@@ -10,7 +10,7 @@ use crate::{
         AdvanceGeneratedSequence, Blueprint, BlueprintMigrationBatch,
         BlueprintMigrationBatchStatus, BlueprintMigrationImpact, BlueprintRecordPublicationSummary,
         BlueprintWithAttributes, CreateBlueprint, GeneratedSequence, GeneratedSequenceAdvance,
-        PublicationContextRequest, StartBlueprintMigrationBatchRequest,
+        PublicationContextRequest, PublishedBlueprint, StartBlueprintMigrationBatchRequest,
     },
 };
 use axum::{Json, extract::State, http::StatusCode};
@@ -153,7 +153,7 @@ pub(super) async fn publish_blueprint_revision(
     State(state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath((blueprint_id, version)): ApiPath<(Uuid, i64)>,
-) -> Result<Json<BlueprintWithAttributes>, ApiError> {
+) -> Result<Json<PublishedBlueprint>, ApiError> {
     let blueprint = AttricatMutationService::new(&repository)
         .publish_blueprint_revision(blueprint_id, version)
         .await?;

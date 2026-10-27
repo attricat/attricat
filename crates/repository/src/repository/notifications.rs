@@ -25,6 +25,7 @@ pub const MAX_NOTIFICATION_BODY_LENGTH: usize = 2_000;
 pub enum NotificationSubjectKind {
     Record,
     AgentConversation,
+    Rule,
 }
 
 impl NotificationSubjectKind {
@@ -32,6 +33,7 @@ impl NotificationSubjectKind {
         match self {
             Self::Record => "record",
             Self::AgentConversation => "agent_conversation",
+            Self::Rule => "rule",
         }
     }
 
@@ -39,6 +41,7 @@ impl NotificationSubjectKind {
         match value {
             "record" => Some(Self::Record),
             "agent_conversation" => Some(Self::AgentConversation),
+            "rule" => Some(Self::Rule),
             _ => None,
         }
     }
@@ -394,6 +397,7 @@ pub mod kinds {
     pub const AGENT_RUN_FAILED: &str = "agent.run_failed";
     pub const TEAM_MEMBER_ADDED: &str = "team.member_added";
     pub const INVITATION_ACCEPTED: &str = "workspace.invitation_accepted";
+    pub const RULE_NOT_APPLICABLE: &str = "rule.not_applicable";
 }
 
 /// Characters of a comment kept in its notification body.

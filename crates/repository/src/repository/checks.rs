@@ -634,57 +634,112 @@ impl EnabledRule {
     }
 }
 
-/// The enabled rule revisions of one blueprint revision, by code.
+/// The enabled rules of a blueprint that apply to one of its revisions, by
+/// code.
 pub(crate) async fn enabled_rules(
     conn: &mut PgConnection,
     workspace_id: Uuid,
     blueprint_id: Uuid,
     blueprint_version: i64,
 ) -> Result<Vec<EnabledRule>, RepositoryError> {
-    sqlx::query_as::<_, (String, Option<Uuid>, Value)>(
-        "SELECT r.code, r.context_id, r.compiled_plan FROM rules r JOIN rule_lifecycles l ON l.rule_id = r.id AND l.workspace_id = r.workspace_id AND l.enabled_version = r.version WHERE r.workspace_id = $1 AND r.blueprint_id = $2 AND r.blueprint_version = $3 AND r.status = 'published' ORDER BY r.code",
+    let rows = sqlx::query_as::<_, (Uuid, String, Option<Uuid>, Value)>(
+        "SELECT r.blueprint_id, r.code, r.context_id, r.compiled_plan FROM rule_lifecycles l JOIN rules r ON r.workspace_id = l.workspace_id AND r.id = l.rule_id AND r.version = l.current_version WHERE l.workspace_id = $1 AND l.enabled AND r.blueprint_id = $2 ORDER BY r.code",
     )
     .bind(workspace_id)
     .bind(blueprint_id)
-    .bind(blueprint_version)
     .fetch_all(&mut *conn)
-    .await?
-    .into_iter()
-    .map(|(code, context_id, plan)| {
-        Ok(EnabledRule {
-            code,
-            context_id,
-            compiled: serde_json::from_value(plan)
-                .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))?,
-        })
-    })
-    .collect()
+    .await?;
+    Ok(rule_sets(conn, workspace_id, rows)
+        .await?
+        .remove(&(blueprint_id, blueprint_version))
+        .unwrap_or_default())
 }
 
-/// Every enabled rule revision of the workspace, by blueprint revision, in
-/// the order [`enabled_rules`] returns them.
+/// Every enabled rule of the workspace, by the blueprint revisions it
+/// applies to, in the order [`enabled_rules`] returns them.
 pub(crate) async fn enabled_rule_sets(
     conn: &mut PgConnection,
     workspace_id: Uuid,
 ) -> Result<super::generations::EnabledRuleSets, RepositoryError> {
-    let rows = sqlx::query_as::<_, (Uuid, i64, String, Option<Uuid>, Value)>(
-        "SELECT r.blueprint_id, r.blueprint_version, r.code, r.context_id, r.compiled_plan FROM rules r JOIN rule_lifecycles l ON l.rule_id = r.id AND l.workspace_id = r.workspace_id AND l.enabled_version = r.version WHERE r.workspace_id = $1 AND r.status = 'published' ORDER BY r.code",
+    let rows = sqlx::query_as::<_, (Uuid, String, Option<Uuid>, Value)>(
+        "SELECT r.blueprint_id, r.code, r.context_id, r.compiled_plan FROM rule_lifecycles l JOIN rules r ON r.workspace_id = l.workspace_id AND r.id = l.rule_id AND r.version = l.current_version WHERE l.workspace_id = $1 AND l.enabled ORDER BY r.code",
     )
     .bind(workspace_id)
     .fetch_all(&mut *conn)
     .await?;
+    rule_sets(conn, workspace_id, rows).await
+}
+
+/// Files enabled rules `(blueprint, code, context, plan)` under each revision
+/// of their blueprint that they fit.
+async fn rule_sets(
+    conn: &mut PgConnection,
+    workspace_id: Uuid,
+    rows: Vec<(Uuid, String, Option<Uuid>, Value)>,
+) -> Result<super::generations::EnabledRuleSets, RepositoryError> {
     let mut sets = super::generations::EnabledRuleSets::new();
-    for (blueprint_id, blueprint_version, code, context_id, plan) in rows {
-        sets.entry((blueprint_id, blueprint_version))
-            .or_default()
-            .push(EnabledRule {
-                code,
-                context_id,
-                compiled: serde_json::from_value(plan)
-                    .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))?,
-            });
+    if rows.is_empty() {
+        return Ok(sets);
+    }
+    let mut blueprint_ids: Vec<Uuid> = rows.iter().map(|row| row.0).collect();
+    blueprint_ids.sort();
+    blueprint_ids.dedup();
+    let revisions = revision_attributes(conn, workspace_id, &blueprint_ids).await?;
+    for (blueprint_id, code, context_id, plan) in rows {
+        let rule = EnabledRule {
+            code,
+            context_id,
+            compiled: serde_json::from_value(plan)
+                .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))?,
+        };
+        for (&(revision_blueprint, version), attributes) in &revisions {
+            if revision_blueprint == blueprint_id
+                && attricat_rules::applicability(&rule.compiled, attributes).is_ok()
+            {
+                sets.entry((blueprint_id, version))
+                    .or_default()
+                    .push(rule.clone());
+            }
+        }
     }
     Ok(sets)
+}
+
+/// The attributes of every revision of `blueprint_ids` that rules are
+/// checked against.
+pub(crate) async fn revision_attributes(
+    conn: &mut PgConnection,
+    workspace_id: Uuid,
+    blueprint_ids: &[Uuid],
+) -> Result<
+    std::collections::HashMap<(Uuid, i64), attricat_rules::RevisionAttributes>,
+    RepositoryError,
+> {
+    #[derive(sqlx::FromRow)]
+    struct AttributeRow {
+        blueprint_id: Uuid,
+        blueprint_version: i64,
+        code: String,
+        #[sqlx(try_from = "String")]
+        value_type: ValueType,
+        value_schema: Option<Value>,
+    }
+    let rows = sqlx::query_as::<_, AttributeRow>(
+        "SELECT blueprint_id, blueprint_version, code, value_type, value_schema FROM attributes WHERE workspace_id = $1 AND blueprint_id = ANY($2) AND deleted_at IS NULL",
+    )
+    .bind(workspace_id)
+    .bind(blueprint_ids)
+    .fetch_all(conn)
+    .await?;
+    let mut revisions: std::collections::HashMap<(Uuid, i64), attricat_rules::RevisionAttributes> =
+        std::collections::HashMap::new();
+    for row in rows {
+        revisions
+            .entry((row.blueprint_id, row.blueprint_version))
+            .or_default()
+            .insert(&row.code, row.value_type, row.value_schema.as_ref());
+    }
+    Ok(revisions)
 }
 
 /// The `x-attricat-checks` of a record schema, failing closed when they are

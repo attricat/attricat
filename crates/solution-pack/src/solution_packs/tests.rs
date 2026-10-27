@@ -3917,7 +3917,8 @@ fn seed_resources_plan_with_physical_references_in_dependency_order() {
     assert_eq!(rule.action, PlanActionKind::Create);
     let payload = rule.normalized_payload.as_ref().unwrap();
     assert_eq!(payload["blueprint_id"], json!(product.target_id));
-    assert_eq!(payload["blueprint_version"], json!(1));
+    // A rule applies to every revision of its blueprint.
+    assert!(payload.get("blueprint_version").is_none());
     assert_eq!(payload["context_id"], json!(pl.target_id));
     assert_eq!(payload["enabled"], json!(true));
     let definition = payload["definition"].as_str().unwrap();
@@ -4164,7 +4165,7 @@ fn invalid_seed_resources_are_rejected_offline() {
             rule_with_predicate(
                 "type = \"required\"\nattribute_code = \"name\"\n\n[enforcement]\non_save = false\n\n[[enforcement.transitions]]\nattribute_code = \"missing\"\nto = \"done\"",
             ),
-            "unknown enforcement attribute 'missing'",
+            "enforcement attribute 'missing' is not a status attribute",
         ),
         (
             "workflows",

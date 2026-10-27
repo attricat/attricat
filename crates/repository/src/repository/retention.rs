@@ -108,8 +108,8 @@ impl<S: RepositoryScope> AttricatRepository<S> {
 
     /// Terminal rule runs: record-scoped completed or cancelled runs after
     /// `record_days`, and full runs and dead letters after `run_days`. Each
-    /// rule version keeps its latest run and its latest completed full dry run,
-    /// which the enable gate reads. Findings keep their resolution
+    /// rule version keeps its latest run, and each definition its latest
+    /// completed full dry run, which the dry-run gate reads. Findings keep their resolution
     /// (`resolved_by_run_id` becomes null).
     pub async fn purge_rule_runs_batch(
         &self,
@@ -124,7 +124,7 @@ impl<S: RepositoryScope> AttricatRepository<S> {
              AND r.created_at < now() - (LEAST($2, $3) * interval '1 day') \
              AND COALESCE(r.completed_at, r.cancelled_at, r.updated_at) < now() - ((CASE WHEN r.scope_record_id IS NOT NULL AND r.status <> 'dead_letter' THEN $2 ELSE $3 END) * interval '1 day') \
              AND EXISTS (SELECT 1 FROM rule_runs n WHERE n.workspace_id = r.workspace_id AND n.rule_id = r.rule_id AND n.rule_version = r.rule_version AND n.created_at > r.created_at) \
-             AND NOT (r.dry_run AND r.scope_record_id IS NULL AND r.status = 'completed' AND NOT EXISTS (SELECT 1 FROM rule_runs n WHERE n.workspace_id = r.workspace_id AND n.rule_id = r.rule_id AND n.rule_version = r.rule_version AND n.dry_run AND n.scope_record_id IS NULL AND n.status = 'completed' AND n.completed_at > r.completed_at)) \
+             AND NOT (r.dry_run AND r.scope_record_id IS NULL AND r.status = 'completed' AND NOT EXISTS (SELECT 1 FROM rule_runs n WHERE n.workspace_id = r.workspace_id AND n.rule_id = r.rule_id AND n.definition_hash = r.definition_hash AND n.dry_run AND n.scope_record_id IS NULL AND n.status = 'completed' AND n.completed_at > r.completed_at)) \
              AND NOT EXISTS (SELECT 1 FROM tasks t WHERE t.workspace_id = r.workspace_id AND t.kind = 'rule_run.v1' AND t.subject_id = r.id AND t.status IN ('queued', 'leased')) \
              ORDER BY r.created_at, r.id LIMIT $1 FOR UPDATE OF r SKIP LOCKED",
         )

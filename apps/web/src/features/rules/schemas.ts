@@ -1,35 +1,68 @@
 import { z } from 'zod';
-import { revisionStatusSchema } from '../../api/revisionStatus';
 import {
   findingSeverities,
   findingStateFilters,
   findingStates,
+  ruleInapplicabilities,
   ruleTriggerTypes,
 } from './constants';
 import { runStatusSchema } from '../../api/runStatus';
 
+/** A rule of a blueprint: its current definition and whether it runs. */
 export const ruleSchema = z.object({
   id: z.uuid(),
   blueprint_id: z.uuid(),
-  blueprint_version: z.number().int().positive(),
   context_id: z.uuid().nullable(),
   code: z.string(),
   name: z.string(),
+  /** The current revision. */
   version: z.number().int().positive(),
-  status: revisionStatusSchema,
   definition: z.string(),
   definition_hash: z.string(),
   compiled_plan: z.unknown(),
-  published_at: z.string().nullable(),
+  enabled: z.boolean(),
   created_at: z.string(),
-  enabled_version: z.number().int().positive().nullable(),
+  /** When the current revision was saved. */
+  updated_at: z.string(),
 });
-/** The rule input that validation and saving accept. */
+/** A blueprint revision whose records a rule skips, and why. */
+export const revisionNotApplicableSchema = z.object({
+  blueprint_version: z.number().int().positive(),
+  reason: z.enum(ruleInapplicabilities),
+  message: z.string(),
+});
+/** A rule with the blueprint revisions it does not fit. */
+export const ruleDetailsSchema = ruleSchema.extend({
+  not_applicable: z.array(revisionNotApplicableSchema),
+});
+/** One saved definition of a rule, from its changelog. */
+export const ruleRevisionSchema = z.object({
+  rule_id: z.uuid(),
+  version: z.number().int().positive(),
+  name: z.string(),
+  definition: z.string(),
+  definition_hash: z.string(),
+  created_by_user_id: z.uuid().nullable(),
+  created_at: z.string(),
+});
+/** The rule input that validation and creation accept. */
 export const createRuleSchema = z.object({
   blueprint_id: z.uuid(),
-  blueprint_version: z.number().int().positive(),
   context_id: z.uuid().nullable(),
   definition: z.string(),
+});
+/** A changed definition, saved as the rule's new current revision. */
+export const updateRuleSchema = z.object({
+  definition: z.string(),
+  accept_existing_violations: z.boolean().optional(),
+});
+/** An enabled rule that a newly published blueprint revision does not fit. */
+export const ruleWarningSchema = z.object({
+  rule_id: z.uuid(),
+  code: z.string(),
+  name: z.string(),
+  reason: z.enum(ruleInapplicabilities),
+  message: z.string(),
 });
 const ruleTriggerSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal(ruleTriggerTypes.manual) }),
@@ -67,12 +100,16 @@ export const ruleRunSchema = z.object({
   id: z.uuid(),
   rule_id: z.uuid(),
   rule_version: z.number().int().positive(),
+  /** The definition the run checked; a dry run may check an unsaved one. */
+  definition_hash: z.string(),
   source: z.enum(ruleTriggerTypes),
   dry_run: z.boolean(),
   scope_record_id: z.uuid().nullable(),
   status: runStatusSchema,
   candidate_cursor: z.uuid().nullable(),
   candidates_evaluated: z.number().int().nonnegative(),
+  /** Candidates on a blueprint revision the rule does not fit. */
+  candidates_skipped: z.number().int().nonnegative(),
   findings_created: z.number().int().nonnegative(),
   findings_resolved: z.number().int().nonnegative(),
   attempts: z.number().int().nonnegative(),
@@ -112,7 +149,27 @@ export const findingsSearchSchema = z.object({
   context: z.uuid().optional().catch(undefined),
 });
 export type FindingsSearch = z.infer<typeof findingsSearchSchema>;
+const comparedVersionSchema = z.coerce
+  .number()
+  .int()
+  .positive()
+  .optional()
+  .catch(undefined);
+/**
+ * The two revisions a rule's changelog compares, kept in its URL. Without
+ * `from`, `to` is compared with the revision before it; without `to`, the
+ * current revision is shown.
+ */
+export const ruleComparisonSearchSchema = z.object({
+  from: comparedVersionSchema,
+  to: comparedVersionSchema,
+});
+export type RuleComparisonSearch = z.infer<typeof ruleComparisonSearchSchema>;
 export type Rule = z.infer<typeof ruleSchema>;
+export type RuleDetails = z.infer<typeof ruleDetailsSchema>;
+export type RuleRevision = z.infer<typeof ruleRevisionSchema>;
+export type RuleWarning = z.infer<typeof ruleWarningSchema>;
+export type UpdateRule = z.infer<typeof updateRuleSchema>;
 export type RuleRun = z.infer<typeof ruleRunSchema>;
 export type Finding = z.infer<typeof findingSchema>;
 export type CreateRule = z.infer<typeof createRuleSchema>;

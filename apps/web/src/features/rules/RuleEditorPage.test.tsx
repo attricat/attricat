@@ -21,11 +21,14 @@ import {
 import { listContexts } from '../contexts/api';
 import {
   createRule,
-  createRuleRevision,
-  listRules,
+  getRule,
+  listRuleRuns,
+  runRuleNow,
+  updateRule,
   validateRule,
   type CompiledRule,
-  type Rule,
+  type RuleDetails,
+  type RuleRun,
 } from './api';
 import { RuleEditorPage } from './RuleEditorPage';
 import { ruleTemplates } from './templates';
@@ -52,11 +55,24 @@ vi.mock('@monaco-editor/react', () => ({
       value={value}
     />
   ),
+  DiffEditor: ({
+    modified,
+    original,
+  }: {
+    modified: string;
+    original: string;
+  }) => (
+    <div data-testid="diff">
+      {original} → {modified}
+    </div>
+  ),
 }));
 vi.mock('./api', () => ({
   createRule: vi.fn(),
-  createRuleRevision: vi.fn(),
-  listRules: vi.fn(),
+  getRule: vi.fn(),
+  listRuleRuns: vi.fn(),
+  runRuleNow: vi.fn(),
+  updateRule: vi.fn(),
   validateRule: vi.fn(),
 }));
 vi.mock('../blueprints/api', () => ({
@@ -83,17 +99,21 @@ const compiled: CompiledRule = {
   triggers: [{ type: 'manual' }],
   predicate: { type: 'required', attribute_code: 'title' },
 };
-const rule = {
+const rule: RuleDetails = {
   id: ruleId,
   blueprint_id: blueprintId,
-  blueprint_version: 2,
   context_id: null,
   code: 'title-required',
   name: 'Records have a title',
   version: 1,
-  status: 'published',
   definition: ruleTemplates[0].definition,
-} as Rule;
+  definition_hash: 'h1',
+  compiled_plan: {},
+  enabled: true,
+  created_at: '',
+  updated_at: '',
+  not_applicable: [],
+};
 
 const renderPage = (props: Parameters<typeof RuleEditorPage>[0] = {}) => {
   const client = new QueryClient({
@@ -134,17 +154,19 @@ afterEach(() => {
 });
 
 describe('RuleEditorPage', () => {
-  it('checks and saves a new rule for the latest published blueprint revision', async () => {
+  it('checks and saves a new rule against the latest published blueprint revision', async () => {
     vi.mocked(createRule).mockResolvedValue(rule);
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Dismiss' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(
-      screen
-        .getByRole('button', { name: 'Save draft' })
-        .hasAttribute('disabled'),
+      screen.getByRole('button', { name: 'Save' }).hasAttribute('disabled'),
     ).toBe(true);
     expect(validateRule).not.toHaveBeenCalled();
+    // A rule fits blueprint revisions; there is no revision to choose.
+    expect(
+      screen.queryByRole('combobox', { name: 'Blueprint revision' }),
+    ).toBeNull();
 
     fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Blueprint' }));
     fireEvent.click(
@@ -152,66 +174,138 @@ describe('RuleEditorPage', () => {
         name: 'Product',
       }),
     );
-    await waitFor(() =>
-      expect(
-        screen.getByRole('combobox', { name: 'Blueprint revision' }),
-      ).toHaveProperty('textContent', 'Version 2'),
-    );
     expect(
       await screen.findByText('Ready to save', {}, { timeout: 2000 }),
     ).toBeTruthy();
-    const scope = {
+    const input = {
       blueprint_id: blueprintId,
-      blueprint_version: 2,
       context_id: null,
       definition: ruleTemplates[0].definition,
     };
-    expect(validateRule).toHaveBeenCalledWith(scope, expect.any(AbortSignal));
+    expect(validateRule).toHaveBeenCalledWith(input, expect.any(AbortSignal));
+    // Completions name the attributes of the latest published revision.
+    expect(vi.mocked(getBlueprintRevision).mock.calls[0]?.slice(0, 2)).toEqual([
+      blueprintId,
+      2,
+    ]);
     expect(screen.getByText('Required value on title')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
-    await waitFor(() => expect(createRule).toHaveBeenCalledWith(scope));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(createRule).toHaveBeenCalledWith(input));
     await waitFor(() =>
       expect(navigate).toHaveBeenCalledWith({
-        params: { ruleId, version: '1' },
-        to: '/manage/rules/$ruleId/revisions/$version',
+        params: { ruleId },
+        to: '/manage/rules/$ruleId',
       }),
     );
   });
 
-  it('saves a changed revision with the rule’s blueprint revision and context', async () => {
-    vi.mocked(listRules).mockResolvedValue([rule]);
-    vi.mocked(createRuleRevision).mockResolvedValue({ ...rule, version: 2 });
-    renderPage({ ruleId, sourceVersion: 1 });
+  it('saves a changed definition as the rule’s current revision after showing the change', async () => {
+    vi.mocked(getRule).mockResolvedValue(rule);
+    vi.mocked(updateRule).mockResolvedValue({ ...rule, version: 2 });
+    renderPage({ ruleId });
     expect(
-      await screen.findByText('Checks Product v2 · All contexts'),
+      await screen.findByText('Checks Product · All contexts'),
     ).toBeTruthy();
     expect(definitionBox()).toHaveProperty('value', rule.definition);
     expect(
-      screen
-        .getByRole('button', { name: 'Save draft' })
-        .hasAttribute('disabled'),
+      screen.getByRole('button', { name: 'Save' }).hasAttribute('disabled'),
     ).toBe(true);
 
     const edited = rule.definition.replace('warning', 'error');
     fireEvent.change(definitionBox(), { target: { value: edited } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+    expect((await screen.findByTestId('diff')).textContent).toBe(
+      `${rule.definition} → ${edited}`,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() =>
-      expect(createRuleRevision).toHaveBeenCalledWith(ruleId, {
-        blueprint_id: blueprintId,
-        blueprint_version: 2,
-        context_id: null,
+      expect(updateRule).toHaveBeenCalledWith(ruleId, {
         definition: edited,
+        accept_existing_violations: undefined,
+      }),
+    );
+    await waitFor(() =>
+      expect(navigate).toHaveBeenCalledWith({
+        params: { ruleId },
+        to: '/manage/rules/$ruleId',
       }),
     );
   });
 
-  it('says when the rule’s blueprint revision cannot be loaded', async () => {
-    vi.mocked(listRules).mockResolvedValue([rule]);
+  it('dry-runs an enforcing change and saves it despite existing violations', async () => {
+    vi.mocked(getRule).mockResolvedValue(rule);
+    const edited = `${rule.definition}\n[enforcement]\non_save = true\n`;
+    const run: RuleRun = {
+      id: '00000000-0000-4000-8000-000000000009',
+      rule_id: ruleId,
+      rule_version: 1,
+      definition_hash: 'h2',
+      source: 'manual',
+      dry_run: true,
+      scope_record_id: null,
+      status: 'completed',
+      candidate_cursor: null,
+      candidates_evaluated: 4,
+      candidates_skipped: 0,
+      findings_created: 2,
+      findings_resolved: 0,
+      attempts: 1,
+      last_error: null,
+      completed_at: '2026-10-27T10:00:00Z',
+      created_at: '2026-10-27T10:00:00Z',
+    };
+    vi.mocked(runRuleNow).mockResolvedValue({ id: run.id });
+    vi.mocked(listRuleRuns).mockResolvedValue([run]);
+    vi.mocked(updateRule)
+      .mockRejectedValueOnce(
+        new ApiRequestError(
+          409,
+          'the latest dry run found 2 existing violations',
+          'rule_has_existing_violations',
+          { existing_violations: 2 },
+        ),
+      )
+      .mockResolvedValueOnce({ ...rule, version: 2 });
+    renderPage({ ruleId });
+    await screen.findByText('Checks Product · All contexts');
+    fireEvent.change(definitionBox(), { target: { value: edited } });
+    await screen.findByText('Ready to save', {}, { timeout: 2000 });
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Dry run this change' }),
+    );
+    await waitFor(() =>
+      expect(runRuleNow).toHaveBeenCalledWith(ruleId, true, edited),
+    );
+    expect(
+      await screen.findByText('The dry run checked 4 records; 2 would fail.'),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    const alert = await screen.findByText(
+      'Records already violate this rule (2).',
+      { exact: false },
+    );
+    fireEvent.click(
+      within(alert.closest('[role="alert"]') as HTMLElement).getByRole(
+        'button',
+        { name: 'Save anyway' },
+      ),
+    );
+    await waitFor(() =>
+      expect(updateRule).toHaveBeenLastCalledWith(ruleId, {
+        definition: edited,
+        accept_existing_violations: true,
+      }),
+    );
+  });
+
+  it('says when the rule’s blueprint cannot be loaded', async () => {
+    vi.mocked(getRule).mockResolvedValue(rule);
     vi.mocked(getBlueprintRevision).mockRejectedValue(
       new ApiRequestError(404, 'Not found', 'not_found'),
     );
-    renderPage({ ruleId, sourceVersion: 1 });
+    renderPage({ ruleId });
     expect(
       await screen.findByText("It doesn't exist, or you can't access it."),
     ).toBeTruthy();

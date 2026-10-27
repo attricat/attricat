@@ -150,8 +150,7 @@
     "reusable_attribute_not_published": "Publish the reusable attribute revision before attaching it or adding it to a group.",
     "rule_dry_run_required": "Run a full dry run of this rule revision before enabling it.",
     "rule_has_existing_violations": "Records already violate this rule ({{existing_violations}}). Fix them or accept the existing violations.",
-    "rule_not_enabled": "The rule has no enabled revision. Enable it or start a dry run.",
-    "rule_not_published": "Publish the rule revision before enabling it.",
+    "rule_not_enabled": "The rule is not enabled. Enable it or start a dry run.",
     "rule_revision_unchanged": "The definition is identical to version {{version}} of this rule.",
     "rule_violation": "The change violates enforcing rules.",
     "service_unavailable": "The service is unavailable: {{message}}",
@@ -370,7 +369,7 @@
     "loading": "Loading notifications…",
     "empty": "No notifications",
     "noUnread": "No unread notifications",
-    "emptyDescription": "You are notified here when you are assigned to a record, someone comments on a record you follow, your team changes, or an agent needs you.",
+    "emptyDescription": "You are notified here when you are assigned to a record, someone comments on a record you follow, your team changes, an agent needs you, or a blueprint change leaves a data quality rule skipping records.",
     "automation": "An automation",
     "namedRecord": "“{{label}}”",
     "blueprintRecord": "a {{blueprint}} record",
@@ -383,7 +382,8 @@
       "runCompleted": "The agent finished in “{{conversation}}”",
       "runFailed": "The agent run failed in “{{conversation}}”",
       "teamMemberAdded": "{{actor}} added you to the team {{team}}",
-      "invitationAccepted": "{{actor}} accepted your invitation and joined the workspace"
+      "invitationAccepted": "{{actor}} accepted your invitation and joined the workspace",
+      "ruleNotApplicable": "{{actor}} published revision {{version}} of {{blueprint}}, which the rule “{{rule}}” no longer fits"
     }
   },
   "contexts": {
@@ -950,8 +950,7 @@
     "revisionHistory": "Revision history",
     "version": "Version",
     "definitionHash": "Definition hash",
-    "versionOption": "v{{version}} ({{status}})",
-    "diffTitle": "{{original}} → {{modified}}"
+    "versionOption": "v{{version}} ({{status}})"
   },
   "definitionEditor": {
     "details": {
@@ -1884,7 +1883,8 @@
       "completed": "Completed",
       "dead_letter": "Dead letter",
       "cancelled": "Cancelled"
-    }
+    },
+    "diffTitle": "{{original}} → {{modified}}"
   },
   "inspector": {
     "apiRestarting": "API restarting…",
@@ -1952,7 +1952,7 @@
   },
   "rules": {
     "title": "Data quality rules",
-    "description": "Write data quality rules for blueprints and inspect their findings and evaluation runs.",
+    "description": "Write data quality rules for blueprints, check every revision of a blueprint against them, and inspect their findings and runs.",
     "inspectionTabs": "Rule inspection",
     "loading": "Loading rules…",
     "sections": {
@@ -1974,12 +1974,13 @@
       "findings": "Findings",
       "record": "Record",
       "scope": "Scope",
-      "executed": "Executed"
+      "executed": "Executed",
+      "blueprint": "Blueprint",
+      "changed": "Changed"
     },
     "enabled": "Enabled",
     "disabled": "Disabled",
-    "draft": "Draft",
-    "toggleRule": "Enable {{name}} v{{version}}",
+    "toggleRule": "Enable {{name}}",
     "enableAnyway": "Enable anyway",
     "dryRun": "Dry run",
     "runNow": "Run now",
@@ -2036,29 +2037,27 @@
       "loadMore": "Load more findings",
       "noRules": "No enabled rule checks records of this blueprint."
     },
-    "revisionPage": {
-      "backToRules": "Back to rules",
-      "notFound": "This rule revision was not found.",
-      "blueprint": "Checks",
-      "blueprintRevision": "{{name}} v{{version}}",
-      "definition": "Definition"
-    },
     "newRule": "New rule",
-    "newRevision": "New revision",
-    "publish": "Publish",
-    "saveDraft": "Save draft",
     "editor": {
       "saving": "Saving…",
-      "newRuleDescription": "Write the rule's TOML. It is saved as a draft; publish it, then enable it to check records.",
-      "newRevisionTitle": "New revision of {{name}}",
-      "newRevisionDescription": "Starts from revision {{version}}. Saving adds a draft revision.",
-      "scopeDescription": "Choose what the rule checks. Revisions keep the blueprint revision and context.",
+      "newRuleDescription": "Write the rule's TOML. It is saved disabled; enable it to check records.",
+      "scopeDescription": "Choose what the rule checks. It applies to every revision of the blueprint it fits, and keeps its blueprint and context.",
       "blueprint": "Blueprint",
-      "blueprintRevision": "Blueprint revision",
-      "revisionOption": "Version {{version}}",
       "noPublishedRevision": "Publish a revision of this blueprint first.",
       "chooseBlueprint": "Choose a blueprint with a published revision to check and save the rule.",
-      "fixedScope": "Checks {{blueprint}} · {{context}}"
+      "fixedScope": "Checks {{blueprint}} · {{context}}",
+      "save": "Save",
+      "editTitle": "Edit {{name}}",
+      "editDescription": "Starts from revision {{version}}. Saving makes the change the rule's current revision at once.",
+      "saveAnyway": "Save anyway",
+      "changesTitle": "Changes",
+      "changesDescription": "Your change compared with the current revision. Dry-run it to see which records it would flag.",
+      "unsavedChange": "Unsaved change",
+      "dryRunChange": "Dry run this change",
+      "dryRunResult_one": "The dry run checked {{evaluated}} records; {{count}} would fail.",
+      "dryRunResult_other": "The dry run checked {{evaluated}} records; {{count}} would fail.",
+      "dryRunOutdated": "The definition changed after the dry run started. Dry-run it again before saving.",
+      "dryRunFailed": "The dry run did not finish."
     },
     "templates": {
       "required": "Required value",
@@ -2101,6 +2100,55 @@
       "rejectsSaves": "Rejects saves that leave a record violating the rule.",
       "blocksTransition": "Blocks changing {{attribute}} from {{from}} to {{to}}.",
       "blocksTransitionInto": "Blocks changing {{attribute}} to {{to}}."
+    },
+    "empty": "No data quality rules yet",
+    "emptyDescription": "A rule checks the records of a blueprint and reports those that fail, or stops their saves.",
+    "unknownBlueprint": "Unknown blueprint",
+    "unknownContext": "Unknown context",
+    "revisionLabel": "v{{version}}",
+    "skipsRevisions_one": "Skips the records of blueprint revision {{versions}}, which it does not fit",
+    "skipsRevisions_other": "Skips the records of blueprint revisions {{versions}}, which it does not fit",
+    "evaluatedWithSkipped": "{{evaluated}} ({{skipped}} skipped)",
+    "inapplicability": {
+      "attribute_missing": "an attribute the rule names is missing",
+      "attribute_type_changed": "an attribute the rule names has a type the rule cannot check",
+      "status_changed": "a guarded status attribute or status no longer exists"
+    },
+    "rulePage": {
+      "backToRules": "Back to rules",
+      "checks": "Checks",
+      "currentRevision": "Revision {{version}}, saved <timestamp/>",
+      "skipsRevisions": "This rule does not fit some revisions of its blueprint and skips their records:",
+      "skippedRevision": "Revision {{version}}: {{reason}} ({{message}})",
+      "definition": "Definition",
+      "edit": "Edit",
+      "enable": "Enable",
+      "disable": "Disable",
+      "tabs": "Rule",
+      "sections": {
+        "definition": "Definition",
+        "changelog": "Changelog"
+      }
+    },
+    "changelog": {
+      "loading": "Loading the changelog…",
+      "title": "Revisions",
+      "savedAt": "Saved",
+      "savedBy": "Saved by",
+      "current": "Current",
+      "currentRevisionOption": "v{{version}} (current)",
+      "unknownAuthor": "Not recorded",
+      "comparePrevious": "Compare with previous",
+      "compareTitle": "Compare revisions",
+      "compareDescription": "Choose two revisions to see how the rule's definition changed between them.",
+      "from": "From",
+      "to": "To",
+      "loadingDiff": "Loading the comparison…",
+      "firstRevision": "This is the rule's first revision."
+    },
+    "publishWarnings": {
+      "title_one": "Revision {{version}} was published, but this enabled rule does not fit it and skips its records:",
+      "title_other": "Revision {{version}} was published, but these enabled rules do not fit it and skip its records:"
     }
   },
   "reusableAttributes": {

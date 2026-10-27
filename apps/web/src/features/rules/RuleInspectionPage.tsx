@@ -6,25 +6,21 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import { createLink, useNavigate } from '@tanstack/react-router';
-import { Alert, Box, Button, Tab, Tabs } from '@mui/material';
+import { Box, Tab, Tabs } from '@mui/material';
 import { PlusIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { ApiRequestError } from '../../api/request';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { RouterButton } from '../../components/RouterLink';
 import { useCan } from '../auth/useCan';
 import {
-  disableRule,
-  enableRuleRevision,
   listFindingsPage,
   runRuleNow,
   type FindingsSearch,
   type Rule,
 } from './api';
 import {
-  RULE_HAS_EXISTING_VIOLATIONS,
   RULE_SECTION_FINDINGS,
   RULE_SECTION_RULES,
   RULE_SECTION_RUNS,
@@ -35,9 +31,11 @@ import {
 import { FindingsSection } from './FindingsSection';
 import { ruleQueryKeys } from './queryKeys';
 import { ruleDefinitionsOptions, ruleRunsOptions } from './queryOptions';
-import { ruleRevisionsByKey } from './ruleRevisions';
+import { rulesById } from './rulesById';
 import { useRecordLabels } from '../records/useRecordLabels';
 import { RulesSection } from './RulesSection';
+import { RuleToggleError } from './RuleToggleError';
+import { useToggleRule } from './useToggleRule';
 import { RunsSection } from './RunsSection';
 import {
   RuleFindingIcon,
@@ -47,7 +45,6 @@ import {
 import { compactIconSize } from '../../components/iconSizes';
 import { useTabAccessibility } from '../../components/useTabAccessibility';
 import type { LucideIcon } from 'lucide-react';
-import { errorMessage } from '../../api/errors';
 import { capabilities } from '../auth/capabilities';
 import { blueprintCatalogueOptions } from '../blueprints/queryOptions';
 import { contextListOptions } from '../contexts/queryOptions';
@@ -73,9 +70,9 @@ export const RuleInspectionPage = ({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const canManage = useCan(capabilities.rulesManage);
-  // Findings and runs name their rule revision from the definitions.
+  // Findings and runs name their rule from the definitions.
   const rules = useQuery(ruleDefinitionsOptions());
-  const revisions = ruleRevisionsByKey(rules.data ?? []);
+  const rulesByIdMap = rulesById(rules.data ?? []);
   const findingsShown = section === RULE_SECTION_FINDINGS;
   const findings = useInfiniteQuery({
     queryKey: ruleQueryKeys.findingsPage(findingsSearch),
@@ -85,10 +82,11 @@ export const RuleInspectionPage = ({
     enabled: findingsShown,
   });
   const findingItems = findings.data?.pages.flatMap((page) => page.items);
-  // The findings filters offer the workspace's blueprints and contexts.
+  // Rules name their blueprint, and the findings filters offer the
+  // workspace's blueprints and contexts.
   const blueprints = useQuery({
     ...blueprintCatalogueOptions(),
-    enabled: findingsShown,
+    enabled: findingsShown || section === RULE_SECTION_RULES,
   });
   const contexts = useQuery({
     ...contextListOptions(),
@@ -113,31 +111,10 @@ export const RuleInspectionPage = ({
   const acknowledge = useAcknowledgeFinding();
   const run = useMutation({
     mutationFn: ({ rule, dryRun }: { rule: Rule; dryRun: boolean }) =>
-      runRuleNow(rule.id, rule.version, dryRun),
+      runRuleNow(rule.id, dryRun),
     onSuccess: refresh,
   });
-  const toggle = useMutation({
-    mutationFn: ({
-      rule,
-      enabled,
-      acceptExistingViolations,
-    }: {
-      rule: Rule;
-      enabled: boolean;
-      acceptExistingViolations?: boolean;
-    }) =>
-      enabled
-        ? enableRuleRevision(rule.id, rule.version, acceptExistingViolations)
-        : disableRule(rule.id),
-    onSuccess: refresh,
-  });
-  // Existing violations of an enforcing rule may be accepted explicitly.
-  const violationsToAccept =
-    toggle.error instanceof ApiRequestError &&
-    toggle.error.code === RULE_HAS_EXISTING_VIOLATIONS &&
-    toggle.variables
-      ? toggle.variables
-      : undefined;
+  const toggle = useToggleRule();
 
   const tabId = useTabAccessibility();
   const activeSectionIndex = RULE_SECTIONS.findIndex(
@@ -185,38 +162,15 @@ export const RuleInspectionPage = ({
         {section === RULE_SECTION_RULES && run.error && (
           <ApiErrorAlert error={run.error} sx={{ mt: 3 }} />
         )}
-        {section === RULE_SECTION_RULES &&
-          toggle.error &&
-          (violationsToAccept ? (
-            <Alert
-              action={
-                <Button
-                  color="inherit"
-                  disabled={toggle.isPending}
-                  onClick={() =>
-                    toggle.mutate({
-                      ...violationsToAccept,
-                      acceptExistingViolations: true,
-                    })
-                  }
-                  size="small"
-                >
-                  {t('rules.enableAnyway')}
-                </Button>
-              }
-              severity="warning"
-              sx={{ mt: 3 }}
-            >
-              {errorMessage(toggle.error)}
-            </Alert>
-          ) : (
-            <ApiErrorAlert error={toggle.error} sx={{ mt: 3 }} />
-          ))}
+        {section === RULE_SECTION_RULES && (
+          <RuleToggleError sx={{ mt: 3 }} toggle={toggle} />
+        )}
         {section === RULE_SECTION_FINDINGS && acknowledge.error && (
           <ApiErrorAlert error={acknowledge.error} sx={{ mt: 3 }} />
         )}
         {section === RULE_SECTION_RULES && (
           <RulesSection
+            blueprints={blueprints.data ?? []}
             canManage={canManage}
             error={rules.error}
             onRetry={() => void rules.refetch()}
@@ -254,7 +208,7 @@ export const RuleInspectionPage = ({
               findings.isFetchNextPageError ? findings.error : null
             }
             onLoadMore={() => void findings.fetchNextPage()}
-            revisions={revisions}
+            rulesById={rulesByIdMap}
           />
         )}
         {section === RULE_SECTION_RUNS && (
@@ -262,7 +216,7 @@ export const RuleInspectionPage = ({
             recordLabels={recordLabels}
             error={runs.error}
             onRetry={() => void runs.refetch()}
-            revisions={revisions}
+            rulesById={rulesByIdMap}
             runs={runs.data}
           />
         )}

@@ -13,7 +13,7 @@ import {
   listUnresolvedRecordFindings,
   recheckRecord,
   type Finding,
-  type Rule,
+  type RuleDetails,
   type RuleRun,
 } from './api';
 import { RECORD_RULE_RUN_POLL_MS } from './constants';
@@ -28,12 +28,8 @@ vi.mock('@tanstack/react-router', () => ({
     params,
   }: {
     children: ReactNode;
-    params: { ruleId: string; version: string };
-  }) => (
-    <a href={`/manage/rules/${params.ruleId}/revisions/${params.version}`}>
-      {children}
-    </a>
-  ),
+    params: { ruleId: string };
+  }) => <a href={`/manage/rules/${params.ruleId}`}>{children}</a>,
 }));
 vi.mock('../auth/api', () => ({ currentSession: vi.fn() }));
 vi.mock('./api', () => ({
@@ -50,21 +46,20 @@ const ruleId = '00000000-0000-4000-8000-000000000003';
 const manager = {
   capabilities: { rules_read: true, rules_manage: true },
 } as Awaited<ReturnType<typeof currentSession>>;
-const rule: Rule = {
+const rule: RuleDetails = {
   id: ruleId,
   blueprint_id: blueprintId,
-  blueprint_version: 1,
   context_id: null,
   code: 'title_required',
   name: 'Title required',
   version: 1,
-  status: 'published',
   definition: '',
   definition_hash: '',
   compiled_plan: {},
-  published_at: null,
+  enabled: true,
   created_at: '',
-  enabled_version: 1,
+  updated_at: '',
+  not_applicable: [],
 };
 const finding: Finding = {
   id: '00000000-0000-4000-8000-000000000004',
@@ -88,12 +83,14 @@ const run = (
   id: '00000000-0000-4000-8000-000000000005',
   rule_id: ruleId,
   rule_version: 1,
+  definition_hash: '',
   source: 'manual',
   dry_run: false,
   scope_record_id: recordId,
   status,
   candidate_cursor: null,
   candidates_evaluated: 0,
+  candidates_skipped: 0,
   findings_created: 0,
   findings_resolved: 0,
   attempts: 0,
@@ -163,7 +160,7 @@ describe('RecordFindingsPanel', () => {
       within(item)
         .getByRole('link', { name: 'Title required' })
         .getAttribute('href'),
-    ).toBe(`/manage/rules/${ruleId}/revisions/1`);
+    ).toBe(`/manage/rules/${ruleId}`);
     expect(within(item).getByText(/Contexts: default, pl/)).toBeTruthy();
     await user.click(within(item).getByRole('button', { name: 'Acknowledge' }));
     expect(vi.mocked(acknowledgeFinding).mock.calls[0]?.[0]).toBe(finding.id);
@@ -298,9 +295,7 @@ describe('RecordFindingsPanel', () => {
   });
 
   it('says when no rule applies and nothing is reported', async () => {
-    vi.mocked(listRules).mockResolvedValue([
-      { ...rule, enabled_version: null },
-    ]);
+    vi.mocked(listRules).mockResolvedValue([{ ...rule, enabled: false }]);
     vi.mocked(listUnresolvedRecordFindings).mockResolvedValue({ items: [] });
     renderPanel();
     expect(await screen.findByText('No open findings.')).toBeTruthy();
@@ -310,6 +305,28 @@ describe('RecordFindingsPanel', () => {
       ),
     ).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Re-run checks' })).toBeNull();
+  });
+
+  it('treats a rule that skips the record’s revision as not applying', async () => {
+    vi.mocked(listRules).mockResolvedValue([
+      {
+        ...rule,
+        not_applicable: [
+          {
+            blueprint_version: 1,
+            reason: 'attribute_missing',
+            message: "unknown attribute 'title'",
+          },
+        ],
+      },
+    ]);
+    vi.mocked(listUnresolvedRecordFindings).mockResolvedValue({ items: [] });
+    renderPanel();
+    expect(
+      await screen.findByText(
+        'No enabled rule checks records of this blueprint.',
+      ),
+    ).toBeTruthy();
   });
 
   it('waits for an edit’s rule runs only when an enabled rule applies', async () => {
@@ -326,9 +343,7 @@ describe('RecordFindingsPanel', () => {
     };
     expect(await pollsAfterEdit()).toBeGreaterThan(1);
 
-    vi.mocked(listRules).mockResolvedValue([
-      { ...rule, enabled_version: null },
-    ]);
+    vi.mocked(listRules).mockResolvedValue([{ ...rule, enabled: false }]);
     expect(await pollsAfterEdit()).toBe(1);
   }, 10_000);
 });

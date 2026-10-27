@@ -13,7 +13,7 @@ describe('RunsSection', () => {
         error={new Error('offline')}
         onRetry={onRetry}
         recordLabels={new Map()}
-        revisions={new Map()}
+        rulesById={new Map()}
         runs={undefined}
       />,
     );

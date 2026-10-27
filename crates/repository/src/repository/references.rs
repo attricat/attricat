@@ -11,8 +11,8 @@ pub(crate) enum Referrers<'a> {
     Any,
     /// Records of a blueprint family, by code, whichever revision they use.
     BlueprintCode(&'a str),
-    /// Records pinned to one blueprint revision.
-    Revision { blueprint_id: Uuid, version: i64 },
+    /// Records of one blueprint, by id, whichever revision they use.
+    Blueprint(Uuid),
 }
 
 /// A bounded search for records referencing `target`.
@@ -36,13 +36,10 @@ pub(crate) async fn referencing_record_ids(
     workspace_id: Uuid,
     query: ReferenceQuery<'_>,
 ) -> Result<Vec<Uuid>, RepositoryError> {
-    let (code, blueprint_id, version) = match query.referrers {
-        Referrers::Any => (None, None, None),
-        Referrers::BlueprintCode(code) => (Some(code), None, None),
-        Referrers::Revision {
-            blueprint_id,
-            version,
-        } => (None, Some(blueprint_id), Some(version)),
+    let (code, blueprint_id) = match query.referrers {
+        Referrers::Any => (None, None),
+        Referrers::BlueprintCode(code) => (Some(code), None),
+        Referrers::Blueprint(blueprint_id) => (None, Some(blueprint_id)),
     };
     Ok(sqlx::query_scalar(
         r#"SELECT DISTINCT av.record_id
@@ -54,18 +51,17 @@ pub(crate) async fn referencing_record_ids(
              AND ($4::text IS NULL OR EXISTS (
                  SELECT 1 FROM blueprints b
                  WHERE b.workspace_id = $1 AND b.id = e.blueprint_id AND b.version = e.blueprint_version AND b.code = $4))
-             AND ($5::uuid IS NULL OR (e.blueprint_id = $5 AND e.blueprint_version = $6))
-             AND ($7::uuid IS NULL OR av.record_id = $7)
-             AND NOT ($8 AND av.record_id = $2)
+             AND ($5::uuid IS NULL OR e.blueprint_id = $5)
+             AND ($6::uuid IS NULL OR av.record_id = $6)
+             AND NOT ($7 AND av.record_id = $2)
            ORDER BY av.record_id
-           LIMIT $9"#,
+           LIMIT $8"#,
     )
     .bind(workspace_id)
     .bind(query.target)
     .bind(query.attribute_code)
     .bind(code)
     .bind(blueprint_id)
-    .bind(version)
     .bind(query.only)
     .bind(query.exclude_target)
     .bind(query.limit)

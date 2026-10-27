@@ -615,7 +615,7 @@ async fn agent_duplicates_comments_validates_and_reviews_attricat_health(pool: P
 
     let created: Value = client
         .post(format!("{base_url}/rules"))
-        .json(&json!({"blueprint_id": blueprint_id, "blueprint_version": 1, "context_id": null, "definition": rule}))
+        .json(&json!({"blueprint_id": blueprint_id, "context_id": null, "definition": rule}))
         .send()
         .await
         .unwrap()
@@ -779,7 +779,7 @@ async fn agent_operational_diagnostics_are_bounded_and_omit_internal_payloads(po
     let record = create_record(&client, &base_url, &blueprint).await;
     let record_id = record["id"].as_str().unwrap();
     let rule: Value = client.post(format!("{base_url}/rules"))
-        .json(&json!({"blueprint_id":blueprint["blueprint"]["id"],"blueprint_version":1,"context_id":null,
+        .json(&json!({"blueprint_id":blueprint["blueprint"]["id"],"context_id":null,
             "definition":"format_version = 1\ncode = \"diagnostic_rule\"\nname = \"Diagnostic rule\"\nseverity = \"warning\"\n[[triggers]]\ntype = \"manual\"\n[predicate]\ntype = \"required\"\nattribute_code = \"title\""}))
         .send().await.unwrap().error_for_status().unwrap().json().await.unwrap();
     let rule_id: Uuid = rule["id"].as_str().unwrap().parse().unwrap();
@@ -791,14 +791,7 @@ async fn agent_operational_diagnostics_are_bounded_and_omit_internal_payloads(po
             .bind(format!("check-{index}")).execute(&pool).await.unwrap();
     }
     client
-        .post(format!("{base_url}/rules/{rule_id}/versions/1/publish"))
-        .send()
-        .await
-        .unwrap()
-        .error_for_status()
-        .unwrap();
-    client
-        .post(format!("{base_url}/rules/{rule_id}/versions/1/enable"))
+        .post(format!("{base_url}/rules/{rule_id}/enable"))
         .send()
         .await
         .unwrap()

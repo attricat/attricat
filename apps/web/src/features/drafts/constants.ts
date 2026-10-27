@@ -19,7 +19,7 @@ export const draftEditors = {
   reusableAttributeCreate: 'reusable-attribute-create',
   reusableAttributeRevision: 'reusable-attribute-revision',
   ruleCreate: 'rule-create',
-  ruleRevision: 'rule-revision',
+  ruleEdit: 'rule-edit',
   workflowCreate: 'workflow-create',
   workflowRevision: 'workflow-revision',
 } as const;

@@ -530,7 +530,7 @@ pub fn definitions() -> Vec<ToolDefinition> {
         ),
         definition(
             "get_rule_definition",
-            "Inspect a rule's latest or exact revision and its authored definition; requires rules.read.",
+            "Inspect a rule's current or an earlier revision and its authored definition; requires rules.read.",
             json!({"type":"object","required":["rule_id"],"properties":{"rule_id":{"type":"string","format":"uuid"},"version":{"type":"integer","minimum":1}},"additionalProperties":false}),
         ),
         definition(
@@ -1629,15 +1629,19 @@ pub async fn execute_read(
             #[serde(deny_unknown_fields)]
             struct Input { rule_id: Uuid, version: Option<i64> }
             let input: Input = decode(arguments)?;
-            let rule = match input.version {
-                Some(version) if version > 0 => repository.get_rule_revision(input.rule_id, version).await?,
-                None => repository.get_rule(input.rule_id).await?,
+            let rule = repository.get_rule(input.rule_id).await?.ok_or(RepositoryError::NotFound("rule"))?;
+            let (version, definition) = match input.version {
+                None => (rule.version, rule.definition),
+                Some(version) if version > 0 => {
+                    let revision = repository.get_rule_revision(input.rule_id, version).await?
+                        .ok_or(RepositoryError::NotFound("rule revision"))?;
+                    (revision.version, revision.definition)
+                }
                 _ => return Err(ToolError::InvalidArguments("version must be positive".into())),
-            }.ok_or(RepositoryError::NotFound("rule revision"))?;
-            json!({"id":rule.id,"code":rule.code,"name":rule.name,"version":rule.version,
-                "status":rule.status,"enabled_version":rule.enabled_version,
-                "blueprint_id":rule.blueprint_id,"blueprint_version":rule.blueprint_version,
-                "definition":rule.definition})
+            };
+            json!({"id":rule.id,"code":rule.code,"name":rule.name,"version":version,
+                "current_version":rule.version,"enabled":rule.enabled,
+                "blueprint_id":rule.blueprint_id,"definition":definition})
         }
         "get_workflow_definition" => {
             #[derive(Deserialize)]

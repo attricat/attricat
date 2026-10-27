@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ruleWarningSchema } from '../rules/schemas';
 import { revisionStatusSchema } from '../../api/revisionStatus';
 import {
   attributeSchema as recordAttributeSchema,
@@ -52,10 +53,19 @@ export const blueprintWithAttributesSchema = z.object({
   attributes: z.array(attributeSchema),
 });
 
+/**
+ * A newly published revision with the enabled rules it no longer fits; they
+ * skip its records.
+ */
+export const publishedBlueprintSchema = blueprintWithAttributesSchema.extend({
+  rule_warnings: z.array(ruleWarningSchema),
+});
+
 export type Blueprint = z.infer<typeof blueprintSchema>;
 export type BlueprintWithAttributes = z.infer<
   typeof blueprintWithAttributesSchema
 >;
+export type PublishedBlueprint = z.infer<typeof publishedBlueprintSchema>;
 
 export const blueprintRecordPublicationSummarySchema = z.object({
   record_count: z.number().int().nonnegative(),

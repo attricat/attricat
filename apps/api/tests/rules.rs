@@ -6,6 +6,23 @@ use api::{repository::AttricatRepository, rule_runtime, task_worker::TaskOutcome
 use support::*;
 use tokio::time::sleep;
 
+const PRODUCT: &str = r#"
+format_version = 1
+code = "rule_task_product"
+name = "Rule task product"
+kind = "record"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title"]
+[[attributes]]
+code = "title"
+value_type = "string"
+default_value = "untitled"
+[[attributes]]
+code = "summary"
+value_type = "string"
+"#;
+
 const RULE: &str = r#"format_version = 1
 code = "required_title"
 name = "Title is required"
@@ -24,32 +41,11 @@ async fn setup_rule(pool: &PgPool) -> (String, tokio::task::JoinHandle<()>, Uuid
         .unwrap();
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
-    let blueprint = create_blueprint(
-        &client,
-        &base_url,
-        r#"
-format_version = 1
-code = "rule_task_product"
-name = "Rule task product"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-[[attributes]]
-code = "title"
-value_type = "string"
-default_value = "untitled"
-[[attributes]]
-code = "summary"
-value_type = "string"
-"#,
-    )
-    .await;
+    let blueprint = create_blueprint(&client, &base_url, PRODUCT).await;
     let created: Value = client
         .post(format!("{base_url}/rules"))
         .json(&json!({
             "blueprint_id": blueprint["blueprint"]["id"],
-            "blueprint_version": blueprint["blueprint"]["version"],
             "context_id": null,
             "definition": RULE,
         }))
@@ -61,16 +57,10 @@ value_type = "string"
         .json()
         .await
         .unwrap();
+    assert_eq!(created["enabled"], false);
     let rule_id = created["id"].as_str().unwrap().parse().unwrap();
     client
-        .post(format!("{base_url}/rules/{rule_id}/versions/1/publish"))
-        .send()
-        .await
-        .unwrap()
-        .error_for_status()
-        .unwrap();
-    client
-        .post(format!("{base_url}/rules/{rule_id}/versions/1/enable"))
+        .post(format!("{base_url}/rules/{rule_id}/enable"))
         .send()
         .await
         .unwrap()
@@ -79,19 +69,72 @@ value_type = "string"
     (base_url, server, rule_id, blueprint)
 }
 
+/// Publishes a new revision of a blueprint and returns it.
+async fn publish_revision(
+    client: &Client,
+    base_url: &str,
+    blueprint: &Value,
+    definition: &str,
+) -> Value {
+    let id = blueprint["blueprint"]["id"].as_str().unwrap();
+    let draft: Value = client
+        .post(format!("{base_url}/blueprints/{id}/versions"))
+        .json(&json!({ "definition": definition }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let version = draft["blueprint"]["version"].as_i64().unwrap();
+    client
+        .post(format!(
+            "{base_url}/blueprints/{id}/versions/{version}/publish"
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap()
+}
+
+/// Runs every queued task to completion.
+async fn drain_tasks(repository: &AttricatRepository) {
+    let handler = rule_runtime::task_handler(repository.clone());
+    while let Some(task) = repository
+        .claim_task("drain", Duration::from_secs(30))
+        .await
+        .unwrap()
+    {
+        handler.handle(task.clone()).await.unwrap();
+        repository
+            .complete_task(task.id, &task.lease_owner, task.lease_token)
+            .await
+            .unwrap();
+    }
+}
+
+/// Saving a changed definition makes it the current revision at once and
+/// keeps the earlier ones as the rule's changelog. Findings of the earlier
+/// definition are resolved and the rule re-checks every record.
 #[sqlx::test(migrator = "api::MIGRATOR")]
-async fn a_rule_revision_identical_to_the_latest_is_refused(pool: PgPool) {
+async fn saving_a_rule_adds_its_current_revision_to_the_changelog(pool: PgPool) {
     let (base_url, server, rule_id, blueprint) = setup_rule(&pool).await;
     let client = authenticated_client();
+    let repository = AttricatRepository::new(pool.clone(), BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
+    let record = create_record(&client, &base_url, &blueprint).await;
+    let record_id: Uuid = record["id"].as_str().unwrap().parse().unwrap();
+    manual_run(&base_url, rule_id, Some(record_id), "before").await;
+    drain_tasks(&repository).await;
     let save = |definition: &str| {
         client
-            .post(format!("{base_url}/rules/{rule_id}/versions"))
-            .json(&json!({
-                "blueprint_id": blueprint["blueprint"]["id"],
-                "blueprint_version": blueprint["blueprint"]["version"],
-                "context_id": null,
-                "definition": definition,
-            }))
+            .put(format!("{base_url}/rules/{rule_id}"))
+            .json(&json!({ "definition": definition }))
             .send()
     };
     let unchanged = expect_error(
@@ -103,12 +146,296 @@ async fn a_rule_revision_identical_to_the_latest_is_refused(pool: PgPool) {
     assert_eq!(unchanged["error"]["details"], json!({ "version": 1 }));
 
     let warning = RULE.replace("severity = \"error\"", "severity = \"warning\"");
-    let changed = expect_status(save(&warning).await.unwrap(), StatusCode::CREATED).await;
-    assert_eq!(changed["version"], 2);
-    // Returning to an earlier definition is a change.
-    let restored = expect_status(save(RULE).await.unwrap(), StatusCode::CREATED).await;
-    assert_eq!(restored["version"], 3);
+    let changed = expect_status(save(&warning).await.unwrap(), StatusCode::OK).await;
+    assert_eq!(
+        (changed["version"].clone(), changed["enabled"].clone()),
+        (json!(2), json!(true))
+    );
+    let findings = |state: &'static str| {
+        let pool = pool.clone();
+        async move {
+            sqlx::query_scalar::<_, String>(
+                "SELECT severity FROM rule_findings WHERE record_id=$1 AND state=$2 ORDER BY created_at",
+            )
+            .bind(record_id)
+            .bind(state)
+            .fetch_all(&pool)
+            .await
+            .unwrap()
+        }
+    };
+    // The error finding belongs to the previous definition.
+    assert_eq!(findings("resolved").await, ["error"]);
+    drain_tasks(&repository).await;
+    assert_eq!(findings("open").await, ["warning"]);
 
+    // Returning to an earlier definition is a change.
+    let restored = expect_status(save(RULE).await.unwrap(), StatusCode::OK).await;
+    assert_eq!(restored["version"], 3);
+    let changelog: Value = client
+        .get(format!("{base_url}/rules/{rule_id}/revisions"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        changelog
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|revision| revision["version"].as_i64().unwrap())
+            .collect::<Vec<_>>(),
+        [3, 2, 1]
+    );
+    assert_eq!(changelog[1]["definition"], warning);
+    assert!(changelog[0]["created_by_user_id"].is_string());
+    let second: Value = client
+        .get(format!("{base_url}/rules/{rule_id}/revisions/2"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(second, changelog[1]);
+    let listed: Value = client
+        .get(format!("{base_url}/rules"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(listed.as_array().unwrap().len(), 1, "one row per rule");
+    assert_eq!(listed[0]["version"], 3);
+    // The code names the rule; it cannot change.
+    expect_error(
+        save(&RULE.replace("required_title", "renamed"))
+            .await
+            .unwrap(),
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "invalid_rule_definition",
+    )
+    .await;
+    server.abort();
+}
+
+/// A rule applies to every revision of its blueprint that it fits and skips
+/// the records of revisions it does not: no findings, no enforcement.
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn rules_follow_blueprint_revisions_and_skip_those_they_do_not_fit(pool: PgPool) {
+    let (base_url, server, rule_id, first) = setup_rule(&pool).await;
+    let client = authenticated_client();
+    let repository = AttricatRepository::new(pool.clone(), BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
+    let on_first = create_record(&client, &base_url, &first).await;
+    let renamed = publish_revision(
+        &client,
+        &base_url,
+        &first,
+        &PRODUCT.replace("Rule task product", "Renamed product"),
+    )
+    .await;
+    let on_renamed = create_record(&client, &base_url, &renamed).await;
+    // Publishing a revision the rule does not fit goes ahead with a warning,
+    // and rule managers other than the publisher are notified.
+    let manager_role = create_role(&pool, "rule_manager", &["rules.manage"]).await;
+    let manager = member_with_role(&pool, manager_role).await;
+    let without_summary = publish_revision(
+        &client,
+        &base_url,
+        &first,
+        &PRODUCT.replace(
+            "[[attributes]]\ncode = \"summary\"\nvalue_type = \"string\"\n",
+            "",
+        ),
+    )
+    .await;
+    assert_eq!(without_summary["blueprint"]["version"], 3);
+    assert_eq!(
+        without_summary["rule_warnings"],
+        json!([{
+            "rule_id": rule_id,
+            "code": "required_title",
+            "name": "Title is required",
+            "reason": "attribute_missing",
+            "message": "unknown attribute 'summary'",
+        }])
+    );
+    assert_eq!(renamed["rule_warnings"], json!([]));
+    let inbox: Value = client_for(manager)
+        .get(format!("{base_url}/notifications"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let notification = &inbox["items"][0];
+    assert_eq!(notification["kind"], "rule.not_applicable");
+    assert_eq!(
+        notification["subject"],
+        json!({"kind": "rule", "id": rule_id})
+    );
+    assert_eq!(notification["data"]["blueprint_version"], 3);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM user_notifications WHERE kind='rule.not_applicable'"
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        1,
+        "the publisher is not notified"
+    );
+    let skipped = create_record(&client, &base_url, &without_summary).await;
+
+    let run_id = manual_run(&base_url, rule_id, None, "every-revision").await;
+    drain_tasks(&repository).await;
+    let (evaluated, skipped_count): (i64, i64) =
+        sqlx::query_as("SELECT candidates_evaluated,candidates_skipped FROM rule_runs WHERE id=$1")
+            .bind(run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!((evaluated, skipped_count), (3, 1));
+    let mut flagged: Vec<String> = sqlx::query_scalar(
+        "SELECT record_id::text FROM rule_findings WHERE rule_id=$1 AND state='open'",
+    )
+    .bind(rule_id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    flagged.sort();
+    let mut expected = vec![
+        on_first["id"].as_str().unwrap().to_owned(),
+        on_renamed["id"].as_str().unwrap().to_owned(),
+    ];
+    expected.sort();
+    assert_eq!(flagged, expected);
+    assert!(!flagged.contains(&skipped["id"].as_str().unwrap().to_owned()));
+
+    // The rule reports the revision it skips. Version 1 has records, and
+    // version 3 is the latest published revision.
+    let rule: Value = client
+        .get(format!("{base_url}/rules/{rule_id}"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        rule["not_applicable"],
+        json!([{"blueprint_version": 3, "reason": "attribute_missing", "message": "unknown attribute 'summary'"}])
+    );
+    // A new or changed rule must fit the latest published revision.
+    let validated = client
+        .post(format!("{base_url}/rules/validate"))
+        .json(&json!({
+            "blueprint_id": first["blueprint"]["id"],
+            "definition": RULE.replace("required_title", "another"),
+        }))
+        .send()
+        .await
+        .unwrap();
+    let refused = expect_error(
+        validated,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "invalid_rule_definition",
+    )
+    .await;
+    assert_eq!(
+        refused["error"]["message"],
+        "invalid rule definition: unknown attribute 'summary'"
+    );
+    let title_rule = RULE
+        .replace("required_title", "titled")
+        .replace("\"summary\"", "\"title\"");
+    expect_status(
+        client
+            .post(format!("{base_url}/rules/validate"))
+            .json(&json!({"blueprint_id": first["blueprint"]["id"], "definition": title_rule}))
+            .send()
+            .await
+            .unwrap(),
+        StatusCode::OK,
+    )
+    .await;
+    server.abort();
+}
+
+/// An enforcing change to an enabled rule is dry-run before it is saved,
+/// like enabling an enforcing rule, and the dry run checks the unsaved
+/// definition.
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn enforcing_changes_are_dry_run_before_they_are_saved(pool: PgPool) {
+    let (base_url, server, rule_id, blueprint) = setup_rule(&pool).await;
+    let client = authenticated_client();
+    let repository = AttricatRepository::new(pool.clone(), BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
+    create_record(&client, &base_url, &blueprint).await;
+    let enforcing = format!("{RULE}[enforcement]\non_save = true\n");
+    let save = |accept: bool| {
+        client
+            .put(format!("{base_url}/rules/{rule_id}"))
+            .json(&json!({ "definition": enforcing, "accept_existing_violations": accept }))
+            .send()
+    };
+    expect_error(
+        save(false).await.unwrap(),
+        StatusCode::CONFLICT,
+        "rule_dry_run_required",
+    )
+    .await;
+
+    let dry_run = |definition: Option<&str>, dry_run: bool, key: &str| {
+        client
+            .post(format!("{base_url}/rules/{rule_id}/run-now"))
+            .json(&json!({"dry_run": dry_run, "idempotency_key": key, "definition": definition}))
+            .send()
+    };
+    // Only a dry run may check an unsaved definition.
+    expect_error(
+        dry_run(Some(&enforcing), false, "not-dry").await.unwrap(),
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "invalid_rule_definition",
+    )
+    .await;
+    let run: Value = expect_status(
+        dry_run(Some(&enforcing), true, "enforcing").await.unwrap(),
+        StatusCode::ACCEPTED,
+    )
+    .await;
+    drain_tasks(&repository).await;
+    let (hash, created): (String, i64) =
+        sqlx::query_as("SELECT definition_hash,findings_created FROM rule_runs WHERE id=$1::uuid")
+            .bind(run["id"].as_str().unwrap())
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(created, 1);
+    // The dry run found the record without a summary.
+    let existing = expect_error(
+        save(false).await.unwrap(),
+        StatusCode::CONFLICT,
+        "rule_has_existing_violations",
+    )
+    .await;
+    assert_eq!(existing["error"]["details"]["existing_violations"], 1);
+    let saved = expect_status(save(true).await.unwrap(), StatusCode::OK).await;
+    assert_eq!(saved["version"], 2);
+    // The dry run checked exactly the definition that was saved.
+    assert_eq!(saved["definition_hash"], hash);
+    // Dry runs record no findings.
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM rule_findings WHERE rule_id=$1")
+            .bind(rule_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        0
+    );
     server.abort();
 }
 
@@ -388,10 +715,10 @@ async fn manual_run_of_a_disabled_rule_explains_it_is_not_enabled(pool: PgPool) 
     assert_eq!(body["error"]["code"], "rule_not_enabled");
     assert_eq!(
         body["error"]["message"],
-        "rule has no enabled revision to run; enable it first, or start a dry run"
+        "rule is not enabled; enable it first, or start a dry run"
     );
 
-    // Dry runs may still evaluate the latest published revision.
+    // Dry runs may still evaluate the current revision.
     client
         .post(format!("{base_url}/rules/{rule_id}/run-now"))
         .json(&json!({"dry_run": true, "idempotency_key": "disabled-dry"}))
@@ -403,10 +730,11 @@ async fn manual_run_of_a_disabled_rule_explains_it_is_not_enabled(pool: PgPool) 
     server.abort();
 }
 
-/// Validation runs the save checks against the chosen blueprint revision, so
-/// the editor reports an unknown attribute before the rule is saved.
+/// Validation runs the save checks against the blueprint's latest published
+/// revision, so the editor reports an unknown attribute before the rule is
+/// saved.
 #[sqlx::test(migrator = "api::MIGRATOR")]
-async fn validate_checks_the_definition_against_its_blueprint_revision(pool: PgPool) {
+async fn validate_checks_the_definition_against_its_blueprint(pool: PgPool) {
     let (base_url, server, _, blueprint) = setup_rule(&pool).await;
     let client = authenticated_client();
     let validate = |definition: String| {
@@ -414,7 +742,6 @@ async fn validate_checks_the_definition_against_its_blueprint_revision(pool: PgP
             .post(format!("{base_url}/rules/validate"))
             .json(&json!({
                 "blueprint_id": blueprint["blueprint"]["id"],
-                "blueprint_version": blueprint["blueprint"]["version"],
                 "context_id": null,
                 "definition": definition,
             }))
@@ -451,7 +778,7 @@ async fn validate_checks_the_definition_against_its_blueprint_revision(pool: PgP
 }
 
 /// A record change re-checks the record for every enabled rule of its
-/// revision, even one without an event trigger, and the record can be
+/// blueprint, even one without an event trigger, and the record can be
 /// re-checked on demand.
 #[sqlx::test(migrator = "api::MIGRATOR")]
 async fn record_changes_and_rechecks_run_every_enabled_rule_for_the_record(pool: PgPool) {

@@ -68,7 +68,7 @@ async fn run_rule(client: &Client, base: &str, rule_id: &str, dry_run: bool, key
     let (status, body) = post(
         client,
         format!("{base}/rules/{rule_id}/run-now"),
-        json!({"dry_run": dry_run, "idempotency_key": key, "version": 1}),
+        json!({"dry_run": dry_run, "idempotency_key": key}),
     )
     .await;
     assert!(status.is_success(), "{body}");
@@ -112,7 +112,6 @@ default_value = 1
         format!("{base}/rules"),
         json!({
             "blueprint_id": blueprint["blueprint"]["id"],
-            "blueprint_version": blueprint["blueprint"]["version"],
             "context_id": null,
             "definition": "format_version = 1\ncode = \"price-positive\"\nname = \"Price positive\"\nseverity = \"error\"\n[[triggers]]\ntype = \"manual\"\n[predicate]\ntype = \"compare\"\nattribute_code = \"price\"\nop = \"gte\"\nvalue = 0\n[enforcement]\non_save = true",
         }),
@@ -121,14 +120,7 @@ default_value = 1
     assert_eq!(status, StatusCode::CREATED, "{rule}");
     let rule_id = rule["id"].as_str().unwrap().to_owned();
     let rule_uuid: Uuid = rule_id.parse().unwrap();
-    let (status, body) = post(
-        &client,
-        format!("{base}/rules/{rule_id}/versions/1/publish"),
-        json!({}),
-    )
-    .await;
-    assert!(status.is_success(), "{body}");
-    let enable = format!("{base}/rules/{rule_id}/versions/1/enable");
+    let enable = format!("{base}/rules/{rule_id}/enable");
     let disable = format!("{base}/rules/{rule_id}/disable");
 
     let older_dry_run = run_rule(&client, &base, &rule_id, true, "dry-a").await;
@@ -152,10 +144,11 @@ default_value = 1
         .await
         .unwrap();
     let pending = Uuid::new_v4();
-    sqlx::query("INSERT INTO rule_runs (id, workspace_id, rule_id, rule_version, source, status, idempotency_key, created_at) VALUES ($1, $2, $3, 1, 'manual', 'pending', 'pending', now() - interval '200 days')")
+    sqlx::query("INSERT INTO rule_runs (id, workspace_id, rule_id, rule_version, definition_hash, source, status, idempotency_key, created_at) VALUES ($1, $2, $3, 1, $4, 'manual', 'pending', 'pending', now() - interval '200 days')")
         .bind(pending)
         .bind(workspace())
         .bind(rule_uuid)
+        .bind(rule["definition_hash"].as_str().unwrap())
         .execute(&pool)
         .await
         .unwrap();
@@ -203,7 +196,7 @@ default_value = 1
             .unwrap();
     assert_eq!(resolved_by, None);
 
-    // The enable gate still finds the latest completed full dry run.
+    // The dry-run gate still finds the latest completed full dry run.
     sqlx::query("DELETE FROM rule_runs WHERE id = $1")
         .bind(pending)
         .execute(&pool)

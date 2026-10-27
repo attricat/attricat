@@ -818,17 +818,7 @@ fn json_or_file_inputs_and_generated_help_cover_new_commands() {
 fn rule_commands_require_definition_metadata_and_sources() {
     let id = "00000000-0000-4000-8000-000000000001";
     assert!(
-        Cli::try_parse_from([
-            "acli",
-            "rule",
-            "validate",
-            "--blueprint-id",
-            id,
-            "--blueprint-version",
-            "1",
-            "--stdin"
-        ])
-        .is_ok()
+        Cli::try_parse_from(["acli", "rule", "validate", "--blueprint-id", id, "--stdin"]).is_ok()
     );
     assert!(
         Cli::try_parse_from([
@@ -837,12 +827,26 @@ fn rule_commands_require_definition_metadata_and_sources() {
             "create",
             "--blueprint-id",
             id,
-            "--blueprint-version",
-            "1",
             "--file",
             "rule.toml"
         ])
         .is_ok()
+    );
+    assert!(Cli::try_parse_from(["acli", "rule", "update", id, "--file", "rule.toml"]).is_ok());
+    assert!(Cli::try_parse_from(["acli", "rule", "revisions", id]).is_ok());
+    // Only a dry run checks an unsaved definition.
+    assert!(
+        Cli::try_parse_from([
+            "acli",
+            "rule",
+            "run-now",
+            id,
+            "--idempotency-key",
+            "check",
+            "--definition-file",
+            "rule.toml"
+        ])
+        .is_err()
     );
     assert!(Cli::try_parse_from(["acli", "rule", "validate", "--stdin"]).is_err());
     assert!(Cli::try_parse_from(["acli", "blueprint", "validate", "--file", "b.toml"]).is_ok());
@@ -877,15 +881,7 @@ fn rule_commands_require_definition_metadata_and_sources() {
         .is_ok()
     );
     assert!(
-        Cli::try_parse_from([
-            "acli",
-            "rule",
-            "enable",
-            id,
-            "2",
-            "--accept-existing-violations"
-        ])
-        .is_ok()
+        Cli::try_parse_from(["acli", "rule", "enable", id, "--accept-existing-violations"]).is_ok()
     );
     assert!(Cli::try_parse_from(["acli", "data-health", "background-processing"]).is_ok());
 }
@@ -908,7 +904,7 @@ async fn rule_routes_forward_definition_and_run_options() {
             ),
         )
         .route(
-            "/rules/{rule_id}/versions/{version}/enable",
+            "/rules/{rule_id}/enable",
             axum::routing::post(
                 |axum::Json(body): axum::Json<Value>| async move { axum::Json(body) },
             ),
@@ -931,7 +927,6 @@ async fn rule_routes_forward_definition_and_run_options() {
         &api,
         RuleCommand::Validate {
             blueprint_id: id,
-            blueprint_version: 2,
             context_id: None,
             source: SourceInput {
                 file: Some(file.path().to_owned()),
@@ -944,7 +939,7 @@ async fn rule_routes_forward_definition_and_run_options() {
     let body: Value = serde_json::from_str(&result).unwrap();
     assert_eq!(
         body,
-        json!({"blueprint_id":id,"blueprint_version":2,"context_id":null,"definition":"format_version = 1\n"})
+        json!({"blueprint_id":id,"context_id":null,"definition":"format_version = 1\n"})
     );
     let result = rule_command(
         &api,
@@ -953,19 +948,19 @@ async fn rule_routes_forward_definition_and_run_options() {
             idempotency_key: "check".into(),
             record_id: Some(id),
             dry_run: true,
+            definition_file: Some(file.path().to_owned()),
         },
     )
     .await
     .unwrap();
     assert_eq!(
         serde_json::from_str::<Value>(&result).unwrap(),
-        json!({"idempotency_key":"check","record_id":id,"dry_run":true})
+        json!({"idempotency_key":"check","record_id":id,"dry_run":true,"definition":"format_version = 1\n"})
     );
     let result = rule_command(
         &api,
         RuleCommand::Enable {
             rule_id: id,
-            version: 3,
             accept_existing_violations: true,
         },
     )
@@ -2654,8 +2649,6 @@ fn token_stdin_rejects_commands_that_also_read_stdin() {
         "validate",
         "--blueprint-id",
         "00000000-0000-4000-8000-000000000001",
-        "--blueprint-version",
-        "1",
         "--stdin",
     ]);
     assert!(error.is_err());

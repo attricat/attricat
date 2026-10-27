@@ -10,12 +10,16 @@ import {
   compiledRuleSchema,
   createRuleSchema,
   findingSchema,
+  ruleDetailsSchema,
+  ruleRevisionSchema,
   ruleRunSchema,
   ruleSchema,
+  updateRuleSchema,
   type CreateRule,
   type FindingsSearch,
+  type UpdateRule,
 } from './schemas';
-import { uuidSegment, versionSegment } from '../../api/pathSegments';
+import { uuidSegment } from '../../api/pathSegments';
 import { randomUuid } from '../../components/randomUuid';
 export type {
   CompiledRule,
@@ -23,34 +27,43 @@ export type {
   Finding,
   FindingsSearch,
   Rule,
+  RuleDetails,
+  RuleRevision,
   RuleRun,
+  RuleWarning,
+  UpdateRule,
 } from './schemas';
-export const listRules = () => request('/api/rules', z.array(ruleSchema));
-/** Runs the save checks on a rule and its blueprint revision without storing it. */
+const rulePath = (ruleId: string) => `/api/rules/${uuidSegment(ruleId)}`;
+/** Every rule with the blueprint revisions it skips. */
+export const listRules = () =>
+  request('/api/rules', z.array(ruleDetailsSchema));
+export const getRule = (ruleId: string) =>
+  request(rulePath(ruleId), ruleDetailsSchema);
+/** A rule's saved revisions, newest first: its changelog. */
+export const listRuleRevisions = (ruleId: string) =>
+  request(`${rulePath(ruleId)}/revisions`, z.array(ruleRevisionSchema));
+/**
+ * Runs the save checks on a rule against its blueprint's latest published
+ * revision without storing it.
+ */
 export const validateRule = (input: CreateRule, signal?: AbortSignal) =>
   request('/api/rules/validate', compiledRuleSchema, {
     ...jsonRequest('POST', createRuleSchema.parse(input)),
     signal,
   });
-/** Creates a rule as a draft first revision. */
+/** Creates a disabled rule with its first revision. */
 export const createRule = (input: CreateRule) =>
   request(
     '/api/rules',
     ruleSchema,
     jsonRequest('POST', createRuleSchema.parse(input)),
   );
-/** Adds a draft revision; the blueprint revision and context stay the same. */
-export const createRuleRevision = (ruleId: string, input: CreateRule) =>
+/** Saves a changed definition as the rule's new current revision. */
+export const updateRule = (ruleId: string, input: UpdateRule) =>
   request(
-    `/api/rules/${uuidSegment(ruleId)}/versions`,
+    rulePath(ruleId),
     ruleSchema,
-    jsonRequest('POST', createRuleSchema.parse(input)),
-  );
-export const publishRuleRevision = (ruleId: string, version: number) =>
-  request(
-    `/api/rules/${uuidSegment(ruleId)}/versions/${versionSegment(version)}/publish`,
-    ruleSchema,
-    { method: 'POST' },
+    jsonRequest('PUT', updateRuleSchema.parse(input)),
   );
 export const listRuleRuns = () =>
   request('/api/rule-runs', z.array(ruleRunSchema));
@@ -60,7 +73,7 @@ export const listRecordRuleRuns = (recordId: string) =>
     `/api/rule-runs?record_id=${uuidSegment(recordId)}&limit=${RECORD_RULE_RUNS_LIMIT}`,
     z.array(ruleRunSchema),
   );
-/** Re-checks one record against every enabled rule of its blueprint revision. */
+/** Re-checks one record against every enabled rule of its blueprint. */
 export const recheckRecord = (recordId: string) =>
   request(
     '/api/rule-findings/recheck',
@@ -115,24 +128,28 @@ export const acknowledgeFinding = (findingId: string) =>
       method: 'POST',
     },
   );
-export const runRuleNow = (ruleId: string, version: number, dryRun: boolean) =>
+/**
+ * Queues a run of the rule's current revision. A dry run may check an unsaved
+ * `definition` instead, so an enforcing change can be dry-run before saving.
+ */
+export const runRuleNow = (
+  ruleId: string,
+  dryRun: boolean,
+  definition?: string,
+) =>
   request(
-    `/api/rules/${uuidSegment(ruleId)}/run-now`,
+    `${rulePath(ruleId)}/run-now`,
     z.object({ id: z.uuid() }),
     jsonRequest('POST', {
       dry_run: dryRun,
       record_id: null,
       idempotency_key: randomUuid(),
-      version: z.number().int().positive().parse(version),
+      ...(definition === undefined ? {} : { definition }),
     }),
   );
-export const enableRuleRevision = (
-  ruleId: string,
-  version: number,
-  acceptExistingViolations = false,
-) =>
+export const enableRule = (ruleId: string, acceptExistingViolations = false) =>
   request(
-    `/api/rules/${uuidSegment(ruleId)}/versions/${versionSegment(version)}/enable`,
+    `${rulePath(ruleId)}/enable`,
     ruleSchema,
     jsonRequest(
       'POST',
@@ -140,6 +157,6 @@ export const enableRuleRevision = (
     ),
   );
 export const disableRule = (ruleId: string) =>
-  request(`/api/rules/${uuidSegment(ruleId)}/disable`, ruleSchema, {
+  request(`${rulePath(ruleId)}/disable`, ruleSchema, {
     method: 'POST',
   });

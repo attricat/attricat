@@ -3,6 +3,12 @@ import type { FindingsSearch } from './schemas';
 export const ruleQueryKeys = {
   all: ['rules'] as const,
   definitions: () => [...ruleQueryKeys.all, 'definitions'] as const,
+  /** One rule; refreshing the definitions refreshes it. */
+  rule: (ruleId: string) =>
+    [...ruleQueryKeys.definitions(), 'rule', ruleId] as const,
+  /** A rule's changelog, refreshed with the rule. */
+  revisions: (ruleId: string) =>
+    [...ruleQueryKeys.rule(ruleId), 'revisions'] as const,
   findings: (recordId?: string) =>
     recordId
       ? ([...ruleQueryKeys.all, 'findings', recordId] as const)

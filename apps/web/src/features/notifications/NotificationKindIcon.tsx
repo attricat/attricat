@@ -6,6 +6,7 @@ import {
   CommentIcon,
   InboxIcon,
   InvitationIcon,
+  RuleIcon,
   TeamIcon,
 } from '../../components/systemIcons';
 import { notificationKinds } from './constants';
@@ -19,6 +20,7 @@ const kindIcons: Record<string, LucideIcon> = {
   [notificationKinds.agentRunFailed]: AgentIcon,
   [notificationKinds.teamMemberAdded]: TeamIcon,
   [notificationKinds.invitationAccepted]: InvitationIcon,
+  [notificationKinds.ruleNotApplicable]: RuleIcon,
 };
 
 /** The decorative concept icon of what a notification is about. */

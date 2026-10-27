@@ -25,8 +25,7 @@ use crate::solution_packs::{
 mod plan;
 
 pub(crate) use plan::{
-    DependentPlanInput, physical_blueprint_code, plan_contexts, plan_dependents,
-    plan_prerequisites,
+    DependentPlanInput, physical_blueprint_code, plan_contexts, plan_dependents, plan_prerequisites,
 };
 pub use plan::{
     ExistingContextSnapshot, ExistingPublicationChannel, PrerequisiteResolution,
@@ -539,13 +538,16 @@ fn validate_rule(
     }
     let target = record_blueprint(key, &blueprint, blueprints)?;
     validate_context_reference(key, context.as_deref(), contexts)?;
-    // The same type check as an ordinary rule write against its blueprint.
-    let types = target
-        .effective_attributes()
-        .iter()
-        .map(|attribute| (attribute.code.clone(), attribute.value_type))
-        .collect::<HashMap<_, _>>();
-    attricat_rules::validate_against_attributes(&compiled, &types).map_err(|error| {
+    // The same check as an ordinary rule write against its blueprint.
+    let mut attributes = attricat_rules::RevisionAttributes::default();
+    for attribute in target.effective_attributes() {
+        attributes.insert(
+            &attribute.code,
+            attribute.value_type,
+            attribute.value_schema.as_ref(),
+        );
+    }
+    attricat_rules::applicability(&compiled, &attributes).map_err(|error| {
         SolutionPackError::Invalid(format!(
             "rule '{key}' is invalid for '{blueprint}': {error}"
         ))

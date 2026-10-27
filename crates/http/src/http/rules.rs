@@ -3,7 +3,10 @@ use super::{
     extractors::{ApiJson, ApiPath, ApiQuery},
     pagination::{ArrayPage, array_response},
 };
-use crate::model::{CreateManualRuleRun, CreateRule, EnableRule, Rule, RuleFinding};
+use crate::model::{
+    CreateManualRuleRun, CreateRule, EnableRule, Rule, RuleDetails, RuleFinding, RuleRevision,
+    UpdateRule,
+};
 use crate::repository::RuleFindingFilter;
 use attricat_domain::states::{RuleFindingSeverity, RuleFindingState};
 use axum::{Json, http::StatusCode, response::Response};
@@ -23,7 +26,7 @@ pub(super) async fn validate(
 pub(super) async fn list(
     super::auth::ScopedRepository(repo): super::auth::ScopedRepository,
     ApiQuery(query): ApiQuery<RuleQuery>,
-) -> Result<Json<Vec<Rule>>, ApiError> {
+) -> Result<Json<Vec<RuleDetails>>, ApiError> {
     Ok(Json(repo.list_rules(query.blueprint_id).await?))
 }
 pub(super) async fn create(
@@ -32,38 +35,46 @@ pub(super) async fn create(
 ) -> Result<(StatusCode, Json<Rule>), ApiError> {
     Ok((StatusCode::CREATED, Json(repo.create_rule(input).await?)))
 }
-pub(super) async fn create_revision(
+/// Saves a changed definition as the rule's new current revision.
+pub(super) async fn update(
     super::auth::ScopedRepository(repo): super::auth::ScopedRepository,
     ApiPath(id): ApiPath<Uuid>,
-    ApiJson(input): ApiJson<CreateRule>,
-) -> Result<(StatusCode, Json<Rule>), ApiError> {
-    Ok((
-        StatusCode::CREATED,
-        Json(repo.create_rule_revision(id, input).await?),
-    ))
+    ApiJson(input): ApiJson<UpdateRule>,
+) -> Result<Json<Rule>, ApiError> {
+    Ok(Json(repo.update_rule(id, input).await?))
 }
 pub(super) async fn get(
     super::auth::ScopedRepository(repo): super::auth::ScopedRepository,
     ApiPath(id): ApiPath<Uuid>,
-) -> Result<Json<Rule>, ApiError> {
-    repo.get_rule(id)
+) -> Result<Json<RuleDetails>, ApiError> {
+    repo.get_rule_details(id)
         .await?
         .map(Json)
         .ok_or_else(|| ApiError::not_found("rule"))
 }
-pub(super) async fn publish(
+/// The rule's changelog, newest first.
+pub(super) async fn revisions(
+    super::auth::ScopedRepository(repo): super::auth::ScopedRepository,
+    ApiPath(id): ApiPath<Uuid>,
+) -> Result<Json<Vec<RuleRevision>>, ApiError> {
+    Ok(Json(repo.list_rule_revisions(id).await?))
+}
+pub(super) async fn revision(
     super::auth::ScopedRepository(repo): super::auth::ScopedRepository,
     ApiPath((id, version)): ApiPath<(Uuid, i64)>,
-) -> Result<Json<Rule>, ApiError> {
-    Ok(Json(repo.publish_rule(id, version).await?))
+) -> Result<Json<RuleRevision>, ApiError> {
+    repo.get_rule_revision(id, version)
+        .await?
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found("rule revision"))
 }
 pub(super) async fn enable(
     super::auth::ScopedRepository(repo): super::auth::ScopedRepository,
-    ApiPath((id, version)): ApiPath<(Uuid, i64)>,
+    ApiPath(id): ApiPath<Uuid>,
     input: Option<ApiJson<EnableRule>>,
 ) -> Result<Json<Rule>, ApiError> {
     let options = input.map(|ApiJson(input)| input).unwrap_or_default();
-    Ok(Json(repo.enable_rule_with(id, version, options).await?))
+    Ok(Json(repo.enable_rule(id, options).await?))
 }
 pub(super) async fn run_now(
     super::auth::ScopedRepository(repo): super::auth::ScopedRepository,

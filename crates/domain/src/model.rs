@@ -355,6 +355,26 @@ pub struct BlueprintWithAttributes {
     pub table_path_attributes: Vec<TablePathAttribute>,
 }
 
+/// A newly published blueprint revision with the enabled rules it no longer
+/// fits. Publishing is never refused for them; they skip the revision's
+/// records.
+#[derive(Clone, Debug, Serialize)]
+pub struct PublishedBlueprint {
+    #[serde(flatten)]
+    pub blueprint: BlueprintWithAttributes,
+    pub rule_warnings: Vec<RuleWarning>,
+}
+
+/// An enabled rule that does not apply to a blueprint revision, and why.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct RuleWarning {
+    pub rule_id: Uuid,
+    pub code: String,
+    pub name: String,
+    pub reason: crate::states::RuleInapplicability,
+    pub message: String,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TablePathAttribute {
     pub code: String,
@@ -1216,31 +1236,75 @@ pub struct CreateManualWorkflowRun {
     pub idempotency_key: String,
 }
 
+/// A data quality rule of a blueprint: its current definition and whether it
+/// runs. It applies to the records of every blueprint revision it fits.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Rule {
     pub id: Uuid,
     pub blueprint_id: Uuid,
-    pub blueprint_version: i64,
     pub context_id: Option<Uuid>,
     pub code: String,
     pub name: String,
+    /// The current revision.
     pub version: i64,
-    pub status: crate::states::RevisionStatus,
     pub definition: String,
     pub definition_hash: String,
     pub compiled_plan: Value,
-    pub published_at: Option<DateTime<Utc>>,
+    pub enabled: bool,
+    /// When the rule was created.
     pub created_at: DateTime<Utc>,
-    pub enabled_version: Option<i64>,
+    /// When the current revision was saved.
+    pub updated_at: DateTime<Utc>,
+}
+
+/// A rule with the blueprint revisions it does not apply to: the latest
+/// published revision and those with live records.
+#[derive(Clone, Debug, Serialize)]
+pub struct RuleDetails {
+    #[serde(flatten)]
+    pub rule: Rule,
+    pub not_applicable: Vec<RevisionNotApplicable>,
+}
+
+/// A blueprint revision whose records a rule skips, and why.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct RevisionNotApplicable {
+    pub blueprint_version: i64,
+    pub reason: crate::states::RuleInapplicability,
+    pub message: String,
+}
+
+/// One saved definition of a rule, kept for its changelog.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct RuleRevision {
+    pub rule_id: Uuid,
+    pub version: i64,
+    pub name: String,
+    pub definition: String,
+    pub definition_hash: String,
+    /// Who saved it; `None` for revisions saved by automation or before
+    /// authors were recorded.
+    pub created_by_user_id: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CreateRule {
     pub blueprint_id: Uuid,
-    pub blueprint_version: i64,
     pub context_id: Option<Uuid>,
     pub definition: String,
+}
+
+/// A changed definition for a rule, saved as its new current revision.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct UpdateRule {
+    pub definition: String,
+    /// Save an enforcing definition of an enabled rule although its completed
+    /// dry run found existing violations, or stopped at the candidate cap.
+    #[serde(default)]
+    pub accept_existing_violations: bool,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -1249,13 +1313,13 @@ pub struct CreateManualRuleRun {
     pub record_id: Option<Uuid>,
     pub dry_run: bool,
     pub idempotency_key: String,
-    /// Published revision to dry-run before enabling it. Defaults to the
-    /// enabled revision, or the latest published one for dry runs.
+    /// An unsaved definition to dry-run instead of the current one, so an
+    /// enforcing change can be checked before it is saved.
     #[serde(default)]
-    pub version: Option<i64>,
+    pub definition: Option<String>,
 }
 
-/// Options for enabling a rule revision.
+/// Options for enabling a rule.
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EnableRule {
@@ -1270,18 +1334,23 @@ pub struct RuleRun {
     pub id: Uuid,
     pub rule_id: Uuid,
     pub rule_version: i64,
+    /// The definition the run evaluated: the rule revision's, or for a dry
+    /// run of an unsaved change, that change's.
+    pub definition_hash: String,
     pub source: String,
     pub dry_run: bool,
     pub scope_record_id: Option<Uuid>,
     pub status: String,
     pub candidate_cursor: Option<Uuid>,
     pub candidates_evaluated: i64,
+    /// Candidates on a blueprint revision the rule does not apply to.
+    pub candidates_skipped: i64,
     pub findings_created: i64,
     pub findings_resolved: i64,
     pub attempts: i32,
     pub last_error: Option<String>,
     /// The run stopped at its candidate cap with candidates left unchecked.
-    /// A truncated full dry run does not satisfy the enable gate on its own.
+    /// A truncated full dry run does not satisfy the dry-run gate on its own.
     pub truncated: bool,
     pub completed_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,

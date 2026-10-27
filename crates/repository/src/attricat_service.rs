@@ -11,8 +11,8 @@ use crate::{
         AppendAttributeValues, AttachReusableAttribute, AttributeContext, AttributeValue,
         BlueprintRecordPublicationSummary, BlueprintWithAttributes, CreateAttributeContext,
         CreateBlueprint, CreateRecordFormRequest, CreateReusableAttribute,
-        CreateReusableAttributeGroup, MigrateRecordRequest, Record, RecordBatchRequest,
-        RecordBatchResponse, RecordPublicationStatus, RecordReusableAttribute,
+        CreateReusableAttributeGroup, MigrateRecordRequest, PublishedBlueprint, Record,
+        RecordBatchRequest, RecordBatchResponse, RecordPublicationStatus, RecordReusableAttribute,
         RelationshipMutation, ReusableAttribute, ReusableAttributeGroup, SearchBlueprint,
         UpdateAttributeContext, UpdateRecordFormRequest,
     },
@@ -63,7 +63,7 @@ impl<'a> AttricatMutationService<'a> {
         &self,
         blueprint_id: Uuid,
         version: i64,
-    ) -> Result<BlueprintWithAttributes, RepositoryError> {
+    ) -> Result<PublishedBlueprint, RepositoryError> {
         self.repository
             .publish_blueprint_revision(blueprint_id, version)
             .await

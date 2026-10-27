@@ -1,19 +1,30 @@
 use super::generations::{Generation, advance_generation};
+use super::notifications::{
+    NewNotification, NotificationSubject, NotificationSubjectKind, kinds as notification_kinds,
+};
 use super::*;
 use crate::persistence_rows::{Db, IntoDomain};
 use crate::{
     domain_events::DomainEvent,
     model::{
-        CreateManualRuleRun, CreateRule, DataQualityFindingCount, RecordDataQuality, Rule,
-        RuleFinding, RuleRun,
+        CreateManualRuleRun, CreateRule, DataQualityFindingCount, EnableRule, RecordDataQuality,
+        RevisionNotApplicable, Rule, RuleDetails, RuleFinding, RuleRevision, RuleRun, RuleWarning,
+        UpdateRule,
     },
     task_queue::{TaskInsert, TaskKind},
 };
 use attricat_domain::states::{RevisionStatus, RuleFindingSeverity, RuleFindingState, RunStatus};
+use attricat_rules::CompiledRule;
 use chrono::Utc;
 use uuid::Uuid;
 
-const RULE_FIELDS: &str = "r.id,r.blueprint_id,r.blueprint_version,r.context_id,r.code,r.name,r.version,r.status,r.definition,r.definition_hash,r.compiled_plan,r.published_at,r.created_at,l.enabled_version";
+/// A rule as its current revision, with whether it is enabled. Select it
+/// from [`CURRENT_RULES`].
+const RULE_FIELDS: &str = "r.id,r.blueprint_id,r.context_id,r.code,r.name,r.version,r.definition,r.definition_hash,r.compiled_plan,l.enabled,(SELECT min(x.created_at) FROM rules x WHERE x.workspace_id=r.workspace_id AND x.id=r.id) AS created_at,r.created_at AS updated_at";
+/// Each rule joined to its current revision.
+const CURRENT_RULES: &str = "rule_lifecycles l JOIN rules r ON r.workspace_id=l.workspace_id AND r.id=l.rule_id AND r.version=l.current_version";
+const REVISION_FIELDS: &str =
+    "id AS rule_id,version,name,definition,definition_hash,created_by_user_id,created_at";
 
 type RuleRunTaskRow = (
     String,
@@ -25,7 +36,6 @@ type RuleRunTaskRow = (
     Option<Uuid>,
     i64,
     Uuid,
-    i64,
     Option<Uuid>,
     serde_json::Value,
 );
@@ -41,8 +51,9 @@ pub struct ClaimedRuleRun {
     pub candidate_cursor: Option<Uuid>,
     pub candidates_evaluated: i64,
     pub blueprint_id: Uuid,
-    pub blueprint_version: i64,
     pub context_id: Option<Uuid>,
+    /// The definition the run evaluates: its rule revision's, or the unsaved
+    /// one a dry run was given.
     pub compiled_plan: serde_json::Value,
 }
 
@@ -52,11 +63,18 @@ pub struct ClaimedRuleRun {
 pub struct RuleCandidateResult {
     pub record_id: Uuid,
     pub failed: bool,
+    /// The record's blueprint revision does not fit the rule. It is neither
+    /// checked nor reported, and passes.
+    pub skipped: bool,
     pub message: String,
     pub evidence: serde_json::Value,
     pub evaluation_key: String,
     pub severity: String,
 }
+
+/// A durable run to create: `(rule, rule version, definition hash, scope
+/// record, idempotency key)`.
+type NewRuleRun = (Uuid, i64, String, Uuid, String);
 
 impl AttricatRepository {
     async fn enqueue_rule_task(
@@ -83,37 +101,81 @@ impl AttricatRepository {
         Ok(())
     }
 
+    /// Rules, optionally of one blueprint, with the revisions they skip.
     pub async fn list_rules(
         &self,
         blueprint_id: Option<Uuid>,
-    ) -> Result<Vec<Rule>, RepositoryError> {
+    ) -> Result<Vec<RuleDetails>, RepositoryError> {
         let ws = self.workspace_id.0;
-        let query = format!(
-            "SELECT {RULE_FIELDS} FROM rules r JOIN rule_lifecycles l ON l.rule_id=r.id WHERE r.workspace_id=$1 AND ($2::uuid IS NULL OR r.blueprint_id=$2) ORDER BY r.created_at DESC,r.version DESC"
-        );
-        Ok(sqlx::query_as::<_, Db<Rule>>(&query)
-            .bind(ws)
-            .bind(blueprint_id)
-            .fetch_all(&self.pool)
-            .await?
-            .into_domain())
+        let rules: Vec<Rule> = sqlx::query_as::<_, Db<Rule>>(&format!(
+            "SELECT {RULE_FIELDS} FROM {CURRENT_RULES} WHERE l.workspace_id=$1 AND ($2::uuid IS NULL OR r.blueprint_id=$2) ORDER BY r.name,r.id"
+        ))
+        .bind(ws)
+        .bind(blueprint_id)
+        .fetch_all(&self.pool)
+        .await?
+        .into_domain();
+        let mut conn = self.pool.acquire().await?;
+        with_applicability(&mut conn, ws, rules).await
     }
+
+    pub async fn get_rule(&self, id: Uuid) -> Result<Option<Rule>, RepositoryError> {
+        Ok(sqlx::query_as::<_, Db<Rule>>(&format!(
+            "SELECT {RULE_FIELDS} FROM {CURRENT_RULES} WHERE l.workspace_id=$1 AND l.rule_id=$2"
+        ))
+        .bind(self.workspace_id.0)
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?
+        .into_domain())
+    }
+
+    /// A rule with the revisions of its blueprint it skips.
+    pub async fn get_rule_details(&self, id: Uuid) -> Result<Option<RuleDetails>, RepositoryError> {
+        let Some(rule) = self.get_rule(id).await? else {
+            return Ok(None);
+        };
+        let mut conn = self.pool.acquire().await?;
+        Ok(
+            with_applicability(&mut conn, self.workspace_id.0, vec![rule])
+                .await?
+                .pop(),
+        )
+    }
+
+    /// Every saved revision of a rule, newest first: its changelog.
+    pub async fn list_rule_revisions(
+        &self,
+        id: Uuid,
+    ) -> Result<Vec<RuleRevision>, RepositoryError> {
+        let revisions: Vec<RuleRevision> = sqlx::query_as::<_, Db<RuleRevision>>(&format!(
+            "SELECT {REVISION_FIELDS} FROM rules WHERE workspace_id=$1 AND id=$2 ORDER BY version DESC"
+        ))
+        .bind(self.workspace_id.0)
+        .bind(id)
+        .fetch_all(&self.pool)
+        .await?
+        .into_domain();
+        if revisions.is_empty() {
+            return Err(RepositoryError::NotFound("rule"));
+        }
+        Ok(revisions)
+    }
+
     pub async fn get_rule_revision(
         &self,
         id: Uuid,
         version: i64,
-    ) -> Result<Option<Rule>, RepositoryError> {
-        let ws = self.workspace_id.0;
-        let q = format!(
-            "SELECT {RULE_FIELDS} FROM rules r JOIN rule_lifecycles l ON l.rule_id=r.id WHERE r.workspace_id=$1 AND r.id=$2 AND r.version=$3"
-        );
-        Ok(sqlx::query_as::<_, Db<Rule>>(&q)
-            .bind(ws)
-            .bind(id)
-            .bind(version)
-            .fetch_optional(&self.pool)
-            .await?
-            .into_domain())
+    ) -> Result<Option<RuleRevision>, RepositoryError> {
+        Ok(sqlx::query_as::<_, Db<RuleRevision>>(&format!(
+            "SELECT {REVISION_FIELDS} FROM rules WHERE workspace_id=$1 AND id=$2 AND version=$3"
+        ))
+        .bind(self.workspace_id.0)
+        .bind(id)
+        .bind(version)
+        .fetch_optional(&self.pool)
+        .await?
+        .into_domain())
     }
 
     pub async fn create_rule(&self, input: CreateRule) -> Result<Rule, RepositoryError> {
@@ -128,33 +190,24 @@ impl AttricatRepository {
     }
 
     /// Runs the checks `create_rule` applies to a definition and its blueprint
-    /// revision and context, without storing anything.
-    pub async fn validate_rule(
-        &self,
-        input: &CreateRule,
-    ) -> Result<attricat_rules::CompiledRule, RepositoryError> {
+    /// and context, without storing anything.
+    pub async fn validate_rule(&self, input: &CreateRule) -> Result<CompiledRule, RepositoryError> {
         let mut tx = self.pool.begin().await?;
         let compiled = self.check_new_rule(&mut tx, input).await?;
         tx.rollback().await?;
         Ok(compiled)
     }
 
-    /// Compiles a new rule and checks it against its published blueprint
-    /// revision and optional context.
+    /// Compiles a new rule and checks it against its blueprint and optional
+    /// context.
     async fn check_new_rule(
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         input: &CreateRule,
-    ) -> Result<attricat_rules::CompiledRule, RepositoryError> {
-        let compiled = attricat_rules::compile(&input.definition)
-            .map_err(|e| RepositoryError::InvalidRuleDefinition(e.to_string()))?;
+    ) -> Result<CompiledRule, RepositoryError> {
+        let compiled = compile_rule(&input.definition)?;
         let ws = self.workspace_id.0;
-        let valid_blueprint:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM blueprints WHERE id=$1 AND version=$2 AND workspace_id=$3 AND status=$4 AND deleted_at IS NULL)").bind(input.blueprint_id).bind(input.blueprint_version).bind(ws).bind(RevisionStatus::Published.as_str()).fetch_one(&mut **tx).await?;
-        if !valid_blueprint {
-            return Err(RepositoryError::BlueprintNotPublished);
-        }
-        Self::validate_rule_attributes(tx, &compiled, input.blueprint_id, input.blueprint_version)
-            .await?;
+        check_rule_fits(tx, ws, input.blueprint_id, &compiled).await?;
         if let Some(context_id) = input.context_id {
             let exists: bool = sqlx::query_scalar(
                 "SELECT EXISTS(SELECT 1 FROM attribute_contexts WHERE id=$1 AND workspace_id=$2)",
@@ -171,30 +224,30 @@ impl AttricatRepository {
     }
 
     /// Serializes every writer of a rule code in this workspace until the
-    /// transaction ends and returns the families that already use it, as
-    /// `(rule_id, blueprint_id, latest_version)`. A rule code names one family
-    /// per workspace; callers must reject a code owned by another family.
+    /// transaction ends and returns the rules that already use it. A rule
+    /// code names one rule per workspace.
     pub(super) async fn lock_rule_code(
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         code: &str,
-    ) -> Result<Vec<(Uuid, Uuid, i64)>, RepositoryError> {
+    ) -> Result<Vec<Uuid>, RepositoryError> {
         let ws = self.workspace_id.0;
         sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))")
             .bind(format!("rule-code:{ws}:{code}"))
             .execute(&mut **tx)
             .await?;
-        Ok(sqlx::query_as(
-            "SELECT id, blueprint_id, max(version) FROM rules WHERE workspace_id=$1 AND code=$2 GROUP BY id, blueprint_id",
+        Ok(
+            sqlx::query_scalar("SELECT DISTINCT id FROM rules WHERE workspace_id=$1 AND code=$2")
+                .bind(ws)
+                .bind(code)
+                .fetch_all(&mut **tx)
+                .await?,
         )
-        .bind(ws)
-        .bind(code)
-        .fetch_all(&mut **tx)
-        .await?)
     }
 
     /// Shared mutation seam for callers that create a rule with a chosen id
-    /// as part of a larger transaction, such as seed application.
+    /// as part of a larger transaction, such as seed application. The rule
+    /// starts disabled with its first revision current.
     pub(super) async fn create_rule_in_transaction(
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
@@ -208,184 +261,175 @@ impl AttricatRepository {
         }
         let plan = serde_json::to_value(&compiled)
             .map_err(|e| RepositoryError::InvalidRuleDefinition(e.to_string()))?;
-        sqlx::query("INSERT INTO rules(id,workspace_id,blueprint_id,blueprint_version,context_id,code,name,version,definition,definition_hash,compiled_plan) VALUES($1,$2,$3,$4,$5,$6,$7,1,$8,$9,$10)").bind(id).bind(ws).bind(input.blueprint_id).bind(input.blueprint_version).bind(input.context_id).bind(&compiled.code).bind(&compiled.name).bind(input.definition).bind(&compiled.raw_definition_hash).bind(plan).execute(&mut **tx).await?;
-        sqlx::query("INSERT INTO rule_lifecycles(rule_id,workspace_id) VALUES($1,$2)")
-            .bind(id)
-            .bind(ws)
-            .execute(&mut **tx)
-            .await?;
+        sqlx::query("INSERT INTO rules(id,workspace_id,blueprint_id,context_id,code,name,version,definition,definition_hash,compiled_plan,created_by_user_id) VALUES($1,$2,$3,$4,$5,$6,1,$7,$8,$9,$10)").bind(id).bind(ws).bind(input.blueprint_id).bind(input.context_id).bind(&compiled.code).bind(&compiled.name).bind(input.definition).bind(&compiled.raw_definition_hash).bind(plan).bind(self.actor_user_id()).execute(&mut **tx).await?;
+        sqlx::query(
+            "INSERT INTO rule_lifecycles(rule_id,workspace_id,current_version) VALUES($1,$2,1)",
+        )
+        .bind(id)
+        .bind(ws)
+        .execute(&mut **tx)
+        .await?;
         Ok(id)
     }
-    pub async fn create_rule_revision(
-        &self,
-        id: Uuid,
-        input: CreateRule,
-    ) -> Result<Rule, RepositoryError> {
-        let compiled = attricat_rules::compile(&input.definition)
-            .map_err(|e| RepositoryError::InvalidRuleDefinition(e.to_string()))?;
+
+    /// Saves a changed definition as the rule's new current revision. Findings
+    /// of earlier definitions are resolved; an enabled rule moves its
+    /// schedules to the new revision and re-checks every record. An enforcing
+    /// definition of an enabled rule passes the same dry-run gate as enabling.
+    pub async fn update_rule(&self, id: Uuid, input: UpdateRule) -> Result<Rule, RepositoryError> {
+        let compiled = compile_rule(&input.definition)?;
         let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
-        let previous: Option<(i64, String, Uuid, i64, Option<Uuid>, String)> = sqlx::query_as("SELECT version,code,blueprint_id,blueprint_version,context_id,definition_hash FROM rules WHERE workspace_id=$1 AND id=$2 ORDER BY version DESC LIMIT 1 FOR UPDATE").bind(ws).bind(id).fetch_optional(&mut *tx).await?;
-        let Some((version, code, blueprint_id, blueprint_version, context_id, definition_hash)) =
-            previous
-        else {
+        let current: Option<(i64, String, Uuid, String, bool)> = sqlx::query_as(&format!(
+            "SELECT r.version,r.code,r.blueprint_id,r.definition_hash,l.enabled FROM {CURRENT_RULES} WHERE l.workspace_id=$1 AND l.rule_id=$2 FOR UPDATE OF l"
+        ))
+        .bind(ws)
+        .bind(id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let Some((version, code, blueprint_id, definition_hash, enabled)) = current else {
             return Err(RepositoryError::NotFound("rule"));
         };
-        if code != compiled.code
-            || blueprint_id != input.blueprint_id
-            || blueprint_version != input.blueprint_version
-            || context_id != input.context_id
-        {
+        if code != compiled.code {
             return Err(RepositoryError::InvalidRuleDefinition(
-                "rule code, blueprint revision, and context cannot change across revisions".into(),
+                "rule code cannot change across revisions".into(),
             ));
         }
-        // Only the latest revision counts, as for blueprints: returning to an
-        // earlier definition is a change.
+        // Only the current revision counts, as for blueprints: returning to
+        // an earlier definition is a change.
         if definition_hash == compiled.raw_definition_hash {
             return Err(RepositoryError::RuleRevisionUnchanged { version });
         }
-        Self::validate_rule_attributes(&mut tx, &compiled, blueprint_id, blueprint_version).await?;
+        check_rule_fits(&mut tx, ws, blueprint_id, &compiled).await?;
+        if enabled && compiled.enforcement.is_some() {
+            self.dry_run_gate(
+                &mut tx,
+                id,
+                blueprint_id,
+                &compiled.raw_definition_hash,
+                input.accept_existing_violations,
+            )
+            .await?;
+        }
+        let next: i64 =
+            sqlx::query_scalar("SELECT max(version)+1 FROM rules WHERE workspace_id=$1 AND id=$2")
+                .bind(ws)
+                .bind(id)
+                .fetch_one(&mut *tx)
+                .await?;
         let plan = serde_json::to_value(&compiled)
             .map_err(|e| RepositoryError::InvalidRuleDefinition(e.to_string()))?;
-        sqlx::query("INSERT INTO rules(id,workspace_id,blueprint_id,blueprint_version,context_id,code,name,version,definition,definition_hash,compiled_plan) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)").bind(id).bind(ws).bind(blueprint_id).bind(blueprint_version).bind(context_id).bind(&compiled.code).bind(&compiled.name).bind(version+1).bind(input.definition).bind(&compiled.raw_definition_hash).bind(plan).execute(&mut *tx).await?;
-        self.commit_mutation(tx).await?;
-        self.get_rule(id)
-            .await?
-            .ok_or(RepositoryError::NotFound("rule"))
-    }
-    pub async fn get_rule(&self, id: Uuid) -> Result<Option<Rule>, RepositoryError> {
-        let ws = self.workspace_id.0;
-        let q = format!(
-            "SELECT {RULE_FIELDS} FROM rules r JOIN rule_lifecycles l ON l.rule_id=r.id WHERE r.workspace_id=$1 AND r.id=$2 ORDER BY r.version DESC LIMIT 1"
-        );
-        Ok(sqlx::query_as::<_, Db<Rule>>(&q)
-            .bind(ws)
-            .bind(id)
-            .fetch_optional(&self.pool)
-            .await?
-            .into_domain())
-    }
-    pub async fn publish_rule(&self, id: Uuid, version: i64) -> Result<Rule, RepositoryError> {
-        let mut tx = self.pool.begin().await?;
-        self.publish_rule_in_transaction(&mut tx, id, version)
-            .await?;
-        self.commit_mutation(tx).await?;
-        self.get_rule(id)
-            .await?
-            .ok_or(RepositoryError::NotFound("rule"))
-    }
-    pub(super) async fn publish_rule_in_transaction(
-        &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-        id: Uuid,
-        version: i64,
-    ) -> Result<(), RepositoryError> {
-        let ws = self.workspace_id.0;
-        if sqlx::query("UPDATE rules SET status='published',published_at=COALESCE(published_at,now()) WHERE workspace_id=$1 AND id=$2 AND version=$3").bind(ws).bind(id).bind(version).execute(&mut **tx).await?.rows_affected()==0{return Err(RepositoryError::NotFound("rule revision"));}
-        advance_generation(tx, ws, Generation::Attricat).await?;
-        Ok(())
-    }
-    /// Type-checks a standalone rule against its blueprint revision's attributes.
-    async fn validate_rule_attributes(
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-        compiled: &attricat_rules::CompiledRule,
-        blueprint_id: Uuid,
-        blueprint_version: i64,
-    ) -> Result<(), RepositoryError> {
-        #[derive(sqlx::FromRow)]
-        struct AttributeTypeRow {
-            code: String,
-            #[sqlx(try_from = "String")]
-            value_type: ValueType,
+        sqlx::query("INSERT INTO rules(id,workspace_id,blueprint_id,context_id,code,name,version,definition,definition_hash,compiled_plan,created_by_user_id) SELECT id,workspace_id,blueprint_id,context_id,$3,$4,$5,$6,$7,$8,$9 FROM rules WHERE workspace_id=$1 AND id=$2 AND version=$10").bind(ws).bind(id).bind(&compiled.code).bind(&compiled.name).bind(next).bind(&input.definition).bind(&compiled.raw_definition_hash).bind(plan).bind(self.actor_user_id()).bind(version).execute(&mut *tx).await?;
+        sqlx::query("UPDATE rule_lifecycles SET current_version=$3,updated_at=now() WHERE workspace_id=$1 AND rule_id=$2")
+            .bind(ws).bind(id).bind(next).execute(&mut *tx).await?;
+        // Findings belong to the definition that reported them.
+        let superseded: Vec<Uuid> = sqlx::query_scalar("UPDATE rule_findings SET state=$4,resolved_at=clock_timestamp(),resolved_by_run_id=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND rule_id=$2 AND evaluation_key<>$3 AND state<>$4 RETURNING record_id")
+            .bind(ws).bind(id).bind(&compiled.raw_definition_hash).bind(RuleFindingState::Resolved.as_str()).fetch_all(&mut *tx).await?;
+        sync_needs_attention_tags(&mut tx, ws, &superseded).await?;
+        // Unfinished runs would report against the previous definition.
+        self.cancel_unfinished_rule_runs(&mut tx, id, false).await?;
+        if enabled {
+            sqlx::query("DELETE FROM rule_schedule_states WHERE workspace_id=$1 AND rule_id=$2")
+                .bind(ws)
+                .bind(id)
+                .execute(&mut *tx)
+                .await?;
+            self.start_rule_schedules(&mut tx, id, next, &compiled)
+                .await?;
+            let run_id = Uuid::new_v4();
+            sqlx::query("INSERT INTO rule_runs(id,workspace_id,rule_id,rule_version,definition_hash,source,idempotency_key) VALUES($1,$2,$3,$4,$5,'manual',$6)")
+                .bind(run_id).bind(ws).bind(id).bind(next).bind(&compiled.raw_definition_hash).bind(format!("revision:{next}")).execute(&mut *tx).await?;
+            self.enqueue_rule_task(&mut tx, ws, run_id, None, None)
+                .await?;
         }
-        let types: std::collections::HashMap<String, ValueType> =
-            sqlx::query_as::<_, AttributeTypeRow>(
-                "SELECT code, value_type FROM attributes WHERE blueprint_id=$1 AND blueprint_version=$2 AND deleted_at IS NULL",
-            )
-            .bind(blueprint_id)
-            .bind(blueprint_version)
-            .fetch_all(&mut **tx)
+        advance_generation(&mut tx, ws, Generation::Attricat).await?;
+        self.commit_mutation(tx).await?;
+        self.get_rule(id)
             .await?
-            .into_iter()
-            .map(|row| (row.code, row.value_type))
-            .collect();
-        attricat_rules::validate_against_attributes(compiled, &types)
-            .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))
+            .ok_or(RepositoryError::NotFound("rule"))
     }
 
-    /// Enables a published revision. An enforcing rule first needs a
-    /// completed full dry run of that revision, unless its blueprint revision
-    /// has no live records; existing violations must be accepted explicitly.
-    pub async fn enable_rule_with(
+    /// Enables a rule's current revision. An enforcing rule first needs a
+    /// completed full dry run of that definition, unless its blueprint has no
+    /// live records; existing violations must be accepted explicitly.
+    pub async fn enable_rule(
         &self,
         id: Uuid,
-        version: i64,
-        options: crate::model::EnableRule,
+        options: EnableRule,
     ) -> Result<Rule, RepositoryError> {
         let mut tx = self.pool.begin().await?;
-        self.ensure_rule_enable_allowed(&mut tx, id, version, options.accept_existing_violations)
-            .await?;
-        self.enable_rule_in_transaction(&mut tx, id, version)
+        self.enable_rule_in_transaction(&mut tx, id, options.accept_existing_violations)
             .await?;
         self.commit_mutation(tx).await?;
         self.get_rule(id)
             .await?
             .ok_or(RepositoryError::NotFound("rule"))
     }
-    /// The enable gate shared by every path that enables a rule revision: it
-    /// must be published, and an enforcing rule whose blueprint revision has
-    /// live records needs a completed full dry run of that revision; existing
-    /// violations, and a dry run that stopped at the candidate cap, must be
-    /// accepted explicitly.
-    pub(super) async fn ensure_rule_enable_allowed(
-        &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-        id: Uuid,
-        version: i64,
-        accept_existing_violations: bool,
-    ) -> Result<(), RepositoryError> {
-        let ws = self.workspace_id.0;
-        let target: Option<(serde_json::Value, Uuid, i64)> = sqlx::query_as("SELECT compiled_plan,blueprint_id,blueprint_version FROM rules WHERE workspace_id=$1 AND id=$2 AND version=$3 AND status='published'").bind(ws).bind(id).bind(version).fetch_optional(&mut **tx).await?;
-        let Some((target_plan, blueprint_id, blueprint_version)) = target else {
-            return Err(RepositoryError::RuleNotPublished);
-        };
-        let target_rule: attricat_rules::CompiledRule = serde_json::from_value(target_plan)
-            .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))?;
-        if target_rule.enforcement.is_some() {
-            let has_records: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM records WHERE workspace_id=$1 AND blueprint_id=$2 AND blueprint_version=$3 AND deleted_at IS NULL)")
-                .bind(ws).bind(blueprint_id).bind(blueprint_version).fetch_one(&mut **tx).await?;
-            if has_records {
-                let latest: Option<(i64, bool)> = sqlx::query_as("SELECT findings_created,truncated FROM rule_runs WHERE workspace_id=$1 AND rule_id=$2 AND rule_version=$3 AND dry_run AND scope_record_id IS NULL AND status='completed' ORDER BY completed_at DESC LIMIT 1")
-                    .bind(ws).bind(id).bind(version).fetch_optional(&mut **tx).await?;
-                dry_run_enable_gate(latest, accept_existing_violations)?;
-            }
-        }
-        Ok(())
-    }
+
+    /// The enable path shared by every caller, gate included.
     pub(super) async fn enable_rule_in_transaction(
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         id: Uuid,
-        version: i64,
+        accept_existing_violations: bool,
     ) -> Result<(), RepositoryError> {
         let ws = self.workspace_id.0;
-        let exists:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM rules WHERE workspace_id=$1 AND id=$2 AND version=$3 AND status='published')").bind(ws).bind(id).bind(version).fetch_one(&mut **tx).await?;
-        if !exists {
-            return Err(RepositoryError::RuleNotPublished);
-        }
-        sqlx::query("UPDATE rule_lifecycles SET enabled_version=$3,activation_sequence=(SELECT COALESCE(max(sequence),0) FROM domain_events WHERE workspace_id=$1),enabled_at=now(),disabled_at=NULL,updated_at=now() WHERE workspace_id=$1 AND rule_id=$2").bind(ws).bind(id).bind(version).execute(&mut **tx).await?;
-        advance_generation(tx, ws, Generation::Attricat).await?;
-        let plan: serde_json::Value = sqlx::query_scalar(
-            "SELECT compiled_plan FROM rules WHERE workspace_id=$1 AND id=$2 AND version=$3",
-        )
+        let current: Option<(i64, Uuid, serde_json::Value)> = sqlx::query_as(&format!(
+            "SELECT r.version,r.blueprint_id,r.compiled_plan FROM {CURRENT_RULES} WHERE l.workspace_id=$1 AND l.rule_id=$2 FOR UPDATE OF l"
+        ))
         .bind(ws)
         .bind(id)
-        .bind(version)
-        .fetch_one(&mut **tx)
+        .fetch_optional(&mut **tx)
         .await?;
-        let compiled: attricat_rules::CompiledRule = serde_json::from_value(plan)
-            .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))?;
+        let Some((version, blueprint_id, plan)) = current else {
+            return Err(RepositoryError::NotFound("rule"));
+        };
+        let compiled = stored_rule(plan)?;
+        if compiled.enforcement.is_some() {
+            self.dry_run_gate(
+                tx,
+                id,
+                blueprint_id,
+                &compiled.raw_definition_hash,
+                accept_existing_violations,
+            )
+            .await?;
+        }
+        sqlx::query("UPDATE rule_lifecycles SET enabled=true,activation_sequence=(SELECT COALESCE(max(sequence),0) FROM domain_events WHERE workspace_id=$1),enabled_at=now(),disabled_at=NULL,updated_at=now() WHERE workspace_id=$1 AND rule_id=$2").bind(ws).bind(id).execute(&mut **tx).await?;
+        advance_generation(tx, ws, Generation::Attricat).await?;
+        self.start_rule_schedules(tx, id, version, &compiled).await
+    }
+
+    /// The dry-run gate for an enforcing definition, by its hash. A blueprint
+    /// without live records needs none; otherwise the latest completed full
+    /// dry run of the definition decides.
+    async fn dry_run_gate(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        rule_id: Uuid,
+        blueprint_id: Uuid,
+        definition_hash: &str,
+        accept_existing_violations: bool,
+    ) -> Result<(), RepositoryError> {
+        let ws = self.workspace_id.0;
+        let has_records: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM records WHERE workspace_id=$1 AND blueprint_id=$2 AND deleted_at IS NULL)")
+            .bind(ws).bind(blueprint_id).fetch_one(&mut **tx).await?;
+        if !has_records {
+            return Ok(());
+        }
+        let latest: Option<(i64, bool)> = sqlx::query_as("SELECT findings_created,truncated FROM rule_runs WHERE workspace_id=$1 AND rule_id=$2 AND definition_hash=$3 AND dry_run AND scope_record_id IS NULL AND status='completed' ORDER BY completed_at DESC LIMIT 1")
+            .bind(ws).bind(rule_id).bind(definition_hash).fetch_optional(&mut **tx).await?;
+        dry_run_verdict(latest, accept_existing_violations)
+    }
+
+    /// Starts the schedule cursors of a rule revision's schedule triggers.
+    async fn start_rule_schedules(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        id: Uuid,
+        version: i64,
+        compiled: &CompiledRule,
+    ) -> Result<(), RepositoryError> {
         for (index, trigger) in compiled.triggers.iter().enumerate() {
             let attricat_rules::Trigger::Schedule { cron, .. } = trigger else {
                 continue;
@@ -396,29 +440,46 @@ impl AttricatRepository {
             let next = schedule.after(&Utc::now()).next().ok_or_else(|| {
                 RepositoryError::InvalidRuleDefinition("schedule has no future occurrence".into())
             })?;
-            sqlx::query("INSERT INTO rule_schedule_states(workspace_id,rule_id,rule_version,trigger_index,next_run_at) VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING").bind(ws).bind(id).bind(version).bind(index as i32).bind(next).execute(&mut **tx).await?;
+            sqlx::query("INSERT INTO rule_schedule_states(workspace_id,rule_id,rule_version,trigger_index,next_run_at) VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING").bind(self.workspace_id.0).bind(id).bind(version).bind(index as i32).bind(next).execute(&mut **tx).await?;
         }
         Ok(())
     }
+
     pub async fn disable_rule(&self, id: Uuid) -> Result<Rule, RepositoryError> {
         let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
-        if sqlx::query("UPDATE rule_lifecycles SET enabled_version=NULL,disabled_at=now(),updated_at=now() WHERE workspace_id=$1 AND rule_id=$2").bind(ws).bind(id).execute(&mut *tx).await?.rows_affected()==0{return Err(RepositoryError::NotFound("rule"));}
+        if sqlx::query("UPDATE rule_lifecycles SET enabled=false,disabled_at=now(),updated_at=now() WHERE workspace_id=$1 AND rule_id=$2").bind(ws).bind(id).execute(&mut *tx).await?.rows_affected()==0{return Err(RepositoryError::NotFound("rule"));}
         advance_generation(&mut tx, ws, Generation::Attricat).await?;
-        sqlx::query("UPDATE rule_runs SET status='cancelled',cancelled_at=clock_timestamp(),lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND rule_id=$2 AND status IN ('pending','leased')").bind(ws).bind(id).execute(&mut *tx).await?;
-        let queued_tasks: Vec<Uuid> = sqlx::query_scalar("SELECT t.id FROM tasks t JOIN rule_runs rr ON rr.id=t.subject_id WHERE t.workspace_id=$1 AND t.kind='rule_run.v1' AND t.status='queued' AND rr.rule_id=$2 FOR UPDATE OF t")
-            .bind(ws).bind(id).fetch_all(&mut *tx).await?;
-        for task_id in queued_tasks {
-            self.cancel_queued_task(&mut tx, task_id).await?;
-        }
+        self.cancel_unfinished_rule_runs(&mut tx, id, true).await?;
         self.commit_mutation(tx).await?;
         self.get_rule(id)
             .await?
             .ok_or(RepositoryError::NotFound("rule"))
     }
-    /// Creates a durable, idempotent manual run for the currently enabled revision.
-    /// An optional record scope is checked before enqueueing, so callers cannot turn a
-    /// manual request into an arbitrary cross-workspace scan.
+
+    /// Cancels a rule's pending and leased runs, and their queued tasks.
+    /// Dry runs are kept unless `dry_runs` is set: they report nothing.
+    async fn cancel_unfinished_rule_runs(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        id: Uuid,
+        dry_runs: bool,
+    ) -> Result<(), RepositoryError> {
+        let ws = self.workspace_id.0;
+        sqlx::query("UPDATE rule_runs SET status='cancelled',cancelled_at=clock_timestamp(),lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND rule_id=$2 AND status IN ('pending','leased') AND ($3 OR NOT dry_run)").bind(ws).bind(id).bind(dry_runs).execute(&mut **tx).await?;
+        let queued_tasks: Vec<Uuid> = sqlx::query_scalar("SELECT t.id FROM tasks t JOIN rule_runs rr ON rr.id=t.subject_id WHERE t.workspace_id=$1 AND t.kind='rule_run.v1' AND t.status='queued' AND rr.rule_id=$2 AND rr.status='cancelled' FOR UPDATE OF t")
+            .bind(ws).bind(id).fetch_all(&mut **tx).await?;
+        for task_id in queued_tasks {
+            self.cancel_queued_task(tx, task_id).await?;
+        }
+        Ok(())
+    }
+
+    /// Creates a durable, idempotent manual run of the rule's current
+    /// revision. A normal run needs the rule enabled; a dry run may instead
+    /// check an unsaved `definition`. An optional record scope is checked
+    /// before enqueueing, so callers cannot turn a manual request into an
+    /// arbitrary cross-workspace scan.
     pub async fn create_manual_rule_run(
         &self,
         rule_id: Uuid,
@@ -431,48 +492,49 @@ impl AttricatRepository {
         }
         let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
-        // Only dry runs may target a published revision that is not enabled,
-        // so an enforcing rule can report existing violations before enabling.
-        let version: Option<i64> = sqlx::query_scalar(
-            "SELECT r.version FROM rules r JOIN rule_lifecycles l ON l.rule_id=r.id AND l.workspace_id=r.workspace_id WHERE r.workspace_id=$1 AND r.id=$2 AND r.status='published' AND (CASE WHEN $3 THEN ($4::bigint IS NULL AND l.enabled_version IS NOT DISTINCT FROM r.version) OR r.version=$4 ELSE l.enabled_version=r.version AND ($4::bigint IS NULL OR r.version=$4) END) FOR SHARE OF l",
-        ).bind(ws).bind(rule_id).bind(input.dry_run).bind(input.version).fetch_optional(&mut *tx).await?;
-        let version = match version {
-            Some(version) => Some(version),
-            None if input.dry_run && input.version.is_none() => sqlx::query_scalar(
-                "SELECT max(version) FROM rules WHERE workspace_id=$1 AND id=$2 AND status='published'",
-            )
-            .bind(ws)
-            .bind(rule_id)
-            .fetch_one(&mut *tx)
-            .await?,
-            None => None,
+        let current: Option<(i64, String, Uuid, String, bool)> = sqlx::query_as(&format!(
+            "SELECT r.version,r.code,r.blueprint_id,r.definition_hash,l.enabled FROM {CURRENT_RULES} WHERE l.workspace_id=$1 AND l.rule_id=$2 FOR SHARE OF l"
+        ))
+        .bind(ws)
+        .bind(rule_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let Some((version, code, blueprint_id, current_hash, enabled)) = current else {
+            return Err(RepositoryError::NotFound("rule"));
         };
-        let Some(version) = version else {
-            // A normal run needs the enabled revision; only report a missing
-            // publication when there is no published revision to enable.
-            let published: bool = sqlx::query_scalar(
-                "SELECT EXISTS(SELECT 1 FROM rules WHERE workspace_id=$1 AND id=$2 AND status='published')",
-            )
-            .bind(ws)
-            .bind(rule_id)
-            .fetch_one(&mut *tx)
-            .await?;
-            return Err(if published && !input.dry_run {
-                RepositoryError::RuleNotEnabled
-            } else {
-                RepositoryError::RuleNotPublished
-            });
+        let (definition_hash, plan) = match &input.definition {
+            Some(_) if !input.dry_run => {
+                return Err(RepositoryError::InvalidRuleDefinition(
+                    "only a dry run can check an unsaved definition".into(),
+                ));
+            }
+            Some(definition) => {
+                let compiled = compile_rule(definition)?;
+                if compiled.code != code {
+                    return Err(RepositoryError::InvalidRuleDefinition(
+                        "rule code cannot change across revisions".into(),
+                    ));
+                }
+                check_rule_fits(&mut tx, ws, blueprint_id, &compiled).await?;
+                let plan = serde_json::to_value(&compiled)
+                    .map_err(|e| RepositoryError::InvalidRuleDefinition(e.to_string()))?;
+                (compiled.raw_definition_hash, Some(plan))
+            }
+            None => (current_hash, None),
         };
+        if !input.dry_run && !enabled {
+            return Err(RepositoryError::RuleNotEnabled);
+        }
         if let Some(record_id) = input.record_id {
-            let matches: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM records e JOIN rules r ON r.id=$3 AND r.workspace_id=$1 AND r.version=$4 WHERE e.id=$2 AND e.workspace_id=$1 AND e.deleted_at IS NULL AND e.blueprint_id=r.blueprint_id AND e.blueprint_version=r.blueprint_version)")
-                .bind(ws).bind(record_id).bind(rule_id).bind(version).fetch_one(&mut *tx).await?;
+            let matches: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM records WHERE id=$2 AND workspace_id=$1 AND deleted_at IS NULL AND blueprint_id=$3)")
+                .bind(ws).bind(record_id).bind(blueprint_id).fetch_one(&mut *tx).await?;
             if !matches {
                 return Err(RepositoryError::NotFound("record in rule blueprint"));
             }
         }
         let id = Uuid::new_v4();
-        let inserted: Option<Uuid> = sqlx::query_scalar("INSERT INTO rule_runs(id,workspace_id,rule_id,rule_version,source,dry_run,scope_record_id,idempotency_key) VALUES($1,$2,$3,$4,'manual',$5,$6,$7) ON CONFLICT(workspace_id,rule_id,rule_version,source,idempotency_key) DO NOTHING RETURNING id")
-            .bind(id).bind(ws).bind(rule_id).bind(version).bind(input.dry_run).bind(input.record_id).bind(&input.idempotency_key).fetch_optional(&mut *tx).await?;
+        let inserted: Option<Uuid> = sqlx::query_scalar("INSERT INTO rule_runs(id,workspace_id,rule_id,rule_version,definition_hash,compiled_plan,source,dry_run,scope_record_id,idempotency_key) VALUES($1,$2,$3,$4,$5,$6,'manual',$7,$8,$9) ON CONFLICT(workspace_id,rule_id,rule_version,source,idempotency_key) DO NOTHING RETURNING id")
+            .bind(id).bind(ws).bind(rule_id).bind(version).bind(&definition_hash).bind(plan).bind(input.dry_run).bind(input.record_id).bind(&input.idempotency_key).fetch_optional(&mut *tx).await?;
         if let Some(id) = inserted {
             self.enqueue_rule_task(&mut tx, ws, id, None, None).await?;
             self.commit_mutation(tx).await?;
@@ -483,9 +545,10 @@ impl AttricatRepository {
             Ok(existing)
         }
     }
+
     /// Re-checks one record against every enabled rule of its blueprint
-    /// revision with idempotent record-scoped manual runs. Returns the run of
-    /// each rule, including runs an earlier request with the same key created.
+    /// with idempotent record-scoped manual runs. Returns the run of each
+    /// rule, including runs an earlier request with the same key created.
     pub async fn create_record_rule_runs(
         &self,
         record_id: Uuid,
@@ -508,14 +571,14 @@ impl AttricatRepository {
         if !exists {
             return Err(RepositoryError::NotFound("record"));
         }
-        let rules: Vec<(Uuid, i64)> = sqlx::query_as("SELECT r.id,r.version FROM rules r JOIN rule_lifecycles l ON l.rule_id=r.id AND l.workspace_id=r.workspace_id AND l.enabled_version=r.version JOIN records e ON e.id=$2 AND e.workspace_id=r.workspace_id AND e.blueprint_id=r.blueprint_id AND e.blueprint_version=r.blueprint_version WHERE r.workspace_id=$1 AND r.status='published' ORDER BY r.id FOR SHARE OF l")
+        let rules: Vec<(Uuid, i64, String)> = sqlx::query_as(&format!("SELECT r.id,r.version,r.definition_hash FROM {CURRENT_RULES} JOIN records e ON e.id=$2 AND e.workspace_id=l.workspace_id AND e.blueprint_id=r.blueprint_id WHERE l.workspace_id=$1 AND l.enabled ORDER BY r.id FOR SHARE OF l"))
             .bind(ws).bind(record_id).fetch_all(&mut *tx).await?;
         let mut ids = Vec::with_capacity(rules.len());
         let mut created = false;
-        for (rule_id, version) in rules {
+        for (rule_id, version, definition_hash) in rules {
             let id = Uuid::new_v4();
-            let inserted: Option<Uuid> = sqlx::query_scalar("INSERT INTO rule_runs(id,workspace_id,rule_id,rule_version,source,scope_record_id,idempotency_key) VALUES($1,$2,$3,$4,'manual',$5,$6) ON CONFLICT(workspace_id,rule_id,rule_version,source,idempotency_key) DO NOTHING RETURNING id")
-                .bind(id).bind(ws).bind(rule_id).bind(version).bind(record_id).bind(idempotency_key).fetch_optional(&mut *tx).await?;
+            let inserted: Option<Uuid> = sqlx::query_scalar("INSERT INTO rule_runs(id,workspace_id,rule_id,rule_version,definition_hash,source,scope_record_id,idempotency_key) VALUES($1,$2,$3,$4,$5,'manual',$6,$7) ON CONFLICT(workspace_id,rule_id,rule_version,source,idempotency_key) DO NOTHING RETURNING id")
+                .bind(id).bind(ws).bind(rule_id).bind(version).bind(&definition_hash).bind(record_id).bind(idempotency_key).fetch_optional(&mut *tx).await?;
             match inserted {
                 Some(id) => {
                     self.enqueue_rule_task(&mut tx, ws, id, None, None).await?;
@@ -539,23 +602,22 @@ impl AttricatRepository {
         }
         let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
-        // Every enabled rule in one read: whether it targets the event
-        // record's own revision, and that record's blueprint code.
-        let rows: Vec<EventRuleRow> = sqlx::query_as("SELECT r.id, r.version, r.compiled_plan, r.blueprint_id, r.blueprint_version, (e.id IS NOT NULL) AS direct, (SELECT b.code FROM records x JOIN blueprints b ON b.id=x.blueprint_id AND b.version=x.blueprint_version WHERE x.workspace_id=$1 AND x.id=$3) AS event_blueprint FROM rules r JOIN rule_lifecycles l ON l.rule_id=r.id AND l.workspace_id=r.workspace_id LEFT JOIN records e ON e.id=$3 AND e.workspace_id=r.workspace_id AND e.blueprint_id=r.blueprint_id AND e.blueprint_version=r.blueprint_version AND e.deleted_at IS NULL WHERE r.workspace_id=$1 AND r.status='published' AND l.enabled_version=r.version AND $2 > COALESCE(l.activation_sequence,0) FOR SHARE OF l").bind(ws).bind(event.sequence).bind(event.aggregate_id).fetch_all(&mut *tx).await?;
+        // Every enabled rule in one read: whether it is a rule of the event
+        // record's blueprint, and that record's blueprint code.
+        let rows: Vec<EventRuleRow> = sqlx::query_as(&format!("SELECT r.id, r.version, r.definition_hash, r.compiled_plan, r.blueprint_id, (e.id IS NOT NULL) AS direct, (SELECT b.code FROM records x JOIN blueprints b ON b.id=x.blueprint_id AND b.version=x.blueprint_version WHERE x.workspace_id=$1 AND x.id=$3) AS event_blueprint FROM {CURRENT_RULES} LEFT JOIN records e ON e.id=$3 AND e.workspace_id=l.workspace_id AND e.blueprint_id=r.blueprint_id AND e.deleted_at IS NULL WHERE l.workspace_id=$1 AND l.enabled AND $2 > COALESCE(l.activation_sequence,0) FOR SHARE OF l")).bind(ws).bind(event.sequence).bind(event.aggregate_id).fetch_all(&mut *tx).await?;
         // A change to the record re-evaluates it for every enabled rule of its
-        // revision; dependents re-run only for rules triggered by the event.
+        // blueprint; dependents re-run only for rules triggered by the event.
         let record_changed = attricat_rules::is_record_change_event(&event.event_type);
-        let mut runs: Vec<(Uuid, i64, Uuid, String)> = Vec::new();
+        let mut runs: Vec<NewRuleRun> = Vec::new();
         let mut rules = Vec::with_capacity(rows.len());
         for row in rows {
-            let compiled: attricat_rules::CompiledRule =
-                serde::Deserialize::deserialize(&row.compiled_plan)
-                    .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))?;
+            let compiled = stored_rule(row.compiled_plan.clone())?;
             let triggered = compiled.triggers.iter().any(|trigger| matches!(trigger, attricat_rules::Trigger::Event { event_type } if event_type == &event.event_type));
             if row.direct && (triggered || record_changed) {
                 runs.push((
                     row.id,
                     row.version,
+                    row.definition_hash.clone(),
                     event.aggregate_id,
                     event.id.to_string(),
                 ));
@@ -571,6 +633,7 @@ impl AttricatRepository {
                 runs.push((
                     row.id,
                     row.version,
+                    row.definition_hash.clone(),
                     dependent,
                     format!("{}:{dependent}", event.id),
                 ));
@@ -581,13 +644,13 @@ impl AttricatRepository {
         Ok(inserted)
     }
 
-    /// Creates event-sourced runs `(rule, version, scope record, key)` and
-    /// their task envelopes with one statement; existing runs are skipped.
+    /// Creates event-sourced runs and their task envelopes with one
+    /// statement; existing runs are skipped.
     async fn insert_event_rule_runs(
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         event: &DomainEvent,
-        runs: &[(Uuid, i64, Uuid, String)],
+        runs: &[NewRuleRun],
     ) -> Result<u64, RepositoryError> {
         if runs.is_empty() {
             return Ok(0);
@@ -596,15 +659,17 @@ impl AttricatRepository {
         let task_ids: Vec<Uuid> = runs.iter().map(|_| Uuid::new_v4()).collect();
         let rule_ids: Vec<Uuid> = runs.iter().map(|run| run.0).collect();
         let versions: Vec<i64> = runs.iter().map(|run| run.1).collect();
-        let scopes: Vec<Uuid> = runs.iter().map(|run| run.2).collect();
-        let keys: Vec<String> = runs.iter().map(|run| run.3.clone()).collect();
+        let hashes: Vec<&str> = runs.iter().map(|run| run.2.as_str()).collect();
+        let scopes: Vec<Uuid> = runs.iter().map(|run| run.3).collect();
+        let keys: Vec<&str> = runs.iter().map(|run| run.4.as_str()).collect();
         let kind = TaskKind::RuleRunV1;
-        let created: i64 = sqlx::query_scalar("WITH candidates AS (SELECT * FROM UNNEST($2::uuid[], $3::uuid[], $4::uuid[], $5::bigint[], $6::uuid[], $7::text[]) AS c(id, task_id, rule_id, rule_version, scope_record_id, idempotency_key)), created AS (INSERT INTO rule_runs(id,workspace_id,rule_id,rule_version,source,scope_record_id,idempotency_key) SELECT id, $1, rule_id, rule_version, 'event', scope_record_id, idempotency_key FROM candidates ON CONFLICT(workspace_id,rule_id,rule_version,source,idempotency_key) DO NOTHING RETURNING id), service AS (INSERT INTO task_workspace_service (workspace_id) VALUES ($1) ON CONFLICT (workspace_id) DO NOTHING), queued AS (INSERT INTO tasks (id, workspace_id, kind, envelope_version, subject_id, generation, payload, max_failures, correlation_id, causation_id) SELECT c.task_id, $1, $8, 1, c.id, 0, '{}'::jsonb, $9, $10, $11 FROM created JOIN candidates c ON c.id = created.id RETURNING id) SELECT count(*) FROM queued")
+        let created: i64 = sqlx::query_scalar("WITH candidates AS (SELECT * FROM UNNEST($2::uuid[], $3::uuid[], $4::uuid[], $5::bigint[], $6::text[], $7::uuid[], $8::text[]) AS c(id, task_id, rule_id, rule_version, definition_hash, scope_record_id, idempotency_key)), created AS (INSERT INTO rule_runs(id,workspace_id,rule_id,rule_version,definition_hash,source,scope_record_id,idempotency_key) SELECT id, $1, rule_id, rule_version, definition_hash, 'event', scope_record_id, idempotency_key FROM candidates ON CONFLICT(workspace_id,rule_id,rule_version,source,idempotency_key) DO NOTHING RETURNING id), service AS (INSERT INTO task_workspace_service (workspace_id) VALUES ($1) ON CONFLICT (workspace_id) DO NOTHING), queued AS (INSERT INTO tasks (id, workspace_id, kind, envelope_version, subject_id, generation, payload, max_failures, correlation_id, causation_id) SELECT c.task_id, $1, $9, 1, c.id, 0, '{}'::jsonb, $10, $11, $12 FROM created JOIN candidates c ON c.id = created.id RETURNING id) SELECT count(*) FROM queued")
             .bind(self.workspace_id.0)
             .bind(&ids)
             .bind(&task_ids)
             .bind(&rule_ids)
             .bind(&versions)
+            .bind(&hashes)
             .bind(&scopes)
             .bind(&keys)
             .bind(kind.as_str())
@@ -625,15 +690,15 @@ impl AttricatRepository {
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         event: &DomainEvent,
         rule: &EventRuleRow,
-        compiled: &attricat_rules::CompiledRule,
+        compiled: &CompiledRule,
     ) -> Result<Vec<Uuid>, RepositoryError> {
         const MAX_DEPENDENTS: i64 = 100;
         let ws = self.workspace_id.0;
         let requirements =
             attricat_validation::predicate::Requirements::for_predicates([&compiled.predicate]);
         let mut dependents: Vec<Uuid> = Vec::new();
-        // The rule evaluates only records pinned to its revision; their
-        // relationship may be a revision field or an additional attribute.
+        // The rule evaluates records of its blueprint; their relationship may
+        // be a revision field or an additional attribute.
         for relationship in &requirements.linked {
             dependents.extend(
                 super::references::referencing_record_ids(
@@ -642,10 +707,7 @@ impl AttricatRepository {
                     super::references::ReferenceQuery {
                         target: event.aggregate_id,
                         attribute_code: relationship,
-                        referrers: super::references::Referrers::Revision {
-                            blueprint_id: rule.blueprint_id,
-                            version: rule.blueprint_version,
-                        },
+                        referrers: super::references::Referrers::Blueprint(rule.blueprint_id),
                         only: None,
                         exclude_target: true,
                         limit: MAX_DEPENDENTS,
@@ -658,14 +720,14 @@ impl AttricatRepository {
             if rule.event_blueprint.as_deref() != Some(blueprint_code.as_str()) {
                 continue;
             }
-            dependents.extend(sqlx::query_scalar::<_, Uuid>("SELECT DISTINCT av.relationship_target_record_id FROM attribute_values av JOIN attributes a ON a.id=av.attribute_id AND a.code=$3 JOIN records t ON t.id=av.relationship_target_record_id AND t.workspace_id=$1 AND t.deleted_at IS NULL AND t.blueprint_id=$4 AND t.blueprint_version=$5 WHERE av.record_id=$2 AND av.active LIMIT $6")
-                .bind(ws).bind(event.aggregate_id).bind(relationship).bind(rule.blueprint_id).bind(rule.blueprint_version).bind(MAX_DEPENDENTS).fetch_all(&mut **tx).await?);
+            dependents.extend(sqlx::query_scalar::<_, Uuid>("SELECT DISTINCT av.relationship_target_record_id FROM attribute_values av JOIN attributes a ON a.id=av.attribute_id AND a.code=$3 JOIN records t ON t.id=av.relationship_target_record_id AND t.workspace_id=$1 AND t.deleted_at IS NULL AND t.blueprint_id=$4 WHERE av.record_id=$2 AND av.active LIMIT $5")
+                .bind(ws).bind(event.aggregate_id).bind(relationship).bind(rule.blueprint_id).bind(MAX_DEPENDENTS).fetch_all(&mut **tx).await?);
             // A record the write stopped referencing (a removed or re-pointed
             // relationship) no longer appears above, yet its count changed.
             let released = changed_relationship_targets(event, relationship);
             if !released.is_empty() {
-                dependents.extend(sqlx::query_scalar::<_, Uuid>("SELECT id FROM records WHERE workspace_id=$1 AND id=ANY($2) AND deleted_at IS NULL AND blueprint_id=$3 AND blueprint_version=$4")
-                    .bind(ws).bind(&released).bind(rule.blueprint_id).bind(rule.blueprint_version).fetch_all(&mut **tx).await?);
+                dependents.extend(sqlx::query_scalar::<_, Uuid>("SELECT id FROM records WHERE workspace_id=$1 AND id=ANY($2) AND deleted_at IS NULL AND blueprint_id=$3")
+                    .bind(ws).bind(&released).bind(rule.blueprint_id).fetch_all(&mut **tx).await?);
             }
         }
         dependents.sort();
@@ -678,7 +740,7 @@ impl AttricatRepository {
     /// this first so an idle tick costs one statement.
     pub async fn rule_schedules_due(&self) -> Result<bool, RepositoryError> {
         Ok(sqlx::query_scalar(
-            "SELECT EXISTS (SELECT 1 FROM rule_schedule_states s JOIN rule_lifecycles l ON l.rule_id = s.rule_id AND l.workspace_id = s.workspace_id AND l.enabled_version = s.rule_version WHERE s.workspace_id = $1 AND s.next_run_at <= $2)",
+            "SELECT EXISTS (SELECT 1 FROM rule_schedule_states s JOIN rule_lifecycles l ON l.rule_id = s.rule_id AND l.workspace_id = s.workspace_id AND l.current_version = s.rule_version AND l.enabled WHERE s.workspace_id = $1 AND s.next_run_at <= $2)",
         )
         .bind(self.workspace_id.0)
         .bind(Utc::now())
@@ -692,11 +754,10 @@ impl AttricatRepository {
         let ws = self.workspace_id.0;
         let now = Utc::now();
         let mut tx = self.pool.begin().await?;
-        let rows: Vec<(Uuid, i64, serde_json::Value)> = sqlx::query_as("SELECT r.id,r.version,r.compiled_plan FROM rules r JOIN rule_lifecycles l ON l.rule_id=r.id AND l.workspace_id=r.workspace_id WHERE r.workspace_id=$1 AND r.status='published' AND l.enabled_version=r.version FOR SHARE OF l").bind(ws).fetch_all(&mut *tx).await?;
+        let rows: Vec<(Uuid, i64, String, serde_json::Value)> = sqlx::query_as(&format!("SELECT r.id,r.version,r.definition_hash,r.compiled_plan FROM {CURRENT_RULES} WHERE l.workspace_id=$1 AND l.enabled FOR SHARE OF l")).bind(ws).fetch_all(&mut *tx).await?;
         let mut created = 0;
-        for (rule_id, version, plan) in rows {
-            let compiled: attricat_rules::CompiledRule = serde_json::from_value(plan)
-                .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))?;
+        for (rule_id, version, definition_hash, plan) in rows {
+            let compiled = stored_rule(plan)?;
             // Whether the rule has an unfinished run; read on first need and
             // kept current as this pass creates runs.
             let mut active: Option<bool> = None;
@@ -729,8 +790,8 @@ impl AttricatRepository {
                 };
                 if !missed && !is_active {
                     let key = format!("{index}:{}", due.to_rfc3339());
-                    let run_id: Option<Uuid> = sqlx::query_scalar("INSERT INTO rule_runs(id,workspace_id,rule_id,rule_version,source,idempotency_key) VALUES($1,$2,$3,$4,'schedule',$5) ON CONFLICT(workspace_id,rule_id,rule_version,source,idempotency_key) DO NOTHING RETURNING id")
-                        .bind(Uuid::new_v4()).bind(ws).bind(rule_id).bind(version).bind(key).fetch_optional(&mut *tx).await?;
+                    let run_id: Option<Uuid> = sqlx::query_scalar("INSERT INTO rule_runs(id,workspace_id,rule_id,rule_version,definition_hash,source,idempotency_key) VALUES($1,$2,$3,$4,$5,'schedule',$6) ON CONFLICT(workspace_id,rule_id,rule_version,source,idempotency_key) DO NOTHING RETURNING id")
+                        .bind(Uuid::new_v4()).bind(ws).bind(rule_id).bind(version).bind(&definition_hash).bind(key).fetch_optional(&mut *tx).await?;
                     if let Some(run_id) = run_id {
                         self.enqueue_rule_task(&mut tx, ws, run_id, None, None)
                             .await?;
@@ -744,9 +805,87 @@ impl AttricatRepository {
         tx.commit().await?;
         Ok(created)
     }
+
+    /// Finds the enabled rules of a blueprint that do not fit a revision just
+    /// published, and tells every member who manages rules, except the
+    /// publisher. Publishing goes ahead; the rules skip the revision's records.
+    pub(super) async fn warn_about_rules_not_fitting(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        blueprint: &crate::model::Blueprint,
+    ) -> Result<Vec<RuleWarning>, RepositoryError> {
+        let ws = self.workspace_id.0;
+        let rules: Vec<(Uuid, String, String, serde_json::Value)> = sqlx::query_as(&format!(
+            "SELECT r.id,r.code,r.name,r.compiled_plan FROM {CURRENT_RULES} WHERE l.workspace_id=$1 AND l.enabled AND r.blueprint_id=$2 ORDER BY r.name,r.id"
+        ))
+        .bind(ws)
+        .bind(blueprint.id)
+        .fetch_all(&mut **tx)
+        .await?;
+        if rules.is_empty() {
+            return Ok(Vec::new());
+        }
+        let attributes = super::checks::revision_attributes(tx, ws, &[blueprint.id])
+            .await?
+            .remove(&(blueprint.id, blueprint.version))
+            .unwrap_or_default();
+        let mut warnings = Vec::new();
+        for (rule_id, code, name, plan) in rules {
+            if let Err(error) = attricat_rules::applicability(&stored_rule(plan)?, &attributes) {
+                warnings.push(RuleWarning {
+                    rule_id,
+                    code,
+                    name,
+                    reason: error.reason,
+                    message: error.message,
+                });
+            }
+        }
+        if warnings.is_empty() {
+            return Ok(warnings);
+        }
+        let managers = Self::workspace_members_with_permission_on(
+            tx,
+            ws,
+            attricat_domain::permissions::Permission::RulesManage,
+        )
+        .await?;
+        for warning in &warnings {
+            let notification = NewNotification {
+                kind: notification_kinds::RULE_NOT_APPLICABLE,
+                title: format!(
+                    "Revision {} of {} no longer fits the data quality rule \"{}\"",
+                    blueprint.version, blueprint.name, warning.name
+                ),
+                body: Some(warning.message.clone()),
+                actor_user_id: self.actor_user_id(),
+                subject: Some(NotificationSubject {
+                    kind: NotificationSubjectKind::Rule,
+                    id: warning.rule_id,
+                }),
+                data: serde_json::json!({
+                    "rule_name": warning.name,
+                    "blueprint_id": blueprint.id,
+                    "blueprint_name": blueprint.name,
+                    "blueprint_version": blueprint.version,
+                    "reason": warning.reason,
+                }),
+            };
+            self.notify_on(tx, &managers, &notification).await?;
+        }
+        Ok(warnings)
+    }
+
+    /// The signed-in user who causes this request's writes, if any.
+    fn actor_user_id(&self) -> Option<Uuid> {
+        self.audit_context
+            .as_ref()
+            .and_then(|context| context.actor_user_id)
+    }
+
     pub async fn list_rule_runs(&self) -> Result<Vec<RuleRun>, RepositoryError> {
         let ws = self.workspace_id.0;
-        Ok(sqlx::query_as::<_, Db<RuleRun>>("SELECT id,rule_id,rule_version,source,dry_run,scope_record_id,status,candidate_cursor,candidates_evaluated,findings_created,findings_resolved,attempts,last_error,truncated,completed_at,created_at FROM rule_runs WHERE workspace_id=$1 ORDER BY created_at DESC").bind(ws).fetch_all(&self.pool).await?.into_domain())
+        Ok(sqlx::query_as::<_, Db<RuleRun>>("SELECT id,rule_id,rule_version,definition_hash,source,dry_run,scope_record_id,status,candidate_cursor,candidates_evaluated,candidates_skipped,findings_created,findings_resolved,attempts,last_error,truncated,completed_at,created_at FROM rule_runs WHERE workspace_id=$1 ORDER BY created_at DESC").bind(ws).fetch_all(&self.pool).await?.into_domain())
     }
     pub async fn list_rule_findings(
         &self,
@@ -763,7 +902,7 @@ impl AttricatRepository {
         offset: i64,
     ) -> Result<(Vec<RuleRun>, bool), RepositoryError> {
         let ws = self.workspace_id.0;
-        let mut rows = sqlx::query_as::<_, Db<RuleRun>>("SELECT id,rule_id,rule_version,source,dry_run,scope_record_id,status,candidate_cursor,candidates_evaluated,findings_created,findings_resolved,attempts,last_error,truncated,completed_at,created_at FROM rule_runs WHERE workspace_id=$1 AND ($2::uuid IS NULL OR rule_id=$2) AND ($5::uuid IS NULL OR scope_record_id=$5) ORDER BY created_at DESC,id DESC LIMIT $3 OFFSET $4")
+        let mut rows = sqlx::query_as::<_, Db<RuleRun>>("SELECT id,rule_id,rule_version,definition_hash,source,dry_run,scope_record_id,status,candidate_cursor,candidates_evaluated,candidates_skipped,findings_created,findings_resolved,attempts,last_error,truncated,completed_at,created_at FROM rule_runs WHERE workspace_id=$1 AND ($2::uuid IS NULL OR rule_id=$2) AND ($5::uuid IS NULL OR scope_record_id=$5) ORDER BY created_at DESC,id DESC LIMIT $3 OFFSET $4")
             .bind(ws).bind(rule_id).bind(limit + 1).bind(offset).bind(record_id).fetch_all(&self.pool).await?;
         let has_more = rows.len() as i64 > limit;
         rows.truncate(limit as usize);
@@ -810,7 +949,7 @@ impl AttricatRepository {
     }
 
     /// The unresolved findings of each of `record_ids`, for a page of search
-    /// results, and whether an enabled rule checks the record's revision.
+    /// results, and whether an enabled rule checks the record's blueprint.
     pub async fn record_data_quality(
         &self,
         record_ids: &[Uuid],
@@ -820,15 +959,13 @@ impl AttricatRepository {
             "SELECT e.id, EXISTS (
                  SELECT 1 FROM rules r
                    JOIN rule_lifecycles l ON l.rule_id = r.id AND l.workspace_id = r.workspace_id
-                    AND l.enabled_version = r.version
-                  WHERE r.workspace_id = e.workspace_id AND r.blueprint_id = e.blueprint_id
-                    AND r.blueprint_version = e.blueprint_version AND r.status = $3)
+                    AND l.current_version = r.version AND l.enabled
+                  WHERE r.workspace_id = e.workspace_id AND r.blueprint_id = e.blueprint_id)
                FROM records e
               WHERE e.workspace_id = $1 AND e.id = ANY($2)",
         )
         .bind(ws)
         .bind(record_ids)
-        .bind(RevisionStatus::Published.as_str())
         .fetch_all(&self.pool)
         .await?;
         let counts: Vec<(Uuid, String, String, i64)> = sqlx::query_as(
@@ -875,10 +1012,7 @@ impl AttricatRepository {
 
     pub async fn acknowledge_rule_finding(&self, id: Uuid) -> Result<RuleFinding, RepositoryError> {
         let ws = self.workspace_id.0;
-        let actor = self
-            .audit_context
-            .as_ref()
-            .and_then(|context| context.actor_user_id);
+        let actor = self.actor_user_id();
         let mut tx = self.pool.begin().await?;
         let updated = sqlx::query("UPDATE rule_findings SET state='acknowledged',acknowledged_at=COALESCE(acknowledged_at,clock_timestamp()),acknowledged_by_user_id=COALESCE(acknowledged_by_user_id,$3),updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 AND state='open'").bind(ws).bind(id).bind(actor).execute(&mut *tx).await?;
         if updated.rows_affected() == 0 {
@@ -916,7 +1050,7 @@ impl AttricatRepository {
         let fenced = self.for_task(task);
         fenced.ensure_task_fence(&mut tx).await?;
         let row: Option<RuleRunTaskRow> = sqlx::query_as(
-            "SELECT rr.status,rr.id,rr.rule_id,rr.rule_version,rr.dry_run,rr.scope_record_id,rr.candidate_cursor,rr.candidates_evaluated,r.blueprint_id,r.blueprint_version,r.context_id,r.compiled_plan FROM rule_runs rr JOIN rules r ON r.id=rr.rule_id AND r.version=rr.rule_version AND r.workspace_id=rr.workspace_id WHERE rr.id=$1 AND rr.workspace_id=$2 FOR UPDATE OF rr",
+            "SELECT rr.status,rr.id,rr.rule_id,rr.rule_version,rr.dry_run,rr.scope_record_id,rr.candidate_cursor,rr.candidates_evaluated,r.blueprint_id,r.context_id,COALESCE(rr.compiled_plan,r.compiled_plan) FROM rule_runs rr JOIN rules r ON r.id=rr.rule_id AND r.version=rr.rule_version AND r.workspace_id=rr.workspace_id WHERE rr.id=$1 AND rr.workspace_id=$2 FOR UPDATE OF rr",
         ).bind(task.subject_id).bind(ws).fetch_optional(&mut *tx).await?;
         let Some((
             status,
@@ -928,7 +1062,6 @@ impl AttricatRepository {
             candidate_cursor,
             candidates_evaluated,
             blueprint_id,
-            blueprint_version,
             context_id,
             compiled_plan,
         )) = row
@@ -953,7 +1086,6 @@ impl AttricatRepository {
             candidate_cursor,
             candidates_evaluated,
             blueprint_id,
-            blueprint_version,
             context_id,
             compiled_plan,
         }))
@@ -1075,8 +1207,9 @@ impl AttricatRepository {
                 .collect::<Vec<_>>();
             sync_needs_attention_tags(&mut tx, ws, &record_ids).await?;
         }
-        sqlx::query("UPDATE rule_runs SET candidate_cursor=$2,candidates_evaluated=candidates_evaluated+$3,findings_created=findings_created+$4,findings_resolved=findings_resolved+$5,status=CASE WHEN $6 THEN 'completed' ELSE 'pending' END,completed_at=CASE WHEN $6 THEN clock_timestamp() ELSE completed_at END,truncated=$8,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$7")
-            .bind(run.id).bind(next_cursor).bind(results.len() as i64).bind(created).bind(resolved).bind(done).bind(ws).bind(truncated).execute(&mut *tx).await?;
+        let skipped = results.iter().filter(|result| result.skipped).count() as i64;
+        sqlx::query("UPDATE rule_runs SET candidate_cursor=$2,candidates_evaluated=candidates_evaluated+$3,candidates_skipped=candidates_skipped+$9,findings_created=findings_created+$4,findings_resolved=findings_resolved+$5,status=CASE WHEN $6 THEN 'completed' ELSE 'pending' END,completed_at=CASE WHEN $6 THEN clock_timestamp() ELSE completed_at END,truncated=$8,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$7")
+            .bind(run.id).bind(next_cursor).bind(results.len() as i64).bind(created).bind(resolved).bind(done).bind(ws).bind(truncated).bind(skipped).execute(&mut *tx).await?;
         tx.commit().await?;
         Ok(done)
     }
@@ -1131,27 +1264,30 @@ impl AttricatRepository {
 struct EventRuleRow {
     id: Uuid,
     version: i64,
+    definition_hash: String,
     compiled_plan: serde_json::Value,
     blueprint_id: Uuid,
-    blueprint_version: i64,
-    /// The rule targets the event record's own revision.
+    /// The rule is a rule of the event record's blueprint.
     direct: bool,
     /// The event record's blueprint code.
     event_blueprint: Option<String>,
 }
 
 impl AttricatRepository {
-    /// Evaluates a rule for a candidate page with the shared predicate
-    /// engine. A rule without a context checks every resolved context and
-    /// fails when any of them fails.
+    /// Evaluates a rule for a candidate page of its blueprint's records with
+    /// the shared predicate engine. A rule without a context checks every
+    /// resolved context and fails when any of them fails. Records on a
+    /// revision the rule does not fit are skipped.
     pub async fn evaluate_rule_candidates(
         &self,
+        blueprint_id: Uuid,
         context_id: Option<Uuid>,
-        rule: &attricat_rules::CompiledRule,
+        rule: &CompiledRule,
         candidates: &[Uuid],
     ) -> Result<Vec<RuleCandidateResult>, RepositoryError> {
         let ws = self.workspace_id.0;
         let mut conn = self.pool.acquire().await?;
+        let revisions = super::checks::revision_attributes(&mut conn, ws, &[blueprint_id]).await?;
         let scope = super::checks::CheckScope::load(&mut conn, ws).await?;
         let contexts = context_id
             .map(|context| vec![context])
@@ -1168,6 +1304,21 @@ impl AttricatRepository {
             let Some(subject) = records.remove(record_id) else {
                 continue;
             };
+            let fits = revisions
+                .get(&(subject.blueprint_id, subject.blueprint_version))
+                .is_some_and(|attributes| attricat_rules::applicability(rule, attributes).is_ok());
+            if !fits {
+                results.push(RuleCandidateResult {
+                    record_id: *record_id,
+                    failed: false,
+                    skipped: true,
+                    message: String::new(),
+                    evidence: serde_json::json!({}),
+                    evaluation_key: rule.raw_definition_hash.clone(),
+                    severity: severity.to_owned(),
+                });
+                continue;
+            }
             let mut failure: Option<attricat_validation::predicate::Failure> = None;
             let mut failing_contexts = Vec::new();
             for context in &contexts {
@@ -1200,6 +1351,7 @@ impl AttricatRepository {
             results.push(RuleCandidateResult {
                 record_id: *record_id,
                 failed,
+                skipped: false,
                 message,
                 evidence,
                 evaluation_key: rule.raw_definition_hash.clone(),
@@ -1242,11 +1394,11 @@ fn changed_relationship_targets(event: &DomainEvent, attribute_code: &str) -> Ve
     targets
 }
 
-/// Decides the enable gate from the latest completed full dry run, given as
+/// Decides the dry-run gate from the latest completed full dry run, given as
 /// its violation count and whether it stopped at the candidate cap. A
 /// truncated dry run missed candidates, so it counts only when existing
 /// violations are accepted.
-fn dry_run_enable_gate(
+fn dry_run_verdict(
     latest: Option<(i64, bool)>,
     accept_existing_violations: bool,
 ) -> Result<(), RepositoryError> {
@@ -1260,6 +1412,106 @@ fn dry_run_enable_gate(
         }
         Some(_) => Ok(()),
     }
+}
+
+fn compile_rule(definition: &str) -> Result<CompiledRule, RepositoryError> {
+    attricat_rules::compile(definition)
+        .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))
+}
+
+/// A rule revision's stored compiled plan.
+fn stored_rule(plan: serde_json::Value) -> Result<CompiledRule, RepositoryError> {
+    serde_json::from_value(plan)
+        .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))
+}
+
+/// The newest published revision of a blueprint, which a rule being saved
+/// must fit.
+async fn latest_published_revision(
+    conn: &mut sqlx::PgConnection,
+    workspace_id: Uuid,
+    blueprint_id: Uuid,
+) -> Result<i64, RepositoryError> {
+    sqlx::query_scalar::<_, Option<i64>>(
+        "SELECT max(version) FROM blueprints WHERE workspace_id=$1 AND id=$2 AND status=$3 AND deleted_at IS NULL",
+    )
+    .bind(workspace_id)
+    .bind(blueprint_id)
+    .bind(RevisionStatus::Published.as_str())
+    .fetch_one(conn)
+    .await?
+    .ok_or(RepositoryError::BlueprintNotPublished)
+}
+
+/// Checks a rule being saved against its blueprint's latest published
+/// revision. Earlier revisions it does not fit are skipped, not refused.
+async fn check_rule_fits(
+    conn: &mut sqlx::PgConnection,
+    workspace_id: Uuid,
+    blueprint_id: Uuid,
+    rule: &CompiledRule,
+) -> Result<(), RepositoryError> {
+    let version = latest_published_revision(conn, workspace_id, blueprint_id).await?;
+    let attributes = super::checks::revision_attributes(conn, workspace_id, &[blueprint_id])
+        .await?
+        .remove(&(blueprint_id, version))
+        .unwrap_or_default();
+    attricat_rules::applicability(rule, &attributes)
+        .map_err(|error| RepositoryError::InvalidRuleDefinition(error.message))
+}
+
+/// Adds to each rule the revisions of its blueprint it does not fit, among
+/// the latest published revision and those with live records.
+async fn with_applicability(
+    conn: &mut sqlx::PgConnection,
+    workspace_id: Uuid,
+    rules: Vec<Rule>,
+) -> Result<Vec<RuleDetails>, RepositoryError> {
+    let mut blueprint_ids: Vec<Uuid> = rules.iter().map(|rule| rule.blueprint_id).collect();
+    blueprint_ids.sort();
+    blueprint_ids.dedup();
+    let revisions: Vec<(Uuid, i64)> = sqlx::query_as(
+        "SELECT b.id, b.version FROM blueprints b
+          WHERE b.workspace_id = $1 AND b.id = ANY($2) AND b.deleted_at IS NULL
+            AND (EXISTS (SELECT 1 FROM records e
+                          WHERE e.workspace_id = b.workspace_id AND e.blueprint_id = b.id
+                            AND e.blueprint_version = b.version AND e.deleted_at IS NULL)
+                 OR b.version = (SELECT max(p.version) FROM blueprints p
+                                  WHERE p.workspace_id = b.workspace_id AND p.id = b.id
+                                    AND p.status = $3 AND p.deleted_at IS NULL))
+          ORDER BY b.id, b.version",
+    )
+    .bind(workspace_id)
+    .bind(&blueprint_ids)
+    .bind(RevisionStatus::Published.as_str())
+    .fetch_all(&mut *conn)
+    .await?;
+    let attributes = super::checks::revision_attributes(conn, workspace_id, &blueprint_ids).await?;
+    let none = attricat_rules::RevisionAttributes::default();
+    rules
+        .into_iter()
+        .map(|rule| {
+            let compiled = stored_rule(rule.compiled_plan.clone())?;
+            let not_applicable = revisions
+                .iter()
+                .filter(|(blueprint_id, _)| *blueprint_id == rule.blueprint_id)
+                .filter_map(|key| {
+                    let revision = attributes.get(key).unwrap_or(&none);
+                    attricat_rules::applicability(&compiled, revision)
+                        .err()
+                        .map(|error| RevisionNotApplicable {
+                            blueprint_version: key.1,
+                            reason: error.reason,
+                            message: error.message,
+                        })
+                })
+                .collect();
+            Ok(RuleDetails {
+                rule,
+                not_applicable,
+            })
+        })
+        .collect()
 }
 
 /// Which findings a page lists. Every set field narrows it.
@@ -1394,27 +1646,27 @@ mod tests {
     }
 
     #[test]
-    fn enable_gate_requires_a_complete_dry_run_or_accepted_violations() {
+    fn dry_run_gate_requires_a_complete_dry_run_or_accepted_violations() {
         assert!(matches!(
-            dry_run_enable_gate(None, true),
+            dry_run_verdict(None, true),
             Err(RepositoryError::RuleDryRunRequired)
         ));
-        assert!(dry_run_enable_gate(Some((0, false)), false).is_ok());
+        assert!(dry_run_verdict(Some((0, false)), false).is_ok());
         assert!(matches!(
-            dry_run_enable_gate(Some((3, false)), false),
+            dry_run_verdict(Some((3, false)), false),
             Err(RepositoryError::RuleHasExistingViolations(3))
         ));
-        assert!(dry_run_enable_gate(Some((3, false)), true).is_ok());
+        assert!(dry_run_verdict(Some((3, false)), true).is_ok());
         // A dry run that stopped at the candidate cap never proves the
         // remaining records pass.
         assert!(matches!(
-            dry_run_enable_gate(Some((0, true)), false),
+            dry_run_verdict(Some((0, true)), false),
             Err(RepositoryError::RuleDryRunTruncated(0))
         ));
         assert!(matches!(
-            dry_run_enable_gate(Some((3, true)), false),
+            dry_run_verdict(Some((3, true)), false),
             Err(RepositoryError::RuleDryRunTruncated(3))
         ));
-        assert!(dry_run_enable_gate(Some((0, true)), true).is_ok());
+        assert!(dry_run_verdict(Some((0, true)), true).is_ok());
     }
 }

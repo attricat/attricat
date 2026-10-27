@@ -16,11 +16,18 @@ pub(crate) enum RuleCommand {
     Get {
         rule_id: Uuid,
     },
+    /// List a rule's saved revisions, newest first.
+    Revisions {
+        rule_id: Uuid,
+    },
+    /// Show one saved revision of a rule.
+    Revision {
+        rule_id: Uuid,
+        version: i64,
+    },
     Validate {
         #[arg(long)]
         blueprint_id: Uuid,
-        #[arg(long)]
-        blueprint_version: i64,
         #[arg(long)]
         context_id: Option<Uuid>,
         #[command(flatten)]
@@ -30,30 +37,22 @@ pub(crate) enum RuleCommand {
         #[arg(long)]
         blueprint_id: Uuid,
         #[arg(long)]
-        blueprint_version: i64,
-        #[arg(long)]
         context_id: Option<Uuid>,
         #[command(flatten)]
         source: SourceInput,
     },
-    CreateVersion {
+    /// Save a changed definition as the rule's new current revision.
+    Update {
         rule_id: Uuid,
+        /// Save an enforcing definition of an enabled rule although its
+        /// completed dry run found existing violations.
         #[arg(long)]
-        blueprint_id: Uuid,
-        #[arg(long)]
-        blueprint_version: i64,
-        #[arg(long)]
-        context_id: Option<Uuid>,
+        accept_existing_violations: bool,
         #[command(flatten)]
         source: SourceInput,
-    },
-    Publish {
-        rule_id: Uuid,
-        version: i64,
     },
     Enable {
         rule_id: Uuid,
-        version: i64,
         /// Enable an enforcing rule although its completed dry run found
         /// existing violations; those records cannot be saved until fixed.
         #[arg(long)]
@@ -70,6 +69,9 @@ pub(crate) enum RuleCommand {
         record_id: Option<Uuid>,
         #[arg(long, default_value_t = false)]
         dry_run: bool,
+        /// Dry-run this unsaved definition instead of the current one.
+        #[arg(long, requires = "dry_run")]
+        definition_file: Option<std::path::PathBuf>,
     },
     RunList {
         #[arg(long)]
@@ -126,54 +128,53 @@ pub(crate) async fn rule_command(api: &Api, command: RuleCommand) -> Result<Stri
             .await
         }
         RuleCommand::Get { rule_id } => api.get(&format!("/rules/{}", segment(rule_id))).await,
+        RuleCommand::Revisions { rule_id } => {
+            api.get(&format!("/rules/{}/revisions", segment(rule_id)))
+                .await
+        }
+        RuleCommand::Revision { rule_id, version } => {
+            api.get(&format!("/rules/{}/revisions/{version}", segment(rule_id)))
+                .await
+        }
         RuleCommand::Validate {
             blueprint_id,
-            blueprint_version,
             context_id,
             source,
         } => {
             api.post_json(
                 "/rules/validate",
-                rule_body(blueprint_id, blueprint_version, context_id, source)?,
+                rule_body(blueprint_id, context_id, source)?,
             )
             .await
         }
         RuleCommand::Create {
             blueprint_id,
-            blueprint_version,
             context_id,
             source,
         } => {
-            api.post_json(
-                "/rules",
-                rule_body(blueprint_id, blueprint_version, context_id, source)?,
-            )
-            .await
-        }
-        RuleCommand::CreateVersion {
-            rule_id,
-            blueprint_id,
-            blueprint_version,
-            context_id,
-            source,
-        } => {
-            api.post_json(
-                &format!("/rules/{}/versions", segment(rule_id)),
-                rule_body(blueprint_id, blueprint_version, context_id, source)?,
-            )
-            .await
-        }
-        RuleCommand::Publish { rule_id, version } => {
-            api.post(&format!("/rules/{rule_id}/versions/{version}/publish"))
+            api.post_json("/rules", rule_body(blueprint_id, context_id, source)?)
                 .await
+        }
+        RuleCommand::Update {
+            rule_id,
+            accept_existing_violations,
+            source,
+        } => {
+            api.put_json(
+                &format!("/rules/{}", segment(rule_id)),
+                json!({
+                    "definition": read_source(source)?,
+                    "accept_existing_violations": accept_existing_violations,
+                }),
+            )
+            .await
         }
         RuleCommand::Enable {
             rule_id,
-            version,
             accept_existing_violations,
         } => {
             api.post_json(
-                &format!("/rules/{rule_id}/versions/{version}/enable"),
+                &format!("/rules/{}/enable", segment(rule_id)),
                 json!({ "accept_existing_violations": accept_existing_violations }),
             )
             .await
@@ -187,10 +188,19 @@ pub(crate) async fn rule_command(api: &Api, command: RuleCommand) -> Result<Stri
             idempotency_key,
             record_id,
             dry_run,
+            definition_file,
         } => {
+            let definition = definition_file
+                .map(|file| {
+                    read_source(SourceInput {
+                        file: Some(file),
+                        stdin: false,
+                    })
+                })
+                .transpose()?;
             api.post_json(
                 &format!("/rules/{}/run-now", segment(rule_id)),
-                json!({"idempotency_key":idempotency_key,"record_id":record_id,"dry_run":dry_run}),
+                json!({"idempotency_key":idempotency_key,"record_id":record_id,"dry_run":dry_run,"definition":definition}),
             )
             .await
         }
@@ -308,13 +318,11 @@ impl FindingState {
 
 pub(crate) fn rule_body(
     blueprint_id: Uuid,
-    blueprint_version: i64,
     context_id: Option<Uuid>,
     source: SourceInput,
 ) -> Result<Value, CliError> {
     Ok(json!({
         "blueprint_id": blueprint_id,
-        "blueprint_version": blueprint_version,
         "context_id": context_id,
         "definition": read_source(source)?,
     }))

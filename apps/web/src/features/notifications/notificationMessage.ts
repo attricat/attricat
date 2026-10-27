@@ -52,6 +52,18 @@ export const notificationMessage = (
         : notification.title;
     case notificationKinds.invitationAccepted:
       return t('inbox.messages.invitationAccepted', { actor });
+    case notificationKinds.ruleNotApplicable: {
+      const rule = dataText(notification, 'rule_name');
+      const version = notification.data.blueprint_version;
+      return rule && blueprint && typeof version === 'number'
+        ? t('inbox.messages.ruleNotApplicable', {
+            actor,
+            blueprint: lexiconText(blueprint),
+            rule,
+            version,
+          })
+        : notification.title;
+    }
     default:
       return notification.title;
   }

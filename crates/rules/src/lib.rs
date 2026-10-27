@@ -1,13 +1,18 @@
 //! Strict, inert rule definition parsing. Candidate selection and evaluation are host-owned.
+use attricat_domain::{states::RuleInapplicability, value_type::ValueType};
 use attricat_validation::{
     is_valid_code,
     predicate::{AttributeTypes, PredicateError, Usage, validate_predicate},
+    status::STATUS_KEY,
 };
 use cron::Schedule;
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::{collections::HashSet, str::FromStr};
+use std::{
+    collections::{HashMap, HashSet},
+    str::FromStr,
+};
 use thiserror::Error;
 
 pub const MAX_CANDIDATES_PER_RUN: u32 = 10_000;
@@ -298,26 +303,104 @@ fn validate_enforcement(enforcement: &Enforcement, severity: &Severity) -> Resul
     Ok(())
 }
 
-/// Type-checks a rule against the attribute types of its blueprint revision.
-pub fn validate_against_attributes(
+/// The attributes of one blueprint revision that a rule is checked against:
+/// value types, and the option codes of each status attribute.
+#[derive(Clone, Debug, Default)]
+pub struct RevisionAttributes {
+    pub types: HashMap<String, ValueType>,
+    pub statuses: HashMap<String, Vec<String>>,
+}
+
+impl RevisionAttributes {
+    /// Adds or replaces one attribute. A status attribute's codes are its
+    /// value schema's `enum`.
+    pub fn insert(
+        &mut self,
+        code: &str,
+        value_type: ValueType,
+        value_schema: Option<&serde_json::Value>,
+    ) {
+        self.types.insert(code.to_owned(), value_type);
+        let options = value_schema
+            .filter(|schema| schema.get(STATUS_KEY).is_some())
+            .and_then(|schema| schema.get("enum"))
+            .and_then(serde_json::Value::as_array);
+        match options {
+            Some(options) => {
+                self.statuses.insert(
+                    code.to_owned(),
+                    options
+                        .iter()
+                        .filter_map(|option| option.as_str().map(str::to_owned))
+                        .collect(),
+                );
+            }
+            None => {
+                self.statuses.remove(code);
+            }
+        }
+    }
+}
+
+impl AttributeTypes for RevisionAttributes {
+    fn attribute_type(&self, code: &str) -> Option<Option<ValueType>> {
+        self.types.attribute_type(code)
+    }
+}
+
+/// Why a rule does not apply to a blueprint revision.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct NotApplicable {
+    pub reason: RuleInapplicability,
+    pub message: String,
+}
+
+impl std::fmt::Display for NotApplicable {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
+/// Checks a rule against one revision of its blueprint: the attributes its
+/// predicate and guarded transitions name must exist there with types and
+/// status codes that suit them. A rule applies to every revision it fits.
+pub fn applicability(
     rule: &CompiledRule,
-    attributes: &dyn AttributeTypes,
-) -> Result<(), RuleError> {
+    attributes: &RevisionAttributes,
+) -> Result<(), NotApplicable> {
     let usage = Enforcement::usage(rule.enforcement.as_ref());
-    validate_predicate(&rule.predicate, Some(attributes), usage)?;
+    validate_predicate(&rule.predicate, Some(attributes), usage).map_err(|error| match error {
+        PredicateError::UnknownAttribute(code) => NotApplicable {
+            reason: RuleInapplicability::AttributeMissing,
+            message: format!("unknown attribute '{code}'"),
+        },
+        PredicateError::Invalid(message) => NotApplicable {
+            reason: RuleInapplicability::AttributeTypeChanged,
+            message,
+        },
+    })?;
     for selector in rule
         .enforcement
         .iter()
         .flat_map(|enforcement| &enforcement.transitions)
     {
-        if attributes
-            .attribute_type(&selector.attribute_code)
-            .is_none()
-        {
-            return Err(RuleError::Invalid(format!(
-                "unknown enforcement attribute '{}'",
+        let status_changed = |message: String| NotApplicable {
+            reason: RuleInapplicability::StatusChanged,
+            message,
+        };
+        let Some(codes) = attributes.statuses.get(&selector.attribute_code) else {
+            return Err(status_changed(format!(
+                "enforcement attribute '{}' is not a status attribute",
                 selector.attribute_code
             )));
+        };
+        for code in std::iter::once(&selector.to).chain(&selector.from) {
+            if !codes.contains(code) {
+                return Err(status_changed(format!(
+                    "unknown status '{code}' for '{}'",
+                    selector.attribute_code
+                )));
+            }
         }
     }
     Ok(())
@@ -423,6 +506,62 @@ mod tests {
         assert!(parse(&range.replace("severity='error'", "severity='warning'")).is_err());
         assert!(parse(&format!("{REQUIRED}\n[enforcement]")).is_err());
     }
+    #[test]
+    fn applies_only_to_revisions_whose_attributes_fit() {
+        let status = serde_json::json!({
+            "enum": ["draft", "released"],
+            "x-attricat-status": {"version": 1},
+        });
+        let mut fits = RevisionAttributes::default();
+        fits.insert("title", ValueType::String, None);
+        fits.insert("status", ValueType::String, Some(&status));
+        let guarded = compile(&format!(
+            "{REQUIRED}\n[enforcement]\n[[enforcement.transitions]]\nattribute_code='status'\nfrom='draft'\nto='released'"
+        ))
+        .unwrap();
+        assert_eq!(applicability(&guarded, &fits), Ok(()));
+
+        let reason = |attributes: &RevisionAttributes, rule: &CompiledRule| {
+            applicability(rule, attributes)
+                .expect_err(&rule.code)
+                .reason
+        };
+        let mut missing = RevisionAttributes::default();
+        missing.insert("status", ValueType::String, Some(&status));
+        assert_eq!(
+            reason(&missing, &guarded),
+            RuleInapplicability::AttributeMissing
+        );
+        let ordered = compile(&REQUIRED.replace(
+            "type='required'\nattribute_code='title'",
+            "type='compare'\nattribute_code='title'\nop='gt'\nvalue=3",
+        ))
+        .unwrap();
+        let mut numeric = fits.clone();
+        numeric.insert("title", ValueType::Number, None);
+        assert_eq!(applicability(&ordered, &numeric), Ok(()));
+        assert_eq!(
+            reason(&fits, &ordered),
+            RuleInapplicability::AttributeTypeChanged
+        );
+        let mut plain_status = fits.clone();
+        plain_status.insert("status", ValueType::String, None);
+        assert_eq!(
+            reason(&plain_status, &guarded),
+            RuleInapplicability::StatusChanged
+        );
+        let mut renamed = fits.clone();
+        renamed.insert(
+            "status",
+            ValueType::String,
+            Some(&serde_json::json!({"enum": ["new", "released"], "x-attricat-status": {}})),
+        );
+        assert_eq!(
+            reason(&renamed, &guarded),
+            RuleInapplicability::StatusChanged
+        );
+    }
+
     #[test]
     fn stored_plans_without_enforcement_still_load() {
         let plan = serde_json::json!({

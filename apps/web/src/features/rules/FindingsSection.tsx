@@ -1,4 +1,3 @@
-import { latestRevisions } from '../../api/revisionStatus';
 import { FindingSeverityChip } from './FindingSeverityChip';
 import {
   Box,
@@ -28,7 +27,7 @@ import { lexiconText } from '../lexicon/lexicon';
 import type { Finding, FindingsSearch, Rule } from './api';
 import { RecordIdLink } from '../../components/RecordIdLink';
 import { RuleRevisionCell } from './RuleCells';
-import type { RuleRevisions } from './ruleRevisions';
+import type { RulesById } from './rulesById';
 import { useFindingMessages } from './useFindingMessages';
 import {
   ANY_FINDING_FILTER,
@@ -89,9 +88,9 @@ const FindingFilter = ({
   );
 };
 
-/** Each rule once, named by its latest revision. */
+/** Each rule, by name. */
 const ruleOptions = (rules: readonly Rule[]): FilterOption[] =>
-  latestRevisions(rules, (rule) => rule.id)
+  rules
     .map((rule) => ({ value: rule.id, label: rule.name }))
     .sort((a, b) => a.label.localeCompare(b.label));
 
@@ -112,7 +111,7 @@ export const FindingsSection = ({
   onLoadMore,
   recordLabels,
   onAcknowledge,
-  revisions,
+  rulesById,
 }: {
   acknowledging: boolean;
   canManage: boolean;
@@ -131,10 +130,10 @@ export const FindingsSection = ({
   onLoadMore: () => void;
   recordLabels: ReadonlyMap<string, string>;
   onAcknowledge: (id: string) => void;
-  revisions: RuleRevisions;
+  rulesById: RulesById;
 }) => {
   const { t } = useTranslation();
-  const messageOf = useFindingMessages(findings ?? [], revisions);
+  const messageOf = useFindingMessages(findings ?? [], rulesById);
   const any = t('rules.filters.any');
   const setFilter =
     (key: keyof FindingsSearch) => (value: string | undefined) =>
@@ -237,7 +236,7 @@ export const FindingsSection = ({
                 <TableCell>{messageOf(finding)}</TableCell>
                 <TableCell>
                   <RuleRevisionCell
-                    revisions={revisions}
+                    rules={rulesById}
                     ruleId={finding.rule_id}
                     version={finding.rule_version}
                   />

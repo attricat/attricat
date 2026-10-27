@@ -53,8 +53,10 @@ export const useBlueprintFieldDiagnostics = ({
             : rules.data?.filter(
                 (rule) =>
                   rule.blueprint_id === revisionId &&
-                  rule.blueprint_version === revisionVersion &&
-                  rule.enabled_version !== null,
+                  rule.enabled &&
+                  !rule.not_applicable.some(
+                    (skipped) => skipped.blueprint_version === revisionVersion,
+                  ),
               ),
       }),
     [

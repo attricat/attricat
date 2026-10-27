@@ -88,6 +88,20 @@ crate::code_enum! {
 }
 
 crate::code_enum! {
+    /// Why a data quality rule does not apply to a blueprint revision. The
+    /// rule skips that revision's records: no findings, no enforcement.
+    pub enum RuleInapplicability (UnknownRuleInapplicability: "rule inapplicability") {
+        /// The revision has no attribute that the rule names.
+        AttributeMissing => "attribute_missing",
+        /// An attribute that the rule names has a type the rule cannot check.
+        AttributeTypeChanged => "attribute_type_changed",
+        /// A guarded status transition names an attribute that is not a
+        /// status, or a status code the attribute does not have.
+        StatusChanged => "status_changed",
+    }
+}
+
+crate::code_enum! {
     /// Records by their unresolved rule findings. Every record falls in
     /// exactly one.
     pub enum DataQualityFilter (UnknownDataQualityFilter: "data quality filter") {
@@ -342,6 +356,11 @@ mod tests {
             RuleFindingSeverity::ALL,
             RuleFindingSeverity::as_str,
             RuleFindingSeverity::parse,
+        );
+        crate::codes::assert_codes_round_trip(
+            RuleInapplicability::ALL,
+            RuleInapplicability::as_str,
+            RuleInapplicability::parse,
         );
         crate::codes::assert_codes_round_trip(
             DataQualityFilter::ALL,

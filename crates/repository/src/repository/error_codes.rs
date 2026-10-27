@@ -130,7 +130,6 @@ error_codes! {
     RuleDryRunRequired = "rule_dry_run_required",
     RuleHasExistingViolations = "rule_has_existing_violations",
     RuleNotEnabled = "rule_not_enabled",
-    RuleNotPublished = "rule_not_published",
     RuleRevisionUnchanged = "rule_revision_unchanged",
     RuleViolation = "rule_violation",
     ServiceUnavailable = "service_unavailable",
@@ -532,7 +531,6 @@ impl RepositoryError {
             Self::BlueprintNotPublished => plain(Unprocessable, Code::BlueprintNotPublished),
             Self::WorkflowNotPublished => plain(Unprocessable, Code::WorkflowNotPublished),
             Self::WorkflowNotEnabled => plain(Unprocessable, Code::WorkflowNotEnabled),
-            Self::RuleNotPublished => plain(Unprocessable, Code::RuleNotPublished),
             Self::RuleNotEnabled => plain(Unprocessable, Code::RuleNotEnabled),
             Self::Database(sqlx::Error::Database(database_error))
                 if database_error.is_unique_violation() =>

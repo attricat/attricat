@@ -8,8 +8,10 @@ import {
   blueprintMigrationImpactSchema,
   blueprintSchema,
   blueprintWithAttributesSchema,
+  publishedBlueprintSchema,
   type Blueprint,
   type BlueprintWithAttributes,
+  type PublishedBlueprint,
 } from './schemas';
 import { uuidSegment, versionSegment } from '../../api/pathSegments';
 
@@ -124,12 +126,13 @@ export const publishBlueprintRecordsAllChannels = (
     { method: 'POST' },
   );
 
+/** Publishes a revision; enabled rules it no longer fits come back as warnings. */
 export const publishBlueprintRevision = (
   id: string,
   version: number,
-): Promise<BlueprintWithAttributes> =>
+): Promise<PublishedBlueprint> =>
   request(
     `/api/blueprints/${uuidSegment(id)}/versions/${versionSegment(version)}/publish`,
-    blueprintWithAttributesSchema,
+    publishedBlueprintSchema,
     { method: 'POST' },
   );

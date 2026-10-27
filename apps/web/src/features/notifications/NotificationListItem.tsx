@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next';
 import { RouterListItemButton } from '../../components/RouterLink';
 import { Timestamp } from '../../time/Timestamp';
 import { agentRoutes } from '../agents/constants';
+import { ruleRoutes } from '../rules/constants';
 import { notificationSubjectKinds, recordRoute } from './constants';
 import { NotificationKindIcon } from './NotificationKindIcon';
 import { notificationMessage } from './notificationMessage';
@@ -122,12 +123,21 @@ export const NotificationListItem = ({
         >
           {content}
         </RouterListItemButton>
-      ) : subject?.kind === 'agent_conversation' ? (
+      ) : subject?.kind === notificationSubjectKinds.agentConversation ? (
         <RouterListItemButton
           onClick={onOpen}
           params={{ conversationId: subject.id }}
           sx={contentSx}
           to={agentRoutes.detail}
+        >
+          {content}
+        </RouterListItemButton>
+      ) : subject?.kind === notificationSubjectKinds.rule ? (
+        <RouterListItemButton
+          onClick={onOpen}
+          params={{ ruleId: subject.id }}
+          sx={contentSx}
+          to={ruleRoutes.rule}
         >
           {content}
         </RouterListItemButton>

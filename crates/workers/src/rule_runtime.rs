@@ -178,18 +178,17 @@ async fn evaluate_page(
     let page_size = PAGE_SIZE.min(remaining);
     let pool = repo.pool_for_runtime();
     let candidates: Vec<Uuid> = sqlx::query_scalar(
-        "SELECT id FROM records WHERE workspace_id=$1 AND blueprint_id=$2 AND blueprint_version=$3 AND deleted_at IS NULL AND ($4::uuid IS NULL OR id>$4) AND ($5::uuid IS NULL OR id=$5) ORDER BY id LIMIT $6",
+        "SELECT id FROM records WHERE workspace_id=$1 AND blueprint_id=$2 AND deleted_at IS NULL AND ($3::uuid IS NULL OR id>$3) AND ($4::uuid IS NULL OR id=$4) ORDER BY id LIMIT $5",
     )
     .bind(repo.workspace_id())
     .bind(run.blueprint_id)
-    .bind(run.blueprint_version)
     .bind(run.candidate_cursor)
     .bind(run.scope_record_id)
     .bind(page_size)
     .fetch_all(&pool)
     .await?;
     let results = repo
-        .evaluate_rule_candidates(run.context_id, &compiled, &candidates)
+        .evaluate_rule_candidates(run.blueprint_id, run.context_id, &compiled, &candidates)
         .await?;
     let exhausted = candidates.len() < page_size as usize || run.scope_record_id.is_some();
     let capped = run.candidates_evaluated + candidates.len() as i64
@@ -206,18 +205,17 @@ async fn evaluate_page(
     })
 }
 
-/// Whether the run's blueprint revision has live candidates after `cursor`.
+/// Whether the run's blueprint has live candidates after `cursor`.
 async fn candidates_remain(
     repo: &AttricatRepository,
     run: &ClaimedRuleRun,
     cursor: Option<Uuid>,
 ) -> Result<bool, RepositoryError> {
     Ok(sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM records WHERE workspace_id=$1 AND blueprint_id=$2 AND blueprint_version=$3 AND deleted_at IS NULL AND ($4::uuid IS NULL OR id>$4))",
+        "SELECT EXISTS(SELECT 1 FROM records WHERE workspace_id=$1 AND blueprint_id=$2 AND deleted_at IS NULL AND ($3::uuid IS NULL OR id>$3))",
     )
     .bind(repo.workspace_id())
     .bind(run.blueprint_id)
-    .bind(run.blueprint_version)
     .bind(cursor)
     .fetch_one(&repo.pool_for_runtime())
     .await?)

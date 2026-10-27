@@ -142,8 +142,17 @@ describe('blueprint API client', () => {
       { method: 'POST' },
     );
 
-    respond({ blueprint, attributes: [] });
-    await publishBlueprintRevision(blueprintId, 2);
+    const warning = {
+      rule_id: blueprintId,
+      code: 'title-required',
+      name: 'Title required',
+      reason: 'attribute_missing',
+      message: "unknown attribute 'title'",
+    };
+    respond({ blueprint, attributes: [], rule_warnings: [warning] });
+    await expect(
+      publishBlueprintRevision(blueprintId, 2),
+    ).resolves.toMatchObject({ rule_warnings: [warning] });
     expect(fetchMock).toHaveBeenLastCalledWith(
       `/api/blueprints/${blueprintId}/versions/2/publish`,
       { method: 'POST' },

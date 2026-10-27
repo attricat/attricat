@@ -30,7 +30,11 @@ import { FieldRevealLink } from '../views/components/FieldRevealLink';
 import { useRevealField } from '../views/fieldReveal';
 import { useCan } from '../auth/useCan';
 import { recheckRecord, type Finding, type RuleRun } from './api';
-import { findingStates, RECORD_RULE_RUN_POLL_MS } from './constants';
+import {
+  findingStates,
+  RECORD_RULE_RUN_POLL_MS,
+  ruleRoutes,
+} from './constants';
 import { ruleQueryKeys } from './queryKeys';
 import {
   recordFindingsOptions,
@@ -39,11 +43,7 @@ import {
 } from './queryOptions';
 import { isWatchingRecordRuleChecks } from './recordRuleChecks';
 import { RuleRevisionCell } from './RuleCells';
-import {
-  ruleRevisionKey,
-  ruleRevisionsByKey,
-  type RuleRevisions,
-} from './ruleRevisions';
+import { rulesById, type RulesById } from './rulesById';
 import { findingEvidenceSchema } from './schemas';
 import { capabilities } from '../auth/capabilities';
 import { findingMessage, type FindingAttribute } from './findingMessage';
@@ -72,7 +72,7 @@ const FindingItem = ({
   finding,
   onAcknowledge,
   onRevealField,
-  revisions,
+  rules,
 }: {
   acknowledging: boolean;
   attributes: readonly FindingAttribute[];
@@ -82,7 +82,7 @@ const FindingItem = ({
   onAcknowledge: () => void;
   /** Leads to the field the finding is about, where the page shows it. */
   onRevealField?: (code: string) => void;
-  revisions: RuleRevisions;
+  rules: RulesById;
 }) => {
   const { t } = useTranslation();
   const evidence = findingEvidenceSchema.safeParse(finding.evidence);
@@ -91,9 +91,7 @@ const FindingItem = ({
     contextCodes !== undefined &&
     contextCodes.length > 1 &&
     contextCodes.every((code) => contexts.includes(code));
-  const rule = revisions.get(
-    ruleRevisionKey(finding.rule_id, finding.rule_version),
-  );
+  const rule = rules.get(finding.rule_id);
   const attributeCode = evidence.success
     ? evidence.data.attribute_code
     : undefined;
@@ -137,18 +135,12 @@ const FindingItem = ({
           }}
         >
           {rule ? (
-            <Link
-              params={{
-                ruleId: finding.rule_id,
-                version: String(finding.rule_version),
-              }}
-              to="/manage/rules/$ruleId/revisions/$version"
-            >
+            <Link params={{ ruleId: finding.rule_id }} to={ruleRoutes.rule}>
               {rule.name}
             </Link>
           ) : (
             <RuleRevisionCell
-              revisions={revisions}
+              rules={rules}
               ruleId={finding.rule_id}
               version={finding.rule_version}
             />
@@ -244,8 +236,10 @@ export const RecordFindingsPanel = ({
   const hasApplicableRules = (rules.data ?? []).some(
     (rule) =>
       rule.blueprint_id === blueprintId &&
-      rule.blueprint_version === blueprintVersion &&
-      rule.enabled_version === rule.version,
+      rule.enabled &&
+      !rule.not_applicable.some(
+        (revision) => revision.blueprint_version === blueprintVersion,
+      ),
   );
   const runs = useQuery({
     ...recordRuleRunsOptions(recordId),
@@ -286,7 +280,7 @@ export const RecordFindingsPanel = ({
   const unresolved = findings.data?.pages.flatMap((page) => page.items) ?? [];
   const error = findings.error ?? rules.error ?? runs.error;
   const checking = Boolean(runs.data?.some(isActive)) || recheck.isPending;
-  const revisions = ruleRevisionsByKey(rules.data ?? []);
+  const rulesByIdMap = rulesById(rules.data ?? []);
 
   return (
     <Box aria-busy={checking}>
@@ -354,7 +348,7 @@ export const RecordFindingsPanel = ({
               finding={finding}
               onAcknowledge={() => acknowledge.mutate(finding.id)}
               onRevealField={revealField ?? undefined}
-              revisions={revisions}
+              rules={rulesByIdMap}
             />
           ))}
         </Box>

@@ -16,10 +16,9 @@ import { contextLabel } from '../contexts/defaultContext';
 import { lexiconText } from '../lexicon/lexicon';
 import { ALL_CONTEXTS, RULE_SCOPE_SELECT_MIN_WIDTH } from './constants';
 
-/** The blueprint revision and context a rule checks. */
+/** The blueprint and context a rule checks. */
 export type RuleScope = {
   blueprintId?: string;
-  blueprintVersion?: number;
   contextId: string | null;
 };
 
@@ -75,29 +74,27 @@ const ScopeSelect = ({
 };
 
 /**
- * Chooses what a new rule checks: a record blueprint, one of its published
- * revisions, and optionally a single context. Revisions keep these.
+ * Chooses what a new rule checks: a record blueprint, every revision of which
+ * the rule fits, and optionally a single context. A rule keeps these.
  */
 export const RuleScopeFields = ({
   blueprints,
   contexts,
   disabled,
+  noPublishedRevision,
   onChange,
-  publishedRevisions,
   scope,
 }: {
   /** Record blueprints, latest revision of each. */
   blueprints: readonly Blueprint[];
   contexts: readonly AttributeContext[];
   disabled: boolean;
+  /** The chosen blueprint has no published revision to check the rule on. */
+  noPublishedRevision: boolean;
   onChange: (scope: RuleScope) => void;
-  /** Published revisions of the chosen blueprint, newest first. */
-  publishedRevisions: readonly Blueprint[] | undefined;
   scope: RuleScope;
 }) => {
   const { t } = useTranslation();
-  const noPublishedRevision =
-    scope.blueprintId !== undefined && publishedRevisions?.length === 0;
   return (
     <Paper component="section" sx={{ mt: 3, p: 2 }} variant="outlined">
       <Typography color="text.secondary" variant="body2">
@@ -117,9 +114,7 @@ export const RuleScopeFields = ({
               : undefined
           }
           label={t('rules.editor.blueprint')}
-          onChange={(blueprintId) =>
-            onChange({ ...scope, blueprintId, blueprintVersion: undefined })
-          }
+          onChange={(blueprintId) => onChange({ ...scope, blueprintId })}
           options={blueprints
             .map((blueprint) => ({
               label: lexiconText(blueprint.name),
@@ -127,24 +122,6 @@ export const RuleScopeFields = ({
             }))
             .sort((a, b) => a.label.localeCompare(b.label))}
           value={scope.blueprintId ?? ''}
-        />
-        <ScopeSelect
-          disabled={disabled || !publishedRevisions?.length}
-          label={t('rules.editor.blueprintRevision')}
-          onChange={(version) =>
-            onChange({ ...scope, blueprintVersion: Number(version) })
-          }
-          options={(publishedRevisions ?? []).map((revision) => ({
-            label: t('rules.editor.revisionOption', {
-              version: revision.version,
-            }),
-            value: String(revision.version),
-          }))}
-          value={
-            scope.blueprintVersion === undefined
-              ? ''
-              : String(scope.blueprintVersion)
-          }
         />
         <ScopeSelect
           disabled={disabled}

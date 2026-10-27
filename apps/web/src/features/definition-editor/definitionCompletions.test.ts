@@ -282,11 +282,7 @@ describe('definitionCompletions', () => {
   it('completes table headers from the current section', async () => {
     const top = await complete(`${header}[[|`);
     expect(top.labels).toEqual(
-      expect.arrayContaining([
-        'attributes',
-        'includes',
-        'connector_jobs',
-      ]),
+      expect.arrayContaining(['attributes', 'includes', 'connector_jobs']),
     );
     expect(top.suggestions[0].insertText.endsWith(']]')).toBe(true);
     const nested = await complete(

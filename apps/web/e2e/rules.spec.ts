@@ -81,19 +81,17 @@ attribute_code = "${attribute}"`,
   await expect(ruleRow).toContainText('Disabled');
   await ruleRow.getByRole('button', { name: 'Run now' }).click();
   await expect(page.getByRole('alert')).toContainText(
-    'The rule has no enabled revision.',
+    'The rule is not enabled.',
   );
 
   const toggle = ruleRow.getByRole('switch', {
-    name: `Enable ${ruleName} v1`,
+    name: `Enable ${ruleName}`,
   });
   // The switch reflects the saved lifecycle, so it flips after the response.
   await toggle.click();
   await expect(toggle).toBeChecked();
   await expect(ruleRow).toContainText('Enabled');
-  await expect(
-    page.getByText('rule has no enabled revision to run'),
-  ).toBeHidden();
+  await expect(page.getByText('The rule is not enabled.')).toBeHidden();
   await page.reload();
   await expect(toggle).toBeChecked();
   await ruleRow.getByRole('button', { name: 'Dry run' }).click();

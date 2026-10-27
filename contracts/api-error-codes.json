@@ -89,7 +89,6 @@
     "rule_dry_run_required",
     "rule_has_existing_violations",
     "rule_not_enabled",
-    "rule_not_published",
     "rule_revision_unchanged",
     "rule_violation",
     "service_unavailable",

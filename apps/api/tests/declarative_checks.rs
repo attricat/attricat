@@ -477,7 +477,6 @@ async fn create_rule(
         format!("{base}/rules"),
         json!({
             "blueprint_id": blueprint["blueprint"]["id"],
-            "blueprint_version": blueprint["blueprint"]["version"],
             "context_id": null,
             "definition": definition,
         }),
@@ -485,27 +484,10 @@ async fn create_rule(
     .await
 }
 
-async fn publish_rule(client: &Client, base: &str, rule: &Value) {
-    let id = rule["id"].as_str().unwrap();
-    let (status, body) = post(
-        client,
-        format!("{base}/rules/{id}/versions/1/publish"),
-        json!({}),
-    )
-    .await;
-    assert!(status.is_success(), "{body}");
-}
-
-/// Publishes and enables version 1 of a rule.
+/// Enables a rule.
 async fn enable_rule(client: &Client, base: &str, rule: &Value) {
-    publish_rule(client, base, rule).await;
     let id = rule["id"].as_str().unwrap();
-    let (status, body) = post(
-        client,
-        format!("{base}/rules/{id}/versions/1/enable"),
-        json!({}),
-    )
-    .await;
+    let (status, body) = post(client, format!("{base}/rules/{id}/enable"), json!({})).await;
     assert!(status.is_success(), "{body}");
 }
 
@@ -779,9 +761,8 @@ async fn enforcing_rules_dry_run_before_enabling_and_reject_writes(pool: PgPool)
     )
     .await;
     assert_eq!(status, StatusCode::CREATED, "{created}");
-    publish_rule(&client, &base, &created).await;
     let id = created["id"].as_str().unwrap();
-    let enable = format!("{base}/rules/{id}/versions/1/enable");
+    let enable = format!("{base}/rules/{id}/enable");
 
     let (status, body) = post(&client, enable.clone(), json!({})).await;
     assert_eq!(status, StatusCode::CONFLICT, "{body}");
@@ -790,7 +771,7 @@ async fn enforcing_rules_dry_run_before_enabling_and_reject_writes(pool: PgPool)
     let (status, body) = post(
         &client,
         format!("{base}/rules/{id}/run-now"),
-        json!({"dry_run": true, "idempotency_key": "preview", "version": 1}),
+        json!({"dry_run": true, "idempotency_key": "preview"}),
     )
     .await;
     assert_eq!(status, StatusCode::ACCEPTED, "{body}");
@@ -1207,21 +1188,15 @@ predicates = [
     );
     let (status, created) = create_rule(&client, &base, &orders, &definition).await;
     assert_eq!(status, StatusCode::CREATED, "{created}");
-    publish_rule(&client, &base, &created).await;
     let id = created["id"].as_str().unwrap();
     let rule_id: Uuid = id.parse().unwrap();
-    let (status, body) = post(
-        &client,
-        format!("{base}/rules/{id}/versions/1/enable"),
-        json!({}),
-    )
-    .await;
+    let (status, body) = post(&client, format!("{base}/rules/{id}/enable"), json!({})).await;
     assert!(status.is_success(), "{body}");
     let run = |key: &'static str| {
         post(
             &client,
             format!("{base}/rules/{id}/run-now"),
-            json!({"dry_run": false, "idempotency_key": key, "version": 1}),
+            json!({"dry_run": false, "idempotency_key": key}),
         )
     };
     let (status, body) = run("first").await;

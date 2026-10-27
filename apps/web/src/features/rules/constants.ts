@@ -9,8 +9,25 @@ export const ruleRoutes = {
   findings: '/manage/rules/findings',
   runs: '/manage/rules/runs',
   create: '/manage/rules/new',
-  revision: '/manage/rules/$ruleId/revisions/$version',
-  newRevision: '/manage/rules/$ruleId/revisions/$version/new',
+  rule: '/manage/rules/$ruleId',
+  changelog: '/manage/rules/$ruleId/changelog',
+  edit: '/manage/rules/$ruleId/edit',
+} as const;
+
+export const RULE_PAGE_DEFINITION = 'definition';
+export const RULE_PAGE_CHANGELOG = 'changelog';
+/** The tabs of a rule's page. */
+export const RULE_PAGE_SECTIONS = [
+  { key: RULE_PAGE_DEFINITION, to: ruleRoutes.rule },
+  { key: RULE_PAGE_CHANGELOG, to: ruleRoutes.changelog },
+] as const;
+export type RulePageSection = (typeof RULE_PAGE_SECTIONS)[number]['key'];
+
+/** Why a rule does not apply to a blueprint revision. */
+export const ruleInapplicabilities = {
+  attributeMissing: 'attribute_missing',
+  attributeTypeChanged: 'attribute_type_changed',
+  statusChanged: 'status_changed',
 } as const;
 
 export const RULE_SECTIONS = [
@@ -87,8 +104,10 @@ export const predicateTypes = {
 export const RULE_SCOPE_SELECT_MIN_WIDTH = 220;
 /** The value of the context selector for a rule that checks every context. */
 export const ALL_CONTEXTS = '';
-/** Height of the read-only definition on a rule revision page. */
+/** Height of the read-only definition on a rule's page. */
 export const RULE_DEFINITION_VIEWER_HEIGHT = '420px';
+/** How often an editor checks on the dry run of its unsaved change. */
+export const RULE_DRY_RUN_POLL_MS = 1000;
 /** Recent runs of one record that the record page inspects. */
 export const RECORD_RULE_RUNS_LIMIT = 20;
 /** How often the record page checks on its rule runs while they are active. */
@@ -100,6 +119,8 @@ export const RECORD_RULE_RUN_POLL_MS = 1000;
 export const RECORD_RULE_CHECK_WATCH_MS = 15_000;
 export const RULE_HAS_EXISTING_VIOLATIONS =
   'rule_has_existing_violations' satisfies ApiErrorCode;
+export const RULE_DRY_RUN_REQUIRED =
+  'rule_dry_run_required' satisfies ApiErrorCode;
 /** Columns of the findings table, for its no-matches row. */
 export const findingsTableColumnCount = 6;
 /** Unresolved findings the record page lists at a time. */

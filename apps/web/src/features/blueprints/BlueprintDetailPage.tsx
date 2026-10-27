@@ -43,6 +43,7 @@ import {
   supportedOutletContextVersion,
 } from '../extensions/constants';
 import { LoadingState } from '../../components/LoadingState';
+import { RuleWarningsAlert } from '../rules/RuleWarningsAlert';
 
 type BlueprintDetailDialog = 'publish' | 'publishRecords' | 'safeMigration';
 
@@ -117,6 +118,13 @@ export const BlueprintDetailPage = ({
             onPublish={() => openActionDialog('publish')}
             onPublishRecords={() => openActionDialog('publishRecords')}
           />
+          {publish.data && (
+            <RuleWarningsAlert
+              sx={{ mt: 2 }}
+              version={publish.data.blueprint.version}
+              warnings={publish.data.rule_warnings}
+            />
+          )}
           {migration.wasEvaluated && !migration.canStart && (
             <Alert severity="info" sx={{ mt: 2 }}>
               {t('blueprints.automaticMigrationUnavailable')}

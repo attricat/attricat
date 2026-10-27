@@ -306,16 +306,15 @@ async fn seeds_install_contexts_channels_rules_workflows_and_saved_searches(pool
     .unwrap();
     assert!(channel_enabled);
     assert_eq!(required_rule_codes, ["seed_name-required"]);
-    let (rule_status, rule_context, enabled_version): (String, Option<Uuid>, Option<i64>) =
-        sqlx::query_as(
-            "SELECT r.status, r.context_id, l.enabled_version FROM rules r JOIN rule_lifecycles l ON l.rule_id = r.id WHERE r.code = 'seed_name-required'",
-        )
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let (rule_context, current_version, enabled): (Option<Uuid>, i64, bool) = sqlx::query_as(
+        "SELECT r.context_id, l.current_version, l.enabled FROM rules r JOIN rule_lifecycles l ON l.rule_id = r.id WHERE r.code = 'seed_name-required'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(
-        (rule_status.as_str(), rule_context, enabled_version),
-        ("published", Some(pl_id), Some(1))
+        (rule_context, current_version, enabled),
+        (Some(pl_id), 1, true)
     );
     let (workflow_status, workflow_enabled): (String, Option<i64>) = sqlx::query_as(
         "SELECT w.status, l.enabled_version FROM workflows w JOIN workflow_lifecycles l ON l.workflow_id = w.id WHERE w.code = 'seed_mark-reviewed'",

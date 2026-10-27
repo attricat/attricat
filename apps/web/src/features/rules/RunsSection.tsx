@@ -14,7 +14,7 @@ import { Timestamp } from '../../time/Timestamp';
 import type { RuleRun } from './api';
 import { RecordIdLink } from '../../components/RecordIdLink';
 import { RuleRevisionCell } from './RuleCells';
-import type { RuleRevisions } from './ruleRevisions';
+import type { RulesById } from './rulesById';
 import { RunStatusChip } from '../../components/RunStatusChip';
 
 /** When a run finished, or when it was queued while it has not. */
@@ -36,14 +36,14 @@ export const RunsSection = ({
   recordLabels,
   error,
   onRetry,
-  revisions,
+  rulesById,
   runs,
 }: {
   recordLabels: ReadonlyMap<string, string>;
   /** The section's load failure, offered for retry. */
   error: Error | null;
   onRetry: () => void;
-  revisions: RuleRevisions;
+  rulesById: RulesById;
   runs: readonly RuleRun[] | undefined;
 }) => {
   const { t } = useTranslation();
@@ -89,7 +89,7 @@ export const RunsSection = ({
                 </TableCell>
                 <TableCell>
                   <RuleRevisionCell
-                    revisions={revisions}
+                    rules={rulesById}
                     ruleId={item.rule_id}
                     version={item.rule_version}
                   />
@@ -114,7 +114,14 @@ export const RunsSection = ({
                 <TableCell>
                   <RunStatusChip status={item.status} />
                 </TableCell>
-                <TableCell>{item.candidates_evaluated}</TableCell>
+                <TableCell>
+                  {item.candidates_skipped > 0
+                    ? t('rules.evaluatedWithSkipped', {
+                        evaluated: item.candidates_evaluated,
+                        skipped: item.candidates_skipped,
+                      })
+                    : item.candidates_evaluated}
+                </TableCell>
                 <TableCell>{item.findings_created}</TableCell>
               </TableRow>
             ))}

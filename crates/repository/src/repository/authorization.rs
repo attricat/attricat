@@ -76,6 +76,21 @@ impl<S: RepositoryScope> AttricatRepository<S> {
             .await
     }
 
+    /// Active members who hold `permission` for the whole workspace.
+    pub(super) async fn workspace_members_with_permission_on(
+        connection: &mut sqlx::PgConnection,
+        workspace_id: Uuid,
+        permission: Permission,
+    ) -> Result<Vec<Uuid>, RepositoryError> {
+        Ok(sqlx::query_scalar(
+            "SELECT DISTINCT m.user_id FROM workspace_memberships m JOIN users u ON u.id = m.user_id JOIN workspaces w ON w.id = m.workspace_id JOIN role_grants g ON g.membership_id = m.id AND g.workspace_id = m.workspace_id JOIN role_permissions rp ON rp.role_id = g.role_id WHERE m.workspace_id = $1 AND m.state = 'active' AND u.state = 'active' AND w.deleted_at IS NULL AND g.scope_type = 'workspace' AND g.scope_target_id = $1 AND rp.permission_code = $2",
+        )
+        .bind(workspace_id)
+        .bind(permission.as_str())
+        .fetch_all(connection)
+        .await?)
+    }
+
     /// `permissions` limits the result; `None` returns every held permission.
     pub(super) async fn workspace_permissions_on(
         connection: &mut sqlx::PgConnection,

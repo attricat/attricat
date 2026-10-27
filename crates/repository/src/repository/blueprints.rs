@@ -5,7 +5,7 @@ use crate::domain_events::{
     BLUEPRINT_CREATED_V1, BLUEPRINT_PUBLISHED_V1, BLUEPRINT_REVISION_CREATED_V1,
     BlueprintRevisionV1, EventSource, EventSourceKind, NewDomainEvent,
 };
-use crate::model::TablePathAttribute;
+use crate::model::{PublishedBlueprint, TablePathAttribute};
 use crate::persistence_rows::{Db, IntoDomain};
 use attricat_blueprint::{AttributeDeclaration, GeneratedValue, ViewDefinition, parse};
 use attricat_cache::{CacheKey, Policy};
@@ -532,11 +532,13 @@ impl AttricatRepository {
         self.with_attributes(blueprint).await
     }
 
+    /// Publishes a draft revision. Enabled rules the revision no longer fits
+    /// are returned as warnings, and their managers notified.
     pub async fn publish_blueprint_revision(
         &self,
         blueprint_id: Uuid,
         version: i64,
-    ) -> Result<BlueprintWithAttributes, RepositoryError> {
+    ) -> Result<PublishedBlueprint, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
         let blueprint = sqlx::query_as::<_, Db<Blueprint>>(&format!(
             r#"SELECT {BLUEPRINT_COLUMNS}
@@ -551,7 +553,7 @@ impl AttricatRepository {
         .await?
         .into_domain()
         .ok_or(RepositoryError::NotFound("blueprint version"))?;
-        if blueprint.status == RevisionStatus::Draft {
+        let rule_warnings = if blueprint.status == RevisionStatus::Draft {
             // Installed renderers and target revisions can change after a draft
             // is saved, so repeat resolution at the publication boundary.
             let compiled = crate::blueprint_resolver::compile_definition(
@@ -634,17 +636,26 @@ impl AttricatRepository {
                 &blueprint.definition,
             )
             .await?;
+            let rule_warnings = self
+                .warn_about_rules_not_fitting(&mut transaction, &blueprint)
+                .await?;
             self.commit_mutation_with_event(
                 transaction,
                 blueprint_event(self, BLUEPRINT_PUBLISHED_V1, &blueprint),
             )
             .await?;
+            rule_warnings
         } else {
             self.commit_mutation(transaction).await?;
-        }
-        self.get_blueprint_revision(blueprint_id, version)
-            .await?
-            .ok_or(RepositoryError::NotFound("blueprint version"))
+            Vec::new()
+        };
+        Ok(PublishedBlueprint {
+            blueprint: self
+                .get_blueprint_revision(blueprint_id, version)
+                .await?
+                .ok_or(RepositoryError::NotFound("blueprint version"))?,
+            rule_warnings,
+        })
     }
 
     pub(super) async fn publish_blueprint_in_transaction(

@@ -1,12 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { Alert, Typography } from '@mui/material';
-import { useMemo, useState } from 'react';
+import { Alert, Box, Button, Paper, Stack, Typography } from '@mui/material';
+import { lazy, Suspense, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ApiRequestError } from '../../api/request';
+import { errorMessage } from '../../api/errors';
 import { revisionStatuses } from '../../api/revisionStatus';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { LoadingState } from '../../components/LoadingState';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
+import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { RuleIcon } from '../../components/systemIcons';
 import { blueprintKinds } from '../blueprints/constants';
 import {
@@ -27,70 +31,65 @@ import { useDefinitionCheck } from '../definition-editor/useDefinitionCheck';
 import { useDefinitionEditor } from '../definition-editor/useDefinitionEditor';
 import { draftEditors } from '../drafts/constants';
 import { lexiconText } from '../lexicon/lexicon';
+import { createRule, updateRule, validateRule, type CreateRule } from './api';
 import {
-  createRule,
-  createRuleRevision,
-  validateRule,
-  type CreateRule,
-} from './api';
-import { ruleRoutes } from './constants';
+  RULE_DRY_RUN_REQUIRED,
+  RULE_HAS_EXISTING_VIOLATIONS,
+  ruleRoutes,
+} from './constants';
 import { ruleQueryKeys } from './queryKeys';
-import { ruleDefinitionsOptions } from './queryOptions';
+import { ruleOptions } from './queryOptions';
+import { RuleChangeDryRun } from './RuleChangeDryRun';
 import { RulePreview } from './RulePreview';
 import { RuleScopeFields, type RuleScope } from './RuleScopeFields';
 import { ruleTemplates } from './templates';
 
+const TomlDiffEditor = lazy(() =>
+  import('../../components/TomlDiffEditor').then(({ TomlDiffEditor }) => ({
+    default: TomlDiffEditor,
+  })),
+);
 const noScope: RuleScope = { contextId: null };
 /** Stands in for a blueprint or context name that is still loading. */
 const loadingName = '…';
 
+/** Error codes of a save that an enforcing change's dry run resolves. */
+const dryRunGateCodes: readonly string[] = [
+  RULE_DRY_RUN_REQUIRED,
+  RULE_HAS_EXISTING_VIOLATIONS,
+];
+
 /**
- * Writes a new rule for a chosen blueprint revision, or a new revision of
- * `ruleId` from its revision `sourceVersion`, in the shared definition editor.
+ * Writes a new rule for a chosen blueprint, or changes the definition of rule
+ * `ruleId`, in the shared definition editor. A rule is checked against the
+ * latest published revision of its blueprint.
  */
-export const RuleEditorPage = ({
-  ruleId,
-  sourceVersion,
-}: {
-  ruleId?: string;
-  sourceVersion?: number;
-}) => {
+export const RuleEditorPage = ({ ruleId }: { ruleId?: string }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const creating = ruleId === undefined;
-  const rules = useQuery({ ...ruleDefinitionsOptions(), enabled: !creating });
-  const source = rules.data?.find(
-    (rule) => rule.id === ruleId && rule.version === sourceVersion,
-  );
+  const rule = useQuery({
+    ...ruleOptions(ruleId ?? ''),
+    enabled: !creating,
+  });
+  const source = rule.data;
   const blueprints = useQuery({
     ...blueprintCatalogueOptions(),
     enabled: creating,
   });
   const contexts = useQuery(contextListOptions());
   const [chosenScope, setChosenScope] = useState<RuleScope>(noScope);
-  const revisions = useQuery({
-    ...blueprintRevisionListOptions(chosenScope.blueprintId),
-    enabled: creating,
-  });
-  const publishedRevisions = revisions.data?.filter(
+  // A rule keeps its blueprint and context.
+  const scope: RuleScope = source
+    ? { blueprintId: source.blueprint_id, contextId: source.context_id }
+    : chosenScope;
+  const revisions = useQuery(blueprintRevisionListOptions(scope.blueprintId));
+  const latestPublished = revisions.data?.find(
     (revision) => revision.status === revisionStatuses.published,
   );
-  // A revision keeps its rule's scope; a new rule checks the latest published
-  // revision of its blueprint unless another is chosen.
-  const scope: RuleScope = source
-    ? {
-        blueprintId: source.blueprint_id,
-        blueprintVersion: source.blueprint_version,
-        contextId: source.context_id,
-      }
-    : {
-        ...chosenScope,
-        blueprintVersion:
-          chosenScope.blueprintVersion ?? publishedRevisions?.[0]?.version,
-      };
   const blueprint = useQuery(
-    blueprintRevisionOptions(scope.blueprintId, scope.blueprintVersion),
+    blueprintRevisionOptions(scope.blueprintId, latestPublished?.version),
   );
   const scopeAttributes = useMemo(
     () =>
@@ -106,81 +105,84 @@ export const RuleEditorPage = ({
     navigate(
       creating
         ? { to: ruleRoutes.list }
-        : {
-            params: { ruleId, version: String(sourceVersion) },
-            to: ruleRoutes.revision,
-          },
+        : { params: { ruleId }, to: ruleRoutes.rule },
     );
   const editor = useDefinitionEditor({
-    draftEditor: creating ? draftEditors.ruleCreate : draftEditors.ruleRevision,
-    draftResource: creating ? [] : [ruleId, sourceVersion ?? 0],
+    draftEditor: creating ? draftEditors.ruleCreate : draftEditors.ruleEdit,
+    draftResource: creating ? [] : [ruleId, source?.version ?? 0],
     onLeave: leaveEditor,
     ready: creating || Boolean(source),
     source: source?.definition,
     templates: ruleTemplates,
   });
   const { definition, isDirty } = editor;
-  const { blueprintId, blueprintVersion, contextId } = scope;
+  const { blueprintId, contextId } = scope;
+  const scopeReady = blueprintId !== undefined && latestPublished !== undefined;
   const ruleInput = (value: string): CreateRule | undefined =>
-    blueprintId && blueprintVersion
-      ? {
-          blueprint_id: blueprintId,
-          blueprint_version: blueprintVersion,
-          context_id: contextId,
-          definition: value,
-        }
+    blueprintId
+      ? { blueprint_id: blueprintId, context_id: contextId, definition: value }
       : undefined;
-  const scopeReady = ruleInput(definition) !== undefined;
 
   const save = useMutation({
-    mutationFn: (input: CreateRule) =>
-      creating ? createRule(input) : createRuleRevision(ruleId, input),
-    onSuccess: async (rule) => {
+    mutationFn: ({
+      value,
+      acceptExistingViolations,
+    }: {
+      value: string;
+      acceptExistingViolations?: boolean;
+    }) =>
+      ruleId === undefined
+        ? createRule(ruleInput(value)!)
+        : updateRule(ruleId, {
+            definition: value,
+            accept_existing_violations: acceptExistingViolations,
+          }),
+    onSuccess: async (saved) => {
       editor.clearDraft();
       await queryClient.invalidateQueries({
         queryKey: ruleQueryKeys.definitions(),
       });
-      navigate({
-        params: { ruleId: rule.id, version: String(rule.version) },
-        to: ruleRoutes.revision,
-      });
+      navigate({ params: { ruleId: saved.id }, to: ruleRoutes.rule });
     },
   });
+  // An enforcing change to an enabled rule waits for a dry run of it.
+  const dryRunGate =
+    save.error instanceof ApiRequestError &&
+    dryRunGateCodes.includes(save.error.code ?? '')
+      ? save.error
+      : undefined;
   const canSave = !save.isPending && scopeReady && (creating || isDirty);
   const saveDefinition = () => {
-    const input = ruleInput(definition);
-    if (canSave && input) save.mutate(input);
+    if (canSave) save.mutate({ value: definition });
   };
   const check = useDefinitionCheck({
     definition,
     enabled: scopeReady,
     kind: definitionKinds.rule,
     resourceId: ruleId,
-    scope: `${blueprintId}:${blueprintVersion}:${contextId}`,
+    scope: `${blueprintId}:${latestPublished?.version}:${contextId}`,
     validate: (value, _, signal) => validateRule(ruleInput(value)!, signal),
   });
-
-  if (!creating && rules.isPending) {
-    return (
-      <PageContainer>
-        <Typography>{t('rules.loading')}</Typography>
-      </PageContainer>
-    );
-  }
 
   if (!creating && !source) {
     return (
       <PageContainer>
-        {rules.isError ? (
-          <ApiErrorAlert error={rules.error} />
+        {rule.isPending ? (
+          <LoadingState>{t('rules.loading')}</LoadingState>
         ) : (
-          <Alert severity="error">{t('rules.revisionPage.notFound')}</Alert>
+          <QueryErrorNotice
+            error={rule.error}
+            isRetrying={rule.isFetching}
+            onRetry={() => void rule.refetch()}
+          />
         )}
       </PageContainer>
     );
   }
 
   const context = contexts.data?.find(({ id }) => id === contextId);
+  const noPublishedRevision =
+    blueprintId !== undefined && revisions.isSuccess && !latestPublished;
   return (
     <PageContainer>
       <PageHeader
@@ -192,21 +194,19 @@ export const RuleEditorPage = ({
             onCancel={editor.cancel}
             onSave={saveDefinition}
             saveLabel={
-              save.isPending ? t('rules.editor.saving') : t('rules.saveDraft')
+              save.isPending ? t('rules.editor.saving') : t('rules.editor.save')
             }
           />
         }
         description={
           source
-            ? t('rules.editor.newRevisionDescription', {
-                version: source.version,
-              })
+            ? t('rules.editor.editDescription', { version: source.version })
             : t('rules.editor.newRuleDescription')
         }
         icon={RuleIcon}
         title={
           source
-            ? t('rules.editor.newRevisionTitle', { name: source.name })
+            ? t('rules.editor.editTitle', { name: source.name })
             : t('rules.newRule')
         }
       />
@@ -217,21 +217,16 @@ export const RuleEditorPage = ({
           )}
           contexts={contexts.data ?? []}
           disabled={save.isPending}
+          noPublishedRevision={noPublishedRevision}
           onChange={setChosenScope}
-          publishedRevisions={
-            chosenScope.blueprintId ? publishedRevisions : undefined
-          }
           scope={scope}
         />
       ) : (
         <Typography color="text.secondary" sx={{ mt: 2 }} variant="body2">
           {t('rules.editor.fixedScope', {
-            blueprint: t('rules.revisionPage.blueprintRevision', {
-              name: blueprint.data
-                ? lexiconText(blueprint.data.blueprint.name)
-                : loadingName,
-              version: blueprintVersion,
-            }),
+            blueprint: blueprint.data
+              ? lexiconText(blueprint.data.blueprint.name)
+              : loadingName,
             context:
               contextId === null
                 ? t('rules.recordFindings.allContexts')
@@ -250,7 +245,33 @@ export const RuleEditorPage = ({
         }
         sx={{ mt: 2 }}
       />
-      <ApiErrorAlert error={save.error} sx={{ mt: 3 }} />
+      {dryRunGate ? (
+        <Alert
+          action={
+            dryRunGate.code === RULE_HAS_EXISTING_VIOLATIONS && (
+              <Button
+                color="inherit"
+                disabled={save.isPending}
+                onClick={() =>
+                  save.mutate({
+                    value: definition,
+                    acceptExistingViolations: true,
+                  })
+                }
+                size="small"
+              >
+                {t('rules.editor.saveAnyway')}
+              </Button>
+            )
+          }
+          severity="warning"
+          sx={{ mt: 3 }}
+        >
+          {errorMessage(dryRunGate)}
+        </Alert>
+      ) : (
+        <ApiErrorAlert error={save.error} sx={{ mt: 3 }} />
+      )}
       {editor.dialogs}
       <DefinitionWorkspace
         check={check}
@@ -276,6 +297,48 @@ export const RuleEditorPage = ({
         </Typography>
       ) : (
         <DefinitionSaveHint unchanged={!editor.creating && !isDirty} />
+      )}
+      {source && isDirty && (
+        <Paper component="section" sx={{ mt: 3, p: 2.5 }}>
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            spacing={2}
+            sx={{
+              alignItems: { sm: 'center' },
+              justifyContent: 'space-between',
+            }}
+          >
+            <Box>
+              <Typography component="h2" variant="h6">
+                {t('rules.editor.changesTitle')}
+              </Typography>
+              <Typography color="text.secondary" variant="body2">
+                {t('rules.editor.changesDescription')}
+              </Typography>
+            </Box>
+            <RuleChangeDryRun
+              definition={definition}
+              disabled={save.isPending || check.result === undefined}
+              ruleId={source.id}
+            />
+          </Stack>
+          <Box sx={{ mt: 2 }}>
+            <Suspense
+              fallback={
+                <LoadingState>{t('rules.changelog.loadingDiff')}</LoadingState>
+              }
+            >
+              <TomlDiffEditor
+                modified={definition}
+                modifiedTitle={t('rules.editor.unsavedChange')}
+                original={source.definition}
+                originalTitle={t('rules.changelog.currentRevisionOption', {
+                  version: source.version,
+                })}
+              />
+            </Suspense>
+          </Box>
+        </Paper>
       )}
     </PageContainer>
   );

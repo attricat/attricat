@@ -152,8 +152,7 @@
     "reusable_attribute_not_published": "Opublikuj rewizję atrybutu wielokrotnego użytku, zanim go dołączysz lub dodasz do grupy.",
     "rule_dry_run_required": "Przed włączeniem tej rewizji reguły przeprowadź pełne próbne wykonanie.",
     "rule_has_existing_violations": "Rekordy już naruszają tę regułę (naruszenia: {{existing_violations}}). Popraw je albo zaakceptuj istniejące naruszenia.",
-    "rule_not_enabled": "Reguła nie ma włączonej rewizji. Włącz ją albo uruchom próbne wykonanie.",
-    "rule_not_published": "Opublikuj rewizję reguły przed jej włączeniem.",
+    "rule_not_enabled": "Reguła nie jest włączona. Włącz ją albo uruchom próbne wykonanie.",
     "rule_revision_unchanged": "Definicja jest identyczna z rewizją {{version}} tej reguły.",
     "rule_violation": "Zmiana narusza egzekwowane reguły.",
     "service_unavailable": "Usługa jest niedostępna: {{message}}",
@@ -388,7 +387,7 @@
     "loading": "Wczytywanie powiadomień…",
     "empty": "Brak powiadomień",
     "noUnread": "Brak nieprzeczytanych powiadomień",
-    "emptyDescription": "Powiadomimy Cię tutaj, gdy ktoś przypisze Cię do rekordu, skomentuje obserwowany rekord, zmieni Twój zespół lub gdy agent będzie Cię potrzebował.",
+    "emptyDescription": "Powiadomimy Cię tutaj, gdy ktoś przypisze Cię do rekordu, skomentuje obserwowany rekord, zmieni Twój zespół, gdy agent będzie Cię potrzebował lub gdy zmiana schematu sprawi, że reguła jakości danych pominie rekordy.",
     "automation": "Automatyzacja",
     "namedRecord": "„{{label}}”",
     "blueprintRecord": "rekordu typu {{blueprint}}",
@@ -401,7 +400,8 @@
       "runCompleted": "Agent zakończył pracę w rozmowie „{{conversation}}”",
       "runFailed": "Praca agenta w rozmowie „{{conversation}}” zakończyła się błędem",
       "teamMemberAdded": "Dodano Cię do zespołu {{team}} (przez: {{actor}})",
-      "invitationAccepted": "Przyjęto Twoje zaproszenie do obszaru roboczego (przez: {{actor}})"
+      "invitationAccepted": "Przyjęto Twoje zaproszenie do obszaru roboczego (przez: {{actor}})",
+      "ruleNotApplicable": "Opublikowano rewizję {{version}} schematu {{blueprint}}, do której nie pasuje już reguła „{{rule}}” (przez: {{actor}})"
     }
   },
   "contexts": {
@@ -1004,8 +1004,7 @@
     "revisionHistory": "Historia wersji",
     "version": "Wersja",
     "definitionHash": "Skrót definicji",
-    "versionOption": "v{{version}} ({{status}})",
-    "diffTitle": "{{original}} → {{modified}}"
+    "versionOption": "v{{version}} ({{status}})"
   },
   "definitionEditor": {
     "details": {
@@ -1968,7 +1967,8 @@
       "completed": "Ukończony",
       "dead_letter": "Martwy list",
       "cancelled": "Anulowany"
-    }
+    },
+    "diffTitle": "{{original}} → {{modified}}"
   },
   "inspector": {
     "apiRestarting": "Ponowne uruchamianie API…",
@@ -2036,7 +2036,7 @@
   },
   "rules": {
     "title": "Reguły jakości danych",
-    "description": "Twórz reguły jakości danych dla schematów i przeglądaj ich ustalenia oraz wykonania ewaluacji.",
+    "description": "Twórz reguły jakości danych dla schematów, sprawdzaj nimi każdą rewizję schematu i przeglądaj ich ustalenia oraz wykonania.",
     "inspectionTabs": "Inspekcja reguł",
     "loading": "Wczytywanie reguł…",
     "sections": {
@@ -2058,12 +2058,13 @@
       "findings": "Ustalenia",
       "record": "Rekord",
       "scope": "Zakres",
-      "executed": "Wykonano"
+      "executed": "Wykonano",
+      "blueprint": "Schemat",
+      "changed": "Zmieniono"
     },
     "enabled": "Włączona",
     "disabled": "Wyłączona",
-    "draft": "Szkic",
-    "toggleRule": "Włącz {{name}} v{{version}}",
+    "toggleRule": "Włącz {{name}}",
     "enableAnyway": "Włącz mimo to",
     "dryRun": "Próbne wykonanie",
     "runNow": "Uruchom teraz",
@@ -2120,29 +2121,29 @@
       "loadMore": "Wczytaj więcej ustaleń",
       "noRules": "Żadna włączona reguła nie sprawdza rekordów tego schematu."
     },
-    "revisionPage": {
-      "backToRules": "Wróć do reguł",
-      "notFound": "Nie znaleziono tej rewizji reguły.",
-      "blueprint": "Sprawdza",
-      "blueprintRevision": "{{name}} v{{version}}",
-      "definition": "Definicja"
-    },
     "newRule": "Nowa reguła",
-    "newRevision": "Nowa rewizja",
-    "publish": "Opublikuj",
-    "saveDraft": "Zapisz szkic",
     "editor": {
       "saving": "Zapisywanie…",
-      "newRuleDescription": "Napisz regułę w TOML. Zostanie zapisana jako szkic; opublikuj ją, a następnie włącz, aby sprawdzała rekordy.",
-      "newRevisionTitle": "Nowa rewizja reguły {{name}}",
-      "newRevisionDescription": "Na podstawie rewizji {{version}}. Zapisanie doda rewizję roboczą.",
-      "scopeDescription": "Wybierz, co sprawdza reguła. Kolejne rewizje zachowują rewizję schematu i kontekst.",
+      "newRuleDescription": "Napisz regułę w TOML. Zostanie zapisana jako wyłączona; włącz ją, aby sprawdzała rekordy.",
+      "scopeDescription": "Wybierz, co sprawdza reguła. Obejmuje każdą rewizję schematu, do której pasuje, i zachowuje swój schemat oraz kontekst.",
       "blueprint": "Schemat",
-      "blueprintRevision": "Rewizja schematu",
-      "revisionOption": "Wersja {{version}}",
       "noPublishedRevision": "Najpierw opublikuj rewizję tego schematu.",
       "chooseBlueprint": "Wybierz schemat z opublikowaną rewizją, aby sprawdzić i zapisać regułę.",
-      "fixedScope": "Sprawdza {{blueprint}} · {{context}}"
+      "fixedScope": "Sprawdza {{blueprint}} · {{context}}",
+      "save": "Zapisz",
+      "editTitle": "Edytuj regułę {{name}}",
+      "editDescription": "Na podstawie rewizji {{version}}. Zapisanie od razu czyni zmianę bieżącą rewizją reguły.",
+      "saveAnyway": "Zapisz mimo to",
+      "changesTitle": "Zmiany",
+      "changesDescription": "Twoja zmiana w porównaniu z bieżącą rewizją. Uruchom ją próbnie, aby zobaczyć, które rekordy by zgłosiła.",
+      "unsavedChange": "Niezapisana zmiana",
+      "dryRunChange": "Uruchom zmianę próbnie",
+      "dryRunResult_one": "Próbne wykonanie sprawdziło rekordy: {{evaluated}}. Nie przeszłyby: {{count}}.",
+      "dryRunResult_other": "Próbne wykonanie sprawdziło rekordy: {{evaluated}}. Nie przeszłyby: {{count}}.",
+      "dryRunOutdated": "Definicja zmieniła się po rozpoczęciu próbnego wykonania. Uruchom ją ponownie przed zapisaniem.",
+      "dryRunFailed": "Próbne wykonanie nie zakończyło się.",
+      "dryRunResult_few": "Próbne wykonanie sprawdziło rekordy: {{evaluated}}. Nie przeszłyby: {{count}}.",
+      "dryRunResult_many": "Próbne wykonanie sprawdziło rekordy: {{evaluated}}. Nie przeszłyby: {{count}}."
     },
     "templates": {
       "required": "Wymagana wartość",
@@ -2185,7 +2186,60 @@
       "rejectsSaves": "Odrzuca zapisy, po których rekord narusza regułę.",
       "blocksTransition": "Blokuje zmianę {{attribute}} z {{from}} na {{to}}.",
       "blocksTransitionInto": "Blokuje zmianę {{attribute}} na {{to}}."
-    }
+    },
+    "empty": "Brak reguł jakości danych",
+    "emptyDescription": "Reguła sprawdza rekordy schematu i zgłasza te, które jej nie spełniają, albo blokuje ich zapis.",
+    "unknownBlueprint": "Nieznany schemat",
+    "unknownContext": "Nieznany kontekst",
+    "revisionLabel": "v{{version}}",
+    "skipsRevisions_one": "Pomija rekordy rewizji schematu {{versions}}, do której nie pasuje",
+    "skipsRevisions_other": "Pomija rekordy rewizji schematu {{versions}}, do których nie pasuje",
+    "evaluatedWithSkipped": "{{evaluated}} (pominięto: {{skipped}})",
+    "inapplicability": {
+      "attribute_missing": "brakuje atrybutu, którego używa reguła",
+      "attribute_type_changed": "atrybut, którego używa reguła, ma typ, którego reguła nie może sprawdzić",
+      "status_changed": "chroniony atrybut statusu lub status już nie istnieje"
+    },
+    "rulePage": {
+      "backToRules": "Wróć do reguł",
+      "checks": "Sprawdza",
+      "currentRevision": "Rewizja {{version}}, zapisana <timestamp/>",
+      "skipsRevisions": "Ta reguła nie pasuje do niektórych rewizji swojego schematu i pomija ich rekordy:",
+      "skippedRevision": "Rewizja {{version}}: {{reason}} ({{message}})",
+      "definition": "Definicja",
+      "edit": "Edytuj",
+      "enable": "Włącz",
+      "disable": "Wyłącz",
+      "tabs": "Reguła",
+      "sections": {
+        "definition": "Definicja",
+        "changelog": "Historia zmian"
+      }
+    },
+    "changelog": {
+      "loading": "Wczytywanie historii zmian…",
+      "title": "Rewizje",
+      "savedAt": "Zapisano",
+      "savedBy": "Zapisał(a)",
+      "current": "Bieżąca",
+      "currentRevisionOption": "v{{version}} (bieżąca)",
+      "unknownAuthor": "Nie zapisano",
+      "comparePrevious": "Porównaj z poprzednią",
+      "compareTitle": "Porównaj rewizje",
+      "compareDescription": "Wybierz dwie rewizje, aby zobaczyć, jak zmieniła się między nimi definicja reguły.",
+      "from": "Od",
+      "to": "Do",
+      "loadingDiff": "Wczytywanie porównania…",
+      "firstRevision": "To pierwsza rewizja reguły."
+    },
+    "publishWarnings": {
+      "title_one": "Rewizja {{version}} została opublikowana, ale ta włączona reguła do niej nie pasuje i pomija jej rekordy:",
+      "title_other": "Rewizja {{version}} została opublikowana, ale te włączone reguły do niej nie pasują i pomijają jej rekordy:",
+      "title_few": "Rewizja {{version}} została opublikowana, ale te włączone reguły do niej nie pasują i pomijają jej rekordy:",
+      "title_many": "Rewizja {{version}} została opublikowana, ale te włączone reguły do niej nie pasują i pomijają jej rekordy:"
+    },
+    "skipsRevisions_few": "Pomija rekordy rewizji schematu {{versions}}, do których nie pasuje",
+    "skipsRevisions_many": "Pomija rekordy rewizji schematu {{versions}}, do których nie pasuje"
   },
   "reusableAttributes": {
     "editor": {

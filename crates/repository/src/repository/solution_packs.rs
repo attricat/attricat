@@ -5389,7 +5389,10 @@ impl PublicationChannelPayload {
 struct RulePayload {
     definition: String,
     blueprint_id: Uuid,
-    blueprint_version: i64,
+    /// Named by plans made while rules were tied to one blueprint revision;
+    /// a rule now applies to every revision it fits.
+    #[serde(default, rename = "blueprint_version")]
+    _blueprint_version: Option<i64>,
     context_id: Option<Uuid>,
     enabled: bool,
 }
@@ -5766,7 +5769,6 @@ impl AttricatRepository {
                         step.target_id,
                         CreateRule {
                             blueprint_id: payload.blueprint_id,
-                            blueprint_version: payload.blueprint_version,
                             context_id: payload.context_id,
                             definition: payload.definition,
                         },
@@ -5785,17 +5787,15 @@ impl AttricatRepository {
                         "persisted rule mapping does not match its payload".into(),
                     ));
                 }
-                self.publish_rule_in_transaction(tx, id, 1).await?;
                 if payload.enabled {
                     // The ordinary enable gate: planning defers enforcing
                     // rules on blueprints that may already have records.
-                    self.ensure_rule_enable_allowed(tx, id, 1, false)
+                    self.enable_rule_in_transaction(tx, id, false)
                         .await
                         .map_err(solution_pack_mutation_error)?;
-                    self.enable_rule_in_transaction(tx, id, 1).await?;
                 }
                 Ok((
-                    serde_json::json!({"id": id, "code": code, "version": 1, "status": "published", "enabled": payload.enabled}),
+                    serde_json::json!({"id": id, "code": code, "version": 1, "enabled": payload.enabled}),
                     Vec::new(),
                 ))
             }

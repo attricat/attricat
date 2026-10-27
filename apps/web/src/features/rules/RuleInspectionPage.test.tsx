@@ -18,14 +18,15 @@ import { getRecordLabels } from '../records/api';
 import {
   acknowledgeFinding,
   disableRule,
-  enableRuleRevision,
+  enableRule,
   listFindingsPage,
   listRuleRuns,
   listRules,
   runRuleNow,
   type Finding,
   type FindingsSearch,
-  type Rule,
+  type RuleDetails,
+  type RuleRun,
 } from './api';
 import { RuleInspectionPage } from './RuleInspectionPage';
 
@@ -68,7 +69,7 @@ vi.mock('../contexts/api', () => ({
 vi.mock('./api', () => ({
   acknowledgeFinding: vi.fn(),
   disableRule: vi.fn(),
-  enableRuleRevision: vi.fn(),
+  enableRule: vi.fn(),
   listFindingsPage: vi.fn(),
   listRuleRuns: vi.fn(),
   listRules: vi.fn(),
@@ -79,21 +80,20 @@ const id = '123e4567-e89b-42d3-a456-426614174000';
 const manager = {
   capabilities: { rules_read: true, rules_manage: true },
 } as Awaited<ReturnType<typeof currentSession>>;
-const rule: Rule = {
+const rule: RuleDetails = {
   id,
   blueprint_id: id,
-  blueprint_version: 1,
   context_id: null,
   code: 'check',
   name: 'Check',
   version: 1,
-  status: 'published',
   definition: '',
   definition_hash: '',
   compiled_plan: {},
-  published_at: null,
+  enabled: false,
   created_at: '',
-  enabled_version: null,
+  updated_at: '',
+  not_applicable: [],
 };
 const finding: Finding = {
   id,
@@ -125,7 +125,10 @@ const renderPage = (
 };
 
 describe('RuleInspectionPage', () => {
-  beforeEach(() => vi.mocked(listRules).mockResolvedValue([rule]));
+  beforeEach(() => {
+    vi.mocked(listRules).mockResolvedValue([rule]);
+    vi.mocked(listBlueprints).mockResolvedValue([]);
+  });
   afterEach(() => {
     vi.clearAllMocks();
     vi.useRealTimers();
@@ -135,29 +138,12 @@ describe('RuleInspectionPage', () => {
     vi.mocked(currentSession).mockResolvedValue({
       capabilities: { rules_read: true, rules_manage: true },
     } as Awaited<ReturnType<typeof currentSession>>);
-    vi.mocked(listRules).mockResolvedValue([
-      {
-        id,
-        blueprint_id: id,
-        blueprint_version: 1,
-        context_id: null,
-        code: 'check',
-        name: 'Check',
-        version: 1,
-        status: 'published',
-        definition: '',
-        definition_hash: '',
-        compiled_plan: {},
-        published_at: null,
-        created_at: '',
-        enabled_version: 1,
-      },
-    ]);
+    vi.mocked(listRules).mockResolvedValue([{ ...rule, enabled: true }]);
     vi.mocked(runRuleNow).mockImplementation(() => new Promise(() => {}));
     renderPage('rules');
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: 'Dry run' }));
-    expect(runRuleNow).toHaveBeenCalledWith(id, 1, true);
+    expect(runRuleNow).toHaveBeenCalledWith(id, true);
     expect(
       (screen.getByRole('button', { name: 'Dry run' }) as HTMLButtonElement)
         .disabled,
@@ -220,26 +206,28 @@ describe('RuleInspectionPage', () => {
     vi.mocked(getBlueprintRevision).mockResolvedValue({
       attributes: [{ code: 'title', name: 'Listing title' }],
     } as unknown as BlueprintWithAttributes);
+    // Labels come from the latest revision of the rule's blueprint.
+    vi.mocked(listBlueprints).mockResolvedValue([
+      { id, kind: 'record', name: 'Product', version: 3 } as Blueprint,
+    ]);
     renderPage('findings');
     expect(await screen.findByText('Listing title is required')).toBeTruthy();
     expect(vi.mocked(getBlueprintRevision).mock.calls[0]?.slice(0, 2)).toEqual([
       rule.blueprint_id,
-      rule.blueprint_version,
+      3,
     ]);
   });
 
   it('shows why a rule run was refused', async () => {
     vi.mocked(currentSession).mockResolvedValue(manager);
     vi.mocked(listRules).mockResolvedValue([rule]);
-    vi.mocked(runRuleNow).mockRejectedValue(
-      new Error('rule has no enabled revision'),
-    );
+    vi.mocked(runRuleNow).mockRejectedValue(new Error('rule is not enabled'));
     renderPage('rules');
     await userEvent
       .setup()
       .click(await screen.findByRole('button', { name: 'Run now' }));
     expect((await screen.findByRole('alert')).textContent).toBe(
-      'rule has no enabled revision',
+      'rule is not enabled',
     );
   });
 
@@ -258,44 +246,52 @@ describe('RuleInspectionPage', () => {
     );
   });
 
-  it('enables a published revision from its switch', async () => {
+  it('enables a rule from its switch', async () => {
     vi.mocked(currentSession).mockResolvedValue(manager);
     vi.mocked(listRules).mockResolvedValue([rule]);
-    vi.mocked(enableRuleRevision).mockResolvedValue({
-      ...rule,
-      enabled_version: 1,
-    });
+    vi.mocked(enableRule).mockResolvedValue({ ...rule, enabled: true });
     renderPage('rules');
     await userEvent
       .setup()
-      .click(await screen.findByRole('switch', { name: 'Enable Check v1' }));
-    expect(enableRuleRevision).toHaveBeenCalledWith(id, 1, undefined);
+      .click(await screen.findByRole('switch', { name: 'Enable Check' }));
+    expect(enableRule).toHaveBeenCalledWith(id, undefined);
   });
 
-  it('marks only the enabled revision and disables the rule', async () => {
+  it('lists each rule once, with its revisions it skips, and disables it', async () => {
     vi.mocked(currentSession).mockResolvedValue(manager);
+    const other = '523e4567-e89b-42d3-a456-426614174000';
     vi.mocked(listRules).mockResolvedValue([
-      { ...rule, version: 2, enabled_version: 2 },
-      { ...rule, version: 1, enabled_version: 2 },
-      { ...rule, version: 3, status: 'draft', enabled_version: 2 },
+      {
+        ...rule,
+        enabled: true,
+        version: 3,
+        not_applicable: [
+          {
+            blueprint_version: 2,
+            reason: 'attribute_missing',
+            message: "unknown attribute 'title'",
+          },
+        ],
+      },
+      { ...rule, id: other, code: 'other', name: 'Other' },
     ]);
-    vi.mocked(disableRule).mockResolvedValue({
-      ...rule,
-      enabled_version: null,
-    });
+    vi.mocked(listBlueprints).mockResolvedValueOnce([
+      { id, kind: 'record', name: '{{Product}}', version: 3 } as Blueprint,
+    ]);
+    vi.mocked(disableRule).mockResolvedValue(rule);
     renderPage('rules');
-    const enabled = await screen.findByRole('switch', {
-      name: 'Enable Check v2',
-    });
-    const older = screen.getByRole('switch', { name: 'Enable Check v1' });
+    const enabled = await screen.findByRole('switch', { name: 'Enable Check' });
     expect((enabled as HTMLInputElement).checked).toBe(true);
-    expect((older as HTMLInputElement).checked).toBe(false);
-    const [, v1Row, draftRow] = screen
-      .getAllByRole('row')
-      .filter((row) => row.textContent?.includes('Check'));
-    expect(within(v1Row).getByText('Disabled')).toBeTruthy();
-    expect(within(draftRow).queryByRole('switch')).toBeNull();
-    expect(within(draftRow).getByText('Draft')).toBeTruthy();
+    const [, checkRow, otherRow] = screen.getAllByRole('row');
+    expect(within(checkRow).getByText('v3')).toBeTruthy();
+    expect(await within(checkRow).findByText('Product')).toBeTruthy();
+    expect(
+      within(checkRow).getByRole('img', {
+        name: 'Skips the records of blueprint revision 2, which it does not fit',
+      }),
+    ).toBeTruthy();
+    expect(within(otherRow).getByText('Disabled')).toBeTruthy();
+    expect(within(otherRow).queryByRole('img')).toBeNull();
 
     await userEvent.setup().click(enabled);
     expect(disableRule).toHaveBeenCalledWith(id);
@@ -304,7 +300,7 @@ describe('RuleInspectionPage', () => {
   it('offers to accept the existing violations of an enforcing rule', async () => {
     vi.mocked(currentSession).mockResolvedValue(manager);
     vi.mocked(listRules).mockResolvedValue([rule]);
-    vi.mocked(enableRuleRevision)
+    vi.mocked(enableRule)
       .mockRejectedValueOnce(
         new ApiRequestError(
           409,
@@ -313,11 +309,11 @@ describe('RuleInspectionPage', () => {
           { existing_violations: 3 },
         ),
       )
-      .mockResolvedValueOnce({ ...rule, enabled_version: 1 });
+      .mockResolvedValueOnce({ ...rule, enabled: true });
     renderPage('rules');
     const user = userEvent.setup();
     await user.click(
-      await screen.findByRole('switch', { name: 'Enable Check v1' }),
+      await screen.findByRole('switch', { name: 'Enable Check' }),
     );
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toContain(
@@ -326,7 +322,7 @@ describe('RuleInspectionPage', () => {
     await user.click(
       within(alert).getByRole('button', { name: 'Enable anyway' }),
     );
-    expect(enableRuleRevision).toHaveBeenLastCalledWith(id, 1, true);
+    expect(enableRule).toHaveBeenLastCalledWith(id, true);
   });
 
   it('names the rule revision and links the record of each finding', async () => {
@@ -362,12 +358,14 @@ describe('RuleInspectionPage', () => {
         id,
         rule_id: id,
         rule_version: 1,
+        definition_hash: '',
         source: 'manual',
         dry_run: false,
         scope_record_id: null,
         status: 'completed',
         candidate_cursor: null,
-        candidates_evaluated: 2,
+        candidates_evaluated: 3,
+        candidates_skipped: 1,
         findings_created: 1,
         findings_resolved: 0,
         attempts: 1,
@@ -379,12 +377,14 @@ describe('RuleInspectionPage', () => {
         id: '323e4567-e89b-42d3-a456-426614174000',
         rule_id: '423e4567-e89b-42d3-a456-426614174000',
         rule_version: 4,
+        definition_hash: '',
         source: 'event',
         dry_run: false,
         scope_record_id: id,
         status: 'completed',
         candidate_cursor: null,
         candidates_evaluated: 1,
+        candidates_skipped: 0,
         findings_created: 0,
         findings_resolved: 0,
         attempts: 1,
@@ -398,6 +398,7 @@ describe('RuleInspectionPage', () => {
     const [, manual, scoped] = screen.getAllByRole('row');
     expect(within(manual).getByText('Check v1')).toBeTruthy();
     expect(within(manual).getByText('All records')).toBeTruthy();
+    expect(within(manual).getByText('3 (1 skipped)')).toBeTruthy();
     // A revision missing from the definitions still identifies its rule.
     expect(within(scoped).getByText('Rule 423e4567 v4')).toBeTruthy();
     expect(
@@ -439,23 +440,25 @@ describe('RuleInspectionPage', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-26T12:00:00Z'));
     vi.mocked(currentSession).mockResolvedValue(manager);
-    const run = {
+    const run: RuleRun = {
       id,
       rule_id: id,
       rule_version: 1,
+      definition_hash: '',
       source: 'schedule',
       dry_run: true,
       scope_record_id: null,
       status: 'completed',
       candidate_cursor: null,
       candidates_evaluated: 2,
+      candidates_skipped: 0,
       findings_created: 1,
       findings_resolved: 0,
       attempts: 1,
       last_error: null,
       completed_at: '2026-10-24T12:00:00Z',
       created_at: '2026-10-24T11:59:00Z',
-    } as const;
+    };
     vi.mocked(listRuleRuns).mockResolvedValue([
       run,
       {

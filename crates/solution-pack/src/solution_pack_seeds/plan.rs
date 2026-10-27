@@ -496,7 +496,6 @@ fn plan_rules(
             Some(serde_json::json!({
                 "definition": replace_codes(&rule.definition, &code, Some(input.blueprint_mappings))?,
                 "blueprint_id": blueprint.target_id,
-                "blueprint_version": blueprint.target_version,
                 "context_id": context.map(|context| context.target_id),
                 "enabled": enabled,
             }))

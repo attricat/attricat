@@ -1,8 +1,10 @@
 import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query';
 import { readAheadStaleTimeMs } from '../records/queryOptions';
 import {
+  getRule,
   getUnresolvedRecordFindingCount,
   listRecordRuleRuns,
+  listRuleRevisions,
   listRuleRuns,
   listRules,
   listUnresolvedRecordFindings,
@@ -17,6 +19,19 @@ export const ruleDefinitionsOptions = () =>
   queryOptions({
     queryKey: ruleQueryKeys.definitions(),
     queryFn: listRules,
+  });
+
+export const ruleOptions = (ruleId: string) =>
+  queryOptions({
+    queryKey: ruleQueryKeys.rule(ruleId),
+    queryFn: () => getRule(ruleId),
+  });
+
+/** A rule's saved revisions, newest first. */
+export const ruleRevisionsOptions = (ruleId: string) =>
+  queryOptions({
+    queryKey: ruleQueryKeys.revisions(ruleId),
+    queryFn: () => listRuleRevisions(ruleId),
   });
 
 /**

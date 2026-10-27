@@ -12,6 +12,7 @@ export const recordRoute = '/records/$recordId';
 export const notificationSubjectKinds = {
   record: 'record',
   agentConversation: 'agent_conversation',
+  rule: 'rule',
 } as const;
 
 export const inboxFilters = { all: 'all', unread: 'unread' } as const;
@@ -26,4 +27,5 @@ export const notificationKinds = {
   agentRunFailed: 'agent.run_failed',
   teamMemberAdded: 'team.member_added',
   invitationAccepted: 'workspace.invitation_accepted',
+  ruleNotApplicable: 'rule.not_applicable',
 } as const;

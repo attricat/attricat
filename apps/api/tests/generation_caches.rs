@@ -150,32 +150,24 @@ async fn published_versions_contexts_and_rules_apply_to_the_next_request(pool: P
     assert_eq!(status, StatusCode::OK, "{body}");
     let (status, rule) = send(client.post(format!("{base}/rules")).json(&json!({
         "blueprint_id": blueprint_id,
-        "blueprint_version": 1,
         "context_id": null,
         "definition": "format_version = 1\ncode = \"price-positive\"\nname = \"price-positive\"\nseverity = \"error\"\n[[triggers]]\ntype = \"manual\"\n[predicate]\ntype = \"compare\"\nattribute_code = \"price\"\nop = \"gte\"\nvalue = 0\n[enforcement]\non_save = true",
     })))
     .await;
     assert_eq!(status, StatusCode::CREATED, "{rule}");
     let rule_id = rule["id"].as_str().unwrap();
-    let (status, body) = send(
-        client
-            .post(format!("{base}/rules/{rule_id}/versions/1/publish"))
-            .json(&json!({})),
-    )
-    .await;
-    assert!(status.is_success(), "{body}");
     // An enforcing rule needs a completed dry run before it is enabled.
     let (status, body) = send(
         client
             .post(format!("{base}/rules/{rule_id}/run-now"))
-            .json(&json!({"dry_run": true, "idempotency_key": "preview", "version": 1})),
+            .json(&json!({"dry_run": true, "idempotency_key": "preview"})),
     )
     .await;
     assert_eq!(status, StatusCode::ACCEPTED, "{body}");
     drain_rule_tasks(&pool).await;
     let (status, body) = send(
         client
-            .post(format!("{base}/rules/{rule_id}/versions/1/enable"))
+            .post(format!("{base}/rules/{rule_id}/enable"))
             .json(&json!({})),
     )
     .await;

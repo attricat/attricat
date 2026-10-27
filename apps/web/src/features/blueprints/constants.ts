@@ -56,6 +56,5 @@ export type BlueprintVersionMetadataTab =
 export const sandboxEditTab = 'sandbox';
 
 export const blueprintFilterWidth = 420;
-export const tomlDiffEditorHeight = 560;
 export const migrationProgressMinWidth = 150;
 export const completePercentage = 100;

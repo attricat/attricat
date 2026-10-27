@@ -896,16 +896,10 @@ pub fn router(state: AppState) -> Router {
         .route("/blueprints/validate", post(blueprints::validate_blueprint))
         .route("/rules", get(rules::list).post(rules::create))
         .route("/rules/validate", post(rules::validate))
-        .route("/rules/{rule_id}", get(rules::get))
-        .route("/rules/{rule_id}/versions", post(rules::create_revision))
-        .route(
-            "/rules/{rule_id}/versions/{version}/publish",
-            post(rules::publish),
-        )
-        .route(
-            "/rules/{rule_id}/versions/{version}/enable",
-            post(rules::enable),
-        )
+        .route("/rules/{rule_id}", get(rules::get).put(rules::update))
+        .route("/rules/{rule_id}/revisions", get(rules::revisions))
+        .route("/rules/{rule_id}/revisions/{version}", get(rules::revision))
+        .route("/rules/{rule_id}/enable", post(rules::enable))
         .route("/rules/{rule_id}/disable", post(rules::disable))
         .route("/rules/{rule_id}/run-now", post(rules::run_now))
         .route("/rule-runs", get(rules::list_runs))

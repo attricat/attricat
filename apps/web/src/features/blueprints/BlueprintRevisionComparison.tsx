@@ -1,54 +1,17 @@
-import {
-  Box,
-  MenuItem,
-  Paper,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
+import { Box, Paper, Stack, Typography } from '@mui/material';
 import { lazy, Suspense, type ComponentProps } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Blueprint } from './schemas';
 import type { BlueprintRevisionComparison as Comparison } from './useBlueprintRevisionComparison';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { LoadingState } from '../../components/LoadingState';
+import { RevisionSelect } from '../../components/RevisionSelect';
 
 const TomlDiffEditor = lazy(() =>
-  import('./TomlDiffEditor').then(({ TomlDiffEditor }) => ({
+  import('../../components/TomlDiffEditor').then(({ TomlDiffEditor }) => ({
     default: TomlDiffEditor,
   })),
 );
-
-const RevisionSelect = ({
-  label,
-  onChange,
-  revisions,
-  value,
-}: {
-  label: string;
-  onChange: (version: number) => void;
-  revisions: readonly Blueprint[];
-  value: number | undefined;
-}) => {
-  const { t } = useTranslation();
-  return (
-    <TextField
-      label={label}
-      onChange={(event) => onChange(Number(event.target.value))}
-      select
-      value={value ?? ''}
-    >
-      {revisions.map((revision) => (
-        <MenuItem key={revision.version} value={revision.version}>
-          {t('blueprints.versionOption', {
-            version: revision.version,
-            status: t(`common.revisionStatuses.${revision.status}`),
-          })}
-        </MenuItem>
-      ))}
-    </TextField>
-  );
-};
 
 export const BlueprintRevisionComparison = ({
   comparison,
@@ -65,6 +28,13 @@ export const BlueprintRevisionComparison = ({
       version,
       status: t(`common.revisionStatuses.${status}`),
     });
+  const options = revisions.map(({ version, status }) => ({
+    version,
+    label: t('blueprints.versionOption', {
+      version,
+      status: t(`common.revisionStatuses.${status}`),
+    }),
+  }));
 
   return (
     <Paper {...panelProps} component="section" sx={{ mt: 3, p: 2.5 }}>
@@ -78,13 +48,13 @@ export const BlueprintRevisionComparison = ({
         <RevisionSelect
           label={t('blueprints.leftVersion')}
           onChange={comparison.selectLeftVersion}
-          revisions={revisions}
+          options={options}
           value={comparison.leftVersion}
         />
         <RevisionSelect
           label={t('blueprints.rightVersion')}
           onChange={comparison.selectRightVersion}
-          revisions={revisions}
+          options={options}
           value={comparison.rightVersion}
         />
       </Stack>
