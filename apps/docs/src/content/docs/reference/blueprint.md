@@ -303,6 +303,7 @@ Any other `{…}` placeholder is rejected. A `reset` needs tokens that identify 
 #### How numbers are given out
 
 - The server assigns the value in the transaction that creates the record. It appears in the create response, in the `record.created.v1` event, and in the audit log, and a `required` on the attribute in `record_schema` is satisfied.
+- On the web app's create form, the field stays empty and says the value is assigned when the record is saved. It is never marked as required there, even when `record_schema` requires it, because there is nothing to fill in.
 - Numbering is gapless. A create that fails, for example on validation or a unique key conflict, gives its number back. Deleted records keep their numbers, and numbers are never reused.
 - There is one counter per blueprint family and attribute code, and with a `reset`, one per period. New revisions of the blueprint continue the same counter. Changing `start` later does not affect a counter that already exists, and changing `format` affects only new values.
 - Duplicating a record gives the copy a new number. A record batch numbers each record it creates, in order. Sample records of a solution pack use up numbers, and removing the sample data does not give them back.

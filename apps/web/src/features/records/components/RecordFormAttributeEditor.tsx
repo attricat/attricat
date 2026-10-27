@@ -160,7 +160,9 @@ export const RecordFormAttributeEditor = ({
         <RecordAttributeEditor
           attribute={attribute}
           component={component}
-          required={required}
+          // The server assigns a generated value on save, so the user has
+          // nothing to fill even when the record schema requires it.
+          required={required && !attribute.generated}
           contextId={contextId}
           disabled={disabled || protectedValue}
           reviewDisabled={disabled}

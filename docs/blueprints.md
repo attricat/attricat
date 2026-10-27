@@ -89,7 +89,10 @@ string. Missing contextual values resolve according to `context_fallback`.
 Set `generated` to have Attricat number a record attribute when the record is
 created, such as `INV-2026-00042`. The value is assigned inside the create
 transaction, so it is in the create response, the `record.created.v1` event and
-the audit entry, and a `record_schema` `required` on it holds.
+the audit entry, and a `record_schema` `required` on it holds. The web create
+form leaves the field empty with an "assigned when saved" hint and never marks
+it required, since the user has nothing to fill; the server enforces the
+requirement.
 
 ```toml
 [[attributes]]

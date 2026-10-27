@@ -303,6 +303,7 @@ Każdy inny symbol zastępczy `{…}` jest odrzucany. `reset` wymaga tokenów, k
 #### Jak nadawane są numery
 
 - Serwer przypisuje wartość w transakcji, która tworzy rekord. Pojawia się ona w odpowiedzi na utworzenie, w zdarzeniu `record.created.v1` i w dzienniku audytu, a `required` dla tego atrybutu w `record_schema` jest spełnione.
+- W formularzu tworzenia rekordu w aplikacji internetowej pole pozostaje puste i informuje, że wartość zostanie przypisana przy zapisie rekordu. Nigdy nie jest tam oznaczone jako wymagane, nawet gdy wymaga go `record_schema`, ponieważ nie ma czego wypełniać.
 - Numeracja jest ciągła, bez luk. Utworzenie, które się nie powiedzie, np. z powodu walidacji lub konfliktu klucza unikalnego, zwraca swój numer. Usunięte rekordy zachowują swoje numery, a numery nigdy nie są używane ponownie.
 - Istnieje jeden licznik na rodzinę schematów i kod atrybutu, a przy ustawionym `reset` jeden na każdy okres. Nowe wersje schematu kontynuują ten sam licznik. Późniejsza zmiana `start` nie wpływa na już istniejący licznik, a zmiana `format` dotyczy tylko nowych wartości.
 - Zduplikowanie rekordu nadaje kopii nowy numer. Wsad rekordów numeruje po kolei każdy tworzony rekord. Przykładowe rekordy pakietu rozwiązań zużywają numery, a usunięcie danych przykładowych ich nie zwraca.
