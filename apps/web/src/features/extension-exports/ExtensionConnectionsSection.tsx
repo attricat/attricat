@@ -35,6 +35,7 @@ import { ConnectionDialog } from './ConnectionDialog';
 import { extensionExportQueryKeys } from './queryKeys';
 import type { ExtensionConnection, ManifestExports } from './schemas';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { connectionGrantTypes, connectionStatuses } from './constants';
 
 const statusColors = {
@@ -191,11 +192,23 @@ const ConnectionRow = ({
       window.location.assign(authorization_url);
     },
   });
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const remove = useMutation({
     mutationFn: () => deleteConnection(extensionId, connection.connection),
-    onSuccess: refresh,
+    onSuccess: async () => {
+      await refresh();
+      setConfirmingDelete(false);
+    },
   });
-  const error = action.error ?? authorize.error ?? remove.error;
+  // Each mutation keeps its last failure, so clear the others before one
+  // runs and only the newest failure is shown.
+  const start = (run: () => void) => {
+    action.reset();
+    authorize.reset();
+    remove.reset();
+    run();
+  };
+  const error = action.error ?? authorize.error;
   const busy = action.isPending || authorize.isPending || remove.isPending;
   return (
     <Box sx={{ borderTop: 1, borderColor: 'divider', py: 2 }}>
@@ -276,7 +289,7 @@ const ConnectionRow = ({
               disabled={busy}
               size="small"
               startIcon={<ExternalLinkIcon />}
-              onClick={() => authorize.mutate()}
+              onClick={() => start(() => authorize.mutate())}
             >
               {t('extensionExports.authorizeInBrowser')}
             </Button>
@@ -287,7 +300,9 @@ const ConnectionRow = ({
                 disabled={busy}
                 size="small"
                 startIcon={<KeyRoundIcon />}
-                onClick={() => action.mutate('device-authorization')}
+                onClick={() =>
+                  start(() => action.mutate('device-authorization'))
+                }
               >
                 {t('extensionExports.startAuthorization')}
               </Button>
@@ -296,7 +311,9 @@ const ConnectionRow = ({
                   disabled={busy}
                   size="small"
                   startIcon={<RefreshCwIcon />}
-                  onClick={() => action.mutate('device-authorization/poll')}
+                  onClick={() =>
+                    start(() => action.mutate('device-authorization/poll'))
+                  }
                 >
                   {t('extensionExports.checkAuthorization')}
                 </Button>
@@ -308,7 +325,7 @@ const ConnectionRow = ({
               disabled={busy}
               size="small"
               startIcon={<PlayIcon />}
-              onClick={() => action.mutate('test')}
+              onClick={() => start(() => action.mutate('test'))}
             >
               {t('extensionExports.testConnection')}
             </Button>
@@ -318,12 +335,26 @@ const ConnectionRow = ({
             disabled={busy}
             size="small"
             startIcon={<Trash2Icon />}
-            onClick={() => remove.mutate()}
+            onClick={() => start(() => setConfirmingDelete(true))}
           >
             {t('extensionExports.deleteConnection')}
           </Button>
         </Stack>
       )}
+      <ConfirmDialog
+        confirmLabel={t('extensionExports.deleteConnection')}
+        destructive
+        error={remove.error}
+        isPending={remove.isPending}
+        onClose={() => setConfirmingDelete(false)}
+        onConfirm={() => remove.mutate()}
+        open={confirmingDelete}
+        title={t('extensionExports.deleteConnectionTitle', {
+          name: connection.display_name,
+        })}
+      >
+        {t('extensionExports.deleteConnectionExplanation')}
+      </ConfirmDialog>
       {canManage &&
         connection.grant_type === connectionGrantTypes.authorizationCode && (
           <AuthorizationCodeForm

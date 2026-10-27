@@ -2332,6 +2332,8 @@
     "checkAuthorization": "Sprawdź autoryzację",
     "testConnection": "Testuj",
     "deleteConnection": "Usuń",
+    "deleteConnectionTitle": "Usunąć {{name}}?",
+    "deleteConnectionExplanation": "Zapisane dane uwierzytelniające zostaną usunięte i nie będzie można ich odzyskać.",
     "authorizationCode": "Kod autoryzacji",
     "redirectUri": "Adres URI przekierowania",
     "exchangeCode": "Połącz",

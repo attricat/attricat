@@ -2234,6 +2234,8 @@
     "checkAuthorization": "Check authorization",
     "testConnection": "Test",
     "deleteConnection": "Delete",
+    "deleteConnectionTitle": "Delete {{name}}?",
+    "deleteConnectionExplanation": "Its stored credentials are removed and cannot be recovered.",
     "authorizationCode": "Authorization code",
     "redirectUri": "Redirect URI",
     "exchangeCode": "Connect",
