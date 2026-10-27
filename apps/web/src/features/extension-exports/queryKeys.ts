@@ -22,6 +22,9 @@ export const extensionExportQueryKeys = {
     ] as const,
   connections: (extensionId: string) =>
     [...root, 'connections', extensionId] as const,
+  /** Every mutation on one connection, so its row knows when one runs. */
+  connectionMutations: (extensionId: string, connection: string) =>
+    [...root, 'connections', extensionId, connection, 'mutations'] as const,
   budgets: (extensionId: string) => [...root, 'budgets', extensionId] as const,
   preview: (
     extensionId: string,
