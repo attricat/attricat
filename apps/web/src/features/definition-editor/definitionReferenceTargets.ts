@@ -20,6 +20,7 @@ import {
 } from './definitionReferenceCandidates';
 import type { DefinitionReferences } from './definitionReferences';
 import {
+  definitionReferenceKinds,
   definitionSchemas,
   schemaAtPath,
   type DefinitionReferenceKind,
@@ -43,19 +44,19 @@ type ReferenceContext = {
  * from them is an error. Attribute lookups omit what mixins contribute.
  */
 const exhaustiveReferences = new Set<DefinitionReferenceKind>([
-  'blueprint',
-  'context',
-  'mixin',
-  'role',
+  definitionReferenceKinds.blueprint,
+  definitionReferenceKinds.context,
+  definitionReferenceKinds.mixin,
+  definitionReferenceKinds.role,
 ]);
 
 /** References that name a value declared elsewhere in the same document. */
 const documentReferences = new Set<DefinitionReferenceKind>([
-  'attribute',
-  'attribute_path',
-  'include_attribute',
-  'relationship_attribute',
-  'relationship_path',
+  definitionReferenceKinds.attribute,
+  definitionReferenceKinds.attributePath,
+  definitionReferenceKinds.includeAttribute,
+  definitionReferenceKinds.relationshipAttribute,
+  definitionReferenceKinds.relationshipPath,
 ]);
 
 const contains = (range: TextRange, offset: number) =>
@@ -177,7 +178,7 @@ export const referenceDeclaration = (
 ): TextRange | undefined => {
   if (!documentReferences.has(reference)) return undefined;
   const [first = ''] = value.split(attributePathSeparator);
-  return reference === 'include_attribute'
+  return reference === definitionReferenceKinds.includeAttribute
     ? declaration(outline, includesKey, aliasKey, first)
     : declaration(outline, attributesKey, codeKey, first);
 };
@@ -189,8 +190,8 @@ export const referenceLink = async (
 ) => {
   const pages = referencePages;
   switch (reference) {
-    case 'blueprint':
-    case 'mixin': {
+    case definitionReferenceKinds.blueprint:
+    case definitionReferenceKinds.mixin: {
       const blueprint = (await context.references.blueprints()).find(
         ({ code }) => code === value,
       );
@@ -201,14 +202,14 @@ export const referenceLink = async (
         }
       );
     }
-    case 'context':
+    case definitionReferenceKinds.context:
       return (await context.references.contexts()).includes(value)
         ? {
             tooltip: i18n.t('definitionEditor.links.contexts'),
             url: pages.contexts,
           }
         : undefined;
-    case 'role':
+    case definitionReferenceKinds.role:
       return (await context.references.roles()).includes(value)
         ? { tooltip: i18n.t('definitionEditor.links.roles'), url: pages.roles }
         : undefined;

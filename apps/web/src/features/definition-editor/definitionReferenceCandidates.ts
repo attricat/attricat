@@ -13,10 +13,14 @@ import {
   versionKey,
 } from './constants';
 import type { DefinitionReferences } from './definitionReferences';
-import type { DefinitionReferenceKind } from './definitionSchema';
+import {
+  definitionReferenceKinds,
+  type DefinitionReferenceKind,
+} from './definitionSchema';
 import type { TomlOutline, TomlPath } from '../../components/tomlOutline';
 import { viewComponentPlacement, viewComponents } from './viewComponents';
 import { attributeValueTypes } from '../records/valueTypes';
+import { blueprintKinds } from '../blueprints/constants';
 
 export type Candidate = {
   continues?: boolean;
@@ -114,12 +118,13 @@ export const referenceCandidates = async (
 ): Promise<Candidate[]> => {
   const sibling = (key: string) => outline.valueAt([...path.slice(0, -1), key]);
   switch (reference) {
-    case 'blueprint':
-    case 'mixin':
+    case definitionReferenceKinds.blueprint:
+    case definitionReferenceKinds.mixin:
       return (await references.blueprints())
         .filter(
           (blueprint) =>
-            reference === 'blueprint' || blueprint.kind === 'mixin',
+            reference === definitionReferenceKinds.blueprint ||
+            blueprint.kind === blueprintKinds.mixin,
         )
         .map((blueprint) => ({
           detail: blueprint.name,
@@ -129,7 +134,7 @@ export const referenceCandidates = async (
           }),
           value: blueprint.code,
         }));
-    case 'mixin_version': {
+    case definitionReferenceKinds.mixinVersion: {
       const code = sibling(codeKey);
       const mixin = (await references.blueprints()).find(
         (blueprint) => blueprint.code === code,
@@ -143,22 +148,23 @@ export const referenceCandidates = async (
           ]
         : [];
     }
-    case 'attribute':
-    case 'relationship_attribute':
+    case definitionReferenceKinds.attribute:
+    case definitionReferenceKinds.relationshipAttribute:
       return knownAttributes(outline, references)
         .filter(
           (attribute) =>
-            reference === 'attribute' ||
+            reference === definitionReferenceKinds.attribute ||
             attribute.valueType === attributeValueTypes.relationship,
         )
         .map((attribute) => ({
           detail: attributeDetail(attribute),
           value: attribute.code,
         }));
-    case 'attribute_path':
-    case 'relationship_path': {
+    case definitionReferenceKinds.attributePath:
+    case definitionReferenceKinds.relationshipPath: {
       // A relationship path ends on a relationship rather than past one.
-      const relationshipsOnly = reference === 'relationship_path';
+      const relationshipsOnly =
+        reference === definitionReferenceKinds.relationshipPath;
       const maxHops = maxAttributePathHops - (relationshipsOnly ? 1 : 0);
       const segments = pathSegments(prefix);
       const hops = segments.length - 1;
@@ -197,7 +203,7 @@ export const referenceCandidates = async (
           };
         });
     }
-    case 'include_attribute': {
+    case definitionReferenceKinds.includeAttribute: {
       const [alias, ...rest] = pathSegments(prefix);
       if (!rest.length) {
         return includes(outline).map((include) => ({
@@ -224,17 +230,17 @@ export const referenceCandidates = async (
         value: `${alias}${attributePathSeparator}${attribute.code}`,
       }));
     }
-    case 'role':
+    case definitionReferenceKinds.role:
       return (await references.roles()).map((role) => ({
         detail: i18n.t('definitionEditor.details.role'),
         value: role,
       }));
-    case 'context':
+    case definitionReferenceKinds.context:
       return (await references.contexts()).map((context) => ({
         detail: i18n.t('definitionEditor.details.context'),
         value: context,
       }));
-    case 'view_component':
+    case definitionReferenceKinds.viewComponent:
       return componentCandidates(outline, path.slice(0, -1)).map(
         (component) => ({
           detail: i18n.t('definitionEditor.details.component', {

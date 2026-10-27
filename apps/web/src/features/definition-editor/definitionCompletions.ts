@@ -12,6 +12,7 @@ import type { DefinitionReferences } from './definitionReferences';
 import {
   choicesOf,
   constantChoices,
+  definitionReferenceKinds,
   definitionSchemas,
   primaryType,
   schemaAtPath,
@@ -445,7 +446,8 @@ const valueSuggestions = async (
 
   if (
     !cursor.quoted &&
-    node.properties?.id?.[schemaExtensions.reference] === 'view_component'
+    node.properties?.id?.[schemaExtensions.reference] ===
+      definitionReferenceKinds.viewComponent
   ) {
     return componentCandidates(outline, path).map((component) => ({
       detail: i18n.t('definitionEditor.details.component', {
@@ -483,9 +485,9 @@ const valueSuggestions = async (
   const literalType = unquotedTypes.has(primaryType(node) ?? '');
   const range =
     cursor.quoted &&
-    (reference === 'attribute_path' ||
-      reference === 'relationship_path' ||
-      reference === 'include_attribute')
+    (reference === definitionReferenceKinds.attributePath ||
+      reference === definitionReferenceKinds.relationshipPath ||
+      reference === definitionReferenceKinds.includeAttribute)
       ? segmentRange(cursor.range, prefix)
       : cursor.range;
   const segmentOffset = range.start - cursor.range.start;

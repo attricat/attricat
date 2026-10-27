@@ -35,20 +35,22 @@ export type SchemaNode = {
   [schemaExtensions.valueTypes]?: string[];
 };
 
-const referenceKinds = [
-  'attribute',
-  'attribute_path',
-  'blueprint',
-  'context',
-  'include_attribute',
-  'mixin',
-  'mixin_version',
-  'relationship_attribute',
-  'relationship_path',
-  'role',
-  'view_component',
-] as const;
-export type DefinitionReferenceKind = (typeof referenceKinds)[number];
+/** What an `x-attricat-reference` value names. */
+export const definitionReferenceKinds = {
+  attribute: 'attribute',
+  attributePath: 'attribute_path',
+  blueprint: 'blueprint',
+  context: 'context',
+  includeAttribute: 'include_attribute',
+  mixin: 'mixin',
+  mixinVersion: 'mixin_version',
+  relationshipAttribute: 'relationship_attribute',
+  relationshipPath: 'relationship_path',
+  role: 'role',
+  viewComponent: 'view_component',
+} as const;
+export type DefinitionReferenceKind =
+  (typeof definitionReferenceKinds)[keyof typeof definitionReferenceKinds];
 
 const schemaNodeSchema: z.ZodType<SchemaNode> = z.lazy(() =>
   z.looseObject({
@@ -69,7 +71,7 @@ const schemaNodeSchema: z.ZodType<SchemaNode> = z.lazy(() =>
     required: z.array(z.string()).optional(),
     type: z.union([z.string(), z.array(z.string())]).optional(),
     [schemaExtensions.keySuggestions]: z.array(z.string()).optional(),
-    [schemaExtensions.reference]: z.enum(referenceKinds).optional(),
+    [schemaExtensions.reference]: z.enum(definitionReferenceKinds).optional(),
     [schemaExtensions.suggestions]: z.array(z.string()).optional(),
     [schemaExtensions.valueTypes]: z.array(z.string()).optional(),
   }),
