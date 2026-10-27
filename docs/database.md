@@ -156,7 +156,8 @@ is the primary key.
 - `views` is generated JSONB view metadata keyed by view name.
 - `record_schema` is an optional JSON Schema Draft 2020-12 contract for the
   fully resolved record document. It is versioned with the blueprint.
-- `definition_hash` is the SHA-256 hash of the exact raw TOML source.
+- `definition_hash` is the SHA-256 hash of the exact raw TOML source. A new
+  revision must differ from the latest one, but may repeat an earlier revision.
 - `deleted_at` implements soft deletion.
 - `unique_keys` is the compiled JSONB array of `[[unique_keys]]`. The latest
   published revision's keys apply to the whole family.

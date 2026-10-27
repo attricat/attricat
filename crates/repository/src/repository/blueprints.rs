@@ -24,6 +24,7 @@ const BLUEPRINT_COLUMNS: &str = "id, code, name, kind, version, includes, views,
 struct LatestBlueprint {
     version: i64,
     code: Option<String>,
+    definition_hash: String,
 }
 
 impl AttricatRepository {
@@ -197,7 +198,7 @@ impl AttricatRepository {
         .execute(&mut **transaction)
         .await?;
         let latest = sqlx::query_as::<_, LatestBlueprint>(
-            "SELECT version, code FROM blueprints WHERE id = $1 AND workspace_id = $2 ORDER BY version DESC LIMIT 1",
+            "SELECT version, code, definition_hash FROM blueprints WHERE id = $1 AND workspace_id = $2 ORDER BY version DESC LIMIT 1",
         )
         .bind(blueprint_id)
         .bind(self.workspace_id.0)
@@ -212,16 +213,12 @@ impl AttricatRepository {
                 "blueprint code cannot change across revisions".to_owned(),
             ));
         }
-        let unchanged: Option<i64> = sqlx::query_scalar(
-            "SELECT version FROM blueprints WHERE id = $1 AND workspace_id = $2 AND definition_hash = $3",
-        )
-        .bind(blueprint_id)
-        .bind(self.workspace_id.0)
-        .bind(&compiled.raw_definition_hash)
-        .fetch_optional(&mut **transaction)
-        .await?;
-        if let Some(version) = unchanged {
-            return Err(RepositoryError::BlueprintRevisionUnchanged { version });
+        // Only the latest revision counts: returning to an earlier definition,
+        // such as removing a field the latest revision added, is a change.
+        if latest.definition_hash == compiled.raw_definition_hash {
+            return Err(RepositoryError::BlueprintRevisionUnchanged {
+                version: latest.version,
+            });
         }
 
         self.insert_blueprint_revision_in_transaction(
