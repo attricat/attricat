@@ -17,6 +17,7 @@ import { singleResultVersionScope } from '../records/schemas';
 type Props = {
   data: ExplorerData;
   onFilterCell: (draft: AttributeFilterDraft) => void;
+  onFilterSystemTag: (tag: string) => void;
   onOpenPanel?: OpenRecordPanel;
   onShowAllVersions: () => void;
   onSortChange: (field: string) => void;
@@ -26,6 +27,7 @@ type Props = {
 export const ExplorerResults = ({
   data,
   onFilterCell,
+  onFilterSystemTag,
   onOpenPanel,
   onShowAllVersions,
   onSortChange,
@@ -120,6 +122,7 @@ export const ExplorerResults = ({
                 resultBlueprint.blueprint.version
               }
               onFilterCell={onFilterCell}
+              onFilterSystemTag={onFilterSystemTag}
               onOpenPanel={onOpenPanel}
               onSaveSelectionAsSearch={setSavedSearchSelection}
               onSortChange={onSortChange}

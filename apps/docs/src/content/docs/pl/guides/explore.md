@@ -97,7 +97,7 @@ Kliknij nagłówek kolumny, aby sortować. Kolumnę można sortować, gdy zawier
 
 W widoku **Wszystkie wersje** sortowanie według powiązanej wartości działa tylko wtedy, gdy wszystkie pasujące rekordy są w tej samej wersji.
 
-**Kolumny** pozwalają pokazywać, ukrywać i zmieniać kolejność kolumn. Układ jest zapisywany w przeglądarce. Kolumna **Znaczniki systemowe** jest ukryta, dopóki jej nie włączysz.
+**Kolumny** pozwalają pokazywać, ukrywać i zmieniać kolejność kolumn. Układ jest zapisywany w przeglądarce. Kolumna **Znaczniki systemowe** jest ukryta, dopóki jej nie włączysz; kliknij w niej tag, aby filtrować według niego.
 
 ## Zapisywanie i udostępnianie wyszukiwań
 

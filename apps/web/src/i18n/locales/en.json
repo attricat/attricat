@@ -1227,6 +1227,7 @@
     "systemTagRecordCount_one": "{{count}} record",
     "systemTagRecordCount_other": "{{count}} records",
     "systemTagFilterChip": "Tag: {{tag}}",
+    "filterBySystemTag": "Filter by tag {{tag}}",
     "removeSystemTagFilter": "Remove tag filter {{filter}}",
     "addAttributeFilterTitle": "Add filter",
     "editAttributeFilterTitle": "Edit filter",

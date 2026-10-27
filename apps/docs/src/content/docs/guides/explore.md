@@ -97,7 +97,7 @@ Click a column header to sort. A column can be sorted when it holds a single sca
 
 In **All versions**, sorting on a related value works only when every matching record is on the same revision.
 
-**Columns** lets you show, hide, and reorder columns. The arrangement is saved in your browser. The **System tags** column is hidden until you turn it on.
+**Columns** lets you show, hide, and reorder columns. The arrangement is saved in your browser. The **System tags** column is hidden until you turn it on; click a tag in it to filter by that tag.
 
 ## Save and share searches
 

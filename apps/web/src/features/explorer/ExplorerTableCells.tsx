@@ -115,12 +115,25 @@ export const SchemaVersionCell = ({ record }: { record: RecordItem }) => {
   );
 };
 
-export const SystemTagsCell = ({ record }: { record: RecordItem }) =>
-  visibleSystemTags(record.system_tags).length ? (
-    <SystemTagChips tags={record.system_tags} />
+export const SystemTagsCell = ({
+  record,
+  onFilterTag,
+}: {
+  record: RecordItem;
+  /** Filters the results by a clicked tag. */
+  onFilterTag?: (tag: string) => void;
+}) => {
+  const { t } = useTranslation();
+  return visibleSystemTags(record.system_tags).length ? (
+    <SystemTagChips
+      onSelect={onFilterTag}
+      selectLabel={(tag) => t('explorer.filterBySystemTag', { tag })}
+      tags={record.system_tags}
+    />
   ) : (
     emptyValuePlaceholder
   );
+};
 
 export const RecordActionsCell = ({
   recordId,

@@ -88,6 +88,8 @@ type Props = {
   onLoadMore: () => void;
   onSortChange: (field: string) => void;
   onFilterCell?: (draft: AttributeFilterDraft) => void;
+  /** Adds a clicked system tag to the search's tag filter. */
+  onFilterSystemTag?: (tag: string) => void;
   onSaveSelectionAsSearch: (records: RecordItem[]) => void;
   /** Opens a result in the record panel instead of navigating to its page. */
   onOpenPanel?: OpenRecordPanel;
@@ -117,6 +119,7 @@ export const ExplorerResultsTable = ({
   onLoadMore,
   onSortChange,
   onFilterCell,
+  onFilterSystemTag,
   onSaveSelectionAsSearch,
   onOpenPanel,
   contextCodes,
@@ -243,6 +246,10 @@ export const ExplorerResultsTable = ({
   );
   const hasPanel = Boolean(onOpenPanel);
   const hasCellFilter = Boolean(onFilterCell);
+  const filterSystemTag = useLatestCallback((tag: string) =>
+    onFilterSystemTag?.(tag),
+  );
+  const hasTagFilter = Boolean(onFilterSystemTag);
   // Extension cell frames are allocated while visible rows render; see
   // `maximumExplorerCellFrames`. Such tables re-render every row each time
   // so the allocation stays bounded.
@@ -266,6 +273,7 @@ export const ExplorerResultsTable = ({
         runtime: runtime.data,
         onSortChange: sortChange,
         onFilterCell: hasCellFilter ? filterCell : undefined,
+        onFilterSystemTag: hasTagFilter ? filterSystemTag : undefined,
         onOpenActions: openActions,
         onOpenPanel: hasPanel ? openPanel : undefined,
         onPrefetchPanel: hasPanel ? prefetchPanel : undefined,
@@ -277,7 +285,9 @@ export const ExplorerResultsTable = ({
       blueprint,
       contextCodes,
       filterCell,
+      filterSystemTag,
       hasCellFilter,
+      hasTagFilter,
       hasPanel,
       openActions,
       openPanel,

@@ -273,6 +273,7 @@ export const Explorer = ({ search: urlSearch, savedView }: Props) => {
                 <ExplorerResults
                   data={data}
                   onFilterCell={requestFilter}
+                  onFilterSystemTag={actions.addSystemTag}
                   onOpenPanel={isWideDesktop ? openPanel : undefined}
                   onShowAllVersions={actions.showAllVersions}
                   onSortChange={actions.toggleSort}

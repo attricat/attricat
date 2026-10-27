@@ -740,7 +740,8 @@ browser as the person types, and sends a `prefix` only when the first answer
 was truncated; a fresh, complete answer for a shorter prefix also covers the
 longer ones, so typing costs at most one server request per narrowing.
 The web app shows tags read-only on the record page (under the title and in
-its **Tags and metadata** tab) and in an optional Explorer column, and the
+its **Tags and metadata** tab) and in an optional Explorer column, whose tag
+chips add their tag to the filter when clicked, and the
 Explorer's **Tag** filter stores the chosen tags as `systemTags` in the URL and
 in saved searches.
 

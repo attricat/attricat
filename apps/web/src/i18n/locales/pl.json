@@ -1285,6 +1285,7 @@
     "systemTagRecordCount_many": "{{count}} rekordów",
     "systemTagRecordCount_other": "{{count}} rekordu",
     "systemTagFilterChip": "Znacznik: {{tag}}",
+    "filterBySystemTag": "Filtruj według znacznika {{tag}}",
     "removeSystemTagFilter": "Usuń filtr znacznika {{filter}}",
     "addAttributeFilterTitle": "Dodaj filtr",
     "editAttributeFilterTitle": "Edytuj filtr",
