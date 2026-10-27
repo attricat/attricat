@@ -1059,7 +1059,10 @@
       "structure": "Struktura",
       "values": "Wartości",
       "behavior": "Zachowanie",
-      "relationshipsAndFiles": "Relacje i pliki"
+      "relationshipsAndFiles": "Relacje i pliki",
+      "triggers": "Wyzwalacze",
+      "predicates": "Warunki",
+      "enforcement": "Wymuszanie"
     },
     "snippets": {
       "textAttribute": "Atrybut tekstowy",
@@ -1088,7 +1091,18 @@
       "defaultContextOnly": "Edycja tylko w kontekście domyślnym",
       "hidden": "Ukryj w interfejsie",
       "relationshipTarget": "Cel relacji",
-      "filePolicy": "Zasady przesyłania plików"
+      "filePolicy": "Zasady przesyłania plików",
+      "manualTrigger": "Uruchamianie na żądanie",
+      "scheduleTrigger": "Harmonogram",
+      "eventTrigger": "Zdarzenie rekordu",
+      "requiredPredicate": "Wymagana wartość",
+      "oneOfPredicate": "Dozwolone wartości",
+      "comparePredicate": "Porównanie wartości",
+      "relativeDatePredicate": "Data względem dzisiaj",
+      "stalePredicate": "Niedawna aktualizacja",
+      "uniquePredicate": "Unikalna wartość",
+      "enforceOnSave": "Odrzucanie naruszających zapisów",
+      "enforceTransition": "Ochrona przejścia statusu"
     },
     "snippetDescriptions": {
       "textAttribute": "Zwykła wartość tekstowa.",
@@ -1117,7 +1131,18 @@
       "defaultContextOnly": "Jedna wartość we wszystkich kontekstach, edytowana w domyślnym.",
       "hidden": "Ukryj atrybut w formularzach, na stronach lub w przeglądarce rekordów.",
       "relationshipTarget": "Schemat, na który muszą wskazywać powiązania.",
-      "filePolicy": "Jakie pliki można przesyłać."
+      "filePolicy": "Jakie pliki można przesyłać.",
+      "manualTrigger": "Sprawdza, gdy ktoś uruchomi regułę.",
+      "scheduleTrigger": "Sprawdza według sześciopolowego harmonogramu cron w UTC.",
+      "eventTrigger": "Sprawdza przy zdarzeniu rekordu.",
+      "requiredPredicate": "Atrybut ma wartość.",
+      "oneOfPredicate": "Wartość należy do listy.",
+      "comparePredicate": "Wartość jest porównywana ze stałą lub innym atrybutem.",
+      "relativeDatePredicate": "Data jest przed lub po określonej liczbie dni od dzisiaj.",
+      "stalePredicate": "Wartość zmieniła się w określonym czasie.",
+      "uniquePredicate": "Żaden inny rekord nie ma tych samych wartości.",
+      "enforceOnSave": "Odrzuca zapisy, po których rekord narusza regułę. Wymaga wagi błąd lub krytyczny.",
+      "enforceTransition": "Blokuje zmianę statusu, dopóki reguła jest naruszona."
     }
   },
   "explorer": {
@@ -1941,7 +1966,7 @@
   },
   "rules": {
     "title": "Reguły jakości danych",
-    "description": "Przeglądaj definicje reguł katalogu, ustalenia i trwałe wykonania ewaluacji.",
+    "description": "Twórz reguły jakości danych dla schematów i przeglądaj ich ustalenia oraz wykonania ewaluacji.",
     "inspectionTabs": "Inspekcja reguł",
     "loading": "Wczytywanie reguł…",
     "sections": {
@@ -2038,6 +2063,50 @@
       "blueprint": "Sprawdza",
       "blueprintRevision": "{{name}} v{{version}}",
       "definition": "Definicja"
+    },
+    "newRule": "Nowa reguła",
+    "newRevision": "Nowa rewizja",
+    "publish": "Opublikuj",
+    "saveDraft": "Zapisz szkic",
+    "editor": {
+      "saving": "Zapisywanie…",
+      "newRuleDescription": "Napisz regułę w TOML. Zostanie zapisana jako szkic; opublikuj ją, a następnie włącz, aby sprawdzała rekordy.",
+      "newRevisionTitle": "Nowa rewizja reguły {{name}}",
+      "newRevisionDescription": "Na podstawie rewizji {{version}}. Zapisanie doda rewizję roboczą.",
+      "scopeDescription": "Wybierz, co sprawdza reguła. Kolejne rewizje zachowują rewizję schematu i kontekst.",
+      "blueprint": "Schemat",
+      "blueprintRevision": "Rewizja schematu",
+      "revisionOption": "Wersja {{version}}",
+      "noPublishedRevision": "Najpierw opublikuj rewizję tego schematu.",
+      "chooseBlueprint": "Wybierz schemat z opublikowaną rewizją, aby sprawdzić i zapisać regułę.",
+      "fixedScope": "Sprawdza {{blueprint}} · {{context}}"
+    },
+    "templates": {
+      "required": "Wymagana wartość",
+      "requiredDescription": "Zgłasza rekordy bez wartości przy uruchomieniu na żądanie.",
+      "choice": "Dozwolone wartości",
+      "choiceDescription": "Zgłasza rekordy z wartością spoza listy przy każdej zmianie rekordu.",
+      "stale": "Data przeglądu",
+      "staleDescription": "Co tydzień zgłasza rekordy nieprzeglądane od 90 dni.",
+      "unique": "Unikalna wartość",
+      "uniqueDescription": "Zgłasza rekordy, które mają tę samą wartość co inny rekord."
+    },
+    "preview": {
+      "checks": "Sprawdza",
+      "predicate": "{{type}}",
+      "predicateOn": "{{type}} dla {{attribute}}",
+      "runs": "Uruchamia się",
+      "triggers": {
+        "manual": "Na żądanie",
+        "schedule": "Według harmonogramu {{cron}} (UTC)",
+        "event": "Przy zdarzeniu {{event}}",
+        "postImport": "Po imporcie"
+      },
+      "enforcement": "Wymuszanie",
+      "reportsOnly": "Tylko zgłasza ustalenia.",
+      "rejectsSaves": "Odrzuca zapisy, po których rekord narusza regułę.",
+      "blocksTransition": "Blokuje zmianę {{attribute}} z {{from}} na {{to}}.",
+      "blocksTransitionInto": "Blokuje zmianę {{attribute}} na {{to}}."
     }
   },
   "reusableAttributes": {

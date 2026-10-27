@@ -22,6 +22,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { definitionEditorHeight, type DefinitionKind } from './constants';
 import { DefinitionEditor } from './DefinitionEditor';
+import type { ReferenceAttribute } from './definitionReferences';
 import { locateDefinitionError } from './definitionErrorLocation';
 import { DefinitionInsertMenu } from './DefinitionInsertMenu';
 import { updateServerDiagnostic } from './definitionLanguage';
@@ -85,7 +86,7 @@ const CheckStatusChip = ({
 };
 
 /**
- * The shared editing surface for blueprint and reusable attribute
+ * The shared editing surface for blueprint, reusable attribute and rule
  * definitions: an Insert menu, the server's save check, and a live preview of
  * the last definition that passed it.
  */
@@ -96,6 +97,7 @@ export const DefinitionWorkspace = ({
   onSave,
   preview,
   readOnly,
+  scopeAttributes,
   toolbar,
   value,
 }: {
@@ -107,6 +109,8 @@ export const DefinitionWorkspace = ({
   /** Renders the last valid definition; omitted until one exists. */
   preview: ReactNode;
   readOnly: boolean;
+  /** Attributes the definition refers to without declaring them. */
+  scopeAttributes?: readonly ReferenceAttribute[];
   /** Extra toolbar actions placed before the Insert menu. */
   toolbar?: ReactNode;
   value: string;
@@ -224,6 +228,7 @@ export const DefinitionWorkspace = ({
             setMounted({ editor: mountedEditor, monaco });
           }}
           readOnly={readOnly}
+          scopeAttributes={scopeAttributes}
           value={value}
         />
         <Paper

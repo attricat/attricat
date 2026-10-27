@@ -436,4 +436,60 @@ mod tests {
         let rule: CompiledRule = serde_json::from_value(plan).unwrap();
         assert!(rule.enforcement.is_none());
     }
+
+    /// The JSON Schema for standalone rule definition TOML, published as
+    /// `contracts/rule-definition-v1.schema.json` for the web editor.
+    fn definition_json_schema() -> serde_json::Value {
+        schemars::generate::SchemaSettings::draft2020_12()
+            .into_generator()
+            .into_root_schema_for::<Raw>()
+            .to_value()
+    }
+
+    const CONTRACT: &str = "contracts/rule-definition-v1.schema.json";
+    const UPDATE_CONTRACTS: &str = "UPDATE_CONTRACTS";
+
+    #[test]
+    fn definition_schema_contract_is_current() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .ancestors()
+            .nth(2)
+            .unwrap()
+            .join(CONTRACT);
+        let mut rendered = serde_json::to_string_pretty(&definition_json_schema()).unwrap();
+        rendered.push('\n');
+        if std::env::var_os(UPDATE_CONTRACTS).is_some() {
+            std::fs::write(&path, rendered).unwrap();
+            return;
+        }
+        assert!(
+            std::fs::read_to_string(&path).unwrap_or_default() == rendered,
+            "{CONTRACT} is stale; run `just contracts`"
+        );
+    }
+
+    #[test]
+    fn schema_matches_parser_for_representative_definitions() {
+        let schema = definition_json_schema();
+        for (definition, accepted) in [
+            (REQUIRED.to_owned(), true),
+            (
+                REQUIRED.replace("severity='error'", "severity='fatal'"),
+                false,
+            ),
+            (REQUIRED.replace("type='required'", "type='sql'"), false),
+            (REQUIRED.replace("format_version=1\n", ""), false),
+            (format!("{REQUIRED}\nlabel='Title'"), false),
+        ] {
+            assert_eq!(parse(&definition).is_ok(), accepted, "{definition}");
+            let instance =
+                serde_json::to_value(toml::from_str::<toml::Value>(&definition).unwrap()).unwrap();
+            let violations = attricat_validation::validate_json_schema(&schema, &instance).unwrap();
+            assert_eq!(
+                violations.is_empty(),
+                accepted,
+                "{definition}: {violations:?}"
+            );
+        }
+    }
 }

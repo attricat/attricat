@@ -9,7 +9,10 @@ import {
   updateDefinitionDiagnostics,
   type DefinitionModelConfig,
 } from './definitionLanguage';
-import { createDefinitionReferences } from './definitionReferences';
+import {
+  createDefinitionReferences,
+  type ReferenceAttribute,
+} from './definitionReferences';
 
 const definitionEditorOptions: editor.IStandaloneEditorConstructionOptions = {
   // Most values are strings, so suggest inside them too.
@@ -21,19 +24,24 @@ const definitionEditorOptions: editor.IStandaloneEditorConstructionOptions = {
 type MountedEditor = { model: editor.ITextModel; monaco: Monaco };
 
 /**
- * A TOML editor that completes, documents, and validates a blueprint or
- * reusable attribute definition from its Rust-derived contract.
+ * A TOML editor that completes, documents, and validates a blueprint,
+ * reusable attribute or rule definition from its Rust-derived contract.
  */
 export const DefinitionEditor = ({
   kind,
   onMount,
+  scopeAttributes,
   value,
   ...props
-}: Omit<TomlEditorProps, 'options'> & { kind: DefinitionKind }) => {
+}: Omit<TomlEditorProps, 'options'> & {
+  kind: DefinitionKind;
+  /** Attributes the definition refers to without declaring them. */
+  scopeAttributes?: readonly ReferenceAttribute[];
+}) => {
   const queryClient = useQueryClient();
   const references = useMemo(
-    () => createDefinitionReferences(queryClient),
-    [queryClient],
+    () => ({ ...createDefinitionReferences(queryClient), scopeAttributes }),
+    [queryClient, scopeAttributes],
   );
   // Monaco providers outlive renders, so they read the latest config via a ref.
   const config = useRef<DefinitionModelConfig>({ kind, references });

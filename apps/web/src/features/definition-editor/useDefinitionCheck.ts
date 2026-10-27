@@ -35,14 +35,23 @@ export type DefinitionCheck<T> = {
  */
 export const useDefinitionCheck = <T>({
   definition,
+  enabled = true,
   kind,
   resourceId,
+  scope,
   validate,
 }: {
   definition: string;
+  /** False while the definition cannot be checked yet; the check is idle. */
+  enabled?: boolean;
   kind: DefinitionKind;
-  /** The saved blueprint or attribute the definition revises, if any. */
+  /** The saved resource the definition revises, if any. */
   resourceId?: string;
+  /**
+   * Identifies anything else `validate` checks the definition against, such
+   * as a rule's blueprint revision, so a change re-runs the check.
+   */
+  scope?: string;
   validate: (
     definition: string,
     resourceId: string | undefined,
@@ -50,13 +59,13 @@ export const useDefinitionCheck = <T>({
   ) => Promise<T>;
 }): DefinitionCheck<T> => {
   const checked = useDebouncedValue(definition, checkDelayMs);
-  const empty = !checked.trim();
+  const empty = !enabled || !checked.trim();
   const query = useQuery({
     enabled: !empty,
     gcTime: 0,
     placeholderData: keepPreviousData,
     queryFn: ({ signal }) => validate(checked, resourceId, signal),
-    queryKey: definitionQueryKeys.check(kind, resourceId, checked),
+    queryKey: definitionQueryKeys.check(kind, resourceId, checked, scope),
     retry: false,
   });
   const [lastValid, setLastValid] = useState<{

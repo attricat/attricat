@@ -144,7 +144,9 @@ triggers = [{ type = "schedule", cron = "0 0 3 * * 1", timezone = "UTC" }]
 predicate = { type = "stale", attribute_code = "price", max_age_seconds = 7776000 }
 ```
 
-**Jako samodzielne reguły** w **Zarządzanie → Reguły jakości danych**, powiązane z jedną opublikowaną wersją Schematu i opcjonalnie z jednym kontekstem:
+**Jako samodzielne reguły** w **Zarządzanie → Reguły jakości danych**, powiązane z jedną opublikowaną wersją Schematu i opcjonalnie z jednym kontekstem. Wybierz **Nowa reguła**, wskaż Schemat, jego opublikowaną rewizję i kontekst, a następnie napisz TOML w tym samym edytorze co Schematy: podpowiada klucze i kody atrybutów Schematu, oferuje gotowe wyzwalacze i warunki w menu **Wstaw** i na bieżąco sprawdza regułę względem rewizji Schematu. **Zapisz szkic** zapisuje pierwszą rewizję; opublikuj ją na stronie reguły. **Nowa rewizja** na stronie rewizji tworzy kolejną na jej podstawie; rewizje zachowują rewizję Schematu i kontekst.
+
+To samo można zrobić w CLI:
 
 ```sh
 acli rule create --blueprint-id <uuid> --blueprint-version 3 --file title-required.toml
@@ -152,7 +154,7 @@ acli rule publish <rule-id> 1
 acli rule enable <rule-id> 1
 ```
 
-Samodzielne reguły mają własne szkice i wersje. Wersja reguły musi zostać opublikowana, a następnie włączona, zanim zacznie działać. W danym momencie włączona jest tylko jedna wersja reguły; `acli rule disable` ją zatrzymuje.
+Samodzielne reguły mają własne szkice i wersje. Wersja reguły musi zostać opublikowana, a następnie włączona przełącznikiem na karcie **Reguły** lub w CLI, zanim zacznie działać. W danym momencie włączona jest tylko jedna wersja reguły; `acli rule disable` ją zatrzymuje.
 
 ## Uruchom regułę
 

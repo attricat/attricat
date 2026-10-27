@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import '../../i18n';
 import { blueprintTemplates } from '../blueprints/blueprintEditorUtils';
 import { reusableAttributeTemplates } from '../reusable-attributes/templates';
+import { ruleTemplates } from '../rules/templates';
 import { definitionKinds } from './constants';
 import { definitionDiagnostics } from './definitionDiagnostics';
 
@@ -34,6 +35,10 @@ describe('definitionDiagnostics', () => {
           definitionKinds.reusableAttribute,
           template.definition,
         ),
+      ).toEqual([]);
+    for (const template of ruleTemplates)
+      expect(
+        definitionDiagnostics(definitionKinds.rule, template.definition),
       ).toEqual([]);
   });
 

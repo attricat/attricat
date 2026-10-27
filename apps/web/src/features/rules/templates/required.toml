@@ -1,0 +1,11 @@
+format_version = 1
+code = "title-required"
+name = "Records have a title"
+severity = "warning"
+
+[[triggers]]
+type = "manual"
+
+[predicate]
+type = "required"
+attribute_code = "title"

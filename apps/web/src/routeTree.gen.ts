@@ -51,6 +51,7 @@ import { Route as ManageReusableAttributesDefinitionIdRouteImport } from './rout
 import { Route as ManageReusableAttributesNewRouteImport } from './routes/manage/reusable-attributes/new'
 import { Route as ManageRulesIndexRouteImport } from './routes/manage/rules/index'
 import { Route as ManageRulesFindingsRouteImport } from './routes/manage/rules/findings'
+import { Route as ManageRulesNewRouteImport } from './routes/manage/rules/new'
 import { Route as ManageRulesRunsRouteImport } from './routes/manage/rules/runs'
 import { Route as ManageWorkflowsIndexRouteImport } from './routes/manage/workflows/index'
 import { Route as ManageWorkflowsWorkflowIdRouteImport } from './routes/manage/workflows/$workflowId'
@@ -74,6 +75,8 @@ import { Route as ManageExtensionsOwnerRepositoryRouteImport } from './routes/ma
 import { Route as ManageWorkflowsWorkflowIdIndexRouteImport } from './routes/manage/workflows/$workflowId/index'
 import { Route as ManageRulesRuleIdRevisionsVersionRouteImport } from './routes/manage/rules/$ruleId/revisions/$version'
 import { Route as ManageBlueprintsBlueprintIdRevisionsVersionNewRouteImport } from './routes/manage/blueprints/$blueprintId/revisions/$version/new'
+import { Route as ManageRulesRuleIdRevisionsVersionIndexRouteImport } from './routes/manage/rules/$ruleId/revisions/$version/index'
+import { Route as ManageRulesRuleIdRevisionsVersionNewRouteImport } from './routes/manage/rules/$ruleId/revisions/$version/new'
 import { Route as ManageWorkflowsWorkflowIdRevisionsVersionNewRouteImport } from './routes/manage/workflows/$workflowId/revisions/$version/new'
 
 const IndexRoute = IndexRouteImport.update({
@@ -296,6 +299,11 @@ const ManageRulesFindingsRoute = ManageRulesFindingsRouteImport.update({
   path: '/manage/rules/findings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ManageRulesNewRoute = ManageRulesNewRouteImport.update({
+  id: '/manage/rules/new',
+  path: '/manage/rules/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ManageRulesRunsRoute = ManageRulesRunsRouteImport.update({
   id: '/manage/rules/runs',
   path: '/manage/rules/runs',
@@ -423,6 +431,18 @@ const ManageBlueprintsBlueprintIdRevisionsVersionNewRoute =
     path: '/revisions/$version/new',
     getParentRoute: () => ManageBlueprintsBlueprintIdRoute,
   } as any)
+const ManageRulesRuleIdRevisionsVersionIndexRoute =
+  ManageRulesRuleIdRevisionsVersionIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => ManageRulesRuleIdRevisionsVersionRoute,
+  } as any)
+const ManageRulesRuleIdRevisionsVersionNewRoute =
+  ManageRulesRuleIdRevisionsVersionNewRouteImport.update({
+    id: '/new',
+    path: '/new',
+    getParentRoute: () => ManageRulesRuleIdRevisionsVersionRoute,
+  } as any)
 const ManageWorkflowsWorkflowIdRevisionsVersionNewRoute =
   ManageWorkflowsWorkflowIdRevisionsVersionNewRouteImport.update({
     id: '/revisions/$version/new',
@@ -468,6 +488,7 @@ export interface FileRoutesByFullPath {
   '/manage/reusable-attributes/$definitionId': typeof ManageReusableAttributesDefinitionIdRoute
   '/manage/reusable-attributes/new': typeof ManageReusableAttributesNewRoute
   '/manage/rules/findings': typeof ManageRulesFindingsRoute
+  '/manage/rules/new': typeof ManageRulesNewRoute
   '/manage/rules/runs': typeof ManageRulesRunsRoute
   '/manage/workflows/$workflowId': typeof ManageWorkflowsWorkflowIdRouteWithChildren
   '/manage/workflows/new': typeof ManageWorkflowsNewRoute
@@ -494,9 +515,11 @@ export interface FileRoutesByFullPath {
   '/manage/extensions/$owner/$repository': typeof ManageExtensionsOwnerRepositoryRoute
   '/manage/blueprints/$blueprintId/': typeof ManageBlueprintsBlueprintIdIndexRoute
   '/manage/workflows/$workflowId/': typeof ManageWorkflowsWorkflowIdIndexRoute
-  '/manage/rules/$ruleId/revisions/$version': typeof ManageRulesRuleIdRevisionsVersionRoute
+  '/manage/rules/$ruleId/revisions/$version': typeof ManageRulesRuleIdRevisionsVersionRouteWithChildren
   '/manage/blueprints/$blueprintId/revisions/$version/new': typeof ManageBlueprintsBlueprintIdRevisionsVersionNewRoute
+  '/manage/rules/$ruleId/revisions/$version/new': typeof ManageRulesRuleIdRevisionsVersionNewRoute
   '/manage/workflows/$workflowId/revisions/$version/new': typeof ManageWorkflowsWorkflowIdRevisionsVersionNewRoute
+  '/manage/rules/$ruleId/revisions/$version/': typeof ManageRulesRuleIdRevisionsVersionIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -532,6 +555,7 @@ export interface FileRoutesByTo {
   '/manage/reusable-attributes/$definitionId': typeof ManageReusableAttributesDefinitionIdRoute
   '/manage/reusable-attributes/new': typeof ManageReusableAttributesNewRoute
   '/manage/rules/findings': typeof ManageRulesFindingsRoute
+  '/manage/rules/new': typeof ManageRulesNewRoute
   '/manage/rules/runs': typeof ManageRulesRunsRoute
   '/manage/workflows/new': typeof ManageWorkflowsNewRoute
   '/manage/workspace/agent': typeof ManageWorkspaceAgentRoute
@@ -557,9 +581,10 @@ export interface FileRoutesByTo {
   '/manage/extensions/$owner/$repository': typeof ManageExtensionsOwnerRepositoryRoute
   '/manage/blueprints/$blueprintId': typeof ManageBlueprintsBlueprintIdIndexRoute
   '/manage/workflows/$workflowId': typeof ManageWorkflowsWorkflowIdIndexRoute
-  '/manage/rules/$ruleId/revisions/$version': typeof ManageRulesRuleIdRevisionsVersionRoute
   '/manage/blueprints/$blueprintId/revisions/$version/new': typeof ManageBlueprintsBlueprintIdRevisionsVersionNewRoute
+  '/manage/rules/$ruleId/revisions/$version/new': typeof ManageRulesRuleIdRevisionsVersionNewRoute
   '/manage/workflows/$workflowId/revisions/$version/new': typeof ManageWorkflowsWorkflowIdRevisionsVersionNewRoute
+  '/manage/rules/$ruleId/revisions/$version': typeof ManageRulesRuleIdRevisionsVersionIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -600,6 +625,7 @@ export interface FileRoutesById {
   '/manage/reusable-attributes/$definitionId': typeof ManageReusableAttributesDefinitionIdRoute
   '/manage/reusable-attributes/new': typeof ManageReusableAttributesNewRoute
   '/manage/rules/findings': typeof ManageRulesFindingsRoute
+  '/manage/rules/new': typeof ManageRulesNewRoute
   '/manage/rules/runs': typeof ManageRulesRunsRoute
   '/manage/workflows/$workflowId': typeof ManageWorkflowsWorkflowIdRouteWithChildren
   '/manage/workflows/new': typeof ManageWorkflowsNewRoute
@@ -626,9 +652,11 @@ export interface FileRoutesById {
   '/manage/extensions/$owner/$repository': typeof ManageExtensionsOwnerRepositoryRoute
   '/manage/blueprints/$blueprintId/': typeof ManageBlueprintsBlueprintIdIndexRoute
   '/manage/workflows/$workflowId/': typeof ManageWorkflowsWorkflowIdIndexRoute
-  '/manage/rules/$ruleId/revisions/$version': typeof ManageRulesRuleIdRevisionsVersionRoute
+  '/manage/rules/$ruleId/revisions/$version': typeof ManageRulesRuleIdRevisionsVersionRouteWithChildren
   '/manage/blueprints/$blueprintId/revisions/$version/new': typeof ManageBlueprintsBlueprintIdRevisionsVersionNewRoute
+  '/manage/rules/$ruleId/revisions/$version/new': typeof ManageRulesRuleIdRevisionsVersionNewRoute
   '/manage/workflows/$workflowId/revisions/$version/new': typeof ManageWorkflowsWorkflowIdRevisionsVersionNewRoute
+  '/manage/rules/$ruleId/revisions/$version/': typeof ManageRulesRuleIdRevisionsVersionIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -670,6 +698,7 @@ export interface FileRouteTypes {
     | '/manage/reusable-attributes/$definitionId'
     | '/manage/reusable-attributes/new'
     | '/manage/rules/findings'
+    | '/manage/rules/new'
     | '/manage/rules/runs'
     | '/manage/workflows/$workflowId'
     | '/manage/workflows/new'
@@ -698,7 +727,9 @@ export interface FileRouteTypes {
     | '/manage/workflows/$workflowId/'
     | '/manage/rules/$ruleId/revisions/$version'
     | '/manage/blueprints/$blueprintId/revisions/$version/new'
+    | '/manage/rules/$ruleId/revisions/$version/new'
     | '/manage/workflows/$workflowId/revisions/$version/new'
+    | '/manage/rules/$ruleId/revisions/$version/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -734,6 +765,7 @@ export interface FileRouteTypes {
     | '/manage/reusable-attributes/$definitionId'
     | '/manage/reusable-attributes/new'
     | '/manage/rules/findings'
+    | '/manage/rules/new'
     | '/manage/rules/runs'
     | '/manage/workflows/new'
     | '/manage/workspace/agent'
@@ -759,9 +791,10 @@ export interface FileRouteTypes {
     | '/manage/extensions/$owner/$repository'
     | '/manage/blueprints/$blueprintId'
     | '/manage/workflows/$workflowId'
-    | '/manage/rules/$ruleId/revisions/$version'
     | '/manage/blueprints/$blueprintId/revisions/$version/new'
+    | '/manage/rules/$ruleId/revisions/$version/new'
     | '/manage/workflows/$workflowId/revisions/$version/new'
+    | '/manage/rules/$ruleId/revisions/$version'
   id:
     | '__root__'
     | '/'
@@ -801,6 +834,7 @@ export interface FileRouteTypes {
     | '/manage/reusable-attributes/$definitionId'
     | '/manage/reusable-attributes/new'
     | '/manage/rules/findings'
+    | '/manage/rules/new'
     | '/manage/rules/runs'
     | '/manage/workflows/$workflowId'
     | '/manage/workflows/new'
@@ -829,7 +863,9 @@ export interface FileRouteTypes {
     | '/manage/workflows/$workflowId/'
     | '/manage/rules/$ruleId/revisions/$version'
     | '/manage/blueprints/$blueprintId/revisions/$version/new'
+    | '/manage/rules/$ruleId/revisions/$version/new'
     | '/manage/workflows/$workflowId/revisions/$version/new'
+    | '/manage/rules/$ruleId/revisions/$version/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -867,6 +903,7 @@ export interface RootRouteChildren {
   ManageReusableAttributesDefinitionIdRoute: typeof ManageReusableAttributesDefinitionIdRoute
   ManageReusableAttributesNewRoute: typeof ManageReusableAttributesNewRoute
   ManageRulesFindingsRoute: typeof ManageRulesFindingsRoute
+  ManageRulesNewRoute: typeof ManageRulesNewRoute
   ManageRulesRunsRoute: typeof ManageRulesRunsRoute
   ManageWorkflowsWorkflowIdRoute: typeof ManageWorkflowsWorkflowIdRouteWithChildren
   ManageWorkflowsNewRoute: typeof ManageWorkflowsNewRoute
@@ -884,7 +921,7 @@ export interface RootRouteChildren {
   ManageWorkflowsIndexRoute: typeof ManageWorkflowsIndexRoute
   ManageWorkspaceIndexRoute: typeof ManageWorkspaceIndexRoute
   ManageExtensionsOwnerRepositoryRoute: typeof ManageExtensionsOwnerRepositoryRoute
-  ManageRulesRuleIdRevisionsVersionRoute: typeof ManageRulesRuleIdRevisionsVersionRoute
+  ManageRulesRuleIdRevisionsVersionRoute: typeof ManageRulesRuleIdRevisionsVersionRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -1183,6 +1220,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManageRulesFindingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/manage/rules/new': {
+      id: '/manage/rules/new'
+      path: '/manage/rules/new'
+      fullPath: '/manage/rules/new'
+      preLoaderRoute: typeof ManageRulesNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/manage/rules/runs': {
       id: '/manage/rules/runs'
       path: '/manage/rules/runs'
@@ -1344,6 +1388,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManageBlueprintsBlueprintIdRevisionsVersionNewRouteImport
       parentRoute: typeof ManageBlueprintsBlueprintIdRoute
     }
+    '/manage/rules/$ruleId/revisions/$version/': {
+      id: '/manage/rules/$ruleId/revisions/$version/'
+      path: '/'
+      fullPath: '/manage/rules/$ruleId/revisions/$version/'
+      preLoaderRoute: typeof ManageRulesRuleIdRevisionsVersionIndexRouteImport
+      parentRoute: typeof ManageRulesRuleIdRevisionsVersionRoute
+    }
+    '/manage/rules/$ruleId/revisions/$version/new': {
+      id: '/manage/rules/$ruleId/revisions/$version/new'
+      path: '/new'
+      fullPath: '/manage/rules/$ruleId/revisions/$version/new'
+      preLoaderRoute: typeof ManageRulesRuleIdRevisionsVersionNewRouteImport
+      parentRoute: typeof ManageRulesRuleIdRevisionsVersionRoute
+    }
     '/manage/workflows/$workflowId/revisions/$version/new': {
       id: '/manage/workflows/$workflowId/revisions/$version/new'
       path: '/revisions/$version/new'
@@ -1436,6 +1494,24 @@ const ManageWorkflowsWorkflowIdRouteWithChildren =
     ManageWorkflowsWorkflowIdRouteChildren,
   )
 
+interface ManageRulesRuleIdRevisionsVersionRouteChildren {
+  ManageRulesRuleIdRevisionsVersionNewRoute: typeof ManageRulesRuleIdRevisionsVersionNewRoute
+  ManageRulesRuleIdRevisionsVersionIndexRoute: typeof ManageRulesRuleIdRevisionsVersionIndexRoute
+}
+
+const ManageRulesRuleIdRevisionsVersionRouteChildren: ManageRulesRuleIdRevisionsVersionRouteChildren =
+  {
+    ManageRulesRuleIdRevisionsVersionNewRoute:
+      ManageRulesRuleIdRevisionsVersionNewRoute,
+    ManageRulesRuleIdRevisionsVersionIndexRoute:
+      ManageRulesRuleIdRevisionsVersionIndexRoute,
+  }
+
+const ManageRulesRuleIdRevisionsVersionRouteWithChildren =
+  ManageRulesRuleIdRevisionsVersionRoute._addFileChildren(
+    ManageRulesRuleIdRevisionsVersionRouteChildren,
+  )
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   InboxRoute: InboxRoute,
@@ -1474,6 +1550,7 @@ const rootRouteChildren: RootRouteChildren = {
     ManageReusableAttributesDefinitionIdRoute,
   ManageReusableAttributesNewRoute: ManageReusableAttributesNewRoute,
   ManageRulesFindingsRoute: ManageRulesFindingsRoute,
+  ManageRulesNewRoute: ManageRulesNewRoute,
   ManageRulesRunsRoute: ManageRulesRunsRoute,
   ManageWorkflowsWorkflowIdRoute: ManageWorkflowsWorkflowIdRouteWithChildren,
   ManageWorkflowsNewRoute: ManageWorkflowsNewRoute,
@@ -1492,7 +1569,7 @@ const rootRouteChildren: RootRouteChildren = {
   ManageWorkspaceIndexRoute: ManageWorkspaceIndexRoute,
   ManageExtensionsOwnerRepositoryRoute: ManageExtensionsOwnerRepositoryRoute,
   ManageRulesRuleIdRevisionsVersionRoute:
-    ManageRulesRuleIdRevisionsVersionRoute,
+    ManageRulesRuleIdRevisionsVersionRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

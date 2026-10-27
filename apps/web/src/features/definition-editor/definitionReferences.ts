@@ -30,6 +30,11 @@ export type DefinitionReferences = {
   blueprints: () => Promise<ReferenceBlueprint[]>;
   contexts: () => Promise<string[]>;
   roles: () => Promise<string[]>;
+  /**
+   * Attributes the definition refers to without declaring them, such as the
+   * blueprint revision a rule checks.
+   */
+  scopeAttributes?: readonly ReferenceAttribute[];
 };
 
 const orEmpty = async <T>(lookup: () => Promise<T[]>) => {

@@ -36,6 +36,15 @@ const apply = (text: string, snippet: DefinitionSnippet) => {
   );
 };
 
+const ruleHeader = `format_version = 1
+code = "title-required"
+name = "Title required"
+severity = "error"
+
+[[triggers]]
+type = "manual"
+`;
+
 const bases: Record<DefinitionKind, string> = {
   [definitionKinds.blueprint]: `format_version = 1
 code = "product"
@@ -54,13 +63,24 @@ value_type = "string"
 name = "Size"
 value_type = "string"
 `,
+  [definitionKinds.rule]: `${ruleHeader}
+[predicate]
+type = "required"
+attribute_code = "title"
+`,
 };
+
+/** A rule has one predicate, so predicate snippets start without one. */
+const baseFor = (kind: DefinitionKind, snippet: DefinitionSnippet) =>
+  kind === definitionKinds.rule && snippet.group === 'predicates'
+    ? ruleHeader
+    : bases[kind];
 
 describe('definition snippets', () => {
   for (const kind of Object.values(definitionKinds)) {
     for (const snippet of definitionSnippets[kind]) {
       it(`${kind} ${snippet.id} keeps the definition valid`, () => {
-        const text = apply(bases[kind], snippet);
+        const text = apply(baseFor(kind, snippet), snippet);
         expect(() => parse(text)).not.toThrow();
         expect(definitionDiagnostics(kind, text)).toEqual([]);
         expect(snippetIsPresent(scanToml(text), snippet)).toBe(

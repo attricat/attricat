@@ -167,7 +167,7 @@ and fail with `422 publication_checks_failed`. See [API](api.md#errors).
 
 `rules.manage` is required for validation, creation, publication, enable/disable, and manual runs; `rules.read` is required for reads.
 
-- `POST /rules/validate`
+- `POST /rules/validate` runs the same checks as `POST /rules` (definition, published blueprint revision, attribute types, context) and returns the compiled rule without storing it. The web rule editor uses it as you type, with `contracts/rule-definition-v1.schema.json` for completions.
 - `GET|POST /rules`
 - `GET /rules/{rule_id}`
 - `POST /rules/{rule_id}/versions/{version}/publish`

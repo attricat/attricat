@@ -7,11 +7,13 @@ import {
 } from '@tanstack/react-query';
 import { createLink, useNavigate } from '@tanstack/react-router';
 import { Alert, Box, Button, Tab, Tabs } from '@mui/material';
+import { PlusIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ApiRequestError } from '../../api/request';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
+import { RouterButton } from '../../components/RouterLink';
 import { useCan } from '../auth/useCan';
 import {
   disableRule,
@@ -29,6 +31,7 @@ import {
   RULE_SECTIONS,
   RULE_TAB_ID_PREFIX,
   RULE_TABPANEL_ID_PREFIX,
+  ruleRoutes,
   type RuleInspectionSection,
 } from './constants';
 import { FindingsSection } from './FindingsSection';
@@ -136,6 +139,17 @@ export const RuleInspectionPage = ({
         icon={RuleIcon}
         title={t('rules.title')}
         description={t('rules.description')}
+        actions={
+          canManage && (
+            <RouterButton
+              startIcon={<PlusIcon />}
+              to={ruleRoutes.create}
+              variant="contained"
+            >
+              {t('rules.newRule')}
+            </RouterButton>
+          )
+        }
       />
       <Tabs
         aria-label={t('rules.inspectionTabs')}

@@ -370,6 +370,53 @@ async fn manual_run_of_a_disabled_rule_explains_it_is_not_enabled(pool: PgPool) 
     server.abort();
 }
 
+/// Validation runs the save checks against the chosen blueprint revision, so
+/// the editor reports an unknown attribute before the rule is saved.
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn validate_checks_the_definition_against_its_blueprint_revision(pool: PgPool) {
+    let (base_url, server, _, blueprint) = setup_rule(&pool).await;
+    let client = authenticated_client();
+    let validate = |definition: String| {
+        client
+            .post(format!("{base_url}/rules/validate"))
+            .json(&json!({
+                "blueprint_id": blueprint["blueprint"]["id"],
+                "blueprint_version": blueprint["blueprint"]["version"],
+                "context_id": null,
+                "definition": definition,
+            }))
+            .send()
+    };
+
+    let valid = validate(RULE.replace("required_title", "another_rule"))
+        .await
+        .unwrap();
+    assert_eq!(valid.status(), 200);
+    let compiled: Value = valid.json().await.unwrap();
+    assert_eq!(compiled["code"], "another_rule");
+
+    let unknown = validate(RULE.replace("\"summary\"", "\"missing\""))
+        .await
+        .unwrap();
+    assert_eq!(unknown.status(), 422);
+    let body: Value = unknown.json().await.unwrap();
+    assert_eq!(body["error"]["code"], "invalid_rule_definition");
+    assert_eq!(
+        client
+            .get(format!("{base_url}/rules"))
+            .send()
+            .await
+            .unwrap()
+            .json::<Vec<Value>>()
+            .await
+            .unwrap()
+            .len(),
+        1,
+        "validation stores nothing"
+    );
+    server.abort();
+}
+
 /// A record change re-checks the record for every enabled rule of its
 /// revision, even one without an event trigger, and the record can be
 /// re-checked on demand.
