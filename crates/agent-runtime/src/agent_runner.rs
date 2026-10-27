@@ -69,6 +69,18 @@ const SYSTEM_PROMPT_SECTIONS: [&str; 7] = [
 /// out of the request.
 const READ_ONLY_PROMPT: &str = "This deployment is a read-only demo: you have no tools that change the catalogue, and no approval can be requested. When the user asks for a change, inspect what it would affect and explain the change you would propose and which approval it would need, then tell them they can make it themselves in the app. Do not claim or imply that you changed anything.";
 
+/// Names the user's interface language, so replies follow it rather than
+/// the English system prompt.
+pub(crate) fn language_prompt(language: Option<&str>) -> String {
+    language
+        .map(|language| {
+            format!(
+                " The user's interface language is {language} (BCP 47). Write every reply in that language unless the user asks for another one."
+            )
+        })
+        .unwrap_or_default()
+}
+
 fn system_prompt() -> String {
     SYSTEM_PROMPT_SECTIONS.join(" ")
 }
@@ -302,8 +314,9 @@ async fn drive(
     let mut request = vec![ChatMessage {
         role: "system".into(),
         content: Value::String(format!(
-            "{}{context_prompt}{catalog_map}",
-            run_system_prompt(provider.read_only())
+            "{}{context_prompt}{}{catalog_map}",
+            run_system_prompt(provider.read_only()),
+            language_prompt(conversation.language.as_deref())
         )),
         tool_call_id: None,
         tool_calls: None,
@@ -1111,6 +1124,12 @@ mod tests {
         let prompt = system_prompt();
         assert!(prompt.contains("Some users still say entity; it means a record."));
         assert!(prompt.contains("call them records"));
+    }
+
+    #[test]
+    fn prompt_names_the_interface_language() {
+        assert!(super::language_prompt(Some("pl")).contains("interface language is pl"));
+        assert_eq!(super::language_prompt(None), "");
     }
 
     #[test]

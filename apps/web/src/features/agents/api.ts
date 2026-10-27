@@ -11,6 +11,7 @@ import {
   toolCallSchema,
 } from './schemas';
 import { uuidSegment } from '../../api/pathSegments';
+import { activeLanguage } from '../../i18n';
 import type { ConversationScope } from './constants';
 
 export type ConversationFilter = {
@@ -74,7 +75,12 @@ export const sendMessage = (
   request(
     `/api/agent/conversations/${uuidSegment(id)}/messages`,
     runResponseSchema,
-    jsonRequest('POST', { content, attachment_ids: attachmentIds }),
+    // The agent replies in the language the app is shown in.
+    jsonRequest('POST', {
+      content,
+      attachment_ids: attachmentIds,
+      language: activeLanguage(),
+    }),
   );
 export const listApprovals = (
   conversationId?: string,

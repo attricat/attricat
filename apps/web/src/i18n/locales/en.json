@@ -315,6 +315,8 @@
     "showCallJson": "Show call JSON",
     "showResultJson": "Show result JSON",
     "unknownTool": "unknown tool",
+    "toolActivity_one": "{{count}} tool call",
+    "toolActivity_other": "{{count}} tool calls",
     "bulkEdit": {
       "preview": "Records this bulk edit changes",
       "columns": {

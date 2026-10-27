@@ -319,6 +319,10 @@
     "showCallJson": "Pokaż JSON wywołania",
     "showResultJson": "Pokaż JSON wyniku",
     "unknownTool": "nieznane narzędzie",
+    "toolActivity_one": "{{count}} wywołanie narzędzia",
+    "toolActivity_few": "{{count}} wywołania narzędzi",
+    "toolActivity_many": "{{count}} wywołań narzędzi",
+    "toolActivity_other": "{{count}} wywołania narzędzi",
     "bulkEdit": {
       "preview": "Rekordy zmieniane przez tę edycję zbiorczą",
       "columns": {

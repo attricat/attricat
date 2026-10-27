@@ -72,6 +72,7 @@ describe('agent API client', () => {
     expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({
       content: 'List products',
       attachment_ids: [id],
+      language: 'en',
     });
   });
 

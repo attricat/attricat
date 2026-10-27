@@ -17,6 +17,8 @@ pub struct Conversation {
     pub title_source: String,
     pub record_id: Option<Uuid>,
     pub context_id: Option<Uuid>,
+    /// The BCP 47 interface language of the latest user message.
+    pub language: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub archived_at: Option<DateTime<Utc>>,
@@ -163,7 +165,7 @@ impl AttricatRepository {
         title: &str,
     ) -> Result<Conversation, RepositoryError> {
         let workspace_id = self.workspace_id.0;
-        Ok(sqlx::query_as("INSERT INTO conversations (id, workspace_id, created_by_user_id, title, title_source) VALUES ($1, $2, $3, $4, 'pending') RETURNING id, workspace_id, created_by_user_id, title, title_source, record_id, context_id, created_at, updated_at, archived_at")
+        Ok(sqlx::query_as("INSERT INTO conversations (id, workspace_id, created_by_user_id, title, title_source) VALUES ($1, $2, $3, $4, 'pending') RETURNING id, workspace_id, created_by_user_id, title, title_source, record_id, context_id, language, created_at, updated_at, archived_at")
             .bind(Uuid::new_v4()).bind(workspace_id).bind(created_by_user_id).bind(title)
             .fetch_one(&self.pool).await?)
     }
@@ -176,7 +178,7 @@ impl AttricatRepository {
         context_id: Option<Uuid>,
     ) -> Result<Conversation, RepositoryError> {
         let workspace = self.workspace_id.0;
-        Ok(sqlx::query_as("INSERT INTO conversations (id, workspace_id, created_by_user_id, title, record_id, context_id, title_source) VALUES ($1, $2, $3, $4, $5, $6, 'pending') RETURNING id, workspace_id, created_by_user_id, title, title_source, record_id, context_id, created_at, updated_at, archived_at")
+        Ok(sqlx::query_as("INSERT INTO conversations (id, workspace_id, created_by_user_id, title, record_id, context_id, title_source) VALUES ($1, $2, $3, $4, $5, $6, 'pending') RETURNING id, workspace_id, created_by_user_id, title, title_source, record_id, context_id, language, created_at, updated_at, archived_at")
             .bind(Uuid::new_v4()).bind(workspace).bind(actor).bind(title).bind(record_id).bind(context_id)
             .fetch_one(&self.pool).await?)
     }
@@ -317,6 +319,21 @@ impl AttricatRepository {
             .execute(&mut **tx)
             .await?;
         Ok(message)
+    }
+
+    /// Records the interface language the agent replies in.
+    pub async fn set_conversation_language(
+        &self,
+        conversation_id: Uuid,
+        language: &str,
+    ) -> Result<(), RepositoryError> {
+        sqlx::query("UPDATE conversations SET language = $3 WHERE id = $1 AND workspace_id = $2")
+            .bind(conversation_id)
+            .bind(self.workspace_id.0)
+            .bind(language)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
     }
 
     /// Atomically records the user's message and queues its run. A failed
@@ -815,7 +832,7 @@ impl AttricatRepository {
                 context_id,
             } => (false, Some(record_id), context_id),
         };
-        Ok(sqlx::query_as("SELECT c.id, c.workspace_id, c.created_by_user_id, c.title, c.title_source, c.record_id, c.context_id, c.created_at, c.updated_at, c.archived_at FROM conversations c WHERE c.workspace_id = $1 AND c.archived_at IS NULL AND ($2 = '' OR position(lower($2) in lower(c.title)) > 0 OR EXISTS (SELECT 1 FROM conversation_messages m WHERE m.conversation_id = c.id AND m.role = 'user' AND position(lower($2) in lower(m.content::text)) > 0)) AND ($3::timestamptz IS NULL OR (c.updated_at, c.id) < ($3, $4)) AND (NOT $6 OR c.record_id IS NULL) AND ($7::uuid IS NULL OR c.record_id = $7) AND ($8::uuid IS NULL OR c.context_id = $8) ORDER BY c.updated_at DESC, c.id DESC LIMIT $5")
+        Ok(sqlx::query_as("SELECT c.id, c.workspace_id, c.created_by_user_id, c.title, c.title_source, c.record_id, c.context_id, c.language, c.created_at, c.updated_at, c.archived_at FROM conversations c WHERE c.workspace_id = $1 AND c.archived_at IS NULL AND ($2 = '' OR position(lower($2) in lower(c.title)) > 0 OR EXISTS (SELECT 1 FROM conversation_messages m WHERE m.conversation_id = c.id AND m.role = 'user' AND position(lower($2) in lower(m.content::text)) > 0)) AND ($3::timestamptz IS NULL OR (c.updated_at, c.id) < ($3, $4)) AND (NOT $6 OR c.record_id IS NULL) AND ($7::uuid IS NULL OR c.record_id = $7) AND ($8::uuid IS NULL OR c.context_id = $8) ORDER BY c.updated_at DESC, c.id DESC LIMIT $5")
             .bind(self.workspace_id.0)
             .bind(query).bind(before_date).bind(before_id).bind(limit)
             .bind(unattached_only).bind(record_id).bind(context_id)
@@ -826,7 +843,7 @@ impl AttricatRepository {
         &self,
         conversation_id: Uuid,
     ) -> Result<Conversation, RepositoryError> {
-        sqlx::query_as("SELECT id, workspace_id, created_by_user_id, title, title_source, record_id, context_id, created_at, updated_at, archived_at FROM conversations WHERE id = $1 AND workspace_id = $2 AND archived_at IS NULL")
+        sqlx::query_as("SELECT id, workspace_id, created_by_user_id, title, title_source, record_id, context_id, language, created_at, updated_at, archived_at FROM conversations WHERE id = $1 AND workspace_id = $2 AND archived_at IS NULL")
             .bind(conversation_id).bind(self.workspace_id.0).fetch_optional(&self.pool).await?
             .ok_or(RepositoryError::NotFound("conversation"))
     }
@@ -836,7 +853,7 @@ impl AttricatRepository {
         conversation_id: Uuid,
         title: &str,
     ) -> Result<Conversation, RepositoryError> {
-        sqlx::query_as("UPDATE conversations SET title = $3, title_source = 'manual', updated_at = now() WHERE id = $1 AND workspace_id = $2 AND archived_at IS NULL RETURNING id, workspace_id, created_by_user_id, title, title_source, record_id, context_id, created_at, updated_at, archived_at")
+        sqlx::query_as("UPDATE conversations SET title = $3, title_source = 'manual', updated_at = now() WHERE id = $1 AND workspace_id = $2 AND archived_at IS NULL RETURNING id, workspace_id, created_by_user_id, title, title_source, record_id, context_id, language, created_at, updated_at, archived_at")
             .bind(conversation_id).bind(self.workspace_id.0).bind(title).fetch_optional(&self.pool).await?
             .ok_or(RepositoryError::NotFound("conversation"))
     }

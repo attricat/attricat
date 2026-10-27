@@ -33,8 +33,13 @@ pub(super) async fn smart_fill_record_form(
     principal @ super::auth::AuthenticatedPrincipal(user, _): super::auth::AuthenticatedPrincipal,
     super::auth::ActiveWorkspace(workspace_id): super::auth::ActiveWorkspace,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
-    ApiJson(input): ApiJson<SmartFillRequest>,
+    ApiJson(mut input): ApiJson<SmartFillRequest>,
 ) -> Result<Json<SmartFillProposal>, ApiError> {
+    input.language = input
+        .language
+        .as_deref()
+        .map(super::agents::conversation_language)
+        .transpose()?;
     if !repository
         .principal_may(
             principal.actor(),

@@ -15,6 +15,7 @@ use uuid::Uuid;
 
 use crate::{
     agent_provider::{ChatMessage, OpenAiCompatibleClient},
+    agent_runner::language_prompt,
     agent_tools::{ToolDefinition, ToolFunction},
     agents::{
         MAX_CONVERSATION_ATTACHMENTS, MAX_CONVERSATION_MESSAGE_BYTES, MAX_TOOL_CALL_ARGUMENT_BYTES,
@@ -41,6 +42,9 @@ pub struct SmartFillRequest {
     pub draft_values: BTreeMap<String, String>,
     #[serde(default)]
     pub attachment_ids: Vec<Uuid>,
+    /// The sender's BCP 47 interface language; the explanation is written in it.
+    #[serde(default)]
+    pub language: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -86,7 +90,7 @@ const MAX_SAFE_INTEGER: i64 = 9_007_199_254_740_991;
 /// Length of a `YYYY-MM-DD` date.
 const ISO_DATE_LEN: usize = 10;
 
-const SMART_FILL_SYSTEM_PROMPT: &str = "You are a record editing assistant. Answer the user's editing request using the selected record context, current unsaved form draft and conversation history. Propose only fields that should change, using supplied editable scalar field codes. Never invent facts. Return exactly one propose_record_form_values tool call with a short explanation of changes and uncertainties. The values are draft-only and require explicit user application and a separate save; never claim they were saved. Do not propose relationship or file fields.";
+const SMART_FILL_SYSTEM_PROMPT: &str = "You are a record editing assistant. Answer the user's editing request using the selected record context, current unsaved form draft and conversation history. Propose only fields that should change, using supplied editable scalar field codes. Never invent facts. Return exactly one propose_record_form_values tool call with a short explanation of changes and uncertainties. If the user asks a question instead of requesting an edit, answer it in the explanation and propose no fields. The values are draft-only and require explicit user application and a separate save; never claim they were saved. Do not propose relationship or file fields.";
 
 fn smart_fill_definition() -> ToolDefinition {
     ToolDefinition {
@@ -324,7 +328,10 @@ pub async fn propose_record_form_values(
             vec![
                 ChatMessage {
                     role: "system".to_owned(),
-                    content: Value::String(SMART_FILL_SYSTEM_PROMPT.to_owned()),
+                    content: Value::String(format!(
+                        "{SMART_FILL_SYSTEM_PROMPT}{}",
+                        language_prompt(input.language.as_deref())
+                    )),
                     tool_call_id: None,
                     tool_calls: None,
                 },
@@ -382,11 +389,19 @@ pub async fn propose_record_form_values(
                 &input.attachment_ids,
             )
             .await?;
-        let base_values = fields
-            .keys()
-            .map(|code| (code.clone(), input.draft_values.get(code).cloned()))
-            .collect::<BTreeMap<_, _>>();
-        repository.append_conversation_message(id, None, "assistant", json!({"draft_proposal":{"fields":fields,"explanation":explanation,"base_values":base_values}})).await?;
+        // Without values to apply, the explanation is an ordinary reply.
+        let content = if fields.is_empty() {
+            Value::String(explanation.clone())
+        } else {
+            let base_values = fields
+                .keys()
+                .map(|code| (code.clone(), input.draft_values.get(code).cloned()))
+                .collect::<BTreeMap<_, _>>();
+            json!({"draft_proposal":{"fields":fields,"explanation":explanation,"base_values":base_values}})
+        };
+        repository
+            .append_conversation_message(id, None, "assistant", content)
+            .await?;
         let title_repository = repository.clone();
         tokio::spawn(async move {
             crate::conversation_title::maybe_generate_title(&title_repository, &provider, id).await;

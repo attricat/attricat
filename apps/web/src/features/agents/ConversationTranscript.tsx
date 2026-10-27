@@ -11,6 +11,8 @@ import type {
 import { BulkEditProgress } from './BulkEditProgress';
 import { transcriptEndScrollMargin } from './constants';
 import { ThinkingIndicator } from './ThinkingIndicator';
+import { groupToolActivity } from './toolActivity';
+import { ToolActivityGroup } from './ToolActivityGroup';
 import { TranscriptMessage } from './TranscriptMessage';
 import { progressSizes } from '../../components/iconSizes';
 
@@ -51,14 +53,18 @@ export const ConversationTranscript = ({
 
   return (
     <Stack spacing={4} sx={{ flexGrow: 1, mx: 'auto', py: 4, width: '100%' }}>
-      {messages?.map((message) => (
-        <TranscriptMessage
-          getDraftValues={getDraftValues}
-          key={message.id}
-          message={message}
-          onApplyDraft={onApplyDraft}
-        />
-      ))}
+      {groupToolActivity(messages ?? []).map((group) =>
+        Array.isArray(group) ? (
+          <ToolActivityGroup key={group[0].id} messages={group} />
+        ) : (
+          <TranscriptMessage
+            getDraftValues={getDraftValues}
+            key={group.id}
+            message={group}
+            onApplyDraft={onApplyDraft}
+          />
+        ),
+      )}
       {isLoadingMessages && (
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
           <CircularProgress enableTrackSlot size={progressSizes.standard} />
