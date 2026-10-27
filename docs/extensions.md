@@ -1270,7 +1270,9 @@ Event handlers can be debounced too: `debounce_ms` (and optional
 `max_wait_ms`, default ten times the debounce) on an event handler delays a
 record's events until the record has been quiet that long and skips events a
 newer event of the same record supersedes, unless the event has waited its
-longest. A superseded delivery ends the export leases its earlier attempts
+longest while the record keeps changing. Once the newest event has itself been
+quiet for the debounce, it supersedes every older event however long they
+waited, so a backlog never pushes stale revisions. A superseded delivery ends the export leases its earlier attempts
 took, so the newer event's delivery is not held off. A retry request concerns one connection: only a later retry
 request of the same extension and connection supersedes it, and it
 supersedes no other event.
