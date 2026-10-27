@@ -22,6 +22,18 @@ import { lexiconText } from '../lexicon/lexicon';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { roleListOptions } from './queryOptions';
 import { recordBlueprintsOptions } from '../records/queryOptions';
+import { randomUuid } from '../../components/randomUuid';
+
+/** A shortcut with a key that survives changing its blueprint. */
+type NavigationRow = ExploreNavigationEntry & { rowKey: string };
+
+const navigationEntry = ({
+  blueprint_code,
+  visible_to_role_codes,
+}: NavigationRow): ExploreNavigationEntry => ({
+  blueprint_code,
+  visible_to_role_codes,
+});
 
 export const WorkspaceNavigationSection = ({
   canManage,
@@ -43,11 +55,20 @@ export const WorkspaceNavigationSection = ({
     ...recordBlueprintsOptions(),
     enabled: canManage,
   });
-  const [entries, setEntries] = useState<
-    ExploreNavigationEntry[] | undefined
-  >();
+  const [entries, setEntries] = useState<NavigationRow[] | undefined>();
+  // Role text as typed, by row key, so separators survive until saved.
   const [roleDrafts, setRoleDrafts] = useState<Record<string, string>>({});
-  const displayed = entries ?? navigation.data ?? [];
+  // Saved shortcuts are unique by blueprint, which keys them until edited.
+  const displayed =
+    entries ??
+    (navigation.data ?? []).map((entry) => ({
+      ...entry,
+      rowKey: entry.blueprint_code,
+    }));
+  const unusedBlueprint = blueprints.data?.find(
+    (blueprint) =>
+      !displayed.some((entry) => entry.blueprint_code === blueprint.code),
+  );
   const save = useMutation({
     mutationFn: updateExploreNavigation,
     onSuccess: (_, savedEntries) => {
@@ -79,20 +100,12 @@ export const WorkspaceNavigationSection = ({
         error={navigation.error ?? roles.error ?? blueprints.error}
       />
       {displayed.map((entry, index) => (
-        <Paper key={entry.blueprint_code} sx={{ p: 2 }}>
+        <Paper key={entry.rowKey} sx={{ p: 2 }}>
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
             <TextField
               disabled={save.isPending}
               label={t('workspace.navigationBlueprint')}
               onChange={(event) => {
-                setRoleDrafts((drafts) => {
-                  const next = { ...drafts };
-                  const previous = next[entry.blueprint_code];
-                  delete next[entry.blueprint_code];
-                  if (previous !== undefined)
-                    next[event.target.value] = previous;
-                  return next;
-                });
                 setEntries(
                   displayed.map((item, position) =>
                     position === index
@@ -129,7 +142,7 @@ export const WorkspaceNavigationSection = ({
                 const draft = event.target.value;
                 setRoleDrafts((current) => ({
                   ...current,
-                  [entry.blueprint_code]: draft,
+                  [entry.rowKey]: draft,
                 }));
                 setEntries(
                   displayed.map((item, position) =>
@@ -146,7 +159,7 @@ export const WorkspaceNavigationSection = ({
                 );
               }}
               value={
-                roleDrafts[entry.blueprint_code] ??
+                roleDrafts[entry.rowKey] ??
                 entry.visible_to_role_codes.join(', ')
               }
               sx={{ minWidth: navigationSelectMinWidth }}
@@ -156,7 +169,7 @@ export const WorkspaceNavigationSection = ({
               onClick={() => {
                 setRoleDrafts((drafts) => {
                   const next = { ...drafts };
-                  delete next[entry.blueprint_code];
+                  delete next[entry.rowKey];
                   return next;
                 });
                 setEntries(
@@ -194,18 +207,16 @@ export const WorkspaceNavigationSection = ({
       ))}
       <Stack direction="row" spacing={1}>
         <Button
-          disabled={save.isPending || !blueprints.data?.length}
+          disabled={save.isPending || !unusedBlueprint}
           onClick={() => {
-            const first = blueprints.data?.find(
-              (blueprint) =>
-                !displayed.some(
-                  (entry) => entry.blueprint_code === blueprint.code,
-                ),
-            );
-            if (first)
+            if (unusedBlueprint)
               setEntries([
                 ...displayed,
-                { blueprint_code: first.code, visible_to_role_codes: [] },
+                {
+                  blueprint_code: unusedBlueprint.code,
+                  rowKey: randomUuid(),
+                  visible_to_role_codes: [],
+                },
               ]);
           }}
           startIcon={<PlusIcon />}
@@ -214,7 +225,7 @@ export const WorkspaceNavigationSection = ({
         </Button>
         <Button
           disabled={save.isPending}
-          onClick={() => save.mutate(displayed)}
+          onClick={() => save.mutate(displayed.map(navigationEntry))}
           variant="contained"
         >
           {t('workspace.saveNavigation')}
