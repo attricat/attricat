@@ -1,7 +1,8 @@
-import { Alert, Box, Card, Skeleton, Stack, Typography } from '@mui/material';
+import { Box, Card, Skeleton, Stack, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { RouterButton } from '../../components/RouterLink';
+import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { smallIconSize } from '../../components/iconSizes';
 import { EmptyState } from '../../components/EmptyState';
 import { ExtensionRunIcon } from '../../components/systemIcons';
@@ -64,9 +65,11 @@ export const ExtensionRunsPage = () => {
           ))}
         </Stack>
       )}
-      {runs.isError && (
-        <Alert severity="error">{t('extensionRuns.loadFailed')}</Alert>
-      )}
+      <QueryErrorNotice
+        error={runs.error}
+        isRetrying={runs.isFetching}
+        onRetry={() => void runs.refetch()}
+      />
       {runs.data?.length === 0 && (
         <EmptyState icon={ExtensionRunIcon} title={t('extensionRuns.empty')} />
       )}

@@ -164,7 +164,13 @@ export const FieldConnectionList = ({
               }}
               i18nKey={connectionKey(connection, outgoing, others.length === 0)}
               t={t}
-              values={{ detail: connection.detail, name: connection.name }}
+              values={{
+                detail: connection.detail,
+                name:
+                  connection.version === undefined
+                    ? connection.name
+                    : `${connection.name} ${t('common.versionNumber', { version: connection.version })}`,
+              }}
             />
           </Typography>
         );

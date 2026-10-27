@@ -1,5 +1,4 @@
 import {
-  Alert,
   Box,
   Button,
   FormControlLabel,
@@ -15,6 +14,7 @@ import {
 } from '@mui/material';
 import { Link } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
+import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { FlaskConicalIcon, PlayIcon } from 'lucide-react';
 import type { Rule } from './api';
 import { revisionStatuses } from '../../api/revisionStatus';
@@ -23,13 +23,16 @@ import { RuleLifecycleChip } from './RuleCells';
 export const RulesSection = ({
   canManage,
   error,
+  onRetry,
   onRun,
   onToggle,
   running,
   rules,
 }: {
   canManage: boolean;
-  error: boolean;
+  /** The section's load failure, offered for retry. */
+  error: Error | null;
+  onRetry: () => void;
   onRun: (rule: Rule, dryRun: boolean) => void;
   onToggle: (rule: Rule, enabled: boolean) => void;
   running: boolean;
@@ -39,9 +42,9 @@ export const RulesSection = ({
   return (
     <>
       {error && (
-        <Alert severity="error" sx={{ mt: 3 }}>
-          {t('rules.errors.definitions')}
-        </Alert>
+        <Box sx={{ mt: 3 }}>
+          <QueryErrorNotice error={error} onRetry={onRetry} />
+        </Box>
       )}
       <Paper component="section" sx={{ mt: 3 }}>
         <Box sx={{ overflowX: 'auto' }}>

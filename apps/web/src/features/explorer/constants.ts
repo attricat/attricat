@@ -52,8 +52,6 @@ export const publicationStatuses = {
 
 export const relationshipPathSortErrorCode =
   'relationship_path_sort_requires_single_result_version' satisfies ApiErrorCode;
-/** Returned when a query names fields the searched blueprint lacks. */
-export const invalidInputErrorCode = 'invalid_input' satisfies ApiErrorCode;
 
 export const explorerColumnIds = {
   actions: 'actions',
@@ -99,8 +97,6 @@ export const overviewRecordsPerBlueprint = 5;
 export const overviewConcurrentSearches = 4;
 /** How long an overview stays fresh through focus changes and remounts. */
 export const overviewStaleTimeMs = 30_000;
-/** React Query's default retry count for unexpected failures. */
-export const defaultQueryRetries = 3;
 
 // Layout dimensions.
 /** The record panel floats over the results; keep most of them visible. */

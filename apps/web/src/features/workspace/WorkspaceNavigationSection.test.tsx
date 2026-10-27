@@ -106,4 +106,50 @@ describe('WorkspaceNavigationSection', () => {
         .hasAttribute('disabled'),
     ).toBe(true);
   });
+
+  it('keeps typed roles and saves plain entries after changing a blueprint', async () => {
+    vi.mocked(listExploreNavigation).mockResolvedValue([
+      { blueprint_code: 'product', visible_to_role_codes: [] },
+    ]);
+    vi.mocked(listRecordBlueprints).mockResolvedValue([
+      { code: 'product', name: 'Product' },
+      { code: 'other', name: 'Other' },
+    ] as never);
+    vi.mocked(listRoles).mockResolvedValue([]);
+    vi.mocked(updateExploreNavigation).mockResolvedValue(undefined as never);
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <WorkspaceNavigationSection canManage />
+      </QueryClientProvider>,
+    );
+    const roles = await screen.findByRole('textbox', {
+      name: 'Visible roles (comma separated)',
+    });
+    fireEvent.change(roles, { target: { value: 'reader,' } });
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Blueprint' }));
+    fireEvent.click(
+      await screen.findByRole('option', { name: 'Other (other)' }),
+    );
+    expect(roles.isConnected).toBe(true);
+    expect(roles).toHaveProperty('value', 'reader,');
+    expect(
+      screen
+        .getByRole('button', { name: 'Add shortcut' })
+        .hasAttribute('disabled'),
+    ).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add shortcut' }));
+    expect(
+      screen
+        .getByRole('button', { name: 'Add shortcut' })
+        .hasAttribute('disabled'),
+    ).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Save navigation' }));
+    await waitFor(() =>
+      expect(vi.mocked(updateExploreNavigation).mock.calls[0]?.[0]).toEqual([
+        { blueprint_code: 'other', visible_to_role_codes: ['reader'] },
+        { blueprint_code: 'product', visible_to_role_codes: [] },
+      ]),
+    );
+  });
 });

@@ -130,7 +130,7 @@ export const BlueprintsPage = () => {
                       />
                     </TableCell>
                     <TableCell>
-                      {t('blueprints.versionNumber', {
+                      {t('common.versionNumber', {
                         version: blueprint.version,
                       })}
                     </TableCell>

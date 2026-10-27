@@ -1,6 +1,6 @@
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { useForm } from '@tanstack/react-form';
 import {
-  Alert,
   Box,
   Button,
   Dialog,
@@ -37,7 +37,7 @@ export const SaveSearchDialog = ({
   open,
   title,
 }: {
-  error: string;
+  error: Error | null;
   isPending: boolean;
   onClose: () => void;
   onSave: (values: SaveSearchValues) => void;
@@ -121,7 +121,7 @@ export const SaveSearchDialog = ({
                 </TextField>
               )}
             </form.Field>
-            {error && <Alert severity="error">{error}</Alert>}
+            <ApiErrorAlert error={error} />
           </Stack>
         </Box>
       </DialogContent>

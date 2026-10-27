@@ -1,8 +1,8 @@
+import { latestRevisions } from '../../api/revisionStatus';
+import { FindingSeverityChip } from './FindingSeverityChip';
 import {
-  Alert,
   Box,
   Button,
-  Chip,
   FormControl,
   InputLabel,
   MenuItem,
@@ -17,6 +17,7 @@ import {
 } from '@mui/material';
 import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
+import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { LoadMoreButton } from '../../components/LoadMoreButton';
 import type { Blueprint } from '../blueprints/api';
@@ -30,11 +31,10 @@ import type { RuleRevisions } from './ruleRevisions';
 import {
   ANY_FINDING_FILTER,
   FINDING_FILTER_MIN_WIDTH,
-  FINDING_STATE_OPEN,
+  findingStates,
   findingSeverities,
   findingStateFilters,
 } from './constants';
-import { findingSeverityColor } from './findingSeverity';
 
 type FilterOption = { value: string; label: string };
 
@@ -88,15 +88,7 @@ const FindingFilter = ({
 
 /** Each rule once, named by its latest revision. */
 const ruleOptions = (rules: readonly Rule[]): FilterOption[] =>
-  [
-    ...rules
-      .reduce((latest, rule) => {
-        const known = latest.get(rule.id);
-        if (!known || rule.version > known.version) latest.set(rule.id, rule);
-        return latest;
-      }, new Map<string, Rule>())
-      .values(),
-  ]
+  latestRevisions(rules, (rule) => rule.id)
     .map((rule) => ({ value: rule.id, label: rule.name }))
     .sort((a, b) => a.label.localeCompare(b.label));
 
@@ -104,6 +96,7 @@ export const FindingsSection = ({
   acknowledging,
   canManage,
   error,
+  onRetry,
   findings,
   filters,
   onFiltersChange,
@@ -120,7 +113,9 @@ export const FindingsSection = ({
 }: {
   acknowledging: boolean;
   canManage: boolean;
-  error: boolean;
+  /** The section's load failure, offered for retry. */
+  error: Error | null;
+  onRetry: () => void;
   findings: readonly Finding[] | undefined;
   filters: FindingsSearch;
   onFiltersChange: (filters: FindingsSearch) => void;
@@ -143,9 +138,9 @@ export const FindingsSection = ({
   return (
     <>
       {error && (
-        <Alert severity="error" sx={{ mt: 3 }}>
-          {t('rules.errors.findings')}
-        </Alert>
+        <Box sx={{ mt: 3 }}>
+          <QueryErrorNotice error={error} onRetry={onRetry} />
+        </Box>
       )}
       <Paper component="section" sx={{ mt: 3 }}>
         <Stack
@@ -233,13 +228,7 @@ export const FindingsSection = ({
             {(findings ?? []).map((finding) => (
               <TableRow key={finding.id}>
                 <TableCell>
-                  <Chip
-                    color={findingSeverityColor(finding.severity)}
-                    label={t(`rules.severities.${finding.severity}`, {
-                      defaultValue: finding.severity,
-                    })}
-                    size="small"
-                  />
+                  <FindingSeverityChip severity={finding.severity} />
                 </TableCell>
                 <TableCell>{finding.message}</TableCell>
                 <TableCell>
@@ -261,7 +250,7 @@ export const FindingsSection = ({
                   })}
                 </TableCell>
                 <TableCell>
-                  {canManage && finding.state === FINDING_STATE_OPEN && (
+                  {canManage && finding.state === findingStates.open && (
                     <Button
                       disabled={acknowledging}
                       size="small"

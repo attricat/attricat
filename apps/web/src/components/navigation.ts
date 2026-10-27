@@ -17,19 +17,19 @@ import {
   WorkflowIcon,
   WorkspaceIcon,
 } from './systemIcons';
+import { capabilities } from '../features/auth/capabilities';
+import type { Capability } from '../features/auth/useCan';
 
-type NavigationCapabilities = {
-  agents_run?: boolean;
-  audit_read?: boolean;
-  data_health_read?: boolean;
-  extensions_read?: boolean;
-  members_manage?: boolean;
-  roles_manage?: boolean;
-  workflows_read?: boolean;
-  workspace_navigation_manage?: boolean;
-  agents_manage?: boolean;
-  rules_read?: boolean;
-};
+type NavigationCapabilities = Partial<Record<Capability, boolean>>;
+
+/**
+ * An item with `anyOf` shows only to users granted at least one of those
+ * capabilities; items without it always show.
+ */
+const isAllowed = (
+  anyOf: readonly Capability[] | undefined,
+  granted: NavigationCapabilities | undefined,
+) => !anyOf || anyOf.some((capability) => granted?.[capability]);
 
 export const navigationRoutes = {
   agents: '/agents',
@@ -50,7 +50,7 @@ export const navigationRoutes = {
   systemHealth: '/manage/system-health',
   reusableAttributes: '/manage/reusable-attributes',
   workflows: '/manage/workflows',
-  workspace: '/manage/workspace/members',
+  workspace: '/manage/workspace',
 } as const;
 
 // Routes rendered outside the authenticated application shell.
@@ -70,6 +70,7 @@ const primaryNavigationItems = [
     icon: AgentIcon,
     labelKey: 'navigation.agents',
     to: navigationRoutes.agents,
+    anyOf: [capabilities.agentsRun],
   },
 ] as const;
 
@@ -116,6 +117,7 @@ const managementNavigationItems = [
     icon: RuleIcon,
     labelKey: 'navigation.rules',
     to: navigationRoutes.rules,
+    anyOf: [capabilities.rulesRead],
   },
   {
     descriptionKey: 'management.workflowsDescription',
@@ -123,6 +125,7 @@ const managementNavigationItems = [
     icon: WorkflowIcon,
     labelKey: 'navigation.workflows',
     to: navigationRoutes.workflows,
+    anyOf: [capabilities.workflowsRead],
   },
   {
     descriptionKey: 'management.extensionsDescription',
@@ -130,6 +133,7 @@ const managementNavigationItems = [
     icon: ExtensionIcon,
     labelKey: 'navigation.extensions',
     to: navigationRoutes.extensions,
+    anyOf: [capabilities.extensionsRead],
   },
   {
     descriptionKey: 'management.exportsDescription',
@@ -144,6 +148,7 @@ const managementNavigationItems = [
     icon: DataHealthIcon,
     labelKey: 'navigation.dataHealth',
     to: navigationRoutes.dataHealth,
+    anyOf: [capabilities.dataHealthRead],
   },
   {
     descriptionKey: 'management.workspaceDescription',
@@ -151,6 +156,12 @@ const managementNavigationItems = [
     icon: WorkspaceIcon,
     labelKey: 'navigation.workspaceManagement',
     to: navigationRoutes.workspace,
+    anyOf: [
+      capabilities.membersManage,
+      capabilities.rolesManage,
+      capabilities.workspaceNavigationManage,
+      capabilities.agentsManage,
+    ],
   },
   {
     descriptionKey: 'management.governanceDescription',
@@ -158,6 +169,7 @@ const managementNavigationItems = [
     icon: AuditLogIcon,
     labelKey: 'navigation.auditLog',
     to: navigationRoutes.auditLog,
+    anyOf: [capabilities.auditRead],
   },
   {
     descriptionKey: 'management.backgroundProcessingDescription',
@@ -165,6 +177,7 @@ const managementNavigationItems = [
     icon: BackgroundProcessingIcon,
     labelKey: 'navigation.backgroundProcessing',
     to: navigationRoutes.backgroundProcessing,
+    anyOf: [capabilities.dataHealthRead],
   },
   {
     descriptionKey: 'management.systemHealthDescription',
@@ -172,14 +185,15 @@ const managementNavigationItems = [
     icon: SystemHealthIcon,
     labelKey: 'navigation.systemHealth',
     to: navigationRoutes.systemHealth,
+    anyOf: [capabilities.dataHealthRead],
   },
 ] as const;
 
 export const getVisiblePrimaryNavigationItems = (
-  capabilities?: NavigationCapabilities,
+  granted?: NavigationCapabilities,
 ) =>
-  primaryNavigationItems.filter(
-    (item) => item.to !== navigationRoutes.agents || capabilities?.agents_run,
+  primaryNavigationItems.filter((item) =>
+    isAllowed('anyOf' in item ? item.anyOf : undefined, granted),
   );
 
 export const profileNavigationItem = {
@@ -189,28 +203,8 @@ export const profileNavigationItem = {
 } as const;
 
 export const getVisibleManagementNavigationItems = (
-  capabilities?: NavigationCapabilities,
+  granted?: NavigationCapabilities,
 ) =>
-  managementNavigationItems.filter((item) => {
-    if (item.to === navigationRoutes.workspace) {
-      return Boolean(
-        capabilities?.members_manage ||
-        capabilities?.roles_manage ||
-        capabilities?.workspace_navigation_manage ||
-        capabilities?.agents_manage,
-      );
-    }
-    if (
-      item.to === navigationRoutes.backgroundProcessing ||
-      item.to === navigationRoutes.dataHealth ||
-      item.to === navigationRoutes.systemHealth
-    )
-      return capabilities?.data_health_read;
-    if (item.to === navigationRoutes.auditLog) return capabilities?.audit_read;
-    if (item.to === navigationRoutes.extensions)
-      return capabilities?.extensions_read;
-    if (item.to === navigationRoutes.workflows)
-      return capabilities?.workflows_read;
-    if (item.to === navigationRoutes.rules) return capabilities?.rules_read;
-    return true;
-  });
+  managementNavigationItems.filter((item) =>
+    isAllowed('anyOf' in item ? item.anyOf : undefined, granted),
+  );

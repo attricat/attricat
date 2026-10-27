@@ -1,6 +1,11 @@
 import { z } from 'zod';
 import { revisionStatusSchema } from '../../api/revisionStatus';
-import { findingSeverities, findingStateFilters } from './constants';
+import {
+  findingSeverities,
+  findingStateFilters,
+  findingStates,
+  ruleRunStatuses,
+} from './constants';
 
 export const ruleSchema = z.object({
   id: z.uuid(),
@@ -25,7 +30,7 @@ export const ruleRunSchema = z.object({
   source: z.enum(['manual', 'schedule', 'event', 'post_import']),
   dry_run: z.boolean(),
   scope_record_id: z.uuid().nullable(),
-  status: z.string(),
+  status: z.enum(ruleRunStatuses),
   candidate_cursor: z.uuid().nullable(),
   candidates_evaluated: z.number().int().nonnegative(),
   findings_created: z.number().int().nonnegative(),
@@ -41,10 +46,10 @@ export const findingSchema = z.object({
   rule_version: z.number().int().positive(),
   record_id: z.uuid(),
   context_id: z.uuid().nullable(),
-  severity: z.string(),
+  severity: z.enum(findingSeverities),
   message: z.string(),
   evidence: z.unknown(),
-  state: z.enum(['open', 'acknowledged', 'resolved']),
+  state: z.enum(findingStates),
   acknowledged_at: z.string().nullable(),
   resolved_at: z.string().nullable(),
   created_at: z.string(),

@@ -27,6 +27,7 @@ import { DefinitionInsertMenu } from './DefinitionInsertMenu';
 import { updateServerDiagnostic } from './definitionLanguage';
 import { snippetEdit, type DefinitionSnippet } from './definitionSnippets';
 import { checkStatuses, type DefinitionCheck } from './useDefinitionCheck';
+import { captionIconSize } from '../../components/iconSizes';
 
 type Mounted = { editor: editor.IStandaloneCodeEditor; monaco: Monaco };
 
@@ -54,7 +55,7 @@ const CheckStatusChip = ({
     case checkStatuses.checking:
       return (
         <Chip
-          icon={<CircularProgress aria-hidden size={14} />}
+          icon={<CircularProgress aria-hidden size={captionIconSize} />}
           label={t('definitionEditor.check.checking')}
           variant="outlined"
         />
@@ -121,10 +122,10 @@ export const DefinitionWorkspace = ({
   });
   const errorRange = useMemo(
     () =>
-      check.error === undefined
+      check.serverMessage === undefined
         ? undefined
-        : locateDefinitionError(value, check.error),
-    [check.error, value],
+        : locateDefinitionError(value, check.serverMessage),
+    [check.serverMessage, value],
   );
   const errorLine = errorRange && lineOf(value, errorRange.start);
 

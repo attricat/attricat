@@ -1,6 +1,6 @@
+import { LoadMoreButton } from '../../components/LoadMoreButton';
 import {
   Box,
-  Button,
   CircularProgress,
   IconButton,
   List,
@@ -340,13 +340,11 @@ const BrowseLevel = ({
       ))}
       {children.hasNextPage && (
         <ListItem disablePadding sx={{ pl: indent + 4 }}>
-          <Button
-            disabled={children.isFetchingNextPage}
-            onClick={() => void children.fetchNextPage()}
-            size="small"
-          >
-            {t('common.loadMore')}
-          </Button>
+          <LoadMoreButton
+            compact
+            isLoading={children.isFetchingNextPage}
+            onLoadMore={() => void children.fetchNextPage()}
+          />
         </ListItem>
       )}
     </List>

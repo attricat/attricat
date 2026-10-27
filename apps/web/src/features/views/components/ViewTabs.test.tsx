@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import '../../../i18n';
 import type { ViewNode } from '../../records/api';
@@ -35,6 +36,23 @@ const description = (name: string) =>
   screen.getByRole('tab', { name }).getAttribute('aria-description');
 
 describe('ViewTabs', () => {
+  it('falls back to the last tab when the selected one is removed', async () => {
+    const user = userEvent.setup();
+    const renderNodes = (nodes: ViewNode[]) =>
+      nodes.map((node) => (node.type === 'field' ? node.field : '')).join();
+    const { rerender } = render(<ViewTabs render={renderNodes} tabs={tabs} />);
+    await user.click(screen.getByRole('tab', { name: 'Images' }));
+    expect(screen.getByRole('tabpanel').textContent).toBe('photo');
+
+    rerender(<ViewTabs render={renderNodes} tabs={tabs.slice(0, 1)} />);
+    expect(screen.getByRole('tabpanel').textContent).toBe('price');
+    expect(
+      screen
+        .getByRole('tab', { name: 'Overview' })
+        .getAttribute('aria-selected'),
+    ).toBe('true');
+  });
+
   it('marks tabs that hold a field with an error', () => {
     render(
       <ViewTabs

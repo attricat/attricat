@@ -29,12 +29,18 @@ import { RevokeTokenDialog } from './RevokeTokenDialog';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { StatusChip } from '../../components/StatusChip';
 
-type TokenStatus = 'active' | 'expired' | 'revoked';
+const tokenStatuses = {
+  active: 'active',
+  expired: 'expired',
+  revoked: 'revoked',
+} as const;
+type TokenStatus = (typeof tokenStatuses)[keyof typeof tokenStatuses];
 
 const tokenStatus = (token: PersonalToken, now: Date): TokenStatus => {
-  if (token.revoked_at) return 'revoked';
-  if (token.expires_at && new Date(token.expires_at) <= now) return 'expired';
-  return 'active';
+  if (token.revoked_at) return tokenStatuses.revoked;
+  if (token.expires_at && new Date(token.expires_at) <= now)
+    return tokenStatuses.expired;
+  return tokenStatuses.active;
 };
 
 const statusChips = {
@@ -49,7 +55,7 @@ const statusChips = {
     label: 'profile.tokenExpired',
   },
   revoked: { color: 'default', icon: BanIcon, label: 'profile.tokenRevoked' },
-} as const;
+} as const satisfies Record<TokenStatus, unknown>;
 
 const tokenGridSx = {
   display: 'grid',
@@ -72,7 +78,7 @@ const TokenCard = ({
   const { t } = useTranslation();
   const status = tokenStatus(token, now);
   const chip = statusChips[status];
-  const inactive = status !== 'active';
+  const inactive = status !== tokenStatuses.active;
   const details: Array<[string, ReactNode]> = [
     [
       'profile.created',

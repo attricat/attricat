@@ -25,8 +25,13 @@ export const recordQueryKeys = {
   searches: () => ['records'] as const,
   blueprints: () => ['record-blueprints'] as const,
   contexts: () => ['attribute-contexts'] as const,
+  /**
+   * A blueprint revision as records parse it. It is kept apart from the
+   * blueprint pages' entry for the same revision, which a different schema
+   * parses into a different shape.
+   */
   blueprintRevision: (id: string | undefined, version: number | undefined) =>
-    ['blueprint-revision', id, version] as const,
+    ['record-blueprint-revision', id, version] as const,
   blueprintsByCode: () => ['blueprint-by-code'] as const,
   blueprintByCode: (code: string | undefined, version: number | undefined) =>
     [...recordQueryKeys.blueprintsByCode(), code, version] as const,

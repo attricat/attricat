@@ -1,3 +1,5 @@
+import { WorkflowIcon } from '../../components/systemIcons';
+import { EmptyState } from '../../components/EmptyState';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Box,
@@ -93,7 +95,10 @@ export const WorkflowRunTable = ({
             {runs.length === 0 && (
               <TableRow>
                 <TableCell colSpan={runTableEmptyColSpan}>
-                  {t('workflows.noRuns')}
+                  <EmptyState
+                    icon={WorkflowIcon}
+                    title={t('workflows.noRuns')}
+                  />
                 </TableCell>
               </TableRow>
             )}

@@ -168,7 +168,8 @@ export const CreateRecordPage = ({
           guardUnsavedChanges
           key={formKey}
           // A background refresh must not disable the fields being filled in.
-          isLoadingBlueprint={blueprint.isLoading || create.isPending}
+          isLoadingBlueprint={blueprint.isLoading}
+          isSubmitting={create.isPending}
           lockedBlueprint={search.locked}
           onChangeBlueprint={() => {
             // The values and files chosen for the old blueprint are discarded.

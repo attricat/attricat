@@ -1,4 +1,10 @@
-export type ApiHealthState = 'checking' | 'ready' | 'restarting';
+export const apiHealthStates = {
+  checking: 'checking',
+  ready: 'ready',
+  restarting: 'restarting',
+} as const;
+export type ApiHealthState =
+  (typeof apiHealthStates)[keyof typeof apiHealthStates];
 
 export const apiHealthStatusKeys = {
   checking: 'inspector.checking',
@@ -13,4 +19,4 @@ export const apiHealthSummaryKeys = {
 } as const satisfies Record<ApiHealthState, string>;
 
 export const apiHealthColor = (state: ApiHealthState) =>
-  state === 'ready' ? 'success.main' : 'warning.main';
+  state === apiHealthStates.ready ? 'success.main' : 'warning.main';

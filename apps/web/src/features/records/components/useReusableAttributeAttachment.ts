@@ -2,25 +2,20 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   attachReusableAttribute,
   attachReusableAttributeGroup,
-  listReusableAttributeGroups,
-  listReusableAttributes,
 } from '../../reusable-attributes/api';
 import { latestReusableAttributeRevisions } from '../../reusable-attributes/latestRevisions';
-import { reusableAttributeQueryKeys } from '../../reusable-attributes/queryKeys';
+import {
+  reusableAttributeListOptions,
+  reusableAttributeGroupListOptions,
+} from '../../reusable-attributes/queryOptions';
 
 /** Loads reusable attributes and groups and attaches them to a record. */
 export const useReusableAttributeAttachment = (
   recordId: string,
   onAttached: () => void,
 ) => {
-  const reusableAttributes = useQuery({
-    queryKey: reusableAttributeQueryKeys.definitions(),
-    queryFn: ({ signal }) => listReusableAttributes(false, signal),
-  });
-  const reusableGroups = useQuery({
-    queryKey: reusableAttributeQueryKeys.groups(),
-    queryFn: ({ signal }) => listReusableAttributeGroups(signal),
-  });
+  const reusableAttributes = useQuery(reusableAttributeListOptions());
+  const reusableGroups = useQuery(reusableAttributeGroupListOptions());
   const attach = useMutation({
     mutationFn: (revisionId: string) =>
       attachReusableAttribute(recordId, revisionId),

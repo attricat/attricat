@@ -1,7 +1,6 @@
 import { Button, List, ListItem, ListItemText, Paper } from '@mui/material';
 import { useMutation } from '@tanstack/react-query';
 import { Trans, useTranslation } from 'react-i18next';
-import { errorMessage } from '../../api/errors';
 import { Timestamp } from '../../time/Timestamp';
 import { revokeInvitation } from './api';
 import type { Invitation } from './schemas';
@@ -13,14 +12,14 @@ export const InvitationList = ({
 }: {
   invitations?: Invitation[];
   onChanged: () => unknown;
-  onError: (message?: string) => void;
+  onError: (error?: Error) => void;
 }) => {
   const { t } = useTranslation();
   const revoke = useMutation({
     mutationFn: revokeInvitation,
     onMutate: () => onError(undefined),
     onSuccess: onChanged,
-    onError: (reason) => onError(errorMessage(reason)),
+    onError: (reason) => onError(reason),
   });
   return (
     <Paper>

@@ -14,8 +14,8 @@ export const notificationSubjectKinds = {
   agentConversation: 'agent_conversation',
 } as const;
 
-export const inboxFilters = ['all', 'unread'] as const;
-export type InboxFilter = (typeof inboxFilters)[number];
+export const inboxFilters = { all: 'all', unread: 'unread' } as const;
+export type InboxFilter = (typeof inboxFilters)[keyof typeof inboxFilters];
 
 /** Notification kinds with a translated message; others show their title. */
 export const notificationKinds = {

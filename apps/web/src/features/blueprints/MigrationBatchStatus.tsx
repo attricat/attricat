@@ -120,7 +120,7 @@ export const MigrationBatchStatus = ({
               {batches.data.map((batch) => (
                 <TableRow key={batch.id}>
                   <TableCell>
-                    {t('blueprints.versionNumber', {
+                    {t('common.versionNumber', {
                       version: batch.target_version,
                     })}
                   </TableCell>

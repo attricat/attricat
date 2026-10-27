@@ -9,7 +9,6 @@ import {
   Typography,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { errorMessage } from '../../api/errors';
 import { useExclusiveMutation } from '../../components/useExclusiveMutation';
 import {
   createInvitation,
@@ -47,7 +46,7 @@ export const InvitationForm = ({
 }: {
   createUser?: boolean;
   onCreated: () => unknown;
-  onError: (message?: string) => void;
+  onError: (error?: Error) => void;
   roles?: { code: string; id: string }[];
   workspaceId?: string;
 }) => {
@@ -87,7 +86,7 @@ export const InvitationForm = ({
       void onCreated();
       form.reset();
     },
-    onError: (reason) => onError(errorMessage(reason)),
+    onError: (reason) => onError(reason),
   });
   const form = useForm({
     defaultValues: {

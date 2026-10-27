@@ -194,7 +194,8 @@ fields = ["stock_number", "title"]
       {
         kind: attributeConnectionKinds.include,
         attributeCodes: ['meta_description'],
-        name: 'cars_seo v1',
+        name: 'cars_seo',
+        version: 1,
         detail: 'seo.meta_description',
       },
     ]);

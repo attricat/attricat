@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -10,7 +10,6 @@ import {
   type ExplorerSearch,
 } from '../explorer/search';
 import {
-  createSavedView,
   createViewStateLink,
   deleteSavedView,
   getSavedView,
@@ -25,7 +24,7 @@ import {
   VIEW_STATE_PARAM,
 } from './constants';
 import { savedViewQueryKeys } from './queryKeys';
-import type { SaveSearchValues } from './SaveSearchDialog';
+import { useCreateSavedView } from './useCreateSavedView';
 import type { SavedView } from './schemas';
 
 export const useSavedSearchActions = ({
@@ -42,7 +41,6 @@ export const useSavedSearchActions = ({
   const client = useQueryClient();
   const { show } = useToast();
   const [saveOpen, setSaveOpen] = useState(false);
-  const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const originalView = useQuery({
     queryKey: savedViewQueryKeys.detail(search.sourceView ?? '', false),
@@ -58,16 +56,7 @@ export const useSavedSearchActions = ({
     search.sourceView &&
     new URLSearchParams(window.location.search).has(SOURCE_VIEW_PARAM),
   );
-  const save = useMutation({
-    mutationFn: (value: SaveSearchValues) =>
-      createSavedView(value.name, value.description, value.visibility, search),
-    onSuccess: (view) => {
-      void client.invalidateQueries({ queryKey: savedViewQueryKeys.all() });
-      setSaveOpen(false);
-      void navigate({ to: '/', search: { savedView: view.id } });
-    },
-    onError: (cause) => setError(errorMessage(cause)),
-  });
+  const save = useCreateSavedView(() => setSaveOpen(false));
 
   const runBusy = async (action: () => Promise<void>) => {
     setBusy(true);
@@ -103,10 +92,9 @@ export const useSavedSearchActions = ({
   };
   const canDelete = (view: SavedView) =>
     Boolean(userId && view.owner_user_id === userId);
-  const remove = (id: string) => {
-    if (!window.confirm(t('explorer.deleteSavedSearchConfirm')))
-      return Promise.resolve();
-    return runBusy(async () => {
+  // The caller confirms first; failures are reported as a toast.
+  const remove = (id: string) =>
+    runBusy(async () => {
       await deleteSavedView(id);
       // Leave the deleted search first, so the refresh below does not refetch
       // it while it is still open and replace the Explorer with a 404.
@@ -118,7 +106,6 @@ export const useSavedSearchActions = ({
       client.removeQueries({ queryKey: savedViewQueryKeys.detail(id, false) });
       await client.invalidateQueries({ queryKey: savedViewQueryKeys.all() });
     });
-  };
   const copyLink = () =>
     runBusy(async () => {
       const url = new URL(window.location.href);
@@ -140,7 +127,7 @@ export const useSavedSearchActions = ({
     });
 
   const openSaveDialog = () => {
-    setError('');
+    save.reset();
     setSaveOpen(true);
   };
   const openView = (id: string) =>
@@ -162,7 +149,6 @@ export const useSavedSearchActions = ({
     closeSaveDialog: () => setSaveOpen(false),
     copyLink,
     discard,
-    error,
     isDraft,
     openSaveDialog,
     openView,

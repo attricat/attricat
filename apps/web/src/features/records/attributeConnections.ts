@@ -1,3 +1,4 @@
+import { isJsonObject } from '../../api/jsonObject';
 import { parse } from 'smol-toml';
 import type { Rule } from '../rules/schemas';
 import type { Attribute } from './api';
@@ -8,6 +9,10 @@ import {
   statusCodeLabel,
   statusOptionLabel,
 } from './status';
+import {
+  recordSchemaChecksKeyword,
+  relationshipPredicateTypes,
+} from './constants';
 
 /** How a blueprint ties an attribute to others. */
 export const attributeConnectionKinds = {
@@ -35,14 +40,14 @@ export type AttributeConnection = {
   sources?: readonly string[];
   /** The check, key, rule, mixin or status attribute behind it. */
   name?: string;
+  /** The mixin version an included attribute comes from. */
+  version?: number;
   /** Status options, a transition, or the mixin attribute selected. */
   detail?: string;
 };
 
 type JsonObject = Record<string, unknown>;
 
-const isObject = (value: unknown): value is JsonObject =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
 const strings = (value: unknown) =>
   Array.isArray(value)
     ? value.filter((item): item is string => typeof item === 'string')
@@ -58,7 +63,7 @@ export const predicateAttributeCodes = (
   predicate: unknown,
   linked = false,
 ): string[] => {
-  if (!isObject(predicate)) return [];
+  if (!isJsonObject(predicate)) return [];
   const own = linked
     ? [predicate.subject_attribute_code]
     : [
@@ -68,11 +73,14 @@ export const predicateAttributeCodes = (
       ];
   // `referenced_by` names a relationship of the referencing blueprint.
   const relationship =
-    predicate.type === 'linked' || predicate.type === 'acyclic'
+    predicate.type === relationshipPredicateTypes.linked ||
+    predicate.type === relationshipPredicateTypes.acyclic
       ? [predicate.relationship_code]
       : [];
   const nestedLinked =
-    linked || predicate.type === 'linked' || predicate.type === 'referenced_by';
+    linked ||
+    predicate.type === relationshipPredicateTypes.linked ||
+    predicate.type === relationshipPredicateTypes.referencedBy;
   const nested = [
     predicate.predicate,
     ...(Array.isArray(predicate.predicates) ? predicate.predicates : []),
@@ -86,9 +94,11 @@ export const predicateAttributeCodes = (
 
 /** Attributes a JSON Schema part constrains at the record's root. */
 const schemaAttributeCodes = (schema: unknown) =>
-  isObject(schema)
+  isJsonObject(schema)
     ? unique([
-        ...(isObject(schema.properties) ? Object.keys(schema.properties) : []),
+        ...(isJsonObject(schema.properties)
+          ? Object.keys(schema.properties)
+          : []),
         ...strings(schema.required),
       ])
     : [];
@@ -120,7 +130,7 @@ const conditionalSchemas = (schema: JsonObject): AttributeConnection[] => [
     : []),
   ...['allOf', 'anyOf', 'oneOf'].flatMap((keyword) =>
     Array.isArray(schema[keyword])
-      ? schema[keyword].filter(isObject).flatMap(conditionalSchemas)
+      ? schema[keyword].filter(isJsonObject).flatMap(conditionalSchemas)
       : [],
   ),
 ];
@@ -128,15 +138,16 @@ const conditionalSchemas = (schema: JsonObject): AttributeConnection[] => [
 const recordSchemaConnections = (
   recordSchema: unknown,
 ): AttributeConnection[] => {
-  if (!isObject(recordSchema)) return [];
-  const dependentRequired = isObject(recordSchema.dependentRequired)
+  if (!isJsonObject(recordSchema)) return [];
+  const dependentRequired = isJsonObject(recordSchema.dependentRequired)
     ? recordSchema.dependentRequired
     : {};
-  const dependentSchemas = isObject(recordSchema.dependentSchemas)
+  const dependentSchemas = isJsonObject(recordSchema.dependentSchemas)
     ? recordSchema.dependentSchemas
     : {};
-  const checks = Array.isArray(recordSchema['x-attricat-checks'])
-    ? recordSchema['x-attricat-checks'].filter(isObject)
+  const declaredChecks = recordSchema[recordSchemaChecksKeyword];
+  const checks = Array.isArray(declaredChecks)
+    ? declaredChecks.filter(isJsonObject)
     : [];
   return [
     ...strings(recordSchema.required).map((code) => ({
@@ -228,10 +239,10 @@ const statusConnections = (
 
 const ruleConnections = (rules: readonly Rule[]): AttributeConnection[] =>
   rules.flatMap((rule) => {
-    const plan = isObject(rule.compiled_plan) ? rule.compiled_plan : {};
-    const enforcement = isObject(plan.enforcement) ? plan.enforcement : {};
+    const plan = isJsonObject(rule.compiled_plan) ? rule.compiled_plan : {};
+    const enforcement = isJsonObject(plan.enforcement) ? plan.enforcement : {};
     const transitions = Array.isArray(enforcement.transitions)
-      ? enforcement.transitions.filter(isObject)
+      ? enforcement.transitions.filter(isJsonObject)
       : [];
     const codes = unique([
       ...predicateAttributeCodes(plan.predicate),
@@ -260,16 +271,16 @@ const definitionConnections = (definition: string): AttributeConnection[] => {
   }
   const includes = new Map(
     (Array.isArray(source.includes) ? source.includes : [])
-      .filter(isObject)
+      .filter(isJsonObject)
       .map((include) => [include.alias, include]),
   );
-  const views = isObject(source.views) ? source.views : {};
-  const dropdown = isObject(views.dropdown_option)
+  const views = isJsonObject(source.views) ? source.views : {};
+  const dropdown = isJsonObject(views.dropdown_option)
     ? strings(views.dropdown_option.fields)
     : [];
   return [
     ...(Array.isArray(source.unique_keys) ? source.unique_keys : [])
-      .filter(isObject)
+      .filter(isJsonObject)
       .flatMap((key) => {
         const codes = strings(key.attributes);
         return codes.length > 0 && typeof key.code === 'string'
@@ -291,7 +302,7 @@ const definitionConnections = (definition: string): AttributeConnection[] => {
         ]
       : []),
     ...(Array.isArray(source.attributes) ? source.attributes : [])
-      .filter(isObject)
+      .filter(isJsonObject)
       .flatMap((attribute) => {
         if (
           typeof attribute.code !== 'string' ||
@@ -303,10 +314,14 @@ const definitionConnections = (definition: string): AttributeConnection[] => {
           {
             kind: attributeConnectionKinds.include,
             attributeCodes: [attribute.code],
-            name:
-              include && typeof include.code === 'string'
-                ? `${include.code} v${String(include.version)}`
-                : attribute.from,
+            ...(include && typeof include.code === 'string'
+              ? {
+                  name: include.code,
+                  ...(typeof include.version === 'number' && {
+                    version: include.version,
+                  }),
+                }
+              : { name: attribute.from }),
             detail: attribute.from,
           },
         ];

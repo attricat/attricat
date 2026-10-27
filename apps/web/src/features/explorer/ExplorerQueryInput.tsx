@@ -43,6 +43,7 @@ import {
   QuerySegmentsProvider,
 } from './QueryHighlightedInput';
 import { QuerySuggestionOption } from './QuerySuggestionOption';
+import { errorMessage } from '../../api/errors';
 
 type Props = {
   value: string;
@@ -81,11 +82,8 @@ export const ExplorerQueryInput = ({
   const [open, setOpen] = useState(false);
   const [focused, setFocused] = useState(false);
   const [active, setActive] = useState(-1);
-  const { schema, blueprintNames, targetsLoading } = useQuerySchema(
-    blueprint,
-    blueprints,
-    value,
-  );
+  const { schema, blueprintNames, targetsError, targetsLoading } =
+    useQuerySchema(blueprint, blueprints, value);
   const segments = useMemo(
     () => highlightQuery(value, schema),
     [value, schema],
@@ -105,8 +103,12 @@ export const ExplorerQueryInput = ({
       ? completion.context.selector
       : undefined;
   const loading = Boolean(completion?.loading && targetsLoading);
+  const loadFailure =
+    completion?.loading && !targetsLoading ? targetsError : undefined;
   const showPopup =
-    open && focused && Boolean(suggestions.length || loading || valueHint);
+    open &&
+    focused &&
+    Boolean(suggestions.length || loading || loadFailure || valueHint);
   const activeIndex = active < suggestions.length ? active : -1;
 
   useLayoutEffect(() => {
@@ -306,6 +308,16 @@ export const ExplorerQueryInput = ({
                 {t('explorer.loadingRelationshipFields')}
               </Typography>
             </Stack>
+          )}
+          {loadFailure && (
+            <Typography
+              color="error"
+              role="alert"
+              sx={{ px: 3, py: 2 }}
+              variant="body2"
+            >
+              {errorMessage(loadFailure)}
+            </Typography>
           )}
           {suggestions.length > 0 && (
             <Box

@@ -64,7 +64,9 @@ export const ReusableAttributesTable = ({
                     </Typography>
                   </Link>
                 </TableCell>
-                <TableCell>v{attribute.version}</TableCell>
+                <TableCell>
+                  {t('common.versionNumber', { version: attribute.version })}
+                </TableCell>
                 <TableCell>
                   <ValueTypeLabel valueType={attribute.value_type} />
                 </TableCell>

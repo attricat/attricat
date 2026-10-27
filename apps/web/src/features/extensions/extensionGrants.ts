@@ -1,24 +1,34 @@
+import { z } from 'zod';
 import type { GrantKind } from './constants';
 
 export type ExtensionGrant = { grant_kind: GrantKind; grant_id: string };
 export type RequestedGrant = { kind: GrantKind; id: string };
 
-type ManifestPermissions = {
-  permissions?: string[];
-  optional_permissions?: string[];
-  host_permissions?: { id: string }[];
-  optional_host_permissions?: { id: string }[];
-  event_contracts?: {
-    exports?: { id: string }[];
-    consumes?: { provider: string; contract: string }[];
-  };
-};
+/** The parts of a manifest that request grants; the server validated the rest. */
+const manifestPermissionsSchema = z.looseObject({
+  permissions: z.array(z.string()).optional(),
+  optional_permissions: z.array(z.string()).optional(),
+  host_permissions: z.array(z.looseObject({ id: z.string() })).optional(),
+  optional_host_permissions: z
+    .array(z.looseObject({ id: z.string() }))
+    .optional(),
+  event_contracts: z
+    .looseObject({
+      exports: z.array(z.looseObject({ id: z.string() })).optional(),
+      consumes: z
+        .array(z.looseObject({ provider: z.string(), contract: z.string() }))
+        .optional(),
+    })
+    .optional(),
+});
 
 export const grantKey = (kind: GrantKind, id: string) => `${kind}:${id}`;
 
 /** Lists every distinct grant the manifest requests, required and optional alike. */
 const requestedGrants = (manifest: unknown): RequestedGrant[] => {
-  const value = manifest as ManifestPermissions;
+  const parsed = manifestPermissionsSchema.safeParse(manifest);
+  if (!parsed.success) return [];
+  const value = parsed.data;
   const requested: RequestedGrant[] = [
     ...[
       ...(value.permissions ?? []),

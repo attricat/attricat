@@ -1,3 +1,4 @@
+import { personName } from '../../components/personName';
 import { useQuery } from '@tanstack/react-query';
 import {
   Alert,
@@ -66,7 +67,7 @@ export const ProfilePage = () => {
         : false,
   });
   const account = session.data;
-  const name = account?.display_name ?? account?.email;
+  const name = personName(account?.display_name, account?.email);
   const [editingName, setEditingName] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const avatar = account?.avatar;

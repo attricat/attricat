@@ -7,13 +7,14 @@ import {
 import { MarkdownContent } from '../../markdown/MarkdownContent';
 import type { ValueRenderer } from '../components/componentTypes';
 import { NotSetValue } from '../components/values/NotSetValue';
-import { parseColor } from './color';
+import { parseColor, COLOR_VALUE_SWATCH_SIZE } from './color';
 import { CopyableText } from './CopyableText';
 import { EachValue } from './EachValue';
 import { emailHref } from './email';
 import { phoneHref } from './phone';
 import { LinkedTextValue } from './TextControl';
 import { safeUrl } from './url';
+import { valueText } from './valueText';
 
 /** Opaque hex colors show a swatch beside the stored text. */
 export const ColorValue: ValueRenderer = ({ value }) => (
@@ -31,8 +32,8 @@ export const ColorValue: ValueRenderer = ({ value }) => (
                 bgcolor: color,
                 border: 1,
                 borderColor: 'divider',
-                width: 20,
-                height: 20,
+                width: COLOR_VALUE_SWATCH_SIZE,
+                height: COLOR_VALUE_SWATCH_SIZE,
                 flexShrink: 0,
               }}
             />
@@ -41,7 +42,7 @@ export const ColorValue: ValueRenderer = ({ value }) => (
             <CopyableText value={item} />
           ) : (
             <Typography variant="body2" sx={{ overflowWrap: 'anywhere' }}>
-              {typeof item === 'object' ? JSON.stringify(item) : String(item)}
+              {valueText(item)}
             </Typography>
           )}
         </Stack>

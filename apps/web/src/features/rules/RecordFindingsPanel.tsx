@@ -1,3 +1,6 @@
+import { useAcknowledgeFinding } from './useAcknowledgeFinding';
+import { FindingSeverityChip } from './FindingSeverityChip';
+import { LoadMoreButton } from '../../components/LoadMoreButton';
 import {
   useInfiniteQuery,
   useMutation,
@@ -25,15 +28,10 @@ import { attributeLabel } from '../records/recordDisplay';
 import { FieldRevealLink } from '../views/components/FieldRevealLink';
 import { useRevealField } from '../views/fieldReveal';
 import { useCan } from '../auth/useCan';
-import {
-  acknowledgeFinding,
-  recheckRecord,
-  type Finding,
-  type RuleRun,
-} from './api';
+import { recheckRecord, type Finding, type RuleRun } from './api';
 import {
   ACTIVE_RULE_RUN_STATUSES,
-  FINDING_STATE_OPEN,
+  findingStates,
   RECORD_RULE_RUN_POLL_MS,
 } from './constants';
 import { ruleQueryKeys } from './queryKeys';
@@ -51,9 +49,10 @@ import {
 } from './ruleRevisions';
 import { findingEvidenceSchema } from './schemas';
 import { capabilities } from '../auth/capabilities';
-import { findingSeverityColor } from './findingSeverity';
 import { findingMessage, type FindingAttribute } from './findingMessage';
 
+/** Lines up the messages beside severity chips of different lengths. */
+const severityChipMinWidth = 72;
 const isActive = (run: RuleRun) =>
   ACTIVE_RULE_RUN_STATUSES.includes(run.status);
 
@@ -124,13 +123,9 @@ const FindingItem = ({
         '&:not(:last-of-type)': { borderBottom: 1, borderColor: 'divider' },
       }}
     >
-      <Chip
-        color={findingSeverityColor(finding.severity)}
-        label={t(`rules.severities.${finding.severity}`, {
-          defaultValue: finding.severity,
-        })}
-        size="small"
-        sx={{ minWidth: 72 }}
+      <FindingSeverityChip
+        severity={finding.severity}
+        sx={{ minWidth: severityChipMinWidth }}
       />
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Typography
@@ -198,7 +193,7 @@ const FindingItem = ({
           />
         </Typography>
       </Box>
-      {finding.state === FINDING_STATE_OPEN ? (
+      {finding.state === findingStates.open ? (
         canManage && (
           <Button disabled={acknowledging} size="small" onClick={onAcknowledge}>
             {t('rules.acknowledge')}
@@ -282,11 +277,7 @@ export const RecordFindingsPanel = ({
         queryKey: ruleQueryKeys.recordRuns(recordId),
       }),
   });
-  const acknowledge = useMutation({
-    mutationFn: acknowledgeFinding,
-    onSuccess: () =>
-      client.invalidateQueries({ queryKey: ruleQueryKeys.findings() }),
-  });
+  const acknowledge = useAcknowledgeFinding();
 
   if (!canRead) return null;
   // The server orders findings most severe first, so loading another page
@@ -385,13 +376,13 @@ export const RecordFindingsPanel = ({
         )
       )}
       {findings.hasNextPage && (
-        <Button
-          disabled={findings.isFetchingNextPage}
-          onClick={() => void findings.fetchNextPage()}
+        <LoadMoreButton
+          compact
+          isLoading={findings.isFetchingNextPage}
+          label={t('rules.recordFindings.loadMore')}
+          onLoadMore={() => void findings.fetchNextPage()}
           sx={{ mt: 1 }}
-        >
-          {t('rules.recordFindings.loadMore')}
-        </Button>
+        />
       )}
     </Box>
   );

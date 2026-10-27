@@ -1,6 +1,6 @@
+import { blueprintRevisionOptions } from './queryOptions';
 import { useQuery } from '@tanstack/react-query';
 import {
-  getBlueprintRevision,
   getSafeBlueprintMigrationImpact,
   listBlueprintMigrationBatches,
 } from './api';
@@ -42,16 +42,8 @@ export const useSafeBlueprintMigration = (
         ? ACTIVE_MIGRATION_POLL_INTERVAL_MS
         : false,
   });
-  const source = useQuery({
-    queryKey: blueprintQueryKeys.revision(blueprintId, sourceVersion ?? 0),
-    queryFn: () => getBlueprintRevision(blueprintId, sourceVersion!),
-    enabled: sourceVersion !== undefined,
-  });
-  const target = useQuery({
-    queryKey: blueprintQueryKeys.revision(blueprintId, targetVersion ?? 0),
-    queryFn: () => getBlueprintRevision(blueprintId, targetVersion!),
-    enabled: targetVersion !== undefined,
-  });
+  const source = useQuery(blueprintRevisionOptions(blueprintId, sourceVersion));
+  const target = useQuery(blueprintRevisionOptions(blueprintId, targetVersion));
   const compatible =
     targetVersion !== undefined &&
     source.data !== undefined &&

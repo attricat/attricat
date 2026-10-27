@@ -19,11 +19,6 @@ import {
 } from '../views/viewFieldComponents';
 import { recordHeadingComponentId } from '../views/components/blocks/RecordHeadingDefinition';
 
-export type ResolvedFormValues = Record<
-  string,
-  { value: unknown; source_context: { id: string; code: string } }
->;
-
 const inContext = (
   value: { context_id?: string | null },
   contextId: string | null,

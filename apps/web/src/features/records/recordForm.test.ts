@@ -5,6 +5,8 @@ import {
   serializeAttributeValues,
   validateRecordForm,
   valuesForForm,
+  recordFormStatus,
+  recordFormStatusKinds,
 } from './recordForm';
 import type { Attribute } from './api';
 import { urlEditComponent } from '../views/controls/definitions';
@@ -333,5 +335,54 @@ describe('record form values', () => {
     expect(
       validateRecordForm([quantity], { quantity: 'many' }).fieldErrors.quantity,
     ).toBe("Enter a value that meets this field's requirements.");
+  });
+});
+
+describe('recordFormStatus', () => {
+  const base = {
+    errorIds: [],
+    fieldOrder: ['title', 'sku', 'price'],
+    missingRequiredCodes: [],
+    pendingConfirmationIds: [],
+    submitAttempted: false,
+  };
+
+  it('reports errors only once a save was attempted', () => {
+    const status = {
+      ...base,
+      errorIds: ['price'],
+      missingRequiredCodes: ['sku'],
+    };
+    expect(recordFormStatus(status)).toEqual({
+      kind: recordFormStatusKinds.required,
+      count: 1,
+      target: 'sku',
+    });
+    expect(recordFormStatus({ ...status, submitAttempted: true })).toEqual({
+      kind: recordFormStatusKinds.errors,
+      count: 1,
+      target: 'price',
+    });
+  });
+
+  it('goes to the first missing field in form order', () => {
+    expect(
+      recordFormStatus({ ...base, missingRequiredCodes: ['price', 'title'] }),
+    ).toEqual({
+      kind: recordFormStatusKinds.required,
+      count: 2,
+      target: 'title',
+    });
+  });
+
+  it('reports confirmations last, and nothing when nothing blocks a save', () => {
+    expect(
+      recordFormStatus({ ...base, pendingConfirmationIds: ['status-change'] }),
+    ).toEqual({
+      kind: recordFormStatusKinds.confirm,
+      count: 1,
+      target: 'status-change',
+    });
+    expect(recordFormStatus(base)).toBeUndefined();
   });
 });

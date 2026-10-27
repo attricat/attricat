@@ -1,5 +1,8 @@
 export const SAVED_VIEW_VISIBILITY_PRIVATE = 'private';
 export const SAVED_VIEW_VISIBILITY_WORKSPACE = 'workspace';
+/** Shared through a link; set by the server, never chosen when saving. */
+export const SAVED_VIEW_VISIBILITY_LINK = 'link';
+/** The visibilities a user chooses between when saving a search. */
 export type SavedViewVisibility =
   typeof SAVED_VIEW_VISIBILITY_PRIVATE | typeof SAVED_VIEW_VISIBILITY_WORKSPACE;
 

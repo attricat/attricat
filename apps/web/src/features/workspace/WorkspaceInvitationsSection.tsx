@@ -19,7 +19,7 @@ export const WorkspaceInvitationsSection = ({
 }) => {
   const { t } = useTranslation();
   const client = useQueryClient();
-  const [error, setError] = useState<string>();
+  const [error, setError] = useState<Error>();
   const invitations = useQuery({
     enabled: canManage,
     queryKey: workspaceQueryKeys.invitations(),
@@ -43,7 +43,7 @@ export const WorkspaceInvitationsSection = ({
   }
   return (
     <Stack spacing={2} sx={{ mt: 3 }}>
-      {error && <Alert severity="error">{error}</Alert>}
+      <ApiErrorAlert error={error} />
       <ApiErrorAlert error={invitations.error} />
       <ApiErrorAlert error={roles.error} />
       <InvitationList

@@ -134,6 +134,19 @@ describe('RecordForm', () => {
     expect(document.activeElement).toBe(titleBox());
   });
 
+  it('says it is saving, not loading, while the values are submitted', () => {
+    renderForm({
+      blueprint: blueprint([attribute('title')]),
+      isSubmitting: true,
+    });
+    const submit = screen.getByRole('button', { name: 'Saving…' });
+    expect(submit).toHaveProperty('disabled', true);
+    expect(
+      screen.queryByRole('button', { name: 'Loading blueprint...' }),
+    ).toBeNull();
+    expect(titleBox()).toHaveProperty('disabled', true);
+  });
+
   it('focuses the first field a migration asks to review', () => {
     renderForm({
       blueprint: blueprint([attribute('title'), attribute('price')]),
@@ -285,6 +298,22 @@ describe('RecordForm', () => {
         expect.objectContaining({ addAnother: false }),
       ),
     );
+  });
+
+  it('marks untouched required fields only once a save is attempted', async () => {
+    renderForm({
+      blueprint: blueprint([attribute('title'), attribute('sku')]),
+      requiredAttributes: ['title', 'sku'],
+    });
+    const [title, sku] = screen.getAllByRole('textbox');
+    fireEvent.change(title, { target: { value: 'Chair' } });
+    expect(sku.getAttribute('aria-invalid')).toBe('false');
+
+    fireEvent.change(title, { target: { value: '' } });
+    expect(title.getAttribute('aria-invalid')).toBe('true');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(sku.getAttribute('aria-invalid')).toBe('true'));
   });
 
   it('opens the tab holding the first field with an error', async () => {

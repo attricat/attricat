@@ -1,9 +1,9 @@
+import { latestRevisions } from '../../api/revisionStatus';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import {
   Alert,
   Box,
-  Button,
   Chip,
   Paper,
   Stack,
@@ -14,14 +14,13 @@ import {
   TableRow,
   Typography,
 } from '@mui/material';
-import { type ComponentType } from 'react';
+import { RouterButton } from '../../components/RouterLink';
 import { useTranslation } from 'react-i18next';
 import { PlusIcon } from 'lucide-react';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { useCan } from '../auth/useCan';
-import { listWorkflowRuns, listWorkflows, type Workflow } from './api';
-import { workflowQueryKeys } from './queryKeys';
+import { listWorkflowRuns } from './api';
 import { workflowRoutes, workflowRunStatus } from './constants';
 import { RevisionStatusChip } from '../../components/RevisionStatusChip';
 import { Timestamp } from '../../time/Timestamp';
@@ -30,35 +29,16 @@ import { WorkflowIcon } from '../../components/systemIcons';
 import { errorMessage } from '../../api/errors';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
-
-const WorkflowDetailLink = Link as unknown as ComponentType<{
-  params: { workflowId: string };
-  to: typeof workflowRoutes.detail;
-}>;
+import { workflowListOptions, workflowRunListOptions } from './queryOptions';
 
 export const WorkflowsPage = () => {
   const { t } = useTranslation();
   const canManage = useCan(capabilities.workflowsManage);
-  const workflows = useQuery({
-    queryKey: workflowQueryKeys.all(),
-    queryFn: listWorkflows,
-  });
-  const runs = useQuery({
-    queryKey: workflowQueryKeys.runs(),
-    queryFn: listWorkflowRuns,
-  });
-  const families = Object.values(
-    (workflows.data ?? []).reduce<Record<string, Workflow>>(
-      (result, workflow) => {
-        if (
-          !result[workflow.id] ||
-          result[workflow.id].version < workflow.version
-        )
-          result[workflow.id] = workflow;
-        return result;
-      },
-      {},
-    ),
+  const workflows = useQuery(workflowListOptions());
+  const runs = useQuery(workflowRunListOptions());
+  const families = latestRevisions(
+    workflows.data ?? [],
+    (workflow) => workflow.id,
   );
   const runSummaries = new Map<
     string,
@@ -82,14 +62,13 @@ export const WorkflowsPage = () => {
       <PageHeader
         actions={
           canManage ? (
-            <Button
-              component={Link}
+            <RouterButton
               startIcon={<PlusIcon />}
               to={workflowRoutes.create}
               variant="contained"
             >
               {t('workflows.newWorkflow')}
-            </Button>
+            </RouterButton>
           ) : undefined
         }
         description={t('workflows.description')}
@@ -195,14 +174,13 @@ export const WorkflowsPage = () => {
                         )}
                       </TableCell>
                       <TableCell align="right">
-                        <Button
-                          component={WorkflowDetailLink}
+                        <RouterButton
                           params={{ workflowId: workflow.id }}
                           to={workflowRoutes.detail}
                           size="small"
                         >
                           {t('workflows.inspect')}
-                        </Button>
+                        </RouterButton>
                       </TableCell>
                     </TableRow>
                   );

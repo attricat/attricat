@@ -5,6 +5,7 @@ import { agentRunEventsUrl } from './api';
 import { bulkProgressEvent } from './bulkEdits';
 import { bulkProgressSchema, type BulkProgress } from './schemas';
 import {
+  bulkProgressStates,
   activeRunStatuses,
   conversationEventBatchDelayMs,
   runUpdateEvents,
@@ -103,7 +104,7 @@ export const useConversationLiveUpdates = (
     bulkProgress: Object.values(bulkProgress).filter(
       (progress) =>
         activeRuns.has(progress.run_id) &&
-        progress.state !== 'failed' &&
+        progress.state !== bulkProgressStates.failed &&
         progress.applied < progress.total,
     ),
     connected: Boolean(activeRunIds && current?.connected),

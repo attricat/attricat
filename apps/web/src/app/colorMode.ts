@@ -1,15 +1,16 @@
 import { create } from 'zustand';
 import type { DesignMode } from './theme';
+import {
+  readStored,
+  writeStored,
+  storageAreas,
+} from '../components/browserStorage';
 
 const storageKey = 'attricat.color-mode';
 
 const savedMode = (): DesignMode | null => {
-  try {
-    const value = localStorage.getItem(storageKey);
-    return value === 'light' || value === 'dark' ? value : null;
-  } catch {
-    return null;
-  }
+  const value = readStored(storageAreas.local, storageKey);
+  return value === 'light' || value === 'dark' ? value : null;
 };
 
 type ColorModeStore = {
@@ -20,11 +21,7 @@ type ColorModeStore = {
 export const useColorMode = create<ColorModeStore>((set) => ({
   preference: savedMode(),
   setPreference: (mode) => {
-    try {
-      localStorage.setItem(storageKey, mode);
-    } catch {
-      // The mode switch still works when storage is unavailable.
-    }
+    writeStored(storageAreas.local, storageKey, mode);
     set({ preference: mode });
   },
 }));

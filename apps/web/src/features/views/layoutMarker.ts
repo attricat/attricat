@@ -8,7 +8,7 @@ import { findingSeverityColor } from '../rules/findingSeverity';
 import { nodesPlacedFields } from './viewFieldComponents';
 
 /** Why a tab or accordion section is marked. */
-export const layoutMarkerReasons = {
+const layoutMarkerReasons = {
   errors: 'errors',
   findings: 'findings',
 } as const;
@@ -19,7 +19,7 @@ export const layoutMarkerDescriptions = {
   [layoutMarkerReasons.findings]: 'views.tabHasFindings',
 } as const;
 
-export type LayoutMarker = {
+type LayoutMarker = {
   reason: (typeof layoutMarkerReasons)[keyof typeof layoutMarkerReasons];
   /** The palette colour of the label and its icon. */
   color: string;

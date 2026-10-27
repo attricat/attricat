@@ -255,8 +255,6 @@
     "email": "E-mail",
     "password": "Hasło",
     "forgotPassword": "Nie pamiętasz hasła?",
-    "workspaceNotFound": "Nie udało się znaleźć obszaru roboczego",
-    "loginFailed": "Nie udało się zalogować",
     "sessionCheckFailed": "Nie udało się przywrócić sesji. Sprawdź połączenie i spróbuj ponownie.",
     "retrySession": "Spróbuj ponownie",
     "signOutFailed": "Nie udało się wylogować. Sprawdź połączenie i spróbuj ponownie.",
@@ -264,12 +262,10 @@
     "resetPassword": "Zresetuj hasło",
     "resetPasswordPrompt": "Wpisz adres e-mail, aby otrzymać link do zresetowania hasła.",
     "resetPasswordSent": "Jeśli konto z tym adresem e-mail istnieje, wysłano link do zresetowania hasła.",
-    "requestResetFailed": "Nie udało się poprosić o zresetowanie hasła",
     "sendResetLink": "Wyślij link do zresetowania hasła",
     "backToSignIn": "Powrót do logowania",
     "chooseNewPassword": "Wybierz nowe hasło",
     "invalidResetLink": "Ten link do zresetowania hasła jest nieprawidłowy lub wygasł",
-    "resetPasswordFailed": "Nie udało się zresetować hasła",
     "passwordResetSuccess": "Hasło zostało zresetowane. Zaloguj się nowym hasłem.",
     "goToSignIn": "Przejdź do logowania",
     "newPassword": "Nowe hasło"
@@ -467,6 +463,7 @@
     "selectBlueprint": "Wybierz schemat",
     "loadBlueprint": "Wczytaj schemat",
     "loadingBlueprint": "Wczytywanie schematu...",
+    "saving": "Zapisywanie…",
     "couldNotLoadBlueprints": "Nie udało się wczytać schematów.",
     "statusUnknown": "Nieznany lub wycofany status: {{value}}",
     "statusTerminal": "Brak dostępnych zmian statusu.",
@@ -662,8 +659,6 @@
     "dataQualityFindings_few": "{{count}} problemy z jakością danych",
     "dataQualityFindings_many": "{{count}} problemów z jakością danych",
     "dataQualityFindings_other": "{{count}} problemu z jakością danych",
-    "previewContextUnavailable": "Kontekst podglądu jest niedostępny",
-    "recordPreviewUnavailable": "Podgląd rekordu jest niedostępny",
     "invalidTimeZone": "Oczekiwano strefy czasowej IANA",
     "invalidJson": "Oczekiwano JSON",
     "blueprintLabel": "Schemat: {{name}}",
@@ -982,7 +977,6 @@
     "revisionHistory": "Historia wersji",
     "version": "Wersja",
     "definitionHash": "Skrót definicji",
-    "versionNumber": "v{{version}}",
     "versionOption": "v{{version}} ({{status}})",
     "diffTitle": "{{original}} → {{modified}}"
   },
@@ -1133,6 +1127,7 @@
     "discardSearchChanges": "Odrzuć zmiany",
     "deleteSavedSearch": "Usuń zapisane wyszukiwanie",
     "deleteSavedSearchConfirm": "Usunąć zapisane wyszukiwanie?",
+    "confirmDeleteSavedSearch": "Usuń",
     "linkCopied": "Skopiowano link",
     "savedSearches": "Zapisane wyszukiwania",
     "filterByCellValue": "Filtruj: {{field}} = {{value}}…",
@@ -1862,6 +1857,7 @@
     "unableToRenderRecordHeading": "Nie można wyświetlić nagłówka rekordu."
   },
   "common": {
+    "versionNumber": "v{{version}}",
     "opensInNewTab": "Otwiera się w nowej karcie",
     "close": "Zamknij",
     "actionCompleted": "Akcja zakończona.",
@@ -1952,11 +1948,6 @@
       "rules": "Reguły",
       "findings": "Ustalenia",
       "runs": "Historia wykonań"
-    },
-    "errors": {
-      "definitions": "Nie udało się wczytać definicji reguł.",
-      "findings": "Nie udało się wczytać ustaleń reguł.",
-      "runs": "Nie udało się wczytać historii wykonań reguł."
     },
     "columns": {
       "rule": "Reguła",
@@ -2161,7 +2152,6 @@
   "extensionRuns": {
     "description": "Praca w tle uruchomiona z akcji rozszerzeń. Uruchomienia trwają po zamknięciu akcji; tutaj możesz śledzić ich postęp i pobrać wyniki.",
     "empty": "Nie uruchomiono jeszcze żadnych rozszerzeń.",
-    "loadFailed": "Nie udało się wczytać uruchomień rozszerzeń.",
     "viewRun": "Pokaż uruchomienie",
     "backToRuns": "Wszystkie uruchomienia rozszerzeń",
     "started": "Uruchomiono rozszerzenie. Praca trwa w tle.",
@@ -2207,8 +2197,7 @@
     "noOutputs": "To uruchomienie nie utworzyło wyników do pobrania.",
     "unnamedOutput": "Wynik",
     "download": "Pobierz",
-    "cancel": "Anuluj uruchomienie",
-    "cancelFailed": "Nie udało się anulować uruchomienia."
+    "cancel": "Anuluj uruchomienie"
   },
   "principals": {
     "loading": "Wczytywanie…",
@@ -2226,6 +2215,7 @@
     "memberSince": "Członek od",
     "noTeams": "Nie należy do żadnego zespołu",
     "editOwnProfile": "Edytuj swój profil",
+    "userProfile": "Profil użytkownika",
     "notFoundTitle": "Nie znaleziono użytkownika",
     "notFound": "Ten użytkownik nie jest członkiem obszaru roboczego."
   },
@@ -2340,6 +2330,8 @@
     "checkAuthorization": "Sprawdź autoryzację",
     "testConnection": "Testuj",
     "deleteConnection": "Usuń",
+    "deleteConnectionTitle": "Usunąć {{name}}?",
+    "deleteConnectionExplanation": "Zapisane dane uwierzytelniające zostaną usunięte i nie będzie można ich odzyskać.",
     "authorizationCode": "Kod autoryzacji",
     "redirectUri": "Adres URI przekierowania",
     "exchangeCode": "Połącz",

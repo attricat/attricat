@@ -51,7 +51,7 @@ export const RevisionHistory = ({
             {revisions.map((revision) => (
               <TableRow key={revision.version}>
                 <TableCell>
-                  {t('blueprints.versionNumber', {
+                  {t('common.versionNumber', {
                     version: revision.version,
                   })}
                 </TableCell>

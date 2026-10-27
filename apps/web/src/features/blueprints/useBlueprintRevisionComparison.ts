@@ -1,7 +1,6 @@
+import { blueprintRevisionOptions } from './queryOptions';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
-import { getBlueprintRevision } from './api';
-import { blueprintQueryKeys } from './queryKeys';
 import type { Blueprint } from './schemas';
 
 /**
@@ -17,16 +16,8 @@ export const useBlueprintRevisionComparison = (
   const leftVersion =
     leftSelection ?? revisions[1]?.version ?? revisions[0]?.version;
   const rightVersion = rightSelection ?? revisions[0]?.version ?? leftVersion;
-  const left = useQuery({
-    queryKey: blueprintQueryKeys.revision(blueprintId, leftVersion ?? 0),
-    queryFn: () => getBlueprintRevision(blueprintId, leftVersion!),
-    enabled: leftVersion !== undefined,
-  });
-  const right = useQuery({
-    queryKey: blueprintQueryKeys.revision(blueprintId, rightVersion ?? 0),
-    queryFn: () => getBlueprintRevision(blueprintId, rightVersion!),
-    enabled: rightVersion !== undefined,
-  });
+  const left = useQuery(blueprintRevisionOptions(blueprintId, leftVersion));
+  const right = useQuery(blueprintRevisionOptions(blueprintId, rightVersion));
 
   return {
     left,

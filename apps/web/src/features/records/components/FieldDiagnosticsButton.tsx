@@ -1,6 +1,6 @@
+import { FindingSeverityChip } from '../../rules/FindingSeverityChip';
 import {
   Box,
-  Chip,
   IconButton,
   Popover,
   Stack,
@@ -224,13 +224,7 @@ export const FieldDiagnosticsButton = ({
                       spacing={1}
                       sx={{ alignItems: 'flex-start', listStyle: 'none' }}
                     >
-                      <Chip
-                        color={findingSeverityColor(finding.severity)}
-                        label={t(`rules.severities.${finding.severity}`, {
-                          defaultValue: finding.severity,
-                        })}
-                        size="small"
-                      />
+                      <FindingSeverityChip severity={finding.severity} />
                       <Typography variant="body2">
                         {findingMessage(finding.message, attribute.code, [
                           attribute,

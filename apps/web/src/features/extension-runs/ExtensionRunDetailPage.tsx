@@ -14,6 +14,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeftIcon, DownloadIcon } from 'lucide-react';
 import { Trans, useTranslation } from 'react-i18next';
 import { RouterButton } from '../../components/RouterLink';
+import { QueryErrorNotice } from '../../components/QueryErrorNotice';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { Timestamp } from '../../time/Timestamp';
 import { formatBytes } from '../data-health/dataHealthFormat';
 import { cancelExtensionRun, extensionRunArtifactUrl } from './api';
@@ -112,9 +114,11 @@ export const ExtensionRunDetailPage = ({ runId }: { runId: string }) => {
       {run.isPending && (
         <Skeleton height={runDetailSkeletonHeight} variant="rounded" />
       )}
-      {run.isError && (
-        <Alert severity="error">{t('extensionRuns.loadFailed')}</Alert>
-      )}
+      <QueryErrorNotice
+        error={run.error}
+        isRetrying={run.isFetching}
+        onRetry={() => void run.refetch()}
+      />
       {run.data && (
         <Card sx={{ display: 'flex', flexDirection: 'column', gap: 4, p: 5 }}>
           <ExtensionRunHeader
@@ -133,9 +137,7 @@ export const ExtensionRunDetailPage = ({ runId }: { runId: string }) => {
             </Typography>
             <Outputs run={run.data} />
           </Box>
-          {cancel.isError && (
-            <Alert severity="error">{t('extensionRuns.cancelFailed')}</Alert>
-          )}
+          <ApiErrorAlert error={cancel.error} />
           {run.data.can_cancel && (
             <Box>
               <Button

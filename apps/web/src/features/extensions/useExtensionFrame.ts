@@ -12,6 +12,7 @@ import {
   maximumExtensionFrameHeight,
 } from './constants';
 import { handleBrokerRequest, postBrokerResponse } from './extensionBroker';
+import { contributionKey } from './outletContributions';
 
 type FrameContext = Record<string, unknown>;
 
@@ -81,11 +82,21 @@ export const useExtensionFrame = ({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   // Context changes are delivered through the broker. A contribution keeps its
-  // frame and subscriptions until its release changes or it is unmounted.
-  const frameKey = `${contribution.extension_id}:${contribution.id}:${contribution.release_id}`;
+  // frame and subscriptions until it is unmounted or anything sent with init
+  // changes: its release, configuration or capabilities. The frame document
+  // mounts once, so those changes load a new frame instead of a second init.
+  const frameKey = `${contributionKey(contribution)}:${JSON.stringify([
+    contribution.configuration,
+    contribution.capabilities,
+  ])}`;
+  const contributionRef = useRef(contribution);
+  useEffect(() => {
+    contributionRef.current = contribution;
+  }, [contribution]);
 
   useEffect(() => {
     if (loadedFrame !== frameKey) return;
+    const contribution = contributionRef.current;
     const readContext = () => JSON.parse(contextRef.current) as FrameContext;
     const frameContext = readContext();
     let disposed = false;
@@ -183,7 +194,7 @@ export const useExtensionFrame = ({
       port?.close();
       if (portRef.current === port) portRef.current = undefined;
     };
-  }, [contribution, frameKey, loadedFrame, navigate, queryClient]);
+  }, [frameKey, loadedFrame, navigate, queryClient]);
 
   useEffect(() => {
     if (!ready) return;

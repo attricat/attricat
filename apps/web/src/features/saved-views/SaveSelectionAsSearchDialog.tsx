@@ -1,12 +1,8 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import type { RecordItem } from '../records/api';
 import { recordSelectionSearch, type ExplorerSearch } from '../explorer/search';
-import { createSavedView } from './api';
-import { savedViewQueryKeys } from './queryKeys';
-import { SaveSearchDialog, type SaveSearchValues } from './SaveSearchDialog';
-import { errorMessage } from '../../api/errors';
+import { SaveSearchDialog } from './SaveSearchDialog';
+import { useCreateSavedView } from './useCreateSavedView';
 
 type Props = {
   records: RecordItem[];
@@ -23,32 +19,22 @@ export const SaveSelectionAsSearchDialog = ({
   search,
 }: Props) => {
   const { t } = useTranslation();
-  const navigate = useNavigate({ from: '/' });
-  const client = useQueryClient();
-  const save = useMutation({
-    mutationFn: ({ description, name, visibility }: SaveSearchValues) =>
-      createSavedView(
-        name,
-        description,
-        visibility,
-        recordSelectionSearch(
-          search,
-          records.map((record) => record.id),
-        ),
-      ),
-    onSuccess: (view) => {
-      void client.invalidateQueries({ queryKey: savedViewQueryKeys.all() });
-      onSuccess();
-      void navigate({ to: '/', search: { savedView: view.id } });
-    },
-  });
+  const save = useCreateSavedView(onSuccess);
 
   return (
     <SaveSearchDialog
-      error={errorMessage(save.error) ?? ''}
+      error={save.error}
       isPending={save.isPending}
       onClose={onClose}
-      onSave={(values) => save.mutate(values)}
+      onSave={(values) =>
+        save.mutate({
+          search: recordSelectionSearch(
+            search,
+            records.map((record) => record.id),
+          ),
+          values,
+        })
+      }
       open
       title={t('explorer.saveSelectionAsSearch')}
     />

@@ -3,11 +3,10 @@ import { Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
-import { getWorkflowRevision } from './api';
-import { workflowQueryKeys } from './queryKeys';
 import { WorkflowDefinitionForm } from './WorkflowDefinitionForm';
 import { WorkflowIcon } from '../../components/systemIcons';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { workflowRevisionOptions } from './queryOptions';
 
 export const WorkflowEditorPage = ({
   workflowId,
@@ -17,11 +16,7 @@ export const WorkflowEditorPage = ({
   sourceVersion?: number;
 }) => {
   const { t } = useTranslation();
-  const source = useQuery({
-    queryKey: workflowQueryKeys.revision(workflowId ?? '', sourceVersion ?? 0),
-    queryFn: () => getWorkflowRevision(workflowId!, sourceVersion!),
-    enabled: Boolean(workflowId && sourceVersion),
-  });
+  const source = useQuery(workflowRevisionOptions(workflowId, sourceVersion));
 
   if (workflowId && source.isPending)
     return (

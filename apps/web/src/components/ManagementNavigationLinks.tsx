@@ -1,3 +1,4 @@
+import { isWithinRoute } from './sideNavigationLayout';
 import { Fragment } from 'react';
 import { Link } from '@tanstack/react-router';
 import {
@@ -53,7 +54,7 @@ export const ManagementNavigationLinks = ({
             aria-label={t(item.labelKey)}
             component={Link}
             onClick={onNavigate}
-            selected={pathname.startsWith(item.to)}
+            selected={isWithinRoute(pathname, item.to)}
             to={item.to}
           >
             <ListItemIcon>

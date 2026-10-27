@@ -64,7 +64,10 @@ export const DefinitionTemplateDialog = ({
                 }}
                 variant="outlined"
               >
-                <CardActionArea onClick={() => onSelect(index)}>
+                <CardActionArea
+                  aria-pressed={selected}
+                  onClick={() => onSelect(index)}
+                >
                   <CardContent>
                     <Typography component="h3" variant="h6">
                       {t(template.labelKey)}

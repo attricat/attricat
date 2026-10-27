@@ -2,18 +2,7 @@ import { Accessibility, type Draggable } from '@dnd-kit/dom';
 import { move as moveDragged } from '@dnd-kit/helpers';
 import { DragDropProvider } from '@dnd-kit/react';
 import { isSortable, useSortable } from '@dnd-kit/react/sortable';
-import {
-  Box,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  IconButton,
-  Stack,
-  Tooltip,
-} from '@mui/material';
+import { Box, IconButton, Stack, Tooltip } from '@mui/material';
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -24,7 +13,6 @@ import {
   createContext,
   useContext,
   useEffect,
-  useId,
   useMemo,
   useRef,
   useState,
@@ -32,6 +20,7 @@ import {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ImageGallery, type GalleryFile } from './ImageGallery';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 
 // `Accessibility.configure` is untyped, so take its options from the plugin.
 type AccessibilityOptions = NonNullable<
@@ -151,8 +140,7 @@ export const ImageGalleryEditor = ({
   const [removeId, setRemoveId] = useState<string | null>(null);
   // Shown until the save settles, so a dropped tile does not jump back.
   const [pendingOrder, setPendingOrder] = useState<string[] | null>(null);
-  const titleId = useId();
-  const descriptionId = useId();
+  const [removing, setRemoving] = useState(false);
   const removedFile = files.find((file) => file.id === removeId);
   const shown = useMemo(() => {
     if (!pendingOrder) return files;
@@ -317,42 +305,33 @@ export const ImageGalleryEditor = ({
       ) : (
         gallery
       )}
-      <Dialog
-        open={Boolean(removedFile)}
+      <ConfirmDialog
+        confirmLabel={t('files.confirmRemove')}
+        confirmDisabled={disabled}
+        destructive
+        error={null}
+        isPending={removing}
         onClose={() => setRemoveId(null)}
-        aria-labelledby={titleId}
-        aria-describedby={descriptionId}
+        onConfirm={async () => {
+          if (disabled) return;
+          setRemoving(true);
+          // Close on failure too, so inline server errors are not hidden by the dialog.
+          try {
+            await onChange(
+              files
+                .filter((file) => file.id !== removeId)
+                .map((file) => file.id),
+            );
+          } finally {
+            setRemoving(false);
+            setRemoveId(null);
+          }
+        }}
+        open={Boolean(removedFile)}
+        title={t('files.removeImage', { filename: removedFile?.filename })}
       >
-        <DialogTitle id={titleId}>
-          {t('files.removeImage', { filename: removedFile?.filename })}
-        </DialogTitle>
-        <DialogContent>
-          <DialogContentText id={descriptionId}>
-            {t('files.removeImageExplanation')}
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setRemoveId(null)}>
-            {t('common.cancel')}
-          </Button>
-          <Button
-            color="error"
-            disabled={disabled}
-            onClick={async () => {
-              if (disabled) return;
-              // Close on failure too, so inline server errors are not hidden by the dialog.
-              await onChange(
-                files
-                  .filter((file) => file.id !== removeId)
-                  .map((file) => file.id),
-              );
-              setRemoveId(null);
-            }}
-          >
-            {t('files.confirmRemove')}
-          </Button>
-        </DialogActions>
-      </Dialog>
+        {t('files.removeImageExplanation')}
+      </ConfirmDialog>
     </>
   );
 };

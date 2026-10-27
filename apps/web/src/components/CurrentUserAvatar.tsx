@@ -1,3 +1,4 @@
+import { personName } from './personName';
 import { useQuery } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { fileStatuses } from '../features/files/constants';
@@ -21,7 +22,7 @@ export const CurrentUserAvatar = ({
   return (
     <UserAvatar
       avatarFileId={account.avatar.file_id}
-      name={account.display_name ?? account.email}
+      name={personName(account.display_name, account.email)}
       size={size}
     />
   );

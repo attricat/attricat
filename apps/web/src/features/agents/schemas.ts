@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { agentRunStatuses, bulkProgressStates } from './constants';
 
 const dateTime = z.string().datetime({ offset: true });
 const id = z.string().uuid();
@@ -39,7 +40,7 @@ export const runSchema = z.object({
   id,
   conversation_id: id,
   origin: z.string(),
-  status: z.string(),
+  status: z.enum(agentRunStatuses),
   provider_base_url: z.string(),
   model: z.string(),
   started_at: dateTime.nullable(),
@@ -118,7 +119,7 @@ export const bulkProgressSchema = z.object({
   payload: z.object({
     tool_call_id: id,
     record_id: id,
-    state: z.enum(['applied', 'failed']),
+    state: z.enum(bulkProgressStates),
     applied: z.number().int().nonnegative(),
     total: z.number().int().positive(),
   }),

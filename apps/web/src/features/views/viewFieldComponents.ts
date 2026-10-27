@@ -4,6 +4,7 @@ import type {
   ViewDefinition,
   ViewNode,
 } from '../records/api';
+import { viewBlockTypes } from './schemas';
 import {
   resolveEditComponent,
   resolveValueEditor,
@@ -14,9 +15,9 @@ const viewNodes = (view?: ViewDefinition | ViewNode) => {
   const visit = (node: ViewNode | ViewDefinition) => {
     nodes.push(node);
     if ('children' in node) node.children.forEach(visit);
-    if (node.type === 'tabs')
+    if (node.type === viewBlockTypes.tabs)
       node.tabs.forEach((tab) => tab.children.forEach(visit));
-    if (node.type === 'accordion')
+    if (node.type === viewBlockTypes.accordion)
       node.sections.forEach((section) => section.children.forEach(visit));
   };
   if (view) visit(view);
@@ -27,7 +28,7 @@ const viewNodes = (view?: ViewDefinition | ViewNode) => {
 const viewFieldComponents = (view?: ViewDefinition) => {
   const result = new Map<string, ComponentReference>();
   for (const node of viewNodes(view))
-    if (node.type === 'field' && node.component)
+    if (node.type === viewBlockTypes.field && node.component)
       result.set(node.field, node.component);
   return result;
 };
@@ -47,7 +48,8 @@ export const viewFieldEditComponents = (view?: ViewDefinition) =>
 
 const placedFields = (view?: ViewDefinition | ViewNode) =>
   viewNodes(view).flatMap((node) =>
-    node.type === 'field' || node.type === 'relationship_list'
+    node.type === viewBlockTypes.field ||
+    node.type === viewBlockTypes.relationshipList
       ? [node.field]
       : [],
   );

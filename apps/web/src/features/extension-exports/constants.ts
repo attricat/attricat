@@ -36,6 +36,15 @@ export const connectionGrantTypes = {
 export type ConnectionGrantType =
   (typeof connectionGrantTypes)[keyof typeof connectionGrantTypes];
 
+/** Server-side steps a connection can be asked to run. */
+export const connectionActions = {
+  deviceAuthorization: 'device-authorization',
+  devicePoll: 'device-authorization/poll',
+  test: 'test',
+} as const;
+export type ConnectionAction =
+  (typeof connectionActions)[keyof typeof connectionActions];
+
 export const connectionStatuses = {
   pendingAuthorization: 'pending_authorization',
   active: 'active',

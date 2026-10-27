@@ -1,5 +1,5 @@
 import { useForm, useStore } from '@tanstack/react-form';
-import { useState } from 'react';
+import { useState, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation } from '@tanstack/react-query';
 import { Alert, Box, Button } from '@mui/material';
@@ -16,21 +16,29 @@ type ConversationComposerProps = {
   conversationId: string | null;
   /** Creates the conversation for the first message; returns its ID. */
   createConversation?: (content: string) => Promise<string>;
-  onSendingChange: (isSending: boolean) => void;
+  /** Focuses the message box when the composer starts a page of its own. */
+  formRef?: Ref<HTMLFormElement>;
+  minRows?: number;
+  onSendingChange?: (isSending: boolean) => void;
   onSent: (conversationId: string) => void;
   sendDraft?: (
     content: string,
     conversationId: string,
     attachmentIds: string[],
   ) => Promise<unknown>;
+  /** Keeps the composer at the bottom of a scrolling conversation. */
+  sticky?: boolean;
 };
 
 export const ConversationComposer = ({
   conversationId,
   createConversation,
+  formRef,
+  minRows = composerMinRows,
   onSendingChange,
   onSent,
   sendDraft,
+  sticky = true,
 }: ConversationComposerProps) => {
   const { t } = useTranslation();
   const form = useForm({ defaultValues: { content: '' } });
@@ -68,13 +76,13 @@ export const ConversationComposer = ({
         : sendMessage(id, content, attachmentIds));
       return id;
     },
-    onMutate: () => onSendingChange(true),
+    onMutate: () => onSendingChange?.(true),
     onSuccess: (id) => {
       form.reset();
       attachments.reset();
       onSent(id);
     },
-    onSettled: () => onSendingChange(false),
+    onSettled: () => onSendingChange?.(false),
   });
 
   const submitMessage = () => {
@@ -94,21 +102,26 @@ export const ConversationComposer = ({
         event.preventDefault();
         submitMessage();
       }}
-      sx={{
-        bgcolor: 'background.default',
-        bottom: 0,
-        mx: 'auto',
-        pb: { xs: 1, md: 2 },
-        position: 'sticky',
-        pt: 2,
-        width: '100%',
-      }}
+      ref={formRef}
+      sx={
+        sticky
+          ? {
+              bgcolor: 'background.default',
+              bottom: 0,
+              mx: 'auto',
+              pb: { xs: 1, md: 2 },
+              position: 'sticky',
+              pt: 2,
+              width: '100%',
+            }
+          : { mt: 4 }
+      }
     >
       <MessageInputBox
         content={content}
         files={attachments.files}
         isPending={send.isPending}
-        minRows={composerMinRows}
+        minRows={minRows}
         onContentChange={(value) => form.setFieldValue('content', value)}
         onFilesChange={attachments.replaceFiles}
         onRemoveFile={attachments.removeFile}

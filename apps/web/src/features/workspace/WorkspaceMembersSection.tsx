@@ -1,3 +1,4 @@
+import { personName } from '../../components/personName';
 import { useForm } from '@tanstack/react-form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -141,14 +142,14 @@ export const WorkspaceMembersSection = ({
               <ListItemAvatar>
                 <UserAvatar
                   avatarFileId={member.avatar_file_id}
-                  name={member.display_name ?? member.email}
+                  name={personName(member.display_name, member.email)}
                   size={userAvatarSizes.list}
                 />
               </ListItemAvatar>
               <ListItemText
                 primary={
                   <UserProfileLink userId={member.user_id}>
-                    {member.display_name ?? member.email}
+                    {personName(member.display_name, member.email)}
                   </UserProfileLink>
                 }
                 secondary={t(

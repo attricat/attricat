@@ -29,14 +29,14 @@ export const useCompactNavigationPanels = (
 ) => {
   const [localOpen, setLocalOpen] = useState<
     Record<CompactNavigationPanel, boolean>
-  >(() => ({
-    explore: pathname === navigationRoutes.explore,
-    extensions: isWithinRoute(
-      pathname,
-      navigationRoutes.extensionContributions,
-    ),
-    manage: pathname.startsWith(`${navigationRoutes.manage}/`),
-  }));
+  >(() => {
+    const routePanel = compactNavigationPanelForRoute(pathname);
+    return {
+      explore: routePanel === 'explore',
+      extensions: routePanel === 'extensions',
+      manage: routePanel === 'manage',
+    };
+  });
   const isOpen = (panel: CompactNavigationPanel) =>
     controls[panel].open ?? localOpen[panel];
   const setOpen = (panel: CompactNavigationPanel, open: boolean) => {

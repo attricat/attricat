@@ -1,25 +1,15 @@
+import {
+  readStored,
+  writeStored,
+  storageAreas,
+} from '../../components/browserStorage';
 import { lastBlueprintStorageKey } from './constants';
 
-export const getLastBlueprint = () => {
-  try {
-    return sessionStorage.getItem(lastBlueprintStorageKey) || undefined;
-  } catch {
-    return undefined;
-  }
-};
+export const getLastBlueprint = () =>
+  readStored(storageAreas.session, lastBlueprintStorageKey) || undefined;
 
-export const setLastBlueprint = (blueprint: string) => {
-  try {
-    sessionStorage.setItem(lastBlueprintStorageKey, blueprint);
-  } catch {
-    // Storage can be unavailable in hardened browser contexts.
-  }
-};
+export const setLastBlueprint = (blueprint: string) =>
+  writeStored(storageAreas.session, lastBlueprintStorageKey, blueprint);
 
-export const clearLastBlueprint = () => {
-  try {
-    sessionStorage.removeItem(lastBlueprintStorageKey);
-  } catch {
-    // Storage can be unavailable in hardened browser contexts.
-  }
-};
+export const clearLastBlueprint = () =>
+  writeStored(storageAreas.session, lastBlueprintStorageKey, null);

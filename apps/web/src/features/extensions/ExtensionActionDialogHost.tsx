@@ -18,10 +18,12 @@ import {
   type OpenActionDialog,
 } from './actionDialogStore';
 import {
+  actionDialogOutlet,
   extensionLoadingIndicatorSize,
   selectionSources,
   contributionKinds,
 } from './constants';
+import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { ExtensionFrame } from './ExtensionFrame';
 import { useExtensionRuntime } from './useExtensionRuntime';
 
@@ -78,7 +80,7 @@ const ActionDialog = ({
     (item) =>
       item.extension_id === extensionId &&
       item.kind === contributionKinds.dialog &&
-      item.outlet === 'action_dialog',
+      item.outlet === actionDialogOutlet,
   );
   const count = context.record_ids.length;
   const title = contribution?.title ?? t('extensions.actionDialogTitle');
@@ -108,10 +110,17 @@ const ActionDialog = ({
             </Box>
           ) : contribution ? (
             <ExtensionFrame context={context} contribution={contribution} />
-          ) : (
+          ) : runtime.data ? (
             <Alert role="status" severity="warning">
               {t('extensions.contentLoadFailed')}
             </Alert>
+          ) : (
+            // A failed poll keeps the loaded runtime, so this is a first load.
+            <QueryErrorNotice
+              error={runtime.error}
+              isRetrying={runtime.isFetching}
+              onRetry={() => void runtime.refetch()}
+            />
           )}
         </Stack>
       </DialogContent>

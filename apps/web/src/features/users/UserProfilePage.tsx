@@ -1,3 +1,6 @@
+import { useResourcePageTitle } from '../../app/useResourcePageTitle';
+import { defaultQueryRetries } from '../../api/queryRetries';
+import { personName } from '../../components/personName';
 import { useQuery } from '@tanstack/react-query';
 import {
   Alert,
@@ -10,7 +13,7 @@ import {
   Typography,
 } from '@mui/material';
 import { PencilIcon } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { httpStatus } from '../../api/httpStatus';
 import { ApiRequestError } from '../../api/request';
@@ -48,17 +51,19 @@ const ProfileDetail = ({
 /** A workspace member as every catalog reader sees them. */
 export const UserProfilePage = ({ userId }: { userId: string }) => {
   const { t } = useTranslation();
+  const teamsHeadingId = useId();
   const profile = useQuery({
     queryKey: userQueryKeys.profile(userId),
     queryFn: ({ signal }) => getUserProfile(userId, signal),
     retry: (count, error) =>
       !(
         error instanceof ApiRequestError && error.status === httpStatus.notFound
-      ) && count < 3,
+      ) && count < defaultQueryRetries,
   });
   const session = useQuery(sessionOptions());
   const user = profile.data;
-  const name = user ? user.display_name?.trim() || user.email : undefined;
+  const name = user ? personName(user.display_name, user.email) : undefined;
+  useResourcePageTitle(name, t('users.userProfile'));
   const isSelf = session.data?.user_id === userId;
   const notFound =
     profile.error instanceof ApiRequestError &&
@@ -144,10 +149,10 @@ export const UserProfilePage = ({ userId }: { userId: string }) => {
                 </Box>
               </Stack>
             </Paper>
-            <Box component="section" aria-labelledby="user-profile-teams">
+            <Box component="section" aria-labelledby={teamsHeadingId}>
               <Typography
                 component="h2"
-                id="user-profile-teams"
+                id={teamsHeadingId}
                 sx={{ mb: 2 }}
                 variant="h6"
               >

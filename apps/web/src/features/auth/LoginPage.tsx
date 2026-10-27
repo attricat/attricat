@@ -9,10 +9,10 @@ import {
 import { useForm } from '@tanstack/react-form';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Navigate, useNavigate } from '@tanstack/react-router';
-import { type ReactNode, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { errorMessage } from '../../api/errors';
-import { returnToStorageKey } from '../../app/storageKeys';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { useExclusiveMutation } from '../../components/useExclusiveMutation';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import { AuthFormShell, authFormWidth } from './AuthFormShell';
 import {
@@ -22,23 +22,7 @@ import {
   login,
 } from './api';
 import { authQueryKeys } from './queryKeys';
-
-const useLoginSubmission = () => {
-  const [submitting, setSubmitting] = useState(false);
-  const pending = useRef(false);
-  const submit = async (action: () => Promise<void>) => {
-    if (pending.current) return;
-    pending.current = true;
-    setSubmitting(true);
-    try {
-      await action();
-    } finally {
-      pending.current = false;
-      setSubmitting(false);
-    }
-  };
-  return { submit, submitting };
-};
+import { takeReturnLocation } from './returnLocation';
 
 const devLoginDefaults = import.meta.env.DEV
   ? {
@@ -92,28 +76,23 @@ const WorkspaceLoginForm = ({
 }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const [error, setError] = useState<string>();
-  const { submit, submitting } = useLoginSubmission();
+  // Navigating is part of the submission, so the form stays disabled until
+  // the next step opens.
+  const discover = useExclusiveMutation({
+    mutationFn: async (loginIdentifier: string) => {
+      const workspace = await discoverWorkspace(loginIdentifier);
+      await navigate({
+        to: '/login/$identifier',
+        params: { identifier: workspace.login_identifier },
+      });
+    },
+  });
+  const submitting = discover.isPending;
   const form = useForm({
     defaultValues: {
       loginIdentifier: defaultIdentifier,
     },
-    onSubmit: ({ value }) =>
-      submit(async () => {
-        try {
-          const workspace = await discoverWorkspace(value.loginIdentifier);
-          await navigate({
-            to: '/login/$identifier',
-            params: { identifier: workspace.login_identifier },
-          });
-        } catch (reason) {
-          setError(
-            reason instanceof Error
-              ? errorMessage(reason)
-              : t('auth.workspaceNotFound'),
-          );
-        }
-      }),
+    onSubmit: ({ value }) => discover.submit(value.loginIdentifier),
   });
   return (
     <LoginShell onSubmit={() => form.handleSubmit()}>
@@ -130,7 +109,7 @@ const WorkspaceLoginForm = ({
           />
         )}
       </form.Field>
-      {error && <Typography color="error">{error}</Typography>}
+      <ApiErrorAlert error={discover.error} />
       <Button disabled={submitting} type="submit" variant="contained">
         {t('auth.continue')}
       </Button>
@@ -159,8 +138,21 @@ const PasswordLoginForm = ({
   const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [error, setError] = useState<string>();
-  const { submit, submitting } = useLoginSubmission();
+  const signIn = useExclusiveMutation({
+    mutationFn: async ({
+      email,
+      password,
+    }: {
+      email: string;
+      password: string;
+    }) => {
+      const session = await login(identifier, email, password);
+      queryClient.clear();
+      queryClient.setQueryData(authQueryKeys.session(), session);
+      await navigate({ to: takeReturnLocation() ?? '/' });
+    },
+  });
+  const submitting = signIn.isPending;
   const initialSample =
     samples?.accounts.find(({ role }) => role === defaultSampleRole(samples)) ??
     samples?.accounts[0];
@@ -168,33 +160,7 @@ const PasswordLoginForm = ({
     defaultValues: initialSample
       ? { email: initialSample.email, password: samples?.password ?? '' }
       : { email: devLoginDefaults.email, password: devLoginDefaults.password },
-    onSubmit: ({ value }) =>
-      submit(async () => {
-        try {
-          const session = await login(identifier, value.email, value.password);
-          queryClient.clear();
-          queryClient.setQueryData(authQueryKeys.session(), session);
-          let returnTo: string | null = null;
-          try {
-            returnTo = sessionStorage.getItem(returnToStorageKey);
-            sessionStorage.removeItem(returnToStorageKey);
-          } catch {
-            // Signing in also works when browser storage is unavailable.
-          }
-          await navigate({
-            to:
-              returnTo?.startsWith('/') && !returnTo.startsWith('//')
-                ? returnTo
-                : '/',
-          });
-        } catch (reason) {
-          setError(
-            reason instanceof Error
-              ? errorMessage(reason)
-              : t('auth.loginFailed'),
-          );
-        }
-      }),
+    onSubmit: ({ value }) => signIn.submit(value),
   });
   return (
     <LoginShell onSubmit={() => form.handleSubmit()}>
@@ -260,7 +226,7 @@ const PasswordLoginForm = ({
           />
         )}
       </form.Field>
-      {error && <Typography color="error">{error}</Typography>}
+      <ApiErrorAlert error={signIn.error} />
       {!samples?.demo && (
         <Button component={Link} to="/password-reset" variant="text">
           {t('auth.forgotPassword')}

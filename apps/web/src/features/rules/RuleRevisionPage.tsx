@@ -1,3 +1,4 @@
+import { blueprintRevisionOptions } from '../blueprints/queryOptions';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Alert, Box, Button, Paper, Stack, Typography } from '@mui/material';
@@ -8,8 +9,6 @@ import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { RuleIcon } from '../../components/systemIcons';
-import { getBlueprintRevision } from '../blueprints/api';
-import { blueprintQueryKeys } from '../blueprints/queryKeys';
 import { lexiconText } from '../lexicon/lexicon';
 import { SHORT_RECORD_ID_LENGTH } from './constants';
 import { ruleDefinitionsOptions } from './queryOptions';
@@ -29,15 +28,9 @@ export const RuleRevisionPage = ({
   const rule = rules.data?.find(
     (candidate) => candidate.id === ruleId && candidate.version === version,
   );
-  const blueprint = useQuery({
-    queryKey: blueprintQueryKeys.revision(
-      rule?.blueprint_id ?? '',
-      rule?.blueprint_version ?? 0,
-    ),
-    queryFn: () =>
-      getBlueprintRevision(rule!.blueprint_id, rule!.blueprint_version),
-    enabled: rule !== undefined,
-  });
+  const blueprint = useQuery(
+    blueprintRevisionOptions(rule?.blueprint_id, rule?.blueprint_version),
+  );
   useResourcePageTitle(rule?.name, t('navigation.rules'));
 
   const back = (

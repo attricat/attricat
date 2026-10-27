@@ -47,12 +47,16 @@ type SearchFormValues = {
   versionScope: string;
 };
 
-const searchFormValues = (search: ExplorerSearch): SearchFormValues => ({
+const searchFormValues = (
+  search: ExplorerSearch,
+  currentVersion: number | undefined,
+): SearchFormValues => ({
   blueprint: search.blueprint ?? '',
   query: search.query ?? '',
   versionScope: search.allVersions
     ? versionScopes.all
-    : search.version === undefined
+    : // Naming the current version explicitly is still the default scope.
+      search.version === undefined || search.version === currentVersion
       ? versionScopes.current
       : String(search.version),
 });
@@ -126,20 +130,24 @@ export const ExplorerSearchForm = ({
     });
   };
   const form = useForm({
-    defaultValues: searchFormValues(search),
+    defaultValues: searchFormValues(search, currentVersion),
     onSubmit: ({ value }) => submitValues(value),
   });
 
   useEffect(() => {
     form.reset(
-      searchFormValues({
-        allVersions: search.allVersions,
-        blueprint: search.blueprint,
-        query: search.query,
-        version: search.version,
-      }),
+      searchFormValues(
+        {
+          allVersions: search.allVersions,
+          blueprint: search.blueprint,
+          query: search.query,
+          version: search.version,
+        },
+        currentVersion,
+      ),
     );
   }, [
+    currentVersion,
     form,
     search.allVersions,
     search.blueprint,
@@ -153,12 +161,7 @@ export const ExplorerSearchForm = ({
   const contextLabel = (code: string) =>
     code === defaultContextCode ? t('explorer.default') : code;
   const contextChoice = onContextChange && contexts.length > 1;
-  const requestedScope = searchFormValues(search).versionScope;
-  // Naming the current version explicitly is still the default scope.
-  const versionScope =
-    requestedScope === String(currentVersion)
-      ? versionScopes.current
-      : requestedScope;
+  const versionScope = searchFormValues(search, currentVersion).versionScope;
   const versionLabel =
     versionScope === versionScopes.current
       ? t('explorer.currentVersion', {

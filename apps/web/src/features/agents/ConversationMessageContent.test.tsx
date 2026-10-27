@@ -1,3 +1,4 @@
+import '../../i18n';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { ConversationMessageContent } from './ConversationMessageContent';

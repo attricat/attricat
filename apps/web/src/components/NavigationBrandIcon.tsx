@@ -1,15 +1,15 @@
 import { Box } from '@mui/material';
 import { lazy, Suspense, type ElementType, type ReactNode } from 'react';
+import {
+  brandIconHeight,
+  brandIconWidths,
+  type BrandVariant,
+} from './brandIconSizes';
 
 // The navigation header's Attricat mark and wordmark, drawn inline so the
 // boxes can stack when the header is hovered. Geometry matches
 // design/assets/logos/{mark,wordmark-*}.svg; colors use the theme's brand
 // primary and primary text, as those assets do.
-
-const brandIconHeight = 32;
-const brandIconWidths = { mark: 32, wordmark: 161 } as const;
-
-type BrandVariant = 'mark' | 'wordmark';
 
 type NavigationBrandGraphicProps = {
   /** Renders one of the mark's three boxes, numbered bottom-left first. */

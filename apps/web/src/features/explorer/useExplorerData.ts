@@ -7,8 +7,7 @@ import {
 import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useMemo } from 'react';
 import { ApiRequestError } from '../../api/request';
-import { listBlueprintRevisions, type Blueprint } from '../blueprints/api';
-import { blueprintQueryKeys } from '../blueprints/queryKeys';
+import { type Blueprint } from '../blueprints/api';
 import { defaultContextCode } from '../contexts/constants';
 import { searchRecordTablePage } from '../records/api';
 import { isHiddenByDefault } from '../records/attributeVisibility';
@@ -35,6 +34,7 @@ import {
 } from '../records/queryOptions';
 import { contextListOptions } from '../contexts/queryOptions';
 import { publicationChannelsOptions } from '../exports/queryOptions';
+import { blueprintRevisionListOptions } from '../blueprints/queryOptions';
 
 const publishedRevisions = (revisions: Blueprint[]) =>
   revisions.filter(
@@ -67,12 +67,9 @@ export const useExplorerData = (search: ExplorerSearch) => {
     enabled: Boolean(search.blueprint && versionResolved),
   });
   const revisions = useQuery({
-    queryKey: blueprintQueryKeys.revisions(currentBlueprint?.id ?? ''),
-    queryFn: ({ signal }) =>
-      listBlueprintRevisions(currentBlueprint?.id ?? '', signal),
+    ...blueprintRevisionListOptions(currentBlueprint?.id),
     // The blueprint pages share this cache entry and need every revision.
     select: publishedRevisions,
-    enabled: Boolean(currentBlueprint?.id),
   });
   const session = useQuery(sessionOptions());
   const channels = useQuery(publicationChannelsOptions());

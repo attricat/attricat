@@ -91,6 +91,15 @@ describe('RecordFormAttributeEditor', () => {
     ).toBeDefined();
   });
 
+  it('does not call a value inherited when it names no source context', () => {
+    renderEditor({
+      attribute: { code: 'title', value_type: 'boolean' },
+      existingValues: [],
+      resolvedValues: { title: { value: true } },
+    });
+    expect(screen.queryByText(/Inherited from/)).toBeNull();
+  });
+
   it('discards a stored value a migration cannot carry over, and undoes it', () => {
     const onDiscardChange = vi.fn();
     const review = {

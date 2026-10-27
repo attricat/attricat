@@ -3,10 +3,15 @@ import { readAheadStaleTimeMs } from '../records/queryOptions';
 import {
   getUnresolvedRecordFindingCount,
   listRecordRuleRuns,
+  listRuleRuns,
   listRules,
   listUnresolvedRecordFindings,
 } from './api';
 import { ruleQueryKeys } from './queryKeys';
+
+/** The workspace's rule runs, newest first. */
+export const ruleRunsOptions = () =>
+  queryOptions({ queryKey: ruleQueryKeys.runs(), queryFn: listRuleRuns });
 
 export const ruleDefinitionsOptions = () =>
   queryOptions({

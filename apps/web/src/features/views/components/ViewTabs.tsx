@@ -8,7 +8,7 @@ import { nodesPlacedFields } from '../viewFieldComponents';
 import { useFieldDiagnostics } from '../../records/fieldDiagnostics';
 import { layoutMarker, layoutMarkerDescriptions } from '../layoutMarker';
 import { compactIconSize } from '../../../components/iconSizes';
-import { VIEW_TAB_PANEL_SPACING } from '../constants';
+import { VIEW_TAB_MIN_HEIGHT, VIEW_TAB_PANEL_SPACING } from '../constants';
 import { useFieldRevealRequest } from '../fieldReveal';
 
 export const ViewTabs = ({
@@ -29,6 +29,8 @@ export const ViewTabs = ({
 }) => {
   const { t } = useTranslation();
   const [value, setValue] = useState(0);
+  // The tab list can shrink under a mounted strip, as in a live preview.
+  const selected = Math.max(0, Math.min(value, tabs.length - 1));
   const tabId = useId();
   useFieldRevealRequest((code) => {
     const index = tabs.findIndex((tab) =>
@@ -54,7 +56,7 @@ export const ViewTabs = ({
             flexGrow: 1,
           },
         }}
-        value={value}
+        value={tabs.length > 0 ? selected : false}
         variant="scrollable"
       >
         {tabs.map((tab, index) => {
@@ -85,20 +87,22 @@ export const ViewTabs = ({
                     borderBottomColor: 'transparent',
                   },
                 },
-                marker ? { color: marker.color, minHeight: 48 } : false,
+                marker
+                  ? { color: marker.color, minHeight: VIEW_TAB_MIN_HEIGHT }
+                  : false,
               ]}
             />
           );
         })}
       </Tabs>
-      {tabs[value] && (
+      {tabs[selected] && (
         <Box
-          aria-labelledby={`${tabId}-tab-${value}`}
-          id={`${tabId}-tabpanel-${value}`}
+          aria-labelledby={`${tabId}-tab-${selected}`}
+          id={`${tabId}-tabpanel-${selected}`}
           role="tabpanel"
           sx={{ pt: panelSpacing }}
         >
-          {render(tabs[value].children)}
+          {render(tabs[selected].children)}
         </Box>
       )}
     </>

@@ -11,7 +11,6 @@ import {
   MIN_GROUP_POSITION,
 } from './constants';
 import { reusableAttributeQueryKeys } from './queryKeys';
-import { errorMessage } from '../../api/errors';
 import { FormDialog } from '../../components/FormDialog';
 
 export const ReusableAttributeGroupDialog = ({
@@ -68,6 +67,7 @@ export const ReusableAttributeGroupDialog = ({
   );
   return (
     <FormDialog
+      error={validationError ? undefined : save.error}
       isPending={save.isPending}
       onClose={onClose}
       onSubmit={() => void form.handleSubmit()}
@@ -118,26 +118,27 @@ export const ReusableAttributeGroupDialog = ({
               required
               helperText={t('reusableAttributes.groupDialog.revisionsHelp')}
               label={t('reusableAttributes.groupDialog.revisions')}
-              onChange={(event) =>
-                field.handleChange(event.target.value as unknown as string[])
-              }
+              onChange={(event) => {
+                // Autofill can set a multiple select to comma-joined text.
+                const { value } = event.target;
+                field.handleChange(
+                  typeof value === 'string' ? value.split(',') : value,
+                );
+              }}
               select
               slotProps={{ select: { multiple: true } }}
               value={field.state.value}
             >
               {published.map((attribute) => (
                 <MenuItem key={attribute.id} value={attribute.id}>
-                  {attribute.namespace}:{attribute.code} · v{attribute.version}
+                  {attribute.namespace}:{attribute.code} ·{' '}
+                  {t('common.versionNumber', { version: attribute.version })}
                 </MenuItem>
               ))}
             </TextField>
           )}
         </form.Field>
-        {(validationError || save.error) && (
-          <Alert severity="error">
-            {validationError ?? errorMessage(save.error)}
-          </Alert>
-        )}
+        {validationError && <Alert severity="error">{validationError}</Alert>}
       </Stack>
     </FormDialog>
   );

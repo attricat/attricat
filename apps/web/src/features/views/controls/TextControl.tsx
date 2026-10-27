@@ -10,6 +10,7 @@ import type { ComponentProps, ReactNode } from 'react';
 import { attributeLabel } from '../../records/recordDisplay';
 import type { ValueEditorProps } from '../components/componentTypes';
 import { EachValue } from './EachValue';
+import { valueText } from './valueText';
 import { FieldHint } from '../../../components/FieldHint';
 
 /** Opens a field's value, such as a website, mail client or phone call. */
@@ -112,8 +113,7 @@ export const LinkedTextValue = ({
   <EachValue
     value={value}
     renderItem={(item) => {
-      const text =
-        typeof item === 'object' ? JSON.stringify(item) : String(item);
+      const text = valueText(item);
       const target = href(item);
       // Keep left-to-right values such as phone numbers intact in RTL layouts.
       const dir = leftToRight ? 'ltr' : undefined;

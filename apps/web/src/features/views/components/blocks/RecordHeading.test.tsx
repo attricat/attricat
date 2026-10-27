@@ -23,14 +23,16 @@ afterEach(cleanup);
 
 describe('RecordHeading', () => {
   it('renders a configured field heading', () => {
-    expect(() =>
-      RecordHeading({
-        attributes,
-        recordId: 'record-1',
-        values: { title: { value: 'Product 001' } },
-        view,
-      }),
-    ).not.toThrow();
+    render(
+      <RecordHeading
+        attributes={attributes}
+        recordId="record-1"
+        values={{ title: { value: 'Product 001' } }}
+        view={view}
+      />,
+    );
+    expect(screen.getByText('Product 001')).toBeTruthy();
+    expect(screen.getByText('Generated catalog product')).toBeTruthy();
   });
 
   it('renders a status field as its chip', () => {

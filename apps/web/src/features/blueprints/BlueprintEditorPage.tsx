@@ -1,3 +1,4 @@
+import { blueprintRevisionOptions } from './queryOptions';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { Alert, Typography } from '@mui/material';
@@ -12,7 +13,6 @@ import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
 import {
   createBlueprint,
   createBlueprintRevision,
-  getBlueprintRevision,
   validateBlueprint,
 } from './api';
 import { blueprintTemplates } from './blueprintEditorUtils';
@@ -38,14 +38,7 @@ export const BlueprintEditorPage = ({
   const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const source = useQuery({
-    queryKey: blueprintQueryKeys.revision(
-      blueprintId ?? '',
-      sourceVersion ?? 0,
-    ),
-    queryFn: () => getBlueprintRevision(blueprintId!, sourceVersion!),
-    enabled: Boolean(blueprintId && sourceVersion),
-  });
+  const source = useQuery(blueprintRevisionOptions(blueprintId, sourceVersion));
   const sourceRevision = source.data;
   const leaveEditor = () => {
     navigate(

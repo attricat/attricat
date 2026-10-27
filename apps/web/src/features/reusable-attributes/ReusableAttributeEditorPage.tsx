@@ -7,7 +7,6 @@ import { PageHeader } from '../../components/PageHeader';
 import {
   createReusableAttribute,
   createReusableAttributeRevision,
-  listReusableAttributes,
   validateReusableAttribute,
 } from './api';
 import { definitionKinds } from '../definition-editor/constants';
@@ -27,6 +26,7 @@ import {
   DefinitionSaveHint,
   DefinitionTemplatesButton,
 } from '../definition-editor/DefinitionEditorControls';
+import { reusableAttributeListOptions } from './queryOptions';
 
 export const ReusableAttributeEditorPage = ({
   definitionId,
@@ -36,10 +36,7 @@ export const ReusableAttributeEditorPage = ({
   const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const attributes = useQuery({
-    queryKey: reusableAttributeQueryKeys.definitions(true),
-    queryFn: ({ signal }) => listReusableAttributes(true, signal),
-  });
+  const attributes = useQuery(reusableAttributeListOptions(true));
   const attribute = latestReusableAttributeRevisions(
     attributes.data ?? [],
   ).find((item) => item.definition_id === definitionId);

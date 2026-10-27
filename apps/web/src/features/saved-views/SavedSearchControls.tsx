@@ -51,10 +51,10 @@ export const SavedSearchesButton = ({ actions, search }: Props) => {
         search={search}
       />
       <SaveSearchDialog
-        error={actions.error}
+        error={save.error}
         isPending={save.isPending}
         onClose={actions.closeSaveDialog}
-        onSave={(values) => save.mutate(values)}
+        onSave={(values) => save.mutate({ search, values })}
         open={actions.saveOpen}
       />
     </>

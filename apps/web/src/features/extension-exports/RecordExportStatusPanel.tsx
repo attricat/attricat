@@ -1,3 +1,4 @@
+import { recordExportStatusOptions } from './queryOptions';
 import {
   Alert,
   Box,
@@ -19,7 +20,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { ExportIcon } from '../../components/systemIcons';
 import { Timestamp } from '../../time/Timestamp';
 import { useCan } from '../auth/useCan';
-import { recordExportStatus, retryExports } from './api';
+import { retryExports } from './api';
 import { retryableExportStatuses } from './constants';
 import { ExportPreviewDialog } from './ExportPreviewDialog';
 import { ExportStatusChip } from './ExportStatusChip';
@@ -122,8 +123,7 @@ export const RecordExportStatusPanel = ({ recordId }: { recordId: string }) => {
     connection: string | null;
   }>();
   const status = useQuery({
-    queryKey: extensionExportQueryKeys.record(recordId),
-    queryFn: () => recordExportStatus(recordId),
+    ...recordExportStatusOptions(recordId),
   });
   const retry = useMutation({
     mutationFn: ({ mapping, key }: { mapping: ExportMapping; key: string }) =>

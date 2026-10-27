@@ -150,7 +150,7 @@ describe('agent API client', () => {
     await listApprovals('space & slash/');
 
     expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
-      '/api/agent/approvals?conversation_id=space%20%26%20slash%2F',
+      '/api/agent/approvals?conversation_id=space+%26+slash%2F',
     ]);
   });
 

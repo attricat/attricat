@@ -251,8 +251,6 @@
     "email": "Email",
     "password": "Password",
     "forgotPassword": "Forgot password?",
-    "workspaceNotFound": "Unable to find workspace",
-    "loginFailed": "Unable to sign in",
     "sessionCheckFailed": "We couldn't restore your session. Check your connection and try again.",
     "retrySession": "Retry",
     "signOutFailed": "We couldn't sign you out. Check your connection and try again.",
@@ -260,12 +258,10 @@
     "resetPassword": "Reset your password",
     "resetPasswordPrompt": "Enter your email address to receive a password reset link.",
     "resetPasswordSent": "If an eligible account uses that email address, a reset link has been sent.",
-    "requestResetFailed": "Unable to request a password reset",
     "sendResetLink": "Send reset link",
     "backToSignIn": "Back to sign in",
     "chooseNewPassword": "Choose a new password",
     "invalidResetLink": "This password reset link is invalid or expired",
-    "resetPasswordFailed": "Unable to reset password",
     "passwordResetSuccess": "Your password has been reset. Sign in with your new password.",
     "goToSignIn": "Go to sign in",
     "newPassword": "New password"
@@ -451,6 +447,7 @@
     "selectBlueprint": "Select a blueprint",
     "loadBlueprint": "Load blueprint",
     "loadingBlueprint": "Loading blueprint...",
+    "saving": "Saving…",
     "couldNotLoadBlueprints": "Could not load blueprints.",
     "statusUnknown": "Unknown or retired status: {{value}}",
     "statusTerminal": "No status transitions are available.",
@@ -636,8 +633,6 @@
     "loadMigrationFirst": "Load the migration preview first",
     "dataQualityFindings_one": "{{count}} data quality finding",
     "dataQualityFindings_other": "{{count}} data quality findings",
-    "previewContextUnavailable": "Preview context is unavailable",
-    "recordPreviewUnavailable": "Record preview is unavailable",
     "invalidTimeZone": "Expected an IANA time zone",
     "invalidJson": "Expected JSON",
     "blueprintLabel": "Blueprint: {{name}}",
@@ -930,7 +925,6 @@
     "revisionHistory": "Revision history",
     "version": "Version",
     "definitionHash": "Definition hash",
-    "versionNumber": "v{{version}}",
     "versionOption": "v{{version}} ({{status}})",
     "diffTitle": "{{original}} → {{modified}}"
   },
@@ -1081,6 +1075,7 @@
     "discardSearchChanges": "Discard changes",
     "deleteSavedSearch": "Delete saved search",
     "deleteSavedSearchConfirm": "Delete this saved search?",
+    "confirmDeleteSavedSearch": "Delete",
     "linkCopied": "Link copied",
     "savedSearches": "Saved searches",
     "filterByCellValue": "Filter by {{field}} = {{value}}…",
@@ -1784,6 +1779,7 @@
     "unableToRenderRecordHeading": "Unable to render record heading."
   },
   "common": {
+    "versionNumber": "v{{version}}",
     "opensInNewTab": "Opens in a new tab",
     "close": "Close",
     "actionCompleted": "Action completed.",
@@ -1872,11 +1868,6 @@
       "rules": "Rules",
       "findings": "Findings",
       "runs": "Run history"
-    },
-    "errors": {
-      "definitions": "Unable to load rule definitions.",
-      "findings": "Unable to load rule findings.",
-      "runs": "Unable to load rule run history."
     },
     "columns": {
       "rule": "Rule",
@@ -2081,7 +2072,6 @@
   "extensionRuns": {
     "description": "Background work you started from extension actions. Runs continue after you close the action, and you can return here to follow them and download their results.",
     "empty": "You have not started any extension runs yet.",
-    "loadFailed": "Extension runs could not be loaded.",
     "viewRun": "View run",
     "backToRuns": "All extension runs",
     "started": "Extension run started. It continues in the background.",
@@ -2119,8 +2109,7 @@
     "noOutputs": "This run produced no downloadable results.",
     "unnamedOutput": "Result",
     "download": "Download",
-    "cancel": "Cancel run",
-    "cancelFailed": "The run could not be cancelled."
+    "cancel": "Cancel run"
   },
   "principals": {
     "loading": "Loading…",
@@ -2138,6 +2127,7 @@
     "memberSince": "Member since",
     "noTeams": "Not a member of any team",
     "editOwnProfile": "Edit your profile",
+    "userProfile": "User profile",
     "notFoundTitle": "User not found",
     "notFound": "This user is not a member of the workspace."
   },
@@ -2242,6 +2232,8 @@
     "checkAuthorization": "Check authorization",
     "testConnection": "Test",
     "deleteConnection": "Delete",
+    "deleteConnectionTitle": "Delete {{name}}?",
+    "deleteConnectionExplanation": "Its stored credentials are removed and cannot be recovered.",
     "authorizationCode": "Authorization code",
     "redirectUri": "Redirect URI",
     "exchangeCode": "Connect",

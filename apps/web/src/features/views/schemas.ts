@@ -94,8 +94,7 @@ export type ViewDefinition =
           | 'divider'
           | 'field'
           | 'relationship_list'
-          | 'incoming_relationship_list'
-          | 'extension_layout';
+          | 'incoming_relationship_list';
       }
     >;
 

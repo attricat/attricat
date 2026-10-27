@@ -4,8 +4,14 @@ import { attributeContextSchema } from '../contexts/schemas';
 import { fileMetadataSchema } from '../files/schemas';
 import { attributeValueKinds, attributeValueTypes } from './valueTypes';
 import { jsonObjectSchema, viewsSchema } from '../views/schemas';
+import { revisionStatusSchema } from '../../api/revisionStatus';
 import {
+  attributeCardinalities,
+  attributeContextEditability,
+  attributeContextFallbacks,
   attributeFilterOperators,
+  attributeHierarchies,
+  publicationStatuses,
   SMART_FILL_MAX_ATTACHMENTS,
   SMART_FILL_MAX_CONTENT_LENGTH,
   statusTransitionDenialCodes,
@@ -34,11 +40,11 @@ export const attributeSchema = z
     target_blueprint_code: z.string().nullable().optional(),
     /** Every allowed target blueprint; empty means any blueprint. */
     target_blueprint_codes: z.array(z.string()).optional(),
-    cardinality: z.enum(['one', 'many']).nullable().optional(),
-    target_cardinality: z.enum(['one', 'many']).nullable().optional(),
-    hierarchy: z.enum(['acyclic', 'tree']).nullable().optional(),
-    context_fallback: z.enum(['default', 'none']).optional(),
-    context_editable: z.enum(['all', 'default']).optional(),
+    cardinality: z.enum(attributeCardinalities).nullable().optional(),
+    target_cardinality: z.enum(attributeCardinalities).nullable().optional(),
+    hierarchy: z.enum(attributeHierarchies).nullable().optional(),
+    context_fallback: z.enum(attributeContextFallbacks).optional(),
+    context_editable: z.enum(attributeContextEditability).optional(),
     readonly: z.boolean().optional(),
     tags: z.array(z.string()).optional(),
     value_schema: jsonSchemaSchema.nullish(),
@@ -55,7 +61,7 @@ export const attributeSchema = z
       .optional(),
     file_policy: z
       .object({
-        cardinality: z.enum(['one', 'many']),
+        cardinality: z.enum(attributeCardinalities),
         ordered: z.boolean(),
         allowed_mime_groups: z.array(z.string()),
         allowed_extensions: z.array(z.string()),
@@ -73,7 +79,7 @@ export const blueprintSchema = z
     code: z.string(),
     name: z.string(),
     version: z.number().int().positive(),
-    status: z.enum(['draft', 'published']),
+    status: revisionStatusSchema,
     views: viewsSchema.default({}),
     record_schema: jsonSchemaSchema.nullish(),
   })
@@ -92,32 +98,34 @@ export const blueprintWithAttributesSchema = z.object({
     .default([]),
 });
 const scalarValueSchema = z.json();
+/** The attribute and context a value is set in; no context means the default. */
+const attributeValueTargetSchema = z.object({
+  attribute_code: z.string().min(1),
+  context_id: uuidSchema.nullable().optional(),
+});
+/** A blueprint by code, at a version or its current one. */
+const blueprintSelectorSchema = z.object({
+  code: z.string().min(1),
+  version: z.number().int().positive().optional(),
+});
 export const newAttributeValueSchema = z.discriminatedUnion('kind', [
-  z.object({
+  attributeValueTargetSchema.extend({
     kind: z.literal(attributeValueKinds.scalar),
-    attribute_code: z.string().min(1),
-    context_id: uuidSchema.nullable().optional(),
     value: scalarValueSchema,
   }),
-  z.object({
+  attributeValueTargetSchema.extend({
     kind: z.literal(attributeValueKinds.relationship),
-    attribute_code: z.string().min(1),
-    context_id: uuidSchema.nullable().optional(),
     target_record_id: uuidSchema,
   }),
 ]);
 export const formAttributeValueSchema = z.discriminatedUnion('kind', [
   ...newAttributeValueSchema.options,
-  z.object({
+  attributeValueTargetSchema.extend({
     kind: z.literal(attributeValueKinds.file),
-    attribute_code: z.string().min(1),
-    context_id: uuidSchema.nullable().optional(),
     files: z.array(fileMetadataSchema),
   }),
 ]);
-export const relationshipTargetsSchema = z.object({
-  attribute_code: z.string().min(1),
-  context_id: uuidSchema.nullable().optional(),
+export const relationshipTargetsSchema = attributeValueTargetSchema.extend({
   target_record_ids: z.array(uuidSchema),
 });
 const attributeValueSelectorSchema = z.object({
@@ -127,7 +135,7 @@ const attributeValueSelectorSchema = z.object({
 export const recordPublicationStatusSchema = z.object({
   context_id: uuidSchema,
   context_code: z.string(),
-  status: z.enum(['not_published', 'published']),
+  status: z.enum(publicationStatuses),
   published_at: z.string().datetime().nullable(),
   published_by_user_id: uuidSchema.nullable(),
 });
@@ -204,26 +212,17 @@ const resolvedPreviewValueSchema = z.union([
   jsonObjectSchema,
   z.array(fileMetadataSchema),
 ]);
+const resolvedPreviewEntrySchema = z.object({
+  value: resolvedPreviewValueSchema,
+  /** The context the value is set in, which may be a parent of the one asked for. */
+  source_context: z.object({ id: uuidSchema, code: z.string() }),
+});
 const resolvedRecordPreviewSchema = z.object({
   record: recordIdentitySchema,
   requested_context: attributeContextSchema,
-  values: z.record(
-    z.string(),
-    z.object({
-      value: resolvedPreviewValueSchema,
-      source_context: z.object({ id: uuidSchema, code: z.string() }),
-    }),
-  ),
+  values: z.record(z.string(), resolvedPreviewEntrySchema),
   reusable_attributes: z.array(attributeSchema).default([]),
-  reusable_values: z
-    .record(
-      z.string(),
-      z.object({
-        value: resolvedPreviewValueSchema,
-        source_context: z.object({ id: uuidSchema, code: z.string() }),
-      }),
-    )
-    .default({}),
+  reusable_values: z.record(z.string(), resolvedPreviewEntrySchema).default({}),
 });
 const resultVersionScopeSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('empty') }),
@@ -337,10 +336,7 @@ export const recordSearchFilterSchema = z
     },
   );
 export const searchRecordsRequestSchema = z.object({
-  blueprint: z.object({
-    code: z.string().min(1),
-    version: z.number().int().positive().optional(),
-  }),
+  blueprint: blueprintSelectorSchema,
   query: z.string(),
   filters: z.array(recordSearchFilterSchema),
   relationship_filters: z
@@ -387,10 +383,7 @@ export const searchRecordsRequestSchema = z.object({
   }),
 });
 export const relationshipTreeFacetChildrenRequestSchema = z.object({
-  blueprint: z.object({
-    code: z.string().min(1),
-    version: z.number().int().positive().optional(),
-  }),
+  blueprint: blueprintSelectorSchema,
   query: z.string().optional(),
   /** Omitted to list the blueprint's own tree through `hierarchy_field`. */
   source_relationship_field: z.string().min(1).optional(),
@@ -414,24 +407,15 @@ export const relationshipTreeFacetChildrenResponseSchema = z.object({
   selected_paths: z.array(z.array(uuidSchema)),
   next_cursor: uuidSchema.nullable(),
 });
-const getBlueprintRequestSchema = z.object({
-  code: z.string().min(1),
-  version: z.number().int().positive().optional(),
-});
 const getBlueprintRevisionRequestSchema = z.object({
   id: uuidSchema,
   version: z.number().int().positive(),
 });
-export const newFileAttributeValueSchema = z.object({
-  attribute_code: z.string().min(1),
-  context_id: uuidSchema.nullable().optional(),
+export const newFileAttributeValueSchema = attributeValueTargetSchema.extend({
   file_ids: z.array(uuidSchema).min(1),
 });
 export const createRecordRequestSchema = z.object({
-  blueprint: z.object({
-    code: z.string().min(1),
-    version: z.number().int().positive().optional(),
-  }),
+  blueprint: blueprintSelectorSchema,
   values: z.array(newAttributeValueSchema),
   /** Staged uploads the create claims, one ordered list per attribute. */
   files: z.array(newFileAttributeValueSchema).optional(),
@@ -509,7 +493,7 @@ export {
   recordFormResponseSchema,
   recordSearchResponseSchema,
   recordSearchPageSchema,
-  getBlueprintRequestSchema,
+  blueprintSelectorSchema,
   getBlueprintRevisionRequestSchema,
   resolvedRecordPreviewSchema,
 };

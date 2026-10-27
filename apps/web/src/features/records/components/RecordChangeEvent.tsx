@@ -1,3 +1,4 @@
+import { personName } from '../../../components/personName';
 import { Box, Paper, Typography } from '@mui/material';
 import { Trans, useTranslation } from 'react-i18next';
 import { JsonInline } from '../../../components/JsonValue';
@@ -15,7 +16,7 @@ type Props = {
 export const RecordChangeEvent = ({ changes }: Props) => {
   const { t } = useTranslation();
   const [event] = changes;
-  const actorName = event.actor_display_name ?? event.actor_email;
+  const actorName = personName(event.actor_display_name, event.actor_email);
   const actor = actorName ? (
     <UserLabel
       avatarFileId={event.actor_avatar_file_id}

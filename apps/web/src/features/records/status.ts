@@ -5,7 +5,8 @@ import type {
   FormAttributeValue,
   StatusTransitionAccess,
 } from './api';
-import { attributeValueTypes } from './valueTypes';
+import { attributeContextFallbacks } from './constants';
+import { attributeValueKinds, attributeValueTypes } from './valueTypes';
 
 export const STATUS_SCHEMA_KEY = 'x-attricat-status';
 const codeSchema = z
@@ -182,11 +183,14 @@ export const savedStatusValue = (
   for (const contextId of contextIds) {
     const value = values.find(
       (item) =>
-        item.kind === 'scalar' &&
+        item.kind === attributeValueKinds.scalar &&
         item.attribute_code === attribute.code &&
         item.context_id === contextId,
     );
-    if (value?.kind === 'scalar' && typeof value.value === 'string')
+    if (
+      value?.kind === attributeValueKinds.scalar &&
+      typeof value.value === 'string'
+    )
       return value.value;
   }
   return null;
@@ -202,7 +206,10 @@ export const savedStatusState = (
   contextId: string | null,
   parentContextIds: readonly string[],
 ) => {
-  const parents = attribute.context_fallback === 'none' ? [] : parentContextIds;
+  const parents =
+    attribute.context_fallback === attributeContextFallbacks.none
+      ? []
+      : parentContextIds;
   return {
     current: savedStatusValue(attribute, values, [contextId, ...parents]),
     inherited: savedStatusValue(attribute, values, parents),

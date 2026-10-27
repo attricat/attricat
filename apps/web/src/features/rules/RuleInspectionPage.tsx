@@ -1,3 +1,4 @@
+import { useAcknowledgeFinding } from './useAcknowledgeFinding';
 import {
   useInfiniteQuery,
   useMutation,
@@ -13,11 +14,9 @@ import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { useCan } from '../auth/useCan';
 import {
-  acknowledgeFinding,
   disableRule,
   enableRuleRevision,
   listFindingsPage,
-  listRuleRuns,
   runRuleNow,
   type FindingsSearch,
   type Rule,
@@ -34,7 +33,7 @@ import {
 } from './constants';
 import { FindingsSection } from './FindingsSection';
 import { ruleQueryKeys } from './queryKeys';
-import { ruleDefinitionsOptions } from './queryOptions';
+import { ruleDefinitionsOptions, ruleRunsOptions } from './queryOptions';
 import { ruleRevisionsByKey } from './ruleRevisions';
 import { useRecordLabels } from '../records/useRecordLabels';
 import { RulesSection } from './RulesSection';
@@ -83,8 +82,7 @@ export const RuleInspectionPage = ({
     enabled: findingsShown,
   });
   const runs = useQuery({
-    queryKey: ruleQueryKeys.runs(),
-    queryFn: listRuleRuns,
+    ...ruleRunsOptions(),
     enabled: section === RULE_SECTION_RUNS,
   });
   // Name the records the visible findings and runs refer to.
@@ -99,10 +97,7 @@ export const RuleInspectionPage = ({
   );
   const refresh = () =>
     queryClient.invalidateQueries({ queryKey: ruleQueryKeys.all });
-  const acknowledge = useMutation({
-    mutationFn: acknowledgeFinding,
-    onSuccess: refresh,
-  });
+  const acknowledge = useAcknowledgeFinding();
   const run = useMutation({
     mutationFn: ({ rule, dryRun }: { rule: Rule; dryRun: boolean }) =>
       runRuleNow(rule.id, rule.version, dryRun),
@@ -199,7 +194,8 @@ export const RuleInspectionPage = ({
         {section === RULE_SECTION_RULES && (
           <RulesSection
             canManage={canManage}
-            error={rules.isError}
+            error={rules.error}
+            onRetry={() => void rules.refetch()}
             onRun={(rule, dryRun) => {
               toggle.reset();
               run.mutate({ rule, dryRun });
@@ -217,7 +213,8 @@ export const RuleInspectionPage = ({
             onAcknowledge={(id) => acknowledge.mutate(id)}
             acknowledging={acknowledge.isPending}
             canManage={canManage}
-            error={findings.isError && !findings.isFetchNextPageError}
+            error={findings.isFetchNextPageError ? null : findings.error}
+            onRetry={() => void findings.refetch()}
             recordLabels={recordLabels}
             findings={findingItems}
             filters={findingsSearch}
@@ -239,7 +236,8 @@ export const RuleInspectionPage = ({
         {section === RULE_SECTION_RUNS && (
           <RunsSection
             recordLabels={recordLabels}
-            error={runs.isError}
+            error={runs.error}
+            onRetry={() => void runs.refetch()}
             revisions={revisions}
             runs={runs.data}
           />

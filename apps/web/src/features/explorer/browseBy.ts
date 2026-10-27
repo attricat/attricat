@@ -1,3 +1,8 @@
+import {
+  readStoredJson,
+  writeStoredJson,
+  storageAreas,
+} from '../../components/browserStorage';
 import type { Attribute, BlueprintWithAttributes } from '../records/api';
 import { isHiddenByDefault } from '../records/attributeVisibility';
 import { attributeLabel } from '../records/recordDisplay';
@@ -195,23 +200,8 @@ export const defaultBrowseByField = (
 const storageKey = (blueprintId: string) =>
   `${browseByStorageKeyPrefix}${blueprintId}`;
 
-export const getStoredBrowseBy = (
-  blueprintId: string,
-): BrowseBy | undefined => {
-  try {
-    const stored = localStorage.getItem(storageKey(blueprintId));
-    if (stored === null) return undefined;
-    const parsed = browseBySchema.safeParse(JSON.parse(stored));
-    return parsed.success ? parsed.data : undefined;
-  } catch {
-    return undefined;
-  }
-};
+export const getStoredBrowseBy = (blueprintId: string): BrowseBy | undefined =>
+  readStoredJson(storageAreas.local, storageKey(blueprintId), browseBySchema);
 
-export const setStoredBrowseBy = (blueprintId: string, browseBy: BrowseBy) => {
-  try {
-    localStorage.setItem(storageKey(blueprintId), JSON.stringify(browseBy));
-  } catch {
-    // Storage can be unavailable in hardened browser contexts.
-  }
-};
+export const setStoredBrowseBy = (blueprintId: string, browseBy: BrowseBy) =>
+  writeStoredJson(storageAreas.local, storageKey(blueprintId), browseBy);

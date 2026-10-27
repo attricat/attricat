@@ -1,5 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useTranslation } from 'react-i18next';
+import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getBlueprintRevision, type BlueprintWithAttributes } from './api';
 import { recordQueryKeys } from './queryKeys';
 import {
@@ -15,21 +14,16 @@ import { useResolvedRecordPreview } from './useRecordContexts';
 export const useRecordBlueprintRevision = (
   record: { blueprint_id: string; blueprint_version: number } | undefined,
 ) => {
-  const { t } = useTranslation();
   const client = useQueryClient();
   return useQuery({
     queryKey: recordQueryKeys.blueprintRevision(
       record?.blueprint_id,
       record?.blueprint_version,
     ),
-    queryFn: () => {
-      if (!record) throw new Error(t('records.recordPreviewUnavailable'));
-      return getBlueprintRevision(
-        record.blueprint_id,
-        record.blueprint_version,
-      );
-    },
-    enabled: Boolean(record?.blueprint_id && record.blueprint_version),
+    queryFn: record
+      ? () =>
+          getBlueprintRevision(record.blueprint_id, record.blueprint_version)
+      : skipToken,
     // Published revisions never change.
     staleTime: Infinity,
     // Most records use their blueprint's latest revision, which pages such as

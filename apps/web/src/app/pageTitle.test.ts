@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import i18n from '../i18n';
 import { pageTitle } from './pageTitle';
@@ -31,5 +33,35 @@ describe('pageTitle', () => {
       'Workflows · Attricat',
     );
     await i18n.changeLanguage('en');
+  });
+});
+
+describe('pageTitle for every route', () => {
+  // The generated route tree lists each full path; a route this file does not
+  // know would otherwise silently show the not-found title.
+  const routeTreeSource = readFileSync(
+    fileURLToPath(new URL('../routeTree.gen.ts', import.meta.url)),
+    'utf8',
+  );
+  const byFullPath = routeTreeSource.slice(
+    routeTreeSource.indexOf('interface FileRoutesByFullPath'),
+  );
+  const paths = [
+    ...new Set(
+      [
+        ...byFullPath
+          .slice(0, byFullPath.indexOf('}'))
+          .matchAll(/^\s+'([^']+)':/gm),
+      ].map(([, path]) => path),
+    ),
+  ];
+  const samplePath = (path: string) =>
+    path.replace(/\$[A-Za-z]+/g, '123e4567-e89b-12d3-a456-426614174000');
+
+  it.each(paths)('names %s', (path) => {
+    expect(paths.length).toBeGreaterThan(50);
+    expect(pageTitle(samplePath(path), i18n.t)).not.toContain(
+      i18n.t('errors.notFoundTitle'),
+    );
   });
 });

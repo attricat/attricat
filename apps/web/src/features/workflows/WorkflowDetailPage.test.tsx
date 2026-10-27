@@ -2,7 +2,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { forwardRef, type ComponentPropsWithoutRef } from 'react';
+import {
+  forwardRef,
+  type ComponentPropsWithoutRef,
+  type ElementType,
+} from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { currentSession } from '../auth/api';
@@ -28,6 +32,15 @@ vi.mock('@tanstack/react-router', () => ({
       </a>
     );
   }),
+  // RouterButton renders the Button as a plain link to its route.
+  createLink: (Component: ElementType) =>
+    forwardRef<
+      HTMLAnchorElement,
+      ComponentPropsWithoutRef<'a'> & { params?: object; to: string }
+    >(({ params, to, ...props }, ref) => {
+      void params;
+      return <Component {...props} component="a" href={to} ref={ref} />;
+    }),
 }));
 vi.mock('../auth/api', () => ({ currentSession: vi.fn() }));
 vi.mock('./api', () => ({

@@ -2,8 +2,6 @@ import { useQueries } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Breadcrumbs, Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { getRecordHierarchy } from '../../records/api';
-import { recordQueryKeys } from '../../records/queryKeys';
 import type { ViewComponentDefinition } from './componentTypes';
 import {
   HIERARCHY_FONT_SIZE,
@@ -12,6 +10,7 @@ import {
   VIEW_COMPONENT_VERSION,
 } from '../constants';
 import { errorMessage } from '../../../api/errors';
+import { recordHierarchyOptions } from '../../records/queryOptions';
 
 export const RelationshipHierarchy = ({
   attribute,
@@ -43,15 +42,9 @@ export const RelationshipHierarchy = ({
   const hierarchyField =
     typeof parentField === 'string' ? parentField : attribute.code;
   const hierarchies = useQueries({
-    queries: targetIds.map((targetId) => ({
-      queryKey: recordQueryKeys.hierarchy(
-        targetId,
-        contextId ?? '',
-        hierarchyField,
-      ),
-      queryFn: () => getRecordHierarchy(targetId, contextId!, hierarchyField),
-      enabled: Boolean(contextId),
-    })),
+    queries: targetIds.map((targetId) =>
+      recordHierarchyOptions(targetId, contextId, hierarchyField),
+    ),
   });
   if (!contextId)
     return (

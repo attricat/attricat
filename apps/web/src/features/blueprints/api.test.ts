@@ -56,9 +56,11 @@ describe('blueprint API client', () => {
     );
 
     respond({ blueprint, attributes: [] });
-    await getBlueprintRevision(blueprintId, 2);
+    const revisionRequest = new AbortController();
+    await getBlueprintRevision(blueprintId, 2, revisionRequest.signal);
     expect(fetchMock).toHaveBeenLastCalledWith(
       `/api/blueprints/${blueprintId}/versions/2`,
+      { signal: revisionRequest.signal },
     );
 
     respond({ blueprint, attributes: [] });

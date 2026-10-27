@@ -32,6 +32,10 @@ import {
   serializeAttributeValues,
   validateRecordForm,
   valuesForForm,
+  firstInFieldOrder,
+  recordFormStatus,
+  recordFormStatusKinds,
+  type RecordFormStatusKind,
 } from '../recordForm';
 import { recordFormLayout } from '../recordFormAttributes';
 import {
@@ -40,10 +44,8 @@ import {
 } from '../../views/viewFieldComponents';
 import { resolveEditComponent } from '../../views/components/registry';
 import { EditableRecordLayout } from '../../views/components/EditableRecordLayout';
-import { draftEditors, type DraftEditor } from '../../drafts/constants';
 import { DraftRestoreDialog } from '../../drafts/DraftRestoreDialog';
-import { formFieldsDraftSchema } from '../../drafts/schemas';
-import { useEditorDraft } from '../../drafts/useEditorDraft';
+import { useRecordFormDraft, type RecordFormDraft } from './useRecordFormDraft';
 import type { MigrationFieldReview } from '../migrationReview';
 import {
   forwardRef,
@@ -64,9 +66,7 @@ import {
   statusTransitionDenial,
 } from '../status';
 import { useStatusTransitionDenialText } from '../useStatusTransitionDenialText';
-import { checkViolationError } from '../../../api/checkViolations';
-import { violationFieldErrors } from '../checkViolations';
-import { useViolationText } from '../../../components/useViolationText';
+import { useServerFieldErrors } from './useServerFieldErrors';
 import { ApiErrorAlert } from '../../../components/ApiErrorAlert';
 import { RecordFormAttributeEditor } from './RecordFormAttributeEditor';
 import { useQueuedFileUploadsContext } from '../../files/queuedFileUploads';
@@ -91,28 +91,9 @@ export type RecordFormHandle = {
   clearDraft: () => void;
 };
 
-/** Identifies where unsaved field values are kept across refreshes. */
-type RecordFormDraft = {
-  editor: DraftEditor;
-  resource: readonly (string | number)[];
-  /** Marker for the loaded source beyond the initial field values. */
-  source: string;
-};
-
-const draftFieldSeparator = '\n';
 /** Padding of the form's surface, which the action bar spans. */
 const formPadding = 3;
 const submitShortcut = 'Control+Enter Meta+Enter';
-
-const pickDraftFields = (
-  fields: Record<string, string>,
-  codes: readonly string[],
-) =>
-  Object.fromEntries(
-    codes.flatMap((code) =>
-      fields[code] === undefined ? [] : [[code, fields[code]]],
-    ),
-  );
 
 // Creating and migrating a record have no saved status edges, parent
 // contexts or resolved values to show.
@@ -122,6 +103,19 @@ const noResolvedValues = {};
 const noAttributes: readonly Attribute[] = [];
 const noPendingConfirmations: readonly FormErrorSummaryItem[] = [];
 const fieldSkeletons = ['first', 'second', 'third'];
+
+// Errors stand out once a save was attempted; what is merely left to do stays
+// neutral.
+const statusColors = {
+  [recordFormStatusKinds.errors]: 'error',
+  [recordFormStatusKinds.required]: 'text.secondary',
+  [recordFormStatusKinds.confirm]: 'text.secondary',
+} as const satisfies Record<RecordFormStatusKind, string>;
+const statusLabelKeys = {
+  [recordFormStatusKinds.errors]: 'records.fieldsNeedAttention',
+  [recordFormStatusKinds.required]: 'records.requiredFieldsLeft',
+  [recordFormStatusKinds.confirm]: 'records.changesToConfirm',
+} as const satisfies Record<RecordFormStatusKind, string>;
 
 /**
  * A field the user changed carries an `action.changed` bar at its leading
@@ -151,6 +145,8 @@ type RecordFormProps = {
   defaultContextId?: string | null;
   existingValues?: FormAttributeValue[];
   isLoadingBlueprint?: boolean;
+  /** The entered values are being saved. */
+  isSubmitting?: boolean;
   showAllAttributes?: boolean;
   /** Lays out every editable field instead of the blueprint's detail view. */
   layout?: ViewDefinition;
@@ -198,6 +194,7 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
       defaultContextId = null,
       existingValues = [],
       isLoadingBlueprint = false,
+      isSubmitting = false,
       showAllAttributes: showAllProp = false,
       layout,
       migrationReviews = {},
@@ -217,7 +214,6 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
     ref,
   ) => {
     const { t } = useTranslation();
-    const violationText = useViolationText();
     const denialText = useStatusTransitionDenialText();
     // A versioned editing session keeps values and its concurrency token from
     // the same snapshot. Refetches must not silently rebase unsaved edits.
@@ -230,6 +226,17 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
       expectedUpdatedAt === undefined ? initialValues : baseline.fields;
     const savedValues = baseline.values;
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+    // Fields the user has changed; others show their errors only once a save
+    // is attempted, as the action bar does.
+    const [touchedCodes, setTouchedCodes] = useState<ReadonlySet<string>>(
+      () => new Set(),
+    );
+    const markTouched = (codes: readonly string[]) =>
+      setTouchedCodes((current) =>
+        codes.every((code) => current.has(code))
+          ? current
+          : new Set([...current, ...codes]),
+      );
     const [formError, setFormError] = useState<string>();
     // Records are entered with the detail layout; each display component
     // edits with its paired edit component.
@@ -270,33 +277,14 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
         ),
       [queuedFiles],
     );
-    const checks = checkViolationError(error);
-    // A field's server violation is cleared once the user edits that field.
-    const [editedAfterError, setEditedAfterError] = useState<{
-      error: unknown;
-      codes: readonly string[];
-    }>({ error: undefined, codes: [] });
-    const editedCodes =
-      editedAfterError.error === error ? editedAfterError.codes : [];
-    const serverViolations = checks
-      ? violationFieldErrors(
-          checks.violations,
-          editableAttributes.map((attribute) => attribute.code),
-          violationText,
-        )
-      : undefined;
-    const serverFieldErrors = Object.fromEntries(
-      Object.entries(serverViolations?.fieldErrors ?? {}).filter(
-        ([code]) => !editedCodes.includes(code),
-      ),
+    const {
+      fieldErrors: serverFieldErrors,
+      markEdited,
+      unplaced: unplacedViolations,
+    } = useServerFieldErrors(
+      error,
+      editableAttributes.map((attribute) => attribute.code),
     );
-    const markEdited = (code: string) => {
-      if (!checks || editedCodes.includes(code)) return;
-      setEditedAfterError((current) => ({
-        error,
-        codes: current.error === error ? [...current.codes, code] : [code],
-      }));
-    };
     // The blueprint picker comes first; once a blueprint loads, its first
     // field, or in a migration the first field to review. A failed save
     // leaves focus where it is.
@@ -382,6 +370,7 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
     };
     // The submit button that was used, read when the form submits.
     const addAnother = useRef(false);
+    const busy = isLoadingBlueprint || isSubmitting;
     const [submitAttempted, setSubmitAttempted] = useState(false);
     const [confirmingBlueprintChange, setConfirmingBlueprintChange] =
       useState(false);
@@ -392,7 +381,7 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
         fields: initialFields,
       },
       onSubmit: ({ value }) => {
-        if (isLoadingBlueprint) return;
+        if (busy) return;
         if (!blueprint) {
           onLoadBlueprint?.(value.blueprintCode);
           return;
@@ -407,9 +396,7 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
           // Confirmations are shown above the fields, so they come first.
           const first =
             pendingConfirmations[0]?.id ??
-            fieldOrder.find(
-              (code) => validation.fieldErrors[code] !== undefined,
-            );
+            firstInFieldOrder(fieldOrder, Object.keys(validation.fieldErrors));
           if (first) revealField(first);
           else focusErrors();
           return;
@@ -434,38 +421,24 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
       },
     });
 
-    // Files upload separately and are never kept in a draft.
-    const draftCodes = editableAttributes
-      .filter((attribute) => attribute.value_type !== attributeValueTypes.file)
-      .map((attribute) => attribute.code)
-      .join(draftFieldSeparator);
     const fields = useStore(form.store, (state) => state.values.fields);
-    const draftFields = useMemo(
-      () => pickDraftFields(fields, draftCodes.split(draftFieldSeparator)),
-      [draftCodes, fields],
-    );
-    const initialDraftFields = JSON.stringify(
-      pickDraftFields(initialFields, draftCodes.split(draftFieldSeparator)),
-    );
-    const fieldsChanged = JSON.stringify(draftFields) !== initialDraftFields;
-    const draft = useEditorDraft({
-      dirty: fieldsChanged,
-      // Unused without draft options; `ready` keeps the draft off.
-      editor: draftOptions?.editor ?? draftEditors.recordCreate,
-      ready: Boolean(draftOptions && blueprint),
-      resource: draftOptions?.resource ?? [],
-      schema: formFieldsDraftSchema,
-      source: JSON.stringify([draftOptions?.source, initialDraftFields]),
-      value: draftFields,
+    const {
+      draft,
+      fieldsChanged,
+      restore: restoredDraftFields,
+    } = useRecordFormDraft({
+      editableAttributes,
+      fields,
+      initialFields,
+      options: draftOptions,
+      ready: Boolean(blueprint),
     });
 
     const restoreDraft = () => {
-      const restored = draft.restore();
-      if (!restored) return;
-      const nextFields = {
-        ...form.state.values.fields,
-        ...pickDraftFields(restored, draftCodes.split(draftFieldSeparator)),
-      };
+      const restoredFields = restoredDraftFields();
+      if (!restoredFields) return;
+      const nextFields = { ...form.state.values.fields, ...restoredFields };
+      markTouched(Object.keys(restoredFields));
       validateFields(nextFields);
       form.setFieldValue('fields', nextFields);
     };
@@ -478,8 +451,13 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
       requiredCodes,
       fileCounts,
     );
+    const shownFieldErrors = Object.fromEntries(
+      Object.entries(fieldErrors).filter(
+        ([code]) => submitAttempted || touchedCodes.has(code),
+      ),
+    );
     const allFieldErrors = Object.fromEntries(
-      Object.entries({ ...serverFieldErrors, ...fieldErrors }).filter(
+      Object.entries({ ...serverFieldErrors, ...shownFieldErrors }).filter(
         // Queuing a file fills a required file field without a field change.
         ([code]) => !((fileCounts?.[code] ?? 0) > 0),
       ),
@@ -504,8 +482,9 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
     useEffect(() => {
       if (!error || error === handledError.current) return;
       handledError.current = error;
-      const first = fieldOrder.find(
-        (code) => serverFieldErrors[code] !== undefined,
+      const first = firstInFieldOrder(
+        fieldOrder,
+        Object.keys(serverFieldErrors),
       );
       if (first) revealField(first);
       else focusErrors();
@@ -527,7 +506,7 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
     );
     const editorContext = {
       statusParentContextIds: noStatusParentContextIds,
-      disabled: isLoadingBlueprint,
+      disabled: busy,
       contextId,
       defaultContextId,
       existingValues,
@@ -543,39 +522,27 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
       void form.handleSubmit();
     };
     // The action bar names what still blocks saving and goes to the first of it.
-    const statusTarget = (():
-      { color: string; label: string; target: () => void } | undefined => {
-      if (isLoadingBlueprint || !blueprint) return undefined;
-      if (submitAttempted && errorItems.length > 0)
-        return {
-          color: 'error',
-          label: t('records.fieldsNeedAttention', { count: errorItems.length }),
-          target: () => revealField(errorItems[0].id),
-        };
-      if (missingRequired.length > 0)
-        return {
-          color: 'text.secondary',
-          label: t('records.requiredFieldsLeft', {
-            count: missingRequired.length,
-          }),
-          target: () => {
-            const missing = new Set(
-              missingRequired.map((attribute) => attribute.code),
-            );
-            const first = fieldOrder.find((code) => missing.has(code));
-            if (first) revealField(first);
-          },
-        };
-      if (pendingConfirmations.length > 0)
-        return {
-          color: 'text.secondary',
-          label: t('records.changesToConfirm', {
-            count: pendingConfirmations.length,
-          }),
-          target: () => revealField(pendingConfirmations[0].id),
-        };
-      return undefined;
-    })();
+    const formStatus =
+      isLoadingBlueprint || !blueprint
+        ? undefined
+        : recordFormStatus({
+            errorIds: errorItems.map((item) => item.id),
+            fieldOrder,
+            missingRequiredCodes: missingRequired.map(
+              (attribute) => attribute.code,
+            ),
+            pendingConfirmationIds: pendingConfirmations.map(
+              (confirmation) => confirmation.id,
+            ),
+            submitAttempted,
+          });
+    const statusTarget = formStatus && {
+      color: statusColors[formStatus.kind],
+      label: t(statusLabelKeys[formStatus.kind], { count: formStatus.count }),
+      target: () => {
+        if (formStatus.target) revealField(formStatus.target);
+      },
+    };
     const status = statusTarget && (
       <Link
         color={statusTarget.color}
@@ -599,7 +566,7 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
           // Keys bubble from the form's dialogs through their portals.
           if (!event.currentTarget.contains(event.target as Node)) return;
           event.preventDefault();
-          if (!isLoadingBlueprint) submit(false);
+          if (!busy) submit(false);
         }}
         onSubmit={(event) => {
           event.preventDefault();
@@ -653,15 +620,13 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
           onDiscard={draft.discard}
           onRestore={restoreDraft}
         />
-        {guardUnsavedChanges &&
-          !isLoadingBlueprint &&
-          (fieldsChanged || hasQueuedFiles) && (
-            <UnsavedChangesGuard
-              description={t('records.unsavedFormDescription')}
-              onDiscard={draft.clear}
-              title={t('records.unsavedFormTitle')}
-            />
-          )}
+        {guardUnsavedChanges && !busy && (fieldsChanged || hasQueuedFiles) && (
+          <UnsavedChangesGuard
+            description={t('records.unsavedFormDescription')}
+            onDiscard={draft.clear}
+            title={t('records.unsavedFormTitle')}
+          />
+        )}
         <Stack spacing={VIEW_EDIT_LAYOUT_SPACING}>
           {(error ||
             formError ||
@@ -682,10 +647,7 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
                 />
               )}
               {error && (
-                <ApiErrorAlert
-                  error={error}
-                  violations={serverViolations?.unplaced}
-                />
+                <ApiErrorAlert error={error} violations={unplacedViolations} />
               )}
               {formError && <Alert severity="error">{formError}</Alert>}
             </Stack>
@@ -709,7 +671,7 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
                 })}
               </Typography>
               <Button
-                disabled={isLoadingBlueprint}
+                disabled={busy}
                 onClick={() =>
                   fieldsChanged || hasQueuedFiles
                     ? setConfirmingBlueprintChange(true)
@@ -758,6 +720,7 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
                           [attribute.code]: nextValue,
                         };
                         markEdited(attribute.code);
+                        markTouched([attribute.code]);
                         validateFields(nextFields);
                         field.handleChange(nextFields);
                       }}
@@ -803,12 +766,12 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
               {t('records.fieldsChanged', { count: changedCodes.size })}
             </Typography>
           )}
-          <Button disabled={isLoadingBlueprint} onClick={onCancel}>
+          <Button disabled={busy} onClick={onCancel}>
             {t('common.cancel')}
           </Button>
           {blueprint && addAnotherLabel && (
             <Button
-              disabled={isLoadingBlueprint}
+              disabled={busy}
               onClick={() => submit(true)}
               variant="outlined"
             >
@@ -817,11 +780,15 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
           )}
           <Button
             aria-keyshortcuts={submitShortcut}
-            disabled={isLoadingBlueprint}
+            disabled={busy}
             type="submit"
             variant="contained"
           >
-            {isLoadingBlueprint ? t('records.loadingBlueprint') : submitLabel}
+            {isLoadingBlueprint
+              ? t('records.loadingBlueprint')
+              : isSubmitting
+                ? t('records.saving')
+                : submitLabel}
           </Button>
         </FormActionBar>
       </Paper>

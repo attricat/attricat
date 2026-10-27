@@ -12,7 +12,7 @@ import { ruleQueryKeys } from '../rules/queryKeys';
 const refreshSchema = z
   .object({ target: z.literal('current_record') })
   .strict();
-const recordRefreshOutlets = new Set([
+const recordRefreshOutlets = new Set<ExtensionContribution['outlet']>([
   'record_action',
   'record_preview_panel',
   'record_attribute_decoration',

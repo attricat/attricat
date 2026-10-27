@@ -80,7 +80,10 @@ const finding: Finding = {
   created_at: '2026-10-20T10:00:00Z',
   updated_at: '2026-10-20T10:00:00Z',
 };
-const run = (status: string, completedAt: string | null): RuleRun => ({
+const run = (
+  status: RuleRun['status'],
+  completedAt: string | null,
+): RuleRun => ({
   id: '00000000-0000-4000-8000-000000000005',
   rule_id: ruleId,
   rule_version: 1,

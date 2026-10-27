@@ -1,3 +1,4 @@
+import { workspaceExportStatusOptions } from './queryOptions';
 import { Button, Chip, ListSubheader, Menu, MenuItem } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { CircleXIcon, FilterIcon } from 'lucide-react';
@@ -6,9 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { compactOutlinedActionButtonSx } from '../../components/CompactOutlinedActionButton';
 import { smallIconSize } from '../../components/iconSizes';
 import { useCan } from '../auth/useCan';
-import { workspaceExportStatus } from './api';
 import { exportStatuses, type ExportStatus } from './constants';
-import { extensionExportQueryKeys } from './queryKeys';
 import { capabilities } from '../auth/capabilities';
 
 export type ExportStatusFilterValue = {
@@ -32,8 +31,7 @@ export const ExportStatusFilterControl = ({
   const canRead = useCan(capabilities.dataHealthRead);
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const overview = useQuery({
-    queryKey: extensionExportQueryKeys.workspace(),
-    queryFn: workspaceExportStatus,
+    ...workspaceExportStatusOptions(),
     enabled: canRead,
   });
   const destinations = overview.data?.destinations ?? [];

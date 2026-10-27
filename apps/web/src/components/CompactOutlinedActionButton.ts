@@ -1,10 +1,10 @@
 import type { SxProps, Theme } from '@mui/material';
+import { pillRadius } from '../app/theme';
 
-const pillBorderRadius = 999;
 const compactActionButtonHeight = 24;
 
 export const compactOutlinedActionButtonSx = {
-  borderRadius: pillBorderRadius,
+  borderRadius: `${pillRadius}px`,
   flexShrink: 0,
   height: compactActionButtonHeight,
   minHeight: compactActionButtonHeight,

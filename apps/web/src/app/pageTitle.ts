@@ -131,6 +131,8 @@ const sectionTitle = (t: TFunction, [section, ...rest]: Segments) => {
       return t('navigation.inbox');
     case 'records':
       return recordsTitle(t, rest);
+    case 'users':
+      return t('users.userProfile');
     case 'extensions':
       return rest[1] && group
         ? joinTitle(t('navigation.apps'), group)

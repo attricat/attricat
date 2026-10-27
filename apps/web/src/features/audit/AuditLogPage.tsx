@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { Box, Typography } from '@mui/material';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
@@ -22,26 +22,28 @@ export const AuditLogPage = () => {
   const { t } = useTranslation();
   const systemLabel = t('audit.system');
   const workspaceLabel = t('audit.workspace');
-  const [filters, setFilters] = useState<AuditEventFilters>({
-    limit: auditPageSize,
-    offset: 0,
-  });
+  const [filters, setFilters] = useState<AuditEventFilters>({});
   const [draftFilters, setDraftFilters] = useState<AuditEventFilters>(filters);
   const [selected, setSelected] = useState<AuditEvent>();
-  const events = useQuery({
+  // Load more adds the next page below the events already shown.
+  const events = useInfiniteQuery({
     queryKey: auditQueryKeys.events(filters),
-    queryFn: () => listAuditEvents(filters),
+    queryFn: ({ pageParam }) =>
+      listAuditEvents({ ...filters, limit: auditPageSize, offset: pageParam }),
+    initialPageParam: 0,
+    getNextPageParam: (page) => {
+      const next = page.offset + page.events.length;
+      return page.events.length > 0 && next < page.total ? next : undefined;
+    },
   });
+  const loadedEvents = events.data?.pages.flatMap((page) => page.events);
+  const total = events.data?.pages.at(-1)?.total;
   const updateDraft = (key: keyof AuditEventFilters, value: string) =>
     setDraftFilters((current) => ({
       ...current,
       [key]: value || undefined,
     }));
-  const applyFilters = () =>
-    setFilters({
-      ...draftFilters,
-      offset: 0,
-    });
+  const applyFilters = () => setFilters(draftFilters);
   return (
     <PageContainer>
       <PageHeader
@@ -56,30 +58,25 @@ export const AuditLogPage = () => {
       />
       <ApiErrorAlert error={events.error} />
       <AuditEventsTable
-        events={events.data?.events}
+        events={loadedEvents}
         isLoading={events.isLoading}
         onSelect={setSelected}
         systemLabel={systemLabel}
         workspaceLabel={workspaceLabel}
       />
-      {events.data && (
+      {loadedEvents && total !== undefined && (
         <Box sx={{ mt: 2 }}>
           <Typography color="text.secondary" variant="body2">
             {t('audit.showing', {
-              from: events.data.offset + 1,
-              to: events.data.offset + events.data.events.length,
-              total: events.data.total,
+              from: loadedEvents.length > 0 ? 1 : 0,
+              to: loadedEvents.length,
+              total,
             })}
           </Typography>
           <LoadMoreButton
-            disabled={events.data.offset + auditPageSize >= events.data.total}
-            isLoading={events.isFetching}
-            onLoadMore={() =>
-              setFilters((current) => ({
-                ...current,
-                offset: (current.offset ?? 0) + auditPageSize,
-              }))
-            }
+            disabled={!events.hasNextPage}
+            isLoading={events.isFetchingNextPage}
+            onLoadMore={() => void events.fetchNextPage()}
           />
         </Box>
       )}

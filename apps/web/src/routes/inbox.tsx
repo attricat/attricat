@@ -5,7 +5,7 @@ import { inboxFilters } from '../features/notifications/constants';
 
 const InboxRoute = () => {
   const search = Route.useSearch();
-  return <InboxPage filter={search.filter ?? 'all'} />;
+  return <InboxPage filter={search.filter ?? inboxFilters.all} />;
 };
 
 export const Route = createFileRoute('/inbox')({

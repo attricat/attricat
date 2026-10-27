@@ -50,7 +50,12 @@ const BudgetRow = ({
   });
   const reset = useMutation({
     mutationFn: () => clearBudget(extensionId, budget.host_permission_id),
-    onSuccess: refresh,
+    onSuccess: () => {
+      // The inputs go back to the declared budget the reset restores.
+      setRequests(String(declared?.requests ?? ''));
+      setPerSeconds(String(declared?.per_seconds ?? ''));
+      return refresh();
+    },
   });
   const describe = (limit: { requests: number; per_seconds: number }) =>
     t('extensionExports.budgetRate', {
@@ -65,9 +70,7 @@ const BudgetRow = ({
       </TableCell>
       <TableCell>
         {budget.lowered ? describe(budget.lowered) : '—'}
-        {(save.error ?? reset.error) && (
-          <ApiErrorAlert error={save.error ?? reset.error} sx={{ mt: 1 }} />
-        )}
+        <ApiErrorAlert error={save.error ?? reset.error} sx={{ mt: 1 }} />
       </TableCell>
       <TableCell>
         {canManage && declared && (

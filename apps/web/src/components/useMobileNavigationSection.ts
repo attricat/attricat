@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { navigationRoutes } from './navigation';
-import { isWithinRoute } from './sideNavigationLayout';
+import { compactNavigationPanelForRoute } from './useCompactNavigationPanels';
 
 type MobileNavigationSection = 'primary' | 'explore' | 'extensions' | 'manage';
 
@@ -10,15 +9,8 @@ export const mobileSectionTitleKeys = {
   manage: 'navigation.manage',
 } as const;
 
-const mobileSectionForPathname = (
-  pathname: string,
-): MobileNavigationSection => {
-  if (isWithinRoute(pathname, navigationRoutes.manage)) return 'manage';
-  if (pathname === navigationRoutes.explore) return 'explore';
-  if (isWithinRoute(pathname, navigationRoutes.extensionContributions))
-    return 'extensions';
-  return 'primary';
-};
+const mobileSectionForPathname = (pathname: string): MobileNavigationSection =>
+  compactNavigationPanelForRoute(pathname) ?? 'primary';
 
 // Manual pane navigation applies only to the route where it was chosen.
 // Browser history and outside links take precedence when the route changes.

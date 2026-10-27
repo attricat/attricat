@@ -1,4 +1,4 @@
-import { Box, Divider, Paper, Stack, Typography } from '@mui/material';
+import { Alert, Box, Divider, Paper, Stack, Typography } from '@mui/material';
 import { createElement, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -8,7 +8,6 @@ import {
   type ViewDefinition,
   type ViewNode,
 } from '../../records/api';
-import { FieldErrorBoundary } from './boundaries/FieldErrorBoundary';
 import {
   resolveIncomingRelationshipRenderer,
   resolveViewComponent,
@@ -20,7 +19,6 @@ import {
 } from '../../records/attributeVisibility';
 import {
   ROOT_NODE_KEY,
-  VIEW_COMPONENT_LOG_LABEL,
   VIEW_GRID_COLUMNS,
   VIEW_EDIT_LAYOUT_SPACING,
   VIEW_EDIT_TAB_PANEL_SPACING,
@@ -92,13 +90,9 @@ export const RecordView = ({
   const renderNode = (node: ViewNode, key: string): ReactNode => {
     if (node.component && !resolveViewComponent(node.component)) {
       return (
-        <FieldErrorBoundary
-          fallbackMessage={t('views.unableToRenderComponent')}
-          key={key}
-          logLabel={VIEW_COMPONENT_LOG_LABEL}
-        >
+        <Alert key={key} severity="warning">
           {t('views.unableToRenderComponent')}
-        </FieldErrorBoundary>
+        </Alert>
       );
     }
     if (skipComponentId && node.component?.id === skipComponentId) return null;

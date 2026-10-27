@@ -9,9 +9,14 @@ type Props = {
   onSelect: () => void;
   previewHref: string;
   previewed: boolean;
+  /**
+   * Whether the target is already chosen, for pickers where the button
+   * toggles it; without it the button only selects.
+   */
+  selected?: boolean;
 };
 
-/** One selectable relationship target in the relationship selector. */
+/** One selectable relationship target in a relationship picker. */
 export const RelationshipTargetOption = ({
   isSample,
   label,
@@ -20,6 +25,7 @@ export const RelationshipTargetOption = ({
   onSelect,
   previewHref,
   previewed,
+  selected = false,
 }: Props) => {
   const { t } = useTranslation();
   return (
@@ -65,13 +71,18 @@ export const RelationshipTargetOption = ({
           {t('records.previewRelationshipOption')}
         </Button>
         <Button
-          aria-label={t('records.selectRelationshipOptionLabel', {
-            option: label,
-          })}
+          aria-label={t(
+            selected
+              ? 'records.removeRelationshipOptionLabel'
+              : 'records.selectRelationshipOptionLabel',
+            { option: label },
+          )}
           onClick={onSelect}
           size="small"
         >
-          {t('records.selectRelationshipOption')}
+          {selected
+            ? t('records.removeRelationshipOption')
+            : t('records.selectRelationshipOption')}
         </Button>
       </Stack>
     </ListItem>

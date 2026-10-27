@@ -62,6 +62,22 @@ export const attributeCardinalities = {
   many: 'many',
 } as const;
 
+/** How a self-referencing relationship may link records to each other. */
+export const attributeHierarchies = {
+  acyclic: 'acyclic',
+  tree: 'tree',
+} as const;
+
+/** Record check predicates that walk a relationship. */
+export const relationshipPredicateTypes = {
+  acyclic: 'acyclic',
+  linked: 'linked',
+  referencedBy: 'referenced_by',
+} as const;
+
+/** The record schema keyword holding declarative record checks. */
+export const recordSchemaChecksKeyword = 'x-attricat-checks';
+
 export const attributeContextEditability = {
   all: 'all',
   default: 'default',

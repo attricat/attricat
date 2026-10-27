@@ -39,6 +39,7 @@ import {
 import type { AttributeFilter } from './search';
 import { useTimeZone } from '../../time/useInstantFormat';
 import { attributeValueTypes } from '../records/valueTypes';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 // Long blueprints offer many fields, so match typed text against the label
 // and the code, which also covers relationship paths such as family.name.
@@ -321,6 +322,10 @@ export const AttributeFilterDialog = ({
                 )
               }
             </form.Field>
+            {/* Without the directory only "Assigned to me" can be chosen. */}
+            {principal && !presence && (
+              <ApiErrorAlert error={directory.error} />
+            )}
           </>
         )}
       </Stack>
