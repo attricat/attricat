@@ -17,7 +17,6 @@ import {
   disableRule,
   enableRuleRevision,
   listFindingsPage,
-  listRuleRuns,
   runRuleNow,
   type FindingsSearch,
   type Rule,
@@ -34,7 +33,7 @@ import {
 } from './constants';
 import { FindingsSection } from './FindingsSection';
 import { ruleQueryKeys } from './queryKeys';
-import { ruleDefinitionsOptions } from './queryOptions';
+import { ruleDefinitionsOptions, ruleRunsOptions } from './queryOptions';
 import { ruleRevisionsByKey } from './ruleRevisions';
 import { useRecordLabels } from '../records/useRecordLabels';
 import { RulesSection } from './RulesSection';
@@ -83,8 +82,7 @@ export const RuleInspectionPage = ({
     enabled: findingsShown,
   });
   const runs = useQuery({
-    queryKey: ruleQueryKeys.runs(),
-    queryFn: listRuleRuns,
+    ...ruleRunsOptions(),
     enabled: section === RULE_SECTION_RUNS,
   });
   // Name the records the visible findings and runs refer to.

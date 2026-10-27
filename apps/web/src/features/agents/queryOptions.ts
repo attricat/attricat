@@ -2,6 +2,7 @@ import {
   infiniteQueryOptions,
   queryOptions,
   type QueryClient,
+  skipToken,
 } from '@tanstack/react-query';
 import {
   getConversation,
@@ -22,10 +23,11 @@ import {
 import { agentQueryKeys } from './queryKeys';
 import type { AgentRun } from './schemas';
 
-export const conversationOptions = (id: string) =>
+/** A conversation; waits while none is chosen. */
+export const conversationOptions = (id: string | null) =>
   queryOptions({
-    queryKey: agentQueryKeys.conversation(id),
-    queryFn: ({ signal }) => getConversation(id, signal),
+    queryKey: agentQueryKeys.conversation(id ?? ''),
+    queryFn: id ? ({ signal }) => getConversation(id, signal) : skipToken,
   });
 export const conversationMessagesOptions = (id: string) =>
   queryOptions({

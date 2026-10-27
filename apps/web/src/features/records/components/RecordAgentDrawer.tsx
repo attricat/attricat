@@ -56,8 +56,8 @@ export const RecordAgentDrawer = ({
   const [renameOpen, setRenameOpen] = useState(false);
   const client = useQueryClient();
   const conversation = useQuery({
-    ...conversationOptions(conversationId ?? ''),
-    enabled: open && conversationId !== null,
+    ...conversationOptions(conversationId),
+    enabled: open,
     refetchInterval: (query) =>
       titlePollInterval(query.state.data ? [query.state.data] : undefined),
   });
