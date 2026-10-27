@@ -31,6 +31,7 @@ import {
   RecordDisplayCell,
   PublicationStatusCell,
   SchemaVersionCell,
+  SystemTagsCell,
   type ActionMenuPosition,
   type OpenRecordPanel,
 } from './ExplorerTableCells';
@@ -202,6 +203,11 @@ export const buildExplorerColumnDefinitions = ({
         />
       ),
       cell: (info) => <SchemaVersionCell record={info.row.original} />,
+    }) as ExplorerColumnDef,
+    columnHelper.display({
+      id: explorerColumnIds.systemTags,
+      header: t('explorer.systemTags'),
+      cell: (info) => <SystemTagsCell record={info.row.original} />,
     }) as ExplorerColumnDef,
     ...configuredColumns,
     columnHelper.display({

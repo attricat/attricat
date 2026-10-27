@@ -48,6 +48,7 @@ const page = (
     id,
     blueprint_version: 1,
     schema_outdated: false,
+    system_tags: [],
     is_sample: isSample,
     display: { default: label },
     match_explanations: [],

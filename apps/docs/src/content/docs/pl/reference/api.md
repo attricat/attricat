@@ -130,6 +130,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `POST` | `/v1/records/search` | Wyszukiwanie. Zobacz poniżej. |
 | `POST` | `/v1/records/labels` | Etykiety wyświetlane dla maksymalnie 100 identyfikatorów rekordów: `{"record_ids": [...]}`. Zwraca tylko istniejące rekordy, które możesz odczytać; pozostałe identyfikatory są pomijane. |
 | `POST` | `/v1/records/facets/relationship-tree/children` | Jedna strona elementów podrzędnych fasety relacji, z liczebnościami. |
+| `POST` | `/v1/records/facets/system-tags` | Tagi systemowe rekordów danego schematu, z liczebnościami. Zobacz [Faseta tagów systemowych](#faseta-tagów-systemowych). |
 | `GET` | `/records/{id}/preview` | Wartości w poszczególnych kontekstach, z powiązanymi rekordami osadzonymi w odpowiedzi. |
 | `GET` | `/records/{id}/resolved-preview?context_id=…` | Wartości rozstrzygnięte w jednym kontekście, wraz z kontekstem, z którego pochodzi każda z nich. |
 | `GET` | `/records/{id}/hierarchy` | Przodkowie wzdłuż relacji. |
@@ -220,10 +221,28 @@ POST /api/v1/records/search
 - Operatory filtrów to `eq`, `contains`, `starts_with`, `gt`, `gte`, `lt` i `lte`. `field` może być ścieżką relacji o maksymalnie trzech krokach.
 - `context_code` (domyślnie `default`) to kontekst, w którym rozstrzygane są filtry, sortowanie i `table_values`, z dziedziczeniem z kontekstów nadrzędnych zależnie od atrybutu. `query` dopasowuje wartości we wszystkich kontekstach.
 - `sort.field` musi być kolumną skalarną w widoku tabeli schematu, `blueprint_version` lub `publication_status` (z `sort.context_code` wskazującym kanał).
-- Odpowiedzi zawierają `items`, `next_cursor`, `result_version_scope`, a dla każdego elementu `table_values` i `match_explanations`. Przekaż `next_cursor` z powrotem jako `page.cursor` przy tym samym sortowaniu.
+- `system_tags` zostawia rekordy, które mają wszystkie podane tagi. Nie można podać `attricat.sample`.
+- Odpowiedzi zawierają `items`, `next_cursor`, `result_version_scope`, a dla każdego elementu `system_tags`, `table_values` i `match_explanations`. Przekaż `next_cursor` z powrotem jako `page.cursor` przy tym samym sortowaniu.
 - `include_total` zwraca łączną liczbę wyników dla pierwszej strony, ograniczoną do 500.
 - `include_blueprint: false` pomija `blueprint` w odpowiedzi, na przykład na kolejnych stronach, gdy klient ma już blueprint z pierwszej strony.
 - `include_previews: false` pomija `preview` i rekordy `related` każdego elementu, chyba że kolumna tabeli używa renderera z rozszerzenia. `display` i `table_values` są zwracane zawsze.
+
+#### Faseta tagów systemowych
+
+`POST /v1/records/facets/system-tags` wyświetla tagi systemowe aktywnych rekordów danego schematu wraz z liczbą rekordów z każdym z nich, od najczęściej używanych:
+
+```json
+POST /api/v1/records/facets/system-tags
+{ "blueprint": { "code": "product" }, "prefix": "needs", "limit": 50 }
+
+{ "items": [{ "tag": "needs-review", "count": 12 }], "truncated": false }
+```
+
+- Pomiń `blueprint.version`, aby liczyć rekordy wszystkich rewizji.
+- `prefix` zostawia tagi, które się od niego zaczynają, bez rozróżniania wielkości liter.
+- `limit` wynosi od 1 do 100 (domyślnie 50). `truncated` ma wartość `true`, gdy pasuje więcej tagów.
+- `attricat.sample` nigdy nie jest wyświetlany; rekordy pokazują go jako plakietkę danych przykładowych.
+- Faseta odczytuje każdy rekord schematu, więc wywołuj ją, gdy ktoś otwiera wybór tagu, a nie przy każdym wyszukiwaniu.
 
 ### Pliki
 

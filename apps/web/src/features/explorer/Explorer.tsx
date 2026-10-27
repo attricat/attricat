@@ -215,6 +215,8 @@ export const Explorer = ({ search: urlSearch, savedView }: Props) => {
               onUpdateFacet={actions.updateFacet}
               exportStatus={search.exportStatus}
               onExportStatusChange={actions.setExportStatus}
+              systemTags={search.systemTags}
+              onSystemTagsChange={actions.setSystemTags}
               pathAttributes={selectedBlueprint.data?.table_path_attributes}
               relationshipAttributes={relationshipFields}
             />

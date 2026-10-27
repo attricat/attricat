@@ -237,7 +237,11 @@ Records are catalog items.
 - `system_tags` and `system_metadata` are operator/automation-owned annotations,
   rather than blueprint attributes. They are not versioned, schema-validated as
   record data, or included in projections. Tags use a GIN index so a workflow
-  can find records marked with all requested tags.
+  can find records marked with all requested tags. Listing the tags in use
+  (`POST /v1/records/facets/system-tags`) unnests the arrays of every record of
+  one blueprint instead; if that grows slow for very large blueprints, keep a
+  per-blueprint tag count table current in the repository transactions that
+  write tags, as `record_unique_key_values` is kept.
 
 ### Record publication
 

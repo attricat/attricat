@@ -1,7 +1,11 @@
 import { z } from 'zod';
 import { exportStatuses } from '../extension-exports/constants';
 import { recordSearchFilterSchema } from '../records/schemas';
-import { maximumAttributeFilters, sortDirections } from './constants';
+import {
+  maximumAttributeFilters,
+  maximumSystemTagFilters,
+  sortDirections,
+} from './constants';
 import { recordIdsQuery } from './queryLanguage';
 
 const attributeFilterSearchSchema = recordSearchFilterSchema.safeExtend({
@@ -68,6 +72,12 @@ export const explorerSearchSchema = z.object({
     .catch(undefined),
   browseBy: browseBySchema.optional().catch(undefined),
   exportStatus: exportStatusFilterSchema.optional().catch(undefined),
+  /** Results carry every one of these system tags. */
+  systemTags: z
+    .array(z.string().trim().min(1))
+    .max(maximumSystemTagFilters)
+    .optional()
+    .catch(undefined),
 });
 
 export type AttributeFilter = z.infer<typeof attributeFilterSearchSchema>;

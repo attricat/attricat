@@ -59,6 +59,8 @@ Filtr możesz również utworzyć z poziomu tabeli: otwórz menu komórki i wybi
 
 Każdy aktywny filtr jest widoczny jako etykieta pod polem wyszukiwania. Wszystkie filtry, fasety i zapytanie wyszukiwania muszą pasować jednocześnie.
 
+**Znacznik** zawęża wyniki do rekordów z [tagiem systemowym](/pl/builders/modeling/#tagi-systemowe-i-metadane), np. dodanym przez przepływ pracy lub agenta. Lista pokazuje tagi rekordów danego schematu, od najczęściej używanych, wraz z liczbą rekordów z każdym z nich; wpisz początek nazwy, aby znaleźć pozostałe. Każdy wybrany tag dodaje etykietę, a wyniki muszą mieć wszystkie wybrane tagi.
+
 **Stan eksportu** pojawia się, gdy jakieś rozszerzenie eksportuje rekordy. Zawęża wyniki do rekordów z jednym stanem, np. **Odrzucony**, w jednym miejscu docelowym. Wymaga uprawnienia `data_health.read`.
 
 ## Fasety relacji
@@ -95,7 +97,7 @@ Kliknij nagłówek kolumny, aby sortować. Kolumnę można sortować, gdy zawier
 
 W widoku **Wszystkie wersje** sortowanie według powiązanej wartości działa tylko wtedy, gdy wszystkie pasujące rekordy są w tej samej wersji.
 
-**Kolumny** pozwalają pokazywać, ukrywać i zmieniać kolejność kolumn. Układ jest zapisywany w przeglądarce.
+**Kolumny** pozwalają pokazywać, ukrywać i zmieniać kolejność kolumn. Układ jest zapisywany w przeglądarce. Kolumna **Znaczniki systemowe** jest ukryta, dopóki jej nie włączysz.
 
 ## Zapisywanie i udostępnianie wyszukiwań
 

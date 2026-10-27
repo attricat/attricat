@@ -130,6 +130,10 @@ Jeśli rozszerzenie eksportuje rekordy do marketplace'u lub sklepu internetowego
 
 **Podgląd** pokazuje ładunek, który rozszerzenie wysłałoby dla rekordu, i to, co odrzuciłoby miejsce docelowe, niczego nie wysyłając. **Ponów** prosi rozszerzenie o ponowny eksport rekordu; wymaga uprawnienia `extensions.manage`.
 
+## Znaczniki i metadane
+
+Przepływy pracy, agenci, rozszerzenia i klienci API mogą oznaczać rekord [tagami systemowymi i metadanymi](/pl/builders/modeling/#tagi-systemowe-i-metadane). Strona rekordu pokazuje jego tagi systemowe pod tytułem, a karta **Znaczniki i metadane** wyświetla tagi i metadane. Tutaj można je tylko odczytać. Aby znaleźć rekordy z danym tagiem, użyj filtra **Znacznik** w [Przeglądarce](/pl/guides/explore/#filtry).
+
 ## Pytanie do agenta
 
 **Zapytaj o ten rekord** otwiera panel, w którym możesz rozpocząć nową [rozmowę z agentem](/pl/guides/agents/) o rekordzie, który właśnie przeglądasz. Wpisz pytanie; rozmowa powstaje w chwili wysłania.

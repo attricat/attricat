@@ -55,6 +55,9 @@ import {
 import { RecordPreviewTabs } from './RecordPreviewTabs';
 import { RecordPreviewToolbar } from './RecordPreviewToolbar';
 import { RecordControlsPanel } from './RecordControlsPanel';
+import { RecordSystemAnnotationsPanel } from './RecordSystemAnnotationsPanel';
+import { visibleSystemTags } from '../systemTags';
+import { SystemTagChips } from './SystemTagChips';
 import { RelationshipPickerActionBar } from './RelationshipPickerActionBar';
 import { useRecordPublications } from './useRecordPublications';
 import { capabilities, accessTargetKinds } from '../../auth/capabilities';
@@ -182,6 +185,7 @@ export const RecordPreview = ({
     if (showComments) void loadRecordCommentsPanel();
   }, [showComments]);
   const resolvedRecord = resolved.data?.record;
+  const systemTags = recordForm.data?.record.system_tags ?? [];
   const knownLabels = useMemo(
     () =>
       resolved.data
@@ -281,6 +285,15 @@ export const RecordPreview = ({
                     values={resolved.data.values}
                     view={blueprint.data.blueprint.views.detail}
                   />
+                  {visibleSystemTags(systemTags).length > 0 && (
+                    <Box
+                      aria-label={t('records.systemAnnotations.tags')}
+                      role="group"
+                      sx={{ mt: 1 }}
+                    >
+                      <SystemTagChips tags={systemTags} />
+                    </Box>
+                  )}
                 </Box>
               )}
               <ApiErrorAlert error={actionError} sx={{ mt: 3 }} />
@@ -457,6 +470,18 @@ export const RecordPreview = ({
                         <RecordControlsPanel
                           attributes={blueprint.data?.attributes ?? []}
                           recordId={recordId}
+                        />
+                      ),
+                    },
+                    {
+                      key: recordPreviewTabs.systemAnnotations,
+                      label: t('records.systemAnnotations.title'),
+                      content: (
+                        <RecordSystemAnnotationsPanel
+                          metadata={
+                            recordForm.data?.record.system_metadata ?? {}
+                          }
+                          tags={systemTags}
                         />
                       ),
                     },

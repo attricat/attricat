@@ -1,6 +1,7 @@
 import type {
   RecordSearchFilter,
   RelationshipTreeFacetChildrenRequest,
+  SystemTagFacetRequest,
 } from './schemas';
 
 type RecordSearchKeyOptions = {
@@ -19,6 +20,7 @@ type RecordSearchKeyOptions = {
   sort?: { field: string; direction: 'asc' | 'desc' };
   version?: number;
   exportStatus?: { extension: string; connection?: string; status: string };
+  systemTags?: string[];
 };
 
 export const recordQueryKeys = {
@@ -39,6 +41,9 @@ export const recordQueryKeys = {
   relationshipTreeFacetChildren: (
     input: Omit<RelationshipTreeFacetChildrenRequest, 'cursor'>,
   ) => ['relationship-tree-facet-children', input] as const,
+  /** Under searches, so record changes that refresh results refresh it too. */
+  systemTagFacet: (input: SystemTagFacetRequest) =>
+    [...recordQueryKeys.searches(), 'system-tag-facet', input] as const,
   relationshipTargets: (blueprint: string | null | undefined, query: string) =>
     ['relationship-targets', blueprint, query] as const,
   form: (recordId: string) => ['record-form', recordId] as const,
@@ -102,6 +107,7 @@ export const recordQueryKeys = {
     sort,
     version,
     exportStatus,
+    systemTags,
   }: RecordSearchKeyOptions) =>
     [
       ...recordQueryKeys.searches(),
@@ -116,6 +122,7 @@ export const recordQueryKeys = {
         sort,
         version,
         exportStatus,
+        systemTags,
       },
     ] as const,
 } as const;

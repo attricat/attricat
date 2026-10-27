@@ -70,6 +70,7 @@ export const ExplorerResults = ({
     relationshipFilters,
     relationshipTreeSelections,
     search.exportStatus,
+    search.systemTags,
   ]);
   const [shownSearch, setShownSearch] = useState(searchKey);
   if (shownSearch !== searchKey && !results.isPlaceholderData)

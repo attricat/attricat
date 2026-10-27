@@ -724,7 +724,21 @@ to projections or views.
 `{}`. `PUT /v1/records/{id}` accepts either field independently; omitted fields
 are retained, while `[]` or `{}` clears the corresponding value. Search accepts
 `system_tags`; returned records must contain every supplied tag, making it
-suitable for finding a marked batch before applying a bulk workflow.
+suitable for finding a marked batch before applying a bulk workflow. Search
+result items include each record's `system_tags`.
+
+`POST /v1/records/facets/system-tags` lists the tags a blueprint's live records
+carry with their record counts, most used first:
+`{"blueprint": {"code", "version"?}, "prefix"?, "limit"?}` returns
+`{"items": [{"tag", "count"}], "truncated"}`. `prefix` matches the start of a
+tag case-insensitively, `limit` is 1 to 100 (default 50), and `truncated` says
+more tags match. `attricat.sample` is never listed, since search filters cannot
+name it. The query unnests every record's tag array, which the GIN index does
+not serve, so clients call it when a tag picker opens, not with every search.
+The web app shows tags read-only on the record page (under the title and in
+its **Tags and metadata** tab) and in an optional Explorer column, and the
+Explorer's **Tag** filter stores the chosen tags as `systemTags` in the URL and
+in saved searches.
 
 ### Extension annotation namespaces
 

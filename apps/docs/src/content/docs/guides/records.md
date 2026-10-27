@@ -130,6 +130,10 @@ If an extension exports records to a marketplace or storefront, the record's **E
 
 **Preview** shows the payload the extension would send for the record, and what the destination would reject, without sending anything. **Retry** asks the extension to export the record again; it needs the `extensions.manage` permission.
 
+## Tags and metadata
+
+Workflows, agents, extensions and API clients can mark a record with [system tags and metadata](/builders/modeling/#system-tags-and-metadata). The record page shows its system tags under its title, and the **Tags and metadata** tab lists the tags and shows the metadata. Both are read-only here. To find records with a tag, use the **Tag** filter in the [Explorer](/guides/explore/#filters).
+
 ## Ask an agent
 
 **Ask about this record** opens a panel where you can start a new [agent conversation](/guides/agents/) about the record you are looking at. Type your question; the conversation is created when you send it.

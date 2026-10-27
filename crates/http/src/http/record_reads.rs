@@ -8,16 +8,19 @@ use crate::{
     model::{
         Record, RecordIdentity, RecordPreviewPage, RecordPreviewResponse,
         RelationshipTreeFacetChildrenRequest, RelationshipTreeFacetChildrenResponse,
-        ResolvedRecordPreviewResponse, SearchRecordsRequest,
+        ResolvedRecordPreviewResponse, SearchRecordsRequest, SystemTagFacetRequest,
+        SystemTagFacetResponse,
     },
     repository::{
-        MAX_SEARCH_FILTERS, RelationshipFacetHop, RepositoryError, SearchPageRequest, SearchPhase,
-        SearchScopeError, SearchScopeRequest, intersect_record_ids, valid_connection_key,
+        DEFAULT_SYSTEM_TAG_FACET_LIMIT, MAX_SEARCH_FILTERS, MAX_SYSTEM_TAG_FACET_LIMIT,
+        RelationshipFacetHop, RepositoryError, SearchPageRequest, SearchPhase, SearchScopeError,
+        SearchScopeRequest, intersect_record_ids, valid_connection_key,
     },
 };
 use attricat_domain::permissions::Permission;
 use attricat_domain::states::ExportStatus;
 use attricat_domain::value_type::ValueType;
+use attricat_validation::predicate::MAX_TAG_LENGTH;
 use attricat_validation::saved_search;
 use axum::{
     Json,
@@ -468,6 +471,46 @@ pub(super) async fn relationship_tree_facet_children(
             .instrument(tracing::info_span!(
                 "sql.operation",
                 label = "relationship-facet"
+            ))
+            .await?,
+    ))
+}
+
+pub(super) async fn system_tag_facet(
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ApiJson(input): ApiJson<SystemTagFacetRequest>,
+) -> Result<Json<SystemTagFacetResponse>, ApiError> {
+    let limit = input.limit.unwrap_or(DEFAULT_SYSTEM_TAG_FACET_LIMIT);
+    if limit == 0 || limit > MAX_SYSTEM_TAG_FACET_LIMIT {
+        return Err(ApiError::invalid_input(format!(
+            "limit must be between 1 and {MAX_SYSTEM_TAG_FACET_LIMIT}"
+        )));
+    }
+    let prefix = input
+        .prefix
+        .as_deref()
+        .map(str::trim)
+        .filter(|prefix| !prefix.is_empty());
+    if prefix.is_some_and(|prefix| prefix.len() > MAX_TAG_LENGTH) {
+        return Err(ApiError::invalid_input(format!(
+            "prefix must not be longer than {MAX_TAG_LENGTH} bytes"
+        )));
+    }
+    let blueprint = repository
+        .get_blueprint_by_code(&input.blueprint.code)
+        .await?
+        .ok_or_else(|| ApiError::not_found("blueprint"))?;
+    Ok(Json(
+        repository
+            .system_tag_facet(
+                blueprint.blueprint.id,
+                input.blueprint.version,
+                prefix,
+                limit,
+            )
+            .instrument(tracing::info_span!(
+                "sql.operation",
+                label = "system-tag-facet"
             ))
             .await?,
     ))

@@ -17,6 +17,7 @@ struct RecordPreviewRow {
     id: Uuid,
     blueprint_version: i64,
     is_sample: bool,
+    system_tags: Vec<String>,
     created_at: DateTime<Utc>,
     preview: Value,
     blueprint_views: Value,
@@ -28,6 +29,7 @@ struct SortedRecordPreviewRow {
     id: Uuid,
     blueprint_version: i64,
     is_sample: bool,
+    system_tags: Vec<String>,
     created_at: DateTime<Utc>,
     preview: Value,
     blueprint_views: Value,
@@ -532,7 +534,7 @@ impl AttricatRepository {
         validate_code(blueprint_code)?;
         validate_code(relationship)?;
         let rows = sqlx::query_as::<_, RecordPreviewRow>(
-            &format!(r#"SELECT target.id, target.blueprint_version, ('attricat.sample'=ANY(target.system_tags)) AS is_sample, target.created_at, target.projections -> 'preview' AS preview,
+            &format!(r#"SELECT target.id, target.blueprint_version, ('attricat.sample'=ANY(target.system_tags)) AS is_sample, target.system_tags, target.created_at, target.projections -> 'preview' AS preview,
                       b.views AS blueprint_views,
                       {context_fallback_target} AS blueprint_context_fallback
                FROM attribute_values av
@@ -964,7 +966,7 @@ impl AttricatRepository {
         validate_system_tags(system_tags)?;
         let export_status_sql = export_status_clause(11, export_status);
         let sql = format!(
-            r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.created_at, e.projections -> 'preview' AS preview,
+            r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.system_tags, e.created_at, e.projections -> 'preview' AS preview,
                       b.views AS blueprint_views,
                       {context_fallback_e} AS blueprint_context_fallback
                 FROM records e
@@ -1269,7 +1271,7 @@ impl AttricatRepository {
                 );
         let export_status_sql = export_status_clause(15, export_status);
         let sql = format!(
-            r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.created_at, e.projections -> 'preview' AS preview,
+            r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.system_tags, e.created_at, e.projections -> 'preview' AS preview,
                       b.views AS blueprint_views,
                       {context_fallback_e} AS blueprint_context_fallback,
                       sort_value.{column}::text AS sort_value, sort_value.{column} IS NULL AS sort_is_null,
@@ -1379,7 +1381,7 @@ impl AttricatRepository {
         };
         let export_status_sql = export_status_clause(11, export_status);
         let sql = format!(
-            r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.created_at, e.projections -> 'preview' AS preview,
+            r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.system_tags, e.created_at, e.projections -> 'preview' AS preview,
                          b.views AS blueprint_views,
                          {context_fallback_e} AS blueprint_context_fallback,
                          ({expression})::text AS sort_value, false AS sort_is_null, e.id AS sort_target_id
@@ -1471,7 +1473,7 @@ impl AttricatRepository {
             let reverse_joins = relationship_sort_reverse_joins(sort.relationship_path.len())?;
             let leaf_context = resolved_context("leaf", "leaf_attribute", "$15");
             let sql = format!(
-                r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.created_at, e.projections -> 'preview' AS preview,
+                r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.system_tags, e.created_at, e.projections -> 'preview' AS preview,
                           b.views AS blueprint_views,
                           {context_fallback_e} AS blueprint_context_fallback,
                           sort_value.{column}::text AS sort_value, false AS sort_is_null,
@@ -1532,7 +1534,7 @@ impl AttricatRepository {
             let forward_joins = relationship_sort_forward_joins(sort.relationship_path.len())?;
             let null_cursor_id = cursor_is_null.then_some(cursor_id).flatten();
             let sql = format!(
-                r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.created_at, e.projections -> 'preview' AS preview,
+                r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.system_tags, e.created_at, e.projections -> 'preview' AS preview,
                           b.views AS blueprint_views,
                           {context_fallback_e} AS blueprint_context_fallback,
                           NULL::text AS sort_value, true AS sort_is_null,
@@ -3734,6 +3736,7 @@ fn sorted_record_preview(row: SortedRecordPreviewRow) -> RecordPreview {
         id: row.id,
         blueprint_version: row.blueprint_version,
         is_sample: row.is_sample,
+        system_tags: row.system_tags,
         created_at: row.created_at,
         preview: row.preview,
         blueprint_views: row.blueprint_views,
@@ -3747,6 +3750,7 @@ fn record_preview(row: RecordPreviewRow) -> RecordPreview {
         blueprint_version: row.blueprint_version,
         schema_outdated: false,
         is_sample: row.is_sample,
+        system_tags: row.system_tags,
         created_at: row.created_at,
         display: super::record_projection::display_labels(
             &row.preview,

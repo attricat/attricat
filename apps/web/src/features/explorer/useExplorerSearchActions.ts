@@ -48,6 +48,8 @@ export const useExplorerSearchActions = (
   return {
     setExportStatus: (exportStatus: ExportStatusFilter | undefined) =>
       go({ ...search, exportStatus }),
+    setSystemTags: (systemTags: string[]) =>
+      go({ ...search, systemTags: systemTags.length ? systemTags : undefined }),
     addAttributeFilter: (filter: AttributeFilter) =>
       go({
         ...search,

@@ -10,6 +10,8 @@ import { recordPanelOpenerAttribute } from './constants';
 import { compactIconSize } from '../../components/iconSizes';
 import { emptyValuePlaceholder } from '../../components/placeholders';
 import { publicationStatuses } from '../records/constants';
+import { SystemTagChips } from '../records/components/SystemTagChips';
+import { visibleSystemTags } from '../records/systemTags';
 
 export type ActionMenuPosition = { left: number; top: number };
 
@@ -112,6 +114,13 @@ export const SchemaVersionCell = ({ record }: { record: RecordItem }) => {
     />
   );
 };
+
+export const SystemTagsCell = ({ record }: { record: RecordItem }) =>
+  visibleSystemTags(record.system_tags).length ? (
+    <SystemTagChips tags={record.system_tags} />
+  ) : (
+    emptyValuePlaceholder
+  );
 
 export const RecordActionsCell = ({
   recordId,

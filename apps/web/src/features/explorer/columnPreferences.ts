@@ -5,7 +5,10 @@ import {
   writeStoredJson,
   storageAreas,
 } from '../../components/browserStorage';
-import { columnPreferencesStorageKeyPrefix } from './constants';
+import {
+  columnPreferencesStorageKeyPrefix,
+  defaultHiddenColumnIds,
+} from './constants';
 
 export type ExplorerColumnPreferences = {
   hidden: string[];
@@ -18,7 +21,7 @@ const storageKey = (blueprintId: string) =>
 const defaultPreferences = (
   columnIds: string[],
 ): ExplorerColumnPreferences => ({
-  hidden: [],
+  hidden: columnIds.filter((id) => defaultHiddenColumnIds.includes(id)),
   order: columnIds,
 });
 
@@ -30,9 +33,17 @@ const normalizePreferences = (
   const order = [
     ...new Set(preferences.order.filter((id) => knownIds.has(id))),
   ];
-  order.push(...columnIds.filter((id) => !order.includes(id)));
+  // Columns added since the preferences were stored start as they would
+  // for a new viewer.
+  const added = columnIds.filter((id) => !order.includes(id));
+  order.push(...added);
   return {
-    hidden: [...new Set(preferences.hidden.filter((id) => knownIds.has(id)))],
+    hidden: [
+      ...new Set([
+        ...preferences.hidden.filter((id) => knownIds.has(id)),
+        ...added.filter((id) => defaultHiddenColumnIds.includes(id)),
+      ]),
+    ],
     order,
   };
 };

@@ -165,6 +165,7 @@ const recordItemSchema = z.object({
   blueprint_version: z.number().int().positive(),
   schema_outdated: z.boolean(),
   is_sample: z.boolean(),
+  system_tags: z.array(z.string()).default([]),
   display: z.record(z.string(), z.string()),
   /** Omitted by searches that exclude previews. */
   preview: z.record(z.string(), jsonObjectSchema).default({}),
@@ -423,6 +424,18 @@ export const relationshipTreeFacetChildrenResponseSchema = z.object({
   selected_paths: z.array(z.array(uuidSchema)),
   next_cursor: uuidSchema.nullable(),
 });
+export const systemTagFacetRequestSchema = z.object({
+  blueprint: blueprintSelectorSchema,
+  prefix: z.string().optional(),
+  limit: z.number().int().positive().optional(),
+});
+export const systemTagFacetResponseSchema = z.object({
+  items: z.array(
+    z.object({ tag: z.string(), count: z.number().int().nonnegative() }),
+  ),
+  /** More tags match than `items` lists. */
+  truncated: z.boolean(),
+});
 const getBlueprintRevisionRequestSchema = z.object({
   id: uuidSchema,
   version: z.number().int().positive(),
@@ -498,6 +511,10 @@ export type RecordPublicationReadiness = z.infer<
 >;
 export type RecordAuditChange = z.infer<typeof recordAuditChangeSchema>;
 export type RecordItem = z.infer<typeof recordItemSchema>;
+export type SystemTagFacetRequest = z.infer<typeof systemTagFacetRequestSchema>;
+export type SystemTagCount = z.infer<
+  typeof systemTagFacetResponseSchema
+>['items'][number];
 export type RecordSearchFilter = z.infer<typeof recordSearchFilterSchema>;
 export type RecordSearchResponse = z.infer<typeof recordSearchResponseSchema>;
 export type RecordFormResponse = z.infer<typeof recordFormResponseSchema>;

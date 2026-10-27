@@ -24,7 +24,9 @@ one workspace; a link never grants access to catalog data.
 
 State is at most 32 KiB and validated on write. It uses the Explorer URL keys:
 `blueprint`, `version`, `allVersions`, `query`, `context`, `locked`, `sort`,
-`attributeFilters`, and `relationshipFacets`. A blueprint code is required.
+`attributeFilters`, `relationshipFacets`, `browseBy`, `exportStatus`, and
+`systemTags` (up to 20 unique, non-empty system tags that every result must
+carry). A blueprint code is required.
 
 The server hashes the JSONB state with SHA-256 and checks equality to reuse
 identical link snapshots within a workspace. See the [API reference](api.md#saved-views-and-share-links)

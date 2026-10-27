@@ -20,6 +20,8 @@ import {
   recordSearchPageSchema,
   relationshipTreeFacetChildrenRequestSchema,
   relationshipTreeFacetChildrenResponseSchema,
+  systemTagFacetRequestSchema,
+  systemTagFacetResponseSchema,
   blueprintSelectorSchema,
   getBlueprintRevisionRequestSchema,
   resolvedRecordPreviewSchema,
@@ -68,6 +70,8 @@ export type {
   RelationshipTargets,
   RelationshipTreeFacetChild,
   RelationshipTreeFacetChildrenRequest,
+  SystemTagCount,
+  SystemTagFacetRequest,
   ResolvedRecordPreview,
   RetentionHold,
   StatusTransitionAccess,
@@ -108,6 +112,8 @@ type SearchRecordsOptions = {
     connection?: string;
     status: string;
   };
+  /** Only records that carry every one of these system tags. */
+  systemTags?: string[];
 };
 
 const searchRecordsInit = (
@@ -125,6 +131,7 @@ const searchRecordsInit = (
     sort,
     version,
     exportStatus,
+    systemTags = [],
   }: SearchRecordsOptions,
   include: { include_blueprint?: boolean; include_previews?: boolean } = {},
 ): RequestInit => {
@@ -142,6 +149,7 @@ const searchRecordsInit = (
       ? { relationship_tree_facets: relationshipTreeFacets }
       : {}),
     ...(exportStatus ? { export_status: exportStatus } : {}),
+    ...(systemTags.length ? { system_tags: systemTags } : {}),
     sort,
     ...(contextCode === undefined ? {} : { context_code: contextCode }),
     ...(includeTotal ? { include_total: true } : {}),
@@ -192,6 +200,16 @@ export const getRelationshipTreeFacetChildren = (
       ...(signal === undefined ? {} : { signal }),
     },
   );
+
+/** The system tags a blueprint's records carry, most used first. */
+export const getSystemTagFacet = (
+  input: import('./schemas').SystemTagFacetRequest,
+  signal?: AbortSignal,
+) =>
+  request('/api/v1/records/facets/system-tags', systemTagFacetResponseSchema, {
+    ...jsonRequest('POST', systemTagFacetRequestSchema.parse(input)),
+    ...(signal === undefined ? {} : { signal }),
+  });
 
 export const listRecordBlueprints = (signal?: AbortSignal) =>
   request('/api/blueprints', z.array(blueprintSchema), { signal });

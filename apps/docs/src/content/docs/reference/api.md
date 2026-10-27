@@ -130,6 +130,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `POST` | `/v1/records/search` | Search. See below. |
 | `POST` | `/v1/records/labels` | Display labels for up to 100 record IDs: `{"record_ids": [...]}`. Returns only live records you can read; other IDs are left out. |
 | `POST` | `/v1/records/facets/relationship-tree/children` | One page of a relationship facet's children, with counts. |
+| `POST` | `/v1/records/facets/system-tags` | The system tags a blueprint's records carry, with counts. See [System tag facet](#system-tag-facet). |
 | `GET` | `/records/{id}/preview` | Values per context, with related records inline. |
 | `GET` | `/records/{id}/resolved-preview?context_id=…` | Values resolved in one context, with the context each came from. |
 | `GET` | `/records/{id}/hierarchy` | Ancestors along a relationship. |
@@ -220,10 +221,28 @@ POST /api/v1/records/search
 - Filter operators are `eq`, `contains`, `starts_with`, `gt`, `gte`, `lt`, and `lte`. `field` can be a relationship path of up to three hops.
 - `context_code` (default `default`) is the context in which filters, sorting, and `table_values` are resolved, inheriting from parent contexts per attribute. `query` matches values in every context.
 - `sort.field` must be a scalar column in the blueprint's table view, `blueprint_version`, or `publication_status` (with `sort.context_code` naming a channel).
-- Responses contain `items`, `next_cursor`, `result_version_scope`, and, for each item, `table_values` and `match_explanations`. Pass `next_cursor` back as `page.cursor` with the same sort.
+- `system_tags` keeps records that carry every listed tag. `attricat.sample` cannot be listed.
+- Responses contain `items`, `next_cursor`, `result_version_scope`, and, for each item, `system_tags`, `table_values` and `match_explanations`. Pass `next_cursor` back as `page.cursor` with the same sort.
 - `include_total` returns a first-page total, capped at 500.
 - `include_blueprint: false` leaves `blueprint` out of the response, for later pages when you kept the first page's.
 - `include_previews: false` leaves out each item's `preview` and `related` records, unless a table column uses an extension renderer. `display` and `table_values` are always returned.
+
+#### System tag facet
+
+`POST /v1/records/facets/system-tags` lists the system tags a blueprint's live records carry, with how many records have each, the most used first:
+
+```json
+POST /api/v1/records/facets/system-tags
+{ "blueprint": { "code": "product" }, "prefix": "needs", "limit": 50 }
+
+{ "items": [{ "tag": "needs-review", "count": 12 }], "truncated": false }
+```
+
+- Omit `blueprint.version` to count records of every revision.
+- `prefix` keeps tags that start with it, ignoring case.
+- `limit` is 1 to 100 (default 50). `truncated` is `true` when more tags match.
+- `attricat.sample` is never listed; records show it as the sample badge.
+- The facet reads every record of the blueprint, so call it when someone opens a tag picker rather than with every search.
 
 ### Files
 

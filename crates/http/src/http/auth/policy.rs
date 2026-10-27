@@ -479,6 +479,7 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     }
     if path == "/v1/records/search"
         || path == "/v1/records/facets/relationship-tree/children"
+        || path == "/v1/records/facets/system-tags"
         || path == "/records"
     {
         return Some(read(TargetKind::None));
