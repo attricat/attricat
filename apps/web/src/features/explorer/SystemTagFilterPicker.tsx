@@ -24,9 +24,13 @@ import {
   type SystemTagCount,
   type SystemTagFacetResponse,
 } from '../records/api';
-import { SYSTEM_TAG_FACET_LIMIT } from '../records/constants';
+import {
+  MAX_SYSTEM_TAG_BYTES,
+  SYSTEM_TAG_FACET_LIMIT,
+} from '../records/constants';
 import { recordQueryKeys } from '../records/queryKeys';
 import { systemTagLabel } from '../records/systemTags';
+import { utf8ByteLength } from '../extensions/utf8';
 import {
   systemTagFacetStaleTimeMs,
   systemTagPickerWidth,
@@ -55,6 +59,13 @@ const InlinePopper = ({ children, id, role, style }: PopperProps) => (
 /** Whether `tag` starts with `prefix`, ignoring case as the server does. */
 const startsWithIgnoringCase = (tag: string, prefix: string) =>
   tag.toLowerCase().startsWith(prefix.toLowerCase());
+
+/**
+ * Whether the server accepts `prefix`. A longer one matches no tag, so the
+ * first list answers it.
+ */
+const fitsTag = (prefix: string) =>
+  utf8ByteLength(prefix) <= MAX_SYSTEM_TAG_BYTES;
 
 /** Whether `prefix` starts the stored tag or its translated label. */
 const matchesTyped = (tag: string, prefix: string) =>
@@ -98,7 +109,8 @@ export const SystemTagFilterPicker = ({
     staleTime: systemTagFacetStaleTimeMs,
   });
   // A prefix only reaches the server when the first list left tags out.
-  const searchesServer = all.data?.truncated === true && typed !== '';
+  const searchesServer =
+    all.data?.truncated === true && typed !== '' && fitsTag(typed);
   // The shortest typed prefix whose fresh answer listed every match.
   const completePrefix = searchesServer
     ? Array.from({ length: typed.length }, (_, end) =>
@@ -119,7 +131,10 @@ export const SystemTagFilterPicker = ({
     queryKey: recordQueryKeys.systemTagFacet(prefixRequest),
     queryFn: ({ signal }) => getSystemTagFacet(prefixRequest, signal),
     enabled:
-      anchor !== null && searchesServer && prefixRequest.prefix !== undefined,
+      anchor !== null &&
+      searchesServer &&
+      prefixRequest.prefix !== undefined &&
+      fitsTag(prefixRequest.prefix),
     staleTime: systemTagFacetStaleTimeMs,
     placeholderData: keepPreviousData,
   });
@@ -205,6 +220,13 @@ export const SystemTagFilterPicker = ({
                 inputRef={inputRef}
                 label={t('explorer.systemTag')}
                 placeholder={t('explorer.searchSystemTags')}
+                slotProps={{
+                  ...params.slotProps,
+                  htmlInput: {
+                    ...params.slotProps.htmlInput,
+                    maxLength: MAX_SYSTEM_TAG_BYTES,
+                  },
+                }}
               />
             )}
             renderOption={({ key, ...props }, item) => (

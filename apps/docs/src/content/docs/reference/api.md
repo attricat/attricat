@@ -229,7 +229,7 @@ POST /api/v1/records/search
 - Filter operators are `eq`, `contains`, `starts_with`, `gt`, `gte`, `lt`, and `lte`. `field` can be a relationship path of up to three hops.
 - `context_code` (default `default`) is the context in which filters, sorting, and `table_values` are resolved, inheriting from parent contexts per attribute. `query` matches values in every context.
 - `sort.field` must be a scalar column in the blueprint's table view, `blueprint_version`, `system_tag:<tag>`, or `publication_status` (with `sort.context_code` naming a channel). `system_tag:<tag>` sorts records that carry the tag apart from the rest, by record ID within each group.
-- `system_tags` keeps records that carry every listed tag, including [Core tags](#system-tags) such as `attricat.needs_attention`.
+- `system_tags` (at most 20) keeps records that carry every listed tag, including [Core tags](#system-tags) such as `attricat.needs_attention`.
 - Responses contain `items`, `next_cursor`, `result_version_scope`, and, for each item, `system_tags`, `table_values` and `match_explanations`. For callers with `rules.read`, each item also has `data_quality`: `checked` (whether an enabled rule checks the record's blueprint revision) and `findings`, the unresolved findings counted by `state` and `severity`, most severe first. Pass `next_cursor` back as `page.cursor` with the same sort.
 - `include_total` returns a first-page total, capped at 500.
 - `include_blueprint: false` leaves `blueprint` out of the response, for later pages when you kept the first page's.

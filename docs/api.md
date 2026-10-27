@@ -763,7 +763,7 @@ sets:
   Rule runs and finding acknowledgements update it in the transaction that
   changes the findings, without touching `updated_at` or emitting events, and
   workspace initialization at startup reconciles it with the findings. Search accepts
-`system_tags`; returned records must contain every supplied tag, making it
+`system_tags` (at most 20); returned records must contain every supplied tag, making it
 suitable for finding a marked batch before applying a bulk workflow. Search
 result items include each record's `system_tags`.
 

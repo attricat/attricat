@@ -7,7 +7,10 @@ import type { ApiErrorCode } from '../../api/errors';
 
 // Search and filter limits.
 export const maximumAttributeFilters = 20;
-/** Most system tags one search filters by; saved searches store as many. */
+/**
+ * Most system tags one search filters by, as the API's `MAX_SYSTEM_TAG_FILTERS`;
+ * saved searches store as many.
+ */
 export const maximumSystemTagFilters = 20;
 /** Delay before a typed tag prefix asks the server for matching tags. */
 export const systemTagSearchDebounceMs = 250;

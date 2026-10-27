@@ -229,7 +229,7 @@ POST /api/v1/records/search
 - Operatory filtrów to `eq`, `contains`, `starts_with`, `gt`, `gte`, `lt` i `lte`. `field` może być ścieżką relacji o maksymalnie trzech krokach.
 - `context_code` (domyślnie `default`) to kontekst, w którym rozstrzygane są filtry, sortowanie i `table_values`, z dziedziczeniem z kontekstów nadrzędnych zależnie od atrybutu. `query` dopasowuje wartości we wszystkich kontekstach.
 - `sort.field` musi być kolumną skalarną w widoku tabeli schematu, `blueprint_version`, `system_tag:<tag>` lub `publication_status` (z `sort.context_code` wskazującym kanał). `system_tag:<tag>` oddziela rekordy z tym tagiem od pozostałych, w każdej grupie według ID rekordu.
-- `system_tags` zostawia rekordy, które mają wszystkie podane tagi, także [tagi Core](#tagi-systemowe), takie jak `attricat.needs_attention`.
+- `system_tags` (najwyżej 20) zostawia rekordy, które mają wszystkie podane tagi, także [tagi Core](#tagi-systemowe), takie jak `attricat.needs_attention`.
 - Odpowiedzi zawierają `items`, `next_cursor`, `result_version_scope`, a dla każdego elementu `system_tags`, `table_values` i `match_explanations`. Dla wywołujących z `rules.read` każdy element ma też `data_quality`: `checked` (czy włączona reguła sprawdza rewizję schematu rekordu) i `findings`, czyli nierozwiązane ustalenia policzone według `state` i `severity`, od najpoważniejszych. Przekaż `next_cursor` z powrotem jako `page.cursor` przy tym samym sortowaniu.
 - `include_total` zwraca łączną liczbę wyników dla pierwszej strony, ograniczoną do 500.
 - `include_blueprint: false` pomija `blueprint` w odpowiedzi, na przykład na kolejnych stronach, gdy klient ma już blueprint z pierwszej strony.

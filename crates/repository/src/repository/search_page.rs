@@ -15,6 +15,7 @@ use crate::model::{
     ExportStatusFilter, RecordSearchResponse, SearchResultVersionScope, SearchSort,
 };
 use attricat_domain::states::DataQualityFilter;
+pub use attricat_validation::saved_search::MAX_SYSTEM_TAG_FILTERS;
 
 /// Totals and hidden-outdated counts stop at this many records.
 pub const SEARCH_TOTAL_COUNT_CAP: i64 = 500;
@@ -59,6 +60,13 @@ impl AttricatRepository {
         request: SearchPageRequest<'_>,
         on_phase: &(dyn Fn(SearchPhase) + Sync),
     ) -> Result<RecordSearchResponse, SearchScopeError> {
+        // Each tag is its own condition on every candidate record.
+        if request.system_tags.len() > MAX_SYSTEM_TAG_FILTERS {
+            return Err(SearchScopeError::Invalid {
+                message: format!("system_tags must contain at most {MAX_SYSTEM_TAG_FILTERS} items"),
+                blueprint: None,
+            });
+        }
         let SearchScope {
             current,
             selected,

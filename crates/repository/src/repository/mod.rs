@@ -271,7 +271,9 @@ pub use retention::RetentionDays;
 pub use retention_holds::FileRetentionHold;
 pub use roles::{PermissionInfo, WorkspaceGrantTarget, WorkspaceRole};
 pub use rules::{ClaimedRuleRun, RuleCandidateResult};
-pub use search_page::{SEARCH_TOTAL_COUNT_CAP, SearchPageRequest, SearchPhase};
+pub use search_page::{
+    MAX_SYSTEM_TAG_FILTERS, SEARCH_TOTAL_COUNT_CAP, SearchPageRequest, SearchPhase,
+};
 pub use search_scope::{
     MAX_SEARCH_FILTERS, SearchScope, SearchScopeError, SearchScopeRequest, intersect_record_ids,
     table_relationship_targets, table_value_paths,
