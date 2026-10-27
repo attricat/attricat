@@ -1,8 +1,15 @@
 import type { Monaco } from '@monaco-editor/react';
-import type { editor, languages, Position } from 'monaco-editor';
-import { tomlLanguageId } from '../blueprints/blueprintEditorUtils';
+import type {
+  editor,
+  languages,
+  MarkerSeverity,
+  Position,
+} from 'monaco-editor';
+import { tomlLanguageId } from '../../components/tomlLanguage';
+import { scanToml } from '../../components/tomlOutline';
 import {
   diagnosticsOwner,
+  referenceDiagnosticsOwner,
   serverDiagnosticsOwner,
   type DefinitionKind,
 } from './constants';
@@ -12,10 +19,21 @@ import {
   type DefinitionSuggestion,
   type SuggestionKind,
 } from './definitionCompletions';
-import { definitionDiagnostics } from './definitionDiagnostics';
+import {
+  definitionDiagnostics,
+  type DefinitionFix,
+} from './definitionDiagnostics';
 import { definitionHover } from './definitionHover';
 import type { DefinitionReferences } from './definitionReferences';
-import type { TextRange } from './tomlOutline';
+import {
+  referenceAt,
+  referenceDeclaration,
+  referenceHover,
+  referenceLink,
+  referenceValues,
+  unknownReferences,
+} from './definitionReferenceTargets';
+import type { TextRange } from '../../components/tomlOutline';
 
 export type DefinitionModelConfig = {
   kind: DefinitionKind;
@@ -32,6 +50,20 @@ const modelConfigs = new WeakMap<
   { current: DefinitionModelConfig }
 >();
 const registeredInstances = new WeakSet<Monaco>();
+/** Quick fixes for each model's current client-side markers. */
+const modelFixes = new WeakMap<
+  editor.ITextModel,
+  { fix: DefinitionFix; marker: editor.IMarkerData }[]
+>();
+
+const quickFixKind = 'quickfix';
+
+const sameMarker = (left: editor.IMarkerData, right: editor.IMarkerData) =>
+  left.message === right.message &&
+  left.startLineNumber === right.startLineNumber &&
+  left.startColumn === right.startColumn &&
+  left.endLineNumber === right.endLineNumber &&
+  left.endColumn === right.endColumn;
 
 const triggerCharacters = ['"', "'", '.', '[', '=', ' ', ',', '{'];
 const triggerSuggestCommand = 'editor.action.triggerSuggest';
@@ -117,21 +149,100 @@ const registerProviders = (monaco: Monaco) => {
     },
     triggerCharacters,
   });
+  monaco.languages.registerCodeActionProvider(tomlLanguageId, {
+    provideCodeActions: (
+      model: editor.ITextModel,
+      _range: unknown,
+      context: languages.CodeActionContext,
+    ) => {
+      const fixes = modelFixes.get(model) ?? [];
+      const actions = context.markers.flatMap((marker) =>
+        fixes
+          .filter((candidate) => sameMarker(candidate.marker, marker))
+          .map(({ fix }): languages.CodeAction => ({
+            diagnostics: [marker],
+            edit: {
+              edits: fix.edits.map(({ range, text }) => ({
+                resource: model.uri,
+                textEdit: { range: toRange(monaco, model, range), text },
+                versionId: model.getVersionId(),
+              })),
+            },
+            isPreferred: true,
+            kind: quickFixKind,
+            title: fix.title,
+          })),
+      );
+      return { actions, dispose: () => {} };
+    },
+  });
   monaco.languages.registerHoverProvider(tomlLanguageId, {
-    provideHover: (model: editor.ITextModel, position: Position) => {
+    provideHover: async (model: editor.ITextModel, position: Position) => {
       const config = modelConfigs.get(model)?.current;
       if (!config) return undefined;
-      const hover = definitionHover(
-        config.kind,
-        model.getValue(),
-        model.getOffsetAt(position),
-      );
+      const text = model.getValue();
+      const offset = model.getOffsetAt(position);
+      const outline = scanToml(text);
+      const target = referenceAt(config.kind, outline, offset);
+      if (target) {
+        const contents = await referenceHover(
+          { outline, references: config.references },
+          target,
+        );
+        return (
+          contents && {
+            contents: contents.map((value) => ({ value })),
+            range: toRange(monaco, model, target.range),
+          }
+        );
+      }
+      const hover = definitionHover(config.kind, text, offset);
       return (
         hover && {
           contents: hover.contents.map((value) => ({ value })),
           range: toRange(monaco, model, hover.range),
         }
       );
+    },
+  });
+  monaco.languages.registerDefinitionProvider(tomlLanguageId, {
+    provideDefinition: (model: editor.ITextModel, position: Position) => {
+      const config = modelConfigs.get(model)?.current;
+      if (!config) return undefined;
+      const outline = scanToml(model.getValue());
+      const target = referenceAt(
+        config.kind,
+        outline,
+        model.getOffsetAt(position),
+      );
+      const declared = target && referenceDeclaration(outline, target);
+      return (
+        declared && {
+          range: toRange(monaco, model, declared),
+          uri: model.uri,
+        }
+      );
+    },
+  });
+  monaco.languages.registerLinkProvider(tomlLanguageId, {
+    provideLinks: async (model: editor.ITextModel) => {
+      const config = modelConfigs.get(model)?.current;
+      if (!config) return { links: [] };
+      const outline = scanToml(model.getValue());
+      const context = { outline, references: config.references };
+      const links = await Promise.all(
+        referenceValues(config.kind, outline).map(async (target) => {
+          const link = await referenceLink(context, target);
+          return (
+            link && {
+              range: toRange(monaco, model, target.range),
+              tooltip: link.tooltip,
+              url: new URL(link.url, window.location.origin).href,
+            }
+          );
+        }),
+      );
+      return { links: links.filter((link) => link !== undefined) };
     },
   });
 };
@@ -149,9 +260,11 @@ export const attachDefinitionModel = (
   modelConfigs.set(model, config);
   return () => {
     modelConfigs.delete(model);
+    modelFixes.delete(model);
     if (!model.isDisposed()) {
       monaco.editor.setModelMarkers(model, diagnosticsOwner, []);
       monaco.editor.setModelMarkers(model, serverDiagnosticsOwner, []);
+      monaco.editor.setModelMarkers(model, referenceDiagnosticsOwner, []);
     }
   };
 };
@@ -160,6 +273,7 @@ const errorMarker = (
   monaco: Monaco,
   model: editor.ITextModel,
   { message, range }: { message: string; range: TextRange },
+  severity: MarkerSeverity = monaco.MarkerSeverity.Error,
 ): editor.IMarkerData => {
   const { startLineNumber, startColumn, endLineNumber, endColumn } = toRange(
     monaco,
@@ -170,7 +284,7 @@ const errorMarker = (
     endColumn,
     endLineNumber,
     message,
-    severity: monaco.MarkerSeverity.Error,
+    severity,
     startColumn,
     startLineNumber,
   };
@@ -182,11 +296,43 @@ export const updateDefinitionDiagnostics = (
   kind: DefinitionKind,
 ) => {
   if (model.isDisposed()) return;
+  const located = definitionDiagnostics(kind, model.getValue()).map(
+    (diagnostic) => ({
+      fix: diagnostic.fix,
+      marker: errorMarker(monaco, model, diagnostic),
+    }),
+  );
+  modelFixes.set(
+    model,
+    located.flatMap(({ fix, marker }) => (fix ? [{ fix, marker }] : [])),
+  );
   monaco.editor.setModelMarkers(
     model,
     diagnosticsOwner,
-    definitionDiagnostics(kind, model.getValue()).map((diagnostic) =>
-      errorMarker(monaco, model, diagnostic),
+    located.map(({ marker }) => marker),
+  );
+  void updateReferenceDiagnostics(monaco, model, kind);
+};
+
+/** Warns about references to blueprints, roles, or contexts that do not exist. */
+const updateReferenceDiagnostics = async (
+  monaco: Monaco,
+  model: editor.ITextModel,
+  kind: DefinitionKind,
+) => {
+  const config = modelConfigs.get(model)?.current;
+  if (!config) return;
+  const version = model.getVersionId();
+  const unknown = await unknownReferences(kind, {
+    outline: scanToml(model.getValue()),
+    references: config.references,
+  });
+  if (model.isDisposed() || model.getVersionId() !== version) return;
+  monaco.editor.setModelMarkers(
+    model,
+    referenceDiagnosticsOwner,
+    unknown.map((diagnostic) =>
+      errorMarker(monaco, model, diagnostic, monaco.MarkerSeverity.Warning),
     ),
   );
 };

@@ -2,7 +2,8 @@ import '../../components/monacoRuntime';
 import { DiffEditor } from '@monaco-editor/react';
 import { Box, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { configureToml, tomlLanguageId } from './blueprintEditorUtils';
+import { useMonacoTheme } from '../../components/monacoTheme';
+import { configureToml, tomlLanguageId } from '../../components/tomlLanguage';
 import { tomlDiffEditorHeight } from './constants';
 
 const diffEditorOptions = {
@@ -28,6 +29,7 @@ export const TomlDiffEditor = ({
   modifiedTitle: string;
 }) => {
   const { t } = useTranslation();
+  const theme = useMonacoTheme();
   return (
     <Box>
       <Typography sx={{ fontWeight: 700, mb: 1 }}>
@@ -46,7 +48,7 @@ export const TomlDiffEditor = ({
           modified={modified}
           options={diffEditorOptions}
           original={original}
-          theme="vs"
+          theme={theme}
         />
       </Box>
     </Box>

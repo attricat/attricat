@@ -997,19 +997,34 @@
       "expectedType": "Oczekiwano typu {{type}}.",
       "expectedValue": "Oczekiwano {{value}}.",
       "invalidCode": "Używaj tylko liter ASCII, cyfr, łączników i podkreśleń.",
+      "invalidFormat": "Nieprawidłowy format.",
+      "keyNotAllowed": "„{{key}}” nie jest tu dozwolony.",
       "missingKey": "Brak wymaganego klucza „{{key}}”.",
       "notEmpty": "Wartość nie może być pusta.",
+      "notAllowed": "To nie jest tu dozwolone.",
       "syntax": "Nieprawidłowy TOML: {{message}}",
       "tooLarge": "Wartość może wynosić najwyżej {{limit}}.",
       "tooLong": "Dozwolone jest najwyżej {{limit}} elementów lub znaków.",
       "tooShort": "Wymagane jest co najmniej {{limit}} elementów lub znaków.",
       "tooSmall": "Wartość musi wynosić co najmniej {{limit}}.",
       "unknownKey": "Nieznany klucz „{{key}}”.",
-      "unknownKeySuggestion": "Nieznany klucz „{{key}}”. Czy chodziło o „{{suggestion}}”?"
+      "unknownKeySuggestion": "Nieznany klucz „{{key}}”. Czy chodziło o „{{suggestion}}”?",
+      "unknownReference": "„{{value}}” nie istnieje w tej przestrzeni roboczej."
+    },
+    "fixes": {
+      "insertKey": "Dodaj „{{key}}”",
+      "renameKey": "Zmień na „{{key}}”",
+      "replaceValue": "Zmień na {{value}}"
     },
     "hover": {
       "allowedValues": "Dozwolone wartości: {{values}}",
-      "default": "Domyślnie: {{value}}"
+      "default": "Domyślnie: {{value}}",
+      "unknownReference": "„{{value}}” nie istnieje w tej przestrzeni roboczej."
+    },
+    "links": {
+      "blueprint": "Otwórz schemat w nowej karcie",
+      "contexts": "Otwórz konteksty w nowej karcie",
+      "roles": "Otwórz role w nowej karcie"
     },
     "placeholders": {
       "name": "nazwa"

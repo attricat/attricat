@@ -2,10 +2,9 @@ import './monacoRuntime';
 import { Editor } from '@monaco-editor/react';
 import { Box } from '@mui/material';
 import type { ComponentProps } from 'react';
-import {
-  configureToml,
-  minimumTomlEditorHeight,
-} from '../features/blueprints/blueprintEditorUtils';
+import { minimumTomlEditorHeight } from '../features/blueprints/blueprintEditorUtils';
+import { useMonacoTheme } from './monacoTheme';
+import { configureToml, tomlLanguageId } from './tomlLanguage';
 
 type EditorProps = ComponentProps<typeof Editor>;
 
@@ -30,34 +29,40 @@ export const TomlEditor = ({
   readOnly,
   marginTop,
   value,
-}: TomlEditorProps) => (
-  <Box
-    sx={{
-      border: 1,
-      borderColor: 'divider',
-      height,
-      minHeight: minimumTomlEditorHeight,
-      mt: marginTop,
-    }}
-  >
-    <Editor
-      beforeMount={configureToml}
-      defaultLanguage="toml"
-      height="100%"
-      language="toml"
-      onChange={onChange}
-      onMount={onMount}
-      options={{
-        automaticLayout: true,
-        minimap: { enabled: false },
-        scrollBeyondLastLine: false,
-        tabSize: 2,
-        wordWrap: 'on',
-        ...options,
-        ariaLabel,
-        readOnly,
+}: TomlEditorProps) => {
+  const theme = useMonacoTheme();
+  return (
+    <Box
+      sx={{
+        border: 1,
+        borderColor: 'divider',
+        height,
+        minHeight: minimumTomlEditorHeight,
+        mt: marginTop,
       }}
-      value={value}
-    />
-  </Box>
-);
+    >
+      <Editor
+        beforeMount={configureToml}
+        defaultLanguage={tomlLanguageId}
+        height="100%"
+        language={tomlLanguageId}
+        onChange={onChange}
+        onMount={onMount}
+        options={{
+          automaticLayout: true,
+          minimap: { enabled: false },
+          scrollBeyondLastLine: false,
+          // Keeps the enclosing [table] headers in view while scrolling.
+          stickyScroll: { enabled: true, defaultModel: 'outlineModel' },
+          tabSize: 2,
+          wordWrap: 'on',
+          ...options,
+          ariaLabel,
+          readOnly,
+        }}
+        theme={theme}
+        value={value}
+      />
+    </Box>
+  );
+};

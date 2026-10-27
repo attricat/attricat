@@ -14,7 +14,7 @@ import {
 } from './constants';
 import type { DefinitionReferences } from './definitionReferences';
 import type { DefinitionReferenceKind } from './definitionSchema';
-import type { TomlOutline, TomlPath } from './tomlOutline';
+import type { TomlOutline, TomlPath } from '../../components/tomlOutline';
 import { viewComponentPlacement, viewComponents } from './viewComponents';
 import { attributeValueTypes } from '../records/valueTypes';
 

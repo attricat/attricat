@@ -1,5 +1,9 @@
 import { definitionKinds, type DefinitionKind } from './constants';
-import { scanToml, type TomlOutline, type TomlPath } from './tomlOutline';
+import {
+  scanToml,
+  type TomlOutline,
+  type TomlPath,
+} from '../../components/tomlOutline';
 
 const snippetPlacements = {
   /** A top-level key, inserted before the first table header. */
@@ -308,6 +312,8 @@ export const definitionSnippets: Record<DefinitionKind, DefinitionSnippet[]> = {
   [definitionKinds.blueprint]: blueprintSnippets,
   [definitionKinds.reusableAttribute]: reusableAttributeSnippets,
   [definitionKinds.rule]: ruleSnippets,
+  // Workflows are edited without the Insert menu.
+  [definitionKinds.workflow]: [],
 };
 
 /**

@@ -2,13 +2,14 @@ import { z } from 'zod';
 import blueprintContract from '../../../../../contracts/blueprint-definition-v1.schema.json';
 import reusableAttributeContract from '../../../../../contracts/reusable-attribute-definition-v1.schema.json';
 import ruleContract from '../../../../../contracts/rule-definition-v1.schema.json';
+import workflowContract from '../../../../../contracts/workflow-definition-v1.schema.json';
 import {
   definitionKinds,
   discriminatorKey,
   schemaExtensions,
   type DefinitionKind,
 } from './constants';
-import type { TomlPath } from './tomlOutline';
+import type { TomlPath } from '../../components/tomlOutline';
 
 /**
  * The subset of JSON Schema that the Rust definition types generate. Unused
@@ -80,6 +81,7 @@ export const definitionSchemas: Record<DefinitionKind, SchemaNode> = {
     reusableAttributeContract,
   ),
   [definitionKinds.rule]: schemaNodeSchema.parse(ruleContract),
+  [definitionKinds.workflow]: schemaNodeSchema.parse(workflowContract),
 };
 
 const refPrefix = '#/$defs/';
@@ -138,6 +140,30 @@ export const taggedVariants = (root: SchemaNode, node: SchemaNode) => {
   return variants;
 };
 
+/**
+ * A union whose branches all have a constant `type` except one, which is used
+ * when no `type` is written, such as workflow event triggers.
+ */
+export const defaultedVariants = (root: SchemaNode, node: SchemaNode) => {
+  const variants = node.oneOf?.map((variant) => unwrapSchema(root, variant));
+  if (!variants || variants.length < 2) return undefined;
+  const untagged = variants.filter(
+    (variant) => !variant.properties?.[discriminatorKey],
+  );
+  const tagged = variants.filter(
+    (variant) => variant.properties?.[discriminatorKey]?.const !== undefined,
+  );
+  const [fallback] = untagged;
+  if (
+    !fallback ||
+    untagged.length !== 1 ||
+    tagged.length !== variants.length - 1 ||
+    primaryType(fallback) !== 'object'
+  )
+    return undefined;
+  return { fallback, fallbackIndex: variants.indexOf(fallback), tagged };
+};
+
 export const variantTag = (variant: SchemaNode) =>
   String(variant.properties?.[discriminatorKey]?.const);
 
@@ -171,6 +197,11 @@ type ResolvedSchema = {
   node: SchemaNode;
   /** Candidate variants when a tagged union has no (valid) `type` yet. */
   variants?: SchemaNode[];
+  /**
+   * Whether `node` is the untagged default of a union that `variants` can
+   * still replace by adding a `type`.
+   */
+  defaulted?: boolean;
 };
 
 /**
@@ -201,8 +232,12 @@ export const schemaAtPath = (
           },
         };
       }
-      next = variants.find((variant) => variant.properties?.[segment])
-        ?.properties?.[segment];
+      // An untyped defaulted table is its default branch.
+      next =
+        (resolved.defaulted ? node.properties?.[segment] : undefined) ??
+        variants.find((variant) => variant.properties?.[segment])?.properties?.[
+          segment
+        ];
     } else {
       next =
         node.properties?.[segment] ??
@@ -228,7 +263,21 @@ const selectVariant = (
   valueAt: (path: TomlPath) => unknown,
 ): ResolvedSchema => {
   const variants = taggedVariants(root, node);
-  if (!variants) return { node };
+  if (!variants) {
+    const defaulted = defaultedVariants(root, node);
+    if (!defaulted) return { node };
+    const tag = valueAt([...path, discriminatorKey]);
+    if (tag === undefined)
+      return {
+        defaulted: true,
+        node: defaulted.fallback,
+        variants: defaulted.tagged,
+      };
+    const selected = defaulted.tagged.find(
+      (variant) => variantTag(variant) === tag,
+    );
+    return selected ? { node: selected } : { node, variants: defaulted.tagged };
+  }
   const tag = valueAt([...path, discriminatorKey]);
   const selected = variants.find((variant) => variantTag(variant) === tag);
   return selected ? { node: selected } : { node, variants };

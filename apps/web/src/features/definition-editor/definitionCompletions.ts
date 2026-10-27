@@ -26,7 +26,7 @@ import {
   type TextRange,
   type TomlCursor,
   type TomlOutline,
-} from './tomlOutline';
+} from '../../components/tomlOutline';
 import {
   componentCandidates,
   referenceCandidates,
@@ -206,6 +206,8 @@ const propertySuggestions = (
     typeof property.additionalProperties === 'object'
       ? unwrapSchema(root, property.additionalProperties)
       : undefined;
+  // Maps of scalars read best as one `[table]` of keys, not a table per key.
+  const tableMap = mapValue && isTable(mapValue) ? mapValue : undefined;
 
   if (!cursor.inline) {
     if (items && isTable(items)) {
@@ -236,13 +238,13 @@ const propertySuggestions = (
         },
       ];
     }
-    if (mapValue) {
+    if (tableMap) {
       const stops = new TabStops();
       const keyChoices = property[schemaExtensions.keySuggestions];
       const name = keyChoices?.length
         ? `\${${stops.take()}|${keyChoices.map(escapeChoice).join(',')}|}`
         : `\${${stops.take()}:${i18n.t('definitionEditor.placeholders.name')}}`;
-      const variants = taggedVariants(root, mapValue);
+      const variants = taggedVariants(root, tableMap);
       const body = variants
         ? [
             `${discriminatorKey} = "\${${stops.take()}|${variants.map((variant) => escapeChoice(variantTag(variant))).join(',')}|}"`,
@@ -304,7 +306,8 @@ const keySuggestions = (
 ): DefinitionSuggestion[] => {
   const resolved = schemaAtPath(root, cursor.table, outline.valueAt);
   if (!resolved) return [];
-  if (resolved.variants) {
+  const present = outline.keysIn(cursor.table);
+  if (resolved.variants && !resolved.defaulted) {
     const separator = cursor.inline ? ', ' : '\n';
     return variantSuggestions(
       root,
@@ -315,7 +318,17 @@ const keySuggestions = (
     );
   }
   const { node } = resolved;
-  const present = outline.keysIn(cursor.table);
+  // An empty defaulted table can still become one of the tagged variants.
+  const alternatives =
+    resolved.defaulted && resolved.variants && !present.size
+      ? variantSuggestions(
+          root,
+          resolved.variants,
+          cursor.range,
+          (body) => body.join(cursor.inline ? ', ' : '\n'),
+          (tag) => `${discriminatorKey} = ${tomlString(tag)}`,
+        )
+      : [];
   const valueType = outline.valueAt([...cursor.table, valueTypeKey]);
   const required = new Set(node.required);
   const properties = Object.entries(node.properties ?? {});
@@ -323,18 +336,27 @@ const keySuggestions = (
     for (const key of node[schemaExtensions.keySuggestions] ?? [])
       properties.push([key, node.additionalProperties]);
   }
-  return properties.flatMap(([key, schema]) => {
-    if (present.has(key)) return [];
-    const property = unwrapSchema(root, schema);
-    const valueTypes = property[schemaExtensions.valueTypes];
-    if (
-      valueTypes &&
-      typeof valueType === 'string' &&
-      !valueTypes.includes(valueType)
-    )
-      return [];
-    return propertySuggestions(root, cursor, key, property, required.has(key));
-  });
+  return [
+    ...properties.flatMap(([key, schema]) => {
+      if (present.has(key)) return [];
+      const property = unwrapSchema(root, schema);
+      const valueTypes = property[schemaExtensions.valueTypes];
+      if (
+        valueTypes &&
+        typeof valueType === 'string' &&
+        !valueTypes.includes(valueType)
+      )
+        return [];
+      return propertySuggestions(
+        root,
+        cursor,
+        key,
+        property,
+        required.has(key),
+      );
+    }),
+    ...alternatives,
+  ];
 };
 
 const headerSuggestions = (

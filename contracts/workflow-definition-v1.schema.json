@@ -1,0 +1,541 @@
+{
+  "$defs": {
+    "Action": {
+      "description": "A record change the workflow makes.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "Adds system tags to the record.",
+          "properties": {
+            "tags": {
+              "description": "Tags to add, each at most 128 bytes, without duplicates.",
+              "items": {
+                "maxLength": 128,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              "maxItems": 100,
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "type": {
+              "const": "system_tags_add",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "tags"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Removes system tags from the record.",
+          "properties": {
+            "tags": {
+              "description": "Tags to remove, without duplicates.",
+              "items": {
+                "maxLength": 128,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              "maxItems": 100,
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "type": {
+              "const": "system_tags_remove",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "tags"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Merges scalar values into the record's system metadata.",
+          "properties": {
+            "type": {
+              "const": "system_metadata_merge",
+              "type": "string"
+            },
+            "values": {
+              "additionalProperties": {
+                "type": [
+                  "string",
+                  "number",
+                  "boolean"
+                ]
+              },
+              "description": "Scalar values keyed by dotted metadata path, such as `review.state`.",
+              "minProperties": 1,
+              "propertyNames": {
+                "pattern": "^[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)*$"
+              },
+              "type": "object"
+            }
+          },
+          "required": [
+            "type",
+            "values"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Deletes keys from the record's system metadata.",
+          "properties": {
+            "keys": {
+              "description": "Metadata keys to delete, without duplicates.",
+              "items": {
+                "pattern": "\\S",
+                "type": "string"
+              },
+              "maxItems": 100,
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "type": {
+              "const": "system_metadata_delete",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "keys"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Writes one attribute value. Set exactly one of `fixed` and `event_field`.",
+          "else": {
+            "required": [
+              "event_field"
+            ]
+          },
+          "if": {
+            "required": [
+              "fixed"
+            ]
+          },
+          "properties": {
+            "attribute_code": {
+              "description": "Attribute to write.",
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "type": "string",
+              "x-attricat-reference": "attribute"
+            },
+            "event_field": {
+              "description": "Event fact to copy, as `facts.<index>.<field>`. Record event\ntriggers only.",
+              "pattern": "^facts\\.\\+?[0-9]+(?:\\.[A-Za-z0-9_-]+)+$",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "fixed": {
+              "default": null,
+              "description": "Scalar value to write.",
+              "type": [
+                "string",
+                "number",
+                "boolean"
+              ]
+            },
+            "type": {
+              "const": "attribute_write",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "attribute_code"
+          ],
+          "then": {
+            "not": {
+              "required": [
+                "event_field"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Applies fixed actions to every live record whose relationship\nattribute targets the trigger record.",
+          "properties": {
+            "actions": {
+              "description": "Actions applied to each referencing record. Attribute writes need\n`fixed` values and updates cannot nest.",
+              "items": {
+                "$ref": "#/$defs/Action",
+                "not": {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "type": {
+                          "const": "referencing_records_update"
+                        }
+                      },
+                      "required": [
+                        "type"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "event_field"
+                      ]
+                    }
+                  ]
+                }
+              },
+              "maxItems": 20,
+              "minItems": 1,
+              "type": "array"
+            },
+            "max_targets": {
+              "default": 100,
+              "description": "Most referencing records to update; more fails the action before\nany record changes.",
+              "format": "uint32",
+              "maximum": 500,
+              "minimum": 1,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "relationship_attribute": {
+              "description": "Relationship attribute of the referencing records.",
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "type": "string",
+              "x-attricat-reference": "relationship_attribute"
+            },
+            "type": {
+              "const": "referencing_records_update",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "relationship_attribute",
+            "actions"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "EventTrigger": {
+      "additionalProperties": false,
+      "description": "Runs when a record event occurs. Event triggers have no `type` key.",
+      "if": {
+        "properties": {
+          "event_type": {
+            "const": "record.migrated.v1"
+          }
+        },
+        "required": [
+          "event_type"
+        ]
+      },
+      "properties": {
+        "attributes": {
+          "default": null,
+          "description": "Match only events whose changed facts name one of these attribute\ncodes. Not allowed with `record.migrated.v1`.",
+          "items": {
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "type": "string",
+            "x-attricat-reference": "attribute"
+          },
+          "maxItems": 100,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "envelope": {
+          "additionalProperties": {
+            "type": [
+              "string",
+              "number",
+              "boolean"
+            ]
+          },
+          "default": {},
+          "description": "Scalar values the event envelope must match: `event_type`,\n`aggregate_kind`, `source_kind`, `source_name` or `metadata.<path>`.",
+          "propertyNames": {
+            "anyOf": [
+              {
+                "enum": [
+                  "event_type",
+                  "aggregate_kind",
+                  "source_kind",
+                  "source_name"
+                ]
+              },
+              {
+                "pattern": "^metadata\\.[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)*$"
+              }
+            ]
+          },
+          "type": "object",
+          "x-attricat-key-suggestions": [
+            "event_type",
+            "aggregate_kind",
+            "source_kind",
+            "source_name"
+          ]
+        },
+        "event_type": {
+          "description": "Record event that starts the workflow.",
+          "enum": [
+            "record.created.v1",
+            "record.updated.v1",
+            "record.migrated.v1",
+            "attribute_value.changed.v1",
+            "attribute_value.restored.v1",
+            "relationship.changed.v1"
+          ],
+          "type": "string"
+        },
+        "facts": {
+          "additionalProperties": {
+            "type": [
+              "string",
+              "number",
+              "boolean"
+            ]
+          },
+          "default": {},
+          "description": "Scalar values the event facts must match, keyed `facts.<index>.<field>`.",
+          "propertyNames": {
+            "pattern": "^facts\\.\\+?[0-9]+(?:\\.[A-Za-z0-9_-]+)+$"
+          },
+          "type": "object"
+        }
+      },
+      "required": [
+        "event_type"
+      ],
+      "then": {
+        "not": {
+          "required": [
+            "attributes"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "Trigger": {
+      "description": "What starts the workflow.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/EventTrigger"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Runs when started on demand for one record. Requires `format_version = 2`.",
+          "properties": {
+            "type": {
+              "const": "manual",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Runs on a UTC cron schedule for one fixed record. Requires `format_version = 2`.",
+          "properties": {
+            "cron": {
+              "description": "Six-field cron expression, including seconds: `sec min hour day month weekday`.",
+              "pattern": "^\\s*\\S+(?:\\s+\\S+){5}\\s*$",
+              "type": "string"
+            },
+            "target_record_id": {
+              "description": "UUID of the record the scheduled run acts on.",
+              "pattern": "^(?:[0-9A-Fa-f]{32}|[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}|\\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\\}|urn:uuid:[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})$",
+              "type": "string"
+            },
+            "timezone": {
+              "description": "Schedule time zone. Only `UTC` is supported.",
+              "enum": [
+                "UTC"
+              ],
+              "type": "string"
+            },
+            "type": {
+              "const": "schedule",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "cron",
+            "timezone",
+            "target_record_id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Reserved: runs when an extension emits a versioned event. Delivery is\nnot enabled yet. Requires `format_version = 2`.",
+          "properties": {
+            "contract_version": {
+              "description": "Version of the event payload contract.",
+              "format": "uint32",
+              "minimum": 1,
+              "type": "integer"
+            },
+            "event_type": {
+              "description": "Versioned extension event, such as `plugin.example.changed.v1`.",
+              "pattern": "^plugin\\.(?:[\\s\\S]*\\.)?v1$",
+              "type": "string"
+            },
+            "provider": {
+              "description": "Extension that emits the event.",
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._-]+$",
+              "type": "string"
+            },
+            "type": {
+              "const": "extension_event",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "provider",
+            "event_type",
+            "contract_version"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "description": "Format version 1 accepts only record event triggers.",
+      "if": {
+        "properties": {
+          "format_version": {
+            "const": 1
+          }
+        },
+        "required": [
+          "format_version"
+        ]
+      },
+      "then": {
+        "properties": {
+          "triggers": {
+            "items": {
+              "not": {
+                "required": [
+                  "type"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "Manual and schedule triggers carry no event facts, so attribute writes need fixed values.",
+      "if": {
+        "properties": {
+          "triggers": {
+            "contains": {
+              "properties": {
+                "type": {
+                  "enum": [
+                    "manual",
+                    "schedule"
+                  ]
+                }
+              },
+              "required": [
+                "type"
+              ]
+            }
+          }
+        },
+        "required": [
+          "triggers"
+        ]
+      },
+      "then": {
+        "properties": {
+          "actions": {
+            "items": {
+              "not": {
+                "required": [
+                  "event_field"
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "description": "An automation that applies fixed record actions when one of its triggers fires.",
+  "properties": {
+    "actions": {
+      "description": "Record actions applied in order when a trigger fires. At least one.",
+      "items": {
+        "$ref": "#/$defs/Action"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "code": {
+      "description": "Stable workflow identifier, unique within its owner.",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "type": "string"
+    },
+    "format_version": {
+      "description": "Definition format version. `1` accepts only record event triggers;\n`2` also accepts `manual`, `schedule` and `extension_event` triggers.",
+      "enum": [
+        1,
+        2
+      ],
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "name": {
+      "description": "Human-readable workflow name.",
+      "pattern": "\\S",
+      "type": "string"
+    },
+    "triggers": {
+      "description": "What starts the workflow. At least one.",
+      "items": {
+        "$ref": "#/$defs/Trigger"
+      },
+      "minItems": 1,
+      "type": "array"
+    }
+  },
+  "required": [
+    "format_version",
+    "code",
+    "name",
+    "triggers",
+    "actions"
+  ],
+  "title": "Attricat workflow definition",
+  "type": "object"
+}

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import contract from '../../../../../contracts/view-components.json';
-import type { TomlPath } from './tomlOutline';
+import type { TomlPath } from '../../components/tomlOutline';
 
 const viewComponentSchema = z.object({
   capabilities: z.array(z.string()),

@@ -1,4 +1,8 @@
-import { scanToml, type TextRange, type TomlPath } from './tomlOutline';
+import {
+  scanToml,
+  type TextRange,
+  type TomlPath,
+} from '../../components/tomlOutline';
 
 const quotedNames = /'([^']+)'/g;
 /** Leading definition keys that server messages name without quotes. */

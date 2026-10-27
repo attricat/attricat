@@ -40,6 +40,7 @@ contracts:
     UPDATE_CONTRACTS=1 cargo test --locked -p attricat-blueprint --test definition_schema definition_schema_contract_is_current
     UPDATE_CONTRACTS=1 cargo test --locked -p attricat-repository --lib definition_schema_contract_is_current
     UPDATE_CONTRACTS=1 cargo test --locked -p attricat-rules --lib definition_schema_contract_is_current
+    UPDATE_CONTRACTS=1 cargo test --locked -p attricat-workflow --lib definition_schema_contract_is_current
     UPDATE_CONTRACTS=1 cargo test --locked -p attricat-lexicon --test conformance lexicon_schema_contract_is_current
     UPDATE_CONTRACTS=1 cargo test --locked -p attricat-repository --lib error_code_contract_is_current
 

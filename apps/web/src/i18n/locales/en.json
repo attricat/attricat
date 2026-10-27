@@ -945,19 +945,34 @@
       "expectedType": "Expected a {{type}}.",
       "expectedValue": "Expected {{value}}.",
       "invalidCode": "Use only ASCII letters, numbers, hyphens, and underscores.",
+      "invalidFormat": "Invalid format.",
+      "keyNotAllowed": "“{{key}}” is not allowed here.",
       "missingKey": "Missing required key “{{key}}”.",
       "notEmpty": "Must not be empty.",
+      "notAllowed": "This is not allowed here.",
       "syntax": "Invalid TOML: {{message}}",
       "tooLarge": "Must be at most {{limit}}.",
       "tooLong": "Must have at most {{limit}} items or characters.",
       "tooShort": "Must have at least {{limit}} items or characters.",
       "tooSmall": "Must be at least {{limit}}.",
       "unknownKey": "Unknown key “{{key}}”.",
-      "unknownKeySuggestion": "Unknown key “{{key}}”. Did you mean “{{suggestion}}”?"
+      "unknownKeySuggestion": "Unknown key “{{key}}”. Did you mean “{{suggestion}}”?",
+      "unknownReference": "“{{value}}” does not exist in this workspace."
+    },
+    "fixes": {
+      "insertKey": "Add “{{key}}”",
+      "renameKey": "Change to “{{key}}”",
+      "replaceValue": "Change to {{value}}"
     },
     "hover": {
       "allowedValues": "Allowed values: {{values}}",
-      "default": "Default: {{value}}"
+      "default": "Default: {{value}}",
+      "unknownReference": "“{{value}}” does not exist in this workspace."
+    },
+    "links": {
+      "blueprint": "Open blueprint in a new tab",
+      "contexts": "Open contexts in a new tab",
+      "roles": "Open roles in a new tab"
     },
     "placeholders": {
       "name": "name"

@@ -9,7 +9,7 @@ import {
   snippetIsPresent,
   type DefinitionSnippet,
 } from './definitionSnippets';
-import { scanToml } from './tomlOutline';
+import { scanToml } from '../../components/tomlOutline';
 
 /** Expands Monaco snippet syntax the way accepting every default would. */
 const expand = (body: string) => {
@@ -68,6 +68,7 @@ value_type = "string"
 type = "required"
 attribute_code = "title"
 `,
+  [definitionKinds.workflow]: '',
 };
 
 /** A rule has one predicate, so predicate snippets start without one. */
