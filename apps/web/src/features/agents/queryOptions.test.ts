@@ -1,5 +1,10 @@
+import { QueryClient } from '@tanstack/react-query';
 import { describe, expect, it } from 'vitest';
-import { conversationPollInterval } from './queryOptions';
+import {
+  conversationPollInterval,
+  invalidateConversation,
+} from './queryOptions';
+import { agentQueryKeys } from './queryKeys';
 import {
   conversationIdlePollIntervalMs,
   conversationPollIntervalMs,
@@ -30,5 +35,17 @@ describe('conversation polling policy', () => {
     expect(conversationPollInterval([], false, true)).toBe(
       conversationPollIntervalMs,
     );
+  });
+});
+
+describe('invalidateConversation', () => {
+  it('refreshes the record conversation lists too', async () => {
+    const client = new QueryClient();
+    const recordList = agentQueryKeys.recordConversations('record-id');
+    client.setQueryData(recordList, { pages: [], pageParams: [] });
+
+    await invalidateConversation(client, 'conversation-id');
+
+    expect(client.getQueryState(recordList)?.isInvalidated).toBe(true);
   });
 });

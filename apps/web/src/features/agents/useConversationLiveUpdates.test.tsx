@@ -104,12 +104,15 @@ describe('useConversationLiveUpdates', () => {
     expect(sources[0].url).toBe(`/api/agent/runs/${run.id}/events`);
     for (const event of ['message', 'status', 'tool_call', 'terminal'])
       sources[0].emit(event);
-    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(3));
     expect(invalidate).toHaveBeenCalledWith({
       queryKey: agentQueryKeys.conversation(run.conversation_id),
     });
     expect(invalidate).toHaveBeenCalledWith({
       queryKey: agentQueryKeys.approvals(run.conversation_id),
+    });
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: agentQueryKeys.recordConversationLists(),
     });
     expect(client.getQueryState(unrelated)?.isInvalidated).toBe(false);
   });

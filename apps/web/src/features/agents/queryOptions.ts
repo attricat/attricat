@@ -64,10 +64,17 @@ export const conversationPollInterval = (
     : conversationPollIntervalMs;
 };
 
+/**
+ * Refreshes a conversation and the record conversation lists, which show
+ * its latest activity and may hold it under any record.
+ */
 export const invalidateConversation = (client: QueryClient, id: string) =>
   Promise.all([
     client.invalidateQueries({ queryKey: agentQueryKeys.conversation(id) }),
     client.invalidateQueries({ queryKey: agentQueryKeys.approvals(id) }),
+    client.invalidateQueries({
+      queryKey: agentQueryKeys.recordConversationLists(),
+    }),
   ]);
 
 /**
