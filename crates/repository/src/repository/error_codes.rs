@@ -58,6 +58,7 @@ error_codes! {
     ContextCycle = "context_cycle",
     ContextInUse = "context_in_use",
     CsrfFailed = "csrf_failed",
+    DataQualityFilterForbidden = "data_quality_filter_forbidden",
     DefaultContextOnly = "default_context_only",
     DefaultContextProtected = "default_context_protected",
     DisabledInDemo = "disabled_in_demo",

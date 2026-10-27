@@ -19,6 +19,7 @@
     "context_cycle",
     "context_in_use",
     "csrf_failed",
+    "data_quality_filter_forbidden",
     "default_context_only",
     "default_context_protected",
     "disabled_in_demo",

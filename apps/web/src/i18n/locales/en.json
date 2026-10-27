@@ -81,6 +81,7 @@
     "context_cycle": "A context can't be its own descendant.",
     "context_in_use": "This context still has descendants, values or extension runs, so it can't be deleted.",
     "csrf_failed": "Your session token is missing or expired. Reload the page and try again.",
+    "data_quality_filter_forbidden": "You aren't authorized to filter by data quality.",
     "default_context_only": "This attribute can only be edited in the default context.",
     "default_context_protected": "The default context can't be changed or deleted.",
     "disabled_in_demo": "This action isn't available in the demo.",

@@ -446,7 +446,7 @@ the agent `search_records` tool accepts the same sort.
 
 The `data_quality` filter keeps records with `open` findings, only
 `acknowledged` ones, or `clean` records without unresolved findings, and
-requires `rules.read` (`403` otherwise). `open` reads the needs-attention tag. For callers with `rules.read`, every search item carries
+requires `rules.read` (`403 data_quality_filter_forbidden` otherwise). `open` reads the needs-attention tag. For callers with `rules.read`, every search item carries
 `data_quality`: `checked`, whether an enabled rule checks the record's
 blueprint revision, and `findings`, unresolved findings counted by `state` and
 `severity`, most severe first. Callers without it get no `data_quality` field.
@@ -716,6 +716,7 @@ results report the same `code`, `message` and `details`.
 | `422` | `invalid_display_name` | `min` and `max` characters |
 | `422` | `text_length_invalid` | `field`, `min` and `max` characters |
 | `422` | `https_required` | `field`: the URL that must use HTTPS |
+| `403` | `data_quality_filter_forbidden` | `permission`: `rules.read`, which a record search's `data_quality` filter requires |
 
 A failed [record batch](#record-batches) operation keeps that operation's
 status, code and details, and adds `operation_index` and `record_id`.

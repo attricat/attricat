@@ -83,6 +83,7 @@
     "context_cycle": "Kontekst nie może być własnym potomkiem.",
     "context_in_use": "Ten kontekst nadal ma potomków, wartości lub wykonania rozszerzeń, więc nie można go usunąć.",
     "csrf_failed": "Brakuje tokenu sesji lub wygasł. Odśwież stronę i spróbuj ponownie.",
+    "data_quality_filter_forbidden": "Nie masz uprawnień do filtrowania według jakości danych.",
     "default_context_only": "Ten atrybut można edytować tylko w kontekście domyślnym.",
     "default_context_protected": "Kontekstu domyślnego nie można zmienić ani usunąć.",
     "disabled_in_demo": "Ta czynność jest niedostępna w wersji demonstracyjnej.",

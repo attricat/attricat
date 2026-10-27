@@ -64,6 +64,16 @@ impl ApiError {
             "you are not authorized to perform this action",
         )
     }
+    /// A record search filtered by data quality without `permission`, which
+    /// findings require.
+    pub(super) fn data_quality_filter_forbidden(permission: &str) -> Self {
+        Self::new(
+            StatusCode::FORBIDDEN,
+            ErrorCode::DataQualityFilterForbidden,
+            format!("filtering by data quality requires {permission}"),
+        )
+        .with_details(serde_json::json!({ "permission": permission }))
+    }
     /// The shared demo accounts must keep working for every visitor.
     pub(super) fn disabled_in_demo() -> Self {
         Self::new(

@@ -800,15 +800,17 @@ async fn search_summarizes_filters_and_sorts_by_data_quality(pool: PgPool) {
     )
     .await;
     assert!(plain["items"][0].get("data_quality").is_none());
-    assert_eq!(
+    let forbidden = expect_status(
         search(
             reader.clone(),
-            json!({"blueprint": code, "data_quality": "open"})
+            json!({"blueprint": code, "data_quality": "open"}),
         )
-        .await
-        .status(),
-        StatusCode::FORBIDDEN
-    );
+        .await,
+        StatusCode::FORBIDDEN,
+    )
+    .await;
+    assert_eq!(forbidden["error"]["code"], "data_quality_filter_forbidden");
+    assert_eq!(forbidden["error"]["details"]["permission"], "rules.read");
     assert_eq!(
         search(
             reader.clone(),
