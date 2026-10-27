@@ -131,6 +131,35 @@ export const missingRequiredAttributes = (
     return !value.trim();
   });
 
+/**
+ * The record schema a form checks before saving. The server assigns
+ * generated attributes when it creates the record, so a form never has their
+ * values and their top-level requirement is left to the server.
+ */
+export const formRecordSchema = (
+  recordSchema: JsonSchema | null | undefined,
+  attributes: readonly Attribute[],
+): JsonSchema | null | undefined => {
+  if (
+    typeof recordSchema !== 'object' ||
+    recordSchema === null ||
+    !Array.isArray(recordSchema.required)
+  )
+    return recordSchema;
+  const generated = new Set(
+    attributes
+      .filter((attribute) => attribute.generated)
+      .map((attribute) => attribute.code),
+  );
+  if (generated.size === 0) return recordSchema;
+  return {
+    ...recordSchema,
+    required: recordSchema.required.filter(
+      (code: unknown) => typeof code !== 'string' || !generated.has(code),
+    ),
+  };
+};
+
 export const validateRecordForm = (
   attributes: readonly Attribute[],
   fields: Record<string, string>,

@@ -223,6 +223,29 @@ they are never independently authored or edited.
 - `tags` is a JSONB array compiled from the attribute TOML. Tags are unique,
   non-empty metadata; `hidden` and `hidden:<surface>` are native UI omission
   hints, not access controls (see [attribute tags](blueprints.md#attribute-tags)).
+- `generated` is the compiled JSONB `generated` declaration
+  (`{format?, start, reset, time_zone}`) or null. Repository writes reject
+  every client value for a generated attribute; only record creation and
+  migration assign one (see [`attribute_sequences`](#attribute_sequences)).
+
+### `attribute_sequences`
+
+The gapless counters behind [generated values](blueprints.md#generated-values),
+one row per `(workspace_id, blueprint_id, attribute_code, period)`.
+`blueprint_id` is the family, whatever the version, and has no foreign key
+because the `blueprints` key includes the version; a deleted and restored
+family keeps its numbers. `period` is `''` unless the attribute resets every
+year, month or day (`2026`, `2026-10`, `2026-10-27`). `next_value` is the
+number the next record receives.
+
+The record-create transaction (and a migration onto a revision that adds a
+generated attribute) takes a number with one statement,
+`INSERT … ON CONFLICT DO UPDATE SET next_value = next_value + 1 RETURNING
+next_value - 1`, which creates the row at `start` the first time. The row
+lock is held until commit, so writers of one family attribute serialize and a
+rollback returns the number. There are no SQL sequences or triggers; the
+increment, formatting and period are Rust. The advance endpoint inserts the
+row if needed, locks it `FOR UPDATE` and only ever raises `next_value`.
 
 ### `records`
 
@@ -445,6 +468,11 @@ Repository code owns everything else, inside the write transaction:
   key or form a cycle). Record checks, transition conditions and rules use the
   record's pinned revision, because they validate that revision's own
   definition of the record.
+
+- Generated-value counters (`attribute_sequences`) are locked by record
+  writers after their record row and before the family key lock, in
+  attribute code order. Publication never touches them, so it cannot wait on
+  a writer holding a counter.
 
 Declare new structural constraints as data (blueprint columns and index
 tables with `UNIQUE`/`CHECK`), never as triggers or functions.

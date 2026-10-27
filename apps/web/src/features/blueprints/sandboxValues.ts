@@ -1,6 +1,6 @@
 import { scalarValueForField } from '../records/attributeValues';
 import type { Attribute, JsonSchema } from '../records/api';
-import { validateRecordForm } from '../records/recordForm';
+import { formRecordSchema, validateRecordForm } from '../records/recordForm';
 
 export type SandboxValues = Record<string, { value: unknown }>;
 
@@ -39,7 +39,7 @@ export const sandboxValidation = (
     attributes,
     fields,
     [],
-    recordSchema,
+    formRecordSchema(recordSchema, attributes),
   );
   return {
     fieldErrors: Object.fromEntries(

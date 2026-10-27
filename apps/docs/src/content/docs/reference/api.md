@@ -49,6 +49,8 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `unique_key_conflict` | 409 | Another record already has these values for a unique key. `details` has `key`, `context`, `values`, and `conflicting_record_id`. |
 | `unique_key_duplicates` | 409 | Publishing a new unique key, or moving a context to another parent, failed because existing records would share values. `details.duplicates` lists them. |
 | `relationship_hierarchy_violations` | 409 | Publishing `acyclic` or `tree` failed because existing links contain cycles or extra parents. `details` lists them. |
+| `generated_attribute_readonly` | 422 | The request tries to write a [generated attribute](/reference/blueprint/#generated-values), which only the server assigns. `details.attribute` names it. |
+| `generated_sequence_not_raised` | 409 | A counter advance asked for a `next_value` lower than the current one. Counters can only be raised. `details` has `current` and `requested`. |
 | `stale_record` | 409 | `expected_updated_at` no longer matches the record. Reload it and try again. |
 | `status_precondition_required` | 428 | A write to a status attribute did not send `expected_updated_at`. Read the record and send its `updated_at`. |
 | `status_transition_forbidden` | 403 | The status transition requires a permission or role the caller does not have. |
@@ -112,6 +114,8 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `POST` | `/blueprints/{id}/versions/{version}/publish` | Publish a draft. |
 | `GET` | `/blueprints/by-code/{code}` and `/blueprints/by-code/{code}/versions/{version}` | Look up by code. |
 | `GET` | `/blueprints/{id}/migration-batches` | Background migration batches. |
+| `GET` | `/blueprints/{id}/sequences` | Counters of the blueprint's [generated attributes](/reference/blueprint/#counters), with `attribute_code`, `period`, `next_value`, and `updated_at`. |
+| `POST` | `/blueprints/{id}/sequences/{attribute_code}/advance` | Raise a counter with `{"next_value": 10000, "period": "2026"}`. `period` defaults to the current one. Needs `blueprints.publish`. |
 | `GET` | `/blueprints/{id}/connector-jobs` | Connector jobs. |
 | `POST` | `/blueprint-connector-jobs/{id}/run` | Run a connector job, with `{"idempotency_key": "…"}`. |
 | `POST` | `/blueprint-connector-jobs/{id}/resync` | Export again every published record of an export job: `{"idempotency_key": "…"}`, plus either `record_ids` (only those records) or `status` (only records with that export status on the job's connection; more than 10,000 such records is a `422`, so resync the whole job instead). Returns `{"run_ids": [...]}`. |

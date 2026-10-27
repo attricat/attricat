@@ -632,6 +632,7 @@ mod tests {
             context_fallback: fallback,
             context_editable: ContextEditable::All,
             readonly: false,
+            generated: None,
             position: 0,
             created_at: Utc::now(),
             updated_at: Utc::now(),

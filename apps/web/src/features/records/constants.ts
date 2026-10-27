@@ -91,6 +91,14 @@ export const attributeContextEditability = {
   default: 'default',
 } as const;
 
+/** When a generated attribute's numbering restarts at its start. */
+export const generatedSequenceResets = {
+  never: 'never',
+  yearly: 'yearly',
+  monthly: 'monthly',
+  daily: 'daily',
+} as const;
+
 export const attributeContextFallbacks = {
   default: 'default',
   none: 'none',

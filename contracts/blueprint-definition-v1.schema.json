@@ -783,6 +783,21 @@
           ],
           "x-attricat-reference": "include_attribute"
         },
+        "generated": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RawGeneratedValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Core assigns the value when a record is created, from a gapless\ncounter per blueprint family and attribute. Clients cannot write it.\nRecord blueprints only.",
+          "x-attricat-value-types": [
+            "string",
+            "integer"
+          ]
+        },
         "image_only": {
           "description": "Accept only images and generate thumbnails.",
           "type": [
@@ -933,6 +948,52 @@
       "required": [
         "code"
       ],
+      "type": "object"
+    },
+    "RawGeneratedValue": {
+      "additionalProperties": false,
+      "description": "`generated = { … }` on an attribute.",
+      "properties": {
+        "format": {
+          "description": "Required on string attributes: literal text with exactly one `{n}` or\n`{n:0W}` counter token (W from 1 to 18 zero-pads), plus optional\n`{yyyy}`, `{yy}`, `{mm}` and `{dd}` date tokens. `{{` and `}}` are\nliteral braces. Integer attributes take no format.",
+          "maxLength": 100,
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reset": {
+          "description": "When numbering restarts at `start`. Defaults to `never`; other values\nneed date tokens that identify the period.",
+          "enum": [
+            "never",
+            "yearly",
+            "monthly",
+            "daily"
+          ],
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "start": {
+          "description": "The first number of a new counter. Defaults to 1.",
+          "format": "int64",
+          "maximum": 999999999999999999,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "time_zone": {
+          "description": "IANA time zone for date tokens and periods. Defaults to `UTC`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
       "type": "object"
     },
     "RawTrigger": {

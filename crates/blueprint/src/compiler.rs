@@ -54,6 +54,7 @@ pub fn compile(
             context_fallback,
             context_editable,
             readonly,
+            generated,
         ) = match declaration {
             AttributeDeclaration::Local(local) => (
                 local.code.clone(),
@@ -77,6 +78,7 @@ pub fn compile(
                 local.context_fallback,
                 local.context_editable,
                 local.readonly,
+                local.generated.clone(),
             ),
             AttributeDeclaration::Selection {
                 code,
@@ -111,6 +113,7 @@ pub fn compile(
                     attribute.context_fallback,
                     attribute.context_editable,
                     attribute.readonly,
+                    None,
                 )
             }
         };
@@ -131,6 +134,7 @@ pub fn compile(
             context_fallback,
             context_editable,
             readonly,
+            generated,
             position: position as i64,
         });
     }

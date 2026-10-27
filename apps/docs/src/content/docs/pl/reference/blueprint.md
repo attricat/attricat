@@ -70,6 +70,7 @@ value_type = "string"
 | `tags` | tablica ciągów znaków | `[]` | Dowolne metadane. Muszą być unikalne i niepuste. Niektóre tagi ukrywają atrybut w aplikacji webowej; zobacz [Tagi widoczności](#tagi-widoczności). |
 | `default_value` | zgodny z typem | Nieustawiony | Wartość zapisywana w kontekście domyślnym, gdy rekord zostaje utworzony bez niej. Tylko typy skalarne. |
 | `value_schema` | ciąg znaków (JSON) | Nieustawiony | JSON Schema dla jednej wartości. Tylko typy skalarne. Schemat atrybutu `string` może uczynić go [statusem](#statusy) lub [przypisaniem użytkownika lub zespołu](#przypisania-użytkowników-i-zespołów). Zobacz [Walidacja](/pl/builders/validation/). |
+| `generated` | tabela | Nieustawiony | Serwer numeruje nowe rekordy, np. numerami faktur lub zamówień. Tylko atrybuty `string` i `integer` w schematach rekordów. Zobacz [Wartości generowane](#wartości-generowane). |
 
 ### Typy wartości
 
@@ -260,6 +261,70 @@ Niektóre tagi zmieniają miejsca, w których aplikacja webowa pokazuje atrybut,
 | `hidden:detail` | Automatycznie generowanych widokach szczegółów rekordów |
 | `hidden:explorer` | Opcjach filtrów i faset przeglądarki rekordów |
 | `hidden:metadata` | Tabeli atrybutów na stronie schematu |
+
+### Wartości generowane
+
+`generated` sprawia, że serwer nadaje każdemu nowemu rekordowi kolejny numer z licznika, np. numer faktury, zamówienia lub dokumentu:
+
+```toml
+[[attributes]]
+code = "invoice_number"
+value_type = "string"
+generated = { format = "INV-{yyyy}-{n:05}", start = 1, reset = "yearly", time_zone = "Europe/Warsaw" }
+```
+
+Pierwsza faktura utworzona w 2026 roku otrzymuje `INV-2026-00001`, następna `INV-2026-00002`, a pierwsza utworzona w 2027 roku `INV-2027-00001`.
+
+| Klucz | Typ | Domyślnie | Opis |
+| --- | --- | --- | --- |
+| `format` | ciąg znaków, do 100 znaków | Wymagany dla `string` | Sposób budowania wartości z [tokenów formatu](#tokeny-formatu). Niedozwolony dla `integer`. |
+| `start` | liczba całkowita od 0 do 999 999 999 999 999 999 | `1` | Pierwszy numer, który wydaje nowy licznik. |
+| `reset` | `"never"`, `"yearly"`, `"monthly"` lub `"daily"` | `"never"` | Rozpoczyna liczenie od `start` w każdym nowym okresie. Niedozwolony dla `integer`. |
+| `time_zone` | strefa czasowa IANA | `"UTC"` | Strefa, w której tokeny daty i okres resetu są odczytywane z czasu utworzenia rekordu. Niedozwolony dla `integer`. |
+
+Generowane mogą być tylko atrybuty `string` i `integer`. `string` wymaga `format`; `integer` przechowuje sam numer i przyjmuje tylko `start`.
+
+`generated` jest dozwolony tylko w lokalnym atrybucie schematu rekordu. Jest odrzucany w mixinie, w atrybucie wybranym przez `from`, w `extension_type`, razem z `default_value` oraz w [statusie](#statusy) lub [przypisaniu użytkownika lub zespołu](#przypisania-użytkowników-i-zespołów). Atrybut generowany jest zawsze tylko do odczytu i zapisywany wyłącznie w kontekście domyślnym (`context_editable = "default"`), niezależnie od wartości `readonly` i `context_editable`.
+
+#### Tokeny formatu
+
+| Token | Zapisuje |
+| --- | --- |
+| `{n}` | Licznik, bez dopełniania. Wymagany dokładnie raz. |
+| `{n:0W}` | Licznik dopełniony zerami do `W` cyfr, gdzie `W` wynosi od 1 do 18. Dłuższe liczby nie są obcinane: po `999` `{n:03}` daje `1000`. |
+| `{yyyy}` | Czterocyfrowy rok. |
+| `{yy}` | Dwucyfrowy rok. |
+| `{mm}` | Dwucyfrowy miesiąc. |
+| `{dd}` | Dwucyfrowy dzień. |
+| `{{` i `}}` | Dosłowne `{` i `}`. |
+
+Każdy inny symbol zastępczy `{…}` jest odrzucany. `reset` wymaga tokenów, które identyfikują jego okres, aby wartości z różnych okresów nigdy nie wyglądały tak samo: `yearly` wymaga `{yyyy}` lub `{yy}`, `monthly` dodatkowo `{mm}`, a `daily` dodatkowo `{dd}`. W przeciwnym razie schemat jest odrzucany.
+
+#### Jak nadawane są numery
+
+- Serwer przypisuje wartość w transakcji, która tworzy rekord. Pojawia się ona w odpowiedzi na utworzenie, w zdarzeniu `record.created.v1` i w dzienniku audytu, a `required` dla tego atrybutu w `record_schema` jest spełnione.
+- W formularzu tworzenia rekordu w aplikacji internetowej pole pozostaje puste i informuje, że wartość zostanie przypisana przy zapisie rekordu. Nigdy nie jest tam oznaczone jako wymagane, nawet gdy wymaga go `record_schema`, ponieważ nie ma czego wypełniać.
+- Numeracja jest ciągła, bez luk. Utworzenie, które się nie powiedzie, np. z powodu walidacji lub konfliktu klucza unikalnego, zwraca swój numer. Usunięte rekordy zachowują swoje numery, a numery nigdy nie są używane ponownie.
+- Istnieje jeden licznik na rodzinę schematów i kod atrybutu, a przy ustawionym `reset` jeden na każdy okres. Nowe wersje schematu kontynuują ten sam licznik. Późniejsza zmiana `start` nie wpływa na już istniejący licznik, a zmiana `format` dotyczy tylko nowych wartości.
+- Zduplikowanie rekordu nadaje kopii nowy numer. Wsad rekordów numeruje po kolei każdy tworzony rekord. Przykładowe rekordy pakietu rozwiązań zużywają numery, a usunięcie danych przykładowych ich nie zwraca.
+- Żaden klient nie może zapisać atrybutu generowanego. Utworzenia, aktualizacje, czyszczenie wartości, przywracanie z historii, wsady rekordów, przepływy pracy, agenci i rozszerzenia, które tego próbują, są odrzucane z `422 generated_attribute_readonly`; `error.details.attribute` wskazuje atrybut.
+- Gdy istniejący rekord migruje do wersji, która dodaje atrybut generowany, otrzymuje numer podczas migracji. Rekordy są numerowane w kolejności migracji, a nie utworzenia, a tokeny daty i okres resetu korzystają z pierwotnej daty utworzenia każdego rekordu. Wartość, którą rekord miał już w poprzedniej wersji, zostaje zachowana.
+
+#### Liczniki
+
+`GET /blueprints/{id}/sequences` wyświetla liczniki schematu i wymaga `blueprints.read`. Każdy wpis zawiera `attribute_code`, okres `period` (pusty dla licznika, który nigdy się nie resetuje), `next_value` (numer, który otrzyma następny rekord) i `updated_at` (`null`, dopóki licznik nie został użyty).
+
+Aby kontynuować numerację po przejściu z innego systemu, podnieś licznik przez `POST /blueprints/{id}/sequences/{attribute_code}/advance`:
+
+```json
+{ "next_value": 10000, "period": "2026" }
+```
+
+- `period` jest opcjonalny i domyślnie oznacza bieżący okres. Ma postać `2026` dla `yearly`, `2026-10` dla `monthly`, `2026-10-27` dla `daily` i jest pusty dla licznika, który nigdy się nie resetuje.
+- Wywołanie wymaga `blueprints.publish` i jest zapisywane w dzienniku audytu.
+- Licznik można tylko podnieść. Niższa wartość `next_value` kończy się błędem `409 generated_sequence_not_raised`, a `error.details` zawiera wartości `current` i `requested`. Ta sama wartość niczego nie zmienia.
+
+W CLI użyj `acli blueprint sequences <blueprint-id>` i `acli blueprint advance-sequence <blueprint-id> <attribute-code> <next-value> [--period <period>]`.
 
 ### Typy atrybutów z rozszerzeń
 
@@ -678,3 +743,4 @@ Kilka reguł kompilacji, które łatwo przeoczyć:
 - `target_blueprint`, `target_blueprints`, `acyclic` i `tree` w atrybucie innym niż relacja są odrzucane.
 - `unique_keys` w mixinie, klucz wskazujący nieznany atrybut, atrybut `json`, plikowy lub relację z wieloma celami, a także klucz wymieniający atrybut dwa razy są odrzucane.
 - `from` musi mieć postać `alias.code`, gdzie `code` odpowiada kodowi samego atrybutu.
+- `generated` w mixinie, w atrybucie wybranym przez `from`, w `extension_type`, w statusie lub w przypisaniu użytkownika lub zespołu, w typie innym niż `string` lub `integer` albo razem z `default_value` jest odrzucany. Odrzucany jest też `format` bez dokładnie jednego `{n}`, z nieznanym symbolem zastępczym lub dłuższy niż 100 znaków, a także `reset`, którego okresu `format` nie identyfikuje.

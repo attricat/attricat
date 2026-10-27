@@ -49,6 +49,14 @@ struct PreparedRelationship {
     target_cardinality: Cardinality,
 }
 
+/// Who supplied a value write. Only the sequence allocator may write a
+/// generated attribute.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ValueOrigin {
+    Client,
+    Generated,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Revalidation {
     /// A record write: status transitions are checked (edges, permissions,
@@ -255,6 +263,19 @@ impl AttricatRepository {
             .collect::<Vec<_>>();
         self.insert_values_in(transaction, &write, &record, defaults)
             .await?;
+        // Numbered here, in the create transaction, so the record is never
+        // visible without its generated values and a rollback returns them.
+        let generated = self
+            .generated_values_in(
+                transaction,
+                &write,
+                &record,
+                record.created_at,
+                &HashSet::new(),
+            )
+            .await?;
+        self.insert_generated_values_in(transaction, &write, &record, generated)
+            .await?;
         self.insert_values_in(transaction, &write, &record, values)
             .await?;
         // Files are linked before validation, so the record schema sees them.
@@ -344,7 +365,8 @@ impl AttricatRepository {
     /// references into a new record. Values of enforced `[[unique_keys]]`
     /// attributes are left out, because the copy could never share them with
     /// its source: default-context values for workspace-scoped keys and every
-    /// context's values for context-scoped keys.
+    /// context's values for context-scoped keys. Generated values are left
+    /// out too; the copy is numbered like any new record.
     pub async fn duplicate_record(&self, record_id: Uuid) -> Result<Record, RepositoryError> {
         let source = self
             .get_record(record_id)
@@ -352,15 +374,19 @@ impl AttricatRepository {
             .ok_or(RepositoryError::NotFound("record"))?;
         let (default_context_id, key_codes) =
             self.unique_key_attributes(source.blueprint_id).await?;
+        let generated_codes = self
+            .generated_attribute_codes(source.blueprint_id, source.blueprint_version)
+            .await?;
         let copied = |attribute_code: &str, context_id: Option<Uuid>| {
-            key_codes
-                .get(attribute_code)
-                .is_none_or(|scope| match scope {
-                    UniqueKeyScope::Context => false,
-                    UniqueKeyScope::Workspace => {
-                        context_id.is_some_and(|id| id != default_context_id)
-                    }
-                })
+            !generated_codes.contains(attribute_code)
+                && key_codes
+                    .get(attribute_code)
+                    .is_none_or(|scope| match scope {
+                        UniqueKeyScope::Context => false,
+                        UniqueKeyScope::Workspace => {
+                            context_id.is_some_and(|id| id != default_context_id)
+                        }
+                    })
         };
         // File references are grouped by attribute and context, in order, so
         // each list is written once instead of archiving every partial list.
@@ -1108,10 +1134,36 @@ impl AttricatRepository {
         record: &Record,
         values: Vec<NewAttributeValue>,
     ) -> Result<Vec<AttributeValue>, RepositoryError> {
+        self.insert_values_with(transaction, write, record, values, ValueOrigin::Client)
+            .await
+    }
+
+    /// Writes values the sequence allocator assigned; see
+    /// [`Self::generated_values_in`]. Only record creation and migration
+    /// call it.
+    pub(super) async fn insert_generated_values_in(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        write: &WriteContext,
+        record: &Record,
+        values: Vec<NewAttributeValue>,
+    ) -> Result<Vec<AttributeValue>, RepositoryError> {
+        self.insert_values_with(transaction, write, record, values, ValueOrigin::Generated)
+            .await
+    }
+
+    async fn insert_values_with(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        write: &WriteContext,
+        record: &Record,
+        values: Vec<NewAttributeValue>,
+        origin: ValueOrigin,
+    ) -> Result<Vec<AttributeValue>, RepositoryError> {
         let mut inserted: Vec<Option<AttributeValue>> = Vec::with_capacity(values.len());
         let mut scalars: Vec<(usize, PreparedValue)> = Vec::new();
         for value in values {
-            let prepared = Self::prepare_value(write, value)?;
+            let prepared = Self::prepare_value(write, value, origin)?;
             if prepared.relationship.is_some() {
                 inserted.push(Some(
                     self.write_prepared_value(transaction, write, record, prepared)
@@ -1170,7 +1222,7 @@ impl AttricatRepository {
         record: &Record,
         value: NewAttributeValue,
     ) -> Result<AttributeValue, RepositoryError> {
-        let prepared = Self::prepare_value(write, value)?;
+        let prepared = Self::prepare_value(write, value, ValueOrigin::Client)?;
         self.write_prepared_value(transaction, write, record, prepared)
             .await
     }
@@ -1180,6 +1232,7 @@ impl AttricatRepository {
     fn prepare_value(
         write: &WriteContext,
         value: NewAttributeValue,
+        origin: ValueOrigin,
     ) -> Result<PreparedValue, RepositoryError> {
         let (attribute_id, attribute_code, context_id, payload, target_record_id) = match value {
             NewAttributeValue::Scalar {
@@ -1204,6 +1257,9 @@ impl AttricatRepository {
         let context_id = write.resolve_context(context_id)?;
         let attribute_label = attribute_code.clone();
         let attribute = write.attribute(attribute_id, attribute_code.as_deref())?;
+        if origin == ValueOrigin::Client {
+            attribute.ensure_client_writable()?;
+        }
         write.ensure_editable(Some(context_id), attribute.context_editable)?;
         if (attribute.value_type == ValueType::Relationship) != target_record_id.is_some() {
             return Err(RepositoryError::AttributeKindMismatch);
@@ -1430,6 +1486,7 @@ impl AttricatRepository {
         if attribute.value_type == ValueType::Relationship {
             return Err(RepositoryError::AttributeKindMismatch);
         }
+        attribute.ensure_client_writable()?;
         write.ensure_editable(context_id, attribute.context_editable)?;
         write.values_changed();
         self.archive_current_value(transaction, record.id, attribute.id, context_id, None)

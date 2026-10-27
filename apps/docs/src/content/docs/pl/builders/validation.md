@@ -346,6 +346,43 @@ Drugi klucz jest złożony: dokument może mieć tylko jedną wersję `B`, ale k
 
 Zasady porównywania, klucze w poszczególnych kontekstach i to, co się dzieje po dodaniu klucza do schematu, który ma już rekordy, opisuje sekcja [Klucze unikalne](/pl/reference/blueprint/#klucze-unikalne).
 
+## Generowane identyfikatory
+
+[Atrybut generowany](/pl/reference/blueprint/#wartości-generowane) nadaje każdemu nowemu rekordowi kolejny numer z licznika, np. `INV-2026-00042`. Aby każdy rekord miał taki numer i żadne dwa rekordy go nie współdzieliły, oznacz atrybut jako wymagany w `record_schema` i zadeklaruj dla niego klucz unikalny:
+
+```toml
+record_schema = '''{ "type": "object", "required": ["invoice_number"] }'''
+
+[[attributes]]
+code = "invoice_number"
+value_type = "string"
+generated = { format = "INV-{yyyy}-{n:05}", reset = "yearly", time_zone = "Europe/Warsaw" }
+
+[[attributes]]
+code = "legacy_number"
+name = "Number in the previous system"
+value_type = "string"
+
+[[unique_keys]]
+code = "invoice_number"
+attributes = ["invoice_number"]
+```
+
+Serwer przypisuje wartość, zanim rekord zostanie zwalidowany, więc `required` jest spełnione przy każdym utworzeniu. Licznik nigdy nie wydaje tego samego numeru dwa razy; klucz unikalny czyni z numeru zadeklarowany identyfikator biznesowy i sprawia, że baza danych odrzuca duplikat, np. gdy późniejsza zmiana `format` sprawi, że nowe wartości będą wyglądać jak stare. Nikt nie może zapisać atrybutu generowanego, więc zapis, który tego próbuje, zwraca `422 generated_attribute_readonly`.
+
+### Kontynuuj numerację po przejściu z innego systemu
+
+Rekordy przeniesione z innego systemu otrzymują nowe numery jak każdy inny rekord. Ich dawne numery przechowuj w osobnym zwykłym atrybucie, takim jak `legacy_number` powyżej, i jeśli dawne numery muszą pozostać unikalne, zadeklaruj dla niego również klucz unikalny.
+
+Aby nowe rekordy kontynuowały numerację od ostatniego numeru starego systemu, podnieś licznik. Jeśli na przykład stary system doszedł do `INV-2026-09999`:
+
+```sh
+acli blueprint sequences <blueprint-id>
+acli blueprint advance-sequence <blueprint-id> invoice_number 10000 --period 2026
+```
+
+Następna faktura utworzona w 2026 roku otrzyma `INV-2026-10000`. Licznik można tylko podnieść: niższa wartość zwraca `409 generated_sequence_not_raised`. Podniesienie licznika wymaga uprawnienia `blueprints.publish` i jest zapisywane w dzienniku audytu. Zobacz [Liczniki](/pl/reference/blueprint/#liczniki).
+
 ## Walidacja a konteksty
 
 Rekord ma w każdym kontekście rozstrzygnięty zestaw wartości, zbudowany z jego własnych wartości i wartości odziedziczonych. Po każdej zmianie Attricat waliduje rekord w **każdym** kontekście, nie tylko w edytowanym.

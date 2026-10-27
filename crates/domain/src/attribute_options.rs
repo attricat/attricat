@@ -36,6 +36,17 @@ crate::code_enum! {
     }
 }
 
+crate::code_enum! {
+    /// When a generated attribute's numbering restarts at its `start`.
+    pub enum SequenceReset (UnknownSequenceReset: "sequence reset") {
+        /// One counter for the attribute's whole life.
+        Never => "never",
+        Yearly => "yearly",
+        Monthly => "monthly",
+        Daily => "daily",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -56,6 +67,11 @@ mod tests {
             ContextEditable::ALL,
             ContextEditable::as_str,
             ContextEditable::parse,
+        );
+        crate::codes::assert_codes_round_trip(
+            SequenceReset::ALL,
+            SequenceReset::as_str,
+            SequenceReset::parse,
         );
     }
 }

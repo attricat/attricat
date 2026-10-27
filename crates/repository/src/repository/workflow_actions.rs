@@ -231,7 +231,7 @@ impl AttricatRepository {
     /// evidence, publication reconciliation and one `record.updated.v1`
     /// outbox event. Like every server-side write, it does not enforce an
     /// attribute's `readonly` flag, which only marks the field read-only in
-    /// the editing UI.
+    /// the editing UI, but it cannot write a generated attribute.
     async fn apply_workflow_actions(
         &self,
         transaction: &mut Transaction<'_, Postgres>,

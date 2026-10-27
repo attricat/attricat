@@ -69,6 +69,11 @@ permissions can edit them, including removing the sample marker. The pack does
 not own them. Application history still records their origin, and later retries
 do not restore removed markers or reset user edits.
 
+Sample records are numbered like any other record when a blueprint has
+[generated values](blueprints.md#generated-values). Removing sample data does
+not return those numbers, so the first records you create continue after the
+samples.
+
 Inspect the resulting relationships and follow the publisher's walkthrough.
 Removing the sample marker does not remove values from audit/event history.
 

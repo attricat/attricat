@@ -11,6 +11,7 @@ import {
   attributeContextFallbacks,
   attributeFilterOperators,
   attributeHierarchies,
+  generatedSequenceResets,
   publicationStatuses,
   resultVersionScopeKinds,
   approvalEndReasons,
@@ -48,6 +49,15 @@ export const attributeSchema = z
     context_fallback: z.enum(attributeContextFallbacks).optional(),
     context_editable: z.enum(attributeContextEditability).optional(),
     readonly: z.boolean().optional(),
+    /** Numbered by the server on record creation; never written by clients. */
+    generated: z
+      .object({
+        format: z.string().optional(),
+        start: z.number(),
+        reset: z.enum(generatedSequenceResets),
+        time_zone: z.string(),
+      })
+      .nullish(),
     tags: z.array(z.string()).optional(),
     value_schema: jsonSchemaSchema.nullish(),
     extension_type: z

@@ -7,9 +7,10 @@ use super::{
 use crate::{
     attricat_service::AttricatMutationService,
     model::{
-        Blueprint, BlueprintMigrationBatch, BlueprintMigrationBatchStatus,
-        BlueprintMigrationImpact, BlueprintRecordPublicationSummary, BlueprintWithAttributes,
-        CreateBlueprint, PublicationContextRequest, StartBlueprintMigrationBatchRequest,
+        AdvanceGeneratedSequence, Blueprint, BlueprintMigrationBatch,
+        BlueprintMigrationBatchStatus, BlueprintMigrationImpact, BlueprintRecordPublicationSummary,
+        BlueprintWithAttributes, CreateBlueprint, GeneratedSequence, GeneratedSequenceAdvance,
+        PublicationContextRequest, StartBlueprintMigrationBatchRequest,
     },
 };
 use axum::{Json, extract::State, http::StatusCode};
@@ -209,4 +210,26 @@ pub(super) async fn get_blueprint_by_code_and_version(
         .await?
         .map(Json)
         .ok_or_else(|| ApiError::not_found("blueprint version"))
+}
+
+pub(super) async fn list_generated_sequences(
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ApiPath(blueprint_id): ApiPath<Uuid>,
+) -> Result<Json<Vec<GeneratedSequence>>, ApiError> {
+    Ok(Json(
+        repository.list_generated_sequences(blueprint_id).await?,
+    ))
+}
+
+/// Raises a generated attribute's counter; it can never be lowered.
+pub(super) async fn advance_generated_sequence(
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ApiPath((blueprint_id, attribute_code)): ApiPath<(Uuid, String)>,
+    ApiJson(input): ApiJson<AdvanceGeneratedSequence>,
+) -> Result<Json<GeneratedSequenceAdvance>, ApiError> {
+    Ok(Json(
+        repository
+            .advance_generated_sequence(blueprint_id, &attribute_code, input)
+            .await?,
+    ))
 }

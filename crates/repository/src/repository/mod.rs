@@ -18,7 +18,8 @@
 //! right before their first record row lock (inside `lock_record`,
 //! `lock_record_with_generations`, record insertion, batch pre-locking, bulk
 //! publication and extension upsert lookups), and the per-family unique-key locks shared while they
-//! validate, after their record rows. Blueprint publication takes the
+//! validate, after their record rows. Record creation and migration lock
+//! generated-value counters between the two, in attribute code order. Blueprint publication takes the
 //! workspace row (by advancing a generation) and then its family's key lock
 //! exclusively. Context creation and reparenting take the workspace row
 //! first, then (reparenting only) the relationship lock, then the
@@ -107,6 +108,7 @@ mod extension_scoped_configuration;
 mod extension_storage;
 mod extensions;
 mod files;
+mod generated_sequences;
 mod generations;
 mod health;
 mod leadership;
@@ -1106,17 +1108,30 @@ impl<S: RepositoryScope> AttricatRepository<S> {
         transaction: &mut Transaction<'_, Postgres>,
         publication_metadata: Option<Value>,
     ) -> Result<Option<Uuid>, RepositoryError> {
+        self.write_audit_event_with_metadata(
+            transaction,
+            publication_metadata.map(|metadata| ("publication", metadata)),
+        )
+        .await
+    }
+
+    /// Writes the request's audit event with one extra metadata entry.
+    async fn write_audit_event_with_metadata(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        extra_metadata: Option<(&str, Value)>,
+    ) -> Result<Option<Uuid>, RepositoryError> {
         let Some(audit) = &self.audit_context else {
             return Ok(None);
         };
         let event_id = Uuid::new_v4();
         let agent = audit.agent.as_ref();
         let mut metadata = audit.metadata.clone();
-        if let Some(publication_metadata) = publication_metadata {
+        if let Some((key, value)) = extra_metadata {
             let metadata = metadata
                 .as_object_mut()
                 .expect("audit metadata is an object");
-            metadata.insert("publication".to_owned(), publication_metadata);
+            metadata.insert(key.to_owned(), value);
         }
         sqlx::query(
             "INSERT INTO audit_events (id, workspace_id, actor_user_id, actor_token_id, request_id, correlation_id, action, authorization_scope, target, outcome, metadata, executor_type, agent_run_id, agent_conversation_id, agent_tool_call_id, agent_tool_name, approval_decision, approved_by_user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'success', $10, $11, $12, $13, $14, $15, $16, $17)",
@@ -1169,6 +1184,21 @@ impl<S: RepositoryScope> AttricatRepository<S> {
     ) -> Result<(), RepositoryError> {
         self.ensure_task_fence(&mut transaction).await?;
         self.write_audit_event(&mut transaction).await?;
+        transaction.commit().await?;
+        Ok(())
+    }
+
+    /// [`Self::commit_mutation`], recording `value` under `key` in the audit
+    /// event's metadata.
+    pub(crate) async fn commit_mutation_with_audit_metadata(
+        &self,
+        mut transaction: Transaction<'_, Postgres>,
+        key: &str,
+        value: Value,
+    ) -> Result<(), RepositoryError> {
+        self.ensure_task_fence(&mut transaction).await?;
+        self.write_audit_event_with_metadata(&mut transaction, Some((key, value)))
+            .await?;
         transaction.commit().await?;
         Ok(())
     }

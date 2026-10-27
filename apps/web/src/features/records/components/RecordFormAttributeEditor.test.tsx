@@ -144,4 +144,28 @@ describe('RecordFormAttributeEditor', () => {
       screen.getByText('Managed by system actions. From the import.'),
     ).toBeTruthy();
   });
+
+  it('does not ask for a required generated value on a new record', () => {
+    renderEditor({
+      attribute: {
+        ...title,
+        readonly: true,
+        generated: {
+          format: 'INV-{n:04}',
+          start: 1,
+          reset: 'never',
+          time_zone: 'UTC',
+        },
+      },
+      contextId: defaultContextId,
+      existingValues: [],
+      required: true,
+      value: '',
+    });
+    const input = screen.getByRole('textbox', { name: 'title' });
+    expect(input).toHaveProperty('required', false);
+    expect(
+      screen.getByText('Assigned automatically when the record is saved.'),
+    ).toBeTruthy();
+  });
 });

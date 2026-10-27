@@ -139,6 +139,16 @@ pub enum RepositoryError {
     InvalidFilePolicy,
     #[error("file attribute is read-only")]
     FileAttributeReadonly,
+    #[error(
+        "attribute '{attribute}' is generated when the record is created and cannot be written"
+    )]
+    GeneratedAttributeReadonly { attribute: String },
+    #[error(
+        "the sequence's next value is already {current}; it can only be raised, not set to {requested}"
+    )]
+    GeneratedSequenceNotRaised { current: i64, requested: i64 },
+    #[error("invalid generated sequence request: {0}")]
+    InvalidGeneratedSequence(String),
     #[error("file references changed; refresh and try again")]
     FileReferencesChanged,
     #[error("file references must be unique existing attachments in an allowed order")]

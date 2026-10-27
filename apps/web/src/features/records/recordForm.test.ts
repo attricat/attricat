@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  formRecordSchema,
   missingRequiredAttributes,
   relationshipTargetsForForm,
   serializeAttributeValues,
@@ -335,6 +336,46 @@ describe('record form values', () => {
     expect(
       validateRecordForm([quantity], { quantity: 'many' }).fieldErrors.quantity,
     ).toBe("Enter a value that meets this field's requirements.");
+  });
+});
+
+describe('formRecordSchema', () => {
+  const generatedAttributes = [
+    { code: 'title', value_type: 'string' },
+    {
+      code: 'number',
+      value_type: 'string',
+      readonly: true,
+      generated: {
+        format: 'INV-{n:04}',
+        start: 1,
+        reset: 'never',
+        time_zone: 'UTC',
+      },
+    },
+  ] satisfies Attribute[];
+
+  it('leaves generated attributes to the server', () => {
+    const schema = { type: 'object', required: ['number', 'title'] };
+    expect(formRecordSchema(schema, generatedAttributes)).toEqual({
+      type: 'object',
+      required: ['title'],
+    });
+    expect(
+      validateRecordForm(
+        generatedAttributes.slice(0, 1),
+        { title: 'Invoice' },
+        [],
+        formRecordSchema(schema, generatedAttributes),
+      ),
+    ).toEqual({ fieldErrors: {} });
+  });
+
+  it('keeps schemas without generated attributes unchanged', () => {
+    const schema = { type: 'object', required: ['title'] };
+    expect(formRecordSchema(schema, attributes)).toBe(schema);
+    expect(formRecordSchema(true, generatedAttributes)).toBe(true);
+    expect(formRecordSchema(undefined, generatedAttributes)).toBeUndefined();
   });
 });
 

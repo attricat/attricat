@@ -2448,6 +2448,26 @@ async fn rule_finding_and_connector_job_commands_build_requests() {
         impact["path"],
         format!("/blueprints/{id}/versions/2/safe-migration-impact")
     );
+    let sequences = echo(&["blueprint", "sequences", id]).await;
+    assert_eq!(sequences["path"], format!("/blueprints/{id}/sequences"));
+    let advanced = echo(&[
+        "blueprint",
+        "advance-sequence",
+        id,
+        "invoice_number",
+        "10000",
+        "--period",
+        "2026",
+    ])
+    .await;
+    assert_eq!(
+        advanced["path"],
+        format!("/blueprints/{id}/sequences/invoice_number/advance")
+    );
+    assert_eq!(
+        advanced["body"],
+        json!({ "next_value": 10000, "period": "2026" })
+    );
 }
 
 #[tokio::test]

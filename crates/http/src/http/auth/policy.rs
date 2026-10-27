@@ -53,7 +53,10 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     };
     let blueprint = if method == Method::GET {
         Permission::BlueprintsRead
-    } else if path.ends_with("/publish") || path.ends_with("/safe-migration-batches") {
+    } else if path.ends_with("/publish")
+        || path.ends_with("/safe-migration-batches")
+        || path.ends_with("/sequences/{attribute_code}/advance")
+    {
         Permission::BlueprintsPublish
     } else {
         Permission::BlueprintsWrite
@@ -672,6 +675,20 @@ mod tests {
         assert_eq!(staged.permission, create.permission);
         assert!(matches!(staged.target, TargetKind::None));
         assert!(matches!(create.target, TargetKind::None));
+    }
+
+    #[test]
+    fn generated_sequence_routes_read_with_blueprints_and_advance_with_publish() {
+        let list = policy(&Method::GET, "/blueprints/{blueprint_id}/sequences").unwrap();
+        assert_eq!(list.permission, Permission::BlueprintsRead);
+        assert!(matches!(list.target, TargetKind::BlueprintId));
+        let advance = policy(
+            &Method::POST,
+            "/blueprints/{blueprint_id}/sequences/{attribute_code}/advance",
+        )
+        .unwrap();
+        assert_eq!(advance.permission, Permission::BlueprintsPublish);
+        assert!(matches!(advance.target, TargetKind::BlueprintId));
     }
 
     #[test]

@@ -138,7 +138,9 @@ export const RecordFormAttributeEditor = ({
   const helperText =
     [
       readonly
-        ? t('records.managedBySystem')
+        ? attribute.generated && recordId === undefined
+          ? t('records.assignedWhenSaved')
+          : t('records.managedBySystem')
         : lockedBy !== undefined
           ? t('records.lockedByStatus', { status: lockedBy })
           : defaultOnly
@@ -158,7 +160,9 @@ export const RecordFormAttributeEditor = ({
         <RecordAttributeEditor
           attribute={attribute}
           component={component}
-          required={required}
+          // The server assigns a generated value on save, so the user has
+          // nothing to fill even when the record schema requires it.
+          required={required && !attribute.generated}
           contextId={contextId}
           disabled={disabled || protectedValue}
           reviewDisabled={disabled}

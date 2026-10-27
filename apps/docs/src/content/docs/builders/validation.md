@@ -347,6 +347,43 @@ The second key is composite: a document can have only one revision `B`, but ever
 
 See [Unique keys](/reference/blueprint/#unique-keys) for comparison rules, per-context keys, and what happens when you add a key to a blueprint that already has records.
 
+## Generated IDs
+
+A [generated attribute](/reference/blueprint/#generated-values) gives every new record the next number from a counter, such as `INV-2026-00042`. To make sure every record has one and no two records share it, make the attribute required in `record_schema` and declare a unique key on it:
+
+```toml
+record_schema = '''{ "type": "object", "required": ["invoice_number"] }'''
+
+[[attributes]]
+code = "invoice_number"
+value_type = "string"
+generated = { format = "INV-{yyyy}-{n:05}", reset = "yearly", time_zone = "Europe/Warsaw" }
+
+[[attributes]]
+code = "legacy_number"
+name = "Number in the previous system"
+value_type = "string"
+
+[[unique_keys]]
+code = "invoice_number"
+attributes = ["invoice_number"]
+```
+
+The server assigns the value before the record is validated, so `required` is met on every create. The counter never gives out the same number twice; the unique key makes the number a declared business identifier and has the database reject a duplicate, for example if a later `format` change makes new values look like old ones. Nobody can write a generated attribute, so a save that tries returns `422 generated_attribute_readonly`.
+
+### Continue numbering after moving from another system
+
+Records you bring over from another system get new numbers like any other record. Keep their old numbers in a separate plain attribute, such as `legacy_number` above, and make it a unique key too if the old numbers must stay unique.
+
+To have new records continue after the old system's last number, raise the counter. For example, if the old system reached `INV-2026-09999`:
+
+```sh
+acli blueprint sequences <blueprint-id>
+acli blueprint advance-sequence <blueprint-id> invoice_number 10000 --period 2026
+```
+
+The next invoice created in 2026 gets `INV-2026-10000`. A counter can only be raised: a lower value returns `409 generated_sequence_not_raised`. Raising needs the `blueprints.publish` permission and is recorded in the audit log. See [Counters](/reference/blueprint/#counters).
+
 ## Validation and contexts
 
 A record has a resolved value set in every context, built from its own values plus whatever it inherits. After each change, Attricat validates the record in **every** context, not only the one you edited.

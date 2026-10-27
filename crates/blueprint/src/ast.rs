@@ -515,6 +515,7 @@ pub struct LocalAttributeDeclaration {
     pub context_fallback: attricat_domain::attribute_options::ContextFallback,
     pub context_editable: attricat_domain::attribute_options::ContextEditable,
     pub readonly: bool,
+    pub generated: Option<crate::GeneratedValue>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -558,6 +559,9 @@ pub struct EffectiveAttribute {
     pub context_fallback: attricat_domain::attribute_options::ContextFallback,
     pub context_editable: attricat_domain::attribute_options::ContextEditable,
     pub readonly: bool,
+    /// Set only on the record blueprint that declares it: a `from` selection
+    /// never generates.
+    pub generated: Option<crate::GeneratedValue>,
     pub position: i64,
 }
 

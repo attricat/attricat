@@ -26,6 +26,27 @@ describe('isSafeAutomaticMigration', () => {
     ).toBe(true);
   });
 
+  it('rejects a changed generated value format', () => {
+    const generated = (format: string) => ({
+      format,
+      start: 1,
+      reset: 'never',
+      time_zone: 'UTC',
+    });
+    expect(
+      isSafeAutomaticMigration(
+        revision([{ code: 'number', generated: generated('A-{n}') }]),
+        revision([{ code: 'number', generated: generated('B-{n}') }]),
+      ),
+    ).toBe(false);
+    expect(
+      isSafeAutomaticMigration(
+        revision([{ code: 'number', generated: generated('A-{n}') }]),
+        revision([{ code: 'number', generated: generated('A-{n}') }]),
+      ),
+    ).toBe(true);
+  });
+
   it('rejects changed attribute contracts and record schemas', () => {
     expect(
       isSafeAutomaticMigration(

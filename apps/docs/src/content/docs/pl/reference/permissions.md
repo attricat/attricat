@@ -20,7 +20,7 @@ Brak zalogowania lub wygasła sesja zwraca `401`. Zalogowana osoba bez uprawnien
 | `audit.read` | Dziennik audytu. | ✓ | ✓ | | |
 | `blueprints.read` | Schematy i atrybuty wielokrotnego użytku. | ✓ | ✓ | ✓ | ✓ |
 | `blueprints.write` | Tworzenie szkiców i wersji schematów; atrybuty wielokrotnego użytku. | ✓ | ✓ | ✓ | |
-| `blueprints.publish` | Publikowanie wersji schematów. | ✓ | ✓ | | |
+| `blueprints.publish` | Publikowanie wersji schematów; podnoszenie liczników atrybutów generowanych. | ✓ | ✓ | | |
 | `records.read` | Rekordy, wyszukiwanie, zapisane wyszukiwania, pliki i historia; katalog użytkowników i zespołów do przypisań (`GET /directory`, `acli directory list`), który pokazuje imiona i nazwiska oraz adresy e-mail członków, oraz profil każdego członka wraz z jego zespołami (`GET /directory/users/{user_id}`). | ✓ | ✓ | ✓ | ✓ |
 | `records.write` | Tworzenie i edytowanie rekordów, przesyłanie plików, migrowanie rekordów, dołączanie atrybutów wielokrotnego użytku, uruchamianie poleceń rozszerzeń z interfejsu. | ✓ | ✓ | ✓ | |
 | `records.delete` | Usuwanie rekordów. | ✓ | ✓ | ✓ | |

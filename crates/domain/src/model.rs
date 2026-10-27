@@ -64,6 +64,9 @@ pub struct Attribute {
     pub context_fallback: crate::attribute_options::ContextFallback,
     pub context_editable: crate::attribute_options::ContextEditable,
     pub readonly: bool,
+    /// How core numbers the attribute on record creation; see
+    /// `attricat_blueprint::GeneratedValue`. Clients cannot write it.
+    pub generated: Option<Value>,
     pub position: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -1032,6 +1035,39 @@ pub struct RecordMigrationPreview {
     pub values: Vec<FormAttributeValue>,
     pub status: crate::states::RecordMigrationStatus,
     pub issues: Vec<MigrationIssue>,
+}
+
+/// The counter behind one generated attribute of a blueprint family, in one
+/// period. `period` is empty unless numbering restarts each year, month or
+/// day.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct GeneratedSequence {
+    pub attribute_code: String,
+    pub period: String,
+    /// The number the next record created in this period receives.
+    pub next_value: i64,
+    /// When the counter last changed; absent until the first record or
+    /// advance creates it.
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct AdvanceGeneratedSequence {
+    /// The number the next record receives. It must not be lower than the
+    /// counter's current next value.
+    pub next_value: i64,
+    /// The counter period to raise; defaults to the current one.
+    #[serde(default)]
+    pub period: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct GeneratedSequenceAdvance {
+    pub attribute_code: String,
+    pub period: String,
+    pub previous: i64,
+    pub next_value: i64,
 }
 
 #[derive(Clone, Debug, Serialize)]

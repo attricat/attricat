@@ -59,6 +59,7 @@ from = "seo.meta_title"
                     context_fallback: ContextFallback::Default,
                     context_editable: ContextEditable::All,
                     readonly: false,
+                    generated: None,
                     position: 0,
                 },
                 EffectiveAttribute {
@@ -78,6 +79,7 @@ from = "seo.meta_title"
                     context_fallback: ContextFallback::Default,
                     context_editable: ContextEditable::All,
                     readonly: false,
+                    generated: None,
                     position: 1,
                 },
             ],

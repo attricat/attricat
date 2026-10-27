@@ -94,6 +94,8 @@
     "file_references_changed": "Pliki zmieniły się od wczytania. Odśwież i spróbuj ponownie.",
     "file_too_large": "Plik przekracza limit rozmiaru przesyłania.",
     "forbidden": "Nie masz uprawnień do wykonania tej czynności.",
+    "generated_attribute_readonly": "Atrybut {{attribute}} jest numerowany automatycznie przy tworzeniu rekordu i nie można go zmienić.",
+    "generated_sequence_not_raised": "Następny numer to już {{current}}. Licznik można tylko zwiększyć, nie ustawić na {{requested}}.",
     "global_relationship_search_budget_exceeded": "Wyszukiwanie objęło zbyt wiele powiązanych rekordów. Zawęź je.",
     "global_relationship_search_timed_out": "Wyszukiwanie trwało zbyt długo. Zawęź je.",
     "https_required": "Podaj adres URL zaczynający się od HTTPS.",
@@ -476,6 +478,7 @@
     "statusTransitionDenied": "Ta zmiana zapisanego statusu jest niedozwolona.",
     "statusSeparationWaived": "Wykonano już wcześniejszy krok, więc zwykle ten wykonuje ktoś inny. Jako właściciel lub administrator możesz wykonać oba.",
     "managedBySystem": "Zarządzane przez działania systemowe.",
+    "assignedWhenSaved": "Nadawane automatycznie przy zapisie rekordu.",
     "lockedByStatus": "Zablokowane, gdy rekord ma status {{status}}. Odblokowuje je dozwolone przejście korygujące.",
     "statusLock": {
       "all": "Pól nie można zmieniać, gdy {{attribute}} ma status {{status}}.",
