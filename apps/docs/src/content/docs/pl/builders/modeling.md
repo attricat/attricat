@@ -186,4 +186,21 @@ Każdy rekord ma też `system_tags` (zbiór łańcuchów znaków) i `system_meta
 
 Tagi zaczynające się od `attricat.` należą do Attricat, który sam je dodaje i usuwa. Przepływy pracy, rozszerzenia i zapisy przez API nie mogą ich dodawać ani usuwać, ale można według nich filtrować i sortować. Attricat ustawia `attricat.sample` na danych przykładowych z pakietu rozwiązań oraz `attricat.needs_attention` na rekordach z co najmniej jednym otwartym [ustaleniem reguły](/pl/builders/rules/#pracuj-z-ustaleniami). Tagi rozszerzeń mają postać `<id-rozszerzenia>:<tag>`; zobacz [dokumentację API](/pl/reference/api/#tagi-systemowe).
 
-Do wszystkiego, co człowiek ma widzieć lub edytować, używaj atrybutów.
+### Tag czy atrybut
+
+Tag systemowy i atrybut mogą oznaczać rekord, na przykład jako wymagający przeglądu, wycofany lub gotowy do synchronizacji. Wybieraj według tego, kto ustawia oznaczenie i kto je odczytuje.
+
+| | Tag systemowy | Atrybut |
+| --- | --- | --- |
+| Ustawiają | Przepływy pracy, agenci, rozszerzenia i klienci API | Użytkownicy w formularzu rekordu oraz automatyzacja |
+| Widoczny | Na stronie rekordu (bez możliwości edycji) oraz jako filtr i kolumna Przeglądarki | W widokach i formularzach |
+| Definicja | Brak; dowolny tag można dodać do dowolnego rekordu | W schemacie, z nazwą, typem i regułami wartości |
+| Sprawdzają | Reguły (`has_tag`, `missing_tag`) | Schemat wartości, wymagane atrybuty, wymagania przejść statusów i reguły |
+| Zależy od kontekstu | Nie | Tak, jeśli atrybut na to pozwala |
+| Wersje rekordu | Niewersjonowany | Wersjonowany razem z rekordem |
+
+Używaj tagu systemowego, gdy automatyzacja zarówno ustawia oznaczenie, jak i na nie reaguje, gdy oznaczenie to tymczasowy stan pracy usuwany po jej wykonaniu (`needs-review`, `sync-pending`), albo gdy zapisuje, skąd rekord pochodzi (`import-2026-10`). Tag nie wymaga zmiany schematu, więc działa we wszystkich schematach.
+
+Używaj atrybutu, gdy wartość ustala człowiek lub musi móc ją zmienić, gdy ma się pojawiać w widoku lub formularzu, gdy wymaga walidacji albo gdy liczy się jej historia. Fakt typu tak/nie to atrybut logiczny, a etap cyklu życia to status. Jeśli oznaczenie pochodzi z zarządzanej listy etykiet, takich jak certyfikaty czy kolekcje, zrób z etykiet rekordy i połącz je relacją; zobacz [Klasyfikacje to rekordy](#klasyfikacje-to-rekordy).
+
+Jeśli osoba, która widzi oznaczenie, musiałaby je poprawić, powinno ono być atrybutem.

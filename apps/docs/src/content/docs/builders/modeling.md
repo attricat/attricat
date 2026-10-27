@@ -184,4 +184,21 @@ Every record also has `system_tags` (a set of strings) and `system_metadata` (a 
 
 Tags that start with `attricat.` belong to Attricat, which adds and removes them itself. Workflows, extensions and API writes cannot add or remove them, but you can filter and sort by them. Attricat sets `attricat.sample` on sample data from a solution pack and `attricat.needs_attention` on records with at least one open [rule finding](/builders/rules/#work-with-findings). Extension tags take the form `<extension-id>:<tag>`; see the [API reference](/reference/api/#system-tags).
 
-Use attributes for anything a person should see or edit.
+### Tag or attribute
+
+A system tag and an attribute can both mark a record, for example as needing review, discontinued, or ready to sync. Choose by who sets the mark and who reads it.
+
+| | System tag | Attribute |
+| --- | --- | --- |
+| Set by | Workflows, agents, extensions, and API clients | People in the record form, and automation |
+| Shown | Read-only on the record page, and as an Explorer filter and column | In views and forms |
+| Defined in | Nowhere; any tag can be added to any record | The blueprint, with a name, type, and value rules |
+| Checked by | Rules (`has_tag`, `missing_tag`) | The value schema, required attributes, status transition requirements, and rules |
+| Varies by context | No | Yes, when the attribute allows it |
+| Record revisions | Not versioned | Versioned with the record |
+
+Use a system tag when automation both sets the mark and acts on it, the mark is temporary work state that is removed once handled (`needs-review`, `sync-pending`), or it records where a record came from (`import-2026-10`). A tag needs no blueprint change, so it works across blueprints.
+
+Use an attribute when a person decides the value or must be able to change it, when it must appear in a view or form, when it needs validation, or when its history matters. A yes/no fact is a boolean attribute, and a stage in a lifecycle is a status. If the mark is one of a managed list of labels, such as certifications or collections, make the labels records and link them; see [Classifications are records](#classifications-are-records).
+
+If someone who sees the mark would need to correct it, it should be an attribute.
