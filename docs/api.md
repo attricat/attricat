@@ -1058,7 +1058,8 @@ authorized with record-scoped `records.write` and audited against the tool
 call, with `bulk_progress` run events. It stops at the first failure, which the
 workspace's system user records as a comment on the failed record (comments
 report `author_kind` `person` or `system`), and returns `applied`, `failed`
-(`record_id`, `code`, `message`) and `not_run`. With the workspace's
+(`record_id`, `code`, `message`, and `details` when the error has them) and
+`not_run`. With the workspace's
 `bulk_edits` setting at `per_record` the tool is not offered.
 `get_record_publication_readiness` reports, per channel, whether a
 record passes the channel's required checks. The agent must inspect current values first. These tools

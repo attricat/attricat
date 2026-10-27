@@ -113,7 +113,12 @@ export const bulkEditProposalSchema = z.object({
 export const bulkEditResultSchema = z.object({
   applied: z.array(id),
   failed: z.array(
-    z.object({ record_id: id, code: z.string(), message: z.string() }),
+    z.object({
+      record_id: id,
+      code: z.string(),
+      message: z.string(),
+      details: z.unknown().optional(),
+    }),
   ),
   not_run: z.array(id),
 });
