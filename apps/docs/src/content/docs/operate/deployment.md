@@ -157,7 +157,7 @@ Secrets are read at startup. To rotate: create the new credential, replace its s
 - A real `ATTRICAT_BOOTSTRAP_OWNER_EMAIL`; the `bootstrap_owner_password` secret emptied after first start.
 - Secret files readable only by uid 10001, and no secrets in environment variables.
 - The `file_worker_metrics_token` secret set, and `/metrics` reachable only from your monitoring network.
-- A private bucket, with credentials limited to `PutObject`, `GetObject`, `DeleteObject`, `AbortMultipartUpload`, and `ListObjectsV2`.
+- A private bucket, with credentials limited to `PutObject`, `GetObject`, `DeleteObject`, `AbortMultipartUpload`, and `ListBucket`.
 - `ATTRICAT_E2E_FIXTURE_EMAIL` unset.
 - A tested backup and restore procedure.
 - With several API replicas: PostgreSQL `max_connections` sized for up to three extra connections per API process, no transaction-mode pooler, and optionally `CACHE_BACKEND=redis`.

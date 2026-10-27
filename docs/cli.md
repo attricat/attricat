@@ -302,10 +302,7 @@ Assignment values are `user:<id>` or `team:<id>`
 ([user or team assignments](blueprints.md#user-or-team-assignments)); filter
 with `"value": "@me"` to find records assigned to the caller or their teams.
 
-## Notifications
-
-Each command acts on the signed-in user's own inbox in the current workspace;
-see [Notifications](notifications.md).
+## Agent
 
 ```sh
 acli agent conversation list [--record-id <id> [--context-id <id>] | --all] [--cursor <cursor>]
@@ -321,7 +318,14 @@ acli agent run events <run-id> [--last-event-id <id>]
 acli agent approval list [--conversation-id <id>]
 acli agent approval approve | reject <tool-call-id>
 acli agent smart-fill --record-id <id> --content <text> [--default-context] [--context-id <id>] [--conversation-id <id>] [--draft-values <json>] [--attachment-id <id> ...]
+```
 
+## Notifications
+
+Each command acts on the signed-in user's own inbox in the current workspace;
+see [Notifications](notifications.md).
+
+```sh
 acli notification list [--unread] [--before-time <created_at> --before-id <id>]
 acli notification count            # {"count": <unread>}
 acli notification get <id>

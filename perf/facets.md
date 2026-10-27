@@ -8,7 +8,7 @@ searches that select tree nodes through the HTTP handlers:
 ```sh
 set -a; source .env; set +a
 OTEL_EXPORTER_OTLP_TRACES_ENDPOINT= RUST_LOG=warn \
-  cargo test --release -p api --test facet_latency -- --ignored --nocapture
+  cargo test --release -p api --test integration facet_latency:: -- --ignored --nocapture
 ```
 
 The products also link to 1,000 product lines, each in a leaf category, so

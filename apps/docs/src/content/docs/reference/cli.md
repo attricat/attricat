@@ -439,7 +439,7 @@ acli extension layout get
 acli extension layout set --layout <json-or-file>
 ```
 
-Connection secrets and workspace secret values are read from standard input so they never appear in process arguments; with both `--client-secret-stdin` and `--refresh-token-stdin`, put the client secret on the first line. `connection authorize` only works from a browser session (`--session-file`).
+Connection secrets and workspace secret values are read from standard input so they never appear in process arguments; with both `--client-secret-stdin` and `--refresh-token-stdin`, put the client secret on the first line. `connection authorize` needs a browser session (`--session-file`) and returns the provider's authorization URL, but the provider's callback completes only in the session that started it, which your browser does not carry; authorize from the web app instead, or use `connection exchange-code` with a code you obtained yourself.
 
 ### Solution packs
 

@@ -13,7 +13,7 @@ pub const MAX_SYSTEM_TAG_FACET_LIMIT: u32 = 100;
 impl AttricatRepository {
     /// Lists the system tags of a blueprint's live records with how many
     /// records carry each, most used first. The sample-data marker is left
-    /// out: search filters cannot name it, and records show it as a badge.
+    /// out: records show it as the sample badge instead.
     ///
     /// Tag arrays are unnested per record, so this reads every record of the
     /// blueprint; clients request it only when a tag filter is opened.

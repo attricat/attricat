@@ -5,8 +5,6 @@ description: Klient wiersza poleceń acli, jego konfiguracja, uwierzytelnianie, 
 
 `acli` to klient wiersza poleceń dla API Attricat, przeznaczony dla skryptów, zadań CI i agentów. Po powodzeniu wypisuje odpowiedź JSON z API bez zmian na standardowe wyjście. Błędy trafiają na standardowe wyjście błędów jako JSON. Każde polecenie ma wbudowaną pomoc: `acli --help` i `acli <group> --help`.
 
-`acli record create`.
-
 ## Instalacja
 
 Każde [wydanie](https://github.com/attricat/attricat/releases) publikuje pliki binarne `acli` dla systemów Linux, macOS i Windows w tej samej wersji co serwer. Zainstaluj najnowsze wydanie w systemie Linux lub macOS:
@@ -441,7 +439,7 @@ acli extension layout get
 acli extension layout set --layout <json-or-file>
 ```
 
-Sekrety połączeń i wartości sekretów obszaru roboczego są czytane ze standardowego wejścia, więc nigdy nie trafiają do argumentów procesu; z `--client-secret-stdin` i `--refresh-token-stdin` jednocześnie podaj sekret klienta w pierwszym wierszu. `connection authorize` działa tylko z sesją przeglądarki (`--session-file`).
+Sekrety połączeń i wartości sekretów obszaru roboczego są czytane ze standardowego wejścia, więc nigdy nie trafiają do argumentów procesu; z `--client-secret-stdin` i `--refresh-token-stdin` jednocześnie podaj sekret klienta w pierwszym wierszu. `connection authorize` wymaga sesji przeglądarki (`--session-file`) i zwraca adres autoryzacji u dostawcy, ale wywołanie zwrotne dostawcy kończy autoryzację tylko w sesji, która ją rozpoczęła, a Twoja przeglądarka jej nie ma; autoryzuj w aplikacji internetowej albo użyj `connection exchange-code` z kodem uzyskanym samodzielnie.
 
 ### Pakiety rozwiązań
 

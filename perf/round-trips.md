@@ -8,7 +8,7 @@ paths using the `attricat_db_round_trips_*` metrics:
 set -a; source .env; set +a
 OTEL_EXPORTER_OTLP_TRACES_ENDPOINT= RUST_LOG=warn \
   ROUND_TRIP_EXTENSION_ARCHIVE=../../../attricat-extension-example/dist/attricat-extension-example-0.2.0.tar.zst \
-  cargo test -p api --test round_trip_baseline -- --ignored --nocapture
+  cargo test -p api --test integration round_trip_baseline:: -- --ignored --nocapture
 ```
 
 Without `ROUND_TRIP_EXTENSION_ARCHIVE` the harness installs the unified test

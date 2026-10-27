@@ -157,7 +157,7 @@ Sekrety są odczytywane przy starcie. Aby przeprowadzić rotację: utwórz nowe 
 - Prawdziwy `ATTRICAT_BOOTSTRAP_OWNER_EMAIL`; sekret `bootstrap_owner_password` opróżniony po pierwszym uruchomieniu.
 - Pliki sekretów czytelne tylko dla uid 10001 i żadnych sekretów w zmiennych środowiskowych.
 - Ustawiony sekret `file_worker_metrics_token`, a `/metrics` osiągalne tylko z sieci monitoringu.
-- Prywatny zasobnik z danymi uwierzytelniającymi ograniczonymi do `PutObject`, `GetObject`, `DeleteObject`, `AbortMultipartUpload` i `ListObjectsV2`.
+- Prywatny zasobnik z danymi uwierzytelniającymi ograniczonymi do `PutObject`, `GetObject`, `DeleteObject`, `AbortMultipartUpload` i `ListBucket`.
 - Nieustawione `ATTRICAT_E2E_FIXTURE_EMAIL`.
 - Przetestowana procedura tworzenia kopii zapasowej i przywracania.
 - Przy kilku replikach API: `max_connections` w PostgreSQL z zapasem do trzech dodatkowych połączeń na proces API, brak poolera w trybie transakcyjnym i opcjonalnie `CACHE_BACKEND=redis`.

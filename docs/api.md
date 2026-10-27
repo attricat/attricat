@@ -94,7 +94,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `POST` | `/rules/validate` | Run the save checks of `POST /rules` on a rule TOML definition, its published blueprint revision and optional context, without storing it (`rules.manage`). |
 | `POST` | `/rules/{rule_id}/run-now` | Enqueue an idempotent bounded manual or dry run (`rules.manage`). Optional `version` selects a published revision; only dry runs may target a revision that is not enabled. |
 | `POST` | `/rules/{rule_id}/versions/{version}/enable` | Enable a published revision (`rules.manage`). Optional body `{ "accept_existing_violations": true }`; enforcing revisions first need a completed full dry run. See [Rules](rules.md#dry-run-before-enabling). |
-| `GET` | `/rule-runs`, `/rule-findings` | Read run diagnostics and active/resolved findings (`rules.read`). Both accept `record_id` to list one record's runs or findings, and `limit`/`offset` pages with an `x-next-offset` header. `/rule-findings` also accepts `unresolved=true`. A run's `truncated` is `true` when it stopped at its candidate cap with candidates left. |
+| `GET` | `/rule-runs`, `/rule-findings` | Read run diagnostics and active/resolved findings (`rules.read`). Both accept `record_id` to list one record's runs or findings, and `limit`/`offset` pages with an `x-next-offset` header. `/rule-findings` also accepts `unresolved=true` and narrows by `rule_id`, `blueprint_id`, `context_id`, `severity` (`info`, `warning`, `error`, `critical`) and `state` (`open`, `acknowledged`, `resolved`). A run's `truncated` is `true` when it stopped at its candidate cap with candidates left. |
 | `GET` | `/rule-findings/count` | `{count}` of open and acknowledged findings, optionally of one `record_id` (`rules.read`). |
 | `POST` | `/rule-findings/recheck` | Re-check one record against every enabled rule of its blueprint revision with idempotent record-scoped runs; body `{record_id, idempotency_key}`, returns `202 {run_ids}` (`rules.manage`). |
 | `GET` | `/v1/records/{record_id}/export-status` | Every export extension's status of one record (`statuses`) and the enabled export destinations (`destinations`) (`records.read`). See [Export platform](extensions.md#per-record-export-status). |
@@ -968,8 +968,11 @@ example, `RUST_LOG=api=debug`) to control output verbosity.
 
 ## Agents
 
-Agent routes require `agents.run`. `GET`/`POST /agent/conversations` lists or
-creates conversations. `GET`/`PATCH`/`DELETE /agent/conversations/{id}` reads,
+Agent routes require `agents.run`. `POST /agent/conversations` creates a
+conversation. `GET /agent/conversations/search` pages them newest first
+(`q`, `cursor`): conversations not about a record unless `scope=all`, or with
+`record_id` (optionally `context_id`, and `records.read` on the record) the
+conversations about one record. `GET`/`PATCH`/`DELETE /agent/conversations/{id}` reads,
 renames, or archives a thread; it exposes ordered messages at
 `/agent/conversations/{id}/messages` and run history at
 `/agent/conversations/{id}/runs`. The single-conversation `GET` also returns

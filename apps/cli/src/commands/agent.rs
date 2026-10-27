@@ -64,7 +64,7 @@ pub(crate) enum AgentCommand {
 
 #[derive(Subcommand)]
 pub(crate) enum ConversationCommand {
-    /// Conversations not about a record, newest first.
+    /// Conversations, newest first; by default only those not about a record.
     List {
         #[command(flatten)]
         filter: ConversationFilter,
