@@ -89,6 +89,7 @@
           "description": "The record has the system tag.",
           "properties": {
             "tag": {
+              "description": "System tag. The parser limits it to `maxLength` UTF-8 bytes, which\nJSON Schema can only bound in characters.",
               "maxLength": 128,
               "minLength": 1,
               "type": "string"
@@ -109,6 +110,7 @@
           "description": "The record does not have the system tag.",
           "properties": {
             "tag": {
+              "description": "System tag. The parser limits it to `maxLength` UTF-8 bytes, which\nJSON Schema can only bound in characters.",
               "maxLength": 128,
               "minLength": 1,
               "type": "string"

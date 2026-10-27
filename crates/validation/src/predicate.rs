@@ -120,11 +120,15 @@ pub enum Predicate {
     },
     /// The record has the system tag.
     HasTag {
+        /// System tag. The parser limits it to `maxLength` UTF-8 bytes, which
+        /// JSON Schema can only bound in characters.
         #[schemars(length(min = 1, max = MAX_TAG_LENGTH))]
         tag: String,
     },
     /// The record does not have the system tag.
     MissingTag {
+        /// System tag. The parser limits it to `maxLength` UTF-8 bytes, which
+        /// JSON Schema can only bound in characters.
         #[schemars(length(min = 1, max = MAX_TAG_LENGTH))]
         tag: String,
     },

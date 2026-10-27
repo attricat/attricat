@@ -10,6 +10,7 @@
             "tags": {
               "description": "Tags to add, each at most 128 bytes, without duplicates.",
               "items": {
+                "description": "At most 128 bytes of UTF-8.",
                 "maxLength": 128,
                 "pattern": "\\S",
                 "type": "string"
@@ -37,6 +38,7 @@
             "tags": {
               "description": "Tags to remove, without duplicates.",
               "items": {
+                "description": "At most 128 bytes of UTF-8.",
                 "maxLength": 128,
                 "pattern": "\\S",
                 "type": "string"

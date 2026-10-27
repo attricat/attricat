@@ -358,6 +358,11 @@ fn trigger_attributes_schema(_: &mut SchemaGenerator) -> Schema {
         },
     })
 }
+/// The parser limits a tag to [`MAX_TAG_LENGTH`] UTF-8 bytes, which JSON
+/// Schema cannot express: `maxLength` counts characters. A string within the
+/// byte limit never has more characters than bytes, so the same number as
+/// `maxLength` never rejects a valid tag; the description states the real limit
+/// for the longer non-ASCII tags only the parser rejects.
 fn system_tags_schema(_: &mut SchemaGenerator) -> Schema {
     json_schema!({
         "type": "array",
@@ -366,6 +371,7 @@ fn system_tags_schema(_: &mut SchemaGenerator) -> Schema {
         "uniqueItems": true,
         "items": {
             "type": "string",
+            "description": format!("At most {MAX_TAG_LENGTH} bytes of UTF-8."),
             "maxLength": MAX_TAG_LENGTH,
             "pattern": NON_BLANK_PATTERN,
         },
@@ -1142,5 +1148,32 @@ mod tests {
                 "{definition}: {violations:?}"
             );
         }
+    }
+
+    #[test]
+    fn tag_length_counts_bytes_and_the_schema_never_rejects_a_valid_tag() {
+        let schema = definition_json_schema();
+        let with_tag = |tag: String| EVENT_WORKFLOW.replace("'needs-review'", &format!("'{tag}'"));
+        let schema_accepts = |definition: &str| {
+            let instance =
+                serde_json::to_value(toml::from_str::<toml::Value>(definition).unwrap()).unwrap();
+            attricat_validation::validate_json_schema(&schema, &instance)
+                .unwrap()
+                .is_empty()
+        };
+        for (tag, accepted) in [
+            ("a".repeat(MAX_TAG_LENGTH), true),
+            ("a".repeat(MAX_TAG_LENGTH + 1), false),
+            ("é".repeat(MAX_TAG_LENGTH / 2), true),
+        ] {
+            let definition = with_tag(tag);
+            assert_eq!(parse(&definition).is_ok(), accepted, "{definition}");
+            assert_eq!(schema_accepts(&definition), accepted, "{definition}");
+        }
+        // Within the character bound but over the byte limit: only the parser
+        // can tell.
+        let definition = with_tag("é".repeat(MAX_TAG_LENGTH / 2 + 1));
+        assert!(parse(&definition).is_err());
+        assert!(schema_accepts(&definition));
     }
 }
