@@ -18,6 +18,7 @@ import {
   listRecordBlueprints,
 } from './api';
 import { recordQueryKeys } from './queryKeys';
+import { listUnresolvedRecordFindings, type Finding } from '../rules/api';
 import {
   createdAtCursor,
   nextKeysetCursor,
@@ -162,4 +163,28 @@ export const recordHierarchyOptions = (
     queryFn: contextId
       ? () => getRecordHierarchy(recordId, contextId, field)
       : skipToken,
+  });
+
+/**
+ * Every unresolved finding of a record, following the API's pages to the
+ * end, so field diagnostics do not miss findings past the first page.
+ */
+export const recordDiagnosticFindingsOptions = (recordId: string) =>
+  queryOptions({
+    queryKey: recordQueryKeys.diagnosticFindings(recordId),
+    queryFn: async () => {
+      const findings: Finding[] = [];
+      let offset: number | undefined = 0;
+      while (offset !== undefined) {
+        const page = await listUnresolvedRecordFindings(recordId, offset);
+        findings.push(...page.items);
+        // An offset that does not move on would load the same page forever.
+        offset =
+          page.nextOffset !== undefined && page.nextOffset > offset
+            ? page.nextOffset
+            : undefined;
+      }
+      return findings;
+    },
+    staleTime: readAheadStaleTimeMs,
   });

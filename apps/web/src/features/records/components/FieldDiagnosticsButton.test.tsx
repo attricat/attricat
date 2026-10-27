@@ -5,7 +5,10 @@ import { describe, expect, it, vi } from 'vitest';
 import '../../../i18n';
 import type { Finding } from '../../rules/schemas';
 import { RevealFieldContext } from '../../views/fieldReveal';
-import { FieldDiagnosticsContext } from '../fieldDiagnostics';
+import {
+  FieldDiagnosticsContext,
+  fieldFindingsStatuses,
+} from '../fieldDiagnostics';
 import { FieldDiagnosticsButton } from './FieldDiagnosticsButton';
 
 const polishContextId = crypto.randomUUID();
@@ -67,6 +70,53 @@ describe('FieldDiagnosticsButton', () => {
     expect(screen.getByText('meta_description')).toBeTruthy();
     expect(screen.getByText('Empty in this context.')).toBeTruthy();
     expect(screen.getByText('Meta description is required')).toBeTruthy();
+  });
+
+  it('says when findings could not be loaded instead of none', async () => {
+    const user = userEvent.setup();
+    render(
+      <FieldDiagnosticsContext
+        value={{
+          contextCode: 'cars_pl',
+          contextId: polishContextId,
+          findingsStatus: fieldFindingsStatuses.failed,
+          findingsError: new Error('Network down'),
+        }}
+      >
+        <FieldDiagnosticsButton attribute={metaDescription} />
+      </FieldDiagnosticsContext>,
+    );
+
+    await user.click(
+      screen.getByRole('button', { name: 'Details of Meta description' }),
+    );
+
+    expect(screen.getByRole('alert').textContent).toBe(
+      'Could not load findings: Network down',
+    );
+    expect(screen.queryByText('No open findings in this context.')).toBeNull();
+  });
+
+  it('says findings are loading instead of none', async () => {
+    const user = userEvent.setup();
+    render(
+      <FieldDiagnosticsContext
+        value={{
+          contextCode: 'cars_pl',
+          contextId: polishContextId,
+          findingsStatus: fieldFindingsStatuses.loading,
+        }}
+      >
+        <FieldDiagnosticsButton attribute={metaDescription} />
+      </FieldDiagnosticsContext>,
+    );
+
+    await user.click(
+      screen.getByRole('button', { name: 'Details of Meta description' }),
+    );
+
+    expect(screen.getByText('Loading findings...')).toBeTruthy();
+    expect(screen.queryByText('No open findings in this context.')).toBeNull();
   });
 
   it('says which context an inherited value comes from', async () => {

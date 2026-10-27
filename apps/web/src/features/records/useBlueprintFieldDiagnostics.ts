@@ -1,14 +1,15 @@
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { capabilities } from '../auth/capabilities';
 import { useCan } from '../auth/useCan';
-import {
-  recordFindingsOptions,
-  ruleDefinitionsOptions,
-} from '../rules/queryOptions';
+import { ruleDefinitionsOptions } from '../rules/queryOptions';
 import type { Attribute } from './api';
 import { blueprintConnections } from './attributeConnections';
-import type { FieldDiagnostics } from './fieldDiagnostics';
+import {
+  fieldFindingsStatuses,
+  type FieldDiagnostics,
+} from './fieldDiagnostics';
+import { recordDiagnosticFindingsOptions } from './queryOptions';
 
 /**
  * Field diagnostics for a blueprint's fields: what ties them together, plus
@@ -30,8 +31,8 @@ export const useBlueprintFieldDiagnostics = ({
   record?: { id: string; contextCode?: string; contextId?: string };
 }): FieldDiagnostics => {
   const canReadRules = useCan(capabilities.rulesRead);
-  const findings = useInfiniteQuery({
-    ...recordFindingsOptions(record?.id ?? ''),
+  const findings = useQuery({
+    ...recordDiagnosticFindingsOptions(record?.id ?? ''),
     enabled: canReadRules && record !== undefined,
   });
   const rules = useQuery({
@@ -68,6 +69,15 @@ export const useBlueprintFieldDiagnostics = ({
   const contextCode = record?.contextCode;
   const contextId = record?.contextId;
   const showsRecord = record !== undefined;
+  const readsFindings = canReadRules && showsRecord;
+  const findingsStatus = !readsFindings
+    ? undefined
+    : // Findings loaded before a failed refresh are still worth showing.
+      findings.data !== undefined
+      ? fieldFindingsStatuses.loaded
+      : findings.isError
+        ? fieldFindingsStatuses.failed
+        : fieldFindingsStatuses.loading;
   return useMemo(
     () => ({
       attributes,
@@ -75,18 +85,22 @@ export const useBlueprintFieldDiagnostics = ({
       contextCode,
       contextId,
       findings:
-        canReadRules && showsRecord
-          ? (findings.data?.pages.flatMap((page) => page.items) ?? [])
+        findingsStatus === fieldFindingsStatuses.loaded
+          ? findings.data
           : undefined,
+      findingsStatus,
+      findingsError: readsFindings ? findings.error : undefined,
       showsValues: showsRecord,
     }),
     [
       attributes,
-      canReadRules,
       connections,
       contextCode,
       contextId,
       findings.data,
+      findings.error,
+      findingsStatus,
+      readsFindings,
       showsRecord,
     ],
   );

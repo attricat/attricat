@@ -622,7 +622,9 @@
       "editableEverywhere": "Editable in every context.",
       "editableInDefault": "Editable only in the default context.",
       "findings": "Data quality",
-      "noFindings": "No open findings in this context."
+      "noFindings": "No open findings in this context.",
+      "loadingFindings": "Loading findings...",
+      "couldNotLoadFindings": "Could not load findings: {{message}}"
     },
     "loadingContexts": "Loading contexts...",
     "resolvingValues": "Resolving values...",

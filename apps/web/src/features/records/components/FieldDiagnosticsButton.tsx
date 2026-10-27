@@ -22,10 +22,12 @@ import {
   attributeContextFallbacks,
 } from '../constants';
 import {
+  fieldFindingsStatuses,
   useFieldDiagnostics,
   useFieldFindings,
   worstSeverity,
 } from '../fieldDiagnostics';
+import { errorMessage } from '../../../api/errors';
 import { attributeLabel } from '../recordDisplay';
 import { attributeValueTypes } from '../valueTypes';
 import { useRevealField } from '../../views/fieldReveal';
@@ -210,6 +212,22 @@ export const FieldDiagnosticsButton = ({
                     : undefined
                 }
               />
+            </DiagnosticSection>
+          )}
+          {diagnostics.findingsStatus === fieldFindingsStatuses.loading && (
+            <DiagnosticSection title={t('records.fieldDiagnostics.findings')}>
+              <Typography color="text.secondary" variant="body2">
+                {t('records.fieldDiagnostics.loadingFindings')}
+              </Typography>
+            </DiagnosticSection>
+          )}
+          {diagnostics.findingsStatus === fieldFindingsStatuses.failed && (
+            <DiagnosticSection title={t('records.fieldDiagnostics.findings')}>
+              <Typography color="error" role="alert" variant="body2">
+                {t('records.fieldDiagnostics.couldNotLoadFindings', {
+                  message: errorMessage(diagnostics.findingsError) ?? '',
+                })}
+              </Typography>
             </DiagnosticSection>
           )}
           {findings && (

@@ -1,4 +1,5 @@
 import type { DataQualityFilter } from '../rules/constants';
+import { ruleQueryKeys } from '../rules/queryKeys';
 import type {
   RecordSearchFilter,
   RelationshipTreeFacetChildrenRequest,
@@ -77,6 +78,12 @@ export const recordQueryKeys = {
     [...recordQueryKeys.allResolvedPreviews(), recordId] as const,
   resolvedPreview: (recordId: string, contextId: string | undefined) =>
     [...recordQueryKeys.resolvedPreviews(recordId), contextId] as const,
+  /**
+   * Every unresolved finding of a record, for its field diagnostics. Kept
+   * under the record's findings so refreshing them refreshes these too.
+   */
+  diagnosticFindings: (recordId: string) =>
+    [...ruleQueryKeys.findings(recordId), 'diagnostics'] as const,
   hierarchies: (recordId: string) => ['record-hierarchy', recordId] as const,
   hierarchy: (recordId: string, contextId: string, field: string) =>
     [...recordQueryKeys.hierarchies(recordId), contextId, field] as const,

@@ -648,7 +648,9 @@
       "editableEverywhere": "Można edytować w każdym kontekście.",
       "editableInDefault": "Można edytować tylko w kontekście domyślnym.",
       "findings": "Jakość danych",
-      "noFindings": "Brak otwartych problemów w tym kontekście."
+      "noFindings": "Brak otwartych problemów w tym kontekście.",
+      "loadingFindings": "Wczytywanie problemów...",
+      "couldNotLoadFindings": "Nie udało się wczytać problemów: {{message}}"
     },
     "loadingContexts": "Wczytywanie kontekstów...",
     "resolvingValues": "Rozwiązywanie wartości...",
