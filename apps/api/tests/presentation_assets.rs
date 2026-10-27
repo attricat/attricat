@@ -237,7 +237,7 @@ async fn apply_asset_pack(client: &Client, base_url: &str, version: &str, svg: &
     listed[0].clone()
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn private_asset_list_metadata_and_content_are_bounded(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let (base_url, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
@@ -455,7 +455,7 @@ async fn private_asset_list_metadata_and_content_are_bounded(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn solution_pack_explicit_exact_asset_map_writes_no_object(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let (base_url, server) = start_server_with_object_store(pool, store.clone()).await;
@@ -507,7 +507,7 @@ async fn solution_pack_explicit_exact_asset_map_writes_no_object(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn planner_never_adopts_by_digest_and_incompatible_explicit_map_conflicts(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let (base_url, server) = start_server_with_object_store(pool, store.clone()).await;
@@ -566,7 +566,7 @@ async fn planner_never_adopts_by_digest_and_incompatible_explicit_map_conflicts(
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn plan_rejects_a_successfully_acknowledged_corrupt_asset_write(pool: PgPool) {
     let store = Arc::new(FlakyObjectStore::new());
     let (base_url, server) =
@@ -590,7 +590,7 @@ async fn plan_rejects_a_successfully_acknowledged_corrupt_asset_write(pool: PgPo
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn apply_storage_outage_is_retryable_and_missing_object_fails_closed(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let (base_url, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
@@ -657,7 +657,7 @@ async fn apply_storage_outage_is_retryable_and_missing_object_fails_closed(pool:
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn provider_ignored_ranges_are_locally_bounded_for_content_mapping_and_apply(pool: PgPool) {
     let store = Arc::new(FlakyObjectStore::new());
     let (base_url, server) =
@@ -780,7 +780,7 @@ async fn provider_ignored_ranges_are_locally_bounded_for_content_mapping_and_app
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn transient_provider_operation_during_apply_is_retryable(pool: PgPool) {
     let store = Arc::new(FlakyObjectStore::new());
     let (base_url, server) =
@@ -835,7 +835,7 @@ async fn transient_provider_operation_during_apply_is_retryable(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn expired_plan_cleanup_never_deletes_running_application_staging(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let (base_url, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
@@ -908,7 +908,7 @@ async fn expired_plan_cleanup_never_deletes_running_application_staging(pool: Pg
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn staging_metadata_mutation_invalidates_plan_evidence(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let (base_url, server) = start_server_with_object_store(pool.clone(), store).await;
@@ -952,7 +952,7 @@ async fn staging_metadata_mutation_invalidates_plan_evidence(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn planning_storage_failure_records_cleanup_without_ready_plan(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     store.set_available(false);
@@ -983,7 +983,7 @@ async fn planning_storage_failure_records_cleanup_without_ready_plan(pool: PgPoo
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn optional_asset_is_skipped_without_staging_or_application_step(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let (base_url, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
@@ -1041,7 +1041,7 @@ async fn optional_asset_is_skipped_without_staging_or_application_step(pool: PgP
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn solution_pack_stages_and_applies_normalized_asset_once(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let (base_url, server) = start_server_with_object_store(pool.clone(), store.clone()).await;

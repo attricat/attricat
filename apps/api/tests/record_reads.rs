@@ -3,7 +3,7 @@ use crate::support;
 use reqwest::header::{HeaderMap, HeaderValue};
 use support::*;
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn resolved_preview_includes_record_identity(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -51,7 +51,7 @@ value_type = "string"
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn incoming_relationships_are_deduplicated_and_paginated(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -179,7 +179,7 @@ target_blueprint = "category"
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn related_record_previews_are_workspace_scoped_across_pages_and_deletions(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -373,7 +373,7 @@ target_blueprint = "previewcategory"
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn legacy_record_creation_route_is_unavailable(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -387,7 +387,7 @@ async fn legacy_record_creation_route_is_unavailable(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn extractor_failures_use_the_api_error_shape(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -419,7 +419,7 @@ async fn extractor_failures_use_the_api_error_shape(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn soft_deleted_record_is_hidden_from_reads_and_relationship_previews(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -506,7 +506,7 @@ async fn soft_deleted_record_is_hidden_from_reads_and_relationship_previews(pool
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn record_labels_name_only_live_records_the_caller_may_read(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let owner = authenticated_client();

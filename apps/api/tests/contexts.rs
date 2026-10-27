@@ -2,7 +2,7 @@ use crate::support;
 
 use support::*;
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn omitted_parent_uses_the_workspace_default_context(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -38,7 +38,7 @@ async fn omitted_parent_uses_the_workspace_default_context(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn updating_an_unknown_context_returns_not_found(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();

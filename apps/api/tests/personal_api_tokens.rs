@@ -34,7 +34,7 @@ async fn insert_personal_api_token(
     .unwrap();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn personal_api_tokens_are_one_time_secrets_and_enforce_permission_subsets(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let owner = authenticated_client();
@@ -152,7 +152,7 @@ async fn personal_api_tokens_are_one_time_secrets_and_enforce_permission_subsets
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn token_issuance_rejects_permissions_the_owner_cannot_delegate(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
@@ -235,7 +235,7 @@ async fn token_issuance_rejects_permissions_the_owner_cannot_delegate(pool: PgPo
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn expired_tokens_fail_and_token_auth_still_obeys_scoped_grants(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
@@ -345,7 +345,7 @@ async fn expired_tokens_fail_and_token_auth_still_obeys_scoped_grants(pool: PgPo
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn member_management_token_cannot_grant_or_revoke_without_roles_grant(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();

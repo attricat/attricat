@@ -75,7 +75,7 @@ async fn run_rule(client: &Client, base: &str, rule_id: &str, dry_run: bool, key
     body["id"].as_str().unwrap().parse().unwrap()
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn rule_run_retention_keeps_the_enable_gate_latest_and_live_runs(pool: PgPool) {
     AttricatRepository::system(pool.clone())
         .ensure_builtin_permissions()
@@ -214,7 +214,7 @@ default_value = 1
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn task_retention_keeps_queued_leased_dead_lettered_and_recent_envelopes(pool: PgPool) {
     let (_, server) = start_server(pool.clone()).await;
     let insert = |status: &'static str, age_days: i32| {
@@ -278,7 +278,7 @@ async fn task_retention_keeps_queued_leased_dead_lettered_and_recent_envelopes(p
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn event_retention_never_removes_undelivered_or_unconsumed_events(pool: PgPool) {
     let (_, server) = start_server(pool.clone()).await;
     let event = || {
@@ -436,7 +436,7 @@ async fn event_retention_never_removes_undelivered_or_unconsumed_events(pool: Pg
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn change_feed_rejects_a_cursor_older_than_purged_events(pool: PgPool) {
     let (_, server) = start_server(pool.clone()).await;
     let blueprint = Uuid::new_v4();
@@ -490,7 +490,7 @@ async fn change_feed_rejects_a_cursor_older_than_purged_events(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn auth_ephemera_retention_keeps_live_sessions_windows_and_accepted_invitations(
     pool: PgPool,
 ) {
@@ -584,7 +584,7 @@ async fn auth_ephemera_retention_keeps_live_sessions_windows_and_accepted_invita
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn extension_retention_keeps_open_deliveries_and_recent_requests(pool: PgPool) {
     let release = Uuid::new_v4();
     sqlx::query("INSERT INTO installed_extension_releases (id, workspace_id, extension_id, version, manifest, manifest_sha256, source) VALUES ($1, $2, 'acme.retention', '1.0.0', '{}'::jsonb, repeat('0', 64), 'side_load')")
@@ -671,7 +671,7 @@ async fn extension_retention_keeps_open_deliveries_and_recent_requests(pool: PgP
     assert_eq!(keys, ["new"]);
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn sweep_drains_every_family_in_bounded_round_robin_batches(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
     let owner = authenticated_client();

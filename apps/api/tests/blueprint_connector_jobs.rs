@@ -37,7 +37,7 @@ code = "external_id"
 value_type = "string"
 "#;
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn scoped_export_fans_out_to_channels_via_existing_task_queue(pool: sqlx::PgPool) {
     let Ok(path) = std::env::var("ATTRICAT_CONNECTOR_CSV_ARCHIVE") else {
         return;

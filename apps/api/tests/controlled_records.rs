@@ -119,7 +119,7 @@ async fn upload(
         .unwrap()
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn transitions_enforce_roles_permissions_and_separation_of_duties(pool: PgPool) {
     let (_, server, _, record) = setup(&pool).await;
     let owner = authenticated_client();
@@ -202,7 +202,7 @@ async fn transitions_enforce_roles_permissions_and_separation_of_duties(pool: Pg
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn owners_may_approve_their_own_submission(pool: PgPool) {
     let (_, server, _, record) = setup(&pool).await;
     // A sole owner who also holds the edge's role: nobody else could approve.
@@ -254,7 +254,7 @@ async fn owners_may_approve_their_own_submission(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn locked_records_reject_writes_until_an_audited_correction(pool: PgPool) {
     let (base, server, _, record) = setup(&pool).await;
     let owner = authenticated_client();
@@ -335,7 +335,7 @@ async fn locked_records_reject_writes_until_an_audited_correction(pool: PgPool) 
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn owners_unlock_any_locking_status_outside_the_declared_transitions(pool: PgPool) {
     let (_, server, _, record) = setup(&pool).await;
     let owner = authenticated_client();
@@ -411,7 +411,7 @@ async fn owners_unlock_any_locking_status_outside_the_declared_transitions(pool:
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn approvals_bind_to_content_and_void_on_change(pool: PgPool) {
     let (base, server, _, record) = setup(&pool).await;
     let owner = authenticated_client();
@@ -548,7 +548,7 @@ value_schema = '''{"type":"string","enum":["draft","approved"],"x-attricat-statu
   ]}}'''
 "#;
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn approval_voids_are_not_guarded_by_transition_conditions(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
     let owner = authenticated_client();
@@ -583,7 +583,7 @@ async fn approval_voids_are_not_guarded_by_transition_conditions(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn released_files_are_held_and_explicit_holds_are_managed(pool: PgPool) {
     let (base, server, _, record) = setup(&pool).await;
     let owner = authenticated_client();
@@ -704,7 +704,7 @@ async fn released_files_are_held_and_explicit_holds_are_managed(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn context_reparenting_revalidates_without_status_effects(pool: PgPool) {
     let (base, server, _, record) = setup(&pool).await;
     let owner = authenticated_client();

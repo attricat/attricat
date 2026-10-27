@@ -184,7 +184,7 @@ async fn insert_paired_edges(pool: &PgPool, sources: &[Uuid], attribute: Uuid, t
     .unwrap();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn global_search_rejects_root_budget_without_a_partial_page(pool: PgPool) {
     let _guard = budget_test_lock().lock().await;
     let (base_url, server) = start_server(pool.clone()).await;
@@ -203,7 +203,7 @@ async fn global_search_rejects_root_budget_without_a_partial_page(pool: PgPool) 
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn global_search_rejects_frontier_budget_without_a_partial_page(pool: PgPool) {
     let _guard = budget_test_lock().lock().await;
     let (base_url, server) = start_server(pool.clone()).await;
@@ -230,7 +230,7 @@ async fn global_search_rejects_frontier_budget_without_a_partial_page(pool: PgPo
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn global_search_rejects_edge_budget_without_a_partial_page(pool: PgPool) {
     let _guard = budget_test_lock().lock().await;
     let (base_url, server) = start_server(pool.clone()).await;
@@ -260,7 +260,7 @@ async fn global_search_rejects_edge_budget_without_a_partial_page(pool: PgPool) 
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn global_search_rejects_visited_budget_without_a_partial_page(pool: PgPool) {
     let _guard = budget_test_lock().lock().await;
     let (base_url, server) = start_server(pool.clone()).await;
@@ -285,7 +285,7 @@ async fn global_search_rejects_visited_budget_without_a_partial_page(pool: PgPoo
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn global_search_returns_an_exact_three_level_witness(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();

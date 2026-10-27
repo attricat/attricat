@@ -85,7 +85,7 @@ async fn batch_with_two_old_records(
     (batch.id, version_one_record, version_two_record)
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn safe_batch_uses_the_nearest_published_ancestor_when_drafts_intervene(pool: PgPool) {
     let repository = AttricatRepository::new(
         pool,
@@ -140,7 +140,7 @@ async fn safe_batch_uses_the_nearest_published_ancestor_when_drafts_intervene(po
     assert_eq!(batch.target_version, 3);
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn safe_batch_rejects_an_unsafe_older_source_revision(pool: PgPool) {
     let repository = AttricatRepository::new(
         pool.clone(),
@@ -222,7 +222,7 @@ async fn safe_batch_rejects_an_unsafe_older_source_revision(pool: PgPool) {
     );
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn safe_batch_task_is_transactional_and_migrates_each_record_once(pool: PgPool) {
     let repository = AttricatRepository::new(
         pool.clone(),
@@ -293,7 +293,7 @@ async fn safe_batch_task_is_transactional_and_migrates_each_record_once(pool: Pg
     );
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn safe_batch_processes_multiple_scalar_candidates_in_one_concurrent_page(pool: PgPool) {
     let repository = AttricatRepository::new(
         pool.clone(),
@@ -338,7 +338,7 @@ async fn safe_batch_processes_multiple_scalar_candidates_in_one_concurrent_page(
     );
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn batch_restart_from_newest_edge_finds_record_inserted_between_pages(pool: PgPool) {
     let repository = AttricatRepository::new(
         pool.clone(),
@@ -436,7 +436,7 @@ async fn batch_restart_from_newest_edge_finds_record_inserted_between_pages(pool
     );
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn expired_batch_task_cannot_checkpoint_and_reclaim_reuses_migration_rows(pool: PgPool) {
     let repository = AttricatRepository::new(
         pool.clone(),
@@ -503,7 +503,7 @@ async fn expired_batch_task_cannot_checkpoint_and_reclaim_reuses_migration_rows(
     );
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn safe_batch_archives_explicitly_approved_removed_values(pool: PgPool) {
     let repository = AttricatRepository::new(
         pool.clone(),

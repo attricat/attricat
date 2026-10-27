@@ -13,9 +13,6 @@ publish = false
 [workspace.dependencies]
 async-stream = "0.3"
 async-trait = "0.1"
-aws-config = { version = "1", default-features = false, features = ["default-https-client", "rt-tokio"] }
-aws-credential-types = "1"
-aws-sdk-s3 = { version = "1", default-features = false, features = ["default-https-client", "http-1x", "rt-tokio"] }
 axum = { version = "0.8", features = ["multipart"] }
 argon2 = "0.5"
 base64 = "0.22"
@@ -25,12 +22,14 @@ chrono-tz = "0.10"
 cron = "0.15"
 dotenvy = "0.15"
 futures-util = "0.3"
+http = "1"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 jsonschema = { version = "0.49", default-features = false }
 kamadak-exif = "0.6"
 lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "tokio1-rustls-tls"] }
 metrics = "0.23"
-metrics-exporter-prometheus = "0.15"
+# Only the recorder; the HTTP listener and push gateway pull in a second TLS stack.
+metrics-exporter-prometheus = { version = "0.15", default-features = false }
 moka = "0.12"
 opentelemetry = "0.32"
 opentelemetry-otlp = { version = "0.32", default-features = false, features = ["trace", "grpc-tonic"] }
@@ -39,6 +38,10 @@ quick-xml = "0.41"
 rand = "0.8"
 regex = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "multipart", "rustls-tls", "stream"] }
+# TLS comes from the workspace's reqwest (rustls with ring). The crate's TLS
+# features also pull in a blocking HTTP client for credential sources that
+# Attricat never uses.
+rust-s3 = { version = "0.38", default-features = false, features = ["fail-on-err", "with-tokio"] }
 rust_decimal = { version = "1", features = ["serde"] }
 schemars = "1"
 secrecy = "0.10"

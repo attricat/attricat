@@ -9,17 +9,14 @@ publish.workspace = true
 [dependencies]
 async-stream.workspace = true
 async-trait.workspace = true
-aws-config.workspace = true
-aws-credential-types.workspace = true
-aws-sdk-s3.workspace = true
 bytes.workspace = true
 futures-util.workspace = true
+http.workspace = true
 metrics.workspace = true
+# Supplies rust-s3's TLS.
+reqwest.workspace = true
+rust-s3.workspace = true
 secrecy.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 url.workspace = true
-
-[dev-dependencies]
-aws-smithy-runtime-api = "1"
-aws-smithy-types = "1"

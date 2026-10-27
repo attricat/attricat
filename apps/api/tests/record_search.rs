@@ -2,7 +2,7 @@ use crate::support;
 
 use support::*;
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn search_includes_all_blueprint_versions_and_marks_outdated_records(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -147,7 +147,7 @@ value_type = "string"
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn search_filters_scalar_attributes_with_type_appropriate_operators(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -262,7 +262,7 @@ value_type = "date"
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn search_returns_contextual_relationship_tree_facet_and_filters_selected_subtrees(
     pool: PgPool,
 ) {
@@ -745,7 +745,7 @@ target_blueprint = "facet_category"
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn relationship_tree_facets_resolve_each_source_in_its_nearest_context(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -946,7 +946,7 @@ context_fallback = "none"
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn relationship_tree_facet_counts_without_a_query_may_lag_while_nodes_do_not(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -1092,7 +1092,7 @@ target_blueprint = "lagging_category"
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn relationship_tree_facet_children_page_through_roots_by_cursor(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -1204,7 +1204,7 @@ target_blueprint = "paged_category"
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn relationship_tree_facet_paths_resolve_every_hop_in_its_nearest_context(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();

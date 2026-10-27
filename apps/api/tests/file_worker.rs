@@ -60,7 +60,7 @@ async fn queue_metadata_job(pool: &PgPool, file_id: Uuid) -> Uuid {
     job_id
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn worker_generates_image_variants_and_completes_metadata_job(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let file_id = Uuid::new_v4();
@@ -127,7 +127,7 @@ async fn worker_generates_image_variants_and_completes_metadata_job(pool: PgPool
     );
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn worker_retries_terminal_failure_and_operator_retry(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let file_id = Uuid::new_v4();
@@ -203,7 +203,7 @@ async fn worker_retries_terminal_failure_and_operator_retry(pool: PgPool) {
     );
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn reconciliation_does_not_rescan_on_every_poll(pool: PgPool) {
     let worker = worker(pool.clone(), Arc::new(FakeObjectStore::available()), 3, 60);
     assert!(!worker.run_once().await.unwrap());
@@ -227,7 +227,7 @@ async fn reconciliation_does_not_rescan_on_every_poll(pool: PgPool) {
     assert!(deleted);
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn reclaimed_file_job_gets_a_new_fencing_token(pool: PgPool) {
     let file_id = Uuid::new_v4();
     insert_file(&pool, file_id, &format!("files/{file_id}/original"), true).await;
@@ -259,7 +259,7 @@ async fn reclaimed_file_job_gets_a_new_fencing_token(pool: PgPool) {
     assert_eq!(token, Some(second.lease_token));
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn concurrent_reconcilers_enqueue_one_purge_job(pool: PgPool) {
     let file_id = Uuid::new_v4();
     insert_file(&pool, file_id, &format!("files/{file_id}/original"), false).await;
@@ -284,7 +284,7 @@ async fn concurrent_reconcilers_enqueue_one_purge_job(pool: PgPool) {
     assert_eq!(count, 1);
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn reconciliation_delays_and_idempotently_purges_unreferenced_files(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let file_id = Uuid::new_v4();
@@ -367,7 +367,7 @@ async fn reconciliation_delays_and_idempotently_purges_unreferenced_files(pool: 
     );
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn reconciliation_retains_files_under_an_active_retention_hold(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let file_id = Uuid::new_v4();
@@ -445,7 +445,7 @@ async fn file_status(pool: &PgPool, file_id: Uuid) -> String {
         .unwrap()
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn reconciliation_retains_files_used_as_extension_and_connector_inputs(pool: PgPool) {
     let workspace_id = WORKSPACE_ID.parse::<Uuid>().unwrap();
     let store = Arc::new(FakeObjectStore::available());
@@ -484,7 +484,7 @@ async fn reconciliation_retains_files_used_as_extension_and_connector_inputs(poo
     assert_eq!(file_status(&pool, finished_run).await, "deleted");
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn purge_keeps_objects_of_a_file_referenced_after_deletion_was_scheduled(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let file_id = Uuid::new_v4();

@@ -36,7 +36,7 @@ fn insert(workspace_id: Uuid, subject_id: Uuid) -> TaskInsert {
     }
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn task_enqueue_is_transactional_and_deduplicated(pool: PgPool) {
     let repository = AttricatRepository::system(pool.clone());
     let workspace_id = workspace(&pool, "tasks-rollback").await;
@@ -76,7 +76,7 @@ async fn task_enqueue_is_transactional_and_deduplicated(pool: PgPool) {
     transaction.commit().await.unwrap();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn task_queue_health_reports_only_actionable_statuses_without_payloads(pool: PgPool) {
     let repository = AttricatRepository::system(pool.clone());
     let workspace_id = workspace(&pool, "tasks-health").await;
@@ -115,7 +115,7 @@ async fn task_queue_health_reports_only_actionable_statuses_without_payloads(poo
     );
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn queued_cancellation_and_dead_letter_replay_obey_kind_policy(pool: PgPool) {
     let repository = AttricatRepository::system(pool.clone());
     let workspace_id = workspace(&pool, "tasks-replay").await;
@@ -184,7 +184,7 @@ async fn queued_cancellation_and_dead_letter_replay_obey_kind_policy(pool: PgPoo
     );
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn task_lease_is_exclusive_reclaimable_and_token_fenced(pool: PgPool) {
     let repository = AttricatRepository::system(pool.clone());
     let workspace_id = workspace(&pool, "tasks-lease").await;
@@ -230,7 +230,7 @@ async fn task_lease_is_exclusive_reclaimable_and_token_fenced(pool: PgPool) {
         .unwrap();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn retry_policy_dead_letters_at_the_registered_failure_budget(pool: PgPool) {
     let repository = AttricatRepository::system(pool.clone());
     let workspace_id = workspace(&pool, "tasks-retry-budget").await;
@@ -269,7 +269,7 @@ async fn retry_policy_dead_letters_at_the_registered_failure_budget(pool: PgPool
     }
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn expired_lease_rejects_every_holder_transition_and_subseconds_round_up(pool: PgPool) {
     let repository = AttricatRepository::system(pool.clone());
     let workspace_id = workspace(&pool, "tasks-expired").await;
@@ -336,7 +336,7 @@ async fn expired_lease_rejects_every_holder_transition_and_subseconds_round_up(p
     );
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn concurrent_workers_claim_distinct_live_tasks(pool: PgPool) {
     let repository = AttricatRepository::system(pool.clone());
     let first_workspace = workspace(&pool, "tasks-concurrent-a").await;
@@ -362,7 +362,7 @@ async fn concurrent_workers_claim_distinct_live_tasks(pool: PgPool) {
     assert_ne!(first.lease_token, second.lease_token);
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn continuation_preserves_failure_budget_and_fairness_rotates_workspaces(pool: PgPool) {
     let repository = AttricatRepository::system(pool.clone());
     let first_workspace = workspace(&pool, "tasks-fair-a").await;
@@ -436,7 +436,7 @@ async fn continuation_preserves_failure_budget_and_fairness_rotates_workspaces(p
     );
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn oversized_retry_error_is_truncated_and_consumes_failure_budget(pool: PgPool) {
     let repository = AttricatRepository::system(pool.clone());
     let workspace_id = workspace(&pool, "tasks-oversized-error").await;
@@ -479,7 +479,7 @@ async fn oversized_retry_error_is_truncated_and_consumes_failure_budget(pool: Pg
     );
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn revoked_initiator_dead_letters_the_envelope_through_the_shared_helper(pool: PgPool) {
     let system = AttricatRepository::system(pool.clone());
     let workspace_id = workspace(&pool, "tasks-revoked-initiator").await;
@@ -546,7 +546,7 @@ async fn revoked_initiator_dead_letters_the_envelope_through_the_shared_helper(p
     assert_eq!(failures, max_failures);
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn in_transaction_holder_transitions_reject_a_lease_that_expired_mid_transaction(
     pool: PgPool,
 ) {
@@ -592,7 +592,7 @@ async fn in_transaction_holder_transitions_reject_a_lease_that_expired_mid_trans
     transaction.rollback().await.unwrap();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn set_based_cancellation_obeys_kind_policy_and_skips_leased_work(pool: PgPool) {
     let repository = AttricatRepository::system(pool.clone());
     let workspace_id = workspace(&pool, "tasks-set-cancel").await;

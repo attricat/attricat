@@ -2,7 +2,7 @@ use crate::support;
 
 use support::*;
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn blueprint_catalogue_lists_all_kinds_and_revision_history(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -83,7 +83,7 @@ async fn blueprint_catalogue_lists_all_kinds_and_revision_history(pool: PgPool) 
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn persists_readonly_attribute_metadata_and_describes_attributes(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -141,7 +141,7 @@ readonly = true
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn persists_attribute_names_through_includes(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -219,7 +219,7 @@ from = "seo.meta_title"
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn rejects_invalid_toml_and_mixin_record_creation(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -270,7 +270,7 @@ value_type = "boolean"
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn saves_rich_table_columns_with_resolved_relationship_targets(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -335,7 +335,7 @@ cardinality = "one"
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn explorer_browse_by_paths_resolve_through_published_targets(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -471,7 +471,7 @@ fields = ["title"]
     )
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn blueprint_rules_cannot_take_a_rule_code_owned_by_another_blueprint(pool: PgPool) {
     let repository = api::repository::AttricatRepository::new(
         pool.clone(),
@@ -512,7 +512,7 @@ async fn blueprint_rules_cannot_take_a_rule_code_owned_by_another_blueprint(pool
     assert_eq!(families, 1);
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn validates_definitions_without_storing_them(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -607,7 +607,7 @@ async fn validates_definitions_without_storing_them(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn checks_enum_value_labels(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -684,7 +684,7 @@ async fn checks_enum_value_labels(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn checks_an_unchanged_definition_as_the_revision_it_matches(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -723,7 +723,7 @@ async fn checks_an_unchanged_definition_as_the_revision_it_matches(pool: PgPool)
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn checks_running_during_a_save_number_the_revision_after_it(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();

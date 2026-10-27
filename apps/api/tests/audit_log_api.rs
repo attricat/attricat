@@ -3,7 +3,7 @@ use crate::support;
 use axum::http::StatusCode;
 use support::{BOOTSTRAP_WORKSPACE_ID, Uuid, authenticated_client, start_server};
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn owner_lists_tenant_scoped_audit_events_with_filters(pool: sqlx::PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let created = authenticated_client()

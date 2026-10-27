@@ -5,7 +5,7 @@ use support::*;
 
 const BOOTSTRAP_WORKSPACE_ID: &str = "00000000-0000-4000-8000-000000000002";
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn workspace_scoped_repository_hides_other_workspace_attricat_rows(pool: PgPool) {
     let other_workspace = Uuid::new_v4();
     let other_context = Uuid::new_v4();
@@ -72,7 +72,7 @@ async fn workspace_scoped_repository_hides_other_workspace_attricat_rows(pool: P
     );
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn workspace_scoped_blueprints_reject_foreign_ids_codes_versions_and_attributes(
     pool: PgPool,
 ) {
@@ -163,7 +163,7 @@ async fn workspace_scoped_blueprints_reject_foreign_ids_codes_versions_and_attri
     );
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn workspace_scoped_record_commands_reject_foreign_record_ids(pool: PgPool) {
     let bootstrap_workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
     let other_workspace = Uuid::new_v4();
@@ -190,7 +190,7 @@ async fn workspace_scoped_record_commands_reject_foreign_record_ids(pool: PgPool
     other.delete_record(record).await.unwrap();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn current_values_hides_foreign_record_values(pool: PgPool) {
     use api::model::{CreateBlueprint, NewAttributeValue};
 
@@ -244,7 +244,7 @@ async fn current_values_hides_foreign_record_values(pool: PgPool) {
     );
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn reachable_search_never_traverses_another_workspace(pool: PgPool) {
     use api::model::{CreateBlueprint, NewAttributeValue};
 

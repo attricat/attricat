@@ -368,7 +368,10 @@ The file worker reads originals for processing, writes generated variants, and
 deletes objects. Authorized downloads through the API also read originals and
 variants. Give API and worker credentials
 only the minimum bucket permissions (`PutObject`, `GetObject`, `DeleteObject`,
-and `HeadBucket`); keep the bucket private and terminate TLS at the S3 endpoint.
+`AbortMultipartUpload`, and `ListObjectsV2`); keep the bucket private and
+terminate TLS at the S3 endpoint. Files larger than 8 MiB upload as multipart
+uploads, which are aborted when a part fails. The startup and readiness check
+lists at most one key.
 
 Uploaded files are retained while referenced. Conversation uploads have a
 15-minute pending-attachment window, so reconciliation does not delete them
@@ -383,7 +386,7 @@ Restoring only one can leave metadata without objects or orphaned objects; run
 the worker afterwards to reconcile the restored state.
 
 RustFS is the supported local and E2E S3-compatible adapter. It is deliberately
-configured through the same AWS SDK and `S3_*` settings used in production, so
+configured through the same S3 client and `S3_*` settings used in production, so
 provider compatibility is exercised without making MinIO a development
 requirement.
 

@@ -69,7 +69,7 @@ async fn assert_stream_closed(response: reqwest::Response) {
     );
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn open_agent_streams_stop_after_token_revocation_or_expiry(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
     let owner = authenticated_client();
@@ -122,7 +122,7 @@ async fn open_agent_streams_stop_after_token_revocation_or_expiry(pool: PgPool) 
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn open_agent_streams_stop_after_browser_session_revocation_or_expiry(pool: PgPool) {
     let (base, server) =
         start_server_with_config(pool.clone(), |state| state.allow_trusted_headers = false).await;
@@ -185,7 +185,7 @@ async fn open_agent_streams_stop_after_browser_session_revocation_or_expiry(pool
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn open_agent_streams_stop_when_agent_permission_is_removed(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
     let repository = AttricatRepository::new(pool.clone(), bootstrap_workspace_id());
@@ -217,7 +217,7 @@ async fn open_agent_streams_stop_when_agent_permission_is_removed(pool: PgPool) 
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn open_agent_streams_stop_when_the_conversation_record_becomes_unreadable(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
     let owner = authenticated_client();

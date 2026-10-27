@@ -42,7 +42,7 @@ async fn add_member(pool: &PgPool, email: &str, state: &str) -> Uuid {
     user
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn assignment_attributes_reference_members_and_teams(pool: PgPool) {
     let (base, _server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -244,7 +244,7 @@ async fn assignment_attributes_reference_members_and_teams(pool: PgPool) {
     assert_eq!(reassigned.status(), StatusCode::UNPROCESSABLE_ENTITY);
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn reparenting_a_context_keeps_inherited_assignments_of_departed_members(pool: PgPool) {
     let (base, _server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -308,7 +308,7 @@ async fn reparenting_a_context_keeps_inherited_assignments_of_departed_members(p
     );
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn assignment_definitions_are_validated(pool: PgPool) {
     let (base, _server) = start_server(pool).await;
     let client = authenticated_client();

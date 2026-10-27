@@ -20,7 +20,7 @@ fn value(status: &str) -> Value {
     json!({"kind":"scalar","attribute_code":"status","value":status})
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn status_transitions_are_atomic_and_stale_edits_are_rejected(pool: PgPool) {
     let (base, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -146,7 +146,7 @@ async fn status_transitions_are_atomic_and_stale_edits_are_rejected(pool: PgPool
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn inherited_status_and_removing_an_override_use_effective_values(pool: PgPool) {
     let (base, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -194,7 +194,7 @@ async fn inherited_status_and_removing_an_override_use_effective_values(pool: Pg
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn concurrent_status_edits_have_one_winner(pool: PgPool) {
     let (base, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -231,7 +231,7 @@ async fn concurrent_status_edits_have_one_winner(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn migration_does_not_silently_clear_a_status(pool: PgPool) {
     let (base, server) = start_server(pool).await;
     let client = authenticated_client();

@@ -2,7 +2,7 @@ use crate::support;
 
 use support::*;
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn rejects_unsafe_reference_codes_in_api_requests(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();

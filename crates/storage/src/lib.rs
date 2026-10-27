@@ -4,6 +4,7 @@
 //! domain code must never expose them to clients.
 
 use std::{
+    borrow::Cow,
     collections::BTreeMap,
     path::Path,
     pin::Pin,
@@ -12,14 +13,10 @@ use std::{
 };
 
 use async_trait::async_trait;
-use aws_config::{BehaviorVersion, Region};
-use aws_credential_types::Credentials;
-use aws_sdk_s3::{
-    Client, config::Builder as S3ConfigBuilder, error::SdkError,
-    operation::get_object::GetObjectError, primitives::ByteStream,
-};
 use bytes::Bytes;
-use futures_util::{Stream, StreamExt};
+use futures_util::{Stream, StreamExt, TryStreamExt};
+use http::{HeaderValue, header};
+use s3::{Bucket, Region, creds::Credentials, error::S3Error};
 use secrecy::{ExposeSecret, SecretString};
 use thiserror::Error;
 use tokio::{sync::Mutex, time::timeout};
@@ -29,6 +26,9 @@ const UPLOAD_OPERATION: &str = "upload";
 const DOWNLOAD_OPERATION: &str = "download";
 const DELETE_OPERATION: &str = "delete";
 const READINESS_OPERATION: &str = "readiness";
+
+/// What S3 assumes for an object stored without a content type.
+const DEFAULT_CONTENT_TYPE: &str = "application/octet-stream";
 
 /// Configuration required to connect to an S3-compatible object store.
 ///
@@ -185,79 +185,82 @@ pub trait ObjectStore: Send + Sync {
     async fn readiness(&self) -> Result<(), ObjectStoreError>;
 }
 
-/// AWS SDK-backed implementation for AWS S3 and compatible endpoints.
+/// `rust-s3`-backed implementation for AWS S3 and compatible endpoints.
 pub struct S3ObjectStore {
-    client: Client,
-    bucket: String,
+    bucket: Box<Bucket>,
     upload_timeout: Duration,
     download_timeout: Duration,
 }
 
 impl S3ObjectStore {
-    pub async fn new(config: StorageConfig) -> Self {
-        let sdk_config = aws_config::defaults(BehaviorVersion::latest())
-            .region(Region::new(config.region))
-            .credentials_provider(Credentials::new(
-                config.access_key_id,
-                config.secret_access_key.expose_secret(),
-                None,
-                None,
-                "attricat-config",
-            ))
-            .load()
-            .await;
-        let client = Client::from_conf(
-            S3ConfigBuilder::from(&sdk_config)
-                .endpoint_url(config.endpoint.as_str())
-                .force_path_style(config.force_path_style)
-                .build(),
-        );
-        Self {
-            client,
-            bucket: config.bucket,
+    pub fn new(config: StorageConfig) -> Result<Self, ObjectStoreError> {
+        let region = Region::Custom {
+            region: config.region,
+            endpoint: config.endpoint.as_str().trim_end_matches('/').to_owned(),
+        };
+        let credentials = Credentials::new(
+            Some(&config.access_key_id),
+            Some(config.secret_access_key.expose_secret()),
+            None,
+            None,
+            None,
+        )
+        .map_err(|_| ObjectStoreError::Unavailable)?;
+        let mut bucket = Bucket::new(&config.bucket, region, credentials)
+            .map_err(|_| ObjectStoreError::Unavailable)?;
+        if config.force_path_style {
+            bucket = bucket.with_path_style();
+        }
+        // The operations below bound each request and each streamed chunk
+        // themselves; a whole-request deadline would cut off long downloads.
+        bucket.set_request_timeout(None);
+        Ok(Self {
+            bucket,
             upload_timeout: config.upload_timeout,
             download_timeout: config.download_timeout,
-        }
+        })
     }
 
     async fn send_upload<T>(
         &self,
-        operation: &'static str,
-        future: impl Future<
-            Output = Result<
-                T,
-                aws_sdk_s3::error::SdkError<aws_sdk_s3::operation::put_object::PutObjectError>,
-            >,
-        >,
+        future: impl Future<Output = Result<T, S3Error>>,
     ) -> Result<T, ObjectStoreError> {
-        timeout(self.upload_timeout, future)
+        let result = timeout(self.upload_timeout, future)
             .await
-            .map_err(|_| ObjectStoreError::TimedOut(operation))?
-            .map_err(|_| ObjectStoreError::Operation(operation))
+            .map_err(|_| ObjectStoreError::TimedOut(UPLOAD_OPERATION))
+            .and_then(|result| result.map_err(|_| ObjectStoreError::Operation(UPLOAD_OPERATION)));
+        record_operation(
+            UPLOAD_OPERATION,
+            if result.is_ok() { "success" } else { "failure" },
+        );
+        result
+    }
+
+    /// The bucket handle for one download, carrying the `Range` header when a
+    /// range is requested. The header is signed with the request.
+    fn download_bucket(&self, range: Option<&str>) -> Result<Cow<'_, Bucket>, ObjectStoreError> {
+        let Some(range) = range else {
+            return Ok(Cow::Borrowed(&self.bucket));
+        };
+        let range = HeaderValue::from_str(range)
+            .map_err(|_| ObjectStoreError::Operation(DOWNLOAD_OPERATION))?;
+        let mut headers = self.bucket.extra_headers.clone();
+        headers.insert(header::RANGE, range);
+        self.bucket
+            .with_extra_headers(headers)
+            .map(Cow::Owned)
+            .map_err(|_| ObjectStoreError::Operation(DOWNLOAD_OPERATION))
     }
 }
 
-/// HTTP 404, which an S3-compatible store may answer for a missing key
-/// without the modeled `NoSuchKey` error.
+/// HTTP 404, which S3 answers for a missing key.
 const HTTP_NOT_FOUND: u16 = 404;
 
-fn classify_download_failure(modeled_no_such_key: bool, status: Option<u16>) -> ObjectStoreError {
-    if modeled_no_such_key || status == Some(HTTP_NOT_FOUND) {
-        ObjectStoreError::NotFound
-    } else {
-        ObjectStoreError::Operation(DOWNLOAD_OPERATION)
+fn classify_download_error(error: S3Error) -> ObjectStoreError {
+    match error {
+        S3Error::HttpFailWithBody(HTTP_NOT_FOUND, _) => ObjectStoreError::NotFound,
+        _ => ObjectStoreError::Operation(DOWNLOAD_OPERATION),
     }
-}
-
-fn classify_download_error(error: SdkError<GetObjectError>) -> ObjectStoreError {
-    classify_download_failure(
-        error
-            .as_service_error()
-            .is_some_and(GetObjectError::is_no_such_key),
-        error
-            .raw_response()
-            .map(|response| response.status().as_u16()),
-    )
 }
 
 /// Read at most `expected_size + 1` bytes. Callers compare the returned exact size and
@@ -295,81 +298,44 @@ pub async fn get_object_for_integrity(
 #[async_trait]
 impl ObjectStore for S3ObjectStore {
     async fn put(&self, key: &str, object: StoredObject) -> Result<(), ObjectStoreError> {
-        let mut request = self
-            .client
-            .put_object()
-            .bucket(&self.bucket)
-            .key(key)
-            .body(ByteStream::from(object.bytes));
-        if let Some(content_type) = object.content_type {
-            request = request.content_type(content_type);
-        }
-        let result = self.send_upload(UPLOAD_OPERATION, request.send()).await;
-        if result.is_err() {
-            record_operation(UPLOAD_OPERATION, "failure");
-        }
-        result?;
-        record_operation(UPLOAD_OPERATION, "success");
-        Ok(())
+        let content_type = object
+            .content_type
+            .as_deref()
+            .unwrap_or(DEFAULT_CONTENT_TYPE);
+        self.send_upload(
+            self.bucket
+                .put_object_with_content_type(key, &object.bytes, content_type),
+        )
+        .await
+        .map(|_| ())
     }
 
+    /// Objects above the library's 8 MiB part size upload as a multipart
+    /// upload, which is aborted when a part fails.
     async fn put_file(
         &self,
         key: &str,
         path: &Path,
         content_type: Option<&str>,
     ) -> Result<(), ObjectStoreError> {
-        let body = ByteStream::from_path(path)
-            .await
-            .map_err(|_| ObjectStoreError::Operation(UPLOAD_OPERATION))?;
-        let mut request = self
-            .client
-            .put_object()
-            .bucket(&self.bucket)
-            .key(key)
-            .body(body);
-        if let Some(content_type) = content_type {
-            request = request.content_type(content_type);
-        }
-        let result = self.send_upload(UPLOAD_OPERATION, request.send()).await;
-        if result.is_err() {
-            record_operation(UPLOAD_OPERATION, "failure");
-        }
-        result?;
-        record_operation(UPLOAD_OPERATION, "success");
-        Ok(())
+        let mut file = match tokio::fs::File::open(path).await {
+            Ok(file) => file,
+            Err(_) => {
+                record_operation(UPLOAD_OPERATION, "failure");
+                return Err(ObjectStoreError::Operation(UPLOAD_OPERATION));
+            }
+        };
+        self.send_upload(self.bucket.put_object_stream_with_content_type(
+            &mut file,
+            key,
+            content_type.unwrap_or(DEFAULT_CONTENT_TYPE),
+        ))
+        .await
+        .map(|_| ())
     }
 
     async fn get(&self, key: &str) -> Result<StoredObject, ObjectStoreError> {
-        let result = timeout(
-            self.download_timeout,
-            self.client
-                .get_object()
-                .bucket(&self.bucket)
-                .key(key)
-                .send(),
-        )
-        .await
-        .map_err(|_| ObjectStoreError::TimedOut(DOWNLOAD_OPERATION))
-        .and_then(|result| result.map_err(classify_download_error));
-        if result.is_err() {
-            record_operation(DOWNLOAD_OPERATION, "failure");
-        }
-        let result = result?;
-        let content_type = result.content_type().map(str::to_owned);
-        let bytes = timeout(self.download_timeout, result.body.collect())
-            .await
-            .map_err(|_| ObjectStoreError::TimedOut(DOWNLOAD_OPERATION))
-            .and_then(|result| result.map_err(|_| ObjectStoreError::Operation(DOWNLOAD_OPERATION)));
-        if bytes.is_err() {
-            record_operation(DOWNLOAD_OPERATION, "failure");
-        }
-        let bytes = bytes?.into_bytes();
-        record_operation(DOWNLOAD_OPERATION, "success");
-        Ok(StoredObject {
-            bytes,
-            content_type,
-        })
+        self.get_range(key, None).await
     }
 
     async fn get_stream(&self, key: &str) -> Result<StoredObjectStream, ObjectStoreError> {
@@ -381,55 +347,47 @@ impl ObjectStore for S3ObjectStore {
         key: &str,
         range: Option<&str>,
     ) -> Result<StoredObject, ObjectStoreError> {
-        let mut request = self.client.get_object().bucket(&self.bucket).key(key);
-        if let Some(range) = range {
-            request = request.range(range);
-        }
-        let result = timeout(self.download_timeout, request.send())
-            .await
-            .map_err(|_| ObjectStoreError::TimedOut(DOWNLOAD_OPERATION))
-            .and_then(|result| result.map_err(classify_download_error));
+        // The response body is read before the request completes, so one
+        // deadline covers both.
+        let result = match self.download_bucket(range) {
+            Ok(bucket) => timeout(self.download_timeout, bucket.get_object(key))
+                .await
+                .map_err(|_| ObjectStoreError::TimedOut(DOWNLOAD_OPERATION))
+                .and_then(|result| result.map_err(classify_download_error)),
+            Err(error) => Err(error),
+        };
         if result.is_err() {
             record_operation(DOWNLOAD_OPERATION, "failure");
         }
-        let result = result?;
-        let content_type = result.content_type().map(str::to_owned);
-        let bytes = timeout(self.download_timeout, result.body.collect())
-            .await
-            .map_err(|_| ObjectStoreError::TimedOut(DOWNLOAD_OPERATION))
-            .and_then(|result| result.map_err(|_| ObjectStoreError::Operation(DOWNLOAD_OPERATION)));
-        if bytes.is_err() {
-            record_operation(DOWNLOAD_OPERATION, "failure");
-        }
-        let bytes = bytes?.into_bytes();
+        let response = result?;
+        let content_type = response.headers().remove(header::CONTENT_TYPE.as_str());
         record_operation(DOWNLOAD_OPERATION, "success");
         Ok(StoredObject {
-            bytes,
+            bytes: response.into_bytes(),
             content_type,
         })
     }
 
+    /// Streamed objects carry no content type; the catalog owns file metadata.
     async fn get_range_stream(
         &self,
         key: &str,
         range: Option<&str>,
     ) -> Result<StoredObjectStream, ObjectStoreError> {
-        let mut request = self.client.get_object().bucket(&self.bucket).key(key);
-        if let Some(range) = range {
-            request = request.range(range);
-        }
-        let result = timeout(self.download_timeout, request.send())
-            .await
-            .map_err(|_| ObjectStoreError::TimedOut(DOWNLOAD_OPERATION))
-            .and_then(|result| result.map_err(classify_download_error));
+        let result = match self.download_bucket(range) {
+            Ok(bucket) => timeout(self.download_timeout, bucket.get_object_stream(key))
+                .await
+                .map_err(|_| ObjectStoreError::TimedOut(DOWNLOAD_OPERATION))
+                .and_then(|result| result.map_err(classify_download_error)),
+            Err(error) => Err(error),
+        };
         if result.is_err() {
             record_operation(DOWNLOAD_OPERATION, "failure");
         }
-        let result = result?;
-        let content_type = result.content_type().map(str::to_owned);
+        let response = result?;
         let download_timeout = self.download_timeout;
         let stream = async_stream::stream! {
-            let mut body = result.body;
+            let mut body = response.bytes;
             loop {
                 match timeout(download_timeout, body.try_next()).await {
                     Ok(Ok(Some(bytes))) => yield Ok(bytes),
@@ -452,22 +410,15 @@ impl ObjectStore for S3ObjectStore {
         };
         Ok(StoredObjectStream {
             stream: Box::pin(stream),
-            content_type,
+            content_type: None,
         })
     }
 
     async fn delete(&self, key: &str) -> Result<(), ObjectStoreError> {
-        let result = timeout(
-            self.upload_timeout,
-            self.client
-                .delete_object()
-                .bucket(&self.bucket)
-                .key(key)
-                .send(),
-        )
-        .await
-        .map_err(|_| ObjectStoreError::TimedOut(DELETE_OPERATION))
-        .and_then(|result| result.map_err(|_| ObjectStoreError::Operation(DELETE_OPERATION)));
+        let result = timeout(self.upload_timeout, self.bucket.delete_object(key))
+            .await
+            .map_err(|_| ObjectStoreError::TimedOut(DELETE_OPERATION))
+            .and_then(|result| result.map_err(|_| ObjectStoreError::Operation(DELETE_OPERATION)));
         if result.is_err() {
             record_operation(DELETE_OPERATION, "failure");
         }
@@ -476,10 +427,13 @@ impl ObjectStore for S3ObjectStore {
         Ok(())
     }
 
+    /// Lists at most one key. `rust-s3` has no HEAD bucket call; listing
+    /// needs the same `s3:ListBucket` permission.
     async fn readiness(&self) -> Result<(), ObjectStoreError> {
         let result = timeout(
             self.download_timeout,
-            self.client.head_bucket().bucket(&self.bucket).send(),
+            self.bucket
+                .list_page(String::new(), None, None, None, Some(1)),
         )
         .await
         .map_err(|_| ObjectStoreError::TimedOut(READINESS_OPERATION))?
@@ -654,10 +608,6 @@ impl ObjectStore for FakeObjectStore {
 
 #[cfg(test)]
 mod tests {
-    use aws_smithy_runtime_api::{client::orchestrator::HttpResponse, http::StatusCode};
-    use aws_smithy_types::body::SdkBody;
-    use futures_util::TryStreamExt;
-
     use super::*;
 
     fn values(name: &str) -> Option<String> {
@@ -730,62 +680,48 @@ mod tests {
         ));
     }
 
-    fn sdk_response(status: u16) -> HttpResponse {
-        HttpResponse::new(
-            StatusCode::try_from(status).expect("valid test status"),
-            SdkBody::empty(),
-        )
+    #[test]
+    fn download_errors_classify_missing_keys_and_other_failures() {
+        let missing = S3Error::HttpFailWithBody(HTTP_NOT_FOUND, "<Code>NoSuchKey</Code>".into());
+        assert!(matches!(
+            classify_download_error(missing),
+            ObjectStoreError::NotFound
+        ));
+
+        let provider_failure = S3Error::HttpFailWithBody(500, "<Code>InternalError</Code>".into());
+        assert!(matches!(
+            classify_download_error(provider_failure),
+            ObjectStoreError::Operation(DOWNLOAD_OPERATION)
+        ));
+
+        assert!(matches!(
+            classify_download_error(S3Error::HttpFail),
+            ObjectStoreError::Operation(DOWNLOAD_OPERATION)
+        ));
     }
 
     #[test]
-    fn production_sdk_download_errors_classify_modeled_status_and_transport_failures() {
-        let modeled_no_such_key = SdkError::service_error(
-            GetObjectError::NoSuchKey(
-                aws_sdk_s3::types::error::NoSuchKey::builder()
-                    .message("missing")
-                    .build(),
-            ),
-            sdk_response(500),
+    fn ranged_downloads_carry_the_range_header_and_others_do_not() {
+        let store = S3ObjectStore::new(
+            StorageConfig::from_values(values, Some(secret())).expect("valid test config"),
+        )
+        .expect("bucket handle");
+        assert!(
+            store
+                .download_bucket(None)
+                .unwrap()
+                .extra_headers
+                .get(header::RANGE)
+                .is_none()
+        );
+        let ranged = store.download_bucket(Some("bytes=0-6")).unwrap();
+        assert_eq!(
+            ranged.extra_headers.get(header::RANGE).unwrap(),
+            "bytes=0-6"
         );
         assert!(matches!(
-            classify_download_error(modeled_no_such_key),
-            ObjectStoreError::NotFound
-        ));
-
-        let raw_404_without_modeled_error = SdkError::service_error(
-            GetObjectError::generic(
-                aws_sdk_s3::error::ErrorMetadata::builder()
-                    .code("UnknownNotFound")
-                    .message("unmodeled 404 response")
-                    .build(),
-            ),
-            sdk_response(404),
-        );
-        assert!(matches!(
-            classify_download_error(raw_404_without_modeled_error),
-            ObjectStoreError::NotFound
-        ));
-
-        let raw_500 = SdkError::service_error(
-            GetObjectError::generic(
-                aws_sdk_s3::error::ErrorMetadata::builder()
-                    .code("InternalError")
-                    .message("provider failure")
-                    .build(),
-            ),
-            sdk_response(500),
-        );
-        assert!(matches!(
-            classify_download_error(raw_500),
-            ObjectStoreError::Operation(DOWNLOAD_OPERATION)
-        ));
-
-        let transport_failure = SdkError::<GetObjectError>::construction_failure(
-            std::io::Error::other("request construction failed"),
-        );
-        assert!(matches!(
-            classify_download_error(transport_failure),
-            ObjectStoreError::Operation(DOWNLOAD_OPERATION)
+            store.download_bucket(Some("bytes=0-\n6")),
+            Err(ObjectStoreError::Operation(DOWNLOAD_OPERATION))
         ));
     }
 

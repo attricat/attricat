@@ -4,7 +4,7 @@ use api::permissions::Permission;
 
 use support::*;
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn attricat_routes_distinguish_missing_identity_from_missing_permission(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
 
@@ -85,7 +85,7 @@ async fn attricat_routes_distinguish_missing_identity_from_missing_permission(po
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn context_subtree_grants_allow_descendants_but_not_siblings(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let owner = authenticated_client();
@@ -215,7 +215,7 @@ async fn context_subtree_grants_allow_descendants_but_not_siblings(pool: PgPool)
 /// Session capability flags come from one batched query; it must agree with
 /// the per-permission `is_authorized` check for every permission and for
 /// every principal shape, including scoped-only grants and inactive members.
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn batched_workspace_permissions_match_per_permission_checks(pool: PgPool) {
     // Starting the server bootstraps the workspace owner.
     let (_, server) = start_server(pool.clone()).await;
@@ -305,7 +305,7 @@ async fn batched_workspace_permissions_match_per_permission_checks(pool: PgPool)
 
 /// Agent lists authorize record-bound items in one batched query; it must
 /// accept exactly the IDs the per-target `is_authorized` check accepts.
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn batched_record_authorization_matches_per_target_checks(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let owner = authenticated_client();
@@ -407,7 +407,7 @@ async fn batched_record_authorization_matches_per_target_checks(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn system_health_reports_the_running_build_to_signed_in_users(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
 
@@ -431,7 +431,7 @@ async fn system_health_reports_the_running_build_to_signed_in_users(pool: PgPool
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn explore_navigation_lists_only_readable_published_entries(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let owner = authenticated_client();
@@ -514,7 +514,7 @@ async fn explore_navigation_lists_only_readable_published_entries(pool: PgPool) 
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn access_checks_report_scoped_grants_per_target(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let owner = authenticated_client();

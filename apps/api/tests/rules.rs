@@ -94,7 +94,7 @@ async fn manual_run(base_url: &str, rule_id: Uuid, record_id: Option<Uuid>, key:
     run["id"].as_str().unwrap().parse().unwrap()
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn rule_task_lease_loss_and_crash_after_page_are_fenced(pool: PgPool) {
     let (base_url, server, rule_id, blueprint) = setup_rule(&pool).await;
     let client = authenticated_client();
@@ -179,7 +179,7 @@ async fn rule_task_lease_loss_and_crash_after_page_are_fenced(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn checkpoint_failure_on_final_attempt_dead_letters_rule_run_and_replays_generation(
     pool: PgPool,
 ) {
@@ -255,7 +255,7 @@ async fn checkpoint_failure_on_final_attempt_dead_letters_rule_run_and_replays_g
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn rule_page_continuation_yields_without_failure_budget(pool: PgPool) {
     let (base_url, server, rule_id, blueprint) = setup_rule(&pool).await;
     let client = authenticated_client();
@@ -332,7 +332,7 @@ async fn rule_page_continuation_yields_without_failure_budget(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn manual_run_of_a_disabled_rule_explains_it_is_not_enabled(pool: PgPool) {
     let (base_url, server, rule_id, _) = setup_rule(&pool).await;
     let client = authenticated_client();
@@ -373,7 +373,7 @@ async fn manual_run_of_a_disabled_rule_explains_it_is_not_enabled(pool: PgPool) 
 /// A record change re-checks the record for every enabled rule of its
 /// revision, even one without an event trigger, and the record can be
 /// re-checked on demand.
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn record_changes_and_rechecks_run_every_enabled_rule_for_the_record(pool: PgPool) {
     let (base_url, server, rule_id, blueprint) = setup_rule(&pool).await;
     let client = authenticated_client();
@@ -511,7 +511,7 @@ async fn record_changes_and_rechecks_run_every_enabled_rule_for_the_record(pool:
 
 /// The findings list narrows by rule, blueprint, context, severity and
 /// state, and pages through what matches.
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn findings_filter_by_rule_blueprint_context_severity_and_state(pool: PgPool) {
     let (base_url, server, rule_id, blueprint) = setup_rule(&pool).await;
     let client = authenticated_client();

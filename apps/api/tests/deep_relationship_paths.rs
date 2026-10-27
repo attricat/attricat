@@ -3,7 +3,7 @@ use crate::support;
 use api::{agent_tools, repository::AttricatRepository};
 use support::*;
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn search_resolves_three_hop_table_query_filter_and_sort_paths(pool: PgPool) {
     let repository_pool = pool.clone();
     let (base_url, server) = start_server(pool).await;
@@ -418,7 +418,7 @@ value_type = "integer""#}))
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn relationship_sort_requires_one_effective_source_version(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();

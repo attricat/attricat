@@ -64,7 +64,7 @@ async fn create_published_reusable(
         .unwrap()
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn attaches_published_reusable_attributes_as_distinct_typed_values(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -139,7 +139,7 @@ async fn attaches_published_reusable_attributes_as_distinct_typed_values(pool: P
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn reusable_relationships_and_group_attachments_use_record_owned_attributes(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -244,7 +244,7 @@ async fn reusable_relationships_and_group_attachments_use_record_owned_attribute
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn migration_preserves_reusable_attribute_values(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -370,7 +370,7 @@ async fn migration_preserves_reusable_attribute_values(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn attaching_a_reusable_attribute_audits_its_default_and_emits_an_record_update(
     pool: PgPool,
 ) {
@@ -416,7 +416,7 @@ async fn attaching_a_reusable_attribute_audits_its_default_and_emits_an_record_u
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn validates_definitions_without_storing_them(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -515,7 +515,7 @@ async fn validates_definitions_without_storing_them(pool: PgPool) {
 }
 
 /// The web editors offer these as starting points, so each must save as is.
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn editor_templates_pass_validation(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();

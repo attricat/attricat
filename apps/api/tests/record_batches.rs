@@ -89,7 +89,7 @@ fn value_of(form: &Value, code: &str) -> Value {
         .unwrap_or(Value::Null)
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn releasing_a_revision_and_superseding_the_previous_one_is_atomic(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -169,7 +169,7 @@ async fn releasing_a_revision_and_superseding_the_previous_one_is_atomic(pool: P
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn a_failing_operation_rolls_back_the_batch_and_names_the_operation(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -299,7 +299,7 @@ async fn a_failing_operation_rolls_back_the_batch_and_names_the_operation(pool: 
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn batches_are_bounded_and_name_each_record_once(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -339,7 +339,7 @@ async fn batches_are_bounded_and_name_each_record_once(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn every_operation_is_authorized_against_its_own_record(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();

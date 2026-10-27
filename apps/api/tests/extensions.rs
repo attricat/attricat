@@ -390,7 +390,7 @@ fn client_release_archive_with_navigation(extension_id: &str) -> Vec<u8> {
     zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn extension_attricat_upsert_create_writes_declared_relationships(pool: sqlx::PgPool) {
     let repository = AttricatRepository::system(pool.clone())
         .for_workspace(Uuid::from_u128(0x00000000000040008000000000000002))
@@ -478,7 +478,7 @@ target_blueprint = "extension_linked_item"
     assert_eq!(targets, vec![target]);
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn extension_attricat_upsert_is_idempotent_and_emits_a_change_feed(pool: sqlx::PgPool) {
     let repository = AttricatRepository::system(pool.clone())
         .for_workspace(Uuid::from_u128(0x00000000000040008000000000000002))
@@ -683,7 +683,7 @@ code = "title"
 value_type = "string"
 "#;
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn extension_intents_use_unique_keys_and_withdraw_publications(pool: sqlx::PgPool) {
     let repository = AttricatRepository::system(pool.clone())
         .for_workspace(bootstrap_workspace_id())
@@ -785,7 +785,7 @@ async fn extension_intents_use_unique_keys_and_withdraw_publications(pool: sqlx:
     assert_eq!(title, "second");
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn sideload_installs_a_validated_local_archive(pool: sqlx::PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let (base, server) = start_server_with_object_store(pool, store.clone()).await;
@@ -805,7 +805,7 @@ async fn sideload_installs_a_validated_local_archive(pool: sqlx::PgPool) {
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn enabled_event_types_follow_authorized_consumption_contracts(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
     let repository = AttricatRepository::system(pool.clone()).for_workspace(workspace);
@@ -930,7 +930,7 @@ async fn enabled_event_types_follow_authorized_consumption_contracts(pool: sqlx:
     );
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn navigation_contributions_target_same_release_routes(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
     let repository = AttricatRepository::system(pool).for_workspace(workspace);
@@ -965,7 +965,7 @@ async fn navigation_contributions_target_same_release_routes(pool: sqlx::PgPool)
     assert_eq!(navigation.artifact_key, None);
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn enabled_client_contributions_are_hidden_after_state_changes(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
     let repository = AttricatRepository::system(pool).for_workspace(workspace);
@@ -1077,7 +1077,7 @@ async fn enabled_client_contributions_are_hidden_after_state_changes(pool: sqlx:
     );
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn workspace_extension_settings_audit_once_with_the_request_actor(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
     let actor = Uuid::new_v4();
@@ -1153,7 +1153,7 @@ async fn workspace_extension_settings_audit_once_with_the_request_actor(pool: sq
     );
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn extension_layout_replacement_rejects_non_object_roots_and_repairs_malformed_layout(
     pool: sqlx::PgPool,
 ) {
@@ -1221,7 +1221,7 @@ async fn extension_layout_replacement_rejects_non_object_roots_and_repairs_malfo
     assert_eq!(audits, 1);
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn extension_layout_order_is_stable_and_host_owned(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
     let repository = AttricatRepository::system(pool.clone()).for_workspace(workspace);
@@ -1332,7 +1332,7 @@ async fn extension_layout_order_is_stable_and_host_owned(pool: sqlx::PgPool) {
     }
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn blueprint_layout_overlays_owned_outlets_and_preserves_global_workspace_rules(
     pool: sqlx::PgPool,
 ) {
@@ -1469,7 +1469,7 @@ value_type = "string"
     );
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn operation_runs_keep_a_batch_key_across_crash_reclaim_and_fence_stale_checkpoints(
     pool: sqlx::PgPool,
 ) {
@@ -1705,7 +1705,7 @@ async fn operation_runs_keep_a_batch_key_across_crash_reclaim_and_fence_stale_ch
     );
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn operation_http_routes_start_list_and_cancel_without_exposing_input(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
     let repository = AttricatRepository::system(pool.clone()).for_workspace(workspace);
@@ -1758,7 +1758,7 @@ async fn operation_http_routes_start_list_and_cancel_without_exposing_input(pool
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn extension_attribute_types_are_pinned_and_survive_provider_disable(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
     let repository = AttricatRepository::system(pool).for_workspace(workspace);
@@ -1832,7 +1832,7 @@ extension_configuration = '{"currency":"USD"}'
     assert!(unavailable.is_err());
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn hidden_contributions_remain_authorized_and_are_validated_on_publish(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
     let repository = AttricatRepository::system(pool).for_workspace(workspace);
@@ -1913,7 +1913,7 @@ value_type = "string"
     );
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn workspace_safe_mode_blocks_runtime_descriptors_and_storage_without_mutating_installations(
     pool: sqlx::PgPool,
 ) {
@@ -1978,7 +1978,7 @@ async fn workspace_safe_mode_blocks_runtime_descriptors_and_storage_without_muta
     );
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn extension_storage_enforces_cas_bounds_quota_and_workspace_namespace(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
     let repository = AttricatRepository::system(pool.clone()).for_workspace(workspace);
@@ -2118,7 +2118,7 @@ async fn extension_storage_enforces_cas_bounds_quota_and_workspace_namespace(poo
     ));
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn extension_storage_list_treats_like_characters_as_literal_prefixes(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000009);
     sqlx::query("INSERT INTO workspaces (id, slug, name, login_identifier) VALUES ($1, 'extension-prefix', 'Extension prefix', 'extension-prefix.local')")
@@ -2170,7 +2170,7 @@ async fn extension_storage_list_treats_like_characters_as_literal_prefixes(pool:
     );
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn lifecycle_installs_validated_archive_artifacts_and_retains_history(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
     let repository = AttricatRepository::system(pool.clone()).for_workspace(workspace);
@@ -2355,7 +2355,7 @@ async fn lifecycle_installs_validated_archive_artifacts_and_retains_history(pool
     );
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn operation_artifacts_are_run_scoped_quota_bound_cleaned_and_downloadable(
     pool: sqlx::PgPool,
 ) {
@@ -2676,7 +2676,7 @@ async fn operation_artifacts_are_run_scoped_quota_bound_cleaned_and_downloadable
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn artifact_wit_component_copies_a_large_approved_input_in_bounded_chunks(
     pool: sqlx::PgPool,
 ) {
@@ -2806,7 +2806,7 @@ async fn artifact_wit_component_copies_a_large_approved_input_in_bounded_chunks(
     );
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn packaged_transfer_import_rejects_ssrf_without_network_io(pool: sqlx::PgPool) {
     use api::{
         extension_runtime::{
@@ -2885,7 +2885,7 @@ async fn packaged_transfer_import_rejects_ssrf_without_network_io(pool: sqlx::Pg
 
 // Opt in only when public HTTPS is reachable. No local/private address is
 // allowed by the broker, so a loopback test server cannot exercise this path.
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn packaged_public_http_transfer_and_redirect_policy(pool: sqlx::PgPool) {
     use api::{
         extension_runtime::{
@@ -2981,7 +2981,7 @@ async fn packaged_public_http_transfer_and_redirect_policy(pool: sqlx::PgPool) {
     }
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn delivery_attempt_is_uncertain_until_confirmed_and_never_auto_resends(pool: sqlx::PgPool) {
     use api::repository::{DeliveryState, StartExtensionOperation};
     use attricat_domain::task_queue::TaskKind;
@@ -3085,7 +3085,7 @@ async fn delivery_attempt_is_uncertain_until_confirmed_and_never_auto_resends(po
     ));
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn operation_schedules_are_workspace_scoped_and_occurrences_deduplicated(pool: sqlx::PgPool) {
     use api::repository::CreateExtensionOperationSchedule;
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
@@ -3257,7 +3257,7 @@ async fn operation_schedules_are_workspace_scoped_and_occurrences_deduplicated(p
 /// Packaged component integration, enabled by pointing at the sibling archive.
 /// This exercises the actual WIT linker, snapshot page, staging, worker and S3
 /// abstraction rather than a mock component implementation.
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn packaged_csv_connector_exports_through_the_real_host(pool: sqlx::PgPool) {
     use api::{
         extension_runtime::{
@@ -3604,7 +3604,7 @@ async fn packaged_csv_connector_exports_through_the_real_host(pool: sqlx::PgPool
     assert!(store.get(&paged_key).await.is_ok());
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn artifact_completion_faults_abort_metadata_and_delete_orphans(pool: sqlx::PgPool) {
     use api::{
         extension_runtime::{
@@ -3722,7 +3722,7 @@ async fn artifact_completion_faults_abort_metadata_and_delete_orphans(pool: sqlx
     );
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn client_artifacts_revalidate_against_the_installed_release(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
     let repository = AttricatRepository::system(pool.clone()).for_workspace(workspace);
@@ -3771,7 +3771,7 @@ async fn client_artifacts_revalidate_against_the_installed_release(pool: sqlx::P
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn extension_lookup_resolves_like_an_upsert(pool: sqlx::PgPool) {
     let workspace_id = Uuid::from_u128(0x00000000000040008000000000000002);
     let repository = AttricatRepository::system(pool.clone())

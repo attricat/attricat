@@ -16,7 +16,7 @@ code = "title"
 value_type = "string"
 "#;
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn readers_can_comment_but_only_authors_can_edit(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
     let owner = authenticated_client();
@@ -185,7 +185,7 @@ async fn readers_can_comment_but_only_authors_can_edit(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn comments_have_stable_bounded_pagination(pool: PgPool) {
     let (base, server) = start_server(pool).await;
     let client = authenticated_client();

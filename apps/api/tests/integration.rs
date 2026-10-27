@@ -1,6 +1,10 @@
 //! The API integration tests, compiled as one test binary. Each file in
 //! `tests/` would otherwise link its own copy of the API and its dependencies.
 //! Declare a new test file here.
+//!
+//! Database tests use `#[sqlx::test(migrator = "api::MIGRATOR")]`. A bare
+//! `#[sqlx::test]` embeds every migration again in each test, which once
+//! doubled this binary's compile time.
 
 mod support;
 

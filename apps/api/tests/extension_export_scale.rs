@@ -28,7 +28,7 @@ value_type = "string"
 /// The slowest an index-backed lookup may take on a busy CI machine.
 const LOOKUP_BUDGET: Duration = Duration::from_millis(250);
 
-#[sqlx::test(migrations = "./migrations")]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn a_full_catalog_keeps_every_mapping_in_host_storage(pool: sqlx::PgPool) {
     let repository =
         AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());

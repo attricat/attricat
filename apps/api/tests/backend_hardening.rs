@@ -6,7 +6,7 @@ use sqlx::postgres::PgPoolOptions;
 use std::{sync::Arc, time::Duration};
 use support::*;
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn token_issuance_is_pool_safe_and_cannot_amplify_its_issuer(pool: PgPool) {
     let bounded = PgPoolOptions::new()
         .max_connections(1)
@@ -71,7 +71,7 @@ async fn token_issuance_is_pool_safe_and_cannot_amplify_its_issuer(pool: PgPool)
     bounded.close().await;
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn token_sessions_recheck_principals_without_writing_usage_on_every_read(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
     let owner = authenticated_client();
@@ -157,7 +157,7 @@ async fn token_sessions_recheck_principals_without_writing_usage_on_every_read(p
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn probes_have_independent_admission_and_readiness_has_a_deadline(pool: PgPool) {
     let permits = Arc::new(tokio::sync::Semaphore::new(1));
     let held = permits.clone().acquire_owned().await.unwrap();
@@ -226,7 +226,7 @@ async fn probes_have_independent_admission_and_readiness_has_a_deadline(pool: Pg
     bounded.close().await;
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn cancelled_uploads_are_reconciled_and_failed_deletions_are_retried(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let (base, server) = start_server_with_config(pool.clone(), |state| {
@@ -312,7 +312,7 @@ async fn cancelled_uploads_are_reconciled_and_failed_deletions_are_retried(pool:
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn event_streams_hold_admission_until_body_close_and_stop_on_shutdown(pool: PgPool) {
     let control = StreamControl::new(4, 1, Duration::from_secs(5));
     let (base, server) =

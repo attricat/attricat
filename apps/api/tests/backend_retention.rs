@@ -4,7 +4,7 @@ use api::{http::StreamControl, repository::AttricatRepository, storage::FakeObje
 use std::{sync::Arc, time::Duration};
 use support::*;
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn history_cleanup_is_batched_concurrent_and_preserves_current_and_recent_values(
     pool: PgPool,
 ) {
@@ -67,7 +67,7 @@ fields = ["title"]
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn successful_uploads_consume_intents_atomically_and_are_not_cleaned(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let (base, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
@@ -118,7 +118,7 @@ async fn successful_uploads_consume_intents_atomically_and_are_not_cleaned(pool:
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn event_replay_drains_all_pages_through_terminal_and_supports_terminal_reconnect(
     pool: PgPool,
 ) {
@@ -176,7 +176,7 @@ async fn event_replay_drains_all_pages_through_terminal_and_supports_terminal_re
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn event_stream_deadline_releases_the_body_permit(pool: PgPool) {
     let control = StreamControl::new(1, 1, Duration::from_millis(200));
     let (base, server) =

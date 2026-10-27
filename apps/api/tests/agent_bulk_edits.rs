@@ -105,7 +105,7 @@ fn coded(error: ToolError) -> String {
         .to_owned()
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn filters_resolve_to_pinned_records_within_the_limit_and_never_statuses(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
     create_blueprint(&authenticated_client(), &base, PRODUCT).await;
@@ -320,7 +320,7 @@ async fn system_comments(pool: &PgPool, record: Uuid) -> Vec<String> {
         .unwrap()
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn approved_bulk_edits_apply_record_by_record_and_stop_at_a_stale_record(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
     create_blueprint(&authenticated_client(), &base, PRODUCT).await;
@@ -406,7 +406,7 @@ async fn approved_bulk_edits_apply_record_by_record_and_stop_at_a_stale_record(p
     provider_server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn proposals_over_the_workspace_limit_return_to_the_agent(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
     create_blueprint(&authenticated_client(), &base, PRODUCT).await;
@@ -451,7 +451,7 @@ async fn proposals_over_the_workspace_limit_return_to_the_agent(pool: PgPool) {
     provider_server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn every_record_needs_the_initiators_write_access(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
     create_blueprint(&authenticated_client(), &base, PRODUCT).await;
@@ -514,7 +514,7 @@ async fn every_record_needs_the_initiators_write_access(pool: PgPool) {
     provider_server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn admins_configure_the_bulk_edit_policy_and_limit(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
     let owner = authenticated_client();
@@ -615,7 +615,7 @@ async fn admins_configure_the_bulk_edit_policy_and_limit(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn per_record_policy_withholds_the_bulk_tool(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
     create_blueprint(&authenticated_client(), &base, PRODUCT).await;

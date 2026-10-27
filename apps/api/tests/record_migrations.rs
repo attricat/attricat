@@ -24,7 +24,7 @@ code = "title"
 value_type = "string"
 "#;
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn compatible_scalar_migration_preserves_row_identity_without_history(pool: PgPool) {
     let repository = AttricatRepository::new(
         pool.clone(),
@@ -138,7 +138,7 @@ async fn compatible_scalar_migration_preserves_row_identity_without_history(pool
     );
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn supplied_scalar_replacement_archives_the_old_row_once(pool: PgPool) {
     let repository = AttricatRepository::new(
         pool.clone(),
@@ -241,7 +241,7 @@ async fn supplied_scalar_replacement_archives_the_old_row_once(pool: PgPool) {
     );
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn compatible_relationship_migration_preserves_row_identity(pool: PgPool) {
     let repository = AttricatRepository::new(
         pool.clone(),
@@ -395,7 +395,7 @@ cardinality = "one"
     );
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn explicitly_discarded_removed_value_is_the_only_row_archived(pool: PgPool) {
     let repository = AttricatRepository::new(
         pool.clone(),
@@ -516,7 +516,7 @@ value_type = "string"
     );
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn ui_shaped_unchanged_payload_preserves_scalar_and_relationship_rows(pool: PgPool) {
     let repository = AttricatRepository::new(
         pool.clone(),
@@ -682,7 +682,7 @@ cardinality = "one"
     );
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn migration_requires_replacements_in_every_affected_context(pool: PgPool) {
     let repository = AttricatRepository::new(
         pool.clone(),
@@ -785,7 +785,7 @@ async fn migration_requires_replacements_in_every_affected_context(pool: PgPool)
     );
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn migration_rejects_non_default_value_when_target_becomes_default_only(pool: PgPool) {
     let repository = AttricatRepository::new(
         pool.clone(),
@@ -895,7 +895,7 @@ context_editable = "all"
     );
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn migration_audits_field_changes_and_reconciles_publication(pool: PgPool) {
     let actor = uuid::Uuid::new_v4();
     sqlx::query("INSERT INTO users (id, email) VALUES ($1, 'migration-publisher@example.test')")
@@ -1015,7 +1015,7 @@ async fn migration_audits_field_changes_and_reconciles_publication(pool: PgPool)
     assert_eq!(unpublished, 1);
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn migration_reports_only_properties_the_target_schema_requires(pool: PgPool) {
     let repository = AttricatRepository::new(
         pool.clone(),

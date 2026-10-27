@@ -208,7 +208,7 @@ INSERT INTO attribute_values (id, record_id, attribute_id, context_id, relations
 SELECT gen_random_uuid(), product, $19, $8, id FROM bench_listing;
 "#;
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 #[ignore = "benchmark; run explicitly with a controlled PostgreSQL instance"]
 async fn relationship_tree_facet_latency(pool: PgPool) {
     let (base_url, server) = start_server_with_devtools(pool.clone()).await;

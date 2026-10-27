@@ -53,7 +53,7 @@ async fn link(
         .unwrap()
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn hierarchies_reject_writes_that_close_a_cycle(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -127,7 +127,7 @@ async fn hierarchies_reject_writes_that_close_a_cycle(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn concurrent_writes_cannot_jointly_create_a_cycle(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -152,7 +152,7 @@ async fn concurrent_writes_cannot_jointly_create_a_cycle(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn publishing_a_hierarchy_reports_existing_cycles_and_extra_parents(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -261,7 +261,7 @@ async fn link_in(
         .unwrap()
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn hierarchies_follow_edges_inherited_from_parent_contexts(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -358,7 +358,7 @@ async fn hierarchies_follow_edges_inherited_from_parent_contexts(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn relationships_accept_only_listed_target_blueprints(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();

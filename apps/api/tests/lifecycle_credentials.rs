@@ -13,7 +13,7 @@ async fn create_user(pool: &PgPool, email: &str, verified: bool) -> Uuid {
     id
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn lifecycle_tokens_are_digest_only_and_single_use(pool: PgPool) {
     let user = create_user(&pool, "lifecycle@example.test", false).await;
     let repository = AttricatRepository::system(pool.clone());
@@ -53,7 +53,7 @@ async fn lifecycle_tokens_are_digest_only_and_single_use(pool: PgPool) {
     );
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn lifecycle_token_validation_uses_account_state_and_revocation(pool: PgPool) {
     let user = create_user(&pool, "verified@example.test", true).await;
     let repository = AttricatRepository::system(pool.clone());
@@ -145,7 +145,7 @@ async fn invite(
     assert!(created.needs_password_setup);
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn a_second_onboarding_link_after_password_setup_is_an_invalid_invitation(pool: PgPool) {
     let repository = AttricatRepository::system(pool.clone());
     let email = "two-workspaces@example.test";
@@ -168,7 +168,7 @@ async fn a_second_onboarding_link_after_password_setup_is_an_invalid_invitation(
     ));
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn an_invitation_to_another_workspace_keeps_a_pending_onboarding_link(pool: PgPool) {
     let repository = AttricatRepository::system(pool.clone());
     let email = "pending-elsewhere@example.test";
@@ -185,7 +185,7 @@ async fn an_invitation_to_another_workspace_keeps_a_pending_onboarding_link(pool
     assert_eq!(completed.workspace_id, first);
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn revoking_workspace_access_keeps_other_workspaces_and_account_tokens(pool: PgPool) {
     let repository = AttricatRepository::system(pool.clone());
     let email = "scoped-revoke@example.test";

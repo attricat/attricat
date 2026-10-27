@@ -2,7 +2,7 @@ use crate::support;
 
 use support::*;
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn system_annotations_are_persisted_updated_and_searchable(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -115,7 +115,7 @@ async fn system_annotations_are_persisted_updated_and_searchable(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn system_annotations_require_an_object_and_unique_tags(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();

@@ -78,7 +78,7 @@ fn presence(field: &str, value: bool) -> Value {
     json!([{"field":field,"operator":"is_set","value":value}])
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn scalar_presence_distinguishes_absence_from_false_zero_empty_and_restored_values(
     pool: PgPool,
 ) {
@@ -286,7 +286,7 @@ async fn scalar_presence_distinguishes_absence_from_false_zero_empty_and_restore
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn file_presence_requires_an_attached_file(pool: PgPool) {
     let (base, server) = start_server_with_object_store(
         pool.clone(),
@@ -411,7 +411,7 @@ async fn file_presence_requires_an_attached_file(pool: PgPool) {
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn presence_traverses_paths_and_preserves_version_and_blueprint_scope(pool: PgPool) {
     let (base, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -521,7 +521,7 @@ async fn presence_traverses_paths_and_preserves_version_and_blueprint_scope(pool
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn presence_searches_attached_reusable_values_and_round_trips_saved_views(pool: PgPool) {
     let (base, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -618,7 +618,7 @@ async fn presence_searches_attached_reusable_values_and_round_trips_saved_views(
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn absence_is_scoped_and_paginated_and_requires_no_reachable_value(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
     let client = authenticated_client();

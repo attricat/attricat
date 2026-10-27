@@ -2,7 +2,7 @@ use crate::support;
 
 use support::*;
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn typed_category_and_color_relationships_can_be_replaced_and_removed(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
@@ -404,7 +404,7 @@ target_blueprint = "color"
     server.abort();
 }
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn previews_expand_cycles_and_shared_targets_per_path(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();

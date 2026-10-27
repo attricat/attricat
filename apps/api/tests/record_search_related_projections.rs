@@ -2,7 +2,7 @@ use crate::support;
 
 use support::*;
 
-#[sqlx::test]
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn search_bulk_hydrates_direct_related_table_previews_without_multiplying_sources(
     pool: PgPool,
 ) {

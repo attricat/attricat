@@ -31,7 +31,7 @@ No library crate may depend on `api`. `apps/api` alone owns process startup, dat
 | `attricat-extension-manifest` | Extension manifests, archive validation, and containment policy | archive codecs |
 | `attricat-solution-pack` | Solution-pack contracts, archive/sample-data validation, and pure planning | image/archive codecs |
 | `attricat-repository` | SQLx repository, transactional application services, registry and installer coordination | SQLx/Reqwest |
-| `attricat-storage` | Object-store interface, S3 adapter, storage configuration | AWS SDK |
+| `attricat-storage` | Object-store interface, S3 adapter, storage configuration | rust-s3 |
 | `attricat-cache` | Query cache (process-memory L1, optional Redis L2), shared rate limits, cache configuration | Moka/fred |
 | `attricat-workers` | Task/event supervision and workflow/rule/file execution | image/EXIF clients |
 | `attricat-agent-runtime` | Agent provider, tools, execution, and task handler | provider clients |
