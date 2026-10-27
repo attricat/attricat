@@ -17,6 +17,8 @@ export const parseDraftProposal = (
       (entry): entry is [string, string] => typeof entry[1] === 'string',
     ),
   );
+  // A proposal without values is an ordinary reply, not something to apply.
+  if (Object.keys(fields).length === 0) return null;
   return {
     fields,
     baseValues: isRecord(proposal.base_values)

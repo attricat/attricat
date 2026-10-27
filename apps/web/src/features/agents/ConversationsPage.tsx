@@ -75,7 +75,13 @@ export const ConversationsPage = ({
           event.preventDefault();
           submitSearch();
         }}
-        sx={{ alignItems: 'center', display: 'flex', gap: 1, mt: 3 }}
+        sx={{
+          alignItems: 'center',
+          display: 'flex',
+          flexWrap: { xs: 'wrap', sm: 'nowrap' },
+          gap: 1,
+          mt: 3,
+        }}
       >
         <TextField
           fullWidth
@@ -84,30 +90,35 @@ export const ConversationsPage = ({
           slotProps={{ htmlInput: { maxLength: maximumSearchLength } }}
           value={draftQuery}
         />
-        <Button startIcon={<SearchIcon />} type="submit" variant="outlined">
+        <FormControlLabel
+          control={
+            <Switch
+              checked={scope === conversationScopes.all}
+              onChange={(event) =>
+                void navigate({
+                  to: agentRoutes.list,
+                  search: {
+                    q: search.q,
+                    scope: event.target.checked
+                      ? conversationScopes.all
+                      : undefined,
+                  },
+                })
+              }
+            />
+          }
+          label={t('agents.showRecordConversations')}
+          sx={{ flexShrink: 0, mx: 0, whiteSpace: 'nowrap' }}
+        />
+        <Button
+          startIcon={<SearchIcon />}
+          sx={{ flexShrink: 0 }}
+          type="submit"
+          variant="outlined"
+        >
           {t('agents.search')}
         </Button>
       </Box>
-      <FormControlLabel
-        control={
-          <Switch
-            checked={scope === conversationScopes.all}
-            onChange={(event) =>
-              void navigate({
-                to: agentRoutes.list,
-                search: {
-                  q: search.q,
-                  scope: event.target.checked
-                    ? conversationScopes.all
-                    : undefined,
-                },
-              })
-            }
-          />
-        }
-        label={t('agents.showRecordConversations')}
-        sx={{ mt: 1 }}
-      />
       <ApiErrorAlert error={conversations.error} sx={{ mt: 3 }} />
       <Paper sx={{ mt: 3 }}>
         <List disablePadding>

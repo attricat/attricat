@@ -72,6 +72,7 @@ describe('record API client', () => {
         context_id: null,
         is_default_context: true,
         content: 'Trail shoes',
+        language: 'en',
       }),
       headers: { 'Content-Type': 'application/json' },
       method: 'POST',

@@ -433,6 +433,7 @@ export const smartFillRecordFormRequestSchema = z.object({
     .array(uuidSchema)
     .max(SMART_FILL_MAX_ATTACHMENTS)
     .optional(),
+  language: z.string().optional(),
 });
 export const smartFillRecordFormResponseSchema = z.object({
   fields: z.record(z.string(), z.string()),

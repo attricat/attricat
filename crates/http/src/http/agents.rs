@@ -43,6 +43,9 @@ pub(super) struct SendMessage {
     pub content: String,
     #[serde(default)]
     pub attachment_ids: Vec<Uuid>,
+    /// The sender's BCP 47 interface language; the agent replies in it.
+    #[serde(default)]
+    pub language: Option<String>,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -76,6 +79,12 @@ fn validate_title(title: &str) -> Result<(), ApiError> {
         )));
     }
     Ok(())
+}
+
+/// Canonicalizes a client interface language for the agent prompt.
+pub(super) fn conversation_language(language: &str) -> Result<String, ApiError> {
+    attricat_lexicon::canonical_language(language)
+        .ok_or_else(|| ApiError::invalid_input(format!("unsupported language '{language}'")))
 }
 
 fn configured(state: &AppState) -> Result<&crate::agents::AgentProviderConfig, ApiError> {
@@ -424,8 +433,18 @@ pub(super) async fn send_message(
             "attachment_ids must not contain duplicates".into(),
         ));
     }
+    let language = input
+        .language
+        .as_deref()
+        .map(conversation_language)
+        .transpose()?;
     readable_conversation(&repository, user, workspace_id, conversation_id).await?;
     let config = configured(&state)?;
+    if let Some(language) = &language {
+        repository
+            .set_conversation_language(conversation_id, language)
+            .await?;
+    }
     let run = repository
         .with_authorization_actor(principal.actor())
         .submit_agent_message(

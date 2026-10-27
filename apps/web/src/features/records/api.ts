@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { request, requestNoContent, jsonRequest } from '../../api/request';
+import { activeLanguage } from '../../i18n';
 import {
   RECORD_CHANGES_PAGE_SIZE,
   RECORD_PREVIEW_QUERY,
@@ -258,7 +259,10 @@ export const createRecord = (
 export const smartFillRecordForm = (
   input: z.input<typeof smartFillRecordFormRequestSchema>,
 ) => {
-  const payload = smartFillRecordFormRequestSchema.parse(input);
+  const payload = smartFillRecordFormRequestSchema.parse({
+    language: activeLanguage(),
+    ...input,
+  });
   return request(
     '/api/agent/smart-fill',
     smartFillRecordFormResponseSchema,

@@ -43,4 +43,10 @@ export const i18nReady = i18n
     },
   });
 
+/** The supported language the app is shown in, falling back to the default. */
+export const activeLanguage = (
+  resolved: string | undefined = i18n.resolvedLanguage,
+): SupportedLanguage =>
+  supportedLanguages.find((code) => code === resolved) ?? defaultLanguage;
+
 export default i18n;
