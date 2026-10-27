@@ -573,6 +573,22 @@ fn preserves_base_path_and_encodes_dynamic_segments() {
 }
 
 #[test]
+fn rejects_dot_path_arguments_instead_of_resolving_them() {
+    let server = Url::parse("https://example.test/api/").unwrap();
+    for value in [".", ".."] {
+        let path = format!("/workspace/secrets/{}", segment(value));
+        assert!(
+            matches!(endpoint(&server, &path), Err(CliError::Input(_))),
+            "{value}"
+        );
+    }
+    for value in ["...", ".hidden", "a..b"] {
+        let path = format!("/workspace/secrets/{}?q=..", segment(value));
+        assert!(endpoint(&server, &path).is_ok(), "{value}");
+    }
+}
+
+#[test]
 fn saved_view_update_keeps_unchanged_fields() {
     let current = json!({
         "id": Uuid::from_u128(1), "kind": "explorer_search", "name": "Assets",
