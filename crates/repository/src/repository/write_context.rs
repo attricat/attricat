@@ -9,6 +9,7 @@
 //! Published blueprint attributes are immutable, and record-scoped attributes
 //! change only under the record lock the writer already holds.
 
+use attricat_blueprint::GeneratedValue;
 use attricat_domain::attribute_options::{Cardinality, ContextEditable, ContextFallback};
 use attricat_domain::constants::DEFAULT_CONTEXT_CODE;
 use attricat_domain::value_type::ValueType;
@@ -49,6 +50,8 @@ pub(super) struct WriteAttribute {
     #[sqlx(try_from = "String")]
     pub context_fallback: ContextFallback,
     pub default_value: Option<Value>,
+    /// Numbered by core on record creation; clients never write it.
+    pub generated: Option<sqlx::types::Json<GeneratedValue>>,
     /// Attached to the record itself rather than a blueprint column.
     pub record_scoped: bool,
 }
@@ -67,6 +70,17 @@ impl WriteAttribute {
             decode(self.cardinality.as_deref())?,
             decode(self.target_cardinality.as_deref())?,
         ))
+    }
+
+    /// Rejects a value write that does not come from the sequence
+    /// allocator: generated values are system-owned on every surface.
+    pub(super) fn ensure_client_writable(&self) -> Result<(), RepositoryError> {
+        if self.generated.is_some() {
+            return Err(RepositoryError::GeneratedAttributeReadonly {
+                attribute: self.code.clone(),
+            });
+        }
+        Ok(())
     }
 
     fn declares(&self, key: &str) -> bool {
@@ -239,7 +253,7 @@ impl WriteContext {
             r#"SELECT id, code, value_type, value_schema,
                       CASE WHEN cardinality(target_blueprint_codes) > 0 THEN target_blueprint_codes WHEN target_blueprint_code IS NULL THEN '{}'::text[] ELSE ARRAY[target_blueprint_code] END AS target_blueprint_codes,
                       cardinality, target_cardinality, context_editable, context_fallback, default_value,
-                      record_id IS NOT NULL AS record_scoped
+                      generated, record_id IS NOT NULL AS record_scoped
                FROM attributes
                WHERE ((blueprint_id = $1 AND blueprint_version = $2) OR record_id = $3)
                  AND deleted_at IS NULL

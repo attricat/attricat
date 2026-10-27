@@ -189,6 +189,7 @@ impl DomainRow for Attribute {
             context_fallback: decode_code(row, "context_fallback")?,
             context_editable: decode_code(row, "context_editable")?,
             readonly: row.try_get("readonly")?,
+            generated: row.try_get("generated")?,
             position: row.try_get("position")?,
             created_at: row.try_get("created_at")?,
             updated_at: row.try_get("updated_at")?,

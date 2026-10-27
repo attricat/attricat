@@ -12,6 +12,8 @@ attricat-events = { path = "../events" }
 attricat-lexicon = { path = "../lexicon" }
 attricat-validation = { path = "../validation" }
 attricat-rules = { path = "../rules" }
+chrono.workspace = true
+chrono-tz.workspace = true
 schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true

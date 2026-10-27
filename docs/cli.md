@@ -72,6 +72,8 @@ acli blueprint publish-records-all <blueprint-id> <version>
 acli blueprint migration-impact <blueprint-id> <version>
 acli blueprint safe-migration-batch <blueprint-id> <version>
 acli blueprint migration-batches <blueprint-id>
+acli blueprint sequences <blueprint-id>
+acli blueprint advance-sequence <blueprint-id> <attribute-code> <next-value> [--period <period>]
 acli blueprint get <blueprint-id>
 acli blueprint get-version <blueprint-id> <version>
 acli blueprint resolve <code> [--include-drafts]

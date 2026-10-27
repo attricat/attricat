@@ -169,6 +169,8 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `GET` | `/blueprints/{id}` | Read the highest published revision. |
 | `GET` | `/blueprints/{id}/versions/{version}` | Read an exact revision, including drafts. |
 | `POST` | `/blueprints/{id}/versions/{version}/publish` | Publish a draft revision. |
+| `GET` | `/blueprints/{id}/sequences` | List the counters of the family's [generated attributes](blueprints.md#generated-values): `[{attribute_code, period, next_value, updated_at}]`. `next_value` is the number the next record receives; counters no record has used yet are listed at their `start` with `updated_at: null`. |
+| `POST` | `/blueprints/{id}/sequences/{attribute_code}/advance` | Raise a counter with `{ "next_value", "period"? }` (`blueprints.publish`). `period` defaults to the current one (`""`, `2026`, `2026-10` or `2026-10-27` by the attribute's `reset`). Returns `{attribute_code, period, previous, next_value}` and records it in the audit event. A lower value fails with `409 generated_sequence_not_raised`; an equal one changes nothing. |
 | `GET` | `/blueprints/by-code/{code}` | Read the highest published revision by code. |
 | `GET` | `/blueprints/by-code/{code}/versions/{version}` | Read an exact revision by code. |
 | `GET`, `POST` | `/contexts` | List or create contexts. |
@@ -263,6 +265,9 @@ and its system tags and metadata except `attricat.sample` and claimed extension
 namespaces. Reusable attributes and publications are not copied. The copy, its
 file references, and its audit event commit in one transaction; each file list
 is written once, so the copy starts with no value history.
+
+[Generated](blueprints.md#generated-values) values are not copied; the copy
+is numbered like any new record.
 
 Values of the family's enforced `[[unique_keys]]` attributes are left out,
 because the copy could never share them with its source: the default-context
@@ -685,6 +690,8 @@ results report the same `code`, `message` and `details`.
 | `409` | `relationship_hierarchy_violations` | `attribute`, `cycles`, `multiple_parents`; returned by blueprint publication |
 | `409` | `relationship_cardinality_conflict` | `attribute`, `context_id`, `source_record_id`, `target_record_id`, `conflicting_source_record_id` |
 | `409` | `record_id_taken` | `record_id` |
+| `422` | `generated_attribute_readonly` | `attribute`: a generated attribute, which no client can write |
+| `409` | `generated_sequence_not_raised` | `current` next value and the lower `requested` one; counters can only be raised |
 | `409` | `annotation_revision_conflict` | `expected`, `actual` revisions |
 | `409` | `rule_dry_run_required` | none when no completed full dry run exists; run `run-now` with `"dry_run": true` and the `version` first. When the latest one was truncated: `truncated: true` and `existing_violations` (found among the candidates it checked), with a distinct message; pass `accept_existing_violations` |
 | `409` | `rule_has_existing_violations` | `existing_violations` (a count); fix the records or pass `accept_existing_violations` |

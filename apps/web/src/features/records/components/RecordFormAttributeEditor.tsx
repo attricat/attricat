@@ -138,7 +138,9 @@ export const RecordFormAttributeEditor = ({
   const helperText =
     [
       readonly
-        ? t('records.managedBySystem')
+        ? attribute.generated && recordId === undefined
+          ? t('records.assignedWhenSaved')
+          : t('records.managedBySystem')
         : lockedBy !== undefined
           ? t('records.lockedByStatus', { status: lockedBy })
           : defaultOnly

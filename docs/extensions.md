@@ -356,7 +356,10 @@ metadata, direct values, and resolved values when requested. Resolved reads use
 Attricat's existing context/fallback path rather than a copy in the extension.
 `attricat.write` permits only validated scalar writes with an explicit context
 ID; ordinary attribute/type/schema validation, audit records, and the domain-event
-outbox remain in force. A write made while handling an event inherits the
+outbox remain in force. Creates receive [generated values](blueprints.md#generated-values)
+like any other create, so an extension does not need to number records from
+`record.created.v1`; a write to a generated attribute fails with
+`generated_attribute_readonly`. A write made while handling an event inherits the
 triggering write's user and token audit attribution, keeps that event's
 correlation ID, uses its ID as causation, and is published with `source_kind:
 plugin` and `source_name: extension:<extension-id>`. The handler then receives

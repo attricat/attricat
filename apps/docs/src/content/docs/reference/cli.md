@@ -174,6 +174,8 @@ acli blueprint resolve <code> [--version <version>] [--include-drafts]
 acli blueprint migration-impact <blueprint-id> <version>
 acli blueprint safe-migration-batch <blueprint-id> <version>
 acli blueprint migration-batches <blueprint-id>
+acli blueprint sequences <blueprint-id>
+acli blueprint advance-sequence <blueprint-id> <attribute-code> <next-value> [--period <period>]
 acli blueprint publish-records <blueprint-id> <version> --context-id <channel>
 acli blueprint publish-records-all <blueprint-id> <version>
 

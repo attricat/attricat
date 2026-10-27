@@ -34,7 +34,8 @@ export const isSafeAutomaticMigration = (
         attribute.target_cardinality === targetAttribute.target_cardinality &&
         attribute.context_fallback === targetAttribute.context_fallback &&
         attribute.context_editable === targetAttribute.context_editable &&
-        attribute.readonly === targetAttribute.readonly)
+        attribute.readonly === targetAttribute.readonly &&
+        sameJson(attribute.generated, targetAttribute.generated))
     );
   });
 };

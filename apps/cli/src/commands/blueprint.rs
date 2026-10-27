@@ -66,6 +66,21 @@ pub(crate) enum BlueprintCommand {
         blueprint_id: Uuid,
         version: i64,
     },
+    /// List the counters behind the blueprint's generated attributes.
+    Sequences {
+        blueprint_id: Uuid,
+    },
+    /// Raise a generated attribute's counter so the next record receives
+    /// `next_value`. Counters can never be lowered.
+    AdvanceSequence {
+        blueprint_id: Uuid,
+        attribute_code: String,
+        next_value: i64,
+        /// The counter period (`2026`, `2026-10` or `2026-10-27`); defaults
+        /// to the current one.
+        #[arg(long)]
+        period: Option<String>,
+    },
     Resolve {
         code: String,
         #[arg(long)]
@@ -192,6 +207,26 @@ pub(crate) async fn blueprint_command(
                 "/blueprints/{}/versions/{version}/safe-migration-batches",
                 segment(blueprint_id)
             ))
+            .await
+        }
+        BlueprintCommand::Sequences { blueprint_id } => {
+            api.get(&format!("/blueprints/{}/sequences", segment(blueprint_id)))
+                .await
+        }
+        BlueprintCommand::AdvanceSequence {
+            blueprint_id,
+            attribute_code,
+            next_value,
+            period,
+        } => {
+            api.post_json(
+                &format!(
+                    "/blueprints/{}/sequences/{}/advance",
+                    segment(blueprint_id),
+                    segment(&attribute_code)
+                ),
+                json!({ "next_value": next_value, "period": period }),
+            )
             .await
         }
         BlueprintCommand::Resolve {

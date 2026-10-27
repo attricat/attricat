@@ -92,6 +92,8 @@
     "file_references_changed": "The files changed since they were loaded. Refresh and try again.",
     "file_too_large": "The file is larger than the upload limit.",
     "forbidden": "You don't have permission to do this.",
+    "generated_attribute_readonly": "{{attribute}} is numbered automatically when the record is created and can't be changed.",
+    "generated_sequence_not_raised": "The next number is already {{current}}. A counter can only be raised, not set to {{requested}}.",
     "global_relationship_search_budget_exceeded": "The search reached too many related records. Narrow it down.",
     "global_relationship_search_timed_out": "The search took too long. Narrow it down.",
     "https_required": "Enter an HTTPS URL.",
@@ -456,6 +458,7 @@
     "statusTransitionDenied": "This transition is not allowed from the saved status.",
     "statusSeparationWaived": "You made an earlier step, so this would normally be someone else's. As an owner or administrator, you can do both.",
     "managedBySystem": "Managed by system actions.",
+    "assignedWhenSaved": "Assigned automatically when the record is saved.",
     "lockedByStatus": "Locked while the record is {{status}}. A permitted correction transition unlocks it.",
     "statusLock": {
       "all": "Fields can't be changed while {{attribute}} is {{status}}.",

@@ -70,6 +70,7 @@ value_type = "string"
 | `tags` | array of strings | `[]` | Free-form metadata. Must be unique and non-empty. Some tags hide the attribute in the web app; see [Visibility tags](#visibility-tags). |
 | `default_value` | matches the type | Unset | Value stored in the default context when a record is created without one. Scalar types only. |
 | `value_schema` | string (JSON) | Unset | JSON Schema for one value. Scalar types only. A `string` attribute's schema can make it a [status](#statuses) or a [user or team assignment](#user-or-team-assignments). See [Validation](/builders/validation/). |
+| `generated` | table | Unset | Lets the server number new records, such as invoice or order numbers. `string` and `integer` attributes of record blueprints only. See [Generated values](#generated-values). |
 
 ### Value types
 
@@ -260,6 +261,69 @@ Some tags change where the web app shows an attribute when it builds a layout au
 | `hidden:detail` | Automatically generated record detail views |
 | `hidden:explorer` | Explorer filter and facet choices |
 | `hidden:metadata` | The Attributes table on the blueprint page |
+
+### Generated values
+
+`generated` makes the server give every new record the next number from a counter, such as an invoice, order, or document number:
+
+```toml
+[[attributes]]
+code = "invoice_number"
+value_type = "string"
+generated = { format = "INV-{yyyy}-{n:05}", start = 1, reset = "yearly", time_zone = "Europe/Warsaw" }
+```
+
+The first invoice created in 2026 gets `INV-2026-00001`, the next one `INV-2026-00002`, and the first one created in 2027 `INV-2027-00001`.
+
+| Key | Type | Default | Description |
+| --- | --- | --- | --- |
+| `format` | string, up to 100 characters | Required for `string` | How the value is built from the [format tokens](#format-tokens). Not allowed on `integer`. |
+| `start` | integer, 0 to 999,999,999,999,999,999 | `1` | The first number a new counter gives out. |
+| `reset` | `"never"`, `"yearly"`, `"monthly"`, or `"daily"` | `"never"` | Starts counting again from `start` in every new period. Not allowed on `integer`. |
+| `time_zone` | IANA time zone | `"UTC"` | Zone in which the date tokens and the reset period are read from the record's creation time. Not allowed on `integer`. |
+
+Only `string` and `integer` attributes can be generated. A `string` needs a `format`; an `integer` stores the number itself and takes only `start`.
+
+`generated` is allowed only on a local attribute of a record blueprint. It is rejected on a mixin, on an attribute selected with `from`, on an `extension_type`, together with `default_value`, and on a [status](#statuses) or a [user or team assignment](#user-or-team-assignments). A generated attribute is always read-only and default-context only (`context_editable = "default"`), whatever `readonly` and `context_editable` say.
+
+#### Format tokens
+
+| Token | Writes |
+| --- | --- |
+| `{n}` | The counter, without padding. Required exactly once. |
+| `{n:0W}` | The counter, zero-padded to `W` digits, where `W` is 1 to 18. Wider numbers are not truncated: after `999`, `{n:03}` gives `1000`. |
+| `{yyyy}` | The four-digit year. |
+| `{yy}` | The two-digit year. |
+| `{mm}` | The two-digit month. |
+| `{dd}` | The two-digit day. |
+| `{{` and `}}` | A literal `{` and `}`. |
+
+Any other `{…}` placeholder is rejected. A `reset` needs tokens that identify its period, so that values from different periods never look the same: `yearly` needs `{yyyy}` or `{yy}`, `monthly` also needs `{mm}`, and `daily` also needs `{dd}`. Otherwise the blueprint is rejected.
+
+#### How numbers are given out
+
+- The server assigns the value in the transaction that creates the record. It appears in the create response, in the `record.created.v1` event, and in the audit log, and a `required` on the attribute in `record_schema` is satisfied.
+- Numbering is gapless. A create that fails, for example on validation or a unique key conflict, gives its number back. Deleted records keep their numbers, and numbers are never reused.
+- There is one counter per blueprint family and attribute code, and with a `reset`, one per period. New revisions of the blueprint continue the same counter. Changing `start` later does not affect a counter that already exists, and changing `format` affects only new values.
+- Duplicating a record gives the copy a new number. A record batch numbers each record it creates, in order. Sample records of a solution pack use up numbers, and removing the sample data does not give them back.
+- No client can write a generated attribute. Creates, updates, clearing the value, restores from history, record batches, workflows, agents, and extensions that try are rejected with `422 generated_attribute_readonly`; `error.details.attribute` names the attribute.
+- When an existing record migrates to a revision that adds a generated attribute, it gets a number during the migration. Records are numbered in the order they are migrated, not the order they were created, and the date tokens and reset period use each record's original creation date. A value the record already had in the previous revision is kept.
+
+#### Counters
+
+`GET /blueprints/{id}/sequences` lists the blueprint's counters and needs `blueprints.read`. Each entry has the `attribute_code`, the `period` (empty for a counter that never resets), `next_value` (the number the next record will receive), and `updated_at` (`null` while the counter has not been used).
+
+To continue numbering after moving from another system, raise a counter with `POST /blueprints/{id}/sequences/{attribute_code}/advance`:
+
+```json
+{ "next_value": 10000, "period": "2026" }
+```
+
+- `period` is optional and defaults to the current period. It is `2026` for `yearly`, `2026-10` for `monthly`, `2026-10-27` for `daily`, and empty for a counter that never resets.
+- The call needs `blueprints.publish` and is recorded in the audit log.
+- A counter can only be raised. A lower `next_value` fails with `409 generated_sequence_not_raised`, and `error.details` has the `current` and `requested` values. The same value changes nothing.
+
+From the CLI, use `acli blueprint sequences <blueprint-id>` and `acli blueprint advance-sequence <blueprint-id> <attribute-code> <next-value> [--period <period>]`.
 
 ### Extension attribute types
 
@@ -678,3 +742,4 @@ A few compile-time rules that are easy to miss:
 - `target_blueprint`, `target_blueprints`, `acyclic`, and `tree` on a non-relationship attribute are rejected.
 - `unique_keys` on a mixin, a key naming an unknown, `json`, file, or many-target relationship attribute, or a key listing an attribute twice is rejected.
 - `from` must be `alias.code` where `code` matches the attribute's own code.
+- `generated` on a mixin, a `from` selection, an `extension_type`, a status, or a user or team assignment, on a type other than `string` or `integer`, or together with `default_value` is rejected. So is a `format` without exactly one `{n}`, with an unknown placeholder, or longer than 100 characters, and a `reset` whose period the `format` does not identify.

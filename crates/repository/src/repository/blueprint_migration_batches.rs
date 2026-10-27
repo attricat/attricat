@@ -616,6 +616,7 @@ fn safe_automatic_migration(
             || source_attribute.context_fallback != target_attribute.context_fallback
             || source_attribute.context_editable != target_attribute.context_editable
             || source_attribute.readonly != target_attribute.readonly
+            || source_attribute.generated != target_attribute.generated
         {
             return None;
         }

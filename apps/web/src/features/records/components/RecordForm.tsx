@@ -26,6 +26,7 @@ import type {
 } from '../api';
 import { attributeLabel } from '../recordDisplay';
 import {
+  formRecordSchema,
   recordFormValidationMessages,
   missingRequiredAttributes,
   relationshipTargetsForForm,
@@ -333,7 +334,10 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
         // failure once they are cleared.
         [...requiredCodes],
         contextId === defaultContextId
-          ? blueprint.blueprint.record_schema
+          ? formRecordSchema(
+              blueprint.blueprint.record_schema,
+              blueprint.attributes,
+            )
           : undefined,
         {
           ...recordFormValidationMessages(),

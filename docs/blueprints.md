@@ -66,6 +66,9 @@ value_type = "string"
 readonly = true
 ```
 
+`readonly` is a UI hint only. To have Attricat assign a value that nobody can
+write, use a [generated value](#generated-values).
+
 Set `name` to give an attribute a human-readable label. The web app shows it in
 forms, previews, Explorer filters and facets, and as the default table column
 heading. Without it, the app humanizes the code (`product_family` becomes
@@ -80,6 +83,80 @@ value_type = "string"
 
 Blank contextual string fields remove their override instead of storing an empty
 string. Missing contextual values resolve according to `context_fallback`.
+
+### Generated values
+
+Set `generated` to have Attricat number a record attribute when the record is
+created, such as `INV-2026-00042`. The value is assigned inside the create
+transaction, so it is in the create response, the `record.created.v1` event and
+the audit entry, and a `record_schema` `required` on it holds.
+
+```toml
+[[attributes]]
+code = "invoice_number"
+value_type = "string"
+generated = { format = "INV-{yyyy}-{n:05}", reset = "yearly", time_zone = "Europe/Warsaw" }
+
+[[attributes]]
+code = "sequence"
+value_type = "integer"
+generated = { start = 1000 }
+
+[[unique_keys]]
+code = "invoice_number"
+attributes = ["invoice_number"]
+```
+
+- Only `string` and `integer` attributes of record blueprints can be generated.
+  Mixins, `from` selections and extension types cannot, and `generated` cannot
+  be combined with `default_value` or with a status or user-or-team assignment.
+- `format` is required on strings and not allowed on integers, which store the
+  number itself. It is literal text with these tokens:
+
+  | Token | Output |
+  | --- | --- |
+  | `{n}` | The counter. Required, exactly once. |
+  | `{n:0W}` | The counter zero-padded to W digits (1 to 18). Wider numbers are not truncated: `{n:03}` gives `1000` after `999`. |
+  | `{yyyy}`, `{yy}` | Four- or two-digit year. |
+  | `{mm}`, `{dd}` | Two-digit month and day. |
+  | `{{`, `}}` | A literal brace. |
+
+  Any other `{…}` placeholder is rejected. Formats are at most 100 characters.
+- `start` is the first number of a new counter (default 1, from 0 to
+  999,999,999,999,999,999).
+- `reset` restarts numbering at `start` every `yearly`, `monthly` or `daily`
+  period; the default `never` keeps one counter. A reset needs tokens that
+  identify the period (`{yyyy}` or `{yy}`, plus `{mm}` for monthly, plus
+  `{dd}` for daily), or values would repeat.
+- `time_zone` is the IANA zone in which date tokens and periods are read from
+  the record's creation time (default `UTC`).
+
+A generated attribute is always read-only and editable in the default context
+only, whatever `readonly` and `context_editable` say. No client can write it:
+creates, updates, clears, history restores, record batches, workflows, agents
+and extensions that try fail with `422 generated_attribute_readonly` and
+`error.details = { attribute }`.
+
+Each blueprint family has one gapless counter per generated attribute code (and
+per period with `reset`). Creates that number the same attribute run one at a
+time while the counter is locked, and a create that fails returns its number.
+Deleted records keep their numbers, which are never reused. New revisions
+continue the same counter: changing `format` affects only new values, and
+`start` only applies when a counter is first created. A unique key on the
+attribute is optional but recommended.
+
+- Duplicating a record numbers the copy like any new record.
+- Records created before the attribute existed get a number when they
+  [migrate](#record-migration-status) onto a revision that adds it, in the order
+  they migrate. Date tokens and the period use the record's creation time. A
+  value carried over from the previous revision is kept.
+- Solution-pack sample records use up numbers; removing them does not return
+  the numbers.
+
+`GET /blueprints/{id}/sequences` lists the family's counters and
+`POST /blueprints/{id}/sequences/{attribute_code}/advance` raises one, for
+example above the highest number of a system you are migrating from; see
+[the API reference](api.md). Keep legacy numbers in a separate plain attribute.
 
 ### Attribute tags
 
@@ -407,6 +484,10 @@ case_sensitive = true
 - The latest published revision of the family defines the enforced keys for
   every record in the family, including records pinned to older revisions.
   Attributes are matched by code.
+
+A [generated](#generated-values) attribute can be a key on its own or with
+other attributes; its counter never repeats a value, and the key also guards
+values carried over by migrations.
 
 A write that gives a second record the same key value returns
 `409 unique_key_conflict` with

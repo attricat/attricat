@@ -69,6 +69,8 @@ error_codes! {
     FileReferencesChanged = "file_references_changed",
     FileTooLarge = "file_too_large",
     Forbidden = "forbidden",
+    GeneratedAttributeReadonly = "generated_attribute_readonly",
+    GeneratedSequenceNotRaised = "generated_sequence_not_raised",
     GlobalRelationshipSearchBudgetExceeded = "global_relationship_search_budget_exceeded",
     GlobalRelationshipSearchTimedOut = "global_relationship_search_timed_out",
     HttpsRequired = "https_required",
@@ -332,6 +334,7 @@ impl RepositoryError {
             | Self::InvalidPublicationChannel(_)
             | Self::InvalidContextData
             | Self::InvalidContext
+            | Self::InvalidGeneratedSequence(_)
             | Self::InvalidAttributeSelector => plain(Unprocessable, Code::InvalidInput),
             Self::NotFound(_) => plain(NotFound, Code::NotFound),
             Self::ActorNotAuthorized | Self::TokenPermissionsUnavailable => ErrorDescription::new(
@@ -360,6 +363,14 @@ impl RepositoryError {
             Self::InvalidSystemMetadata => plain(Unprocessable, Code::InvalidSystemMetadata),
             Self::InvalidSystemTags => plain(Unprocessable, Code::InvalidSystemTags),
             Self::FileAttributeReadonly => plain(Unprocessable, Code::FileAttributeReadonly),
+            Self::GeneratedAttributeReadonly { attribute } => {
+                plain(Unprocessable, Code::GeneratedAttributeReadonly)
+                    .with_details(json!({ "attribute": attribute }))
+            }
+            Self::GeneratedSequenceNotRaised { current, requested } => {
+                plain(Conflict, Code::GeneratedSequenceNotRaised)
+                    .with_details(json!({ "current": current, "requested": requested }))
+            }
             Self::FileReferencesChanged => plain(Conflict, Code::FileReferencesChanged),
             Self::InvalidFileReferences => plain(Unprocessable, Code::InvalidFileReferences),
             Self::FileCardinality => plain(Unprocessable, Code::FileCardinalityExceeded),

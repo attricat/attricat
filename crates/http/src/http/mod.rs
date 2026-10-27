@@ -1017,6 +1017,14 @@ pub fn router(state: AppState) -> Router {
             post(blueprints::start_safe_blueprint_migration_batch),
         )
         .route(
+            "/blueprints/{blueprint_id}/sequences",
+            get(blueprints::list_generated_sequences),
+        )
+        .route(
+            "/blueprints/{blueprint_id}/sequences/{attribute_code}/advance",
+            post(blueprints::advance_generated_sequence),
+        )
+        .route(
             "/blueprints/by-code/{code}",
             get(blueprints::get_blueprint_by_code),
         )

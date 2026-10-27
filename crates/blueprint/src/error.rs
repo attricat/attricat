@@ -66,6 +66,8 @@ pub enum BlueprintError {
     RelationshipValueSchema { code: String },
     #[error("attribute '{code}' can only define a default value for scalar values")]
     DefaultValueOnNonScalarAttribute { code: String },
+    #[error("attribute '{code}' has an invalid generated value: {message}")]
+    InvalidGeneratedAttribute { code: String, message: String },
     #[error("file attribute '{0}' has an invalid file policy")]
     InvalidFilePolicy(String),
     #[error("relationship attribute '{0}' has an invalid cardinality")]

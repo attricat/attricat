@@ -100,7 +100,7 @@ fn audit_permission(method: &Method, route: &str) -> Permission {
     } else if route.starts_with("/lexicon") {
         Permission::BlueprintsWrite
     } else if route.starts_with("/blueprints") {
-        if route.ends_with("/publish") {
+        if route.ends_with("/publish") || route.ends_with("/sequences/{attribute_code}/advance") {
             Permission::BlueprintsPublish
         } else {
             Permission::BlueprintsWrite

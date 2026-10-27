@@ -316,6 +316,8 @@ dependencies = [
  "attricat-lexicon",
  "attricat-rules",
  "attricat-validation",
+ "chrono",
+ "chrono-tz",
  "schemars",
  "serde",
  "serde_json",

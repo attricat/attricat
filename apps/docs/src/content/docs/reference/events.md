@@ -72,7 +72,7 @@ To act on the record's current state, read it; the payload is only a description
 
 `facts` contains one entry per attribute value that actually changed. A save that leaves a value as it was adds no fact for it. [Workflow triggers](/builders/workflows/#react-only-to-specific-attributes) can filter on `attribute_code` with `attributes`.
 
-- **Scalar attributes:** `change_kind` is `set`, `replace`, or `remove`; `restore` on `attribute_value.restored.v1`. `record.created.v1` lists every initial value, including defaults, as `set`.
+- **Scalar attributes:** `change_kind` is `set`, `replace`, or `remove`; `restore` on `attribute_value.restored.v1`. `record.created.v1` lists every initial value, including defaults and generated values, as `set`.
 - **Relationship attributes:** each added or removed target is its own fact, with `change_kind` `relationship_add` or `relationship_remove`, `relationship_target_record_id` set, and the target ID as the value. A save that only changes relationships records `relationship.changed.v1`; one that also changes other values records `record.updated.v1`.
 - **File attributes:** uploading, linking, reordering, or removing files is recorded in the audit log but records no event and no fact.
 - System tag and system metadata changes are not attribute values and add no fact.

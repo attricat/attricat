@@ -882,6 +882,38 @@ impl AttricatRepository {
             input.relationships,
         )
         .await?;
+        // A revision that adds a generated attribute numbers records as they
+        // migrate onto it. A value carried over from the source revision is
+        // kept; the period comes from when the record was created.
+        if write
+            .attributes()
+            .iter()
+            .any(|attribute| attribute.generated.is_some())
+        {
+            let numbered = self
+                .current_blueprint_values_in_transaction(
+                    &mut transaction,
+                    target_record.id,
+                    target_record.blueprint_id,
+                    target_record.blueprint_version,
+                )
+                .await?
+                .into_iter()
+                .filter(|value| value.context_id == default_context_id)
+                .map(|value| value.attribute_id)
+                .collect();
+            let generated = self
+                .generated_values_in(
+                    &mut transaction,
+                    &write,
+                    &target_record,
+                    target_record.created_at,
+                    &numbered,
+                )
+                .await?;
+            self.insert_generated_values_in(&mut transaction, &write, &target_record, generated)
+                .await?;
+        }
         // A migration is not an implicit escape hatch from the source status policy.
         self.validate_status_values(&mut transaction, &record)
             .await?;

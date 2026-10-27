@@ -1,6 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
-use attricat_domain::attribute_options::{Cardinality, ContextEditable, ContextFallback};
+use attricat_domain::attribute_options::{
+    Cardinality, ContextEditable, ContextFallback, SequenceReset,
+};
 use attricat_domain::value_type::ValueType;
 use attricat_validation::{CODE_PATTERN, is_valid_code, validate_json_schema_definition};
 use schemars::{JsonSchema, generate::SchemaSettings};
@@ -13,6 +15,7 @@ use crate::{
     IncludeRef, KNOWN_VIEW_NAMES, LocalAttributeDeclaration, MAX_UNIQUE_KEY_ATTRIBUTES,
     PublicationPolicy, UNIQUE_KEY_SCOPES, UniqueKeyDefinition, ViewDefinition,
 };
+use crate::{GeneratedValue, MAX_GENERATED_FORMAT_CHARS, MAX_GENERATED_NUMBER};
 
 /// `one_to_one` is relationship shorthand for both directions set to `one`.
 /// Relationship shorthand for both directions set to `one`. Parsing expands
@@ -201,10 +204,36 @@ struct RawAttributeDeclaration {
     /// Preview-only in the Attricat web app. API writes remain allowed.
     #[serde(default)]
     readonly: bool,
+    /// Core assigns the value when a record is created, from a gapless
+    /// counter per blueprint family and attribute. Clients cannot write it.
+    /// Record blueprints only.
+    #[schemars(extend("x-attricat-value-types" = ["string", "integer"]))]
+    generated: Option<RawGeneratedValue>,
     /// Selects `<include alias>.<attribute code>` from an include. The
     /// attribute code must match `code`.
     #[schemars(extend("x-attricat-reference" = "include_attribute"))]
     from: Option<String>,
+}
+
+/// `generated = { … }` on an attribute.
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct RawGeneratedValue {
+    /// Required on string attributes: literal text with exactly one `{n}` or
+    /// `{n:0W}` counter token (W from 1 to 18 zero-pads), plus optional
+    /// `{yyyy}`, `{yy}`, `{mm}` and `{dd}` date tokens. `{{` and `}}` are
+    /// literal braces. Integer attributes take no format.
+    #[schemars(length(min = 1, max = MAX_GENERATED_FORMAT_CHARS))]
+    format: Option<String>,
+    /// The first number of a new counter. Defaults to 1.
+    #[schemars(range(min = 0, max = MAX_GENERATED_NUMBER))]
+    start: Option<i64>,
+    /// When numbering restarts at `start`. Defaults to `never`; other values
+    /// need date tokens that identify the period.
+    #[schemars(extend("enum" = SequenceReset::codes()))]
+    reset: Option<String>,
+    /// IANA time zone for date tokens and periods. Defaults to `UTC`.
+    time_zone: Option<String>,
 }
 
 /// The JSON Schema for blueprint definition TOML, published as
@@ -499,6 +528,21 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                             return Err(BlueprintError::InvalidAttributeTag(attribute.code));
                         }
                     }
+                    let generated = parse_generated(
+                        &attribute.code,
+                        attribute.generated,
+                        value_type,
+                        &raw.kind,
+                        attribute.default_value.is_some(),
+                        value_schema.as_ref(),
+                    )?;
+                    // Generated values exist only in the default context and
+                    // are never edited, so the UI shows them read-only.
+                    let (context_editable, readonly) = if generated.is_some() {
+                        (ContextEditable::Default, true)
+                    } else {
+                        (context_editable, attribute.readonly)
+                    };
                     AttributeDeclaration::Local(Box::new(LocalAttributeDeclaration {
                         code: attribute.code,
                         name: attribute.name,
@@ -517,11 +561,13 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                         tags: attribute.tags,
                         context_fallback,
                         context_editable,
-                        readonly: attribute.readonly,
+                        readonly,
+                        generated,
                     }))
                 }
                 (None, None, Some(source))
                     if !attribute.declares_relationship_targets()
+                        && attribute.generated.is_none()
                         && attribute.name.is_none()
                         && attribute.description.is_none() =>
                 {
@@ -535,6 +581,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                 }
                 (None, Some(extension_type), None) => {
                     if extension_type.trim().is_empty()
+                        || attribute.generated.is_some()
                         || attribute.value_schema.is_some()
                         || attribute.declares_relationship_targets()
                         || attribute.cardinality.is_some()
@@ -587,6 +634,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                         context_fallback,
                         context_editable,
                         readonly: attribute.readonly,
+                        generated: None,
                     }))
                 }
                 _ => return Err(BlueprintError::InvalidAttributeDeclaration(attribute.code)),
@@ -765,6 +813,55 @@ fn validate_unique_keys(
         }
     }
     Ok(())
+}
+
+/// Validates `generated` on a local attribute. Counters belong to a record
+/// family, and a generated value is the only value the attribute ever has,
+/// so mixins, defaults, statuses and assignments cannot be combined with it.
+fn parse_generated(
+    code: &str,
+    generated: Option<RawGeneratedValue>,
+    value_type: ValueType,
+    kind: &BlueprintKind,
+    has_default_value: bool,
+    value_schema: Option<&serde_json::Value>,
+) -> Result<Option<GeneratedValue>, BlueprintError> {
+    let Some(generated) = generated else {
+        return Ok(None);
+    };
+    let invalid = |message: String| BlueprintError::InvalidGeneratedAttribute {
+        code: code.to_owned(),
+        message,
+    };
+    if *kind != BlueprintKind::Record {
+        return Err(invalid("only record blueprints can generate values".into()));
+    }
+    if has_default_value {
+        return Err(invalid(
+            "a generated attribute cannot have a default_value".into(),
+        ));
+    }
+    if value_schema.is_some_and(|schema| {
+        schema
+            .get(attricat_validation::status::STATUS_KEY)
+            .is_some()
+            || schema
+                .get(attricat_validation::principal::PRINCIPAL_KEY)
+                .is_some()
+    }) {
+        return Err(invalid(
+            "a generated attribute cannot be a status or an assignment".into(),
+        ));
+    }
+    GeneratedValue::new(
+        value_type,
+        generated.format,
+        generated.start,
+        generated.reset.as_deref(),
+        generated.time_zone,
+    )
+    .map(Some)
+    .map_err(invalid)
 }
 
 fn parse_file_policy(

@@ -49,6 +49,8 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `unique_key_conflict` | 409 | Inny rekord ma już te wartości klucza unikalnego. `details` zawiera `key`, `context`, `values` i `conflicting_record_id`. |
 | `unique_key_duplicates` | 409 | Publikacja nowego klucza unikalnego lub przeniesienie kontekstu pod innego rodzica nie powiodły się, bo istniejące rekordy współdzieliłyby wartości. `details.duplicates` je wymienia. |
 | `relationship_hierarchy_violations` | 409 | Publikacja `acyclic` lub `tree` nie powiodła się, bo istniejące powiązania zawierają cykle lub nadmiarowych rodziców. `details` je wymienia. |
+| `generated_attribute_readonly` | 422 | Żądanie próbuje zapisać [atrybut generowany](/pl/reference/blueprint/#wartości-generowane), który przypisuje wyłącznie serwer. `details.attribute` go wskazuje. |
+| `generated_sequence_not_raised` | 409 | Podniesienie licznika podało `next_value` niższe od bieżącego. Liczniki można tylko podnosić. `details` zawiera `current` i `requested`. |
 | `stale_record` | 409 | `expected_updated_at` nie odpowiada już rekordowi. Wczytaj go ponownie i spróbuj jeszcze raz. |
 | `status_precondition_required` | 428 | Zapis atrybutu statusu nie zawiera `expected_updated_at`. Odczytaj rekord i wyślij jego `updated_at`. |
 | `status_transition_forbidden` | 403 | Przejście statusu wymaga uprawnienia lub roli, których wywołujący nie ma. |
@@ -112,6 +114,8 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `POST` | `/blueprints/{id}/versions/{version}/publish` | Publikuje szkic. |
 | `GET` | `/blueprints/by-code/{code}` i `/blueprints/by-code/{code}/versions/{version}` | Wyszukiwanie po kodzie. |
 | `GET` | `/blueprints/{id}/migration-batches` | Partie migracji w tle. |
+| `GET` | `/blueprints/{id}/sequences` | Liczniki [atrybutów generowanych](/pl/reference/blueprint/#liczniki) schematu z `attribute_code`, `period`, `next_value` i `updated_at`. |
+| `POST` | `/blueprints/{id}/sequences/{attribute_code}/advance` | Podnosi licznik: `{"next_value": 10000, "period": "2026"}`. `period` domyślnie oznacza bieżący okres. Wymaga `blueprints.publish`. |
 | `GET` | `/blueprints/{id}/connector-jobs` | Zadania konektorów. |
 | `POST` | `/blueprint-connector-jobs/{id}/run` | Uruchamia zadanie konektora z `{"idempotency_key": "…"}`. |
 | `POST` | `/blueprint-connector-jobs/{id}/resync` | Ponownie eksportuje każdy opublikowany rekord zadania eksportu: `{"idempotency_key": "…"}` oraz `record_ids` (tylko te rekordy) albo `status` (tylko rekordy z tym stanem eksportu w połączeniu zadania; ponad 10 000 takich rekordów daje błąd `422`, więc wtedy wykonaj ponowny eksport całego zadania). Zwraca `{"run_ids": [...]}`. |

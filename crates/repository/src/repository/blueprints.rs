@@ -312,9 +312,9 @@ impl AttricatRepository {
             validate_attribute_default_value(&attribute)?;
             attributes.push(
                 sqlx::query_as::<_, Db<Attribute>>(
-                    r#"INSERT INTO attributes (id, workspace_id, blueprint_id, blueprint_version, code, name, value_type, value_schema, extension_type, default_value, file_policy, target_blueprint_code, cardinality, target_cardinality, tags, context_fallback, context_editable, readonly, position, target_blueprint_codes, hierarchy)
-                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
-                       RETURNING id, blueprint_id, blueprint_version, code, name, value_type, value_schema, extension_type, default_value, file_policy, target_blueprint_code, target_blueprint_codes, cardinality, target_cardinality, hierarchy, tags, context_fallback, context_editable, readonly, position, created_at, updated_at, deleted_at"#,
+                    r#"INSERT INTO attributes (id, workspace_id, blueprint_id, blueprint_version, code, name, value_type, value_schema, extension_type, default_value, file_policy, target_blueprint_code, cardinality, target_cardinality, tags, context_fallback, context_editable, readonly, position, target_blueprint_codes, hierarchy, generated)
+                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+                       RETURNING id, blueprint_id, blueprint_version, code, name, value_type, value_schema, extension_type, default_value, file_policy, target_blueprint_code, target_blueprint_codes, cardinality, target_cardinality, hierarchy, tags, context_fallback, context_editable, readonly, generated, position, created_at, updated_at, deleted_at"#,
                 )
                 .bind(Uuid::new_v4())
                 .bind(self.workspace_id.0)
@@ -341,6 +341,7 @@ impl AttricatRepository {
                     Vec::new()
                 })
                 .bind(attribute.hierarchy)
+                .bind(attribute.generated.map(|generated| serde_json::to_value(generated).expect("generated value serializes")))
                 .fetch_one(&mut **transaction)
                 .await?
                 .into_domain(),
@@ -783,7 +784,7 @@ impl AttricatRepository {
             return Ok(revision.1.clone());
         }
         Ok(sqlx::query_as::<_, Db<Attribute>>(
-            r#"SELECT id, blueprint_id, blueprint_version, code, name, value_type, value_schema, extension_type, default_value, file_policy, target_blueprint_code, target_blueprint_codes, cardinality, target_cardinality, hierarchy, tags, context_fallback, context_editable, readonly, position, created_at, updated_at, deleted_at
+            r#"SELECT id, blueprint_id, blueprint_version, code, name, value_type, value_schema, extension_type, default_value, file_policy, target_blueprint_code, target_blueprint_codes, cardinality, target_cardinality, hierarchy, tags, context_fallback, context_editable, readonly, generated, position, created_at, updated_at, deleted_at
                FROM attributes
                WHERE blueprint_id = $1 AND blueprint_version = $2 AND workspace_id = $3 AND deleted_at IS NULL
                ORDER BY position"#,
@@ -880,7 +881,7 @@ impl AttricatRepository {
                     r#"SELECT a.id, a.blueprint_id, a.blueprint_version, a.code, a.name, a.value_type,
                               a.value_schema, a.extension_type, a.default_value, a.file_policy, a.target_blueprint_code,
                               a.target_blueprint_codes, a.cardinality, a.target_cardinality, a.hierarchy, a.tags, a.context_fallback,
-                              a.context_editable, a.readonly, a.position, a.created_at, a.updated_at,
+                              a.context_editable, a.readonly, a.generated, a.position, a.created_at, a.updated_at,
                               a.deleted_at
                          FROM blueprints b
                          JOIN attributes a ON a.blueprint_id = b.id AND a.blueprint_version = b.version
