@@ -1,13 +1,16 @@
-import { Button, Stack, Typography } from '@mui/material';
-import { Link } from '@tanstack/react-router';
+import { Stack, Typography } from '@mui/material';
+import { useQuery } from '@tanstack/react-query';
 import { PlusIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useCan } from '../auth/useCan';
 import { PersonalTokens } from './PersonalTokens';
 import { capabilities } from '../auth/capabilities';
+import { sessionOptions } from '../auth/queryOptions';
+import { RouterButton } from '../../components/RouterLink';
 
 export const PersonalTokensPage = () => {
   const { t } = useTranslation();
+  const session = useQuery(sessionOptions());
   const canManage = useCan(capabilities.tokensManage);
   return (
     <Stack spacing={5}>
@@ -20,8 +23,7 @@ export const PersonalTokensPage = () => {
           {t('profile.tokensDescription')}
         </Typography>
         {canManage && (
-          <Button
-            component={Link}
+          <RouterButton
             startIcon={<PlusIcon />}
             sx={{
               alignSelf: { xs: 'flex-start', sm: 'center' },
@@ -31,10 +33,11 @@ export const PersonalTokensPage = () => {
             variant="contained"
           >
             {t('profile.createToken')}
-          </Button>
+          </RouterButton>
         )}
       </Stack>
-      <PersonalTokens canManage={canManage} />
+      {/* The capability is unknown until the session loads. */}
+      {!session.isPending && <PersonalTokens canManage={canManage} />}
     </Stack>
   );
 };
