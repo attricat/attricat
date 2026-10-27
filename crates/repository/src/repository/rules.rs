@@ -149,7 +149,7 @@ impl AttricatRepository {
         let compiled = attricat_rules::compile(&input.definition)
             .map_err(|e| RepositoryError::InvalidRuleDefinition(e.to_string()))?;
         let ws = self.workspace_id.0;
-        let valid_blueprint:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM blueprints WHERE id=$1 AND version=$2 AND workspace_id=$3 AND status='published' AND deleted_at IS NULL)").bind(input.blueprint_id).bind(input.blueprint_version).bind(ws).fetch_one(&mut **tx).await?;
+        let valid_blueprint:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM blueprints WHERE id=$1 AND version=$2 AND workspace_id=$3 AND status=$4 AND deleted_at IS NULL)").bind(input.blueprint_id).bind(input.blueprint_version).bind(ws).bind(RevisionStatus::Published.as_str()).fetch_one(&mut **tx).await?;
         if !valid_blueprint {
             return Err(RepositoryError::BlueprintNotPublished);
         }
@@ -780,7 +780,7 @@ impl AttricatRepository {
         offset: i64,
     ) -> Result<(Vec<RuleFinding>, bool), RepositoryError> {
         let ws = self.workspace_id.0;
-        let mut rows = sqlx::query_as::<_, Db<RuleFinding>>("SELECT f.id,f.rule_id,f.rule_version,f.record_id,f.context_id,f.severity,f.message,f.evidence,f.state,f.acknowledged_at,f.resolved_at,f.created_at,f.updated_at FROM rule_findings f WHERE f.workspace_id=$1 AND ($2::uuid IS NULL OR f.record_id=$2) AND (NOT $3 OR f.state <> $4) AND ($5::uuid IS NULL OR f.rule_id=$5) AND ($6::uuid IS NULL OR f.context_id=$6) AND ($7::text IS NULL OR f.severity=$7) AND ($8::text IS NULL OR f.state=$8) AND ($9::uuid IS NULL OR EXISTS (SELECT 1 FROM records r WHERE r.workspace_id=f.workspace_id AND r.id=f.record_id AND r.blueprint_id=$9)) ORDER BY CASE f.severity WHEN 'critical' THEN 0 WHEN 'error' THEN 1 WHEN 'warning' THEN 2 WHEN 'info' THEN 3 ELSE 4 END,f.created_at DESC,f.id DESC LIMIT $10 OFFSET $11")
+        let mut rows = sqlx::query_as::<_, Db<RuleFinding>>("SELECT f.id,f.rule_id,f.rule_version,f.record_id,f.context_id,f.severity,f.message,f.evidence,f.state,f.acknowledged_at,f.resolved_at,f.created_at,f.updated_at FROM rule_findings f WHERE f.workspace_id=$1 AND ($2::uuid IS NULL OR f.record_id=$2) AND (NOT $3 OR f.state <> $4) AND ($5::uuid IS NULL OR f.rule_id=$5) AND ($6::uuid IS NULL OR f.context_id=$6) AND ($7::text IS NULL OR f.severity=$7) AND ($8::text IS NULL OR f.state=$8) AND ($9::uuid IS NULL OR EXISTS (SELECT 1 FROM records r WHERE r.workspace_id=f.workspace_id AND r.id=f.record_id AND r.blueprint_id=$9)) ORDER BY array_position($12::text[],f.severity),f.created_at DESC,f.id DESC LIMIT $10 OFFSET $11")
             .bind(ws)
             .bind(filter.record_id)
             .bind(filter.unresolved)
@@ -792,6 +792,7 @@ impl AttricatRepository {
             .bind(filter.blueprint_id)
             .bind(limit + 1)
             .bind(offset)
+            .bind(severities_most_severe_first())
             .fetch_all(&self.pool)
             .await?;
         let has_more = rows.len() as i64 > limit;
@@ -1276,6 +1277,16 @@ pub struct RuleFindingFilter {
     pub unresolved: bool,
 }
 
+/// Finding severity codes in the order findings are listed. A code outside
+/// them has no position and sorts last.
+fn severities_most_severe_first() -> Vec<&'static str> {
+    RuleFindingSeverity::ALL
+        .iter()
+        .rev()
+        .map(|severity| severity.as_str())
+        .collect()
+}
+
 impl<S: super::RepositoryScope> AttricatRepository<S> {
     /// Brings every record's needs-attention tag in line with its findings,
     /// in pages. [`Self::initialize_workspace`] runs it at startup, which
@@ -1373,6 +1384,14 @@ pub(super) async fn sync_needs_attention_tags(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn findings_list_the_most_severe_first() {
+        assert_eq!(
+            severities_most_severe_first(),
+            ["critical", "error", "warning", "info"]
+        );
+    }
 
     #[test]
     fn enable_gate_requires_a_complete_dry_run_or_accepted_violations() {
