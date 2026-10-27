@@ -18,6 +18,7 @@ import {
   type RecordSearchResponse,
 } from '../api';
 import { RelationshipField } from './RelationshipField';
+import { relationshipPickerMessageType } from './useRecentlyPreviewedRecords';
 
 vi.mock('../api', () => ({
   getBlueprintByCode: vi.fn(),
@@ -270,6 +271,47 @@ describe('RelationshipField', () => {
         expect.objectContaining({ blueprint: 'material' }),
       ),
     );
+  });
+
+  it('keeps previews from an earlier opening of the picker', async () => {
+    // jsdom does not scroll; selecting scrolls the picker to the top.
+    Element.prototype.scrollTo = vi.fn();
+    vi.mocked(searchRecords).mockResolvedValue(
+      page([{ id: firstId, label: 'First product' }], null),
+    );
+    renderField();
+    const user = userEvent.setup();
+
+    await openSelector(user);
+    const preview = await screen.findByRole('link', {
+      name: 'Preview First product in a new tab',
+    });
+    const href = preview.getAttribute('href') ?? '';
+    fireEvent.click(preview);
+    await user.click(
+      screen.getByRole('button', { name: 'Close relationship selector' }),
+    );
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    const dialog = await openSelector(user);
+    const reopened = await within(dialog).findByRole('link', {
+      name: 'Preview First product in a new tab',
+    });
+    expect(reopened.getAttribute('href')).toBe(href);
+    expect(reopened.className).toContain('MuiIconButton-colorSecondary');
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: {
+          recordId: firstId,
+          token: new URL(href, location.href).searchParams.get(
+            'relationshipPicker',
+          ),
+          type: relationshipPickerMessageType,
+        },
+        origin: window.location.origin,
+      }),
+    );
+    await waitFor(() => expect(dialog.textContent).toContain('1 selected'));
   });
 
   it('names the blueprint whose records could not be loaded', async () => {

@@ -1,4 +1,4 @@
-import { forwardRef, useId, useState, type ReactNode } from 'react';
+import { forwardRef, useId, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Box,
@@ -28,6 +28,7 @@ import {
   RelatedRecordPreviewToggle,
 } from './RelatedRecordPreview';
 import { RelationshipPickerDialog } from './RelationshipPickerDialog';
+import { useRecentlyPreviewedRecords } from './useRecentlyPreviewedRecords';
 import { RelationshipSelectionPills } from './RelationshipSelectionPills';
 import { useRelationshipSelectionLabels } from './useRelationshipSelectionLabels';
 import { smallIconSize } from '../../../components/iconSizes';
@@ -118,6 +119,11 @@ export const RelationshipField = ({
   const [open, setOpen] = useState(false);
   // Each opening mounts a fresh picker, starting from the field's value.
   const [openings, setOpenings] = useState(0);
+  // Kept across openings, so a preview tab opened earlier can still select.
+  const previewSelectRef = useRef<((id: string) => void) | null>(null);
+  const recentPreviews = useRecentlyPreviewedRecords((id) =>
+    previewSelectRef.current?.(id),
+  );
   const allowedTargets = allowedTargetBlueprints(attribute);
   const targetBlueprint = allowedTargets[0];
   const selectedIds = relationshipIdsForField(value);
@@ -251,6 +257,8 @@ export const RelationshipField = ({
         }}
         onClose={() => setOpen(false)}
         open={selectorOpen}
+        previewSelectRef={previewSelectRef}
+        recentPreviews={recentPreviews}
         selectionLabels={selectionLabels}
       />
     </>
