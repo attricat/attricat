@@ -1,5 +1,6 @@
 use crate::support;
 
+use api::states::RecordMigrationStatus;
 use chrono::{Datelike, Utc};
 use support::*;
 
@@ -373,6 +374,13 @@ async fn records_are_numbered_when_they_migrate_onto_a_generating_revision(pool:
         format!("{base_url}/v1/records/{id}/blueprint-migration/preview"),
     )
     .await;
+    // The required generated `number` is filled in when the migration applies.
+    assert_eq!(
+        preview["status"],
+        RecordMigrationStatus::Ready.as_str(),
+        "{preview}"
+    );
+    assert_eq!(preview["issues"], json!([]));
     expect_status(
         client
             .post(format!("{base_url}/v1/records/{id}/blueprint-migration"))
