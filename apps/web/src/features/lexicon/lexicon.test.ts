@@ -43,6 +43,9 @@ describe('lexiconResources', () => {
       Product_few: 'produkty',
       Price: 'Cena',
       Order_sorting: 'Kolejność',
+      // Context-free entries, for names looked up as whole keys.
+      '|Product': 'produkt',
+      '|Price': 'Cena',
     });
   });
 });

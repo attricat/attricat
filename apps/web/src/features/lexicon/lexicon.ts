@@ -11,6 +11,7 @@ import {
 import {
   lexiconResourceKey,
   lexiconResources,
+  plainKeyResourceKey,
   pluralResourceKey,
 } from './resources';
 
@@ -48,10 +49,11 @@ export const lexiconText = (text: string): string => {
 /**
  * Renders a name that is itself a lexicon key, such as a system tag, with no
  * `{{}}` around it. It resolves like `{{key}}`, but `|` and braces are part
- * of the key, and a name without an entry renders as authored.
+ * of the key, and a name without an entry renders as authored. Only entries
+ * without a context match, and never one of their plural forms.
  */
 export const lexiconKeyText = (key: string): string =>
-  i18n.t(normalizeLexiconTerm(key), {
+  i18n.t(plainKeyResourceKey(normalizeLexiconTerm(key)), {
     ...lookupOptions,
     defaultValue: key,
   } as TOptions);

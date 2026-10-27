@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../i18n';
 import { LEXICON_NAMESPACE } from '../lexicon/constants';
+import { plainKeyResourceKey } from '../lexicon/resources';
 import { getSystemTagFacet } from '../records/api';
 import { SystemTagFilterPicker } from './SystemTagFilterPicker';
 
@@ -41,7 +42,7 @@ describe('SystemTagFilterPicker', () => {
 
   it('shows translated tags and matches typing against either form', async () => {
     i18n.addResourceBundle('en', LEXICON_NAMESPACE, {
-      'workflow.review': 'Needs review',
+      [plainKeyResourceKey('workflow.review')]: 'Needs review',
     });
     facet.mockResolvedValue({
       items: [
