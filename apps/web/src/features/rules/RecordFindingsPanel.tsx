@@ -1,4 +1,5 @@
 import { useAcknowledgeFinding } from './useAcknowledgeFinding';
+import { refreshRecordRuleState } from './refreshRecordRuleState';
 import { FindingSeverityChip } from './FindingSeverityChip';
 import { LoadMoreButton } from '../../components/LoadMoreButton';
 import {
@@ -262,9 +263,12 @@ export const RecordFindingsPanel = ({
   useEffect(() => {
     if (!runs.isSuccess) return;
     if (seenFinish.current !== undefined && seenFinish.current !== finishedAt)
-      void client.invalidateQueries({
-        queryKey: ruleQueryKeys.findings(recordId),
-      });
+      void Promise.all([
+        client.invalidateQueries({
+          queryKey: ruleQueryKeys.findings(recordId),
+        }),
+        refreshRecordRuleState(client, recordId),
+      ]);
     seenFinish.current = finishedAt;
   }, [client, finishedAt, recordId, runs.isSuccess]);
   const recheck = useMutation({

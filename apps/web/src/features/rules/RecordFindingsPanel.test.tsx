@@ -20,6 +20,7 @@ import { RECORD_RULE_RUN_POLL_MS } from './constants';
 import { RevealFieldContext } from '../views/fieldReveal';
 import { RecordFindingsPanel } from './RecordFindingsPanel';
 import { watchRecordRuleChecks } from './recordRuleChecks';
+import { recordQueryKeys } from '../records/queryKeys';
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
@@ -101,16 +102,30 @@ const run = (
   created_at: '2026-10-20T10:00:00Z',
 });
 
+const newClient = () =>
+  new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+/** Caches what the server rewrites beside findings: tags and data quality. */
+const seedRecordState = (client: QueryClient) => {
+  const keys = [
+    recordQueryKeys.form(recordId),
+    recordQueryKeys.preview(recordId),
+    recordQueryKeys.resolvedPreview(recordId, undefined),
+    recordQueryKeys.search({ blueprint: 'products' }),
+    recordQueryKeys.systemTagFacet({ blueprint: { code: 'products' } }),
+  ];
+  for (const key of keys) client.setQueryData(key, {});
+  return () =>
+    keys.map((queryKey) => client.getQueryState(queryKey)?.isInvalidated);
+};
+
 const renderPanel = (
   props: Partial<Parameters<typeof RecordFindingsPanel>[0]> = {},
   revealField: ((code: string) => void) | null = null,
+  client: QueryClient = newClient(),
 ) =>
   render(
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
+    <QueryClientProvider client={client}>
       <RevealFieldContext value={revealField}>
         <RecordFindingsPanel
           blueprintId={blueprintId}
@@ -139,7 +154,9 @@ describe('RecordFindingsPanel', () => {
       ...finding,
       state: 'acknowledged',
     });
-    renderPanel();
+    const client = newClient();
+    const invalidated = seedRecordState(client);
+    renderPanel({}, null, client);
     const item = await screen.findByRole('listitem');
     expect(within(item).getByText('title is required')).toBeTruthy();
     expect(
@@ -150,6 +167,9 @@ describe('RecordFindingsPanel', () => {
     expect(within(item).getByText(/Contexts: default, pl/)).toBeTruthy();
     await user.click(within(item).getByRole('button', { name: 'Acknowledge' }));
     expect(vi.mocked(acknowledgeFinding).mock.calls[0]?.[0]).toBe(finding.id);
+    await waitFor(() =>
+      expect(invalidated()).toEqual([true, true, true, true, true]),
+    );
   });
 
   it('keeps the server’s severity order and names fields by their labels', async () => {
@@ -228,7 +248,8 @@ describe('RecordFindingsPanel', () => {
   it('re-runs the record’s checks and refreshes findings when they finish', async () => {
     const user = userEvent.setup();
     vi.mocked(recheckRecord).mockResolvedValue({ run_ids: [] });
-    renderPanel();
+    const client = newClient();
+    renderPanel({}, null, client);
     await screen.findByText('title is required');
     vi.mocked(listRecordRuleRuns)
       .mockResolvedValueOnce([run('pending', null)])
@@ -236,6 +257,7 @@ describe('RecordFindingsPanel', () => {
     vi.mocked(listUnresolvedRecordFindings).mockResolvedValue({ items: [] });
     await user.click(screen.getByRole('button', { name: 'Re-run checks' }));
     expect(recheckRecord).toHaveBeenCalledWith(recordId);
+    const invalidated = seedRecordState(client);
     // The finished run arrives with the next poll, a second later.
     await waitFor(
       () =>
@@ -245,6 +267,7 @@ describe('RecordFindingsPanel', () => {
       { timeout: 3 * RECORD_RULE_RUN_POLL_MS },
     );
     expect(screen.queryByText('title is required')).toBeNull();
+    expect(invalidated()).toEqual([true, true, true, true, true]);
   });
 
   it('loads further pages of findings on request', async () => {
