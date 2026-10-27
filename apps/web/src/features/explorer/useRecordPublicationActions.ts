@@ -48,8 +48,8 @@ export const useRecordPublicationActions = (
     ]),
   );
   const readinessQuery = useQuery({
-    ...recordPublicationReadinessOptions(readinessRecordId ?? ''),
-    enabled: Boolean(readinessRecordId && publicationContextId),
+    ...recordPublicationReadinessOptions(readinessRecordId),
+    enabled: Boolean(publicationContextId),
   });
   const readiness = readinessRecordId
     ? readinessForContext(readinessQuery.data, publicationContextId)

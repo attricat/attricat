@@ -5,6 +5,8 @@ import {
 } from '@tanstack/react-query';
 import {
   getBlueprintByCode,
+  getCurrentBlueprint,
+  getRecordHierarchy,
   getRecordApprovals,
   getRecordForm,
   getRecordLabels,
@@ -80,11 +82,18 @@ export const recordPublicationOptions = (recordId: string) =>
     staleTime: publicationStaleTimeMs,
   });
 
-/** Readiness is evaluated live, so it is refetched whenever it is observed. */
-export const recordPublicationReadinessOptions = (recordId: string) =>
+/**
+ * Readiness is evaluated live, so it is refetched whenever it is observed.
+ * Waits while the record is unknown.
+ */
+export const recordPublicationReadinessOptions = (
+  recordId: string | undefined,
+) =>
   queryOptions({
-    queryKey: recordQueryKeys.publicationReadiness(recordId),
-    queryFn: ({ signal }) => getRecordPublicationReadiness(recordId, signal),
+    queryKey: recordQueryKeys.publicationReadiness(recordId ?? ''),
+    queryFn: recordId
+      ? ({ signal }) => getRecordPublicationReadiness(recordId, signal)
+      : skipToken,
   });
 
 export const recordApprovalsOptions = (recordId: string) =>
@@ -133,4 +142,24 @@ export const recordBlueprintsOptions = () =>
   queryOptions({
     queryKey: recordQueryKeys.blueprints(),
     queryFn: ({ signal }) => listRecordBlueprints(signal),
+  });
+
+/** A blueprint at its current version, once its id is known. */
+export const currentBlueprintOptions = (blueprintId: string | undefined) =>
+  queryOptions({
+    queryKey: recordQueryKeys.currentBlueprint(blueprintId ?? ''),
+    queryFn: blueprintId ? () => getCurrentBlueprint(blueprintId) : skipToken,
+  });
+
+/** A record's ancestors along `field`, as seen from a context once known. */
+export const recordHierarchyOptions = (
+  recordId: string,
+  contextId: string | null | undefined,
+  field: string,
+) =>
+  queryOptions({
+    queryKey: recordQueryKeys.hierarchy(recordId, contextId ?? '', field),
+    queryFn: contextId
+      ? () => getRecordHierarchy(recordId, contextId, field)
+      : skipToken,
   });

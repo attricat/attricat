@@ -15,11 +15,7 @@ import { ApiErrorAlert } from '../../../components/ApiErrorAlert';
 import { BlueprintLink } from '../../blueprints/BlueprintLink';
 import { ExtensionOutlet } from '../../extensions/ExtensionOutlet';
 import { useCan, useCanOn } from '../../auth/useCan';
-import {
-  getCurrentBlueprint,
-  type AttricatRecord,
-  type Attribute,
-} from '../api';
+import { type AttricatRecord, type Attribute } from '../api';
 import { attributeCardinalities } from '../constants';
 import { attributeValueTypes } from '../valueTypes';
 import {
@@ -30,7 +26,6 @@ import {
 } from '../constants';
 import { commentsSectionId } from '../../record-comments/constants';
 import { RelatedRecordPreviewContext } from '../linkedRecord';
-import { recordQueryKeys } from '../queryKeys';
 import { pageTitleLabel } from '../pageTitle';
 import { useRecordReadAhead } from '../useRecordReadAhead';
 import {
@@ -64,6 +59,7 @@ import { RecordControlsPanel } from './RecordControlsPanel';
 import { RelationshipPickerActionBar } from './RelationshipPickerActionBar';
 import { useRecordPublications } from './useRecordPublications';
 import { capabilities, accessTargetKinds } from '../../auth/capabilities';
+import { currentBlueprintOptions } from '../queryOptions';
 
 const loadRecordCommentsPanel = () =>
   import('../../record-comments/RecordCommentsPanel');
@@ -193,12 +189,9 @@ export const RecordPreview = ({
         : new Map<string, string>(),
     [contextId, defaultContextId, resolved.data],
   );
-  const currentBlueprintId = resolvedRecord?.blueprint_id ?? '';
-  const currentBlueprint = useQuery({
-    queryKey: recordQueryKeys.currentBlueprint(currentBlueprintId),
-    queryFn: () => getCurrentBlueprint(currentBlueprintId),
-    enabled: Boolean(currentBlueprintId),
-  });
+  const currentBlueprint = useQuery(
+    currentBlueprintOptions(resolvedRecord?.blueprint_id),
+  );
   const schemaOutdated =
     currentBlueprint.data && resolvedRecord
       ? currentBlueprint.data.blueprint.version >
