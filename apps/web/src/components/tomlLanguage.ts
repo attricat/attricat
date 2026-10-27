@@ -25,6 +25,8 @@ export const tomlTokens: languages.IMonarchLanguage = {
   tokenizer: {
     root: [
       // Headers start a line outside any value; arrays only follow `=`.
+      // An unclosed bracket alone on its line does not open a header.
+      [/^\s*\[\[?\s*$/, 'keyword'],
       [/^\s*\[\[?/, { token: 'keyword', next: '@header' }],
       { include: '@whitespace' },
       { include: '@key' },
@@ -34,6 +36,8 @@ export const tomlTokens: languages.IMonarchLanguage = {
     header: [
       [/\]\]?/, { token: 'keyword', next: '@pop' }],
       [/#.*$/, { token: 'comment', next: '@pop' }],
+      // Headers end with their line even when the bracket is missing.
+      [/[^\]#]+$/, { token: 'keyword', next: '@pop' }],
       [/[^\]#]+/, 'keyword'],
     ],
     key: [
