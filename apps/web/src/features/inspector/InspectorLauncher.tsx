@@ -6,6 +6,7 @@ import {
   apiHealthColor,
   apiHealthSummaryKeys,
   type ApiHealthState,
+  apiHealthStates,
 } from './apiHealth';
 import {
   LAUNCHER_TOUCH_REVEAL_MS,
@@ -71,7 +72,9 @@ export const InspectorLauncher = ({
             '&:hover > button': revealedLauncher,
             '&:hover > [aria-hidden]': {
               backgroundColor:
-                apiHealth === 'ready' ? 'success.dark' : 'warning.dark',
+                apiHealth === apiHealthStates.ready
+                  ? 'success.dark'
+                  : 'warning.dark',
             },
           },
           '&:focus-within > button, &[data-revealed] > button':
@@ -92,7 +95,7 @@ export const InspectorLauncher = ({
               duration: theme.transitions.duration.shorter,
             }),
             width: launcherHandleWidth,
-            ...(apiHealth !== 'ready' && {
+            ...(apiHealth !== apiHealthStates.ready && {
               overflow: 'hidden',
               [`@keyframes ${launcherLoadingAnimationName}`]: {
                 from: { transform: 'translateX(-100%)' },

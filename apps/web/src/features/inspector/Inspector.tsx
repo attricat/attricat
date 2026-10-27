@@ -8,6 +8,7 @@ import {
   apiHealthColor,
   apiHealthSummaryKeys,
   type ApiHealthState,
+  apiHealthStates,
 } from './apiHealth';
 import {
   API_HEALTH_POLL_INTERVAL_MS,
@@ -61,10 +62,10 @@ export const Inspector = () => {
         : API_HEALTH_POLL_INTERVAL_MS,
   });
   const apiHealth: ApiHealthState = apiHealthQuery.isError
-    ? 'restarting'
+    ? apiHealthStates.restarting
     : apiHealthQuery.isPending
-      ? 'checking'
-      : 'ready';
+      ? apiHealthStates.checking
+      : apiHealthStates.ready;
   const apiStatus = t(apiHealthSummaryKeys[apiHealth]);
   const tabIds = (pane: InspectorPaneId) => ({
     panel: `${tabId}-${pane}-panel`,

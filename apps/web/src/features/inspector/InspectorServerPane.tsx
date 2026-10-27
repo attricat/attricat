@@ -1,7 +1,11 @@
 import { Box, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { apiHealthStatusKeys, type ApiHealthState } from './apiHealth';
+import {
+  apiHealthStatusKeys,
+  type ApiHealthState,
+  apiHealthStates,
+} from './apiHealth';
 import {
   API_HEALTH_POLL_INTERVAL_SECONDS,
   shortCommitLength,
@@ -14,7 +18,7 @@ const InspectorBuild = ({ apiHealth }: { apiHealth: ApiHealthState }) => {
   // commit without reloading the page.
   const health = useQuery({
     ...systemHealthOptions(),
-    enabled: apiHealth === 'ready',
+    enabled: apiHealth === apiHealthStates.ready,
     retry: false,
   });
   if (health.isError)
@@ -51,7 +55,7 @@ export const InspectorServerPane = ({
       </Typography>
       <InspectorBuild apiHealth={apiHealth} />
       <Typography color="text.secondary" variant="caption">
-        {apiHealth === 'restarting'
+        {apiHealth === apiHealthStates.restarting
           ? t('inspector.waitingForHealthCheck')
           : t('inspector.healthCheckInterval', {
               seconds: API_HEALTH_POLL_INTERVAL_SECONDS,
