@@ -233,6 +233,7 @@
       "extensions_read": "You are not authorized to view extensions.",
       "extensions_manage": "You are not authorized to manage extensions.",
       "rules_read": "You are not authorized to view data quality rules.",
+      "rules_manage": "You are not authorized to manage data quality rules.",
       "workflows_read": "You are not authorized to view workflows in this workspace.",
       "workflows_manage": "You are not authorized to manage workflows in this workspace."
     },

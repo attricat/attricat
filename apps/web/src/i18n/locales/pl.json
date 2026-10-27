@@ -237,6 +237,7 @@
       "extensions_read": "Nie masz uprawnień do wyświetlania rozszerzeń.",
       "extensions_manage": "Nie masz uprawnień do zarządzania rozszerzeniami.",
       "rules_read": "Nie masz uprawnień do wyświetlania reguł jakości danych.",
+      "rules_manage": "Nie masz uprawnień do zarządzania regułami jakości danych.",
       "workflows_read": "Nie masz uprawnień do wyświetlania przepływów pracy w tym obszarze roboczym.",
       "workflows_manage": "Nie masz uprawnień do zarządzania przepływami pracy w tym obszarze roboczym."
     },
@@ -1024,7 +1025,7 @@
       "tooSmall": "Wartość musi wynosić co najmniej {{limit}}.",
       "unknownKey": "Nieznany klucz „{{key}}”.",
       "unknownKeySuggestion": "Nieznany klucz „{{key}}”. Czy chodziło o „{{suggestion}}”?",
-      "unknownReference": "„{{value}}” nie istnieje w tej przestrzeni roboczej."
+      "unknownReference": "„{{value}}” nie istnieje w tym obszarze roboczym."
     },
     "fixes": {
       "insertKey": "Dodaj „{{key}}”",
@@ -1034,7 +1035,7 @@
     "hover": {
       "allowedValues": "Dozwolone wartości: {{values}}",
       "default": "Domyślnie: {{value}}",
-      "unknownReference": "„{{value}}” nie istnieje w tej przestrzeni roboczej."
+      "unknownReference": "„{{value}}” nie istnieje w tym obszarze roboczym."
     },
     "links": {
       "blueprint": "Otwórz schemat w nowej karcie",
