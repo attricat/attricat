@@ -124,6 +124,49 @@ impl AttricatRepository {
             .ok_or(RepositoryError::NotFound("rule"))
     }
 
+    /// Runs the checks `create_rule` applies to a definition and its blueprint
+    /// revision and context, without storing anything.
+    pub async fn validate_rule(
+        &self,
+        input: &CreateRule,
+    ) -> Result<attricat_rules::CompiledRule, RepositoryError> {
+        let mut tx = self.pool.begin().await?;
+        let compiled = self.check_new_rule(&mut tx, input).await?;
+        tx.rollback().await?;
+        Ok(compiled)
+    }
+
+    /// Compiles a new rule and checks it against its published blueprint
+    /// revision and optional context.
+    async fn check_new_rule(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        input: &CreateRule,
+    ) -> Result<attricat_rules::CompiledRule, RepositoryError> {
+        let compiled = attricat_rules::compile(&input.definition)
+            .map_err(|e| RepositoryError::InvalidRuleDefinition(e.to_string()))?;
+        let ws = self.workspace_id.0;
+        let valid_blueprint:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM blueprints WHERE id=$1 AND version=$2 AND workspace_id=$3 AND status='published' AND deleted_at IS NULL)").bind(input.blueprint_id).bind(input.blueprint_version).bind(ws).fetch_one(&mut **tx).await?;
+        if !valid_blueprint {
+            return Err(RepositoryError::BlueprintNotPublished);
+        }
+        Self::validate_rule_attributes(tx, &compiled, input.blueprint_id, input.blueprint_version)
+            .await?;
+        if let Some(context_id) = input.context_id {
+            let exists: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM attribute_contexts WHERE id=$1 AND workspace_id=$2)",
+            )
+            .bind(context_id)
+            .bind(ws)
+            .fetch_one(&mut **tx)
+            .await?;
+            if !exists {
+                return Err(RepositoryError::InvalidContext);
+            }
+        }
+        Ok(compiled)
+    }
+
     /// Serializes every writer of a rule code in this workspace until the
     /// transaction ends and returns the families that already use it, as
     /// `(rule_id, blueprint_id, latest_version)`. A rule code names one family
@@ -155,27 +198,8 @@ impl AttricatRepository {
         id: Uuid,
         input: CreateRule,
     ) -> Result<Uuid, RepositoryError> {
-        let compiled = attricat_rules::compile(&input.definition)
-            .map_err(|e| RepositoryError::InvalidRuleDefinition(e.to_string()))?;
+        let compiled = self.check_new_rule(tx, &input).await?;
         let ws = self.workspace_id.0;
-        let valid_blueprint:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM blueprints WHERE id=$1 AND version=$2 AND workspace_id=$3 AND status='published' AND deleted_at IS NULL)").bind(input.blueprint_id).bind(input.blueprint_version).bind(ws).fetch_one(&mut **tx).await?;
-        if !valid_blueprint {
-            return Err(RepositoryError::BlueprintNotPublished);
-        }
-        Self::validate_rule_attributes(tx, &compiled, input.blueprint_id, input.blueprint_version)
-            .await?;
-        if let Some(context_id) = input.context_id {
-            let exists: bool = sqlx::query_scalar(
-                "SELECT EXISTS(SELECT 1 FROM attribute_contexts WHERE id=$1 AND workspace_id=$2)",
-            )
-            .bind(context_id)
-            .bind(ws)
-            .fetch_one(&mut **tx)
-            .await?;
-            if !exists {
-                return Err(RepositoryError::InvalidContext);
-            }
-        }
         if !self.lock_rule_code(tx, &compiled.code).await?.is_empty() {
             return Err(RepositoryError::CodeTaken(CodedResource::Rule));
         }

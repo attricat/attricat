@@ -1,0 +1,15 @@
+format_version = 1
+code = "reviewed-recently"
+name = "Records were reviewed in the last 90 days"
+severity = "info"
+
+# Every Monday at 03:00 UTC: sec min hour day month weekday.
+[[triggers]]
+type = "schedule"
+cron = "0 0 3 * * 1"
+timezone = "UTC"
+
+[predicate]
+type = "stale"
+attribute_code = "reviewed_at"
+max_age_seconds = 7776000

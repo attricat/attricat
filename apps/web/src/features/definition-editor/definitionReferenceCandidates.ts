@@ -57,6 +57,15 @@ const documentAttributes = (outline: TomlOutline): DocumentAttribute[] =>
     ];
   });
 
+/** Attributes the document declares, then those of its scope. */
+const knownAttributes = (
+  outline: TomlOutline,
+  references: DefinitionReferences,
+): DocumentAttribute[] => [
+  ...documentAttributes(outline),
+  ...(references.scopeAttributes ?? []),
+];
+
 const attributeDetail = (attribute: {
   from?: string;
   targetBlueprint?: string;
@@ -136,7 +145,7 @@ export const referenceCandidates = async (
     }
     case 'attribute':
     case 'relationship_attribute':
-      return documentAttributes(outline)
+      return knownAttributes(outline, references)
         .filter(
           (attribute) =>
             reference === 'attribute' ||
@@ -154,7 +163,10 @@ export const referenceCandidates = async (
       const segments = pathSegments(prefix);
       const hops = segments.length - 1;
       if (hops > maxHops) return [];
-      let attributes: DocumentAttribute[] = documentAttributes(outline);
+      let attributes: DocumentAttribute[] = knownAttributes(
+        outline,
+        references,
+      );
       for (const segment of segments.slice(0, -1)) {
         const target = attributes.find(
           (attribute) => attribute.code === segment,

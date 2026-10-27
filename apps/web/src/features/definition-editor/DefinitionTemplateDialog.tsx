@@ -20,7 +20,7 @@ export type DefinitionTemplate = {
   labelKey: string;
 };
 
-/** Offers valid starting definitions for a new blueprint or attribute. */
+/** Offers valid starting definitions for a new definition. */
 export const DefinitionTemplateDialog = ({
   onClose,
   onSelect,

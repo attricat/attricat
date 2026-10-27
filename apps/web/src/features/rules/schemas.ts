@@ -5,6 +5,7 @@ import {
   findingStateFilters,
   findingStates,
   ruleRunStatuses,
+  ruleTriggerTypes,
 } from './constants';
 
 export const ruleSchema = z.object({
@@ -22,6 +23,45 @@ export const ruleSchema = z.object({
   published_at: z.string().nullable(),
   created_at: z.string(),
   enabled_version: z.number().int().positive().nullable(),
+});
+/** The rule input that validation and saving accept. */
+export const createRuleSchema = z.object({
+  blueprint_id: z.uuid(),
+  blueprint_version: z.number().int().positive(),
+  context_id: z.uuid().nullable(),
+  definition: z.string(),
+});
+const ruleTriggerSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal(ruleTriggerTypes.manual) }),
+  z.object({
+    type: z.literal(ruleTriggerTypes.schedule),
+    cron: z.string(),
+    timezone: z.string(),
+  }),
+  z.object({ type: z.literal(ruleTriggerTypes.event), event_type: z.string() }),
+  z.object({ type: z.literal(ruleTriggerTypes.postImport) }),
+]);
+/** A definition that passed validation, as the editor previews it. */
+export const compiledRuleSchema = z.object({
+  code: z.string(),
+  name: z.string(),
+  severity: z.enum(findingSeverities),
+  triggers: z.array(ruleTriggerSchema),
+  predicate: z.object({ type: z.string() }).loose(),
+  enforcement: z
+    .object({
+      on_save: z.boolean(),
+      transitions: z
+        .array(
+          z.object({
+            attribute_code: z.string(),
+            from: z.string().nullish(),
+            to: z.string(),
+          }),
+        )
+        .default([]),
+    })
+    .nullish(),
 });
 export const ruleRunSchema = z.object({
   id: z.uuid(),
@@ -75,3 +115,6 @@ export type FindingsSearch = z.infer<typeof findingsSearchSchema>;
 export type Rule = z.infer<typeof ruleSchema>;
 export type RuleRun = z.infer<typeof ruleRunSchema>;
 export type Finding = z.infer<typeof findingSchema>;
+export type CreateRule = z.infer<typeof createRuleSchema>;
+export type CompiledRule = z.infer<typeof compiledRuleSchema>;
+export type RuleTrigger = z.infer<typeof ruleTriggerSchema>;

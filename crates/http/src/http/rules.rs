@@ -16,13 +16,10 @@ pub struct RuleQuery {
     pub blueprint_id: Option<Uuid>,
 }
 pub(super) async fn validate(
+    super::auth::ScopedRepository(repo): super::auth::ScopedRepository,
     ApiJson(input): ApiJson<CreateRule>,
 ) -> Result<Json<attricat_rules::CompiledRule>, ApiError> {
-    attricat_rules::compile(&input.definition)
-        .map(Json)
-        .map_err(|e| {
-            crate::repository::RepositoryError::InvalidRuleDefinition(e.to_string()).into()
-        })
+    Ok(Json(repo.validate_rule(&input).await?))
 }
 pub(super) async fn list(
     super::auth::ScopedRepository(repo): super::auth::ScopedRepository,

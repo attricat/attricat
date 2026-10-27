@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import blueprintContract from '../../../../../contracts/blueprint-definition-v1.schema.json';
 import reusableAttributeContract from '../../../../../contracts/reusable-attribute-definition-v1.schema.json';
+import ruleContract from '../../../../../contracts/rule-definition-v1.schema.json';
 import {
   definitionKinds,
   discriminatorKey,
@@ -78,6 +79,7 @@ export const definitionSchemas: Record<DefinitionKind, SchemaNode> = {
   [definitionKinds.reusableAttribute]: schemaNodeSchema.parse(
     reusableAttributeContract,
   ),
+  [definitionKinds.rule]: schemaNodeSchema.parse(ruleContract),
 };
 
 const refPrefix = '#/$defs/';

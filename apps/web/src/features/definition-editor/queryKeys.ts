@@ -6,6 +6,13 @@ export const definitionQueryKeys = {
     kind: DefinitionKind,
     resourceId: string | null | undefined,
     definition: string,
+    scope?: string,
   ) =>
-    [...definitionQueryKeys.all, kind, resourceId ?? null, definition] as const,
+    [
+      ...definitionQueryKeys.all,
+      kind,
+      resourceId ?? null,
+      scope ?? null,
+      definition,
+    ] as const,
 };

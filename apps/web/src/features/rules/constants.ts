@@ -41,6 +41,24 @@ export const findingSeverities = {
   error: 'error',
   critical: 'critical',
 } as const;
+export const ruleTriggerTypes = {
+  manual: 'manual',
+  schedule: 'schedule',
+  event: 'event',
+  postImport: 'post_import',
+} as const;
+export const ruleRoutes = {
+  list: '/manage/rules',
+  create: '/manage/rules/new',
+  revision: '/manage/rules/$ruleId/revisions/$version',
+  newRevision: '/manage/rules/$ruleId/revisions/$version/new',
+} as const;
+/** Keeps the rule scope selectors readable when their labels are short. */
+export const RULE_SCOPE_SELECT_MIN_WIDTH = 220;
+/** The value of the context selector for a rule that checks every context. */
+export const ALL_CONTEXTS = '';
+/** Height of the read-only definition on a rule revision page. */
+export const RULE_DEFINITION_VIEWER_HEIGHT = '420px';
 export const ruleRunStatuses = {
   pending: 'pending',
   leased: 'leased',

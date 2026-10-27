@@ -144,7 +144,9 @@ triggers = [{ type = "schedule", cron = "0 0 3 * * 1", timezone = "UTC" }]
 predicate = { type = "stale", attribute_code = "price", max_age_seconds = 7776000 }
 ```
 
-**As standalone rules** under **Manage → Data quality rules**, attached to one published blueprint revision and optionally to one context:
+**As standalone rules** under **Manage → Data quality rules**, attached to one published blueprint revision and optionally to one context. Choose **New rule**, pick the blueprint, its published revision and a context, and write the TOML in the same editor as blueprints: it completes keys and the blueprint's attribute codes, offers ready-made triggers and predicates under **Insert**, and checks the rule against the blueprint revision as you type. **Save draft** stores the first revision; publish it from the rule's page. **New revision** on a revision's page starts the next one from it; revisions keep the blueprint revision and context.
+
+The CLI does the same:
 
 ```sh
 acli rule create --blueprint-id <uuid> --blueprint-version 3 --file title-required.toml
@@ -152,7 +154,7 @@ acli rule publish <rule-id> 1
 acli rule enable <rule-id> 1
 ```
 
-Standalone rules have their own drafts and revisions. A rule revision must be published and then enabled before it runs. Only one revision of a rule is enabled at a time; `acli rule disable` stops it.
+Standalone rules have their own drafts and revisions. A rule revision must be published and then enabled before it runs, with the switch on the **Rules** tab or the CLI. Only one revision of a rule is enabled at a time; `acli rule disable` stops it.
 
 ## Run a rule
 

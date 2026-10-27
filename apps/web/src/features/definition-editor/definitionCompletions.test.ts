@@ -314,4 +314,44 @@ describe('definitionCompletions', () => {
     );
     expect(values.labels).not.toContain('json');
   });
+
+  it('completes rule predicates from the rule blueprint’s attributes', async () => {
+    const rule = `format_version = 1
+code = "title-required"
+name = "Title required"
+severity = "error"
+
+[[triggers]]
+type = "manual"
+
+[predicate]
+`;
+    const types = await complete(`${rule}type = "|"`, definitionKinds.rule);
+    expect(types.labels).toEqual(
+      expect.arrayContaining(['required', 'one_of', 'stale', 'unique']),
+    );
+    const offset = `${rule}type = "required"\nattribute_code = "|"`;
+    const suggestions = await definitionCompletions({
+      kind: definitionKinds.rule,
+      offset: offset.indexOf(cursorMarker),
+      references: {
+        ...references,
+        scopeAttributes: [
+          { code: 'title', valueType: 'string' },
+          {
+            code: 'brand',
+            targetBlueprint: 'brand',
+            valueType: 'relationship',
+          },
+        ],
+      },
+      text: offset.replace(cursorMarker, ''),
+    });
+    expect(suggestions.map(({ detail, label }) => ({ detail, label }))).toEqual(
+      [
+        { detail: 'string', label: 'title' },
+        { detail: 'Relationship to brand', label: 'brand' },
+      ],
+    );
+  });
 });

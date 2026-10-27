@@ -7,15 +7,51 @@ import {
   RECORD_RULE_RUNS_LIMIT,
 } from './constants';
 import {
+  compiledRuleSchema,
+  createRuleSchema,
   findingSchema,
   ruleRunSchema,
   ruleSchema,
+  type CreateRule,
   type FindingsSearch,
 } from './schemas';
 import { uuidSegment, versionSegment } from '../../api/pathSegments';
 import { randomUuid } from '../../components/randomUuid';
-export type { Finding, FindingsSearch, Rule, RuleRun } from './schemas';
+export type {
+  CompiledRule,
+  CreateRule,
+  Finding,
+  FindingsSearch,
+  Rule,
+  RuleRun,
+} from './schemas';
 export const listRules = () => request('/api/rules', z.array(ruleSchema));
+/** Runs the save checks on a rule and its blueprint revision without storing it. */
+export const validateRule = (input: CreateRule, signal?: AbortSignal) =>
+  request('/api/rules/validate', compiledRuleSchema, {
+    ...jsonRequest('POST', createRuleSchema.parse(input)),
+    signal,
+  });
+/** Creates a rule as a draft first revision. */
+export const createRule = (input: CreateRule) =>
+  request(
+    '/api/rules',
+    ruleSchema,
+    jsonRequest('POST', createRuleSchema.parse(input)),
+  );
+/** Adds a draft revision; the blueprint revision and context stay the same. */
+export const createRuleRevision = (ruleId: string, input: CreateRule) =>
+  request(
+    `/api/rules/${uuidSegment(ruleId)}/versions`,
+    ruleSchema,
+    jsonRequest('POST', createRuleSchema.parse(input)),
+  );
+export const publishRuleRevision = (ruleId: string, version: number) =>
+  request(
+    `/api/rules/${uuidSegment(ruleId)}/versions/${versionSegment(version)}/publish`,
+    ruleSchema,
+    { method: 'POST' },
+  );
 export const listRuleRuns = () =>
   request('/api/rule-runs', z.array(ruleRunSchema));
 /** The most recent runs scoped to one record. */

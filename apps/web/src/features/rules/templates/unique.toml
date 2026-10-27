@@ -1,0 +1,11 @@
+format_version = 1
+code = "sku-unique"
+name = "No two records share a SKU"
+severity = "error"
+
+[[triggers]]
+type = "manual"
+
+[predicate]
+type = "unique"
+attribute_codes = ["sku"]

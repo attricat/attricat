@@ -1,6 +1,7 @@
 export const definitionKinds = {
   blueprint: 'blueprint',
   reusableAttribute: 'reusableAttribute',
+  rule: 'rule',
 } as const;
 export type DefinitionKind =
   (typeof definitionKinds)[keyof typeof definitionKinds];

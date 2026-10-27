@@ -237,9 +237,77 @@ const reusableAttributeSnippets: DefinitionSnippet[] = [
   },
 ];
 
+/** A rule has exactly one predicate, so every predicate conflicts. */
+const predicate = (id: string, body: string): DefinitionSnippet => ({
+  id,
+  group: 'predicates',
+  body: `[predicate]\n${body}`,
+  placement: snippetPlacements.section,
+  conflicts: [['predicate']],
+});
+
+const ruleSnippets: DefinitionSnippet[] = [
+  {
+    id: 'manualTrigger',
+    group: 'triggers',
+    body: '[[triggers]]\ntype = "manual"',
+    placement: snippetPlacements.section,
+  },
+  {
+    id: 'scheduleTrigger',
+    group: 'triggers',
+    body: '[[triggers]]\ntype = "schedule"\ncron = "${1:0 0 3 * * *}"\ntimezone = "UTC"',
+    placement: snippetPlacements.section,
+  },
+  {
+    id: 'eventTrigger',
+    group: 'triggers',
+    body: '[[triggers]]\ntype = "event"\nevent_type = "${1|record.updated.v1,record.created.v1,record.migrated.v1,attribute_value.changed.v1,attribute_value.restored.v1,relationship.changed.v1|}"',
+    placement: snippetPlacements.section,
+  },
+  predicate(
+    'requiredPredicate',
+    'type = "required"\nattribute_code = "${1:attribute}"',
+  ),
+  predicate(
+    'oneOfPredicate',
+    'type = "one_of"\nattribute_code = "${1:attribute}"\nvalues = ["${2:value}"]',
+  ),
+  predicate(
+    'comparePredicate',
+    'type = "compare"\nattribute_code = "${1:attribute}"\nop = "${2|gte,gt,lte,lt,eq,ne|}"\nvalue = ${3:0}',
+  ),
+  predicate(
+    'relativeDatePredicate',
+    'type = "relative_date"\nattribute_code = "${1:attribute}"\nop = "${2|gt,gte,lt,lte|}"\noffset_days = ${3:30}',
+  ),
+  predicate(
+    'stalePredicate',
+    'type = "stale"\nattribute_code = "${1:attribute}"\nmax_age_seconds = ${2:7776000}',
+  ),
+  predicate(
+    'uniquePredicate',
+    'type = "unique"\nattribute_codes = ["${1:attribute}"]',
+  ),
+  {
+    id: 'enforceOnSave',
+    group: 'enforcement',
+    body: '[enforcement]\non_save = true',
+    placement: snippetPlacements.section,
+    conflicts: [['enforcement']],
+  },
+  {
+    id: 'enforceTransition',
+    group: 'enforcement',
+    body: '[[enforcement.transitions]]\nattribute_code = "${1:status}"\nto = "${2:released}"',
+    placement: snippetPlacements.section,
+  },
+];
+
 export const definitionSnippets: Record<DefinitionKind, DefinitionSnippet[]> = {
   [definitionKinds.blueprint]: blueprintSnippets,
   [definitionKinds.reusableAttribute]: reusableAttributeSnippets,
+  [definitionKinds.rule]: ruleSnippets,
 };
 
 /**
