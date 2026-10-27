@@ -1,6 +1,7 @@
 import { Box, Stack, Typography } from '@mui/material';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { defaultContextCode } from '../../contexts/constants';
 import { IconLabel } from '../../../components/IconLabel';
 import { RelationshipIcon } from '../../../components/systemIcons';
 import { fileAttributeIcon } from '../../files/fileAttributeIcon';
@@ -141,9 +142,11 @@ export const ValueField = ({
               contextId &&
               resolved.source_context.id !== contextId && (
                 <Typography color="text.secondary" variant="caption">
-                  {t('views.inheritedFromContext', {
-                    context: resolved.source_context.code,
-                  })}
+                  {resolved.source_context.code === defaultContextCode
+                    ? t('views.inheritedFromDefaultContext')
+                    : t('views.inheritedFromContext', {
+                        context: resolved.source_context.code,
+                      })}
                 </Typography>
               )}
           </>

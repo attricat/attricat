@@ -10,7 +10,12 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useIsMutating,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import {
   ExternalLinkIcon,
   KeyRoundIcon,
@@ -51,7 +56,7 @@ const statusColors = {
 } as const satisfies Record<ExtensionConnection['status'], string>;
 
 type ConnectionFormProps = {
-  /** Another action on the connection is running. */
+  /** An action on the connection, including this form's, is running. */
   busy: boolean;
   connection: ExtensionConnection;
   extensionId: string;
@@ -68,6 +73,10 @@ const AuthorizationCodeForm = ({
   const [code, setCode] = useState('');
   const [redirectUri, setRedirectUri] = useState('');
   const exchange = useMutation({
+    mutationKey: extensionExportQueryKeys.connectionMutations(
+      extensionId,
+      connection.connection,
+    ),
     mutationFn: () =>
       exchangeAuthorizationCode(extensionId, connection.connection, {
         code,
@@ -105,7 +114,7 @@ const AuthorizationCodeForm = ({
           value={redirectUri}
           onChange={(event) => setRedirectUri(event.target.value)}
         />
-        <Button disabled={busy || exchange.isPending} type="submit">
+        <Button disabled={busy} type="submit">
           {t('extensionExports.exchangeCode')}
         </Button>
       </Stack>
@@ -125,6 +134,10 @@ const ReplaceSecretForm = ({
   const refreshToken =
     connection.grant_type === connectionGrantTypes.refreshToken;
   const rotate = useMutation({
+    mutationKey: extensionExportQueryKeys.connectionMutations(
+      extensionId,
+      connection.connection,
+    ),
     mutationFn: () =>
       updateConnection(
         extensionId,
@@ -160,7 +173,7 @@ const ReplaceSecretForm = ({
           value={secret}
           onChange={(event) => setSecret(event.target.value)}
         />
-        <Button disabled={busy || rotate.isPending || !secret} type="submit">
+        <Button disabled={busy || !secret} type="submit">
           {t('extensionExports.replace')}
         </Button>
       </Stack>
@@ -183,13 +196,19 @@ const ConnectionRow = ({
     client.invalidateQueries({
       queryKey: extensionExportQueryKeys.connections(extensionId),
     });
+  const mutationKey = extensionExportQueryKeys.connectionMutations(
+    extensionId,
+    connection.connection,
+  );
   const action = useMutation({
+    mutationKey,
     mutationFn: (name: ConnectionAction) =>
       connectionAction(extensionId, connection.connection, name),
     onSuccess: refresh,
   });
   // The provider sends the operator back to this page after approving.
   const authorize = useMutation({
+    mutationKey,
     mutationFn: () =>
       startBrowserAuthorization(extensionId, connection.connection),
     onSuccess: ({ authorization_url }) => {
@@ -198,6 +217,7 @@ const ConnectionRow = ({
   });
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const remove = useMutation({
+    mutationKey,
     mutationFn: () => deleteConnection(extensionId, connection.connection),
     onSuccess: async () => {
       await refresh();
@@ -213,7 +233,8 @@ const ConnectionRow = ({
     run();
   };
   const error = action.error ?? authorize.error;
-  const busy = action.isPending || authorize.isPending || remove.isPending;
+  // The code and secret forms run their own mutations under the same key.
+  const busy = useIsMutating({ mutationKey }) > 0;
   return (
     <Box sx={{ borderTop: 1, borderColor: 'divider', py: 2 }}>
       <Stack

@@ -149,7 +149,7 @@ impl AttricatRepository {
         let compiled = attricat_rules::compile(&input.definition)
             .map_err(|e| RepositoryError::InvalidRuleDefinition(e.to_string()))?;
         let ws = self.workspace_id.0;
-        let valid_blueprint:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM blueprints WHERE id=$1 AND version=$2 AND workspace_id=$3 AND status='published' AND deleted_at IS NULL)").bind(input.blueprint_id).bind(input.blueprint_version).bind(ws).fetch_one(&mut **tx).await?;
+        let valid_blueprint:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM blueprints WHERE id=$1 AND version=$2 AND workspace_id=$3 AND status=$4 AND deleted_at IS NULL)").bind(input.blueprint_id).bind(input.blueprint_version).bind(ws).bind(RevisionStatus::Published.as_str()).fetch_one(&mut **tx).await?;
         if !valid_blueprint {
             return Err(RepositoryError::BlueprintNotPublished);
         }
@@ -225,8 +225,10 @@ impl AttricatRepository {
             .map_err(|e| RepositoryError::InvalidRuleDefinition(e.to_string()))?;
         let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
-        let previous: Option<(i64, String, Uuid, i64, Option<Uuid>)> = sqlx::query_as("SELECT version,code,blueprint_id,blueprint_version,context_id FROM rules WHERE workspace_id=$1 AND id=$2 ORDER BY version DESC LIMIT 1 FOR UPDATE").bind(ws).bind(id).fetch_optional(&mut *tx).await?;
-        let Some((version, code, blueprint_id, blueprint_version, context_id)) = previous else {
+        let previous: Option<(i64, String, Uuid, i64, Option<Uuid>, String)> = sqlx::query_as("SELECT version,code,blueprint_id,blueprint_version,context_id,definition_hash FROM rules WHERE workspace_id=$1 AND id=$2 ORDER BY version DESC LIMIT 1 FOR UPDATE").bind(ws).bind(id).fetch_optional(&mut *tx).await?;
+        let Some((version, code, blueprint_id, blueprint_version, context_id, definition_hash)) =
+            previous
+        else {
             return Err(RepositoryError::NotFound("rule"));
         };
         if code != compiled.code
@@ -237,6 +239,11 @@ impl AttricatRepository {
             return Err(RepositoryError::InvalidRuleDefinition(
                 "rule code, blueprint revision, and context cannot change across revisions".into(),
             ));
+        }
+        // Only the latest revision counts, as for blueprints: returning to an
+        // earlier definition is a change.
+        if definition_hash == compiled.raw_definition_hash {
+            return Err(RepositoryError::RuleRevisionUnchanged { version });
         }
         Self::validate_rule_attributes(&mut tx, &compiled, blueprint_id, blueprint_version).await?;
         let plan = serde_json::to_value(&compiled)
@@ -773,18 +780,19 @@ impl AttricatRepository {
         offset: i64,
     ) -> Result<(Vec<RuleFinding>, bool), RepositoryError> {
         let ws = self.workspace_id.0;
-        let mut rows = sqlx::query_as::<_, Db<RuleFinding>>("SELECT f.id,f.rule_id,f.rule_version,f.record_id,f.context_id,f.severity,f.message,f.evidence,f.state,f.acknowledged_at,f.resolved_at,f.created_at,f.updated_at FROM rule_findings f WHERE f.workspace_id=$1 AND ($2::uuid IS NULL OR f.record_id=$2) AND (NOT $3 OR f.state <> $4) AND ($5::uuid IS NULL OR f.rule_id=$5) AND ($6::uuid IS NULL OR f.context_id=$6) AND ($7::text IS NULL OR f.severity=$7) AND ($8::text IS NULL OR f.state=$8) AND ($9::uuid IS NULL OR EXISTS (SELECT 1 FROM records r WHERE r.workspace_id=f.workspace_id AND r.id=f.record_id AND r.blueprint_id=$9)) ORDER BY CASE f.severity WHEN 'critical' THEN 0 WHEN 'error' THEN 1 WHEN 'warning' THEN 2 WHEN 'info' THEN 3 ELSE 4 END,f.created_at DESC,f.id DESC LIMIT $10 OFFSET $11")
+        let mut rows = sqlx::query_as::<_, Db<RuleFinding>>("SELECT f.id,f.rule_id,f.rule_version,f.record_id,f.context_id,f.severity,f.message,f.evidence,f.state,f.acknowledged_at,f.resolved_at,f.created_at,f.updated_at FROM rule_findings f WHERE f.workspace_id=$1 AND ($2::uuid IS NULL OR f.record_id=$2) AND (NOT $3 OR f.state <> $4) AND ($5::uuid IS NULL OR f.rule_id=$5) AND ($6::uuid IS NULL OR f.context_id=$6) AND ($7::text IS NULL OR f.severity=$7) AND ($8::text IS NULL OR f.state=$8) AND ($9::uuid IS NULL OR EXISTS (SELECT 1 FROM records r WHERE r.workspace_id=f.workspace_id AND r.id=f.record_id AND r.blueprint_id=$9)) ORDER BY array_position($12::text[],f.severity),f.created_at DESC,f.id DESC LIMIT $10 OFFSET $11")
             .bind(ws)
             .bind(filter.record_id)
             .bind(filter.unresolved)
             .bind(RuleFindingState::Resolved.as_str())
             .bind(filter.rule_id)
             .bind(filter.context_id)
-            .bind(filter.severity.as_ref().map(severity_code))
+            .bind(filter.severity.map(RuleFindingSeverity::as_str))
             .bind(filter.state.map(RuleFindingState::as_str))
             .bind(filter.blueprint_id)
             .bind(limit + 1)
             .bind(offset)
+            .bind(severities_most_severe_first())
             .fetch_all(&self.pool)
             .await?;
         let has_more = rows.len() as i64 > limit;
@@ -1154,7 +1162,7 @@ impl AttricatRepository {
         let prefetch =
             super::checks::prefetch_related(&mut conn, &scope, &records, &contexts, &requirements)
                 .await?;
-        let severity = severity_code(&rule.severity);
+        let severity = rule.severity.as_str();
         let mut results = Vec::with_capacity(candidates.len());
         for record_id in candidates {
             let Some(subject) = records.remove(record_id) else {
@@ -1263,20 +1271,20 @@ pub struct RuleFindingFilter {
     pub blueprint_id: Option<Uuid>,
     /// Findings for this context; record-wide findings have none.
     pub context_id: Option<Uuid>,
-    pub severity: Option<attricat_rules::Severity>,
+    pub severity: Option<RuleFindingSeverity>,
     pub state: Option<RuleFindingState>,
     /// Leaves out resolved findings.
     pub unresolved: bool,
 }
 
-/// The `rule_findings.severity` code, spelled as in rule definitions.
-fn severity_code(severity: &attricat_rules::Severity) -> &'static str {
-    match severity {
-        attricat_rules::Severity::Info => "info",
-        attricat_rules::Severity::Warning => "warning",
-        attricat_rules::Severity::Error => "error",
-        attricat_rules::Severity::Critical => "critical",
-    }
+/// Finding severity codes in the order findings are listed. A code outside
+/// them has no position and sorts last.
+fn severities_most_severe_first() -> Vec<&'static str> {
+    RuleFindingSeverity::ALL
+        .iter()
+        .rev()
+        .map(|severity| severity.as_str())
+        .collect()
 }
 
 impl<S: super::RepositoryScope> AttricatRepository<S> {
@@ -1325,6 +1333,13 @@ const NEEDS_ATTENTION_RECONCILE_PAGE: i64 = 1_000;
 /// whether each record has an open finding. Rows are locked in ID order so
 /// concurrent rule pages cannot deadlock. `updated_at` stays: the tag follows
 /// the findings and is not an edit.
+///
+/// The lock and the update are separate statements on purpose: under READ
+/// COMMITTED a single statement evaluates the open-finding `EXISTS` against
+/// its starting snapshot even after waiting for a newer row version, so a
+/// concurrent run that committed a finding meanwhile would be missed and the
+/// tag dropped. Locking first makes the second statement's fresh snapshot see
+/// every finding committed by the transactions it waited for.
 pub(super) async fn sync_needs_attention_tags(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     workspace_id: Uuid,
@@ -1334,20 +1349,28 @@ pub(super) async fn sync_needs_attention_tags(
         return Ok(());
     }
     sqlx::query(
-        "WITH locked AS (
+        "SELECT e.id FROM records e
+          WHERE e.workspace_id = $1 AND e.id = ANY($2)
+          ORDER BY e.id
+            FOR NO KEY UPDATE",
+    )
+    .bind(workspace_id)
+    .bind(record_ids)
+    .execute(&mut **tx)
+    .await?;
+    sqlx::query(
+        "WITH state AS (
              SELECT e.id, $3 = ANY(e.system_tags) AS tagged,
                     EXISTS (SELECT 1 FROM rule_findings f
                              WHERE f.workspace_id = e.workspace_id AND f.record_id = e.id
                                AND f.state = $4) AS open
                FROM records e
-              WHERE e.workspace_id = $1 AND e.id = ANY($2)
-              ORDER BY e.id
-                FOR NO KEY UPDATE)
+              WHERE e.workspace_id = $1 AND e.id = ANY($2))
          UPDATE records e
-            SET system_tags = CASE WHEN locked.open THEN array_append(e.system_tags, $3)
+            SET system_tags = CASE WHEN state.open THEN array_append(e.system_tags, $3)
                                    ELSE array_remove(e.system_tags, $3) END
-           FROM locked
-          WHERE e.workspace_id = $1 AND e.id = locked.id AND locked.tagged <> locked.open",
+           FROM state
+          WHERE e.workspace_id = $1 AND e.id = state.id AND state.tagged <> state.open",
     )
     .bind(workspace_id)
     .bind(record_ids)
@@ -1361,6 +1384,14 @@ pub(super) async fn sync_needs_attention_tags(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn findings_list_the_most_severe_first() {
+        assert_eq!(
+            severities_most_severe_first(),
+            ["critical", "error", "warning", "info"]
+        );
+    }
 
     #[test]
     fn enable_gate_requires_a_complete_dry_run_or_accepted_violations() {

@@ -19,7 +19,9 @@
 //! `lock_record_with_generations`, record insertion, batch pre-locking, bulk
 //! publication and extension upsert lookups), and the per-family unique-key locks shared while they
 //! validate, after their record rows. Record creation and migration lock
-//! generated-value counters between the two, in attribute code order. Blueprint publication takes the
+//! generated-value counters between the two, ordered by blueprint, attribute
+//! code and period; a record batch locks all of its creates' counters before
+//! its first operation. Blueprint publication takes the
 //! workspace row (by advancing a generation) and then its family's key lock
 //! exclusively. Context creation and reparenting take the workspace row
 //! first, then (reparenting only) the relationship lock, then the
@@ -269,7 +271,9 @@ pub use retention::RetentionDays;
 pub use retention_holds::FileRetentionHold;
 pub use roles::{PermissionInfo, WorkspaceGrantTarget, WorkspaceRole};
 pub use rules::{ClaimedRuleRun, RuleCandidateResult};
-pub use search_page::{SEARCH_TOTAL_COUNT_CAP, SearchPageRequest, SearchPhase};
+pub use search_page::{
+    MAX_SYSTEM_TAG_FILTERS, SEARCH_TOTAL_COUNT_CAP, SearchPageRequest, SearchPhase,
+};
 pub use search_scope::{
     MAX_SEARCH_FILTERS, SearchScope, SearchScopeError, SearchScopeRequest, intersect_record_ids,
     table_relationship_targets, table_value_paths,

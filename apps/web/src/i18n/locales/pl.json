@@ -83,9 +83,11 @@
     "context_cycle": "Kontekst nie może być własnym potomkiem.",
     "context_in_use": "Ten kontekst nadal ma potomków, wartości lub wykonania rozszerzeń, więc nie można go usunąć.",
     "csrf_failed": "Brakuje tokenu sesji lub wygasł. Odśwież stronę i spróbuj ponownie.",
+    "data_quality_filter_forbidden": "Nie masz uprawnień do filtrowania według jakości danych.",
     "default_context_only": "Ten atrybut można edytować tylko w kontekście domyślnym.",
     "default_context_protected": "Kontekstu domyślnego nie można zmienić ani usunąć.",
     "disabled_in_demo": "Ta czynność jest niedostępna w wersji demonstracyjnej.",
+    "export_job_resync_failed": "Zadanie eksportu {{job_code}} nie mogło uruchomić ponownej synchronizacji.",
     "extension_already_installed": "To rozszerzenie jest już zainstalowane.",
     "file_attribute_readonly": "Ten atrybut plikowy jest tylko do odczytu.",
     "file_cardinality_exceeded": "Liczba plików nie pasuje do atrybutu.",
@@ -95,6 +97,7 @@
     "file_too_large": "Plik przekracza limit rozmiaru przesyłania.",
     "forbidden": "Nie masz uprawnień do wykonania tej czynności.",
     "generated_attribute_readonly": "Atrybut {{attribute}} jest numerowany automatycznie przy tworzeniu rekordu i nie można go zmienić.",
+    "generated_reset_changed": "Atrybut {{attribute}} ma we wcześniejszej wersji reset {{previous}}. Nowa wersja nie może zmienić go na {{requested}}, bo numery by się powtórzyły.",
     "generated_sequence_not_raised": "Następny numer to już {{current}}. Licznik można tylko zwiększyć, nie ustawić na {{requested}}.",
     "global_relationship_search_budget_exceeded": "Wyszukiwanie objęło zbyt wiele powiązanych rekordów. Zawęź je.",
     "global_relationship_search_timed_out": "Wyszukiwanie trwało zbyt długo. Zawęź je.",
@@ -151,6 +154,7 @@
     "rule_has_existing_violations": "Rekordy już naruszają tę regułę (naruszenia: {{existing_violations}}). Popraw je albo zaakceptuj istniejące naruszenia.",
     "rule_not_enabled": "Reguła nie ma włączonej rewizji. Włącz ją albo uruchom próbne wykonanie.",
     "rule_not_published": "Opublikuj rewizję reguły przed jej włączeniem.",
+    "rule_revision_unchanged": "Definicja jest identyczna z rewizją {{version}} tej reguły.",
     "rule_violation": "Zmiana narusza egzekwowane reguły.",
     "service_unavailable": "Usługa jest niedostępna: {{message}}",
     "solution_pack_application_failed": "Zastosowanie pakietu rozwiązania nie powiodło się: {{message}}",
@@ -237,6 +241,7 @@
       "extensions_read": "Nie masz uprawnień do wyświetlania rozszerzeń.",
       "extensions_manage": "Nie masz uprawnień do zarządzania rozszerzeniami.",
       "rules_read": "Nie masz uprawnień do wyświetlania reguł jakości danych.",
+      "rules_manage": "Nie masz uprawnień do zarządzania regułami jakości danych.",
       "workflows_read": "Nie masz uprawnień do wyświetlania przepływów pracy w tym obszarze roboczym.",
       "workflows_manage": "Nie masz uprawnień do zarządzania przepływami pracy w tym obszarze roboczym."
     },
@@ -507,6 +512,7 @@
       "title": "Kontrola rekordu",
       "approvals": "Zatwierdzenia",
       "approvedAs": "{{status}} w kontekście {{context}}",
+      "approvedAsInDefaultContext": "{{status}} w kontekście domyślnym",
       "approvalActive": "Ważne",
       "approvalVoided": "Unieważnione przez zmianę treści",
       "approvalSuperseded": "Zastąpione",
@@ -527,7 +533,9 @@
     },
     "managedInDefault": "Zarządzane w kontekście domyślnym.",
     "inheritedFromContext": "Dziedziczone z kontekstu {{context}}.",
+    "inheritedFromDefaultContext": "Dziedziczone z kontekstu domyślnego.",
     "inheritedValue": "Dziedziczone z kontekstu {{context}}: {{value}}.",
+    "inheritedValueFromDefaultContext": "Dziedziczone z kontekstu domyślnego: {{value}}.",
     "notSet": "Nie ustawiono",
     "true": "Prawda",
     "false": "Fałsz",
@@ -641,13 +649,17 @@
       "empty": "Brak wartości w tym kontekście.",
       "set": "Ustawiona.",
       "setInContext": "Ustawiona w kontekście {{context}}.",
+      "setInDefaultContext": "Ustawiona w kontekście domyślnym.",
       "inheritedFromContext": "Odziedziczona z kontekstu {{context}}.",
+      "inheritedFromDefaultContext": "Odziedziczona z kontekstu domyślnego.",
       "fallsBack": "Gdy brak wartości, używana jest wartość z kontekstu domyślnego.",
       "noFallback": "Nie dziedziczy wartości z kontekstu domyślnego.",
       "editableEverywhere": "Można edytować w każdym kontekście.",
       "editableInDefault": "Można edytować tylko w kontekście domyślnym.",
       "findings": "Jakość danych",
-      "noFindings": "Brak otwartych problemów w tym kontekście."
+      "noFindings": "Brak otwartych problemów w tym kontekście.",
+      "loadingFindings": "Wczytywanie problemów...",
+      "couldNotLoadFindings": "Nie udało się wczytać problemów: {{message}}"
     },
     "loadingContexts": "Wczytywanie kontekstów...",
     "resolvingValues": "Rozwiązywanie wartości...",
@@ -1026,7 +1038,7 @@
       "tooSmall": "Wartość musi wynosić co najmniej {{limit}}.",
       "unknownKey": "Nieznany klucz „{{key}}”.",
       "unknownKeySuggestion": "Nieznany klucz „{{key}}”. Czy chodziło o „{{suggestion}}”?",
-      "unknownReference": "„{{value}}” nie istnieje w tej przestrzeni roboczej."
+      "unknownReference": "„{{value}}” nie istnieje w tym obszarze roboczym."
     },
     "fixes": {
       "insertKey": "Dodaj „{{key}}”",
@@ -1036,7 +1048,7 @@
     "hover": {
       "allowedValues": "Dozwolone wartości: {{values}}",
       "default": "Domyślnie: {{value}}",
-      "unknownReference": "„{{value}}” nie istnieje w tej przestrzeni roboczej."
+      "unknownReference": "„{{value}}” nie istnieje w tym obszarze roboczym."
     },
     "links": {
       "blueprint": "Otwórz schemat w nowej karcie",
@@ -1216,6 +1228,7 @@
     "versionScope": "Zakres wersji",
     "searchScopeSummary": "Zakres wyszukiwania: {{scope}}",
     "searchScopeParts": "{{version}}, kontekst {{context}}",
+    "searchScopePartsInDefaultContext": "{{version}}, kontekst domyślny",
     "currentVersion": "Bieżąca — v{{version}}",
     "version": "Wersja {{version}}",
     "allVersions": "Wszystkie wersje",
@@ -1927,6 +1940,7 @@
     "hierarchy": "Hierarchia",
     "incomingRelationshipLink": "{{label}} · {{blueprint}}",
     "inheritedFromContext": "Dziedziczone z kontekstu {{context}}",
+    "inheritedFromDefaultContext": "Dziedziczone z kontekstu domyślnego",
     "unableToRenderAttribute": "Nie można wyświetlić {{attribute}}.",
     "unableToRenderComponent": "Nie można wyświetlić komponentu.",
     "unableToRenderRecordHeading": "Nie można wyświetlić nagłówka rekordu."
@@ -2146,6 +2160,21 @@
       "checks": "Sprawdza",
       "predicate": "{{type}}",
       "predicateOn": "{{type}} dla {{attribute}}",
+      "predicateTypes": {
+        "required": "Wymagana wartość",
+        "stale": "Niedawno zmieniona wartość",
+        "has_tag": "Ma tag systemowy",
+        "missing_tag": "Nie ma tagu systemowego",
+        "compare": "Porównanie",
+        "one_of": "Dozwolone wartości",
+        "relative_date": "Data względem dzisiaj",
+        "unique": "Unikalne wartości",
+        "linked": "Powiązane rekordy",
+        "referenced_by": "Odwołujące się rekordy",
+        "acyclic": "Brak cykli",
+        "all_of": "Wszystkie warunki",
+        "any_of": "Dowolny warunek"
+      },
       "runs": "Uruchamia się",
       "triggers": {
         "manual": "Na żądanie",

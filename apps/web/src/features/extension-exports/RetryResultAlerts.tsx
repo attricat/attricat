@@ -1,5 +1,6 @@
 import { Alert, Stack, type SxProps, type Theme } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { apiErrorText } from '../../api/errors';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import type { useRetryExports } from './useRetryExports';
 
@@ -19,9 +20,7 @@ export const RetryResultAlerts = ({
       {!!retry.data?.job_errors.length && (
         <Alert severity="warning">
           {t('extensionExports.retryJobErrors', {
-            messages: retry.data.job_errors
-              .map((error) => error.message)
-              .join('; '),
+            messages: retry.data.job_errors.map(apiErrorText).join(' '),
           })}
         </Alert>
       )}

@@ -17,7 +17,8 @@ pub(super) fn validate_system_annotations(
 
 /// The tags a whole-field write of `requested` leaves on a record. Core tags
 /// stay as they are: `requested` cannot add one, and leaving one out keeps it,
-/// except that the sample marker may be dropped.
+/// except that the sample marker may be dropped. Only ordinary tags count
+/// toward [`MAX_SYSTEM_TAGS`], so a Core tag never blocks a caller's write.
 pub(super) fn resolve_system_tag_update(
     current: &[String],
     requested: &[String],
@@ -39,9 +40,6 @@ pub(super) fn resolve_system_tag_update(
             })
             .cloned(),
     );
-    if tags.len() > MAX_SYSTEM_TAGS {
-        return Err(RepositoryError::InvalidSystemTags);
-    }
     Ok(tags)
 }
 
@@ -178,4 +176,31 @@ pub(super) fn validate_system_metadata(metadata: &Value) -> Result<(), Repositor
         return Err(RepositoryError::InvalidSystemMetadata);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use attricat_validation::system_tags::NEEDS_ATTENTION_SYSTEM_TAG;
+
+    fn ordinary_tags(count: usize) -> Vec<String> {
+        (0..count).map(|index| format!("tag-{index}")).collect()
+    }
+
+    #[test]
+    fn core_tags_do_not_count_toward_the_tag_limit() {
+        let mut current = ordinary_tags(MAX_SYSTEM_TAGS);
+        current.push(NEEDS_ATTENTION_SYSTEM_TAG.to_owned());
+        current.push(SAMPLE_SYSTEM_TAG.to_owned());
+
+        let kept = resolve_system_tag_update(&current, &current).unwrap();
+        assert_eq!(kept, current);
+        let without_core = resolve_system_tag_update(&current, &ordinary_tags(MAX_SYSTEM_TAGS));
+        assert_eq!(without_core.unwrap().len(), MAX_SYSTEM_TAGS + 1);
+
+        assert!(matches!(
+            resolve_system_tag_update(&current, &ordinary_tags(MAX_SYSTEM_TAGS + 1)),
+            Err(RepositoryError::InvalidSystemTags)
+        ));
+    }
 }

@@ -90,3 +90,8 @@ export const useRecentlyPreviewedRecords = (
     previewHref,
   };
 };
+
+/** Records previewed from a relationship picker, and how to link to them. */
+export type RecentlyPreviewedRecords = ReturnType<
+  typeof useRecentlyPreviewedRecords
+>;

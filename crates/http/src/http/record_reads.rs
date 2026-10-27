@@ -225,7 +225,9 @@ pub(super) async fn search_record_previews(
         )
         .await?;
     if input.data_quality.is_some() && !rules_readable {
-        return Err(ApiError::forbidden());
+        return Err(ApiError::data_quality_filter_forbidden(
+            Permission::RulesRead.as_str(),
+        ));
     }
     let candidate_started = Instant::now();
     let mut scope = repository

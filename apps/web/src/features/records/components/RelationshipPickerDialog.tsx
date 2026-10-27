@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   InputAdornment,
@@ -25,13 +25,15 @@ import {
 import { useRelationshipTargets } from './useRelationshipTargets';
 import {
   scrollRelationshipPickerToTop,
-  useRecentlyPreviewedRecords,
+  type RecentlyPreviewedRecords,
 } from './useRecentlyPreviewedRecords';
 
 /**
  * Picks the records a relationship field links to. Mount it with a new `key`
  * for each opening: the draft selection, search and target start from
- * `initialIds` and are only handed back through `onApply`.
+ * `initialIds` and are only handed back through `onApply`. Previewed records
+ * come from the field, so a record previewed in an earlier opening stays
+ * marked and can still be selected from its tab.
  */
 export const RelationshipPickerDialog = ({
   allowedTargets,
@@ -40,6 +42,8 @@ export const RelationshipPickerDialog = ({
   onApply,
   onClose,
   open,
+  previewSelectRef,
+  recentPreviews,
   selectionLabels,
 }: {
   /** Blueprints the relationship may link to; the first is searched first. */
@@ -49,6 +53,9 @@ export const RelationshipPickerDialog = ({
   onApply: (ids: string[]) => void;
   onClose: () => void;
   open: boolean;
+  /** Where the picker takes a record selected from its preview tab. */
+  previewSelectRef: RefObject<((id: string) => void) | null>;
+  recentPreviews: RecentlyPreviewedRecords;
   /** Labels of the records already selected in the field. */
   selectionLabels: ReadonlyMap<string, string>;
 }) => {
@@ -62,13 +69,18 @@ export const RelationshipPickerDialog = ({
   const optionName = useId();
   // A relationship may allow several blueprints; the picker searches one at a time.
   const [targetBlueprint, setTargetBlueprint] = useState(allowedTargets[0]);
-  const { isPreviewed, markPreviewed, previewHref } =
-    useRecentlyPreviewedRecords((id) => {
+  const { isPreviewed, markPreviewed, previewHref } = recentPreviews;
+  useEffect(() => {
+    previewSelectRef.current = (id) => {
       setDraftIds((current) =>
         isSingle ? [id] : current.includes(id) ? current : [...current, id],
       );
       scrollRelationshipPickerToTop(contentRoot.current);
-    });
+    };
+    return () => {
+      previewSelectRef.current = null;
+    };
+  }, [isSingle, previewSelectRef]);
   const { labelById, options, targetLabel, targets } = useRelationshipTargets(
     targetBlueprint,
     query,
@@ -205,7 +217,7 @@ export const RelationshipPickerDialog = ({
           {targets.isError && (
             <Typography color="error" variant="caption">
               {t('records.couldNotLoadRecords', {
-                blueprint: targetBlueprint,
+                blueprint: blueprintName(targetBlueprint),
               })}
             </Typography>
           )}

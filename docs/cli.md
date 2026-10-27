@@ -284,7 +284,15 @@ lists are newest first: pass the last item's `created_at` and `id` as
 
 `agent run events` and `agent message send --follow` print one JSON line per
 server-sent run event until the run's `terminal` event, reconnecting with
-`Last-Event-ID` if the server ends the stream first.
+`Last-Event-ID` if the server ends the stream first. A failed run's stored
+`error` event (it has an event id) is printed like any other; only an `error`
+event without an id, the server's notice that the stream itself failed, ends
+the command with `request_failed`. When a stream ends without a `terminal`
+event, `acli` reads the run (`GET /agent/runs/{run_id}`) and stops with exit
+code 0 if it has finished, for example when its events were purged by
+retention or `--last-event-id` named its terminal event. If the reader of
+standard output goes away (for example `| head -1`), the command stops with
+exit code 0.
 
 
 ## Teams and assignments
@@ -302,10 +310,7 @@ Assignment values are `user:<id>` or `team:<id>`
 ([user or team assignments](blueprints.md#user-or-team-assignments)); filter
 with `"value": "@me"` to find records assigned to the caller or their teams.
 
-## Notifications
-
-Each command acts on the signed-in user's own inbox in the current workspace;
-see [Notifications](notifications.md).
+## Agent
 
 ```sh
 acli agent conversation list [--record-id <id> [--context-id <id>] | --all] [--cursor <cursor>]
@@ -321,7 +326,14 @@ acli agent run events <run-id> [--last-event-id <id>]
 acli agent approval list [--conversation-id <id>]
 acli agent approval approve | reject <tool-call-id>
 acli agent smart-fill --record-id <id> --content <text> [--default-context] [--context-id <id>] [--conversation-id <id>] [--draft-values <json>] [--attachment-id <id> ...]
+```
 
+## Notifications
+
+Each command acts on the signed-in user's own inbox in the current workspace;
+see [Notifications](notifications.md).
+
+```sh
 acli notification list [--unread] [--before-time <created_at> --before-id <id>]
 acli notification count            # {"count": <unread>}
 acli notification get <id>
@@ -368,7 +380,7 @@ acli saved-view create --name 'Active assets' --visibility workspace \
   --state '{"blueprint":"asset","attributeFilters":[{"field":"status","operator":"eq","value":"active"}]}'
 ```
 
-The CLI returns JSON with an `id`; set `ATTRICAT_WEB_URL` to also include a short Explorer `url`. The link command creates an unnamed shareable snapshot. Both commands require workspace access and `records.read` (a link does not grant catalog permissions). See [saved views](saved-views.md).
+The CLI returns JSON with an `id`; set `ATTRICAT_WEB_URL` to the web app's origin (for example `https://attricat.example.com`, with no path) to also include a short Explorer `url`; a URL with a path, query or fragment is rejected because the web app is served only from the root. The link command creates an unnamed shareable snapshot. Both commands require workspace access and `records.read` (a link does not grant catalog permissions). See [saved views](saved-views.md).
 
 ## JSON, workflow, and binary inputs
 
@@ -409,6 +421,10 @@ a login remains valid only for that invocation's HTTP client. A bearer token
 provided with `--token`, `--token-stdin`, or `ATTRICAT_TOKEN` always takes precedence over a
 session file; the CLI does not read or send saved browser cookies in that case.
 Prefer `ATTRICAT_TOKEN` or `--token-stdin` to avoid placing a secret in argv.
+`--token-stdin` reads all of standard input, so it cannot be combined with a
+command flag that also reads it (`--password-stdin`, `--value-stdin`,
+`--client-secret-stdin`, `--stdin` and the like); `acli` rejects the
+combination with `invalid_input`. Use `ATTRICAT_TOKEN` for those commands.
 Credentials are sent only over HTTPS, except to a loopback server for local development.
 When no token is supplied, the saved login session is used.
 

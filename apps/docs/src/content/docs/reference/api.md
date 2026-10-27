@@ -50,6 +50,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `unique_key_duplicates` | 409 | Publishing a new unique key, or moving a context to another parent, failed because existing records would share values. `details.duplicates` lists them. |
 | `relationship_hierarchy_violations` | 409 | Publishing `acyclic` or `tree` failed because existing links contain cycles or extra parents. `details` lists them. |
 | `generated_attribute_readonly` | 422 | The request tries to write a [generated attribute](/reference/blueprint/#generated-values), which only the server assigns. `details.attribute` names it. |
+| `generated_reset_changed` | 409 | A blueprint revision changes the `reset` of an attribute that an earlier revision generated, which would repeat numbers. `details` has `attribute`, `previous`, and `requested`. |
 | `generated_sequence_not_raised` | 409 | A counter advance asked for a `next_value` lower than the current one. Counters can only be raised. `details` has `current` and `requested`. |
 | `stale_record` | 409 | `expected_updated_at` no longer matches the record. Reload it and try again. |
 | `status_precondition_required` | 428 | A write to a status attribute did not send `expected_updated_at`. Read the record and send its `updated_at`. |
@@ -67,6 +68,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `rule_violation` | 422 | The write leaves the record violating an enforcing rule. |
 | `publication_checks_failed` | 422 | A channel's required checks fail. `details.context` is the channel code. |
 | `invalid_rule_definition` | 422 | The rule TOML is invalid or does not fit its blueprint revision. |
+| `rule_revision_unchanged` | 409 | A new rule revision is identical to the latest one, so nothing was saved. `details.version` is that revision. An earlier revision's definition can be saved again. |
 | `rule_not_enabled` | 422 | A normal manual run needs an enabled revision. Enable the rule first, or start a dry run. |
 | `workflow_not_enabled` | 422 | A manual workflow run needs an enabled revision. Enable the workflow first. |
 | `rule_dry_run_required` | 409 | Enabling an enforcing rule needs a completed full dry run of that revision first. If the latest dry run stopped at its record limit, `details` is `{"truncated": true, "existing_violations": …}`. |
@@ -223,11 +225,11 @@ POST /api/v1/records/search
 - `source_relationship_field` can be a relationship path of up to three hops, such as `model.brand`. Each hop needs a single target blueprint and `cardinality = "one"`, and resolves in the facet's context with its own context fallback. The children endpoint accepts the same paths.
 - A `relationship_tree_facets` item without `source_relationship_field` filters the searched blueprint by its own `hierarchy_field`: a record matches when it is a selected node or one of its descendants. The children endpoint accepts the same omission to list the blueprint's own tree, counting each node and everything below it.
 - `export_status` keeps records with that export status at one extension's connection, or its default destination when `connection` is omitted. `status` is `pending`, `synced`, `rejected`, `retrying`, `uncertain`, or `withdrawn`. It combines with the other filters like any of them, with no limit on how many records have the status.
-- `data_quality` keeps records by their unresolved rule findings: `open` (at least one open finding), `acknowledged` (unresolved findings, all acknowledged), or `clean` (none). It requires `rules.read`; without it the request returns `403`.
+- `data_quality` keeps records by their unresolved rule findings: `open` (at least one open finding), `acknowledged` (unresolved findings, all acknowledged), or `clean` (none). It requires `rules.read`; without it the request returns `403 data_quality_filter_forbidden`.
 - Filter operators are `eq`, `contains`, `starts_with`, `gt`, `gte`, `lt`, and `lte`. `field` can be a relationship path of up to three hops.
 - `context_code` (default `default`) is the context in which filters, sorting, and `table_values` are resolved, inheriting from parent contexts per attribute. `query` matches values in every context.
 - `sort.field` must be a scalar column in the blueprint's table view, `blueprint_version`, `system_tag:<tag>`, or `publication_status` (with `sort.context_code` naming a channel). `system_tag:<tag>` sorts records that carry the tag apart from the rest, by record ID within each group.
-- `system_tags` keeps records that carry every listed tag, including [Core tags](#system-tags) such as `attricat.needs_attention`.
+- `system_tags` (at most 20) keeps records that carry every listed tag, including [Core tags](#system-tags) such as `attricat.needs_attention`.
 - Responses contain `items`, `next_cursor`, `result_version_scope`, and, for each item, `system_tags`, `table_values` and `match_explanations`. For callers with `rules.read`, each item also has `data_quality`: `checked` (whether an enabled rule checks the record's blueprint revision) and `findings`, the unresolved findings counted by `state` and `severity`, most severe first. Pass `next_cursor` back as `page.cursor` with the same sort.
 - `include_total` returns a first-page total, capped at 500.
 - `include_blueprint: false` leaves `blueprint` out of the response, for later pages when you kept the first page's.
@@ -252,8 +254,8 @@ POST /api/v1/records/facets/system-tags
 
 #### System tags
 
-A record carries up to 100 system tags of at most 128 bytes each. Their form
-says who owns them:
+A record carries up to 100 system tags of at most 128 bytes each, not counting
+Core tags. Their form says who owns them:
 
 | Form | Owner | Example |
 |---|---|---|
@@ -385,6 +387,7 @@ See [Translate labels](/builders/translations/).
 | `GET`, `POST` | `/agent/conversations/{id}/messages` | Messages. Posting starts a run and returns `202`. |
 | `POST` | `/agent/conversations/{id}/uploads` | Upload an attachment. |
 | `GET` | `/agent/conversations/{id}/runs` | Runs. |
+| `GET` | `/agent/runs/{run_id}` | One run and its status. |
 | `GET` | `/agent/runs/{run_id}/events` | Server-sent events. Reconnect with `Last-Event-ID`. |
 | `GET` | `/agent/approvals` | Pending approvals. |
 | `POST` | `/agent/tool-calls/{id}/approve`, `/reject` | Decide. |
@@ -431,7 +434,7 @@ See [Translate labels](/builders/translations/).
 | `GET` | `/extension-operation-runs/{id}/artifacts/{artifact_id}/download` | Download an output. |
 | `POST`, `GET`, `PATCH` | `/extensions/{id}/operation-schedules`, `/extension-operation-schedules[/{id}]` | Schedules. |
 | `GET` | `/extensions/{id}/export-status` | Status counts per connection and status, a page of export mappings (`?connection=&status=&after=&limit=`, up to 100, continue with `next`), and the 20 most recent rejected or exhausted event deliveries (`handler_failures`); counts and failures come only with the first page. It names records across the workspace, so it also needs a workspace-wide `records.read` grant. |
-| `POST` | `/extensions/{id}/export-status/retry` | `{"connection"?, "record_ids"?, "status"?, "run"?, "idempotency_key"?}`, with record IDs, a status, or both: set up to 1,000 matching records back to `pending` (records chosen by ID alone that were never exported start as `pending` when one of the extension's export jobs covers their blueprint and connection, or the extension handles retry requests itself; deleted records and withdrawn mappings are never selected, and `"status": "withdrawn"` is refused: publish the record again instead) and send the extension `export.retry_requested.v1` for each. With `"run": true`, also resync just those records on the extension's export jobs for that connection; with `idempotency_key` (1–40 ASCII bytes) the same request sent again retries nothing twice: it finds the records it retried and the runs it started, and starts a run only for a job that could not start before. Returns `202` with `{"record_ids", "run_ids", "job_errors"}`; a job that cannot resync is listed in `job_errors` and does not fail the retry. Needs a workspace-wide `records.read` grant too; an extension that is not installed with `exports.mappings` is a `404`, and a disabled one a `422`. |
+| `POST` | `/extensions/{id}/export-status/retry` | `{"connection"?, "record_ids"?, "status"?, "run"?, "idempotency_key"?}`, with record IDs, a status, or both: set up to 1,000 matching records back to `pending` (records chosen by ID alone that were never exported start as `pending` when one of the extension's export jobs covers their blueprint and connection, or the extension handles retry requests itself; deleted records and withdrawn mappings are never selected, and `"status": "withdrawn"` is refused: publish the record again instead) and send the extension `export.retry_requested.v1` for each. With `"run": true`, also resync just those records on the extension's export jobs for that connection; with `idempotency_key` (1–40 ASCII bytes) the same request sent again retries nothing twice: it finds the records it retried and the runs it started, and starts a run only for a job that could not start before. Returns `202` with `{"record_ids", "run_ids", "job_errors"}`; a job that cannot resync is listed in `job_errors` as `{"job_id", "code", "message", "details"}` and does not fail the retry: `code` is `export_job_resync_failed` (with `job_id` and `job_code` in `details`) unless the cause has a more specific error code, which keeps its own details plus those two. Needs a workspace-wide `records.read` grant too; an extension that is not installed with `exports.mappings` is a `404`, and a disabled one a `422`. |
 | `POST` | `/extensions/{id}/exports/{export_id}/preview` | `{"record_id", "connection"?}`: the payload the destination's preview command builds for one record, conventionally `{"payload", "issues"}`. Nothing is pushed. Needs `records.write`, like other extension commands, and `records.read` across the whole workspace; `connection` must be a connection of the export's kind. |
 | `GET`, `POST` | `/extensions/{id}/connections` | List connections, or create one: `{"connection", "kind", "display_name", "grant_type", "token_url", "device_authorization_url"?, "client_id", "scope"?, "parameters"?, "client_secret"?, "refresh_token"?}`. Responses never contain secrets or tokens, only whether they are stored. |
 | `PATCH`, `DELETE` | `/extensions/{id}/connections/{connection}` | Change `display_name`, `token_url`, `device_authorization_url`, `scope` (an empty string clears it), or `parameters`, or replace `client_secret` or `refresh_token`; or delete the connection with its credentials. Moving `token_url` or `device_authorization_url` to another host needs `client_secret` again and drops the stored tokens, so the connection waits for authorization unless a `refresh_token` is sent too. Its export mappings stay, so a connection re-created under the same name keeps the destination's external IDs. |

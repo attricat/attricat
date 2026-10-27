@@ -29,6 +29,7 @@ import type { Finding, FindingsSearch, Rule } from './api';
 import { RecordIdLink } from '../../components/RecordIdLink';
 import { RuleRevisionCell } from './RuleCells';
 import type { RuleRevisions } from './ruleRevisions';
+import { useFindingMessages } from './useFindingMessages';
 import {
   ANY_FINDING_FILTER,
   FINDING_FILTER_MIN_WIDTH,
@@ -133,6 +134,7 @@ export const FindingsSection = ({
   revisions: RuleRevisions;
 }) => {
   const { t } = useTranslation();
+  const messageOf = useFindingMessages(findings ?? [], revisions);
   const any = t('rules.filters.any');
   const setFilter =
     (key: keyof FindingsSearch) => (value: string | undefined) =>
@@ -232,7 +234,7 @@ export const FindingsSection = ({
                 <TableCell>
                   <FindingSeverityChip severity={finding.severity} />
                 </TableCell>
-                <TableCell>{finding.message}</TableCell>
+                <TableCell>{messageOf(finding)}</TableCell>
                 <TableCell>
                   <RuleRevisionCell
                     revisions={revisions}

@@ -34,7 +34,7 @@ docker run --rm -e ATTRICAT_API_URL -e ATTRICAT_TOKEN ghcr.io/attricat/attricat@
 | Server URL | `--server` | `ATTRICAT_API_URL` | API base URL, including `/api`. Defaults to `http://127.0.0.1:3000/api`. |
 | Token | `--token`, `--token-stdin` | `ATTRICAT_TOKEN` | Personal API token. |
 | Session file | `--session-file` | `ATTRICAT_SESSION_FILE` | Stores a browser session between commands. |
-| Web URL | | `ATTRICAT_WEB_URL` | When set, saved-search commands also print a short Explorer link. |
+| Web URL | | `ATTRICAT_WEB_URL` | The web app's origin, such as `https://attricat.example.com`, with no path. When set, saved-search commands also print a short Explorer link. |
 | Skip `.env` | `--no-env` | | Do not read `.env` from the current directory. |
 
 By default, `acli` reads `.env` from the current directory without overriding variables already set in the shell.
@@ -51,6 +51,8 @@ acli blueprint list
 ```
 
 Prefer `ATTRICAT_TOKEN` or `--token-stdin` over `--token`, which leaves the secret in your shell history and process list.
+
+`--token-stdin` reads all of standard input, so it cannot be combined with a command flag that also reads it, such as `--password-stdin`, `--value-stdin`, `--client-secret-stdin` or `--stdin`; `acli` rejects the combination with `invalid_input`. Use `ATTRICAT_TOKEN` for those commands.
 
 **With a password session.** Sign in once and keep the session in a file:
 
@@ -439,7 +441,7 @@ acli extension layout get
 acli extension layout set --layout <json-or-file>
 ```
 
-Connection secrets and workspace secret values are read from standard input so they never appear in process arguments; with both `--client-secret-stdin` and `--refresh-token-stdin`, put the client secret on the first line. `connection authorize` only works from a browser session (`--session-file`).
+Connection secrets and workspace secret values are read from standard input so they never appear in process arguments; with both `--client-secret-stdin` and `--refresh-token-stdin`, put the client secret on the first line. `connection authorize` needs a browser session (`--session-file`) and returns the provider's authorization URL, but the provider's callback completes only in the session that started it, which your browser does not carry; authorize from the web app instead, or use `connection exchange-code` with a code you obtained yourself.
 
 ### Solution packs
 

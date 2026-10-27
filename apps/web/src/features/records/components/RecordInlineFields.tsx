@@ -332,7 +332,7 @@ export const RecordInlineFields = ({
       // Leaves room for the editor's label, which rises above its outline.
       <Stack spacing={4} useFlexGap>
         {/* Sits closer to the field above than the layout's gap so it
-              reads as part of its own editor. */}
+            reads as part of its own editor. */}
         <Box sx={{ mt: -4 }}>
           <KeptDisplay
             attribute={attribute}

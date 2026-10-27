@@ -2014,7 +2014,11 @@ impl WasmExtensionTaskHandler {
         }
         // A debounced handler sees a record's event only after the record has
         // been quiet for the window; a newer event of the same record
-        // supersedes it, unless the event has waited its longest.
+        // supersedes it, unless the event has waited its longest while the
+        // record is still changing. Once the newest event's own window has
+        // passed, its delivery pushes the record, so an older event is
+        // superseded however long it waited: delivering it then would only
+        // push a stale revision, possibly after the newer one.
         if let Some((debounce, max_wait)) = handler.debounce()
             && event.aggregate_kind == "record"
         {
@@ -2033,14 +2037,15 @@ impl WasmExtensionTaskHandler {
                 dispatch.resume_no_later_than(due);
                 return Ok(HandlerStep::Settled);
             }
-            if now < event.occurred_at + delay(max_wait)
-                && repository
-                    .newer_record_event_exists(
-                        &installation.extension_id,
-                        event,
-                        &handler.event_types,
-                    )
-                    .await?
+            let newest = repository
+                .newest_superseding_record_event_at(
+                    &installation.extension_id,
+                    event,
+                    &handler.event_types,
+                )
+                .await?;
+            if let Some(newest) = newest
+                && (now < event.occurred_at + delay(max_wait) || newest + delay(debounce) <= now)
             {
                 // The newer event's delivery pushes the record, so leases an
                 // earlier attempt took end rather than hold it off.

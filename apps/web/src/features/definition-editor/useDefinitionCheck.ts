@@ -24,7 +24,10 @@ export type DefinitionCheck<T> = {
   serverMessage?: string;
   /** The most recent definition that passed, for the preview. */
   result?: T;
-  /** Whether `result` comes from an earlier version of the definition. */
+  /**
+   * Whether `result` comes from an earlier version of the definition or was
+   * checked against another scope.
+   */
   stale: boolean;
 };
 
@@ -71,13 +74,14 @@ export const useDefinitionCheck = <T>({
   const [lastValid, setLastValid] = useState<{
     definition: string;
     result: T;
+    scope: string | undefined;
   }>();
   if (
     query.isSuccess &&
     !query.isPlaceholderData &&
-    lastValid?.result !== query.data
+    (lastValid?.result !== query.data || lastValid?.scope !== scope)
   )
-    setLastValid({ definition: checked, result: query.data });
+    setLastValid({ definition: checked, result: query.data, scope });
 
   const pending =
     checked !== definition || query.isFetching || query.isPlaceholderData;
@@ -93,7 +97,9 @@ export const useDefinitionCheck = <T>({
     error: failure ? errorMessage(failure) : undefined,
     serverMessage: failure?.message,
     result: lastValid?.result,
-    stale: lastValid !== undefined && lastValid.definition !== definition,
+    stale:
+      lastValid !== undefined &&
+      (lastValid.definition !== definition || lastValid.scope !== scope),
     status,
   };
 };

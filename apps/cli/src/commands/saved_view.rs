@@ -162,10 +162,21 @@ fn with_web_url(body: String, key: &str) -> Result<String, CliError> {
     let Some(id) = output.get("id").and_then(Value::as_str).map(str::to_owned) else {
         return Ok(body);
     };
-    let mut url = Url::parse(&web)
-        .map_err(|error| CliError::Input(format!("invalid ATTRICAT_WEB_URL: {error}")))?;
-    url.set_path("/");
-    url.set_query(Some(&format!("{key}={id}")));
-    output["url"] = json!(url.to_string());
+    output["url"] = json!(explorer_link(&web, key, &id)?.to_string());
     Ok(output.to_string())
+}
+
+/// The Explorer link for `id` under the web app at `web`. The web app is
+/// served from its origin's root, so a path, query or fragment would be
+/// silently dropped; reject it instead.
+pub(crate) fn explorer_link(web: &str, key: &str, id: &str) -> Result<Url, CliError> {
+    let mut url = Url::parse(web)
+        .map_err(|error| CliError::Input(format!("invalid ATTRICAT_WEB_URL: {error}")))?;
+    if url.path() != "/" || url.query().is_some() || url.fragment().is_some() {
+        return Err(CliError::Input(format!(
+            "ATTRICAT_WEB_URL must be the web app's origin, such as https://attricat.example.com, not {web}"
+        )));
+    }
+    url.set_query(Some(&format!("{key}={id}")));
+    Ok(url)
 }

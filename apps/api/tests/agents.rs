@@ -1101,6 +1101,18 @@ async fn agent_conversation_reads_and_persisted_sse_replay(pool: PgPool) {
     let replay = response.text().await.unwrap();
     assert!(replay.contains(&format!("id: {event_id}")));
     assert!(replay.contains("event: terminal"));
+    let run: Value = client
+        .get(format!("{base_url}/agent/runs/{run_id}"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(run["id"], run_id.to_string());
+    assert_eq!(run["status"], "skipped");
     server.abort();
 }
 

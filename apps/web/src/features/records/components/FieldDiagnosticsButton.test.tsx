@@ -1,11 +1,14 @@
 // @vitest-environment jsdom
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
-import '../../../i18n';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import i18n from '../../../i18n';
 import type { Finding } from '../../rules/schemas';
 import { RevealFieldContext } from '../../views/fieldReveal';
-import { FieldDiagnosticsContext } from '../fieldDiagnostics';
+import {
+  FieldDiagnosticsContext,
+  fieldFindingsStatuses,
+} from '../fieldDiagnostics';
 import { FieldDiagnosticsButton } from './FieldDiagnosticsButton';
 
 const polishContextId = crypto.randomUUID();
@@ -32,6 +35,8 @@ const missingDescription: Finding = {
 };
 
 describe('FieldDiagnosticsButton', () => {
+  afterEach(() => i18n.changeLanguage('en'));
+
   it('renders nothing outside the record page', () => {
     const { container } = render(
       <FieldDiagnosticsButton attribute={metaDescription} />,
@@ -69,23 +74,18 @@ describe('FieldDiagnosticsButton', () => {
     expect(screen.getByText('Meta description is required')).toBeTruthy();
   });
 
-  it('says which context an inherited value comes from', async () => {
+  it('says when findings could not be loaded instead of none', async () => {
     const user = userEvent.setup();
     render(
       <FieldDiagnosticsContext
         value={{
           contextCode: 'cars_pl',
           contextId: polishContextId,
-          showsValues: true,
+          findingsStatus: fieldFindingsStatuses.failed,
+          findingsError: new Error('Network down'),
         }}
       >
-        <FieldDiagnosticsButton
-          attribute={metaDescription}
-          resolved={{
-            value: 'A fast estate',
-            source_context: { id: crypto.randomUUID(), code: 'default' },
-          }}
-        />
+        <FieldDiagnosticsButton attribute={metaDescription} />
       </FieldDiagnosticsContext>,
     );
 
@@ -93,12 +93,69 @@ describe('FieldDiagnosticsButton', () => {
       screen.getByRole('button', { name: 'Details of Meta description' }),
     );
 
-    expect(
-      screen.getByText('Inherited from the default context.'),
-    ).toBeTruthy();
-    // Without access to rules there is no findings section.
-    expect(screen.queryByText('Data quality')).toBeNull();
+    expect(screen.getByRole('alert').textContent).toBe(
+      'Could not load findings: Network down',
+    );
+    expect(screen.queryByText('No open findings in this context.')).toBeNull();
   });
+
+  it('says findings are loading instead of none', async () => {
+    const user = userEvent.setup();
+    render(
+      <FieldDiagnosticsContext
+        value={{
+          contextCode: 'cars_pl',
+          contextId: polishContextId,
+          findingsStatus: fieldFindingsStatuses.loading,
+        }}
+      >
+        <FieldDiagnosticsButton attribute={metaDescription} />
+      </FieldDiagnosticsContext>,
+    );
+
+    await user.click(
+      screen.getByRole('button', { name: 'Details of Meta description' }),
+    );
+
+    expect(screen.getByText('Loading findings...')).toBeTruthy();
+    expect(screen.queryByText('No open findings in this context.')).toBeNull();
+  });
+
+  it.each([
+    ['en', 'default', 'Inherited from the default context.'],
+    ['en', 'cars', 'Inherited from the cars context.'],
+    ['pl', 'default', 'Odziedziczona z kontekstu domyślnego.'],
+    ['pl', 'cars', 'Odziedziczona z kontekstu cars.'],
+  ])(
+    'says which context an inherited value comes from (%s, %s)',
+    async (language, source, sentence) => {
+      await i18n.changeLanguage(language);
+      const user = userEvent.setup();
+      render(
+        <FieldDiagnosticsContext
+          value={{
+            contextCode: 'cars_pl',
+            contextId: polishContextId,
+            showsValues: true,
+          }}
+        >
+          <FieldDiagnosticsButton
+            attribute={metaDescription}
+            resolved={{
+              value: 'A fast estate',
+              source_context: { id: crypto.randomUUID(), code: source },
+            }}
+          />
+        </FieldDiagnosticsContext>,
+      );
+
+      await user.click(screen.getByRole('button'));
+
+      expect(screen.getByText(sentence)).toBeTruthy();
+      // Without access to rules there is no findings section.
+      expect(screen.queryByText('Data quality')).toBeNull();
+    },
+  );
 
   it('describes how the blueprint ties the field to others', async () => {
     const user = userEvent.setup();

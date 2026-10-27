@@ -97,7 +97,7 @@ or inaccessible configured bucket.
 | `S3_BUCKET` | Required | API, file worker, migrate | Existing bucket used for catalog objects. Local startup creates it. |
 | `S3_ACCESS_KEY_ID` | Required | API, file worker, migrate | S3 access key ID. Its secret half is the `s3_secret_access_key` secret. |
 | `S3_FORCE_PATH_STYLE` | Required | API, file worker, migrate | Strict `true`/`false` setting for S3 path-style addressing. Set `true` for local RustFS. |
-| `S3_UPLOAD_TIMEOUT_SECONDS` | Required | API, file worker, migrate | Positive timeout for object uploads and deletes. |
+| `S3_UPLOAD_TIMEOUT_SECONDS` | Required | API, file worker, migrate | Positive timeout for object uploads and deletes. A multipart upload applies it to each request: initiation, every part, and completion. |
 | `S3_DOWNLOAD_TIMEOUT_SECONDS` | Required | API, file worker, migrate | Positive timeout for object downloads and bucket readiness. |
 | `FILE_UPLOAD_MAX_BYTES` | `52428800` | API | Positive request-level byte limit for each streamed upload. A file attribute may set a lower `max_bytes` policy. |
 | `FILE_UPLOAD_MAX_FILES` | `10` | API | Positive request-level number of file parts. A `cardinality = "one"` attribute accepts exactly one. |
@@ -368,10 +368,14 @@ The file worker reads originals for processing, writes generated variants, and
 deletes objects. Authorized downloads through the API also read originals and
 variants. Give API and worker credentials
 only the minimum bucket permissions (`PutObject`, `GetObject`, `DeleteObject`,
-`AbortMultipartUpload`, and `ListObjectsV2`); keep the bucket private and
-terminate TLS at the S3 endpoint. Files larger than 8 MiB upload as multipart
-uploads, which are aborted when a part fails. The startup and readiness check
-lists at most one key.
+`AbortMultipartUpload`, and `ListBucket`); keep the bucket private and
+terminate TLS at the S3 endpoint. Files of 8 MiB or more upload as multipart
+uploads, which are aborted when any part or the completion fails or times out,
+or the upload is cancelled. The startup and readiness check lists at most one
+key. The S3 client honours the standard `HTTP_PROXY`, `HTTPS_PROXY`,
+`ALL_PROXY` and `NO_PROXY` environment variables (or their lowercase forms);
+set `NO_PROXY` to the S3 host when a proxy is configured for other traffic but
+must not carry object-store requests.
 
 Uploaded files are retained while referenced. Conversation uploads have a
 15-minute pending-attachment window, so reconciliation does not delete them

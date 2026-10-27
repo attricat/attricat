@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   clearExplorerColumnPreferences,
+  defaultExplorerColumnPreferences,
+  normalizeExplorerColumnPreferences,
   getExplorerColumnPreferences,
   setExplorerColumnPreferences,
   type ExplorerColumnPreferences,
@@ -8,7 +10,9 @@ import {
 
 /**
  * Column preferences are read once per mounted table; the results table is
- * remounted whenever its rows belong to another blueprint revision.
+ * remounted whenever its rows belong to another blueprint revision. Columns
+ * can still appear while it is mounted, for example when the viewer is
+ * granted rules access, so they are fitted to the current columns.
  */
 export const useExplorerColumnPreferences = (
   blueprintId: string,
@@ -23,7 +27,16 @@ export const useExplorerColumnPreferences = (
   };
   const clear = () => {
     clearExplorerColumnPreferences(blueprintId);
-    setPreferences({ hidden: [], order: columnIds });
+    setPreferences(defaultExplorerColumnPreferences(columnIds));
   };
-  return { clear, preferences, update };
+  const columnKey = JSON.stringify(columnIds);
+  const current = useMemo(
+    () =>
+      normalizeExplorerColumnPreferences(
+        preferences,
+        JSON.parse(columnKey) as string[],
+      ),
+    [columnKey, preferences],
+  );
+  return { clear, preferences: current, update };
 };

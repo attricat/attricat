@@ -5,7 +5,9 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../i18n';
 import { LEXICON_NAMESPACE } from '../lexicon/constants';
+import { plainKeyResourceKey } from '../lexicon/resources';
 import { getSystemTagFacet } from '../records/api';
+import { MAX_SYSTEM_TAG_BYTES } from '../records/constants';
 import { SystemTagFilterPicker } from './SystemTagFilterPicker';
 
 vi.mock('../records/api', async (importOriginal) => {
@@ -41,7 +43,7 @@ describe('SystemTagFilterPicker', () => {
 
   it('shows translated tags and matches typing against either form', async () => {
     i18n.addResourceBundle('en', LEXICON_NAMESPACE, {
-      'workflow.review': 'Needs review',
+      [plainKeyResourceKey('workflow.review')]: 'Needs review',
     });
     facet.mockResolvedValue({
       items: [
@@ -138,6 +140,24 @@ describe('SystemTagFilterPicker', () => {
     expect(facet.mock.calls.map(([request]) => request.prefix)).toEqual([
       undefined,
       'ra',
+    ]);
+  });
+
+  it('never asks the server for a prefix longer than a tag', async () => {
+    facet.mockResolvedValue({
+      items: [{ tag: 'common', count: 40 }],
+      truncated: true,
+    });
+    const user = await openPicker();
+    const combobox = screen.getByRole('combobox');
+    expect(combobox).toHaveProperty('maxLength', MAX_SYSTEM_TAG_BYTES);
+
+    // Two bytes a letter: within the input's limit, over the server's.
+    await user.click(combobox);
+    await user.paste('ą'.repeat(MAX_SYSTEM_TAG_BYTES / 2 + 1));
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(facet.mock.calls.map(([request]) => request.prefix)).toEqual([
+      undefined,
     ]);
   });
 });

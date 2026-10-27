@@ -158,12 +158,23 @@ export const toggledSort = (
       : sortDirections.ascending,
 });
 
+/**
+ * The data quality filter the search sends. Only viewers who may read rules
+ * can filter by findings, so a filter from a link or saved view is dropped for
+ * others, who cannot see its chip to remove it.
+ */
+export const dataQualityRequest = (
+  search: ExplorerSearch,
+  canReadRules: boolean,
+) => (canReadRules ? search.dataQuality : undefined);
+
 export const explorerResultsQueryKey = (
   search: ExplorerSearch,
   relationshipFilters: RelationshipFilter[],
   version: number | undefined,
   sort: ReturnType<typeof requestSort>,
   contextCode: string,
+  canReadRules: boolean,
 ) =>
   recordQueryKeys.search({
     allVersions: Boolean(search.allVersions),
@@ -177,7 +188,7 @@ export const explorerResultsQueryKey = (
     version,
     exportStatus: search.exportStatus,
     systemTags: search.systemTags,
-    dataQuality: search.dataQuality,
+    dataQuality: dataQualityRequest(search, canReadRules),
   });
 
 /** The search request's export status filter. */

@@ -58,9 +58,13 @@ error_codes! {
     ContextCycle = "context_cycle",
     ContextInUse = "context_in_use",
     CsrfFailed = "csrf_failed",
+    DataQualityFilterForbidden = "data_quality_filter_forbidden",
     DefaultContextOnly = "default_context_only",
     DefaultContextProtected = "default_context_protected",
     DisabledInDemo = "disabled_in_demo",
+    // Not an error response: a job a retry could not resync, listed in its
+    // `job_errors`.
+    ExportJobResyncFailed = "export_job_resync_failed",
     ExtensionAlreadyInstalled = "extension_already_installed",
     FileAttributeReadonly = "file_attribute_readonly",
     FileCardinalityExceeded = "file_cardinality_exceeded",
@@ -70,6 +74,7 @@ error_codes! {
     FileTooLarge = "file_too_large",
     Forbidden = "forbidden",
     GeneratedAttributeReadonly = "generated_attribute_readonly",
+    GeneratedResetChanged = "generated_reset_changed",
     GeneratedSequenceNotRaised = "generated_sequence_not_raised",
     GlobalRelationshipSearchBudgetExceeded = "global_relationship_search_budget_exceeded",
     GlobalRelationshipSearchTimedOut = "global_relationship_search_timed_out",
@@ -126,6 +131,7 @@ error_codes! {
     RuleHasExistingViolations = "rule_has_existing_violations",
     RuleNotEnabled = "rule_not_enabled",
     RuleNotPublished = "rule_not_published",
+    RuleRevisionUnchanged = "rule_revision_unchanged",
     RuleViolation = "rule_violation",
     ServiceUnavailable = "service_unavailable",
     SolutionPackApplicationFailed = "solution_pack_application_failed",
@@ -367,6 +373,15 @@ impl RepositoryError {
                 plain(Unprocessable, Code::GeneratedAttributeReadonly)
                     .with_details(json!({ "attribute": attribute }))
             }
+            Self::GeneratedResetChanged {
+                attribute,
+                previous,
+                requested,
+            } => plain(Conflict, Code::GeneratedResetChanged).with_details(json!({
+                "attribute": attribute,
+                "previous": previous.as_str(),
+                "requested": requested.as_str(),
+            })),
             Self::GeneratedSequenceNotRaised { current, requested } => {
                 plain(Conflict, Code::GeneratedSequenceNotRaised)
                     .with_details(json!({ "current": current, "requested": requested }))
@@ -512,6 +527,8 @@ impl RepositoryError {
                 plain(Conflict, Code::BlueprintRevisionUnchanged)
                     .with_details(json!({ "version": version }))
             }
+            Self::RuleRevisionUnchanged { version } => plain(Conflict, Code::RuleRevisionUnchanged)
+                .with_details(json!({ "version": version })),
             Self::BlueprintNotPublished => plain(Unprocessable, Code::BlueprintNotPublished),
             Self::WorkflowNotPublished => plain(Unprocessable, Code::WorkflowNotPublished),
             Self::WorkflowNotEnabled => plain(Unprocessable, Code::WorkflowNotEnabled),

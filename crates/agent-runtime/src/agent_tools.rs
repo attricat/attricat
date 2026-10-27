@@ -16,7 +16,9 @@ use uuid::Uuid;
 use attricat_validation::predicate::MAX_SYSTEM_TAGS;
 use attricat_validation::saved_search::{
     EXPLORER_SEARCH_KIND, MAX_BLUEPRINT_BYTES, MAX_SELECTED_IDS, MAX_STATE_BYTES,
+    MAX_SYSTEM_TAG_FILTERS,
 };
+use attricat_validation::system_tags::{CORE_SYSTEM_TAGS, is_core_system_tag};
 
 use crate::{
     agents::MAX_TOOL_RESULT_BYTES,
@@ -316,15 +318,16 @@ impl AnnotationEdit {
                 system_tags,
                 system_metadata,
             } => {
-                if system_tags
+                // Core tags the record already carries may be listed and do
+                // not count toward the limit.
+                if system_tags.as_ref().is_some_and(|tags| {
+                    tags.iter().filter(|tag| !is_core_system_tag(tag)).count() > MAX_SYSTEM_TAGS
+                }) || system_metadata
                     .as_ref()
-                    .is_some_and(|tags| tags.len() > MAX_SYSTEM_TAGS)
-                    || system_metadata
-                        .as_ref()
-                        .is_some_and(|metadata| !metadata.is_object())
+                    .is_some_and(|metadata| !metadata.is_object())
                 {
                     return Err(ToolError::InvalidArguments(format!(
-                        "tags must have at most {MAX_SYSTEM_TAGS} entries and metadata must be an object"
+                        "tags must have at most {MAX_SYSTEM_TAGS} entries besides Core tags and metadata must be an object"
                     )));
                 }
             }
@@ -633,7 +636,7 @@ pub fn definitions() -> Vec<ToolDefinition> {
         definition(
             "search_records",
             "Search records of a blueprint by scalar values, attribute filters, relationship filters, and system tags. filters use {field, operator, value} with a scalar or file leaf, including is_set presence checks such as records without an attached file (see the filters parameter for operators per attribute type); relationship_filters use {field, selected_target_ids} with a relationship path and target record UUIDs. All filters combine with AND. Filters, sorting and table values read the context_code context (default: default), falling back through its parent contexts per attribute; free text matches values in every context. Query terms are whitespace-separated AND terms. Bare free text searches scalar values on the selected blueprint only. Use *:value for global relationship-aware discovery through up to three incoming edges. Use attribute:value for a selected-blueprint attribute; use relationship:value or an explicit path with up to three relationship hops and a scalar leaf; and use blueprint:value or blueprint.attribute:value for the selected blueprint (code or name). Use @id:uuid1,uuid2 for selected-blueprint record IDs or relationship.@id:uuid1,uuid2 for records linked to those IDs (at most 100 IDs per term). A trailing * means prefix matching. Results include match_explanations with deterministic match witnesses and relationship paths. Omit blueprint.version to include every published revision; set outdated to true to return only records that are not on the latest published revision. Use sort with a configured scalar table-column field, blueprint_version, or publication_status and asc or desc direction; ascending blueprint_version puts older schemas first, ascending publication_status puts unpublished records first and requires sort.context_code for an enabled channel. Relationship table columns use paths of up to three hops. A relationship-path sort without blueprint.version is accepted only when the complete matching result uses one source version. Without sort, results are paginated in ascending creation order.",
-            json!({"type":"object","required":["blueprint"],"properties":{"blueprint":{"type":"object","required":["code"],"properties":{"code":{"type":"string"},"version":{"type":"integer","minimum":1}},"additionalProperties":false},"query":{"type":"string"},"filters":attribute_filter_parameters(),"relationship_filters":relationship_filter_parameters(),"system_tags":{"type":"array","items":{"type":"string"}},"outdated":{"type":"boolean"},"context_code":{"type":"string"},"sort":{"type":"object","required":["field","direction"],"properties":{"field":{"type":"string"},"direction":{"type":"string","enum":["asc","desc"]},"context_code":{"type":"string"}},"additionalProperties":false},"page":{"type":"object","properties":{"size":{"type":"integer","minimum":1,"maximum":DEFAULT_RECORD_PAGE_SIZE},"cursor":{"type":"string"}},"additionalProperties":false}},"additionalProperties":false}),
+            json!({"type":"object","required":["blueprint"],"properties":{"blueprint":{"type":"object","required":["code"],"properties":{"code":{"type":"string"},"version":{"type":"integer","minimum":1}},"additionalProperties":false},"query":{"type":"string"},"filters":attribute_filter_parameters(),"relationship_filters":relationship_filter_parameters(),"system_tags":{"type":"array","maxItems":MAX_SYSTEM_TAG_FILTERS,"items":{"type":"string"}},"outdated":{"type":"boolean"},"context_code":{"type":"string"},"sort":{"type":"object","required":["field","direction"],"properties":{"field":{"type":"string"},"direction":{"type":"string","enum":["asc","desc"]},"context_code":{"type":"string"}},"additionalProperties":false},"page":{"type":"object","properties":{"size":{"type":"integer","minimum":1,"maximum":DEFAULT_RECORD_PAGE_SIZE},"cursor":{"type":"string"}},"additionalProperties":false}},"additionalProperties":false}),
         ),
         definition(
             "find_records",
@@ -859,7 +862,7 @@ pub fn definitions() -> Vec<ToolDefinition> {
                 "remove_tags":{"type":"array","maxItems":MAX_SYSTEM_TAGS,"items":{"type":"string"}},
                 "set_metadata":{"type":"object"},
                 "remove_metadata":{"type":"array","items":{"type":"string"}},
-                "system_tags":{"type":"array","maxItems":MAX_SYSTEM_TAGS,"items":{"type":"string"}},"system_metadata":{"type":"object"}},"additionalProperties":false}),
+                "system_tags":{"type":"array","maxItems":MAX_SYSTEM_TAGS + CORE_SYSTEM_TAGS.len(),"items":{"type":"string"}},"system_metadata":{"type":"object"}},"additionalProperties":false}),
         ),
         definition(
             "update_context",
@@ -3576,6 +3579,21 @@ mod tests {
                 "{invalid}"
             );
         }
+        // A full replacement may list the record's Core tags on top of the
+        // ordinary-tag limit.
+        let mut tags = (0..super::MAX_SYSTEM_TAGS)
+            .map(|index| format!("tag-{index}"))
+            .collect::<Vec<_>>();
+        tags.extend(super::CORE_SYSTEM_TAGS.map(str::to_owned));
+        assert!(
+            super::AnnotationEdit::from_arguments(&json!({"record_id":"id","system_tags":tags}))
+                .is_ok()
+        );
+        tags.push("one-too-many".into());
+        assert!(
+            super::AnnotationEdit::from_arguments(&json!({"record_id":"id","system_tags":tags}))
+                .is_err()
+        );
         assert_eq!(
             change_summary("update_context", &json!({"context_id":"id"})).unwrap(),
             "Replace parent and data on context id."

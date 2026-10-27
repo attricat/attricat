@@ -7,7 +7,7 @@ use crate::domain_events::{
 };
 use crate::model::TablePathAttribute;
 use crate::persistence_rows::{Db, IntoDomain};
-use attricat_blueprint::{AttributeDeclaration, ViewDefinition, parse};
+use attricat_blueprint::{AttributeDeclaration, GeneratedValue, ViewDefinition, parse};
 use attricat_cache::{CacheKey, Policy};
 use attricat_domain::attribute_options::Cardinality;
 use attricat_domain::states::RevisionStatus;
@@ -220,6 +220,8 @@ impl AttricatRepository {
                 version: latest.version,
             });
         }
+        self.validate_generated_resets(transaction, blueprint_id, &compiled)
+            .await?;
 
         self.insert_blueprint_revision_in_transaction(
             transaction,
@@ -229,6 +231,57 @@ impl AttricatRepository {
             compiled,
         )
         .await
+    }
+
+    /// Refuses a revision that changes the `reset` of an attribute an earlier
+    /// revision of the family generated. Counters are keyed by attribute code
+    /// and period, so a new `reset` reads a different period and restarts
+    /// numbering at `start`, handing out numbers earlier records already hold.
+    /// `start` may change: it only seeds a period that has no counter yet,
+    /// and each period of a resetting attribute renders its own date tokens.
+    /// The caller holds the family's revision lock.
+    async fn validate_generated_resets(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        blueprint_id: Uuid,
+        compiled: &attricat_blueprint::CompiledBlueprint,
+    ) -> Result<(), RepositoryError> {
+        let requested: HashMap<_, _> = compiled
+            .attributes
+            .iter()
+            .filter_map(|attribute| {
+                attribute
+                    .generated
+                    .as_ref()
+                    .map(|generated| (attribute.code.as_str(), generated.reset))
+            })
+            .collect();
+        if requested.is_empty() {
+            return Ok(());
+        }
+        // Every earlier declaration of an attribute agrees on `reset`, so the
+        // latest one stands for all of them.
+        let previous = sqlx::query_as::<_, (String, sqlx::types::Json<GeneratedValue>)>(
+            r#"SELECT DISTINCT ON (code) code, generated FROM attributes
+               WHERE workspace_id = $1 AND blueprint_id = $2 AND generated IS NOT NULL
+               ORDER BY code, blueprint_version DESC"#,
+        )
+        .bind(self.workspace_id.0)
+        .bind(blueprint_id)
+        .fetch_all(&mut **transaction)
+        .await?;
+        for (attribute, previous) in previous {
+            if let Some(&requested) = requested.get(attribute.as_str())
+                && requested != previous.0.reset
+            {
+                return Err(RepositoryError::GeneratedResetChanged {
+                    attribute,
+                    previous: previous.0.reset,
+                    requested,
+                });
+            }
+        }
+        Ok(())
     }
 
     async fn insert_blueprint_revision_in_transaction(

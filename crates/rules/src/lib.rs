@@ -15,6 +15,12 @@ pub const MAX_PAGE_SIZE: u32 = 500;
 const MAX_TRIGGERS: usize = 8;
 /// Fields of a schedule cron expression, including seconds.
 const CRON_FIELDS: usize = 6;
+/// Supported definition format versions.
+const FORMAT_VERSIONS: [u32; 1] = [1];
+/// Matches text with at least one non-whitespace character.
+const NON_BLANK_PATTERN: &str = r"\S";
+/// Matches [`CRON_FIELDS`] whitespace-separated fields.
+const SIX_FIELD_CRON_PATTERN: &str = r"^\s*\S+(?:\s+\S+){5}\s*$";
 
 #[derive(Debug, Error)]
 pub enum RuleError {
@@ -49,14 +55,25 @@ pub struct RuleDefinition {
     pub enforcement: Option<Enforcement>,
 }
 
-/// How prominently findings from this rule are reported.
-#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum Severity {
-    Info,
-    Warning,
-    Error,
-    Critical,
+/// How prominently findings from this rule are reported: the same codes
+/// that rule findings store.
+pub use attricat_domain::states::RuleFindingSeverity as Severity;
+
+/// The JSON Schema of [`Severity`], which `attricat-domain` cannot derive.
+struct SeveritySchema;
+
+impl JsonSchema for SeveritySchema {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "Severity".into()
+    }
+
+    fn json_schema(_: &mut SchemaGenerator) -> Schema {
+        json_schema!({
+            "description": "How prominently findings from this rule are reported.",
+            "enum": Severity::codes(),
+            "type": "string",
+        })
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -152,14 +169,18 @@ pub struct CompiledRule {
 /// A data-health rule that reports findings for records matching its predicate.
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+#[schemars(title = "Attricat rule definition")]
 struct Raw {
     /// Definition format version. Only `1` is supported.
+    #[schemars(extend("enum" = FORMAT_VERSIONS))]
     format_version: u32,
     /// Stable rule identifier, unique within its owner.
     #[schemars(regex(pattern = attricat_validation::CODE_PATTERN))]
     code: String,
     /// Human-readable rule name.
+    #[schemars(regex(pattern = NON_BLANK_PATTERN))]
     name: String,
+    #[schemars(with = "SeveritySchema")]
     severity: Severity,
     /// One to eight events that evaluate the rule.
     #[schemars(length(min = 1, max = MAX_TRIGGERS))]
@@ -170,14 +191,18 @@ struct Raw {
     enforcement: Option<Enforcement>,
 }
 /// When the rule is evaluated.
+// Variants without fields are empty structs rather than unit variants: serde
+// ignores unknown keys next to the tag of a unit variant even with
+// `deny_unknown_fields`.
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 enum RawTrigger {
     /// Evaluated only when run on demand.
-    Manual,
+    Manual {},
     /// Evaluated on a UTC cron schedule.
     Schedule {
         /// Six-field cron expression, including seconds: `sec min hour day month weekday`.
+        #[schemars(regex(pattern = SIX_FIELD_CRON_PATTERN))]
         cron: String,
         /// Schedule time zone. Only `UTC` is supported.
         #[schemars(extend("enum" = ["UTC"]))]
@@ -190,11 +215,11 @@ enum RawTrigger {
         event_type: String,
     },
     /// Evaluated after an import finishes.
-    PostImport,
+    PostImport {},
 }
 pub fn parse(source: &str) -> Result<RuleDefinition, RuleError> {
     let raw: Raw = toml::from_str(source)?;
-    if raw.format_version != 1 {
+    if !FORMAT_VERSIONS.contains(&raw.format_version) {
         return Err(RuleError::UnsupportedFormatVersion(raw.format_version));
     }
     code(&raw.code, "rule code")?;
@@ -209,8 +234,8 @@ pub fn parse(source: &str) -> Result<RuleDefinition, RuleError> {
         .triggers
         .into_iter()
         .map(|trigger| match trigger {
-            RawTrigger::Manual => Ok(Trigger::Manual),
-            RawTrigger::PostImport => Ok(Trigger::PostImport),
+            RawTrigger::Manual {} => Ok(Trigger::Manual),
+            RawTrigger::PostImport {} => Ok(Trigger::PostImport),
             RawTrigger::Event { event_type } => {
                 if !RECORD_EVENTS.contains(&event_type.as_str()) {
                     return Err(RuleError::Invalid(format!(
@@ -321,6 +346,7 @@ pub fn compile_embedded(value: toml::Value) -> Result<CompiledRule, RuleError> {
 /// `format_version`, which the owning blueprint supplies.
 pub fn embedded_rules_schema(generator: &mut SchemaGenerator) -> Schema {
     let mut rule = Raw::json_schema(generator);
+    rule.remove("title");
     if let Some(properties) = rule
         .get_mut("properties")
         .and_then(|properties| properties.as_object_mut())
@@ -389,6 +415,17 @@ mod tests {
     #[test]
     fn parses_bounded_host_owned_rule() {
         assert!(parse(REQUIRED).is_ok());
+    }
+    #[test]
+    fn definitions_spell_severity_as_findings_store_it() {
+        for &severity in Severity::ALL {
+            let source = REQUIRED.replace(
+                "severity='error'",
+                &format!("severity='{}'", severity.as_str()),
+            );
+            assert_eq!(parse(&source).unwrap().severity, severity);
+        }
+        assert!(parse(&REQUIRED.replace("severity='error'", "severity='fatal'")).is_err());
     }
     #[test]
     fn rejects_unbounded_or_invalid_contracts() {
@@ -480,6 +517,30 @@ mod tests {
             (REQUIRED.replace("type='required'", "type='sql'"), false),
             (REQUIRED.replace("format_version=1\n", ""), false),
             (format!("{REQUIRED}\nlabel='Title'"), false),
+            (
+                REQUIRED.replace("format_version=1", "format_version=2"),
+                false,
+            ),
+            (
+                REQUIRED.replace("name='Product title required'", "name='  '"),
+                false,
+            ),
+            (
+                REQUIRED.replace("cron='0 0 * * * *'", "cron='0 * * * *'"),
+                false,
+            ),
+            (
+                REQUIRED.replace("type='manual'", "type='manual'\nlabel='x'"),
+                false,
+            ),
+            (
+                REQUIRED.replace("type='manual'", "type='post_import'"),
+                true,
+            ),
+            (
+                REQUIRED.replace("type='manual'", "type='post_import'\nlabel='x'"),
+                false,
+            ),
         ] {
             assert_eq!(parse(&definition).is_ok(), accepted, "{definition}");
             let instance =

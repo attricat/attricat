@@ -17,6 +17,7 @@ import {
   relationshipPathSortErrorCode,
 } from './constants';
 import {
+  dataQualityRequest,
   explorerResultsQueryKey,
   relationshipFiltersFromSearch,
   relationshipTreeFacetsRequest,
@@ -27,6 +28,8 @@ import {
 import { isRelationshipPath } from './explorerTableColumns';
 import { isRelationshipFilterAttribute } from './relationshipFilterTypes';
 import type { ExplorerSearch } from './search';
+import { capabilities } from '../auth/capabilities';
+import { useCan } from '../auth/useCan';
 import { sessionOptions } from '../auth/queryOptions';
 import {
   blueprintByCodeOptions,
@@ -115,6 +118,7 @@ export const useExplorerData = (search: ExplorerSearch) => {
     ) ?? false;
   const sort = requestSort(search.sort, contextCode);
   const relationshipFilters = relationshipFiltersFromSearch(search);
+  const canReadRules = useCan(capabilities.rulesRead);
   const relationshipTreeSelections =
     relationshipTreeSelectionsFromSearch(search);
   const results = useInfiniteQuery({
@@ -124,6 +128,7 @@ export const useExplorerData = (search: ExplorerSearch) => {
       effectiveVersion,
       sort,
       contextCode,
+      canReadRules,
     ),
     queryFn: ({ pageParam, signal }) =>
       searchRecordTablePage({
@@ -143,7 +148,7 @@ export const useExplorerData = (search: ExplorerSearch) => {
         version: effectiveVersion,
         exportStatus: exportStatusRequest(search),
         systemTags: search.systemTags,
-        dataQuality: search.dataQuality,
+        dataQuality: dataQualityRequest(search, canReadRules),
       }),
     initialPageParam: null as string | null,
     getNextPageParam: (page) => page.next_cursor,

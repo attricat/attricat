@@ -1,5 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
+import { capabilities } from '../auth/capabilities';
+import { useCan } from '../auth/useCan';
 import { defaultContextCode } from '../contexts/constants';
 import { maximumSystemTagFilters } from './constants';
 import type { DataQualityFilter } from '../rules/constants';
@@ -34,6 +36,7 @@ export const useExplorerSearchActions = (
 ) => {
   const navigate = useNavigate({ from: '/' });
   const queryClient = useQueryClient();
+  const canReadRules = useCan(capabilities.rulesRead);
   // The record side panel stays open while the search changes.
   const go = (nextSearch: ExplorerSearch) =>
     void navigate({
@@ -133,6 +136,7 @@ export const useExplorerSearchActions = (
             nextSearch.context ?? defaultContextCode,
           ),
           nextSearch.context ?? defaultContextCode,
+          canReadRules,
         ),
       });
       go(nextSearch);

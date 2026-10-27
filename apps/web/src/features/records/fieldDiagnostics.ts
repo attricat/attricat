@@ -4,6 +4,16 @@ import { findingEvidenceSchema, type Finding } from '../rules/schemas';
 import type { Attribute } from './api';
 import type { AttributeConnection } from './attributeConnections';
 
+/** Where loading a record's findings for its field diagnostics stands. */
+export const fieldFindingsStatuses = {
+  loading: 'loading',
+  failed: 'failed',
+  loaded: 'loaded',
+} as const;
+
+export type FieldFindingsStatus =
+  (typeof fieldFindingsStatuses)[keyof typeof fieldFindingsStatuses];
+
 /** What a record page knows about its fields beyond their values. */
 export type FieldDiagnostics = {
   /** The context the page shows, by code. */
@@ -11,9 +21,15 @@ export type FieldDiagnostics = {
   contextId?: string;
   /**
    * The record's unresolved data quality findings, or `undefined` when the
-   * user cannot read them.
+   * user cannot read them or they have not loaded.
    */
   findings?: readonly Finding[];
+  /**
+   * Why `findings` is missing although the user can read them: they are
+   * still loading, or loading them failed with `findingsError`.
+   */
+  findingsStatus?: FieldFindingsStatus;
+  findingsError?: Error | null;
   /** Every attribute of the record, to name connected fields. */
   attributes?: readonly Attribute[];
   /** What the blueprint and its rules tie attributes to. */

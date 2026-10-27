@@ -18,14 +18,19 @@ export type ExplorerColumnPreferences = {
 const storageKey = (blueprintId: string) =>
   `${columnPreferencesStorageKeyPrefix}${blueprintId}`;
 
-const defaultPreferences = (
+/** What a viewer without stored preferences sees. */
+export const defaultExplorerColumnPreferences = (
   columnIds: string[],
 ): ExplorerColumnPreferences => ({
   hidden: columnIds.filter((id) => defaultHiddenColumnIds.includes(id)),
   order: columnIds,
 });
 
-const normalizePreferences = (
+/**
+ * Fits preferences to the table's current columns: unknown ones are dropped
+ * and new ones appended as a new viewer would see them.
+ */
+export const normalizeExplorerColumnPreferences = (
   preferences: ExplorerColumnPreferences,
   columnIds: string[],
 ): ExplorerColumnPreferences => {
@@ -63,8 +68,8 @@ export const getExplorerColumnPreferences = (
     preferencesSchema,
   );
   return stored
-    ? normalizePreferences(stored, columnIds)
-    : defaultPreferences(columnIds);
+    ? normalizeExplorerColumnPreferences(stored, columnIds)
+    : defaultExplorerColumnPreferences(columnIds);
 };
 
 export const setExplorerColumnPreferences = (

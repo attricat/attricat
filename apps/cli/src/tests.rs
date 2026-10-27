@@ -6,8 +6,8 @@ use serde_json::{Value, json};
 use url::Url;
 use uuid::Uuid;
 
-use crate::cli::{Cli, Command, PageArgs, SourceInput};
-use crate::commands::agent::follow_run;
+use crate::cli::{Cli, Command, PageArgs, SourceInput, reject_shared_stdin};
+use crate::commands::agent::{Output, follow_run, write_line};
 use crate::commands::data_health::data_health_path;
 use crate::commands::extension::connector_job::{ConnectorJobCommand, connector_job_command};
 use crate::commands::extension::operation::{
@@ -18,7 +18,7 @@ use crate::commands::lexicon::lexicon_request;
 use crate::commands::notification::notification_request;
 use crate::commands::record::migrate_records;
 use crate::commands::rule::{RuleCommand, rule_command};
-use crate::commands::saved_view::changed_saved_view;
+use crate::commands::saved_view::{changed_saved_view, explorer_link};
 use crate::commands::solution_pack::{
     BlueprintPublicationArgument, SolutionPackApplicationsCommand, SolutionPackChecksCommand,
     SolutionPackCommand, SolutionPackPlanCommand, blueprint_mapping_value, parse_pack_mappings,
@@ -570,6 +570,43 @@ fn preserves_base_path_and_encodes_dynamic_segments() {
     );
     // A path segment keeps `+` literal, so spaces must not become `+`.
     assert_eq!(segment("a b+c~d"), "a%20b%2Bc~d");
+}
+
+#[test]
+fn explorer_links_need_the_web_apps_origin() {
+    for web in ["https://app.example.test", "https://app.example.test/"] {
+        assert_eq!(
+            explorer_link(web, "view", "v1").unwrap().as_str(),
+            "https://app.example.test/?view=v1"
+        );
+    }
+    for web in [
+        "https://example.test/attricat",
+        "https://example.test/attricat/",
+        "https://example.test/?tab=1",
+        "https://example.test/#top",
+    ] {
+        assert!(
+            matches!(explorer_link(web, "view", "v1"), Err(CliError::Input(_))),
+            "{web}"
+        );
+    }
+}
+
+#[test]
+fn rejects_dot_path_arguments_instead_of_resolving_them() {
+    let server = Url::parse("https://example.test/api/").unwrap();
+    for value in [".", ".."] {
+        let path = format!("/workspace/secrets/{}", segment(value));
+        assert!(
+            matches!(endpoint(&server, &path), Err(CliError::Input(_))),
+            "{value}"
+        );
+    }
+    for value in ["...", ".hidden", "a..b"] {
+        let path = format!("/workspace/secrets/{}?q=..", segment(value));
+        assert!(endpoint(&server, &path).is_ok(), "{value}");
+    }
 }
 
 #[test]
@@ -2578,6 +2615,64 @@ async fn extension_connection_export_and_run_commands_build_requests() {
 }
 
 #[test]
+fn token_stdin_rejects_commands_that_also_read_stdin() {
+    use clap::CommandFactory;
+
+    let check = |args: &[&str]| {
+        let matches = Cli::command().try_get_matches_from(args).unwrap();
+        reject_shared_stdin(&matches)
+    };
+    let error = check(&[
+        "acli",
+        "--token-stdin",
+        "extension",
+        "secret",
+        "set",
+        "token",
+        "--value-stdin",
+    ])
+    .unwrap_err();
+    assert!(matches!(&error, CliError::Input(_)));
+    assert!(error.to_string().contains("--token-stdin"), "{error}");
+    assert!(error.to_string().contains("--value-stdin"), "{error}");
+    let error = check(&[
+        "acli",
+        "auth",
+        "login",
+        "acme",
+        "--email",
+        "a@example.com",
+        "--password-stdin",
+        "--token-stdin",
+    ])
+    .unwrap_err();
+    assert!(error.to_string().contains("--password-stdin"), "{error}");
+    let error = check(&[
+        "acli",
+        "--token-stdin",
+        "rule",
+        "validate",
+        "--blueprint-id",
+        "00000000-0000-4000-8000-000000000001",
+        "--blueprint-version",
+        "1",
+        "--stdin",
+    ]);
+    assert!(error.is_err());
+    check(&["acli", "--token-stdin", "extension", "list"]).unwrap();
+    check(&[
+        "acli",
+        "auth",
+        "login",
+        "acme",
+        "--email",
+        "a@example.com",
+        "--password-stdin",
+    ])
+    .unwrap();
+}
+
+#[test]
 fn event_parser_frames_server_sent_events_across_chunks() {
     let mut parser = EventParser::default();
     assert!(parser.push(b": keep-alive\n\nid: 1\nevent: sta").is_empty());
@@ -2606,29 +2701,36 @@ async fn agent_run_events_resume_after_the_last_event_until_terminal() {
     let resumed_after = Arc::new(Mutex::new(Vec::new()));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
-    let app = axum::Router::new().route(
-        "/agent/runs/{run_id}/events",
-        axum::routing::get({
-            let resumed_after = resumed_after.clone();
-            move |headers: axum::http::HeaderMap| {
+    let app = axum::Router::new()
+        .route(
+            "/agent/runs/{run_id}/events",
+            axum::routing::get({
                 let resumed_after = resumed_after.clone();
-                async move {
-                    let last = headers
-                        .get("last-event-id")
-                        .map(|value| value.to_str().unwrap().to_owned());
-                    resumed_after.lock().unwrap().push(last.clone());
-                    let body = match last {
-                        None => "id: 7\nevent: status\ndata: {\"status\":\"running\"}\n\n",
-                        Some(_) => "id: 8\nevent: terminal\ndata: {\"status\":\"completed\"}\n\n",
-                    };
-                    (
-                        [(axum::http::header::CONTENT_TYPE, "text/event-stream")],
-                        body,
-                    )
+                move |headers: axum::http::HeaderMap| {
+                    let resumed_after = resumed_after.clone();
+                    async move {
+                        let last = headers
+                            .get("last-event-id")
+                            .map(|value| value.to_str().unwrap().to_owned());
+                        resumed_after.lock().unwrap().push(last.clone());
+                        let body = match last {
+                            None => "id: 7\nevent: status\ndata: {\"status\":\"running\"}\n\n",
+                            Some(_) => {
+                                "id: 8\nevent: terminal\ndata: {\"status\":\"completed\"}\n\n"
+                            }
+                        };
+                        (
+                            [(axum::http::header::CONTENT_TYPE, "text/event-stream")],
+                            body,
+                        )
+                    }
                 }
-            }
-        }),
-    );
+            }),
+        )
+        .route(
+            "/agent/runs/{run_id}",
+            axum::routing::get(|| async { axum::Json(json!({"status": "running"})) }),
+        );
     let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     let api = Api::new(
         Client::new(),
@@ -2643,6 +2745,97 @@ async fn agent_run_events_resume_after_the_last_event_until_terminal() {
         vec![None, Some("7".to_owned())]
     );
     server.abort();
+}
+
+/// Serves fixed SSE bodies for one run's events, one per connection, and the
+/// run itself with `run_status`, and returns the API pointed at it.
+async fn sse_server(
+    bodies: Vec<&'static str>,
+    run_status: &'static str,
+) -> (Api, tokio::task::JoinHandle<()>) {
+    use std::sync::{Arc, Mutex};
+
+    let bodies = Arc::new(Mutex::new(bodies.into_iter()));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let app = axum::Router::new()
+        .route(
+            "/agent/runs/{run_id}/events",
+            axum::routing::get(move || {
+                let body = bodies.lock().unwrap().next().expect("no further stream");
+                async move {
+                    (
+                        [(axum::http::header::CONTENT_TYPE, "text/event-stream")],
+                        body,
+                    )
+                }
+            }),
+        )
+        .route(
+            "/agent/runs/{run_id}",
+            axum::routing::get(move || async move { axum::Json(json!({"status": run_status})) }),
+        );
+    let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let api = Api::new(
+        Client::new(),
+        Url::parse(&format!("http://{address}")).unwrap(),
+    );
+    (api, server)
+}
+
+#[tokio::test]
+async fn agent_run_events_stop_when_a_finished_runs_stream_ends_without_terminal() {
+    // The run's events were purged, or the stream resumed after its terminal
+    // event: the server closes cleanly with nothing to send.
+    let (api, server) = sse_server(vec![": keep-alive\n\n", ""], "completed").await;
+    let followed = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        follow_run(&api, Uuid::from_u128(1), Some("8".to_owned())),
+    )
+    .await
+    .expect("follow_run kept reconnecting");
+    assert_eq!(followed.unwrap(), "");
+    server.abort();
+}
+
+#[tokio::test]
+async fn agent_run_events_print_a_failed_runs_error_event_and_continue_to_terminal() {
+    let (api, server) = sse_server(vec![
+        "id: 7\nevent: error\ndata: {\"type\":\"error\"}\n\nid: 8\nevent: terminal\ndata: {\"status\":\"failed\"}\n\n",
+    ], "failed")
+    .await;
+    assert_eq!(
+        follow_run(&api, Uuid::from_u128(1), None).await.unwrap(),
+        ""
+    );
+    let (api2, server2) = sse_server(
+        vec!["event: error\ndata: agent run event stream failed\n\n"],
+        "running",
+    )
+    .await;
+    assert!(matches!(
+        follow_run(&api2, Uuid::from_u128(1), None).await,
+        Err(CliError::Transport(message)) if message == "agent run event stream failed"
+    ));
+    server.abort();
+    server2.abort();
+}
+
+#[test]
+fn a_closed_stdout_ends_streamed_output_cleanly() {
+    struct ClosedPipe;
+    impl std::io::Write for ClosedPipe {
+        fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+            Err(std::io::ErrorKind::BrokenPipe.into())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    assert_eq!(write_line(&mut ClosedPipe, "{}").unwrap(), Output::Closed);
+    let mut open = Vec::new();
+    assert_eq!(write_line(&mut open, "{}").unwrap(), Output::Open);
+    assert_eq!(open, b"{}\n");
 }
 
 #[tokio::test]

@@ -367,7 +367,19 @@ pub(crate) fn is_secure_credential_transport(server: &Url) -> bool {
     }
 }
 
+/// Path segments URL resolution removes or resolves against their parent.
+/// [`segment`] leaves `.` unencoded, so a value that is exactly one of these
+/// would otherwise retarget the request (`secret delete ..` would become
+/// `DELETE /workspace/`).
+const DOT_SEGMENTS: [&str; 2] = [".", ".."];
+
 pub(crate) fn endpoint(server: &Url, path: &str) -> Result<Url, CliError> {
+    let route = path.split_once('?').map_or(path, |(route, _)| route);
+    if route.split('/').any(|part| DOT_SEGMENTS.contains(&part)) {
+        return Err(CliError::Input(
+            "a path argument must not be `.` or `..`".to_owned(),
+        ));
+    }
     let mut base = server.clone();
     let mut base_path = base.path().to_owned();
     if !base_path.ends_with('/') {

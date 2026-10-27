@@ -170,12 +170,16 @@ export const ExplorerSearchForm = ({
         ? t('explorer.allVersions')
         : t('explorer.version', { version: versionScope });
   const scopeLabel = t('explorer.searchScopeSummary', {
-    scope: contextChoice
-      ? t('explorer.searchScopeParts', {
-          context: contextLabel(t, contextCode),
-          version: versionLabel,
-        })
-      : versionLabel,
+    scope: !contextChoice
+      ? versionLabel
+      : contextCode === defaultContextCode
+        ? t('explorer.searchScopePartsInDefaultContext', {
+            version: versionLabel,
+          })
+        : t('explorer.searchScopeParts', {
+            context: contextCode,
+            version: versionLabel,
+          }),
   });
   // Highlighted whenever the scope narrows or widens what a plain search shows.
   const scopeChanged =

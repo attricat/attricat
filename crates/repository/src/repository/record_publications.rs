@@ -151,7 +151,7 @@ impl PublicationGate {
                     message: check.message.clone().unwrap_or(failure.message),
                     contexts: vec![self.context_code.clone()],
                     attributes: failure.attributes,
-                    severity: check.severity.clone(),
+                    severity: check.severity,
                     transition: None,
                     evidence: failure.evidence,
                 });

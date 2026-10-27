@@ -2,7 +2,8 @@
 
 use std::path::PathBuf;
 
-use clap::{Args, Parser, Subcommand};
+use clap::parser::ValueSource;
+use clap::{ArgMatches, Args, Parser, Subcommand};
 use url::Url;
 use uuid::Uuid;
 
@@ -29,6 +30,7 @@ use crate::commands::token::TokenCommand;
 use crate::commands::value::ValueCommand;
 use crate::commands::workflow::WorkflowCommand;
 use crate::commands::workspace::WorkspaceCommand;
+use crate::error::CliError;
 
 pub(crate) const DEFAULT_SERVER_URL: &str = "http://127.0.0.1:3000/api";
 
@@ -78,6 +80,37 @@ impl PageArgs {
             ("offset", self.offset.map(|offset| offset.to_string())),
         ]
     }
+}
+
+/// The argument id of `--token-stdin`.
+const TOKEN_STDIN: &str = "token_stdin";
+/// The id suffix every flag that reads standard input shares.
+const STDIN_SUFFIX: &str = "stdin";
+
+/// Rejects `--token-stdin` together with a command flag that also reads
+/// standard input: the token would consume all of it, leaving the command an
+/// empty value.
+pub(crate) fn reject_shared_stdin(matches: &ArgMatches) -> Result<(), CliError> {
+    if !matches.get_flag(TOKEN_STDIN) {
+        return Ok(());
+    }
+    let mut current = matches;
+    while let Some((_, command)) = current.subcommand() {
+        if let Some(id) = command.ids().find(|id| {
+            let id = id.as_str();
+            id != TOKEN_STDIN
+                && id.ends_with(STDIN_SUFFIX)
+                && command.value_source(id) == Some(ValueSource::CommandLine)
+        }) {
+            return Err(CliError::Input(format!(
+                "--token-stdin cannot be combined with --{}: both read standard input; \
+                 pass the token with ATTRICAT_TOKEN instead",
+                id.as_str().replace('_', "-")
+            )));
+        }
+        current = command;
+    }
+    Ok(())
 }
 
 #[derive(Parser)]

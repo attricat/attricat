@@ -9,6 +9,7 @@ import {
 } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
+import { ApiRequestError } from '../../api/request';
 import { authQueryKeys } from '../auth/queryKeys';
 import {
   getBlueprintRevision,
@@ -166,7 +167,7 @@ describe('RuleEditorPage', () => {
       definition: ruleTemplates[0].definition,
     };
     expect(validateRule).toHaveBeenCalledWith(scope, expect.any(AbortSignal));
-    expect(screen.getByText('required on title')).toBeTruthy();
+    expect(screen.getByText('Required value on title')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
     await waitFor(() => expect(createRule).toHaveBeenCalledWith(scope));
@@ -203,5 +204,16 @@ describe('RuleEditorPage', () => {
         definition: edited,
       }),
     );
+  });
+
+  it('says when the rule’s blueprint revision cannot be loaded', async () => {
+    vi.mocked(listRules).mockResolvedValue([rule]);
+    vi.mocked(getBlueprintRevision).mockRejectedValue(
+      new ApiRequestError(404, 'Not found', 'not_found'),
+    );
+    renderPage({ ruleId, sourceVersion: 1 });
+    expect(
+      await screen.findByText("It doesn't exist, or you can't access it."),
+    ).toBeTruthy();
   });
 });

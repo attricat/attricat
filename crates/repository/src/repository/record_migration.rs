@@ -324,10 +324,14 @@ impl AttricatRepository {
             for violation in validate_json_schema(schema, &Value::Object(document))
                 .map_err(RepositoryError::invalid_blueprint_definition)?
             {
-                // Only a top-level `required` names a target attribute.
+                // Only a top-level `required` names a target attribute. A
+                // generated attribute is numbered when the migration applies,
+                // so it never needs input.
                 let missing = violation.missing_property.filter(|property| {
                     violation.instance_path.is_empty()
-                        && target_attributes.contains_key(property.as_str())
+                        && target_attributes
+                            .get(property.as_str())
+                            .is_some_and(|attribute| attribute.generated.is_none())
                 });
                 if let Some(field) = missing
                     && !issues.iter().any(|issue| {

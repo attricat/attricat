@@ -11,6 +11,8 @@ use serde_json::Value;
 pub const EXPLORER_SEARCH_KIND: &str = "explorer_search";
 pub const MAX_STATE_BYTES: usize = 32 * 1024;
 pub(crate) const MAX_FILTERS: usize = 20;
+/// Most system tags a search filters by, and a saved search stores.
+pub const MAX_SYSTEM_TAG_FILTERS: usize = MAX_FILTERS;
 pub const MAX_SELECTED_IDS: usize = 100;
 pub const MAX_BLUEPRINT_BYTES: usize = 256;
 /// Longest Explorer field path, in bytes.
@@ -91,7 +93,7 @@ fn valid_attribute_filter(filter: &Value) -> bool {
 /// Unique, non-empty system tags that every result must carry.
 fn valid_system_tags(tags: &Value) -> bool {
     tags.as_array().is_some_and(|tags| {
-        tags.len() <= MAX_FILTERS
+        tags.len() <= MAX_SYSTEM_TAG_FILTERS
             && tags.iter().all(|tag| {
                 tag.as_str()
                     .is_some_and(|tag| !tag.trim().is_empty() && tag.len() <= MAX_TAG_LENGTH)

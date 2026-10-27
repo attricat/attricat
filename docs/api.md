@@ -94,13 +94,13 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `POST` | `/rules/validate` | Run the save checks of `POST /rules` on a rule TOML definition, its published blueprint revision and optional context, without storing it (`rules.manage`). |
 | `POST` | `/rules/{rule_id}/run-now` | Enqueue an idempotent bounded manual or dry run (`rules.manage`). Optional `version` selects a published revision; only dry runs may target a revision that is not enabled. |
 | `POST` | `/rules/{rule_id}/versions/{version}/enable` | Enable a published revision (`rules.manage`). Optional body `{ "accept_existing_violations": true }`; enforcing revisions first need a completed full dry run. See [Rules](rules.md#dry-run-before-enabling). |
-| `GET` | `/rule-runs`, `/rule-findings` | Read run diagnostics and active/resolved findings (`rules.read`). Both accept `record_id` to list one record's runs or findings, and `limit`/`offset` pages with an `x-next-offset` header. `/rule-findings` also accepts `unresolved=true`. A run's `truncated` is `true` when it stopped at its candidate cap with candidates left. |
+| `GET` | `/rule-runs`, `/rule-findings` | Read run diagnostics and active/resolved findings (`rules.read`). Both accept `record_id` to list one record's runs or findings, and `limit`/`offset` pages with an `x-next-offset` header. `/rule-findings` also accepts `unresolved=true` and narrows by `rule_id`, `blueprint_id`, `context_id`, `severity` (`info`, `warning`, `error`, `critical`) and `state` (`open`, `acknowledged`, `resolved`). A run's `truncated` is `true` when it stopped at its candidate cap with candidates left. |
 | `GET` | `/rule-findings/count` | `{count}` of open and acknowledged findings, optionally of one `record_id` (`rules.read`). |
 | `POST` | `/rule-findings/recheck` | Re-check one record against every enabled rule of its blueprint revision with idempotent record-scoped runs; body `{record_id, idempotency_key}`, returns `202 {run_ids}` (`rules.manage`). |
 | `GET` | `/v1/records/{record_id}/export-status` | Every export extension's status of one record (`statuses`) and the enabled export destinations (`destinations`) (`records.read`). See [Export platform](extensions.md#per-record-export-status). |
 | `GET` | `/export-status` | Export status counts per extension, connection and status, with the enabled destinations (`data_health.read`). |
 | `GET` | `/extensions/{extension_id}/export-status` | One extension's status counts, a page of its mappings (`?connection=&status=&after=&limit=`, up to 100) and its recent rejected or exhausted handler deliveries (`extensions.read` and a workspace-wide `records.read` grant). |
-| `POST` | `/extensions/{extension_id}/export-status/retry` | `{connection?, record_ids? \| status?, run?, idempotency_key?}`: set up to 1,000 mappings to `pending`, emit `export.retry_requested.v1` to that extension, and with `run: true` resync just those records on its export jobs for the connection. Returns `{record_ids, run_ids, job_errors}`; a job that cannot resync is listed in `job_errors` rather than failing the retry (`extensions.manage` and a workspace-wide `records.read` grant; `404` unless the extension is installed with `exports.mappings`). |
+| `POST` | `/extensions/{extension_id}/export-status/retry` | `{connection?, record_ids? \| status?, run?, idempotency_key?}`: set up to 1,000 mappings to `pending`, emit `export.retry_requested.v1` to that extension, and with `run: true` resync just those records on its export jobs for the connection. Returns `{record_ids, run_ids, job_errors}`; a job that cannot resync is listed in `job_errors` as `{job_id, code, message, details}` rather than failing the retry (`extensions.manage` and a workspace-wide `records.read` grant; `404` unless the extension is installed with `exports.mappings`). |
 | `GET`, `POST` | `/extensions/{extension_id}/connections` | List an extension's credential connections without secrets, or create one (`extensions.read` / `extensions.manage`). Secrets are write-only. |
 | `PATCH`, `DELETE` | `/extensions/{extension_id}/connections/{connection}` | Rename, change the token URL, device authorization URL, scope (an empty string clears it) or parameters, replace a client secret or refresh token, or delete a connection with its credentials; its mappings stay for a connection re-created under the same name (`extensions.manage`). |
 | `POST` | `/extensions/{extension_id}/connections/{connection}/device-authorization`, `/device-authorization/poll`, `/authorization-code`, `/test` | Start or poll the device authorization grant, exchange an authorization code an operator copied (`{code, redirect_uri, code_verifier?}`), or obtain a token to test the connection (`extensions.manage`). |
@@ -446,7 +446,7 @@ the agent `search_records` tool accepts the same sort.
 
 The `data_quality` filter keeps records with `open` findings, only
 `acknowledged` ones, or `clean` records without unresolved findings, and
-requires `rules.read` (`403` otherwise). `open` reads the needs-attention tag. For callers with `rules.read`, every search item carries
+requires `rules.read` (`403 data_quality_filter_forbidden` otherwise). `open` reads the needs-attention tag. For callers with `rules.read`, every search item carries
 `data_quality`: `checked`, whether an enabled rule checks the record's
 blueprint revision, and `findings`, unresolved findings counted by `state` and
 `severity`, most severe first. Callers without it get no `data_quality` field.
@@ -706,16 +706,20 @@ results report the same `code`, `message` and `details`.
 | `409` | `record_id_taken` | `record_id` |
 | `422` | `generated_attribute_readonly` | `attribute`: a generated attribute, which no client can write |
 | `409` | `generated_sequence_not_raised` | `current` next value and the lower `requested` one; counters can only be raised |
+| `409` | `generated_reset_changed` | `attribute`, and the `previous` and `requested` `reset`; a blueprint revision cannot change the `reset` of an attribute an earlier revision generated |
 | `409` | `annotation_revision_conflict` | `expected`, `actual` revisions |
 | `409` | `rule_dry_run_required` | none when no completed full dry run exists; run `run-now` with `"dry_run": true` and the `version` first. When the latest one was truncated: `truncated: true` and `existing_violations` (found among the candidates it checked), with a distinct message; pass `accept_existing_violations` |
 | `409` | `rule_has_existing_violations` | `existing_violations` (a count); fix the records or pass `accept_existing_violations` |
 | `409` | `code_taken` | `resource`: `blueprint`, `context`, `workflow`, `rule` or `connection`, whose code or name is already in use |
 | `409` | `blueprint_revision_unchanged` | `version`: the latest revision, which the definition is identical to; an earlier revision's definition can be saved again |
+| `409` | `rule_revision_unchanged` | `version`: the latest rule revision, which the definition is identical to; an earlier revision's definition can be saved again |
 | `422` | `invalid_comment` | `max` characters |
 | `422` | `password_too_short`, `password_too_long` | `min` characters or `max` bytes |
 | `422` | `invalid_display_name` | `min` and `max` characters |
 | `422` | `text_length_invalid` | `field`, `min` and `max` characters |
 | `422` | `https_required` | `field`: the URL that must use HTTPS |
+| none | `export_job_resync_failed` | never an error response: an [export retry](#routes)'s `job_errors` item for a job that could not start a resync, with `job_id` and `job_code`. A cause with a more specific code (such as `not_found`) keeps that code and its details, plus `job_id` and `job_code` |
+| `403` | `data_quality_filter_forbidden` | `permission`: `rules.read`, which a record search's `data_quality` filter requires |
 
 A failed [record batch](#record-batches) operation keeps that operation's
 status, code and details, and adds `operation_index` and `record_id`.
@@ -759,7 +763,7 @@ sets:
   Rule runs and finding acknowledgements update it in the transaction that
   changes the findings, without touching `updated_at` or emitting events, and
   workspace initialization at startup reconciles it with the findings. Search accepts
-`system_tags`; returned records must contain every supplied tag, making it
+`system_tags` (at most 20); returned records must contain every supplied tag, making it
 suitable for finding a marked batch before applying a bulk workflow. Search
 result items include each record's `system_tags`.
 
@@ -968,11 +972,15 @@ example, `RUST_LOG=api=debug`) to control output verbosity.
 
 ## Agents
 
-Agent routes require `agents.run`. `GET`/`POST /agent/conversations` lists or
-creates conversations. `GET`/`PATCH`/`DELETE /agent/conversations/{id}` reads,
+Agent routes require `agents.run`. `POST /agent/conversations` creates a
+conversation. `GET /agent/conversations/search` pages them newest first
+(`q`, `cursor`): conversations not about a record unless `scope=all`, or with
+`record_id` (optionally `context_id`, and `records.read` on the record) the
+conversations about one record. `GET`/`PATCH`/`DELETE /agent/conversations/{id}` reads,
 renames, or archives a thread; it exposes ordered messages at
 `/agent/conversations/{id}/messages` and run history at
-`/agent/conversations/{id}/runs`. The single-conversation `GET` also returns
+`/agent/conversations/{id}/runs`; `GET /agent/runs/{run_id}` reads one run
+and its status. The single-conversation `GET` also returns
 `read_only`, which is `true` when `ATTRICAT_DEMO_MODE` limits the agent to read
 tools. Posting a message creates a durable queued run and returns `202`. The API worker executes the run independently of the
 HTTP request.
@@ -982,7 +990,11 @@ tool, approval, error, terminal, and schedule events. Each SSE `id` is the
 persisted event UUID. Reconnect with `Last-Event-ID` to replay only later
 ordered events. Credentials, `agents.run`, and the conversation's record-read
 access are rechecked before each event batch, including idle polls. Losing
-access ends an already-open stream with an error event.
+access ends an already-open stream with an error event. That stream-failure
+event has no SSE `id`, unlike a failed run's stored `error` event. A stream
+that has nothing left to send for a finished run (its events were purged, or
+`Last-Event-ID` named its terminal event) closes without a `terminal` event;
+read the run to tell this apart from an early close.
 
 `GET /agent/approvals` lists pending tool calls from live runs
 (optionally by `conversation_id`). Approve/reject routes durably record each
@@ -1050,7 +1062,8 @@ authorized with record-scoped `records.write` and audited against the tool
 call, with `bulk_progress` run events. It stops at the first failure, which the
 workspace's system user records as a comment on the failed record (comments
 report `author_kind` `person` or `system`), and returns `applied`, `failed`
-(`record_id`, `code`, `message`) and `not_run`. With the workspace's
+(`record_id`, `code`, `message`, and `details` when the error has them) and
+`not_run`. With the workspace's
 `bulk_edits` setting at `per_record` the tool is not offered.
 `get_record_publication_readiness` reports, per channel, whether a
 record passes the channel's required checks. The agent must inspect current values first. These tools

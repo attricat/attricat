@@ -1,5 +1,6 @@
 use crate::support;
 
+use api::states::RecordMigrationStatus;
 use chrono::{Datelike, Utc};
 use support::*;
 
@@ -373,6 +374,13 @@ async fn records_are_numbered_when_they_migrate_onto_a_generating_revision(pool:
         format!("{base_url}/v1/records/{id}/blueprint-migration/preview"),
     )
     .await;
+    // The required generated `number` is filled in when the migration applies.
+    assert_eq!(
+        preview["status"],
+        RecordMigrationStatus::Ready.as_str(),
+        "{preview}"
+    );
+    assert_eq!(preview["issues"], json!([]));
     expect_status(
         client
             .post(format!("{base_url}/v1/records/{id}/blueprint-migration"))
@@ -403,6 +411,131 @@ async fn records_are_numbered_when_they_migrate_onto_a_generating_revision(pool:
         )
         .await[0]["period"],
         year.to_string()
+    );
+
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn revisions_cannot_change_the_reset_of_a_generated_attribute(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    let blueprint = create_blueprint(&client, &base_url, INVOICE).await;
+    let blueprint_id = blueprint["blueprint"]["id"].as_str().unwrap();
+    let versions = format!("{base_url}/blueprints/{blueprint_id}/versions");
+    let save = |url: String, definition: String| {
+        client
+            .post(url)
+            .json(&json!({ "definition": definition }))
+            .send()
+    };
+    let yearly = INVOICE.replace(
+        "generated = { format = \"INV-{n:04}\" }",
+        "generated = { format = \"INV-{yyyy}-{n:04}\", reset = \"yearly\" }",
+    );
+    let expected = json!({"attribute": "number", "previous": "never", "requested": "yearly"});
+    for url in [versions.clone(), format!("{versions}/validate")] {
+        let refused = expect_error(
+            save(url, yearly.clone()).await.unwrap(),
+            StatusCode::CONFLICT,
+            "generated_reset_changed",
+        )
+        .await;
+        assert_eq!(refused["error"]["details"], expected);
+    }
+
+    // `start`, `format` and dropping `generated` stay allowed.
+    let restarted = INVOICE
+        .replace("{n:04}", "N{n:06}")
+        .replace("generated = { start = 1000 }", "generated = { start = 1 }");
+    expect_status(
+        save(versions.clone(), restarted).await.unwrap(),
+        StatusCode::CREATED,
+    )
+    .await;
+    let plain = INVOICE
+        .replace("generated = { format = \"INV-{n:04}\" }", "")
+        .replace(
+            r#"record_schema = '{"type":"object","required":["number","title"]}'"#,
+            "",
+        );
+    expect_status(
+        save(versions.clone(), plain).await.unwrap(),
+        StatusCode::CREATED,
+    )
+    .await;
+    // A later revision cannot bring it back with another reset either.
+    let refused = expect_error(
+        save(versions.clone(), yearly).await.unwrap(),
+        StatusCode::CONFLICT,
+        "generated_reset_changed",
+    )
+    .await;
+    assert_eq!(refused["error"]["details"], expected);
+
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn batches_creating_on_several_blueprints_in_opposite_orders_do_not_deadlock(pool: PgPool) {
+    const ORDER: &str = r#"
+format_version = 1
+code = "gs_order"
+name = "Order"
+kind = "record"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title"]
+
+[[attributes]]
+code = "number"
+value_type = "integer"
+generated = { start = 1 }
+
+[[attributes]]
+code = "title"
+value_type = "string"
+"#;
+    const ROUNDS: usize = 12;
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    create_blueprint(&client, &base_url, INVOICE).await;
+    create_blueprint(&client, &base_url, ORDER).await;
+    let create = |blueprint: &str| {
+        json!({
+            "op": "create",
+            "blueprint": { "code": blueprint },
+            "values": [scalar("title", json!("batched"))],
+        })
+    };
+
+    let mut work = tokio::task::JoinSet::new();
+    for round in 0..ROUNDS {
+        let operations = if round % 2 == 0 {
+            json!([create("gs_invoice"), create("gs_order")])
+        } else {
+            json!([create("gs_order"), create("gs_invoice")])
+        };
+        let client = client.clone();
+        let url = format!("{base_url}/v1/records/batch");
+        work.spawn(async move {
+            let response = client
+                .post(url)
+                .json(&json!({ "operations": operations }))
+                .send()
+                .await
+                .unwrap();
+            expect_status(response, StatusCode::OK).await;
+        });
+    }
+    tokio::time::timeout(std::time::Duration::from_secs(30), work.join_all())
+        .await
+        .expect("batches finish");
+    let after = invoice(&client, &base_url, "after").await;
+    assert_eq!(
+        value_of(&form(&client, &base_url, &after).await, "position"),
+        1000 + ROUNDS as i64
     );
 
     server.abort();

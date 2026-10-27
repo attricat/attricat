@@ -1,5 +1,6 @@
 use crate::support;
 
+use api::repository::MAX_SYSTEM_TAG_FILTERS;
 use support::*;
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
@@ -114,6 +115,22 @@ async fn system_annotations_are_persisted_updated_and_searchable(pool: PgPool) {
         .unwrap();
     assert_eq!(cleared["system_tags"], json!([]));
     assert_eq!(cleared["system_metadata"], json!({}));
+
+    // A search filters by as many tags as the Explorer and saved searches
+    // hold, and no more.
+    let tags = |count: usize| (0..count).map(|i| format!("tag-{i}")).collect::<Vec<_>>();
+    let search_tags = |tags: Vec<String>| {
+        client
+            .post(format!("{base_url}/v1/records/search"))
+            .json(&json!({ "blueprint": { "code": "annotated_product" }, "system_tags": tags }))
+            .send()
+    };
+    let allowed = search_tags(tags(MAX_SYSTEM_TAG_FILTERS)).await.unwrap();
+    assert_eq!(allowed.status(), StatusCode::OK);
+    let refused = search_tags(tags(MAX_SYSTEM_TAG_FILTERS + 1)).await.unwrap();
+    assert_eq!(refused.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let error: Value = refused.json().await.unwrap();
+    assert_eq!(error["error"]["code"], "invalid_input");
 
     assert_eq!(blueprint["blueprint"]["code"], "annotated_product");
     server.abort();

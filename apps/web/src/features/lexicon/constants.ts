@@ -9,6 +9,13 @@ export const SINGULAR_PLURAL_CATEGORY = 'one';
 export const CONTEXT_SEPARATOR = '_';
 /** Joins a key and its plural category, matching i18next's plural suffix. */
 export const PLURAL_SEPARATOR = '_';
+/**
+ * Prefixes the bundle's copy of each context-free entry, so a name such as a
+ * system tag is looked up as a whole key: `needs_review` must not resolve to
+ * `needs` in the context `review`, nor `x_one` to a plural form. Keys and
+ * contexts cannot contain `|`, so the copies never collide with other keys.
+ */
+export const PLAIN_KEY_RESOURCE_PREFIX = '|';
 export const LEXICON_EXPORT_PATH = '/api/lexicon/export';
 export const LEXICON_IMPORT_PATH = '/api/lexicon/import';
 export const LEXICON_REPORT_PATH = '/api/lexicon/report';

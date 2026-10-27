@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use clap::Subcommand;
 use futures_util::StreamExt;
+use serde::Deserialize;
 use serde_json::{Map, Value, json};
 use uuid::Uuid;
 
@@ -64,7 +65,7 @@ pub(crate) enum AgentCommand {
 
 #[derive(Subcommand)]
 pub(crate) enum ConversationCommand {
-    /// Conversations not about a record, newest first.
+    /// Conversations, newest first; by default only those not about a record.
     List {
         #[command(flatten)]
         filter: ConversationFilter,
@@ -180,8 +181,41 @@ pub(crate) enum ApprovalCommand {
 const CONVERSATIONS_PATH: &str = "/agent/conversations";
 /// The event that ends a run's stream.
 const TERMINAL_EVENT: &str = "terminal";
-/// The event the server sends when it stops a stream abnormally.
+/// The event name of both a failed run's stored error, which has an id, and
+/// the server's own notice that it stopped the stream abnormally, which has
+/// none.
 const ERROR_EVENT: &str = "error";
+/// Where an agent run stands, as the API reports it.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+enum AgentRunStatus {
+    Queued,
+    Running,
+    AwaitingApproval,
+    Completed,
+    Failed,
+    Cancelled,
+    Skipped,
+    /// A status this `acli` does not know; treated as still running.
+    #[serde(other)]
+    Unknown,
+}
+
+impl AgentRunStatus {
+    /// Whether the run has finished and its status will not change.
+    fn is_terminal(self) -> bool {
+        matches!(
+            self,
+            Self::Completed | Self::Failed | Self::Cancelled | Self::Skipped
+        )
+    }
+}
+
+#[derive(Deserialize)]
+struct AgentRun {
+    status: AgentRunStatus,
+}
+
 /// Pause before resuming a stream the server closed before the run ended.
 const STREAM_RECONNECT_DELAY: std::time::Duration = std::time::Duration::from_secs(1);
 
@@ -321,24 +355,34 @@ async fn message_command(api: &Api, command: MessageCommand) -> Result<String, C
                 .ok()
                 .and_then(|run| run["id"].as_str().and_then(|id| id.parse::<Uuid>().ok()))
                 .ok_or(CliError::InvalidResponse)?;
-            print_line(&run)?;
+            if print_line(&run)? == Output::Closed {
+                return Ok(String::new());
+            }
             follow_run(api, run_id, None).await
         }
     }
 }
 
 /// Prints a run's events as JSON lines until its terminal event, resuming
-/// with `Last-Event-ID` when the server ends the stream early. Returns no
-/// further output.
+/// with `Last-Event-ID` when the server ends the stream early. A stream that
+/// ends without a terminal event because none remains to send (the run's
+/// events were purged, or the stream resumed after its terminal event) stops
+/// once the run itself is terminal. Returns no further output.
 pub(crate) async fn follow_run(
     api: &Api,
     run_id: Uuid,
     mut last_event_id: Option<String>,
 ) -> Result<String, CliError> {
-    let path = format!("/agent/runs/{}/events", segment(run_id));
+    let run_path = format!("/agent/runs/{}", segment(run_id));
+    let path = format!("{run_path}/events");
     let mut resumed = false;
     loop {
         if resumed {
+            let run: AgentRun = serde_json::from_value(api.get_value(&run_path).await?)
+                .map_err(|_| CliError::InvalidResponse)?;
+            if run.status.is_terminal() {
+                return Ok(String::new());
+            }
             tokio::time::sleep(STREAM_RECONNECT_DELAY).await;
         }
         resumed = true;
@@ -351,11 +395,12 @@ pub(crate) async fn follow_run(
         while let Some(chunk) = stream.next().await {
             let chunk = chunk.map_err(|error| CliError::Transport(error.to_string()))?;
             for event in parser.push(&chunk) {
-                if event.event.as_deref() == Some(ERROR_EVENT) {
+                if event.event.as_deref() == Some(ERROR_EVENT) && event.id.is_none() {
                     return Err(CliError::Transport(event.data));
                 }
-                print_line(&event.data)?;
-                if event.event.as_deref() == Some(TERMINAL_EVENT) {
+                if print_line(&event.data)? == Output::Closed
+                    || event.event.as_deref() == Some(TERMINAL_EVENT)
+                {
                     return Ok(String::new());
                 }
                 if event.id.is_some() {
@@ -366,11 +411,25 @@ pub(crate) async fn follow_run(
     }
 }
 
-fn print_line(line: &str) -> Result<(), CliError> {
-    let mut stdout = std::io::stdout().lock();
-    writeln!(stdout, "{line}")
-        .and_then(|()| stdout.flush())
-        .map_err(|error| CliError::Transport(error.to_string()))
+/// Whether standard output still has a reader.
+#[derive(Debug, PartialEq)]
+pub(crate) enum Output {
+    Open,
+    /// The reader went away, as `| head -1` does after one line; the
+    /// command has printed all anyone will read and ends successfully.
+    Closed,
+}
+
+fn print_line(line: &str) -> Result<Output, CliError> {
+    write_line(&mut std::io::stdout().lock(), line)
+}
+
+pub(crate) fn write_line(out: &mut impl Write, line: &str) -> Result<Output, CliError> {
+    match writeln!(out, "{line}").and_then(|()| out.flush()) {
+        Ok(()) => Ok(Output::Open),
+        Err(error) if error.kind() == std::io::ErrorKind::BrokenPipe => Ok(Output::Closed),
+        Err(error) => Err(CliError::Transport(error.to_string())),
+    }
 }
 
 fn conversation_path(conversation_id: Uuid, rest: &str) -> String {

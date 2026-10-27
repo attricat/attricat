@@ -16,7 +16,8 @@ function RuleRevisionEditorRoute() {
     <RequireCapability capability={capabilities.rulesManage}>
       <RuleEditorPage
         ruleId={ruleId}
-        sourceVersion={versionParamSchema.parse(version)}
+        // A malformed version shows the page's not-found state.
+        sourceVersion={versionParamSchema.safeParse(version).data}
       />
     </RequireCapability>
   );

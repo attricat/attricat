@@ -105,9 +105,32 @@ impl AttricatRepository {
         .bind(&existing)
         .execute(&mut *transaction)
         .await?;
+        // Creates resolve their revision once, here, so the counters locked
+        // below are exactly the ones they number. A create on a missing
+        // revision fails when its turn comes, after the operations before it.
+        let mut revisions = Vec::with_capacity(operation_count);
+        for operation in &request.operations {
+            revisions.push(match operation {
+                RecordBatchOperation::Create { blueprint, .. } => Some(
+                    self.batch_blueprint_revision(&mut transaction, blueprint)
+                        .await,
+                ),
+                _ => None,
+            });
+        }
+        // Creates on several blueprints would otherwise lock their counters in
+        // operation order, and two batches in opposite orders would deadlock.
+        let created: Vec<_> = revisions
+            .iter()
+            .filter_map(|revision| revision.as_ref()?.as_ref().ok().copied())
+            .collect();
+        self.lock_generated_sequences_in(&mut transaction, &created)
+            .await?;
 
         let mut results = Vec::with_capacity(operation_count);
-        for (index, operation) in request.operations.into_iter().enumerate() {
+        for ((index, operation), revision) in
+            request.operations.into_iter().enumerate().zip(revisions)
+        {
             let record_id = operation.record_id();
             let failed = |source: RepositoryError| RepositoryError::RecordBatchOperationFailed {
                 index,
@@ -115,7 +138,13 @@ impl AttricatRepository {
                 source: Box::new(source),
             };
             let result = self
-                .apply_record_batch_operation(&mut transaction, index, operation_count, operation)
+                .apply_record_batch_operation(
+                    &mut transaction,
+                    index,
+                    operation_count,
+                    operation,
+                    revision,
+                )
                 .await
                 .map_err(failed)?;
             results.push(result);
@@ -132,11 +161,12 @@ impl AttricatRepository {
         index: usize,
         operation_count: usize,
         operation: RecordBatchOperation,
+        revision: Option<Result<(Uuid, i64), RepositoryError>>,
     ) -> Result<RecordBatchOperationResult, RepositoryError> {
         Ok(match operation {
             RecordBatchOperation::Create {
                 record_id,
-                blueprint,
+                blueprint: _,
                 values,
                 system_tags,
                 system_metadata,
@@ -151,9 +181,8 @@ impl AttricatRepository {
                 if taken {
                     return Err(RepositoryError::RecordIdTaken(record_id));
                 }
-                let (blueprint_id, blueprint_version) = self
-                    .batch_blueprint_revision(transaction, &blueprint)
-                    .await?;
+                let (blueprint_id, blueprint_version) =
+                    revision.expect("creates resolve their revision before the batch runs")?;
                 let repository = self.for_batch_operation(index, operation_count, record_id);
                 let (record, changes, event) = repository
                     .create_record_in_transaction(

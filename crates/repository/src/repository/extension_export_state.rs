@@ -18,7 +18,7 @@ use sha2::{Digest, Sha256};
 use sqlx::{FromRow, Postgres, Transaction};
 use uuid::Uuid;
 
-use super::{AttricatRepository, RepositoryError};
+use super::{AttricatRepository, ErrorCode, RepositoryError};
 
 /// Whose lease a mapping commit honours.
 enum Lease<'a> {
@@ -256,10 +256,42 @@ pub struct ExportRetryOutcome {
     pub job_errors: Vec<ExportRetryJobError>,
 }
 
+/// A job whose resync could not start, reported like an API error so
+/// clients translate it by `code`.
 #[derive(Clone, Debug, Serialize)]
 pub struct ExportRetryJobError {
     pub job_id: Uuid,
+    /// The cause's own code when it is specific, otherwise
+    /// [`ErrorCode::ExportJobResyncFailed`].
+    pub code: ErrorCode,
+    /// English, for the CLI, agents and logs.
     pub message: String,
+    /// The cause's details, if any, plus `job_id` and `job_code`.
+    pub details: Value,
+}
+
+impl ExportRetryJobError {
+    fn new(job_id: Uuid, job_code: Option<&str>, error: &RepositoryError) -> Self {
+        let described = error.describe();
+        // Validation and internal failures name nothing a client can
+        // translate, so they report the job instead.
+        let code = match described.code {
+            ErrorCode::InvalidInput | ErrorCode::InternalError => ErrorCode::ExportJobResyncFailed,
+            code => code,
+        };
+        let mut details = match described.details {
+            Some(Value::Object(details)) => details,
+            _ => serde_json::Map::new(),
+        };
+        details.insert("job_id".into(), json!(job_id));
+        details.insert("job_code".into(), json!(job_code));
+        Self {
+            job_id,
+            code,
+            message: resync_error_message(error),
+            details: Value::Object(details),
+        }
+    }
 }
 
 /// Record IDs in one order without repeats, as a selection names them.
@@ -369,20 +401,20 @@ impl AttricatRepository {
             .fetch_all(&self.pool).await?)
     }
 
-    /// Whether a later event of `event_types` for `event`'s record exists
-    /// that supersedes `event`'s debounced delivery to `extension_id`. A retry
-    /// request concerns one connection only, so only a later retry request of
-    /// the same extension and connection supersedes it, and no retry request
-    /// supersedes any other event.
-    pub async fn newer_record_event_exists(
+    /// When the latest event of `event_types` for `event`'s record that
+    /// supersedes `event`'s debounced delivery to `extension_id` occurred, if
+    /// any does. A retry request concerns one connection only, so only a later
+    /// retry request of the same extension and connection supersedes it, and
+    /// no retry request supersedes any other event.
+    pub async fn newest_superseding_record_event_at(
         &self,
         extension_id: &str,
         event: &attricat_events::DomainEvent,
         event_types: &[String],
-    ) -> Result<bool, RepositoryError> {
+    ) -> Result<Option<chrono::DateTime<chrono::Utc>>, RepositoryError> {
         let retry = event.event_type == crate::domain_events::EXPORT_RETRY_REQUESTED_V1;
         let retry_connection = event.payload.get("connection").and_then(Value::as_str);
-        Ok(sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM domain_events WHERE workspace_id=$1 AND aggregate_kind='record' AND aggregate_id=$2 AND sequence>$3 AND event_type=ANY($4) AND CASE WHEN $7 THEN event_type=$6 AND payload->>'extension_id'=$5 AND payload->>'connection' IS NOT DISTINCT FROM $8 ELSE event_type<>$6 END)")
+        Ok(sqlx::query_scalar("SELECT max(occurred_at) FROM domain_events WHERE workspace_id=$1 AND aggregate_kind='record' AND aggregate_id=$2 AND sequence>$3 AND event_type=ANY($4) AND CASE WHEN $7 THEN event_type=$6 AND payload->>'extension_id'=$5 AND payload->>'connection' IS NOT DISTINCT FROM $8 ELSE event_type<>$6 END")
             .bind(self.workspace_id()).bind(event.aggregate_id).bind(event.sequence).bind(event_types)
             .bind(extension_id).bind(crate::domain_events::EXPORT_RETRY_REQUESTED_V1)
             .bind(retry).bind(retry_connection)
@@ -1119,10 +1151,11 @@ impl AttricatRepository {
                     Ok(runs) => run_ids.extend(runs),
                     Err(error) => {
                         tracing::warn!(job = %job.id, %error, "export retry resync could not start");
-                        job_errors.push(ExportRetryJobError {
-                            job_id: job.id,
-                            message: resync_error_message(&error),
-                        });
+                        job_errors.push(ExportRetryJobError::new(
+                            job.id,
+                            job.code.as_deref(),
+                            &error,
+                        ));
                     }
                 }
             }
@@ -1269,5 +1302,47 @@ impl AttricatRepository {
         self.write_audit_event(&mut transaction).await?;
         transaction.commit().await?;
         Ok(ids)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn retry_job_errors_carry_a_translatable_code_and_the_job() {
+        let job = Uuid::new_v4();
+        let unpublished = ExportRetryJobError::new(
+            job,
+            Some("nightly"),
+            &RepositoryError::InvalidExtension("blueprint is no longer published".into()),
+        );
+        assert_eq!(unpublished.code, ErrorCode::ExportJobResyncFailed);
+        assert_eq!(unpublished.message, "blueprint is no longer published");
+        assert_eq!(
+            unpublished.details,
+            json!({"job_id": job, "job_code": "nightly"})
+        );
+
+        let internal = ExportRetryJobError::new(
+            job,
+            Some("nightly"),
+            &RepositoryError::Database(sqlx::Error::PoolTimedOut),
+        );
+        assert_eq!(internal.code, ErrorCode::ExportJobResyncFailed);
+        assert_eq!(internal.message, "the job could not start a resync");
+
+        // A specific cause keeps its own code.
+        let missing = ExportRetryJobError::new(
+            job,
+            None,
+            &RepositoryError::NotFound("blueprint connector job"),
+        );
+        assert_eq!(missing.code, ErrorCode::NotFound);
+        assert_eq!(missing.details["job_id"], json!(job));
+        assert_eq!(
+            serde_json::to_value(&missing).unwrap()["code"],
+            json!("not_found")
+        );
     }
 }

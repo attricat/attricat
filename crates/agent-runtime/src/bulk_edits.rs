@@ -510,6 +510,24 @@ pub struct BulkEditFailure {
     pub record_id: Uuid,
     pub code: String,
     pub message: String,
+    /// The error's structured details, which clients translate the code with.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details: Option<Value>,
+}
+
+impl BulkEditFailure {
+    /// The failure a tool error payload (`code`, `message`, `details`)
+    /// describes for `record_id`.
+    fn from_payload(record_id: Uuid, mut payload: Value) -> Self {
+        Self {
+            record_id,
+            code: payload["code"].as_str().unwrap_or("tool_error").to_owned(),
+            message: payload["message"].as_str().unwrap_or_default().to_owned(),
+            details: payload
+                .as_object_mut()
+                .and_then(|payload| payload.remove("details")),
+        }
+    }
 }
 
 /// Applies an approved bulk edit record by record and stops at the first
@@ -559,22 +577,17 @@ pub async fn execute(
             tracing::warn!(run_id = %run.id, %error, "could not record bulk edit progress");
         }
         if let Some(payload) = failure {
-            let code = payload["code"].as_str().unwrap_or("tool_error").to_owned();
-            let message = payload["message"].as_str().unwrap_or_default().to_owned();
+            let failure = BulkEditFailure::from_payload(record.record_id, payload);
             note_failure(
                 repository,
                 workspace,
                 run,
                 record.record_id,
-                &code,
-                &message,
+                &failure.code,
+                &failure.message,
             )
             .await;
-            outcome.failed.push(BulkEditFailure {
-                record_id: record.record_id,
-                code,
-                message,
-            });
+            outcome.failed.push(failure);
             break;
         }
     }
@@ -758,5 +771,31 @@ mod tests {
         assert!(body.contains("`stale_record`"));
         assert!(body.contains(&format!("(/agents/{conversation})")));
         assert!(body.chars().count() < 2_500);
+    }
+
+    #[test]
+    fn failures_keep_the_error_details() {
+        let record = Uuid::new_v4();
+        let failure = BulkEditFailure::from_payload(
+            record,
+            json!({"code": "invalid_value", "message": "bad", "details": {"attribute_code": "sku"}}),
+        );
+        assert_eq!(
+            serde_json::to_value(&failure).unwrap(),
+            json!({
+                "record_id": record,
+                "code": "invalid_value",
+                "message": "bad",
+                "details": {"attribute_code": "sku"},
+            })
+        );
+        let plain =
+            BulkEditFailure::from_payload(record, json!({"code": "forbidden", "message": "no"}));
+        assert!(
+            serde_json::to_value(&plain)
+                .unwrap()
+                .get("details")
+                .is_none()
+        );
     }
 }

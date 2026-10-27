@@ -177,10 +177,12 @@ Attricat stores uploaded files, generated image variants, extension artifacts, a
 | `S3_BUCKET` | Existing bucket name. Attricat does not create it in production. |
 | `S3_ACCESS_KEY_ID` | Access key ID. Its secret key is the `s3_secret_access_key` secret. |
 | `S3_FORCE_PATH_STYLE` | `true` or `false`. Use `true` for services that do not support virtual-hosted buckets, such as RustFS or MinIO. |
-| `S3_UPLOAD_TIMEOUT_SECONDS` | Timeout for uploads and deletes. |
+| `S3_UPLOAD_TIMEOUT_SECONDS` | Timeout for uploads and deletes. A multipart upload applies it to each request: initiation, every part, and completion. |
 | `S3_DOWNLOAD_TIMEOUT_SECONDS` | Timeout for downloads and the startup bucket check. |
 
-Grant the credentials only `PutObject`, `GetObject`, `DeleteObject`, `AbortMultipartUpload`, and `ListObjectsV2` on that bucket, keep the bucket private, and use TLS. Clients never receive object keys or signed URLs; every download goes through the API.
+Grant the credentials only `PutObject`, `GetObject`, `DeleteObject`, `AbortMultipartUpload`, and `ListBucket` on that bucket, keep the bucket private, and use TLS. Clients never receive object keys or signed URLs; every download goes through the API.
+
+Files of 8 MiB or more upload as multipart uploads, which are aborted when any part or the completion fails or times out, or the upload is cancelled. The S3 client honours the standard `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` and `NO_PROXY` environment variables (or their lowercase forms); set `NO_PROXY` to the S3 host when a proxy is configured for other traffic but must not carry object-store requests.
 
 ## File uploads and processing
 

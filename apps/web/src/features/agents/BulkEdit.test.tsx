@@ -202,4 +202,31 @@ describe('bulk edit approval', () => {
       screen.getByText('Show the record that was not changed'),
     ).toBeTruthy();
   });
+
+  it('translates a failure with its details', () => {
+    renderWithQueries(
+      <ConversationMessageContent
+        content={{
+          tool_call_id: 'call_bulk',
+          name: 'bulk_set_record_values',
+          result: {
+            applied: [],
+            failed: [
+              {
+                record_id: recordId(1),
+                code: 'attribute_value_schema_mismatch',
+                message: 'value does not match the schema',
+                details: { attribute: 'SKU' },
+              },
+            ],
+            not_run: [],
+          },
+        }}
+        messageRole="tool"
+      />,
+    );
+    expect(
+      screen.getByText("The value of SKU doesn't match its schema."),
+    ).toBeTruthy();
+  });
 });

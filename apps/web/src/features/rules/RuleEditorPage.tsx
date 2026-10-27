@@ -242,7 +242,12 @@ export const RuleEditorPage = ({
         </Typography>
       )}
       <ApiErrorAlert
-        error={blueprints.error ?? revisions.error ?? contexts.error}
+        error={
+          blueprints.error ??
+          revisions.error ??
+          blueprint.error ??
+          contexts.error
+        }
         sx={{ mt: 2 }}
       />
       <ApiErrorAlert error={save.error} sx={{ mt: 3 }} />

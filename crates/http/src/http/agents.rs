@@ -402,6 +402,20 @@ pub(super) async fn list_runs(
     ))
 }
 
+/// One run, so a client whose event stream ended without a `terminal` event
+/// (its events were purged, or it resumed after the last one) can tell
+/// whether the run has finished.
+pub(super) async fn get_run(
+    AuthenticatedPrincipal(user, _): AuthenticatedPrincipal,
+    ActiveWorkspace(workspace): ActiveWorkspace,
+    ScopedRepository(repository): ScopedRepository,
+    ApiPath(run_id): ApiPath<Uuid>,
+) -> Result<Json<crate::repository::AgentRun>, ApiError> {
+    let run = repository.get_agent_run(run_id).await?;
+    readable_conversation(&repository, user, workspace, run.conversation_id).await?;
+    Ok(Json(run))
+}
+
 pub(super) async fn send_message(
     State(state): State<AppState>,
     principal @ AuthenticatedPrincipal(user, _): AuthenticatedPrincipal,

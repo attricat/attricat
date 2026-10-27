@@ -7,6 +7,7 @@ import '../../i18n';
 import { uploadConversationFiles } from '../files/api';
 import { sendMessage } from './api';
 import { ConversationComposer } from './ConversationComposer';
+import { agentQueryKeys } from './queryKeys';
 
 vi.mock('../files/api', () => ({
   uploadConversationFiles: vi.fn(),
@@ -161,6 +162,43 @@ describe('ConversationComposer', () => {
     );
   });
 
+  it('refreshes but does not lead on after it is gone mid-send', async () => {
+    const user = userEvent.setup();
+    const onSent = vi.fn();
+    const queryClient = new QueryClient({
+      defaultOptions: { mutations: { retry: false } },
+    });
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    let finishSend!: (value: Awaited<ReturnType<typeof sendMessage>>) => void;
+    vi.mocked(sendMessage).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishSend = resolve;
+        }),
+    );
+    const { unmount } = render(
+      <QueryClientProvider client={queryClient}>
+        <ConversationComposer conversationId={conversationId} onSent={onSent} />
+      </QueryClientProvider>,
+    );
+    await user.type(screen.getByRole('textbox', { name: 'Message' }), 'Hi');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+    await waitFor(() => expect(sendMessage).toHaveBeenCalledOnce());
+
+    unmount();
+    finishSend({
+      id: '123e4567-e89b-12d3-a456-426614174002',
+      status: 'queued',
+    });
+
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({
+        queryKey: agentQueryKeys.conversation(conversationId),
+      }),
+    );
+    expect(onSent).not.toHaveBeenCalled();
+  });
+
   it('creates the conversation on the first send and reuses it on retry', async () => {
     const user = userEvent.setup();
     const onSent = vi.fn();
@@ -192,5 +230,36 @@ describe('ConversationComposer', () => {
     expect(createConversation).toHaveBeenCalledOnce();
     expect(createConversation).toHaveBeenCalledWith('Hi');
     expect(sendMessage).toHaveBeenLastCalledWith(conversationId, 'Hi', []);
+  });
+
+  it('needs a way to create the conversation when there is none', () => {
+    // Checked by the type checker: no send can lack a conversation.
+    // @ts-expect-error A composer without a conversation must create one.
+    const missing = <ConversationComposer conversationId={null} />;
+    expect(missing).toBeTruthy();
+  });
+
+  it('lists a created conversation even when its first message fails', async () => {
+    const user = userEvent.setup();
+    const queryClient = new QueryClient({
+      defaultOptions: { mutations: { retry: false } },
+    });
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ConversationComposer
+          conversationId={null}
+          createConversation={vi.fn().mockResolvedValue(conversationId)}
+        />
+      </QueryClientProvider>,
+    );
+    vi.mocked(sendMessage).mockRejectedValueOnce(new Error('offline'));
+    await user.type(screen.getByRole('textbox', { name: 'Message' }), 'Hi');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+
+    expect(await screen.findByRole('button', { name: 'Retry' })).toBeTruthy();
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: agentQueryKeys.conversations(),
+    });
   });
 });

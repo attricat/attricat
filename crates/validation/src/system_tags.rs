@@ -12,6 +12,10 @@ pub const SAMPLE_SYSTEM_TAG: &str = "attricat.sample";
 /// finding acknowledgement keep it current.
 pub const NEEDS_ATTENTION_SYSTEM_TAG: &str = "attricat.needs_attention";
 
+/// Every Core tag the host sets. A record carries at most these on top of its
+/// ordinary tags.
+pub const CORE_SYSTEM_TAGS: [&str; 2] = [SAMPLE_SYSTEM_TAG, NEEDS_ATTENTION_SYSTEM_TAG];
+
 /// Whether `tag` is reserved for Core.
 pub fn is_core_system_tag(tag: &str) -> bool {
     tag.starts_with(CORE_SYSTEM_TAG_PREFIX) && !tag.contains(':')
@@ -28,5 +32,6 @@ mod tests {
         assert!(is_core_system_tag("attricat.future"));
         assert!(!is_core_system_tag("reviewed"));
         assert!(!is_core_system_tag("attricat.example:reviewed"));
+        assert!(CORE_SYSTEM_TAGS.iter().all(|tag| is_core_system_tag(tag)));
     }
 }
