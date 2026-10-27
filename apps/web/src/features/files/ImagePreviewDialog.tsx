@@ -10,7 +10,6 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
-import { useQuery } from '@tanstack/react-query';
 import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -24,13 +23,12 @@ import {
 import { fileDownloadUrl } from './api';
 import {
   DISPLAY_VARIANT_KIND,
-  fileStatuses,
   IMAGE_MAX_ZOOM,
   IMAGE_MIN_ZOOM,
   IMAGE_ZOOM_STEP,
 } from './constants';
-import { fileMetadataOptions } from './queryOptions';
 import type { GalleryFile } from './ImageGallery';
+import { useFileVariant } from './useFileVariant';
 
 const ImagePreview = ({ file }: { file: GalleryFile }) => {
   const { t } = useTranslation();
@@ -39,17 +37,13 @@ const ImagePreview = ({ file }: { file: GalleryFile }) => {
   const [loaded, setLoaded] = useState(false);
   const viewport = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
-  const metadata = useQuery(fileMetadataOptions(file.id));
-  const variant = metadata.data?.variants.find(
-    (item) => item.kind === DISPLAY_VARIANT_KIND,
-  );
-  const ready = metadata.data?.status === fileStatuses.ready;
-  const unavailable =
-    metadata.isError ||
-    failed ||
-    (ready && !variant) ||
-    metadata.data?.status === fileStatuses.failed ||
-    metadata.data?.status === fileStatuses.deleted;
+  const {
+    metadata,
+    ready,
+    unavailable: variantUnavailable,
+    variant,
+  } = useFileVariant(file.id, DISPLAY_VARIANT_KIND);
+  const unavailable = variantUnavailable || failed;
   useEffect(() => {
     const element = viewport.current;
     if (!element) return;

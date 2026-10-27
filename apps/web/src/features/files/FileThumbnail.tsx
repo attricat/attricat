@@ -1,10 +1,8 @@
 import { Box, CircularProgress, Typography } from '@mui/material';
-import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { fileDownloadUrl } from './api';
 import {
-  fileStatuses,
   MAX_LOADED_THUMBNAIL_SOURCES,
   MAX_THUMBNAIL_RETRIES,
   THUMBNAIL_FADE_IN_TRANSITION,
@@ -13,8 +11,8 @@ import {
   THUMBNAIL_SPINNER_SIZE,
   THUMBNAIL_VARIANT_KIND,
 } from './constants';
-import { fileMetadataOptions } from './queryOptions';
 import type { FileMetadata } from './schemas';
+import { useFileVariant } from './useFileVariant';
 
 type ThumbnailFile = Pick<FileMetadata, 'id' | 'filename'>;
 
@@ -158,20 +156,13 @@ export const FileThumbnail = ({
   file: ThumbnailFile;
   size?: number;
 }) => {
-  const metadata = useQuery(fileMetadataOptions(file.id));
-  const currentFile = metadata.data;
-  const thumbnail = currentFile?.variants.find(
-    (variant) => variant.kind === THUMBNAIL_VARIANT_KIND,
-  );
+  const {
+    ready,
+    unavailable,
+    variant: thumbnail,
+  } = useFileVariant(file.id, THUMBNAIL_VARIANT_KIND);
   const source =
-    currentFile?.status === fileStatuses.ready && thumbnail
-      ? fileDownloadUrl(currentFile.id, thumbnail.kind)
-      : undefined;
-  const unavailable =
-    metadata.isError ||
-    (currentFile?.status === fileStatuses.ready && !thumbnail) ||
-    currentFile?.status === fileStatuses.failed ||
-    currentFile?.status === fileStatuses.deleted;
+    ready && thumbnail ? fileDownloadUrl(file.id, thumbnail.kind) : undefined;
 
   return (
     <ThumbnailPreview
