@@ -1,12 +1,16 @@
+const root = ['extension-exports'] as const;
+
 export const extensionExportQueryKeys = {
-  all: ['extension-exports'] as const,
-  workspace: () => ['extension-exports', 'workspace'] as const,
-  record: (recordId: string) =>
-    ['extension-exports', 'record', recordId] as const,
+  all: root,
+  workspace: () => [...root, 'workspace'] as const,
+  record: (recordId: string) => [...root, 'record', recordId] as const,
+  extensionRoot: (extensionId: string) =>
+    [...root, 'extension', extensionId] as const,
   extension: (
     extensionId: string,
     filter: { connection: string | null; status: string | null },
-  ) => ['extension-exports', 'extension', extensionId, filter] as const,
+  ) =>
+    [...extensionExportQueryKeys.extensionRoot(extensionId), filter] as const,
   /** The paged problem list; an infinite query cannot share the overview's entry. */
   extensionPages: (
     extensionId: string,
@@ -16,24 +20,14 @@ export const extensionExportQueryKeys = {
       ...extensionExportQueryKeys.extension(extensionId, filter),
       'pages',
     ] as const,
-  extensionRoot: (extensionId: string) =>
-    ['extension-exports', 'extension', extensionId] as const,
   connections: (extensionId: string) =>
-    ['extension-exports', 'connections', extensionId] as const,
-  budgets: (extensionId: string) =>
-    ['extension-exports', 'budgets', extensionId] as const,
+    [...root, 'connections', extensionId] as const,
+  budgets: (extensionId: string) => [...root, 'budgets', extensionId] as const,
   preview: (
     extensionId: string,
     exportId: string,
     recordId: string,
     connection: string | null,
   ) =>
-    [
-      'extension-exports',
-      'preview',
-      extensionId,
-      exportId,
-      recordId,
-      connection,
-    ] as const,
+    [...root, 'preview', extensionId, exportId, recordId, connection] as const,
 };
