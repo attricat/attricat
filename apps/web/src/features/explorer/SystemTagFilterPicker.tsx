@@ -26,6 +26,7 @@ import {
 } from '../records/api';
 import { SYSTEM_TAG_FACET_LIMIT } from '../records/constants';
 import { recordQueryKeys } from '../records/queryKeys';
+import { systemTagLabel } from '../records/systemTags';
 import {
   systemTagFacetStaleTimeMs,
   systemTagPickerWidth,
@@ -55,6 +56,11 @@ const InlinePopper = ({ children, id, role, style }: PopperProps) => (
 const startsWithIgnoringCase = (tag: string, prefix: string) =>
   tag.toLowerCase().startsWith(prefix.toLowerCase());
 
+/** Whether `prefix` starts the stored tag or its translated label. */
+const matchesTyped = (tag: string, prefix: string) =>
+  startsWithIgnoringCase(tag, prefix) ||
+  startsWithIgnoringCase(systemTagLabel(tag), prefix);
+
 /**
  * Adds a system tag filter: a button that opens a searchable list of the
  * tags the blueprint's records carry, most used first. The list is requested
@@ -62,6 +68,8 @@ const startsWithIgnoringCase = (tag: string, prefix: string) =>
  * blueprint, so typing filters the first list in the browser when it holds
  * every tag, and asks the server for a prefix only when it was truncated.
  * A fresh, complete answer for a shorter prefix also covers longer ones.
+ * The server matches stored tags only, so a translated label matches among
+ * the tags of the first list.
  */
 export const SystemTagFilterPicker = ({
   blueprint,
@@ -115,15 +123,20 @@ export const SystemTagFilterPicker = ({
     staleTime: systemTagFacetStaleTimeMs,
     placeholderData: keepPreviousData,
   });
+  const serverMatches = searchesServer ? matching.data?.items : undefined;
   // Until the server answers, and for an answer to an earlier prefix, the
   // typed prefix still narrows what is shown.
   const options = (
-    (searchesServer ? matching.data?.items : undefined) ??
-    all.data?.items ??
-    []
+    serverMatches
+      ? [
+          ...serverMatches,
+          ...(all.data?.items ?? []).filter(
+            (item) => !serverMatches.some(({ tag }) => tag === item.tag),
+          ),
+        ].sort((a, b) => b.count - a.count)
+      : (all.data?.items ?? [])
   ).filter(
-    (item) =>
-      startsWithIgnoringCase(item.tag, typed) && !selected.includes(item.tag),
+    (item) => matchesTyped(item.tag, typed) && !selected.includes(item.tag),
   );
   const error = all.error ?? (searchesServer ? matching.error : null);
   const close = () => {
@@ -168,7 +181,7 @@ export const SystemTagFilterPicker = ({
           <Autocomplete<SystemTagCount>
             disablePortal
             filterOptions={(items) => items}
-            getOptionLabel={(item) => item.tag}
+            getOptionLabel={(item) => systemTagLabel(item.tag)}
             inputValue={input}
             isOptionEqualToValue={(item, value) => item.tag === value.tag}
             loading={all.isFetching || (searchesServer && matching.isFetching)}
@@ -206,7 +219,7 @@ export const SystemTagFilterPicker = ({
                   }}
                 >
                   <Typography sx={{ wordBreak: 'break-word' }} variant="body2">
-                    {item.tag}
+                    {systemTagLabel(item.tag)}
                   </Typography>
                   <Typography color="text.secondary" variant="caption">
                     {t('explorer.systemTagRecordCount', { count: item.count })}

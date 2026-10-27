@@ -2,8 +2,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import '../../i18n';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import i18n from '../../i18n';
+import { LEXICON_NAMESPACE } from '../lexicon/constants';
 import { getSystemTagFacet } from '../records/api';
 import { SystemTagFilterPicker } from './SystemTagFilterPicker';
 
@@ -32,6 +33,38 @@ const optionNames = () =>
 describe('SystemTagFilterPicker', () => {
   beforeEach(() => {
     facet.mockReset();
+  });
+
+  afterEach(() => {
+    i18n.removeResourceBundle('en', LEXICON_NAMESPACE);
+  });
+
+  it('shows translated tags and matches typing against either form', async () => {
+    i18n.addResourceBundle('en', LEXICON_NAMESPACE, {
+      'workflow.review': 'Needs review',
+    });
+    facet.mockResolvedValue({
+      items: [
+        { tag: 'workflow.review', count: 5 },
+        { tag: 'imported', count: 3 },
+      ],
+      truncated: false,
+    });
+    const onAdd = vi.fn();
+    const user = await openPicker(onAdd);
+
+    expect(optionNames()).toEqual([
+      'Needs review5 records',
+      'imported3 records',
+    ]);
+    await user.type(screen.getByRole('combobox'), 'needs');
+    expect(optionNames()).toEqual(['Needs review5 records']);
+    await user.clear(screen.getByRole('combobox'));
+    await user.type(screen.getByRole('combobox'), 'workflow.');
+    expect(optionNames()).toEqual(['Needs review5 records']);
+
+    await user.click(screen.getByRole('option'));
+    expect(onAdd).toHaveBeenCalledWith('workflow.review');
   });
 
   it('filters a complete list in the browser without asking the server again', async () => {

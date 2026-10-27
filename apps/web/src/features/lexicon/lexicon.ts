@@ -4,6 +4,7 @@ import { listLexiconEntries } from './api';
 import { LEXICON_MANAGEMENT_NAMESPACE, LEXICON_NAMESPACE } from './constants';
 import {
   isLexiconReference,
+  normalizeLexiconTerm,
   parseLexiconText,
   type LexiconReference,
 } from './references';
@@ -43,6 +44,17 @@ export const lexiconText = (text: string): string => {
     )
     .join('');
 };
+
+/**
+ * Renders a name that is itself a lexicon key, such as a system tag, with no
+ * `{{}}` around it. It resolves like `{{key}}`, but `|` and braces are part
+ * of the key, and a name without an entry renders as authored.
+ */
+export const lexiconKeyText = (key: string): string =>
+  i18n.t(normalizeLexiconTerm(key), {
+    ...lookupOptions,
+    defaultValue: key,
+  } as TOptions);
 
 /**
  * The plural noun for `count` when `text` is exactly one reference whose
