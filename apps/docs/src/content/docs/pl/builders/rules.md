@@ -66,6 +66,8 @@ Rekord **nie spełnia** reguły, gdy predykat nie jest spełniony. Reguły używ
 - **Tylko zgłaszanie ustaleń:** `stale` (brak aktualizacji w zadanym czasie), `unique` (żaden inny rekord Schematu nie ma tych samych wartości) i `acyclic` (relacja nigdy nie prowadzi z powrotem do rekordu).
 - **Kombinacje:** `all_of` i `any_of`.
 
+Dla atrybutu ze stałą listą wartości, takiego jak status lub wybór, każda wartość wymieniona w `one_of` oraz wartość porównania `eq` lub `ne` musi być jedną z nich; zapis zgłasza wartość, której atrybut nie dopuszcza, wraz z dopuszczalnymi wartościami.
+
 Porównanie z brakującą wartością jest spełnione; to samo dotyczy `one_of` i `relative_date`, gdy atrybut jest pusty. Połącz je z `required`, jeśli wartość musi istnieć:
 
 ```toml

@@ -66,6 +66,8 @@ A record **fails** when the predicate is not satisfied. Rules use the same predi
 - **Reporting only:** `stale` (not updated within an age limit), `unique` (no other record of the blueprint has the same values), and `acyclic` (a relationship never leads back to the record).
 - **Combinations:** `all_of` and `any_of`.
 
+For an attribute with a fixed list of values, such as a status or a choice, every value `one_of` lists, and the value of an `eq` or `ne` comparison, must be one of them; saving reports a value it does not allow, with the values it does.
+
 A comparison whose value is missing is satisfied, and so are `one_of` and `relative_date` when the attribute is empty. Combine them with `required` when the value must exist:
 
 ```toml

@@ -829,7 +829,9 @@ async fn record_changes_and_rechecks_run_every_enabled_rule_for_the_record(pool:
     manual_run(&base_url, rule_id, None, "everything").await;
     for (scope, expected) in [("record", 2), ("all_records", 1)] {
         let scoped: Value = client
-            .get(format!("{base_url}/rule-runs?rule_id={rule_id}&scope={scope}"))
+            .get(format!(
+                "{base_url}/rule-runs?rule_id={rule_id}&scope={scope}"
+            ))
             .send()
             .await
             .unwrap()

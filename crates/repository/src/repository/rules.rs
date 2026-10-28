@@ -1579,7 +1579,9 @@ async fn check_rule_fits(
         .remove(&(blueprint_id, version))
         .unwrap_or_default();
     attricat_rules::applicability(rule, &attributes)
-        .map_err(|error| RepositoryError::InvalidRuleDefinition(error.message))
+        .map_err(|error| RepositoryError::InvalidRuleDefinition(error.message))?;
+    attricat_rules::check_option_values(rule, &attributes)
+        .map_err(RepositoryError::InvalidRuleDefinition)
 }
 
 /// Adds to each rule the revisions of its blueprint it does not fit, among

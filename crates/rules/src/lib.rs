@@ -323,11 +323,13 @@ fn validate_enforcement(enforcement: &Enforcement, severity: &Severity) -> Resul
 }
 
 /// The attributes of one blueprint revision that a rule is checked against:
-/// value types, and the option codes of each status attribute.
+/// value types, the option codes of each status attribute, and the values of
+/// every attribute with a fixed list of them.
 #[derive(Clone, Debug, Default)]
 pub struct RevisionAttributes {
     pub types: HashMap<String, ValueType>,
     pub statuses: HashMap<String, Vec<String>>,
+    pub options: HashMap<String, Vec<String>>,
 }
 
 impl RevisionAttributes {
@@ -340,6 +342,23 @@ impl RevisionAttributes {
         value_schema: Option<&serde_json::Value>,
     ) {
         self.types.insert(code.to_owned(), value_type);
+        let values: Option<Vec<String>> = value_schema
+            .and_then(|schema| schema.get("enum"))
+            .and_then(serde_json::Value::as_array)
+            .map(|values| {
+                values
+                    .iter()
+                    .filter_map(|value| value.as_str().map(str::to_owned))
+                    .collect()
+            });
+        match values {
+            Some(values) => {
+                self.options.insert(code.to_owned(), values);
+            }
+            None => {
+                self.options.remove(code);
+            }
+        }
         let options = value_schema
             .filter(|schema| schema.get(STATUS_KEY).is_some())
             .and_then(|schema| schema.get("enum"))
@@ -364,6 +383,59 @@ impl RevisionAttributes {
 impl AttributeTypes for RevisionAttributes {
     fn attribute_type(&self, code: &str) -> Option<Option<ValueType>> {
         self.types.attribute_type(code)
+    }
+}
+
+/// Checks that every value a rule compares an attribute with fixed values to,
+/// in `one_of` or an `eq`/`ne` comparison, is one of those values, so a
+/// misspelt option does not flag every record. Linked records' attributes
+/// belong to other blueprints and are not checked here.
+pub fn check_option_values(
+    rule: &CompiledRule,
+    attributes: &RevisionAttributes,
+) -> Result<(), String> {
+    check_predicate_options(&rule.predicate, attributes)
+}
+
+fn check_predicate_options(
+    predicate: &Predicate,
+    attributes: &RevisionAttributes,
+) -> Result<(), String> {
+    let check = |attribute_code: &str, value: &serde_json::Value| {
+        let (Some(options), Some(value)) = (attributes.options.get(attribute_code), value.as_str())
+        else {
+            return Ok(());
+        };
+        if options.iter().any(|option| option == value) {
+            Ok(())
+        } else {
+            Err(format!(
+                "'{attribute_code}' has no value \"{value}\"; it allows {}",
+                options
+                    .iter()
+                    .map(|option| format!("\"{option}\""))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ))
+        }
+    };
+    match predicate {
+        Predicate::OneOf {
+            attribute_code,
+            values,
+        } => values
+            .iter()
+            .try_for_each(|value| check(attribute_code, value)),
+        Predicate::Compare {
+            attribute_code,
+            op: CompareOp::Eq | CompareOp::Ne,
+            value: Some(value),
+            ..
+        } => check(attribute_code, value),
+        Predicate::AllOf { predicates } | Predicate::AnyOf { predicates } => predicates
+            .iter()
+            .try_for_each(|predicate| check_predicate_options(predicate, attributes)),
+        _ => Ok(()),
     }
 }
 
@@ -479,6 +551,34 @@ mod tests {
     #[test]
     fn parses_bounded_host_owned_rule() {
         assert!(parse(REQUIRED).is_ok());
+    }
+    #[test]
+    fn rejects_values_an_attribute_does_not_allow() {
+        let mut attributes = RevisionAttributes::default();
+        attributes.insert(
+            "condition",
+            ValueType::String,
+            Some(&serde_json::json!({"type": "string", "enum": ["new", "used"]})),
+        );
+        attributes.insert("title", ValueType::String, None);
+        let rule = |predicate: &str| {
+            compile(&REQUIRED.replace("type='required'\nattribute_code='title'", predicate))
+                .unwrap()
+        };
+        let allowed = rule("type='one_of'\nattribute_code='condition'\nvalues=['new']");
+        assert!(check_option_values(&allowed, &attributes).is_ok());
+        let misspelt = rule("type='one_of'\nattribute_code='condition'\nvalues=['brand_new']");
+        assert_eq!(
+            check_option_values(&misspelt, &attributes).unwrap_err(),
+            "'condition' has no value \"brand_new\"; it allows \"new\", \"used\""
+        );
+        let nested = rule(
+            "type='any_of'\npredicates=[{type='compare',attribute_code='condition',op='eq',value='mint'},{type='required',attribute_code='title'}]",
+        );
+        assert!(check_option_values(&nested, &attributes).is_err());
+        // Attributes without fixed values take any value.
+        let free = rule("type='one_of'\nattribute_code='title'\nvalues=['anything']");
+        assert!(check_option_values(&free, &attributes).is_ok());
     }
     #[test]
     fn carries_an_optional_bounded_description() {
