@@ -12,6 +12,10 @@ An event trigger may declare `attributes = ["code", ...]` (1-100 unique codes). 
 
 Verification for this contract: `record.created.v1`, `record.updated.v1`, `attribute_value.changed.v1`, `attribute_value.restored.v1` and `relationship.changed.v1` carry `facts[]` built from the audit before/after diff (`audit_changes`), so a fact exists only for a value that actually changed and always names its `attribute_code`. Relationship facts are one per added/removed target (`relationship_add`/`relationship_remove`). File attributes are excluded from the audit snapshot and the file-reference write paths (`files.rs`) enqueue no domain event, so a file attribute can never satisfy a filter. Emitting file-reference facts is a separate eventing contract change.
 
+## Blueprint filters
+
+An event trigger may declare `blueprints = ["code", ...]` (1-100 unique codes). Fan-out then creates a run only if the event's record belongs to a listed blueprint, ANDed with `attributes`, `envelope` and `facts`. Fan-out reads the record's blueprint code from `records`/`blueprints` once per event, and only when some matching trigger has the filter, because `attribute_value.*` and `relationship.changed.v1` payloads do not carry the blueprint. Saving a workflow (`create_workflow_in_transaction`, `create_workflow_revision`) rejects codes the workspace has no blueprint for with `invalid_workflow_definition`; the definition schema marks them `x-attricat-reference = "blueprint"`, so the editor completes and checks them. Like `attributes`, the field is omitted from the compiled plan when absent. Solution-pack seeds require the codes to be pack blueprints and check trigger attributes and direct `attribute_write` actions against those blueprints only; referencing-record updates still resolve against every pack blueprint.
+
 ## Referencing record updates
 
 ```toml

@@ -82,6 +82,7 @@ impl AttricatRepository {
         let compiled = attricat_workflow::compile(&input.definition)
             .map_err(|e| RepositoryError::InvalidWorkflowDefinition(e.to_string()))?;
         let ws = self.workspace_id.0;
+        check_trigger_blueprints(tx, ws, &compiled).await?;
         // A versioned primary key cannot express a unique workflow family code.
         // Serialize first revisions by workspace and code, as blueprint creation does.
         sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
@@ -121,6 +122,7 @@ impl AttricatRepository {
         let Some((version, code)) = previous else {
             return Err(RepositoryError::NotFound("workflow"));
         };
+        check_trigger_blueprints(&mut tx, ws, &compiled).await?;
         if code != compiled.code {
             return Err(RepositoryError::InvalidWorkflowDefinition(
                 "workflow code cannot change across revisions".into(),
@@ -257,5 +259,43 @@ impl AttricatRepository {
         self.get_workflow(id)
             .await?
             .ok_or(RepositoryError::NotFound("workflow"))
+    }
+}
+
+/// Rejects a trigger that names a blueprint code the workspace does not have,
+/// so a typo cannot silently stop a workflow from running.
+async fn check_trigger_blueprints(
+    conn: &mut sqlx::PgConnection,
+    ws: Uuid,
+    compiled: &attricat_workflow::CompiledWorkflow,
+) -> Result<(), RepositoryError> {
+    let codes: Vec<&str> = compiled
+        .triggers
+        .iter()
+        .filter_map(|trigger| match trigger {
+            attricat_workflow::Trigger::Event { blueprints, .. } => Some(blueprints),
+            _ => None,
+        })
+        .flatten()
+        .map(String::as_str)
+        .collect();
+    if codes.is_empty() {
+        return Ok(());
+    }
+    let known: Vec<String> = sqlx::query_scalar(
+        "SELECT DISTINCT code FROM blueprints WHERE workspace_id = $1 AND code = ANY($2) AND deleted_at IS NULL",
+    )
+    .bind(ws)
+    .bind(&codes)
+    .fetch_all(&mut *conn)
+    .await?;
+    match codes
+        .iter()
+        .find(|code| !known.iter().any(|known| known == *code))
+    {
+        Some(code) => Err(RepositoryError::InvalidWorkflowDefinition(format!(
+            "trigger names unknown blueprint '{code}'"
+        ))),
+        None => Ok(()),
     }
 }

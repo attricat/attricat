@@ -162,6 +162,8 @@ impl AttricatRepository {
         let rows: Vec<(Uuid, i64, Value)> = sqlx::query_as("SELECT w.id, w.version, w.compiled_plan FROM workflows w JOIN workflow_lifecycles l ON l.workflow_id=w.id AND l.workspace_id=w.workspace_id WHERE w.workspace_id=$1 AND w.status='published' AND l.enabled_version=w.version AND $2 > COALESCE(l.activation_sequence, 0) FOR SHARE OF l")
             .bind(ws).bind(event.sequence).fetch_all(&mut *tx).await?;
         let snapshot = serde_json::to_value(event).expect("domain event serializes");
+        // Read once, and only when a trigger filters by blueprint.
+        let mut record_blueprint: Option<Option<String>> = None;
         let mut inserted = 0;
         for (workflow_id, version, plan) in rows {
             let compiled: attricat_workflow::CompiledWorkflow =
@@ -170,11 +172,36 @@ impl AttricatRepository {
                         "stored compiled workflow is invalid: {e}"
                     ))
                 })?;
-            if !compiled
-                .triggers
-                .iter()
-                .any(|trigger| workflow_trigger_matches(trigger, event))
-            {
+            let mut matched = false;
+            for trigger in &compiled.triggers {
+                if !workflow_trigger_matches(trigger, event) {
+                    continue;
+                }
+                if let attricat_workflow::Trigger::Event { blueprints, .. } = trigger
+                    && !blueprints.is_empty()
+                {
+                    if record_blueprint.is_none() {
+                        record_blueprint = Some(
+                            sqlx::query_scalar(
+                                "SELECT b.code FROM records e JOIN blueprints b ON b.workspace_id = e.workspace_id AND b.id = e.blueprint_id AND b.version = e.blueprint_version WHERE e.workspace_id = $1 AND e.id = $2",
+                            )
+                            .bind(ws)
+                            .bind(event.aggregate_id)
+                            .fetch_optional(&mut *tx)
+                            .await?,
+                        );
+                    }
+                    let Some(Some(code)) = &record_blueprint else {
+                        continue;
+                    };
+                    if !blueprints.contains(code) {
+                        continue;
+                    }
+                }
+                matched = true;
+                break;
+            }
+            if !matched {
                 continue;
             }
             let root_trigger_event_id = event
@@ -539,6 +566,7 @@ fn workflow_trigger_matches(trigger: &attricat_workflow::Trigger, event: &Domain
         envelope,
         facts,
         attributes,
+        ..
     } = trigger
     else {
         return false;
@@ -583,6 +611,7 @@ mod tests {
             envelope: [("source_kind".into(), json!("api"))].into(),
             facts: [("facts.0.attribute_code".into(), json!("title"))].into(),
             attributes: Vec::new(),
+            blueprints: Vec::new(),
         };
         let event = DomainEvent {
             id: Uuid::new_v4(),
@@ -611,6 +640,7 @@ mod tests {
             envelope: [("metadata.tenant_hint".into(), json!("north"))].into(),
             facts: Default::default(),
             attributes: Vec::new(),
+            blueprints: Vec::new(),
         };
         assert!(!workflow_trigger_matches(&metadata_trigger, &event));
         let metadata_event = DomainEvent {
@@ -627,6 +657,7 @@ mod tests {
             envelope: Default::default(),
             facts: Default::default(),
             attributes: attributes.iter().map(|code| (*code).to_owned()).collect(),
+            blueprints: Vec::new(),
         };
         let event = DomainEvent {
             id: Uuid::new_v4(),

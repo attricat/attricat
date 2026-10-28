@@ -4192,6 +4192,30 @@ fn invalid_seed_resources_are_rejected_offline() {
             "follows relationship 'name'",
         ),
         (
+            "workflows",
+            "workflows/mark-reviewed.toml",
+            String::from_utf8(REVIEW_WORKFLOW.to_vec())
+                .unwrap()
+                .replace(
+                    "[[triggers]]\ntype = \"manual\"",
+                    "[[triggers]]\nevent_type = \"record.updated.v1\"\nblueprints = [\"missing\"]",
+                )
+                .into_bytes(),
+            "names blueprint 'missing'",
+        ),
+        (
+            "workflows",
+            "workflows/mark-reviewed.toml",
+            String::from_utf8(REVIEW_WORKFLOW.to_vec())
+                .unwrap()
+                .replace(
+                    "[[triggers]]\ntype = \"manual\"\n\n[[actions]]\ntype = \"system_tags_add\"\ntags = [\"reviewed\"]",
+                    "[[triggers]]\nevent_type = \"record.updated.v1\"\nblueprints = [\"category\"]\n\n[[actions]]\ntype = \"referencing_records_update\"\nrelationship_attribute = \"categories\"\nmax_targets = 5\n[[actions.actions]]\ntype = \"attribute_write\"\nattribute_code = \"categories\"\nfixed = \"x\"\n\n[[actions]]\ntype = \"attribute_write\"\nattribute_code = \"categories\"\nfixed = \"x\"",
+                )
+                .into_bytes(),
+            "writes attribute 'categories'",
+        ),
+        (
             "saved_searches",
             "saved-searches/unnamed.json",
             String::from_utf8(UNNAMED_SEARCH.to_vec())

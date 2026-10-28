@@ -591,19 +591,53 @@ fn validate_workflow(
         ));
     }
     let all = blueprints.values().collect::<Vec<_>>();
+    // Actions can only touch records of the blueprints some trigger admits;
+    // a trigger without a blueprint filter admits every pack blueprint.
+    let mut admitted = Vec::new();
     for trigger in &compiled.triggers {
-        if let attricat_workflow::Trigger::Event { attributes, .. } = trigger
-            && let Some(code) = attributes.iter().find(|code| {
-                !all.iter()
-                    .any(|blueprint| declares_attribute(blueprint, code))
-            })
-        {
+        let attricat_workflow::Trigger::Event {
+            attributes,
+            blueprints: codes,
+            ..
+        } = trigger
+        else {
+            admitted = all.clone();
+            continue;
+        };
+        if let Some(code) = codes.iter().find(|code| {
+            !all.iter()
+                .any(|blueprint| blueprint.code() == code.as_str())
+        }) {
             return invalid(format!(
-                "workflow '{key}' trigger filters attribute '{code}' that no pack blueprint declares"
+                "workflow '{key}' trigger names blueprint '{code}' that the pack does not declare"
             ));
         }
+        let scope = all
+            .iter()
+            .copied()
+            .filter(|blueprint| {
+                codes.is_empty() || codes.iter().any(|code| code == blueprint.code())
+            })
+            .collect::<Vec<_>>();
+        if let Some(code) = attributes.iter().find(|code| {
+            !scope
+                .iter()
+                .any(|blueprint| declares_attribute(blueprint, code))
+        }) {
+            return invalid(format!(
+                "workflow '{key}' trigger filters attribute '{code}' that no pack blueprint it matches declares"
+            ));
+        }
+        for blueprint in scope {
+            if !admitted
+                .iter()
+                .any(|known: &&SolutionPackBlueprint| std::ptr::eq(*known, blueprint))
+            {
+                admitted.push(blueprint);
+            }
+        }
     }
-    validate_workflow_actions(key, &compiled.actions, &all)?;
+    validate_workflow_actions(key, &compiled.actions, &admitted, &all)?;
     Ok(SeedWorkflow {
         key: key.to_owned(),
         code: compiled.code.clone(),
@@ -628,11 +662,13 @@ fn declares_relationship(blueprint: &SolutionPackBlueprint, code: &str) -> bool 
 }
 
 /// Checks every write, including those nested in a referencing-records
-/// update, against the pack blueprints that can hold the written record.
+/// update, against the pack blueprints that can hold the written record:
+/// `candidates` for the trigger record, any of `all` for referencing records.
 fn validate_workflow_actions(
     key: &str,
     actions: &[attricat_workflow::Action],
     candidates: &[&SolutionPackBlueprint],
+    all: &[&SolutionPackBlueprint],
 ) -> Result<(), SolutionPackError> {
     for action in actions {
         match action {
@@ -650,7 +686,7 @@ fn validate_workflow_actions(
                 actions,
                 ..
             } => {
-                let referencing = candidates
+                let referencing = all
                     .iter()
                     .copied()
                     .filter(|blueprint| declares_relationship(blueprint, relationship_attribute))
@@ -660,7 +696,7 @@ fn validate_workflow_actions(
                         "workflow '{key}' follows relationship '{relationship_attribute}' that no pack blueprint declares"
                     ));
                 }
-                validate_workflow_actions(key, actions, &referencing)?;
+                validate_workflow_actions(key, actions, &referencing, all)?;
             }
             _ => {}
         }

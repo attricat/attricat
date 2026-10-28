@@ -70,6 +70,21 @@ source_kind = "api"
 
 Akcje przepływu pracy wyzwolonego zdarzeniem dotyczą rekordu, którego dotyczy zdarzenie.
 
+### Reaguj tylko na wybrane schematy
+
+Przepływ pracy należy do całej przestrzeni roboczej. `blueprints` zawiera od 1 do 100 kodów schematów i wtedy wyzwalacz uruchamia przepływ tylko dla rekordów tych schematów:
+
+```toml
+[[triggers]]
+event_type = "record.updated.v1"
+blueprints = ["product", "service"]
+```
+
+- Każdy kod musi wskazywać schemat istniejący w przestrzeni roboczej w chwili zapisu przepływu, więc literówka jest odrzucana z `422 invalid_workflow_definition`, zamiast po cichu wyłączać przepływ.
+- Rekord pasuje według swojego schematu, niezależnie od rewizji, w której jest.
+- `blueprints` łączy się z `attributes`, `envelope` i `facts`: wszystkie muszą pasować. Bez niego wyzwalacz pasuje do rekordów każdego schematu.
+- Wyzwalacze ręczne i harmonogramowe same wskazują swój rekord, więc nie przyjmują `blueprints`.
+
 ### Reaguj tylko na wybrane atrybuty
 
 `attributes` to lista od 1 do 100 kodów atrybutów. Wyzwalacz uruchamia wykonanie tylko wtedy, gdy w zdarzeniu zmienił się co najmniej jeden z tych atrybutów, niezależnie od jego miejsca wśród faktów zdarzenia:

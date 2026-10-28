@@ -70,6 +70,21 @@ source_kind = "api"
 
 The actions of an event-triggered workflow apply to the record the event is about.
 
+### React only to specific blueprints
+
+A workflow belongs to the whole workspace. `blueprints` lists 1 to 100 blueprint codes, and the trigger then starts a run only for records of those blueprints:
+
+```toml
+[[triggers]]
+event_type = "record.updated.v1"
+blueprints = ["product", "service"]
+```
+
+- Every code must name a blueprint in the workspace when the workflow is saved, so a typo is rejected with `422 invalid_workflow_definition` instead of silently stopping the workflow.
+- A record matches by its blueprint, whatever revision of it the record is on.
+- `blueprints` combines with `attributes`, `envelope`, and `facts`: all of them must match. Without it, the trigger matches records of every blueprint.
+- Manual and schedule triggers already name their record, so they don't take `blueprints`.
+
 ### React only to specific attributes
 
 `attributes` lists 1 to 100 attribute codes. The trigger then starts a run only when at least one of those attributes changed in the event, wherever it appears among the event's facts:

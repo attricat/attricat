@@ -260,6 +260,19 @@
           "type": "array",
           "uniqueItems": true
         },
+        "blueprints": {
+          "default": null,
+          "description": "Match only events of records of these blueprints, by code. Omit to\nmatch every blueprint.",
+          "items": {
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "type": "string",
+            "x-attricat-reference": "blueprint"
+          },
+          "maxItems": 100,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
         "envelope": {
           "additionalProperties": {
             "type": [

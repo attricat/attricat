@@ -46,6 +46,11 @@ pub enum Trigger {
         /// no filter, which keeps stored revisions without the field unchanged.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         attributes: Vec<String>,
+        /// Optional blueprint filter: the event matches only when its record
+        /// belongs to one of these blueprint codes. Empty means every
+        /// blueprint, which keeps stored revisions without the field unchanged.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        blueprints: Vec<String>,
     },
     /// A management caller supplies one UUID record target; no arbitrary payload is accepted.
     Manual,
@@ -171,6 +176,11 @@ struct RawEventTrigger {
     #[serde(default)]
     #[schemars(schema_with = "trigger_attributes_schema")]
     attributes: Option<Vec<String>>,
+    /// Match only events of records of these blueprints, by code. Omit to
+    /// match every blueprint.
+    #[serde(default)]
+    #[schemars(schema_with = "trigger_blueprints_schema")]
+    blueprints: Option<Vec<String>>,
 }
 /// Schema of the typed (`format_version = 2`) triggers. [`RawTrigger::V2`]
 /// reads them loosely and [`trigger`] applies these rules.
@@ -358,6 +368,19 @@ fn trigger_attributes_schema(_: &mut SchemaGenerator) -> Schema {
         },
     })
 }
+fn trigger_blueprints_schema(_: &mut SchemaGenerator) -> Schema {
+    json_schema!({
+        "type": "array",
+        "minItems": 1,
+        "maxItems": MAX_TRIGGER_BLUEPRINTS,
+        "uniqueItems": true,
+        "items": {
+            "type": "string",
+            "pattern": attricat_validation::CODE_PATTERN,
+            "x-attricat-reference": "blueprint",
+        },
+    })
+}
 /// The parser limits a tag to [`MAX_TAG_LENGTH`] UTF-8 bytes, which JSON
 /// Schema cannot express: `maxLength` counts characters. A string within the
 /// byte limit never has more characters than bytes, so the same number as
@@ -479,6 +502,7 @@ pub(crate) const DEFAULT_REFERENCING_TARGETS: u32 = 100;
 pub(crate) const MAX_REFERENCING_TARGETS: u32 = 500;
 const MAX_NESTED_ACTIONS: usize = 20;
 const MAX_TRIGGER_ATTRIBUTES: usize = 100;
+const MAX_TRIGGER_BLUEPRINTS: usize = 100;
 const MAX_EXTENSION_PROVIDER_BYTES: usize = 128;
 /// Keys one system metadata delete action may remove.
 const MAX_METADATA_KEYS_PER_ACTION: usize = 100;
@@ -546,6 +570,7 @@ fn trigger(raw: RawTrigger, version: u32) -> Result<Trigger, WorkflowError> {
             envelope,
             facts,
             attributes,
+            blueprints,
         }) => {
             if !RECORD_TRIGGER_EVENTS.contains(&event_type.as_str()) {
                 return Err(WorkflowError::Invalid(format!(
@@ -570,11 +595,23 @@ fn trigger(raw: RawTrigger, version: u32) -> Result<Trigger, WorkflowError> {
                     codes
                 }
             };
+            let blueprints = match blueprints {
+                None => Vec::new(),
+                Some(codes) => {
+                    let codes =
+                        limited_strings(codes, "trigger blueprint", MAX_TRIGGER_BLUEPRINTS)?;
+                    for code in &codes {
+                        valid_code(code, "trigger blueprint code")?;
+                    }
+                    codes
+                }
+            };
             Ok(Trigger::Event {
                 event_type,
                 envelope,
                 facts,
                 attributes,
+                blueprints,
             })
         }
         RawTrigger::V2 {
@@ -967,10 +1004,29 @@ mod tests {
     }
 
     #[test]
+    fn event_trigger_filters_on_blueprints() {
+        let parsed = parse(&format!("{HEAD}[[triggers]]\nevent_type='record.updated.v1'\nblueprints=['product','service']\n[[actions]]\ntype='system_tags_add'\ntags=['x']")).unwrap();
+        let Trigger::Event { blueprints, .. } = &parsed.triggers[0] else {
+            panic!("expected an event trigger")
+        };
+        assert_eq!(blueprints, &["product".to_owned(), "service".to_owned()]);
+        for invalid in [
+            "blueprints=[]",
+            "blueprints=['a','a']",
+            "blueprints=['Not A Code']",
+        ] {
+            assert!(parse(&format!("{HEAD}[[triggers]]\nevent_type='record.updated.v1'\n{invalid}\n[[actions]]\ntype='system_tags_add'\ntags=['x']")).is_err(), "{invalid}");
+        }
+        assert!(parse(&format!("{HEAD}[[triggers]]\ntype='manual'\nblueprints=['a']\n[[actions]]\ntype='system_tags_add'\ntags=['x']")).is_err());
+    }
+
+    #[test]
     fn stored_plans_without_attribute_filters_still_deserialize() {
         let stored = serde_json::json!({"type":"event","event_type":"record.updated.v1","envelope":{},"facts":{}});
         let trigger: Trigger = serde_json::from_value(stored.clone()).unwrap();
-        assert!(matches!(&trigger, Trigger::Event { attributes, .. } if attributes.is_empty()));
+        assert!(
+            matches!(&trigger, Trigger::Event { attributes, blueprints, .. } if attributes.is_empty() && blueprints.is_empty())
+        );
         assert_eq!(serde_json::to_value(&trigger).unwrap(), stored);
     }
 

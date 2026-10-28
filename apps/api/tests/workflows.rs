@@ -869,6 +869,88 @@ tags = ["needs-review"]"#,
     server.abort();
 }
 
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn event_triggers_run_only_for_listed_blueprints(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let blueprint = |code: &str| {
+        format!(
+            r#"
+format_version = 1
+code = "{code}"
+name = "{code}"
+kind = "record"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title"]
+[[attributes]]
+code = "title"
+value_type = "string"
+"#
+        )
+    };
+    let product = create_blueprint(&client, &base_url, &blueprint("scoped_product")).await;
+    let service = create_blueprint(&client, &base_url, &blueprint("scoped_service")).await;
+    let other = create_blueprint(&client, &base_url, &blueprint("scoped_other")).await;
+    let definition = |blueprints: &str| {
+        format!(
+            r#"format_version = 2
+code = "tag_catalogue_changes"
+name = "Tag catalogue changes"
+[[triggers]]
+event_type = "attribute_value.changed.v1"
+blueprints = [{blueprints}]
+[[actions]]
+type = "system_tags_add"
+tags = ["catalogue-changed"]"#
+        )
+    };
+
+    // A typo would silently stop the workflow, so unknown codes are refused.
+    let unknown = client
+        .post(format!("{base_url}/workflows"))
+        .json(&json!({ "definition": definition(r#""scoped_product", "scoped_typo""#) }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(unknown.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let error: Value = unknown.json().await.unwrap();
+    assert_eq!(error["error"]["code"], "invalid_workflow_definition");
+    assert!(
+        error["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("scoped_typo"),
+        "{error}"
+    );
+
+    enabled_workflow(
+        &client,
+        &base_url,
+        &definition(r#""scoped_product", "scoped_service""#),
+    )
+    .await;
+    for (blueprint, runs) in [(&product, 1), (&service, 1), (&other, 0)] {
+        let record = create_record(&client, &base_url, blueprint).await;
+        let id = record["id"].as_str().unwrap();
+        client
+            .post(format!("{base_url}/records/{id}/values"))
+            .json(&json!({"values":[scalar("title", "Changed")]}))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+        assert_eq!(
+            fan_out_latest_event(&pool, id).await,
+            ("attribute_value.changed.v1".into(), runs),
+            "{}",
+            blueprint["code"]
+        );
+    }
+    server.abort();
+}
+
 const LICENSED_PRODUCT: &str = r#"
 format_version = 1
 code = "licensed_product"
