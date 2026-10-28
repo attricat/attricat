@@ -38,10 +38,7 @@ export const RelationshipFacetChip = ({
   const { t } = useTranslation();
   const { code, target_blueprint_code: targetBlueprint } =
     facet.sourceRelationship;
-  const selectionLabels = useRelationshipSelectionLabels(
-    targetBlueprint,
-    facet.selectedIds,
-  );
+  const selectionLabels = useRelationshipSelectionLabels(facet.selectedIds);
   const [firstId] = facet.selectedIds;
   const chipLabel =
     firstId === undefined

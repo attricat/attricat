@@ -170,11 +170,14 @@ Every referenced field must be an effective attribute. `field` accepts scalar
 attributes; `relationship_list` accepts relationships only.
 
 When editable, a relationship field opens the record picker for its allowed target
-blueprints. When the attribute lists several `target_blueprints`, the picker
-shows a **Target blueprint** selector and searches one of them at a time;
-selected records are labelled with their own blueprint's `dropdown_option`
-view. An `incoming_relationship_list` may name such a field on any of its
-allowed target blueprints.
+blueprints. When the attribute lists several `target_blueprints`, or names no
+target and so allows any blueprint, the picker shows a **Target blueprint**
+selector and searches one of them at a time; an unrestricted field offers every
+record blueprint. Selected records are labelled with their own blueprint's
+`dropdown_option` view in the Default context, falling back to the record ID
+when there is no label or the editor cannot read the record. An
+`incoming_relationship_list` may name such a field on any of its allowed target
+blueprints.
 
 ## Record Heading
 

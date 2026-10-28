@@ -8,8 +8,7 @@ import { searchRecords } from '../records/api';
 import { RelationshipTargetPicker } from './RelationshipTargetPicker';
 
 vi.mock('../records/api', () => ({
-  getBlueprintByCode: vi.fn(() => new Promise(() => {})),
-  getRecordPreview: vi.fn(() => new Promise(() => {})),
+  getRecordLabels: vi.fn(() => new Promise(() => {})),
   searchRecords: vi.fn(),
 }));
 

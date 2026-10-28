@@ -1,71 +1,23 @@
-import { useQueries } from '@tanstack/react-query';
 import { use } from 'react';
-import { getRecordPreview } from '../api';
 import { KnownRecordLabelsContext } from '../knownRecordLabels';
-import { dropdownOptionLabel } from '../recordDisplay';
-import { recordQueryKeys } from '../queryKeys';
-import { blueprintByCodeOptions } from '../queryOptions';
-
-const MAX_RESOLVED_RELATIONSHIP_SELECTIONS = 10;
+import { useRecordLabels } from '../useRecordLabels';
 
 /**
- * Labels selected relationship targets with their blueprint's dropdown view.
- * A relationship may allow several target blueprints; each selected record
- * uses the view of the blueprint it belongs to.
+ * Labels selected relationship targets with the Default-context display of
+ * their own blueprint's dropdown view, so records of different blueprints
+ * each get theirs. A record without a label, or that cannot be read, keeps
+ * its ID.
  */
 export const useRelationshipSelectionLabels = (
-  blueprintCodes: string | string[] | null | undefined,
-  ids: string[],
-) => {
-  const codes = (
-    Array.isArray(blueprintCodes) ? blueprintCodes : [blueprintCodes]
-  ).filter((code): code is string => Boolean(code));
+  ids: readonly string[],
+): ReadonlyMap<string, string> => {
   const knownLabels = use(KnownRecordLabelsContext);
-  const resolvedIds = [...new Set(ids)].slice(
-    0,
-    MAX_RESOLVED_RELATIONSHIP_SELECTIONS,
+  const selectedIds = [...new Set(ids)];
+  // Records the page already labels need no lookup of their own.
+  const labels = useRecordLabels(
+    selectedIds.filter((id) => !knownLabels.has(id)),
   );
-  // Records the page already labels need no preview of their own.
-  const unknownIds = resolvedIds.filter((id) => !knownLabels.has(id));
-  const blueprints = useQueries({
-    queries: codes.map((code) => ({
-      ...blueprintByCodeOptions(code),
-      enabled: unknownIds.length > 0,
-    })),
-  });
-  const previews = useQueries({
-    queries: unknownIds.map((id) => ({
-      queryKey: recordQueryKeys.preview(id),
-      queryFn: ({ signal }: { signal: AbortSignal }) =>
-        getRecordPreview(id, signal),
-      enabled: codes.length > 0,
-    })),
-  });
-  const viewsByBlueprintId = new Map(
-    blueprints.flatMap((blueprint) =>
-      blueprint.data
-        ? [[blueprint.data.blueprint.id, blueprint.data.blueprint.views]]
-        : [],
-    ),
-  );
-
-  const previewsById = new Map(
-    unknownIds.map((id, index) => [id, previews[index]?.data]),
-  );
-
   return new Map(
-    resolvedIds.map((id) => {
-      const known = knownLabels.get(id);
-      if (known !== undefined) return [id, known];
-      const preview = previewsById.get(id);
-      const views =
-        preview && viewsByBlueprintId.get(preview.record.blueprint_id);
-      return [
-        id,
-        preview && views
-          ? (dropdownOptionLabel(preview.context, views) ?? id)
-          : id,
-      ];
-    }),
+    selectedIds.map((id) => [id, knownLabels.get(id) ?? labels.get(id) ?? id]),
   );
 };

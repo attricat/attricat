@@ -107,7 +107,6 @@ const newClient = () =>
 const seedRecordState = (client: QueryClient) => {
   const keys = [
     recordQueryKeys.form(recordId),
-    recordQueryKeys.preview(recordId),
     recordQueryKeys.resolvedPreview(recordId, undefined),
     recordQueryKeys.search({ blueprint: 'products' }),
     recordQueryKeys.systemTagFacet({ blueprint: { code: 'products' } }),
@@ -166,7 +165,7 @@ describe('RecordFindingsPanel', () => {
     await user.click(within(item).getByRole('button', { name: 'Acknowledge' }));
     expect(vi.mocked(acknowledgeFinding).mock.calls[0]?.[0]).toBe(finding.id);
     await waitFor(() =>
-      expect(invalidated()).toEqual([true, true, true, true, true]),
+      expect(invalidated()).toEqual([true, true, true, true]),
     );
   });
 
@@ -308,7 +307,7 @@ describe('RecordFindingsPanel', () => {
       { timeout: 3 * RULE_RUN_POLL_MS },
     );
     expect(screen.queryByText('title is required')).toBeNull();
-    expect(invalidated()).toEqual([true, true, true, true, true]);
+    expect(invalidated()).toEqual([true, true, true, true]);
   });
 
   it('loads further pages of findings on request', async () => {

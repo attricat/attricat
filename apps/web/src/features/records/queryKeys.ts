@@ -51,9 +51,6 @@ export const recordQueryKeys = {
     ['relationship-targets', blueprint, query] as const,
   forms: () => ['record-form'] as const,
   form: (recordId: string) => [...recordQueryKeys.forms(), recordId] as const,
-  previews: () => ['record-preview'] as const,
-  preview: (recordId: string) =>
-    [...recordQueryKeys.previews(), recordId] as const,
   allLabels: () => ['record-labels'] as const,
   labels: (recordIds: readonly string[]) =>
     [...recordQueryKeys.allLabels(), ...recordIds] as const,

@@ -2,11 +2,7 @@ import { z } from 'zod';
 import { request, requestNoContent, jsonRequest } from '../../api/request';
 import { activeLanguage } from '../../i18n';
 import type { DataQualityFilter } from '../rules/constants';
-import {
-  RECORD_CHANGES_PAGE_SIZE,
-  RECORD_PREVIEW_QUERY,
-  RECORD_SEARCH_PAGE_SIZE,
-} from './constants';
+import { RECORD_CHANGES_PAGE_SIZE, RECORD_SEARCH_PAGE_SIZE } from './constants';
 import {
   blueprintSchema,
   blueprintWithAttributesSchema,
@@ -15,7 +11,6 @@ import {
   recordHierarchySchema,
   recordFormResponseSchema,
   recordMigrationPreviewSchema,
-  recordPreviewResponseSchema,
   recordSchema,
   recordSearchResponseSchema,
   recordSearchPageSchema,
@@ -229,12 +224,6 @@ export const getRecordLabels = (
     }),
     ...(signal === undefined ? {} : { signal }),
   });
-export const getRecordPreview = (id: string, signal?: AbortSignal) =>
-  request(
-    `/api/records/${uuidSegment(id)}/preview?relationship_depth=${RECORD_PREVIEW_QUERY.relationshipDepth}&relationship_limit=${RECORD_PREVIEW_QUERY.relationshipLimit}`,
-    recordPreviewResponseSchema,
-    { signal },
-  );
 export const getResolvedRecordPreview = (id: string, contextId: string) =>
   request(
     `/api/records/${uuidSegment(id)}/resolved-preview?context_id=${uuidSegment(contextId)}`,

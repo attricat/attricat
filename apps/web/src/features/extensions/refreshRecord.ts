@@ -56,7 +56,6 @@ export const refreshCurrentRecord = async (
 export const refreshRecord = async (client: QueryClient, recordId: string) => {
   const keys = [
     recordQueryKeys.form(recordId),
-    recordQueryKeys.preview(recordId),
     recordQueryKeys.changes(recordId),
     recordQueryKeys.recordControls(recordId),
     recordQueryKeys.publication(recordId),

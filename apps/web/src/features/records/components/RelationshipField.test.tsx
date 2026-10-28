@@ -11,8 +11,8 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import '../../../i18n';
 import {
-  getBlueprintByCode,
-  getRecordPreview,
+  getRecordLabels,
+  listRecordBlueprints,
   searchRecords,
   type Attribute,
   type RecordSearchResponse,
@@ -21,19 +21,47 @@ import { RelationshipField } from './RelationshipField';
 import { relationshipPickerMessageType } from './useRecentlyPreviewedRecords';
 
 vi.mock('../api', () => ({
-  getBlueprintByCode: vi.fn(),
-  getRecordPreview: vi.fn(),
+  getRecordLabels: vi.fn(),
+  listRecordBlueprints: vi.fn(),
   searchRecords: vi.fn(),
 }));
 
 const blueprintId = '123e4567-e89b-12d3-a456-426614174000';
 const firstId = '123e4567-e89b-12d3-a456-426614174001';
 const laterId = '123e4567-e89b-12d3-a456-426614174002';
+const unlabelledId = '123e4567-e89b-12d3-a456-426614174003';
 const attribute = {
   code: 'related_products',
   value_type: 'relationship' as const,
   target_blueprint_code: 'product',
 };
+
+const recordBlueprint = (code: string, name: string) => ({
+  code,
+  id: blueprintId,
+  name,
+  status: 'published' as const,
+  version: 1,
+  views: {},
+});
+
+/** Labels each requested record from `labels`, leaving the rest unlabelled. */
+const mockLabels = (labels: Record<string, string>) =>
+  vi.mocked(getRecordLabels).mockImplementation((ids) =>
+    Promise.resolve({
+      items: ids.flatMap((id) =>
+        labels[id] === undefined
+          ? []
+          : [
+              {
+                id,
+                blueprint_code: 'product',
+                display: { default: labels[id] },
+              },
+            ],
+      ),
+    }),
+  );
 
 const page = (
   items: { id: string; label: string; isSample?: boolean }[],
@@ -100,72 +128,30 @@ const openSelector = async (user: ReturnType<typeof userEvent.setup>) => {
 };
 
 describe('RelationshipField', () => {
-  it('resolves up to ten selected IDs into name pills', async () => {
-    const selectedIds = Array.from(
-      { length: 11 },
-      (_, index) =>
-        `123e4567-e89b-12d3-a456-${String(index).padStart(12, '0')}`,
-    );
-    vi.mocked(getBlueprintByCode).mockResolvedValue({
-      blueprint: {
-        code: 'product',
-        id: blueprintId,
-        name: 'Product',
-        status: 'published',
-        version: 1,
-        views: {
-          dropdown_option: { type: 'dropdown_option', fields: ['name'] },
-        },
-      },
-      attributes: [],
-      table_path_attributes: [],
-    });
-    vi.mocked(getRecordPreview).mockImplementation((id) =>
-      Promise.resolve({
-        record: {
-          id,
-          blueprint_id: blueprintId,
-          blueprint_version: 1,
-          is_sample: false,
-        },
-        context: { default: { name: `Product ${id.slice(-2)}` } },
-      }),
-    );
+  it('labels selected records of different blueprints in one lookup', async () => {
+    mockLabels({ [firstId]: 'Oak chair', [laterId]: 'Walnut veneer' });
 
-    const onChange = renderField(vi.fn(), attribute, selectedIds.join(', '));
+    const onChange = renderField(
+      vi.fn(),
+      attribute,
+      [firstId, laterId, unlabelledId].join(', '),
+    );
     const user = userEvent.setup();
 
-    expect(await screen.findByText('Product 00')).toBeTruthy();
-    expect(screen.getByText(selectedIds[10])).toBeTruthy();
-    expect(getRecordPreview).toHaveBeenCalledTimes(10);
+    expect(await screen.findByText('Oak chair')).toBeTruthy();
+    expect(screen.getByText('Walnut veneer')).toBeTruthy();
+    expect(screen.getByText(unlabelledId)).toBeTruthy();
+    expect(getRecordLabels).toHaveBeenCalledTimes(1);
 
-    const firstPill = screen.getByRole('button', { name: 'Product 00' });
+    const firstPill = screen.getByRole('button', { name: 'Oak chair' });
     await user.click(firstPill.querySelector('.MuiChip-deleteIcon')!);
-    expect(onChange).toHaveBeenLastCalledWith(selectedIds.slice(1).join(', '));
+    expect(onChange).toHaveBeenLastCalledWith(
+      [laterId, unlabelledId].join(', '),
+    );
   });
 
   it('does not allow selected relationships to be removed when disabled', async () => {
-    vi.mocked(getBlueprintByCode).mockResolvedValue({
-      blueprint: {
-        code: 'product',
-        id: blueprintId,
-        name: 'Product',
-        status: 'published',
-        version: 1,
-        views: {},
-      },
-      attributes: [],
-      table_path_attributes: [],
-    });
-    vi.mocked(getRecordPreview).mockResolvedValue({
-      record: {
-        id: firstId,
-        blueprint_id: blueprintId,
-        blueprint_version: 1,
-        is_sample: false,
-      },
-      context: {},
-    });
+    mockLabels({});
     const onChange = renderField(vi.fn(), attribute, firstId, true);
 
     const pill = await screen.findByText(firstId);
@@ -227,20 +213,11 @@ describe('RelationshipField', () => {
   });
 
   it('searches one allowed target blueprint at a time', async () => {
-    vi.mocked(getBlueprintByCode).mockImplementation((code) =>
-      Promise.resolve({
-        blueprint: {
-          code,
-          id: blueprintId,
-          name: code === 'product' ? 'Product' : 'Material',
-          status: 'published',
-          version: 1,
-          views: {},
-        },
-        attributes: [],
-        table_path_attributes: [],
-      }),
-    );
+    vi.mocked(listRecordBlueprints).mockResolvedValue([
+      recordBlueprint('product', 'Product'),
+      recordBlueprint('material', 'Material'),
+      recordBlueprint('supplier', 'Supplier'),
+    ]);
     vi.mocked(searchRecords).mockResolvedValue(
       page([{ id: firstId, label: 'First option' }], null),
     );
@@ -271,6 +248,91 @@ describe('RelationshipField', () => {
         expect.objectContaining({ blueprint: 'material' }),
       ),
     );
+    expect(screen.queryByRole('option', { name: 'Supplier' })).toBeNull();
+  });
+
+  it('searches every record blueprint when the relationship names no target', async () => {
+    vi.mocked(listRecordBlueprints).mockResolvedValue([
+      recordBlueprint('product', 'Product'),
+      recordBlueprint('material', 'Material'),
+    ]);
+    vi.mocked(searchRecords).mockResolvedValue(
+      page([{ id: firstId, label: 'First option' }], null),
+    );
+    renderField(vi.fn(), {
+      ...attribute,
+      target_blueprint_code: null,
+      target_blueprint_codes: [],
+    });
+    const user = userEvent.setup();
+
+    expect(screen.queryByRole('textbox')).toBeNull();
+    const selector = await screen.findByRole('button', {
+      name: 'Choose related products',
+    });
+    await waitFor(() =>
+      expect((selector as HTMLButtonElement).disabled).toBe(false),
+    );
+    await user.click(selector);
+    const dialog = await screen.findByRole('dialog', {
+      name: /^Select records/,
+    });
+    await waitFor(() =>
+      expect(searchRecords).toHaveBeenLastCalledWith(
+        expect.objectContaining({ blueprint: 'product' }),
+      ),
+    );
+    await user.click(
+      within(dialog).getByRole('combobox', { name: 'Target blueprint' }),
+    );
+    expect(await screen.findByRole('option', { name: 'Product' })).toBeTruthy();
+    await user.click(screen.getByRole('option', { name: 'Material' }));
+    await waitFor(() =>
+      expect(searchRecords).toHaveBeenLastCalledWith(
+        expect.objectContaining({ blueprint: 'material' }),
+      ),
+    );
+  });
+
+  it('names no blueprint when one record of any blueprint is picked', async () => {
+    vi.mocked(listRecordBlueprints).mockResolvedValue([
+      recordBlueprint('product', 'Product'),
+    ]);
+    vi.mocked(searchRecords).mockResolvedValue(page([], null));
+    renderField(vi.fn(), {
+      ...attribute,
+      cardinality: 'one',
+      target_blueprint_code: null,
+      target_blueprint_codes: [],
+    });
+    const user = userEvent.setup();
+
+    const selector = await screen.findByRole('button', {
+      name: 'Choose related products',
+    });
+    await waitFor(() =>
+      expect((selector as HTMLButtonElement).disabled).toBe(false),
+    );
+    await user.click(selector);
+    expect(
+      await screen.findByRole('dialog', { name: /^Select one record/ }),
+    ).toBeTruthy();
+  });
+
+  it('disables the selector until some record blueprint can be targeted', async () => {
+    vi.mocked(listRecordBlueprints).mockResolvedValue([]);
+    renderField(vi.fn(), {
+      ...attribute,
+      target_blueprint_code: null,
+      target_blueprint_codes: [],
+    });
+
+    const selector = await screen.findByRole('button', {
+      name: 'Choose related products',
+    });
+    expect((selector as HTMLButtonElement).disabled).toBe(true);
+    await waitFor(() => expect(listRecordBlueprints).toHaveBeenCalled());
+    expect((selector as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('keeps previews from an earlier opening of the picker', async () => {
@@ -315,18 +377,9 @@ describe('RelationshipField', () => {
   });
 
   it('names the blueprint whose records could not be loaded', async () => {
-    vi.mocked(getBlueprintByCode).mockResolvedValue({
-      blueprint: {
-        code: 'product',
-        id: blueprintId,
-        name: 'Catalog product',
-        status: 'published',
-        version: 1,
-        views: {},
-      },
-      attributes: [],
-      table_path_attributes: [],
-    });
+    vi.mocked(listRecordBlueprints).mockResolvedValue([
+      recordBlueprint('product', 'Catalog product'),
+    ]);
     vi.mocked(searchRecords).mockRejectedValue(new Error('offline'));
     renderField();
     const user = userEvent.setup();

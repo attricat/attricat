@@ -50,10 +50,7 @@ export const RelationshipTargetPicker = ({
     query,
     true,
   );
-  const selectedLabels = useRelationshipSelectionLabels(
-    targetBlueprint,
-    selectedIds,
-  );
+  const selectedLabels = useRelationshipSelectionLabels(selectedIds);
   const toggle = (id: string) =>
     onSelectedIdsChange(
       selectedIds.includes(id)
