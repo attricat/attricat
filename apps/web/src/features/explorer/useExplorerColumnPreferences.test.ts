@@ -43,10 +43,10 @@ describe('useExplorerColumnPreferences', () => {
       ({ ids }) => useExplorerColumnPreferences(blueprintId, ids),
       { initialProps: { ids: columns } },
     );
-    rerender({ ids: [...columns, explorerColumnIds.dataQuality] });
+    rerender({ ids: [...columns, 'title'] });
     expect(result.current.preferences).toEqual({
       hidden: [explorerColumnIds.systemTags],
-      order: [...columns, explorerColumnIds.dataQuality],
+      order: [...columns, 'title'],
     });
   });
 });

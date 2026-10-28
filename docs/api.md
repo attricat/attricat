@@ -443,15 +443,12 @@ The built-in `system_tag:<tag>` sort puts records that carry the tag apart from
 the rest: `{"sort":{"field":"system_tag:attricat.needs_attention","direction":"desc"}}`
 lists records that need attention first. Record ID orders each group. The tag
 check reads the record row, so the sort costs about as much as sorting by
-`blueprint_version`. The Explorer's **Data quality** column sorts this way, and
-the agent `search_records` tool accepts the same sort.
+`blueprint_version`. The agent `search_records` tool accepts the same sort.
 
 The `data_quality` filter keeps records with `open` findings, only
 `acknowledged` ones, or `clean` records without unresolved findings, and
-requires `rules.read` (`403 data_quality_filter_forbidden` otherwise). `open` reads the needs-attention tag. For callers with `rules.read`, every search item carries
-`data_quality`: `checked`, whether an enabled rule checks the record's
-blueprint revision, and `findings`, unresolved findings counted by `state` and
-`severity`, most severe first. Callers without it get no `data_quality` field.
+requires `rules.read` (`403 data_quality_filter_forbidden` otherwise). `open` reads the needs-attention tag. Search items carry no
+findings summary; a record's findings are read with `GET /rule-findings`.
 
 The built-in `blueprint_version` field is also sortable without blueprint
 configuration: `{"sort":{"field":"blueprint_version","direction":"asc"}}`

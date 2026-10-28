@@ -1,4 +1,4 @@
-import { Box, Chip, IconButton, Tooltip } from '@mui/material';
+import { Box, Chip, IconButton } from '@mui/material';
 import { Link } from '@tanstack/react-router';
 import { EllipsisVerticalIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -12,9 +12,6 @@ import { emptyValuePlaceholder } from '../../components/placeholders';
 import { publicationStatuses } from '../records/constants';
 import { SystemTagChips } from '../records/components/SystemTagChips';
 import { visibleSystemTags } from '../records/systemTags';
-import { RuleFindingIcon, RuleIcon } from '../../components/systemIcons';
-import { findingStates } from '../rules/constants';
-import { findingSeverityColor } from '../rules/findingSeverity';
 
 export type ActionMenuPosition = { left: number; top: number };
 
@@ -135,76 +132,6 @@ export const SystemTagsCell = ({
     />
   ) : (
     emptyValuePlaceholder
-  );
-};
-
-/**
- * The record's unresolved rule findings as one icon: coloured by the most
- * severe open finding, muted when every finding is acknowledged, a check
- * when an enabled rule found nothing, and empty when no rule checks the
- * record. The tooltip counts the findings.
- */
-export const DataQualityCell = ({ record }: { record: RecordItem }) => {
-  const { t } = useTranslation();
-  const quality = record.data_quality;
-  if (!quality) return null;
-  const { findings } = quality;
-  if (!findings.length) {
-    if (!quality.checked) return emptyValuePlaceholder;
-    const label = t('explorer.dataQualityClean');
-    return (
-      <Tooltip title={label}>
-        <Box
-          aria-label={label}
-          component="span"
-          role="img"
-          sx={{
-            color: 'success.main',
-            display: 'inline-flex',
-            verticalAlign: 'middle',
-          }}
-        >
-          <RuleIcon aria-hidden size={compactIconSize} />
-        </Box>
-      </Tooltip>
-    );
-  }
-  // Findings arrive most severe first.
-  const worstOpen = findings.find(
-    (finding) => finding.state === findingStates.open,
-  );
-  const total = findings.reduce((sum, finding) => sum + finding.count, 0);
-  return (
-    <Tooltip
-      title={
-        <Box component="ul" sx={{ m: 0, pl: 2 }}>
-          {findings.map((finding) => (
-            <li key={`${finding.state}:${finding.severity}`}>
-              {t('explorer.dataQualityFindingCount', {
-                count: finding.count,
-                severity: t(`rules.severities.${finding.severity}`),
-                state: t(`rules.findingStates.${finding.state}`),
-              })}
-            </li>
-          ))}
-        </Box>
-      }
-    >
-      <Box
-        aria-label={t('records.dataQualityFindings', { count: total })}
-        component="span"
-        role="img"
-        sx={{
-          color: worstOpen
-            ? `${findingSeverityColor(worstOpen.severity)}.main`
-            : 'text.disabled',
-          display: 'inline-flex',
-          verticalAlign: 'middle',
-        }}
-      >
-        <RuleFindingIcon aria-hidden size={compactIconSize} />
-      </Box>
-    </Tooltip>
   );
 };
 

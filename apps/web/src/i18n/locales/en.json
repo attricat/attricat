@@ -1353,8 +1353,6 @@
       "collapse": "Collapse {{item}}"
     },
     "dataQuality": "Data quality",
-    "dataQualityClean": "No data quality findings",
-    "dataQualityFindingCount": "{{severity}}, {{state}}: {{count}}",
     "dataQualityFilterChip": "Data quality: {{filter}}",
     "dataQualityFilters": {
       "open": "Open findings",

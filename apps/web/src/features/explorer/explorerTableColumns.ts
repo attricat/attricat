@@ -83,16 +83,9 @@ export const explorerColumnValueType = (
     blueprint.table_path_attributes.find((attribute) => attribute.code === id)
   )?.value_type;
 
-/**
- * Every column the viewer can show and order. The data quality column is
- * offered only to viewers who may read rules.
- */
-export const configurableColumnIds = (
-  tableColumns: ExplorerTableColumn[],
-  dataQualityAvailable: boolean,
-) => [
+/** Every column the viewer can show and order. */
+export const configurableColumnIds = (tableColumns: ExplorerTableColumn[]) => [
   ...builtInConfigurableColumnIds,
-  ...(dataQualityAvailable ? [explorerColumnIds.dataQuality] : []),
   ...tableColumns.map((column) => column.field),
 ];
 
@@ -110,7 +103,6 @@ export const explorerColumnLabel = (
     });
   if (id === explorerColumnIds.schema) return t('explorer.schema');
   if (id === explorerColumnIds.systemTags) return t('explorer.systemTags');
-  if (id === explorerColumnIds.dataQuality) return t('explorer.dataQuality');
   return (
     tableColumns.find((column) => column.field === id)?.label ??
     humanizeField(id)

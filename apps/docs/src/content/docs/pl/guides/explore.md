@@ -101,16 +101,9 @@ W widoku **Wszystkie wersje** sortowanie według powiązanej wartości działa t
 
 **Kolumny** pozwalają pokazywać, ukrywać i zmieniać kolejność kolumn. Układ jest zapisywany w przeglądarce. Kolumna **Znaczniki systemowe** jest ukryta, dopóki jej nie włączysz; kliknij w niej tag, aby filtrować według niego.
 
-Jeśli masz uprawnienie `rules.read`, kolumna **Jakość danych** pokazuje nierozwiązane [ustalenia reguł](/pl/builders/rules/#pracuj-z-ustaleniami) każdego rekordu jako ikonę. Po najechaniu na nią zobaczysz ustalenia policzone według ważności i stanu.
+Aby zobaczyć rekordy wymagające uwagi, użyj filtra **Jakość danych** z opcją **Otwarte problemy**. Rekord wymaga uwagi, gdy ma otwarte ustalenie. Ustalenia aktualizują się po zakończeniu sprawdzania rekordu, więc właśnie zapisany rekord może przez chwilę pokazywać poprzedni stan.
 
-- Kolorowa ikona ostrzeżenia oznacza, że rekord ma otwarte ustalenia. Jej kolor odpowiada najpoważniejszemu otwartemu ustaleniu.
-- Szara ikona ostrzeżenia oznacza, że wszystkie ustalenia zostały potwierdzone.
-- Znacznik wyboru oznacza, że włączona reguła sprawdza rekord i niczego nie znalazła.
-- Pusta komórka oznacza, że żadna włączona reguła nie sprawdza rekordu. Reguła, która pomija rewizję schematu rekordu, bo [do niej nie pasuje](/pl/builders/rules/#reguły-i-rewizje-schematu), się nie liczy.
-
-Posortuj według tej kolumny, aby rekordy wymagające uwagi znalazły się na początku (malejąco) albo na końcu (rosnąco). Rekord wymaga uwagi, gdy ma otwarte ustalenie; rekordy, których wszystkie ustalenia potwierdzono, są sortowane razem z rekordami bez problemów. Ustalenia aktualizują się po zakończeniu sprawdzania rekordu, więc właśnie zapisany rekord może przez chwilę pokazywać poprzedni stan.
-
-Rekordy wymagające uwagi mają też [tag systemowy](/pl/builders/modeling/#tagi-systemowe-i-metadane) `attricat.needs_attention`, więc każdy może filtrować według niego przez **Znacznik**, także bez `rules.read`.
+Rekordy wymagające uwagi mają też [tag systemowy](/pl/builders/modeling/#tagi-systemowe-i-metadane) `attricat.needs_attention`, widoczny w kolumnie **Znaczniki systemowe**, więc każdy może filtrować według niego przez **Znacznik**, także bez `rules.read`. Strona rekordu pokazuje jego ustalenia.
 
 ## Zapisywanie i udostępnianie wyszukiwań
 

@@ -7,9 +7,8 @@ use crate::persistence_rows::{Db, IntoDomain};
 use crate::{
     domain_events::DomainEvent,
     model::{
-        CreateManualRuleRun, CreateRule, DataQualityFindingCount, EnableRule, RecordDataQuality,
-        RevisionNotApplicable, Rule, RuleDetails, RuleFinding, RuleRevision, RuleRun, RuleWarning,
-        UpdateRule,
+        CreateManualRuleRun, CreateRule, EnableRule, RevisionNotApplicable, Rule, RuleDetails,
+        RuleFinding, RuleRevision, RuleRun, RuleWarning, UpdateRule,
     },
     task_queue::{TaskInsert, TaskKind},
 };
@@ -946,68 +945,6 @@ impl AttricatRepository {
     ) -> Result<i64, RepositoryError> {
         Ok(sqlx::query_scalar("SELECT count(*) FROM rule_findings WHERE workspace_id=$1 AND ($2::uuid IS NULL OR record_id=$2) AND state <> 'resolved'")
             .bind(self.workspace_id.0).bind(record_id).fetch_one(&self.pool).await?)
-    }
-
-    /// The unresolved findings of each of `record_ids`, for a page of search
-    /// results, and whether an enabled rule checks the record's blueprint.
-    pub async fn record_data_quality(
-        &self,
-        record_ids: &[Uuid],
-    ) -> Result<std::collections::HashMap<Uuid, RecordDataQuality>, RepositoryError> {
-        let ws = self.workspace_id.0;
-        let checked: Vec<(Uuid, bool)> = sqlx::query_as(
-            "SELECT e.id, EXISTS (
-                 SELECT 1 FROM rules r
-                   JOIN rule_lifecycles l ON l.rule_id = r.id AND l.workspace_id = r.workspace_id
-                    AND l.current_version = r.version AND l.enabled
-                  WHERE r.workspace_id = e.workspace_id AND r.blueprint_id = e.blueprint_id)
-               FROM records e
-              WHERE e.workspace_id = $1 AND e.id = ANY($2)",
-        )
-        .bind(ws)
-        .bind(record_ids)
-        .fetch_all(&self.pool)
-        .await?;
-        let counts: Vec<(Uuid, String, String, i64)> = sqlx::query_as(
-            "SELECT record_id, state, severity, count(*)
-               FROM rule_findings
-              WHERE workspace_id = $1 AND record_id = ANY($2) AND state <> $3
-              GROUP BY record_id, state, severity",
-        )
-        .bind(ws)
-        .bind(record_ids)
-        .bind(RuleFindingState::Resolved.as_str())
-        .fetch_all(&self.pool)
-        .await?;
-        let mut quality: std::collections::HashMap<_, _> = checked
-            .into_iter()
-            .map(|(id, checked)| {
-                (
-                    id,
-                    RecordDataQuality {
-                        checked,
-                        findings: Vec::new(),
-                    },
-                )
-            })
-            .collect();
-        for (record_id, state, severity, count) in counts {
-            quality
-                .entry(record_id)
-                .or_default()
-                .findings
-                .push(DataQualityFindingCount {
-                    state: stored_code(state)?,
-                    severity: stored_code::<RuleFindingSeverity>(severity)?,
-                    count,
-                });
-        }
-        for record in quality.values_mut() {
-            record
-                .findings
-                .sort_by(|a, b| b.severity.cmp(&a.severity).then(a.state.cmp(&b.state)));
-        }
-        Ok(quality)
     }
 
     pub async fn acknowledge_rule_finding(&self, id: Uuid) -> Result<RuleFinding, RepositoryError> {

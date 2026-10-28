@@ -143,28 +143,24 @@ attribute_code = "${attribute}"`,
   await expect(toggle).not.toBeChecked();
 });
 
-for (const colorScheme of ['light', 'dark'] as const) {
-  test(`shows, filters and sorts records by data quality (${colorScheme})`, async ({
-    page,
-  }) => {
-    await page.emulateMedia({ colorScheme });
-    const code = `quality_${suffix()}`;
-    const ruleCode = `summary-required-${suffix()}`;
-    const blueprint = await createRecordBlueprint(
-      code,
-      'Quality product',
-      `[[attributes]]
+test('filters records by data quality', async ({ page }) => {
+  const code = `quality_${suffix()}`;
+  const ruleCode = `summary-required-${suffix()}`;
+  const blueprint = await createRecordBlueprint(
+    code,
+    'Quality product',
+    `[[attributes]]
 code = "title"
 value_type = "string"
 
 [[attributes]]
 code = "summary"
 value_type = "string"`,
-    );
-    await enableRule(
-      await createRule(
-        blueprint,
-        `code = "${ruleCode}"
+  );
+  await enableRule(
+    await createRule(
+      blueprint,
+      `code = "${ruleCode}"
 name = "Summary required ${code}"
 severity = "error"
 
@@ -174,54 +170,29 @@ type = "manual"
 [predicate]
 type = "required"
 attribute_code = "summary"`,
-      ),
-    );
-    // Saving a record checks it against every enabled rule of its revision.
-    await createRecord(blueprint, [
-      scalar('title', 'Complete product'),
-      scalar('summary', 'Has a summary'),
-    ]);
-    await createRecord(blueprint, [scalar('title', 'Incomplete product')]);
+    ),
+  );
+  // Saving a record checks it against every enabled rule of its revision.
+  await createRecord(blueprint, [
+    scalar('title', 'Complete product'),
+    scalar('summary', 'Has a summary'),
+  ]);
+  await createRecord(blueprint, [scalar('title', 'Incomplete product')]);
 
-    const rows = page.getByRole('row');
-    const incomplete = rows.filter({ hasText: 'Incomplete product' });
-    const complete = rows.filter({ hasText: 'Complete product' }).filter({
-      hasNotText: 'Incomplete',
-    });
-    await expect(async () => {
-      await page.goto(`/?blueprint=${code}`);
-      await expect(
-        incomplete.getByRole('img', { name: '1 data quality finding' }),
-      ).toBeVisible({ timeout: 1_000 });
-    }).toPass();
-    await expect(
-      complete.getByRole('img', { name: 'No data quality findings' }),
-    ).toBeVisible();
-    await page.screenshot({
-      path: test.info().outputPath(`data-quality-${colorScheme}.png`),
-    });
-
-    await incomplete
-      .getByRole('img', { name: '1 data quality finding' })
-      .hover();
-    await expect(page.getByRole('tooltip')).toHaveText('Error, Open: 1');
-
-    // Clean records first, then records that need attention first.
-    const header = page
-      .getByRole('columnheader', { name: 'Data quality' })
-      .getByRole('button');
-    await header.click();
-    await expect(rows.nth(1)).toContainText('Complete product');
-    await header.click();
-    await expect(rows.nth(1)).toContainText('Incomplete product');
-
-    const filters = page.getByRole('group', { name: 'Filters' });
-    await filters.getByRole('button', { name: 'Data quality' }).click();
-    await page.getByRole('menuitem', { name: 'Open findings' }).click();
-    await expect(
-      filters.getByText('Data quality: Open findings'),
-    ).toBeVisible();
-    await expect(incomplete).toBeVisible();
-    await expect(complete).toBeHidden();
+  const rows = page.getByRole('row');
+  const incomplete = rows.filter({ hasText: 'Incomplete product' });
+  const complete = rows.filter({ hasText: 'Complete product' }).filter({
+    hasNotText: 'Incomplete',
   });
-}
+  await page.goto(`/?blueprint=${code}`);
+  const filters = page.getByRole('group', { name: 'Filters' });
+  await filters.getByRole('button', { name: 'Data quality' }).click();
+  await page.getByRole('menuitem', { name: 'Open findings' }).click();
+  await expect(filters.getByText('Data quality: Open findings')).toBeVisible();
+  // Findings arrive once the record's checks finish.
+  await expect(async () => {
+    await page.reload();
+    await expect(incomplete).toBeVisible({ timeout: 1_000 });
+  }).toPass();
+  await expect(complete).toBeHidden();
+});

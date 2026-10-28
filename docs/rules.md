@@ -245,8 +245,8 @@ context when publishing and fail with `422 publication_checks_failed`. See
 - `GET /rule-runs?record_id=...` (runs include `definition_hash` and `candidates_skipped`), `POST /rule-runs/{run_id}/replay`, `GET /rule-findings?record_id=...` (add `unresolved=true` to skip resolved findings; also narrows by `rule_id`, `blueprint_id`, `context_id`, `severity` and `state`), `GET /rule-findings/count?record_id=...`
 - `POST /rule-findings/recheck` with `{ "record_id": "UUID", "idempotency_key": "..." }` re-checks one record against every enabled rule of its blueprint and returns `202 { "run_ids": [...] }`, one record-scoped manual run per rule. Repeating the key returns the same runs.
 - `POST /rule-findings/{finding_id}/acknowledge`
-- `POST /v1/records/search` with `rules.read` returns each record's unresolved
-  findings as `data_quality` and accepts the `data_quality` filter. Core keeps
+- `POST /v1/records/search` with `rules.read` accepts the `data_quality`
+  filter. Core keeps
   the `attricat.needs_attention` tag on records with open findings, which
   search sorts by with `system_tag:attricat.needs_attention`; see
   [API](api.md#search-table-sorting).

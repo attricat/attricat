@@ -423,27 +423,6 @@ pub struct RecordPreview {
     pub related: HashMap<String, Vec<RelatedRecordPreview>>,
     #[serde(default)]
     pub match_explanations: Vec<MatchExplanation>,
-    /// The record's unresolved rule findings. Omitted unless the caller may
-    /// read rules.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub data_quality: Option<RecordDataQuality>,
-}
-
-/// A record's unresolved rule findings, for the Explorer's data quality column.
-#[derive(Clone, Debug, Default, Serialize)]
-pub struct RecordDataQuality {
-    /// Whether an enabled rule checks the record's blueprint revision. A
-    /// record without findings is only known to be clean when one does.
-    pub checked: bool,
-    /// Unresolved findings counted by state and severity, most severe first.
-    pub findings: Vec<DataQualityFindingCount>,
-}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct DataQualityFindingCount {
-    pub state: crate::states::RuleFindingState,
-    pub severity: crate::states::RuleFindingSeverity,
-    pub count: i64,
 }
 
 #[derive(Clone, Debug, Serialize)]

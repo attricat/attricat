@@ -27,7 +27,6 @@ import {
   SortableColumnHeader,
 } from './ExplorerColumnHeaders';
 import {
-  DataQualityCell,
   RecordActionsCell,
   RecordDisplayCell,
   PublicationStatusCell,
@@ -55,8 +54,6 @@ type ColumnOptions = {
   publicationContextCode: string;
   publicationContextId: string | undefined;
   publicationSortAvailable: boolean;
-  /** Whether rows carry their rule findings, for viewers who may read rules. */
-  dataQualityAvailable: boolean;
   runtime: ExtensionRuntime | undefined;
   onSortChange: (field: string) => void;
   onFilterCell?: (draft: AttributeFilterDraft) => void;
@@ -95,7 +92,6 @@ export const buildExplorerColumnDefinitions = ({
   publicationContextCode,
   publicationContextId,
   publicationSortAvailable,
-  dataQualityAvailable,
   runtime,
   onSortChange,
   onFilterCell,
@@ -220,21 +216,6 @@ export const buildExplorerColumnDefinitions = ({
         />
       ),
     }) as ExplorerColumnDef,
-    ...(dataQualityAvailable
-      ? [
-          columnHelper.display({
-            id: explorerColumnIds.dataQuality,
-            header: () => (
-              <SortableColumnHeader
-                field={explorerSortFields.dataQuality}
-                label={t('explorer.dataQuality')}
-                onSortChange={onSortChange}
-              />
-            ),
-            cell: (info) => <DataQualityCell record={info.row.original} />,
-          }) as ExplorerColumnDef,
-        ]
-      : []),
     ...configuredColumns,
     columnHelper.display({
       id: explorerColumnIds.actions,

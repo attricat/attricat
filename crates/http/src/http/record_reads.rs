@@ -212,19 +212,20 @@ pub(super) async fn search_record_previews(
             return Err(ApiError::invalid_input("invalid connection key".to_owned()));
         }
     }
-    // Findings belong to rules: only principals who may read rules see each
-    // row's data quality or filter by it.
-    let rules_readable = state
-        .repository
-        .principal_may(
-            principal.actor(),
-            workspace.0,
-            Permission::RulesRead,
-            None,
-            None,
-        )
-        .await?;
-    if input.data_quality.is_some() && !rules_readable {
+    // Findings belong to rules: only principals who may read rules filter by
+    // them.
+    if input.data_quality.is_some()
+        && !state
+            .repository
+            .principal_may(
+                principal.actor(),
+                workspace.0,
+                Permission::RulesRead,
+                None,
+                None,
+            )
+            .await?
+    {
         return Err(ApiError::data_quality_filter_forbidden(
             Permission::RulesRead.as_str(),
         ));
@@ -286,7 +287,6 @@ pub(super) async fn search_record_previews(
                 outdated: input.outdated,
                 export_status: input.export_status.as_ref(),
                 data_quality: input.data_quality,
-                include_data_quality: rules_readable,
                 sort: input.sort.as_ref(),
                 cursor: input.page.cursor.as_deref(),
                 limit: limit.into(),

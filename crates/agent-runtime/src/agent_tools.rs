@@ -2298,7 +2298,6 @@ pub async fn execute_read(
                         outdated: input.outdated,
                         export_status: None,
                         data_quality: None,
-                        include_data_quality: false,
                         sort: input.sort.as_ref(),
                         cursor: input.page.cursor.as_deref(),
                         limit: limit.into(),

@@ -260,7 +260,7 @@ Rekordu, który już narusza egzekwowaną regułę, nie można zapisać, dopóki
 
 Strona rekordu wyświetla jego otwarte i potwierdzone ustalenia na karcie **Jakość danych**, po 20 naraz, a pozostałe wczytuje **Wczytaj więcej ustaleń**; oznaczenie jakości danych w nagłówku rekordu otwiera tę kartę. Po edycji lista odświeża się, gdy sprawdzanie rekordu się zakończy. **Sprawdź ponownie** od razu sprawdza rekord względem każdej włączonej reguły jego Schematu, na przykład po zmianie reguły.
 
-W [Eksploratorze](/pl/guides/explore/#sortowanie-i-układ-kolumn) kolumna i filtr **Jakość danych** pokazują, które rekordy mają otwarte lub potwierdzone ustalenia, i stawiają na początku te, które wymagają uwagi.
+W [Eksploratorze](/pl/guides/explore/#filtry) filtr **Jakość danych** zawęża wyniki do rekordów z otwartymi ustaleniami, tylko z potwierdzonymi albo bez ustaleń.
 
 ```sh
 acli rule findings --record-id <uuid>

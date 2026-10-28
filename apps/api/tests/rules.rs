@@ -1017,7 +1017,7 @@ async fn findings_filter_by_rule_blueprint_context_severity_and_state(pool: PgPo
 }
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
-async fn search_summarizes_filters_and_sorts_by_data_quality(pool: PgPool) {
+async fn search_filters_and_sorts_by_data_quality(pool: PgPool) {
     let (base_url, server, rule_id, blueprint) = setup_rule(&pool).await;
     let client = authenticated_client();
     let workspace = Uuid::parse_str(support::BOOTSTRAP_WORKSPACE_ID).unwrap();
@@ -1073,34 +1073,13 @@ async fn search_summarizes_filters_and_sorts_by_data_quality(pool: PgPool) {
     };
     let code = json!({"code": "rule_task_product"});
 
+    // Search results carry no findings summary; the filter and sort do.
     let all = expect_status(
         search(client.clone(), json!({"blueprint": code})).await,
         StatusCode::OK,
     )
     .await;
-    let mixed = all["items"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|item| item["id"] == ids[2])
-        .unwrap();
-    assert_eq!(
-        mixed["data_quality"],
-        json!({"checked": true, "findings": [
-            {"state": "acknowledged", "severity": "critical", "count": 1},
-            {"state": "open", "severity": "info", "count": 1},
-        ]})
-    );
-    let clean = all["items"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|item| item["id"] == ids[3])
-        .unwrap();
-    assert_eq!(
-        clean["data_quality"],
-        json!({"checked": true, "findings": []})
-    );
+    assert!(all["items"][0].get("data_quality").is_none());
 
     for (filter, expected) in [
         ("open", vec![ids[0].clone(), ids[2].clone()]),
@@ -1150,16 +1129,10 @@ async fn search_summarizes_filters_and_sorts_by_data_quality(pool: PgPool) {
     expected.extend(by_id(vec![ids[1].clone(), ids[3].clone()]));
     assert_eq!(sorted, expected);
 
-    // Findings belong to rules: a reader without rules.read sees no summary
-    // and cannot filter by it, but may sort by the tag it sees.
+    // Findings belong to rules: a reader without rules.read cannot filter by
+    // them, but may sort by the tag it sees.
     let reader_role = create_role(&pool, "records_reader", &["records.read"]).await;
     let reader = client_for(member_with_role(&pool, reader_role).await);
-    let plain = expect_status(
-        search(reader.clone(), json!({"blueprint": code})).await,
-        StatusCode::OK,
-    )
-    .await;
-    assert!(plain["items"][0].get("data_quality").is_none());
     let forbidden = expect_status(
         search(
             reader.clone(),

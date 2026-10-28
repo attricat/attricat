@@ -1419,8 +1419,6 @@
       "collapse": "Zwiń {{item}}"
     },
     "dataQuality": "Jakość danych",
-    "dataQualityClean": "Brak problemów z jakością danych",
-    "dataQualityFindingCount": "{{severity}}, {{state}}: {{count}}",
     "dataQualityFilterChip": "Jakość danych: {{filter}}",
     "dataQualityFilters": {
       "open": "Otwarte problemy",

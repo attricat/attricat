@@ -260,7 +260,7 @@ A record that already violates an enforcing rule cannot be saved until a save fi
 
 A record's own page lists its open and acknowledged findings in its **Data quality** tab, 20 at a time with **Load more findings** for the rest; the data quality chip in the record's header opens the tab. After an edit, the list refreshes once the record's checks finish. **Re-run checks** checks the record against every enabled rule of its blueprint straight away, for example after a rule changed.
 
-In the [Explorer](/guides/explore/#sort-and-arrange-columns), the **Data quality** column and filter show which records have open or acknowledged findings, and sort the records that need attention first.
+In the [Explorer](/guides/explore/#filters), the **Data quality** filter narrows results to records with open findings, only acknowledged findings, or none.
 
 ```sh
 acli rule findings --record-id <uuid>

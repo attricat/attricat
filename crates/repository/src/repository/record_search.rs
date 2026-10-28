@@ -3826,7 +3826,6 @@ fn record_preview(row: RecordPreviewRow) -> RecordPreview {
         table_values: HashMap::new(),
         related: HashMap::new(),
         match_explanations: Vec::new(),
-        data_quality: None,
     }
 }
 
