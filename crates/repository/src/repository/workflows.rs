@@ -1,6 +1,7 @@
 use super::*;
 use crate::model::{CreateWorkflow, Workflow};
 use crate::persistence_rows::{Db, IntoDomain};
+use attricat_domain::states::RevisionStatus;
 use chrono::Utc;
 use uuid::Uuid;
 
@@ -82,7 +83,7 @@ impl AttricatRepository {
         let compiled = attricat_workflow::compile(&input.definition)
             .map_err(|e| RepositoryError::InvalidWorkflowDefinition(e.to_string()))?;
         let ws = self.workspace_id.0;
-        check_trigger_blueprints(tx, ws, &compiled).await?;
+        check_trigger_scope(tx, ws, &compiled).await?;
         // A versioned primary key cannot express a unique workflow family code.
         // Serialize first revisions by workspace and code, as blueprint creation does.
         sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
@@ -122,7 +123,7 @@ impl AttricatRepository {
         let Some((version, code)) = previous else {
             return Err(RepositoryError::NotFound("workflow"));
         };
-        check_trigger_blueprints(&mut tx, ws, &compiled).await?;
+        check_trigger_scope(&mut tx, ws, &compiled).await?;
         if code != compiled.code {
             return Err(RepositoryError::InvalidWorkflowDefinition(
                 "workflow code cannot change across revisions".into(),
@@ -263,19 +264,28 @@ impl AttricatRepository {
 }
 
 /// Rejects a trigger that names a blueprint code the workspace does not have,
-/// so a typo cannot silently stop a workflow from running.
-async fn check_trigger_blueprints(
+/// so a typo cannot silently stop a workflow from running. When every trigger
+/// names its blueprints, the attribute writes on the trigger record must name
+/// an attribute one of those blueprints declares, in its latest published
+/// revision (or latest revision before the first publish), or a reusable
+/// attribute a record can carry. Writes on referencing records are not
+/// checked: those records can be of any blueprint.
+async fn check_trigger_scope(
     conn: &mut sqlx::PgConnection,
     ws: Uuid,
     compiled: &attricat_workflow::CompiledWorkflow,
 ) -> Result<(), RepositoryError> {
-    let codes: Vec<&str> = compiled
+    let scoped: Vec<&[String]> = compiled
         .triggers
         .iter()
-        .filter_map(|trigger| match trigger {
-            attricat_workflow::Trigger::Event { blueprints, .. } => Some(blueprints),
-            _ => None,
+        .map(|trigger| match trigger {
+            attricat_workflow::Trigger::Event { blueprints, .. } => blueprints.as_slice(),
+            _ => &[],
         })
+        .collect();
+    let codes: Vec<&str> = scoped
+        .iter()
+        .copied()
         .flatten()
         .map(String::as_str)
         .collect();
@@ -289,12 +299,54 @@ async fn check_trigger_blueprints(
     .bind(&codes)
     .fetch_all(&mut *conn)
     .await?;
-    match codes
+    if let Some(code) = codes
         .iter()
         .find(|code| !known.iter().any(|known| known == *code))
     {
-        Some(code) => Err(RepositoryError::InvalidWorkflowDefinition(format!(
+        return Err(RepositoryError::InvalidWorkflowDefinition(format!(
             "trigger names unknown blueprint '{code}'"
+        )));
+    }
+    if scoped.iter().any(|blueprints| blueprints.is_empty()) {
+        return Ok(());
+    }
+    let written: Vec<&str> = compiled
+        .actions
+        .iter()
+        .filter_map(|action| match action {
+            attricat_workflow::Action::AttributeWrite { attribute_code, .. } => {
+                Some(attribute_code.as_str())
+            }
+            _ => None,
+        })
+        .collect();
+    if written.is_empty() {
+        return Ok(());
+    }
+    let declared: Vec<String> = sqlx::query_scalar(
+        "WITH scoped AS (
+             SELECT DISTINCT ON (id) id, version FROM blueprints
+              WHERE workspace_id = $1 AND code = ANY($2) AND deleted_at IS NULL
+              ORDER BY id, (status = $4) DESC, version DESC)
+         SELECT a.code FROM attributes a JOIN scoped s ON a.blueprint_id = s.id AND a.blueprint_version = s.version
+          WHERE a.workspace_id = $1 AND a.code = ANY($3) AND a.deleted_at IS NULL
+         UNION
+         SELECT code FROM reusable_attribute_definitions
+          WHERE workspace_id = $1 AND code = ANY($3) AND deleted_at IS NULL",
+    )
+    .bind(ws)
+    .bind(&codes)
+    .bind(&written)
+    .bind(RevisionStatus::Published.as_str())
+    .fetch_all(&mut *conn)
+    .await?;
+    match written
+        .iter()
+        .find(|code| !declared.iter().any(|declared| declared == *code))
+    {
+        Some(code) => Err(RepositoryError::InvalidWorkflowDefinition(format!(
+            "action writes attribute '{code}' that none of the trigger blueprints ({}) declares",
+            known.join(", ")
         ))),
         None => Ok(()),
     }

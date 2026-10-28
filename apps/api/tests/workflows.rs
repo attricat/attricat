@@ -924,6 +924,53 @@ tags = ["catalogue-changed"]"#
         "{error}"
     );
 
+    // With every trigger scoped, writes to the trigger record must name an
+    // attribute those blueprints declare, or a reusable attribute.
+    client
+        .post(format!("{base_url}/reusable-attributes"))
+        .json(&json!({ "definition": "code = \"reviewer\"\nname = \"Reviewer\"\nvalue_type = \"string\"\n" }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let writing = |code: &str, attribute: &str| {
+        json!({ "definition": format!(
+            r#"format_version = 2
+code = "{code}"
+name = "Write {attribute}"
+[[triggers]]
+event_type = "record.created.v1"
+blueprints = ["scoped_product"]
+[[actions]]
+type = "attribute_write"
+attribute_code = "{attribute}"
+fixed = "x""#
+        ) })
+    };
+    let misspelt = client
+        .post(format!("{base_url}/workflows"))
+        .json(&writing("write_titel", "titel"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(misspelt.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let error: Value = misspelt.json().await.unwrap();
+    assert_eq!(
+        error["error"]["message"],
+        "invalid workflow definition: action writes attribute 'titel' that none of the trigger blueprints (scoped_product) declares"
+    );
+    for (code, attribute) in [("write_title", "title"), ("write_reviewer", "reviewer")] {
+        client
+            .post(format!("{base_url}/workflows"))
+            .json(&writing(code, attribute))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+    }
+
     enabled_workflow(
         &client,
         &base_url,
