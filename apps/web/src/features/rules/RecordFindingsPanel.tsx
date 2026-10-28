@@ -39,7 +39,7 @@ import { ruleQueryKeys } from './queryKeys';
 import {
   recordFindingsOptions,
   recordRuleRunsOptions,
-  ruleDefinitionsOptions,
+  recordRulesOptions,
 } from './queryOptions';
 import { isWatchingRecordRuleChecks } from './recordRuleChecks';
 import { RuleRevisionCell } from './RuleCells';
@@ -68,6 +68,7 @@ const FindingItem = ({
   acknowledging,
   attributes,
   canManage,
+  canReadRules,
   contextCodes,
   finding,
   onAcknowledge,
@@ -77,6 +78,8 @@ const FindingItem = ({
   acknowledging: boolean;
   attributes: readonly FindingAttribute[];
   canManage: boolean;
+  /** Rule pages need `rules.read`; without it the rule is named, not linked. */
+  canReadRules: boolean;
   contextCodes: readonly string[] | undefined;
   finding: Finding;
   onAcknowledge: () => void;
@@ -134,10 +137,12 @@ const FindingItem = ({
             '& a:hover, & a:focus-visible': { textDecoration: 'underline' },
           }}
         >
-          {rule ? (
+          {rule && canReadRules ? (
             <Link params={{ ruleId: finding.rule_id }} to={ruleRoutes.rule}>
               {rule.name}
             </Link>
+          ) : rule ? (
+            rule.name
           ) : (
             <RuleRevisionCell
               rules={rules}
@@ -225,14 +230,12 @@ export const RecordFindingsPanel = ({
 }) => {
   const { t } = useTranslation();
   const client = useQueryClient();
-  const canRead = useCan(capabilities.rulesRead);
+  // Everyone who may read the record sees its findings.
+  const canReadRules = useCan(capabilities.rulesRead);
   const canManage = useCan(capabilities.rulesManage);
   const revealField = useRevealField();
-  const rules = useQuery({ ...ruleDefinitionsOptions(), enabled: canRead });
-  const findings = useInfiniteQuery({
-    ...recordFindingsOptions(recordId),
-    enabled: canRead,
-  });
+  const rules = useQuery(recordRulesOptions(recordId));
+  const findings = useInfiniteQuery(recordFindingsOptions(recordId));
   const hasApplicableRules = (rules.data ?? []).some(
     (rule) =>
       rule.blueprint_id === blueprintId &&
@@ -243,7 +246,6 @@ export const RecordFindingsPanel = ({
   );
   const runs = useQuery({
     ...recordRuleRunsOptions(recordId),
-    enabled: canRead,
     // Keep checking while runs are pending or an edit's runs may still start.
     // Without an enabled rule an edit starts no runs.
     refetchInterval: (query) =>
@@ -274,7 +276,6 @@ export const RecordFindingsPanel = ({
   });
   const acknowledge = useAcknowledgeFinding();
 
-  if (!canRead) return null;
   // The server orders findings most severe first, so loading another page
   // only appends rows.
   const unresolved = findings.data?.pages.flatMap((page) => page.items) ?? [];
@@ -344,6 +345,7 @@ export const RecordFindingsPanel = ({
               acknowledging={acknowledge.isPending}
               attributes={attributes}
               canManage={canManage}
+              canReadRules={canReadRules}
               contextCodes={contextCodes}
               finding={finding}
               onAcknowledge={() => acknowledge.mutate(finding.id)}

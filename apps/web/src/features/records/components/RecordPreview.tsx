@@ -165,7 +165,6 @@ export const RecordPreview = ({
   );
   const canCreateRecords = useCan(capabilities.recordsWrite);
   const canAskAgent = useCan(capabilities.agentsRun);
-  const canReadRules = useCan(capabilities.rulesRead);
   const publications = useRecordPublications(recordId, contextId, canPublish);
   const { blueprint, recordForm, resolved, statusTransitions } =
     useRecordPreviewData(recordId, contextId);
@@ -403,27 +402,22 @@ export const RecordPreview = ({
                   onChange={setTab}
                   panelRef={tabPanelRef}
                   tabs={[
-                    ...(canReadRules
-                      ? [
-                          {
-                            key: recordPreviewTabs.dataQuality,
-                            label: t('rules.recordFindings.title'),
-                            content: (
-                              <RecordFindingsPanel
-                                attributes={blueprint.data?.attributes}
-                                blueprintId={resolvedRecord.blueprint_id}
-                                blueprintVersion={
-                                  resolvedRecord.blueprint_version
-                                }
-                                contextCodes={contexts.data?.map(
-                                  (context) => context.code,
-                                )}
-                                recordId={recordId}
-                              />
-                            ),
-                          },
-                        ]
-                      : []),
+                    {
+                      key: recordPreviewTabs.dataQuality,
+                      label: t('rules.recordFindings.title'),
+                      content: (
+                        <RecordFindingsPanel
+                          attributes={blueprint.data?.attributes}
+                          blueprintId={resolvedRecord.blueprint_id}
+                          blueprintVersion={resolvedRecord.blueprint_version}
+                          contextCodes={contexts.data?.map(
+                            (context) => context.code,
+                          )}
+                          recordId={recordId}
+                        />
+                      ),
+                    },
+
                     ...(showComments
                       ? [
                           {

@@ -66,7 +66,7 @@ vi.mock('../rules/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../rules/api')>()),
   getUnresolvedRecordFindingCount: vi.fn(),
   listRecordRuleRuns: vi.fn(),
-  listRules: vi.fn(),
+  listRecordRules: vi.fn(),
   listUnresolvedRecordFindings: vi.fn(),
 }));
 
@@ -173,6 +173,16 @@ describe('RecordPreviewPage', () => {
     const emptyPage = { items: [], has_more: false };
     vi.mocked(api.getRecordApprovals).mockResolvedValue(emptyPage);
     vi.mocked(api.getRecordRetentionHolds).mockResolvedValue(emptyPage);
+    // Every reader of a record sees its data quality.
+    const rules = await import('../rules/api');
+    vi.mocked(rules.listRecordRules).mockResolvedValue([]);
+    vi.mocked(rules.listRecordRuleRuns).mockResolvedValue([]);
+    vi.mocked(rules.listUnresolvedRecordFindings).mockResolvedValue({
+      items: [],
+    });
+    vi.mocked(rules.getUnresolvedRecordFindingCount).mockResolvedValue({
+      count: 0,
+    });
   });
   it('offers confirmed deletion only when permitted and navigates away afterwards', async () => {
     const { getExtensionRuntime } = await import('../extensions/api');
@@ -441,7 +451,7 @@ describe('RecordPreviewPage', () => {
     vi.mocked(currentSession).mockResolvedValue({
       capabilities: { rules_read: true },
     } as never);
-    vi.mocked(rules.listRules).mockResolvedValue([]);
+    vi.mocked(rules.listRecordRules).mockResolvedValue([]);
     vi.mocked(rules.listRecordRuleRuns).mockResolvedValue([]);
     vi.mocked(rules.listUnresolvedRecordFindings).mockResolvedValue({
       items: [],

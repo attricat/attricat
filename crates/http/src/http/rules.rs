@@ -169,6 +169,55 @@ pub(super) async fn acknowledge(
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct RecordPageQuery {
+    limit: Option<i64>,
+    offset: Option<i64>,
+}
+/// One page of a record's open and acknowledged findings, for anyone who
+/// may read the record.
+pub(super) async fn record_findings(
+    super::auth::ScopedRepository(repo): super::auth::ScopedRepository,
+    ApiPath(record_id): ApiPath<Uuid>,
+    ApiQuery(query): ApiQuery<RecordPageQuery>,
+) -> Result<Response, ApiError> {
+    let (limit, offset) = ArrayPage::new(query.limit, query.offset).bounds()?;
+    let filter = RuleFindingFilter {
+        record_id: Some(record_id),
+        unresolved: true,
+        ..Default::default()
+    };
+    let page_items = repo.rule_findings_page(&filter, limit, offset).await?;
+    Ok(array_response(page_items, (limit, offset)))
+}
+/// Counts a record's unresolved findings, for anyone who may read the record.
+pub(super) async fn record_finding_count(
+    super::auth::ScopedRepository(repo): super::auth::ScopedRepository,
+    ApiPath(record_id): ApiPath<Uuid>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let count = repo.unresolved_rule_finding_count(Some(record_id)).await?;
+    Ok(Json(serde_json::json!({ "count": count })))
+}
+/// The runs that checked a record, newest first, for anyone who may read it.
+pub(super) async fn record_runs(
+    super::auth::ScopedRepository(repo): super::auth::ScopedRepository,
+    ApiPath(record_id): ApiPath<Uuid>,
+    ApiQuery(query): ApiQuery<RecordPageQuery>,
+) -> Result<Response, ApiError> {
+    let (limit, offset) = ArrayPage::new(query.limit, query.offset).bounds()?;
+    let page_items = repo
+        .rule_runs_page(None, Some(record_id), limit, offset)
+        .await?;
+    Ok(array_response(page_items, (limit, offset)))
+}
+/// The rules of a record's blueprint, for anyone who may read the record.
+pub(super) async fn record_rules(
+    super::auth::ScopedRepository(repo): super::auth::ScopedRepository,
+    ApiPath(record_id): ApiPath<Uuid>,
+) -> Result<Json<Vec<RuleDetails>>, ApiError> {
+    Ok(Json(repo.list_record_rules(record_id).await?))
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RecheckRecord {
     record_id: Uuid,
     idempotency_key: String,

@@ -4,6 +4,7 @@ import {
   getRule,
   getUnresolvedRecordFindingCount,
   listRecordRuleRuns,
+  listRecordRules,
   listRuleRevisions,
   listRuleRuns,
   listRules,
@@ -19,6 +20,14 @@ export const ruleDefinitionsOptions = () =>
   queryOptions({
     queryKey: ruleQueryKeys.definitions(),
     queryFn: listRules,
+  });
+
+/** The rules of a record's blueprint, readable by the record's readers. */
+export const recordRulesOptions = (recordId: string) =>
+  queryOptions({
+    queryKey: ruleQueryKeys.recordRules(recordId),
+    queryFn: () => listRecordRules(recordId),
+    staleTime: readAheadStaleTimeMs,
   });
 
 export const ruleOptions = (ruleId: string) =>

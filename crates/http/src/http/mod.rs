@@ -1155,6 +1155,16 @@ pub fn router(state: AppState) -> Router {
             "/v1/records/{record_id}/comments/{comment_id}",
             axum::routing::patch(record_comments::update),
         )
+        .route(
+            "/v1/records/{record_id}/rule-findings",
+            get(rules::record_findings),
+        )
+        .route(
+            "/v1/records/{record_id}/rule-findings/count",
+            get(rules::record_finding_count),
+        )
+        .route("/v1/records/{record_id}/rule-runs", get(rules::record_runs))
+        .route("/v1/records/{record_id}/rules", get(rules::record_rules))
         .route("/records", get(record_reads::list_previews))
         .route(
             "/records/{record_id}",

@@ -272,3 +272,5 @@ Karta **Historia wykonań** pokazuje historię wykonań i błędy. Wykonanie, kt
 ## Uprawnienia
 
 `rules.read` pozwala wyświetlać reguły, wykonania i ustalenia. `rules.manage` pozwala tworzyć, zmieniać, włączać, wyłączać i uruchamiać reguły oraz potwierdzać ustalenia. Oba uprawnienia są domyślnie przyznane rolom właściciela i administratora.
+
+Każdy, kto może odczytać rekord, widzi jego ustalenia: kartę **Jakość danych**, oznaczenie w nagłówku i wyróżnione pola, więc osoby poprawiające dane widzą, co poprawić. Bez `rules.read` widzą nazwę reguły, ale nie jej stronę.

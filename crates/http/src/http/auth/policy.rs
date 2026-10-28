@@ -73,6 +73,17 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     {
         return Some(read(TargetKind::RecordId));
     }
+    // A record's readers see its findings and the rules behind them, so the
+    // people who fix the data see what to fix. The workspace-wide lists stay
+    // behind `rules.read`.
+    if method == Method::GET
+        && (path == "/v1/records/{record_id}/rule-findings"
+            || path == "/v1/records/{record_id}/rule-findings/count"
+            || path == "/v1/records/{record_id}/rule-runs"
+            || path == "/v1/records/{record_id}/rules")
+    {
+        return Some(read(TargetKind::RecordId));
+    }
     // Every catalog reader needs translations to render labels; editing them
     // is part of maintaining the catalog model.
     if path == "/lexicon/entries" && method == Method::GET {

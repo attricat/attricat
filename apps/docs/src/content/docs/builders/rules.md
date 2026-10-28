@@ -272,3 +272,5 @@ The **Runs** tab shows run history and failures. A run that fails five times bec
 ## Permissions
 
 `rules.read` lets someone see rules, runs, and findings. `rules.manage` lets them create, change, enable, disable, and run rules, and acknowledge findings. Both are granted to the owner and admin roles by default.
+
+Everyone who can read a record sees its findings: the **Data quality** tab, the chip in its header, and the highlighted fields, so the people who fix the data see what to fix. Without `rules.read` they see the rule's name but not its page.

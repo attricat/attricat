@@ -34,9 +34,15 @@ export type {
   UpdateRule,
 } from './schemas';
 const rulePath = (ruleId: string) => `/api/rules/${uuidSegment(ruleId)}`;
+/** A record's data quality, readable by everyone who may read the record. */
+const recordPath = (recordId: string) =>
+  `/api/v1/records/${uuidSegment(recordId)}`;
 /** Every rule with the blueprint revisions it skips. */
 export const listRules = () =>
   request('/api/rules', z.array(ruleDetailsSchema));
+/** The rules of a record's blueprint, for naming the rules of its findings. */
+export const listRecordRules = (recordId: string) =>
+  request(`${recordPath(recordId)}/rules`, z.array(ruleDetailsSchema));
 export const getRule = (ruleId: string) =>
   request(rulePath(ruleId), ruleDetailsSchema);
 /** A rule's saved revisions, newest first: its changelog. */
@@ -70,7 +76,7 @@ export const listRuleRuns = () =>
 /** The most recent runs scoped to one record. */
 export const listRecordRuleRuns = (recordId: string) =>
   request(
-    `/api/rule-runs?record_id=${uuidSegment(recordId)}&limit=${RECORD_RULE_RUNS_LIMIT}`,
+    `${recordPath(recordId)}/rule-runs?limit=${RECORD_RULE_RUNS_LIMIT}`,
     z.array(ruleRunSchema),
   );
 /** Re-checks one record against every enabled rule of its blueprint. */
@@ -106,9 +112,7 @@ export const listFindingsPage = (search: FindingsSearch, offset = 0) => {
 /** One page of a record's open and acknowledged findings, newest change first. */
 export const listUnresolvedRecordFindings = (recordId: string, offset = 0) =>
   requestOffsetPage(
-    `/api/rule-findings?${new URLSearchParams({
-      record_id: z.uuid().parse(recordId),
-      unresolved: 'true',
+    `${recordPath(recordId)}/rule-findings?${new URLSearchParams({
       limit: String(RECORD_FINDINGS_PAGE_SIZE),
       offset: String(offset),
     })}`,
@@ -117,7 +121,7 @@ export const listUnresolvedRecordFindings = (recordId: string, offset = 0) =>
 /** How many of a record's findings are open or acknowledged. */
 export const getUnresolvedRecordFindingCount = (recordId: string) =>
   request(
-    `/api/rule-findings/count?record_id=${uuidSegment(recordId)}`,
+    `${recordPath(recordId)}/rule-findings/count`,
     z.object({ count: z.number().int().nonnegative() }),
   );
 export const acknowledgeFinding = (findingId: string) =>

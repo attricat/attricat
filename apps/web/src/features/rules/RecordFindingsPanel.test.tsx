@@ -9,7 +9,7 @@ import { currentSession } from '../auth/api';
 import {
   acknowledgeFinding,
   listRecordRuleRuns,
-  listRules,
+  listRecordRules,
   listUnresolvedRecordFindings,
   recheckRecord,
   type Finding,
@@ -35,7 +35,7 @@ vi.mock('../auth/api', () => ({ currentSession: vi.fn() }));
 vi.mock('./api', () => ({
   acknowledgeFinding: vi.fn(),
   listRecordRuleRuns: vi.fn(),
-  listRules: vi.fn(),
+  listRecordRules: vi.fn(),
   listUnresolvedRecordFindings: vi.fn(),
   recheckRecord: vi.fn(),
 }));
@@ -138,7 +138,7 @@ describe('RecordFindingsPanel', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(currentSession).mockResolvedValue(manager);
-    vi.mocked(listRules).mockResolvedValue([rule]);
+    vi.mocked(listRecordRules).mockResolvedValue([rule]);
     vi.mocked(listUnresolvedRecordFindings).mockResolvedValue({
       items: [finding],
     });
@@ -167,6 +167,19 @@ describe('RecordFindingsPanel', () => {
     await waitFor(() =>
       expect(invalidated()).toEqual([true, true, true, true, true]),
     );
+  });
+
+  it('shows a record reader without rule access the findings and their rule names', async () => {
+    vi.mocked(currentSession).mockResolvedValue({
+      capabilities: {},
+    } as Awaited<ReturnType<typeof currentSession>>);
+    renderPanel();
+    const item = await screen.findByRole('listitem');
+    expect(within(item).getByText('Title required')).toBeTruthy();
+    expect(within(item).queryByRole('link')).toBeNull();
+    expect(
+      within(item).queryByRole('button', { name: 'Acknowledge' }),
+    ).toBeNull();
   });
 
   it('keeps the server’s severity order and names fields by their labels', async () => {
@@ -295,7 +308,7 @@ describe('RecordFindingsPanel', () => {
   });
 
   it('says when no rule applies and nothing is reported', async () => {
-    vi.mocked(listRules).mockResolvedValue([{ ...rule, enabled: false }]);
+    vi.mocked(listRecordRules).mockResolvedValue([{ ...rule, enabled: false }]);
     vi.mocked(listUnresolvedRecordFindings).mockResolvedValue({ items: [] });
     renderPanel();
     expect(await screen.findByText('No open findings.')).toBeTruthy();
@@ -308,7 +321,7 @@ describe('RecordFindingsPanel', () => {
   });
 
   it('treats a rule that skips the record’s revision as not applying', async () => {
-    vi.mocked(listRules).mockResolvedValue([
+    vi.mocked(listRecordRules).mockResolvedValue([
       {
         ...rule,
         not_applicable: [
@@ -343,7 +356,7 @@ describe('RecordFindingsPanel', () => {
     };
     expect(await pollsAfterEdit()).toBeGreaterThan(1);
 
-    vi.mocked(listRules).mockResolvedValue([{ ...rule, enabled: false }]);
+    vi.mocked(listRecordRules).mockResolvedValue([{ ...rule, enabled: false }]);
     expect(await pollsAfterEdit()).toBe(1);
   }, 10_000);
 });

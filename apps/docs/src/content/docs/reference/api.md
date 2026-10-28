@@ -376,6 +376,7 @@ See [Translate labels](/builders/translations/).
 | `GET` | `/rule-findings/count` | `{count}` of open and acknowledged findings; pass `record_id` to count one record's. |
 | `POST` | `/rule-runs/{id}/replay`, `/rule-findings/{id}/acknowledge` | Replay a dead letter; acknowledge a finding. |
 | `POST` | `/rule-findings/recheck` | Re-check one record against every enabled rule of its blueprint. Body `{record_id, idempotency_key}`; returns `202 {run_ids}`. Pass `record_id` to `GET /rule-runs` or `/rule-findings` to follow one record. |
+| `GET` | `/v1/records/{id}/rule-findings`, `/v1/records/{id}/rule-findings/count`, `/v1/records/{id}/rule-runs`, `/v1/records/{id}/rules` | One record's open and acknowledged findings (with `limit` and `offset`), their `{count}`, the runs that checked it, and the rules of its blueprint. They need `records.read` on the record, not `rules.read`. |
 | `POST` | `/workflows/validate` | Validate workflow TOML. |
 | `GET`, `POST` | `/workflows`, `/workflows/{id}/versions` | List or create workflows and revisions. |
 | `POST` | `/workflows/{id}/versions/{version}/publish`, `/enable`; `/workflows/{id}/disable` | Lifecycle. |

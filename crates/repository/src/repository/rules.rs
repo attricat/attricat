@@ -118,6 +118,25 @@ impl AttricatRepository {
         with_applicability(&mut conn, ws, rules).await
     }
 
+    /// The rules of a record's blueprint, with the revisions they skip, so
+    /// the record's readers can name the rules its findings come from.
+    pub async fn list_record_rules(
+        &self,
+        record_id: Uuid,
+    ) -> Result<Vec<RuleDetails>, RepositoryError> {
+        let blueprint_id: Option<Uuid> = sqlx::query_scalar(
+            "SELECT blueprint_id FROM records WHERE workspace_id=$1 AND id=$2 AND deleted_at IS NULL",
+        )
+        .bind(self.workspace_id.0)
+        .bind(record_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        let Some(blueprint_id) = blueprint_id else {
+            return Err(RepositoryError::NotFound("record"));
+        };
+        self.list_rules(Some(blueprint_id)).await
+    }
+
     pub async fn get_rule(&self, id: Uuid) -> Result<Option<Rule>, RepositoryError> {
         Ok(sqlx::query_as::<_, Db<Rule>>(&format!(
             "SELECT {RULE_FIELDS} FROM {CURRENT_RULES} WHERE l.workspace_id=$1 AND l.rule_id=$2"

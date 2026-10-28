@@ -2,7 +2,10 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { capabilities } from '../auth/capabilities';
 import { useCan } from '../auth/useCan';
-import { ruleDefinitionsOptions } from '../rules/queryOptions';
+import {
+  recordRulesOptions,
+  ruleDefinitionsOptions,
+} from '../rules/queryOptions';
 import type { Attribute } from './api';
 import { blueprintConnections } from './attributeConnections';
 import {
@@ -31,13 +34,15 @@ export const useBlueprintFieldDiagnostics = ({
   record?: { id: string; contextCode?: string; contextId?: string };
 }): FieldDiagnostics => {
   const canReadRules = useCan(capabilities.rulesRead);
+  // A record's readers see its findings and rules; the rules of a revision
+  // alone need `rules.read`.
   const findings = useQuery({
     ...recordDiagnosticFindingsOptions(record?.id ?? ''),
-    enabled: canReadRules && record !== undefined,
+    enabled: record !== undefined,
   });
   const rules = useQuery({
-    ...ruleDefinitionsOptions(),
-    enabled: canReadRules && revision !== undefined,
+    ...(record ? recordRulesOptions(record.id) : ruleDefinitionsOptions()),
+    enabled: revision !== undefined && (record !== undefined || canReadRules),
   });
   const revisionId = revision?.id;
   const revisionVersion = revision?.version;
@@ -71,7 +76,7 @@ export const useBlueprintFieldDiagnostics = ({
   const contextCode = record?.contextCode;
   const contextId = record?.contextId;
   const showsRecord = record !== undefined;
-  const readsFindings = canReadRules && showsRecord;
+  const readsFindings = showsRecord;
   const findingsStatus = !readsFindings
     ? undefined
     : // Findings loaded before a failed refresh are still worth showing.

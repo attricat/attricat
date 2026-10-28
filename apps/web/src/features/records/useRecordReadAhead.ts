@@ -1,6 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { useCan } from '../auth/useCan';
 import { recordCommentsOptions } from '../record-comments/queryOptions';
 import {
   recordFindingCountOptions,
@@ -13,7 +12,6 @@ import {
   recordRetentionHoldsOptions,
 } from './queryOptions';
 import { sessionOptions } from '../auth/queryOptions';
-import { capabilities } from '../auth/capabilities';
 
 /**
  * Starts loading what a record's side panels show as soon as the record
@@ -28,18 +26,16 @@ export const useRecordReadAhead = (
   relatedBlueprintCodes: readonly string[] = [],
 ) => {
   const client = useQueryClient();
-  const canReadRules = useCan(capabilities.rulesRead);
   const session = useQuery(sessionOptions());
   useEffect(() => {
     void client.prefetchInfiniteQuery(recordApprovalsOptions(recordId));
     void client.prefetchInfiniteQuery(recordRetentionHoldsOptions(recordId));
   }, [client, recordId]);
   useEffect(() => {
-    if (!canReadRules) return;
     void client.prefetchInfiniteQuery(recordFindingsOptions(recordId));
     void client.prefetchQuery(recordFindingCountOptions(recordId));
     void client.prefetchQuery(recordRuleRunsOptions(recordId));
-  }, [canReadRules, client, recordId]);
+  }, [client, recordId]);
   // A related preview needs its record's blueprint revision, usually the
   // latest one; loading it by code now lets the preview reuse it instead of
   // loading it after the related record arrives.

@@ -1346,3 +1346,69 @@ async fn needs_attention_tag_survives_a_concurrent_finding_commit(pool: PgPool) 
     assert_eq!(tags, vec!["attricat.needs_attention".to_owned()]);
     server.abort();
 }
+
+/// A record's readers see its findings and the rules behind them without
+/// `rules.read`, which still guards the workspace-wide lists.
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn record_readers_see_the_records_findings(pool: PgPool) {
+    let (base_url, server, rule_id, blueprint) = setup_rule(&pool).await;
+    let client = authenticated_client();
+    let workspace = Uuid::parse_str(support::BOOTSTRAP_WORKSPACE_ID).unwrap();
+    let flagged: Uuid = create_record(&client, &base_url, &blueprint).await["id"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    let other: Uuid = create_record(&client, &base_url, &blueprint).await["id"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    for record_id in [flagged, other] {
+        sqlx::query("INSERT INTO rule_findings(id,workspace_id,rule_id,rule_version,record_id,evaluation_key,severity,message) VALUES ($1,$2,$3,1,$4,'key','error','summary is required')")
+            .bind(Uuid::new_v4())
+            .bind(workspace)
+            .bind(rule_id)
+            .bind(record_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+    let reader_role = create_role(&pool, "records_reader", &["records.read"]).await;
+    let (reader_user, membership) = add_workspace_user(&pool).await;
+    grant_role(&pool, membership, reader_role, GrantScope::Record(flagged)).await;
+    let reader = client_for(reader_user);
+
+    let findings = get_json(
+        &reader,
+        format!("{base_url}/v1/records/{flagged}/rule-findings"),
+    )
+    .await;
+    assert_eq!(findings.as_array().unwrap().len(), 1);
+    assert_eq!(findings[0]["record_id"], json!(flagged));
+    let count = get_json(
+        &reader,
+        format!("{base_url}/v1/records/{flagged}/rule-findings/count"),
+    )
+    .await;
+    assert_eq!(count["count"], 1);
+    let rules = get_json(&reader, format!("{base_url}/v1/records/{flagged}/rules")).await;
+    assert_eq!(rules[0]["id"], json!(rule_id));
+    let runs = get_json(
+        &reader,
+        format!("{base_url}/v1/records/{flagged}/rule-runs"),
+    )
+    .await;
+    assert_eq!(runs, json!([]));
+
+    for path in [
+        format!("{base_url}/v1/records/{other}/rule-findings"),
+        format!("{base_url}/v1/records/{other}/rules"),
+        format!("{base_url}/rule-findings?record_id={flagged}"),
+        format!("{base_url}/rules"),
+    ] {
+        let status = reader.get(&path).send().await.unwrap().status();
+        assert!(status == 403 || status == 404, "{path}: {status}");
+    }
+    server.abort();
+}

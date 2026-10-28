@@ -376,6 +376,7 @@ Trasy `GET` reguł, wykonań i ustaleń wymagają `rules.read`; pozostałe trasy
 | `GET` | `/rule-findings/count` | `{count}` otwartych i potwierdzonych ustaleń; przekaż `record_id`, aby policzyć ustalenia jednego rekordu. |
 | `POST` | `/rule-runs/{id}/replay`, `/rule-findings/{id}/acknowledge` | Ponawia martwą wiadomość; potwierdza ustalenie. |
 | `POST` | `/rule-findings/recheck` | Ponownie sprawdza jeden rekord względem każdej włączonej reguły jego schematu. Treść `{record_id, idempotency_key}`; zwraca `202 {run_ids}`. Przekaż `record_id` do `GET /rule-runs` lub `/rule-findings`, aby śledzić jeden rekord. |
+| `GET` | `/v1/records/{id}/rule-findings`, `/v1/records/{id}/rule-findings/count`, `/v1/records/{id}/rule-runs`, `/v1/records/{id}/rules` | Otwarte i potwierdzone ustalenia jednego rekordu (z `limit` i `offset`), ich `{count}`, wykonania, które go sprawdziły, oraz reguły jego schematu. Wymagają `records.read` dla rekordu, a nie `rules.read`. |
 | `POST` | `/workflows/validate` | Weryfikuje TOML przepływu pracy. |
 | `GET`, `POST` | `/workflows`, `/workflows/{id}/versions` | Wyświetla lub tworzy przepływy pracy i ich wersje. |
 | `POST` | `/workflows/{id}/versions/{version}/publish`, `/enable`; `/workflows/{id}/disable` | Cykl życia. |
