@@ -12,12 +12,7 @@ import { RouterButton } from '../../components/RouterLink';
 import { DryRunDialog } from './DryRunDialog';
 import { useRunRule } from './useRunRule';
 import { useCan } from '../auth/useCan';
-import {
-  countFindings,
-  listFindingsPage,
-  type FindingsSearch,
-  type RunsSearch,
-} from './api';
+import type { FindingsSearch, RunsSearch } from './api';
 import {
   RULE_SECTION_FINDINGS,
   RULE_SECTION_RULES,
@@ -28,8 +23,13 @@ import {
   type RuleInspectionSection,
 } from './constants';
 import { FindingsSection } from './FindingsSection';
-import { ruleQueryKeys } from './queryKeys';
-import { ruleDefinitionsOptions, ruleRunsOptions } from './queryOptions';
+import {
+  findingsCountOptions,
+  findingsPageOptions,
+  ruleDefinitionsOptions,
+  ruleRunsOptions,
+} from './queryOptions';
+import { useRefreshFindingsAfterRuns } from './runCompletion';
 import { rulesById } from './rulesById';
 import { useRecordLabels } from '../records/useRecordLabels';
 import { RulesSection } from './RulesSection';
@@ -77,10 +77,7 @@ export const RuleInspectionPage = ({
   const rulesByIdMap = rulesById(rules.data ?? []);
   const findingsShown = section === RULE_SECTION_FINDINGS;
   const findings = useInfiniteQuery({
-    queryKey: ruleQueryKeys.findingsPage(findingsSearch),
-    queryFn: ({ pageParam }) => listFindingsPage(findingsSearch, pageParam),
-    initialPageParam: 0,
-    getNextPageParam: (page) => page.nextOffset,
+    ...findingsPageOptions(findingsSearch),
     enabled: findingsShown,
   });
   const findingItems = findings.data?.pages.flatMap((page) => page.items);
@@ -98,6 +95,7 @@ export const RuleInspectionPage = ({
     ...ruleRunsOptions(runsSearch),
     enabled: section === RULE_SECTION_RUNS,
   });
+  useRefreshFindingsAfterRuns(runs.data, runs.isSuccess);
   // Name the records the visible findings and runs refer to.
   const recordLabels = useRecordLabels(
     findingsShown
@@ -111,15 +109,17 @@ export const RuleInspectionPage = ({
   const acknowledge = useAcknowledgeFinding();
   const acknowledgeMany = useAcknowledgeFindings();
   const findingsTotal = useQuery({
-    queryKey: ruleQueryKeys.findingsCount(findingsSearch),
-    queryFn: () => countFindings(findingsSearch),
+    ...findingsCountOptions(findingsSearch),
     enabled: findingsShown,
   });
   const openSearch = { ...findingsSearch, state: findingStates.open };
+  // Acknowledging every match is only offered while open findings are listed.
+  const listsOpen =
+    findingsSearch.state !== findingStates.acknowledged &&
+    findingsSearch.state !== findingStates.resolved;
   const openMatching = useQuery({
-    queryKey: ruleQueryKeys.findingsCount(openSearch),
-    queryFn: () => countFindings(openSearch),
-    enabled: findingsShown && canManage,
+    ...findingsCountOptions(openSearch),
+    enabled: findingsShown && canManage && listsOpen,
   });
   const { run, dryRun, closeDryRun } = useRunRule();
   const toggle = useToggleRule();
@@ -218,7 +218,7 @@ export const RuleInspectionPage = ({
             onLoadMore={() => void findings.fetchNextPage()}
             rulesById={rulesByIdMap}
             total={findingsTotal.data?.count}
-            openMatching={openMatching.data?.count}
+            openMatching={listsOpen ? openMatching.data?.count : undefined}
             bulk={{
               acknowledgeSelected: (ids) =>
                 acknowledgeMany.mutateAsync({ findingIds: ids }).then(

@@ -15,7 +15,8 @@ export const tagColorOf = (
 /**
  * A colored tag chip: its fill, its text, and a border in the text color so
  * the chip keeps its edge on a matching surface. A clickable chip darkens on
- * hover and focus; a removable chip's delete icon takes the text color.
+ * hover and focus, and a removable one on focus, in place of MUI's grey;
+ * a removable chip's delete icon takes the text color.
  */
 export const tagChipSx = (color: TagColor) => (theme: Theme) => {
   const { background, text } = theme.palette.tagColors[color];
@@ -26,9 +27,10 @@ export const tagChipSx = (color: TagColor) => (theme: Theme) => {
     color: text,
     '& .MuiChip-deleteIcon': { color: alpha(text, 0.7) },
     '& .MuiChip-deleteIcon:hover': { color: text },
-    '&.MuiChip-clickable:hover, &.MuiChip-clickable.Mui-focusVisible': {
-      backgroundColor: background,
-      backgroundImage: `linear-gradient(${shade}, ${shade})`,
-    },
+    '&.MuiChip-clickable:hover, &.MuiChip-clickable.Mui-focusVisible, &.MuiChip-deletable.Mui-focusVisible':
+      {
+        backgroundColor: background,
+        backgroundImage: `linear-gradient(${shade}, ${shade})`,
+      },
   };
 };

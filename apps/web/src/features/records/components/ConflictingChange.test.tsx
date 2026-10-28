@@ -3,7 +3,7 @@ import { cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import '../../../i18n';
 import type { Attribute } from '../api';
-import { ENUM_LABELS_SCHEMA_KEY } from '../choices';
+import { ENUM_LABELS_SCHEMA_KEY } from '../enumLabels';
 import { ConflictingChange } from './ConflictingChange';
 
 const size: Attribute = {

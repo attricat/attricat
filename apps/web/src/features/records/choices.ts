@@ -3,10 +3,7 @@ import { resolveValueEditor } from '../views/components/registry';
 import type { Attribute, ComponentReference } from './api';
 import { STATUS_SCHEMA_KEY } from './status';
 import { attributeValueTypes } from './valueTypes';
-
-import { enumValueLabel, ENUM_LABELS_SCHEMA_KEY } from './enumLabels';
-
-export { ENUM_LABELS_SCHEMA_KEY };
+import { enumValueLabel } from './enumLabels';
 
 export type ChoiceOption = { code: string; label: string };
 

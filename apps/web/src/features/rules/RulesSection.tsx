@@ -16,6 +16,7 @@ import { Link } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { EmptyState } from '../../components/EmptyState';
+import { LoadingState } from '../../components/LoadingState';
 import { RuleIcon } from '../../components/systemIcons';
 import { Timestamp } from '../../time/Timestamp';
 import { FlaskConicalIcon, PlayIcon } from 'lucide-react';
@@ -70,7 +71,11 @@ export const RulesSection = ({
         </Box>
       )}
       <Paper component="section" sx={{ mt: 3 }}>
-        {rules?.length === 0 ? (
+        {rules === undefined ? (
+          !error && (
+            <LoadingState sx={{ p: 2 }}>{t('rules.loading')}</LoadingState>
+          )
+        ) : rules.length === 0 ? (
           <EmptyState
             description={t('rules.emptyDescription')}
             icon={RuleIcon}
@@ -186,14 +191,16 @@ export const RulesSection = ({
                             >
                               {t('rules.dryRun')}
                             </Button>
-                            <Button
-                              disabled={running}
-                              size="small"
-                              onClick={() => onRun(rule, false)}
-                              startIcon={<PlayIcon />}
-                            >
-                              {t('rules.runNow')}
-                            </Button>
+                            {rule.enabled && (
+                              <Button
+                                disabled={running}
+                                size="small"
+                                onClick={() => onRun(rule, false)}
+                                startIcon={<PlayIcon />}
+                              >
+                                {t('rules.runNow')}
+                              </Button>
+                            )}
                           </>
                         )}
                       </TableCell>

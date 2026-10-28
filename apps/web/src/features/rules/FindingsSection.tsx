@@ -14,9 +14,10 @@ import {
   useMediaQuery,
   useTheme,
 } from '@mui/material';
-import { CheckCheckIcon } from 'lucide-react';
+import { CheckCheckIcon, CheckIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { LoadingState } from '../../components/LoadingState';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
@@ -162,6 +163,7 @@ export const FindingsSection = ({
         disabled={acknowledging}
         size="small"
         onClick={() => onAcknowledge(finding.id)}
+        startIcon={<CheckIcon />}
       >
         {t('rules.acknowledge')}
       </Button>
@@ -277,6 +279,11 @@ export const FindingsSection = ({
         </Stack>
         {!confirmAll && (
           <ApiErrorAlert error={bulk.error} sx={{ mx: 2, mb: 1 }} />
+        )}
+        {findings === undefined && !error && (
+          <LoadingState sx={{ px: 2, pb: 2 }}>
+            {t('rules.loadingFindings')}
+          </LoadingState>
         )}
         {narrow ? (
           <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>

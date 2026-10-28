@@ -50,6 +50,7 @@ import {
   type RulePageSection,
 } from './constants';
 import { recentRuleRunsOptions, ruleOptions } from './queryOptions';
+import { useRefreshFindingsAfterRuns } from './runCompletion';
 import { RuleChangelog } from './RuleChangelog';
 import {
   RuleDescriptionText,
@@ -82,6 +83,7 @@ const ignoreChange = () => undefined;
 const RecentRuns = ({ rule }: { rule: RuleDetails }) => {
   const { t } = useTranslation();
   const runs = useQuery(recentRuleRunsOptions(rule.id));
+  useRefreshFindingsAfterRuns(runs.data, runs.isSuccess);
   const recordLabels = useRecordLabels(
     (runs.data ?? []).flatMap((run) =>
       run.scope_record_id ? [run.scope_record_id] : [],
@@ -136,7 +138,7 @@ const RuleDefinition = ({ rule }: { rule: RuleDetails }) => {
           </Link>{' '}
           ·{' '}
           {rule.context_id === null
-            ? t('rules.recordFindings.allContexts')
+            ? t('rules.allContexts')
             : context
               ? contextLabel(t, context.code)
               : t('rules.unknownContext')}
@@ -216,6 +218,11 @@ export const RulePage = ({
   const rule = useQuery(ruleOptions(ruleId));
   const toggle = useToggleRule();
   const { run, dryRun, closeDryRun } = useRunRule();
+  // Each action clears the other's error, as on the rules list.
+  const startRun = (rule: RuleDetails, asDryRun: boolean) => {
+    toggle.reset();
+    run.mutate({ rule, dryRun: asDryRun });
+  };
   const tabId = useTabAccessibility();
   useResourcePageTitle(rule.data?.name, t('navigation.rules'));
 
@@ -263,7 +270,7 @@ export const RulePage = ({
             <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
               <Button
                 disabled={run.isPending}
-                onClick={() => run.mutate({ rule: current, dryRun: true })}
+                onClick={() => startRun(current, true)}
                 startIcon={<FlaskConicalIcon />}
                 variant="outlined"
               >
@@ -272,7 +279,7 @@ export const RulePage = ({
               {current.enabled && (
                 <Button
                   disabled={run.isPending}
-                  onClick={() => run.mutate({ rule: current, dryRun: false })}
+                  onClick={() => startRun(current, false)}
                   startIcon={<PlayIcon />}
                   variant="outlined"
                 >
@@ -289,9 +296,10 @@ export const RulePage = ({
               </RouterButton>
               <Button
                 disabled={toggle.isPending}
-                onClick={() =>
-                  toggle.mutate({ rule: current, enabled: !current.enabled })
-                }
+                onClick={() => {
+                  run.reset();
+                  toggle.mutate({ rule: current, enabled: !current.enabled });
+                }}
                 startIcon={current.enabled ? <PowerOffIcon /> : <PowerIcon />}
                 variant="outlined"
               >

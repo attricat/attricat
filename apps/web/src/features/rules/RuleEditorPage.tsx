@@ -1,11 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { Alert, Box, Button, Paper, Stack, Typography } from '@mui/material';
+import { Alert, Box, Button, Paper, Typography } from '@mui/material';
 import { lazy, Suspense, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ApiRequestError } from '../../api/request';
 import { errorMessage } from '../../api/errors';
-import { revisionStatuses } from '../../api/revisionStatus';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { LoadingState } from '../../components/LoadingState';
 import { PageContainer } from '../../components/PageContainer';
@@ -39,6 +38,7 @@ import {
 } from './constants';
 import { ruleQueryKeys } from './queryKeys';
 import { ruleOptions } from './queryOptions';
+import { latestPublishedVersion } from './useFindingMessages';
 import { RuleChangeDryRun } from './RuleChangeDryRun';
 import { RulePreview } from './RulePreview';
 import { RuleScopeFields, type RuleScope } from './RuleScopeFields';
@@ -85,11 +85,9 @@ export const RuleEditorPage = ({ ruleId }: { ruleId?: string }) => {
     ? { blueprintId: source.blueprint_id, contextId: source.context_id }
     : chosenScope;
   const revisions = useQuery(blueprintRevisionListOptions(scope.blueprintId));
-  const latestPublished = revisions.data?.find(
-    (revision) => revision.status === revisionStatuses.published,
-  );
+  const publishedVersion = latestPublishedVersion(revisions.data);
   const blueprint = useQuery(
-    blueprintRevisionOptions(scope.blueprintId, latestPublished?.version),
+    blueprintRevisionOptions(scope.blueprintId, publishedVersion),
   );
   const scopeAttributes = useMemo(
     () =>
@@ -119,7 +117,8 @@ export const RuleEditorPage = ({ ruleId }: { ruleId?: string }) => {
   });
   const { definition, isDirty } = editor;
   const { blueprintId, contextId } = scope;
-  const scopeReady = blueprintId !== undefined && latestPublished !== undefined;
+  const scopeReady =
+    blueprintId !== undefined && publishedVersion !== undefined;
   const ruleInput = (value: string): CreateRule | undefined =>
     blueprintId
       ? { blueprint_id: blueprintId, context_id: contextId, definition: value }
@@ -162,7 +161,7 @@ export const RuleEditorPage = ({ ruleId }: { ruleId?: string }) => {
     enabled: scopeReady,
     kind: definitionKinds.rule,
     resourceId: ruleId,
-    scope: `${blueprintId}:${latestPublished?.version}:${contextId}`,
+    scope: `${blueprintId}:${publishedVersion}:${contextId}`,
     validate: (value, _, signal) => validateRule(ruleInput(value)!, signal),
   });
 
@@ -184,7 +183,9 @@ export const RuleEditorPage = ({ ruleId }: { ruleId?: string }) => {
 
   const context = contexts.data?.find(({ id }) => id === contextId);
   const noPublishedRevision =
-    blueprintId !== undefined && revisions.isSuccess && !latestPublished;
+    blueprintId !== undefined &&
+    revisions.isSuccess &&
+    publishedVersion === undefined;
   return (
     <PageContainer>
       <PageHeader
@@ -231,7 +232,7 @@ export const RuleEditorPage = ({ ruleId }: { ruleId?: string }) => {
               : loadingName,
             context:
               contextId === null
-                ? t('rules.recordFindings.allContexts')
+                ? t('rules.allContexts')
                 : context
                   ? contextLabel(t, context.code)
                   : loadingName,
@@ -309,29 +310,22 @@ export const RuleEditorPage = ({ ruleId }: { ruleId?: string }) => {
       )}
       {source && isDirty && (
         <Paper component="section" sx={{ mt: 3, p: 2.5 }}>
-          <Stack
-            direction={{ xs: 'column', sm: 'row' }}
-            spacing={2}
-            sx={{
-              alignItems: { sm: 'center' },
-              justifyContent: 'space-between',
-            }}
-          >
-            <Box>
-              <Typography component="h2" variant="h6">
-                {t('rules.editor.changesTitle')}
-              </Typography>
-              <Typography color="text.secondary" variant="body2">
-                {t('rules.editor.changesDescription')}
-              </Typography>
-            </Box>
-            <RuleChangeDryRun
-              definition={definition}
-              disabled={save.isPending || check.result === undefined}
-              blueprintId={source.blueprint_id}
-              ruleId={source.id}
-            />
-          </Stack>
+          <RuleChangeDryRun
+            definition={definition}
+            disabled={save.isPending || check.result === undefined}
+            blueprintId={source.blueprint_id}
+            heading={
+              <Box>
+                <Typography component="h2" variant="h6">
+                  {t('rules.editor.changesTitle')}
+                </Typography>
+                <Typography color="text.secondary" variant="body2">
+                  {t('rules.editor.changesDescription')}
+                </Typography>
+              </Box>
+            }
+            ruleId={source.id}
+          />
           <Box sx={{ mt: 2 }}>
             <Suspense
               fallback={

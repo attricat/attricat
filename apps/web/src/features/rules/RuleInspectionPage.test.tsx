@@ -9,6 +9,7 @@ import { ApiRequestError } from '../../api/request';
 import { currentSession } from '../auth/api';
 import {
   getBlueprintRevision,
+  listBlueprintRevisions,
   listBlueprints,
   type Blueprint,
   type BlueprintWithAttributes,
@@ -30,6 +31,8 @@ import {
   type RuleDetails,
   type RuleRun,
 } from './api';
+import { revisionStatuses } from '../../api/revisionStatus';
+import { findingStates } from './constants';
 import { RuleInspectionPage } from './RuleInspectionPage';
 
 const navigate = vi.fn();
@@ -63,6 +66,7 @@ vi.mock('../records/api', () => ({
 }));
 vi.mock('../blueprints/api', () => ({
   getBlueprintRevision: vi.fn(),
+  listBlueprintRevisions: vi.fn(() => Promise.resolve([])),
   listBlueprints: vi.fn(() => Promise.resolve([])),
 }));
 vi.mock('../contexts/api', () => ({
@@ -211,10 +215,12 @@ describe('RuleInspectionPage', () => {
     vi.mocked(getBlueprintRevision).mockResolvedValue({
       attributes: [{ code: 'title', name: 'Listing title' }],
     } as unknown as BlueprintWithAttributes);
-    // Labels come from the latest revision of the rule's blueprint.
-    vi.mocked(listBlueprints).mockResolvedValue([
-      { id, kind: 'record', name: 'Product', version: 3 } as Blueprint,
-    ]);
+    // Labels come from the latest published revision of the rule's
+    // blueprint, which rules check, not from a newer draft.
+    vi.mocked(listBlueprintRevisions).mockResolvedValue([
+      { id, version: 4, status: revisionStatuses.draft },
+      { id, version: 3, status: revisionStatuses.published },
+    ] as Blueprint[]);
     renderPage('findings');
     expect(await screen.findByText('Listing title is required')).toBeTruthy();
     expect(vi.mocked(getBlueprintRevision).mock.calls[0]?.slice(0, 2)).toEqual([
@@ -225,15 +231,23 @@ describe('RuleInspectionPage', () => {
 
   it('shows why a rule run was refused', async () => {
     vi.mocked(currentSession).mockResolvedValue(manager);
-    vi.mocked(listRules).mockResolvedValue([rule]);
-    vi.mocked(runRuleNow).mockRejectedValue(new Error('rule is not enabled'));
+    vi.mocked(listRules).mockResolvedValue([{ ...rule, enabled: true }]);
+    vi.mocked(runRuleNow).mockRejectedValue(new Error('rule run refused'));
     renderPage('rules');
     await userEvent
       .setup()
       .click(await screen.findByRole('button', { name: 'Run now' }));
     expect((await screen.findByRole('alert')).textContent).toBe(
-      'rule is not enabled',
+      'rule run refused',
     );
+  });
+
+  it('offers only a dry run of a disabled rule', async () => {
+    vi.mocked(currentSession).mockResolvedValue(manager);
+    vi.mocked(listRules).mockResolvedValue([rule]);
+    renderPage('rules');
+    expect(await screen.findByRole('button', { name: 'Dry run' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Run now' })).toBeNull();
   });
 
   it('shows why an acknowledgement was refused', async () => {
@@ -393,6 +407,18 @@ describe('RuleInspectionPage', () => {
     );
   });
 
+  it('offers to acknowledge all open findings only while they are listed', async () => {
+    vi.mocked(currentSession).mockResolvedValue(manager);
+    vi.mocked(listFindingsPage).mockResolvedValue({ items: [] });
+    vi.mocked(countFindings).mockResolvedValue({ count: 7 });
+    renderPage('findings', { state: findingStates.resolved });
+    expect(await screen.findByText('7 findings')).toBeTruthy();
+    expect(
+      screen.queryByRole('button', { name: 'Acknowledge all 7 open' }),
+    ).toBeNull();
+    expect(vi.mocked(countFindings)).toHaveBeenCalledTimes(1);
+  });
+
   it('names the rule revision and scope of each run', async () => {
     vi.mocked(currentSession).mockResolvedValue(manager);
     vi.mocked(listRuleRuns).mockResolvedValue([
@@ -412,6 +438,7 @@ describe('RuleInspectionPage', () => {
         findings_resolved: 0,
         attempts: 1,
         last_error: null,
+        truncated: false,
         completed_at: null,
         created_at: '',
       },
@@ -431,6 +458,7 @@ describe('RuleInspectionPage', () => {
         findings_resolved: 0,
         attempts: 1,
         last_error: null,
+        truncated: false,
         completed_at: null,
         created_at: '',
       },
@@ -498,6 +526,7 @@ describe('RuleInspectionPage', () => {
       findings_resolved: 0,
       attempts: 1,
       last_error: null,
+      truncated: false,
       completed_at: '2026-10-24T12:00:00Z',
       created_at: '2026-10-24T11:59:00Z',
     };

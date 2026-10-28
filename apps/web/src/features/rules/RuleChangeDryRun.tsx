@@ -1,28 +1,32 @@
-import { Button, CircularProgress } from '@mui/material';
+import { Button, CircularProgress, Stack } from '@mui/material';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { FlaskConicalIcon } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { activeRunStatuses } from '../../api/runStatus';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { progressSizes } from '../../components/iconSizes';
 import { runRuleNow } from './api';
 import { DryRunResult } from './DryRunResult';
 import { ruleRunOptions } from './queryOptions';
+import { isActiveRun } from './runCompletion';
 
 /**
  * Dry-runs an unsaved definition of a rule and reports which records it
- * would flag, so an enforcing change can be checked before it is saved.
+ * would flag, so an enforcing change can be checked before it is saved. The
+ * dry-run button sits beside `heading`, and the result below them.
  */
 export const RuleChangeDryRun = ({
   blueprintId,
   definition,
   disabled,
+  heading,
   ruleId,
 }: {
   /** The rule's blueprint, to name the attributes its findings mention. */
   blueprintId: string;
   definition: string;
   disabled: boolean;
+  heading: ReactNode;
   ruleId: string;
 }) => {
   const { t } = useTranslation();
@@ -40,23 +44,34 @@ export const RuleChangeDryRun = ({
   const running =
     start.isPending ||
     (runId !== undefined &&
-      (!run.data || activeRunStatuses.includes(run.data.status)));
+      !run.isError &&
+      (!run.data || isActiveRun(run.data)));
   return (
     <>
-      <Button
-        disabled={disabled || running}
-        onClick={() => start.mutate(definition)}
-        startIcon={
-          running ? (
-            <CircularProgress size={progressSizes.compact} />
-          ) : (
-            <FlaskConicalIcon />
-          )
-        }
-        variant="outlined"
+      <Stack
+        direction={{ xs: 'column', sm: 'row' }}
+        spacing={2}
+        sx={{
+          alignItems: { sm: 'center' },
+          justifyContent: 'space-between',
+        }}
       >
-        {t('rules.editor.dryRunChange')}
-      </Button>
+        {heading}
+        <Button
+          disabled={disabled || running}
+          onClick={() => start.mutate(definition)}
+          startIcon={
+            running ? (
+              <CircularProgress size={progressSizes.compact} />
+            ) : (
+              <FlaskConicalIcon />
+            )
+          }
+          variant="outlined"
+        >
+          {t('rules.editor.dryRunChange')}
+        </Button>
+      </Stack>
       <ApiErrorAlert error={start.error} sx={{ mt: 2 }} />
       {runId && (
         <DryRunResult

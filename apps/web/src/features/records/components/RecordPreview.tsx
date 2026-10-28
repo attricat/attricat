@@ -186,7 +186,10 @@ export const RecordPreview = ({
   }, [showComments]);
   // A finding about other contexts opens the first of them, then its field
   // once the record's values there have loaded.
-  const [pendingReveal, setPendingReveal] = useState<string>();
+  const [pendingReveal, setPendingReveal] = useState<{
+    code: string;
+    contextId: string;
+  }>();
   const revealFindingField = (
     code: string,
     contextCodes: readonly string[],
@@ -200,12 +203,23 @@ export const RecordPreview = ({
       return;
     }
     setSelectedContext(target.id);
-    setPendingReveal(code);
+    setPendingReveal({ code, contextId: target.id });
   };
-  const shownContextLoaded = resolved.isSuccess && !resolved.isFetching;
-  if (pendingReveal !== undefined && shownContextLoaded) {
+  // The reveal is dropped when another context is chosen first or its values
+  // cannot be loaded.
+  if (
+    pendingReveal !== undefined &&
+    (pendingReveal.contextId !== contextId ||
+      (resolved.isError && !resolved.isFetching))
+  )
     setPendingReveal(undefined);
-    revealField(pendingReveal);
+  else if (
+    pendingReveal !== undefined &&
+    resolved.isSuccess &&
+    !resolved.isFetching
+  ) {
+    setPendingReveal(undefined);
+    revealField(pendingReveal.code);
   }
   const resolvedRecord = resolved.data?.record;
   const systemTags = recordForm.data?.record.system_tags ?? [];

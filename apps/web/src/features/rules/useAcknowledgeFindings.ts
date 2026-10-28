@@ -7,8 +7,8 @@ import { ruleQueryKeys } from './queryKeys';
 
 /**
  * Acknowledges many findings at once, then refreshes every list and count of
- * findings and marks record searches stale, since the server updates the
- * records' needs-attention tags with them.
+ * findings, the rules' counts and the record views, and marks record searches
+ * stale, since the server updates the records' needs-attention tags with them.
  */
 export const useAcknowledgeFindings = () => {
   const { t } = useTranslation();
@@ -21,6 +21,13 @@ export const useAcknowledgeFindings = () => {
       return Promise.all([
         client.invalidateQueries({ queryKey: ruleQueryKeys.findings() }),
         client.invalidateQueries({ queryKey: ruleQueryKeys.definitions() }),
+        // The acknowledged findings' records are not returned, so every
+        // record view refreshes its needs-attention tag and data quality.
+        ...[
+          recordQueryKeys.forms(),
+          recordQueryKeys.previews(),
+          recordQueryKeys.allResolvedPreviews(),
+        ].map((queryKey) => client.invalidateQueries({ queryKey })),
         client.invalidateQueries({
           queryKey: recordQueryKeys.searches(),
           refetchType: 'none',

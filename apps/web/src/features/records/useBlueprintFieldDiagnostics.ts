@@ -40,10 +40,15 @@ export const useBlueprintFieldDiagnostics = ({
     ...recordDiagnosticFindingsOptions(record?.id ?? ''),
     enabled: record !== undefined,
   });
-  const rules = useQuery({
-    ...(record ? recordRulesOptions(record.id) : ruleDefinitionsOptions()),
-    enabled: revision !== undefined && (record !== undefined || canReadRules),
+  const recordRules = useQuery({
+    ...recordRulesOptions(record?.id ?? ''),
+    enabled: revision !== undefined && record !== undefined,
   });
+  const workspaceRules = useQuery({
+    ...ruleDefinitionsOptions(),
+    enabled: revision !== undefined && record === undefined && canReadRules,
+  });
+  const rules = record ? recordRules : workspaceRules;
   const revisionId = revision?.id;
   const revisionVersion = revision?.version;
   const connections = useMemo(

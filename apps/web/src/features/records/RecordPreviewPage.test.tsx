@@ -451,11 +451,6 @@ describe('RecordPreviewPage', () => {
     vi.mocked(currentSession).mockResolvedValue({
       capabilities: { rules_read: true },
     } as never);
-    vi.mocked(rules.listRecordRules).mockResolvedValue([]);
-    vi.mocked(rules.listRecordRuleRuns).mockResolvedValue([]);
-    vi.mocked(rules.listUnresolvedRecordFindings).mockResolvedValue({
-      items: [],
-    });
     vi.mocked(rules.getUnresolvedRecordFindingCount).mockResolvedValue({
       count: 2,
     });

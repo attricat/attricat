@@ -1,6 +1,7 @@
 import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query';
 import { readAheadStaleTimeMs } from '../records/queryOptions';
 import {
+  countFindings,
   getRule,
   getRuleRun,
   getUnresolvedRecordFindingCount,
@@ -9,19 +10,23 @@ import {
   listRuleRevisions,
   listRecentRuleRuns,
   listRuleRuns,
+  listFindingsPage,
   listRules,
   listUnresolvedRecordFindings,
 } from './api';
 import { ruleQueryKeys } from './queryKeys';
-import type { RunsSearch } from './schemas';
-import { activeRunStatuses } from '../../api/runStatus';
-import { RULE_DRY_RUN_POLL_MS } from './constants';
+import type { FindingsSearch, RunsSearch } from './schemas';
+import { isActiveRun } from './runCompletion';
+import { RULE_RUN_POLL_MS } from './constants';
 
-/** The workspace's rule runs that match `search`, newest first. */
+/** The workspace's rule runs that match `search`, newest first, refreshed
+ * while one has not finished. */
 export const ruleRunsOptions = (search: RunsSearch = {}) =>
   queryOptions({
     queryKey: ruleQueryKeys.runsPage(search),
     queryFn: () => listRuleRuns(search),
+    refetchInterval: (query) =>
+      query.state.data?.some(isActiveRun) ? RULE_RUN_POLL_MS : false,
   });
 
 /** A rule's most recent runs, refreshed while one has not finished. */
@@ -30,19 +35,18 @@ export const recentRuleRunsOptions = (ruleId: string) =>
     queryKey: ruleQueryKeys.ruleRuns(ruleId),
     queryFn: () => listRecentRuleRuns(ruleId),
     refetchInterval: (query) =>
-      query.state.data?.some((run) => activeRunStatuses.includes(run.status))
-        ? RULE_DRY_RUN_POLL_MS
-        : false,
+      query.state.data?.some(isActiveRun) ? RULE_RUN_POLL_MS : false,
   });
 
-/** One run, polled until it finishes. */
+/** One run, polled until it finishes or can no longer be read. */
 export const ruleRunOptions = (runId: string) =>
   queryOptions({
     queryKey: ruleQueryKeys.run(runId),
     queryFn: () => getRuleRun(runId),
     refetchInterval: (query) =>
-      !query.state.data || activeRunStatuses.includes(query.state.data.status)
-        ? RULE_DRY_RUN_POLL_MS
+      query.state.status !== 'error' &&
+      (!query.state.data || isActiveRun(query.state.data))
+        ? RULE_RUN_POLL_MS
         : false,
   });
 
@@ -64,6 +68,22 @@ export const ruleOptions = (ruleId: string) =>
   queryOptions({
     queryKey: ruleQueryKeys.rule(ruleId),
     queryFn: () => getRule(ruleId),
+  });
+
+/** The findings page's findings that match `search`, page by page. */
+export const findingsPageOptions = (search: FindingsSearch) =>
+  infiniteQueryOptions({
+    queryKey: ruleQueryKeys.findingsPage(search),
+    queryFn: ({ pageParam }) => listFindingsPage(search, pageParam),
+    initialPageParam: 0,
+    getNextPageParam: (page) => page.nextOffset,
+  });
+
+/** How many findings match `search`; refreshed with every finding list. */
+export const findingsCountOptions = (search: FindingsSearch) =>
+  queryOptions({
+    queryKey: ruleQueryKeys.findingsCount(search),
+    queryFn: () => countFindings(search),
   });
 
 /** A rule's saved revisions, newest first. */

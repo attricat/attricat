@@ -16,7 +16,7 @@ import {
   type RuleDetails,
   type RuleRun,
 } from './api';
-import { RECORD_RULE_RUN_POLL_MS } from './constants';
+import { RULE_RUN_POLL_MS } from './constants';
 import { RevealFieldContext } from '../views/fieldReveal';
 import { RecordFindingsPanel } from './RecordFindingsPanel';
 import { watchRecordRuleChecks } from './recordRuleChecks';
@@ -95,6 +95,7 @@ const run = (
   findings_resolved: 0,
   attempts: 0,
   last_error: null,
+  truncated: false,
   completed_at: completedAt,
   created_at: '2026-10-20T10:00:00Z',
 });
@@ -304,7 +305,7 @@ describe('RecordFindingsPanel', () => {
         expect(
           screen.getByText(/No open findings\. Last checked/),
         ).toBeTruthy(),
-      { timeout: 3 * RECORD_RULE_RUN_POLL_MS },
+      { timeout: 3 * RULE_RUN_POLL_MS },
     );
     expect(screen.queryByText('title is required')).toBeNull();
     expect(invalidated()).toEqual([true, true, true, true, true]);
@@ -379,7 +380,7 @@ describe('RecordFindingsPanel', () => {
       const { unmount } = renderPanel();
       await waitFor(() => expect(listRecordRuleRuns).toHaveBeenCalled());
       await new Promise((resolve) =>
-        setTimeout(resolve, 2.5 * RECORD_RULE_RUN_POLL_MS),
+        setTimeout(resolve, 2.5 * RULE_RUN_POLL_MS),
       );
       unmount();
       return vi.mocked(listRecordRuleRuns).mock.calls.length;

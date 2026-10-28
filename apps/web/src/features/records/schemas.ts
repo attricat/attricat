@@ -215,7 +215,6 @@ const recordItemSchema = z.object({
       }),
     )
     .default([]),
-  /** Unresolved rule findings; only for viewers who may read rules. */
 });
 const recordContextSchema = z.record(z.string(), jsonObjectSchema);
 export const recordPreviewResponseSchema = z.object({
