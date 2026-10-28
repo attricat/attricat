@@ -114,6 +114,8 @@ export const RuleEditorPage = ({ ruleId }: { ruleId?: string }) => {
     ready: creating || Boolean(source),
     source: source?.definition,
     templates: ruleTemplates,
+    // Examples name attributes, which only make sense for a blueprint.
+    templatesReady: scope.blueprintId !== undefined,
   });
   const { definition, isDirty } = editor;
   const { blueprintId, contextId } = scope;

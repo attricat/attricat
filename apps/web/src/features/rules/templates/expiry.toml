@@ -1,0 +1,19 @@
+format_version = 1
+code = "valid-for-30-days"
+name = "Certificates are valid for at least 30 more days"
+description = "Renew a certificate before it lapses, so the record stays usable."
+severity = "warning"
+
+# A record that nobody edits can still expire overnight, so check daily.
+# Every day at 05:00 UTC: sec min hour day month weekday.
+[[triggers]]
+type = "schedule"
+cron = "0 0 5 * * *"
+timezone = "UTC"
+
+[predicate]
+type = "all_of"
+predicates = [
+  { type = "required", attribute_code = "valid_until" },
+  { type = "relative_date", attribute_code = "valid_until", op = "gt", offset_days = 30 },
+]

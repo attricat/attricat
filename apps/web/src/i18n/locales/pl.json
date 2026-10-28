@@ -2154,7 +2154,11 @@
       "stale": "Data przeglądu",
       "staleDescription": "Co tydzień zgłasza rekordy nieprzeglądane od 90 dni.",
       "unique": "Unikalna wartość",
-      "uniqueDescription": "Zgłasza rekordy, które mają tę samą wartość co inny rekord."
+      "uniqueDescription": "Zgłasza rekordy, które mają tę samą wartość co inny rekord.",
+      "expiry": "Data ważności",
+      "expiryDescription": "Zgłaszaj rekordy, których ważność kończy się w ciągu 30 dni, sprawdzane codziennie.",
+      "linked": "Powiązane rekordy",
+      "linkedDescription": "Zgłaszaj rekordy powiązane z rekordem, który nie spełnia warunku, na przykład z nieaktywnym dostawcą."
     },
     "preview": {
       "checks": "Sprawdza",

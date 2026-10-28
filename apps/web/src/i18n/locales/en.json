@@ -2070,7 +2070,11 @@
       "stale": "Review date",
       "staleDescription": "Report records not reviewed for 90 days, checked every week.",
       "unique": "Unique value",
-      "uniqueDescription": "Report records that share a value with another record."
+      "uniqueDescription": "Report records that share a value with another record.",
+      "expiry": "Expiry date",
+      "expiryDescription": "Report records that expire within 30 days, checked every day.",
+      "linked": "Linked records",
+      "linkedDescription": "Report records linked to a record that fails a check, such as an inactive supplier."
     },
     "preview": {
       "checks": "Checks",

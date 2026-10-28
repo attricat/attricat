@@ -24,7 +24,13 @@ export const useDefinitionEditor = ({
   ready,
   source,
   templates,
+  templatesReady = true,
 }: {
+  /**
+   * Whether choosing a template makes sense yet, such as once the blueprint
+   * it would check is chosen; the dialog opens then.
+   */
+  templatesReady?: boolean;
   draftEditor: DraftEditor;
   /** The revised resource; empty when writing a new definition. */
   draftResource: readonly (string | number)[];
@@ -90,7 +96,7 @@ export const useDefinitionEditor = ({
                 });
               else applyTemplate(index);
             }}
-            open={templateDialogOpen && !draft.pending}
+            open={templateDialogOpen && templatesReady && !draft.pending}
             selectedIndex={templateIndex}
             templates={templates}
           />

@@ -170,11 +170,13 @@ describe('RuleEditorPage', () => {
   it('checks and saves a new rule against the latest published blueprint revision', async () => {
     vi.mocked(createRule).mockResolvedValue(rule);
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Dismiss' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    // Examples wait for a blueprint, whose attributes they would name.
     expect(
-      screen.getByRole('button', { name: 'Save' }).hasAttribute('disabled'),
+      (await screen.findByRole('button', { name: 'Save' })).hasAttribute(
+        'disabled',
+      ),
     ).toBe(true);
+    expect(screen.queryByRole('dialog')).toBeNull();
     expect(validateRule).not.toHaveBeenCalled();
     // A rule fits blueprint revisions; there is no revision to choose.
     expect(
@@ -187,6 +189,8 @@ describe('RuleEditorPage', () => {
         name: 'Product',
       }),
     );
+    fireEvent.click(await screen.findByRole('button', { name: 'Dismiss' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(
       await screen.findByText('Ready to save', {}, { timeout: 2000 }),
     ).toBeTruthy();
