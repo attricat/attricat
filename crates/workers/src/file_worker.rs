@@ -127,8 +127,9 @@ impl FileWorker {
 
     /// Atomically claims one due or abandoned job. SKIP LOCKED allows multiple
     /// worker processes to poll without serialising each other. Text
-    /// extraction waits for other due jobs, so it never delays a new upload
-    /// becoming ready.
+    /// extraction is claimed after other due jobs, so a queue of extractions
+    /// does not hold back new uploads; one already running still occupies
+    /// its worker.
     pub async fn claim(&self) -> Result<Option<ClaimedJob>, sqlx::Error> {
         let job = sqlx::query_as::<_, (Uuid, Uuid, Uuid, String, i32, Uuid)>(
             r#"WITH candidate AS (
@@ -393,8 +394,8 @@ impl FileWorker {
             Err(failure) => Err(*failure),
         };
         let mut transaction = self.pool.begin().await?;
-        let still_owned: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM file_processing_jobs WHERE id = $1 AND status = 'running' AND lease_token = $2 FOR UPDATE)")
-            .bind(job.id).bind(job.lease_token).fetch_one(&mut *transaction).await?;
+        let still_owned: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM file_processing_jobs WHERE id = $1 AND status = $3 AND lease_token = $2 FOR UPDATE)")
+            .bind(job.id).bind(job.lease_token).bind(FileJobStatus::Running.as_str()).fetch_one(&mut *transaction).await?;
         if !still_owned {
             return Err(WorkerError::LeaseLost);
         }

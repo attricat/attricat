@@ -302,11 +302,11 @@ impl AttricatRepository {
         .bind(conversation.map(|conversation| conversation.1))
         .execute(&mut **transaction)
         .await?;
-        sqlx::query("INSERT INTO file_processing_jobs (id, workspace_id, file_id, kind, status) VALUES ($1,$2,$3,$4,'queued')")
-            .bind(Uuid::new_v4()).bind(workspace_id).bind(id).bind(FileJobKind::Metadata.as_str()).execute(&mut **transaction).await?;
+        sqlx::query("INSERT INTO file_processing_jobs (id, workspace_id, file_id, kind, status) VALUES ($1,$2,$3,$4,$5)")
+            .bind(Uuid::new_v4()).bind(workspace_id).bind(id).bind(FileJobKind::Metadata.as_str()).bind(FileJobStatus::Queued.as_str()).execute(&mut **transaction).await?;
         if is_text_extraction_mime(&file.mime_type) {
-            sqlx::query("INSERT INTO file_processing_jobs (id, workspace_id, file_id, kind, status) VALUES ($1,$2,$3,$4,'queued')")
-                .bind(Uuid::new_v4()).bind(workspace_id).bind(id).bind(FileJobKind::TextExtraction.as_str()).execute(&mut **transaction).await?;
+            sqlx::query("INSERT INTO file_processing_jobs (id, workspace_id, file_id, kind, status) VALUES ($1,$2,$3,$4,$5)")
+                .bind(Uuid::new_v4()).bind(workspace_id).bind(id).bind(FileJobKind::TextExtraction.as_str()).bind(FileJobStatus::Queued.as_str()).execute(&mut **transaction).await?;
         }
         Ok(UploadedFile {
             id,

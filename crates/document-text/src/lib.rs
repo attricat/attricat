@@ -36,7 +36,8 @@ pub struct Limits {
     pub max_sheet_columns: usize,
     /// Pages read from a PDF.
     pub max_pdf_pages: usize,
-    /// Decompressed content-stream bytes of one PDF page.
+    /// Decompressed content-stream bytes of one PDF page, and decompressed
+    /// bytes of any one object or cross-reference stream read while loading.
     pub max_pdf_page_stream_bytes: usize,
 }
 

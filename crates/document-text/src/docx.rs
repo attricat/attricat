@@ -12,8 +12,14 @@ use quick_xml::{
 
 use crate::{ExtractError, Limits, Output, SectionKind, archive::Archive};
 
+/// Where the main document and its styles usually are; the package
+/// relationships name the actual parts.
 const DOCUMENT_PART: &str = "word/document.xml";
-const STYLES_PART: &str = "word/styles.xml";
+const STYLES_PART: &str = "styles.xml";
+const PACKAGE_RELATIONSHIPS_PART: &str = "_rels/.rels";
+/// Relationship type suffixes, shared by the transitional and strict schemas.
+const OFFICE_DOCUMENT_RELATIONSHIP: &str = "/officeDocument";
+const STYLES_RELATIONSHIP: &str = "/styles";
 /// Section label of the single section a Word document produces.
 pub(crate) const BODY_LABEL: &str = "body";
 /// Deepest Markdown heading level.
@@ -25,10 +31,29 @@ pub(crate) fn extract(
     output: &mut Output,
 ) -> Result<(), ExtractError> {
     let mut archive = Archive::open(bytes, limits)?;
+    let document_part = relationship_target(
+        &mut archive,
+        PACKAGE_RELATIONSHIPS_PART,
+        "",
+        OFFICE_DOCUMENT_RELATIONSHIP,
+    )?
+    .unwrap_or_else(|| DOCUMENT_PART.to_owned());
     let document = archive
-        .read(DOCUMENT_PART)?
+        .read(&document_part)?
         .ok_or(ExtractError::Malformed)?;
-    let headings = match archive.read(STYLES_PART)? {
+    let (directory, file_name) = document_part
+        .rsplit_once('/')
+        .map_or(("", document_part.as_str()), |(directory, name)| {
+            (directory, name)
+        });
+    let styles_part = relationship_target(
+        &mut archive,
+        &join_part(directory, &format!("_rels/{file_name}.rels")),
+        directory,
+        STYLES_RELATIONSHIP,
+    )?
+    .unwrap_or_else(|| join_part(directory, STYLES_PART));
+    let headings = match archive.read(&styles_part)? {
         Some(styles) => heading_styles(&styles)?,
         None => HashMap::new(),
     };
@@ -38,6 +63,52 @@ pub(crate) fn extract(
     }
     output.push(SectionKind::Body, BODY_LABEL.to_owned(), text);
     Ok(())
+}
+
+/// The part a relationships part names for a relationship type, resolved
+/// against the directory of the part that owns the relationships.
+fn relationship_target(
+    archive: &mut Archive<'_>,
+    relationships_part: &str,
+    base_directory: &str,
+    type_suffix: &str,
+) -> Result<Option<String>, ExtractError> {
+    let Some(relationships) = archive.read(relationships_part)? else {
+        return Ok(None);
+    };
+    let mut reader = Reader::from_reader(relationships.as_slice());
+    let mut buffer = Vec::new();
+    loop {
+        match reader
+            .read_event_into(&mut buffer)
+            .map_err(|_| ExtractError::Malformed)?
+        {
+            Event::Start(element) | Event::Empty(element)
+                if element.local_name().as_ref() == b"Relationship"
+                    && attribute(&element, b"Type")
+                        .is_some_and(|kind| kind.ends_with(type_suffix))
+                    && attribute(&element, b"TargetMode").is_none_or(|mode| mode != "External") =>
+            {
+                return Ok(attribute(&element, b"Target").map(|target| {
+                    match target.strip_prefix('/') {
+                        Some(absolute) => absolute.to_owned(),
+                        None => join_part(base_directory, &target),
+                    }
+                }));
+            }
+            Event::Eof => return Ok(None),
+            _ => {}
+        }
+        buffer.clear();
+    }
+}
+
+fn join_part(directory: &str, name: &str) -> String {
+    if directory.is_empty() {
+        name.to_owned()
+    } else {
+        format!("{directory}/{name}")
+    }
 }
 
 /// The heading level of each paragraph style ID whose name is `Title` or
@@ -101,8 +172,8 @@ fn body_text(
     let mut paragraphs: Vec<Paragraph> = Vec::new();
     let mut tables: Vec<Table> = Vec::new();
     let mut in_text = false;
-    // Alternate content repeats a text box as a legacy fallback; read it once.
-    let mut fallback_depth = 0_usize;
+    // An element whose content is not read, and how deeply it is nested.
+    let mut skipped: Option<(Vec<u8>, usize)> = None;
     loop {
         if blocks.full {
             break;
@@ -110,13 +181,16 @@ fn body_text(
         let event = reader
             .read_event_into(&mut buffer)
             .map_err(|_| ExtractError::Malformed)?;
-        if fallback_depth > 0 {
+        if let Some((name, depth)) = &mut skipped {
             match event {
-                Event::Start(element) if element.local_name().as_ref() == b"Fallback" => {
-                    fallback_depth += 1
+                Event::Start(element) if element.local_name().as_ref() == name.as_slice() => {
+                    *depth += 1
                 }
-                Event::End(element) if element.local_name().as_ref() == b"Fallback" => {
-                    fallback_depth -= 1
+                Event::End(element) if element.local_name().as_ref() == name.as_slice() => {
+                    *depth -= 1;
+                    if *depth == 0 {
+                        skipped = None;
+                    }
                 }
                 Event::Eof => break,
                 _ => {}
@@ -126,10 +200,12 @@ fn body_text(
         }
         match event {
             Event::Start(element) => match element.local_name().as_ref() {
-                b"Fallback" => fallback_depth = 1,
+                // Alternate content repeats a text box as a legacy fallback,
+                // and tracked formatting changes hold a paragraph's former
+                // style and numbering; neither describes the current text.
+                name @ (b"Fallback" | b"pPrChange") => skipped = Some((name.to_vec(), 1)),
                 b"p" => paragraphs.push(Paragraph::default()),
                 b"t" => in_text = true,
-                b"numPr" => set_list_item(&mut paragraphs),
                 b"tbl" => tables.push(Vec::new()),
                 b"tr" => {
                     if let Some(table) = tables.last_mut() {
@@ -149,7 +225,10 @@ fn body_text(
                         paragraph.style = attribute(&element, b"val");
                     }
                 }
-                b"numPr" => set_list_item(&mut paragraphs),
+                // Numbering ID 0 removes numbering a style would apply.
+                b"numId" if attribute(&element, b"val").is_some_and(|id| id != "0") => {
+                    set_list_item(&mut paragraphs)
+                }
                 b"tab" => push_text(&mut paragraphs, "\t"),
                 b"br" | b"cr" => push_text(&mut paragraphs, "\n"),
                 _ => {}

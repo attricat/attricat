@@ -33,6 +33,29 @@ fn word_documents_keep_headings_lists_and_tables() {
 }
 
 #[test]
+fn word_documents_follow_package_relationships() {
+    const W: &str = "xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"";
+    let relationships = br#"<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document2.xml"/></Relationships>"#;
+    let styles = format!(
+        r#"<w:styles {W}><w:style w:type="paragraph" w:styleId="Kop1"><w:name w:val="heading 1"/></w:style></w:styles>"#
+    );
+    let document = format!(
+        r#"<w:document {W}><w:body>
+        <w:p><w:pPr><w:pStyle w:val="Kop1"/><w:pPrChange><w:pPr><w:pStyle w:val="Normal"/></w:pPr></w:pPrChange></w:pPr><w:r><w:t>Overview</w:t></w:r></w:p>
+        <w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="0"/></w:numPr></w:pPr><w:r><w:t>Plain</w:t></w:r></w:p>
+        <w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="3"/></w:numPr></w:pPr><w:r><w:t>Item</w:t></w:r></w:p>
+        </w:body></w:document>"#
+    );
+    let package = archive(&[
+        ("_rels/.rels", relationships.to_vec()),
+        ("word/document2.xml", document.into_bytes()),
+        ("word/styles.xml", styles.into_bytes()),
+    ]);
+    let document = extract(DOCX_MIME, &package, &Limits::DEFAULT).unwrap();
+    assert_eq!(document.sections[0].text, "# Overview\n\nPlain\n\n- Item");
+}
+
+#[test]
 fn workbooks_read_each_sheet_as_tab_separated_rows() {
     let document = extract(XLSX_MIME, PRICES_XLSX, &Limits::DEFAULT).unwrap();
     let labels = document
@@ -120,6 +143,18 @@ fn output_is_cut_to_the_character_budget() {
 fn oversized_sources_are_rejected_before_parsing() {
     let limits = Limits {
         max_source_bytes: 10,
+        ..Limits::DEFAULT
+    };
+    assert_eq!(
+        extract(PDF_MIME, SPECIFICATION_PDF, &limits),
+        Err(ExtractError::TooLarge)
+    );
+}
+
+#[test]
+fn pdf_streams_past_the_limit_are_too_large_not_textless() {
+    let limits = Limits {
+        max_pdf_page_stream_bytes: 1,
         ..Limits::DEFAULT
     };
     assert_eq!(
