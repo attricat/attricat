@@ -1,8 +1,8 @@
 import { Box, MenuItem, Paper, TextField } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { TomlDiffEditor } from '../../components/TomlDiffEditor';
 import { compareSelectMinWidth } from './constants';
 import type { Workflow } from './schemas';
-import { WorkflowSourcePanel } from './WorkflowSourcePanel';
 
 export const WorkflowComparePanel = ({
   compared,
@@ -16,6 +16,8 @@ export const WorkflowComparePanel = ({
   revisions: Workflow[];
 }) => {
   const { t } = useTranslation();
+  const revisionLabel = ({ version, status }: Workflow) =>
+    `v${version} (${t(`common.revisionStatuses.${status}`)})`;
   return (
     <Paper component="section" sx={{ mt: 3, p: 2 }}>
       <TextField
@@ -27,26 +29,18 @@ export const WorkflowComparePanel = ({
       >
         {revisions.map((revision) => (
           <MenuItem key={revision.version} value={revision.version}>
-            v{revision.version} (
-            {t(`common.revisionStatuses.${revision.status}`)})
+            {revisionLabel(revision)}
           </MenuItem>
         ))}
       </TextField>
-      <Box
-        sx={{
-          display: 'grid',
-          gap: 2,
-          gridTemplateColumns: { md: '1fr 1fr' },
-          mt: 2,
-        }}
-      >
-        <WorkflowSourcePanel
-          definition={compared?.definition ?? ''}
-          title={t('workflows.compareRevision')}
-        />
-        <WorkflowSourcePanel
-          definition={current.definition}
-          title={t('workflows.currentRevision')}
+      <Box sx={{ mt: 2 }}>
+        <TomlDiffEditor
+          modified={current.definition}
+          modifiedTitle={t('workflows.currentRevision')}
+          original={compared?.definition ?? ''}
+          originalTitle={
+            compared ? revisionLabel(compared) : t('workflows.compareRevision')
+          }
         />
       </Box>
     </Paper>

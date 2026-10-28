@@ -57,6 +57,15 @@ fixed = "reviewed"
   await page.getByRole('button', { name: 'Enable', exact: true }).click();
   await expect(page.getByText('Enabled revision v1')).toBeVisible();
 
+  await page.getByRole('tab', { name: 'Source' }).click();
+  await expect(
+    page.getByRole('tabpanel').locator('.monaco-editor .view-lines'),
+  ).toContainText(`code = "${workflowCode}"`);
+  await page.getByRole('tab', { name: 'Compare' }).click();
+  await expect(
+    page.getByRole('tabpanel').locator('.monaco-diff-editor'),
+  ).toBeVisible();
+
   await page.getByLabel('Manual run record ID').fill(record.id);
   await page.getByRole('button', { name: 'Run now' }).click();
   await expect(async () => {
