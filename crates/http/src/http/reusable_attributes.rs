@@ -31,6 +31,32 @@ pub(super) async fn list(
     ))
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct BlueprintFilterFieldsQuery {
+    blueprint: String,
+}
+
+/// Lists the reusable attributes the Explorer offers as filters on a
+/// blueprint's current-version records.
+pub(super) async fn list_blueprint_filter_fields(
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ApiQuery(query): ApiQuery<BlueprintFilterFieldsQuery>,
+) -> Result<Json<Vec<ReusableAttribute>>, ApiError> {
+    let blueprint = repository
+        .get_blueprint_by_code(&query.blueprint)
+        .await?
+        .ok_or_else(|| ApiError::not_found("blueprint"))?;
+    Ok(Json(
+        repository
+            .facetable_reusable_attributes_for_blueprint(
+                blueprint.blueprint.id,
+                blueprint.blueprint.version,
+            )
+            .await?,
+    ))
+}
+
 pub(super) async fn create(
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiJson(input): ApiJson<CreateReusableAttribute>,

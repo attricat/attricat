@@ -1,5 +1,6 @@
 import type { Attribute } from '../records/api';
 import type { ReusableAttribute } from './api';
+import { REUSABLE_CODE_SEPARATOR } from './constants';
 
 /** The record attribute a reusable attribute becomes once attached. */
 export const attributeForReusable = (
@@ -21,3 +22,8 @@ export const attributeForReusable = (
       : (reusable.value_schema as Attribute['value_schema']),
   value_type: reusable.value_type,
 });
+
+/** The code an attached reusable attribute has on records and in filters. */
+export const attachedReusableCode = (
+  reusable: Pick<ReusableAttribute, 'code' | 'namespace'>,
+) => `${reusable.namespace}${REUSABLE_CODE_SEPARATOR}${reusable.code}`;

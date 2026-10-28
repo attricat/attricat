@@ -973,6 +973,10 @@ pub fn router(state: AppState) -> Router {
             get(reusable_attributes::list_groups).post(reusable_attributes::create_group),
         )
         .route(
+            "/v1/records/reusable-attributes",
+            get(reusable_attributes::list_blueprint_filter_fields),
+        )
+        .route(
             "/v1/records/{record_id}/reusable-attributes",
             post(reusable_attributes::attach),
         )

@@ -9,6 +9,11 @@ import { isHiddenByDefault } from '../records/attributeVisibility';
 import { attributeLabel } from '../records/recordDisplay';
 import { systemTagLabel } from '../records/systemTags';
 import { tagColorsOptions } from '../tag-colors/queryOptions';
+import {
+  attachedReusableCode,
+  attributeForReusable,
+} from '../reusable-attributes/attributeForReusable';
+import { reusableFilterFieldOptions } from '../reusable-attributes/queryOptions';
 import { tagColorOf } from '../tag-colors/tagColors';
 import { AttributeFilterDialog } from './AttributeFilterDialog';
 import { principalConfiguration } from '../principals/principal';
@@ -185,7 +190,13 @@ export const ExplorerFilterBar = ({
     relationshipAttributes,
     open && editor.editingIndex === null,
   );
-  const localAttributes = attributes.filter(
+  const reusableFields = useQuery(reusableFilterFieldOptions(blueprint));
+  // Attached reusable attributes are filtered by their qualified code.
+  const reusableAttributes = (reusableFields.data ?? []).map((reusable) => ({
+    ...attributeForReusable(reusable),
+    code: attachedReusableCode(reusable),
+  }));
+  const localAttributes = [...attributes, ...reusableAttributes].filter(
     (attribute) =>
       isFilterableAttribute(attribute) &&
       !isHiddenByDefault(attribute, explorerVisibilityScope),

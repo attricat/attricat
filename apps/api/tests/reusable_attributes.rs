@@ -140,6 +140,77 @@ async fn attaches_published_reusable_attributes_as_distinct_typed_values(pool: P
 }
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
+async fn lists_facetable_searchable_attributes_as_blueprint_filter_fields(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    let blueprint = create_blueprint(&client, &base_url, PRODUCT).await;
+    let record = create_record(&client, &base_url, &blueprint).await;
+    let record_id = record["id"].as_str().unwrap();
+    for (code, searchable, facetable) in [
+        ("width", true, true),
+        ("height", true, false),
+        ("depth", false, true),
+    ] {
+        let published = create_published_reusable(
+            &client,
+            &base_url,
+            json!({
+                "code": code, "name": code, "value_type": "number",
+                "searchable": searchable, "facetable": facetable
+            }),
+        )
+        .await;
+        client
+            .post(format!(
+                "{base_url}/v1/records/{record_id}/reusable-attributes"
+            ))
+            .json(&json!({ "reusable_attribute_revision_id": published["id"] }))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+    }
+    // Attached to no record of the blueprint, so no filter can match it.
+    create_published_reusable(
+        &client,
+        &base_url,
+        json!({
+            "code": "length", "name": "Length", "value_type": "number",
+            "searchable": true, "facetable": true
+        }),
+    )
+    .await;
+
+    let fields: Vec<Value> = client
+        .get(format!(
+            "{base_url}/v1/records/reusable-attributes?blueprint=reusable_product"
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let codes = fields
+        .iter()
+        .map(|field| field["code"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(codes, ["width"]);
+    let unknown = client
+        .get(format!(
+            "{base_url}/v1/records/reusable-attributes?blueprint=missing"
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(unknown.status(), reqwest::StatusCode::NOT_FOUND);
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn reusable_relationships_and_group_attachments_use_record_owned_attributes(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();

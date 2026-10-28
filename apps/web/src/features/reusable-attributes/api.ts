@@ -23,6 +23,20 @@ export const listReusableAttributes = (
     { signal },
   );
 
+/**
+ * The reusable attributes the Explorer offers as filters on a blueprint:
+ * searchable and facetable ones attached to its current-version records.
+ */
+export const listBlueprintFilterReusableAttributes = (
+  blueprint: string,
+  signal?: AbortSignal,
+) =>
+  request(
+    `/api/v1/records/reusable-attributes?${new URLSearchParams({ blueprint })}`,
+    z.array(reusableAttributeSchema),
+    { signal },
+  );
+
 export const createReusableAttribute = (input: CreateReusableAttribute) =>
   request(
     '/api/reusable-attributes',

@@ -193,6 +193,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `POST` | `/records/{id}/relationships/replace` | Replace relationship target sets. |
 | `POST` | `/records/{id}/relationships/remove` | Remove relationship targets. |
 | `POST` | `/v1/records/search` | Search a selected blueprint across published revisions by default, or one explicit revision; supports text queries, validated filters, facets, and sorting. |
+| `GET` | `/v1/records/reusable-attributes?blueprint=<code>` | Reusable attributes the Explorer filter picker offers (`records.read`): per qualified code, the revision the search filter resolver picks on the blueprint's current-version records (newest searchable), kept when it is also `facetable`. Returns reusable attribute revisions; filters name them `namespace:code`. |
 | `POST` | `/v1/records/labels` | Display labels for `{"record_ids": [...]}` (1–100 IDs): `{"items": [{"id", "blueprint_code", "display"}]}`, with `display` per context code. Only live records the caller may read are returned; other IDs are omitted. |
 | `POST` | `/v1/records` | Create a record atomically with form values, optional staged `files`, and optional system annotations; see [Files on create](#files-on-create). |
 | `POST` | `/v1/records/batch` | Apply create, update, and delete operations to several records in one transaction; see [Record batches](#record-batches). |

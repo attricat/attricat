@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
@@ -15,6 +15,7 @@ import {
   type BlueprintWithAttributes,
   type RecordSearchResponse,
 } from '../records/api';
+import { listBlueprintFilterReusableAttributes } from '../reusable-attributes/api';
 import { relationshipPickerMessageType } from '../records/components/useRecentlyPreviewedRecords';
 import type { AttributeFilterRequest } from './attributeFilterValues';
 import { maximumAttributeFilters } from './constants';
@@ -34,6 +35,11 @@ vi.mock('../records/api', async (importOriginal) => {
     searchRecords: vi.fn(),
   };
 });
+
+vi.mock('../reusable-attributes/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../reusable-attributes/api')>()),
+  listBlueprintFilterReusableAttributes: vi.fn().mockResolvedValue([]),
+}));
 
 vi.mock('../records/components/useRelationshipSelectionLabels', () => ({
   useRelationshipSelectionLabels: () => new Map([[targetId, 'Acme']]),
@@ -234,6 +240,74 @@ describe('ExplorerFilterBar', () => {
     );
     await user.click(screen.getByRole('combobox', { name: 'Value' }));
     expect(await screen.findByRole('option', { name: 'Live' })).toBeTruthy();
+  });
+
+  it('offers reusable attributes by their qualified code', async () => {
+    vi.mocked(listBlueprintFilterReusableAttributes).mockResolvedValueOnce([
+      {
+        cardinality: null,
+        code: 'weight',
+        context_editable: 'all',
+        context_fallback: 'default',
+        default_value: null,
+        definition: '',
+        definition_id: '123e4567-e89b-12d3-a456-426614174003',
+        facetable: true,
+        file_policy: null,
+        id: '123e4567-e89b-12d3-a456-426614174004',
+        name: 'Shipping weight',
+        namespace: 'acme',
+        published_at: null,
+        readonly: false,
+        searchable: true,
+        status: 'published',
+        tags: [],
+        target_blueprint_code: null,
+        target_cardinality: null,
+        value_schema: null,
+        value_type: 'number',
+        version: 1,
+      },
+    ]);
+    const onAdd = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <ExplorerFilterBar
+          attributes={[{ code: 'stock', value_type: 'integer' }]}
+          blueprint="product"
+          filters={[]}
+          onAdd={onAdd}
+          onRemove={vi.fn()}
+          onUpdate={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Add filter' }));
+    await user.click(screen.getByRole('combobox', { name: 'Field' }));
+    await user.click(
+      await screen.findByRole('option', { name: /Shipping weight/ }),
+    );
+    await user.type(screen.getByRole('spinbutton', { name: 'Value' }), '2');
+    await user.click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: 'Add filter',
+      }),
+    );
+    expect(listBlueprintFilterReusableAttributes).toHaveBeenCalledWith(
+      'product',
+      expect.anything(),
+    );
+    expect(onAdd).toHaveBeenCalledWith({
+      field: 'acme:weight',
+      operator: 'eq',
+      value: 2,
+    });
   });
 
   it('keeps keyboard focus in the list when filters are removed', async () => {
