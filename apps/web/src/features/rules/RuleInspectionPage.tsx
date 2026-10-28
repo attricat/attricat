@@ -30,6 +30,7 @@ import {
 import { FindingsSection } from './FindingsSection';
 import { ruleQueryKeys } from './queryKeys';
 import { ruleDefinitionsOptions, ruleRunsOptions } from './queryOptions';
+import { useRefreshFindingsAfterRuns } from './runCompletion';
 import { rulesById } from './rulesById';
 import { useRecordLabels } from '../records/useRecordLabels';
 import { RulesSection } from './RulesSection';
@@ -98,6 +99,7 @@ export const RuleInspectionPage = ({
     ...ruleRunsOptions(runsSearch),
     enabled: section === RULE_SECTION_RUNS,
   });
+  useRefreshFindingsAfterRuns(runs.data, runs.isSuccess);
   // Name the records the visible findings and runs refer to.
   const recordLabels = useRecordLabels(
     findingsShown

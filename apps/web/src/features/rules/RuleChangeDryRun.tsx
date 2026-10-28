@@ -2,12 +2,12 @@ import { Button, CircularProgress } from '@mui/material';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { FlaskConicalIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { activeRunStatuses } from '../../api/runStatus';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { progressSizes } from '../../components/iconSizes';
 import { runRuleNow } from './api';
 import { DryRunResult } from './DryRunResult';
 import { ruleRunOptions } from './queryOptions';
+import { isActiveRun } from './runCompletion';
 
 /**
  * Dry-runs an unsaved definition of a rule and reports which records it
@@ -40,7 +40,8 @@ export const RuleChangeDryRun = ({
   const running =
     start.isPending ||
     (runId !== undefined &&
-      (!run.data || activeRunStatuses.includes(run.data.status)));
+      !run.isError &&
+      (!run.data || isActiveRun(run.data)));
   return (
     <>
       <Button

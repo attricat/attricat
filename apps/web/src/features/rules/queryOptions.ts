@@ -14,14 +14,17 @@ import {
 } from './api';
 import { ruleQueryKeys } from './queryKeys';
 import type { RunsSearch } from './schemas';
-import { activeRunStatuses } from '../../api/runStatus';
-import { RULE_DRY_RUN_POLL_MS } from './constants';
+import { isActiveRun } from './runCompletion';
+import { RULE_RUN_POLL_MS } from './constants';
 
-/** The workspace's rule runs that match `search`, newest first. */
+/** The workspace's rule runs that match `search`, newest first, refreshed
+ * while one has not finished. */
 export const ruleRunsOptions = (search: RunsSearch = {}) =>
   queryOptions({
     queryKey: ruleQueryKeys.runsPage(search),
     queryFn: () => listRuleRuns(search),
+    refetchInterval: (query) =>
+      query.state.data?.some(isActiveRun) ? RULE_RUN_POLL_MS : false,
   });
 
 /** A rule's most recent runs, refreshed while one has not finished. */
@@ -30,19 +33,18 @@ export const recentRuleRunsOptions = (ruleId: string) =>
     queryKey: ruleQueryKeys.ruleRuns(ruleId),
     queryFn: () => listRecentRuleRuns(ruleId),
     refetchInterval: (query) =>
-      query.state.data?.some((run) => activeRunStatuses.includes(run.status))
-        ? RULE_DRY_RUN_POLL_MS
-        : false,
+      query.state.data?.some(isActiveRun) ? RULE_RUN_POLL_MS : false,
   });
 
-/** One run, polled until it finishes. */
+/** One run, polled until it finishes or can no longer be read. */
 export const ruleRunOptions = (runId: string) =>
   queryOptions({
     queryKey: ruleQueryKeys.run(runId),
     queryFn: () => getRuleRun(runId),
     refetchInterval: (query) =>
-      !query.state.data || activeRunStatuses.includes(query.state.data.status)
-        ? RULE_DRY_RUN_POLL_MS
+      query.state.status !== 'error' &&
+      (!query.state.data || isActiveRun(query.state.data))
+        ? RULE_RUN_POLL_MS
         : false,
   });
 

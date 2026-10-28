@@ -50,6 +50,7 @@ import {
   type RulePageSection,
 } from './constants';
 import { recentRuleRunsOptions, ruleOptions } from './queryOptions';
+import { useRefreshFindingsAfterRuns } from './runCompletion';
 import { RuleChangelog } from './RuleChangelog';
 import {
   RuleDescriptionText,
@@ -82,6 +83,7 @@ const ignoreChange = () => undefined;
 const RecentRuns = ({ rule }: { rule: RuleDetails }) => {
   const { t } = useTranslation();
   const runs = useQuery(recentRuleRunsOptions(rule.id));
+  useRefreshFindingsAfterRuns(runs.data, runs.isSuccess);
   const recordLabels = useRecordLabels(
     (runs.data ?? []).flatMap((run) =>
       run.scope_record_id ? [run.scope_record_id] : [],

@@ -18,7 +18,7 @@ import {
 } from '@mui/material';
 import { Link } from '@tanstack/react-router';
 import { PlayIcon } from 'lucide-react';
-import { Fragment, useEffect, useRef } from 'react';
+import { Fragment } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { EmptyState } from '../../components/EmptyState';
@@ -29,12 +29,8 @@ import { attributeLabel } from '../records/recordDisplay';
 import { FieldRevealLink } from '../views/components/FieldRevealLink';
 import { useRevealField } from '../views/fieldReveal';
 import { useCan } from '../auth/useCan';
-import { recheckRecord, type Finding, type RuleRun } from './api';
-import {
-  findingStates,
-  RECORD_RULE_RUN_POLL_MS,
-  ruleRoutes,
-} from './constants';
+import { recheckRecord, type Finding } from './api';
+import { findingStates, RULE_RUN_POLL_MS, ruleRoutes } from './constants';
 import { ruleQueryKeys } from './queryKeys';
 import {
   recordFindingsOptions,
@@ -48,23 +44,15 @@ import { rulesById, type RulesById } from './rulesById';
 import { findingEvidenceSchema } from './schemas';
 import { capabilities } from '../auth/capabilities';
 import { findingMessage, type FindingAttribute } from './findingMessage';
-import { activeRunStatuses } from '../../api/runStatus';
+import {
+  isActiveRun,
+  latestCompletion,
+  useOnRunsFinished,
+} from './runCompletion';
 import { progressSizes } from '../../components/iconSizes';
 
 /** Lines up the messages beside severity chips of different lengths. */
 const severityChipMinWidth = 72;
-const isActive = (run: RuleRun) => activeRunStatuses.includes(run.status);
-
-/** The latest finish among the runs, which changes whenever a run finishes. */
-const latestCompletion = (runs: readonly RuleRun[] | undefined) =>
-  runs?.reduce<string | null>(
-    (latest, run) =>
-      run.completed_at && (!latest || run.completed_at > latest)
-        ? run.completed_at
-        : latest,
-    null,
-  ) ?? null;
-
 const FindingItem = ({
   acknowledging,
   attributes,
@@ -267,24 +255,20 @@ export const RecordFindingsPanel = ({
     // Keep checking while runs are pending or an edit's runs may still start.
     // Without an enabled rule an edit starts no runs.
     refetchInterval: (query) =>
-      query.state.data?.some(isActive) ||
+      query.state.data?.some(isActiveRun) ||
       (hasApplicableRules && isWatchingRecordRuleChecks(recordId))
-        ? RECORD_RULE_RUN_POLL_MS
+        ? RULE_RUN_POLL_MS
         : false,
   });
   const finishedAt = latestCompletion(runs.data);
-  const seenFinish = useRef<string | null | undefined>(undefined);
-  useEffect(() => {
-    if (!runs.isSuccess) return;
-    if (seenFinish.current !== undefined && seenFinish.current !== finishedAt)
-      void Promise.all([
-        client.invalidateQueries({
-          queryKey: ruleQueryKeys.findings(recordId),
-        }),
-        refreshRecordRuleState(client, recordId),
-      ]);
-    seenFinish.current = finishedAt;
-  }, [client, finishedAt, recordId, runs.isSuccess]);
+  useOnRunsFinished(runs.data, runs.isSuccess, () => {
+    void Promise.all([
+      client.invalidateQueries({
+        queryKey: ruleQueryKeys.findings(recordId),
+      }),
+      refreshRecordRuleState(client, recordId),
+    ]);
+  });
   const recheck = useMutation({
     mutationFn: () => recheckRecord(recordId),
     onSuccess: () =>
@@ -298,7 +282,7 @@ export const RecordFindingsPanel = ({
   // only appends rows.
   const unresolved = findings.data?.pages.flatMap((page) => page.items) ?? [];
   const error = findings.error ?? rules.error ?? runs.error;
-  const checking = Boolean(runs.data?.some(isActive)) || recheck.isPending;
+  const checking = Boolean(runs.data?.some(isActiveRun)) || recheck.isPending;
   const rulesByIdMap = rulesById(rules.data ?? []);
 
   return (

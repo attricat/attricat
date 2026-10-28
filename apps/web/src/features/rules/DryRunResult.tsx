@@ -1,12 +1,13 @@
 import { Alert, Box, CircularProgress, Stack, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { activeRunStatuses, runStatuses } from '../../api/runStatus';
+import { runStatuses } from '../../api/runStatus';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { progressSizes } from '../../components/iconSizes';
 import { RecordIdLink } from '../../components/RecordIdLink';
 import { useRecordLabels } from '../records/useRecordLabels';
 import { ruleRunOptions } from './queryOptions';
+import { isActiveRun } from './runCompletion';
 import { findingMessage } from './findingMessage';
 import { useLatestBlueprintAttributes } from './useFindingMessages';
 
@@ -31,7 +32,7 @@ export const DryRunResult = ({
   const failures = run.data?.dry_run_failures ?? [];
   const labels = useRecordLabels(failures.map((failure) => failure.record_id));
   if (run.error) return <ApiErrorAlert error={run.error} sx={{ mt: 2 }} />;
-  if (!run.data || activeRunStatuses.includes(run.data.status))
+  if (!run.data || isActiveRun(run.data))
     return (
       <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mt: 2 }}>
         <CircularProgress

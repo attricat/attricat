@@ -127,14 +127,12 @@ export const RULE_SCOPE_SELECT_MIN_WIDTH = 220;
 export const ALL_CONTEXTS = '';
 /** Height of the read-only definition on a rule's page. */
 export const RULE_DEFINITION_VIEWER_HEIGHT = '420px';
-/** How often an editor checks on the dry run of its unsaved change. */
-export const RULE_DRY_RUN_POLL_MS = 1000;
+/** How often a page checks on the rule runs it shows while they are active. */
+export const RULE_RUN_POLL_MS = 1000;
 /** Recent runs of one record that the record page inspects. */
 export const RECORD_RULE_RUNS_LIMIT = 20;
 /** The recent runs a rule's page lists. */
 export const RULE_PAGE_RUNS_LIMIT = 10;
-/** How often the record page checks on its rule runs while they are active. */
-export const RECORD_RULE_RUN_POLL_MS = 1000;
 /**
  * How long after an edit the record page waits for the rule runs that the
  * edit's events start; they are created asynchronously.
