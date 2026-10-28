@@ -5,6 +5,7 @@ import {
   DialogContent,
   DialogTitle,
 } from '@mui/material';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DryRunResult } from './DryRunResult';
 import type { ShownDryRun } from './useRunRule';
@@ -18,19 +19,23 @@ export const DryRunDialog = ({
   onClose: () => void;
 }) => {
   const { t } = useTranslation();
+  // The closing dialog keeps showing its dry run until it has faded out.
+  const [shown, setShown] = useState(dryRun);
+  if (dryRun !== undefined && dryRun !== shown) setShown(dryRun);
   return (
     <Dialog
       fullWidth
       maxWidth="sm"
       onClose={onClose}
       open={dryRun !== undefined}
+      slotProps={{ transition: { onExited: () => setShown(undefined) } }}
     >
       <DialogTitle>
-        {dryRun && t('rules.dryRunResult.title', { name: dryRun.name })}
+        {shown && t('rules.dryRunResult.title', { name: shown.name })}
       </DialogTitle>
       <DialogContent>
-        {dryRun && (
-          <DryRunResult blueprintId={dryRun.blueprintId} runId={dryRun.runId} />
+        {shown && (
+          <DryRunResult blueprintId={shown.blueprintId} runId={shown.runId} />
         )}
       </DialogContent>
       <DialogActions>
