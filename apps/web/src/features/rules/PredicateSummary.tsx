@@ -19,8 +19,9 @@ const text = (value: unknown) =>
 
 /**
  * Says in words what a rule's predicate checks, nesting the parts of
- * `all_of`, `any_of`, `linked` and `referenced_by`. Attributes and their
- * fixed values are named by their labels where `attributes` knows them.
+ * `all_of`, `any_of`, `linked` and `referenced_by`. Attributes of the rule's
+ * blueprint and their fixed values are named by their labels where
+ * `attributes` knows them.
  */
 export const PredicateSummary = ({
   predicate,
@@ -42,16 +43,22 @@ export const PredicateSummary = ({
   };
   const op = (raw: unknown) =>
     t(`rules.preview.ops.${text(raw)}`, { defaultValue: text(raw) });
-  const nested = (predicates: unknown) =>
+  const nested = (
+    predicates: unknown,
+    partAttributes: readonly FindingAttribute[] = attributes,
+  ) =>
     Array.isArray(predicates) && (
       <Box component="ul" sx={{ m: 0, pl: 3 }}>
         {predicates.filter(isPredicate).map((part, index) => (
           <li key={index}>
-            <PredicateSummary attributes={attributes} predicate={part} />
+            <PredicateSummary attributes={partAttributes} predicate={part} />
           </li>
         ))}
       </Box>
     );
+  // `linked` and `referenced_by` check another blueprint's records, whose
+  // attributes `attributes` does not describe, so those keep their codes.
+  const otherBlueprint = (predicates: unknown) => nested(predicates, []);
   const p = predicate;
   const line = (sentence: string) => (
     <Typography component="span" variant="body2">
@@ -146,7 +153,7 @@ export const PredicateSummary = ({
               }),
             }),
           )}
-          {isPredicate(p.predicate) && nested([p.predicate])}
+          {isPredicate(p.predicate) && otherBlueprint([p.predicate])}
         </>
       );
     case predicateTypes.referencedBy:
@@ -164,7 +171,7 @@ export const PredicateSummary = ({
                     : t('rules.preview.says.atMost', { count: Number(p.max) }),
             }),
           )}
-          {isPredicate(p.predicate) && nested([p.predicate])}
+          {isPredicate(p.predicate) && otherBlueprint([p.predicate])}
         </>
       );
     case predicateTypes.allOf:
