@@ -412,6 +412,7 @@ describe('RuleInspectionPage', () => {
         findings_resolved: 0,
         attempts: 1,
         last_error: null,
+        truncated: false,
         completed_at: null,
         created_at: '',
       },
@@ -431,6 +432,7 @@ describe('RuleInspectionPage', () => {
         findings_resolved: 0,
         attempts: 1,
         last_error: null,
+        truncated: false,
         completed_at: null,
         created_at: '',
       },
@@ -498,6 +500,7 @@ describe('RuleInspectionPage', () => {
       findings_resolved: 0,
       attempts: 1,
       last_error: null,
+      truncated: false,
       completed_at: '2026-10-24T12:00:00Z',
       created_at: '2026-10-24T11:59:00Z',
     };

@@ -95,6 +95,7 @@ const run = (
   findings_resolved: 0,
   attempts: 0,
   last_error: null,
+  truncated: false,
   completed_at: completedAt,
   created_at: '2026-10-20T10:00:00Z',
 });
