@@ -66,7 +66,9 @@ import { RuleToggleError } from './RuleToggleError';
 import type { RuleComparisonSearch } from './schemas';
 import { useToggleRule } from './useToggleRule';
 import { FindingSeverityChip } from './FindingSeverityChip';
-import { ruleDescription, ruleSeverity } from './rulePlan';
+import { ruleDescription, rulePredicate, ruleSeverity } from './rulePlan';
+import { PredicateSummary } from './PredicateSummary';
+import { useLatestBlueprintAttributes } from './useFindingMessages';
 
 const RouterTab = createLink(Tab);
 const sectionIcons = {
@@ -109,6 +111,8 @@ const RuleDefinition = ({ rule }: { rule: RuleDetails }) => {
   const blueprints = useQuery(blueprintCatalogueOptions());
   const contexts = useQuery(contextListOptions());
   const severity = ruleSeverity(rule);
+  const checks = rulePredicate(rule);
+  const attributes = useLatestBlueprintAttributes(rule.blueprint_id);
   const blueprint = blueprints.data?.find(({ id }) => id === rule.blueprint_id);
   const context = contexts.data?.find(({ id }) => id === rule.context_id);
   return (
@@ -163,6 +167,16 @@ const RuleDefinition = ({ rule }: { rule: RuleDetails }) => {
             ))}
           </Box>
         </Alert>
+      )}
+      {checks && (
+        <Paper component="section" sx={{ mt: 3, p: 2 }}>
+          <Typography component="h2" variant="h6">
+            {t('rules.rulePage.whatItChecks')}
+          </Typography>
+          <Box sx={{ mt: 1 }}>
+            <PredicateSummary attributes={attributes} predicate={checks} />
+          </Box>
+        </Paper>
       )}
       <Paper component="section" sx={{ mt: 3, p: 2 }}>
         <Typography component="h2" variant="h6">

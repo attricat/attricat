@@ -112,6 +112,15 @@ export const predicateTypes = {
   allOf: 'all_of',
   anyOf: 'any_of',
 } as const;
+/** The preview's wording of each record event a rule can run on. */
+export const ruleEventLabelKeys: Readonly<Record<string, string>> = {
+  'record.created.v1': 'recordCreated',
+  'record.updated.v1': 'recordUpdated',
+  'record.migrated.v1': 'recordMigrated',
+  'attribute_value.changed.v1': 'attributeValueChanged',
+  'attribute_value.restored.v1': 'attributeValueRestored',
+  'relationship.changed.v1': 'relationshipChanged',
+};
 /** Keeps the rule scope selectors readable when their labels are short. */
 export const RULE_SCOPE_SELECT_MIN_WIDTH = 220;
 /** The value of the context selector for a rule that checks every context. */

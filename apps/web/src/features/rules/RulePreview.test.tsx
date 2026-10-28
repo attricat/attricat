@@ -19,13 +19,56 @@ const rule: CompiledRule = {
 afterEach(() => i18n.changeLanguage('en'));
 
 describe('RulePreview', () => {
-  it('names the predicate type in the active language', async () => {
+  it('says what the predicate checks in the active language', async () => {
     await i18n.changeLanguage('en');
-    const { rerender } = render(<RulePreview rule={rule} />);
-    expect(screen.getByText('Required value on title')).toBeTruthy();
+    const attributes = [{ code: 'title', name: 'Listing title' }];
+    const { rerender } = render(
+      <RulePreview attributes={attributes} rule={rule} />,
+    );
+    expect(screen.getByText('Listing title has a value')).toBeTruthy();
     await i18n.changeLanguage('pl');
-    rerender(<RulePreview rule={rule} />);
-    expect(screen.getByText('Wymagana wartość dla title')).toBeTruthy();
+    rerender(<RulePreview attributes={attributes} rule={rule} />);
+    expect(screen.getByText('Listing title ma wartość')).toBeTruthy();
+  });
+
+  it('spells out each part of a combined predicate and names events', async () => {
+    await i18n.changeLanguage('en');
+    render(
+      <RulePreview
+        attributes={[
+          {
+            code: 'condition',
+            name: 'Condition',
+            value_type: 'string',
+            value_schema: {
+              type: 'string',
+              enum: ['new'],
+              'x-attricat-enum-labels': { new: 'New' },
+            },
+          },
+          { code: 'mileage_km', name: 'Mileage (km)' },
+        ]}
+        rule={{
+          ...rule,
+          triggers: [{ type: 'event', event_type: 'record.updated.v1' }],
+          predicate: {
+            type: predicateTypes.anyOf,
+            predicates: [
+              {
+                type: predicateTypes.oneOf,
+                attribute_code: 'condition',
+                values: ['new'],
+              },
+              { type: predicateTypes.required, attribute_code: 'mileage_km' },
+            ],
+          },
+        }}
+      />,
+    );
+    expect(screen.getByText('At least one of these holds:')).toBeTruthy();
+    expect(screen.getByText('Condition is one of "New"')).toBeTruthy();
+    expect(screen.getByText('Mileage (km) has a value')).toBeTruthy();
+    expect(screen.getByText('When a record is updated')).toBeTruthy();
   });
 
   it('shows the description with its line breaks', async () => {

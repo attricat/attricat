@@ -278,7 +278,14 @@ export const RuleEditorPage = ({ ruleId }: { ruleId?: string }) => {
         kind={definitionKinds.rule}
         onChange={editor.setDefinition}
         onSave={saveDefinition}
-        preview={check.result && <RulePreview rule={check.result} />}
+        preview={
+          check.result && (
+            <RulePreview
+              attributes={blueprint.data?.attributes}
+              rule={check.result}
+            />
+          )
+        }
         readOnly={save.isPending}
         scopeAttributes={scopeAttributes}
         toolbar={

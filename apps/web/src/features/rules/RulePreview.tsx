@@ -1,7 +1,9 @@
 import { Box, Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import type { CompiledRule } from './api';
-import { ruleTriggerTypes } from './constants';
+import { ruleEventLabelKeys, ruleTriggerTypes } from './constants';
+import type { FindingAttribute } from './findingMessage';
+import { PredicateSummary } from './PredicateSummary';
 import { FindingSeverityChip } from './FindingSeverityChip';
 import type { RuleTrigger } from './schemas';
 import { RuleDescriptionText } from './RuleCells';
@@ -13,21 +15,27 @@ const TriggerText = ({ trigger }: { trigger: RuleTrigger }) => {
       return t('rules.preview.triggers.manual');
     case ruleTriggerTypes.schedule:
       return t('rules.preview.triggers.schedule', { cron: trigger.cron });
-    case ruleTriggerTypes.event:
-      return t('rules.preview.triggers.event', { event: trigger.event_type });
+    case ruleTriggerTypes.event: {
+      const key = ruleEventLabelKeys[trigger.event_type];
+      return key
+        ? t(`rules.preview.events.${key}`)
+        : t('rules.preview.triggers.event', { event: trigger.event_type });
+    }
     case ruleTriggerTypes.postImport:
       return t('rules.preview.triggers.postImport');
   }
 };
 
 /** What a rule definition that passed the save checks will do. */
-export const RulePreview = ({ rule }: { rule: CompiledRule }) => {
+export const RulePreview = ({
+  rule,
+  attributes,
+}: {
+  rule: CompiledRule;
+  /** The blueprint's attributes, to name them and their values by label. */
+  attributes?: readonly FindingAttribute[];
+}) => {
   const { t } = useTranslation();
-  const attribute = rule.predicate.attribute_code;
-  // A predicate type added on the server before the app learns it keeps its code.
-  const type = t(`rules.preview.predicateTypes.${rule.predicate.type}`, {
-    defaultValue: rule.predicate.type,
-  });
   const transitions = rule.enforcement?.transitions ?? [];
   return (
     <Stack spacing={2} sx={{ mt: 1 }}>
@@ -51,11 +59,12 @@ export const RulePreview = ({ rule }: { rule: CompiledRule }) => {
         <Typography component="h4" variant="subtitle2">
           {t('rules.preview.checks')}
         </Typography>
-        <Typography variant="body2">
-          {typeof attribute === 'string'
-            ? t('rules.preview.predicateOn', { attribute, type })
-            : t('rules.preview.predicate', { type })}
-        </Typography>
+        <Box>
+          <PredicateSummary
+            attributes={attributes}
+            predicate={rule.predicate}
+          />
+        </Box>
       </Box>
       <Box>
         <Typography component="h4" variant="subtitle2">

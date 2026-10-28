@@ -201,7 +201,7 @@ describe('RuleEditorPage', () => {
       blueprintId,
       2,
     ]);
-    expect(screen.getByText('Required value on title')).toBeTruthy();
+    expect(screen.getByText('title has a value')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(createRule).toHaveBeenCalledWith(input));

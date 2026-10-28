@@ -2158,8 +2158,6 @@
     },
     "preview": {
       "checks": "Sprawdza",
-      "predicate": "{{type}}",
-      "predicateOn": "{{type}} dla {{attribute}}",
       "predicateTypes": {
         "required": "Wymagana wartość",
         "stale": "Niedawno zmieniona wartość",
@@ -2186,7 +2184,59 @@
       "reportsOnly": "Tylko zgłasza ustalenia.",
       "rejectsSaves": "Odrzuca zapisy, po których rekord narusza regułę.",
       "blocksTransition": "Blokuje zmianę {{attribute}} z {{from}} na {{to}}.",
-      "blocksTransitionInto": "Blokuje zmianę {{attribute}} na {{to}}."
+      "blocksTransitionInto": "Blokuje zmianę {{attribute}} na {{to}}.",
+      "says": {
+        "required": "{{attribute}} ma wartość",
+        "oneOf": "{{attribute}} ma jedną z wartości: {{values}}",
+        "compare": "{{attribute}} {{op}} {{other}}",
+        "subjectAttribute": "{{attribute}} sprawdzanego rekordu",
+        "relativeDate": "{{attribute}} {{op}} {{when}}",
+        "today": "dziś",
+        "daysFromNow_one": "za {{count}} dzień",
+        "daysFromNow_few": "za {{count}} dni",
+        "daysFromNow_many": "za {{count}} dni",
+        "daysFromNow_other": "za {{count}} dnia",
+        "daysAgo_one": "{{count}} dzień temu",
+        "daysAgo_few": "{{count}} dni temu",
+        "daysAgo_many": "{{count}} dni temu",
+        "daysAgo_other": "{{count}} dnia temu",
+        "stale_one": "{{attribute}} zmieniono w ciągu ostatniego {{count}} dnia",
+        "stale_few": "{{attribute}} zmieniono w ciągu ostatnich {{count}} dni",
+        "stale_many": "{{attribute}} zmieniono w ciągu ostatnich {{count}} dni",
+        "stale_other": "{{attribute}} zmieniono w ciągu ostatnich {{count}} dnia",
+        "hasTag": "Rekord ma tag systemowy {{tag}}",
+        "missingTag": "Rekord nie ma tagu systemowego {{tag}}",
+        "unique": "Żaden inny rekord nie ma tych samych wartości: {{attributes}}",
+        "acyclic": "Podążanie relacją {{relationship}} nigdy nie wraca do rekordu",
+        "linked": {
+          "all": "Każdy rekord powiązany przez {{relationship}} spełnia:",
+          "any": "Co najmniej jeden rekord powiązany przez {{relationship}} spełnia:",
+          "none": "Żaden rekord powiązany przez {{relationship}} nie spełnia:"
+        },
+        "referencedBy": "{{bounds}} rekordów {{blueprint}} wskazuje na niego przez {{relationship}}",
+        "between": "Od {{min}} do {{max}}",
+        "atLeast": "Co najmniej {{count}}",
+        "atMost": "Co najwyżej {{count}}",
+        "allOf": "Spełnione są wszystkie warunki:",
+        "anyOf": "Spełniony jest co najmniej jeden warunek:"
+      },
+      "ops": {
+        "eq": "jest równe",
+        "ne": "różni się od",
+        "lt": "jest wcześniej lub mniej niż",
+        "lte": "jest co najwyżej",
+        "gt": "jest później lub więcej niż",
+        "gte": "jest co najmniej",
+        "disjoint": "nie ma wspólnych wartości z"
+      },
+      "events": {
+        "recordCreated": "Po utworzeniu rekordu",
+        "recordUpdated": "Po zmianie rekordu",
+        "recordMigrated": "Po przeniesieniu rekordu do innej rewizji schematu",
+        "attributeValueChanged": "Po zmianie wartości",
+        "attributeValueRestored": "Po przywróceniu wartości",
+        "relationshipChanged": "Po zmianie relacji"
+      }
     },
     "empty": "Brak reguł jakości danych",
     "emptyDescription": "Reguła sprawdza rekordy schematu i zgłasza te, które jej nie spełniają, albo blokuje ich zapis.",
@@ -2217,7 +2267,8 @@
         "changelog": "Historia zmian"
       },
       "recentRuns": "Ostatnie wykonania",
-      "allRuns": "Wszystkie wykonania tej reguły"
+      "allRuns": "Wszystkie wykonania tej reguły",
+      "whatItChecks": "Co sprawdza"
     },
     "changelog": {
       "loading": "Wczytywanie historii zmian…",

@@ -2074,8 +2074,6 @@
     },
     "preview": {
       "checks": "Checks",
-      "predicate": "{{type}}",
-      "predicateOn": "{{type}} on {{attribute}}",
       "predicateTypes": {
         "required": "Required value",
         "stale": "Recently changed value",
@@ -2102,7 +2100,53 @@
       "reportsOnly": "Reports findings only.",
       "rejectsSaves": "Rejects saves that leave a record violating the rule.",
       "blocksTransition": "Blocks changing {{attribute}} from {{from}} to {{to}}.",
-      "blocksTransitionInto": "Blocks changing {{attribute}} to {{to}}."
+      "blocksTransitionInto": "Blocks changing {{attribute}} to {{to}}.",
+      "says": {
+        "required": "{{attribute}} has a value",
+        "oneOf": "{{attribute}} is one of {{values}}",
+        "compare": "{{attribute}} {{op}} {{other}}",
+        "subjectAttribute": "the checked record's {{attribute}}",
+        "relativeDate": "{{attribute}} {{op}} {{when}}",
+        "today": "today",
+        "daysFromNow_one": "{{count}} day from now",
+        "daysFromNow_other": "{{count}} days from now",
+        "daysAgo_one": "{{count}} day ago",
+        "daysAgo_other": "{{count}} days ago",
+        "stale_one": "{{attribute}} changed within the last {{count}} day",
+        "stale_other": "{{attribute}} changed within the last {{count}} days",
+        "hasTag": "The record has the system tag {{tag}}",
+        "missingTag": "The record lacks the system tag {{tag}}",
+        "unique": "No other record has the same {{attributes}}",
+        "acyclic": "Following {{relationship}} never leads back to the record",
+        "linked": {
+          "all": "Every record linked through {{relationship}} satisfies:",
+          "any": "At least one record linked through {{relationship}} satisfies:",
+          "none": "No record linked through {{relationship}} satisfies:"
+        },
+        "referencedBy": "{{bounds}} {{blueprint}} records point to it through {{relationship}}",
+        "between": "Between {{min}} and {{max}}",
+        "atLeast": "At least {{count}}",
+        "atMost": "At most {{count}}",
+        "allOf": "All of these hold:",
+        "anyOf": "At least one of these holds:"
+      },
+      "ops": {
+        "eq": "equals",
+        "ne": "differs from",
+        "lt": "is before or less than",
+        "lte": "is at most",
+        "gt": "is after or greater than",
+        "gte": "is at least",
+        "disjoint": "shares no value with"
+      },
+      "events": {
+        "recordCreated": "When a record is created",
+        "recordUpdated": "When a record is updated",
+        "recordMigrated": "When a record moves to another blueprint revision",
+        "attributeValueChanged": "When a value changes",
+        "attributeValueRestored": "When a value is restored",
+        "relationshipChanged": "When a relationship changes"
+      }
     },
     "empty": "No data quality rules yet",
     "emptyDescription": "A rule checks the records of a blueprint and reports those that fail, or stops their saves.",
@@ -2133,7 +2177,8 @@
         "changelog": "Changelog"
       },
       "recentRuns": "Recent runs",
-      "allRuns": "All runs of this rule"
+      "allRuns": "All runs of this rule",
+      "whatItChecks": "What it checks"
     },
     "changelog": {
       "loading": "Loading the changelog…",

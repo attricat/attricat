@@ -14,7 +14,7 @@ const QUOTED_CODE = /'([A-Za-z0-9_-]+)'/g;
 const QUOTED_VALUE = /"((?:[^"\\]|\\.)*)"/g;
 
 /** The label of one of an attribute's fixed values, such as a status. */
-const optionLabel = (attribute: FindingAttribute, value: string) => {
+export const optionLabel = (attribute: FindingAttribute, value: string) => {
   if (attribute.value_type === undefined) return undefined;
   const full = attribute as Attribute;
   return statusLabel(full, value) ?? enumValueLabel(full.value_schema, value);
