@@ -9,6 +9,7 @@ export const capabilities = {
   rolesGrant: 'roles_grant',
   tokensManage: 'tokens_manage',
   workspaceNavigationManage: 'workspace_navigation_manage',
+  tagColorsManage: 'tag_colors_manage',
   agentsManage: 'agents_manage',
   extensionsRead: 'extensions_read',
   extensionsManage: 'extensions_manage',

@@ -10,6 +10,7 @@ import { WorkspaceInvitationsSection } from './WorkspaceInvitationsSection';
 import { WorkspaceMembersSection } from './WorkspaceMembersSection';
 import { WorkspaceNavigationSection } from './WorkspaceNavigationSection';
 import { WorkspaceRolesSection } from './WorkspaceRolesSection';
+import { WorkspaceTagColorsSection } from './WorkspaceTagColorsSection';
 import { WorkspaceTeamsSection } from './WorkspaceTeamsSection';
 import { sessionOptions } from '../auth/queryOptions';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
@@ -18,7 +19,13 @@ import { capabilities as capabilityCodes } from '../auth/capabilities';
 import type { Capability } from '../auth/useCan';
 
 type WorkspaceManagementSection =
-  'members' | 'teams' | 'roles' | 'invitations' | 'navigation' | 'agent';
+  | 'members'
+  | 'teams'
+  | 'roles'
+  | 'invitations'
+  | 'navigation'
+  | 'tag-colors'
+  | 'agent';
 
 const sections = [
   {
@@ -50,6 +57,12 @@ const sections = [
     section: 'navigation',
     to: '/manage/workspace/navigation',
     capability: capabilityCodes.workspaceNavigationManage,
+  },
+  {
+    labelKey: 'workspace.tagColors',
+    section: 'tag-colors',
+    to: '/manage/workspace/tag-colors',
+    capability: capabilityCodes.tagColorsManage,
   },
   {
     labelKey: 'workspace.agent',
@@ -127,6 +140,11 @@ export const WorkspaceManagementPage = ({
           {section === 'navigation' && (
             <WorkspaceNavigationSection
               canManage={can(capabilityCodes.workspaceNavigationManage)}
+            />
+          )}
+          {section === 'tag-colors' && (
+            <WorkspaceTagColorsSection
+              canManage={can(capabilityCodes.tagColorsManage)}
             />
           )}
           {section === 'agent' && (

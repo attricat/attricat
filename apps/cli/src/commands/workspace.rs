@@ -22,6 +22,12 @@ pub(crate) enum WorkspaceCommand {
         #[command(subcommand)]
         command: AgentSettingsCommand,
     },
+    /// Read or change the colors of record system tags (changes require
+    /// `tag_colors.manage`).
+    TagColor {
+        #[command(subcommand)]
+        command: TagColorCommand,
+    },
     TokenPermission {
         #[command(subcommand)]
         command: TokenPermissionCommand,
@@ -74,6 +80,26 @@ pub(crate) enum AgentSettingsCommand {
         )]
         bulk_edit_max_records: Option<u32>,
     },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum TagColorCommand {
+    /// The Core defaults and the workspace's own colors.
+    List,
+    /// Give a tag a color: gray, blue, teal, green, yellow, orange, red,
+    /// purple or pink.
+    Set { tag: String, color: String },
+    /// Remove a tag's color, returning a Core tag to its default.
+    Reset { tag: String },
+}
+
+/// The patch an `acli workspace tag-color` change sends.
+pub(crate) fn tag_color_patch(command: TagColorCommand) -> Option<Value> {
+    match command {
+        TagColorCommand::List => None,
+        TagColorCommand::Set { tag, color } => Some(json!({ "set": { tag: color } })),
+        TagColorCommand::Reset { tag } => Some(json!({ "reset": [tag] })),
+    }
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -315,6 +341,10 @@ pub(crate) async fn workspace_command(
                 api.put_json(AGENT_SETTINGS_PATH, changed).await
             }
         },
+        WorkspaceCommand::TagColor { command } => match tag_color_patch(command) {
+            None => api.get(TAG_COLORS_PATH).await,
+            Some(patch) => api.patch_json(TAG_COLORS_PATH, patch).await,
+        },
         WorkspaceCommand::TokenPermission {
             command: TokenPermissionCommand::List,
         } => api.get("/workspace/token-permissions").await,
@@ -420,6 +450,7 @@ pub(crate) async fn workspace_command(
 }
 
 const AGENT_SETTINGS_PATH: &str = "/workspace/agent-settings";
+const TAG_COLORS_PATH: &str = "/workspace/tag-colors";
 
 async fn navigation_command(api: &Api, command: NavigationCommand) -> Result<String, CliError> {
     match command {

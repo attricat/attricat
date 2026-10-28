@@ -5,6 +5,9 @@ import { useState } from 'react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import '../../i18n';
+import { tagColorSwatches } from '../../app/tagColors';
+import { TagColorsTestProvider } from '../tag-colors/TagColorsTestProvider';
+import { hexToRgb } from '../tag-colors/testColors';
 import {
   getBlueprintByCode,
   getSystemTagFacet,
@@ -474,6 +477,36 @@ describe('ExplorerFilterBar', () => {
     await user.click(screen.getByLabelText('Remove tag filter Tag: imported'));
     expect(screen.queryByText('Tag: imported')).toBeNull();
     expect(screen.getByText('Tag: needs-review')).toBeTruthy();
+  });
+
+  it('shows a tag filter in the tag color', () => {
+    render(
+      <TagColorsTestProvider
+        colors={{ defaults: {}, overrides: { imported: 'green' } }}
+      >
+        <ExplorerFilterBar
+          attributes={[]}
+          blueprint="product"
+          filters={[]}
+          onAdd={vi.fn()}
+          onRemove={vi.fn()}
+          onSystemTagsChange={vi.fn()}
+          onUpdate={vi.fn()}
+          systemTags={['imported', 'plain']}
+        />
+      </TagColorsTestProvider>,
+    );
+
+    const chip = (label: string) =>
+      screen.getByText(label).closest('.MuiChip-root')!;
+    const { background, text } = tagColorSwatches.light.green;
+    expect(getComputedStyle(chip('Tag: imported')).backgroundColor).toBe(
+      hexToRgb(background),
+    );
+    expect(getComputedStyle(chip('Tag: imported')).color).toBe(hexToRgb(text));
+    expect(getComputedStyle(chip('Tag: plain')).backgroundColor).not.toBe(
+      hexToRgb(background),
+    );
   });
 
   it('says when the filter limit is reached', () => {

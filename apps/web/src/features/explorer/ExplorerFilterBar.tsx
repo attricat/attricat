@@ -1,4 +1,5 @@
 import { Box, Button, Typography } from '@mui/material';
+import { useQuery } from '@tanstack/react-query';
 import { PlusIcon } from 'lucide-react';
 import { useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -7,6 +8,8 @@ import type { Attribute, Blueprint } from '../records/api';
 import { isHiddenByDefault } from '../records/attributeVisibility';
 import { attributeLabel } from '../records/recordDisplay';
 import { systemTagLabel } from '../records/systemTags';
+import { tagColorsOptions } from '../tag-colors/queryOptions';
+import { tagColorOf } from '../tag-colors/tagColors';
 import { AttributeFilterDialog } from './AttributeFilterDialog';
 import { principalConfiguration } from '../principals/principal';
 import { usePrincipalDirectory } from '../principals/usePrincipalDirectory';
@@ -117,6 +120,10 @@ export const ExplorerFilterBar = ({
   onDataQualityChange,
 }: Props) => {
   const { t } = useTranslation();
+  const tagColors = useQuery({
+    ...tagColorsOptions(),
+    enabled: systemTags.length > 0,
+  });
   const timeZone = useTimeZone();
   const [open, setOpen] = useState(false);
   const [relationshipToOpen, setRelationshipToOpen] =
@@ -317,6 +324,7 @@ export const ExplorerFilterBar = ({
         return (
           <ExplorerFilterChip
             chipRef={chipRef(key)}
+            color={tagColorOf(tagColors.data, tag)}
             key={key}
             label={label}
             onDelete={() =>

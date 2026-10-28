@@ -43,6 +43,7 @@ pub(super) struct SessionCapabilities {
     roles_grant: bool,
     tokens_manage: bool,
     workspace_navigation_manage: bool,
+    tag_colors_manage: bool,
     agents_manage: bool,
     extensions_read: bool,
     extensions_manage: bool,
@@ -74,6 +75,7 @@ impl SessionResponse {
         c.roles_grant &= permits(Permission::RolesGrant);
         c.tokens_manage &= permits(Permission::TokensManage);
         c.workspace_navigation_manage &= permits(Permission::WorkspaceNavigationManage);
+        c.tag_colors_manage &= permits(Permission::TagColorsManage);
         c.agents_manage &= permits(Permission::AgentsManage);
         c.extensions_read &= permits(Permission::ExtensionsRead);
         c.extensions_manage &= permits(Permission::ExtensionsManage);
@@ -190,7 +192,7 @@ async fn session_response_payload_with_identifier(
 }
 
 /// Workspace-wide permissions reported as session capability flags.
-const CAPABILITY_PERMISSIONS: [Permission; 23] = [
+const CAPABILITY_PERMISSIONS: [Permission; 24] = [
     Permission::AuditRead,
     Permission::DataHealthRead,
     Permission::MembersManage,
@@ -198,6 +200,7 @@ const CAPABILITY_PERMISSIONS: [Permission; 23] = [
     Permission::RolesGrant,
     Permission::TokensManage,
     Permission::WorkspaceNavigationManage,
+    Permission::TagColorsManage,
     Permission::AgentsManage,
     Permission::ExtensionsRead,
     Permission::ExtensionsManage,
@@ -236,6 +239,7 @@ async fn session_capabilities(
         roles_grant: has(Permission::RolesGrant),
         tokens_manage: has(Permission::TokensManage),
         workspace_navigation_manage: has(Permission::WorkspaceNavigationManage),
+        tag_colors_manage: has(Permission::TagColorsManage),
         agents_manage: has(Permission::AgentsManage),
         extensions_read: has(Permission::ExtensionsRead),
         extensions_manage: has(Permission::ExtensionsManage),

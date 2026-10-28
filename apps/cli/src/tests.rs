@@ -26,7 +26,9 @@ use crate::commands::solution_pack::{
 };
 use crate::commands::team::team_request;
 use crate::commands::token::{GENERATOR_TOKEN_LABEL, GENERATOR_TOKEN_PERMISSIONS};
-use crate::commands::workspace::{AgentSettingsCommand, WorkspaceCommand, changed_agent_settings};
+use crate::commands::workspace::{
+    AgentSettingsCommand, WorkspaceCommand, changed_agent_settings, tag_color_patch,
+};
 use crate::error::CliError;
 use crate::events::{EventParser, ServerEvent};
 use crate::input::{
@@ -181,6 +183,31 @@ fn notification_commands_build_requests() {
     assert_eq!(
         parse(&["acli", "notification", "count"]).1,
         "/notifications/unread-count"
+    );
+}
+
+#[test]
+fn tag_color_commands_send_one_change() {
+    let patch = |args: &[&str]| match Cli::try_parse_from(args).unwrap().command {
+        Command::Workspace {
+            command: WorkspaceCommand::TagColor { command },
+        } => tag_color_patch(command),
+        _ => unreachable!(),
+    };
+    assert_eq!(patch(&["acli", "workspace", "tag-color", "list"]), None);
+    assert_eq!(
+        patch(&["acli", "workspace", "tag-color", "set", "reviewed", "green"]),
+        Some(json!({"set": {"reviewed": "green"}}))
+    );
+    assert_eq!(
+        patch(&[
+            "acli",
+            "workspace",
+            "tag-color",
+            "reset",
+            "attricat.needs_attention"
+        ]),
+        Some(json!({"reset": ["attricat.needs_attention"]}))
     );
 }
 

@@ -32,6 +32,7 @@ mod sessions;
 mod solution_packs;
 mod streams;
 mod system;
+mod tag_colors;
 mod teams;
 mod tokens;
 mod workflows;
@@ -814,6 +815,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/workspace/agent-settings",
             get(agent_settings::configured).put(agent_settings::update),
+        )
+        .route(
+            "/workspace/tag-colors",
+            get(tag_colors::get).patch(tag_colors::update),
         )
         .route(
             "/workspace/extension-layout",

@@ -4,6 +4,7 @@ import type { MouseEventHandler, ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import type { RecordItem } from '../records/api';
+import { TagColorsTestProvider } from '../tag-colors/TagColorsTestProvider';
 import { recordPanelOpenerAttribute } from './constants';
 import { RecordDisplayCell, SystemTagsCell } from './ExplorerTableCells';
 
@@ -97,7 +98,9 @@ describe('SystemTagsCell', () => {
 
   it('filters by a clicked tag', () => {
     const onFilterTag = vi.fn();
-    render(<SystemTagsCell onFilterTag={onFilterTag} record={tagged} />);
+    render(<SystemTagsCell onFilterTag={onFilterTag} record={tagged} />, {
+      wrapper: TagColorsTestProvider,
+    });
 
     fireEvent.click(
       screen.getByRole('button', { name: 'Filter by tag needs-review' }),
@@ -109,7 +112,9 @@ describe('SystemTagsCell', () => {
   });
 
   it('shows plain tags without a filter', () => {
-    render(<SystemTagsCell record={tagged} />);
+    render(<SystemTagsCell record={tagged} />, {
+      wrapper: TagColorsTestProvider,
+    });
 
     expect(screen.getByText('needs-review')).toBeTruthy();
     expect(screen.queryByRole('button')).toBeNull();

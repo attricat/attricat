@@ -25,6 +25,7 @@ export const sessionSchema = z.object({
       roles_grant: z.boolean().default(false),
       tokens_manage: z.boolean(),
       workspace_navigation_manage: z.boolean(),
+      tag_colors_manage: z.boolean().default(false),
       agents_manage: z.boolean().default(false),
       extensions_read: z.boolean(),
       extensions_manage: z.boolean(),

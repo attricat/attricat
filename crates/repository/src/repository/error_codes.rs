@@ -336,6 +336,7 @@ impl RepositoryError {
             | Self::InvalidSolutionPackPlan(_)
             | Self::InvalidTeam(_)
             | Self::InvalidAgentSettings(_)
+            | Self::InvalidTagColors(_)
             | Self::InvalidPublicationChannel(_)
             | Self::InvalidContextData
             | Self::InvalidContext

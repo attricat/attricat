@@ -91,6 +91,7 @@ mod solution_packs;
 mod staged_file_uploads;
 mod status_control;
 mod system_users;
+mod tag_colors;
 mod tasks;
 mod unique_keys;
 mod upload_intents;

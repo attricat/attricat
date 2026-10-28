@@ -75,6 +75,14 @@ Invitation and onboarding emails need [SMTP configured](/reference/configuration
 
 Changing navigation needs `workspace_navigation.manage`.
 
+## Tag colors
+
+**Tag colors** gives record system tags a color, so tags such as *needs attention* or *reviewed* stand out in the Explorer and on the record page. Pick each color from a preset list; every color has a light and a dark mode variant, so tags stay readable in both.
+
+Attricat's own tags start with a default color: *needs attention* is yellow. You can choose another color for them and **Reset to default** later. Other tags have no color until you add one: type the tag as records store it, for example `reviewed` or `my-extension:synced`, and choose a color. A workspace can color up to 200 tags besides the defaults.
+
+Everyone who can read records sees the colors. Changing them needs `tag_colors.manage`, or use `acli workspace tag-color set <tag> <color>`.
+
 ## Your profile
 
 **Profile → Account** shows how other people see you in the workspace.

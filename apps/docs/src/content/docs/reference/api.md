@@ -419,6 +419,7 @@ See [Translate labels](/builders/translations/).
 | `POST` | `/workspace/users` | Create a user. |
 | `GET`, `PUT` | `/workspace/navigation`; `GET /workspace/navigation/sidebar` | Sidebar shortcuts. |
 | `GET`, `PUT` | `/workspace/agent-settings` | How agent bulk edits are approved (`agents.manage`): `{"bulk_edits": "per_proposal" \| "per_record", "bulk_edit_max_records": 1–5000}`. |
+| `GET`, `PATCH` | `/workspace/tag-colors` | Colors of record system tags. `GET` (`records.read`) returns `{"defaults": {tag: color}, "overrides": {tag: color}}`; a tag's color is its override, else its default. `PATCH` (`tag_colors.manage`) takes `{"set": {tag: color}, "reset": [tag]}` and returns the result. Colors: `gray`, `blue`, `teal`, `green`, `yellow`, `orange`, `red`, `purple`, `pink`. |
 | `GET` | `/directory` | Users and teams that user or team attributes can reference (`records.read`). |
 | `GET` | `/directory/users/{user_id}` | One workspace member's profile with their teams (`records.read`). |
 | `GET`, `POST`, `PATCH`, `DELETE` | `/workspace/teams[/{id}]` | Teams (`members.manage`). `PATCH` takes `name` and/or `member_user_ids`, which replaces every member. |

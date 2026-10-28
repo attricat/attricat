@@ -10,6 +10,8 @@ export const ownerRoleCode = 'owner';
 export const roleCodePattern = /^[a-z][a-z0-9_-]*$/;
 export const activeMemberState = 'active';
 export const navigationSelectMinWidth = 250;
+/** Fits the longest color name with its swatch. */
+export const tagColorSelectMinWidth = 180;
 /** How the agent's bulk value edits are approved; see the API's settings. */
 export const bulkEditPolicies = ['per_proposal', 'per_record'] as const;
 /** The highest per-edit record limit a workspace may set. */

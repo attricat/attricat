@@ -419,6 +419,7 @@ Trasy `GET` reguł, wykonań i ustaleń wymagają `rules.read`; pozostałe trasy
 | `POST` | `/workspace/users` | Tworzy użytkownika. |
 | `GET`, `PUT` | `/workspace/navigation`; `GET /workspace/navigation/sidebar` | Skróty na pasku bocznym. |
 | `GET`, `PUT` | `/workspace/agent-settings` | Sposób zatwierdzania edycji zbiorczych agenta (`agents.manage`): `{"bulk_edits": "per_proposal" \| "per_record", "bulk_edit_max_records": 1–5000}`. |
+| `GET`, `PATCH` | `/workspace/tag-colors` | Kolory tagów systemowych rekordów. `GET` (`records.read`) zwraca `{"defaults": {tag: kolor}, "overrides": {tag: kolor}}`; kolorem tagu jest jego nadpisanie, a w razie jego braku kolor domyślny. `PATCH` (`tag_colors.manage`) przyjmuje `{"set": {tag: kolor}, "reset": [tag]}` i zwraca wynik. Kolory: `gray`, `blue`, `teal`, `green`, `yellow`, `orange`, `red`, `purple`, `pink`. |
 | `GET` | `/directory` | Użytkownicy i zespoły, do których mogą odwoływać się atrybuty użytkownika lub zespołu (`records.read`). |
 | `GET` | `/directory/users/{user_id}` | Profil jednego członka obszaru roboczego wraz z jego zespołami (`records.read`). |
 | `GET`, `POST`, `PATCH`, `DELETE` | `/workspace/teams[/{id}]` | Zespoły (`members.manage`). `PATCH` przyjmuje `name` lub `member_user_ids`, które zastępuje cały skład. |

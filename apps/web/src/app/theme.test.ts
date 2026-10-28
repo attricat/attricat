@@ -1,7 +1,12 @@
+import { getContrastRatio } from '@mui/material/styles';
 import { describe, expect, it } from 'vitest';
 import colors from '../../design/tokens/colors.json';
 import radius from '../../design/tokens/radius.json';
+import { tagColorCodes } from './tagColors';
 import { makeTheme } from './theme';
+
+/** WCAG AA contrast for chip-sized text. */
+const minimumTextContrast = 4.5;
 
 describe('catalog theme', () => {
   it.each(['light', 'dark'] as const)('uses the %s design tokens', (mode) => {
@@ -25,4 +30,18 @@ describe('catalog theme', () => {
     expect(theme.shape.borderRadius).toBe(radius.control);
     expect(theme.spacing(1)).toBe('4px');
   });
+
+  it.each(['light', 'dark'] as const)(
+    'keeps %s tag text readable on its fill',
+    (mode) => {
+      const { tagColors } = makeTheme(mode).palette;
+      for (const color of tagColorCodes) {
+        const { background, text } = tagColors[color];
+        expect(
+          getContrastRatio(text, background),
+          color,
+        ).toBeGreaterThanOrEqual(minimumTextContrast);
+      }
+    },
+  );
 });

@@ -303,6 +303,8 @@ pub enum RepositoryError {
     InvalidTeam(String),
     #[error("invalid agent settings: {0}")]
     InvalidAgentSettings(String),
+    #[error("invalid tag colors: {0}")]
+    InvalidTagColors(String),
     #[error("invalid workflow definition: {0}")]
     InvalidWorkflowDefinition(String),
     #[error("invalid rule definition: {0}")]

@@ -75,6 +75,14 @@ Karta **Nawigacja** określa skróty do schematów na pasku bocznym przeglądark
 
 Zmiana nawigacji wymaga uprawnienia `workspace_navigation.manage`.
 
+## Kolory znaczników
+
+Karta **Kolory znaczników** nadaje tagom systemowym rekordów kolory, dzięki czemu tagi takie jak *wymaga uwagi* czy *reviewed* wyróżniają się w przeglądarce rekordów i na stronie rekordu. Każdy kolor wybierasz z gotowej listy; każdy ma wariant dla trybu jasnego i ciemnego, więc tagi pozostają czytelne w obu.
+
+Własne tagi Attricat mają domyślny kolor: *wymaga uwagi* jest żółty. Możesz wybrać dla nich inny kolor, a później użyć **Przywróć domyślny**. Pozostałe tagi nie mają koloru, dopóki go nie dodasz: wpisz tag w postaci zapisanej w rekordach, np. `reviewed` lub `my-extension:synced`, i wybierz kolor. Obszar roboczy może nadać kolory najwyżej 200 tagom poza domyślnymi.
+
+Kolory widzi każdy, kto może odczytywać rekordy. Ich zmiana wymaga uprawnienia `tag_colors.manage`; możesz też użyć `acli workspace tag-color set <tag> <kolor>`.
+
 ## Twój profil
 
 **Profil → Konto** pokazuje, jak widzą Cię inne osoby w obszarze roboczym.

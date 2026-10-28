@@ -122,6 +122,8 @@ fn audit_permission(method: &Method, route: &str) -> Permission {
         Permission::WorkspaceNavigationManage
     } else if route.starts_with("/workspace/agent-settings") {
         Permission::AgentsManage
+    } else if route == "/workspace/tag-colors" {
+        Permission::TagColorsManage
     } else if method == Method::DELETE {
         Permission::RecordsDelete
     } else {
@@ -225,6 +227,10 @@ mod tests {
         assert_eq!(
             audit_permission(&Method::PUT, "/workspace/agent-settings"),
             Permission::AgentsManage
+        );
+        assert_eq!(
+            audit_permission(&Method::PATCH, "/workspace/tag-colors"),
+            Permission::TagColorsManage
         );
         assert_eq!(
             audit_permission(

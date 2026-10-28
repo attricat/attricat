@@ -17,6 +17,7 @@ Brak zalogowania lub wygasła sesja zwraca `401`. Zalogowana osoba bez uprawnien
 | `roles.manage` | Role niestandardowe; ponawianie dostarczeń zdarzeń, które stały się martwymi wiadomościami. | ✓ | ✓ | | |
 | `tokens.manage` | Tworzenie i odwoływanie własnych osobistych tokenów API. | ✓ | ✓ | | |
 | `workspace_navigation.manage` | Skróty na pasku bocznym przeglądarki rekordów. | ✓ | ✓ | | |
+| `tag_colors.manage` | Kolory tagów systemowych rekordów. | ✓ | ✓ | | |
 | `audit.read` | Dziennik audytu. | ✓ | ✓ | | |
 | `blueprints.read` | Schematy i atrybuty wielokrotnego użytku. | ✓ | ✓ | ✓ | ✓ |
 | `blueprints.write` | Tworzenie szkiców i wersji schematów; atrybuty wielokrotnego użytku. | ✓ | ✓ | ✓ | |
