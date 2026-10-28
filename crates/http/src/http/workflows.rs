@@ -8,13 +8,10 @@ use axum::{Json, http::StatusCode, response::Response};
 use uuid::Uuid;
 
 pub(super) async fn validate(
+    super::auth::ScopedRepository(repo): super::auth::ScopedRepository,
     ApiJson(input): ApiJson<CreateWorkflow>,
 ) -> Result<Json<attricat_workflow::CompiledWorkflow>, ApiError> {
-    attricat_workflow::compile(&input.definition)
-        .map(Json)
-        .map_err(|e| {
-            crate::repository::RepositoryError::InvalidWorkflowDefinition(e.to_string()).into()
-        })
+    Ok(Json(repo.validate_workflow(&input).await?))
 }
 pub(super) async fn list(
     super::auth::ScopedRepository(repo): super::auth::ScopedRepository,

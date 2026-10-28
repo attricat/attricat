@@ -82,7 +82,7 @@ blueprints = ["product", "service"]
 
 - Każdy kod musi wskazywać schemat istniejący w przestrzeni roboczej w chwili zapisu przepływu, więc literówka jest odrzucana z `422 invalid_workflow_definition`, zamiast po cichu wyłączać przepływ.
 - Rekord pasuje według swojego schematu, niezależnie od rewizji, w której jest.
-- Gdy każdy wyzwalacz wymienia swoje schematy, każda akcja `attribute_write` na rekordzie wyzwalającym musi wskazywać atrybut, który jeden z tych schematów deklaruje w najnowszej opublikowanej rewizji, albo [atrybut wielokrotnego użytku](/pl/builders/modeling/#wielokrotne-użycie-atrybutów). Literówka w kodzie jest odrzucana przy zapisie, a nie przy pierwszym uruchomieniu przepływu. Zapisy w [`referencing_records_update`](#aktualizuj-rekordy-odwołujące-się-do-rekordu-wyzwalającego) nie są tak sprawdzane, bo rekordy odwołujące się mogą mieć dowolny schemat.
+- Gdy każdy wyzwalacz wymienia swoje schematy, każda akcja `attribute_write` na rekordzie wyzwalającym musi wskazywać atrybut, który jeden z tych schematów deklaruje w najnowszej opublikowanej rewizji, albo [atrybut wielokrotnego użytku](/pl/builders/modeling/#wielokrotne-użycie-atrybutów). Edytor zaznacza literówkę w kodzie już podczas pisania, a zapis ją odrzuca, więc nie dochodzi ona do uruchomienia. Zapisy w [`referencing_records_update`](#aktualizuj-rekordy-odwołujące-się-do-rekordu-wyzwalającego) nie są tak sprawdzane, bo rekordy odwołujące się mogą mieć dowolny schemat.
 - `blueprints` łączy się z `attributes`, `envelope` i `facts`: wszystkie muszą pasować. Bez niego wyzwalacz pasuje do rekordów każdego schematu.
 - Wyzwalacze ręczne i harmonogramowe same wskazują swój rekord, więc nie przyjmują `blueprints`.
 

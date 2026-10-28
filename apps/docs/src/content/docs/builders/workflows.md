@@ -82,7 +82,7 @@ blueprints = ["product", "service"]
 
 - Every code must name a blueprint in the workspace when the workflow is saved, so a typo is rejected with `422 invalid_workflow_definition` instead of silently stopping the workflow.
 - A record matches by its blueprint, whatever revision of it the record is on.
-- When every trigger lists its blueprints, each `attribute_write` on the trigger record must name an attribute one of those blueprints declares in its latest published revision, or a [reusable attribute](/builders/modeling/#reuse-attributes). A misspelt code is rejected when you save, not when the workflow first runs. Writes in [`referencing_records_update`](#update-records-that-reference-the-trigger-record) are not checked this way, because referencing records can be of any blueprint.
+- When every trigger lists its blueprints, each `attribute_write` on the trigger record must name an attribute one of those blueprints declares in its latest published revision, or a [reusable attribute](/builders/modeling/#reuse-attributes). The editor flags a misspelt code as you type, and saving rejects it, so it never reaches a run. Writes in [`referencing_records_update`](#update-records-that-reference-the-trigger-record) are not checked this way, because referencing records can be of any blueprint.
 - `blueprints` combines with `attributes`, `envelope`, and `facts`: all of them must match. Without it, the trigger matches records of every blueprint.
 - Manual and schedule triggers already name their record, so they don't take `blueprints`.
 

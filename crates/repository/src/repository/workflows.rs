@@ -59,6 +59,18 @@ impl AttricatRepository {
             .await?
             .into_domain())
     }
+    /// Runs every check a save runs, for the editor's live diagnostics,
+    /// without saving anything.
+    pub async fn validate_workflow(
+        &self,
+        input: &CreateWorkflow,
+    ) -> Result<attricat_workflow::CompiledWorkflow, RepositoryError> {
+        let compiled = attricat_workflow::compile(&input.definition)
+            .map_err(|e| RepositoryError::InvalidWorkflowDefinition(e.to_string()))?;
+        let mut conn = self.pool.acquire().await?;
+        check_trigger_scope(&mut conn, self.workspace_id.0, &compiled).await?;
+        Ok(compiled)
+    }
     pub async fn create_workflow(
         &self,
         input: CreateWorkflow,

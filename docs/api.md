@@ -157,7 +157,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `POST` | `/workspace/invitations/accept` | Accept `{ "secret": "cat_inv_..." }` as the verified intended account. |
 | `GET`, `POST` | `/personal-access-tokens` | List or issue a personal token; creation returns its secret exactly once. |
 | `DELETE` | `/personal-access-tokens/{token_id}` | Revoke a personal token. |
-| `POST` | `/workflows/validate` | Strictly validate and compile a workflow TOML definition without persisting it (`workflows.manage`). |
+| `POST` | `/workflows/validate` | Strictly validate and compile a workflow TOML definition without persisting it, running every save check including trigger blueprint scope (`workflows.manage`). |
 | `GET`, `POST` | `/workflows` | List workflow families/revisions or create the first draft (`workflows.read` / `workflows.manage`). |
 | `GET`, `POST` | `/workflows/{id}/versions` | List immutable revisions or create the next draft. |
 | `GET` | `/workflows/{id}`, `/workflows/{id}/versions/{version}` | Read the latest or exact workflow revision. |

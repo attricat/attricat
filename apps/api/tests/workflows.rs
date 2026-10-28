@@ -948,18 +948,26 @@ attribute_code = "{attribute}"
 fixed = "x""#
         ) })
     };
-    let misspelt = client
-        .post(format!("{base_url}/workflows"))
-        .json(&writing("write_titel", "titel"))
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(misspelt.status(), StatusCode::UNPROCESSABLE_ENTITY);
-    let error: Value = misspelt.json().await.unwrap();
-    assert_eq!(
-        error["error"]["message"],
-        "invalid workflow definition: action writes attribute 'titel' that none of the trigger blueprints (scoped_product) declares"
-    );
+    // The editor's live check runs the same rule as a save.
+    for path in ["workflows/validate", "workflows"] {
+        let misspelt = client
+            .post(format!("{base_url}/{path}"))
+            .json(&writing("write_titel", "titel"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            misspelt.status(),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "{path}"
+        );
+        let error: Value = misspelt.json().await.unwrap();
+        assert_eq!(
+            error["error"]["message"],
+            "invalid workflow definition: action writes attribute 'titel' that none of the trigger blueprints (scoped_product) declares",
+            "{path}"
+        );
+    }
     for (code, attribute) in [("write_title", "title"), ("write_reviewer", "reviewer")] {
         client
             .post(format!("{base_url}/workflows"))
