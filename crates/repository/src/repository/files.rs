@@ -1190,8 +1190,10 @@ impl SystemRepository {
     /// Queues text extraction for documents that have never been extracted or
     /// were extracted by an extractor older than `extractor_version`. Files
     /// with a pending text job, or whose last one failed, are skipped; job
-    /// retention eventually lets a failed file be tried again. Returns how
-    /// many jobs were queued.
+    /// retention eventually lets a failed file be tried again. A timeout is
+    /// not a property of the document, so a timed-out extraction is likewise
+    /// tried again once retention has removed its text jobs. Returns how many
+    /// jobs were queued.
     pub async fn queue_text_extraction_backfill(
         &self,
         extractor_version: u32,
@@ -1204,7 +1206,8 @@ impl SystemRepository {
         let due: Vec<(Uuid, Uuid)> = sqlx::query_as(
             r#"SELECT f.workspace_id, f.id FROM files f
             WHERE f.deleted_at IS NULL AND f.mime_type = ANY($1)
-              AND NOT EXISTS (SELECT 1 FROM file_text_extractions e WHERE e.file_id = f.id AND e.extractor_version >= $2)
+              AND NOT EXISTS (SELECT 1 FROM file_text_extractions e WHERE e.file_id = f.id AND e.extractor_version >= $2
+                AND (e.failure_reason IS DISTINCT FROM $5 OR EXISTS (SELECT 1 FROM file_processing_jobs tj WHERE tj.file_id = f.id AND tj.kind = $3)))
               AND NOT EXISTS (SELECT 1 FROM file_processing_jobs j WHERE j.file_id = f.id AND j.kind = $3 AND j.status IN ('queued','running','retryable','failed'))
             ORDER BY f.created_at, f.id
             LIMIT $4 FOR UPDATE OF f SKIP LOCKED"#,
@@ -1213,6 +1216,7 @@ impl SystemRepository {
         .bind(extractor_version as i32)
         .bind(FileJobKind::TextExtraction.as_str())
         .bind(RECONCILE_BATCH)
+        .bind(TextExtractionFailure::TimedOut.as_str())
         .fetch_all(&mut *transaction)
         .await?;
         let mut queued = 0;

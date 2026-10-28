@@ -56,16 +56,17 @@ const AUTHORING_GUIDE_TOPICS: [(&str, &str); 6] = [
     ("rules", RULES_GUIDE),
     ("workflows", WORKFLOWS_GUIDE),
 ];
-/// Comments per page and characters per comment body the agent reads, so a
-/// page of maximum-length comments stays within the tool result bound.
-/// Newest approvals and retention holds `get_record_controls` reports.
 /// Characters `read_file` returns when the call sets no limit.
 pub(crate) const DEFAULT_READ_FILE_CHARS: usize = 20_000;
 /// Most characters one `read_file` call returns.
 pub(crate) const MAX_READ_FILE_CHARS: usize = 40_000;
+/// Longest `read_file` section selector, in bytes.
 const MAX_READ_FILE_SECTION_BYTES: usize = 200;
 /// Tool error code of a document whose text could not be extracted.
 const DOCUMENT_TEXT_UNAVAILABLE: &str = "document_text_unavailable";
+/// Comments per page and characters per comment body the agent reads, so a
+/// page of maximum-length comments stays within the tool result bound.
+/// Newest approvals and retention holds `get_record_controls` reports.
 const MAX_RECORD_CONTROL_ITEMS: i64 = 200;
 const MAX_COMMENT_PAGE: usize = 30;
 const MAX_COMMENT_BODY_CHARS: usize = 1_000;

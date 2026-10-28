@@ -4,9 +4,12 @@
 //! reached yet, or extracted with an older extractor, is extracted here on
 //! demand and not stored; the worker's job stores it later.
 
+use std::{collections::HashMap, sync::Arc};
+
 use attricat_document_text::{Document, EXTRACTOR_VERSION, Section, SectionKind};
 use attricat_domain::states::TextExtractionFailure;
 use attricat_workers::document_text::extract_text;
+use uuid::Uuid;
 
 use crate::{
     repository::{AttricatRepository, FileObject, FileTextOutcome, RepositoryError},
@@ -30,7 +33,7 @@ pub(crate) enum DocumentTextError {
 pub(crate) async fn load(
     repository: &AttricatRepository,
     object_store: &dyn ObjectStore,
-    file_id: uuid::Uuid,
+    file_id: Uuid,
     file: &FileObject,
 ) -> Result<Document, DocumentTextError> {
     match repository.file_text_extraction(file_id).await? {
@@ -60,6 +63,31 @@ pub(crate) async fn load(
     extract_text(file.mime_type.clone(), original.bytes)
         .await
         .map_err(DocumentTextError::Unavailable)
+}
+
+/// Documents a run has already loaded, by file ID. Conversation history is
+/// converted once per run, and each `read_file` window of a document would
+/// otherwise load, or extract, the whole document again.
+#[derive(Default)]
+pub(crate) struct DocumentCache(HashMap<Uuid, Arc<Document>>);
+
+impl DocumentCache {
+    /// The text of a document file, loaded at most once per cache. Failures
+    /// are not cached.
+    pub(crate) async fn load(
+        &mut self,
+        repository: &AttricatRepository,
+        object_store: &dyn ObjectStore,
+        file_id: Uuid,
+        file: &FileObject,
+    ) -> Result<Arc<Document>, DocumentTextError> {
+        if let Some(document) = self.0.get(&file_id) {
+            return Ok(document.clone());
+        }
+        let document = Arc::new(load(repository, object_store, file_id, file).await?);
+        self.0.insert(file_id, document.clone());
+        Ok(document)
+    }
 }
 
 /// The sections `selector` names: a page number, a page range such as `3-5`,

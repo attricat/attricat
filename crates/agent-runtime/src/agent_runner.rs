@@ -171,6 +171,9 @@ pub async fn run_claimed(
 #[derive(Default)]
 struct RunMemo {
     messages: HashMap<Uuid, ChatMessage>,
+    /// Document text by file ID, so several `read_file` windows of one
+    /// document load (or extract) it once per run.
+    document_cache: documents::DocumentCache,
     initiator: Option<(Uuid, Uuid)>,
     catalog_map: Option<String>,
     settings: Option<AgentSettings>,
@@ -332,7 +335,9 @@ async fn drive(
         let converted = match memo.messages.get(&id) {
             Some(converted) => converted.clone(),
             None => {
-                let converted = request_message(repository, object_store, message).await;
+                let converted =
+                    request_message(repository, object_store, &mut memo.document_cache, message)
+                        .await;
                 memo.messages.insert(id, converted.clone());
                 converted
             }
@@ -633,6 +638,7 @@ async fn flush_deltas(
 async fn request_message(
     repository: &AttricatRepository,
     object_store: &Arc<dyn ObjectStore>,
+    document_cache: &mut documents::DocumentCache,
     message: crate::repository::ConversationMessage,
 ) -> ChatMessage {
     if message.role == "assistant"
@@ -693,9 +699,15 @@ async fn request_message(
                     continue;
                 };
                 let request = ReadFileRequest::from_result(&content);
-                if let Some(text) =
-                    read_file_contents(repository, object_store, attachment.id, &file, &request)
-                        .await
+                if let Some(text) = read_file_contents(
+                    repository,
+                    object_store,
+                    document_cache,
+                    attachment.id,
+                    &file,
+                    &request,
+                )
+                .await
                 {
                     parts.push(json!({"type":"text","text":text}));
                 }
@@ -730,13 +742,9 @@ async fn request_message(
             continue;
         };
         if is_text_extraction_mime(&attachment.mime_type) {
-            let text = match documents::load(
-                repository,
-                object_store.as_ref(),
-                attachment.id,
-                &file,
-            )
-            .await
+            let text = match document_cache
+                .load(repository, object_store.as_ref(), attachment.id, &file)
+                .await
             {
                 Ok(document) => {
                     let text = documents::render(&document.sections);
@@ -812,13 +820,16 @@ impl ReadFileRequest {
 async fn read_file_contents(
     repository: &AttricatRepository,
     object_store: &Arc<dyn ObjectStore>,
+    document_cache: &mut documents::DocumentCache,
     file_id: Uuid,
     file: &FileObject,
     request: &ReadFileRequest,
 ) -> Option<String> {
     let name = &file.display_filename;
     let text = if is_text_extraction_mime(&file.mime_type) {
-        let document = match documents::load(repository, object_store.as_ref(), file_id, file).await
+        let document = match document_cache
+            .load(repository, object_store.as_ref(), file_id, file)
+            .await
         {
             Ok(document) => document,
             Err(error) => return Some(format!("{name}: {error}.")),

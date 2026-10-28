@@ -344,8 +344,8 @@ Extraction is bounded: 25 MiB source files, 64 MiB per unzipped Office part and
 256 MiB per Office file, 2,000,000 characters of text, 10,000 rows and 200
 columns per sheet, 2,000 PDF pages, and 60 seconds. Each reconciliation queues
 text extraction for documents uploaded before it existed, or extracted by an
-older extractor version, in batches; documents whose last text job failed are
-retried once job retention removes that job. Until the worker has run, the
+older extractor version, in batches; documents whose last text job failed, or
+whose extraction timed out, are retried once job retention removes that job. Until the worker has run, the
 agent and smart fill extract a document's text on demand without storing it.
 When `read_file` targets a document whose stored extraction failed, it fails
 with the tool error code `document_text_unavailable`.

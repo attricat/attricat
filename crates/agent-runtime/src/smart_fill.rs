@@ -279,17 +279,25 @@ pub async fn propose_record_form_values(
                     continue;
                 };
                 if is_text_extraction_mime(&file.mime_type) && remaining_attachment_bytes > 0 {
-                    let text = document_attachment_text(
+                    // Like an unreadable text file, a document that cannot be
+                    // read now is noted rather than failing the request.
+                    match document_attachment_text(
                         repository,
                         object_store,
                         attachment.id,
                         &file,
                         remaining_attachment_bytes,
                     )
-                    .await?;
-                    remaining_attachment_bytes =
-                        remaining_attachment_bytes.saturating_sub(text.len());
-                    prior_files.push(json!({"filename":file.display_filename,"text":text}));
+                    .await
+                    {
+                        Ok(text) => {
+                            remaining_attachment_bytes =
+                                remaining_attachment_bytes.saturating_sub(text.len());
+                            prior_files
+                                .push(json!({"filename":file.display_filename,"text":text}));
+                        }
+                        Err(_) => prior_files.push(json!({"filename":file.display_filename,"note":"Reattach this file if its contents are needed."})),
+                    }
                 } else if (file.mime_type.starts_with("text/")
                     || file.mime_type == "application/json")
                     && file.byte_size >= 0

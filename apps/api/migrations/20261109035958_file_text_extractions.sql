@@ -22,3 +22,8 @@ CREATE TABLE file_text_extractions (
 CREATE UNIQUE INDEX file_processing_jobs_one_active_text_extraction_idx
     ON file_processing_jobs (file_id, kind)
     WHERE kind = 'text_extraction' AND status IN ('queued', 'running', 'retryable');
+
+-- Reconciliation looks for documents without current text on every pass.
+CREATE INDEX files_text_extraction_candidates_idx
+    ON files (mime_type, created_at, id)
+    WHERE deleted_at IS NULL;

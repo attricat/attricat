@@ -364,7 +364,10 @@ impl FileWorker {
         let extraction = crate::document_text::extract_text(mime, object.bytes).await;
         counter!(
             "attricat_file_text_extractions_total",
-            "outcome" => extraction.as_ref().err().map_or("ready", |failure| failure.as_str())
+            "outcome" => extraction
+                .as_ref()
+                .err()
+                .map_or(FileTextExtractionStatus::Ready.as_str(), |failure| failure.as_str())
         )
         .increment(1);
         let text_key = format!("files/{}/{TEXT_FILE_VARIANT}.json", job.file_id);
@@ -373,17 +376,19 @@ impl FileWorker {
         let stored = match &extraction {
             Ok(document) => {
                 let bytes = serde_json::to_vec(document).expect("documents serialize");
+                let byte_size = bytes.len() as i64;
+                let hash = format!("{:x}", sha2::Sha256::digest(&bytes));
                 self.store
                     .put(
                         &text_key,
                         StoredObject {
-                            bytes: bytes.clone().into(),
+                            bytes: bytes.into(),
                             content_type: Some("application/json".into()),
                         },
                     )
                     .await
                     .map_err(WorkerError::Storage)?;
-                Ok((document, bytes))
+                Ok((document, byte_size, hash))
             }
             Err(failure) => Err(*failure),
         };
@@ -393,13 +398,13 @@ impl FileWorker {
         if !still_owned {
             return Err(WorkerError::LeaseLost);
         }
+        let mut removed_variant = false;
         let (status, failure, sections, chars, truncated) = match stored {
-            Ok((document, bytes)) => {
-                let hash = format!("{:x}", sha2::Sha256::digest(&bytes));
+            Ok((document, byte_size, hash)) => {
                 sqlx::query(r#"INSERT INTO file_variants (id, workspace_id, file_id, kind, mime_type, byte_size, object_key, sha256)
                     VALUES ($1,$2,$3,$4,'application/json',$5,$6,$7)
                     ON CONFLICT (file_id, kind) DO UPDATE SET mime_type = EXCLUDED.mime_type, byte_size = EXCLUDED.byte_size, object_key = EXCLUDED.object_key, sha256 = EXCLUDED.sha256, updated_at = now()"#)
-                    .bind(Uuid::new_v4()).bind(job.workspace_id).bind(job.file_id).bind(TEXT_FILE_VARIANT).bind(bytes.len() as i64).bind(&text_key).bind(hash)
+                    .bind(Uuid::new_v4()).bind(job.workspace_id).bind(job.file_id).bind(TEXT_FILE_VARIANT).bind(byte_size).bind(&text_key).bind(hash)
                     .execute(&mut *transaction).await?;
                 (
                     FileTextExtractionStatus::Ready,
@@ -411,8 +416,9 @@ impl FileWorker {
             }
             Err(failure) => {
                 // Text from an earlier extractor must not outlive a failed rerun.
-                sqlx::query("DELETE FROM file_variants WHERE file_id = $1 AND workspace_id = $2 AND kind = $3")
-                    .bind(job.file_id).bind(job.workspace_id).bind(TEXT_FILE_VARIANT).execute(&mut *transaction).await?;
+                removed_variant = sqlx::query("DELETE FROM file_variants WHERE file_id = $1 AND workspace_id = $2 AND kind = $3")
+                    .bind(job.file_id).bind(job.workspace_id).bind(TEXT_FILE_VARIANT).execute(&mut *transaction).await?
+                    .rows_affected() > 0;
                 (
                     FileTextExtractionStatus::Failed,
                     Some(failure.as_str()),
@@ -428,7 +434,7 @@ impl FileWorker {
             .bind(job.file_id).bind(job.workspace_id).bind(EXTRACTOR_VERSION as i32).bind(status.as_str()).bind(failure).bind(sections).bind(chars).bind(truncated)
             .execute(&mut *transaction).await?;
         transaction.commit().await?;
-        if extraction.is_err() {
+        if removed_variant {
             // Deleted after the commit so a rolled-back transaction never
             // leaves a variant row pointing at a missing object.
             self.store
@@ -507,7 +513,11 @@ impl FileWorker {
             return Ok(());
         }
         // Only the metadata job decides whether a file is usable.
-        if terminal && job.kind == FileJobKind::Metadata.as_str() {
+        // Unknown kinds are processed as metadata jobs, so they fail as one.
+        if terminal
+            && FileJobKind::parse(&job.kind).unwrap_or(FileJobKind::Metadata)
+                == FileJobKind::Metadata
+        {
             sqlx::query("UPDATE files SET status = 'failed', processing_error = $2, updated_at = now() WHERE id = $1 AND deleted_at IS NULL").bind(job.file_id).bind(error).execute(&self.pool).await?;
         }
         counter!("attricat_file_worker_jobs_failed_total", "terminal" => terminal.to_string())
@@ -961,6 +971,31 @@ mod tests {
         // A newer extractor queues text an older one produced.
         assert_eq!(backfill(EXTRACTOR_VERSION + 1).await.unwrap(), 1);
         assert!(queued_files().await.contains(&extracted));
+
+        // A timeout is retried once retention has removed its text job.
+        let (timed_out, timed_out_job) = stored_file(
+            &pool,
+            &store,
+            docx,
+            SPECIFICATION_DOCX,
+            FileJobKind::TextExtraction,
+        )
+        .await;
+        sqlx::query("UPDATE file_processing_jobs SET status='completed' WHERE id=$1")
+            .bind(timed_out_job)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO file_text_extractions (file_id,workspace_id,extractor_version,status,failure_reason) VALUES ($1,$2,$3,'failed','timed_out')")
+            .bind(timed_out).bind(TEST_WORKSPACE).bind(EXTRACTOR_VERSION as i32).execute(&pool).await.unwrap();
+        assert_eq!(backfill(EXTRACTOR_VERSION).await.unwrap(), 0);
+        sqlx::query("DELETE FROM file_processing_jobs WHERE id=$1")
+            .bind(timed_out_job)
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert_eq!(backfill(EXTRACTOR_VERSION).await.unwrap(), 1);
+        assert!(queued_files().await.contains(&timed_out));
     }
 
     #[test]
