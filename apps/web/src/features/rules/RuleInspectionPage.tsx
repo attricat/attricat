@@ -6,13 +6,25 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import { createLink, useNavigate } from '@tanstack/react-router';
-import { Box, Tab, Tabs } from '@mui/material';
+import {
+  Box,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Tab,
+  Tabs,
+} from '@mui/material';
+import { useState } from 'react';
 import { PlusIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { RouterButton } from '../../components/RouterLink';
+import { toast } from '../../components/toast';
+import { DryRunResult } from './DryRunResult';
 import { useCan } from '../auth/useCan';
 import {
   listFindingsPage,
@@ -109,10 +121,17 @@ export const RuleInspectionPage = ({
   const refresh = () =>
     queryClient.invalidateQueries({ queryKey: ruleQueryKeys.all });
   const acknowledge = useAcknowledgeFinding();
+  // A dry run's result opens in a dialog; a run reports to the run history.
+  const [dryRun, setDryRun] = useState<{ name: string; runId: string }>();
   const run = useMutation({
     mutationFn: ({ rule, dryRun }: { rule: Rule; dryRun: boolean }) =>
       runRuleNow(rule.id, dryRun),
-    onSuccess: refresh,
+    meta: { toast: false },
+    onSuccess: (started, { rule, dryRun }) => {
+      if (dryRun) setDryRun({ name: rule.name, runId: started.id });
+      else toast.success(t('rules.runStarted'));
+      return refresh();
+    },
   });
   const toggle = useToggleRule();
 
@@ -221,6 +240,24 @@ export const RuleInspectionPage = ({
           />
         )}
       </Box>
+      <Dialog
+        fullWidth
+        maxWidth="sm"
+        onClose={() => setDryRun(undefined)}
+        open={dryRun !== undefined}
+      >
+        <DialogTitle>
+          {dryRun && t('rules.dryRunResult.title', { name: dryRun.name })}
+        </DialogTitle>
+        <DialogContent>
+          {dryRun && <DryRunResult runId={dryRun.runId} />}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDryRun(undefined)}>
+            {t('common.close')}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </PageContainer>
   );
 };

@@ -2136,12 +2136,7 @@
       "changesDescription": "Twoja zmiana w porównaniu z bieżącą rewizją. Uruchom ją próbnie, aby zobaczyć, które rekordy by zgłosiła.",
       "unsavedChange": "Niezapisana zmiana",
       "dryRunChange": "Uruchom zmianę próbnie",
-      "dryRunResult_one": "Próbne wykonanie sprawdziło rekordy: {{evaluated}}. Nie przeszłyby: {{count}}.",
-      "dryRunResult_other": "Próbne wykonanie sprawdziło rekordy: {{evaluated}}. Nie przeszłyby: {{count}}.",
-      "dryRunOutdated": "Definicja zmieniła się po rozpoczęciu próbnego wykonania. Uruchom ją ponownie przed zapisaniem.",
-      "dryRunFailed": "Próbne wykonanie nie zakończyło się.",
-      "dryRunResult_few": "Próbne wykonanie sprawdziło rekordy: {{evaluated}}. Nie przeszłyby: {{count}}.",
-      "dryRunResult_many": "Próbne wykonanie sprawdziło rekordy: {{evaluated}}. Nie przeszłyby: {{count}}."
+      "dryRunOutdated": "Definicja zmieniła się po rozpoczęciu próbnego wykonania. Uruchom ją ponownie przed zapisaniem."
     },
     "templates": {
       "required": "Wymagana wartość",
@@ -2237,7 +2232,20 @@
       "title_many": "Rewizja {{version}} została opublikowana, ale te włączone reguły do niej nie pasują i pomijają jej rekordy:"
     },
     "skipsRevisions_few": "Pomija rekordy rewizji schematu {{versions}}, do których nie pasuje",
-    "skipsRevisions_many": "Pomija rekordy rewizji schematu {{versions}}, do których nie pasuje"
+    "skipsRevisions_many": "Pomija rekordy rewizji schematu {{versions}}, do których nie pasuje",
+    "dryRunResult": {
+      "title": "Próbne wykonanie: {{name}}",
+      "checking": "Sprawdzanie rekordów…",
+      "result_one": "Próbne wykonanie sprawdziło rekordy: {{evaluated}}. Nie przeszłyby: {{count}}.",
+      "result_few": "Próbne wykonanie sprawdziło rekordy: {{evaluated}}. Nie przeszłyby: {{count}}.",
+      "result_many": "Próbne wykonanie sprawdziło rekordy: {{evaluated}}. Nie przeszłyby: {{count}}.",
+      "result_other": "Próbne wykonanie sprawdziło rekordy: {{evaluated}}. Nie przeszłyby: {{count}}.",
+      "truncated": "Zatrzymało się na limicie rekordów, więc części rekordów nie sprawdziło.",
+      "failures": "Rekordy, które by nie przeszły",
+      "showingFirst": "Wyświetlono pierwsze {{shown}} z {{count}}.",
+      "failed": "Próbne wykonanie nie zakończyło się."
+    },
+    "runStarted": "Wykonanie rozpoczęte. Jego wynik pojawi się w historii wykonań."
   },
   "reusableAttributes": {
     "editor": {

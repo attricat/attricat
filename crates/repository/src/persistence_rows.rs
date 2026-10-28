@@ -449,6 +449,11 @@ domain_row!(RuleRun {
     completed_at,
     created_at,
 });
+domain_row!(RuleDryRunFailure {
+    record_id,
+    message,
+    evidence,
+});
 domain_row!(RuleFinding {
     id,
     rule_id,

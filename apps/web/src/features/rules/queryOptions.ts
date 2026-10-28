@@ -2,6 +2,7 @@ import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query';
 import { readAheadStaleTimeMs } from '../records/queryOptions';
 import {
   getRule,
+  getRuleRun,
   getUnresolvedRecordFindingCount,
   listRecordRuleRuns,
   listRecordRules,
@@ -11,10 +12,23 @@ import {
   listUnresolvedRecordFindings,
 } from './api';
 import { ruleQueryKeys } from './queryKeys';
+import { activeRunStatuses } from '../../api/runStatus';
+import { RULE_DRY_RUN_POLL_MS } from './constants';
 
 /** The workspace's rule runs, newest first. */
 export const ruleRunsOptions = () =>
   queryOptions({ queryKey: ruleQueryKeys.runs(), queryFn: listRuleRuns });
+
+/** One run, polled until it finishes. */
+export const ruleRunOptions = (runId: string) =>
+  queryOptions({
+    queryKey: ruleQueryKeys.run(runId),
+    queryFn: () => getRuleRun(runId),
+    refetchInterval: (query) =>
+      !query.state.data || activeRunStatuses.includes(query.state.data.status)
+        ? RULE_DRY_RUN_POLL_MS
+        : false,
+  });
 
 export const ruleDefinitionsOptions = () =>
   queryOptions({

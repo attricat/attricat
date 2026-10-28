@@ -5,7 +5,7 @@ use super::{
 };
 use crate::model::{
     CreateManualRuleRun, CreateRule, EnableRule, Rule, RuleDetails, RuleFinding, RuleRevision,
-    UpdateRule,
+    RuleRunDetails, UpdateRule,
 };
 use crate::repository::RuleFindingFilter;
 use attricat_domain::states::{RuleFindingSeverity, RuleFindingState};
@@ -99,6 +99,16 @@ pub(super) async fn list_runs(
         .rule_runs_page(None, query.record_id, limit, offset)
         .await?;
     Ok(array_response(page_items, (limit, offset)))
+}
+/// One run with, for a dry run, the first records it would flag.
+pub(super) async fn get_run(
+    super::auth::ScopedRepository(repo): super::auth::ScopedRepository,
+    ApiPath(id): ApiPath<Uuid>,
+) -> Result<Json<RuleRunDetails>, ApiError> {
+    repo.get_rule_run_details(id)
+        .await?
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found("rule run"))
 }
 pub(super) async fn replay_run(
     super::auth::ScopedRepository(repo): super::auth::ScopedRepository,

@@ -2052,10 +2052,7 @@
       "changesDescription": "Your change compared with the current revision. Dry-run it to see which records it would flag.",
       "unsavedChange": "Unsaved change",
       "dryRunChange": "Dry run this change",
-      "dryRunResult_one": "The dry run checked {{evaluated}} records; {{count}} would fail.",
-      "dryRunResult_other": "The dry run checked {{evaluated}} records; {{count}} would fail.",
-      "dryRunOutdated": "The definition changed after the dry run started. Dry-run it again before saving.",
-      "dryRunFailed": "The dry run did not finish."
+      "dryRunOutdated": "The definition changed after the dry run started. Dry-run it again before saving."
     },
     "templates": {
       "required": "Required value",
@@ -2147,7 +2144,18 @@
     "publishWarnings": {
       "title_one": "Revision {{version}} was published, but this enabled rule does not fit it and skips its records:",
       "title_other": "Revision {{version}} was published, but these enabled rules do not fit it and skip its records:"
-    }
+    },
+    "dryRunResult": {
+      "title": "Dry run of {{name}}",
+      "checking": "Checking records…",
+      "result_one": "The dry run checked {{evaluated}} records; {{count}} would fail.",
+      "result_other": "The dry run checked {{evaluated}} records; {{count}} would fail.",
+      "truncated": "It stopped at its record limit, so some records were not checked.",
+      "failures": "Records that would fail",
+      "showingFirst": "Showing the first {{shown}} of {{count}}.",
+      "failed": "The dry run did not finish."
+    },
+    "runStarted": "Run started. Its result appears in the run history."
   },
   "reusableAttributes": {
     "editor": {

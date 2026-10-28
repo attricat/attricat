@@ -174,7 +174,7 @@ acli rule run-now <rule-id> --idempotency-key check-one --record-id <uuid>
 acli rule run-now <rule-id> --idempotency-key preview --dry-run
 ```
 
-A dry run reports how many records would fail and saves no findings. It works whether or not the rule is enabled; a normal run needs the rule enabled. Reusing an idempotency key returns the original run instead of starting a new one.
+A dry run reports how many records would fail and names the first 50 of them with what each would report, and saves no findings. **Dry run** in the list opens its result in a dialog; `GET /rule-runs/{id}` returns it as `dry_run_failures`. It works whether or not the rule is enabled; a normal run needs the rule enabled. Reusing an idempotency key returns the original run instead of starting a new one.
 
 Each run processes candidates in pages of 500 and stops after 10,000. A schedule never overlaps itself: if the previous run is still pending, the next occurrence is skipped.
 

@@ -8,7 +8,8 @@ use crate::{
     domain_events::DomainEvent,
     model::{
         CreateManualRuleRun, CreateRule, EnableRule, RevisionNotApplicable, Rule, RuleDetails,
-        RuleFinding, RuleRevision, RuleRun, RuleWarning, UpdateRule,
+        RuleDryRunFailure, RuleFinding, RuleRevision, RuleRun, RuleRunDetails, RuleWarning,
+        UpdateRule,
     },
     task_queue::{TaskInsert, TaskKind},
 };
@@ -16,6 +17,9 @@ use attricat_domain::states::{RevisionStatus, RuleFindingSeverity, RuleFindingSt
 use attricat_rules::CompiledRule;
 use chrono::Utc;
 use uuid::Uuid;
+
+/// How many of the records a dry run flags it names. The rest are counted.
+pub const DRY_RUN_FAILURE_SAMPLE: i64 = 50;
 
 /// A rule as its current revision, with whether it is enabled. Select it
 /// from [`CURRENT_RULES`].
@@ -1112,6 +1116,8 @@ impl AttricatRepository {
             == results.len();
         if run.dry_run {
             created = results.iter().map(|result| i64::from(result.failed)).sum();
+            self.keep_dry_run_failures(&mut tx, run.id, &results)
+                .await?;
         } else if distinct {
             // Each finding is written by one statement per outcome; one row
             // per finding key keeps them equivalent to writing in order.
@@ -1168,6 +1174,68 @@ impl AttricatRepository {
             .bind(run.id).bind(next_cursor).bind(results.len() as i64).bind(created).bind(resolved).bind(done).bind(ws).bind(truncated).bind(skipped).execute(&mut *tx).await?;
         tx.commit().await?;
         Ok(done)
+    }
+
+    /// Keeps the first [`DRY_RUN_FAILURE_SAMPLE`] records a dry run flags, in
+    /// the order it checks them, so its result can name them.
+    async fn keep_dry_run_failures(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        run_id: Uuid,
+        results: &[RuleCandidateResult],
+    ) -> Result<(), RepositoryError> {
+        let failed: Vec<&RuleCandidateResult> =
+            results.iter().filter(|result| result.failed).collect();
+        if failed.is_empty() {
+            return Ok(());
+        }
+        let kept: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM rule_dry_run_failures WHERE run_id=$1")
+                .bind(run_id)
+                .fetch_one(&mut **tx)
+                .await?;
+        let room = usize::try_from(DRY_RUN_FAILURE_SAMPLE - kept).unwrap_or(0);
+        let sample: Vec<&RuleCandidateResult> = failed.into_iter().take(room).collect();
+        if sample.is_empty() {
+            return Ok(());
+        }
+        sqlx::query("INSERT INTO rule_dry_run_failures(run_id,workspace_id,record_id,evaluation_key,message,evidence,position) SELECT $1,$2,f.record_id,f.evaluation_key,f.message,f.evidence,$3+f.ordinality-1 FROM unnest($4::uuid[],$5::text[],$6::text[],$7::jsonb[]) WITH ORDINALITY AS f(record_id,evaluation_key,message,evidence,ordinality) ON CONFLICT DO NOTHING")
+            .bind(run_id)
+            .bind(self.workspace_id.0)
+            .bind(kept)
+            .bind(sample.iter().map(|result| result.record_id).collect::<Vec<_>>())
+            .bind(sample.iter().map(|result| result.evaluation_key.as_str()).collect::<Vec<_>>())
+            .bind(sample.iter().map(|result| result.message.as_str()).collect::<Vec<_>>())
+            .bind(sample.iter().map(|result| &result.evidence).collect::<Vec<_>>())
+            .execute(&mut **tx)
+            .await?;
+        Ok(())
+    }
+
+    /// One run with, for a dry run, the records it would flag.
+    pub async fn get_rule_run_details(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<RuleRunDetails>, RepositoryError> {
+        let ws = self.workspace_id.0;
+        let Some(run) = sqlx::query_as::<_, Db<RuleRun>>("SELECT id,rule_id,rule_version,definition_hash,source,dry_run,scope_record_id,status,candidate_cursor,candidates_evaluated,candidates_skipped,findings_created,findings_resolved,attempts,last_error,truncated,completed_at,created_at FROM rule_runs WHERE workspace_id=$1 AND id=$2")
+            .bind(ws)
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await?
+        else {
+            return Ok(None);
+        };
+        let dry_run_failures = sqlx::query_as::<_, Db<RuleDryRunFailure>>("SELECT record_id,message,evidence FROM rule_dry_run_failures WHERE workspace_id=$1 AND run_id=$2 ORDER BY position")
+            .bind(ws)
+            .bind(id)
+            .fetch_all(&self.pool)
+            .await?
+            .into_domain();
+        Ok(Some(RuleRunDetails {
+            run: run.into_domain(),
+            dry_run_failures,
+        }))
     }
 
     /// Records retry-visible domain state under the same token as the generic

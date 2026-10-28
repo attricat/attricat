@@ -22,13 +22,13 @@ import { listContexts } from '../contexts/api';
 import {
   createRule,
   getRule,
-  listRuleRuns,
+  getRuleRun,
   runRuleNow,
   updateRule,
   validateRule,
   type CompiledRule,
   type RuleDetails,
-  type RuleRun,
+  type RuleRunDetails,
 } from './api';
 import { RuleEditorPage } from './RuleEditorPage';
 import { ruleTemplates } from './templates';
@@ -37,6 +37,9 @@ const navigate = vi.fn();
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => navigate,
   createLink: <T,>(component: T) => component,
+  Link: ({ children }: { children: React.ReactNode }) => (
+    <a href="/records">{children}</a>
+  ),
 }));
 vi.mock('@monaco-editor/react', () => ({
   Editor: ({
@@ -70,7 +73,7 @@ vi.mock('@monaco-editor/react', () => ({
 vi.mock('./api', () => ({
   createRule: vi.fn(),
   getRule: vi.fn(),
-  listRuleRuns: vi.fn(),
+  getRuleRun: vi.fn(),
   runRuleNow: vi.fn(),
   updateRule: vi.fn(),
   validateRule: vi.fn(),
@@ -81,6 +84,16 @@ vi.mock('../blueprints/api', () => ({
   listBlueprints: vi.fn(),
 }));
 vi.mock('../contexts/api', () => ({ listContexts: vi.fn() }));
+vi.mock('../records/api', () => ({
+  getRecordLabels: vi.fn(async () => ({
+    items: [
+      {
+        id: '00000000-0000-4000-8000-00000000000a',
+        display: { default: 'Blue chair' },
+      },
+    ],
+  })),
+}));
 
 const blueprintId = '00000000-0000-4000-8000-000000000002';
 const ruleId = '00000000-0000-4000-8000-000000000003';
@@ -235,7 +248,7 @@ describe('RuleEditorPage', () => {
   it('dry-runs an enforcing change and saves it despite existing violations', async () => {
     vi.mocked(getRule).mockResolvedValue(rule);
     const edited = `${rule.definition}\n[enforcement]\non_save = true\n`;
-    const run: RuleRun = {
+    const run: RuleRunDetails = {
       id: '00000000-0000-4000-8000-000000000009',
       rule_id: ruleId,
       rule_version: 1,
@@ -251,11 +264,19 @@ describe('RuleEditorPage', () => {
       findings_resolved: 0,
       attempts: 1,
       last_error: null,
+      truncated: false,
       completed_at: '2026-10-27T10:00:00Z',
       created_at: '2026-10-27T10:00:00Z',
+      dry_run_failures: [
+        {
+          record_id: '00000000-0000-4000-8000-00000000000a',
+          message: "'title' is required",
+          evidence: {},
+        },
+      ],
     };
     vi.mocked(runRuleNow).mockResolvedValue({ id: run.id });
-    vi.mocked(listRuleRuns).mockResolvedValue([run]);
+    vi.mocked(getRuleRun).mockResolvedValue(run);
     vi.mocked(updateRule)
       .mockRejectedValueOnce(
         new ApiRequestError(
@@ -280,6 +301,12 @@ describe('RuleEditorPage', () => {
     expect(
       await screen.findByText('The dry run checked 4 records; 2 would fail.'),
     ).toBeTruthy();
+    // It names the records it would flag and what they would report.
+    expect(
+      await screen.findByRole('link', { name: 'Blue chair' }),
+    ).toBeTruthy();
+    expect(screen.getByText("'title' is required")).toBeTruthy();
+    expect(screen.getByText('Showing the first 1 of 2.')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     const alert = await screen.findByText(

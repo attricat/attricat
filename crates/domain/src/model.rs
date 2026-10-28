@@ -1335,6 +1335,24 @@ pub struct RuleRun {
     pub created_at: DateTime<Utc>,
 }
 
+/// A record a dry run would flag, with what it would report.
+#[derive(Clone, Debug, Serialize)]
+pub struct RuleDryRunFailure {
+    pub record_id: Uuid,
+    pub message: String,
+    pub evidence: Value,
+}
+
+/// A run with, for a dry run, the first records it would flag.
+#[derive(Clone, Debug, Serialize)]
+pub struct RuleRunDetails {
+    #[serde(flatten)]
+    pub run: RuleRun,
+    /// Up to the sample limit, in the order the run checked them. A dry run
+    /// that flags more reports them in `findings_created` only.
+    pub dry_run_failures: Vec<RuleDryRunFailure>,
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct RuleFinding {
     pub id: Uuid,

@@ -114,8 +114,20 @@ export const ruleRunSchema = z.object({
   findings_resolved: z.number().int().nonnegative(),
   attempts: z.number().int().nonnegative(),
   last_error: z.string().nullable(),
+  /** The run stopped at its record limit with records left unchecked. */
+  truncated: z.boolean(),
   completed_at: z.string().nullable(),
   created_at: z.string(),
+});
+/** A run with, for a dry run, the first records it would flag. */
+export const ruleRunDetailsSchema = ruleRunSchema.extend({
+  dry_run_failures: z.array(
+    z.object({
+      record_id: z.uuid(),
+      message: z.string(),
+      evidence: z.unknown(),
+    }),
+  ),
 });
 export const findingSchema = z.object({
   id: z.uuid(),
@@ -171,6 +183,7 @@ export type RuleRevision = z.infer<typeof ruleRevisionSchema>;
 export type RuleWarning = z.infer<typeof ruleWarningSchema>;
 export type UpdateRule = z.infer<typeof updateRuleSchema>;
 export type RuleRun = z.infer<typeof ruleRunSchema>;
+export type RuleRunDetails = z.infer<typeof ruleRunDetailsSchema>;
 export type Finding = z.infer<typeof findingSchema>;
 export type CreateRule = z.infer<typeof createRuleSchema>;
 export type CompiledRule = z.infer<typeof compiledRuleSchema>;

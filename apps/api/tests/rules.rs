@@ -1412,3 +1412,71 @@ async fn record_readers_see_the_records_findings(pool: PgPool) {
     }
     server.abort();
 }
+
+/// A dry run names the first records it would flag and saves no findings.
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn dry_runs_name_the_records_they_would_flag(pool: PgPool) {
+    let (base_url, server, rule_id, blueprint) = setup_rule(&pool).await;
+    let client = authenticated_client();
+    let mut record_ids = Vec::new();
+    for _ in 0..3 {
+        let record = create_record(&client, &base_url, &blueprint).await;
+        record_ids.push(record["id"].as_str().unwrap().to_owned());
+    }
+    let repository = AttricatRepository::new(
+        pool.clone(),
+        support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
+    );
+    drain_tasks(&repository).await;
+    sqlx::query("UPDATE rule_findings SET state='resolved'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let started: Value = client
+        .post(format!("{base_url}/rules/{rule_id}/run-now"))
+        .json(&json!({"record_id": null, "dry_run": true, "idempotency_key": "dry"}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    drain_tasks(&repository).await;
+    let run = get_json(
+        &client,
+        format!("{base_url}/rule-runs/{}", started["id"].as_str().unwrap()),
+    )
+    .await;
+    assert_eq!(run["status"], "completed");
+    assert_eq!(run["findings_created"], 3);
+    let mut named: Vec<String> = run["dry_run_failures"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|failure| failure["record_id"].as_str().unwrap().to_owned())
+        .collect();
+    named.sort();
+    record_ids.sort();
+    assert_eq!(named, record_ids);
+    assert!(
+        run["dry_run_failures"][0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("summary")
+    );
+    let open: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM rule_findings WHERE state <> 'resolved'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(open, 0);
+    let missing = client
+        .get(format!("{base_url}/rule-runs/{}", Uuid::new_v4()))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(missing.status(), 404);
+    server.abort();
+}

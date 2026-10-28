@@ -12,6 +12,7 @@ import {
   findingSchema,
   ruleDetailsSchema,
   ruleRevisionSchema,
+  ruleRunDetailsSchema,
   ruleRunSchema,
   ruleSchema,
   updateRuleSchema,
@@ -30,6 +31,7 @@ export type {
   RuleDetails,
   RuleRevision,
   RuleRun,
+  RuleRunDetails,
   RuleWarning,
   UpdateRule,
 } from './schemas';
@@ -71,6 +73,9 @@ export const updateRule = (ruleId: string, input: UpdateRule) =>
     ruleSchema,
     jsonRequest('PUT', updateRuleSchema.parse(input)),
   );
+/** One run with, for a dry run, the first records it would flag. */
+export const getRuleRun = (runId: string) =>
+  request(`/api/rule-runs/${uuidSegment(runId)}`, ruleRunDetailsSchema);
 export const listRuleRuns = () =>
   request('/api/rule-runs', z.array(ruleRunSchema));
 /** The most recent runs scoped to one record. */

@@ -174,7 +174,7 @@ acli rule run-now <rule-id> --idempotency-key check-one --record-id <uuid>
 acli rule run-now <rule-id> --idempotency-key preview --dry-run
 ```
 
-Próbne wykonanie (dry run) podaje, ile rekordów nie spełniłoby reguły, i nie zapisuje żadnych ustaleń. Działa niezależnie od tego, czy reguła jest włączona; zwykłe wykonanie wymaga włączonej reguły. Ponowne użycie klucza idempotencji zwraca pierwotne wykonanie zamiast rozpoczynać nowe.
+Próbne wykonanie (dry run) podaje, ile rekordów nie spełniłoby reguły, wymienia pierwsze 50 z nich wraz z tym, co każdy by zgłosił, i nie zapisuje żadnych ustaleń. **Próbne wykonanie** na liście otwiera wynik w oknie dialogowym; `GET /rule-runs/{id}` zwraca go jako `dry_run_failures`. Działa niezależnie od tego, czy reguła jest włączona; zwykłe wykonanie wymaga włączonej reguły. Ponowne użycie klucza idempotencji zwraca pierwotne wykonanie zamiast rozpoczynać nowe.
 
 Każde wykonanie przetwarza kandydatów stronami po 500 i zatrzymuje się po 10 000. Harmonogram nigdy nie nakłada się sam na siebie: jeśli poprzednie wykonanie wciąż oczekuje, kolejne wystąpienie jest pomijane.
 

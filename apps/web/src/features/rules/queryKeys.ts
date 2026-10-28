@@ -23,6 +23,7 @@ export const ruleQueryKeys = {
   findingCount: (recordId: string) =>
     [...ruleQueryKeys.findings(recordId), 'count'] as const,
   runs: () => [...ruleQueryKeys.all, 'runs'] as const,
+  run: (runId: string) => [...ruleQueryKeys.runs(), 'run', runId] as const,
   recordRuns: (recordId: string) =>
     [...ruleQueryKeys.runs(), 'record', recordId] as const,
 };

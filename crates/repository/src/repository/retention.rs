@@ -110,7 +110,8 @@ impl<S: RepositoryScope> AttricatRepository<S> {
     /// `record_days`, and full runs and dead letters after `run_days`. Each
     /// rule version keeps its latest run, and each definition its latest
     /// completed full dry run, which the dry-run gate reads. Findings keep their resolution
-    /// (`resolved_by_run_id` becomes null).
+    /// (`resolved_by_run_id` becomes null), and a dry run's named failures go
+    /// with it (`ON DELETE CASCADE`).
     pub async fn purge_rule_runs_batch(
         &self,
         record_days: RetentionDays,
