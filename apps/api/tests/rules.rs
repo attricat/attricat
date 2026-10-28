@@ -1570,3 +1570,55 @@ async fn findings_are_counted_and_acknowledged_in_bulk(pool: PgPool) {
     .await;
     server.abort();
 }
+
+/// Disabling a rule resolves its findings, so they stop counting against
+/// records; enabling it checks every record again and they come back.
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn disabling_a_rule_resolves_its_findings_until_it_is_enabled(pool: PgPool) {
+    let (base_url, server, rule_id, blueprint) = setup_rule(&pool).await;
+    let client = authenticated_client();
+    let record = create_record(&client, &base_url, &blueprint).await;
+    let record_id = record["id"].as_str().unwrap().to_owned();
+    let repository = AttricatRepository::new(
+        pool.clone(),
+        support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
+    );
+    let open = || async {
+        get_json(
+            &client,
+            format!("{base_url}/rule-findings/count?rule_id={rule_id}&state=open"),
+        )
+        .await["count"]
+            .as_i64()
+            .unwrap()
+    };
+    manual_run(&base_url, rule_id, None, "first").await;
+    drain_tasks(&repository).await;
+    assert_eq!(open().await, 1);
+
+    client
+        .post(format!("{base_url}/rules/{rule_id}/disable"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    assert_eq!(open().await, 0);
+    let tags: Vec<String> = sqlx::query_scalar("SELECT system_tags FROM records WHERE id=$1::uuid")
+        .bind(&record_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert!(tags.is_empty(), "{tags:?}");
+
+    client
+        .post(format!("{base_url}/rules/{rule_id}/enable"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    drain_tasks(&repository).await;
+    assert_eq!(open().await, 1);
+    server.abort();
+}

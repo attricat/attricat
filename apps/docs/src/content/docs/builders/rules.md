@@ -142,7 +142,7 @@ acli rule create --blueprint-id <uuid> --file title-required.toml
 acli rule enable <rule-id>
 ```
 
-A new rule starts disabled and runs only once enabled, with the switch or the CLI. `acli rule disable` stops it.
+A new rule starts disabled and runs only once enabled, with the switch or the CLI. `acli rule disable` stops it. Disabling a rule resolves its findings, so they no longer count against records or tag them **Needs attention**; enabling it again checks every record of its blueprint straight away.
 
 ### Change a rule
 

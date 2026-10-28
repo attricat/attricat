@@ -142,7 +142,7 @@ acli rule create --blueprint-id <uuid> --file title-required.toml
 acli rule enable <rule-id>
 ```
 
-Nowa reguła jest wyłączona i zaczyna działać dopiero po włączeniu przełącznikiem lub w CLI. `acli rule disable` ją zatrzymuje.
+Nowa reguła jest wyłączona i zaczyna działać dopiero po włączeniu przełącznikiem lub w CLI. `acli rule disable` ją zatrzymuje. Wyłączenie reguły rozwiązuje jej ustalenia, więc przestają one obciążać rekordy i oznaczać je jako **Wymaga uwagi**; ponowne włączenie od razu sprawdza każdy rekord jej Schematu.
 
 ### Zmień regułę
 

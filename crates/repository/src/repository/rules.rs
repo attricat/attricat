@@ -423,14 +423,14 @@ impl AttricatRepository {
         accept_existing_violations: bool,
     ) -> Result<(), RepositoryError> {
         let ws = self.workspace_id.0;
-        let current: Option<(i64, Uuid, serde_json::Value)> = sqlx::query_as(&format!(
-            "SELECT r.version,r.blueprint_id,r.compiled_plan FROM {CURRENT_RULES} WHERE l.workspace_id=$1 AND l.rule_id=$2 FOR UPDATE OF l"
+        let current: Option<(i64, Uuid, serde_json::Value, bool)> = sqlx::query_as(&format!(
+            "SELECT r.version,r.blueprint_id,r.compiled_plan,(NOT l.enabled AND l.disabled_at IS NOT NULL) FROM {CURRENT_RULES} WHERE l.workspace_id=$1 AND l.rule_id=$2 FOR UPDATE OF l"
         ))
         .bind(ws)
         .bind(id)
         .fetch_optional(&mut **tx)
         .await?;
-        let Some((version, blueprint_id, plan)) = current else {
+        let Some((version, blueprint_id, plan, re_enabling)) = current else {
             return Err(RepositoryError::NotFound("rule"));
         };
         let compiled = stored_rule(plan)?;
@@ -446,7 +446,18 @@ impl AttricatRepository {
         }
         sqlx::query("UPDATE rule_lifecycles SET enabled=true,activation_sequence=(SELECT COALESCE(max(sequence),0) FROM domain_events WHERE workspace_id=$1),enabled_at=now(),disabled_at=NULL,updated_at=now() WHERE workspace_id=$1 AND rule_id=$2").bind(ws).bind(id).execute(&mut **tx).await?;
         advance_generation(tx, ws, Generation::Attricat).await?;
-        self.start_rule_schedules(tx, id, version, &compiled).await
+        self.start_rule_schedules(tx, id, version, &compiled)
+            .await?;
+        // Disabling resolved the rule's findings; check every record again
+        // so they come back at once rather than on the next trigger. A new
+        // rule waits for its triggers.
+        if re_enabling {
+            let run_id = Uuid::new_v4();
+            sqlx::query("INSERT INTO rule_runs(id,workspace_id,rule_id,rule_version,definition_hash,source,idempotency_key) VALUES($1,$2,$3,$4,$5,'manual',$6)")
+                .bind(run_id).bind(ws).bind(id).bind(version).bind(&compiled.raw_definition_hash).bind(format!("enable:{run_id}")).execute(&mut **tx).await?;
+            self.enqueue_rule_task(tx, ws, run_id, None, None).await?;
+        }
+        Ok(())
     }
 
     /// The dry-run gate for an enforcing definition, by its hash. A blueprint
@@ -500,6 +511,14 @@ impl AttricatRepository {
         if sqlx::query("UPDATE rule_lifecycles SET enabled=false,disabled_at=now(),updated_at=now() WHERE workspace_id=$1 AND rule_id=$2").bind(ws).bind(id).execute(&mut *tx).await?.rows_affected()==0{return Err(RepositoryError::NotFound("rule"));}
         advance_generation(&mut tx, ws, Generation::Attricat).await?;
         self.cancel_unfinished_rule_runs(&mut tx, id, true).await?;
+        // A disabled rule reports nothing, so its findings no longer count
+        // against records. Enabling it checks every record again.
+        let released: Vec<Uuid> = sqlx::query_scalar("UPDATE rule_findings SET state=$3,resolved_at=clock_timestamp(),resolved_by_run_id=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND rule_id=$2 AND state<>$3 RETURNING record_id")
+            .bind(ws).bind(id).bind(RuleFindingState::Resolved.as_str()).fetch_all(&mut *tx).await?;
+        let mut released = released;
+        released.sort();
+        released.dedup();
+        sync_needs_attention_tags(&mut tx, ws, &released).await?;
         self.commit_mutation(tx).await?;
         self.get_rule(id)
             .await?
