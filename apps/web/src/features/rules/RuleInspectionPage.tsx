@@ -12,12 +12,7 @@ import { RouterButton } from '../../components/RouterLink';
 import { DryRunDialog } from './DryRunDialog';
 import { useRunRule } from './useRunRule';
 import { useCan } from '../auth/useCan';
-import {
-  countFindings,
-  listFindingsPage,
-  type FindingsSearch,
-  type RunsSearch,
-} from './api';
+import type { FindingsSearch, RunsSearch } from './api';
 import {
   RULE_SECTION_FINDINGS,
   RULE_SECTION_RULES,
@@ -28,8 +23,12 @@ import {
   type RuleInspectionSection,
 } from './constants';
 import { FindingsSection } from './FindingsSection';
-import { ruleQueryKeys } from './queryKeys';
-import { ruleDefinitionsOptions, ruleRunsOptions } from './queryOptions';
+import {
+  findingsCountOptions,
+  findingsPageOptions,
+  ruleDefinitionsOptions,
+  ruleRunsOptions,
+} from './queryOptions';
 import { useRefreshFindingsAfterRuns } from './runCompletion';
 import { rulesById } from './rulesById';
 import { useRecordLabels } from '../records/useRecordLabels';
@@ -78,10 +77,7 @@ export const RuleInspectionPage = ({
   const rulesByIdMap = rulesById(rules.data ?? []);
   const findingsShown = section === RULE_SECTION_FINDINGS;
   const findings = useInfiniteQuery({
-    queryKey: ruleQueryKeys.findingsPage(findingsSearch),
-    queryFn: ({ pageParam }) => listFindingsPage(findingsSearch, pageParam),
-    initialPageParam: 0,
-    getNextPageParam: (page) => page.nextOffset,
+    ...findingsPageOptions(findingsSearch),
     enabled: findingsShown,
   });
   const findingItems = findings.data?.pages.flatMap((page) => page.items);
@@ -113,8 +109,7 @@ export const RuleInspectionPage = ({
   const acknowledge = useAcknowledgeFinding();
   const acknowledgeMany = useAcknowledgeFindings();
   const findingsTotal = useQuery({
-    queryKey: ruleQueryKeys.findingsCount(findingsSearch),
-    queryFn: () => countFindings(findingsSearch),
+    ...findingsCountOptions(findingsSearch),
     enabled: findingsShown,
   });
   const openSearch = { ...findingsSearch, state: findingStates.open };
@@ -123,8 +118,7 @@ export const RuleInspectionPage = ({
     findingsSearch.state !== findingStates.acknowledged &&
     findingsSearch.state !== findingStates.resolved;
   const openMatching = useQuery({
-    queryKey: ruleQueryKeys.findingsCount(openSearch),
-    queryFn: () => countFindings(openSearch),
+    ...findingsCountOptions(openSearch),
     enabled: findingsShown && canManage && listsOpen,
   });
   const { run, dryRun, closeDryRun } = useRunRule();

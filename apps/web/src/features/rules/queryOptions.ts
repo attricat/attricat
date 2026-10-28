@@ -1,6 +1,7 @@
 import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query';
 import { readAheadStaleTimeMs } from '../records/queryOptions';
 import {
+  countFindings,
   getRule,
   getRuleRun,
   getUnresolvedRecordFindingCount,
@@ -9,11 +10,12 @@ import {
   listRuleRevisions,
   listRecentRuleRuns,
   listRuleRuns,
+  listFindingsPage,
   listRules,
   listUnresolvedRecordFindings,
 } from './api';
 import { ruleQueryKeys } from './queryKeys';
-import type { RunsSearch } from './schemas';
+import type { FindingsSearch, RunsSearch } from './schemas';
 import { isActiveRun } from './runCompletion';
 import { RULE_RUN_POLL_MS } from './constants';
 
@@ -66,6 +68,22 @@ export const ruleOptions = (ruleId: string) =>
   queryOptions({
     queryKey: ruleQueryKeys.rule(ruleId),
     queryFn: () => getRule(ruleId),
+  });
+
+/** The findings page's findings that match `search`, page by page. */
+export const findingsPageOptions = (search: FindingsSearch) =>
+  infiniteQueryOptions({
+    queryKey: ruleQueryKeys.findingsPage(search),
+    queryFn: ({ pageParam }) => listFindingsPage(search, pageParam),
+    initialPageParam: 0,
+    getNextPageParam: (page) => page.nextOffset,
+  });
+
+/** How many findings match `search`; refreshed with every finding list. */
+export const findingsCountOptions = (search: FindingsSearch) =>
+  queryOptions({
+    queryKey: ruleQueryKeys.findingsCount(search),
+    queryFn: () => countFindings(search),
   });
 
 /** A rule's saved revisions, newest first. */
