@@ -2154,10 +2154,10 @@
           "any": "At least one record linked through {{relationship}} satisfies:",
           "none": "No record linked through {{relationship}} satisfies:"
         },
-        "referencedBy": "{{bounds}} {{blueprint}} records point to it through {{relationship}}",
-        "between": "Between {{min}} and {{max}}",
-        "atLeast": "At least {{count}}",
-        "atMost": "At most {{count}}",
+        "referencedBy": "{{blueprint}} records pointing to it through {{relationship}}: {{bounds}}",
+        "between": "between {{min}} and {{max}}",
+        "atLeast": "at least {{count}}",
+        "atMost": "at most {{count}}",
         "allOf": "All of these hold:",
         "anyOf": "At least one of these holds:"
       },

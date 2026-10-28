@@ -2171,7 +2171,7 @@
       "changesDescription": "Twoja zmiana w porównaniu z bieżącą rewizją. Uruchom ją próbnie, aby zobaczyć, które rekordy by zgłosiła.",
       "unsavedChange": "Niezapisana zmiana",
       "dryRunChange": "Uruchom zmianę próbnie",
-      "dryRunOutdated": "Definicja zmieniła się po rozpoczęciu próbnego wykonania. Uruchom ją ponownie przed zapisaniem."
+      "dryRunOutdated": "Definicja zmieniła się po rozpoczęciu próbnego wykonania. Przed zapisaniem uruchom zmianę próbnie jeszcze raz."
     },
     "templates": {
       "required": "Wymagana wartość",
@@ -2192,8 +2192,8 @@
       "predicateTypes": {
         "required": "Wymagana wartość",
         "stale": "Niedawno zmieniona wartość",
-        "has_tag": "Ma tag systemowy",
-        "missing_tag": "Nie ma tagu systemowego",
+        "has_tag": "Ma znacznik systemowy",
+        "missing_tag": "Nie ma znacznika systemowego",
         "compare": "Porównanie",
         "one_of": "Dozwolone wartości",
         "relative_date": "Data względem dzisiaj",
@@ -2231,12 +2231,12 @@
         "daysAgo_few": "{{count}} dni temu",
         "daysAgo_many": "{{count}} dni temu",
         "daysAgo_other": "{{count}} dnia temu",
-        "stale_one": "{{attribute}} zmieniono w ciągu ostatniego {{count}} dnia",
-        "stale_few": "{{attribute}} zmieniono w ciągu ostatnich {{count}} dni",
-        "stale_many": "{{attribute}} zmieniono w ciągu ostatnich {{count}} dni",
-        "stale_other": "{{attribute}} zmieniono w ciągu ostatnich {{count}} dnia",
-        "hasTag": "Rekord ma tag systemowy {{tag}}",
-        "missingTag": "Rekord nie ma tagu systemowego {{tag}}",
+        "stale_one": "Atrybut {{attribute}} zmienił się w ciągu ostatniego dnia",
+        "stale_few": "Atrybut {{attribute}} zmienił się w ciągu ostatnich {{count}} dni",
+        "stale_many": "Atrybut {{attribute}} zmienił się w ciągu ostatnich {{count}} dni",
+        "stale_other": "Atrybut {{attribute}} zmienił się w ciągu ostatnich {{count}} dnia",
+        "hasTag": "Rekord ma znacznik systemowy {{tag}}",
+        "missingTag": "Rekord nie ma znacznika systemowego {{tag}}",
         "unique": "Żaden inny rekord nie ma tych samych wartości: {{attributes}}",
         "acyclic": "Podążanie relacją {{relationship}} nigdy nie wraca do rekordu",
         "linked": {
@@ -2244,20 +2244,20 @@
           "any": "Co najmniej jeden rekord powiązany przez {{relationship}} spełnia:",
           "none": "Żaden rekord powiązany przez {{relationship}} nie spełnia:"
         },
-        "referencedBy": "{{bounds}} rekordów {{blueprint}} wskazuje na niego przez {{relationship}}",
-        "between": "Od {{min}} do {{max}}",
-        "atLeast": "Co najmniej {{count}}",
-        "atMost": "Co najwyżej {{count}}",
+        "referencedBy": "Liczba rekordów {{blueprint}} wskazujących na niego przez {{relationship}}: {{bounds}}",
+        "between": "od {{min}} do {{max}}",
+        "atLeast": "co najmniej {{count}}",
+        "atMost": "co najwyżej {{count}}",
         "allOf": "Spełnione są wszystkie warunki:",
         "anyOf": "Spełniony jest co najmniej jeden warunek:"
       },
       "ops": {
-        "eq": "jest równe",
+        "eq": "równa się",
         "ne": "różni się od",
-        "lt": "jest wcześniej lub mniej niż",
-        "lte": "jest co najwyżej",
-        "gt": "jest później lub więcej niż",
-        "gte": "jest co najmniej",
+        "lt": "ma wartość wcześniejszą lub mniejszą niż",
+        "lte": "ma wartość co najwyżej",
+        "gt": "ma wartość późniejszą lub większą niż",
+        "gte": "ma wartość co najmniej",
         "disjoint": "nie ma wspólnych wartości z"
       },
       "events": {
@@ -2308,7 +2308,7 @@
       "savedBy": "Zapisał(a)",
       "current": "Bieżąca",
       "currentRevisionOption": "v{{version}} (bieżąca)",
-      "unknownAuthor": "Nie zapisano",
+      "unknownAuthor": "Nieznany",
       "comparePrevious": "Porównaj z poprzednią",
       "compareTitle": "Porównaj rewizje",
       "compareDescription": "Wybierz dwie rewizje, aby zobaczyć, jak zmieniła się między nimi definicja reguły.",
