@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import '../../i18n';
@@ -53,5 +54,22 @@ describe('RecordCommentsLink', () => {
     const link = await screen.findByRole('link', { name: '3 comments' });
     expect(link.textContent).toBe('3');
     expect(link.getAttribute('href')).toBe(`/records/${recordId}#comments`);
+  });
+
+  it('opens the comments in place when given somewhere to show them', async () => {
+    const onOpen = vi.fn();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <RecordCommentsLink
+          recordId="123e4567-e89b-12d3-a456-426614174001"
+          onOpen={onOpen}
+        />
+      </QueryClientProvider>,
+    );
+
+    await userEvent.click(
+      await screen.findByRole('button', { name: '3 comments' }),
+    );
+    expect(onOpen).toHaveBeenCalledOnce();
   });
 });

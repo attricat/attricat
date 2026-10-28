@@ -244,7 +244,7 @@ describe('record actions menu', () => {
     ).toEqual(['Changes', 'Copy record ID']);
   });
 
-  it('moves the agent and extensions into the menu when compact', async () => {
+  it('keeps the agent beside the menu and moves extensions into it when compact', async () => {
     const onOpenAgent = vi.fn();
     const onOpenExtensions = vi.fn();
     renderActions({
@@ -253,19 +253,18 @@ describe('record actions menu', () => {
       onOpenExtensions,
       showExtensions: true,
     });
-    expect(
-      screen.queryByRole('button', { name: 'Ask about this record' }),
-    ).toBeNull();
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Ask about this record' }),
+    );
+    expect(onOpenAgent).toHaveBeenCalledOnce();
     expect(
       screen.queryByRole('button', { name: 'Extension contributions' }),
     ).toBeNull();
 
-    let menu = await openActions();
-    await userEvent.click(
-      menu.getByRole('menuitem', { name: 'Ask about this record' }),
-    );
-    expect(onOpenAgent).toHaveBeenCalledOnce();
-    menu = await openActions();
+    const menu = await openActions();
+    expect(
+      menu.queryByRole('menuitem', { name: 'Ask about this record' }),
+    ).toBeNull();
     await userEvent.click(
       menu.getByRole('menuitem', { name: 'Extension contributions' }),
     );

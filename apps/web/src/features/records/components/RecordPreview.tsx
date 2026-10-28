@@ -24,6 +24,7 @@ import {
 } from '../constants';
 import { attributeValueTypes } from '../valueTypes';
 import { commentsSectionId } from '../../record-comments/constants';
+import { RecordCommentsLink } from '../../record-comments/RecordCommentsLink';
 import { RelatedRecordPreviewContext } from '../linkedRecord';
 import { pageTitleLabel } from '../pageTitle';
 import { useRecordReadAhead } from '../useRecordReadAhead';
@@ -97,7 +98,7 @@ type Props = {
   /** Right edge of the agent and extension drawers, beside a panel. */
   drawerOffset?: string;
   relationshipPickerToken?: string;
-  /** Comments are shown only on the record page for now. */
+  /** Shows the record's comments in a tab. */
   showComments?: boolean;
   onDeleted: () => void;
   onDuplicated: (copy: AttricatRecord) => void;
@@ -272,6 +273,13 @@ export const RecordPreview = ({
               recordId={recordId}
               onOpen={() => showTab(recordPreviewTabs.exports)}
             />
+            {/* A panel's tabs sit below the fold; the count leads to them. */}
+            {compact && showComments && (
+              <RecordCommentsLink
+                recordId={recordId}
+                onOpen={() => showTab(recordPreviewTabs.comments)}
+              />
+            )}
           </RecordBlueprintHeaderActions>
         ),
         children: (

@@ -1,4 +1,4 @@
-import { Tooltip } from '@mui/material';
+import { Button, Tooltip } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { RouterButton } from '../../components/RouterLink';
@@ -9,8 +9,14 @@ import { commentsSectionId } from './constants';
 import { commentQueryKeys } from './queryKeys';
 import { sessionOptions } from '../auth/queryOptions';
 
-/** Comment count linking to the comments on the record page; the label is in its tooltip. */
-export const RecordCommentsLink = ({ recordId }: { recordId: string }) => {
+type Props = {
+  recordId: string;
+  /** Shows the comments where they are, instead of on the record page. */
+  onOpen?: () => void;
+};
+
+/** Comment count leading to the record's comments; the label is in its tooltip. */
+export const RecordCommentsLink = ({ recordId, onOpen }: Props) => {
   const { t } = useTranslation();
   const session = useQuery(sessionOptions());
   const count = useQuery({
@@ -25,19 +31,32 @@ export const RecordCommentsLink = ({ recordId }: { recordId: string }) => {
   });
   if (count.data === undefined) return null;
   const label = t('comments.count', { count: count.data });
+  const icon = <CommentIcon size={compactIconSize} />;
   return (
     <Tooltip title={label}>
-      <RouterButton
-        aria-label={label}
-        hash={commentsSectionId}
-        params={{ recordId }}
-        size="small"
-        startIcon={<CommentIcon size={compactIconSize} />}
-        to="/records/$recordId"
-        variant="text"
-      >
-        {count.data}
-      </RouterButton>
+      {onOpen ? (
+        <Button
+          aria-label={label}
+          onClick={onOpen}
+          size="small"
+          startIcon={icon}
+          variant="text"
+        >
+          {count.data}
+        </Button>
+      ) : (
+        <RouterButton
+          aria-label={label}
+          hash={commentsSectionId}
+          params={{ recordId }}
+          size="small"
+          startIcon={icon}
+          to="/records/$recordId"
+          variant="text"
+        >
+          {count.data}
+        </RouterButton>
+      )}
     </Tooltip>
   );
 };
