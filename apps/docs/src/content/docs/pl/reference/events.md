@@ -70,12 +70,12 @@ Aby działać na bieżącym stanie rekordu, odczytaj go; ładunek jest wyłączn
 
 ### Które zmiany tworzą fakty
 
-`facts` zawiera po jednym wpisie dla każdej wartości atrybutu, która faktycznie się zmieniła. Zapis, który pozostawia wartość bez zmian, nie dodaje dla niej faktu. [Wyzwalacze przepływów pracy](/pl/builders/workflows/#reaguj-tylko-na-wybrane-atrybuty) mogą filtrować po `attribute_code` za pomocą `attributes`.
+`facts` zawiera po jednym wpisie dla każdej wartości atrybutu, która faktycznie się zmieniła. Zapis, który pozostawia wartość bez zmian, nie dodaje dla niej faktu. [Wyzwalacze przepływów pracy](/pl/builders/workflows/#reaguj-tylko-na-wybrane-atrybuty) mogą filtrować po `attribute_code` za pomocą `attributes` i po `change_kind` za pomocą `change_kinds`.
 
 - **Atrybuty skalarne:** `change_kind` to `set`, `replace` lub `remove`; `restore` w `attribute_value.restored.v1`. `record.created.v1` wymienia każdą wartość początkową, łącznie z domyślnymi i generowanymi, jako `set`.
 - **Atrybuty relacji:** każdy dodany lub usunięty cel to osobny fakt z `change_kind` równym `relationship_add` lub `relationship_remove`, ustawionym `relationship_target_record_id` i identyfikatorem celu jako wartością. Zapis zmieniający tylko relacje tworzy `relationship.changed.v1`; zapis zmieniający też inne wartości tworzy `record.updated.v1`.
 - **Atrybuty plikowe:** przesłanie, podłączenie, zmiana kolejności lub usunięcie plików trafia do dziennika audytu, ale nie tworzy zdarzenia ani faktu.
-- Zmiany tagów i metadanych systemowych nie są wartościami atrybutów i nie dodają faktów.
+- Zmiany tagów i metadanych systemowych nie są wartościami atrybutów i nie dodają faktów. Zamiast tego `record.created.v1` i `record.updated.v1` wymieniają tagi systemowe dodane przez zapis w `tags_added`, a usunięte w `tags_removed`. Puste listy są pomijane. [Wyzwalacze przepływów pracy](/pl/builders/workflows/#reaguj-tylko-na-dodane-lub-usunięte-tagi) mogą po nich filtrować.
 - **Migracje:** `record.migrated.v1` nie zawiera `facts`. Jego ładunek wskazuje rekord, jego schemat, `source_version`, `target_version` i `migration_id`. Jeśli migracja usunęła relację lub zmieniła jej cele, `released_relationships` wymienia cele, których rekord już nie wskazuje, jako `attribute_code` i `target_record_ids` (najwyżej 100 na relację i 1000 na zdarzenie).
 
 ## Prośby o ponowienie eksportu

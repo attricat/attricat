@@ -235,17 +235,84 @@
     },
     "EventTrigger": {
       "additionalProperties": false,
-      "description": "Runs when a record event occurs. Event triggers have no `type` key.",
-      "if": {
-        "properties": {
-          "event_type": {
-            "const": "record.migrated.v1"
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "const": "record.migrated.v1"
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "attributes"
+                  ]
+                },
+                {
+                  "required": [
+                    "change_kinds"
+                  ]
+                }
+              ]
+            }
           }
         },
-        "required": [
-          "event_type"
-        ]
-      },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "not": {
+                  "enum": [
+                    "record.created.v1",
+                    "record.updated.v1"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "tags_added"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_type": {
+                "not": {
+                  "enum": [
+                    "record.updated.v1"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "event_type"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "tags_removed"
+              ]
+            }
+          }
+        }
+      ],
+      "description": "Runs when a record event occurs. Event triggers have no `type` key.",
       "properties": {
         "attributes": {
           "default": null,
@@ -269,6 +336,23 @@
             "x-attricat-reference": "blueprint"
           },
           "maxItems": 100,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "change_kinds": {
+          "default": null,
+          "description": "Match only events with a changed fact of one of these kinds, such as\n`relationship_add` or `relationship_remove`. With `attributes`, the\nsame fact must also name one of those attributes. Not allowed with\n`record.migrated.v1`.",
+          "items": {
+            "enum": [
+              "set",
+              "replace",
+              "remove",
+              "restore",
+              "relationship_add",
+              "relationship_remove"
+            ]
+          },
           "minItems": 1,
           "type": "array",
           "uniqueItems": true
@@ -332,18 +416,39 @@
             "pattern": "^facts\\.\\+?[0-9]+(?:\\.[A-Za-z0-9_-]+)+$"
           },
           "type": "object"
+        },
+        "tags_added": {
+          "default": null,
+          "description": "Match only events that added one of these system tags. Allowed with\n`record.created.v1` and `record.updated.v1`.",
+          "items": {
+            "description": "At most 128 bytes of UTF-8.",
+            "maxLength": 128,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "maxItems": 100,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "tags_removed": {
+          "default": null,
+          "description": "Match only events that removed one of these system tags. Allowed with\n`record.updated.v1`.",
+          "items": {
+            "description": "At most 128 bytes of UTF-8.",
+            "maxLength": 128,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "maxItems": 100,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
         }
       },
       "required": [
         "event_type"
       ],
-      "then": {
-        "not": {
-          "required": [
-            "attributes"
-          ]
-        }
-      },
       "type": "object"
     },
     "Trigger": {

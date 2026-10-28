@@ -43,7 +43,7 @@ type AttributeContextKey = (String, Option<Uuid>);
 fn released_relationships(changes: &[AuditEventChange]) -> Vec<ReleasedRelationshipV1> {
     let mut released: std::collections::BTreeMap<&str, Vec<Uuid>> = Default::default();
     for change in changes {
-        if let (Some(target), "relationship_remove") =
+        if let (Some(target), crate::domain_events::CHANGE_KIND_RELATIONSHIP_REMOVE) =
             (change.relationship_target_record_id, change.change_kind)
         {
             released
@@ -1099,7 +1099,7 @@ mod tests {
             context_id: None,
             context_code: None,
             relationship_target_record_id: Some(Uuid::new_v4()),
-            change_kind: "relationship_remove",
+            change_kind: crate::domain_events::CHANGE_KIND_RELATIONSHIP_REMOVE,
             before_value: None,
             after_value: None,
         }

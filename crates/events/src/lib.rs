@@ -25,6 +25,24 @@ pub const CONTEXT_DELETED_V1: &str = "context.deleted.v1";
 /// extension named in the payload receives it.
 pub const EXPORT_RETRY_REQUESTED_V1: &str = "export.retry_requested.v1";
 
+/// [`AffectedFactV1::change_kind`] values: a scalar value was set, replaced,
+/// removed or restored from history, or a relationship target was added or
+/// removed.
+pub const CHANGE_KIND_SET: &str = "set";
+pub const CHANGE_KIND_REPLACE: &str = "replace";
+pub const CHANGE_KIND_REMOVE: &str = "remove";
+pub const CHANGE_KIND_RESTORE: &str = "restore";
+pub const CHANGE_KIND_RELATIONSHIP_ADD: &str = "relationship_add";
+pub const CHANGE_KIND_RELATIONSHIP_REMOVE: &str = "relationship_remove";
+pub const CHANGE_KINDS_V1: &[&str] = &[
+    CHANGE_KIND_SET,
+    CHANGE_KIND_REPLACE,
+    CHANGE_KIND_REMOVE,
+    CHANGE_KIND_RESTORE,
+    CHANGE_KIND_RELATIONSHIP_ADD,
+    CHANGE_KIND_RELATIONSHIP_REMOVE,
+];
+
 pub const ALL_EVENT_TYPES_V1: &[&str] = &[
     RECORD_CREATED_V1,
     RECORD_UPDATED_V1,
@@ -230,6 +248,14 @@ pub struct RecordMutationV1 {
     pub blueprint_id: Uuid,
     pub blueprint_version: i64,
     pub facts: Vec<AffectedFactV1>,
+    /// System tags the mutation added to the record, in the record's tag
+    /// order. Omitted when none were added.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags_added: Vec<String>,
+    /// System tags the mutation removed from the record. Omitted when none
+    /// were removed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags_removed: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

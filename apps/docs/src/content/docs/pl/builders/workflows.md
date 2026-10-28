@@ -107,6 +107,47 @@ attributes = ["license"]
 - **Atrybuty plikowe:** przesłanie, podłączenie, zmiana kolejności lub usunięcie plików trafia do dziennika audytu, ale nie tworzy zdarzenia, więc atrybut plikowy w `attributes` nigdy nie uruchamia wykonania. Śledź zmiany plików atrybutem skalarnym, który zmienia się razem z nimi, np. numerem rewizji.
 - `attributes` nie działa z `record.migrated.v1`, które nie zawiera faktów. Łączy się z `envelope` i `facts`: wszystkie muszą pasować.
 
+### Reaguj tylko na dodane lub usunięte cele relacji
+
+`change_kinds` to lista rodzajów zmian, na które reaguje wyzwalacz. Wyzwalacz uruchamia wykonanie tylko wtedy, gdy zdarzenie zawiera fakt jednego z tych rodzajów. Razem z `attributes` ten sam fakt musi też dotyczyć jednego z tych atrybutów:
+
+```toml
+# Do rekordu podłączono licencję
+[[triggers]]
+event_type = "relationship.changed.v1"
+attributes = ["license"]
+change_kinds = ["relationship_add"]
+
+# Od rekordu odłączono licencję
+[[triggers]]
+event_type = "relationship.changed.v1"
+attributes = ["license"]
+change_kinds = ["relationship_remove"]
+```
+
+- Rodzaje to `set`, `replace`, `remove`, `restore`, `relationship_add` i `relationship_remove`. Zobacz, [które zmiany tworzą fakty](/pl/reference/events/#które-zmiany-tworzą-fakty).
+- Zapis zmieniający relacje razem z innymi wartościami tworzy `record.updated.v1`, a nie `relationship.changed.v1`. Dodaj drugi wyzwalacz z `event_type = "record.updated.v1"` i tymi samymi filtrami, aby wychwycić też takie zapisy.
+- `change_kinds` nie działa z `record.migrated.v1`. Łączy się z pozostałymi filtrami: wszystkie muszą pasować.
+
+### Reaguj tylko na dodane lub usunięte tagi
+
+`tags_added` i `tags_removed` to listy od 1 do 100 tagów systemowych. Wyzwalacz uruchamia wykonanie tylko wtedy, gdy zapis dodał lub usunął co najmniej jeden z nich:
+
+```toml
+[[triggers]]
+event_type = "record.updated.v1"
+tags_added = ["approved"]
+
+[[triggers]]
+event_type = "record.updated.v1"
+tags_removed = ["approved"]
+```
+
+- Liczą się tylko tagi, które faktycznie się zmieniły. Zapisanie rekordu z tagami, które już ma, nie uruchamia wykonania.
+- `tags_added` działa z `record.created.v1`, gdzie każdy tag, z którym powstaje rekord, liczy się jako dodany, oraz z `record.updated.v1`. `tags_removed` działa tylko z `record.updated.v1`.
+- Zmiany tagów wprowadzone przez przepływ pracy nie uruchamiają przepływów, jak każda inna zmiana wprowadzona przez przepływ pracy.
+- Oba łączą się z pozostałymi filtrami: wszystkie muszą pasować. Aby reagować na każdą z tych zmian, użyj dwóch wyzwalaczy, jak powyżej.
+
 ## Wyzwalacze ręczne i harmonogramowe
 
 Przy `format_version = 2` przepływ pracy można też uruchomić ręcznie lub według harmonogramu.

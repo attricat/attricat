@@ -9,9 +9,10 @@ use super::values::NativeValue;
 use super::write_context::WriteContext;
 use super::*;
 use crate::domain_events::{
-    ATTRIBUTE_VALUE_CHANGED_V1, AttributeValueMutationV1, NewDomainEvent, RECORD_CREATED_V1,
-    RECORD_DELETED_V1, RECORD_UPDATED_V1, RELATIONSHIP_CHANGED_V1, RecordMutationV1,
-    RelationshipMutationV1,
+    ATTRIBUTE_VALUE_CHANGED_V1, AttributeValueMutationV1, CHANGE_KIND_RELATIONSHIP_ADD,
+    CHANGE_KIND_RELATIONSHIP_REMOVE, CHANGE_KIND_REMOVE, CHANGE_KIND_REPLACE, CHANGE_KIND_RESTORE,
+    CHANGE_KIND_SET, NewDomainEvent, RECORD_CREATED_V1, RECORD_DELETED_V1, RECORD_UPDATED_V1,
+    RELATIONSHIP_CHANGED_V1, RecordMutationV1, RelationshipMutationV1,
 };
 use crate::model::{NewFileAttributeValue, UpdateRecordFormRequest};
 use crate::persistence_rows::{Db, IntoDomain};
@@ -302,6 +303,8 @@ impl AttricatRepository {
                 blueprint_id: record.blueprint_id,
                 blueprint_version: record.blueprint_version,
                 facts: Self::affected_facts(&changes),
+                tags_added: record.system_tags.clone(),
+                tags_removed: Vec::new(),
             })
             .expect("record-created payload is serializable"),
         );
@@ -615,6 +618,7 @@ impl AttricatRepository {
         // Snapshot under the lock so a concurrent writer cannot change the
         // audited "before" state between the read and this mutation.
         let before = self.record_audit_snapshot(transaction, record_id).await?;
+        let before_tags = record.system_tags.clone();
         let prefetch = prefetch.filter(|prefetch| Some(prefetch.generations) == generations);
         let write =
             WriteContext::load_with(transaction, self.workspace_id.0, &record, prefetch).await?;
@@ -664,6 +668,7 @@ impl AttricatRepository {
         let record = self.store_preview(transaction, record.id, preview).await?;
         let after = self.record_audit_snapshot(transaction, record_id).await?;
         let changes = Self::audit_changes(record_id, before, after, false);
+        let (tags_added, tags_removed) = tag_changes(&before_tags, &record.system_tags);
         let event = self.core_event(
             RECORD_UPDATED_V1,
             "record",
@@ -673,6 +678,8 @@ impl AttricatRepository {
                 blueprint_id: record.blueprint_id,
                 blueprint_version: record.blueprint_version,
                 facts: Self::affected_facts(&changes),
+                tags_added,
+                tags_removed,
             })
             .expect("record-updated payload is serializable"),
         );
@@ -855,6 +862,8 @@ impl AttricatRepository {
                 blueprint_id: record.blueprint_id,
                 blueprint_version: record.blueprint_version,
                 facts: Vec::new(),
+                tags_added: Vec::new(),
+                tags_removed: Vec::new(),
             })
             .expect("record-deleted payload is serializable"),
         );
@@ -946,6 +955,8 @@ impl AttricatRepository {
                     blueprint_id: record.blueprint_id,
                     blueprint_version: record.blueprint_version,
                     facts,
+                    tags_added: Vec::new(),
+                    tags_removed: Vec::new(),
                 })
                 .expect("record-updated payload is serializable"),
             )
@@ -2080,17 +2091,17 @@ impl AttricatRepository {
                 let source = new.or(old)?;
                 let relationship = source.relationship_target_record_id.is_some();
                 let change_kind = if restored {
-                    "restore"
+                    CHANGE_KIND_RESTORE
                 } else if relationship && old.is_none() {
-                    "relationship_add"
+                    CHANGE_KIND_RELATIONSHIP_ADD
                 } else if relationship && new.is_none() {
-                    "relationship_remove"
+                    CHANGE_KIND_RELATIONSHIP_REMOVE
                 } else if old.is_none() {
-                    "set"
+                    CHANGE_KIND_SET
                 } else if new.is_none() {
-                    "remove"
+                    CHANGE_KIND_REMOVE
                 } else {
-                    "replace"
+                    CHANGE_KIND_REPLACE
                 };
                 Some(AuditEventChange {
                     record_id,
@@ -2314,4 +2325,16 @@ pub(super) async fn lock_record_writes(
         .execute(&mut **transaction)
         .await?;
     Ok(())
+}
+
+/// The tags in `after` but not `before`, and in `before` but not `after`,
+/// each in its list's order.
+fn tag_changes(before: &[String], after: &[String]) -> (Vec<String>, Vec<String>) {
+    let missing_from = |list: &[String], other: &[String]| {
+        list.iter()
+            .filter(|tag| !other.contains(tag))
+            .cloned()
+            .collect::<Vec<_>>()
+    };
+    (missing_from(after, before), missing_from(before, after))
 }

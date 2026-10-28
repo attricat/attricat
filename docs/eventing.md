@@ -80,6 +80,9 @@ Core types are constants in `api::domain_events` and currently include:
 
 - `record.created.v1`, `record.updated.v1`, `record.deleted.v1`,
   `record.migrated.v1`, `record.published.v1`, and `record.unpublished.v1`.
+  `record.created.v1` and `record.updated.v1` payloads (`RecordMutationV1`)
+  carry optional `tags_added` and `tags_removed` lists of the system tags the
+  write changed, omitted when empty.
   Publication payloads carry `record_id`, `context_id` (the channel),
   `published_at`, `published_by_user_id` and an optional `reason`.
   `record.published.v1` has `reason = "blueprint_bulk"` when it comes from

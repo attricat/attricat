@@ -70,12 +70,12 @@ To act on the record's current state, read it; the payload is only a description
 
 ### Which changes produce facts
 
-`facts` contains one entry per attribute value that actually changed. A save that leaves a value as it was adds no fact for it. [Workflow triggers](/builders/workflows/#react-only-to-specific-attributes) can filter on `attribute_code` with `attributes`.
+`facts` contains one entry per attribute value that actually changed. A save that leaves a value as it was adds no fact for it. [Workflow triggers](/builders/workflows/#react-only-to-specific-attributes) can filter on `attribute_code` with `attributes` and on `change_kind` with `change_kinds`.
 
 - **Scalar attributes:** `change_kind` is `set`, `replace`, or `remove`; `restore` on `attribute_value.restored.v1`. `record.created.v1` lists every initial value, including defaults and generated values, as `set`.
 - **Relationship attributes:** each added or removed target is its own fact, with `change_kind` `relationship_add` or `relationship_remove`, `relationship_target_record_id` set, and the target ID as the value. A save that only changes relationships records `relationship.changed.v1`; one that also changes other values records `record.updated.v1`.
 - **File attributes:** uploading, linking, reordering, or removing files is recorded in the audit log but records no event and no fact.
-- System tag and system metadata changes are not attribute values and add no fact.
+- System tag and system metadata changes are not attribute values and add no fact. Instead, `record.created.v1` and `record.updated.v1` list the system tags the save added in `tags_added` and the ones it removed in `tags_removed`. Each is left out when empty. [Workflow triggers](/builders/workflows/#react-only-to-added-or-removed-tags) can filter on them.
 - **Migrations:** `record.migrated.v1` has no `facts`. Its payload names the record, its blueprint, `source_version`, `target_version`, and `migration_id`. When the migration dropped or re-pointed a relationship, `released_relationships` lists the targets the record no longer points to, as `attribute_code` and `target_record_ids` (at most 100 per relationship and 1,000 per event).
 
 ## Export retry requests

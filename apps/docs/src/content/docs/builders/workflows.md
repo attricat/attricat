@@ -107,6 +107,47 @@ attributes = ["license"]
 - **File attributes:** uploading, linking, reordering, or removing files is recorded in the audit log but does not record an event, so a file attribute in `attributes` never starts a run. Track file changes with a scalar attribute that changes alongside them, such as a revision number.
 - `attributes` can't be used with `record.migrated.v1`, which carries no facts. It combines with `envelope` and `facts`: all of them must match.
 
+### React only to added or removed relationship targets
+
+`change_kinds` lists the kinds of change the trigger reacts to. The trigger then starts a run only when the event has a fact of one of those kinds. With `attributes`, the same fact must also be for one of those attributes:
+
+```toml
+# A license was linked to the record
+[[triggers]]
+event_type = "relationship.changed.v1"
+attributes = ["license"]
+change_kinds = ["relationship_add"]
+
+# A license was unlinked from the record
+[[triggers]]
+event_type = "relationship.changed.v1"
+attributes = ["license"]
+change_kinds = ["relationship_remove"]
+```
+
+- The kinds are `set`, `replace`, `remove`, `restore`, `relationship_add`, and `relationship_remove`. See [which changes produce facts](/reference/events/#which-changes-produce-facts).
+- A save that changes relationships together with other values records `record.updated.v1`, not `relationship.changed.v1`. Add a second trigger with `event_type = "record.updated.v1"` and the same filters to catch those saves too.
+- `change_kinds` can't be used with `record.migrated.v1`. It combines with the other filters: all of them must match.
+
+### React only to added or removed tags
+
+`tags_added` and `tags_removed` each list 1 to 100 system tags. The trigger then starts a run only when the save added, or removed, at least one of them:
+
+```toml
+[[triggers]]
+event_type = "record.updated.v1"
+tags_added = ["approved"]
+
+[[triggers]]
+event_type = "record.updated.v1"
+tags_removed = ["approved"]
+```
+
+- Tags count only when they actually change. Saving a record with the tags it already has starts no run.
+- `tags_added` works with `record.created.v1`, where every tag the new record starts with counts as added, and `record.updated.v1`. `tags_removed` works with `record.updated.v1` only.
+- Tag changes made by a workflow don't start workflows, like any other change made by a workflow.
+- Both combine with the other filters: all of them must match. To react to either change, use two triggers as above.
+
 ## Manual and schedule triggers
 
 With `format_version = 2`, a workflow can also be started by hand or on a schedule.
