@@ -4,7 +4,11 @@ use crate::domain_events::{ATTRIBUTE_VALUE_CHANGED_V1, AttributeValueMutationV1}
 use crate::model::NewFileAttributeValue;
 use crate::persistence_rows::{Db, IntoDomain};
 use attricat_domain::attribute_options::{Cardinality, ContextEditable};
-use attricat_domain::states::FileStatus;
+use attricat_domain::constants::TEXT_FILE_VARIANT;
+use attricat_domain::states::{
+    FileJobKind, FileJobStatus, FileStatus, FileTextExtractionStatus, TextExtractionFailure,
+};
+use attricat_validation::files::{TEXT_EXTRACTION_MIME_TYPES, is_text_extraction_mime};
 use chrono::Utc;
 use serde::Serialize;
 use sqlx::Transaction;
@@ -90,6 +94,22 @@ pub struct FileObject {
     pub status: FileStatus,
     /// Digest of the stored bytes; a file and its variants never change.
     pub sha256: String,
+}
+
+/// The stored outcome of extracting a document's text.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FileTextExtraction {
+    pub extractor_version: u32,
+    pub outcome: FileTextOutcome,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FileTextOutcome {
+    /// The extracted text is stored at `object_key` as a JSON document.
+    Ready {
+        object_key: String,
+    },
+    Failed(TextExtractionFailure),
 }
 
 /// A record's file attribute, checked to accept uploads in `context_id`.
@@ -282,8 +302,12 @@ impl AttricatRepository {
         .bind(conversation.map(|conversation| conversation.1))
         .execute(&mut **transaction)
         .await?;
-        sqlx::query("INSERT INTO file_processing_jobs (id, workspace_id, file_id, kind, status) VALUES ($1,$2,$3,'metadata','queued')")
-            .bind(Uuid::new_v4()).bind(workspace_id).bind(id).execute(&mut **transaction).await?;
+        sqlx::query("INSERT INTO file_processing_jobs (id, workspace_id, file_id, kind, status) VALUES ($1,$2,$3,$4,$5)")
+            .bind(Uuid::new_v4()).bind(workspace_id).bind(id).bind(FileJobKind::Metadata.as_str()).bind(FileJobStatus::Queued.as_str()).execute(&mut **transaction).await?;
+        if is_text_extraction_mime(&file.mime_type) {
+            sqlx::query("INSERT INTO file_processing_jobs (id, workspace_id, file_id, kind, status) VALUES ($1,$2,$3,$4,$5)")
+                .bind(Uuid::new_v4()).bind(workspace_id).bind(id).bind(FileJobKind::TextExtraction.as_str()).bind(FileJobStatus::Queued.as_str()).execute(&mut **transaction).await?;
+        }
         Ok(UploadedFile {
             id,
             filename: file.display_filename,
@@ -865,6 +889,42 @@ impl AttricatRepository {
         row.ok_or(RepositoryError::NotFound("file"))
     }
 
+    /// How text extraction of a file ended, or `None` before it has run.
+    pub async fn file_text_extraction(
+        &self,
+        file_id: Uuid,
+    ) -> Result<Option<FileTextExtraction>, RepositoryError> {
+        let row = sqlx::query_as::<_, (i32, String, Option<String>, Option<String>)>(
+            "SELECT e.extractor_version, e.status, e.failure_reason, v.object_key FROM file_text_extractions e JOIN files f ON f.id = e.file_id AND f.workspace_id = e.workspace_id LEFT JOIN file_variants v ON v.file_id = e.file_id AND v.workspace_id = e.workspace_id AND v.kind = $3 WHERE e.file_id = $1 AND e.workspace_id = $2 AND f.deleted_at IS NULL",
+        )
+        .bind(file_id)
+        .bind(self.workspace_id.0)
+        .bind(TEXT_FILE_VARIANT)
+        .fetch_optional(&self.pool)
+        .await?;
+        let Some((version, status, failure, object_key)) = row else {
+            return Ok(None);
+        };
+        let outcome = match (
+            stored_code::<FileTextExtractionStatus>(status)?,
+            failure,
+            object_key,
+        ) {
+            (FileTextExtractionStatus::Ready, _, Some(object_key)) => {
+                FileTextOutcome::Ready { object_key }
+            }
+            (FileTextExtractionStatus::Failed, Some(failure), _) => {
+                FileTextOutcome::Failed(stored_code(failure)?)
+            }
+            // A ready row whose variant is gone reads as not yet extracted.
+            _ => return Ok(None),
+        };
+        Ok(Some(FileTextExtraction {
+            extractor_version: u32::try_from(version).unwrap_or_default(),
+            outcome,
+        }))
+    }
+
     /// The file IDs of the local value, in position order. The caller holds
     /// the record lock, which serializes every writer of its file values.
     async fn current_file_ids(
@@ -1119,6 +1179,64 @@ impl SystemRepository {
                 .bind(workspace_id)
                 .bind(file_id)
                 .bind(available_at)
+                .execute(&mut *transaction)
+                .await?
+                .rows_affected();
+        }
+        transaction.commit().await?;
+        Ok(queued)
+    }
+
+    /// Queues text extraction for documents that have never been extracted or
+    /// were extracted by an extractor older than `extractor_version`. Files
+    /// with a pending text job, or whose last one failed, are skipped; job
+    /// retention eventually lets a failed file be tried again. A timeout is
+    /// not a property of the document, so a timed-out extraction is likewise
+    /// tried again once retention has removed its text jobs. Returns how many
+    /// jobs were queued.
+    pub async fn queue_text_extraction_backfill(
+        &self,
+        extractor_version: u32,
+    ) -> Result<u64, RepositoryError> {
+        let mime_types = TEXT_EXTRACTION_MIME_TYPES
+            .iter()
+            .map(|mime| (*mime).to_owned())
+            .collect::<Vec<_>>();
+        // A file waiting for, running or terminally failing a text job is not
+        // queued again.
+        let blocking_statuses = [
+            FileJobStatus::Queued,
+            FileJobStatus::Running,
+            FileJobStatus::Retryable,
+            FileJobStatus::Failed,
+        ]
+        .map(|status| status.as_str().to_owned());
+        let mut transaction = self.pool.begin().await?;
+        let due: Vec<(Uuid, Uuid)> = sqlx::query_as(
+            r#"SELECT f.workspace_id, f.id FROM files f
+            WHERE f.deleted_at IS NULL AND f.mime_type = ANY($1)
+              AND NOT EXISTS (SELECT 1 FROM file_text_extractions e WHERE e.file_id = f.id AND e.extractor_version >= $2
+                AND (e.failure_reason IS DISTINCT FROM $5 OR EXISTS (SELECT 1 FROM file_processing_jobs tj WHERE tj.file_id = f.id AND tj.kind = $3)))
+              AND NOT EXISTS (SELECT 1 FROM file_processing_jobs j WHERE j.file_id = f.id AND j.kind = $3 AND j.status = ANY($6))
+            ORDER BY f.created_at, f.id
+            LIMIT $4 FOR UPDATE OF f SKIP LOCKED"#,
+        )
+        .bind(&mime_types)
+        .bind(extractor_version as i32)
+        .bind(FileJobKind::TextExtraction.as_str())
+        .bind(RECONCILE_BATCH)
+        .bind(TextExtractionFailure::TimedOut.as_str())
+        .bind(&blocking_statuses[..])
+        .fetch_all(&mut *transaction)
+        .await?;
+        let mut queued = 0;
+        for (workspace_id, file_id) in due {
+            queued += sqlx::query("INSERT INTO file_processing_jobs (id, workspace_id, file_id, kind, status) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING")
+                .bind(Uuid::new_v4())
+                .bind(workspace_id)
+                .bind(file_id)
+                .bind(FileJobKind::TextExtraction.as_str())
+                .bind(FileJobStatus::Queued.as_str())
                 .execute(&mut *transaction)
                 .await?
                 .rows_affected();

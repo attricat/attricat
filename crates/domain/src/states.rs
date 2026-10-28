@@ -214,6 +214,39 @@ crate::code_enum! {
 }
 
 crate::code_enum! {
+    /// What a file processing job does.
+    pub enum FileJobKind (UnknownFileJobKind: "file job kind") {
+        /// Records metadata and renders image variants.
+        Metadata => "metadata",
+        /// Extracts the text of a PDF, Word or Excel file.
+        TextExtraction => "text_extraction",
+        /// Deletes the objects of a file past its deletion grace.
+        Purge => "purge",
+    }
+}
+
+crate::code_enum! {
+    /// Whether a file's text was extracted.
+    pub enum FileTextExtractionStatus (UnknownFileTextExtractionStatus: "file text extraction status") {
+        Ready => "ready",
+        Failed => "failed",
+    }
+}
+
+crate::code_enum! {
+    /// Why a file has no extracted text.
+    pub enum TextExtractionFailure (UnknownTextExtractionFailure: "text extraction failure") {
+        Encrypted => "encrypted",
+        /// A PDF of scanned pages without a text layer.
+        NoTextLayer => "no_text_layer",
+        TooLarge => "too_large",
+        Malformed => "malformed",
+        Unsupported => "unsupported",
+        TimedOut => "timed_out",
+    }
+}
+
+crate::code_enum! {
     /// Whether an extension connection can issue access tokens.
     pub enum ConnectionStatus (UnknownConnectionStatus: "connection status") {
         PendingAuthorization => "pending_authorization",
@@ -321,6 +354,21 @@ mod tests {
             FileJobStatus::ALL,
             FileJobStatus::as_str,
             FileJobStatus::parse,
+        );
+        crate::codes::assert_codes_round_trip(
+            FileJobKind::ALL,
+            FileJobKind::as_str,
+            FileJobKind::parse,
+        );
+        crate::codes::assert_codes_round_trip(
+            FileTextExtractionStatus::ALL,
+            FileTextExtractionStatus::as_str,
+            FileTextExtractionStatus::parse,
+        );
+        crate::codes::assert_codes_round_trip(
+            TextExtractionFailure::ALL,
+            TextExtractionFailure::as_str,
+            TextExtractionFailure::parse,
         );
         crate::codes::assert_codes_round_trip(
             ConnectionStatus::ALL,

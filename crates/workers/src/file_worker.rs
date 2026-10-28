@@ -3,7 +3,10 @@
 //! The worker owns state transitions: HTTP only stages the original and queues a
 //! metadata job.  Claims and all state changes are database transactions, while
 //! object writes are deliberately idempotent (stable variant keys).
-use attricat_domain::states::FileJobStatus;
+use attricat_document_text::EXTRACTOR_VERSION;
+use attricat_domain::constants::TEXT_FILE_VARIANT;
+use attricat_domain::states::{FileJobKind, FileJobStatus, FileTextExtractionStatus};
+use attricat_validation::files::is_text_extraction_mime;
 use std::{
     io::Cursor,
     sync::{Arc, Mutex},
@@ -123,14 +126,17 @@ impl FileWorker {
     }
 
     /// Atomically claims one due or abandoned job. SKIP LOCKED allows multiple
-    /// worker processes to poll without serialising each other.
+    /// worker processes to poll without serialising each other. Text
+    /// extraction is claimed after other due jobs, so a queue of extractions
+    /// does not hold back new uploads; one already running still occupies
+    /// its worker.
     pub async fn claim(&self) -> Result<Option<ClaimedJob>, sqlx::Error> {
         let job = sqlx::query_as::<_, (Uuid, Uuid, Uuid, String, i32, Uuid)>(
             r#"WITH candidate AS (
                  SELECT id FROM file_processing_jobs
                  WHERE (status IN ('queued', 'retryable') AND available_at <= now())
                     OR (status = 'running' AND locked_at < now() - make_interval(secs => $1))
-                 ORDER BY available_at, id FOR UPDATE SKIP LOCKED LIMIT 1
+                 ORDER BY kind = $4, available_at, id FOR UPDATE SKIP LOCKED LIMIT 1
                )
                UPDATE file_processing_jobs job SET status = 'running', locked_at = now(),
                  worker_id = $2, lease_token = $3, attempts = job.attempts + 1, updated_at = now()
@@ -140,6 +146,7 @@ impl FileWorker {
         .bind(STALE_LOCK_SECONDS)
         .bind(&self.config.worker_id)
         .bind(Uuid::new_v4())
+        .bind(FileJobKind::TextExtraction.as_str())
         .fetch_optional(&self.pool)
         .await?;
         if job.is_some() {
@@ -191,16 +198,13 @@ impl FileWorker {
             self.record_metrics_if_due().await?;
             return Ok(false);
         };
-        let kind = if job.kind == "purge" {
-            "purge"
-        } else {
-            "metadata"
-        };
-        let span = info_span!("file_worker.job", job_id = %job.id, file_id = %job.file_id, kind);
+        let kind = FileJobKind::parse(&job.kind).unwrap_or(FileJobKind::Metadata);
+        let span = info_span!("file_worker.job", job_id = %job.id, file_id = %job.file_id, kind = kind.as_str());
         let operation = async {
             let result = match kind {
-                "purge" => self.purge(&job).await,
-                _ => self.process_file(&job).await,
+                FileJobKind::Purge => self.purge(&job).await,
+                FileJobKind::TextExtraction => self.extract_text(&job).await,
+                FileJobKind::Metadata => self.process_file(&job).await,
             };
             match result {
                 Ok(()) => self.complete(&job).await?,
@@ -343,6 +347,120 @@ impl FileWorker {
         Ok(())
     }
 
+    /// Extracts a document's text into its `text` variant and records the
+    /// outcome. A document that cannot be read is a recorded outcome, not a
+    /// job failure, and never changes the file's own status.
+    async fn extract_text(&self, job: &ClaimedJob) -> Result<(), WorkerError> {
+        let row: Option<(String, String)> = sqlx::query_as(
+            "SELECT original_key, mime_type FROM files WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL",
+        )
+        .bind(job.file_id)
+        .bind(job.workspace_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        let Some((key, mime)) = row.filter(|(_, mime)| is_text_extraction_mime(mime)) else {
+            return Ok(());
+        };
+        let object = self.store.get(&key).await.map_err(WorkerError::Storage)?;
+        let extraction = crate::document_text::extract_text(mime, object.bytes).await;
+        counter!(
+            "attricat_file_text_extractions_total",
+            "outcome" => extraction
+                .as_ref()
+                .err()
+                .map_or(FileTextExtractionStatus::Ready.as_str(), |failure| failure.as_str())
+        )
+        .increment(1);
+        let text_key = format!("files/{}/{TEXT_FILE_VARIANT}.json", job.file_id);
+        // The object key is stable, so a write from a job that then loses its
+        // lease is overwritten by the next attempt.
+        let stored = match &extraction {
+            Ok(document) => {
+                let bytes = serde_json::to_vec(document).expect("documents serialize");
+                let byte_size = bytes.len() as i64;
+                let hash = format!("{:x}", sha2::Sha256::digest(&bytes));
+                self.store
+                    .put(
+                        &text_key,
+                        StoredObject {
+                            bytes: bytes.into(),
+                            content_type: Some("application/json".into()),
+                        },
+                    )
+                    .await
+                    .map_err(WorkerError::Storage)?;
+                Ok((document, byte_size, hash))
+            }
+            Err(failure) => Err(*failure),
+        };
+        let mut transaction = self.pool.begin().await?;
+        let still_owned: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM file_processing_jobs WHERE id = $1 AND status = $3 AND lease_token = $2 FOR UPDATE)")
+            .bind(job.id).bind(job.lease_token).bind(FileJobStatus::Running.as_str()).fetch_one(&mut *transaction).await?;
+        if !still_owned {
+            return Err(WorkerError::LeaseLost);
+        }
+        // Holding the file row keeps a deletion, and so a purge that lists its
+        // variants, from passing this transaction unseen.
+        let live: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM files WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL FOR UPDATE)")
+            .bind(job.file_id).bind(job.workspace_id).fetch_one(&mut *transaction).await?;
+        if !live {
+            transaction.rollback().await?;
+            if stored.is_ok() {
+                // No purge will list text written for a file deleted meanwhile.
+                self.store
+                    .delete(&text_key)
+                    .await
+                    .map_err(WorkerError::Storage)?;
+            }
+            return Ok(());
+        }
+        let mut removed_variant = false;
+        let (status, failure, sections, chars, truncated) = match stored {
+            Ok((document, byte_size, hash)) => {
+                sqlx::query(r#"INSERT INTO file_variants (id, workspace_id, file_id, kind, mime_type, byte_size, object_key, sha256)
+                    VALUES ($1,$2,$3,$4,'application/json',$5,$6,$7)
+                    ON CONFLICT (file_id, kind) DO UPDATE SET mime_type = EXCLUDED.mime_type, byte_size = EXCLUDED.byte_size, object_key = EXCLUDED.object_key, sha256 = EXCLUDED.sha256, updated_at = now()"#)
+                    .bind(Uuid::new_v4()).bind(job.workspace_id).bind(job.file_id).bind(TEXT_FILE_VARIANT).bind(byte_size).bind(&text_key).bind(hash)
+                    .execute(&mut *transaction).await?;
+                (
+                    FileTextExtractionStatus::Ready,
+                    None,
+                    document.sections.len() as i32,
+                    document.char_count() as i64,
+                    document.truncated,
+                )
+            }
+            Err(failure) => {
+                // Text from an earlier extractor must not outlive a failed rerun.
+                removed_variant = sqlx::query("DELETE FROM file_variants WHERE file_id = $1 AND workspace_id = $2 AND kind = $3")
+                    .bind(job.file_id).bind(job.workspace_id).bind(TEXT_FILE_VARIANT).execute(&mut *transaction).await?
+                    .rows_affected() > 0;
+                (
+                    FileTextExtractionStatus::Failed,
+                    Some(failure.as_str()),
+                    0,
+                    0,
+                    false,
+                )
+            }
+        };
+        sqlx::query(r#"INSERT INTO file_text_extractions (file_id, workspace_id, extractor_version, status, failure_reason, section_count, char_count, truncated)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+            ON CONFLICT (file_id) DO UPDATE SET extractor_version = EXCLUDED.extractor_version, status = EXCLUDED.status, failure_reason = EXCLUDED.failure_reason, section_count = EXCLUDED.section_count, char_count = EXCLUDED.char_count, truncated = EXCLUDED.truncated, updated_at = now()"#)
+            .bind(job.file_id).bind(job.workspace_id).bind(EXTRACTOR_VERSION as i32).bind(status.as_str()).bind(failure).bind(sections).bind(chars).bind(truncated)
+            .execute(&mut *transaction).await?;
+        transaction.commit().await?;
+        if removed_variant {
+            // Deleted after the commit so a rolled-back transaction never
+            // leaves a variant row pointing at a missing object.
+            self.store
+                .delete(&text_key)
+                .await
+                .map_err(WorkerError::Storage)?;
+        }
+        Ok(())
+    }
+
     async fn purge(&self, job: &ClaimedJob) -> Result<(), WorkerError> {
         let Some(keys) = self
             .repository
@@ -374,9 +492,15 @@ impl FileWorker {
         metrics::counter!("attricat_file_reconciliation_files_marked_total").increment(marked);
         let due_count = self.repository.queue_due_file_purges().await?;
         metrics::counter!("attricat_file_purge_jobs_queued_total").increment(due_count);
+        let text_count = self
+            .repository
+            .queue_text_extraction_backfill(EXTRACTOR_VERSION)
+            .await?;
+        metrics::counter!("attricat_file_text_extraction_jobs_queued_total").increment(text_count);
         tracing::info!(
             files_marked = marked,
             purge_jobs_queued = due_count,
+            text_extraction_jobs_queued = text_count,
             "file reconciliation completed"
         );
         Ok(())
@@ -404,7 +528,12 @@ impl FileWorker {
             tracing::warn!(job_id = %job.id, "file job lease lost before failure could be recorded");
             return Ok(());
         }
-        if terminal {
+        // Only the metadata job decides whether a file is usable.
+        // Unknown kinds are processed as metadata jobs, so they fail as one.
+        if terminal
+            && FileJobKind::parse(&job.kind).unwrap_or(FileJobKind::Metadata)
+                == FileJobKind::Metadata
+        {
             sqlx::query("UPDATE files SET status = 'failed', processing_error = $2, updated_at = now() WHERE id = $1 AND deleted_at IS NULL").bind(job.file_id).bind(error).execute(&self.pool).await?;
         }
         counter!("attricat_file_worker_jobs_failed_total", "terminal" => terminal.to_string())
@@ -637,6 +766,252 @@ mod tests {
                 .unwrap(),
             "ready"
         );
+    }
+
+    const TEST_WORKSPACE: Uuid = Uuid::from_u128(0x00000000000040008000000000000002);
+    const SPECIFICATION_DOCX: &[u8] =
+        include_bytes!("../../document-text/tests/fixtures/specification.docx");
+    const ENCRYPTED_PDF: &[u8] = include_bytes!("../../document-text/tests/fixtures/encrypted.pdf");
+
+    fn test_worker(pool: &PgPool, store: Arc<dyn ObjectStore>) -> FileWorker {
+        FileWorker::new(
+            pool.clone(),
+            store,
+            WorkerConfig {
+                worker_id: "text-extraction-test".into(),
+                max_pixels: DEFAULT_MAX_PIXELS,
+                max_attempts: 1,
+                delete_grace: Duration::from_secs(60),
+            },
+        )
+    }
+
+    /// A ready file whose original is stored, with one queued job of `kind`.
+    async fn stored_file(
+        pool: &PgPool,
+        store: &dyn ObjectStore,
+        mime: &str,
+        bytes: &[u8],
+        kind: FileJobKind,
+    ) -> (Uuid, Uuid) {
+        let file = Uuid::new_v4();
+        let job = Uuid::new_v4();
+        let key = format!("files/{file}/original");
+        store
+            .put(
+                &key,
+                StoredObject {
+                    bytes: bytes.to_vec().into(),
+                    content_type: Some(mime.into()),
+                },
+            )
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO files (id,workspace_id,original_filename,display_filename,mime_type,byte_size,sha256,original_key,status,attachment_expires_at) VALUES ($1,$2,'document','document',$3,$4,$5,$6,'ready',now()+interval '1 hour')")
+            .bind(file).bind(TEST_WORKSPACE).bind(mime).bind(bytes.len() as i64).bind("0".repeat(64)).bind(key).execute(pool).await.unwrap();
+        sqlx::query("INSERT INTO file_processing_jobs (id,workspace_id,file_id,kind,status) VALUES ($1,$2,$3,$4,'queued')")
+            .bind(job).bind(TEST_WORKSPACE).bind(file).bind(kind.as_str()).execute(pool).await.unwrap();
+        (file, job)
+    }
+
+    async fn extraction(pool: &PgPool, file: Uuid) -> (String, Option<String>, i32) {
+        sqlx::query_as("SELECT status, failure_reason, extractor_version FROM file_text_extractions WHERE file_id=$1")
+            .bind(file)
+            .fetch_one(pool)
+            .await
+            .unwrap()
+    }
+
+    #[sqlx::test(migrations = "../../apps/api/migrations")]
+    async fn documents_get_a_stored_text_variant(pool: PgPool) {
+        let store: Arc<dyn ObjectStore> = Arc::new(crate::storage::FakeObjectStore::available());
+        let (file, job) = stored_file(
+            &pool,
+            store.as_ref(),
+            attricat_validation::files::DOCX_MIME,
+            SPECIFICATION_DOCX,
+            FileJobKind::TextExtraction,
+        )
+        .await;
+        assert!(test_worker(&pool, store.clone()).run_once().await.unwrap());
+
+        assert_eq!(
+            extraction(&pool, file).await,
+            ("ready".to_owned(), None, EXTRACTOR_VERSION as i32)
+        );
+        let key: String = sqlx::query_scalar(
+            "SELECT object_key FROM file_variants WHERE file_id=$1 AND kind=$2 AND mime_type='application/json'",
+        )
+        .bind(file)
+        .bind(TEXT_FILE_VARIANT)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let document: attricat_document_text::Document =
+            serde_json::from_slice(&store.get(&key).await.unwrap().bytes).unwrap();
+        assert!(document.sections[0].text.contains("# Widget specification"));
+        let job_status: String =
+            sqlx::query_scalar("SELECT status FROM file_processing_jobs WHERE id=$1")
+                .bind(job)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(job_status, "completed");
+    }
+
+    #[sqlx::test(migrations = "../../apps/api/migrations")]
+    async fn unreadable_documents_record_why_and_stay_usable(pool: PgPool) {
+        let store: Arc<dyn ObjectStore> = Arc::new(crate::storage::FakeObjectStore::available());
+        let (file, _) = stored_file(
+            &pool,
+            store.as_ref(),
+            attricat_validation::files::PDF_MIME,
+            ENCRYPTED_PDF,
+            FileJobKind::TextExtraction,
+        )
+        .await;
+        assert!(test_worker(&pool, store).run_once().await.unwrap());
+
+        assert_eq!(
+            extraction(&pool, file).await,
+            (
+                "failed".to_owned(),
+                Some("encrypted".to_owned()),
+                EXTRACTOR_VERSION as i32
+            )
+        );
+        let (status, variants): (String, i64) = sqlx::query_as(
+            "SELECT f.status, (SELECT count(*) FROM file_variants v WHERE v.file_id = f.id) FROM files f WHERE f.id=$1",
+        )
+        .bind(file)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!((status.as_str(), variants), ("ready", 0));
+    }
+
+    #[sqlx::test(migrations = "../../apps/api/migrations")]
+    async fn failed_text_jobs_never_fail_the_file(pool: PgPool) {
+        let store = Arc::new(crate::storage::FakeObjectStore::available());
+        let (file, job) = stored_file(
+            &pool,
+            store.as_ref(),
+            attricat_validation::files::DOCX_MIME,
+            SPECIFICATION_DOCX,
+            FileJobKind::TextExtraction,
+        )
+        .await;
+        store.set_available(false);
+        assert!(test_worker(&pool, store).run_once().await.unwrap());
+
+        let (job_status, file_status): (String, String) = sqlx::query_as(
+            "SELECT j.status, f.status FROM file_processing_jobs j JOIN files f ON f.id = j.file_id WHERE j.id=$1",
+        )
+        .bind(job)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            (job_status.as_str(), file_status.as_str()),
+            ("failed", "ready")
+        );
+        let extracted: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM file_text_extractions WHERE file_id=$1)",
+        )
+        .bind(file)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert!(!extracted);
+    }
+
+    #[sqlx::test(migrations = "../../apps/api/migrations")]
+    async fn backfill_queues_documents_without_current_text_once(pool: PgPool) {
+        let store = crate::storage::FakeObjectStore::available();
+        let docx = attricat_validation::files::DOCX_MIME;
+        // Uploaded before text extraction existed: only a metadata job.
+        let (missing, missing_job) = stored_file(
+            &pool,
+            &store,
+            docx,
+            SPECIFICATION_DOCX,
+            FileJobKind::Metadata,
+        )
+        .await;
+        let (extracted, extracted_job) = stored_file(
+            &pool,
+            &store,
+            docx,
+            SPECIFICATION_DOCX,
+            FileJobKind::Metadata,
+        )
+        .await;
+        let (_, failed_job) = stored_file(
+            &pool,
+            &store,
+            docx,
+            SPECIFICATION_DOCX,
+            FileJobKind::TextExtraction,
+        )
+        .await;
+        let (_, plain_job) =
+            stored_file(&pool, &store, "text/plain", b"notes", FileJobKind::Metadata).await;
+        sqlx::query("UPDATE file_processing_jobs SET status='completed' WHERE id = ANY($1)")
+            .bind(vec![missing_job, extracted_job, plain_job])
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE file_processing_jobs SET status='failed' WHERE id=$1")
+            .bind(failed_job)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO file_text_extractions (file_id,workspace_id,extractor_version,status) VALUES ($1,$2,$3,'ready')")
+            .bind(extracted).bind(TEST_WORKSPACE).bind(EXTRACTOR_VERSION as i32).execute(&pool).await.unwrap();
+        let repository = AttricatRepository::system(pool.clone());
+        let queued_files = || async {
+            sqlx::query_scalar::<_, Uuid>(
+                "SELECT file_id FROM file_processing_jobs WHERE kind=$1 AND status='queued' ORDER BY created_at, file_id",
+            )
+            .bind(FileJobKind::TextExtraction.as_str())
+            .fetch_all(&pool)
+            .await
+            .unwrap()
+        };
+
+        let backfill = |version| repository.queue_text_extraction_backfill(version);
+        assert_eq!(backfill(EXTRACTOR_VERSION).await.unwrap(), 1);
+        assert_eq!(queued_files().await, [missing]);
+        // A pending job is not queued twice.
+        assert_eq!(backfill(EXTRACTOR_VERSION).await.unwrap(), 0);
+        // A newer extractor queues text an older one produced.
+        assert_eq!(backfill(EXTRACTOR_VERSION + 1).await.unwrap(), 1);
+        assert!(queued_files().await.contains(&extracted));
+
+        // A timeout is retried once retention has removed its text job.
+        let (timed_out, timed_out_job) = stored_file(
+            &pool,
+            &store,
+            docx,
+            SPECIFICATION_DOCX,
+            FileJobKind::TextExtraction,
+        )
+        .await;
+        sqlx::query("UPDATE file_processing_jobs SET status='completed' WHERE id=$1")
+            .bind(timed_out_job)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO file_text_extractions (file_id,workspace_id,extractor_version,status,failure_reason) VALUES ($1,$2,$3,'failed','timed_out')")
+            .bind(timed_out).bind(TEST_WORKSPACE).bind(EXTRACTOR_VERSION as i32).execute(&pool).await.unwrap();
+        assert_eq!(backfill(EXTRACTOR_VERSION).await.unwrap(), 0);
+        sqlx::query("DELETE FROM file_processing_jobs WHERE id=$1")
+            .bind(timed_out_job)
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert_eq!(backfill(EXTRACTOR_VERSION).await.unwrap(), 1);
+        assert!(queued_files().await.contains(&timed_out));
     }
 
     #[test]

@@ -8,11 +8,14 @@ publish.workspace = true
 
 [dependencies]
 async-trait.workspace = true
+bytes.workspace = true
+attricat-document-text = { path = "../document-text" }
 attricat-domain = { path = "../domain" }
 attricat-events = { path = "../events" }
 attricat-repository = { path = "../repository" }
 attricat-rules = { path = "../rules" }
 attricat-storage = { path = "../storage" }
+attricat-validation = { path = "../validation" }
 attricat-workflow = { path = "../workflow" }
 chrono.workspace = true
 image.workspace = true

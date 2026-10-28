@@ -20,7 +20,7 @@ pub mod constants {
     pub const MAINTENANCE_POOL_CONNECTIONS: u32 = 1;
 }
 pub use attricat_agent_runtime::{
-    agent_provider, agent_runner, agent_tools, agent_worker, bulk_edits,
+    agent_provider, agent_runner, agent_tools, agent_worker, bulk_edits, smart_fill,
 };
 pub use attricat_events as domain_events;
 pub use attricat_extension_manifest::{extension_policy, extensions};

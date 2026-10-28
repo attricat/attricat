@@ -304,20 +304,51 @@ signed download URL, checksum, or byte size.
 The original file bytes are forwarded only when the attachment's MIME type
 starts with `image/` and both its recorded size and bytes read from private
 object storage are at most 5 MiB (5,242,880 bytes). Those bytes are sent as a
-base64 `data:` image URL alongside the text record. Non-image attachments,
-images over the limit, and images that cannot be read are not sent as file
-content; they remain represented by the filename, MIME type, and file ID (an
-unreadable eligible image is additionally marked as unreadable in the text
-record). The 5 MiB threshold is fixed, not configurable. A message accepts at
-most 16 attachments.
+base64 `data:` image URL alongside the text record. PDF, Word (`.docx`) and
+Excel (`.xlsx`) attachments are sent as their extracted text (see
+[Document text](#document-text)) when it is at most 16,000 characters; a longer
+document is sent as an outline of its pages or sheets, and the agent reads it
+with `read_file`. Other non-image attachments, images over the limit, and
+images that cannot be read are not sent as file content; they remain
+represented by the filename, MIME type, and file ID (an unreadable eligible
+image or document is additionally marked as unreadable in the text record).
+The 5 MiB threshold is fixed, not configurable. A message accepts at most 16
+attachments.
 
 The provider can also request a workspace file through a read-only tool. A
 successful `view_image` tool result sends an image display variant, or the
 original if no display variant is available, only when it is at most 1 MiB;
 otherwise it sends the tool result metadata without image bytes. A successful
-`read_file` result sends UTF-8 file text only when it is at most 64 KiB;
-otherwise it sends its result metadata without file text. These tool results
-include the requested file ID, filename, and MIME type.
+`read_file` result sends a window of a UTF-8 text file (up to 1 MiB) or of a
+document's extracted text: at most 40,000 characters and 64 KiB from the
+requested character `offset`, optionally limited to one PDF page, page range or
+Excel sheet (`section`). These tool results include the requested file ID,
+filename, MIME type, and where the next window starts. Both tools read files
+linked to records the user can read, and files the user attached to their own
+conversation messages.
+
+### Document text
+
+The file worker extracts the text of every uploaded PDF, Word and Excel file
+in a `text_extraction` job, separate from the file's metadata job, and stores it
+as the file's `text` variant (JSON with one section per PDF page, Excel sheet,
+or Word document body). `file_text_extractions` records the extractor version
+that produced it, or why there is no text: `encrypted`, `no_text_layer`
+(scanned PDFs; there is no OCR), `too_large`, `malformed`, `unsupported` or
+`timed_out`. A file whose text cannot be extracted stays usable; a failed text
+job never changes the file's status. Word headings, lists and tables become
+Markdown; Excel rows become tab-separated values of the values Excel last
+calculated, not formulas.
+
+Extraction is bounded: 25 MiB source files, 64 MiB per unzipped Office part and
+256 MiB per Office file, 2,000,000 characters of text, 10,000 rows and 200
+columns per sheet, 2,000 PDF pages, and 60 seconds. Each reconciliation queues
+text extraction for documents uploaded before it existed, or extracted by an
+older extractor version, in batches; documents whose last text job failed, or
+whose extraction timed out, are retried once job retention removes that job. Until the worker has run, the
+agent and smart fill extract a document's text on demand without storing it.
+When `read_file` targets a document whose stored extraction failed, it fails
+with the tool error code `document_text_unavailable`.
 
 Attricat retains conversation messages and their attachment records (file ID,
 display filename, MIME type, byte size, and status) and keeps referenced file

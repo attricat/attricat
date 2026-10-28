@@ -5,6 +5,7 @@ use attricat_domain::attribute_options::ContextEditable;
 use std::collections::{BTreeMap, HashSet};
 
 use attricat_domain::value_type::ValueType;
+use attricat_validation::files::is_text_extraction_mime;
 use attricat_validation::validate_json_schema;
 use base64::{Engine, engine::general_purpose::STANDARD};
 use chrono::{DateTime, NaiveDate, NaiveTime};
@@ -20,9 +21,10 @@ use crate::{
     agents::{
         MAX_CONVERSATION_ATTACHMENTS, MAX_CONVERSATION_MESSAGE_BYTES, MAX_TOOL_CALL_ARGUMENT_BYTES,
     },
+    documents::{self, DocumentTextError},
     model::FormAttributeValue,
     provider_config::AgentProviderConfig,
-    repository::{AttricatRepository, RepositoryError},
+    repository::{AttricatRepository, FileObject, RepositoryError},
 };
 use attricat_repository::attricat_read_service::AttricatReadService;
 use attricat_storage::ObjectStore;
@@ -91,6 +93,36 @@ const MAX_SAFE_INTEGER: i64 = 9_007_199_254_740_991;
 const ISO_DATE_LEN: usize = 10;
 
 const SMART_FILL_SYSTEM_PROMPT: &str = "You are a record editing assistant. Answer the user's editing request using the selected record context, current unsaved form draft and conversation history. Propose only fields that should change, using supplied editable scalar field codes. Never invent facts. Return exactly one propose_record_form_values tool call with a short explanation of changes and uncertainties. If the user asks a question instead of requesting an edit, answer it in the explanation and propose no fields. The values are draft-only and require explicit user application and a separate save; never claim they were saved. Do not propose relationship or file fields.";
+
+/// A document's text within `max_bytes`, marked when cut. A document without
+/// readable text is described rather than rejected, so the request can still
+/// use the rest of its context.
+async fn document_attachment_text(
+    repository: &AttricatRepository,
+    object_store: &dyn ObjectStore,
+    file_id: Uuid,
+    file: &FileObject,
+    max_bytes: usize,
+) -> Result<String, SmartFillError> {
+    match documents::load(repository, object_store, file_id, file).await {
+        Ok(document) => {
+            let text = documents::render(&document.sections);
+            let window = documents::window(&text, 0, usize::MAX, max_bytes);
+            Ok(if window.end < window.total {
+                format!("{}\n[the rest of the document was cut]", window.text)
+            } else {
+                window.text
+            })
+        }
+        Err(DocumentTextError::Unavailable(failure)) => {
+            Ok(format!("[no readable text: {}]", failure.as_str()))
+        }
+        Err(DocumentTextError::Storage) => {
+            Err(SmartFillError::Unavailable("attachment unavailable"))
+        }
+        Err(DocumentTextError::Repository(error)) => Err(error.into()),
+    }
+}
 
 fn smart_fill_definition() -> ToolDefinition {
     ToolDefinition {
@@ -246,7 +278,28 @@ pub async fn propose_record_form_values(
                 let Ok(file) = repository.file_object(attachment.id, None).await else {
                     continue;
                 };
-                if (file.mime_type.starts_with("text/") || file.mime_type == "application/json")
+                if is_text_extraction_mime(&file.mime_type) && remaining_attachment_bytes > 0 {
+                    // Like an unreadable text file, a document that cannot be
+                    // read now is noted rather than failing the request.
+                    match document_attachment_text(
+                        repository,
+                        object_store,
+                        attachment.id,
+                        &file,
+                        remaining_attachment_bytes,
+                    )
+                    .await
+                    {
+                        Ok(text) => {
+                            remaining_attachment_bytes =
+                                remaining_attachment_bytes.saturating_sub(text.len());
+                            prior_files
+                                .push(json!({"filename":file.display_filename,"text":text}));
+                        }
+                        Err(_) => prior_files.push(json!({"filename":file.display_filename,"note":"Reattach this file if its contents are needed."})),
+                    }
+                } else if (file.mime_type.starts_with("text/")
+                    || file.mime_type == "application/json")
                     && file.byte_size >= 0
                     && (file.byte_size as usize) <= remaining_attachment_bytes
                 {
@@ -315,9 +368,19 @@ pub async fn propose_record_form_values(
             let text = std::str::from_utf8(&object.bytes)
                 .map_err(|_| SmartFillError::Invalid("attachment is not UTF-8".into()))?;
             parts.push(json!({"type":"text","text":format!("Attachment {}:\n{text}",file.display_filename)}));
+        } else if is_text_extraction_mime(&file.mime_type) {
+            let text = document_attachment_text(
+                repository,
+                object_store,
+                *file_id,
+                &file,
+                MAX_SMART_FILL_TEXT_ATTACHMENT_BYTES,
+            )
+            .await?;
+            parts.push(json!({"type":"text","text":format!("Attachment {}:\n{text}",file.display_filename)}));
         } else {
             return Err(SmartFillError::Invalid(
-                "only images and text attachments are supported for draft proposals".into(),
+                "only images, text, PDF, Word and Excel attachments are supported for draft proposals".into(),
             ));
         }
     }

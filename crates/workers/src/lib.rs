@@ -7,6 +7,7 @@ pub use attricat_storage as storage;
 
 pub mod blueprint_migration_worker;
 pub mod coordinator;
+pub mod document_text;
 pub mod event_dispatcher;
 pub mod file_worker;
 mod heartbeat;

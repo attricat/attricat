@@ -13,6 +13,8 @@ use serde_json::{Value, json};
 use std::collections::{BTreeMap, HashMap};
 use uuid::Uuid;
 
+use attricat_document_text::EXTRACTOR_VERSION;
+use attricat_validation::files::is_text_extraction_mime;
 use attricat_validation::predicate::MAX_SYSTEM_TAGS;
 use attricat_validation::saved_search::{
     EXPLORER_SEARCH_KIND, MAX_BLUEPRINT_BYTES, MAX_SELECTED_IDS, MAX_STATE_BYTES,
@@ -31,9 +33,9 @@ use crate::{
     },
     file_access::{AllowFileAccess, FileAccessOperation, authorize_file_read},
     repository::{
-        AttricatRepository, AuthorizationActor, MAX_SEARCH_FILTERS, RepositoryError,
-        RuleFindingFilter, RuleRunFilter, SearchPageRequest, SearchScope, SearchScopeError,
-        SearchScopeRequest,
+        AttricatRepository, AuthorizationActor, FileTextOutcome, MAX_SEARCH_FILTERS,
+        RepositoryError, RuleFindingFilter, RuleRunFilter, SearchPageRequest, SearchScope,
+        SearchScopeError, SearchScopeRequest,
     },
     search_filters::{check_selected_ids, resolve_agent_relationship_filter},
 };
@@ -54,6 +56,14 @@ const AUTHORING_GUIDE_TOPICS: [(&str, &str); 6] = [
     ("rules", RULES_GUIDE),
     ("workflows", WORKFLOWS_GUIDE),
 ];
+/// Characters `read_file` returns when the call sets no limit.
+pub(crate) const DEFAULT_READ_FILE_CHARS: usize = 20_000;
+/// Most characters one `read_file` call returns.
+pub(crate) const MAX_READ_FILE_CHARS: usize = 40_000;
+/// Longest `read_file` section selector, in bytes.
+const MAX_READ_FILE_SECTION_BYTES: usize = 200;
+/// Tool error code of a document whose text could not be extracted.
+const DOCUMENT_TEXT_UNAVAILABLE: &str = "document_text_unavailable";
 /// Comments per page and characters per comment body the agent reads, so a
 /// page of maximum-length comments stays within the tool result bound.
 /// Newest approvals and retention holds `get_record_controls` reports.
@@ -626,13 +636,13 @@ pub fn definitions() -> Vec<ToolDefinition> {
         ),
         definition(
             "view_image",
-            "View an image file linked to a record. Use get_record first to find its file ID. The image is supplied to the model as a bounded display image.",
+            "View an image file linked to a record or attached to the conversation. Use get_record first to find a record's file IDs. The image is supplied to the model as a bounded display image.",
             json!({"type":"object","required":["file_id"],"properties":{"file_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
         ),
         definition(
             "read_file",
-            "Read a UTF-8 text file linked to a record. Use get_record first to find its file ID. The file contents are supplied to the model, up to a fixed safe limit.",
-            json!({"type":"object","required":["file_id"],"properties":{"file_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
+            "Read a UTF-8 text file, or the text of a PDF, Word (.docx) or Excel (.xlsx) file, linked to a record or attached to the conversation. Use get_record first to find a record's file IDs. The text is supplied in windows of at most limit characters starting at offset; the result says where the next window starts. section reads one part of a document: a PDF page number or page range such as 3-5, or an Excel sheet name. Excel rows are tab-separated values. Scanned PDFs without a text layer and password-protected files have no readable text.",
+            json!({"type":"object","required":["file_id"],"properties":{"file_id":{"type":"string","format":"uuid"},"section":{"type":"string","minLength":1,"maxLength":MAX_READ_FILE_SECTION_BYTES},"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":MAX_READ_FILE_CHARS}},"additionalProperties":false}),
         ),
         definition(
             "search_records",
@@ -1999,18 +2009,67 @@ pub async fn execute_read(
             })
         }
         "read_file" => {
-            let file_id = parse_uuid(&arguments, "file_id")?;
-            let metadata = repository.file_metadata(file_id).await?;
-            if !is_readable_text_mime(&metadata.mime_type) {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Input {
+                file_id: Uuid,
+                #[serde(default)]
+                section: Option<String>,
+                #[serde(default)]
+                offset: usize,
+                #[serde(default)]
+                limit: Option<usize>,
+            }
+            let input: Input = decode(arguments)?;
+            let limit = input.limit.unwrap_or(DEFAULT_READ_FILE_CHARS);
+            if !(1..=MAX_READ_FILE_CHARS).contains(&limit) {
+                return Err(ToolError::InvalidArguments(format!(
+                    "limit must be between 1 and {MAX_READ_FILE_CHARS}"
+                )));
+            }
+            if input
+                .section
+                .as_ref()
+                .is_some_and(|section| section.trim().is_empty() || section.len() > MAX_READ_FILE_SECTION_BYTES)
+            {
+                return Err(ToolError::InvalidArguments(format!(
+                    "section must be 1-{MAX_READ_FILE_SECTION_BYTES} bytes"
+                )));
+            }
+            let metadata = repository.file_metadata(input.file_id).await?;
+            let document = is_text_extraction_mime(&metadata.mime_type);
+            if !document && !is_readable_text_mime(&metadata.mime_type) {
                 return Err(ToolError::InvalidArguments(
-                    "file_id must identify a UTF-8 text file".to_owned(),
+                    "file_id must identify a UTF-8 text, PDF, Word or Excel file".to_owned(),
                 ));
             }
+            if !document && input.section.is_some() {
+                return Err(ToolError::InvalidArguments(
+                    "section applies only to PDF, Word and Excel files".to_owned(),
+                ));
+            }
+            if document
+                && let Some(extraction) = repository.file_text_extraction(input.file_id).await?
+                && extraction.extractor_version >= EXTRACTOR_VERSION
+                && let FileTextOutcome::Failed(failure) = extraction.outcome
+            {
+                return Err(ToolError::Coded {
+                    code: DOCUMENT_TEXT_UNAVAILABLE,
+                    message: format!(
+                        "{} has no readable text ({}).",
+                        metadata.filename,
+                        failure.as_str()
+                    ),
+                });
+            }
             json!({
-                "file_id": file_id,
+                "file_id": input.file_id,
                 "filename": metadata.filename,
                 "mime_type": metadata.mime_type,
-                "message": "The text file is attached to this tool result for reading.",
+                "section": input.section,
+                "offset": input.offset,
+                "limit": limit,
+                "message": "The requested text is attached to this tool result.",
             })
         }
         "count_records" => {
@@ -3232,6 +3291,12 @@ async fn read_authorized(
                 return Ok(false);
             }
             let file_id = parse_uuid(arguments, "file_id")?;
+            if repository
+                .is_own_conversation_attachment(file_id, actor)
+                .await?
+            {
+                return Ok(true);
+            }
             return Ok(authorize_file_read(
                 repository,
                 &AllowFileAccess,

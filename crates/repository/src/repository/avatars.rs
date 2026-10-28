@@ -1,3 +1,4 @@
+use attricat_domain::states::FileJobKind;
 use serde::Serialize;
 use uuid::Uuid;
 
@@ -52,10 +53,11 @@ impl AttricatRepository {
         .bind(&status)
         .execute(&mut *transaction)
         .await?;
-        sqlx::query("INSERT INTO file_processing_jobs (id, workspace_id, file_id, kind, status) VALUES ($1,$2,$3,'metadata','queued')")
+        sqlx::query("INSERT INTO file_processing_jobs (id, workspace_id, file_id, kind, status) VALUES ($1,$2,$3,$4,'queued')")
             .bind(Uuid::new_v4())
             .bind(workspace_id)
             .bind(file_id)
+            .bind(FileJobKind::Metadata.as_str())
             .execute(&mut *transaction)
             .await?;
         sqlx::query("UPDATE workspace_memberships SET avatar_file_id = $2, updated_at = clock_timestamp() WHERE id = $1")

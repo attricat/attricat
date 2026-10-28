@@ -201,6 +201,21 @@ impl AttricatRepository {
         Ok(())
     }
 
+    /// Whether `actor` uploaded the file to one of their conversations and
+    /// attached it to a message there.
+    pub async fn is_own_conversation_attachment(
+        &self,
+        file_id: Uuid,
+        actor: Uuid,
+    ) -> Result<bool, RepositoryError> {
+        Ok(sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM files f WHERE f.id = $1 AND f.workspace_id = $2 AND f.deleted_at IS NULL AND f.conversation_upload_user_id = $3 AND EXISTS (SELECT 1 FROM conversation_message_attachments a JOIN conversation_messages m ON m.id = a.message_id WHERE a.file_id = f.id AND a.workspace_id = f.workspace_id AND m.conversation_id = f.conversation_upload_conversation_id))")
+            .bind(file_id)
+            .bind(self.workspace_id.0)
+            .bind(actor)
+            .fetch_one(&self.pool)
+            .await?)
+    }
+
     pub async fn conversation_messages(
         &self,
         conversation_id: Uuid,
