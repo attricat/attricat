@@ -70,7 +70,10 @@ vi.mock('@monaco-editor/react', () => ({
   ),
 }));
 vi.mock('../auth/api', () => ({ currentSession: vi.fn() }));
-vi.mock('../blueprints/api', () => ({ listBlueprints: vi.fn() }));
+vi.mock('../blueprints/api', () => ({
+  listBlueprintRevisions: vi.fn(() => Promise.resolve([])),
+  listBlueprints: vi.fn(),
+}));
 vi.mock('../contexts/api', () => ({ listContexts: vi.fn() }));
 vi.mock('../principals/api', () => ({ getDirectory: vi.fn() }));
 vi.mock('./api', () => ({

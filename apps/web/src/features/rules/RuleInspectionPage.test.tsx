@@ -9,6 +9,7 @@ import { ApiRequestError } from '../../api/request';
 import { currentSession } from '../auth/api';
 import {
   getBlueprintRevision,
+  listBlueprintRevisions,
   listBlueprints,
   type Blueprint,
   type BlueprintWithAttributes,
@@ -30,6 +31,7 @@ import {
   type RuleDetails,
   type RuleRun,
 } from './api';
+import { revisionStatuses } from '../../api/revisionStatus';
 import { findingStates } from './constants';
 import { RuleInspectionPage } from './RuleInspectionPage';
 
@@ -64,6 +66,7 @@ vi.mock('../records/api', () => ({
 }));
 vi.mock('../blueprints/api', () => ({
   getBlueprintRevision: vi.fn(),
+  listBlueprintRevisions: vi.fn(() => Promise.resolve([])),
   listBlueprints: vi.fn(() => Promise.resolve([])),
 }));
 vi.mock('../contexts/api', () => ({
@@ -212,10 +215,12 @@ describe('RuleInspectionPage', () => {
     vi.mocked(getBlueprintRevision).mockResolvedValue({
       attributes: [{ code: 'title', name: 'Listing title' }],
     } as unknown as BlueprintWithAttributes);
-    // Labels come from the latest revision of the rule's blueprint.
-    vi.mocked(listBlueprints).mockResolvedValue([
-      { id, kind: 'record', name: 'Product', version: 3 } as Blueprint,
-    ]);
+    // Labels come from the latest published revision of the rule's
+    // blueprint, which rules check, not from a newer draft.
+    vi.mocked(listBlueprintRevisions).mockResolvedValue([
+      { id, version: 4, status: revisionStatuses.draft },
+      { id, version: 3, status: revisionStatuses.published },
+    ] as Blueprint[]);
     renderPage('findings');
     expect(await screen.findByText('Listing title is required')).toBeTruthy();
     expect(vi.mocked(getBlueprintRevision).mock.calls[0]?.slice(0, 2)).toEqual([
