@@ -134,7 +134,7 @@ export const RuleScopeFields = ({
           }
           options={[
             {
-              label: t('rules.recordFindings.allContexts'),
+              label: t('rules.allContexts'),
               value: ALL_CONTEXTS,
             },
             ...contexts.map((context) => ({

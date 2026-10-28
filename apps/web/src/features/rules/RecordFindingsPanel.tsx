@@ -176,7 +176,7 @@ const FindingItem = ({
           sx={{ color: 'text.secondary' }}
         >
           {everyContext
-            ? t('rules.recordFindings.allContexts')
+            ? t('rules.allContexts')
             : contexts.length > 0 &&
               t('rules.recordFindings.contexts', {
                 contexts: contexts.join(', '),

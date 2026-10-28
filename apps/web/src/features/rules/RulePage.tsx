@@ -138,7 +138,7 @@ const RuleDefinition = ({ rule }: { rule: RuleDetails }) => {
           </Link>{' '}
           ·{' '}
           {rule.context_id === null
-            ? t('rules.recordFindings.allContexts')
+            ? t('rules.allContexts')
             : context
               ? contextLabel(t, context.code)
               : t('rules.unknownContext')}

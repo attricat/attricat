@@ -232,7 +232,7 @@ export const RuleEditorPage = ({ ruleId }: { ruleId?: string }) => {
               : loadingName,
             context:
               contextId === null
-                ? t('rules.recordFindings.allContexts')
+                ? t('rules.allContexts')
                 : context
                   ? contextLabel(t, context.code)
                   : loadingName,
