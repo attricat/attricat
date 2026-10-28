@@ -11,6 +11,8 @@ import {
   TableHead,
   TableRow,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material';
 import { CheckCheckIcon } from 'lucide-react';
 import { useState } from 'react';
@@ -94,6 +96,9 @@ export const FindingsSection = ({
   rulesById: RulesById;
 }) => {
   const { t } = useTranslation();
+  const theme = useTheme();
+  // Narrow screens stack each finding instead of squeezing a table.
+  const narrow = useMediaQuery(theme.breakpoints.down('sm'));
   const messageOf = useFindingMessages(findings ?? [], rulesById);
   const any = t('rules.filters.any');
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
@@ -119,6 +124,48 @@ export const FindingsSection = ({
     });
   const allSelected =
     selectable.length > 0 && selectedIds.length === selectable.length;
+  const selectBox = (finding: Finding) =>
+    canManage &&
+    finding.state === findingStates.open && (
+      <Checkbox
+        checked={selected.has(finding.id)}
+        onChange={() => toggle(finding.id)}
+        slotProps={{
+          input: {
+            'aria-label': t('rules.selectFinding', {
+              record: recordLabels.get(finding.record_id) ?? finding.record_id,
+              message: messageOf(finding),
+            }),
+          },
+        }}
+      />
+    );
+  const ruleOf = (finding: Finding) => (
+    <RuleRevisionCell
+      rules={rulesById}
+      ruleId={finding.rule_id}
+      version={finding.rule_version}
+    />
+  );
+  const recordOf = (finding: Finding) => (
+    <RecordIdLink
+      recordId={finding.record_id}
+      label={recordLabels.get(finding.record_id)}
+    />
+  );
+  const stateOf = (finding: Finding) =>
+    t(`rules.findingStates.${finding.state}`, { defaultValue: finding.state });
+  const acknowledgeButton = (finding: Finding) =>
+    canManage &&
+    finding.state === findingStates.open && (
+      <Button
+        disabled={acknowledging}
+        size="small"
+        onClick={() => onAcknowledge(finding.id)}
+      >
+        {t('rules.acknowledge')}
+      </Button>
+    );
   return (
     <>
       {error && (
@@ -231,106 +278,118 @@ export const FindingsSection = ({
         {!confirmAll && (
           <ApiErrorAlert error={bulk.error} sx={{ mx: 2, mb: 1 }} />
         )}
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              {canManage && (
-                <TableCell padding="checkbox">
-                  <Checkbox
-                    checked={allSelected}
-                    disabled={selectable.length === 0}
-                    indeterminate={selectedIds.length > 0 && !allSelected}
-                    onChange={() =>
-                      setSelected(
-                        allSelected
-                          ? new Set()
-                          : new Set(selectable.map((finding) => finding.id)),
-                      )
-                    }
-                    slotProps={{
-                      input: { 'aria-label': t('rules.selectAllFindings') },
-                    }}
-                  />
-                </TableCell>
-              )}
-              <TableCell>{t('rules.columns.severity')}</TableCell>
-              <TableCell>{t('rules.columns.finding')}</TableCell>
-              <TableCell>{t('rules.columns.rule')}</TableCell>
-              <TableCell>{t('rules.columns.record')}</TableCell>
-              <TableCell>{t('rules.columns.state')}</TableCell>
-              <TableCell />
-            </TableRow>
-          </TableHead>
-          <TableBody>
+        {narrow ? (
+          <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
             {findings?.length === 0 && (
-              <TableRow>
-                <TableCell
-                  colSpan={findingsTableColumnCount + (canManage ? 1 : 0)}
-                  sx={{ color: 'text.secondary' }}
-                >
-                  {t('rules.filters.noMatches')}
-                </TableCell>
-              </TableRow>
+              <Typography
+                component="li"
+                color="text.secondary"
+                sx={{ px: 2, py: 1.5 }}
+                variant="body2"
+              >
+                {t('rules.filters.noMatches')}
+              </Typography>
             )}
             {(findings ?? []).map((finding) => (
-              <TableRow key={finding.id} selected={selected.has(finding.id)}>
+              <Box
+                component="li"
+                key={finding.id}
+                sx={{
+                  borderTop: 1,
+                  borderColor: 'divider',
+                  display: 'flex',
+                  gap: 1,
+                  px: 2,
+                  py: 1.5,
+                  ...(selected.has(finding.id) && {
+                    bgcolor: 'action.selected',
+                  }),
+                }}
+              >
+                {canManage && <Box sx={{ mt: -1 }}>{selectBox(finding)}</Box>}
+                <Stack spacing={0.5} sx={{ flex: 1, minWidth: 0 }}>
+                  <Stack
+                    direction="row"
+                    spacing={1}
+                    sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                  >
+                    <FindingSeverityChip severity={finding.severity} />
+                    <Typography color="text.secondary" variant="caption">
+                      {stateOf(finding)}
+                    </Typography>
+                  </Stack>
+                  <Typography variant="body2">{messageOf(finding)}</Typography>
+                  <Typography variant="body2">{recordOf(finding)}</Typography>
+                  <Typography variant="caption">{ruleOf(finding)}</Typography>
+                  {acknowledgeButton(finding) && (
+                    <Box>{acknowledgeButton(finding)}</Box>
+                  )}
+                </Stack>
+              </Box>
+            ))}
+          </Box>
+        ) : (
+          <Table size="small">
+            <TableHead>
+              <TableRow>
                 {canManage && (
                   <TableCell padding="checkbox">
-                    {finding.state === findingStates.open && (
-                      <Checkbox
-                        checked={selected.has(finding.id)}
-                        onChange={() => toggle(finding.id)}
-                        slotProps={{
-                          input: {
-                            'aria-label': t('rules.selectFinding', {
-                              record:
-                                recordLabels.get(finding.record_id) ??
-                                finding.record_id,
-                              message: messageOf(finding),
-                            }),
-                          },
-                        }}
-                      />
-                    )}
+                    <Checkbox
+                      checked={allSelected}
+                      disabled={selectable.length === 0}
+                      indeterminate={selectedIds.length > 0 && !allSelected}
+                      onChange={() =>
+                        setSelected(
+                          allSelected
+                            ? new Set()
+                            : new Set(selectable.map((finding) => finding.id)),
+                        )
+                      }
+                      slotProps={{
+                        input: { 'aria-label': t('rules.selectAllFindings') },
+                      }}
+                    />
                   </TableCell>
                 )}
-                <TableCell>
-                  <FindingSeverityChip severity={finding.severity} />
-                </TableCell>
-                <TableCell>{messageOf(finding)}</TableCell>
-                <TableCell>
-                  <RuleRevisionCell
-                    rules={rulesById}
-                    ruleId={finding.rule_id}
-                    version={finding.rule_version}
-                  />
-                </TableCell>
-                <TableCell>
-                  <RecordIdLink
-                    recordId={finding.record_id}
-                    label={recordLabels.get(finding.record_id)}
-                  />
-                </TableCell>
-                <TableCell>
-                  {t(`rules.findingStates.${finding.state}`, {
-                    defaultValue: finding.state,
-                  })}
-                </TableCell>
-                <TableCell>
-                  {canManage && finding.state === findingStates.open && (
-                    <Button
-                      disabled={acknowledging}
-                      size="small"
-                      onClick={() => onAcknowledge(finding.id)}
-                    >
-                      {t('rules.acknowledge')}
-                    </Button>
-                  )}
-                </TableCell>
+                <TableCell>{t('rules.columns.severity')}</TableCell>
+                <TableCell>{t('rules.columns.finding')}</TableCell>
+                <TableCell>{t('rules.columns.rule')}</TableCell>
+                <TableCell>{t('rules.columns.record')}</TableCell>
+                <TableCell>{t('rules.columns.state')}</TableCell>
+                <TableCell />
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHead>
+            <TableBody>
+              {findings?.length === 0 && (
+                <TableRow>
+                  <TableCell
+                    colSpan={findingsTableColumnCount + (canManage ? 1 : 0)}
+                    sx={{ color: 'text.secondary' }}
+                  >
+                    {t('rules.filters.noMatches')}
+                  </TableCell>
+                </TableRow>
+              )}
+              {(findings ?? []).map((finding) => (
+                <TableRow key={finding.id} selected={selected.has(finding.id)}>
+                  {canManage && (
+                    <TableCell padding="checkbox">
+                      {selectBox(finding)}
+                    </TableCell>
+                  )}
+                  <TableCell>
+                    <FindingSeverityChip severity={finding.severity} />
+                  </TableCell>
+                  <TableCell>{messageOf(finding)}</TableCell>
+                  <TableCell>{ruleOf(finding)}</TableCell>
+                  <TableCell>{recordOf(finding)}</TableCell>
+                  <TableCell>{stateOf(finding)}</TableCell>
+                  <TableCell>{acknowledgeButton(finding)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
         {(hasNextPage || nextPageError) && (
           <Box sx={{ p: 2 }}>
             <ApiErrorAlert error={nextPageError} sx={{ mb: 2 }} />
