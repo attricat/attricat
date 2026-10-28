@@ -225,15 +225,23 @@ describe('RuleInspectionPage', () => {
 
   it('shows why a rule run was refused', async () => {
     vi.mocked(currentSession).mockResolvedValue(manager);
-    vi.mocked(listRules).mockResolvedValue([rule]);
-    vi.mocked(runRuleNow).mockRejectedValue(new Error('rule is not enabled'));
+    vi.mocked(listRules).mockResolvedValue([{ ...rule, enabled: true }]);
+    vi.mocked(runRuleNow).mockRejectedValue(new Error('rule run refused'));
     renderPage('rules');
     await userEvent
       .setup()
       .click(await screen.findByRole('button', { name: 'Run now' }));
     expect((await screen.findByRole('alert')).textContent).toBe(
-      'rule is not enabled',
+      'rule run refused',
     );
+  });
+
+  it('offers only a dry run of a disabled rule', async () => {
+    vi.mocked(currentSession).mockResolvedValue(manager);
+    vi.mocked(listRules).mockResolvedValue([rule]);
+    renderPage('rules');
+    expect(await screen.findByRole('button', { name: 'Dry run' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Run now' })).toBeNull();
   });
 
   it('shows why an acknowledgement was refused', async () => {

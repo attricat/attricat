@@ -186,14 +186,16 @@ export const RulesSection = ({
                             >
                               {t('rules.dryRun')}
                             </Button>
-                            <Button
-                              disabled={running}
-                              size="small"
-                              onClick={() => onRun(rule, false)}
-                              startIcon={<PlayIcon />}
-                            >
-                              {t('rules.runNow')}
-                            </Button>
+                            {rule.enabled && (
+                              <Button
+                                disabled={running}
+                                size="small"
+                                onClick={() => onRun(rule, false)}
+                                startIcon={<PlayIcon />}
+                              >
+                                {t('rules.runNow')}
+                              </Button>
+                            )}
                           </>
                         )}
                       </TableCell>
