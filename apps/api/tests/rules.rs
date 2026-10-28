@@ -1394,6 +1394,19 @@ async fn record_readers_see_the_records_findings(pool: PgPool) {
     assert_eq!(count["count"], 1);
     let rules = get_json(&reader, format!("{base_url}/v1/records/{flagged}/rules")).await;
     assert_eq!(rules[0]["id"], json!(rule_id));
+    // Counts span records the reader may not see.
+    assert!(rules[0].get("open_findings").is_none());
+    let all_rules = get_json(&client, format!("{base_url}/rules")).await;
+    assert_eq!(all_rules[0]["open_findings"], 2);
+    assert_eq!(all_rules[0]["acknowledged_findings"], 0);
+    let rule_runs = get_json(&client, format!("{base_url}/rule-runs?rule_id={rule_id}")).await;
+    assert!(
+        rule_runs
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|run| run["rule_id"] == json!(rule_id))
+    );
     let runs = get_json(
         &reader,
         format!("{base_url}/v1/records/{flagged}/rule-runs"),

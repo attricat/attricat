@@ -5,6 +5,7 @@ import {
   findingStateFilters,
   RECORD_FINDINGS_PAGE_SIZE,
   RECORD_RULE_RUNS_LIMIT,
+  RULE_PAGE_RUNS_LIMIT,
 } from './constants';
 import {
   compiledRuleSchema,
@@ -18,6 +19,7 @@ import {
   updateRuleSchema,
   type CreateRule,
   type FindingsSearch,
+  type RunsSearch,
   type UpdateRule,
 } from './schemas';
 import { uuidSegment } from '../../api/pathSegments';
@@ -28,6 +30,7 @@ export type {
   Finding,
   FindingsSearch,
   Rule,
+  RunsSearch,
   RuleDetails,
   RuleRevision,
   RuleRun,
@@ -76,8 +79,21 @@ export const updateRule = (ruleId: string, input: UpdateRule) =>
 /** One run with, for a dry run, the first records it would flag. */
 export const getRuleRun = (runId: string) =>
   request(`/api/rule-runs/${uuidSegment(runId)}`, ruleRunDetailsSchema);
-export const listRuleRuns = () =>
-  request('/api/rule-runs', z.array(ruleRunSchema));
+/** The workspace's runs that match the run history's filters. */
+export const listRuleRuns = (search: RunsSearch = {}) => {
+  const params = new URLSearchParams();
+  if (search.rule) params.set('rule_id', z.uuid().parse(search.rule));
+  return request(`/api/rule-runs?${params}`, z.array(ruleRunSchema));
+};
+/** A rule's most recent runs, newest first. */
+export const listRecentRuleRuns = (ruleId: string) =>
+  request(
+    `/api/rule-runs?${new URLSearchParams({
+      rule_id: z.uuid().parse(ruleId),
+      limit: String(RULE_PAGE_RUNS_LIMIT),
+    })}`,
+    z.array(ruleRunSchema),
+  );
 /** The most recent runs scoped to one record. */
 export const listRecordRuleRuns = (recordId: string) =>
   request(

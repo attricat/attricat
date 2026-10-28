@@ -12,7 +12,10 @@ import { getDirectory } from '../principals/api';
 import {
   disableRule,
   getRule,
+  getRuleRun,
+  listRecentRuleRuns,
   listRuleRevisions,
+  runRuleNow,
   type RuleDetails,
   type RuleRevision,
 } from './api';
@@ -22,7 +25,7 @@ import { RulePage } from './RulePage';
 const navigate = vi.fn();
 type LinkProps = ComponentPropsWithoutRef<'a'> & {
   params?: Record<string, string>;
-  search?: Record<string, number>;
+  search?: Record<string, number | string>;
   to?: string;
 };
 vi.mock('@tanstack/react-router', () => {
@@ -74,7 +77,10 @@ vi.mock('./api', () => ({
   disableRule: vi.fn(),
   enableRule: vi.fn(),
   getRule: vi.fn(),
+  getRuleRun: vi.fn(),
+  listRecentRuleRuns: vi.fn(),
   listRuleRevisions: vi.fn(),
+  runRuleNow: vi.fn(),
 }));
 
 const ruleId = '00000000-0000-4000-8000-000000000003';
@@ -136,6 +142,7 @@ beforeEach(() => {
     } as Blueprint,
   ]);
   vi.mocked(listContexts).mockResolvedValue([]);
+  vi.mocked(listRecentRuleRuns).mockResolvedValue([]);
   vi.mocked(listRuleRevisions).mockResolvedValue([
     revision(3, 'critical'),
     revision(2, 'error'),
@@ -180,6 +187,41 @@ describe('RulePage', () => {
       .setup()
       .click(screen.getByRole('button', { name: 'Disable' }));
     await waitFor(() => expect(disableRule).toHaveBeenCalledWith(ruleId));
+  });
+
+  it('counts its findings, lists its recent runs and dry-runs it', async () => {
+    vi.mocked(getRule).mockResolvedValue({
+      ...rule,
+      compiled_plan: { severity: 'critical' },
+      open_findings: 4,
+      acknowledged_findings: 1,
+    });
+    vi.mocked(runRuleNow).mockResolvedValue({ id: ruleId });
+    vi.mocked(getRuleRun).mockReturnValue(new Promise(() => undefined));
+    renderPage({});
+    expect(
+      (await screen.findByRole('link', { name: '4 open' })).getAttribute(
+        'href',
+      ),
+    ).toBe(`/manage/rules/findings?rule=${ruleId}&state=open`);
+    expect(screen.getByRole('link', { name: '1 acknowledged' })).toBeTruthy();
+    expect(screen.getByText('Critical')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Recent runs' })).toBeTruthy();
+    expect(
+      screen
+        .getByRole('link', { name: 'All runs of this rule' })
+        .getAttribute('href'),
+    ).toBe(`/manage/rules/runs?rule=${ruleId}`);
+
+    await userEvent
+      .setup()
+      .click(screen.getByRole('button', { name: 'Dry run' }));
+    await waitFor(() => expect(runRuleNow).toHaveBeenCalledWith(ruleId, true));
+    expect(
+      await screen.findByRole('dialog', {
+        name: 'Dry run of Records have a title',
+      }),
+    ).toBeTruthy();
   });
 
   it('lists the changelog and compares a revision with the one before it', async () => {

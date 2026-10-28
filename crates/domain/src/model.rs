@@ -1243,6 +1243,12 @@ pub struct RuleDetails {
     #[serde(flatten)]
     pub rule: Rule,
     pub not_applicable: Vec<RevisionNotApplicable>,
+    /// Its findings that are open, and those someone acknowledged, across
+    /// the workspace. Left out where the reader may only read one record.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub open_findings: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub acknowledged_findings: Option<i64>,
 }
 
 /// A blueprint revision whose records a rule skips, and why.

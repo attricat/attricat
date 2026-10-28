@@ -1974,7 +1974,8 @@
       "scope": "Scope",
       "executed": "Executed",
       "blueprint": "Blueprint",
-      "changed": "Changed"
+      "changed": "Changed",
+      "openFindings": "Open findings"
     },
     "enabled": "Enabled",
     "disabled": "Disabled",
@@ -1995,7 +1996,8 @@
         "acknowledged": "Acknowledged",
         "resolved": "Resolved",
         "all": "All"
-      }
+      },
+      "runsLabel": "Filter runs"
     },
     "runHistory": "Run history",
     "lastExecuted": "Last executed",
@@ -2123,7 +2125,9 @@
       "sections": {
         "definition": "Definition",
         "changelog": "Changelog"
-      }
+      },
+      "recentRuns": "Recent runs",
+      "allRuns": "All runs of this rule"
     },
     "changelog": {
       "loading": "Loading the changelog…",
@@ -2155,7 +2159,11 @@
       "showingFirst": "Showing the first {{shown}} of {{count}}.",
       "failed": "The dry run did not finish."
     },
-    "runStarted": "Run started. Its result appears in the run history."
+    "runStarted": "Run started. Its result appears in the run history.",
+    "openFindings_one": "{{count}} open",
+    "openFindings_other": "{{count}} open",
+    "acknowledgedFindings_one": "{{count}} acknowledged",
+    "acknowledgedFindings_other": "{{count}} acknowledged"
   },
   "reusableAttributes": {
     "editor": {

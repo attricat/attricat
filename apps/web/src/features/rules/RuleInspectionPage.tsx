@@ -1,37 +1,17 @@
 import { useAcknowledgeFinding } from './useAcknowledgeFinding';
-import {
-  useInfiniteQuery,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { createLink, useNavigate } from '@tanstack/react-router';
-import {
-  Box,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Tab,
-  Tabs,
-} from '@mui/material';
-import { useState } from 'react';
+import { Box, Tab, Tabs } from '@mui/material';
 import { PlusIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { RouterButton } from '../../components/RouterLink';
-import { toast } from '../../components/toast';
-import { DryRunResult } from './DryRunResult';
+import { DryRunDialog } from './DryRunDialog';
+import { useRunRule } from './useRunRule';
 import { useCan } from '../auth/useCan';
-import {
-  listFindingsPage,
-  runRuleNow,
-  type FindingsSearch,
-  type Rule,
-} from './api';
+import { listFindingsPage, type FindingsSearch, type RunsSearch } from './api';
 import {
   RULE_SECTION_FINDINGS,
   RULE_SECTION_RULES,
@@ -69,18 +49,21 @@ const sectionIcons = {
 } satisfies Record<RuleInspectionSection, LucideIcon>;
 
 const noFindingsSearch: FindingsSearch = {};
+const noRunsSearch: RunsSearch = {};
 
 export const RuleInspectionPage = ({
   section,
   findingsSearch = noFindingsSearch,
+  runsSearch = noRunsSearch,
 }: {
   section: RuleInspectionSection;
   /** The findings section's filters, from its URL. */
   findingsSearch?: FindingsSearch;
+  /** The run history's filters, from its URL. */
+  runsSearch?: RunsSearch;
 }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const canManage = useCan(capabilities.rulesManage);
   // Findings and runs name their rule from the definitions.
   const rules = useQuery(ruleDefinitionsOptions());
@@ -105,7 +88,7 @@ export const RuleInspectionPage = ({
     enabled: findingsShown,
   });
   const runs = useQuery({
-    ...ruleRunsOptions(),
+    ...ruleRunsOptions(runsSearch),
     enabled: section === RULE_SECTION_RUNS,
   });
   // Name the records the visible findings and runs refer to.
@@ -118,21 +101,8 @@ export const RuleInspectionPage = ({
           )
         : [],
   );
-  const refresh = () =>
-    queryClient.invalidateQueries({ queryKey: ruleQueryKeys.all });
   const acknowledge = useAcknowledgeFinding();
-  // A dry run's result opens in a dialog; a run reports to the run history.
-  const [dryRun, setDryRun] = useState<{ name: string; runId: string }>();
-  const run = useMutation({
-    mutationFn: ({ rule, dryRun }: { rule: Rule; dryRun: boolean }) =>
-      runRuleNow(rule.id, dryRun),
-    meta: { toast: false },
-    onSuccess: (started, { rule, dryRun }) => {
-      if (dryRun) setDryRun({ name: rule.name, runId: started.id });
-      else toast.success(t('rules.runStarted'));
-      return refresh();
-    },
-  });
+  const { run, dryRun, closeDryRun } = useRunRule();
   const toggle = useToggleRule();
 
   const tabId = useTabAccessibility();
@@ -237,27 +207,16 @@ export const RuleInspectionPage = ({
             onRetry={() => void runs.refetch()}
             rulesById={rulesByIdMap}
             runs={runs.data}
+            filters={{
+              rules: rules.data ?? [],
+              search: runsSearch,
+              onChange: (search) =>
+                void navigate({ to: ruleRoutes.runs, search }),
+            }}
           />
         )}
       </Box>
-      <Dialog
-        fullWidth
-        maxWidth="sm"
-        onClose={() => setDryRun(undefined)}
-        open={dryRun !== undefined}
-      >
-        <DialogTitle>
-          {dryRun && t('rules.dryRunResult.title', { name: dryRun.name })}
-        </DialogTitle>
-        <DialogContent>
-          {dryRun && <DryRunResult runId={dryRun.runId} />}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDryRun(undefined)}>
-            {t('common.close')}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <DryRunDialog dryRun={dryRun} onClose={closeDryRun} />
     </PageContainer>
   );
 };

@@ -23,7 +23,13 @@ import type { Blueprint } from '../blueprints/api';
 import { lexiconText } from '../lexicon/lexicon';
 import type { RuleDetails } from './api';
 import { ruleRoutes } from './constants';
-import { RuleLifecycleChip, RuleSkipsRevisionsIcon } from './RuleCells';
+import {
+  RuleFindingCounts,
+  RuleLifecycleChip,
+  RuleSkipsRevisionsIcon,
+} from './RuleCells';
+import { FindingSeverityChip } from './FindingSeverityChip';
+import { ruleSeverity } from './ruleSeverity';
 
 /** The workspace's rules, one row each, with their switches and runs. */
 export const RulesSection = ({
@@ -73,6 +79,8 @@ export const RulesSection = ({
                 <TableRow>
                   <TableCell>{t('rules.columns.rule')}</TableCell>
                   <TableCell>{t('rules.columns.blueprint')}</TableCell>
+                  <TableCell>{t('rules.columns.severity')}</TableCell>
+                  <TableCell>{t('rules.columns.openFindings')}</TableCell>
                   <TableCell>{t('rules.columns.changed')}</TableCell>
                   <TableCell>{t('rules.columns.lifecycle')}</TableCell>
                   <TableCell>{t('rules.columns.actions')}</TableCell>
@@ -81,6 +89,7 @@ export const RulesSection = ({
               <TableBody>
                 {(rules ?? []).map((rule) => {
                   const lifecycle = <RuleLifecycleChip rule={rule} />;
+                  const severity = ruleSeverity(rule);
                   return (
                     <TableRow key={rule.id}>
                       <TableCell>
@@ -111,6 +120,14 @@ export const RulesSection = ({
                             {t('rules.unknownBlueprint')}
                           </Typography>
                         )}
+                      </TableCell>
+                      <TableCell>
+                        {severity && (
+                          <FindingSeverityChip severity={severity} />
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <RuleFindingCounts rule={rule} />
                       </TableCell>
                       <TableCell>
                         <Stack spacing={0.25}>

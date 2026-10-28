@@ -2,11 +2,7 @@ import { FindingSeverityChip } from './FindingSeverityChip';
 import {
   Box,
   Button,
-  FormControl,
-  InputLabel,
-  MenuItem,
   Paper,
-  Select,
   Stack,
   Table,
   TableBody,
@@ -14,7 +10,6 @@ import {
   TableHead,
   TableRow,
 } from '@mui/material';
-import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
@@ -29,70 +24,14 @@ import { RecordIdLink } from '../../components/RecordIdLink';
 import { RuleRevisionCell } from './RuleCells';
 import type { RulesById } from './rulesById';
 import { useFindingMessages } from './useFindingMessages';
+import { RuleListFilter } from './RuleListFilter';
+import { ruleFilterOptions } from './ruleFilterOptions';
 import {
-  ANY_FINDING_FILTER,
-  FINDING_FILTER_MIN_WIDTH,
   findingStates,
   findingSeverities,
   findingStateFilters,
   findingsTableColumnCount,
 } from './constants';
-
-type FilterOption = { value: string; label: string };
-
-/** One filter of the findings list; the empty value matches every finding. */
-const FindingFilter = ({
-  label,
-  value,
-  options,
-  anyLabel,
-  onChange,
-}: {
-  label: string;
-  value: string | undefined;
-  options: readonly FilterOption[];
-  /** The label of the unset value, when the filter can be unset. */
-  anyLabel?: string;
-  onChange: (value: string | undefined) => void;
-}) => {
-  const labelId = useId();
-  return (
-    <FormControl size="small" sx={{ minWidth: FINDING_FILTER_MIN_WIDTH }}>
-      <InputLabel id={labelId} shrink>
-        {label}
-      </InputLabel>
-      <Select
-        displayEmpty
-        label={label}
-        labelId={labelId}
-        notched
-        onChange={(event) =>
-          onChange(
-            event.target.value === ANY_FINDING_FILTER
-              ? undefined
-              : event.target.value,
-          )
-        }
-        value={value ?? ANY_FINDING_FILTER}
-      >
-        {anyLabel !== undefined && (
-          <MenuItem value={ANY_FINDING_FILTER}>{anyLabel}</MenuItem>
-        )}
-        {options.map((option) => (
-          <MenuItem key={option.value} value={option.value}>
-            {option.label}
-          </MenuItem>
-        ))}
-      </Select>
-    </FormControl>
-  );
-};
-
-/** Each rule, by name. */
-const ruleOptions = (rules: readonly Rule[]): FilterOption[] =>
-  rules
-    .map((rule) => ({ value: rule.id, label: rule.name }))
-    .sort((a, b) => a.label.localeCompare(b.label));
 
 export const FindingsSection = ({
   acknowledging,
@@ -154,7 +93,7 @@ export const FindingsSection = ({
           useFlexGap
           sx={{ flexWrap: 'wrap', p: 2 }}
         >
-          <FindingFilter
+          <RuleListFilter
             label={t('rules.columns.state')}
             onChange={setFilter('state')}
             options={Object.values(findingStateFilters).map((state) => ({
@@ -163,7 +102,7 @@ export const FindingsSection = ({
             }))}
             value={filters.state ?? findingStateFilters.unresolved}
           />
-          <FindingFilter
+          <RuleListFilter
             anyLabel={any}
             label={t('rules.columns.severity')}
             onChange={setFilter('severity')}
@@ -175,14 +114,14 @@ export const FindingsSection = ({
               }))}
             value={filters.severity}
           />
-          <FindingFilter
+          <RuleListFilter
             anyLabel={any}
             label={t('rules.columns.rule')}
             onChange={setFilter('rule')}
-            options={ruleOptions(rules)}
+            options={ruleFilterOptions(rules)}
             value={filters.rule}
           />
-          <FindingFilter
+          <RuleListFilter
             anyLabel={any}
             label={t('rules.filters.blueprint')}
             onChange={setFilter('blueprint')}
@@ -195,7 +134,7 @@ export const FindingsSection = ({
               .sort((a, b) => a.label.localeCompare(b.label))}
             value={filters.blueprint}
           />
-          <FindingFilter
+          <RuleListFilter
             anyLabel={any}
             label={t('rules.filters.context')}
             onChange={setFilter('context')}

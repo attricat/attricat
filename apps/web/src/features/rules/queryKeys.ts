@@ -1,4 +1,4 @@
-import type { FindingsSearch } from './schemas';
+import type { FindingsSearch, RunsSearch } from './schemas';
 
 export const ruleQueryKeys = {
   all: ['rules'] as const,
@@ -23,7 +23,12 @@ export const ruleQueryKeys = {
   findingCount: (recordId: string) =>
     [...ruleQueryKeys.findings(recordId), 'count'] as const,
   runs: () => [...ruleQueryKeys.all, 'runs'] as const,
+  /** The run history's list; refreshing all runs refreshes it. */
+  runsPage: (search: RunsSearch) =>
+    [...ruleQueryKeys.runs(), 'page', search] as const,
   run: (runId: string) => [...ruleQueryKeys.runs(), 'run', runId] as const,
+  ruleRuns: (ruleId: string) =>
+    [...ruleQueryKeys.runs(), 'rule', ruleId] as const,
   recordRuns: (recordId: string) =>
     [...ruleQueryKeys.runs(), 'record', recordId] as const,
 };

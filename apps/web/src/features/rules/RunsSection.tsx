@@ -1,6 +1,7 @@
 import {
   Box,
   Paper,
+  Stack,
   Table,
   TableBody,
   TableCell,
@@ -8,10 +9,13 @@ import {
   TableRow,
   Typography,
 } from '@mui/material';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { Timestamp } from '../../time/Timestamp';
-import type { RuleRun } from './api';
+import type { Rule, RuleRun, RunsSearch } from './api';
+import { RuleListFilter } from './RuleListFilter';
+import { ruleFilterOptions } from './ruleFilterOptions';
 import { RecordIdLink } from '../../components/RecordIdLink';
 import { RuleRevisionCell } from './RuleCells';
 import type { RulesById } from './rulesById';
@@ -38,7 +42,23 @@ export const RunsSection = ({
   onRetry,
   rulesById,
   runs,
+  title,
+  action,
+  filters,
+  showRule = true,
 }: {
+  /** Leaves out the rule column where every run is of one rule. */
+  showRule?: boolean;
+  /** The run history's filters and the rules they offer. */
+  filters?: {
+    rules: readonly Rule[];
+    search: RunsSearch;
+    onChange: (search: RunsSearch) => void;
+  };
+  /** Replaces the run history heading, as where only recent runs show. */
+  title?: string;
+  /** Beside the heading, such as a link to every run. */
+  action?: ReactNode;
   recordLabels: ReadonlyMap<string, string>;
   /** The section's load failure, offered for retry. */
   error: Error | null;
@@ -57,7 +77,16 @@ export const RunsSection = ({
       )}
       <Paper component="section" sx={{ mt: 3 }}>
         <Box sx={{ p: 2 }}>
-          <Typography variant="h6">{t('rules.runHistory')}</Typography>
+          <Stack
+            direction="row"
+            spacing={2}
+            sx={{ alignItems: 'center', justifyContent: 'space-between' }}
+          >
+            <Typography component="h2" variant="h6">
+              {title ?? t('rules.runHistory')}
+            </Typography>
+            {action}
+          </Stack>
           {runs && (
             <Typography color="text.secondary" variant="body2">
               {t('rules.lastExecuted')}:{' '}
@@ -69,11 +98,29 @@ export const RunsSection = ({
             </Typography>
           )}
         </Box>
+        {filters && (
+          <Stack
+            aria-label={t('rules.filters.runsLabel')}
+            component="search"
+            direction="row"
+            spacing={2}
+            useFlexGap
+            sx={{ flexWrap: 'wrap', px: 2, pb: 2 }}
+          >
+            <RuleListFilter
+              anyLabel={t('rules.filters.any')}
+              label={t('rules.columns.rule')}
+              onChange={(rule) => filters.onChange({ ...filters.search, rule })}
+              options={ruleFilterOptions(filters.rules)}
+              value={filters.search.rule}
+            />
+          </Stack>
+        )}
         <Table size="small">
           <TableHead>
             <TableRow>
               <TableCell>{t('rules.columns.executed')}</TableCell>
-              <TableCell>{t('rules.columns.rule')}</TableCell>
+              {showRule && <TableCell>{t('rules.columns.rule')}</TableCell>}
               <TableCell>{t('rules.columns.scope')}</TableCell>
               <TableCell>{t('rules.columns.source')}</TableCell>
               <TableCell>{t('rules.columns.status')}</TableCell>
@@ -87,13 +134,15 @@ export const RunsSection = ({
                 <TableCell>
                   <Timestamp relative value={runTime(item)} />
                 </TableCell>
-                <TableCell>
-                  <RuleRevisionCell
-                    rules={rulesById}
-                    ruleId={item.rule_id}
-                    version={item.rule_version}
-                  />
-                </TableCell>
+                {showRule && (
+                  <TableCell>
+                    <RuleRevisionCell
+                      rules={rulesById}
+                      ruleId={item.rule_id}
+                      version={item.rule_version}
+                    />
+                  </TableCell>
+                )}
                 <TableCell>
                   {item.scope_record_id ? (
                     <RecordIdLink

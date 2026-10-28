@@ -138,7 +138,13 @@ impl AttricatRepository {
         let Some(blueprint_id) = blueprint_id else {
             return Err(RepositoryError::NotFound("record"));
         };
-        self.list_rules(Some(blueprint_id)).await
+        // The counts span records the reader may not see.
+        let mut rules = self.list_rules(Some(blueprint_id)).await?;
+        for rule in &mut rules {
+            rule.open_findings = None;
+            rule.acknowledged_findings = None;
+        }
+        Ok(rules)
     }
 
     pub async fn get_rule(&self, id: Uuid) -> Result<Option<Rule>, RepositoryError> {
@@ -1511,6 +1517,23 @@ async fn with_applicability(
     .fetch_all(&mut *conn)
     .await?;
     let attributes = super::checks::revision_attributes(conn, workspace_id, &blueprint_ids).await?;
+    let rule_ids: Vec<Uuid> = rules.iter().map(|rule| rule.id).collect();
+    let finding_counts: std::collections::HashMap<Uuid, (i64, i64)> =
+        sqlx::query_as::<_, (Uuid, i64, i64)>(
+            "SELECT rule_id, count(*) FILTER (WHERE state = $3), count(*) FILTER (WHERE state = $4)
+           FROM rule_findings
+          WHERE workspace_id = $1 AND rule_id = ANY($2) AND state IN ($3, $4)
+          GROUP BY rule_id",
+        )
+        .bind(workspace_id)
+        .bind(&rule_ids)
+        .bind(RuleFindingState::Open.as_str())
+        .bind(RuleFindingState::Acknowledged.as_str())
+        .fetch_all(&mut *conn)
+        .await?
+        .into_iter()
+        .map(|(rule_id, open, acknowledged)| (rule_id, (open, acknowledged)))
+        .collect();
     let none = attricat_rules::RevisionAttributes::default();
     rules
         .into_iter()
@@ -1530,9 +1553,13 @@ async fn with_applicability(
                         })
                 })
                 .collect();
+            let (open_findings, acknowledged_findings) =
+                finding_counts.get(&rule.id).copied().unwrap_or_default();
             Ok(RuleDetails {
                 rule,
                 not_applicable,
+                open_findings: Some(open_findings),
+                acknowledged_findings: Some(acknowledged_findings),
             })
         })
         .collect()

@@ -34,6 +34,9 @@ export const revisionNotApplicableSchema = z.object({
 /** A rule with the blueprint revisions it does not fit. */
 export const ruleDetailsSchema = ruleSchema.extend({
   not_applicable: z.array(revisionNotApplicableSchema),
+  /** Across the workspace; left out for readers of a single record. */
+  open_findings: z.number().int().nonnegative().optional(),
+  acknowledged_findings: z.number().int().nonnegative().optional(),
 });
 /** One saved definition of a rule, from its changelog. */
 export const ruleRevisionSchema = z.object({
@@ -161,6 +164,11 @@ export const findingsSearchSchema = z.object({
   context: z.uuid().optional().catch(undefined),
 });
 export type FindingsSearch = z.infer<typeof findingsSearchSchema>;
+/** The run history's filters, kept in its URL. Unset filters match all. */
+export const runsSearchSchema = z.object({
+  rule: z.uuid().optional().catch(undefined),
+});
+export type RunsSearch = z.infer<typeof runsSearchSchema>;
 const comparedVersionSchema = z.coerce
   .number()
   .int()

@@ -7,17 +7,33 @@ import {
   listRecordRuleRuns,
   listRecordRules,
   listRuleRevisions,
+  listRecentRuleRuns,
   listRuleRuns,
   listRules,
   listUnresolvedRecordFindings,
 } from './api';
 import { ruleQueryKeys } from './queryKeys';
+import type { RunsSearch } from './schemas';
 import { activeRunStatuses } from '../../api/runStatus';
 import { RULE_DRY_RUN_POLL_MS } from './constants';
 
-/** The workspace's rule runs, newest first. */
-export const ruleRunsOptions = () =>
-  queryOptions({ queryKey: ruleQueryKeys.runs(), queryFn: listRuleRuns });
+/** The workspace's rule runs that match `search`, newest first. */
+export const ruleRunsOptions = (search: RunsSearch = {}) =>
+  queryOptions({
+    queryKey: ruleQueryKeys.runsPage(search),
+    queryFn: () => listRuleRuns(search),
+  });
+
+/** A rule's most recent runs, refreshed while one has not finished. */
+export const recentRuleRunsOptions = (ruleId: string) =>
+  queryOptions({
+    queryKey: ruleQueryKeys.ruleRuns(ruleId),
+    queryFn: () => listRecentRuleRuns(ruleId),
+    refetchInterval: (query) =>
+      query.state.data?.some((run) => activeRunStatuses.includes(run.status))
+        ? RULE_DRY_RUN_POLL_MS
+        : false,
+  });
 
 /** One run, polled until it finishes. */
 export const ruleRunOptions = (runId: string) =>

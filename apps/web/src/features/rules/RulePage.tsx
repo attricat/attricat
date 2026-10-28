@@ -13,8 +13,10 @@ import {
 import {
   ArrowLeftIcon,
   FileCodeIcon,
+  FlaskConicalIcon,
   HistoryIcon,
   PencilIcon,
+  PlayIcon,
   PowerIcon,
   PowerOffIcon,
   type LucideIcon,
@@ -47,12 +49,20 @@ import {
   ruleRoutes,
   type RulePageSection,
 } from './constants';
-import { ruleOptions } from './queryOptions';
+import { recentRuleRunsOptions, ruleOptions } from './queryOptions';
 import { RuleChangelog } from './RuleChangelog';
-import { RuleLifecycleChip } from './RuleCells';
+import { RuleFindingCounts, RuleLifecycleChip } from './RuleCells';
+import { DryRunDialog } from './DryRunDialog';
+import { RunsSection } from './RunsSection';
+import { rulesById } from './rulesById';
+import { useRunRule } from './useRunRule';
+import { useRecordLabels } from '../records/useRecordLabels';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { RuleToggleError } from './RuleToggleError';
 import type { RuleComparisonSearch } from './schemas';
 import { useToggleRule } from './useToggleRule';
+import { FindingSeverityChip } from './FindingSeverityChip';
+import { ruleSeverity } from './ruleSeverity';
 
 const RouterTab = createLink(Tab);
 const sectionIcons = {
@@ -62,11 +72,39 @@ const sectionIcons = {
 const noComparison: RuleComparisonSearch = {};
 const ignoreChange = () => undefined;
 
+/** A rule's most recent runs, with a link to the full run history. */
+const RecentRuns = ({ rule }: { rule: RuleDetails }) => {
+  const { t } = useTranslation();
+  const runs = useQuery(recentRuleRunsOptions(rule.id));
+  const recordLabels = useRecordLabels(
+    (runs.data ?? []).flatMap((run) =>
+      run.scope_record_id ? [run.scope_record_id] : [],
+    ),
+  );
+  return (
+    <RunsSection
+      action={
+        <Link search={{ rule: rule.id }} to={ruleRoutes.runs}>
+          {t('rules.rulePage.allRuns')}
+        </Link>
+      }
+      error={runs.error}
+      onRetry={() => void runs.refetch()}
+      recordLabels={recordLabels}
+      rulesById={rulesById([rule])}
+      runs={runs.data}
+      showRule={false}
+      title={t('rules.rulePage.recentRuns')}
+    />
+  );
+};
+
 /** What a rule checks: its blueprint, context and current definition. */
 const RuleDefinition = ({ rule }: { rule: RuleDetails }) => {
   const { t } = useTranslation();
   const blueprints = useQuery(blueprintCatalogueOptions());
   const contexts = useQuery(contextListOptions());
+  const severity = ruleSeverity(rule);
   const blueprint = blueprints.data?.find(({ id }) => id === rule.blueprint_id);
   const context = contexts.data?.find(({ id }) => id === rule.context_id);
   return (
@@ -77,6 +115,7 @@ const RuleDefinition = ({ rule }: { rule: RuleDetails }) => {
         sx={{ alignItems: 'center', flexWrap: 'wrap', mt: 3 }}
       >
         <RuleLifecycleChip rule={rule} />
+        {severity && <FindingSeverityChip severity={severity} />}
         <Typography color="text.secondary" variant="body2">
           {t('rules.rulePage.checks')}{' '}
           <Link
@@ -103,6 +142,7 @@ const RuleDefinition = ({ rule }: { rule: RuleDetails }) => {
             values={{ version: rule.version }}
           />
         </Typography>
+        <RuleFindingCounts rule={rule} />
       </Stack>
       {rule.not_applicable.length > 0 && (
         <Alert severity="warning" sx={{ mt: 2 }}>
@@ -134,6 +174,7 @@ const RuleDefinition = ({ rule }: { rule: RuleDetails }) => {
           value={rule.definition}
         />
       </Paper>
+      <RecentRuns rule={rule} />
     </>
   );
 };
@@ -156,6 +197,7 @@ export const RulePage = ({
   const canManage = useCan(capabilities.rulesManage);
   const rule = useQuery(ruleOptions(ruleId));
   const toggle = useToggleRule();
+  const { run, dryRun, closeDryRun } = useRunRule();
   const tabId = useTabAccessibility();
   useResourcePageTitle(rule.data?.name, t('navigation.rules'));
 
@@ -201,6 +243,24 @@ export const RulePage = ({
         actions={
           canManage && (
             <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
+              <Button
+                disabled={run.isPending}
+                onClick={() => run.mutate({ rule: current, dryRun: true })}
+                startIcon={<FlaskConicalIcon />}
+                variant="outlined"
+              >
+                {t('rules.dryRun')}
+              </Button>
+              {current.enabled && (
+                <Button
+                  disabled={run.isPending}
+                  onClick={() => run.mutate({ rule: current, dryRun: false })}
+                  startIcon={<PlayIcon />}
+                  variant="outlined"
+                >
+                  {t('rules.runNow')}
+                </Button>
+              )}
               <RouterButton
                 params={{ ruleId }}
                 startIcon={<PencilIcon />}
@@ -229,6 +289,8 @@ export const RulePage = ({
         title={current.name}
       />
       <RuleToggleError sx={{ mt: 2 }} toggle={toggle} />
+      <ApiErrorAlert error={run.error} sx={{ mt: 2 }} />
+      <DryRunDialog dryRun={dryRun} onClose={closeDryRun} />
       <Tabs
         aria-label={t('rules.rulePage.tabs')}
         sx={{ mt: 3 }}

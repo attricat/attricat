@@ -86,6 +86,7 @@ pub(super) async fn run_now(
 }
 #[derive(Deserialize)]
 pub struct RunsQuery {
+    rule_id: Option<Uuid>,
     record_id: Option<Uuid>,
     limit: Option<i64>,
     offset: Option<i64>,
@@ -96,7 +97,7 @@ pub(super) async fn list_runs(
 ) -> Result<Response, ApiError> {
     let (limit, offset) = ArrayPage::new(query.limit, query.offset).bounds()?;
     let page_items = repo
-        .rule_runs_page(None, query.record_id, limit, offset)
+        .rule_runs_page(query.rule_id, query.record_id, limit, offset)
         .await?;
     Ok(array_response(page_items, (limit, offset)))
 }

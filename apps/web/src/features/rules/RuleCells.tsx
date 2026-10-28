@@ -1,11 +1,11 @@
-import { Chip, Tooltip, useTheme } from '@mui/material';
+import { Chip, Stack, Tooltip, Typography, useTheme } from '@mui/material';
 import { Link } from '@tanstack/react-router';
 import { TriangleAlertIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Rule, RuleDetails } from './api';
 import { shortId } from '../../components/shortId';
 import { compactIconSize } from '../../components/iconSizes';
-import { ruleRoutes } from './constants';
+import { findingStates, ruleRoutes } from './constants';
 import type { RulesById } from './rulesById';
 
 /**
@@ -36,6 +36,42 @@ export const RuleRevisionCell = ({
       id: shortId(ruleId),
       version,
     })
+  );
+};
+
+/**
+ * A rule's open findings, linking to them on the findings page, and how
+ * many of the rest someone acknowledged.
+ */
+export const RuleFindingCounts = ({ rule }: { rule: RuleDetails }) => {
+  const { t } = useTranslation();
+  const open = rule.open_findings ?? 0;
+  const acknowledged = rule.acknowledged_findings ?? 0;
+  return (
+    <Stack spacing={0.25}>
+      <Typography variant="body2">
+        {open > 0 ? (
+          <Link
+            search={{ rule: rule.id, state: findingStates.open }}
+            to={ruleRoutes.findings}
+          >
+            {t('rules.openFindings', { count: open })}
+          </Link>
+        ) : (
+          t('rules.openFindings', { count: open })
+        )}
+      </Typography>
+      {acknowledged > 0 && (
+        <Typography color="text.secondary" variant="caption">
+          <Link
+            search={{ rule: rule.id, state: findingStates.acknowledged }}
+            to={ruleRoutes.findings}
+          >
+            {t('rules.acknowledgedFindings', { count: acknowledged })}
+          </Link>
+        </Typography>
+      )}
+    </Stack>
   );
 };
 

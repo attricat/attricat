@@ -2058,7 +2058,8 @@
       "scope": "Zakres",
       "executed": "Wykonano",
       "blueprint": "Schemat",
-      "changed": "Zmieniono"
+      "changed": "Zmieniono",
+      "openFindings": "Otwarte ustalenia"
     },
     "enabled": "Włączona",
     "disabled": "Wyłączona",
@@ -2079,7 +2080,8 @@
         "acknowledged": "Potwierdzone",
         "resolved": "Rozwiązane",
         "all": "Wszystkie"
-      }
+      },
+      "runsLabel": "Filtruj wykonania"
     },
     "runHistory": "Historia wykonań",
     "lastExecuted": "Ostatnie wykonanie",
@@ -2207,7 +2209,9 @@
       "sections": {
         "definition": "Definicja",
         "changelog": "Historia zmian"
-      }
+      },
+      "recentRuns": "Ostatnie wykonania",
+      "allRuns": "Wszystkie wykonania tej reguły"
     },
     "changelog": {
       "loading": "Wczytywanie historii zmian…",
@@ -2245,7 +2249,15 @@
       "showingFirst": "Wyświetlono pierwsze {{shown}} z {{count}}.",
       "failed": "Próbne wykonanie nie zakończyło się."
     },
-    "runStarted": "Wykonanie rozpoczęte. Jego wynik pojawi się w historii wykonań."
+    "runStarted": "Wykonanie rozpoczęte. Jego wynik pojawi się w historii wykonań.",
+    "openFindings_one": "{{count}} otwarte",
+    "openFindings_few": "{{count}} otwarte",
+    "openFindings_many": "{{count}} otwartych",
+    "openFindings_other": "{{count}} otwartego",
+    "acknowledgedFindings_one": "{{count}} potwierdzone",
+    "acknowledgedFindings_few": "{{count}} potwierdzone",
+    "acknowledgedFindings_many": "{{count}} potwierdzonych",
+    "acknowledgedFindings_other": "{{count}} potwierdzonego"
   },
   "reusableAttributes": {
     "editor": {
