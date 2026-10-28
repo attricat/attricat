@@ -595,6 +595,8 @@ impl AttricatRepository {
                 blueprint_id: record.blueprint_id,
                 blueprint_version: record.blueprint_version,
                 facts: Self::affected_facts(&changes),
+                tags_added: Vec::new(),
+                tags_removed: Vec::new(),
             })
             .expect("record-updated payload is serializable"),
         );

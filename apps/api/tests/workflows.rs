@@ -870,6 +870,168 @@ tags = ["needs-review"]"#,
 }
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
+async fn event_triggers_filter_on_relationship_change_kinds(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let blueprint = create_blueprint(
+        &client,
+        &base_url,
+        r#"
+format_version = 1
+code = "licensed_document"
+name = "Licensed document"
+kind = "record"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title"]
+[[attributes]]
+code = "title"
+value_type = "string"
+[[attributes]]
+code = "license"
+value_type = "relationship"
+"#,
+    )
+    .await;
+    enabled_workflow(
+        &client,
+        &base_url,
+        r#"format_version = 2
+code = "license_added"
+name = "License added"
+[[triggers]]
+event_type = "relationship.changed.v1"
+attributes = ["license"]
+change_kinds = ["relationship_add"]
+[[actions]]
+type = "system_tags_add"
+tags = ["licensed"]"#,
+    )
+    .await;
+    let document = create_record(&client, &base_url, &blueprint).await;
+    let id = document["id"].as_str().unwrap();
+    let license = create_record(&client, &base_url, &blueprint).await;
+    let relationships = |action: &str| {
+        client
+            .post(format!("{base_url}/records/{id}/relationships/{action}"))
+            .json(&json!({"relationships":[{"attribute_code":"license","target_record_ids":[license["id"]]}]}))
+    };
+
+    relationships("replace")
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    assert_eq!(
+        fan_out_latest_event(&pool, id).await,
+        ("relationship.changed.v1".into(), 1),
+        "adding a target matches relationship_add"
+    );
+    relationships("remove")
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    assert_eq!(
+        fan_out_latest_event(&pool, id).await,
+        ("relationship.changed.v1".into(), 0),
+        "removing a target does not match relationship_add"
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn event_triggers_filter_on_added_and_removed_tags(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let blueprint = create_blueprint(
+        &client,
+        &base_url,
+        r#"
+format_version = 1
+code = "tagged_document"
+name = "Tagged document"
+kind = "record"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title"]
+[[attributes]]
+code = "title"
+value_type = "string"
+"#,
+    )
+    .await;
+    enabled_workflow(
+        &client,
+        &base_url,
+        r#"format_version = 2
+code = "approval_changed"
+name = "Approval changed"
+[[triggers]]
+event_type = "record.updated.v1"
+tags_added = ["approved"]
+[[triggers]]
+event_type = "record.updated.v1"
+tags_removed = ["approved"]
+[[actions]]
+type = "system_tags_add"
+tags = ["approval-changed"]"#,
+    )
+    .await;
+    let document = create_record(&client, &base_url, &blueprint).await;
+    let id = document["id"].as_str().unwrap();
+    let set_tags = |tags: Value| {
+        client
+            .put(format!("{base_url}/v1/records/{id}"))
+            .json(&json!({ "system_tags": tags }))
+    };
+
+    set_tags(json!(["draft"]))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    assert_eq!(
+        fan_out_latest_event(&pool, id).await,
+        ("record.updated.v1".into(), 0),
+        "an unlisted tag must not start a run"
+    );
+    set_tags(json!(["draft", "approved"]))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let event = support::latest_domain_event(&pool, Uuid::parse_str(id).unwrap(), None).await;
+    assert_eq!(event.payload["tags_added"], json!(["approved"]));
+    assert_eq!(fan_out_latest_event(&pool, id).await.1, 1);
+    set_tags(json!(["draft", "approved"]))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    assert_eq!(
+        fan_out_latest_event(&pool, id).await.1,
+        0,
+        "re-saving the same tags changes none"
+    );
+    set_tags(json!(["draft"]))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let event = support::latest_domain_event(&pool, Uuid::parse_str(id).unwrap(), None).await;
+    assert_eq!(event.payload["tags_removed"], json!(["approved"]));
+    assert_eq!(fan_out_latest_event(&pool, id).await.1, 1);
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn event_triggers_run_only_for_listed_blueprints(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();

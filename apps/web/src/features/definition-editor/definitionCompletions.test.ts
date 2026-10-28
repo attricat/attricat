@@ -367,9 +367,13 @@ type = "manual"
       const { labels } = await workflow('[[triggers]]\n|');
       expect(labels).toEqual([
         'attributes',
+        'blueprints',
+        'change_kinds',
         'envelope',
         'event_type',
         'facts',
+        'tags_added',
+        'tags_removed',
         'type = "manual"',
         'type = "schedule"',
         'type = "extension_event"',

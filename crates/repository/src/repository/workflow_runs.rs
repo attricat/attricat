@@ -566,13 +566,26 @@ fn workflow_trigger_matches(trigger: &attricat_workflow::Trigger, event: &Domain
         envelope,
         facts,
         attributes,
+        change_kinds,
+        tags_added,
+        tags_removed,
         ..
     } = trigger
     else {
         return false;
     };
     event_type == &event.event_type
-        && attricat_workflow::changed_attributes_match(attributes, &event.payload)
+        && attricat_workflow::changed_facts_match(attributes, change_kinds, &event.payload)
+        && attricat_workflow::changed_tags_match(
+            tags_added,
+            &event.payload,
+            attricat_workflow::TAGS_ADDED_FIELD,
+        )
+        && attricat_workflow::changed_tags_match(
+            tags_removed,
+            &event.payload,
+            attricat_workflow::TAGS_REMOVED_FIELD,
+        )
         && envelope.iter().all(|(key, expected)| match key.as_str() {
             "event_type" => expected == &Value::String(event.event_type.clone()),
             "aggregate_kind" => expected == &Value::String(event.aggregate_kind.clone()),
@@ -612,6 +625,9 @@ mod tests {
             facts: [("facts.0.attribute_code".into(), json!("title"))].into(),
             attributes: Vec::new(),
             blueprints: Vec::new(),
+            change_kinds: Vec::new(),
+            tags_added: Vec::new(),
+            tags_removed: Vec::new(),
         };
         let event = DomainEvent {
             id: Uuid::new_v4(),
@@ -641,6 +657,9 @@ mod tests {
             facts: Default::default(),
             attributes: Vec::new(),
             blueprints: Vec::new(),
+            change_kinds: Vec::new(),
+            tags_added: Vec::new(),
+            tags_removed: Vec::new(),
         };
         assert!(!workflow_trigger_matches(&metadata_trigger, &event));
         let metadata_event = DomainEvent {
@@ -658,6 +677,9 @@ mod tests {
             facts: Default::default(),
             attributes: attributes.iter().map(|code| (*code).to_owned()).collect(),
             blueprints: Vec::new(),
+            change_kinds: Vec::new(),
+            tags_added: Vec::new(),
+            tags_removed: Vec::new(),
         };
         let event = DomainEvent {
             id: Uuid::new_v4(),

@@ -51,6 +51,18 @@ pub enum Trigger {
         /// blueprint, which keeps stored revisions without the field unchanged.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         blueprints: Vec<String>,
+        /// Optional change-kind filter: the event matches only when one of its
+        /// payload facts has one of these change kinds and, with
+        /// `attributes`, names one of those attributes. Empty means no filter.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        change_kinds: Vec<String>,
+        /// Optional added-tag filter: the event matches only when its payload
+        /// `tags_added` holds one of these system tags. Empty means no filter.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        tags_added: Vec<String>,
+        /// Optional removed-tag filter, as `tags_added` for `tags_removed`.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        tags_removed: Vec<String>,
     },
     /// A management caller supplies one UUID record target; no arbitrary payload is accepted.
     Manual,
@@ -181,6 +193,23 @@ struct RawEventTrigger {
     #[serde(default)]
     #[schemars(schema_with = "trigger_blueprints_schema")]
     blueprints: Option<Vec<String>>,
+    /// Match only events with a changed fact of one of these kinds, such as
+    /// `relationship_add` or `relationship_remove`. With `attributes`, the
+    /// same fact must also name one of those attributes. Not allowed with
+    /// `record.migrated.v1`.
+    #[serde(default)]
+    #[schemars(schema_with = "trigger_change_kinds_schema")]
+    change_kinds: Option<Vec<String>>,
+    /// Match only events that added one of these system tags. Allowed with
+    /// `record.created.v1` and `record.updated.v1`.
+    #[serde(default)]
+    #[schemars(schema_with = "trigger_tags_schema")]
+    tags_added: Option<Vec<String>>,
+    /// Match only events that removed one of these system tags. Allowed with
+    /// `record.updated.v1`.
+    #[serde(default)]
+    #[schemars(schema_with = "trigger_tags_schema")]
+    tags_removed: Option<Vec<String>>,
 }
 /// Schema of the typed (`format_version = 2`) triggers. [`RawTrigger::V2`]
 /// reads them loosely and [`trigger`] applies these rules.
@@ -381,6 +410,17 @@ fn trigger_blueprints_schema(_: &mut SchemaGenerator) -> Schema {
         },
     })
 }
+fn trigger_change_kinds_schema(_: &mut SchemaGenerator) -> Schema {
+    json_schema!({
+        "type": "array",
+        "minItems": 1,
+        "uniqueItems": true,
+        "items": { "enum": attricat_events::CHANGE_KINDS_V1 },
+    })
+}
+fn trigger_tags_schema(generator: &mut SchemaGenerator) -> Schema {
+    system_tags_schema(generator)
+}
 /// The parser limits a tag to [`MAX_TAG_LENGTH`] UTF-8 bytes, which JSON
 /// Schema cannot express: `maxLength` counts characters. A string within the
 /// byte limit never has more characters than bytes, so the same number as
@@ -446,16 +486,33 @@ fn exactly_one_value_source(schema: &mut Schema) {
     schema.insert("else".into(), json!({ "required": ["event_field"] }));
 }
 fn event_trigger_rules(schema: &mut Schema) {
-    schema.insert(
-        "if".into(),
+    let event_type_not_in = |event_types: &[&str]| {
         json!({
-            "properties": { "event_type": { "const": attricat_events::RECORD_MIGRATED_V1 } },
+            "properties": { "event_type": { "not": { "enum": event_types } } },
             "required": ["event_type"],
-        }),
-    );
+        })
+    };
     schema.insert(
-        "then".into(),
-        json!({ "not": { "required": ["attributes"] } }),
+        "allOf".into(),
+        json!([
+            {
+                "if": {
+                    "properties": { "event_type": { "const": attricat_events::RECORD_MIGRATED_V1 } },
+                    "required": ["event_type"],
+                },
+                "then": {
+                    "not": { "anyOf": [{ "required": ["attributes"] }, { "required": ["change_kinds"] }] }
+                },
+            },
+            {
+                "if": event_type_not_in(TAGS_ADDED_EVENTS),
+                "then": { "not": { "required": ["tags_added"] } },
+            },
+            {
+                "if": event_type_not_in(TAGS_REMOVED_EVENTS),
+                "then": { "not": { "required": ["tags_removed"] } },
+            },
+        ]),
     );
 }
 fn definition_cross_field_rules(schema: &mut Schema) {
@@ -571,6 +628,9 @@ fn trigger(raw: RawTrigger, version: u32) -> Result<Trigger, WorkflowError> {
             facts,
             attributes,
             blueprints,
+            change_kinds,
+            tags_added,
+            tags_removed,
         }) => {
             if !RECORD_TRIGGER_EVENTS.contains(&event_type.as_str()) {
                 return Err(WorkflowError::Invalid(format!(
@@ -606,12 +666,47 @@ fn trigger(raw: RawTrigger, version: u32) -> Result<Trigger, WorkflowError> {
                     codes
                 }
             };
+            let change_kinds = match change_kinds {
+                None => Vec::new(),
+                Some(kinds) => {
+                    if event_type == attricat_events::RECORD_MIGRATED_V1 {
+                        return Err(WorkflowError::Invalid(
+                            "record.migrated.v1 carries no changed facts, so it cannot filter on change kinds".into(),
+                        ));
+                    }
+                    let kinds = limited_strings(
+                        kinds,
+                        "trigger change kind",
+                        attricat_events::CHANGE_KINDS_V1.len(),
+                    )?;
+                    if let Some(kind) = kinds
+                        .iter()
+                        .find(|kind| !attricat_events::CHANGE_KINDS_V1.contains(&kind.as_str()))
+                    {
+                        return Err(WorkflowError::Invalid(format!(
+                            "unsupported trigger change kind '{kind}'"
+                        )));
+                    }
+                    kinds
+                }
+            };
+            let tags_added =
+                trigger_tags(tags_added, &event_type, TAGS_ADDED_EVENTS, "tags_added")?;
+            let tags_removed = trigger_tags(
+                tags_removed,
+                &event_type,
+                TAGS_REMOVED_EVENTS,
+                "tags_removed",
+            )?;
             Ok(Trigger::Event {
                 event_type,
                 envelope,
                 facts,
                 attributes,
                 blueprints,
+                change_kinds,
+                tags_added,
+                tags_removed,
             })
         }
         RawTrigger::V2 {
@@ -744,6 +839,31 @@ pub fn raw_hash(source: &str) -> String {
     format!("{:x}", Sha256::digest(source.as_bytes()))
 }
 const RECORD_TRIGGER_EVENTS: &[&str] = attricat_events::RECORD_TRIGGER_EVENT_TYPES_V1;
+/// Record events whose payload reports added system tags.
+const TAGS_ADDED_EVENTS: &[&str] = &[
+    attricat_events::RECORD_CREATED_V1,
+    attricat_events::RECORD_UPDATED_V1,
+];
+/// Record events whose payload reports removed system tags.
+const TAGS_REMOVED_EVENTS: &[&str] = &[attricat_events::RECORD_UPDATED_V1];
+/// A trigger's `tags_added` or `tags_removed` filter, allowed only on
+/// `event_types`.
+fn trigger_tags(
+    tags: Option<Vec<String>>,
+    event_type: &str,
+    event_types: &[&str],
+    field: &str,
+) -> Result<Vec<String>, WorkflowError> {
+    let Some(tags) = tags else {
+        return Ok(Vec::new());
+    };
+    if !event_types.contains(&event_type) {
+        return Err(WorkflowError::Invalid(format!(
+            "{event_type} does not report tag changes, so it cannot filter on {field}"
+        )));
+    }
+    system_tags(tags)
+}
 const ENVELOPE_FIELDS: &[&str] = &["event_type", "aggregate_kind", "source_kind", "source_name"];
 fn action(a: RawAction) -> Result<Action, WorkflowError> {
     match a {
@@ -836,16 +956,51 @@ fn action(a: RawAction) -> Result<Action, WorkflowError> {
 /// An empty filter always matches. Facts exist only for values that actually
 /// changed, so an unchanged write never satisfies a filter.
 pub fn changed_attributes_match(attributes: &[String], payload: &Value) -> bool {
-    attributes.is_empty()
+    changed_facts_match(attributes, &[], payload)
+}
+/// Whether one payload fact both names one of `attributes` and has one of
+/// `change_kinds`. An empty list does not constrain its field, and two empty
+/// lists always match.
+pub fn changed_facts_match(
+    attributes: &[String],
+    change_kinds: &[String],
+    payload: &Value,
+) -> bool {
+    let listed = |wanted: &[String], fact: &Value, field: &str| {
+        wanted.is_empty()
+            || fact
+                .get(field)
+                .and_then(Value::as_str)
+                .is_some_and(|actual| wanted.iter().any(|wanted| wanted == actual))
+    };
+    (attributes.is_empty() && change_kinds.is_empty())
         || payload
             .get("facts")
             .and_then(Value::as_array)
             .is_some_and(|facts| {
                 facts.iter().any(|fact| {
-                    fact.get("attribute_code")
-                        .and_then(Value::as_str)
-                        .is_some_and(|code| attributes.iter().any(|wanted| wanted == code))
+                    listed(attributes, fact, "attribute_code")
+                        && listed(change_kinds, fact, "change_kind")
                 })
+            })
+}
+/// Payload fields of [`attricat_events::RecordMutationV1`] that list changed
+/// system tags.
+pub const TAGS_ADDED_FIELD: &str = "tags_added";
+pub const TAGS_REMOVED_FIELD: &str = "tags_removed";
+/// Whether a record event's payload `field` ([`TAGS_ADDED_FIELD`] or
+/// [`TAGS_REMOVED_FIELD`])
+/// holds at least one of `tags`. An empty filter always matches.
+pub fn changed_tags_match(tags: &[String], payload: &Value, field: &str) -> bool {
+    tags.is_empty()
+        || payload
+            .get(field)
+            .and_then(Value::as_array)
+            .is_some_and(|changed| {
+                changed
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .any(|tag| tags.iter().any(|wanted| wanted == tag))
             })
 }
 fn non_empty(v: &str, n: &str) -> Result<(), WorkflowError> {
@@ -1004,6 +1159,100 @@ mod tests {
     }
 
     #[test]
+    fn event_trigger_filters_on_change_kinds() {
+        let parsed = parse(&format!("{HEAD}[[triggers]]\nevent_type='relationship.changed.v1'\nattributes=['license']\nchange_kinds=['relationship_add']\n[[actions]]\ntype='system_tags_add'\ntags=['x']")).unwrap();
+        let Trigger::Event { change_kinds, .. } = &parsed.triggers[0] else {
+            panic!("expected an event trigger")
+        };
+        assert_eq!(change_kinds, &["relationship_add".to_owned()]);
+        for invalid in [
+            "change_kinds=[]",
+            "change_kinds=['set','set']",
+            "change_kinds=['linked']",
+        ] {
+            assert!(parse(&format!("{HEAD}[[triggers]]\nevent_type='record.updated.v1'\n{invalid}\n[[actions]]\ntype='system_tags_add'\ntags=['x']")).is_err(), "{invalid}");
+        }
+        assert!(parse(&format!("{HEAD}[[triggers]]\nevent_type='record.migrated.v1'\nchange_kinds=['set']\n[[actions]]\ntype='system_tags_add'\ntags=['x']")).is_err());
+    }
+
+    #[test]
+    fn event_trigger_filters_on_tag_changes() {
+        let parsed = parse(&format!("{HEAD}[[triggers]]\nevent_type='record.updated.v1'\ntags_added=['approved']\ntags_removed=['draft']\n[[actions]]\ntype='system_tags_add'\ntags=['x']")).unwrap();
+        let Trigger::Event {
+            tags_added,
+            tags_removed,
+            ..
+        } = &parsed.triggers[0]
+        else {
+            panic!("expected an event trigger")
+        };
+        assert_eq!(tags_added, &["approved".to_owned()]);
+        assert_eq!(tags_removed, &["draft".to_owned()]);
+        assert!(parse(&format!("{HEAD}[[triggers]]\nevent_type='record.created.v1'\ntags_added=['approved']\n[[actions]]\ntype='system_tags_add'\ntags=['x']")).is_ok());
+        for (event_type, filter) in [
+            ("record.created.v1", "tags_removed=['draft']"),
+            ("relationship.changed.v1", "tags_added=['approved']"),
+            ("record.updated.v1", "tags_added=[]"),
+            ("record.updated.v1", "tags_added=['a','a']"),
+        ] {
+            assert!(parse(&format!("{HEAD}[[triggers]]\nevent_type='{event_type}'\n{filter}\n[[actions]]\ntype='system_tags_add'\ntags=['x']")).is_err(), "{event_type} {filter}");
+        }
+    }
+
+    #[test]
+    fn changed_facts_match_one_fact_on_both_filters() {
+        let payload = json!({"facts":[
+            {"attribute_code":"license","change_kind":"relationship_remove"},
+            {"attribute_code":"owner","change_kind":"relationship_add"},
+        ]});
+        let codes = |values: &[&str]| values.iter().map(|v| (*v).to_owned()).collect::<Vec<_>>();
+        assert!(changed_facts_match(&[], &[], &payload));
+        assert!(changed_facts_match(
+            &[],
+            &codes(&["relationship_add"]),
+            &payload
+        ));
+        assert!(changed_facts_match(
+            &codes(&["license"]),
+            &codes(&["relationship_remove"]),
+            &payload
+        ));
+        assert!(!changed_facts_match(
+            &codes(&["license"]),
+            &codes(&["relationship_add"]),
+            &payload
+        ));
+        assert!(!changed_facts_match(&[], &codes(&["set"]), &payload));
+    }
+
+    #[test]
+    fn changed_tags_match_the_named_payload_field() {
+        let payload = json!({"tags_added":["approved"],"tags_removed":["draft"]});
+        let tags = |values: &[&str]| values.iter().map(|v| (*v).to_owned()).collect::<Vec<_>>();
+        assert!(changed_tags_match(&[], &json!({}), TAGS_ADDED_FIELD));
+        assert!(changed_tags_match(
+            &tags(&["x", "approved"]),
+            &payload,
+            TAGS_ADDED_FIELD
+        ));
+        assert!(!changed_tags_match(
+            &tags(&["approved"]),
+            &payload,
+            TAGS_REMOVED_FIELD
+        ));
+        assert!(changed_tags_match(
+            &tags(&["draft"]),
+            &payload,
+            TAGS_REMOVED_FIELD
+        ));
+        assert!(!changed_tags_match(
+            &tags(&["approved"]),
+            &json!({}),
+            TAGS_ADDED_FIELD
+        ));
+    }
+
+    #[test]
     fn event_trigger_filters_on_blueprints() {
         let parsed = parse(&format!("{HEAD}[[triggers]]\nevent_type='record.updated.v1'\nblueprints=['product','service']\n[[actions]]\ntype='system_tags_add'\ntags=['x']")).unwrap();
         let Trigger::Event { blueprints, .. } = &parsed.triggers[0] else {
@@ -1153,6 +1402,39 @@ mod tests {
                     .replace("attribute_value.changed.v1", "record.migrated.v1"),
                 true,
             ),
+            (
+                EVENT_WORKFLOW.replace("attributes=['license']\n", "attributes=['license']\nchange_kinds=['set','replace']\n"),
+                true,
+            ),
+            (
+                EVENT_WORKFLOW.replace("attributes=['license']\n", "change_kinds=['linked']\n"),
+                false,
+            ),
+            (
+                EVENT_WORKFLOW
+                    .replace("attributes=['license']\n", "change_kinds=['set']\n")
+                    .replace("attribute_value.changed.v1", "record.migrated.v1"),
+                false,
+            ),
+            (
+                EVENT_WORKFLOW
+                    .replace("attributes=['license']\n", "tags_added=['a']\ntags_removed=['b']\n")
+                    .replace("attribute_value.changed.v1", "record.updated.v1"),
+                true,
+            ),
+            (
+                EVENT_WORKFLOW
+                    .replace("attributes=['license']\n", "tags_added=['a']\n")
+                    .replace("attribute_value.changed.v1", "record.created.v1"),
+                true,
+            ),
+            (
+                EVENT_WORKFLOW
+                    .replace("attributes=['license']\n", "tags_removed=['a']\n")
+                    .replace("attribute_value.changed.v1", "record.created.v1"),
+                false,
+            ),
+            (EVENT_WORKFLOW.replace("attributes=['license']\n", "tags_added=['a']\n"), false),
             (EVENT_WORKFLOW.replace("source_kind=", "origin="), false),
             (EVENT_WORKFLOW.replace("'facts.0.attribute_code'", "'facts.x.attribute_code'"), false),
             (EVENT_WORKFLOW.replace("max_targets=25", "max_targets=501"), false),

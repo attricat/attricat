@@ -952,9 +952,9 @@ impl AttricatRepository {
             context_code: Some(context_code),
             relationship_target_record_id: None,
             change_kind: match (&before_value, &after_value) {
-                (None, _) => "set",
-                (Some(_), None) => "remove",
-                (Some(_), Some(_)) => "replace",
+                (None, _) => crate::domain_events::CHANGE_KIND_SET,
+                (Some(_), None) => crate::domain_events::CHANGE_KIND_REMOVE,
+                (Some(_), Some(_)) => crate::domain_events::CHANGE_KIND_REPLACE,
             },
             before_value,
             after_value,
