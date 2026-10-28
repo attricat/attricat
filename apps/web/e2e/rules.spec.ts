@@ -9,9 +9,12 @@ import {
   suffix,
 } from './helpers';
 
-// Run history is listed newest first. Saving a record also runs the enabled
-// rules for that record alone, and that run may be listed after a manual one,
-// so only runs over all records count.
+// Run history is listed newest first and hides the runs a record save starts
+// for that record alone. A row's name starts with when it ran, so only its end
+// is compared.
+const escapeRegExp = (text: string) =>
+  text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 const expectLatestRun = async (page: Page, ruleName: string, run: string) => {
   await expect(async () => {
     await page.goto('/manage/rules/runs');
@@ -21,9 +24,10 @@ const expectLatestRun = async (page: Page, ruleName: string, run: string) => {
         .filter({ hasText: ruleName })
         .filter({ hasText: 'All records' })
         .first(),
-    ).toHaveAccessibleName(`${ruleName} v1 All records ${run}`, {
-      timeout: 1_000,
-    });
+    ).toHaveAccessibleName(
+      new RegExp(`${escapeRegExp(`${ruleName} v1 All records ${run}`)}$`),
+      { timeout: 1_000 },
+    );
   }).toPass();
 };
 
@@ -95,13 +99,21 @@ attribute_code = "${attribute}"`,
   await page.reload();
   await expect(toggle).toBeChecked();
   await ruleRow.getByRole('button', { name: 'Dry run' }).click();
-  await expectLatestRun(page, ruleName, 'manual (dry run) Completed 2 1');
+  await expectLatestRun(
+    page,
+    ruleName,
+    'manual (dry run) Completed 2 1 would fail',
+  );
   await openFindings(page);
   await expect(page.getByRole('cell', { name: finding })).toBeHidden();
 
   await page.goto('/manage/rules');
   await ruleRow.getByRole('button', { name: 'Run now' }).click();
-  await expectLatestRun(page, ruleName, 'manual Completed 2 1');
+  await expectLatestRun(
+    page,
+    ruleName,
+    'manual Completed 2 1 new · 0 resolved',
+  );
 
   await openFindings(page);
   const findingRow = page.getByRole('row').filter({ hasText: finding });
@@ -126,7 +138,11 @@ attribute_code = "${attribute}"`,
 
   await page.goto('/manage/rules');
   await ruleRow.getByRole('button', { name: 'Run now' }).click();
-  await expectLatestRun(page, ruleName, 'manual Completed 2 0');
+  await expectLatestRun(
+    page,
+    ruleName,
+    'manual Completed 2 0 new · 1 resolved',
+  );
   await openFindings(page);
   await expect(findingRow).toBeHidden();
   await page.goto(`/records/${missing.id}`);
