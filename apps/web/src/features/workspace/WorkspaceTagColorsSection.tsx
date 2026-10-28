@@ -17,6 +17,7 @@ import { PlusIcon, Trash2Icon, Undo2Icon } from 'lucide-react';
 import { tagColorCodes, type TagColor } from '../../app/tagColors';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { codeTypography } from '../../app/theme';
+import { utf8ByteLength } from '../extensions/utf8';
 import { MAX_SYSTEM_TAG_BYTES } from '../records/constants';
 import { systemTagLabel } from '../records/systemTags';
 import { updateTagColors, type TagColors } from '../tag-colors/api';
@@ -90,6 +91,9 @@ const TagColorsEditor = ({ colors }: { colors: TagColors }) => {
   });
   const tags = coloredTags(colors);
   const trimmedTag = newTag.trim();
+  // The server bounds a tag in UTF-8 bytes, which `maxLength` does not count.
+  const tagTooLong = utf8ByteLength(trimmedTag) > MAX_SYSTEM_TAG_BYTES;
+  const canAdd = trimmedTag !== '' && !tagTooLong;
   const full = Object.keys(colors.overrides).length >= MAX_TAG_COLORS;
   const add = () => {
     save.mutate(
@@ -138,6 +142,7 @@ const TagColorsEditor = ({ colors }: { colors: TagColors }) => {
               />
               {isDefault ? (
                 <Button
+                  aria-label={t('workspace.resetTagColorFor', { tag: label })}
                   disabled={save.isPending || !overridden}
                   onClick={() => save.mutate({ reset: [tag] })}
                   startIcon={<Undo2Icon />}
@@ -163,7 +168,7 @@ const TagColorsEditor = ({ colors }: { colors: TagColors }) => {
         noValidate
         onSubmit={(event) => {
           event.preventDefault();
-          if (trimmedTag) add();
+          if (canAdd) add();
         }}
         sx={{ p: 2 }}
       >
@@ -174,10 +179,15 @@ const TagColorsEditor = ({ colors }: { colors: TagColors }) => {
         >
           <TextField
             disabled={save.isPending || full}
+            error={tagTooLong}
             helperText={
               full
                 ? t('workspace.tagColorsFull', { max: MAX_TAG_COLORS })
-                : t('workspace.newTagColorHelp')
+                : tagTooLong
+                  ? t('workspace.newTagColorTooLong', {
+                      max: MAX_SYSTEM_TAG_BYTES,
+                    })
+                  : t('workspace.newTagColorHelp')
             }
             label={t('workspace.newTagColorTag')}
             onChange={(event) => setNewTag(event.target.value)}
@@ -192,7 +202,7 @@ const TagColorsEditor = ({ colors }: { colors: TagColors }) => {
             value={newColor}
           />
           <Button
-            disabled={save.isPending || full || !trimmedTag}
+            disabled={save.isPending || full || !canAdd}
             startIcon={<PlusIcon />}
             sx={{ mt: { md: 0.25 } }}
             type="submit"
