@@ -14,7 +14,7 @@ import {
   useMediaQuery,
   useTheme,
 } from '@mui/material';
-import { CheckCheckIcon } from 'lucide-react';
+import { CheckCheckIcon, CheckIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LoadingState } from '../../components/LoadingState';
@@ -163,6 +163,7 @@ export const FindingsSection = ({
         disabled={acknowledging}
         size="small"
         onClick={() => onAcknowledge(finding.id)}
+        startIcon={<CheckIcon />}
       >
         {t('rules.acknowledge')}
       </Button>

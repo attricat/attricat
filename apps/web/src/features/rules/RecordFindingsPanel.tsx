@@ -17,7 +17,7 @@ import {
   Typography,
 } from '@mui/material';
 import { Link } from '@tanstack/react-router';
-import { PlayIcon } from 'lucide-react';
+import { CheckIcon, PlayIcon } from 'lucide-react';
 import { Fragment } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
@@ -190,7 +190,12 @@ const FindingItem = ({
       </Box>
       {finding.state === findingStates.open ? (
         canManage && (
-          <Button disabled={acknowledging} size="small" onClick={onAcknowledge}>
+          <Button
+            disabled={acknowledging}
+            size="small"
+            onClick={onAcknowledge}
+            startIcon={<CheckIcon />}
+          >
             {t('rules.acknowledge')}
           </Button>
         )

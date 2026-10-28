@@ -1,3 +1,4 @@
+import { PowerIcon } from 'lucide-react';
 import { Alert, Button, type SxProps, type Theme } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { ApiRequestError } from '../../api/request';
@@ -39,6 +40,7 @@ export const RuleToggleError = ({
             })
           }
           size="small"
+          startIcon={<PowerIcon />}
         >
           {t('rules.enableAnyway')}
         </Button>
