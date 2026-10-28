@@ -218,6 +218,11 @@ export const RulePage = ({
   const rule = useQuery(ruleOptions(ruleId));
   const toggle = useToggleRule();
   const { run, dryRun, closeDryRun } = useRunRule();
+  // Each action clears the other's error, as on the rules list.
+  const startRun = (rule: RuleDetails, asDryRun: boolean) => {
+    toggle.reset();
+    run.mutate({ rule, dryRun: asDryRun });
+  };
   const tabId = useTabAccessibility();
   useResourcePageTitle(rule.data?.name, t('navigation.rules'));
 
@@ -265,7 +270,7 @@ export const RulePage = ({
             <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
               <Button
                 disabled={run.isPending}
-                onClick={() => run.mutate({ rule: current, dryRun: true })}
+                onClick={() => startRun(current, true)}
                 startIcon={<FlaskConicalIcon />}
                 variant="outlined"
               >
@@ -274,7 +279,7 @@ export const RulePage = ({
               {current.enabled && (
                 <Button
                   disabled={run.isPending}
-                  onClick={() => run.mutate({ rule: current, dryRun: false })}
+                  onClick={() => startRun(current, false)}
                   startIcon={<PlayIcon />}
                   variant="outlined"
                 >
@@ -291,9 +296,10 @@ export const RulePage = ({
               </RouterButton>
               <Button
                 disabled={toggle.isPending}
-                onClick={() =>
-                  toggle.mutate({ rule: current, enabled: !current.enabled })
-                }
+                onClick={() => {
+                  run.reset();
+                  toggle.mutate({ rule: current, enabled: !current.enabled });
+                }}
                 startIcon={current.enabled ? <PowerOffIcon /> : <PowerIcon />}
                 variant="outlined"
               >
