@@ -61,8 +61,6 @@ export const runScopeFilters = {
   record: 'record',
   any: 'any',
 } as const;
-export type RunScopeFilter =
-  (typeof runScopeFilters)[keyof typeof runScopeFilters];
 
 /** Findings the findings page lists at a time. */
 export const FINDINGS_PAGE_SIZE = 50;

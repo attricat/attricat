@@ -1996,7 +1996,6 @@
       "source": "Source",
       "status": "Status",
       "evaluated": "Evaluated",
-      "findings": "Findings",
       "record": "Record",
       "scope": "Scope",
       "executed": "Executed",

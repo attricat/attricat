@@ -11,8 +11,8 @@ import {
 /**
  * Column preferences are read once per mounted table; the results table is
  * remounted whenever its rows belong to another blueprint revision. Columns
- * can still appear while it is mounted, for example when the viewer is
- * granted rules access, so they are fitted to the current columns.
+ * can still appear while it is mounted, so they are fitted to the current
+ * columns.
  */
 export const useExplorerColumnPreferences = (
   blueprintId: string,

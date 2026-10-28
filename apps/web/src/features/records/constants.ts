@@ -22,8 +22,6 @@ export const RECORD_SEARCH_PAGE_SIZE = 25;
 export const SAMPLE_SYSTEM_TAG = 'attricat.sample';
 /** System tag Core keeps on records with at least one open rule finding. */
 export const NEEDS_ATTENTION_SYSTEM_TAG = 'attricat.needs_attention';
-/** Search sorts records carrying the tag after this prefix apart from the rest. */
-export const SYSTEM_TAG_SORT_PREFIX = 'system_tag:';
 /**
  * Longest system tag, in UTF-8 bytes, as the API's `MAX_TAG_LENGTH`; the
  * facet refuses a longer prefix.
