@@ -2,6 +2,7 @@ import { FindingSeverityChip } from './FindingSeverityChip';
 import {
   Box,
   Button,
+  Checkbox,
   Paper,
   Stack,
   Table,
@@ -9,8 +10,12 @@ import {
   TableCell,
   TableHead,
   TableRow,
+  Typography,
 } from '@mui/material';
+import { CheckCheckIcon } from 'lucide-react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { LoadMoreButton } from '../../components/LoadMoreButton';
@@ -51,7 +56,24 @@ export const FindingsSection = ({
   recordLabels,
   onAcknowledge,
   rulesById,
+  total,
+  openMatching,
+  bulk,
 }: {
+  /** How many findings the filters match, once counted. */
+  total: number | undefined;
+  /** How many of them are open, which acknowledging all would change. */
+  openMatching: number | undefined;
+  /**
+   * Acknowledges many findings: those listed, or all open ones matching.
+   * Each resolves to whether it succeeded.
+   */
+  bulk: {
+    acknowledgeSelected: (ids: readonly string[]) => Promise<boolean>;
+    acknowledgeMatching: () => Promise<boolean>;
+    isPending: boolean;
+    error: Error | null;
+  };
   acknowledging: boolean;
   canManage: boolean;
   /** The section's load failure, offered for retry. */
@@ -74,9 +96,29 @@ export const FindingsSection = ({
   const { t } = useTranslation();
   const messageOf = useFindingMessages(findings ?? [], rulesById);
   const any = t('rules.filters.any');
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const [confirmAll, setConfirmAll] = useState(false);
+  // Selection is of the findings listed now.
   const setFilter =
-    (key: keyof FindingsSearch) => (value: string | undefined) =>
+    (key: keyof FindingsSearch) => (value: string | undefined) => {
+      setSelected(new Set());
       onFiltersChange({ ...filters, [key]: value });
+    };
+  const selectable = (findings ?? []).filter(
+    (finding) => finding.state === findingStates.open,
+  );
+  const selectedIds = selectable
+    .map((finding) => finding.id)
+    .filter((id) => selected.has(id));
+  const toggle = (id: string) =>
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const allSelected =
+    selectable.length > 0 && selectedIds.length === selectable.length;
   return (
     <>
       {error && (
@@ -145,9 +187,72 @@ export const FindingsSection = ({
             value={filters.context}
           />
         </Stack>
+        <Stack
+          direction="row"
+          spacing={1}
+          useFlexGap
+          sx={{ alignItems: 'center', flexWrap: 'wrap', px: 2, pb: 1 }}
+        >
+          <Typography
+            color="text.secondary"
+            role="status"
+            sx={{ flexGrow: 1 }}
+            variant="body2"
+          >
+            {total !== undefined && t('rules.findingsCount', { count: total })}
+          </Typography>
+          {canManage && (
+            <>
+              <Button
+                disabled={selectedIds.length === 0 || bulk.isPending}
+                onClick={() =>
+                  void bulk
+                    .acknowledgeSelected(selectedIds)
+                    .then((done) => done && setSelected(new Set()))
+                }
+                size="small"
+                startIcon={<CheckCheckIcon />}
+              >
+                {t('rules.acknowledgeSelected', { count: selectedIds.length })}
+              </Button>
+              {openMatching !== undefined && openMatching > 0 && (
+                <Button
+                  disabled={bulk.isPending}
+                  onClick={() => setConfirmAll(true)}
+                  size="small"
+                  startIcon={<CheckCheckIcon />}
+                >
+                  {t('rules.acknowledgeAllMatching', { count: openMatching })}
+                </Button>
+              )}
+            </>
+          )}
+        </Stack>
+        {!confirmAll && (
+          <ApiErrorAlert error={bulk.error} sx={{ mx: 2, mb: 1 }} />
+        )}
         <Table size="small">
           <TableHead>
             <TableRow>
+              {canManage && (
+                <TableCell padding="checkbox">
+                  <Checkbox
+                    checked={allSelected}
+                    disabled={selectable.length === 0}
+                    indeterminate={selectedIds.length > 0 && !allSelected}
+                    onChange={() =>
+                      setSelected(
+                        allSelected
+                          ? new Set()
+                          : new Set(selectable.map((finding) => finding.id)),
+                      )
+                    }
+                    slotProps={{
+                      input: { 'aria-label': t('rules.selectAllFindings') },
+                    }}
+                  />
+                </TableCell>
+              )}
               <TableCell>{t('rules.columns.severity')}</TableCell>
               <TableCell>{t('rules.columns.finding')}</TableCell>
               <TableCell>{t('rules.columns.rule')}</TableCell>
@@ -160,7 +265,7 @@ export const FindingsSection = ({
             {findings?.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={findingsTableColumnCount}
+                  colSpan={findingsTableColumnCount + (canManage ? 1 : 0)}
                   sx={{ color: 'text.secondary' }}
                 >
                   {t('rules.filters.noMatches')}
@@ -168,7 +273,27 @@ export const FindingsSection = ({
               </TableRow>
             )}
             {(findings ?? []).map((finding) => (
-              <TableRow key={finding.id}>
+              <TableRow key={finding.id} selected={selected.has(finding.id)}>
+                {canManage && (
+                  <TableCell padding="checkbox">
+                    {finding.state === findingStates.open && (
+                      <Checkbox
+                        checked={selected.has(finding.id)}
+                        onChange={() => toggle(finding.id)}
+                        slotProps={{
+                          input: {
+                            'aria-label': t('rules.selectFinding', {
+                              record:
+                                recordLabels.get(finding.record_id) ??
+                                finding.record_id,
+                              message: messageOf(finding),
+                            }),
+                          },
+                        }}
+                      />
+                    )}
+                  </TableCell>
+                )}
                 <TableCell>
                   <FindingSeverityChip severity={finding.severity} />
                 </TableCell>
@@ -218,6 +343,26 @@ export const FindingsSection = ({
           </Box>
         )}
       </Paper>
+      {confirmAll && openMatching !== undefined && (
+        <ConfirmDialog
+          confirmLabel={t('rules.acknowledgeAllMatching', {
+            count: openMatching,
+          })}
+          error={bulk.error}
+          isPending={bulk.isPending}
+          onClose={() => setConfirmAll(false)}
+          onConfirm={() =>
+            void bulk.acknowledgeMatching().then((done) => {
+              if (!done) return;
+              setSelected(new Set());
+              setConfirmAll(false);
+            })
+          }
+          title={t('rules.acknowledgeAllTitle')}
+        >
+          {t('rules.acknowledgeAllConfirm', { count: openMatching })}
+        </ConfirmDialog>
+      )}
     </>
   );
 };

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { forwardRef, type ComponentPropsWithoutRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -17,6 +17,8 @@ import { listContexts, type AttributeContext } from '../contexts/api';
 import { getRecordLabels } from '../records/api';
 import {
   acknowledgeFinding,
+  acknowledgeFindings,
+  countFindings,
   disableRule,
   enableRule,
   listFindingsPage,
@@ -68,6 +70,8 @@ vi.mock('../contexts/api', () => ({
 }));
 vi.mock('./api', () => ({
   acknowledgeFinding: vi.fn(),
+  acknowledgeFindings: vi.fn(),
+  countFindings: vi.fn(),
   disableRule: vi.fn(),
   enableRule: vi.fn(),
   listFindingsPage: vi.fn(),
@@ -127,6 +131,7 @@ const renderPage = (
 describe('RuleInspectionPage', () => {
   beforeEach(() => {
     vi.mocked(listRules).mockResolvedValue([rule]);
+    vi.mocked(countFindings).mockResolvedValue({ count: 0 });
     vi.mocked(listBlueprints).mockResolvedValue([]);
   });
   afterEach(() => {
@@ -348,6 +353,43 @@ describe('RuleInspectionPage', () => {
     expect(getRecordLabels).toHaveBeenCalledWith(
       [recordId],
       expect.any(AbortSignal),
+    );
+  });
+
+  it('counts the findings and acknowledges the selected or all open ones', async () => {
+    const user = userEvent.setup();
+    const second = { ...finding, id: '323e4567-e89b-42d3-a456-426614174000' };
+    vi.mocked(currentSession).mockResolvedValue(manager);
+    vi.mocked(listFindingsPage).mockResolvedValue({ items: [finding, second] });
+    vi.mocked(countFindings).mockResolvedValue({ count: 7 });
+    vi.mocked(acknowledgeFindings).mockResolvedValue({ acknowledged: 1 });
+    renderPage('findings');
+    expect(await screen.findByText('7 findings')).toBeTruthy();
+    const [first] = await screen.findAllByRole('checkbox', {
+      name: /Select the finding of/,
+    });
+    await user.click(first!);
+    await user.click(
+      screen.getByRole('button', { name: 'Acknowledge selected (1)' }),
+    );
+    await waitFor(() =>
+      expect(vi.mocked(acknowledgeFindings).mock.calls[0]?.[0]).toEqual({
+        findingIds: [finding.id],
+      }),
+    );
+    await user.click(
+      screen.getByRole('button', { name: 'Acknowledge all 7 open' }),
+    );
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Acknowledge open findings?',
+    });
+    await user.click(
+      within(dialog).getByRole('button', { name: 'Acknowledge all 7 open' }),
+    );
+    await waitFor(() =>
+      expect(vi.mocked(acknowledgeFindings).mock.calls[1]?.[0]).toEqual({
+        matching: {},
+      }),
     );
   });
 

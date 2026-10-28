@@ -110,26 +110,60 @@ export const recheckRecord = (recordId: string) =>
       idempotency_key: randomUuid(),
     }),
   );
-/** One page of the workspace's findings that match the findings page's filters. */
-export const listFindingsPage = (search: FindingsSearch, offset = 0) => {
-  const params = new URLSearchParams({
-    limit: String(FINDINGS_PAGE_SIZE),
-    offset: String(offset),
-  });
+/** The findings page's filters other than state, under their API names. */
+const findingMatch = (search: FindingsSearch) => ({
+  ...(search.severity ? { severity: search.severity } : {}),
+  ...(search.rule ? { rule_id: z.uuid().parse(search.rule) } : {}),
+  ...(search.blueprint
+    ? { blueprint_id: z.uuid().parse(search.blueprint) }
+    : {}),
+  ...(search.context ? { context_id: z.uuid().parse(search.context) } : {}),
+});
+/** The findings page's filters as query parameters. */
+const findingParams = (search: FindingsSearch) => {
+  const params = new URLSearchParams(findingMatch(search));
   const state = search.state ?? findingStateFilters.unresolved;
   if (state === findingStateFilters.unresolved)
     params.set('unresolved', 'true');
-  else if (state !== findingStateFilters.all) params.set('state', state);
-  if (search.severity) params.set('severity', search.severity);
-  if (search.rule) params.set('rule_id', z.uuid().parse(search.rule));
-  if (search.blueprint)
-    params.set('blueprint_id', z.uuid().parse(search.blueprint));
-  if (search.context) params.set('context_id', z.uuid().parse(search.context));
+  else if (state === findingStateFilters.all) params.set('unresolved', 'false');
+  else params.set('state', state);
+  return params;
+};
+/** One page of the workspace's findings that match the findings page's filters. */
+export const listFindingsPage = (search: FindingsSearch, offset = 0) => {
+  const params = findingParams(search);
+  // Every state is the list's default.
+  if (params.get('unresolved') === 'false') params.delete('unresolved');
+  params.set('limit', String(FINDINGS_PAGE_SIZE));
+  params.set('offset', String(offset));
   return requestOffsetPage(
     `/api/rule-findings?${params}`,
     z.array(findingSchema),
   );
 };
+/** How many findings match the findings page's filters. */
+export const countFindings = (search: FindingsSearch) =>
+  request(
+    `/api/rule-findings/count?${findingParams(search)}`,
+    z.object({ count: z.number().int().nonnegative() }),
+  );
+/**
+ * Acknowledges the listed findings, or every open finding that matches the
+ * findings page's filters, and says how many it acknowledged.
+ */
+export const acknowledgeFindings = (
+  selection: { findingIds: readonly string[] } | { matching: FindingsSearch },
+) =>
+  request(
+    '/api/rule-findings/acknowledge',
+    z.object({ acknowledged: z.number().int().nonnegative() }),
+    jsonRequest(
+      'POST',
+      'findingIds' in selection
+        ? { finding_ids: selection.findingIds.map((id) => z.uuid().parse(id)) }
+        : { matching: findingMatch(selection.matching) },
+    ),
+  );
 /** One page of a record's open and acknowledged findings, newest change first. */
 export const listUnresolvedRecordFindings = (recordId: string, offset = 0) =>
   requestOffsetPage(

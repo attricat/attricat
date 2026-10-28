@@ -16,6 +16,9 @@ export const ruleQueryKeys = {
     recordId
       ? ([...ruleQueryKeys.all, 'findings', recordId] as const)
       : ([...ruleQueryKeys.all, 'findings'] as const),
+  /** How many findings the findings page's filters match. */
+  findingsCount: (search: FindingsSearch) =>
+    [...ruleQueryKeys.findings(), 'count', search] as const,
   /** The findings page's list; refreshing all findings refreshes it. */
   findingsPage: (search: FindingsSearch) =>
     [...ruleQueryKeys.findings(), 'page', search] as const,

@@ -256,7 +256,7 @@ Rekordu, który już narusza egzekwowaną regułę, nie można zapisać, dopóki
 
 **Zarządzanie → Reguły jakości danych → Ustalenia** wyświetla ustalenia wraz z regułą, rekordem, kontekstem i stanem. Dla każdej kombinacji reguły, rekordu i kontekstu istnieje jedno ustalenie. Gdy późniejsza ocena zakończy się powodzeniem, ustalenie zostaje rozwiązane. Jeśli problem wróci, to samo ustalenie zostaje ponownie otwarte.
 
-**Potwierdź** ustalenie, aby zapisać, że ktoś je widział. Pozostaje ono, dopóki rekord nie spełni reguły.
+**Potwierdź** ustalenie, aby zapisać, że ktoś je widział. Pozostaje ono, dopóki rekord nie spełni reguły. Lista ustaleń pokazuje, ile ustaleń pasuje do jej filtrów; zaznacz otwarte ustalenia i wybierz **Potwierdź zaznaczone** albo **Potwierdź wszystkie otwarte**, aby potwierdzić każde otwarte ustalenie pasujące do filtrów, do 5000 naraz. Potwierdzenia nie można cofnąć.
 
 Strona rekordu wyświetla jego otwarte i potwierdzone ustalenia na karcie **Jakość danych**, po 20 naraz, a pozostałe wczytuje **Wczytaj więcej ustaleń**; oznaczenie jakości danych w nagłówku rekordu otwiera tę kartę. Po edycji lista odświeża się, gdy sprawdzanie rekordu się zakończy. **Sprawdź ponownie** od razu sprawdza rekord względem każdej włączonej reguły jego Schematu, na przykład po zmianie reguły.
 

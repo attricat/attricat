@@ -1493,3 +1493,80 @@ async fn dry_runs_name_the_records_they_would_flag(pool: PgPool) {
     assert_eq!(missing.status(), 404);
     server.abort();
 }
+
+/// The findings list counts what its filters match and acknowledges many
+/// open findings at once, listed or matching.
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn findings_are_counted_and_acknowledged_in_bulk(pool: PgPool) {
+    let (base_url, server, rule_id, blueprint) = setup_rule(&pool).await;
+    let client = authenticated_client();
+    let workspace = Uuid::parse_str(support::BOOTSTRAP_WORKSPACE_ID).unwrap();
+    let mut finding_ids = Vec::new();
+    for (severity, state) in [
+        ("error", "open"),
+        ("error", "open"),
+        ("warning", "open"),
+        ("warning", "acknowledged"),
+        ("info", "resolved"),
+    ] {
+        let record = create_record(&client, &base_url, &blueprint).await;
+        let id = Uuid::new_v4();
+        sqlx::query("INSERT INTO rule_findings(id,workspace_id,rule_id,rule_version,record_id,evaluation_key,severity,message,state) VALUES ($1,$2,$3,1,$4,'key',$5,'m',$6)")
+            .bind(id)
+            .bind(workspace)
+            .bind(rule_id)
+            .bind(Uuid::parse_str(record["id"].as_str().unwrap()).unwrap())
+            .bind(severity)
+            .bind(state)
+            .execute(&pool)
+            .await
+            .unwrap();
+        finding_ids.push(id);
+    }
+    let count = |query: &'static str| {
+        let (client, base_url) = (client.clone(), base_url.clone());
+        async move {
+            get_json(&client, format!("{base_url}/rule-findings/count{query}")).await["count"]
+                .as_i64()
+                .unwrap()
+        }
+    };
+    assert_eq!(count("").await, 4);
+    assert_eq!(count("?severity=error").await, 2);
+    assert_eq!(count("?state=resolved").await, 1);
+    assert_eq!(count("?unresolved=false").await, 5);
+    assert_eq!(count("?state=open&severity=warning").await, 1);
+
+    let acknowledge = |body: Value| {
+        let (client, base_url) = (client.clone(), base_url.clone());
+        async move {
+            client
+                .post(format!("{base_url}/rule-findings/acknowledge"))
+                .json(&body)
+                .send()
+                .await
+                .unwrap()
+        }
+    };
+    let listed = expect_status(
+        acknowledge(json!({"finding_ids": [finding_ids[0], finding_ids[3]]})).await,
+        StatusCode::OK,
+    )
+    .await;
+    // The acknowledged finding is left as it is.
+    assert_eq!(listed["acknowledged"], 1);
+    let matching = expect_status(
+        acknowledge(json!({"matching": {"rule_id": rule_id, "severity": "error"}})).await,
+        StatusCode::OK,
+    )
+    .await;
+    assert_eq!(matching["acknowledged"], 1);
+    assert_eq!(count("?state=open").await, 1);
+    assert_eq!(count("?state=acknowledged").await, 3);
+    expect_status(
+        acknowledge(json!({})).await,
+        StatusCode::UNPROCESSABLE_ENTITY,
+    )
+    .await;
+    server.abort();
+}

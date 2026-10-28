@@ -26,6 +26,27 @@ pub const DRY_RUN_FAILURE_SAMPLE: i64 = 50;
 const RULE_FIELDS: &str = "r.id,r.blueprint_id,r.context_id,r.code,r.name,r.version,r.definition,r.definition_hash,r.compiled_plan,l.enabled,(SELECT min(x.created_at) FROM rules x WHERE x.workspace_id=r.workspace_id AND x.id=r.id) AS created_at,r.created_at AS updated_at";
 /// Each rule joined to its current revision.
 const CURRENT_RULES: &str = "rule_lifecycles l JOIN rules r ON r.workspace_id=l.workspace_id AND r.id=l.rule_id AND r.version=l.current_version";
+/// The findings [`RuleFindingFilter`] matches, over `rule_findings f` with
+/// binds `$1` to `$9` from [`bind_finding_filter`].
+const FINDING_FILTER: &str = "f.workspace_id=$1 AND ($2::uuid IS NULL OR f.record_id=$2) AND (NOT $3 OR f.state <> $4) AND ($5::uuid IS NULL OR f.rule_id=$5) AND ($6::uuid IS NULL OR f.context_id=$6) AND ($7::text IS NULL OR f.severity=$7) AND ($8::text IS NULL OR f.state=$8) AND ($9::uuid IS NULL OR EXISTS (SELECT 1 FROM records r WHERE r.workspace_id=f.workspace_id AND r.id=f.record_id AND r.blueprint_id=$9))";
+
+/// Binds `$1` to `$9` of [`FINDING_FILTER`] to any query.
+macro_rules! bind_finding_filter {
+    ($query:expr, $workspace_id:expr, $filter:expr) => {{
+        let filter: &RuleFindingFilter = $filter;
+        $query
+            .bind($workspace_id)
+            .bind(filter.record_id)
+            .bind(filter.unresolved)
+            .bind(RuleFindingState::Resolved.as_str())
+            .bind(filter.rule_id)
+            .bind(filter.context_id)
+            .bind(filter.severity.map(RuleFindingSeverity::as_str))
+            .bind(filter.state.map(RuleFindingState::as_str))
+            .bind(filter.blueprint_id)
+    }};
+}
+
 const REVISION_FIELDS: &str =
     "id AS rule_id,version,name,definition,definition_hash,created_by_user_id,created_at";
 
@@ -947,24 +968,76 @@ impl AttricatRepository {
         offset: i64,
     ) -> Result<(Vec<RuleFinding>, bool), RepositoryError> {
         let ws = self.workspace_id.0;
-        let mut rows = sqlx::query_as::<_, Db<RuleFinding>>("SELECT f.id,f.rule_id,f.rule_version,f.record_id,f.context_id,f.severity,f.message,f.evidence,f.state,f.acknowledged_at,f.resolved_at,f.created_at,f.updated_at FROM rule_findings f WHERE f.workspace_id=$1 AND ($2::uuid IS NULL OR f.record_id=$2) AND (NOT $3 OR f.state <> $4) AND ($5::uuid IS NULL OR f.rule_id=$5) AND ($6::uuid IS NULL OR f.context_id=$6) AND ($7::text IS NULL OR f.severity=$7) AND ($8::text IS NULL OR f.state=$8) AND ($9::uuid IS NULL OR EXISTS (SELECT 1 FROM records r WHERE r.workspace_id=f.workspace_id AND r.id=f.record_id AND r.blueprint_id=$9)) ORDER BY array_position($12::text[],f.severity),f.created_at DESC,f.id DESC LIMIT $10 OFFSET $11")
-            .bind(ws)
-            .bind(filter.record_id)
-            .bind(filter.unresolved)
-            .bind(RuleFindingState::Resolved.as_str())
-            .bind(filter.rule_id)
-            .bind(filter.context_id)
-            .bind(filter.severity.map(RuleFindingSeverity::as_str))
-            .bind(filter.state.map(RuleFindingState::as_str))
-            .bind(filter.blueprint_id)
-            .bind(limit + 1)
-            .bind(offset)
-            .bind(severities_most_severe_first())
-            .fetch_all(&self.pool)
-            .await?;
+        let query = format!(
+            "SELECT f.id,f.rule_id,f.rule_version,f.record_id,f.context_id,f.severity,f.message,f.evidence,f.state,f.acknowledged_at,f.resolved_at,f.created_at,f.updated_at FROM rule_findings f WHERE {FINDING_FILTER} ORDER BY array_position($12::text[],f.severity),f.created_at DESC,f.id DESC LIMIT $10 OFFSET $11"
+        );
+        let mut rows =
+            bind_finding_filter!(sqlx::query_as::<_, Db<RuleFinding>>(&query), ws, filter)
+                .bind(limit + 1)
+                .bind(offset)
+                .bind(severities_most_severe_first())
+                .fetch_all(&self.pool)
+                .await?;
         let has_more = rows.len() as i64 > limit;
         rows.truncate(limit as usize);
         Ok((rows.into_domain(), has_more))
+    }
+
+    /// How many findings match `filter`.
+    pub async fn rule_finding_count(
+        &self,
+        filter: &RuleFindingFilter,
+    ) -> Result<i64, RepositoryError> {
+        let query = format!("SELECT count(*) FROM rule_findings f WHERE {FINDING_FILTER}");
+        Ok(
+            bind_finding_filter!(sqlx::query_scalar(&query), self.workspace_id.0, filter)
+                .fetch_one(&self.pool)
+                .await?,
+        )
+    }
+
+    /// Acknowledges the open findings `selection` names, at most
+    /// [`MAX_BULK_ACKNOWLEDGE`] at a time, and returns how many it
+    /// acknowledged. Findings already acknowledged or resolved are left.
+    pub async fn acknowledge_rule_findings(
+        &self,
+        selection: &FindingSelection,
+    ) -> Result<i64, RepositoryError> {
+        let ws = self.workspace_id.0;
+        let actor = self.actor_user_id();
+        let mut tx = self.pool.begin().await?;
+        let ids: Vec<Uuid> = match selection {
+            FindingSelection::Ids(ids) => ids.clone(),
+            FindingSelection::Matching(filter) => {
+                let filter = RuleFindingFilter {
+                    state: Some(RuleFindingState::Open),
+                    unresolved: false,
+                    ..filter.clone()
+                };
+                let query = format!(
+                    "SELECT f.id FROM rule_findings f WHERE {FINDING_FILTER} ORDER BY f.id LIMIT $10"
+                );
+                bind_finding_filter!(sqlx::query_scalar(&query), ws, &filter)
+                    .bind(MAX_BULK_ACKNOWLEDGE)
+                    .fetch_all(&mut *tx)
+                    .await?
+            }
+        };
+        let record_ids: Vec<Uuid> = sqlx::query_scalar("UPDATE rule_findings SET state=$4,acknowledged_at=COALESCE(acknowledged_at,clock_timestamp()),acknowledged_by_user_id=COALESCE(acknowledged_by_user_id,$3),updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=ANY($2) AND state=$5 RETURNING record_id")
+            .bind(ws)
+            .bind(&ids)
+            .bind(actor)
+            .bind(RuleFindingState::Acknowledged.as_str())
+            .bind(RuleFindingState::Open.as_str())
+            .fetch_all(&mut *tx)
+            .await?;
+        let acknowledged = record_ids.len() as i64;
+        let mut records = record_ids;
+        records.sort();
+        records.dedup();
+        sync_needs_attention_tags(&mut tx, ws, &records).await?;
+        self.commit_mutation(tx).await?;
+        Ok(acknowledged)
     }
 
     /// Open and acknowledged findings, optionally of one record.
@@ -1563,6 +1636,17 @@ async fn with_applicability(
             })
         })
         .collect()
+}
+
+/// The most findings one bulk acknowledgement changes.
+pub const MAX_BULK_ACKNOWLEDGE: i64 = 5_000;
+
+/// Which findings a bulk acknowledgement covers.
+#[derive(Clone, Debug)]
+pub enum FindingSelection {
+    Ids(Vec<Uuid>),
+    /// The open findings matching the filter; its state is ignored.
+    Matching(RuleFindingFilter),
 }
 
 /// Which findings a page lists. Every set field narrows it.

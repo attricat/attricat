@@ -7,7 +7,7 @@ use crate::model::{
     CreateManualRuleRun, CreateRule, EnableRule, Rule, RuleDetails, RuleFinding, RuleRevision,
     RuleRunDetails, UpdateRule,
 };
-use crate::repository::RuleFindingFilter;
+use crate::repository::{FindingSelection, MAX_BULK_ACKNOWLEDGE, RuleFindingFilter};
 use attricat_domain::states::{RuleFindingSeverity, RuleFindingState};
 use axum::{Json, http::StatusCode, response::Response};
 use serde::Deserialize;
@@ -163,14 +163,75 @@ pub(super) async fn findings(
 #[serde(deny_unknown_fields)]
 pub struct FindingCountQuery {
     record_id: Option<Uuid>,
+    rule_id: Option<Uuid>,
+    blueprint_id: Option<Uuid>,
+    context_id: Option<Uuid>,
+    severity: Option<RuleFindingSeverity>,
+    /// Counts findings in this state; without it, open and acknowledged ones.
+    state: Option<RuleFindingState>,
+    /// `false` counts findings in every state when no state is chosen.
+    unresolved: Option<bool>,
 }
-/// Counts unresolved findings, optionally of one record.
+/// Counts the findings the list's filters match: unresolved ones unless a
+/// state is chosen.
 pub(super) async fn finding_count(
     super::auth::ScopedRepository(repo): super::auth::ScopedRepository,
     ApiQuery(query): ApiQuery<FindingCountQuery>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let count = repo.unresolved_rule_finding_count(query.record_id).await?;
+    let filter = RuleFindingFilter {
+        record_id: query.record_id,
+        rule_id: query.rule_id,
+        blueprint_id: query.blueprint_id,
+        context_id: query.context_id,
+        severity: query.severity,
+        state: query.state,
+        unresolved: query.state.is_none() && query.unresolved.unwrap_or(true),
+    };
+    let count = repo.rule_finding_count(&filter).await?;
     Ok(Json(serde_json::json!({ "count": count })))
+}
+/// The findings to acknowledge at once: listed ones, or the open ones the
+/// findings list's filters match.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AcknowledgeFindings {
+    finding_ids: Option<Vec<Uuid>>,
+    matching: Option<FindingMatch>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FindingMatch {
+    record_id: Option<Uuid>,
+    rule_id: Option<Uuid>,
+    blueprint_id: Option<Uuid>,
+    context_id: Option<Uuid>,
+    severity: Option<RuleFindingSeverity>,
+}
+/// Acknowledges many open findings; returns how many it acknowledged.
+pub(super) async fn acknowledge_many(
+    super::auth::ScopedRepository(repo): super::auth::ScopedRepository,
+    ApiJson(input): ApiJson<AcknowledgeFindings>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let selection = match (input.finding_ids, input.matching) {
+        (Some(ids), None) if !ids.is_empty() && ids.len() as i64 <= MAX_BULK_ACKNOWLEDGE => {
+            FindingSelection::Ids(ids)
+        }
+        (None, Some(matching)) => FindingSelection::Matching(RuleFindingFilter {
+            record_id: matching.record_id,
+            rule_id: matching.rule_id,
+            blueprint_id: matching.blueprint_id,
+            context_id: matching.context_id,
+            severity: matching.severity,
+            ..Default::default()
+        }),
+        _ => {
+            return Err(ApiError::invalid_input(format!(
+                "send either 1-{MAX_BULK_ACKNOWLEDGE} finding_ids or matching"
+            )));
+        }
+    };
+    let acknowledged = repo.acknowledge_rule_findings(&selection).await?;
+    Ok(Json(serde_json::json!({ "acknowledged": acknowledged })))
 }
 pub(super) async fn acknowledge(
     super::auth::ScopedRepository(repo): super::auth::ScopedRepository,

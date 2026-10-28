@@ -908,6 +908,7 @@ pub fn router(state: AppState) -> Router {
         .route("/rule-findings", get(rules::findings))
         .route("/rule-findings/count", get(rules::finding_count))
         .route("/rule-findings/recheck", post(rules::recheck_record))
+        .route("/rule-findings/acknowledge", post(rules::acknowledge_many))
         .route(
             "/rule-findings/{finding_id}/acknowledge",
             post(rules::acknowledge),

@@ -1,4 +1,5 @@
 import { useAcknowledgeFinding } from './useAcknowledgeFinding';
+import { useAcknowledgeFindings } from './useAcknowledgeFindings';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { createLink, useNavigate } from '@tanstack/react-router';
 import { Box, Tab, Tabs } from '@mui/material';
@@ -11,12 +12,18 @@ import { RouterButton } from '../../components/RouterLink';
 import { DryRunDialog } from './DryRunDialog';
 import { useRunRule } from './useRunRule';
 import { useCan } from '../auth/useCan';
-import { listFindingsPage, type FindingsSearch, type RunsSearch } from './api';
+import {
+  countFindings,
+  listFindingsPage,
+  type FindingsSearch,
+  type RunsSearch,
+} from './api';
 import {
   RULE_SECTION_FINDINGS,
   RULE_SECTION_RULES,
   RULE_SECTION_RUNS,
   RULE_SECTIONS,
+  findingStates,
   ruleRoutes,
   type RuleInspectionSection,
 } from './constants';
@@ -102,6 +109,18 @@ export const RuleInspectionPage = ({
         : [],
   );
   const acknowledge = useAcknowledgeFinding();
+  const acknowledgeMany = useAcknowledgeFindings();
+  const findingsTotal = useQuery({
+    queryKey: ruleQueryKeys.findingsCount(findingsSearch),
+    queryFn: () => countFindings(findingsSearch),
+    enabled: findingsShown,
+  });
+  const openSearch = { ...findingsSearch, state: findingStates.open };
+  const openMatching = useQuery({
+    queryKey: ruleQueryKeys.findingsCount(openSearch),
+    queryFn: () => countFindings(openSearch),
+    enabled: findingsShown && canManage,
+  });
   const { run, dryRun, closeDryRun } = useRunRule();
   const toggle = useToggleRule();
 
@@ -198,6 +217,22 @@ export const RuleInspectionPage = ({
             }
             onLoadMore={() => void findings.fetchNextPage()}
             rulesById={rulesByIdMap}
+            total={findingsTotal.data?.count}
+            openMatching={openMatching.data?.count}
+            bulk={{
+              acknowledgeSelected: (ids) =>
+                acknowledgeMany.mutateAsync({ findingIds: ids }).then(
+                  () => true,
+                  () => false,
+                ),
+              acknowledgeMatching: () =>
+                acknowledgeMany.mutateAsync({ matching: findingsSearch }).then(
+                  () => true,
+                  () => false,
+                ),
+              isPending: acknowledgeMany.isPending,
+              error: acknowledgeMany.error,
+            }}
           />
         )}
         {section === RULE_SECTION_RUNS && (

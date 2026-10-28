@@ -2163,7 +2163,20 @@
     "openFindings_one": "{{count}} open",
     "openFindings_other": "{{count}} open",
     "acknowledgedFindings_one": "{{count}} acknowledged",
-    "acknowledgedFindings_other": "{{count}} acknowledged"
+    "acknowledgedFindings_other": "{{count}} acknowledged",
+    "findingsCount_one": "{{count}} finding",
+    "findingsCount_other": "{{count}} findings",
+    "acknowledgeSelected_one": "Acknowledge selected ({{count}})",
+    "acknowledgeSelected_other": "Acknowledge selected ({{count}})",
+    "acknowledgeAllMatching_one": "Acknowledge all {{count}} open",
+    "acknowledgeAllMatching_other": "Acknowledge all {{count}} open",
+    "acknowledgeAllTitle": "Acknowledge open findings?",
+    "acknowledgeAllConfirm_one": "This marks {{count}} open finding that matches the filters as seen. It stays until its record passes, and acknowledging cannot be undone.",
+    "acknowledgeAllConfirm_other": "This marks {{count}} open findings that match the filters as seen. They stay until their records pass, and acknowledging cannot be undone.",
+    "bulkAcknowledged_one": "Acknowledged {{count}} finding.",
+    "bulkAcknowledged_other": "Acknowledged {{count}} findings.",
+    "selectAllFindings": "Select every open finding listed",
+    "selectFinding": "Select the finding of {{record}}: {{message}}"
   },
   "reusableAttributes": {
     "editor": {

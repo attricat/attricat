@@ -256,7 +256,7 @@ A record that already violates an enforcing rule cannot be saved until a save fi
 
 **Manage → Data quality rules → Findings** lists findings with their rule, record, context, and status. There is one finding per rule, record, and context. When a later evaluation passes, the finding is resolved. If the problem comes back, the same finding reopens.
 
-**Acknowledge** a finding to record that someone has seen it. It stays until the record passes.
+**Acknowledge** a finding to record that someone has seen it. It stays until the record passes. The findings list shows how many findings match its filters; select open findings and choose **Acknowledge selected**, or **Acknowledge all … open** to acknowledge every open finding the filters match, up to 5,000 at a time. Acknowledging cannot be undone.
 
 A record's own page lists its open and acknowledged findings in its **Data quality** tab, 20 at a time with **Load more findings** for the rest; the data quality chip in the record's header opens the tab. After an edit, the list refreshes once the record's checks finish. **Re-run checks** checks the record against every enabled rule of its blueprint straight away, for example after a rule changed.
 
