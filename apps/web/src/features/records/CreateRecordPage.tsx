@@ -147,6 +147,7 @@ export const CreateRecordPage = ({
   return (
     <RecordPage
       blueprint={blueprint.data?.blueprint}
+      fullWidth
       title={t('records.createRecord')}
     >
       <QueuedFileUploadsContext value={queuedFiles.queue}>
