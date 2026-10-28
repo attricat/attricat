@@ -48,7 +48,7 @@
     },
     "facetable": {
       "default": false,
-      "description": "Offer the attribute as an Explorer facet.",
+      "description": "Offer the attribute as an Explorer filter. Takes effect together with\n`searchable`, which lets search filters name the attribute.",
       "type": "boolean"
     },
     "file_policy": {

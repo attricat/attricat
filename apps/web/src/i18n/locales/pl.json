@@ -1165,7 +1165,7 @@
       "assignee": "Członek obszaru roboczego lub zespół wybierany z listy.",
       "defaultValue": "Wartość, od której zaczynają nowe rekordy.",
       "searchable": "Dopasowuj wartości w wyszukiwaniu przeglądarki rekordów.",
-      "facetable": "Udostępnij atrybut jako filtr w przeglądarce rekordów.",
+      "facetable": "Udostępnij atrybut jako filtr w przeglądarce rekordów. Wymaga opcji „Uwzględnij w wyszukiwaniu”.",
       "defaultContextOnly": "Jedna wartość we wszystkich kontekstach, edytowana w domyślnym.",
       "hidden": "Ukryj atrybut w formularzach, na stronach lub w przeglądarce rekordów.",
       "relationshipTarget": "Schemat, na który muszą wskazywać powiązania.",

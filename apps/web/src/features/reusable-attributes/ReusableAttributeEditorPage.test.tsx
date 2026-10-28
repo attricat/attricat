@@ -68,7 +68,7 @@ const checked = (
   namespace: 'acme',
   published_at: null,
   readonly: false,
-  searchable: false,
+  searchable: true,
   status: 'draft',
   tags: [],
   target_blueprint_code: null,

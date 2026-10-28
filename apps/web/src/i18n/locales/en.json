@@ -1111,7 +1111,7 @@
       "assignee": "A workspace member or team, chosen from a picker.",
       "defaultValue": "The value new records start with.",
       "searchable": "Match values in Explorer search.",
-      "facetable": "Offer the attribute as an Explorer filter.",
+      "facetable": "Offer the attribute as an Explorer filter. Needs “Include in search”.",
       "defaultContextOnly": "Share one value across contexts, edited in the default one.",
       "hidden": "Hide the attribute from forms, pages or the Explorer.",
       "relationshipTarget": "The blueprint links must point to.",

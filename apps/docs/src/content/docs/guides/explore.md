@@ -55,6 +55,8 @@ Every type also offers **Presence**: choose **Has a value** or **Not set**. For 
 
 You can filter on an attribute of a related record too, such as `brand.name`, through up to three relationships.
 
+The list also offers [reusable attributes](/builders/modeling/#reuse-attributes) attached to the blueprint's records when their definition sets both `searchable` and `facetable`.
+
 You can also start a filter from the table: open a cell's menu and choose **Filter by**.
 
 Every active filter shows as a pill under the search box. All filters, facets, and the search query must match together.

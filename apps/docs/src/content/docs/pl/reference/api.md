@@ -137,6 +137,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `POST` | `/v1/records/search` | Wyszukiwanie. Zobacz poniżej. |
 | `POST` | `/v1/records/labels` | Etykiety wyświetlane dla maksymalnie 100 identyfikatorów rekordów: `{"record_ids": [...]}`. Zwraca tylko istniejące rekordy, które możesz odczytać; pozostałe identyfikatory są pomijane. |
 | `POST` | `/v1/records/facets/relationship-tree/children` | Jedna strona elementów podrzędnych fasety relacji, z liczebnościami. |
+| `GET` | `/v1/records/reusable-attributes?blueprint=…` | Atrybuty wielokrotnego użytku, które **Przeglądarka rekordów** oferuje jako filtry schematu: dołączone do rekordów jego bieżącej wersji, których wersja atrybutu ustawia `searchable` i `facetable`. |
 | `POST` | `/v1/records/facets/system-tags` | Tagi systemowe rekordów danego schematu, z liczebnościami. Zobacz [Faseta tagów systemowych](#faseta-tagów-systemowych). |
 | `GET` | `/records/{id}/preview` | Wartości w poszczególnych kontekstach, z powiązanymi rekordami osadzonymi w odpowiedzi. |
 | `GET` | `/records/{id}/resolved-preview?context_id=…` | Wartości rozstrzygnięte w jednym kontekście, wraz z kontekstem, z którego pochodzi każda z nich. |

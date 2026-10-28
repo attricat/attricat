@@ -1,6 +1,7 @@
 code = "weight_kg"
 name = "Weight (kg)"
 value_type = "number"
-# Facetable values can be filtered in the Explorer.
+# Offered as a filter in the Explorer.
+searchable = true
 facetable = true
 value_schema = { type = "number", minimum = 0 }

@@ -115,7 +115,8 @@ struct ReusableAttributeDefinition {
     /// Include values in search.
     #[serde(default)]
     searchable: bool,
-    /// Offer the attribute as an Explorer facet.
+    /// Offer the attribute as an Explorer filter. Takes effect together with
+    /// `searchable`, which lets search filters name the attribute.
     #[serde(default)]
     facetable: bool,
 }
@@ -420,6 +421,30 @@ impl AttricatRepository {
             ORDER BY r.version DESC LIMIT 1"#)
             .bind(self.workspace_id()).bind(blueprint_id).bind(blueprint_version).bind(qualified_code)
             .fetch_optional(&self.pool).await?
+        .into_domain())
+    }
+
+    /// Lists the reusable fields the Explorer offers as filters on a
+    /// blueprint: per field, the revision the filter resolver above picks,
+    /// kept when it is also `facetable`.
+    pub async fn facetable_reusable_attributes_for_blueprint(
+        &self,
+        blueprint_id: Uuid,
+        blueprint_version: i64,
+    ) -> Result<Vec<ReusableAttribute>, RepositoryError> {
+        Ok(sqlx::query_as::<_, Db<ReusableAttribute>>(r#"SELECT * FROM (
+            SELECT DISTINCT ON (a.code) r.id, r.definition_id, d.namespace, d.code, d.name, r.version, r.value_type, r.value_schema, r.default_value, r.file_policy, r.target_blueprint_code, r.cardinality, r.target_cardinality, r.tags, r.context_fallback, r.context_editable, r.readonly, r.searchable, r.facetable, r.status, r.published_at, r.definition
+            FROM records e
+            JOIN attributes a ON a.record_id = e.id AND a.deleted_at IS NULL
+            JOIN reusable_attribute_revisions r ON r.id = a.reusable_attribute_revision_id
+            JOIN reusable_attribute_definitions d ON d.id = r.definition_id
+            WHERE e.workspace_id = $1 AND e.blueprint_id = $2 AND e.blueprint_version = $3
+              AND e.deleted_at IS NULL AND r.searchable
+            ORDER BY a.code, r.version DESC) attached
+            WHERE facetable
+            ORDER BY namespace, code"#)
+            .bind(self.workspace_id()).bind(blueprint_id).bind(blueprint_version)
+            .fetch_all(&self.pool).await?
         .into_domain())
     }
 

@@ -29,7 +29,10 @@ export const ReusableAttributePreview = ({
   const validation = sandboxValidation([attribute], fields);
   const flags = [
     reusable.searchable && t('reusableAttributes.preview.searchable'),
-    reusable.facetable && t('reusableAttributes.preview.facetable'),
+    // Filters can name only searchable attributes.
+    reusable.searchable &&
+      reusable.facetable &&
+      t('reusableAttributes.preview.facetable'),
     reusable.readonly && t('reusableAttributes.preview.readonly'),
     reusable.context_editable === 'default' &&
       t('reusableAttributes.preview.defaultContextOnly'),

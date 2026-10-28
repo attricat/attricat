@@ -2,6 +2,8 @@ code = "review_status"
 name = "Review status"
 value_type = "string"
 default_value = "draft"
+# Offered as a filter in the Explorer.
+searchable = true
 facetable = true
 # Identical in every context, and edited only in the default one.
 context_editable = "default"

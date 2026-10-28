@@ -137,6 +137,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `POST` | `/v1/records/search` | Search. See below. |
 | `POST` | `/v1/records/labels` | Display labels for up to 100 record IDs: `{"record_ids": [...]}`. Returns only live records you can read; other IDs are left out. |
 | `POST` | `/v1/records/facets/relationship-tree/children` | One page of a relationship facet's children, with counts. |
+| `GET` | `/v1/records/reusable-attributes?blueprint=…` | The reusable attributes the Explorer offers as filters on a blueprint: those attached to its current-version records whose revision sets `searchable` and `facetable`. |
 | `POST` | `/v1/records/facets/system-tags` | The system tags a blueprint's records carry, with counts. See [System tag facet](#system-tag-facet). |
 | `GET` | `/records/{id}/preview` | Values per context, with related records inline. |
 | `GET` | `/records/{id}/resolved-preview?context_id=…` | Values resolved in one context, with the context each came from. |

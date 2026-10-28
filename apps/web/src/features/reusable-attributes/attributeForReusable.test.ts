@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { ReusableAttribute } from './api';
-import { attributeForReusable } from './attributeForReusable';
+import {
+  attachedReusableCode,
+  attributeForReusable,
+} from './attributeForReusable';
 
 const reusable: ReusableAttribute = {
   cardinality: null,
@@ -38,5 +41,11 @@ describe('attributeForReusable', () => {
       value_schema: { enum: ['small', 'large'], type: 'string' },
       value_type: 'string',
     });
+  });
+});
+
+describe('attachedReusableCode', () => {
+  it('qualifies the code with the namespace', () => {
+    expect(attachedReusableCode(reusable)).toBe('acme:size');
   });
 });

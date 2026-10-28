@@ -55,6 +55,8 @@ Każdy typ ma też operator **Obecność wartości**: wybierz **Ma wartość** l
 
 Możesz też filtrować według atrybutu powiązanego rekordu, na przykład `brand.name`, przez maksymalnie trzy relacje.
 
+Lista obejmuje też [atrybuty wielokrotnego użytku](/pl/builders/modeling/#wielokrotne-użycie-atrybutów) dołączone do rekordów schematu, jeśli ich definicja ustawia zarówno `searchable`, jak i `facetable`.
+
 Filtr możesz również utworzyć z poziomu tabeli: otwórz menu komórki i wybierz **Filtruj**.
 
 Każdy aktywny filtr jest widoczny jako etykieta pod polem wyszukiwania. Wszystkie filtry, fasety i zapytanie wyszukiwania muszą pasować jednocześnie.
