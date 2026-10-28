@@ -2064,6 +2064,9 @@
     "description": "Twórz reguły jakości danych dla schematów, sprawdzaj nimi każdą rewizję schematu i przeglądaj ich ustalenia oraz wykonania.",
     "inspectionTabs": "Inspekcja reguł",
     "loading": "Wczytywanie reguł…",
+    "loadingRuns": "Wczytywanie wykonań…",
+    "loadingFindings": "Wczytywanie ustaleń…",
+    "noRuns": "Brak wykonań do pokazania",
     "sections": {
       "rules": "Reguły",
       "findings": "Ustalenia",

@@ -1980,6 +1980,9 @@
     "description": "Write data quality rules for blueprints, check every revision of a blueprint against them, and inspect their findings and runs.",
     "inspectionTabs": "Rule inspection",
     "loading": "Loading rules…",
+    "loadingRuns": "Loading runs…",
+    "loadingFindings": "Loading findings…",
+    "noRuns": "No runs to show",
     "sections": {
       "rules": "Rules",
       "findings": "Findings",

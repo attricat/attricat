@@ -12,6 +12,8 @@ import {
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
+import { EmptyState } from '../../components/EmptyState';
+import { LoadingState } from '../../components/LoadingState';
 import { Timestamp } from '../../time/Timestamp';
 import type { Rule, RuleRun, RunsSearch } from './api';
 import { RuleListFilter } from './RuleListFilter';
@@ -22,6 +24,7 @@ import { RecordIdLink } from '../../components/RecordIdLink';
 import { RuleRevisionCell } from './RuleCells';
 import type { RulesById } from './rulesById';
 import { RunStatusChip } from '../../components/RunStatusChip';
+import { RuleRunIcon } from '../../components/systemIcons';
 
 /** When a run finished, or when it was queued while it has not. */
 const runTime = (run: RuleRun) => run.completed_at ?? run.created_at;
@@ -132,75 +135,86 @@ export const RunsSection = ({
             />
           </Stack>
         )}
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>{t('rules.columns.executed')}</TableCell>
-              {showRule && <TableCell>{t('rules.columns.rule')}</TableCell>}
-              <TableCell>{t('rules.columns.scope')}</TableCell>
-              <TableCell>{t('rules.columns.source')}</TableCell>
-              <TableCell>{t('rules.columns.status')}</TableCell>
-              <TableCell>{t('rules.columns.evaluated')}</TableCell>
-              <TableCell>{t('rules.columns.outcome')}</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {(runs ?? []).map((item) => (
-              <TableRow key={item.id}>
-                <TableCell>
-                  <Timestamp relative value={runTime(item)} />
-                </TableCell>
-                {showRule && (
-                  <TableCell>
-                    <RuleRevisionCell
-                      rules={rulesById}
-                      ruleId={item.rule_id}
-                      version={item.rule_version}
-                    />
-                  </TableCell>
-                )}
-                <TableCell>
-                  {item.scope_record_id ? (
-                    <RecordIdLink
-                      recordId={item.scope_record_id}
-                      label={recordLabels.get(item.scope_record_id)}
-                    />
-                  ) : (
-                    t('rules.allRecords')
-                  )}
-                </TableCell>
-                <TableCell>
-                  {item.dry_run
-                    ? t('rules.dryRunSuffix', {
-                        source: t(`rules.runSources.${item.source}`),
-                      })
-                    : t(`rules.runSources.${item.source}`)}
-                </TableCell>
-                <TableCell>
-                  <RunStatusChip status={item.status} />
-                </TableCell>
-                <TableCell>
-                  {item.candidates_skipped > 0
-                    ? t('rules.evaluatedWithSkipped', {
-                        evaluated: item.candidates_evaluated,
-                        skipped: item.candidates_skipped,
-                      })
-                    : item.candidates_evaluated}
-                </TableCell>
-                <TableCell>
-                  {item.dry_run
-                    ? t('rules.runOutcome.wouldFail', {
-                        count: item.findings_created,
-                      })
-                    : t('rules.runOutcome.changed', {
-                        created: item.findings_created,
-                        resolved: item.findings_resolved,
-                      })}
-                </TableCell>
+        <Box sx={{ overflowX: 'auto' }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>{t('rules.columns.executed')}</TableCell>
+                {showRule && <TableCell>{t('rules.columns.rule')}</TableCell>}
+                <TableCell>{t('rules.columns.scope')}</TableCell>
+                <TableCell>{t('rules.columns.source')}</TableCell>
+                <TableCell>{t('rules.columns.status')}</TableCell>
+                <TableCell>{t('rules.columns.evaluated')}</TableCell>
+                <TableCell>{t('rules.columns.outcome')}</TableCell>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHead>
+            <TableBody>
+              {(runs ?? []).map((item) => (
+                <TableRow key={item.id}>
+                  <TableCell>
+                    <Timestamp relative value={runTime(item)} />
+                  </TableCell>
+                  {showRule && (
+                    <TableCell>
+                      <RuleRevisionCell
+                        rules={rulesById}
+                        ruleId={item.rule_id}
+                        version={item.rule_version}
+                      />
+                    </TableCell>
+                  )}
+                  <TableCell>
+                    {item.scope_record_id ? (
+                      <RecordIdLink
+                        recordId={item.scope_record_id}
+                        label={recordLabels.get(item.scope_record_id)}
+                      />
+                    ) : (
+                      t('rules.allRecords')
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {item.dry_run
+                      ? t('rules.dryRunSuffix', {
+                          source: t(`rules.runSources.${item.source}`),
+                        })
+                      : t(`rules.runSources.${item.source}`)}
+                  </TableCell>
+                  <TableCell>
+                    <RunStatusChip status={item.status} />
+                  </TableCell>
+                  <TableCell>
+                    {item.candidates_skipped > 0
+                      ? t('rules.evaluatedWithSkipped', {
+                          evaluated: item.candidates_evaluated,
+                          skipped: item.candidates_skipped,
+                        })
+                      : item.candidates_evaluated}
+                  </TableCell>
+                  <TableCell>
+                    {item.dry_run
+                      ? t('rules.runOutcome.wouldFail', {
+                          count: item.findings_created,
+                        })
+                      : t('rules.runOutcome.changed', {
+                          created: item.findings_created,
+                          resolved: item.findings_resolved,
+                        })}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Box>
+        {runs === undefined
+          ? !error && (
+              <LoadingState sx={{ p: 2 }}>
+                {t('rules.loadingRuns')}
+              </LoadingState>
+            )
+          : runs.length === 0 && (
+              <EmptyState icon={RuleRunIcon} title={t('rules.noRuns')} />
+            )}
       </Paper>
     </>
   );
