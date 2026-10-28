@@ -65,13 +65,13 @@ fn sheet_text(
             }
             row_index = Some(cell_row);
         }
+        let value = cell_text(cell.get_value());
+        if value.is_empty() {
+            continue;
+        }
         let column = column as usize;
         if column >= limits.max_sheet_columns {
             output.mark_truncated();
-            continue;
-        }
-        let value = cell_text(cell.get_value());
-        if value.is_empty() {
             continue;
         }
         if row.len() <= column {

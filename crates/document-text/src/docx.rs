@@ -303,6 +303,13 @@ impl Blocks {
         let separator = if self.text.is_empty() { "" } else { "\n\n" };
         let chars = separator.len() + block.chars().count();
         if chars > self.remaining_chars {
+            // Keep as much of the block as fits rather than dropping it.
+            let room = self.remaining_chars.saturating_sub(separator.len());
+            if room > 0 {
+                self.text.push_str(separator);
+                self.text.extend(block.chars().take(room));
+            }
+            self.remaining_chars = 0;
             self.full = true;
             return;
         }

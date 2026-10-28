@@ -3270,7 +3270,7 @@ async fn agents_read_attached_documents_and_page_through_them(pool: PgPool) {
         .unwrap()
         .to_string();
     assert!(
-        tool_message.contains("Contents of prices.xlsx, section prices (characters 0-12 of 66; call read_file with offset 12 for more)"),
+        tool_message.contains("Contents of prices.xlsx, section prices (characters 0-12 of 66; call read_file with section prices and offset 12 for more)"),
         "{tool_message}"
     );
     assert!(tool_message.contains("## Sheet: P"), "{tool_message}");

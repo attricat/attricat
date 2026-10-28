@@ -860,7 +860,17 @@ async fn read_file_contents(
         .map(|section| format!(", section {section}"))
         .unwrap_or_default();
     let more = if window.end < window.total {
-        format!("; call read_file with offset {} for more", window.end)
+        // An offset counts within the selected section, so the next call
+        // must name it again.
+        let section = request
+            .section
+            .as_ref()
+            .map(|section| format!("section {section} and "))
+            .unwrap_or_default();
+        format!(
+            "; call read_file with {section}offset {} for more",
+            window.end
+        )
     } else {
         String::new()
     };

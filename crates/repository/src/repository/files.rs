@@ -6,7 +6,7 @@ use crate::persistence_rows::{Db, IntoDomain};
 use attricat_domain::attribute_options::{Cardinality, ContextEditable};
 use attricat_domain::constants::TEXT_FILE_VARIANT;
 use attricat_domain::states::{
-    FileJobKind, FileStatus, FileTextExtractionStatus, TextExtractionFailure,
+    FileJobKind, FileJobStatus, FileStatus, FileTextExtractionStatus, TextExtractionFailure,
 };
 use attricat_validation::files::{TEXT_EXTRACTION_MIME_TYPES, is_text_extraction_mime};
 use chrono::Utc;
@@ -1202,13 +1202,22 @@ impl SystemRepository {
             .iter()
             .map(|mime| (*mime).to_owned())
             .collect::<Vec<_>>();
+        // A file waiting for, running or terminally failing a text job is not
+        // queued again.
+        let blocking_statuses = [
+            FileJobStatus::Queued,
+            FileJobStatus::Running,
+            FileJobStatus::Retryable,
+            FileJobStatus::Failed,
+        ]
+        .map(|status| status.as_str().to_owned());
         let mut transaction = self.pool.begin().await?;
         let due: Vec<(Uuid, Uuid)> = sqlx::query_as(
             r#"SELECT f.workspace_id, f.id FROM files f
             WHERE f.deleted_at IS NULL AND f.mime_type = ANY($1)
               AND NOT EXISTS (SELECT 1 FROM file_text_extractions e WHERE e.file_id = f.id AND e.extractor_version >= $2
                 AND (e.failure_reason IS DISTINCT FROM $5 OR EXISTS (SELECT 1 FROM file_processing_jobs tj WHERE tj.file_id = f.id AND tj.kind = $3)))
-              AND NOT EXISTS (SELECT 1 FROM file_processing_jobs j WHERE j.file_id = f.id AND j.kind = $3 AND j.status IN ('queued','running','retryable','failed'))
+              AND NOT EXISTS (SELECT 1 FROM file_processing_jobs j WHERE j.file_id = f.id AND j.kind = $3 AND j.status = ANY($6))
             ORDER BY f.created_at, f.id
             LIMIT $4 FOR UPDATE OF f SKIP LOCKED"#,
         )
@@ -1217,15 +1226,17 @@ impl SystemRepository {
         .bind(FileJobKind::TextExtraction.as_str())
         .bind(RECONCILE_BATCH)
         .bind(TextExtractionFailure::TimedOut.as_str())
+        .bind(&blocking_statuses[..])
         .fetch_all(&mut *transaction)
         .await?;
         let mut queued = 0;
         for (workspace_id, file_id) in due {
-            queued += sqlx::query("INSERT INTO file_processing_jobs (id, workspace_id, file_id, kind, status) VALUES ($1,$2,$3,$4,'queued') ON CONFLICT DO NOTHING")
+            queued += sqlx::query("INSERT INTO file_processing_jobs (id, workspace_id, file_id, kind, status) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING")
                 .bind(Uuid::new_v4())
                 .bind(workspace_id)
                 .bind(file_id)
                 .bind(FileJobKind::TextExtraction.as_str())
+                .bind(FileJobStatus::Queued.as_str())
                 .execute(&mut *transaction)
                 .await?
                 .rows_affected();

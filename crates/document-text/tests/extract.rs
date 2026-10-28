@@ -112,7 +112,8 @@ fn output_is_cut_to_the_character_budget() {
     };
     let document = extract(DOCX_MIME, SPECIFICATION_DOCX, &limits).unwrap();
     assert!(document.truncated);
-    assert!(document.char_count() <= 20);
+    assert_eq!(document.char_count(), 20);
+    assert_eq!(document.sections[0].text, "# Widget specificati");
 }
 
 #[test]

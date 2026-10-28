@@ -69,11 +69,13 @@ pub(crate) async fn load(
 /// converted once per run, and each `read_file` window of a document would
 /// otherwise load, or extract, the whole document again.
 #[derive(Default)]
-pub(crate) struct DocumentCache(HashMap<Uuid, Arc<Document>>);
+pub(crate) struct DocumentCache(HashMap<Uuid, Result<Arc<Document>, TextExtractionFailure>>);
 
 impl DocumentCache {
-    /// The text of a document file, loaded at most once per cache. Failures
-    /// are not cached.
+    /// The text of a document file, loaded at most once per cache. A document
+    /// without readable text is remembered too, so a slow or unreadable file
+    /// is not extracted again for every window; storage and repository
+    /// errors are not cached.
     pub(crate) async fn load(
         &mut self,
         repository: &AttricatRepository,
@@ -81,12 +83,16 @@ impl DocumentCache {
         file_id: Uuid,
         file: &FileObject,
     ) -> Result<Arc<Document>, DocumentTextError> {
-        if let Some(document) = self.0.get(&file_id) {
-            return Ok(document.clone());
+        if let Some(cached) = self.0.get(&file_id) {
+            return cached.clone().map_err(DocumentTextError::Unavailable);
         }
-        let document = Arc::new(load(repository, object_store, file_id, file).await?);
-        self.0.insert(file_id, document.clone());
-        Ok(document)
+        let loaded = match load(repository, object_store, file_id, file).await {
+            Ok(document) => Ok(Arc::new(document)),
+            Err(DocumentTextError::Unavailable(failure)) => Err(failure),
+            Err(error) => return Err(error),
+        };
+        self.0.insert(file_id, loaded.clone());
+        loaded.map_err(DocumentTextError::Unavailable)
     }
 }
 

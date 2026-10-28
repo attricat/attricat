@@ -398,6 +398,21 @@ impl FileWorker {
         if !still_owned {
             return Err(WorkerError::LeaseLost);
         }
+        // Holding the file row keeps a deletion, and so a purge that lists its
+        // variants, from passing this transaction unseen.
+        let live: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM files WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL FOR UPDATE)")
+            .bind(job.file_id).bind(job.workspace_id).fetch_one(&mut *transaction).await?;
+        if !live {
+            transaction.rollback().await?;
+            if stored.is_ok() {
+                // No purge will list text written for a file deleted meanwhile.
+                self.store
+                    .delete(&text_key)
+                    .await
+                    .map_err(WorkerError::Storage)?;
+            }
+            return Ok(());
+        }
         let mut removed_variant = false;
         let (status, failure, sections, chars, truncated) = match stored {
             Ok((document, byte_size, hash)) => {

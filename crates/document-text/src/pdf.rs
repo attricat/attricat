@@ -45,12 +45,13 @@ fn page_texts(bytes: &[u8], limits: &Limits) -> Result<(Vec<(u32, String)>, bool
             dropped = true;
             break;
         }
-        // One unreadable page does not hide the rest of the document.
-        let Ok(text) =
-            document.extract_text_with_limit(&[number], limits.max_pdf_page_stream_bytes)
-        else {
-            continue;
-        };
+        // One unreadable page does not hide the rest of the document, and
+        // one unreadable font does not hide the rest of its page.
+        let text = document
+            .extract_text_chunks_with_limit(&[number], limits.max_pdf_page_stream_bytes)
+            .into_iter()
+            .flatten()
+            .collect::<String>();
         let text = text.trim().to_owned();
         chars += text.chars().count();
         pages.push((number, text));
