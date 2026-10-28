@@ -183,6 +183,29 @@ export const RecordPreview = ({
   useEffect(() => {
     if (showComments) void loadRecordCommentsPanel();
   }, [showComments]);
+  // A finding about other contexts opens the first of them, then its field
+  // once the record's values there have loaded.
+  const [pendingReveal, setPendingReveal] = useState<string>();
+  const revealFindingField = (
+    code: string,
+    contextCodes: readonly string[],
+  ) => {
+    const shown = contexts.data?.find((context) => context.id === contextId);
+    const target = contexts.data?.find((context) =>
+      contextCodes.includes(context.code),
+    );
+    if (!target || !shown || contextCodes.includes(shown.code)) {
+      revealField(code);
+      return;
+    }
+    setSelectedContext(target.id);
+    setPendingReveal(code);
+  };
+  const shownContextLoaded = resolved.isSuccess && !resolved.isFetching;
+  if (pendingReveal !== undefined && shownContextLoaded) {
+    setPendingReveal(undefined);
+    revealField(pendingReveal);
+  }
   const resolvedRecord = resolved.data?.record;
   const systemTags = recordForm.data?.record.system_tags ?? [];
   const knownLabels = useMemo(
@@ -413,11 +436,11 @@ export const RecordPreview = ({
                           contextCodes={contexts.data?.map(
                             (context) => context.code,
                           )}
+                          onRevealField={revealFindingField}
                           recordId={recordId}
                         />
                       ),
                     },
-
                     ...(showComments
                       ? [
                           {

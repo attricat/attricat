@@ -84,8 +84,11 @@ const FindingItem = ({
   contextCodes: readonly string[] | undefined;
   finding: Finding;
   onAcknowledge: () => void;
-  /** Leads to the field the finding is about, where the page shows it. */
-  onRevealField?: (code: string) => void;
+  /**
+   * Leads to the field the finding is about, where the page shows it, in
+   * one of the contexts the finding fails in.
+   */
+  onRevealField?: (code: string, contextCodes: readonly string[]) => void;
   rules: RulesById;
 }) => {
   const { t } = useTranslation();
@@ -104,7 +107,9 @@ const FindingItem = ({
   const fieldLink =
     attribute && onRevealField
       ? (label: string) => (
-          <FieldRevealLink onClick={() => onRevealField(attribute.code)}>
+          <FieldRevealLink
+            onClick={() => onRevealField(attribute.code, contexts)}
+          >
             {label}
           </FieldRevealLink>
         )
@@ -226,6 +231,7 @@ export const RecordFindingsPanel = ({
   blueprintVersion,
   attributes = [],
   contextCodes,
+  onRevealField,
 }: {
   recordId: string;
   blueprintId: string;
@@ -234,6 +240,11 @@ export const RecordFindingsPanel = ({
   attributes?: readonly FindingAttribute[];
   /** Every context's code, to summarize findings that fail in all of them. */
   contextCodes?: readonly string[];
+  /**
+   * Shows a finding's field in a context it fails in; without it the field
+   * is shown where the page is.
+   */
+  onRevealField?: (code: string, contextCodes: readonly string[]) => void;
 }) => {
   const { t } = useTranslation();
   const client = useQueryClient();
@@ -356,7 +367,10 @@ export const RecordFindingsPanel = ({
               contextCodes={contextCodes}
               finding={finding}
               onAcknowledge={() => acknowledge.mutate(finding.id)}
-              onRevealField={revealField ?? undefined}
+              onRevealField={
+                onRevealField ??
+                (revealField ? (code: string) => revealField(code) : undefined)
+              }
               rules={rulesByIdMap}
             />
           ))}

@@ -260,7 +260,7 @@ A record that already violates an enforcing rule cannot be saved until a save fi
 
 **Acknowledge** a finding to record that someone has seen it. It stays until the record passes. The findings list shows how many findings match its filters; select open findings and choose **Acknowledge selected**, or **Acknowledge all … open** to acknowledge every open finding the filters match, up to 5,000 at a time. Acknowledging cannot be undone.
 
-A record's own page lists its open and acknowledged findings in its **Data quality** tab, 20 at a time with **Load more findings** for the rest; the data quality chip in the record's header opens the tab. After an edit, the list refreshes once the record's checks finish. **Re-run checks** checks the record against every enabled rule of its blueprint straight away, for example after a rule changed.
+A record's own page lists its open and acknowledged findings in its **Data quality** tab, 20 at a time with **Load more findings** for the rest; the data quality chip in the record's header opens the tab. A finding's field name leads to that field; for a finding about other contexts, it switches the record to the first context the finding fails in. After an edit, the list refreshes once the record's checks finish. **Re-run checks** checks the record against every enabled rule of its blueprint straight away, for example after a rule changed.
 
 In the [Explorer](/guides/explore/#filters), the **Data quality** filter narrows results to records with open findings, only acknowledged findings, or none.
 

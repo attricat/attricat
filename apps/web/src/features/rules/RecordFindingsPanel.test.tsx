@@ -264,6 +264,27 @@ describe('RecordFindingsPanel', () => {
     expect(revealField.mock.calls).toEqual([['title'], ['summary']]);
   });
 
+  it('leads to a field in a context the finding fails in', async () => {
+    const user = userEvent.setup();
+    const onRevealField = vi.fn();
+    vi.mocked(listUnresolvedRecordFindings).mockResolvedValue({
+      items: [
+        {
+          ...finding,
+          message: "'summary' is required",
+          evidence: { attribute_code: 'summary', contexts: ['pl'] },
+        },
+      ],
+    });
+    renderPanel({
+      attributes: [{ code: 'summary', name: 'Summary' }],
+      onRevealField,
+    });
+    const item = await screen.findByRole('listitem');
+    await user.click(within(item).getByRole('button', { name: 'Summary' }));
+    expect(onRevealField.mock.calls).toEqual([['summary', ['pl']]]);
+  });
+
   it('re-runs the record’s checks and refreshes findings when they finish', async () => {
     const user = userEvent.setup();
     vi.mocked(recheckRecord).mockResolvedValue({ run_ids: [] });
