@@ -49,8 +49,11 @@ export const recordQueryKeys = {
     [...recordQueryKeys.searches(), 'system-tag-facet', input] as const,
   relationshipTargets: (blueprint: string | null | undefined, query: string) =>
     ['relationship-targets', blueprint, query] as const,
-  form: (recordId: string) => ['record-form', recordId] as const,
-  preview: (recordId: string) => ['record-preview', recordId] as const,
+  forms: () => ['record-form'] as const,
+  form: (recordId: string) => [...recordQueryKeys.forms(), recordId] as const,
+  previews: () => ['record-preview'] as const,
+  preview: (recordId: string) =>
+    [...recordQueryKeys.previews(), recordId] as const,
   allLabels: () => ['record-labels'] as const,
   labels: (recordIds: readonly string[]) =>
     [...recordQueryKeys.allLabels(), ...recordIds] as const,
