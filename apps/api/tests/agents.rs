@@ -3103,3 +3103,348 @@ async fn conversation_detail_reports_a_read_only_agent(pool: PgPool) {
     assert_eq!(detail["title"], json!("demo"));
     server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn agents_read_attached_documents_and_page_through_them(pool: PgPool) {
+    const SPECIFICATION_DOCX: &[u8] =
+        include_bytes!("../../../crates/document-text/tests/fixtures/specification.docx");
+    const PRICES_XLSX: &[u8] =
+        include_bytes!("../../../crates/document-text/tests/fixtures/prices.xlsx");
+    const ENCRYPTED_PDF: &[u8] =
+        include_bytes!("../../../crates/document-text/tests/fixtures/encrypted.pdf");
+    let store = Arc::new(FakeObjectStore::available());
+    let (base_url, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
+    let client = authenticated_client();
+    let conversation: Value = client
+        .post(format!("{base_url}/agent/conversations"))
+        .json(&json!({"title": "Documents"}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let conversation_id: Uuid = conversation["id"].as_str().unwrap().parse().unwrap();
+    let upload = |name: &'static str, mime: &'static str, bytes: &'static [u8]| {
+        let client = client.clone();
+        let url = format!("{base_url}/agent/conversations/{conversation_id}/uploads");
+        async move {
+            let upload: Value = client
+                .post(url)
+                .multipart(
+                    Form::new().part(
+                        "file",
+                        Part::bytes(bytes.to_vec())
+                            .file_name(name)
+                            .mime_str(mime)
+                            .unwrap(),
+                    ),
+                )
+                .send()
+                .await
+                .unwrap()
+                .error_for_status()
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+            upload["files"][0]["id"]
+                .as_str()
+                .unwrap()
+                .parse::<Uuid>()
+                .unwrap()
+        }
+    };
+    let docx = upload(
+        "specification.docx",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        SPECIFICATION_DOCX,
+    )
+    .await;
+    let xlsx = upload(
+        "prices.xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        PRICES_XLSX,
+    )
+    .await;
+    let pdf = upload("locked.pdf", "application/pdf", ENCRYPTED_PDF).await;
+
+    // The model reads the Prices sheet in a 12-character window.
+    let requests = Arc::new(std::sync::Mutex::new(Vec::<Value>::new()));
+    let provider_requests = requests.clone();
+    let provider_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let provider_address = provider_listener.local_addr().unwrap();
+    let provider = tokio::spawn(async move {
+        axum::serve(
+            provider_listener,
+            Router::new().route(
+                "/v1/chat/completions",
+                post(move |axum::Json(request): axum::Json<Value>| {
+                    let mut requests = provider_requests.lock().unwrap();
+                    requests.push(request);
+                    let body = if requests.len() == 1 {
+                        let arguments = json!({"file_id": xlsx, "section": "prices", "limit": 12}).to_string();
+                        format!(
+                            "data: {}\n\ndata: [DONE]\n\n",
+                            json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_read","type":"function","function":{"name":"read_file","arguments":arguments}}]}}]})
+                        )
+                    } else {
+                        "data: {\"choices\":[{\"delta\":{\"content\":\"Read.\"}}]}\n\ndata: [DONE]\n\n".to_owned()
+                    };
+                    async move {
+                        axum::response::Response::builder()
+                            .header("content-type", "text/event-stream")
+                            .body(axum::body::Body::from(body))
+                            .unwrap()
+                    }
+                }),
+            ),
+        )
+        .await
+        .unwrap();
+    });
+    let config = AgentProviderConfig::from_values(
+        |name| match name {
+            "LLM_BASE_URL" => Some(format!("http://{provider_address}/v1")),
+            _ => None,
+        },
+        Some(secrecy::SecretString::from("test-key")),
+    )
+    .unwrap()
+    .unwrap();
+    let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
+    let owner: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
+    let repository = AttricatRepository::system(pool.clone()).for_workspace(workspace);
+    let run = repository
+        .submit_agent_message(
+            conversation_id,
+            owner,
+            json!("What do these say?"),
+            &[docx, xlsx, pdf],
+            config.base_url.as_str(),
+            &config.model,
+        )
+        .await
+        .unwrap();
+    let provider_client = api::agent_provider::OpenAiCompatibleClient::new(&config).unwrap();
+    let object_store: Arc<dyn api::storage::ObjectStore> = store.clone();
+    // The file worker has not run: the text is extracted on demand.
+    api::agent_runner::run(
+        &repository,
+        &provider_client,
+        &object_store,
+        run.id,
+        conversation_id,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        repository.get_agent_run(run.id).await.unwrap().status,
+        AgentRunStatus::Completed
+    );
+    let requests = requests.lock().unwrap().clone();
+    assert_eq!(requests.len(), 2);
+    let user_message = requests[0]["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|message| message["role"] == "user")
+        .unwrap()
+        .to_string();
+    assert!(
+        user_message.contains("# Widget specification"),
+        "{user_message}"
+    );
+    assert!(user_message.contains("| Part | Weight |"), "{user_message}");
+    assert!(
+        user_message.contains("the document has no readable text (encrypted)"),
+        "{user_message}"
+    );
+    let tool_message = requests[1]["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|message| message["role"] == "tool")
+        .unwrap()
+        .to_string();
+    assert!(
+        tool_message.contains("Contents of prices.xlsx, section prices (characters 0-12 of 66; call read_file with offset 12 for more)"),
+        "{tool_message}"
+    );
+    assert!(tool_message.contains("## Sheet: P"), "{tool_message}");
+
+    // Once the worker has recorded why a document has no text, read_file
+    // reports it before any provider round.
+    let worker = FileWorker::new(
+        pool.clone(),
+        store,
+        WorkerConfig {
+            worker_id: "document-test-worker".into(),
+            max_pixels: 1,
+            max_attempts: 1,
+            delete_grace: Duration::from_secs(60),
+        },
+    );
+    while worker.run_once().await.unwrap() {}
+    let error = execute_read(
+        &repository,
+        owner,
+        workspace,
+        "read_file",
+        json!({"file_id": pdf}),
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        matches!(
+            error,
+            ToolError::Coded {
+                code: "document_text_unavailable",
+                ..
+            }
+        ),
+        "{error}"
+    );
+    let read = execute_read(
+        &repository,
+        owner,
+        workspace,
+        "read_file",
+        json!({"file_id": docx, "section": "body", "offset": 5}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(read["section"], json!("body"));
+    assert_eq!(read["offset"], json!(5));
+    // Another reader's agent cannot read someone else's attachment.
+    let reader = member_with_role(
+        &pool,
+        create_role(&pool, "document_reader", &["records.read"]).await,
+    )
+    .await;
+    let error = execute_read(
+        &repository,
+        reader,
+        workspace,
+        "read_file",
+        json!({"file_id": docx}),
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(error, ToolError::Forbidden), "{error}");
+    server.abort();
+    provider.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn smart_fill_reads_attached_documents(pool: PgPool) {
+    const SPECIFICATION_PDF: &[u8] =
+        include_bytes!("../../../crates/document-text/tests/fixtures/specification.pdf");
+    let store = Arc::new(FakeObjectStore::available());
+    let (base_url, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
+    let client = authenticated_client();
+    let blueprint = create_blueprint(&client, &base_url,
+        "format_version = 1\ncode = \"spec_sheet\"\nname = \"Spec sheet\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"").await;
+    let record_id: Uuid = create_record(&client, &base_url, &blueprint).await["id"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    let conversation: Value = client
+        .post(format!("{base_url}/agent/conversations"))
+        .json(&json!({"title": "Fill", "record_id": record_id}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let conversation_id: Uuid = conversation["id"].as_str().unwrap().parse().unwrap();
+    let upload: Value = client
+        .post(format!(
+            "{base_url}/agent/conversations/{conversation_id}/uploads"
+        ))
+        .multipart(
+            Form::new().part(
+                "file",
+                Part::bytes(SPECIFICATION_PDF.to_vec())
+                    .file_name("specification.pdf")
+                    .mime_str("application/pdf")
+                    .unwrap(),
+            ),
+        )
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let file_id: Uuid = upload["files"][0]["id"].as_str().unwrap().parse().unwrap();
+
+    let request = Arc::new(std::sync::Mutex::new(Value::Null));
+    let provider_request = request.clone();
+    let provider_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let provider_address = provider_listener.local_addr().unwrap();
+    let provider = tokio::spawn(async move {
+        axum::serve(
+            provider_listener,
+            Router::new().route(
+                "/v1/chat/completions",
+                post(move |axum::Json(body): axum::Json<Value>| {
+                    *provider_request.lock().unwrap() = body;
+                    let arguments = json!({"fields": {"title": "Widget specification"}, "explanation": "From the PDF."}).to_string();
+                    // Smart fill asks for one complete, non-streamed answer.
+                    async move {
+                        axum::Json(json!({"choices":[{"message":{"role":"assistant","content":null,"tool_calls":[{"id":"call_fill","type":"function","function":{"name":"propose_record_form_values","arguments":arguments}}]}}]}))
+                    }
+                }),
+            ),
+        )
+        .await
+        .unwrap();
+    });
+    let config = AgentProviderConfig::from_values(
+        |name| match name {
+            "LLM_BASE_URL" => Some(format!("http://{provider_address}/v1")),
+            _ => None,
+        },
+        Some(secrecy::SecretString::from("test-key")),
+    )
+    .unwrap()
+    .unwrap();
+    let repository = AttricatRepository::system(pool.clone())
+        .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
+    let proposal = api::smart_fill::propose_record_form_values(
+        &repository,
+        store.as_ref(),
+        &config,
+        BOOTSTRAP_OWNER_ID.parse().unwrap(),
+        api::smart_fill::SmartFillRequest {
+            record_id,
+            context_id: None,
+            is_default_context: true,
+            content: "Fill the title from the specification".to_owned(),
+            conversation_id: Some(conversation_id),
+            draft_values: Default::default(),
+            attachment_ids: vec![file_id],
+            language: None,
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(proposal.fields["title"], "Widget specification");
+    let request = request.lock().unwrap().to_string();
+    assert!(
+        request.contains("Attachment specification.pdf:\\n--- Page 1 ---"),
+        "{request}"
+    );
+    assert!(request.contains("brushed aluminium"), "{request}");
+    server.abort();
+    provider.abort();
+}

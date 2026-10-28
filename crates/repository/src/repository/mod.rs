@@ -260,7 +260,10 @@ pub use extensions::{
     ExtensionInstallation, ExtensionLifecycleRecord, ExtensionRuntimeInstallation, ExtensionState,
     InstalledExtension, extension_manifest_sha256, required_extension_grants,
 };
-pub use files::{FileObject, FilePolicy, FileUploadResult, NewUploadedFile, StagedUploadResult};
+pub use files::{
+    FileObject, FilePolicy, FileTextExtraction, FileTextOutcome, FileUploadResult, NewUploadedFile,
+    StagedUploadResult,
+};
 pub use generations::WorkspaceGenerations;
 pub use leadership::CoordinatorLeadership;
 pub use members::{WorkspaceInvitation, WorkspaceMember};

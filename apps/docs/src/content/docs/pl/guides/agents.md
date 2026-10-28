@@ -18,7 +18,9 @@ Rozmowę możesz też rozpocząć:
 - przyciskiem **Zapytaj o ten rekord** na stronie rekordu. Takie rozmowy są wyświetlane na karcie **Rozmowy** rekordu; włącz **Pokaż rozmowy o rekordach**, aby uwzględnić je na liście **Agenci**;
 - przyciskiem **Wyślij do rozmowy z agentem** po zaznaczeniu rekordów w **Przeglądarce rekordów**.
 
-Dołącz pliki przyciskiem **Dodaj pliki**, maksymalnie 16 na wiadomość. Obrazy do 5 MiB są wysyłane do dostawcy, aby agent mógł je zobaczyć. Pozostałe pliki są opisywane nazwą i typem, a agent może je otworzyć swoimi narzędziami do plików.
+Dołącz pliki przyciskiem **Dodaj pliki**, maksymalnie 16 na wiadomość. Obrazy do 5 MiB są wysyłane do dostawcy, aby agent mógł je zobaczyć. Agent odczytuje też tekst plików PDF, Word (`.docx`) i Excel (`.xlsx`): krótki dokument trafia do agenta razem z wiadomością, a dłuższy agent czyta strona po stronie lub arkusz po arkuszu. Pozostałe pliki są opisywane nazwą i typem, a agent może je otworzyć swoimi narzędziami do plików.
+
+Agent czyta tekst, a nie obrazy tekstu. Nie odczyta zeskanowanego pliku PDF bez warstwy tekstowej ani pliku chronionego hasłem i poinformuje o tym. Z arkusza odczytuje wartości ostatnio obliczone przez Excel, a nie formuły. Bardzo duże dokumenty są czytane do limitu rozmiaru.
 
 ## Co może agent
 
@@ -31,7 +33,7 @@ Agent działa w Twoim imieniu. Widzi i zmienia tylko to, na co pozwala Twoja rol
 - wyszukiwać rekordy i odczytywać zapisane wyszukiwania;
 - wyświetlać podgląd migracji rekordu;
 - odczytywać stan danych, ustalenia reguł i uruchomienia przepływów pracy;
-- oglądać obrazy i odczytywać pliki tekstowe w obszarze roboczym;
+- oglądać obrazy i odczytywać pliki tekstowe, PDF, Word i Excel w obszarze roboczym;
 - odczytywać uruchomienia operacji rozszerzeń i zadania konektorów (z uprawnieniem `extensions.manage`);
 - wyjaśniać przejścia statusów encji, jej zatwierdzenia i blokady retencji;
 - odczytywać Twoje [powiadomienia](/pl/guides/inbox/).

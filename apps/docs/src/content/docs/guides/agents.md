@@ -18,7 +18,9 @@ You can also start a conversation from:
 - **Ask about this record** on a record page. These conversations are listed on the record's **Conversations** tab; turn on **Show record conversations** to include them in the **Agents** list;
 - **Send to agent conversation** after selecting records in the Explorer.
 
-Attach files with **Add files**, up to 16 per message. Images up to 5 MiB are sent to the provider so the agent can see them. Other files are described by name and type, and the agent can open them with its file tools.
+Attach files with **Add files**, up to 16 per message. Images up to 5 MiB are sent to the provider so the agent can see them. The agent also reads the text of PDF, Word (`.docx`) and Excel (`.xlsx`) files: a short document is included with your message, and the agent reads a longer one page by page or sheet by sheet. Other files are described by name and type, and the agent can open them with its file tools.
+
+The agent reads text, not pictures of text. It cannot read a scanned PDF without a text layer or a password-protected file, and tells you so. From a spreadsheet it reads the values Excel last calculated, not the formulas. Very large documents are read up to a size limit.
 
 ## What the agent can do
 
@@ -31,7 +33,7 @@ The agent acts as you. It can only see and change what your role allows.
 - search records and read saved searches;
 - preview a record migration;
 - read data health, rule findings, and workflow runs;
-- view images and read text files in the workspace;
+- view images and read text, PDF, Word and Excel files in the workspace;
 - read extension operation runs and connector jobs (with `extensions.manage`);
 - explain a record's status transitions, approvals, and retention holds;
 - read your [inbox](/guides/inbox/).

@@ -95,7 +95,7 @@ Some records need a field their blueprint does not have. If your workspace has p
 
 ## Smart fill
 
-When agents are enabled and you can edit the record, open **Ask about this record** in the record toolbar and paste text, such as a supplier's product description. The agent proposes values for the current context. Nothing is saved until you apply the proposal; applying it saves all the proposed values as one change.
+When agents are enabled and you can edit the record, open **Ask about this record** in the record toolbar and paste text, such as a supplier's product description, or attach a file, such as a PDF datasheet, a Word document or an Excel sheet. The agent proposes values for the current context. Nothing is saved until you apply the proposal; applying it saves all the proposed values as one change.
 
 ## History
 

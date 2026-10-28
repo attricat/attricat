@@ -1,8 +1,10 @@
 //! File type detection and attribute file-policy checks shared by uploads and
 //! the files that solution-pack samples bundle.
 
-const DOCX_MIME: &str = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-const XLSX_MIME: &str = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+pub const PDF_MIME: &str = "application/pdf";
+pub const DOCX_MIME: &str =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+pub const XLSX_MIME: &str = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const PPTX_MIME: &str = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
 
 /// MIME types accepted by every upload entry point. Attribute policies may
@@ -12,7 +14,7 @@ pub const SUPPORTED_UPLOAD_MIME_TYPES: &[&str] = &[
     "image/jpeg",
     "image/gif",
     "image/webp",
-    "application/pdf",
+    PDF_MIME,
     "text/plain",
     DOCX_MIME,
     XLSX_MIME,
@@ -21,6 +23,13 @@ pub const SUPPORTED_UPLOAD_MIME_TYPES: &[&str] = &[
 
 pub fn is_supported_upload_mime(mime: &str) -> bool {
     SUPPORTED_UPLOAD_MIME_TYPES.contains(&mime)
+}
+
+/// Document types whose text is extracted for the agent to read.
+pub const TEXT_EXTRACTION_MIME_TYPES: &[&str] = &[PDF_MIME, DOCX_MIME, XLSX_MIME];
+
+pub fn is_text_extraction_mime(mime: &str) -> bool {
+    TEXT_EXTRACTION_MIME_TYPES.contains(&mime)
 }
 
 /// The lowercase extension of a file name, if any.
@@ -44,7 +53,7 @@ pub fn detect_mime(signature: &[u8], filename: &str, valid_text: bool) -> Option
     } else if signature.len() >= 12 && &signature[..4] == b"RIFF" && &signature[8..12] == b"WEBP" {
         Some("image/webp")
     } else if signature.starts_with(b"%PDF-") {
-        Some("application/pdf")
+        Some(PDF_MIME)
     } else if signature.starts_with(b"PK\x03\x04") {
         match extension(filename).as_deref() {
             Some("docx") => Some(DOCX_MIME),

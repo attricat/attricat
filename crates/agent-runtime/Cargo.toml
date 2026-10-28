@@ -12,6 +12,7 @@ base64.workspace = true
 chrono.workspace = true
 chrono-tz.workspace = true
 attricat-blueprint = { path = "../blueprint" }
+attricat-document-text = { path = "../document-text" }
 attricat-domain = { path = "../domain" }
 attricat-repository = { path = "../repository" }
 attricat-rules = { path = "../rules" }

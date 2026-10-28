@@ -1,0 +1,21 @@
+[package]
+name = "attricat-document-text"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+attricat-validation = { path = "../validation" }
+calamine = { workspace = true, features = ["dates"] }
+chrono.workspace = true
+lopdf.workspace = true
+quick-xml.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+zip.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+zip = { workspace = true, features = ["deflate"] }

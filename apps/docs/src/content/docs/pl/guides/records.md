@@ -95,7 +95,7 @@ Niektóre rekordy potrzebują pola, którego nie ma ich schemat. Jeśli obszar r
 
 ## Inteligentne wypełnianie
 
-Gdy agenci są włączeni i możesz edytować rekord, otwórz **Zapytaj o ten rekord** na pasku narzędzi rekordu i wklej tekst, na przykład opis produktu od dostawcy. Agent zaproponuje wartości dla bieżącego kontekstu. Nic nie zostaje zapisane, dopóki nie zastosujesz propozycji; zastosowanie zapisuje wszystkie proponowane wartości jako jedną zmianę.
+Gdy agenci są włączeni i możesz edytować rekord, otwórz **Zapytaj o ten rekord** na pasku narzędzi rekordu i wklej tekst, na przykład opis produktu od dostawcy, albo dołącz plik, na przykład kartę katalogową w PDF, dokument Word lub arkusz Excel. Agent zaproponuje wartości dla bieżącego kontekstu. Nic nie zostaje zapisane, dopóki nie zastosujesz propozycji; zastosowanie zapisuje wszystkie proponowane wartości jako jedną zmianę.
 
 ## Historia
 

@@ -11,6 +11,8 @@ pub const DEFAULT_STALE_AFTER_DAYS: u16 = 90;
 pub const MAX_STALE_AFTER_DAYS: u16 = 3650;
 pub const DEFAULT_FILE_UPLOAD_MAX_BYTES: usize = 50 * 1024 * 1024;
 pub const DEFAULT_FILE_UPLOAD_MAX_FILES: usize = 10;
+/// Kind of the file variant that holds a document's extracted text as JSON.
+pub const TEXT_FILE_VARIANT: &str = "text";
 pub const SECONDS_PER_HOUR: i64 = 60 * 60;
 
 /// Code of the context every workspace starts with. Previews and record

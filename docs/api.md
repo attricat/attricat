@@ -1047,7 +1047,11 @@ Built-in tools include exact blueprint-revision
 inspection and read-only record migration assessment, plus approved replacement
 or removal of relationship targets. Replacement sets the complete target list
 for each specified attribute/context (an empty list clears it); removal unlinks
-only named targets. `apply_record_batch` proposes several record operations
+only named targets. `read_file` reads a text file, or the extracted text of a
+PDF, Word or Excel file, in windows chosen by `offset`, `limit` and `section`
+(a page, page range or sheet); a document whose stored extraction failed
+returns the tool error `document_text_unavailable` (see
+[Document text](configuration.md#document-text)). `apply_record_batch` proposes several record operations
 as one approval and applies them through [record batches](#record-batches);
 each operation is authorized for the initiating user when the approved call
 runs. `bulk_set_record_values` proposes the same scalar value edit for many
