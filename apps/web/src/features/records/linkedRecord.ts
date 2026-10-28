@@ -48,7 +48,7 @@ export type RelatedRecordPreviewState = {
 
 /**
  * Whether a field shows the one record it links to, and whether that record
- * is open. Each newly linked record opens.
+ * is open. Each newly linked record starts closed.
  */
 export const useRelatedRecordPreview = (
   attribute: Attribute,
@@ -56,7 +56,7 @@ export const useRelatedRecordPreview = (
 ): RelatedRecordPreviewState | undefined => {
   const contextId = useContext(RelatedRecordPreviewContext);
   const detailsId = useId();
-  const [collapsedId, setCollapsedId] = useState<string>();
+  const [expandedId, setExpandedId] = useState<string>();
   if (
     contextId === null ||
     recordId === undefined ||
@@ -67,12 +67,10 @@ export const useRelatedRecordPreview = (
   return {
     contextId,
     detailsId,
-    expanded: collapsedId !== recordId,
+    expanded: expandedId === recordId,
     recordId,
     toggle: () =>
-      setCollapsedId((current) =>
-        current === recordId ? undefined : recordId,
-      ),
+      setExpandedId((current) => (current === recordId ? undefined : recordId)),
   };
 };
 

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -129,12 +129,14 @@ describe('a single relationship value on the record page', () => {
     vi.clearAllMocks();
   });
 
-  it('shows the linked record open, in the same context', async () => {
+  it('opens the linked record on request, in the same context', async () => {
     mockLinkedRecord();
     renderInContext(
       <AttributeValue attribute={relationship('one')} value={linked} />,
     );
 
+    // Clicks synchronously, so the record is still loading when it opens.
+    fireEvent.click(screen.getByRole('button', { name: details }));
     const region = screen.getByRole('region', { name: details });
     expect(
       within(region)
@@ -174,13 +176,17 @@ describe('a single relationship value on the record page', () => {
     ).toBe(link);
   });
 
-  it('closes the linked record from beside its link', async () => {
+  it('shows the linked record closed until opened from beside its link', async () => {
     mockLinkedRecord();
     renderInContext(
       <AttributeValue attribute={relationship('one')} value={linked} />,
     );
 
     const toggle = screen.getByRole('button', { name: details });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('region', { name: details })).toBeNull();
+    expect(getResolvedRecordPreview).not.toHaveBeenCalled();
+    await userEvent.click(toggle);
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
     await userEvent.click(toggle);
 
@@ -195,6 +201,7 @@ describe('a single relationship value on the record page', () => {
       <AttributeValue attribute={relationship('one')} value={linked} />,
     );
 
+    await userEvent.click(screen.getByRole('button', { name: details }));
     expect(
       await screen.findByText('This record cannot be shown.'),
     ).toBeTruthy();
@@ -233,6 +240,9 @@ describe('a single relationship field on the record page', () => {
     );
 
     const field = screen.getByRole('group', { name: 'Product' });
+    await userEvent.click(
+      within(field).getByRole('button', { name: `Details of ${productId}` }),
+    );
     const region = within(field).getByRole('region', {
       name: `Details of ${productId}`,
     });
