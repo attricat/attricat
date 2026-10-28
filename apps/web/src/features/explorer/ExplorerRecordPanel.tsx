@@ -13,7 +13,6 @@ import { RouterButton } from '../../components/RouterLink';
 import { compactIconSize } from '../../components/iconSizes';
 import { RecordPreview } from '../records/components/RecordPreview';
 import { refreshStaleRecordSearches } from '../records/invalidateRecord';
-import { RecordCommentsLink } from '../record-comments/RecordCommentsLink';
 import { lexiconText } from '../lexicon/lexicon';
 import { recordPanelOpenerAttribute, recordPanelWidth } from './constants';
 
@@ -108,6 +107,7 @@ export const ExplorerRecordPanel = ({
           key={recordId}
           onDeleted={onClose}
           onDuplicated={(copy) => onOpenRecord(copy.id)}
+          showComments
           renderFrame={({ blueprint, children, headerActions }) => (
             <Paper
               // Named for assistive technology only; the record heading inside
@@ -154,7 +154,6 @@ export const ExplorerRecordPanel = ({
                 }}
               >
                 {headerActions}
-                <RecordCommentsLink recordId={recordId} />
                 <RouterButton
                   params={{ recordId }}
                   size="small"

@@ -54,10 +54,6 @@ vi.mock('../records/components/RecordPreview', () => ({
     }),
 }));
 
-vi.mock('../record-comments/RecordCommentsLink', () => ({
-  RecordCommentsLink: () => null,
-}));
-
 vi.mock('../../components/RouterLink', () => ({
   RouterButton: ({ children }: { children: ReactNode }) => (
     <a href="#record">{children}</a>

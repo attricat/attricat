@@ -11,7 +11,7 @@ import type { RecordPublications } from './useRecordPublications';
 type Props = {
   /** The record's blueprint, offered for creating another record. */
   blueprint?: { code: string; name: string };
-  /** Moves the agent and extension buttons into the actions menu. */
+  /** Moves the extension button into the actions menu. */
   compact?: boolean;
   recordId: string;
   extensionPanelOpen: boolean;
@@ -53,27 +53,30 @@ export const RecordPreviewToolbar = ({
   publications,
 }: Props) => {
   const { t } = useTranslation();
-  const panelActions: PanelAction[] = showExtensions
-    ? [
-        ...(canAskAgent
-          ? [
-              {
-                expanded: agentPanelOpen,
-                icon: AgentIcon,
-                label: t('records.askAboutRecord'),
-                onClick: onOpenAgent,
-              },
-            ]
-          : []),
-        {
-          controls: RECORD_EXTENSION_DRAWER_ID,
-          expanded: extensionPanelOpen,
-          icon: PanelRightIcon,
-          label: t('records.extensionContributions'),
-          onClick: onOpenExtensions,
-        },
-      ]
-    : [];
+  const agentAction: PanelAction | undefined =
+    showExtensions && canAskAgent
+      ? {
+          expanded: agentPanelOpen,
+          icon: AgentIcon,
+          label: t('records.askAboutRecord'),
+          onClick: onOpenAgent,
+        }
+      : undefined;
+  const extensionAction: PanelAction | undefined = showExtensions
+    ? {
+        controls: RECORD_EXTENSION_DRAWER_ID,
+        expanded: extensionPanelOpen,
+        icon: PanelRightIcon,
+        label: t('records.extensionContributions'),
+        onClick: onOpenExtensions,
+      }
+    : undefined;
+  // Starting a conversation stays one click away, as on the record page.
+  const menuActions = compact && extensionAction ? [extensionAction] : [];
+  const buttonActions = [
+    agentAction,
+    compact ? undefined : extensionAction,
+  ].filter((action) => action !== undefined);
   return (
     <RecordToolbar label={t('records.recordPreview')}>
       <RecordActionsMenu
@@ -83,7 +86,7 @@ export const RecordPreviewToolbar = ({
         canWrite={canWrite}
         onDelete={onDelete}
         onDuplicate={onDuplicate}
-        panelActions={compact ? panelActions : []}
+        panelActions={menuActions}
         recordId={recordId}
         schemaOutdated={schemaOutdated}
       />
@@ -92,21 +95,20 @@ export const RecordPreviewToolbar = ({
         canPublish={canPublish}
         publications={publications}
       />
-      {!compact &&
-        panelActions.map(
-          ({ controls, expanded, icon: Icon, label, onClick }) => (
-            <Tooltip key={label} title={label}>
-              <IconButton
-                aria-controls={controls}
-                aria-expanded={expanded}
-                aria-label={label}
-                onClick={onClick}
-              >
-                <Icon />
-              </IconButton>
-            </Tooltip>
-          ),
-        )}
+      {buttonActions.map(
+        ({ controls, expanded, icon: Icon, label, onClick }) => (
+          <Tooltip key={label} title={label}>
+            <IconButton
+              aria-controls={controls}
+              aria-expanded={expanded}
+              aria-label={label}
+              onClick={onClick}
+            >
+              <Icon />
+            </IconButton>
+          </Tooltip>
+        ),
+      )}
     </RecordToolbar>
   );
 };
