@@ -188,7 +188,7 @@ type = "required"
 attribute_code = "summary"`,
     ),
   );
-  // Saving a record checks it against every enabled rule of its revision.
+  // Saving a record checks it against every enabled rule of its blueprint.
   await createRecord(blueprint, [
     scalar('title', 'Complete product'),
     scalar('summary', 'Has a summary'),

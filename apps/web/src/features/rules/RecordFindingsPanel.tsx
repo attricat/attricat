@@ -214,9 +214,9 @@ const FindingItem = ({
 
 /**
  * A record's unresolved data quality findings, page by page, with a re-check
- * of every enabled rule of its blueprint revision. Edits re-check the record
- * on the server; the panel follows those runs and refreshes the findings when
- * they finish.
+ * of every enabled rule of its blueprint that fits its revision. Edits
+ * re-check the record on the server; the panel follows those runs and
+ * refreshes the findings when they finish.
  */
 export const RecordFindingsPanel = ({
   recordId,
