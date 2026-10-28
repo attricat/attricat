@@ -102,7 +102,7 @@ const FindingItem = ({
   const attributeCode = evidence.success
     ? evidence.data.attribute_code
     : undefined;
-  const message = findingMessage(finding.message, attributeCode, attributes);
+  const message = findingMessage(finding.message, attributes);
   const attribute = attributes.find((item) => item.code === attributeCode);
   const fieldLink =
     attribute && onRevealField

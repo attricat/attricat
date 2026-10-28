@@ -14,10 +14,13 @@ import { ruleRunOptions } from './queryOptions';
  * would flag, so an enforcing change can be checked before it is saved.
  */
 export const RuleChangeDryRun = ({
+  blueprintId,
   definition,
   disabled,
   ruleId,
 }: {
+  /** The rule's blueprint, to name the attributes its findings mention. */
+  blueprintId: string;
   definition: string;
   disabled: boolean;
   ruleId: string;
@@ -57,6 +60,7 @@ export const RuleChangeDryRun = ({
       <ApiErrorAlert error={start.error} sx={{ mt: 2 }} />
       {runId && (
         <DryRunResult
+          blueprintId={blueprintId}
           outdated={checked ? undefined : t('rules.editor.dryRunOutdated')}
           runId={runId}
         />

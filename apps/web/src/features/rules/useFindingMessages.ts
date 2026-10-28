@@ -6,10 +6,10 @@ import {
 import type { Finding } from './api';
 import { findingMessage } from './findingMessage';
 import type { RulesById } from './rulesById';
-import { findingEvidenceSchema } from './schemas';
 
 /**
- * Words each finding's message with the label of the attribute it is about.
+ * Words each finding's message with the labels of the attributes and
+ * options it names.
  * Findings span blueprints, so the attributes of the latest revision of each
  * blueprint their rules check are loaded; until they arrive, or when they
  * cannot be read, a message keeps the attribute's code.
@@ -46,11 +46,19 @@ export const useFindingMessages = (
   );
   return (finding: Finding) => {
     const rule = rules.get(finding.rule_id);
-    const evidence = findingEvidenceSchema.safeParse(finding.evidence);
     return findingMessage(
       finding.message,
-      evidence.success ? evidence.data.attribute_code : undefined,
       (rule && attributes.get(rule.blueprint_id)) ?? [],
     );
   };
+};
+
+/** The attributes of a blueprint's latest revision, once loaded. */
+export const useLatestBlueprintAttributes = (blueprintId: string) => {
+  const catalogue = useQuery(blueprintCatalogueOptions());
+  const version = catalogue.data?.find(
+    (blueprint) => blueprint.id === blueprintId,
+  )?.version;
+  const revision = useQuery(blueprintRevisionOptions(blueprintId, version));
+  return revision.data?.attributes ?? [];
 };

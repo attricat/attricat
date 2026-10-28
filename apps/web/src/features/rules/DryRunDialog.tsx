@@ -29,7 +29,9 @@ export const DryRunDialog = ({
         {dryRun && t('rules.dryRunResult.title', { name: dryRun.name })}
       </DialogTitle>
       <DialogContent>
-        {dryRun && <DryRunResult runId={dryRun.runId} />}
+        {dryRun && (
+          <DryRunResult blueprintId={dryRun.blueprintId} runId={dryRun.runId} />
+        )}
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>{t('common.close')}</Button>

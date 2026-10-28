@@ -6,7 +6,7 @@ import { runRuleNow, type Rule } from './api';
 import { ruleQueryKeys } from './queryKeys';
 
 /** A dry run whose result is shown: the rule's name and the run. */
-export type ShownDryRun = { name: string; runId: string };
+export type ShownDryRun = { blueprintId: string; name: string; runId: string };
 
 /**
  * Starts a run or dry run of a rule's current revision. A dry run's result
@@ -21,7 +21,12 @@ export const useRunRule = () => {
       runRuleNow(rule.id, dryRun),
     meta: { toast: false },
     onSuccess: (started, { rule, dryRun }) => {
-      if (dryRun) setDryRun({ name: rule.name, runId: started.id });
+      if (dryRun)
+        setDryRun({
+          blueprintId: rule.blueprint_id,
+          name: rule.name,
+          runId: started.id,
+        });
       else toast.success(t('rules.runStarted'));
       return queryClient.invalidateQueries({ queryKey: ruleQueryKeys.all });
     },

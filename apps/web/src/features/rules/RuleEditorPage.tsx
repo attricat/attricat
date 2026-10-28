@@ -319,6 +319,7 @@ export const RuleEditorPage = ({ ruleId }: { ruleId?: string }) => {
             <RuleChangeDryRun
               definition={definition}
               disabled={save.isPending || check.result === undefined}
+              blueprintId={source.blueprint_id}
               ruleId={source.id}
             />
           </Stack>

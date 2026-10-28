@@ -1,11 +1,12 @@
-import { lexiconText } from '../lexicon/lexicon';
 import { principalConfiguration } from '../principals/principal';
 import { resolveValueEditor } from '../views/components/registry';
 import type { Attribute, ComponentReference } from './api';
 import { STATUS_SCHEMA_KEY } from './status';
 import { attributeValueTypes } from './valueTypes';
 
-export const ENUM_LABELS_SCHEMA_KEY = 'x-attricat-enum-labels';
+import { enumValueLabel, ENUM_LABELS_SCHEMA_KEY } from './enumLabels';
+
+export { ENUM_LABELS_SCHEMA_KEY };
 
 export type ChoiceOption = { code: string; label: string };
 
@@ -33,17 +34,10 @@ export const choiceOptions = (
     !values.every((value): value is string => typeof value === 'string')
   )
     return undefined;
-  const labels = schema[ENUM_LABELS_SCHEMA_KEY];
-  const labelFor = (code: string) => {
-    const label =
-      labels && typeof labels === 'object' && !Array.isArray(labels)
-        ? (labels as Record<string, unknown>)[code]
-        : undefined;
-    return typeof label === 'string' && label.trim()
-      ? lexiconText(label)
-      : code;
-  };
-  return values.map((code) => ({ code, label: labelFor(code) }));
+  return values.map((code) => ({
+    code,
+    label: enumValueLabel(schema, code) ?? code,
+  }));
 };
 
 /** The configured label of an `enum` attribute's value, if it has one. */

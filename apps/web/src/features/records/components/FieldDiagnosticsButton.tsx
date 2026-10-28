@@ -255,9 +255,10 @@ export const FieldDiagnosticsButton = ({
                     >
                       <FindingSeverityChip severity={finding.severity} />
                       <Typography variant="body2">
-                        {findingMessage(finding.message, attribute.code, [
-                          attribute,
-                        ])}
+                        {findingMessage(
+                          finding.message,
+                          diagnostics.attributes ?? [attribute],
+                        )}
                       </Typography>
                     </Stack>
                   ))}

@@ -7,6 +7,8 @@ import { progressSizes } from '../../components/iconSizes';
 import { RecordIdLink } from '../../components/RecordIdLink';
 import { useRecordLabels } from '../records/useRecordLabels';
 import { ruleRunOptions } from './queryOptions';
+import { findingMessage } from './findingMessage';
+import { useLatestBlueprintAttributes } from './useFindingMessages';
 
 /**
  * Follows a dry run until it finishes, then says how many records it checked
@@ -14,14 +16,18 @@ import { ruleRunOptions } from './queryOptions';
  * `outdated` replaces the result when what was dry-run has changed since.
  */
 export const DryRunResult = ({
+  blueprintId,
   runId,
   outdated,
 }: {
+  /** The rule's blueprint, to name the attributes its messages mention. */
+  blueprintId: string;
   runId: string;
   outdated?: string;
 }) => {
   const { t } = useTranslation();
   const run = useQuery(ruleRunOptions(runId));
+  const attributes = useLatestBlueprintAttributes(blueprintId);
   const failures = run.data?.dry_run_failures ?? [];
   const labels = useRecordLabels(failures.map((failure) => failure.record_id));
   if (run.error) return <ApiErrorAlert error={run.error} sx={{ mt: 2 }} />;
@@ -89,7 +95,7 @@ export const DryRunResult = ({
                   />
                 </Typography>
                 <Typography color="text.secondary" variant="body2">
-                  {failure.message}
+                  {findingMessage(failure.message, attributes)}
                 </Typography>
               </Box>
             ))}
