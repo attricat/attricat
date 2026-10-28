@@ -132,6 +132,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `POST` | `/event-deliveries/{consumer_id}/{event_id}/replay` | Reactivate one terminal delivery as pending; it preserves the event and attempts (`roles.manage`). |
 | `GET` | `/workspace/roles` | List fixed and workspace-local roles with permissions (`roles.manage`). |
 | `GET`, `PUT` | `/workspace/navigation` | Read or replace configured workspace navigation (`workspace_navigation.manage`). |
+| `GET`, `PATCH` | `/workspace/tag-colors` | Read (`records.read`) or change (`tag_colors.manage`) record system tag colors, stored in `workspaces.settings.tag_colors` as overrides of the Core defaults; `PATCH` takes `{"set": {tag: color}, "reset": [tag]}` under a row lock, so concurrent changes to different tags both apply. |
 | `GET`, `PUT` | `/workspace/agent-settings` | Read or replace how agent bulk value edits are approved (`agents.manage`): `bulk_edits` is `per_proposal` (default; one approval per `bulk_set_record_values` proposal) or `per_record` (the tool is not offered), and `bulk_edit_max_records` (1–5000, default 500) bounds one proposal. Out-of-range values return `422 invalid_input`. |
 | `GET` | `/workspace/navigation/sidebar` | Read the caller-visible navigation tree. |
 | `POST` | `/workspace/roles` | Create a workspace-local role. |

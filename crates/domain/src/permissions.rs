@@ -31,6 +31,7 @@ crate::code_enum! {
         FilesHold => "files.hold",
         SolutionPacksManage => "solution_packs.manage",
         WorkspaceNavigationManage => "workspace_navigation.manage",
+        TagColorsManage => "tag_colors.manage",
         DataHealthRead => "data_health.read",
     }
 }

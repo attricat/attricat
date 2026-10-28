@@ -8,5 +8,6 @@ pub mod constants;
 pub mod model;
 pub mod permissions;
 pub mod states;
+pub mod tag_colors;
 pub mod task_queue;
 pub mod value_type;

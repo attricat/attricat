@@ -89,6 +89,18 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     if path == "/lexicon/entries" && method == Method::GET {
         return Some(read(TargetKind::None));
     }
+    // Every catalog reader renders tags in their workspace colors; choosing
+    // the colors is managed on its own.
+    if path == "/workspace/tag-colors" {
+        return Some(if method == Method::GET {
+            read(TargetKind::None)
+        } else {
+            Policy {
+                permission: Permission::TagColorsManage,
+                target: TargetKind::None,
+            }
+        });
+    }
     // Assignment pickers and renderers resolve users and teams for every
     // catalog reader; managing teams is part of managing members. Every name
     // they show links to that member's profile.

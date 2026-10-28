@@ -62,6 +62,7 @@ import { Route as ManageWorkspaceInvitationsRouteImport } from './routes/manage/
 import { Route as ManageWorkspaceMembersRouteImport } from './routes/manage/workspace/members'
 import { Route as ManageWorkspaceNavigationRouteImport } from './routes/manage/workspace/navigation'
 import { Route as ManageWorkspaceRolesRouteImport } from './routes/manage/workspace/roles'
+import { Route as ManageWorkspaceTagColorsRouteImport } from './routes/manage/workspace/tag-colors'
 import { Route as ManageWorkspaceTeamsRouteImport } from './routes/manage/workspace/teams'
 import { Route as ProfileExtensionRunsIndexRouteImport } from './routes/profile/extension-runs/index'
 import { Route as ProfileExtensionRunsRunIdRouteImport } from './routes/profile/extension-runs/$runId'
@@ -357,6 +358,12 @@ const ManageWorkspaceRolesRoute = ManageWorkspaceRolesRouteImport.update({
   path: '/manage/workspace/roles',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ManageWorkspaceTagColorsRoute =
+  ManageWorkspaceTagColorsRouteImport.update({
+    id: '/manage/workspace/tag-colors',
+    path: '/manage/workspace/tag-colors',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ManageWorkspaceTeamsRoute = ManageWorkspaceTeamsRouteImport.update({
   id: '/manage/workspace/teams',
   path: '/manage/workspace/teams',
@@ -495,6 +502,7 @@ export interface FileRoutesByFullPath {
   '/manage/workspace/members': typeof ManageWorkspaceMembersRoute
   '/manage/workspace/navigation': typeof ManageWorkspaceNavigationRoute
   '/manage/workspace/roles': typeof ManageWorkspaceRolesRoute
+  '/manage/workspace/tag-colors': typeof ManageWorkspaceTagColorsRoute
   '/manage/workspace/teams': typeof ManageWorkspaceTeamsRoute
   '/profile/extension-runs/$runId': typeof ProfileExtensionRunsRunIdRoute
   '/profile/personal-access-tokens/new': typeof ProfilePersonalAccessTokensNewRoute
@@ -561,6 +569,7 @@ export interface FileRoutesByTo {
   '/manage/workspace/members': typeof ManageWorkspaceMembersRoute
   '/manage/workspace/navigation': typeof ManageWorkspaceNavigationRoute
   '/manage/workspace/roles': typeof ManageWorkspaceRolesRoute
+  '/manage/workspace/tag-colors': typeof ManageWorkspaceTagColorsRoute
   '/manage/workspace/teams': typeof ManageWorkspaceTeamsRoute
   '/profile/extension-runs/$runId': typeof ProfileExtensionRunsRunIdRoute
   '/profile/personal-access-tokens/new': typeof ProfilePersonalAccessTokensNewRoute
@@ -633,6 +642,7 @@ export interface FileRoutesById {
   '/manage/workspace/members': typeof ManageWorkspaceMembersRoute
   '/manage/workspace/navigation': typeof ManageWorkspaceNavigationRoute
   '/manage/workspace/roles': typeof ManageWorkspaceRolesRoute
+  '/manage/workspace/tag-colors': typeof ManageWorkspaceTagColorsRoute
   '/manage/workspace/teams': typeof ManageWorkspaceTeamsRoute
   '/profile/extension-runs/$runId': typeof ProfileExtensionRunsRunIdRoute
   '/profile/personal-access-tokens/new': typeof ProfilePersonalAccessTokensNewRoute
@@ -706,6 +716,7 @@ export interface FileRouteTypes {
     | '/manage/workspace/members'
     | '/manage/workspace/navigation'
     | '/manage/workspace/roles'
+    | '/manage/workspace/tag-colors'
     | '/manage/workspace/teams'
     | '/profile/extension-runs/$runId'
     | '/profile/personal-access-tokens/new'
@@ -772,6 +783,7 @@ export interface FileRouteTypes {
     | '/manage/workspace/members'
     | '/manage/workspace/navigation'
     | '/manage/workspace/roles'
+    | '/manage/workspace/tag-colors'
     | '/manage/workspace/teams'
     | '/profile/extension-runs/$runId'
     | '/profile/personal-access-tokens/new'
@@ -843,6 +855,7 @@ export interface FileRouteTypes {
     | '/manage/workspace/members'
     | '/manage/workspace/navigation'
     | '/manage/workspace/roles'
+    | '/manage/workspace/tag-colors'
     | '/manage/workspace/teams'
     | '/profile/extension-runs/$runId'
     | '/profile/personal-access-tokens/new'
@@ -912,6 +925,7 @@ export interface RootRouteChildren {
   ManageWorkspaceMembersRoute: typeof ManageWorkspaceMembersRoute
   ManageWorkspaceNavigationRoute: typeof ManageWorkspaceNavigationRoute
   ManageWorkspaceRolesRoute: typeof ManageWorkspaceRolesRoute
+  ManageWorkspaceTagColorsRoute: typeof ManageWorkspaceTagColorsRoute
   ManageWorkspaceTeamsRoute: typeof ManageWorkspaceTeamsRoute
   ManageBlueprintsIndexRoute: typeof ManageBlueprintsIndexRoute
   ManageContextsIndexRoute: typeof ManageContextsIndexRoute
@@ -1299,6 +1313,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManageWorkspaceRolesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/manage/workspace/tag-colors': {
+      id: '/manage/workspace/tag-colors'
+      path: '/manage/workspace/tag-colors'
+      fullPath: '/manage/workspace/tag-colors'
+      preLoaderRoute: typeof ManageWorkspaceTagColorsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/manage/workspace/teams': {
       id: '/manage/workspace/teams'
       path: '/manage/workspace/teams'
@@ -1543,6 +1564,7 @@ const rootRouteChildren: RootRouteChildren = {
   ManageWorkspaceMembersRoute: ManageWorkspaceMembersRoute,
   ManageWorkspaceNavigationRoute: ManageWorkspaceNavigationRoute,
   ManageWorkspaceRolesRoute: ManageWorkspaceRolesRoute,
+  ManageWorkspaceTagColorsRoute: ManageWorkspaceTagColorsRoute,
   ManageWorkspaceTeamsRoute: ManageWorkspaceTeamsRoute,
   ManageBlueprintsIndexRoute: ManageBlueprintsIndexRoute,
   ManageContextsIndexRoute: ManageContextsIndexRoute,

@@ -17,6 +17,7 @@ A missing or expired sign-in returns `401`. A signed-in person without the permi
 | `roles.manage` | Custom roles; replaying dead-letter event deliveries. | ✓ | ✓ | | |
 | `tokens.manage` | Creating and revoking your personal API tokens. | ✓ | ✓ | | |
 | `workspace_navigation.manage` | Explorer sidebar shortcuts. | ✓ | ✓ | | |
+| `tag_colors.manage` | The colors of record system tags. | ✓ | ✓ | | |
 | `audit.read` | The audit log. | ✓ | ✓ | | |
 | `blueprints.read` | Blueprints and reusable attributes. | ✓ | ✓ | ✓ | ✓ |
 | `blueprints.write` | Creating blueprint drafts and revisions; reusable attributes. | ✓ | ✓ | ✓ | |

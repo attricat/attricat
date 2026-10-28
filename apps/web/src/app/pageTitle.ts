@@ -64,6 +64,11 @@ const rulesTitle = (t: TFunction, [section]: Segments) => {
   return key ? joinTitle(t('navigation.rules'), t(key)) : t('navigation.rules');
 };
 
+/** Workspace sections whose title key differs from their path segment. */
+const workspaceSectionKeys: Record<string, string | undefined> = {
+  'tag-colors': 'workspace.tagColors',
+};
+
 const simpleManagementPageKeys: Record<string, string> = {
   'audit-log': 'navigation.auditLog',
   'background-processing': 'navigation.backgroundProcessing',
@@ -86,7 +91,10 @@ const managementTitle = (t: TFunction, [group, ...rest]: Segments) => {
       return extensionsManagementTitle(t, rest);
     case 'workspace':
       return item
-        ? joinTitle(t(`workspace.${item}`), t('navigation.workspaceManagement'))
+        ? joinTitle(
+            t(workspaceSectionKeys[item] ?? `workspace.${item}`),
+            t('navigation.workspaceManagement'),
+          )
         : t('navigation.workspaceManagement');
     case 'rules':
       return rulesTitle(t, rest);

@@ -90,6 +90,10 @@ const BUILTIN_PERMISSIONS: &[(Permission, &str)] = &[
         Permission::RulesManage,
         "Create and operate workspace data quality rules",
     ),
+    (
+        Permission::TagColorsManage,
+        "Choose the colors of record system tags",
+    ),
 ];
 
 impl<S: super::RepositoryScope> AttricatRepository<S> {

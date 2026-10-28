@@ -30,6 +30,9 @@ import {
 } from '../records/constants';
 import { recordQueryKeys } from '../records/queryKeys';
 import { systemTagLabel } from '../records/systemTags';
+import { TagColorDot } from '../tag-colors/TagColorDot';
+import { tagColorsOptions } from '../tag-colors/queryOptions';
+import { tagColorOf } from '../tag-colors/tagColors';
 import { utf8ByteLength } from '../extensions/utf8';
 import {
   systemTagFacetStaleTimeMs,
@@ -95,6 +98,7 @@ export const SystemTagFilterPicker = ({
   const [input, setInput] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const typed = input.trim();
+  const colors = useQuery(tagColorsOptions());
   const debouncedPrefix = useDebouncedValue(typed, systemTagSearchDebounceMs);
   const facetRequest = (prefix?: string) => ({
     blueprint: { code: blueprint },
@@ -229,26 +233,44 @@ export const SystemTagFilterPicker = ({
                 }}
               />
             )}
-            renderOption={({ key, ...props }, item) => (
-              <li key={key} {...props}>
-                <Box
-                  sx={{
-                    alignItems: 'baseline',
-                    display: 'flex',
-                    gap: 1,
-                    justifyContent: 'space-between',
-                    width: '100%',
-                  }}
-                >
-                  <Typography sx={{ wordBreak: 'break-word' }} variant="body2">
-                    {systemTagLabel(item.tag)}
-                  </Typography>
-                  <Typography color="text.secondary" variant="caption">
-                    {t('explorer.systemTagRecordCount', { count: item.count })}
-                  </Typography>
-                </Box>
-              </li>
-            )}
+            renderOption={({ key, ...props }, item) => {
+              const color = tagColorOf(colors.data, item.tag);
+              return (
+                <li key={key} {...props}>
+                  <Box
+                    sx={{
+                      alignItems: 'baseline',
+                      display: 'flex',
+                      gap: 1,
+                      justifyContent: 'space-between',
+                      width: '100%',
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        alignItems: 'center',
+                        display: 'flex',
+                        gap: 1,
+                        minWidth: 0,
+                      }}
+                    >
+                      {color && <TagColorDot color={color} />}
+                      <Typography
+                        sx={{ wordBreak: 'break-word' }}
+                        variant="body2"
+                      >
+                        {systemTagLabel(item.tag)}
+                      </Typography>
+                    </Box>
+                    <Typography color="text.secondary" variant="caption">
+                      {t('explorer.systemTagRecordCount', {
+                        count: item.count,
+                      })}
+                    </Typography>
+                  </Box>
+                </li>
+              );
+            }}
             size="small"
             slots={{ popper: InlinePopper }}
             value={null}

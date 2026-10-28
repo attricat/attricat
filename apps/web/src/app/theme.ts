@@ -16,6 +16,11 @@ import colors from '../../design/tokens/colors.json';
 import typography from '../../design/tokens/typography.json';
 import radius from '../../design/tokens/radius.json';
 import elevation from '../../design/tokens/elevation.json';
+import {
+  tagColorSwatches,
+  type TagColor,
+  type TagColorSwatch,
+} from './tagColors';
 
 // These tokens are a pinned snapshot from attricat/design; see design/README.md.
 // These overrides adapt its MUI patterns to the version used by web.
@@ -42,6 +47,13 @@ declare module '@mui/material/styles' {
   }
   interface SimplePaletteColorOptions {
     tint?: string;
+  }
+  interface Palette {
+    /** Fill and text of each preset tag color. */
+    tagColors: Record<TagColor, TagColorSwatch>;
+  }
+  interface PaletteOptions {
+    tagColors?: Record<TagColor, TagColorSwatch>;
   }
 }
 
@@ -96,6 +108,7 @@ export const makeTheme = (mode: DesignMode) => {
       },
       error: { main: c.semantic.error.main, tint: c.semantic.error.tint },
       info: { main: c.semantic.info.main, tint: c.semantic.info.tint },
+      tagColors: tagColorSwatches[mode],
       background: {
         default: c.background.default,
         paper: c.background.surface,

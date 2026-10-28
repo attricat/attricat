@@ -167,6 +167,9 @@ acli workspace navigation get|sidebar
 acli workspace navigation set --entries <json-or-file>
 acli workspace agent get
 acli workspace agent set [--bulk-edits per-proposal|per-record] [--bulk-edit-max-records <1-5000>]
+acli workspace tag-color list
+acli workspace tag-color set <tag> gray|blue|teal|green|yellow|orange|red|purple|pink
+acli workspace tag-color reset <tag>
 acli workspace token-permission list
 acli workspace grant-target list workspace|blueprint-family|record|context-subtree
 acli workspace publication-channel list
@@ -448,6 +451,8 @@ migration is blocked or `--dry-run` is selected.
 
 `workspace navigation set --entries` takes the `explore_navigation` array.
 `workspace agent set` changes only the settings it is given and keeps the others.
+`workspace tag-color reset` returns a Core tag to its default color and removes
+any other tag's color.
 Extension `configure` takes its configuration JSON directly; `storage --body`
 takes exactly one tagged storage request (`get`, `set`, `delete`, or `list`),
 and `command --payload` is the contribution-defined JSON payload.

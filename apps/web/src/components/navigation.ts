@@ -160,6 +160,7 @@ const managementNavigationItems = [
       capabilities.membersManage,
       capabilities.rolesManage,
       capabilities.workspaceNavigationManage,
+      capabilities.tagColorsManage,
       capabilities.agentsManage,
     ],
   },

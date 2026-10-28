@@ -377,6 +377,9 @@ acli workspace navigation get | sidebar
 acli workspace navigation set --entries <json>
 acli workspace agent get
 acli workspace agent set [--bulk-edits per-proposal|per-record] [--bulk-edit-max-records <1-5000>]
+acli workspace tag-color list
+acli workspace tag-color set <tag> gray|blue|teal|green|yellow|orange|red|purple|pink
+acli workspace tag-color reset <tag>
 acli workspace publication-channel list
 acli workspace publication-channel set <context-id> --enabled true|false
 acli workspace grant-target list workspace|blueprint-family|record|context-subtree
