@@ -15,6 +15,8 @@ import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { Timestamp } from '../../time/Timestamp';
 import type { Rule, RuleRun, RunsSearch } from './api';
 import { RuleListFilter } from './RuleListFilter';
+import { runScopeFilters } from './constants';
+import { runsSearchSchema } from './schemas';
 import { ruleFilterOptions } from './ruleFilterOptions';
 import { RecordIdLink } from '../../components/RecordIdLink';
 import { RuleRevisionCell } from './RuleCells';
@@ -114,6 +116,20 @@ export const RunsSection = ({
               options={ruleFilterOptions(filters.rules)}
               value={filters.search.rule}
             />
+            <RuleListFilter
+              label={t('rules.columns.scope')}
+              onChange={(scope) =>
+                filters.onChange({
+                  ...filters.search,
+                  scope: runsSearchSchema.shape.scope.parse(scope),
+                })
+              }
+              options={Object.values(runScopeFilters).map((scope) => ({
+                value: scope,
+                label: t(`rules.filters.runScopes.${scope}`),
+              }))}
+              value={filters.search.scope ?? runScopeFilters.allRecords}
+            />
           </Stack>
         )}
         <Table size="small">
@@ -125,7 +141,7 @@ export const RunsSection = ({
               <TableCell>{t('rules.columns.source')}</TableCell>
               <TableCell>{t('rules.columns.status')}</TableCell>
               <TableCell>{t('rules.columns.evaluated')}</TableCell>
-              <TableCell>{t('rules.columns.findings')}</TableCell>
+              <TableCell>{t('rules.columns.outcome')}</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -171,7 +187,16 @@ export const RunsSection = ({
                       })
                     : item.candidates_evaluated}
                 </TableCell>
-                <TableCell>{item.findings_created}</TableCell>
+                <TableCell>
+                  {item.dry_run
+                    ? t('rules.runOutcome.wouldFail', {
+                        count: item.findings_created,
+                      })
+                    : t('rules.runOutcome.changed', {
+                        created: item.findings_created,
+                        resolved: item.findings_resolved,
+                      })}
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>

@@ -183,7 +183,7 @@ pub use notifications::{
     NotificationSubjectKind, kinds as notification_kinds, notification_excerpt,
 };
 pub use record_comments::{COMMENT_PAGE_SIZE, RecordComment};
-pub use rules::{FindingSelection, MAX_BULK_ACKNOWLEDGE, RuleFindingFilter};
+pub use rules::{FindingSelection, MAX_BULK_ACKNOWLEDGE, RuleFindingFilter, RuleRunFilter};
 pub use saved_views::SavedView;
 pub use structural_constraints::UniqueKeyDuplicate;
 pub use system_tag_facets::{DEFAULT_SYSTEM_TAG_FACET_LIMIT, MAX_SYSTEM_TAG_FACET_LIMIT};

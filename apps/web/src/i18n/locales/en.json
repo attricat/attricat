@@ -1975,7 +1975,8 @@
       "executed": "Executed",
       "blueprint": "Blueprint",
       "changed": "Changed",
-      "openFindings": "Open findings"
+      "openFindings": "Open findings",
+      "outcome": "Outcome"
     },
     "enabled": "Enabled",
     "disabled": "Disabled",
@@ -1997,7 +1998,12 @@
         "resolved": "Resolved",
         "all": "All"
       },
-      "runsLabel": "Filter runs"
+      "runsLabel": "Filter runs",
+      "runScopes": {
+        "all_records": "All records",
+        "record": "One record",
+        "any": "Any"
+      }
     },
     "runHistory": "Run history",
     "lastExecuted": "Last executed",
@@ -2176,7 +2182,12 @@
     "bulkAcknowledged_one": "Acknowledged {{count}} finding.",
     "bulkAcknowledged_other": "Acknowledged {{count}} findings.",
     "selectAllFindings": "Select every open finding listed",
-    "selectFinding": "Select the finding of {{record}}: {{message}}"
+    "selectFinding": "Select the finding of {{record}}: {{message}}",
+    "runOutcome": {
+      "wouldFail_one": "{{count}} would fail",
+      "wouldFail_other": "{{count}} would fail",
+      "changed": "{{created}} new · {{resolved}} resolved"
+    }
   },
   "reusableAttributes": {
     "editor": {

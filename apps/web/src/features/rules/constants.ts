@@ -52,6 +52,18 @@ export const findingStateFilters = {
   ...findingStates,
   all: 'all',
 } as const;
+/**
+ * Which runs the run history keeps. Runs that checked one record, which
+ * every edit starts, are left out unless asked for.
+ */
+export const runScopeFilters = {
+  allRecords: 'all_records',
+  record: 'record',
+  any: 'any',
+} as const;
+export type RunScopeFilter =
+  (typeof runScopeFilters)[keyof typeof runScopeFilters];
+
 /** Findings the findings page lists at a time. */
 export const FINDINGS_PAGE_SIZE = 50;
 /** The value of a findings filter that is not set. */

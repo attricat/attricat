@@ -269,7 +269,7 @@ acli rule findings --record-id <uuid>
 acli rule acknowledge <finding-id>
 ```
 
-The **Runs** tab shows run history and failures. A run that fails five times becomes a dead letter; fix the cause and replay it with `acli rule run-replay <run-id>`.
+The **Run history** tab shows runs and failures. It lists runs over all records unless **Scope** is set to **One record**, which shows the runs that checked a single record, such as after each edit, or **Any**. **Outcome** gives the findings a run added and resolved, or for a dry run how many records would fail. A run that fails five times becomes a dead letter; fix the cause and replay it with `acli rule run-replay <run-id>`.
 
 ## Permissions
 

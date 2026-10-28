@@ -7,7 +7,7 @@ use crate::model::{
     CreateManualRuleRun, CreateRule, EnableRule, Rule, RuleDetails, RuleFinding, RuleRevision,
     RuleRunDetails, UpdateRule,
 };
-use crate::repository::{FindingSelection, MAX_BULK_ACKNOWLEDGE, RuleFindingFilter};
+use crate::repository::{FindingSelection, MAX_BULK_ACKNOWLEDGE, RuleFindingFilter, RuleRunFilter};
 use attricat_domain::states::{RuleFindingSeverity, RuleFindingState};
 use axum::{Json, http::StatusCode, response::Response};
 use serde::Deserialize;
@@ -84,10 +84,19 @@ pub(super) async fn run_now(
     let id = repo.create_manual_rule_run(id, input).await?;
     Ok((StatusCode::ACCEPTED, Json(serde_json::json!({ "id": id }))))
 }
+/// Which runs a run list keeps: those over every record, or those that
+/// checked one record.
+#[derive(Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RunScope {
+    AllRecords,
+    Record,
+}
 #[derive(Deserialize)]
 pub struct RunsQuery {
     rule_id: Option<Uuid>,
     record_id: Option<Uuid>,
+    scope: Option<RunScope>,
     limit: Option<i64>,
     offset: Option<i64>,
 }
@@ -97,7 +106,15 @@ pub(super) async fn list_runs(
 ) -> Result<Response, ApiError> {
     let (limit, offset) = ArrayPage::new(query.limit, query.offset).bounds()?;
     let page_items = repo
-        .rule_runs_page(query.rule_id, query.record_id, limit, offset)
+        .rule_runs_page(
+            &RuleRunFilter {
+                rule_id: query.rule_id,
+                record_id: query.record_id,
+                record_scoped: query.scope.map(|scope| scope == RunScope::Record),
+            },
+            limit,
+            offset,
+        )
         .await?;
     Ok(array_response(page_items, (limit, offset)))
 }
@@ -277,7 +294,14 @@ pub(super) async fn record_runs(
 ) -> Result<Response, ApiError> {
     let (limit, offset) = ArrayPage::new(query.limit, query.offset).bounds()?;
     let page_items = repo
-        .rule_runs_page(None, Some(record_id), limit, offset)
+        .rule_runs_page(
+            &RuleRunFilter {
+                record_id: Some(record_id),
+                ..Default::default()
+            },
+            limit,
+            offset,
+        )
         .await?;
     Ok(array_response(page_items, (limit, offset)))
 }

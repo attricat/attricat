@@ -962,16 +962,16 @@ impl AttricatRepository {
         let ws = self.workspace_id.0;
         Ok(sqlx::query_as::<_, Db<RuleFinding>>("SELECT id,rule_id,rule_version,record_id,context_id,severity,message,evidence,state,acknowledged_at,resolved_at,created_at,updated_at FROM rule_findings WHERE workspace_id=$1 AND ($2::uuid IS NULL OR record_id=$2) ORDER BY updated_at DESC").bind(ws).bind(record_id).fetch_all(&self.pool).await?.into_domain())
     }
+    /// Runs matching `filter`, newest first.
     pub async fn rule_runs_page(
         &self,
-        rule_id: Option<Uuid>,
-        record_id: Option<Uuid>,
+        filter: &RuleRunFilter,
         limit: i64,
         offset: i64,
     ) -> Result<(Vec<RuleRun>, bool), RepositoryError> {
         let ws = self.workspace_id.0;
-        let mut rows = sqlx::query_as::<_, Db<RuleRun>>("SELECT id,rule_id,rule_version,definition_hash,source,dry_run,scope_record_id,status,candidate_cursor,candidates_evaluated,candidates_skipped,findings_created,findings_resolved,attempts,last_error,truncated,completed_at,created_at FROM rule_runs WHERE workspace_id=$1 AND ($2::uuid IS NULL OR rule_id=$2) AND ($5::uuid IS NULL OR scope_record_id=$5) ORDER BY created_at DESC,id DESC LIMIT $3 OFFSET $4")
-            .bind(ws).bind(rule_id).bind(limit + 1).bind(offset).bind(record_id).fetch_all(&self.pool).await?;
+        let mut rows = sqlx::query_as::<_, Db<RuleRun>>("SELECT id,rule_id,rule_version,definition_hash,source,dry_run,scope_record_id,status,candidate_cursor,candidates_evaluated,candidates_skipped,findings_created,findings_resolved,attempts,last_error,truncated,completed_at,created_at FROM rule_runs WHERE workspace_id=$1 AND ($2::uuid IS NULL OR rule_id=$2) AND ($5::uuid IS NULL OR scope_record_id=$5) AND ($6::boolean IS NULL OR (scope_record_id IS NOT NULL)=$6) ORDER BY created_at DESC,id DESC LIMIT $3 OFFSET $4")
+            .bind(ws).bind(filter.rule_id).bind(limit + 1).bind(offset).bind(filter.record_id).bind(filter.record_scoped).fetch_all(&self.pool).await?;
         let has_more = rows.len() as i64 > limit;
         rows.truncate(limit as usize);
         Ok((rows.into_domain(), has_more))
@@ -1666,6 +1666,16 @@ pub enum FindingSelection {
     Ids(Vec<Uuid>),
     /// The open findings matching the filter; its state is ignored.
     Matching(RuleFindingFilter),
+}
+
+/// Which runs a page lists. Every set field narrows it.
+#[derive(Clone, Debug, Default)]
+pub struct RuleRunFilter {
+    pub rule_id: Option<Uuid>,
+    pub record_id: Option<Uuid>,
+    /// `true` keeps runs that checked one record, such as after an edit;
+    /// `false` keeps runs over every record.
+    pub record_scoped: Option<bool>,
 }
 
 /// Which findings a page lists. Every set field narrows it.

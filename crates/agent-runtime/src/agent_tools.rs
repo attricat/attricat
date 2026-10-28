@@ -32,7 +32,8 @@ use crate::{
     file_access::{AllowFileAccess, FileAccessOperation, authorize_file_read},
     repository::{
         AttricatRepository, AuthorizationActor, MAX_SEARCH_FILTERS, RepositoryError,
-        RuleFindingFilter, SearchPageRequest, SearchScope, SearchScopeError, SearchScopeRequest,
+        RuleFindingFilter, RuleRunFilter, SearchPageRequest, SearchScope, SearchScopeError,
+        SearchScopeRequest,
     },
     search_filters::{check_selected_ids, resolve_agent_relationship_filter},
 };
@@ -1663,7 +1664,7 @@ pub async fn execute_read(
             struct Input { rule_id: Option<Uuid>, limit: Option<i64>, offset: Option<i64> }
             let input: Input = decode(arguments)?;
             let (limit, offset) = diagnostic_page_arguments(input.limit, input.offset)?;
-            let (items, has_more) = repository.rule_runs_page(input.rule_id, None, limit, offset).await?;
+            let (items, has_more) = repository.rule_runs_page(&RuleRunFilter { rule_id: input.rule_id, ..Default::default() }, limit, offset).await?;
             json!({"items":items.into_iter().map(|run| json!({
                 "id":run.id,"rule_id":run.rule_id,"rule_version":run.rule_version,
                 "scope_record_id":run.scope_record_id,"source":run.source,

@@ -6,6 +6,7 @@ import {
   RECORD_FINDINGS_PAGE_SIZE,
   RECORD_RULE_RUNS_LIMIT,
   RULE_PAGE_RUNS_LIMIT,
+  runScopeFilters,
 } from './constants';
 import {
   compiledRuleSchema,
@@ -83,6 +84,8 @@ export const getRuleRun = (runId: string) =>
 export const listRuleRuns = (search: RunsSearch = {}) => {
   const params = new URLSearchParams();
   if (search.rule) params.set('rule_id', z.uuid().parse(search.rule));
+  const scope = search.scope ?? runScopeFilters.allRecords;
+  if (scope !== runScopeFilters.any) params.set('scope', scope);
   return request(`/api/rule-runs?${params}`, z.array(ruleRunSchema));
 };
 /** A rule's most recent runs, newest first. */
@@ -90,6 +93,7 @@ export const listRecentRuleRuns = (ruleId: string) =>
   request(
     `/api/rule-runs?${new URLSearchParams({
       rule_id: z.uuid().parse(ruleId),
+      scope: runScopeFilters.allRecords,
       limit: String(RULE_PAGE_RUNS_LIMIT),
     })}`,
     z.array(ruleRunSchema),

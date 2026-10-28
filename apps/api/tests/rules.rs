@@ -825,6 +825,21 @@ async fn record_changes_and_rechecks_run_every_enabled_rule_for_the_record(pool:
         .unwrap();
     let runs = runs.as_array().unwrap();
     assert_eq!(runs.len(), 2);
+    // Runs that checked one record can be kept apart from runs over all.
+    manual_run(&base_url, rule_id, None, "everything").await;
+    for (scope, expected) in [("record", 2), ("all_records", 1)] {
+        let scoped: Value = client
+            .get(format!("{base_url}/rule-runs?rule_id={rule_id}&scope={scope}"))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(scoped.as_array().unwrap().len(), expected, "{scope}");
+    }
     assert!(
         runs.iter()
             .all(|run| run["scope_record_id"] == json!(record_id)

@@ -2059,7 +2059,8 @@
       "executed": "Wykonano",
       "blueprint": "Schemat",
       "changed": "Zmieniono",
-      "openFindings": "Otwarte ustalenia"
+      "openFindings": "Otwarte ustalenia",
+      "outcome": "Wynik"
     },
     "enabled": "Włączona",
     "disabled": "Wyłączona",
@@ -2081,7 +2082,12 @@
         "resolved": "Rozwiązane",
         "all": "Wszystkie"
       },
-      "runsLabel": "Filtruj wykonania"
+      "runsLabel": "Filtruj wykonania",
+      "runScopes": {
+        "all_records": "Wszystkie rekordy",
+        "record": "Jeden rekord",
+        "any": "Dowolny"
+      }
     },
     "runHistory": "Historia wykonań",
     "lastExecuted": "Ostatnie wykonanie",
@@ -2280,7 +2286,14 @@
     "bulkAcknowledged_many": "Potwierdzono {{count}} ustaleń.",
     "bulkAcknowledged_other": "Potwierdzono {{count}} ustalenia.",
     "selectAllFindings": "Zaznacz wszystkie wyświetlone otwarte ustalenia",
-    "selectFinding": "Zaznacz ustalenie rekordu {{record}}: {{message}}"
+    "selectFinding": "Zaznacz ustalenie rekordu {{record}}: {{message}}",
+    "runOutcome": {
+      "wouldFail_one": "Nie przeszłyby: {{count}}",
+      "wouldFail_few": "Nie przeszłyby: {{count}}",
+      "wouldFail_many": "Nie przeszłyby: {{count}}",
+      "wouldFail_other": "Nie przeszłyby: {{count}}",
+      "changed": "Nowe: {{created}} · rozwiązane: {{resolved}}"
+    }
   },
   "reusableAttributes": {
     "editor": {

@@ -5,6 +5,7 @@ import {
   findingStates,
   ruleInapplicabilities,
   ruleTriggerTypes,
+  runScopeFilters,
 } from './constants';
 import { runStatusSchema } from '../../api/runStatus';
 
@@ -168,6 +169,7 @@ export type FindingsSearch = z.infer<typeof findingsSearchSchema>;
 /** The run history's filters, kept in its URL. Unset filters match all. */
 export const runsSearchSchema = z.object({
   rule: z.uuid().optional().catch(undefined),
+  scope: z.enum(Object.values(runScopeFilters)).optional().catch(undefined),
 });
 export type RunsSearch = z.infer<typeof runsSearchSchema>;
 const comparedVersionSchema = z.coerce

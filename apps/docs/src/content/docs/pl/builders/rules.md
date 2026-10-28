@@ -269,7 +269,7 @@ acli rule findings --record-id <uuid>
 acli rule acknowledge <finding-id>
 ```
 
-Karta **Historia wykonań** pokazuje historię wykonań i błędy. Wykonanie, które zakończy się niepowodzeniem pięć razy, staje się martwą wiadomością (dead letter); usuń przyczynę i odtwórz je poleceniem `acli rule run-replay <run-id>`.
+Karta **Historia wykonań** pokazuje wykonania i błędy. Wymienia wykonania obejmujące wszystkie rekordy, chyba że **Zakres** ustawisz na **Jeden rekord**, który pokazuje wykonania sprawdzające pojedynczy rekord, na przykład po każdej edycji, albo na **Dowolny**. **Wynik** podaje ustalenia, które wykonanie dodało i rozwiązało, a dla próbnego wykonania liczbę rekordów, które by nie przeszły. Wykonanie, które zakończy się niepowodzeniem pięć razy, staje się martwą wiadomością (dead letter); usuń przyczynę i odtwórz je poleceniem `acli rule run-replay <run-id>`.
 
 ## Uprawnienia
 
