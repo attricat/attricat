@@ -16,7 +16,7 @@ export const RelationshipSelectionPills = ({
   /** Spacing between pills, in theme units. */
   gap?: number;
   ids: string[];
-  labels: Map<string, string>;
+  labels: ReadonlyMap<string, string>;
   /** Each pill opens its record in a new tab; removing one stays on the page. */
   linkToRecords?: boolean;
   onRemove?: (id: string) => void;

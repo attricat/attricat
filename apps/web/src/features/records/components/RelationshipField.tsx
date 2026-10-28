@@ -1,5 +1,6 @@
 import { forwardRef, useId, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useQuery } from '@tanstack/react-query';
 import {
   Box,
   Button,
@@ -17,6 +18,7 @@ import {
 } from '../../../components/systemIcons';
 import type { Attribute } from '../api';
 import { attributeCardinalities, RELATIONSHIP_ID_JOINER } from '../constants';
+import { recordBlueprintsOptions } from '../queryOptions';
 import {
   allowedTargetBlueprints,
   relationshipIdsForField,
@@ -124,43 +126,25 @@ export const RelationshipField = ({
   const recentPreviews = useRecentlyPreviewedRecords((id) =>
     previewSelectRef.current?.(id),
   );
-  const allowedTargets = allowedTargetBlueprints(attribute);
-  const targetBlueprint = allowedTargets[0];
+  const restrictedTargets = allowedTargetBlueprints(attribute);
+  // A relationship that names no target blueprint may link to any of them.
+  const anyBlueprint = restrictedTargets.length === 0;
+  const recordBlueprints = useQuery({
+    ...recordBlueprintsOptions(),
+    enabled: anyBlueprint,
+  });
+  const allowedTargets = anyBlueprint
+    ? (recordBlueprints.data ?? []).map((blueprint) => blueprint.code)
+    : restrictedTargets;
   const selectedIds = relationshipIdsForField(value);
   const isSingle = attribute.cardinality === attributeCardinalities.one;
-  const selectorOpen = open && !disabled;
-  const selectionLabels = useRelationshipSelectionLabels(
-    allowedTargets,
-    selectedIds,
-  );
+  const selectorDisabled = disabled || allowedTargets.length === 0;
+  const selectorOpen = open && !selectorDisabled;
+  const selectionLabels = useRelationshipSelectionLabels(selectedIds);
   const preview = useRelatedRecordPreview(
     attribute,
-    targetBlueprint && selectedIds.length === 1 ? selectedIds[0] : undefined,
+    selectedIds.length === 1 ? selectedIds[0] : undefined,
   );
-
-  if (!targetBlueprint) {
-    return (
-      <TextField
-        fullWidth
-        disabled={disabled}
-        error={Boolean(error)}
-        label={attributeLabel(attribute)}
-        required={required}
-        helperText={
-          error ?? (
-            <FieldHint>
-              {[helperText, t('records.commaSeparatedUuids')]
-                .filter(Boolean)
-                .join(' ')}
-            </FieldHint>
-          )
-        }
-        onChange={(event) => onChange(event.target.value)}
-        slotProps={{ input: { startAdornment: relationshipAdornment } }}
-        value={value}
-      />
-    );
-  }
 
   const previewLabel = preview
     ? (selectionLabels.get(preview.recordId) ?? preview.recordId)
@@ -195,7 +179,7 @@ export const RelationshipField = ({
                           field: attributeLabel(attribute),
                         })}
                         color="primary"
-                        disabled={disabled}
+                        disabled={selectorDisabled}
                         onClick={openSelector}
                         size="small"
                         startIcon={
@@ -248,6 +232,7 @@ export const RelationshipField = ({
       />
       <RelationshipPickerDialog
         allowedTargets={allowedTargets}
+        anyBlueprint={anyBlueprint}
         initialIds={selectedIds}
         isSingle={isSingle}
         key={openings}

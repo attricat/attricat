@@ -7,9 +7,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../../i18n';
 import { AttributeValue } from '../../views/components/values/AttributeValue';
 import {
-  getBlueprintByCode,
   getBlueprintRevision,
-  getRecordPreview,
+  getRecordLabels,
   getResolvedRecordPreview,
   type Attribute,
 } from '../api';
@@ -37,9 +36,9 @@ vi.mock('@tanstack/react-router', async (importOriginal) => ({
 }));
 vi.mock('../api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api')>()),
-  getBlueprintByCode: vi.fn(),
   getBlueprintRevision: vi.fn(),
-  getRecordPreview: vi.fn(),
+  getRecordLabels: vi.fn(),
+  listRecordBlueprints: vi.fn(),
   getResolvedRecordPreview: vi.fn(),
 }));
 
@@ -227,13 +226,22 @@ describe('a single relationship field on the record page', () => {
     vi.clearAllMocks();
   });
 
-  it('shows the linked record within the field', async () => {
+  it.each([
+    ['one target blueprint', relationship('one')],
+    [
+      'no target blueprint',
+      {
+        ...relationship('one'),
+        target_blueprint_code: null,
+        target_blueprint_codes: [],
+      },
+    ],
+  ])('shows the linked record within a field with %s', async (_, attribute) => {
     mockLinkedRecord();
-    vi.mocked(getBlueprintByCode).mockRejectedValue(new Error('offline'));
-    vi.mocked(getRecordPreview).mockRejectedValue(new Error('offline'));
+    vi.mocked(getRecordLabels).mockRejectedValue(new Error('offline'));
     renderInContext(
       <RelationshipField
-        attribute={{ ...relationship('one'), name: 'Product' }}
+        attribute={{ ...attribute, name: 'Product' }}
         onChange={vi.fn()}
         value={productId}
       />,

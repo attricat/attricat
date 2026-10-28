@@ -217,10 +217,6 @@ const recordItemSchema = z.object({
     .default([]),
 });
 const recordContextSchema = z.record(z.string(), jsonObjectSchema);
-export const recordPreviewResponseSchema = z.object({
-  record: recordIdentitySchema,
-  context: recordContextSchema,
-});
 const resolvedPreviewValueSchema = z.union([
   scalarValueSchema,
   jsonObjectSchema,

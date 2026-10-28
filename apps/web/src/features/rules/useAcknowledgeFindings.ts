@@ -23,11 +23,9 @@ export const useAcknowledgeFindings = () => {
         client.invalidateQueries({ queryKey: ruleQueryKeys.definitions() }),
         // The acknowledged findings' records are not returned, so every
         // record view refreshes its needs-attention tag and data quality.
-        ...[
-          recordQueryKeys.forms(),
-          recordQueryKeys.previews(),
-          recordQueryKeys.allResolvedPreviews(),
-        ].map((queryKey) => client.invalidateQueries({ queryKey })),
+        ...[recordQueryKeys.forms(), recordQueryKeys.allResolvedPreviews()].map(
+          (queryKey) => client.invalidateQueries({ queryKey }),
+        ),
         client.invalidateQueries({
           queryKey: recordQueryKeys.searches(),
           refetchType: 'none',

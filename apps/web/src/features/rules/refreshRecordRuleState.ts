@@ -12,7 +12,6 @@ export const refreshRecordRuleState = (client: QueryClient, recordId: string) =>
   Promise.all([
     ...[
       recordQueryKeys.form(recordId),
-      recordQueryKeys.preview(recordId),
       recordQueryKeys.resolvedPreviews(recordId),
     ].map((queryKey) => client.invalidateQueries({ queryKey })),
     // System-tag facets live under searches.

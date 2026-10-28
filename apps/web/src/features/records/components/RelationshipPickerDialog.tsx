@@ -7,7 +7,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { useQueries } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { SearchIcon } from 'lucide-react';
 import { EmptyState } from '../../../components/EmptyState';
 import { IconLabel } from '../../../components/IconLabel';
@@ -16,7 +16,7 @@ import { LoadMoreButton } from '../../../components/LoadMoreButton';
 import { RelationshipSelectorDialog } from '../../../components/RelationshipSelectorDialog';
 import { BlueprintIcon, RecordIcon } from '../../../components/systemIcons';
 import { lexiconText } from '../../lexicon/lexicon';
-import { blueprintByCodeOptions } from '../queryOptions';
+import { recordBlueprintsOptions } from '../queryOptions';
 import { RelationshipDraftSelection } from './RelationshipDraftSelection';
 import {
   RelationshipTargetList,
@@ -37,6 +37,7 @@ import {
  */
 export const RelationshipPickerDialog = ({
   allowedTargets,
+  anyBlueprint = false,
   initialIds,
   isSingle,
   onApply,
@@ -48,6 +49,8 @@ export const RelationshipPickerDialog = ({
 }: {
   /** Blueprints the relationship may link to; the first is searched first. */
   allowedTargets: readonly string[];
+  /** The relationship names no target, so `allowedTargets` is every blueprint. */
+  anyBlueprint?: boolean;
   initialIds: readonly string[];
   isSingle: boolean;
   onApply: (ids: string[]) => void;
@@ -86,16 +89,11 @@ export const RelationshipPickerDialog = ({
     query,
     open,
   );
-  const blueprints = useQueries({
-    queries: allowedTargets.map((code) => ({
-      ...blueprintByCodeOptions(code),
-      enabled: open,
-    })),
-  });
+  const blueprints = useQuery({ ...recordBlueprintsOptions(), enabled: open });
   const blueprintName = (code: string) => {
-    const name = blueprints.find(
-      (blueprint) => blueprint.data?.blueprint.code === code,
-    )?.data?.blueprint.name;
+    const name = blueprints.data?.find(
+      (blueprint) => blueprint.code === code,
+    )?.name;
     return name ? lexiconText(name) : code;
   };
   const labelForId = (id: string) =>
@@ -125,12 +123,20 @@ export const RelationshipPickerDialog = ({
       selectedLabel={t('records.relationshipSelected', {
         count: draftIds.length,
       })}
-      title={t(
-        isSingle
-          ? 'records.selectOneRelationship'
-          : 'records.selectRelationships',
-        { blueprint: allowedTargets.map(blueprintName).join(', ') },
-      )}
+      title={
+        anyBlueprint
+          ? t(
+              isSingle
+                ? 'records.selectOneAnyRelationship'
+                : 'records.selectAnyRelationships',
+            )
+          : t(
+              isSingle
+                ? 'records.selectOneRelationship'
+                : 'records.selectRelationships',
+              { blueprint: allowedTargets.map(blueprintName).join(', ') },
+            )
+      }
     >
       <Stack ref={contentRoot} spacing={2}>
         {allowedTargets.length > 1 && (

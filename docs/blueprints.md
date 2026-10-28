@@ -281,7 +281,8 @@ allowed set as `target_blueprint_codes` (empty means any blueprint);
 single-target consumers such as table column paths, Explorer relationship
 filters, and tree facets treat a multi-target relationship like an unrestricted
 one. The record relationship picker searches one allowed blueprint at a time with a
-**Target blueprint** selector, and an `incoming_relationship_list` on any
+**Target blueprint** selector, offering every record blueprint when the
+relationship names no target, and an `incoming_relationship_list` on any
 allowed target can list the field. A migration preview reports
 `relationship_target_changed` when the allowed set differs between revisions.
 

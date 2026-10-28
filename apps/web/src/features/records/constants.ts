@@ -47,12 +47,6 @@ export const attributeFilterOperators = {
 export const RECORD_LABEL_BATCH_SIZE = 100;
 export const RECORD_CHANGES_PAGE_SIZE = 25;
 
-/** Query parameters used when fetching a lightweight record preview. */
-export const RECORD_PREVIEW_QUERY = {
-  relationshipDepth: 0,
-  relationshipLimit: 1,
-} as const;
-
 /** Sections shown in tabs below a record's values. */
 export const recordPreviewTabs = {
   dataQuality: 'data-quality',

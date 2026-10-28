@@ -28,7 +28,6 @@ export const invalidateRecordPublications = (client: QueryClient, id: string) =>
 
 const recordProjections = (id: string) => [
   recordQueryKeys.form(id),
-  recordQueryKeys.preview(id),
   recordQueryKeys.resolvedPreviews(id),
   recordQueryKeys.changes(id),
   recordQueryKeys.recordControls(id),

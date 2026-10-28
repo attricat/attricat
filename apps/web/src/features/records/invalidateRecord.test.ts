@@ -10,7 +10,6 @@ import { recordQueryKeys } from './queryKeys';
 
 const projections = [
   recordQueryKeys.form('record'),
-  recordQueryKeys.preview('record'),
   recordQueryKeys.resolvedPreview('record', 'context'),
   recordQueryKeys.changes('record'),
   recordQueryKeys.publication('record'),
