@@ -118,10 +118,14 @@ export const RuleInspectionPage = ({
     enabled: findingsShown,
   });
   const openSearch = { ...findingsSearch, state: findingStates.open };
+  // Acknowledging every match is only offered while open findings are listed.
+  const listsOpen =
+    findingsSearch.state !== findingStates.acknowledged &&
+    findingsSearch.state !== findingStates.resolved;
   const openMatching = useQuery({
     queryKey: ruleQueryKeys.findingsCount(openSearch),
     queryFn: () => countFindings(openSearch),
-    enabled: findingsShown && canManage,
+    enabled: findingsShown && canManage && listsOpen,
   });
   const { run, dryRun, closeDryRun } = useRunRule();
   const toggle = useToggleRule();
@@ -220,7 +224,7 @@ export const RuleInspectionPage = ({
             onLoadMore={() => void findings.fetchNextPage()}
             rulesById={rulesByIdMap}
             total={findingsTotal.data?.count}
-            openMatching={openMatching.data?.count}
+            openMatching={listsOpen ? openMatching.data?.count : undefined}
             bulk={{
               acknowledgeSelected: (ids) =>
                 acknowledgeMany.mutateAsync({ findingIds: ids }).then(

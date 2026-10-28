@@ -30,6 +30,7 @@ import {
   type RuleDetails,
   type RuleRun,
 } from './api';
+import { findingStates } from './constants';
 import { RuleInspectionPage } from './RuleInspectionPage';
 
 const navigate = vi.fn();
@@ -399,6 +400,18 @@ describe('RuleInspectionPage', () => {
         matching: {},
       }),
     );
+  });
+
+  it('offers to acknowledge all open findings only while they are listed', async () => {
+    vi.mocked(currentSession).mockResolvedValue(manager);
+    vi.mocked(listFindingsPage).mockResolvedValue({ items: [] });
+    vi.mocked(countFindings).mockResolvedValue({ count: 7 });
+    renderPage('findings', { state: findingStates.resolved });
+    expect(await screen.findByText('7 findings')).toBeTruthy();
+    expect(
+      screen.queryByRole('button', { name: 'Acknowledge all 7 open' }),
+    ).toBeNull();
+    expect(vi.mocked(countFindings)).toHaveBeenCalledTimes(1);
   });
 
   it('names the rule revision and scope of each run', async () => {
