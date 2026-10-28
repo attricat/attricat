@@ -28,6 +28,17 @@ describe('RulePreview', () => {
     expect(screen.getByText('Wymagana wartość dla title')).toBeTruthy();
   });
 
+  it('shows the description with its line breaks', async () => {
+    await i18n.changeLanguage('en');
+    render(
+      <RulePreview
+        rule={{ ...rule, description: 'Shoppers search by title.\nKeep it.' }}
+      />,
+    );
+    const description = screen.getByText(/Shoppers search by title/);
+    expect(description.textContent).toBe('Shoppers search by title.\nKeep it.');
+  });
+
   it('keeps the code of a predicate type it does not know', async () => {
     await i18n.changeLanguage('en');
     render(<RulePreview rule={{ ...rule, predicate: { type: 'novel' } }} />);

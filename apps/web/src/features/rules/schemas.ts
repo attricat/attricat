@@ -81,6 +81,7 @@ const ruleTriggerSchema = z.discriminatedUnion('type', [
 export const compiledRuleSchema = z.object({
   code: z.string(),
   name: z.string(),
+  description: z.string().nullish(),
   severity: z.enum(findingSeverities),
   triggers: z.array(ruleTriggerSchema),
   predicate: z.object({ type: z.string() }).loose(),

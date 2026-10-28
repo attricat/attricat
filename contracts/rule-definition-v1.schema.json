@@ -559,6 +559,15 @@
       "pattern": "^[A-Za-z0-9_-]+$",
       "type": "string"
     },
+    "description": {
+      "description": "What the rule checks and why, for the people who fix its findings.\nShown with the rule and its findings; Markdown is not rendered.",
+      "maxLength": 2000,
+      "pattern": "\\S",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "enforcement": {
       "anyOf": [
         {

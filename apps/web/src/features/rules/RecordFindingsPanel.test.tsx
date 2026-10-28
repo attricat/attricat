@@ -173,9 +173,18 @@ describe('RecordFindingsPanel', () => {
     vi.mocked(currentSession).mockResolvedValue({
       capabilities: {},
     } as Awaited<ReturnType<typeof currentSession>>);
+    vi.mocked(listRecordRules).mockResolvedValue([
+      {
+        ...rule,
+        compiled_plan: { description: 'Shoppers search by title.' },
+      },
+    ]);
     renderPanel();
     const item = await screen.findByRole('listitem');
     expect(within(item).getByText('Title required')).toBeTruthy();
+    expect(
+      await within(item).findByText('Shoppers search by title.'),
+    ).toBeTruthy();
     expect(within(item).queryByRole('link')).toBeNull();
     expect(
       within(item).queryByRole('button', { name: 'Acknowledge' }),

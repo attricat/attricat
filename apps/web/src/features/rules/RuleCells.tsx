@@ -75,6 +75,40 @@ export const RuleFindingCounts = ({ rule }: { rule: RuleDetails }) => {
   );
 };
 
+/**
+ * What a rule says it is for, keeping the author's line breaks. Renders
+ * nothing for a rule without a description.
+ */
+export const RuleDescriptionText = ({
+  description,
+  variant = 'body2',
+  maxLines,
+}: {
+  description: string | null | undefined;
+  variant?: 'body1' | 'body2' | 'caption';
+  /** Cuts a long description short where space is tight, as in a list. */
+  maxLines?: number;
+}) =>
+  description ? (
+    <Typography
+      color="text.secondary"
+      component="p"
+      sx={{
+        whiteSpace: 'pre-line',
+        ...(maxLines && {
+          display: '-webkit-box',
+          overflow: 'hidden',
+          WebkitBoxOrient: 'vertical',
+          WebkitLineClamp: maxLines,
+        }),
+      }}
+      title={maxLines ? description : undefined}
+      variant={variant}
+    >
+      {description}
+    </Typography>
+  ) : null;
+
 /** Whether a rule is enabled. */
 export const RuleLifecycleChip = ({ rule }: { rule: Rule }) => {
   const { t } = useTranslation();

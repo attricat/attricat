@@ -15,6 +15,7 @@ Reguła ma kod, nazwę, wagę, od jednego do ośmiu wyzwalaczy i dokładnie jede
 format_version = 1
 code = "title-required"
 name = "Products have a title"
+description = "Shoppers search by title, so every product needs one before it goes live."
 severity = "error"
 
 [[triggers]]
@@ -39,6 +40,7 @@ attribute_code = "title"
 | `format_version` | `1`. |
 | `code` | Unikalny [kod](/pl/reference/blueprint/#kody). |
 | `name` | Nazwa wyświetlana. |
+| `description` | Opcjonalny. Co reguła sprawdza i dlaczego, prostymi słowami, do 2000 znaków. Jest wyświetlany na stronie reguły, na liście reguł, w podglądzie edytora i przy ustaleniach reguły na każdym rekordzie, aby osoby je poprawiające wiedziały, czego się oczekuje. Podziały wierszy są zachowywane; Markdown nie jest renderowany. |
 | `severity` | `info`, `warning`, `error` lub `critical`. |
 | `triggers` | Od 1 do 8 wyzwalaczy. Zobacz niżej. |
 | `predicate` | Warunek, który rekord musi spełnić. Zobacz niżej. |

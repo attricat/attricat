@@ -192,7 +192,10 @@ describe('RulePage', () => {
   it('counts its findings, lists its recent runs and dry-runs it', async () => {
     vi.mocked(getRule).mockResolvedValue({
       ...rule,
-      compiled_plan: { severity: 'critical' },
+      compiled_plan: {
+        severity: 'critical',
+        description: 'Every product needs a title to be found.',
+      },
       open_findings: 4,
       acknowledged_findings: 1,
     });
@@ -206,6 +209,9 @@ describe('RulePage', () => {
     ).toBe(`/manage/rules/findings?rule=${ruleId}&state=open`);
     expect(screen.getByRole('link', { name: '1 acknowledged' })).toBeTruthy();
     expect(screen.getByText('Critical')).toBeTruthy();
+    expect(
+      screen.getByText('Every product needs a title to be found.'),
+    ).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Recent runs' })).toBeTruthy();
     expect(
       screen

@@ -24,12 +24,16 @@ import { lexiconText } from '../lexicon/lexicon';
 import type { RuleDetails } from './api';
 import { ruleRoutes } from './constants';
 import {
+  RuleDescriptionText,
   RuleFindingCounts,
   RuleLifecycleChip,
   RuleSkipsRevisionsIcon,
 } from './RuleCells';
 import { FindingSeverityChip } from './FindingSeverityChip';
-import { ruleSeverity } from './ruleSeverity';
+import { ruleDescription, ruleSeverity } from './rulePlan';
+
+/** How much of each rule's description the list shows. */
+const listDescriptionLines = 2;
 
 /** The workspace's rules, one row each, with their switches and runs. */
 export const RulesSection = ({
@@ -112,6 +116,11 @@ export const RulesSection = ({
                           <Typography color="text.secondary" variant="caption">
                             {rule.code}
                           </Typography>
+                          <RuleDescriptionText
+                            description={ruleDescription(rule)}
+                            maxLines={listDescriptionLines}
+                            variant="caption"
+                          />
                         </Stack>
                       </TableCell>
                       <TableCell>

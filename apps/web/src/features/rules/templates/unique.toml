@@ -1,6 +1,7 @@
 format_version = 1
 code = "sku-unique"
 name = "No two records share a SKU"
+description = "Each SKU must identify exactly one record, or orders and stock go to the wrong item."
 severity = "error"
 
 [[triggers]]

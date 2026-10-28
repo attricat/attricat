@@ -18,6 +18,8 @@ use thiserror::Error;
 pub const MAX_CANDIDATES_PER_RUN: u32 = 10_000;
 pub const MAX_PAGE_SIZE: u32 = 500;
 const MAX_TRIGGERS: usize = 8;
+/// The longest description a rule may carry, in characters.
+pub const MAX_DESCRIPTION_CHARS: usize = 2_000;
 /// Fields of a schedule cron expression, including seconds.
 const CRON_FIELDS: usize = 6;
 /// Supported definition format versions.
@@ -54,6 +56,7 @@ pub struct RuleDefinition {
     pub format_version: u32,
     pub code: String,
     pub name: String,
+    pub description: Option<String>,
     pub severity: Severity,
     pub triggers: Vec<Trigger>,
     pub predicate: Predicate,
@@ -163,6 +166,9 @@ pub struct CompiledRule {
     pub format_version: u32,
     pub code: String,
     pub name: String,
+    /// What the rule is for, in the words of the people who fix its findings.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
     pub severity: Severity,
     pub triggers: Vec<Trigger>,
     pub predicate: Predicate,
@@ -185,6 +191,10 @@ struct Raw {
     /// Human-readable rule name.
     #[schemars(regex(pattern = NON_BLANK_PATTERN))]
     name: String,
+    /// What the rule checks and why, for the people who fix its findings.
+    /// Shown with the rule and its findings; Markdown is not rendered.
+    #[schemars(regex(pattern = NON_BLANK_PATTERN), length(max = MAX_DESCRIPTION_CHARS))]
+    description: Option<String>,
     #[schemars(with = "SeveritySchema")]
     severity: Severity,
     /// One to eight events that evaluate the rule.
@@ -229,6 +239,14 @@ pub fn parse(source: &str) -> Result<RuleDefinition, RuleError> {
     }
     code(&raw.code, "rule code")?;
     non_empty(&raw.name, "rule name")?;
+    if let Some(description) = &raw.description {
+        non_empty(description, "rule description")?;
+        if description.chars().count() > MAX_DESCRIPTION_CHARS {
+            return Err(RuleError::Invalid(format!(
+                "rule description must be at most {MAX_DESCRIPTION_CHARS} characters"
+            )));
+        }
+    }
     if raw.triggers.is_empty() || raw.triggers.len() > MAX_TRIGGERS {
         return Err(RuleError::Invalid(format!(
             "rules require 1-{MAX_TRIGGERS} triggers"
@@ -270,6 +288,7 @@ pub fn parse(source: &str) -> Result<RuleDefinition, RuleError> {
         format_version: raw.format_version,
         code: raw.code,
         name: raw.name,
+        description: raw.description,
         severity: raw.severity,
         triggers,
         predicate: raw.predicate,
@@ -411,6 +430,7 @@ pub fn compile(source: &str) -> Result<CompiledRule, RuleError> {
         format_version: rule.format_version,
         code: rule.code,
         name: rule.name,
+        description: rule.description,
         severity: rule.severity,
         triggers: rule.triggers,
         predicate: rule.predicate,
@@ -459,6 +479,30 @@ mod tests {
     #[test]
     fn parses_bounded_host_owned_rule() {
         assert!(parse(REQUIRED).is_ok());
+    }
+    #[test]
+    fn carries_an_optional_bounded_description() {
+        assert_eq!(compile(REQUIRED).unwrap().description, None);
+        let described = REQUIRED.replace(
+            "severity='error'",
+            "severity='error'\ndescription='Shoppers need a title to find the product.'",
+        );
+        assert_eq!(
+            compile(&described).unwrap().description.as_deref(),
+            Some("Shoppers need a title to find the product.")
+        );
+        assert!(
+            parse(&REQUIRED.replace("severity='error'", "severity='error'\ndescription='  '"))
+                .is_err()
+        );
+        let long = "x".repeat(MAX_DESCRIPTION_CHARS + 1);
+        assert!(
+            parse(&REQUIRED.replace(
+                "severity='error'",
+                &format!("severity='error'\ndescription='{long}'")
+            ))
+            .is_err()
+        );
     }
     #[test]
     fn definitions_spell_severity_as_findings_store_it() {

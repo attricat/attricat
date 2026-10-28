@@ -4,6 +4,7 @@ import type { CompiledRule } from './api';
 import { ruleTriggerTypes } from './constants';
 import { FindingSeverityChip } from './FindingSeverityChip';
 import type { RuleTrigger } from './schemas';
+import { RuleDescriptionText } from './RuleCells';
 
 const TriggerText = ({ trigger }: { trigger: RuleTrigger }) => {
   const { t } = useTranslation();
@@ -44,6 +45,7 @@ export const RulePreview = ({ rule }: { rule: CompiledRule }) => {
         <Typography color="text.secondary" variant="caption">
           {rule.code}
         </Typography>
+        <RuleDescriptionText description={rule.description} />
       </Box>
       <Box>
         <Typography component="h4" variant="subtitle2">

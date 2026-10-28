@@ -51,7 +51,11 @@ import {
 } from './constants';
 import { recentRuleRunsOptions, ruleOptions } from './queryOptions';
 import { RuleChangelog } from './RuleChangelog';
-import { RuleFindingCounts, RuleLifecycleChip } from './RuleCells';
+import {
+  RuleDescriptionText,
+  RuleFindingCounts,
+  RuleLifecycleChip,
+} from './RuleCells';
 import { DryRunDialog } from './DryRunDialog';
 import { RunsSection } from './RunsSection';
 import { rulesById } from './rulesById';
@@ -62,7 +66,7 @@ import { RuleToggleError } from './RuleToggleError';
 import type { RuleComparisonSearch } from './schemas';
 import { useToggleRule } from './useToggleRule';
 import { FindingSeverityChip } from './FindingSeverityChip';
-import { ruleSeverity } from './ruleSeverity';
+import { ruleDescription, ruleSeverity } from './rulePlan';
 
 const RouterTab = createLink(Tab);
 const sectionIcons = {
@@ -288,6 +292,12 @@ export const RulePage = ({
         icon={RuleIcon}
         title={current.name}
       />
+      <Box sx={{ maxWidth: 'md', mt: 1 }}>
+        <RuleDescriptionText
+          description={ruleDescription(current)}
+          variant="body1"
+        />
+      </Box>
       <RuleToggleError sx={{ mt: 2 }} toggle={toggle} />
       <ApiErrorAlert error={run.error} sx={{ mt: 2 }} />
       <DryRunDialog dryRun={dryRun} onClose={closeDryRun} />

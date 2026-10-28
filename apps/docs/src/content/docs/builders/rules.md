@@ -15,6 +15,7 @@ A rule has a code, a name, a severity, one to eight triggers, and exactly one pr
 format_version = 1
 code = "title-required"
 name = "Products have a title"
+description = "Shoppers search by title, so every product needs one before it goes live."
 severity = "error"
 
 [[triggers]]
@@ -39,6 +40,7 @@ attribute_code = "title"
 | `format_version` | `1`. |
 | `code` | Unique [code](/reference/blueprint/#codes). |
 | `name` | Display name. |
+| `description` | Optional. What the rule checks and why, in plain words, up to 2,000 characters. It is shown on the rule's page, in the rules list, in the editor's preview and beside the rule's findings on each record, so the people who fix them know what is expected. Line breaks are kept; Markdown is not rendered. |
 | `severity` | `info`, `warning`, `error`, or `critical`. |
 | `triggers` | 1 to 8 triggers. See below. |
 | `predicate` | The condition a record must satisfy. See below. |

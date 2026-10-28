@@ -1,6 +1,7 @@
 format_version = 1
 code = "title-required"
 name = "Records have a title"
+description = "Shoppers and channels need a title to find and show the record."
 severity = "warning"
 
 [[triggers]]

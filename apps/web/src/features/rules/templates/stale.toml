@@ -1,6 +1,7 @@
 format_version = 1
 code = "reviewed-recently"
 name = "Records were reviewed in the last 90 days"
+description = "Someone should confirm these details at least every 90 days so they stay accurate."
 severity = "info"
 
 # Every Monday at 03:00 UTC: sec min hour day month weekday.

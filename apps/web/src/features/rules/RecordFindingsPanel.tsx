@@ -42,7 +42,8 @@ import {
   recordRulesOptions,
 } from './queryOptions';
 import { isWatchingRecordRuleChecks } from './recordRuleChecks';
-import { RuleRevisionCell } from './RuleCells';
+import { RuleDescriptionText, RuleRevisionCell } from './RuleCells';
+import { ruleDescription } from './rulePlan';
 import { rulesById, type RulesById } from './rulesById';
 import { findingEvidenceSchema } from './schemas';
 import { capabilities } from '../auth/capabilities';
@@ -170,6 +171,12 @@ const FindingItem = ({
             </>
           )}
         </Typography>
+        {rule && (
+          <RuleDescriptionText
+            description={ruleDescription(rule)}
+            variant="caption"
+          />
+        )}
         <Typography
           component="p"
           variant="caption"
