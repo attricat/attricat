@@ -45,10 +45,17 @@ describe('TableImageValue', () => {
     expect(screen.getByText('Thumbnail unavailable')).toBeTruthy();
   });
 
-  it('shows the normal unset state when no file is assigned', () => {
+  it('shows a placeholder thumbnail when no file is assigned', () => {
     render(<TableImageValue value={[]} />);
 
-    expect(screen.getByText('Not set')).toBeTruthy();
+    expect(screen.getByRole('img', { name: 'No image' })).toBeTruthy();
+    expect(screen.queryByText('Not set')).toBeNull();
+  });
+
+  it('shows a placeholder thumbnail for an absent value', () => {
+    render(<TableImageValue value={null} />);
+
+    expect(screen.getByRole('img', { name: 'No image' })).toBeTruthy();
   });
 
   it('shows the unavailable status for a failed image', () => {

@@ -1581,6 +1581,7 @@
     "thumbnailProcessing": "Thumbnail is processing",
     "thumbnailFor": "Thumbnail for {{filename}}",
     "thumbnailUnavailable": "Thumbnail unavailable",
+    "noImage": "No image",
     "failed": "Failed",
     "unavailable": "Unavailable",
     "uploadFailed": "Upload failed",
