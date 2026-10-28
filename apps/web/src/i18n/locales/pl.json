@@ -1653,6 +1653,7 @@
     "thumbnailProcessing": "Miniatura jest przetwarzana",
     "thumbnailFor": "Miniatura pliku {{filename}}",
     "thumbnailUnavailable": "Miniatura niedostępna",
+    "noImage": "Brak obrazu",
     "failed": "Niepowodzenie",
     "unavailable": "Niedostępne",
     "uploadFailed": "Przesyłanie nie powiodło się",
