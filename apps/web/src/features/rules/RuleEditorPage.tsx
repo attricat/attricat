@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { Alert, Box, Button, Paper, Stack, Typography } from '@mui/material';
+import { Alert, Box, Button, Paper, Typography } from '@mui/material';
 import { lazy, Suspense, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ApiRequestError } from '../../api/request';
@@ -309,29 +309,22 @@ export const RuleEditorPage = ({ ruleId }: { ruleId?: string }) => {
       )}
       {source && isDirty && (
         <Paper component="section" sx={{ mt: 3, p: 2.5 }}>
-          <Stack
-            direction={{ xs: 'column', sm: 'row' }}
-            spacing={2}
-            sx={{
-              alignItems: { sm: 'center' },
-              justifyContent: 'space-between',
-            }}
-          >
-            <Box>
-              <Typography component="h2" variant="h6">
-                {t('rules.editor.changesTitle')}
-              </Typography>
-              <Typography color="text.secondary" variant="body2">
-                {t('rules.editor.changesDescription')}
-              </Typography>
-            </Box>
-            <RuleChangeDryRun
-              definition={definition}
-              disabled={save.isPending || check.result === undefined}
-              blueprintId={source.blueprint_id}
-              ruleId={source.id}
-            />
-          </Stack>
+          <RuleChangeDryRun
+            definition={definition}
+            disabled={save.isPending || check.result === undefined}
+            blueprintId={source.blueprint_id}
+            heading={
+              <Box>
+                <Typography component="h2" variant="h6">
+                  {t('rules.editor.changesTitle')}
+                </Typography>
+                <Typography color="text.secondary" variant="body2">
+                  {t('rules.editor.changesDescription')}
+                </Typography>
+              </Box>
+            }
+            ruleId={source.id}
+          />
           <Box sx={{ mt: 2 }}>
             <Suspense
               fallback={
