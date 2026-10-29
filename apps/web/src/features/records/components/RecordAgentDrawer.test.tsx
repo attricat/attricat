@@ -127,7 +127,7 @@ describe('RecordAgentDrawer', () => {
 
     await user.click(
       screen.getByRole('switch', {
-        name: 'Auto-approve changes to this record',
+        name: 'Auto-approve changes within this conversation',
       }),
     );
     await user.type(
@@ -166,16 +166,21 @@ describe('RecordAgentDrawer', () => {
     const user = userEvent.setup();
     renderDrawer(undefined, { draft, initialConversation: conversationId });
 
-    await user.hover(
-      await screen.findByRole('button', { name: 'About auto-approval' }),
-    );
+    const about = await screen.findByRole('button', {
+      name: 'About auto-approval',
+    });
+    await user.hover(about);
     expect(
       await screen.findByText(/On for someone else's messages/),
     ).toBeTruthy();
     const toggle = screen.getByRole('switch', {
-      name: 'Auto-approve changes to this record',
+      name: 'Auto-approve changes within this conversation',
     });
     expect((toggle as HTMLInputElement).checked).toBe(false);
+    // The info button sits in the switch's label but does not flip it.
+    await user.click(about);
+    expect((toggle as HTMLInputElement).checked).toBe(false);
+    expect(setConversationAutoApproval).not.toHaveBeenCalled();
     await waitFor(() =>
       expect((toggle as HTMLInputElement).disabled).toBe(false),
     );
@@ -191,7 +196,7 @@ describe('RecordAgentDrawer', () => {
     await screen.findByRole('textbox', { name: 'Message' });
     expect(
       screen.queryByRole('switch', {
-        name: 'Auto-approve changes to this record',
+        name: 'Auto-approve changes within this conversation',
       }),
     ).toBeNull();
   });

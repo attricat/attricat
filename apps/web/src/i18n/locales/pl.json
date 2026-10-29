@@ -279,7 +279,7 @@
   "agents": {
     "autoApproval": {
       "about": "O automatycznym zatwierdzaniu",
-      "label": "Automatycznie zatwierdzaj zmiany tego rekordu",
+      "label": "Automatycznie zatwierdzaj zmiany w tej rozmowie",
       "hint": "W wysyłanych przez Ciebie wiadomościach agent stosuje zmiany pól, relacji, tagów, plików i komentarzy tego rekordu bez pytania. Usunięcie, publikacja i zmiany innych rekordów nadal wymagają zatwierdzenia.",
       "heldByOther": "Włączone dla wiadomości innej osoby. Włącz, aby używać go dla swoich."
     },

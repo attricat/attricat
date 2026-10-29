@@ -30,7 +30,7 @@ export const AutoApprovalSwitch = ({
     ? `${t('agents.autoApproval.heldByOther')} ${t('agents.autoApproval.hint')}`
     : t('agents.autoApproval.hint');
   return (
-    <Box sx={{ alignItems: 'center', display: 'flex', mb: 1.5, px: 1 }}>
+    <Box sx={{ mb: 1.5, px: 1 }}>
       <FormControlLabel
         control={
           <Switch
@@ -39,15 +39,24 @@ export const AutoApprovalSwitch = ({
             onChange={(event) => onChange(event.target.checked)}
           />
         }
-        label={t('agents.autoApproval.label')}
+        label={
+          <>
+            {t('agents.autoApproval.label')}
+            <Tooltip title={about}>
+              <IconButton
+                aria-label={t('agents.autoApproval.about')}
+                // Inside the label, a click would otherwise flip the switch.
+                onClick={(event) => event.preventDefault()}
+                sx={{ ml: 0.5, p: 0.5, verticalAlign: 'middle' }}
+              >
+                <InfoIcon aria-hidden size={compactIconSize} />
+              </IconButton>
+            </Tooltip>
+          </>
+        }
         slotProps={{ typography: { variant: 'body2' } }}
-        sx={{ gap: 2, ml: 0, mr: 0.5 }}
+        sx={{ gap: 2, ml: 0, mr: 0 }}
       />
-      <Tooltip title={about}>
-        <IconButton aria-label={t('agents.autoApproval.about')}>
-          <InfoIcon aria-hidden size={compactIconSize} />
-        </IconButton>
-      </Tooltip>
     </Box>
   );
 };
