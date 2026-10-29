@@ -10,7 +10,7 @@
     "edited": "Edytowano",
     "loading": "Wczytywanie komentarzy",
     "empty": "Nie ma jeszcze komentarzy. Dodaj pierwszy komentarz poniżej.",
-    "loadMore": "Wczytaj więcej komentarzy",
+    "loadEarlier": "Pokaż wcześniejsze komentarze",
     "saved": "Komentarz zapisany.",
     "validation": "Wpisz komentarz o długości od 1 do {{max}} znaków, bez znaków null.",
     "markdownHint": "Obsługiwany jest Markdown. {{count}} / {{max}} znaków. Obrazy i HTML nie są wyświetlane.",

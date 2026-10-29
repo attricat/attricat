@@ -82,3 +82,55 @@ describe('record comments', () => {
     expect(own.querySelector('.MuiAvatar-root')).not.toBeNull();
   });
 });
+
+describe('record comment order', () => {
+  it('lists comments oldest first with earlier pages above and the composer below', async () => {
+    const person = {
+      ...comment,
+      author_user_id: userId,
+      author_display_name: 'Reader',
+      author_email: 'reader@example.com',
+      author_kind: 'person' as const,
+    };
+    // The API pages comments newest first.
+    vi.mocked(listComments).mockResolvedValue({
+      has_more: true,
+      items: [
+        {
+          ...person,
+          id: '00000000-0000-4000-8000-000000000402',
+          body: 'Newest note.',
+        },
+        {
+          ...person,
+          id: '00000000-0000-4000-8000-000000000401',
+          body: 'Older note.',
+        },
+      ],
+    });
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <RecordCommentsPanel recordId="record" />
+      </QueryClientProvider>,
+    );
+
+    const older = await screen.findByText('Older note.');
+    const newest = screen.getByText('Newest note.');
+    const earlier = screen.getByRole('button', {
+      name: 'Show earlier comments',
+    });
+    const composer = await screen.findByRole('textbox', { name: /Comment/ });
+    const follows = (first: Node, second: Node) =>
+      Boolean(
+        first.compareDocumentPosition(second) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+    expect(follows(earlier, older)).toBe(true);
+    expect(follows(older, newest)).toBe(true);
+    expect(follows(newest, composer)).toBe(true);
+  });
+});

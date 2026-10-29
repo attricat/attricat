@@ -133,7 +133,10 @@ const CommentItem = ({
   );
 };
 
-/** A record's comments, newest first and page by page, with a composer. */
+/**
+ * A record's comments, oldest first like a conversation, with earlier pages
+ * above them and the composer below.
+ */
 export const RecordCommentsPanel = ({ recordId }: { recordId: string }) => {
   const { t } = useTranslation();
   const client = useQueryClient();
@@ -150,7 +153,10 @@ export const RecordCommentsPanel = ({ recordId }: { recordId: string }) => {
     setNotice(t('comments.saved'));
     void client.invalidateQueries({ queryKey: key });
   };
-  const items = comments.data?.pages.flatMap((page) => page.items) ?? [];
+  // Pages arrive newest first; the oldest loaded comment leads.
+  const items = (comments.data?.pages.flatMap((page) => page.items) ?? [])
+    .slice()
+    .reverse();
   const sectionRef = useRef<HTMLDivElement>(null);
   // The section loads after the record, too late for the router's own
   // scroll to a link's #comments target.
@@ -174,20 +180,11 @@ export const RecordCommentsPanel = ({ recordId }: { recordId: string }) => {
           void comments.refetch();
         }}
       />
-      {comments.isSuccess && items.length === 0 && (
-        <EmptyState icon={CommentIcon} title={t('comments.empty')} />
-      )}
-      {session.data && (
-        <CommentComposer
-          key={`${session.data.workspace_id}:${session.data.user_id}:${recordId}:${composerVersion}`}
-          recordId={recordId}
-          disabled={!comments.data || comments.isError}
-          onSaved={() => {
-            setComposerVersion((version) => version + 1);
-            saved();
-          }}
-        />
-      )}
+      <NextPageButton
+        compact
+        label={t('comments.loadEarlier')}
+        query={comments}
+      />
       <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0 }}>
         {items.map((comment) => (
           <CommentItem
@@ -201,7 +198,22 @@ export const RecordCommentsPanel = ({ recordId }: { recordId: string }) => {
           />
         ))}
       </Box>
-      <NextPageButton compact label={t('comments.loadMore')} query={comments} />
+      {comments.isSuccess && items.length === 0 && (
+        <EmptyState icon={CommentIcon} title={t('comments.empty')} />
+      )}
+      {session.data && (
+        <Box sx={{ mt: 6 }}>
+          <CommentComposer
+            key={`${session.data.workspace_id}:${session.data.user_id}:${recordId}:${composerVersion}`}
+            recordId={recordId}
+            disabled={!comments.data || comments.isError}
+            onSaved={() => {
+              setComposerVersion((version) => version + 1);
+              saved();
+            }}
+          />
+        </Box>
+      )}
     </Box>
   );
 };
