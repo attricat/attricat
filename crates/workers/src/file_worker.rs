@@ -17,6 +17,7 @@ use image::{DynamicImage, GenericImageView, ImageReader};
 use metrics::{counter, gauge};
 use sha2::Digest;
 use sqlx::{PgPool, Row};
+use tokio::task::JoinSet;
 use tracing::{Instrument, info_span};
 use uuid::Uuid;
 
@@ -40,6 +41,8 @@ const LEASE_HEARTBEAT_SECONDS: u64 = 60;
 const RECONCILE_INTERVAL: Duration = Duration::from_secs(30);
 const METRICS_INTERVAL: Duration = Duration::from_secs(5);
 const MAX_BACKOFF_SECONDS: i64 = 300;
+/// Back-off after a failed claim, so a persistent fault does not spin.
+const FAILED_CLAIM_BACKOFF: Duration = Duration::from_secs(1);
 
 #[derive(Clone, Debug)]
 pub struct WorkerConfig {
@@ -129,7 +132,7 @@ impl FileWorker {
     /// worker processes to poll without serialising each other. Text
     /// extraction is claimed after other due jobs, so a queue of extractions
     /// does not hold back new uploads; one already running still occupies
-    /// its worker.
+    /// its slot.
     pub async fn claim(&self) -> Result<Option<ClaimedJob>, sqlx::Error> {
         let job = sqlx::query_as::<_, (Uuid, Uuid, Uuid, String, i32, Uuid)>(
             r#"WITH candidate AS (
@@ -164,6 +167,44 @@ impl FileWorker {
         ))
     }
 
+    /// Processes jobs until the future is dropped, running up to
+    /// `concurrency` at once. A free slot is refilled as soon as a job
+    /// finishes; an empty queue is polled again after `poll_interval`.
+    /// Dropping the future aborts running jobs and leaves their leases to
+    /// expire.
+    pub async fn run(self: Arc<Self>, concurrency: usize, poll_interval: Duration) {
+        let mut running = JoinSet::new();
+        loop {
+            let mut wait = poll_interval;
+            while running.len() < concurrency {
+                match self.next_job().await {
+                    Ok(Some(job)) => {
+                        let worker = Arc::clone(&self);
+                        running.spawn(async move {
+                            worker
+                                .process(job, Duration::from_secs(LEASE_HEARTBEAT_SECONDS))
+                                .await
+                        });
+                    }
+                    Ok(None) => break,
+                    Err(error) => {
+                        tracing::error!(%error, "file job claim failed");
+                        wait = FAILED_CLAIM_BACKOFF;
+                        break;
+                    }
+                }
+            }
+            tokio::select! {
+                joined = running.join_next(), if !running.is_empty() => match joined {
+                    Some(Ok(Err(error))) => tracing::error!(%error, "file job failed"),
+                    Some(Err(error)) => tracing::error!(%error, "file job panicked"),
+                    _ => {}
+                },
+                _ = tokio::time::sleep(wait) => {}
+            }
+        }
+    }
+
     pub async fn run_once(&self) -> Result<bool, RepositoryError> {
         self.run_once_with_heartbeat(Duration::from_secs(LEASE_HEARTBEAT_SECONDS))
             .await
@@ -173,6 +214,15 @@ impl FileWorker {
         &self,
         heartbeat_every: Duration,
     ) -> Result<bool, RepositoryError> {
+        let Some(job) = self.next_job().await? else {
+            return Ok(false);
+        };
+        self.process(job, heartbeat_every).await?;
+        Ok(true)
+    }
+
+    /// Reconciles when due, then claims one job.
+    async fn next_job(&self) -> Result<Option<ClaimedJob>, RepositoryError> {
         // Reconciliation is maintenance, not part of every job claim. Avoid
         // rescanning the file population before each item in a busy queue.
         let should_reconcile = {
@@ -194,10 +244,19 @@ impl FileWorker {
                 .expect("reconcile clock poisoned") = None;
             return Err(error);
         }
-        let Some(job) = self.claim().await? else {
+        let job = self.claim().await?;
+        if job.is_none() {
             self.record_metrics_if_due().await?;
-            return Ok(false);
-        };
+        }
+        Ok(job)
+    }
+
+    /// Runs one claimed job to completion while renewing its lease.
+    async fn process(
+        &self,
+        job: ClaimedJob,
+        heartbeat_every: Duration,
+    ) -> Result<(), RepositoryError> {
         let kind = FileJobKind::parse(&job.kind).unwrap_or(FileJobKind::Metadata);
         let span = info_span!("file_worker.job", job_id = %job.id, file_id = %job.file_id, kind = kind.as_str());
         let operation = async {
@@ -231,7 +290,7 @@ impl FileWorker {
             }
         }
         self.record_metrics_if_due().await?;
-        Ok(true)
+        Ok(())
     }
 
     async fn record_metrics_if_due(&self) -> Result<(), sqlx::Error> {
@@ -820,6 +879,56 @@ mod tests {
             .fetch_one(pool)
             .await
             .unwrap()
+    }
+
+    #[sqlx::test(migrations = "../../apps/api/migrations")]
+    async fn run_processes_jobs_concurrently(pool: PgPool) {
+        let store: Arc<dyn ObjectStore> = Arc::new(crate::storage::FakeObjectStore::available());
+        let mut files = Vec::new();
+        for _ in 0..2 {
+            let (file, _) = stored_file(
+                &pool,
+                store.as_ref(),
+                "text/plain",
+                b"text",
+                FileJobKind::Metadata,
+            )
+            .await;
+            files.push(file);
+        }
+        // Holding both file rows keeps each claimed job running, so both
+        // only run at once when the worker has two slots.
+        let mut blocker = pool.begin().await.unwrap();
+        sqlx::query("SELECT id FROM files WHERE id = ANY($1) FOR UPDATE")
+            .bind(&files)
+            .execute(&mut *blocker)
+            .await
+            .unwrap();
+        let worker = Arc::new(test_worker(&pool, store));
+        let running = tokio::spawn(worker.run(2, Duration::from_millis(10)));
+        let count = |status: FileJobStatus| {
+            sqlx::query_scalar::<_, i64>(
+                "SELECT count(*) FROM file_processing_jobs WHERE status = $1",
+            )
+            .bind(status.as_str())
+            .fetch_one(&pool)
+        };
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while count(FileJobStatus::Running).await.unwrap() < 2 {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("both jobs should run at once");
+        blocker.rollback().await.unwrap();
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while count(FileJobStatus::Completed).await.unwrap() < 2 {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("both jobs should complete");
+        running.abort();
     }
 
     #[sqlx::test(migrations = "../../apps/api/migrations")]

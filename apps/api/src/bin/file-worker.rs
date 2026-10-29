@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use api::{
     config::Config,
@@ -19,9 +19,10 @@ use secrecy::ExposeSecret;
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use subtle::ConstantTimeEq;
 
-const POOL_CONNECTIONS: u32 = 4;
-/// Back-off after a failed iteration, so a persistent fault does not spin.
-const FAILED_ITERATION_BACKOFF: Duration = Duration::from_secs(1);
+/// A job holds a transaction while its lease heartbeat renews.
+const CONNECTIONS_PER_JOB: u32 = 2;
+/// Claiming and reconciliation, plus the readiness probe.
+const SHARED_CONNECTIONS: u32 = 2;
 
 #[derive(Clone)]
 struct OperationsState {
@@ -42,11 +43,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let metrics = init_metrics()?;
     let file_worker = config.file_worker;
     let object_store = ready_object_store(config.storage).await?;
+    let concurrency = file_worker.concurrency;
     let pool = PgPoolOptions::new()
-        .max_connections(POOL_CONNECTIONS)
+        .max_connections(concurrency as u32 * CONNECTIONS_PER_JOB + SHARED_CONNECTIONS)
         .connect(config.database.url.expose_secret())
         .await?;
-    let worker = FileWorker::new(pool.clone(), object_store.clone(), file_worker.worker);
+    let worker = Arc::new(FileWorker::new(
+        pool.clone(),
+        object_store.clone(),
+        file_worker.worker,
+    ));
     let args: Vec<_> = std::env::args().skip(1).collect();
     if let Some(job_id) = args
         .windows(2)
@@ -83,23 +89,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     });
 
     let poll = file_worker.poll_interval;
-    tracing::info!(operations_address = %operations_addr, "file worker started");
-    let shutdown = shutdown_signal();
-    tokio::pin!(shutdown);
-    loop {
-        tokio::select! {
-            result = worker.run_once() => {
-                if let Err(error) = result {
-                    tracing::error!(%error, "file worker iteration failed");
-                    tokio::time::sleep(FAILED_ITERATION_BACKOFF).await;
-                }
-            }
-            _ = &mut shutdown => break,
-        }
-        tokio::select! {
-            _ = &mut shutdown => break,
-            _ = tokio::time::sleep(poll) => {}
-        }
+    tracing::info!(operations_address = %operations_addr, concurrency, "file worker started");
+    tokio::select! {
+        () = worker.run(concurrency, poll) => {}
+        () = shutdown_signal() => {}
     }
     let _ = shutdown_sender.send(());
     operations_server.await??;
