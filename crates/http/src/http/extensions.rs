@@ -264,6 +264,8 @@ pub(super) struct OperationRunResponse {
     progress: Value,
     attempts: i32,
     last_error_code: Option<String>,
+    /// The redacted diagnostic stored with the last failure.
+    last_error_message: Option<String>,
     created_at: chrono::DateTime<chrono::Utc>,
     completed_at: Option<chrono::DateTime<chrono::Utc>>,
 }
@@ -284,6 +286,7 @@ impl From<ExtensionOperationRun> for OperationRunResponse {
             progress: value.progress,
             attempts: value.attempts,
             last_error_code: value.last_error_code,
+            last_error_message: value.last_error_message,
             created_at: value.created_at,
             completed_at: value.completed_at,
         }

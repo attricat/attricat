@@ -817,7 +817,7 @@ whose `handle-event(event, delivery)` returns `result<_, failure>`, and
 
 | Case | Event handler | Operation batch |
 |---|---|---|
-| `rejected { code, message, record-id?, connection? }` | Recorded, never retried; the delivery completes, and other records the handler leased become `retrying` with error `handler_rejected` | A rejection that names a record, from an extension with `exports.mappings`, settles that record and replays the batch after a second, so the component finds the record settled and moves on. A newly settled record is progress and is not counted; a repeated rejection, or one of a record another worker holds, counts toward the 100 waits in a row below; a record another worker holds is replayed once that worker's lease ends. A rejection that cannot be recorded (for example for an unknown connection, or of a record outside the run's scope), and any other rejection, dead-letters the run with code `rejected`, without retries |
+| `rejected { code, message, record-id?, connection? }` | Recorded, never retried; the delivery completes, and other records the handler leased become `retrying` with error `handler_rejected` | A rejection that names a record, from an extension with `exports.mappings`, settles that record and replays the batch after a second, so the component finds the record settled and moves on. A newly settled record is progress and is not counted; a repeated rejection, or one of a record another worker holds, counts toward the 100 waits in a row below; a record another worker holds is replayed once that worker's lease ends. A rejection that cannot be recorded (for example for an unknown connection, or of a record outside the run's scope), and any other rejection, dead-letters the run with code `rejected`, without retries; the run's `last_error_message` keeps the rejection's code as `{"rejection_code": "…"}`, with the message's fields when the message is a JSON object |
 | `retry { message, after-ms? }` | Retried for this handler only, after `after-ms` or a backoff (5 s doubling to 1 h), up to 10 attempts, then recorded as `exhausted`; records the handler still leases become `retrying` with error `retries_exhausted` and their leases end | The batch is retried with the same batch key after the delay. With `after-ms` it waits like a deferral, without spending the task's failure budget, up to 100 times in a row before a completed batch; past that, and without `after-ms`, it is a failure within that budget. A replayed dead-lettered run starts with fresh failure and deferral budgets |
 | `fault(message)` | Quarantines the installation; records the handler leased become `retrying` with error `handler_fault` | Fails the run and quarantines the installation |
 
@@ -1836,7 +1836,13 @@ S3-backed deployment, side-load the same archive via `acli extension sideload
 `/extension-operation-runs/{run_id}/artifacts` afterward. The run list returns
 the most recent 200; `GET /extension-operation-runs/{id}` retrieves an older
 run by ID. Run history includes `schedule_id` and `outputs_expired`
-without exposing input or secrets.
+without exposing input or secrets. `last_error_code` names the host's category
+of the last failure (`rejected`, `retry` or `operation`) and
+`last_error_message` holds its diagnostic. Component text is untrusted, so a
+diagnostic is kept only as structured JSON with secret-named fields redacted;
+opaque text is stored as `operation failure (diagnostics redacted)`. Return
+failures as JSON objects, and rejections with a specific code, to make them
+diagnosable from the run.
 
 When available, the sibling checkout at `../../attricat-extension-example`
 contains the packaged `attricat-extension-example` formula component using the

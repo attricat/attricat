@@ -85,6 +85,9 @@ pub struct ExtensionOperationRun {
     pub checkpoint: Value,
     pub attempts: i32,
     pub last_error_code: Option<String>,
+    /// The last failure's diagnostic: structured JSON with secrets redacted,
+    /// or a fixed notice when the failure carried only opaque text.
+    pub last_error_message: Option<String>,
     pub created_at: DateTime<Utc>,
     pub completed_at: Option<DateTime<Utc>>,
 }
@@ -755,7 +758,7 @@ impl AttricatRepository {
         &self,
     ) -> Result<Vec<ExtensionOperationRun>, RepositoryError> {
         Ok(sqlx::query_as(
-            "SELECT id,schedule_id,connector_job_id,connector_channel_id,extension_id,installed_release_id,abi_version,operation_id,status,outputs_expired,progress,checkpoint,attempts,last_error_code,created_at,completed_at FROM extension_operation_runs WHERE workspace_id=$1 ORDER BY created_at DESC,id DESC LIMIT 200",
+            "SELECT id,schedule_id,connector_job_id,connector_channel_id,extension_id,installed_release_id,abi_version,operation_id,status,outputs_expired,progress,checkpoint,attempts,last_error_code,last_error_message,created_at,completed_at FROM extension_operation_runs WHERE workspace_id=$1 ORDER BY created_at DESC,id DESC LIMIT 200",
         )
         .bind(self.workspace_id())
         .fetch_all(&self.pool)
@@ -769,7 +772,7 @@ impl AttricatRepository {
         limit: i64,
         offset: i64,
     ) -> Result<(Vec<ExtensionOperationRun>, bool), RepositoryError> {
-        let mut rows = sqlx::query_as("SELECT id,schedule_id,connector_job_id,connector_channel_id,extension_id,installed_release_id,abi_version,operation_id,status,outputs_expired,progress,checkpoint,attempts,last_error_code,created_at,completed_at FROM extension_operation_runs WHERE workspace_id=$1 AND ($2::text IS NULL OR extension_id=$2) AND ($3::uuid IS NULL OR connector_job_id=$3) ORDER BY created_at DESC,id DESC LIMIT $4 OFFSET $5")
+        let mut rows = sqlx::query_as("SELECT id,schedule_id,connector_job_id,connector_channel_id,extension_id,installed_release_id,abi_version,operation_id,status,outputs_expired,progress,checkpoint,attempts,last_error_code,last_error_message,created_at,completed_at FROM extension_operation_runs WHERE workspace_id=$1 AND ($2::text IS NULL OR extension_id=$2) AND ($3::uuid IS NULL OR connector_job_id=$3) ORDER BY created_at DESC,id DESC LIMIT $4 OFFSET $5")
             .bind(self.workspace_id()).bind(extension_id).bind(connector_job_id)
             .bind(limit + 1).bind(offset).fetch_all(&self.pool).await?;
         let has_more = rows.len() as i64 > limit;
@@ -781,7 +784,7 @@ impl AttricatRepository {
         &self,
         id: Uuid,
     ) -> Result<Option<ExtensionOperationRun>, RepositoryError> {
-        sqlx::query_as("SELECT id,schedule_id,connector_job_id,connector_channel_id,extension_id,installed_release_id,abi_version,operation_id,status,outputs_expired,progress,checkpoint,attempts,last_error_code,created_at,completed_at FROM extension_operation_runs WHERE id=$1 AND workspace_id=$2")
+        sqlx::query_as("SELECT id,schedule_id,connector_job_id,connector_channel_id,extension_id,installed_release_id,abi_version,operation_id,status,outputs_expired,progress,checkpoint,attempts,last_error_code,last_error_message,created_at,completed_at FROM extension_operation_runs WHERE id=$1 AND workspace_id=$2")
             .bind(id).bind(self.workspace_id()).fetch_optional(&self.pool).await.map_err(Into::into)
     }
 }

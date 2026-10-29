@@ -3602,6 +3602,7 @@ mod tests {
             checkpoint: json!({"token":"hidden"}),
             attempts: 0,
             last_error_code: None,
+            last_error_message: Some(r#"{"token":"hidden"}"#.into()),
             created_at: chrono::Utc::now(),
             completed_at: None,
         };

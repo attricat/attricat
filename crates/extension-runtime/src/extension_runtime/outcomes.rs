@@ -31,6 +31,36 @@ pub struct Rejection {
     pub connection: Option<String>,
 }
 
+impl Rejection {
+    /// The diagnostic a run keeps for this rejection. Stored run errors keep
+    /// only structured JSON (redacted) and drop opaque text, so the code goes
+    /// in as a field, with the message's own fields when it is a JSON object.
+    /// A code that is not a plain identifier is left out.
+    pub fn diagnostic(&self) -> String {
+        let mut diagnostic = match serde_json::from_str::<serde_json::Value>(&self.message) {
+            Ok(serde_json::Value::Object(fields)) => fields,
+            _ => serde_json::Map::new(),
+        };
+        if is_identifier(&self.code) {
+            diagnostic.insert(
+                REJECTION_CODE_FIELD.into(),
+                serde_json::Value::String(self.code.clone()),
+            );
+        }
+        serde_json::Value::Object(diagnostic).to_string()
+    }
+}
+
+/// The diagnostic field that names a rejection's code.
+const REJECTION_CODE_FIELD: &str = "rejection_code";
+
+fn is_identifier(code: &str) -> bool {
+    !code.is_empty()
+        && code
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.' | b':'))
+}
+
 /// What one handler invocation, or one operation batch, ended with.
 #[derive(Clone, Debug)]
 pub enum InvocationFailure {
@@ -133,5 +163,28 @@ mod tests {
             panic!("retry expected");
         };
         assert_eq!(after, Some(MAX_COMPONENT_DELAY));
+    }
+
+    fn rejection(code: &str, message: &str) -> Rejection {
+        Rejection {
+            code: code.into(),
+            message: message.into(),
+            record_id: None,
+            connection: None,
+        }
+    }
+
+    #[test]
+    fn rejection_diagnostics_keep_the_code_but_not_opaque_text() {
+        assert_eq!(
+            rejection("invalid_checkpoint", "invalid checkpoint").diagnostic(),
+            r#"{"rejection_code":"invalid_checkpoint"}"#
+        );
+        // A structured message keeps its fields; the code is the host's.
+        assert_eq!(
+            rejection("template_changed", r#"{"version":2,"rejection_code":"x"}"#).diagnostic(),
+            r#"{"rejection_code":"template_changed","version":2}"#
+        );
+        assert_eq!(rejection("token=secret value", "").diagnostic(), "{}");
     }
 }

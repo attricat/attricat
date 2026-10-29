@@ -1362,6 +1362,17 @@ input = {{fail = "{fail}"}}
         (status.as_str(), code.as_deref()),
         ("dead_letter", Some("rejected"))
     );
+    // The component's code survives; its free-text message is not kept.
+    let message: Option<String> =
+        sqlx::query_scalar("SELECT last_error_message FROM extension_operation_runs WHERE id=$1")
+            .bind(rejected[0])
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        message.as_deref(),
+        Some(r#"{"rejection_code":"feed_rejected"}"#)
+    );
     assert_eq!(installation_state(&pool).await, "enabled");
     // A replayed run gets a fresh deferral budget.
     sqlx::query("UPDATE extension_operation_runs SET deferrals=100 WHERE id=$1")

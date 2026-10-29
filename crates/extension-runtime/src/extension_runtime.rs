@@ -1657,6 +1657,7 @@ impl ExtensionOperationTaskHandler {
                 }
             }
             BatchError::Failure(InvocationFailure::Rejected(rejection)) => {
+                let message = rejection.diagnostic();
                 let exports = exports_mappings(&installation);
                 let mut recorded = None;
                 if let Some(record_id) = rejection.record_id
@@ -1741,7 +1742,6 @@ impl ExtensionOperationTaskHandler {
                         );
                     }
                 }
-                let message = format!("{}: {}", rejection.code, rejection.message);
                 // A rejection of one record settles that record, so the
                 // batch replays and the component moves past it (its mapping
                 // now reads as settled); the rest of the run continues. A
