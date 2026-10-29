@@ -135,7 +135,6 @@ export const ExplorerBrowseRail = ({
           label={t('explorer.browse.by')}
           onChange={(event) => onFieldChange(event.target.value)}
           select
-          size="small"
           value={field.attribute.code}
         >
           {fields.map((candidate) => (

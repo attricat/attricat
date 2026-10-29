@@ -54,7 +54,7 @@ const DataHealthControlsForm = ({
         spacing={2}
         sx={{ alignItems: { sm: 'center' } }}
       >
-        <FormControl size="small" sx={{ minWidth: staleAfterSelectMinWidth }}>
+        <FormControl sx={{ minWidth: staleAfterSelectMinWidth }}>
           <InputLabel id={staleAfterLabelId}>
             {t('dataHealth.staleAfter')}
           </InputLabel>
@@ -94,7 +94,6 @@ const DataHealthControlsForm = ({
               )
                 onStaleAfterDaysChange(days);
             }}
-            size="small"
             slotProps={{
               htmlInput: {
                 min: minimumStaleAfterDays,

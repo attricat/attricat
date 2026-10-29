@@ -24,7 +24,7 @@ export const RuleListFilter = ({
 }) => {
   const labelId = useId();
   return (
-    <FormControl size="small" sx={{ minWidth: FINDING_FILTER_MIN_WIDTH }}>
+    <FormControl sx={{ minWidth: FINDING_FILTER_MIN_WIDTH }}>
       <InputLabel id={labelId} shrink>
         {label}
       </InputLabel>

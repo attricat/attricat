@@ -45,10 +45,10 @@ const relationshipAdornment = (
 /** Height of a pill and of the selector button beside the pills. */
 const pillRowHeight = '24px';
 /**
- * Padding that keeps one row of pills as tall as a small text field's input
- * (MUI gives it 8.5px padding around a 1.4375em line).
+ * Padding that keeps one row of pills as tall as a text field's input
+ * (MUI gives it 16.5px padding around a 1.4375em line).
  */
-const pillRowPadding = `calc(8.5px - (${pillRowHeight} - 1.4375em) / 2)`;
+const pillRowPadding = `calc(16.5px - (${pillRowHeight} - 1.4375em) / 2)`;
 
 /** Lets the pills grow the outlined field over several rows. */
 const relationshipInputSx = {

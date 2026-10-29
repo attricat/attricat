@@ -102,14 +102,12 @@ const AuthorizationCodeForm = ({
         <TextField
           label={t('extensionExports.authorizationCode')}
           required
-          size="small"
           value={code}
           onChange={(event) => setCode(event.target.value)}
         />
         <TextField
           label={t('extensionExports.redirectUri')}
           required
-          size="small"
           type="url"
           value={redirectUri}
           onChange={(event) => setRedirectUri(event.target.value)}
@@ -168,7 +166,6 @@ const ReplaceSecretForm = ({
               ? t('extensionExports.replaceRefreshToken')
               : t('extensionExports.replaceSecret')
           }
-          size="small"
           type="password"
           value={secret}
           onChange={(event) => setSecret(event.target.value)}

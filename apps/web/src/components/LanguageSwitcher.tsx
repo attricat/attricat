@@ -17,7 +17,7 @@ export const LanguageSwitcher = () => {
   const language = useActiveLanguage();
 
   return (
-    <FormControl size="small" sx={{ minWidth: languageSwitcherMinWidth }}>
+    <FormControl sx={{ minWidth: languageSwitcherMinWidth }}>
       <InputLabel id={labelId}>{t('language.label')}</InputLabel>
       <Select
         label={t('language.label')}

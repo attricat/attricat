@@ -68,7 +68,6 @@ export const ChannelChecksEditor = ({
             label={t('exports.requiredRules')}
           />
         )}
-        size="small"
         value={[...requiredRuleCodes]}
       />
     </Stack>

@@ -74,7 +74,6 @@ export const WorkflowActions = ({
               htmlInput: { 'aria-label': t('workflows.manualRunRecordId') },
             }}
             onChange={(event) => setManualRecordId(event.target.value)}
-            size="small"
             value={manualRecordId}
           />
           <Button
