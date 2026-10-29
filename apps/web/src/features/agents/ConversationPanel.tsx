@@ -1,9 +1,8 @@
 import { useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Box } from '@mui/material';
-import { decideApproval } from './api';
-import { smartFillRecordForm } from '../records/api';
-import { thinkingRunStatuses } from './constants';
+import { decideApproval, sendMessage } from './api';
+import { thinkingRunStatuses, unfinishedRunStatuses } from './constants';
 import { ConversationComposer } from './ConversationComposer';
 import { ConversationTranscript } from './ConversationTranscript';
 import {
@@ -92,25 +91,23 @@ export const ConversationPanel = ({
       <ConversationComposer
         conversationId={conversationId}
         onSendingChange={setIsSending}
+        sendBlocked={runs.data?.some((run) =>
+          unfinishedRunStatuses.includes(run.status),
+        )}
         sendDraft={draftSender(draft)}
       />
     </Box>
   );
 };
 
-/** Sends messages that may propose values for the unsaved record form. */
+/**
+ * Sends messages with the unsaved record form, so the agent can propose
+ * values for it alongside everything else it can do.
+ */
 const draftSender = (draft?: DraftContext) =>
   draft
     ? (content: string, id: string, attachmentIds: string[]) =>
-        smartFillRecordForm({
-          record_id: draft.recordId,
-          context_id: draft.contextId,
-          is_default_context: draft.contextId === draft.defaultContextId,
-          content,
-          conversation_id: id,
-          draft_values: draft.getDraftValues(),
-          attachment_ids: attachmentIds,
-        })
+        sendMessage(id, content, attachmentIds, draft.getDraftValues())
     : undefined;
 
 /**

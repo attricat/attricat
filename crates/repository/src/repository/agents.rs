@@ -362,6 +362,32 @@ impl AttricatRepository {
         provider_base_url: &str,
         model: &str,
     ) -> Result<AgentRun, RepositoryError> {
+        self.submit_agent_message_with_record_form(
+            conversation_id,
+            actor,
+            content,
+            attachment_ids,
+            provider_base_url,
+            model,
+            None,
+        )
+        .await
+    }
+
+    /// Like [`Self::submit_agent_message`], with the unsaved values of the
+    /// record form beside the conversation, which the run may propose
+    /// changes to.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn submit_agent_message_with_record_form(
+        &self,
+        conversation_id: Uuid,
+        actor: Uuid,
+        content: Value,
+        attachment_ids: &[Uuid],
+        provider_base_url: &str,
+        model: &str,
+        record_form_draft: Option<&Value>,
+    ) -> Result<AgentRun, RepositoryError> {
         let mut tx = self.pool.begin().await?;
         if !attachment_ids.is_empty() {
             let workspace_id = self.workspace_id.0;
@@ -391,7 +417,14 @@ impl AttricatRepository {
         )
         .await?;
         let run = self
-            .create_agent_run_in_tx(&mut tx, conversation_id, actor, provider_base_url, model)
+            .create_agent_run_in_tx(
+                &mut tx,
+                conversation_id,
+                actor,
+                provider_base_url,
+                model,
+                record_form_draft,
+            )
             .await?;
         tx.commit().await?;
         Ok(run)
@@ -408,7 +441,14 @@ impl AttricatRepository {
     ) -> Result<AgentRun, RepositoryError> {
         let mut tx = self.pool.begin().await?;
         let run = self
-            .create_agent_run_in_tx(&mut tx, conversation_id, actor, provider_base_url, model)
+            .create_agent_run_in_tx(
+                &mut tx,
+                conversation_id,
+                actor,
+                provider_base_url,
+                model,
+                None,
+            )
             .await?;
         tx.commit().await?;
         Ok(run)
@@ -421,14 +461,15 @@ impl AttricatRepository {
         actor: Uuid,
         provider_base_url: &str,
         model: &str,
+        record_form_draft: Option<&Value>,
     ) -> Result<AgentRun, RepositoryError> {
         let workspace_id = self.workspace_id.0;
         let token_id = self
             .authorization_actor
             .filter(|principal| principal.user_id == actor)
             .and_then(|principal| principal.token_id);
-        let run: AgentRun = sqlx::query_as("INSERT INTO agent_runs (id, workspace_id, conversation_id, origin, status, provider_base_url, model, initiated_by_user_id, initiated_by_token_id, authority_recorded) SELECT $1, $2, $3, 'interactive', 'queued', $4, $5, $6, $7, true WHERE EXISTS (SELECT 1 FROM conversations WHERE id = $3 AND workspace_id = $2) RETURNING id, conversation_id, origin, status, provider_base_url, model, started_at, finished_at, error_code, error_message, created_at")
-            .bind(Uuid::new_v4()).bind(workspace_id).bind(conversation_id).bind(provider_base_url).bind(model).bind(actor).bind(token_id)
+        let run: AgentRun = sqlx::query_as("INSERT INTO agent_runs (id, workspace_id, conversation_id, origin, status, provider_base_url, model, initiated_by_user_id, initiated_by_token_id, authority_recorded, record_form_draft) SELECT $1, $2, $3, 'interactive', 'queued', $4, $5, $6, $7, true, $8 WHERE EXISTS (SELECT 1 FROM conversations WHERE id = $3 AND workspace_id = $2) RETURNING id, conversation_id, origin, status, provider_base_url, model, started_at, finished_at, error_code, error_message, created_at")
+            .bind(Uuid::new_v4()).bind(workspace_id).bind(conversation_id).bind(provider_base_url).bind(model).bind(actor).bind(token_id).bind(record_form_draft)
             .fetch_optional(&mut **tx).await?.ok_or(RepositoryError::NotFound("conversation"))?;
         self.enqueue_task(
             tx,
@@ -564,6 +605,21 @@ impl AttricatRepository {
             .fetch_optional(&self.pool).await?
             .and_then(|(actor, workspace): (Option<Uuid>, Uuid)| actor.map(|actor| (actor, workspace)))
             .ok_or(RepositoryError::InvalidAgentState("agent run has no initiating user"))
+    }
+
+    /// The unsaved record form values a run was started with, if any.
+    pub async fn agent_run_record_form_draft(
+        &self,
+        run_id: Uuid,
+    ) -> Result<Option<Value>, RepositoryError> {
+        sqlx::query_scalar(
+            "SELECT record_form_draft FROM agent_runs WHERE id = $1 AND workspace_id = $2",
+        )
+        .bind(run_id)
+        .bind(self.workspace_id.0)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or(RepositoryError::NotFound("agent run"))
     }
 
     pub async fn agent_run_actor(

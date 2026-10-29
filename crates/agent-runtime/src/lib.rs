@@ -20,5 +20,6 @@ pub mod bulk_edits;
 pub mod conversation_title;
 mod documents;
 pub mod provider_config;
+pub mod record_form;
 mod search_filters;
 pub mod smart_fill;

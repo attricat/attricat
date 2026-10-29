@@ -77,7 +77,7 @@ return.
 | Export preview | `POST /extensions/{id}/exports/{export_id}/preview` | `records.write`, plus a workspace-wide `records.read` grant (the command reads with the extension's access) | The destination payload an extension builds from the record's values. |
 | Public file links | `GET /public/extension-files/{token}` (`extension_connections.rs`) | none: the unguessable token, while the link is live and the extension holds `attricat.read`, `attricat.files.read` and `attricat.files.public_links`; revoking any of them ends its links | File bytes, to anyone who has the link. |
 | Publication channels | `record_publications.rs` | `records.publish`, `contexts.*` | Flags only. Channel consumers read values through extensions. |
-| Agent tools | `crates/agent-runtime/src/agent_tools.rs` (`get_record`, `get_record_context_preview`, `get_record_changes`, `get_value_history`, `search_records`, `find_records`, `count_records`; display labels from `get_record_labels`, `get_incoming_relationships` and `get_record_hierarchy`) | the person who started the conversation, checked on each call | Same as HTTP. Tool results are stored in conversations, which the workspace shares (filtered only by whether the anchor record is readable), and are sent to the model provider. Smart-fill sends the editable values to the provider. |
+| Agent tools | `crates/agent-runtime/src/agent_tools.rs` (`get_record`, `get_record_context_preview`, `get_record_changes`, `get_value_history`, `search_records`, `find_records`, `count_records`; display labels from `get_record_labels`, `get_incoming_relationships` and `get_record_hierarchy`) | the person who started the conversation, checked on each call | Same as HTTP. Tool results are stored in conversations, which the workspace shares (filtered only by whether the anchor record is readable), and are sent to the model provider. Smart fill, and agent runs started beside a record's form, send its editable values to the provider. |
 | Rules | `workers/src/rule_runtime.rs`, findings API | `rules.read` | No values, but findings name attributes and say whether they are missing or stale. |
 | Workflows | `crates/workflow` | run as the system | A trigger can match on any value. `AttributeWrite` from an event field can copy one attribute's value into another attribute or into system metadata. |
 | Files | `file_access.rs`, `files.rs` `file_read_targets` | record readability | Resolves file → record **without** the attribute. File metadata is embedded in form and resolved values. |
@@ -181,8 +181,9 @@ remain:
    started the run to have `records.read_restricted`. Connector `schema`
    marks restricted attributes, so export profiles can leave them out.
 7. **Agent.** Tools read through the same redacting layer as the person who
-   started the conversation. Smart-fill leaves restricted attributes out of
-   what it sends to the model provider. Because conversations are shared,
+   started the conversation. Smart fill and the record form a run proposes
+   values for leave restricted attributes out of what they send to the model
+   provider. Because conversations are shared,
    tool results that contain restricted values are stored with a marker, and
    the conversation read API redacts them for readers without the
    permission. Explain restricted attributes in `SYSTEM_PROMPT`.

@@ -16,8 +16,6 @@ import {
   publicationStatuses,
   resultVersionScopeKinds,
   approvalEndReasons,
-  SMART_FILL_MAX_ATTACHMENTS,
-  SMART_FILL_MAX_CONTENT_LENGTH,
   statusTransitionDenialCodes,
   retentionHoldSources,
 } from './constants';
@@ -458,23 +456,6 @@ export const createRecordRequestSchema = z.object({
   files: z.array(newFileAttributeValueSchema).optional(),
   system_tags: z.array(z.string()).optional(),
   system_metadata: jsonObjectSchema.optional(),
-});
-export const smartFillRecordFormRequestSchema = z.object({
-  record_id: uuidSchema,
-  context_id: uuidSchema.nullable(),
-  is_default_context: z.boolean(),
-  content: z.string().max(SMART_FILL_MAX_CONTENT_LENGTH),
-  conversation_id: uuidSchema.optional(),
-  draft_values: z.record(z.string(), z.string()).optional(),
-  attachment_ids: z
-    .array(uuidSchema)
-    .max(SMART_FILL_MAX_ATTACHMENTS)
-    .optional(),
-  language: z.string().optional(),
-});
-export const smartFillRecordFormResponseSchema = z.object({
-  fields: z.record(z.string(), z.string()),
-  explanation: z.string().optional(),
 });
 export const updateRecordRequestSchema = z.object({
   expected_updated_at: z.string().datetime({ offset: true }).optional(),

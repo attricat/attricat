@@ -1019,6 +1019,14 @@ most 5 MiB (5,242,880 bytes) also send their original bytes as a base64 `data:`
 image URL. Non-images, oversized images, and unreadable images send no file
 content. The same stored conversation history is sent on later runs and
 provider tool-call rounds, so this applies each time the message is included.
+A message in a conversation about a record may also include `draft_values`,
+the unsaved values of that record's form by field code (at most 256 fields and
+32,768 bytes). Its run is then offered `propose_record_form_values`, which runs
+without approval and saves nothing: it checks the proposed values against the
+record's editable scalar fields in the conversation's context and appends them
+as a draft proposal message that the user applies to the form and saves. The
+record page's agent panel sends them while the user can edit the record;
+`POST /agent/smart-fill` still makes one-shot proposals, such as for the CLI.
 See [Agent provider attachment forwarding](configuration.md#attachment-forwarding)
 for tool-requested file behavior and provider-retention implications. Record
 file uploads remain available through their file-attribute endpoint. A message

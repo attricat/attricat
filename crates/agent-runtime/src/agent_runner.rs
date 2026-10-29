@@ -2,7 +2,7 @@
 use attricat_domain::states::{AgentRunStatus, AgentToolCallState};
 use attricat_domain::value_type::ValueType;
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -14,6 +14,7 @@ use crate::{
     agent_tools::{self, ToolKind},
     agents::MAX_INLINE_ATTACHMENT_BYTES,
     bulk_edits, documents,
+    record_form::{self, RecordForm},
     repository::{
         AgentAuditAttribution, AgentSettings, AttricatRepository, AuditContext, BulkEditPolicy,
         FileObject, RepositoryError,
@@ -74,6 +75,9 @@ const SYSTEM_PROMPT_SECTIONS: [&str; 7] = [
 /// Appended when the client is read-only, which leaves every mutation tool
 /// out of the request.
 const READ_ONLY_PROMPT: &str = "This deployment is a read-only demo: you have no tools that change the catalogue, and no approval can be requested. When the user asks for a change, inspect what it would affect and explain the change you would propose and which approval it would need, then tell them they can make it themselves in the app. Do not claim or imply that you changed anything.";
+
+/// Appended for a run started beside a record's editable form.
+const RECORD_FORM_PROMPT: &str = "The user is editing this record in a form beside this conversation. To change its editable scalar fields, call propose_record_form_values with only the fields that should change and a short explanation, instead of proposing set_record_values: the values fill the form as a draft that the user reviews, applies and saves themselves, so never claim they were saved. Use the record form below for field codes, value types, saved values and the user's unsaved draft values. Never invent facts. Relationships, files, comments, tags and other changes still use their own tools.";
 
 /// Names the user's interface language, so replies follow it rather than
 /// the English system prompt.
@@ -177,6 +181,34 @@ struct RunMemo {
     initiator: Option<(Uuid, Uuid)>,
     catalog_map: Option<String>,
     settings: Option<AgentSettings>,
+    /// The record form the run may propose values for, once looked up.
+    record_form: Option<Option<RecordForm>>,
+}
+
+/// The form of the conversation's record when the run was started beside it
+/// with the user's unsaved values. A form that can no longer be loaded, such
+/// as one whose record was deleted, is left out rather than failing the run.
+async fn run_record_form(
+    repository: &AttricatRepository,
+    run_id: Uuid,
+    record_id: Option<Uuid>,
+    context_id: Option<Uuid>,
+) -> Result<Option<RecordForm>, RepositoryError> {
+    let Some(record_id) = record_id else {
+        return Ok(None);
+    };
+    let Some(draft) = repository.agent_run_record_form_draft(run_id).await? else {
+        return Ok(None);
+    };
+    let draft_values =
+        serde_json::from_value::<BTreeMap<String, String>>(draft).unwrap_or_default();
+    match RecordForm::load(repository, record_id, context_id, draft_values).await {
+        Ok(form) => Ok(Some(form)),
+        Err(error) => {
+            tracing::warn!(%run_id, %error, "agent run record form is unavailable");
+            Ok(None)
+        }
+    }
 }
 
 /// Bounds the catalog map so a large catalog cannot crowd out the prompt.
@@ -305,6 +337,21 @@ async fn drive(
     }
     let conversation = repository.get_conversation(conversation_id).await?;
     let messages = repository.conversation_messages(conversation_id).await?;
+    if memo.record_form.is_none() {
+        memo.record_form = Some(
+            run_record_form(
+                repository,
+                run_id,
+                conversation.record_id,
+                conversation.context_id,
+            )
+            .await?,
+        );
+    }
+    let form = memo.record_form.as_ref().and_then(Option::as_ref);
+    let form_prompt = form
+        .map(|form| format!(" {RECORD_FORM_PROMPT} Record form: {}", form.describe()))
+        .unwrap_or_default();
     let context_prompt = match conversation.record_id {
         Some(record_id) => format!(
             " This conversation is anchored to record {record_id} in attribute context {:?}. Before answering questions about what its preview shows, call get_record_context_preview with this record and context ID to see resolved inherited values (or get_record when no context is selected). Ground all responses in this record and its selected context, and do not assume values from another context apply here. For edits, always confirm before persisting changes.",
@@ -323,7 +370,7 @@ async fn drive(
     let mut request = vec![ChatMessage {
         role: "system".into(),
         content: Value::String(format!(
-            "{}{context_prompt}{}{catalog_map}",
+            "{}{context_prompt}{form_prompt}{}{catalog_map}",
             run_system_prompt(provider.read_only()),
             language_prompt(conversation.language.as_deref())
         )),
@@ -346,16 +393,16 @@ async fn drive(
     }
     let pending = Arc::new(Mutex::new(String::new()));
     let stream_pending = pending.clone();
-    let mut stream = Box::pin(provider.stream(
-        request,
-        offered_tools(provider.read_only(), &settings),
-        move |delta| {
-            stream_pending
-                .lock()
-                .expect("agent delta buffer poisoned")
-                .push_str(delta);
-        },
-    ));
+    let mut tools = offered_tools(provider.read_only(), &settings);
+    if form.is_some() {
+        tools.push(record_form::propose_tool_definition());
+    }
+    let mut stream = Box::pin(provider.stream(request, tools, move |delta| {
+        stream_pending
+            .lock()
+            .expect("agent delta buffer poisoned")
+            .push_str(delta);
+    }));
     // The provider callback is synchronous. Flush while its future waits for
     // network frames so subscribers see text before generation completes,
     // without a database write for every token.
@@ -422,6 +469,14 @@ async fn drive(
                 return Ok(());
             }
         };
+        if call.function.name == record_form::PROPOSE_TOOL
+            && let Some(form) = form
+        {
+            executed_read = true;
+            propose_form_values(repository, form, conversation_id, run_id, &call, arguments)
+                .await?;
+            continue;
+        }
         let kind = match agent_tools::kind(&call.function.name) {
             // A tool the run did not offer, such as a mutation in a read-only
             // run, is never queued for approval even if the provider names it
@@ -621,6 +676,66 @@ async fn drive(
     });
     Ok(())
 }
+/// Records a proposal for the record form without approval, since it saves
+/// nothing: the tool result tells the agent which fields were proposed, and
+/// the proposal follows as a message the user can apply to the form.
+async fn propose_form_values(
+    repository: &AttricatRepository,
+    form: &RecordForm,
+    conversation_id: Uuid,
+    run_id: Uuid,
+    call: &ToolCall,
+    arguments: Value,
+) -> Result<(), RepositoryError> {
+    let proposal = form.proposal(&arguments);
+    let result = match &proposal {
+        Some(proposal) => Ok(json!({
+            "proposed": proposal.fields.keys().collect::<Vec<_>>(),
+            "skipped": proposal.skipped,
+            "shown_to_user": !proposal.fields.is_empty(),
+        })),
+        None => Err(agent_tools::tool_error_payload(
+            &agent_tools::ToolError::InvalidArguments(
+                "fields must map field codes to values".into(),
+            ),
+        )),
+    };
+    let message = match &result {
+        Ok(value) | Err(value) => value.clone(),
+    };
+    let tool = repository
+        .create_agent_tool_call(
+            run_id,
+            Some(&call.id),
+            &call.function.name,
+            arguments,
+            None,
+            AgentToolCallState::PendingApproval,
+        )
+        .await?;
+    repository
+        .complete_agent_tool_call_with_message(
+            tool.id,
+            result,
+            conversation_id,
+            run_id,
+            json!({"tool_call_id": call.id, "name": call.function.name, "result": message}),
+            &[],
+        )
+        .await?;
+    if let Some(proposal) = proposal.filter(|proposal| !proposal.fields.is_empty()) {
+        repository
+            .append_conversation_message(
+                conversation_id,
+                Some(run_id),
+                "assistant",
+                form.proposal_message(&proposal),
+            )
+            .await?;
+    }
+    Ok(())
+}
+
 async fn flush_deltas(
     repository: &AttricatRepository,
     run_id: Uuid,

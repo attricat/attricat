@@ -3448,3 +3448,229 @@ async fn smart_fill_reads_attached_documents(pool: PgPool) {
     server.abort();
     provider.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn record_form_runs_propose_draft_values_alongside_every_other_tool(pool: PgPool) {
+    let (base_url, api_server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let blueprint = create_blueprint(&client, &base_url,
+        "format_version = 1\ncode = \"brand\"\nname = \"Brand\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\n\n[[attributes]]\ncode = \"founded\"\nvalue_type = \"integer\"").await;
+    let record_id: Uuid = create_record(&client, &base_url, &blueprint).await["id"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    let conversation: Value = client
+        .post(format!("{base_url}/agent/conversations"))
+        .json(&json!({"title": "Fill", "record_id": record_id}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let conversation_id: Uuid = conversation["id"].as_str().unwrap().parse().unwrap();
+
+    // Draft values belong to a record's form and are bounded like a message.
+    let standalone: Value = client
+        .post(format!("{base_url}/agent/conversations"))
+        .json(&json!({"title": "Chat"}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    for (id, draft) in [
+        (
+            standalone["id"].as_str().unwrap().to_owned(),
+            json!({"title": "VW"}),
+        ),
+        (
+            conversation_id.to_string(),
+            json!({"notes": "x".repeat(api::agents::MAX_CONVERSATION_MESSAGE_BYTES)}),
+        ),
+    ] {
+        let response = client
+            .post(format!("{base_url}/agent/conversations/{id}/messages"))
+            .json(&json!({"content": "Fill it in", "draft_values": draft}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::UNPROCESSABLE_ENTITY);
+        let body: Value = response.json().await.unwrap();
+        assert_eq!(body["error"]["code"], "invalid_input");
+    }
+
+    let requests = Arc::new(std::sync::Mutex::new(Vec::<Value>::new()));
+    let provider_requests = requests.clone();
+    let provider_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let provider_address = provider_listener.local_addr().unwrap();
+    let provider = tokio::spawn(async move {
+        axum::serve(
+            provider_listener,
+            Router::new().route(
+                "/v1/chat/completions",
+                post(move |axum::Json(request): axum::Json<Value>| {
+                    let requests = provider_requests.clone();
+                    async move {
+                        let round = {
+                            let mut requests = requests.lock().unwrap();
+                            requests.push(request);
+                            requests.len()
+                        };
+                        let delta = if round == 1 {
+                            json!({"tool_calls": [{
+                                "index": 0,
+                                "id": "call_fill",
+                                "type": "function",
+                                "function": {
+                                    "name": "propose_record_form_values",
+                                    "arguments": json!({
+                                        "fields": {"title": "Volkswagen", "founded": "soon", "secret": "x"},
+                                        "explanation": "From the fact sheet.",
+                                    }).to_string(),
+                                },
+                            }]})
+                        } else {
+                            json!({"content": "I proposed the name."})
+                        };
+                        axum::response::Response::builder()
+                            .header("content-type", "text/event-stream")
+                            .body(axum::body::Body::from(format!(
+                                "data: {}\n\ndata: [DONE]\n\n",
+                                json!({"choices": [{"delta": delta}]})
+                            )))
+                            .unwrap()
+                    }
+                }),
+            ),
+        )
+        .await
+        .unwrap();
+    });
+    let config = AgentProviderConfig::from_values(
+        |name| match name {
+            "LLM_BASE_URL" => Some(format!("http://{provider_address}/v1")),
+            _ => None,
+        },
+        Some(secrecy::SecretString::from("test-key")),
+    )
+    .unwrap()
+    .unwrap();
+    let repository = AttricatRepository::system(pool.clone())
+        .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
+    let owner: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
+    let run = repository
+        .submit_agent_message_with_record_form(
+            conversation_id,
+            owner,
+            json!("Fill it in from the fact sheet"),
+            &[],
+            config.base_url.as_str(),
+            &config.model,
+            Some(&json!({"title": "VW"})),
+        )
+        .await
+        .unwrap();
+    let provider_client = api::agent_provider::OpenAiCompatibleClient::new(&config).unwrap();
+    let store: Arc<dyn api::storage::ObjectStore> = Arc::new(FakeObjectStore::available());
+    api::agent_runner::run(
+        &repository,
+        &provider_client,
+        &store,
+        run.id,
+        conversation_id,
+    )
+    .await
+    .unwrap();
+
+    let first = requests.lock().unwrap()[0].clone();
+    let offered = first["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|tool| tool["function"]["name"].as_str().unwrap().to_owned())
+        .collect::<Vec<_>>();
+    assert!(
+        offered
+            .iter()
+            .any(|name| name == "propose_record_form_values")
+    );
+    assert!(offered.iter().any(|name| name == "add_record_comment"));
+    let system = first["messages"][0]["content"].as_str().unwrap();
+    assert!(system.contains("Record form:"));
+    assert!(system.contains(r#""unsaved_draft_values":{"title":"VW"}"#));
+
+    assert_eq!(
+        repository.get_agent_run(run.id).await.unwrap().status,
+        AgentRunStatus::Completed
+    );
+    let messages = repository
+        .conversation_messages(conversation_id)
+        .await
+        .unwrap();
+    let result = messages
+        .iter()
+        .find(|message| message.role == "tool")
+        .map(|message| message.content["result"].clone())
+        .unwrap();
+    assert_eq!(
+        result,
+        json!({"proposed": ["title"], "skipped": ["founded", "secret"], "shown_to_user": true})
+    );
+    let proposal = messages
+        .iter()
+        .find_map(|message| message.content.get("draft_proposal"))
+        .unwrap();
+    assert_eq!(
+        proposal,
+        &json!({
+            "fields": {"title": "Volkswagen"},
+            "explanation": "From the fact sheet.",
+            "base_values": {"title": "VW"},
+        })
+    );
+    assert_eq!(
+        messages.last().unwrap().content,
+        json!("I proposed the name.")
+    );
+
+    // A run started without the form is not offered the proposal tool.
+    let plain = repository
+        .submit_agent_message(
+            conversation_id,
+            owner,
+            json!("Any comments?"),
+            &[],
+            config.base_url.as_str(),
+            &config.model,
+        )
+        .await
+        .unwrap();
+    requests.lock().unwrap().clear();
+    api::agent_runner::run(
+        &repository,
+        &provider_client,
+        &store,
+        plain.id,
+        conversation_id,
+    )
+    .await
+    .unwrap();
+    let offered = requests.lock().unwrap()[0]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|tool| tool["function"]["name"].as_str().unwrap().to_owned())
+        .collect::<Vec<_>>();
+    assert!(
+        !offered
+            .iter()
+            .any(|name| name == "propose_record_form_values")
+    );
+    api_server.abort();
+    provider.abort();
+}

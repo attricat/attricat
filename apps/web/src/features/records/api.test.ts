@@ -16,7 +16,6 @@ import {
   getResolvedRecordPreview,
   searchRecords,
   searchRecordTablePage,
-  smartFillRecordForm,
   unpublishRecord,
   updateRecord,
 } from './api';
@@ -54,31 +53,6 @@ const respondError = (status: number, body: unknown) => {
 };
 
 describe('record API client', () => {
-  it('sends active-context source text to Smart Fill', async () => {
-    respond({ fields: { title: 'Trail shoes' } });
-
-    await expect(
-      smartFillRecordForm({
-        record_id: recordId,
-        context_id: null,
-        is_default_context: true,
-        content: 'Trail shoes',
-      }),
-    ).resolves.toEqual({ fields: { title: 'Trail shoes' } });
-
-    expect(fetchMock).toHaveBeenCalledWith('/api/agent/smart-fill', {
-      body: JSON.stringify({
-        record_id: recordId,
-        context_id: null,
-        is_default_context: true,
-        content: 'Trail shoes',
-        language: 'en',
-      }),
-      headers: { 'Content-Type': 'application/json' },
-      method: 'POST',
-    });
-  });
-
   it('loads blueprints and records from their code-based routes', async () => {
     respond(blueprintWithAttributes);
     await getBlueprintByCode('summer sale', 2);

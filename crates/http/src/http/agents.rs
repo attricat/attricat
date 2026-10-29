@@ -46,6 +46,10 @@ pub(super) struct SendMessage {
     /// The sender's BCP 47 interface language; the agent replies in it.
     #[serde(default)]
     pub language: Option<String>,
+    /// Unsaved values of the record form beside a record's conversation, by
+    /// field code. The run may then propose values for that form.
+    #[serde(default)]
+    pub draft_values: Option<std::collections::BTreeMap<String, String>>,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -452,7 +456,17 @@ pub(super) async fn send_message(
         .as_deref()
         .map(conversation_language)
         .transpose()?;
-    readable_conversation(&repository, user, workspace_id, conversation_id).await?;
+    if let Some(draft_values) = &input.draft_values {
+        attricat_agent_runtime::record_form::check_draft_values(draft_values)
+            .map_err(ApiError::invalid_input)?;
+    }
+    let conversation =
+        readable_conversation(&repository, user, workspace_id, conversation_id).await?;
+    if input.draft_values.is_some() && conversation.record_id.is_none() {
+        return Err(ApiError::invalid_input(
+            "draft_values need a conversation about a record".into(),
+        ));
+    }
     let config = configured(&state)?;
     if let Some(language) = &language {
         repository
@@ -461,13 +475,14 @@ pub(super) async fn send_message(
     }
     let run = repository
         .with_authorization_actor(principal.actor())
-        .submit_agent_message(
+        .submit_agent_message_with_record_form(
             conversation_id,
             user,
             Value::String(input.content),
             &input.attachment_ids,
             config.base_url.as_str(),
             &config.model,
+            input.draft_values.map(|values| json!(values)).as_ref(),
         )
         .await?;
     Ok((

@@ -71,6 +71,8 @@ export const sendMessage = (
   id: string,
   content: string,
   attachmentIds: string[] = [],
+  /** Unsaved values of the record form beside the conversation. */
+  draftValues?: Record<string, string>,
 ) =>
   request(
     `/api/agent/conversations/${uuidSegment(id)}/messages`,
@@ -80,6 +82,7 @@ export const sendMessage = (
       content,
       attachment_ids: attachmentIds,
       language: activeLanguage(),
+      ...(draftValues && { draft_values: draftValues }),
     }),
   );
 export const listApprovals = (

@@ -14,6 +14,8 @@ import { composerBorderRadius, composerMaxRows } from './constants';
 import { progressSizes } from '../../components/iconSizes';
 
 type MessageInputBoxProps = {
+  /** Whether a message may be sent now; typing is still possible. */
+  canSend?: boolean;
   content: string;
   files: File[];
   isPending: boolean;
@@ -28,6 +30,7 @@ const attachmentKey = (file: File) =>
   `${file.name}:${file.size}:${file.lastModified}`;
 
 export const MessageInputBox = ({
+  canSend = true,
   content,
   files,
   isPending,
@@ -117,7 +120,9 @@ export const MessageInputBox = ({
             <IconButton
               aria-label={t('agents.send')}
               color="primary"
-              disabled={(!content.trim() && files.length === 0) || isPending}
+              disabled={
+                (!content.trim() && files.length === 0) || isPending || !canSend
+              }
               type="submit"
             >
               {isPending ? (

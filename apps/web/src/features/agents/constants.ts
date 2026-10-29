@@ -41,6 +41,14 @@ export const thinkingRunStatuses: readonly AgentRunStatus[] = [
   agentRunStatuses.queued,
   agentRunStatuses.running,
 ];
+/**
+ * Runs that still need the conversation as it is: a message sent meanwhile
+ * would land between a tool call and its result.
+ */
+export const unfinishedRunStatuses: readonly AgentRunStatus[] = [
+  ...thinkingRunStatuses,
+  agentRunStatuses.awaitingApproval,
+];
 
 /** What a bulk edit reports for each record it applies. */
 export const bulkProgressStates = {

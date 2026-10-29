@@ -39,6 +39,8 @@ type ConversationComposerProps = ComposerConversation & {
     conversationId: string,
     attachmentIds: string[],
   ) => Promise<unknown>;
+  /** Holds messages back while an earlier run is unfinished. */
+  sendBlocked?: boolean;
   /** Keeps the composer at the bottom of a scrolling conversation. */
   sticky?: boolean;
 };
@@ -50,6 +52,7 @@ export const ConversationComposer = (props: ConversationComposerProps) => {
     onSendingChange,
     onSent,
     sendDraft,
+    sendBlocked = false,
     sticky = true,
   } = props;
   const { t } = useTranslation();
@@ -103,7 +106,11 @@ export const ConversationComposer = (props: ConversationComposerProps) => {
   });
 
   const submitMessage = () => {
-    if ((content.trim() || attachments.files.length) && !send.isPending) {
+    if (
+      (content.trim() || attachments.files.length) &&
+      !send.isPending &&
+      !sendBlocked
+    ) {
       // Passed per call so that it does not run once the composer is gone.
       send.mutate(
         {
@@ -139,6 +146,7 @@ export const ConversationComposer = (props: ConversationComposerProps) => {
       }
     >
       <MessageInputBox
+        canSend={!sendBlocked}
         content={content}
         files={attachments.files}
         isPending={send.isPending}

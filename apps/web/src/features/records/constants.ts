@@ -4,10 +4,6 @@ import type { ApiErrorCode } from '../../api/errors';
 /** Largest integer the API accepts for component protocol versions (Rust u32). */
 export const MAX_COMPONENT_PROTOCOL_VERSION = 4_294_967_295;
 
-/** Smart fill request limits enforced by the API. */
-export const SMART_FILL_MAX_CONTENT_LENGTH = 32_768;
-export const SMART_FILL_MAX_ATTACHMENTS = 16;
-
 /** Why a retention hold keeps a record: its status, or an explicit hold. */
 export const retentionHoldSources = {
   status: 'status',

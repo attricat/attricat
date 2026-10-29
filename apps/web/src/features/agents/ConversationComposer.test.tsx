@@ -27,6 +27,7 @@ const renderComposer = (
     conversationId: string,
     attachmentIds: string[],
   ) => Promise<unknown>,
+  sendBlocked = false,
 ) => {
   const queryClient = new QueryClient({
     defaultOptions: { mutations: { retry: false } },
@@ -38,6 +39,7 @@ const renderComposer = (
         conversationId={conversationId}
         onSendingChange={onSendingChange}
         onSent={onSent}
+        sendBlocked={sendBlocked}
         sendDraft={sendDraft}
       />
     </QueryClientProvider>,
@@ -160,6 +162,22 @@ describe('ConversationComposer', () => {
     await waitFor(() =>
       expect(sendMessage).toHaveBeenCalledWith(conversationId, 'Review', []),
     );
+  });
+
+  it('holds a message back while an earlier run is unfinished', async () => {
+    const user = userEvent.setup();
+    renderComposer(vi.fn(), vi.fn(), undefined, true);
+    const message = screen.getByRole('textbox', { name: 'Message' });
+
+    // The next message can be written while the agent works.
+    await user.type(message, 'And add a comment');
+    await user.keyboard('{Enter}');
+
+    expect(
+      screen.getByRole('button', { name: 'Send' }).hasAttribute('disabled'),
+    ).toBe(true);
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect((message as HTMLTextAreaElement).value).toBe('And add a comment');
   });
 
   it('refreshes but does not lead on after it is gone mid-send', async () => {

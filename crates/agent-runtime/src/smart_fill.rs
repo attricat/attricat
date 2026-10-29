@@ -1,14 +1,10 @@
 //! Draft-only record form proposals ("smart fill"): the agent provider
 //! suggests values for a record's editable scalar fields from the user's
 //! request, the unsaved draft, attachments and conversation history.
-use attricat_domain::attribute_options::ContextEditable;
 use std::collections::{BTreeMap, HashSet};
 
-use attricat_domain::value_type::ValueType;
 use attricat_validation::files::is_text_extraction_mime;
-use attricat_validation::validate_json_schema;
 use base64::{Engine, engine::general_purpose::STANDARD};
-use chrono::{DateTime, NaiveDate, NaiveTime};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use thiserror::Error;
@@ -17,19 +13,15 @@ use uuid::Uuid;
 use crate::{
     agent_provider::{AssistantMessage, ChatMessage, OpenAiCompatibleClient, ToolChoice},
     agent_runner::language_prompt,
-    agent_tools::{ToolDefinition, ToolFunction},
     agents::{
         MAX_CONVERSATION_ATTACHMENTS, MAX_CONVERSATION_MESSAGE_BYTES, MAX_TOOL_CALL_ARGUMENT_BYTES,
     },
     documents::{self, DocumentTextError},
-    model::FormAttributeValue,
     provider_config::AgentProviderConfig,
+    record_form::{self, RecordForm, RecordFormError},
     repository::{AttricatRepository, FileObject, RepositoryError},
 };
-use attricat_repository::attricat_read_service::AttricatReadService;
 use attricat_storage::ObjectStore;
-
-use attricat_domain::constants::DEFAULT_CONTEXT_CODE;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -71,26 +63,12 @@ pub enum SmartFillError {
     Repository(#[from] RepositoryError),
 }
 
-#[derive(Serialize)]
-struct SmartFillField {
-    code: String,
-    name: String,
-    value_type: ValueType,
-    value_schema: Option<Value>,
-}
-
-const MAX_SMART_FILL_DRAFT_VALUES: usize = 256;
 /// Most recent conversation messages replayed to the provider as history.
 const SMART_FILL_HISTORY_MESSAGES: usize = 16;
 /// Combined size of the text attachments inlined from conversation history.
 const SMART_FILL_HISTORY_ATTACHMENT_BYTES: usize = 64 * 1024;
 const MAX_SMART_FILL_TEXT_ATTACHMENT_BYTES: usize = 64 * 1024;
 const MAX_SMART_FILL_IMAGE_BYTES: usize = 1024 * 1024;
-const MAX_SMART_FILL_EXPLANATION_CHARS: usize = 2048;
-/// Largest integer a browser number field represents exactly (2^53 - 1).
-const MAX_SAFE_INTEGER: i64 = 9_007_199_254_740_991;
-/// Length of a `YYYY-MM-DD` date.
-const ISO_DATE_LEN: usize = 10;
 
 const SMART_FILL_SYSTEM_PROMPT: &str = "You are a record editing assistant. Answer the user's editing request using the selected record context, current unsaved form draft and conversation history. Propose only fields that should change, using supplied editable scalar field codes. Never invent facts. Return exactly one propose_record_form_values tool call with a short explanation of changes and uncertainties. If the user asks a question instead of requesting an edit, answer it in the explanation and propose no fields. The values are draft-only and require explicit user application and a separate save; never claim they were saved. Do not propose relationship or file fields.";
 
@@ -124,32 +102,8 @@ async fn document_attachment_text(
     }
 }
 
-/// The one tool a draft proposal answers with.
-const SMART_FILL_TOOL_NAME: &str = "propose_record_form_values";
 const MISSING_FORM_VALUES: &str = "agent did not return form values";
 const INVALID_FORM_VALUES: &str = "agent returned invalid form values";
-
-fn smart_fill_definition() -> ToolDefinition {
-    ToolDefinition {
-        kind: "function",
-        function: ToolFunction {
-            name: SMART_FILL_TOOL_NAME,
-            description: "Propose editable record form field values. This does not save catalog data.",
-            parameters: json!({
-                "type": "object",
-                "required": ["fields", "explanation"],
-                "properties": {
-                    "fields": {
-                        "type": "object",
-                        "additionalProperties": { "type": "string" }
-                    },
-                    "explanation": {"type": "string"}
-                },
-                "additionalProperties": false
-            }),
-        },
-    }
-}
 
 /// The proposal's arguments. A provider that ignores the required tool may
 /// still answer in text, such as about a long attachment; that answer becomes
@@ -160,7 +114,7 @@ fn smart_fill_arguments(message: Option<AssistantMessage>) -> Result<Value, Smar
         .tool_calls
         .into_iter()
         .next()
-        .filter(|call| call.function.name == SMART_FILL_TOOL_NAME)
+        .filter(|call| call.function.name == record_form::PROPOSE_TOOL)
     else {
         return message
             .content
@@ -177,27 +131,6 @@ fn smart_fill_arguments(message: Option<AssistantMessage>) -> Result<Value, Smar
         .map_err(|_| SmartFillError::BadGateway(INVALID_FORM_VALUES))
 }
 
-/// The proposed values as form text. Models often send numbers and booleans as
-/// JSON scalars despite the tool's string schema; other values are skipped.
-fn proposed_fields(arguments: &Value) -> Result<BTreeMap<String, String>, SmartFillError> {
-    let fields = arguments
-        .get("fields")
-        .and_then(Value::as_object)
-        .ok_or(SmartFillError::BadGateway(INVALID_FORM_VALUES))?;
-    Ok(fields
-        .iter()
-        .filter_map(|(code, value)| {
-            let text = match value {
-                Value::String(text) => text.clone(),
-                Value::Number(number) => number.to_string(),
-                Value::Bool(flag) => flag.to_string(),
-                _ => return None,
-            };
-            Some((code.clone(), text))
-        })
-        .collect())
-}
-
 /// Asks the agent provider for draft values of a record form's editable
 /// scalar fields. Nothing is saved; with a conversation, the request and the
 /// proposal are appended to it. The caller has checked that the user may read
@@ -211,85 +144,29 @@ pub async fn propose_record_form_values(
 ) -> Result<SmartFillProposal, SmartFillError> {
     if (input.content.trim().is_empty() && input.attachment_ids.is_empty())
         || input.content.len() > MAX_CONVERSATION_MESSAGE_BYTES
-        || input.draft_values.len() > MAX_SMART_FILL_DRAFT_VALUES
-        || input
-            .draft_values
-            .iter()
-            .map(|(key, value)| key.len() + value.len())
-            .sum::<usize>()
-            > MAX_CONVERSATION_MESSAGE_BYTES
     {
         return Err(SmartFillError::Invalid(format!(
             "content must be between 1 and {MAX_CONVERSATION_MESSAGE_BYTES} bytes"
         )));
     }
-    let (record, values) = AttricatReadService::new(repository)
-        .record_with_values(input.record_id)
-        .await?;
-    let blueprint = repository
-        .get_blueprint_revision(record.blueprint_id, record.blueprint_version)
-        .await?
-        .ok_or_else(|| SmartFillError::NotFound("blueprint version"))?;
-    let reusable_attributes = repository
-        .record_reusable_attributes(input.record_id)
-        .await?;
-    let reusable_values = repository.reusable_form_values(input.record_id).await?;
-    let is_default_context = match input.context_id {
-        Some(id) => {
-            repository
-                .get_context_by_id(id)
-                .await?
-                .ok_or_else(|| SmartFillError::Invalid("unknown context".to_owned()))?
-                .code
-                == DEFAULT_CONTEXT_CODE
-        }
-        None => true,
-    };
-    if input.is_default_context != is_default_context {
+    record_form::check_draft_values(&input.draft_values).map_err(SmartFillError::Invalid)?;
+    let form = RecordForm::load(
+        repository,
+        input.record_id,
+        input.context_id,
+        input.draft_values,
+    )
+    .await
+    .map_err(|error| match error {
+        RecordFormError::Invalid(message) => SmartFillError::Invalid(message),
+        RecordFormError::NotFound(what) => SmartFillError::NotFound(what),
+        RecordFormError::Repository(error) => SmartFillError::Repository(error),
+    })?;
+    if input.is_default_context != form.is_default_context {
         return Err(SmartFillError::Invalid(
             "is_default_context does not match context_id".to_owned(),
         ));
     }
-    let mut editable = Vec::new();
-    for attribute in &blueprint.attributes {
-        if smart_fill_editable(
-            attribute.readonly,
-            attribute.value_type,
-            attribute.context_editable,
-            is_default_context,
-        ) {
-            editable.push(SmartFillField {
-                code: attribute.code.clone(),
-                name: attribute.code.clone(),
-                value_type: attribute.value_type,
-                value_schema: attribute.value_schema.clone(),
-            });
-        }
-    }
-    for attribute in &reusable_attributes {
-        if smart_fill_editable(
-            attribute.readonly,
-            attribute.value_type,
-            attribute.context_editable,
-            is_default_context,
-        ) {
-            editable.push(SmartFillField {
-                code: attribute.code.clone(),
-                name: attribute.name.clone(),
-                value_type: attribute.value_type,
-                value_schema: attribute.value_schema.clone(),
-            });
-        }
-    }
-    let allowed = editable
-        .iter()
-        .map(|field| field.code.as_str())
-        .collect::<HashSet<_>>();
-    let current_values = editable_scalar_values(
-        values.iter().chain(reusable_values.iter()),
-        input.context_id,
-        &allowed,
-    );
     if input.attachment_ids.len() > MAX_CONVERSATION_ATTACHMENTS
         || input.attachment_ids.iter().collect::<HashSet<_>>().len() != input.attachment_ids.len()
     {
@@ -374,15 +251,9 @@ pub async fn propose_record_form_values(
     } else {
         Vec::new()
     };
-    let prompt = json!({
-        "record_id": input.record_id,
-        "context_id": input.context_id,
-        "editable_fields": editable,
-        "current_values": current_values,
-        "unsaved_draft_values": input.draft_values.iter().filter(|(code, _)| allowed.contains(code.as_str())).collect::<BTreeMap<_, _>>(),
-        "conversation_history": history,
-        "user_request": input.content,
-    });
+    let mut prompt = form.describe();
+    prompt["conversation_history"] = Value::Array(history);
+    prompt["user_request"] = Value::String(input.content.clone());
     let mut parts = vec![json!({"type":"text","text":prompt.to_string()})];
     for file_id in &input.attachment_ids {
         let file = repository.file_object(*file_id, None).await?;
@@ -457,8 +328,8 @@ pub async fn propose_record_form_values(
                     tool_calls: None,
                 },
             ],
-            vec![smart_fill_definition()],
-            Some(ToolChoice::function(SMART_FILL_TOOL_NAME)),
+            vec![record_form::propose_tool_definition()],
+            Some(ToolChoice::function(record_form::PROPOSE_TOOL)),
         )
         .await
         .map_err(|_| SmartFillError::Unavailable("agent provider is unavailable"))?;
@@ -469,21 +340,9 @@ pub async fn propose_record_form_values(
             .next()
             .map(|choice| choice.message),
     )?;
-    let explanation = arguments
-        .get("explanation")
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .chars()
-        .take(MAX_SMART_FILL_EXPLANATION_CHARS)
-        .collect::<String>();
-    let fields = proposed_fields(&arguments)?
-        .into_iter()
-        .filter(|(code, value)| {
-            editable
-                .iter()
-                .any(|field| field.code == *code && smart_fill_value_is_valid(field, value))
-        })
-        .collect::<BTreeMap<_, _>>();
+    let proposal = form
+        .proposal(&arguments)
+        .ok_or(SmartFillError::BadGateway(INVALID_FORM_VALUES))?;
     if let Some(id) = input.conversation_id {
         repository
             .append_conversation_message_with_attachments(
@@ -495,14 +354,10 @@ pub async fn propose_record_form_values(
             )
             .await?;
         // Without values to apply, the explanation is an ordinary reply.
-        let content = if fields.is_empty() {
-            Value::String(explanation.clone())
+        let content = if proposal.fields.is_empty() {
+            Value::String(proposal.explanation.clone())
         } else {
-            let base_values = fields
-                .keys()
-                .map(|code| (code.clone(), input.draft_values.get(code).cloned()))
-                .collect::<BTreeMap<_, _>>();
-            json!({"draft_proposal":{"fields":fields,"explanation":explanation,"base_values":base_values}})
+            form.proposal_message(&proposal)
         };
         repository
             .append_conversation_message(id, None, "assistant", content)
@@ -513,133 +368,13 @@ pub async fn propose_record_form_values(
         });
     }
     Ok(SmartFillProposal {
-        fields,
-        explanation,
+        fields: proposal.fields,
+        explanation: proposal.explanation,
     })
 }
-/// Smart fill proposes only writable scalar values; non-default contexts may
-/// change only attributes that are editable outside the default context.
-fn smart_fill_editable(
-    readonly: bool,
-    value_type: ValueType,
-    context_editable: ContextEditable,
-    is_default_context: bool,
-) -> bool {
-    !readonly
-        && value_type != ValueType::Relationship
-        && value_type != ValueType::File
-        && (is_default_context || context_editable != ContextEditable::Default)
-}
-
-/// Parse a suggestion exactly as the browser will parse a scalar form field,
-/// then apply the attribute's JSON schema before offering it to the user.
-fn smart_fill_value_is_valid(field: &SmartFillField, proposed: &str) -> bool {
-    let value = proposed.trim();
-    if value.is_empty() {
-        return false;
-    }
-    let native = match field.value_type {
-        ValueType::String => Some(Value::String(value.to_owned())),
-        ValueType::Number => value
-            .parse::<f64>()
-            .ok()
-            .and_then(serde_json::Number::from_f64)
-            .map(Value::Number),
-        ValueType::Integer => value
-            .parse::<i64>()
-            .ok()
-            .filter(|value| (-MAX_SAFE_INTEGER..=MAX_SAFE_INTEGER).contains(value))
-            .map(|value| json!(value)),
-        ValueType::Boolean => value.parse::<bool>().ok().map(|value| json!(value)),
-        ValueType::Date => NaiveDate::parse_from_str(value, "%Y-%m-%d")
-            .ok()
-            .filter(|_| value.len() == ISO_DATE_LEN)
-            .map(|_| json!(value)),
-        ValueType::Datetime => DateTime::parse_from_rfc3339(value)
-            .ok()
-            .map(|_| json!(value)),
-        ValueType::Time => value.split_once(' ').and_then(|(time, zone)| {
-            NaiveTime::parse_from_str(time, "%H:%M:%S%.f").ok()?;
-            zone.parse::<chrono_tz::Tz>().ok()?;
-            Some(json!({"time": time, "time_zone": zone}))
-        }),
-        ValueType::Json => serde_json::from_str(value).ok(),
-        _ => None,
-    };
-    let Some(native) = native else { return false };
-    field.value_schema.as_ref().is_none_or(|schema| {
-        validate_json_schema(schema, &native).is_ok_and(|errors| errors.is_empty())
-    })
-}
-
-fn editable_scalar_values<'a>(
-    values: impl Iterator<Item = &'a FormAttributeValue>,
-    context_id: Option<Uuid>,
-    allowed: &HashSet<&str>,
-) -> Vec<&'a FormAttributeValue> {
-    values
-        .filter(|value| matches!(value, FormAttributeValue::Scalar { attribute_code, context_id: value_context, .. }
-            if *value_context == context_id && allowed.contains(attribute_code.as_str())))
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn only_editable_scalar_values_in_the_requested_context_reach_the_provider() {
-        let context = Uuid::new_v4();
-        let values = [
-            FormAttributeValue::Scalar {
-                attribute_code: "name".into(),
-                context_id: Some(context),
-                value: json!("ok"),
-            },
-            FormAttributeValue::Scalar {
-                attribute_code: "private".into(),
-                context_id: Some(context),
-                value: json!("secret"),
-            },
-            FormAttributeValue::Scalar {
-                attribute_code: "name".into(),
-                context_id: Some(Uuid::new_v4()),
-                value: json!("other"),
-            },
-        ];
-        let allowed = HashSet::from(["name"]);
-        let filtered = editable_scalar_values(values.iter(), Some(context), &allowed);
-        assert_eq!(filtered.len(), 1);
-        assert_eq!(serde_json::to_value(filtered[0]).unwrap()["value"], "ok");
-    }
-
-    #[test]
-    fn suggestions_must_match_the_browser_scalar_type_and_attribute_schema() {
-        let field = SmartFillField {
-            code: "state".into(),
-            name: "State".into(),
-            value_type: ValueType::String,
-            value_schema: Some(json!({"type": "string", "enum": ["active", "inactive"]})),
-        };
-        assert!(smart_fill_value_is_valid(&field, "active"));
-        assert!(!smart_fill_value_is_valid(&field, "discontinued"));
-        let integer = SmartFillField {
-            value_type: ValueType::Integer,
-            value_schema: None,
-            ..field
-        };
-        assert!(smart_fill_value_is_valid(&integer, "42"));
-        assert!(!smart_fill_value_is_valid(&integer, "1.5"));
-        assert!(!smart_fill_value_is_valid(&integer, "9223372036854775808"));
-        assert!(!smart_fill_value_is_valid(&integer, "-9223372036854775808"));
-        let date = SmartFillField {
-            value_type: ValueType::Date,
-            value_schema: None,
-            ..integer
-        };
-        assert!(smart_fill_value_is_valid(&date, "2026-09-23"));
-        assert!(!smart_fill_value_is_valid(&date, "2026-9-23"));
-    }
 
     fn assistant_message(content: Option<&str>, call: Option<(&str, &str)>) -> AssistantMessage {
         serde_json::from_value(json!({
@@ -658,7 +393,7 @@ mod tests {
         let arguments = smart_fill_arguments(Some(assistant_message(
             Some("ignored"),
             Some((
-                SMART_FILL_TOOL_NAME,
+                record_form::PROPOSE_TOOL,
                 r#"{"fields":{"name":"Golf"},"explanation":"From the brochure."}"#,
             )),
         )))
@@ -678,32 +413,6 @@ mod tests {
             arguments["explanation"],
             "The PDF does not name a model year."
         );
-    }
-
-    #[test]
-    fn scalar_proposals_become_form_text() {
-        let fields = proposed_fields(&json!({"fields": {
-            "name": "Golf",
-            "founded_year": 1937,
-            "price": 24.5,
-            "electric": false,
-            "notes": null,
-            "dimensions": {"length": 4},
-        }}))
-        .unwrap();
-        assert_eq!(
-            fields,
-            BTreeMap::from([
-                ("electric".to_owned(), "false".to_owned()),
-                ("founded_year".to_owned(), "1937".to_owned()),
-                ("name".to_owned(), "Golf".to_owned()),
-                ("price".to_owned(), "24.5".to_owned()),
-            ])
-        );
-        assert!(matches!(
-            proposed_fields(&json!({"explanation": "No fields"})),
-            Err(SmartFillError::BadGateway(INVALID_FORM_VALUES))
-        ));
     }
 
     #[test]

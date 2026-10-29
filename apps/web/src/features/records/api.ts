@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { request, requestNoContent, jsonRequest } from '../../api/request';
-import { activeLanguage } from '../../i18n';
 import type { DataQualityFilter } from '../rules/constants';
 import { RECORD_CHANGES_PAGE_SIZE, RECORD_SEARCH_PAGE_SIZE } from './constants';
 import {
@@ -21,8 +20,6 @@ import {
   blueprintSelectorSchema,
   getBlueprintRevisionRequestSchema,
   resolvedRecordPreviewSchema,
-  smartFillRecordFormRequestSchema,
-  smartFillRecordFormResponseSchema,
   searchRecordsRequestSchema,
   migrateRecordRequestSchema,
   updateRecordRequestSchema,
@@ -269,20 +266,6 @@ export const createRecord = (
   const payload = createRecordRequestSchema.parse(input);
   return request('/api/v1/records', recordSchema, jsonRequest('POST', payload));
 };
-export const smartFillRecordForm = (
-  input: z.input<typeof smartFillRecordFormRequestSchema>,
-) => {
-  const payload = smartFillRecordFormRequestSchema.parse({
-    language: activeLanguage(),
-    ...input,
-  });
-  return request(
-    '/api/agent/smart-fill',
-    smartFillRecordFormResponseSchema,
-    jsonRequest('POST', payload),
-  );
-};
-
 export const deleteRecord = (id: string) =>
   requestNoContent(`/api/records/${uuidSegment(id)}`, {
     method: 'DELETE',
