@@ -2457,6 +2457,50 @@ async fn record_create_attaches_staged_files() {
 }
 
 #[tokio::test]
+async fn publication_channel_set_sends_only_given_requirements() {
+    let id = "00000000-0000-4000-8000-000000000001";
+    let path = format!("/publication-channels/{id}");
+    let set = |extra: &[&'static str]| {
+        let mut args = vec![
+            "workspace",
+            "publication-channel",
+            "set",
+            id,
+            "--enabled",
+            "true",
+        ];
+        args.extend_from_slice(extra);
+        args
+    };
+    let kept = echo(&set(&[])).await;
+    assert_eq!(kept["method"], "PUT");
+    assert_eq!(kept["path"], path);
+    assert_eq!(
+        kept["body"],
+        json!({ "enabled": true, "required_rule_codes": null, "require_valid_record": null })
+    );
+    let changed = echo(&set(&[
+        "--required-rule-code",
+        "has_gtin",
+        "--required-rule-code",
+        "has_image",
+        "--require-valid-record",
+        "false",
+    ]))
+    .await;
+    assert_eq!(
+        changed["body"],
+        json!({
+            "enabled": true,
+            "required_rule_codes": ["has_gtin", "has_image"],
+            "require_valid_record": false,
+        })
+    );
+    let cleared = echo(&set(&["--clear-required-rule-codes"])).await;
+    assert_eq!(cleared["body"]["required_rule_codes"], json!([]));
+}
+
+#[tokio::test]
 async fn record_facet_commands_build_requests() {
     let fields = echo(&[
         "reusable-attribute",

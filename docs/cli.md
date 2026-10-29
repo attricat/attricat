@@ -180,7 +180,7 @@ acli workspace tag-color reset <tag>
 acli workspace token-permission list
 acli workspace grant-target list workspace|blueprint-family|record|context-subtree
 acli workspace publication-channel list
-acli workspace publication-channel set <context-id> --enabled true|false
+acli workspace publication-channel set <context-id> --enabled true|false [--required-rule-code <code> ... | --clear-required-rule-codes] [--require-valid-record true|false]
 acli workspace member list
 acli workspace member set-state <member-id> --state active|inactive
 acli workspace member grant <member-id> --role-id <role-id> --scope-type workspace|blueprint-family|record|context-subtree --scope-target-id <id>
