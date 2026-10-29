@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Box, CircularProgress, Typography } from '@mui/material';
 import {
   lazy,
@@ -63,6 +63,7 @@ import {
   RevealFieldContext,
   useFieldReveal,
 } from '../../views/fieldReveal';
+import { refreshRecordTab } from '../refreshRecordTab';
 import { RecordPreviewTabs } from './RecordPreviewTabs';
 import { RecordPreviewToolbar } from './RecordPreviewToolbar';
 import { RecordControlsPanel } from './RecordControlsPanel';
@@ -272,8 +273,14 @@ export const RecordPreview = ({
     setExtensionPanelOpen(false);
     setAgentPanelOpen(true);
   };
-  const showTab = (key: RecordPreviewTabKey) => {
+  const client = useQueryClient();
+  // Opening a tab reloads what it shows.
+  const openTab = (key: RecordPreviewTabKey) => {
     setTab(key);
+    void refreshRecordTab(client, recordId, key);
+  };
+  const showTab = (key: RecordPreviewTabKey) => {
+    openTab(key);
     setTabReveal((count) => count + 1);
   };
   const loaded = resolved.data && blueprint.data;
@@ -427,7 +434,7 @@ export const RecordPreview = ({
               )}
               {resolvedRecord && (
                 <RecordPreviewTabs
-                  onChange={setTab}
+                  onChange={openTab}
                   panelRef={tabPanelRef}
                   tabs={[
                     {
