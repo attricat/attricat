@@ -38,7 +38,7 @@ pub(crate) enum FileCommand {
         context_id: Option<Uuid>,
     },
     /// Upload files for a record not created yet; pass the returned file
-    /// IDs as the attribute's values when creating it.
+    /// IDs to `record create --files`.
     StageUpload {
         blueprint_id: Uuid,
         attribute_code: String,

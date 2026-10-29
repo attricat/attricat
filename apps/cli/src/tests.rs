@@ -2433,6 +2433,30 @@ async fn reusable_attribute_commands_build_requests() {
 }
 
 #[tokio::test]
+async fn record_create_attaches_staged_files() {
+    let id = "00000000-0000-4000-8000-000000000001";
+    let files = format!(r#"[{{"attribute_code":"manual","file_ids":["{id}"]}}]"#);
+    let created = echo(&[
+        "record",
+        "create",
+        "--blueprint",
+        "product",
+        "--files",
+        &files,
+    ])
+    .await;
+    assert_eq!(created["path"], "/v1/records");
+    assert_eq!(
+        created["body"],
+        json!({
+            "blueprint": { "code": "product", "version": null },
+            "values": [],
+            "files": [{ "attribute_code": "manual", "file_ids": [id] }],
+        })
+    );
+}
+
+#[tokio::test]
 async fn record_facet_commands_build_requests() {
     let fields = echo(&[
         "reusable-attribute",

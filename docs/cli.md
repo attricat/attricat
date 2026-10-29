@@ -97,7 +97,7 @@ acli context get en_GB
 acli context update <context-id> --parent-id <context-id> --data '{"language":"en-GB"}'
 acli context delete <context-id>
 
-acli record create --blueprint product --values values.toml [--version <version>] [--context-id <context-id>] [--system-tags <json>] [--system-metadata <json>]
+acli record create --blueprint product [--values values.toml] [--files <json-or-file>] [--version <version>] [--context-id <context-id>] [--system-tags <json>] [--system-metadata <json>]
 acli record get|delete|form|duplicate|export-status <record-id>
 acli record labels --record-id <record-id> [--record-id <record-id> ...]
 acli record batch --operations <json-or-file>
@@ -284,6 +284,11 @@ acli file download-variant <file-id> <kind> --output preview.webp [--range 'byte
 Commands that page with `--limit` and `--offset` use the endpoint's default
 page size when you omit them; each endpoint enforces its own maximum, and
 offsets stop at 10,000.
+
+`file stage-upload` stores files for a record that does not exist yet. Pass
+the returned file IDs to `record create --files`, for example
+`[{"attribute_code":"manual","file_ids":["<file-id>"]}]`, to attach them as
+the record is created.
 
 `--expected-updated-at` makes `record update`, `transition`, `migrate` and
 `restore-value` fail instead of overwriting a record someone changed after

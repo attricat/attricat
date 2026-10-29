@@ -44,9 +44,14 @@ pub(crate) enum RecordCommand {
         #[arg(long)]
         version: Option<i64>,
         #[arg(long)]
-        values: PathBuf,
+        values: Option<PathBuf>,
         #[arg(long)]
         context_id: Option<Uuid>,
+        /// JSON array of staged files to attach, or a file containing it:
+        /// `[{"attribute_code": "...", "context_id": null, "file_ids": [...]}]`
+        /// with IDs from `file stage-upload`.
+        #[arg(long)]
+        files: Option<String>,
         /// JSON array of agent/operator-owned tags.
         #[arg(long)]
         system_tags: Option<String>,
@@ -355,12 +360,18 @@ pub(crate) async fn record_command(api: &Api, command: RecordCommand) -> Result<
             version,
             values,
             context_id,
+            files,
             system_tags,
             system_metadata,
         } => {
+            let values = match values {
+                Some(values) => values_body_from_file(&values, context_id)?["values"].take(),
+                None => json!([]),
+            };
             let mut body = json!({
                 "blueprint": { "code": blueprint, "version": version },
-                "values": values_body_from_file(&values, context_id)?["values"].clone(),
+                "values": values,
+                "files": json_array_argument(files.as_deref(), "--files")?,
             });
             add_system_fields(&mut body, system_tags, system_metadata)?;
             api.post_json("/v1/records", body).await
