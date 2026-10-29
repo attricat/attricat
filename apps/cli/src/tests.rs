@@ -2501,6 +2501,67 @@ async fn publication_channel_set_sends_only_given_requirements() {
 }
 
 #[tokio::test]
+async fn record_search_sends_every_filter_and_option() {
+    let id = "00000000-0000-4000-8000-000000000001";
+    let relationship_filters =
+        format!(r#"[{{"field":"model.brand","selected_target_ids":["{id}"]}}]"#);
+    let search = echo(&[
+        "record",
+        "search",
+        "--blueprint",
+        "product",
+        "--relationship-filters",
+        &relationship_filters,
+        "--export-extension-id",
+        "acme.pim",
+        "--export-status",
+        "rejected",
+        "--data-quality",
+        "open",
+        "--context-code",
+        "eu",
+        "--omit-blueprint",
+        "--omit-previews",
+        "--sort-field",
+        "publication_status",
+        "--sort-context-code",
+        "web",
+    ])
+    .await;
+    assert_eq!(search["path"], "/v1/records/search");
+    let body = &search["body"];
+    assert_eq!(
+        body["relationship_filters"],
+        json!([{ "field": "model.brand", "selected_target_ids": [id] }])
+    );
+    assert_eq!(
+        body["export_status"],
+        json!({ "extension_id": "acme.pim", "connection": null, "status": "rejected" })
+    );
+    assert_eq!(body["data_quality"], "open");
+    assert_eq!(body["context_code"], "eu");
+    assert_eq!(body["include_blueprint"], false);
+    assert_eq!(body["include_previews"], false);
+    assert_eq!(
+        body["sort"],
+        json!({ "field": "publication_status", "direction": "asc", "context_code": "web" })
+    );
+    let plain = echo(&["record", "search", "--blueprint", "product"]).await;
+    assert_eq!(plain["body"]["include_blueprint"], true);
+    assert_eq!(plain["body"]["include_previews"], true);
+    assert!(plain["body"].get("export_status").is_none());
+    for args in [
+        ["--export-status", "synced"],
+        ["--export-extension-id", "acme.pim"],
+        ["--sort-context-code", "web"],
+    ] {
+        let mut command = vec!["acli", "record", "search", "--blueprint", "product"];
+        command.extend(args);
+        assert!(Cli::try_parse_from(command).is_err());
+    }
+}
+
+#[tokio::test]
 async fn record_facet_commands_build_requests() {
     let fields = echo(&[
         "reusable-attribute",

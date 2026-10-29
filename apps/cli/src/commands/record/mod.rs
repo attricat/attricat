@@ -9,6 +9,7 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::cli::{BeforeArgs, DEFAULT_LIST_LIMIT, PageArgs};
+use crate::commands::extension::connector_job::ExportState;
 use crate::error::CliError;
 use crate::input::{
     form_update_body, json_array_argument, json_array_input, json_object_input,
@@ -32,6 +33,27 @@ impl SortDirection {
         match self {
             Self::Asc => "asc",
             Self::Desc => "desc",
+        }
+    }
+}
+
+/// Records by their unresolved rule findings.
+#[derive(Clone, Copy, ValueEnum)]
+pub(crate) enum DataQuality {
+    /// At least one open finding.
+    Open,
+    /// Unresolved findings, every one acknowledged.
+    Acknowledged,
+    /// No unresolved findings.
+    Clean,
+}
+
+impl DataQuality {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Open => "open",
+            Self::Acknowledged => "acknowledged",
+            Self::Clean => "clean",
         }
     }
 }
@@ -120,10 +142,41 @@ pub(crate) enum RecordCommand {
         /// JSON array of relationship-tree facet requests, or a file containing it.
         #[arg(long)]
         relationship_tree_facets: Option<String>,
+        /// JSON array of `{field, selected_target_ids}` filters on targets
+        /// reached through one to three relationship hops, or a file containing it.
+        #[arg(long)]
+        relationship_filters: Option<String>,
+        /// Only records with --export-status at this export extension's
+        /// destination.
+        #[arg(long, requires = "export_status")]
+        export_extension_id: Option<String>,
+        /// The extension's connection; its default destination when omitted.
+        #[arg(long, requires = "export_extension_id")]
+        export_connection: Option<String>,
+        #[arg(long, value_enum, requires = "export_extension_id")]
+        export_status: Option<ExportState>,
+        /// Only records with open findings, only acknowledged ones, or none
+        /// unresolved. Needs `rules.read`.
+        #[arg(long, value_enum)]
+        data_quality: Option<DataQuality>,
+        /// Context whose values filters, sorting and table values resolve;
+        /// `default` when omitted.
+        #[arg(long)]
+        context_code: Option<String>,
+        /// Leave the blueprint out of the response, for later pages.
+        #[arg(long)]
+        omit_blueprint: bool,
+        /// Leave each item's preview and related records out of the response.
+        #[arg(long)]
+        omit_previews: bool,
         #[arg(long)]
         sort_field: Option<String>,
         #[arg(long, value_enum, requires = "sort_field", default_value_t = SortDirection::Asc)]
         sort_direction: SortDirection,
+        /// The publication channel's context code; required to sort by
+        /// publication status.
+        #[arg(long, requires = "sort_field")]
+        sort_context_code: Option<String>,
     },
     Form {
         record_id: Uuid,
@@ -450,25 +503,50 @@ pub(crate) async fn record_command(api: &Api, command: RecordCommand) -> Result<
             outdated,
             include_total,
             relationship_tree_facets,
+            relationship_filters,
+            export_extension_id,
+            export_connection,
+            export_status,
+            data_quality,
+            context_code,
+            omit_blueprint,
+            omit_previews,
             sort_field,
             sort_direction,
+            sort_context_code,
         } => {
             let mut body = json!({
                 "blueprint": { "code": blueprint, "version": version },
                 "query": query,
                 "filters": json_array_argument(filters.as_deref(), "--filters")?,
+                "relationship_filters": json_array_argument(
+                    relationship_filters.as_deref(),
+                    "--relationship-filters",
+                )?,
+                "data_quality": data_quality.map(DataQuality::as_str),
                 "outdated": outdated,
+                "context_code": context_code,
                 "include_total": include_total,
+                "include_blueprint": !omit_blueprint,
+                "include_previews": !omit_previews,
                 "relationship_tree_facets": json_array_argument(
                     relationship_tree_facets.as_deref(),
                     "--relationship-tree-facets",
                 )?,
                 "page": { "size": size, "cursor": cursor },
             });
+            if let (Some(extension_id), Some(status)) = (export_extension_id, export_status) {
+                body["export_status"] = json!({
+                    "extension_id": extension_id,
+                    "connection": export_connection,
+                    "status": status.as_str(),
+                });
+            }
             if let Some(field) = sort_field {
                 body["sort"] = json!({
                     "field": field,
                     "direction": sort_direction.as_str(),
+                    "context_code": sort_context_code,
                 });
             }
             if let Some(tags) = system_tags {
