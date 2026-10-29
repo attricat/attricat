@@ -131,7 +131,7 @@ acli record publication status --record-id <record-id> [--record-id <record-id> 
 acli record migrate <record-id> [--values <json-or-file>] [--relationships <json-or-file>] [--discard-attributes <json-or-file>] [--expected-updated-at <rfc3339>]
 acli record migrate-bulk --blueprint <code> --from-version <version> [--size <size>] [--dry-run]
 
-acli value append <record-id> --file values.toml --context-id <context-id>
+acli value append <record-id> --file values.toml --context-id <context-id> [--expected-updated-at <rfc3339>]
 acli value current <record-id>
 acli value replace-relationships <record-id> --file relationships.toml --context-id <context-id>
 acli value remove-relationships <record-id> --file relationships.toml --context-id <context-id>
@@ -290,8 +290,8 @@ the returned file IDs to `record create --files`, for example
 `[{"attribute_code":"manual","file_ids":["<file-id>"]}]`, to attach them as
 the record is created.
 
-`--expected-updated-at` makes `record update`, `transition`, `migrate` and
-`restore-value` fail instead of overwriting a record someone changed after
+`--expected-updated-at` makes `record update`, `transition`, `migrate`,
+`restore-value` and `value append` fail instead of overwriting a record someone changed after
 that `updated_at`. `record transition` writes the status option as a scalar
 value, so it follows the same workflow and approval rules as the web app;
 `record unlock` needs `records.unlock`. Comment, approval and retention-hold

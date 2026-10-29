@@ -2562,6 +2562,37 @@ async fn record_search_sends_every_filter_and_option() {
 }
 
 #[tokio::test]
+async fn value_append_sends_expected_updated_at() {
+    let id = "00000000-0000-4000-8000-000000000001";
+    let directory = tempfile::tempdir().unwrap();
+    let file = directory.path().join("values.toml");
+    fs::write(
+        &file,
+        "[[values]]\nkind = \"scalar\"\nattribute_code = \"name\"\nvalue = \"Linen shirt\"\n",
+    )
+    .unwrap();
+    let file = file.to_str().unwrap();
+    let appended = echo(&[
+        "value",
+        "append",
+        id,
+        "--file",
+        file,
+        "--expected-updated-at",
+        "2026-10-29T10:00:00Z",
+    ])
+    .await;
+    assert_eq!(appended["path"], format!("/records/{id}/values"));
+    assert_eq!(
+        appended["body"]["expected_updated_at"],
+        "2026-10-29T10:00:00Z"
+    );
+    assert_eq!(appended["body"]["values"][0]["attribute_code"], "name");
+    let unchecked = echo(&["value", "append", id, "--file", file]).await;
+    assert!(unchecked["body"].get("expected_updated_at").is_none());
+}
+
+#[tokio::test]
 async fn record_facet_commands_build_requests() {
     let fields = echo(&[
         "reusable-attribute",
