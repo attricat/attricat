@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 use crate::error::CliError;
 use crate::input::{json_input, json_object_input, read_secret_stdin};
-use crate::transport::{Api, ZSTD_MEDIA_TYPE, segment};
+use crate::transport::{Api, ZSTD_MEDIA_TYPE, segment, with_query};
 use connection::{ConnectionCommand, connection_command};
 use connector_job::{ConnectorJobCommand, connector_job_command};
 use export::{ExportCommand, export_command};
@@ -54,8 +54,14 @@ pub(crate) enum ExtensionCommand {
     Remove {
         extension_id: String,
     },
-    /// Show the server's extension runtime and supported host ABI.
-    Runtime,
+    /// List the enabled extensions' client contributions; with a blueprint,
+    /// only those in scope for that blueprint version.
+    Runtime {
+        #[arg(long, requires = "blueprint_version")]
+        blueprint_id: Option<Uuid>,
+        #[arg(long, requires = "blueprint_id", value_parser = clap::value_parser!(i64).range(1..))]
+        blueprint_version: Option<i64>,
+    },
     WorkspaceMode {
         #[arg(long, action = clap::ArgAction::Set)]
         enabled: bool,
@@ -270,7 +276,22 @@ pub(crate) async fn extension_command(
         ExtensionCommand::Remove { extension_id } => {
             api.delete(&extension_path(&extension_id, "")).await
         }
-        ExtensionCommand::Runtime => api.get("/extensions/runtime").await,
+        ExtensionCommand::Runtime {
+            blueprint_id,
+            blueprint_version,
+        } => {
+            api.get(&with_query(
+                "/extensions/runtime",
+                [
+                    ("blueprint_id", blueprint_id.map(|id| id.to_string())),
+                    (
+                        "blueprint_version",
+                        blueprint_version.map(|version| version.to_string()),
+                    ),
+                ],
+            ))
+            .await
+        }
         ExtensionCommand::WorkspaceMode { enabled } => {
             api.put_json("/workspace/extensions-mode", json!({ "enabled": enabled }))
                 .await

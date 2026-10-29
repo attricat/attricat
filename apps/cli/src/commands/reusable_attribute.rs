@@ -13,6 +13,13 @@ pub(crate) enum ReusableAttributeCommand {
         #[arg(long)]
         include_drafts: bool,
     },
+    /// List the reusable attributes the Explorer offers as filters on a
+    /// blueprint's current-version records.
+    FilterFields {
+        /// The blueprint's code.
+        #[arg(long)]
+        blueprint: String,
+    },
     /// Create a definition from a TOML definition file.
     Create(SourceInput),
     /// Run every save check on a definition without storing it. With
@@ -76,6 +83,13 @@ pub(crate) async fn reusable_attribute_command(
             api.get(&with_query(
                 DEFINITIONS_PATH,
                 [("include_drafts", flag(include_drafts))],
+            ))
+            .await
+        }
+        ReusableAttributeCommand::FilterFields { blueprint } => {
+            api.get(&with_query(
+                "/v1/records/reusable-attributes",
+                [("blueprint", Some(blueprint))],
             ))
             .await
         }

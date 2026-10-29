@@ -22,56 +22,60 @@ fields = ["title"]
 
 [views.detail]
 type = "stack"
+
+[[views.detail.children]]
+type = "stack"
+component = { id = "attricat.record_heading", version = 1 }
 children = [
-  {
-    type = "stack",
-    component = { id = "attricat.record_heading", version = 1 },
-    children = [
-      { type = "field", field = "title" },
-      { type = "text", text = "Product details" },
-    ],
-  },
-  { type = "text", text = "Availability and linked catalog classifications." },
-  {
-    type = "tabs",
-    tabs = [
-      {
-        label = "Overview",
-        children = [
-          {
-            type = "grid",
-            children = [
-              { type = "field", field = "title" },
-              { type = "field", field = "price" },
-            ],
-          },
-          { type = "relationship_list", field = "categories" },
-        ],
-      },
-      {
-        label = "Operations",
-        children = [
-          {
-            type = "accordion",
-            sections = [
-              {
-                label = "Availability",
-                children = [
-                  { type = "field", field = "stock_on_hand" },
-                  { type = "field", field = "available" },
-                  { type = "field", field = "available_on" },
-                ],
-              },
-            ],
-          },
-        ],
-      },
-    ],
-  },
-  { type = "divider" },
-  { type = "relationship_list", field = "colors" },
-  { type = "relationship_list", field = "variants" },
+  { type = "field", field = "title" },
+  { type = "text", text = "Product details" },
 ]
+
+[[views.detail.children]]
+type = "text"
+text = "Availability and linked catalog classifications."
+
+[[views.detail.children]]
+type = "tabs"
+
+[[views.detail.children.tabs]]
+label = "Overview"
+
+[[views.detail.children.tabs.children]]
+type = "grid"
+children = [
+  { type = "field", field = "title" },
+  { type = "field", field = "price" },
+]
+
+[[views.detail.children.tabs.children]]
+type = "relationship_list"
+field = "categories"
+
+[[views.detail.children.tabs]]
+label = "Operations"
+
+[[views.detail.children.tabs.children]]
+type = "accordion"
+
+[[views.detail.children.tabs.children.sections]]
+label = "Availability"
+children = [
+  { type = "field", field = "stock_on_hand" },
+  { type = "field", field = "available" },
+  { type = "field", field = "available_on" },
+]
+
+[[views.detail.children]]
+type = "divider"
+
+[[views.detail.children]]
+type = "relationship_list"
+field = "colors"
+
+[[views.detail.children]]
+type = "relationship_list"
+field = "variants"
 
 [views.table]
 type = "table"

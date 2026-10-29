@@ -70,14 +70,25 @@ pub(crate) enum RuleCommand {
         #[arg(long, default_value_t = false)]
         dry_run: bool,
         /// Dry-run this unsaved definition instead of the current one.
-        #[arg(long, requires = "dry_run")]
+        #[arg(long, requires = "dry_run", conflicts_with = "definition_stdin")]
         definition_file: Option<std::path::PathBuf>,
+        /// Dry-run an unsaved definition read from standard input.
+        #[arg(long, requires = "dry_run")]
+        definition_stdin: bool,
     },
     RunList {
         #[arg(long)]
+        rule_id: Option<Uuid>,
+        #[arg(long)]
         record_id: Option<Uuid>,
+        /// Keep only runs over every record, or only those that checked one.
+        #[arg(long, value_enum)]
+        scope: Option<RunScope>,
         #[command(flatten)]
         page: PageArgs,
+    },
+    RunGet {
+        run_id: Uuid,
     },
     RunReplay {
         run_id: Uuid,
@@ -101,10 +112,24 @@ pub(crate) enum RuleCommand {
         #[command(flatten)]
         page: PageArgs,
     },
-    /// Count unresolved findings, optionally of one record.
+    /// Count the findings the filters match: unresolved ones unless a state
+    /// is chosen or --include-resolved is given.
     FindingCount {
         #[arg(long)]
         record_id: Option<Uuid>,
+        #[arg(long)]
+        rule_id: Option<Uuid>,
+        #[arg(long)]
+        blueprint_id: Option<Uuid>,
+        #[arg(long)]
+        context_id: Option<Uuid>,
+        #[arg(long, value_enum)]
+        severity: Option<FindingSeverity>,
+        #[arg(long, value_enum)]
+        state: Option<FindingState>,
+        /// Count findings in every state.
+        #[arg(long, conflicts_with = "state")]
+        include_resolved: bool,
     },
     /// Re-check one record against every enabled rule of its blueprint.
     Recheck {
@@ -115,6 +140,31 @@ pub(crate) enum RuleCommand {
     },
     Acknowledge {
         finding_id: Uuid,
+    },
+    /// Acknowledge many open findings: the listed ones, or with --matching
+    /// every open finding the filters match. Prints how many it acknowledged.
+    #[command(group(
+        clap::ArgGroup::new("selection")
+            .required(true)
+            .args(["finding_ids", "matching"])
+    ))]
+    AcknowledgeMany {
+        /// Finding to acknowledge; repeat for up to 5000.
+        #[arg(long = "finding-id", num_args = 1..)]
+        finding_ids: Vec<Uuid>,
+        /// Acknowledge every open finding the filters below match.
+        #[arg(long)]
+        matching: bool,
+        #[arg(long, requires = "matching")]
+        record_id: Option<Uuid>,
+        #[arg(long, requires = "matching")]
+        rule_id: Option<Uuid>,
+        #[arg(long, requires = "matching")]
+        blueprint_id: Option<Uuid>,
+        #[arg(long, requires = "matching")]
+        context_id: Option<Uuid>,
+        #[arg(long, value_enum, requires = "matching")]
+        severity: Option<FindingSeverity>,
     },
 }
 
@@ -189,12 +239,13 @@ pub(crate) async fn rule_command(api: &Api, command: RuleCommand) -> Result<Stri
             record_id,
             dry_run,
             definition_file,
+            definition_stdin,
         } => {
-            let definition = definition_file
-                .map(|file| {
+            let definition = (definition_file.is_some() || definition_stdin)
+                .then(|| {
                     read_source(SourceInput {
-                        file: Some(file),
-                        stdin: false,
+                        file: definition_file,
+                        stdin: definition_stdin,
                     })
                 })
                 .transpose()?;
@@ -204,20 +255,30 @@ pub(crate) async fn rule_command(api: &Api, command: RuleCommand) -> Result<Stri
             )
             .await
         }
-        RuleCommand::RunList { record_id, page } => {
+        RuleCommand::RunList {
+            rule_id,
+            record_id,
+            scope,
+            page,
+        } => {
             let [limit, offset] = page.query();
             api.get(&with_query(
-                "/rule-runs",
+                RUNS_PATH,
                 [
+                    ("rule_id", rule_id.map(|id| id.to_string())),
                     ("record_id", record_id.map(|id| id.to_string())),
+                    ("scope", scope.map(|scope| scope.as_str().to_owned())),
                     limit,
                     offset,
                 ],
             ))
             .await
         }
+        RuleCommand::RunGet { run_id } => {
+            api.get(&format!("{RUNS_PATH}/{}", segment(run_id))).await
+        }
         RuleCommand::RunReplay { run_id } => {
-            api.post(&format!("/rule-runs/{}/replay", segment(run_id)))
+            api.post(&format!("{RUNS_PATH}/{}/replay", segment(run_id)))
                 .await
         }
         RuleCommand::Findings {
@@ -251,10 +312,30 @@ pub(crate) async fn rule_command(api: &Api, command: RuleCommand) -> Result<Stri
             ))
             .await
         }
-        RuleCommand::FindingCount { record_id } => {
+        RuleCommand::FindingCount {
+            record_id,
+            rule_id,
+            blueprint_id,
+            context_id,
+            severity,
+            state,
+            include_resolved,
+        } => {
+            let id = |id: Option<Uuid>| id.map(|id| id.to_string());
             api.get(&with_query(
                 &format!("{FINDINGS_PATH}/count"),
-                [("record_id", record_id.map(|id| id.to_string()))],
+                [
+                    ("record_id", id(record_id)),
+                    ("rule_id", id(rule_id)),
+                    ("blueprint_id", id(blueprint_id)),
+                    ("context_id", id(context_id)),
+                    (
+                        "severity",
+                        severity.map(|severity| severity.as_str().to_owned()),
+                    ),
+                    ("state", state.map(|state| state.as_str().to_owned())),
+                    ("unresolved", include_resolved.then(|| "false".to_owned())),
+                ],
             ))
             .await
         }
@@ -275,10 +356,52 @@ pub(crate) async fn rule_command(api: &Api, command: RuleCommand) -> Result<Stri
             ))
             .await
         }
+        RuleCommand::AcknowledgeMany {
+            finding_ids,
+            matching,
+            record_id,
+            rule_id,
+            blueprint_id,
+            context_id,
+            severity,
+        } => {
+            let body = if matching {
+                json!({ "matching": {
+                    "record_id": record_id,
+                    "rule_id": rule_id,
+                    "blueprint_id": blueprint_id,
+                    "context_id": context_id,
+                    "severity": severity.map(FindingSeverity::as_str),
+                }})
+            } else {
+                json!({ "finding_ids": finding_ids })
+            };
+            api.post_json(&format!("{FINDINGS_PATH}/acknowledge"), body)
+                .await
+        }
     }
 }
 
 const FINDINGS_PATH: &str = "/rule-findings";
+const RUNS_PATH: &str = "/rule-runs";
+
+/// Which runs `run-list` keeps.
+#[derive(Clone, Copy, ValueEnum)]
+pub(crate) enum RunScope {
+    /// Runs over every record.
+    AllRecords,
+    /// Runs that checked one record.
+    Record,
+}
+
+impl RunScope {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::AllRecords => "all_records",
+            Self::Record => "record",
+        }
+    }
+}
 
 #[derive(Clone, Copy, ValueEnum)]
 pub(crate) enum FindingSeverity {

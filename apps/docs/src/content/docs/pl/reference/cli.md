@@ -84,7 +84,7 @@ Gdy API zwraca szczegóły w formie czytelnej dla maszyn (na przykład naruszeni
 
 ## Argumenty JSON
 
-Opcje przyjmujące dane strukturalne (`--permissions`, `--entries`, `--filters`, `--relationship-tree-facets`, `--relationships`, `--selected-target-ids`, `--include-ids`, `--values`, `--discard-attributes`, `--configuration`, `--body`, `--payload`, `--input`, `--state`, `--operations`) akceptują JSON podany bezpośrednio albo ścieżkę do pliku JSON.
+Opcje przyjmujące dane strukturalne (`--permissions`, `--entries`, `--filters`, `--relationship-tree-facets`, `--relationship-filters`, `--relationships`, `--files`, `--selected-target-ids`, `--include-ids`, `--values`, `--discard-attributes`, `--configuration`, `--body`, `--payload`, `--input`, `--state`, `--operations`) akceptują JSON podany bezpośrednio albo ścieżkę do pliku JSON.
 
 Polecenia schematów, przepływów pracy i reguł przyjmują `--file <path>` lub `--stdin` i wysyłają TOML bez zmian.
 
@@ -174,7 +174,7 @@ acli blueprint get <blueprint-id>
 acli blueprint get-version <blueprint-id> <version>
 acli blueprint resolve <code> [--version <version>] [--include-drafts]
 acli blueprint migration-impact <blueprint-id> <version>
-acli blueprint safe-migration-batch <blueprint-id> <version>
+acli blueprint safe-migration-batch <blueprint-id> <version> [--archive-removed-values]
 acli blueprint migration-batches <blueprint-id>
 acli blueprint sequences <blueprint-id>
 acli blueprint advance-sequence <blueprint-id> <attribute-code> <next-value> [--period <period>]
@@ -182,6 +182,7 @@ acli blueprint publish-records <blueprint-id> <version> --context-id <channel>
 acli blueprint publish-records-all <blueprint-id> <version>
 
 acli reusable-attribute list [--include-drafts]
+acli reusable-attribute filter-fields --blueprint <code>
 acli reusable-attribute create --file gtin.toml
 acli reusable-attribute validate [--definition-id <definition-id>] --file gtin.toml
 acli reusable-attribute create-version <definition-id> --file gtin-v2.toml
@@ -191,6 +192,8 @@ acli reusable-attribute group list
 acli reusable-attribute group create --code <code> --name <name> [--position <n>] --revision-id <revision-id> [--revision-id <revision-id> ...]
 acli reusable-attribute group apply <record-id> <group-id>
 ```
+
+`safe-migration-batch` odrzuca wersję, która usuwa atrybuty nadal mające wartości; gdy `migration-impact` zwraca `requires_removal_disposition`, dodaj `--archive-removed-values`, aby zarchiwizować te wartości. `reusable-attribute filter-fields` wypisuje atrybuty wielokrotnego użytku, które Przeglądarka oferuje jako filtry dla rekordów schematu.
 
 ### Konteksty
 
@@ -206,14 +209,15 @@ acli context delete <context-id>
 ### Rekordy i wartości
 
 ```sh
-acli record create --blueprint <code> --values values.toml [--context-id <id>] [--system-tags <json>] [--system-metadata <json>]
+acli record create --blueprint <code> [--values values.toml] [--files <json-or-file>] [--context-id <id>] [--system-tags <json>] [--system-metadata <json>]
 acli record get | form | delete | duplicate | export-status <record-id>
 acli record labels --record-id <id> [--record-id <id> ...]
 acli record update <record-id> [--values f.toml] [--relationships f.toml] [--remove-values f.toml] [--context-id <id>] [--expected-updated-at <t>]
 acli record batch --operations <json-or-file>
 acli record preview <record-id> [--relationship-depth <n>] [--relationship-limit <n>]
 acli record resolved-preview <record-id> --context-id <id>
-acli record search --blueprint <code> [--query <text>] [--filters <json>] [--version <n>] [--sort-field <f> --sort-direction asc|desc] [--size <n>] [--cursor <c>] [--include-total] [--outdated] [--system-tags <json>] [--relationship-tree-facets <json>]
+acli record search --blueprint <code> [--query <text>] [--filters <json>] [--version <n>] [--sort-field <f> [--sort-direction asc|desc] [--sort-context-code <code>]] [--size <n>] [--cursor <c>] [--include-total] [--outdated] [--system-tags <json>] [--relationship-tree-facets <json>] [--relationship-filters <json>] [--export-extension-id <id> [--export-connection <name>] --export-status <state>] [--data-quality open|acknowledged|clean] [--context-code <code>] [--omit-blueprint] [--omit-previews]
+acli record system-tags --blueprint <code> [--version <n>] [--prefix <text>] [--limit <n>]
 acli record facet-children --blueprint <code> --source-relationship-field <f> --context-id <id> [--hierarchy-field <f>] [--parent-id <id>]
 acli record list --blueprint <code> --related-from <record-id> --relationship <attribute>
 acli record incoming-relationships <record-id> --relationships <json>
@@ -229,6 +233,8 @@ acli record comment list <record-id> [--before-time <t> --before-id <id>]
 acli record comment add <record-id> --body <text>
 acli record comment count <record-id>
 acli record comment edit <record-id> <comment-id> --body <text> --revision <n>
+acli record rule list | finding-count <record-id>
+acli record rule findings | runs <record-id> [--limit <n>] [--offset <n>]
 acli record migrate-bulk --blueprint <code> --from-version <n> [--dry-run]
 acli record publication list <record-id>
 acli record publication publish | unpublish <record-id> --context-id <channel>
@@ -236,13 +242,15 @@ acli record publication publish-all | readiness <record-id>
 acli record publication status --record-id <id> [--record-id <id> ...]
 
 acli value current <record-id>
-acli value append <record-id> --file values.toml --context-id <id>
+acli value append <record-id> --file values.toml --context-id <id> [--expected-updated-at <t>]
 acli value replace-relationships | remove-relationships <record-id> --file relationships.toml --context-id <id>
 ```
 
 `record batch` przyjmuje tablicę JSON z operacjami tworzenia, aktualizacji i usuwania, podaną bezpośrednio lub w pliku, i zapisuje wszystkie albo żadną. Format operacji opisuje sekcja [Zmiany wsadowe](/pl/reference/api/#zmiany-wsadowe).
 
 Z `--expected-updated-at` zapis kończy się błędem zamiast nadpisać rekord zmieniony po tej chwili. `record transition` zmienia status tak jak aplikacja webowa, więc obowiązują reguły przepływów i zatwierdzeń; `record unlock` wymaga uprawnienia `records.unlock`. Listy komentarzy, zatwierdzeń i blokad retencji są posortowane od najnowszych: aby pobrać kolejną stronę, podaj `created_at` i `id` ostatniego elementu w `--before-time` i `--before-id`.
+
+`record rule` pokazuje reguły rekordu, ich ustalenia i wykonania każdemu, kto może odczytać rekord; polecenia `rule` wymagają uprawnienia `rules.read`, podobnie jak `record search --data-quality`. Sortowanie według statusu publikacji wymaga podania kanału w `--sort-context-code`. `record system-tags` wypisuje tagi systemowe rekordów schematu, od najczęściej używanych.
 
 ### Pliki
 
@@ -258,7 +266,7 @@ acli file download-original <file-id> --output original.bin [--range 'bytes=0-10
 acli file download-variant <file-id> thumbnail|display --output preview.webp
 ```
 
-`stage-upload` przesyła pliki, zanim rekord powstanie; zwrócone identyfikatory plików podaj jako wartości atrybutu przy tworzeniu rekordu. `set-references` zastępuje pliki, do których odwołuje się atrybut, w podanej kolejności, i kończy się błędem, jeśli `--expected-file-id` nie wymienia dokładnie obecnych. Blokady retencji wymagają uprawnienia `files.hold`.
+`stage-upload` przesyła pliki, zanim rekord powstanie; zwrócone identyfikatory plików przekaż do `record create --files`, na przykład `[{"attribute_code":"manual","file_ids":["<file-id>"]}]`. `set-references` zastępuje pliki, do których odwołuje się atrybut, w podanej kolejności, i kończy się błędem, jeśli `--expected-file-id` nie wymienia dokładnie obecnych. Blokady retencji wymagają uprawnienia `files.hold`.
 
 ### Zapisane wyszukiwania
 
@@ -284,11 +292,11 @@ acli notification count
 acli notification get <id>
 acli notification read <id>
 acli notification unread <id>
-acli notification read-all
+acli notification read-all [--up-to <rfc3339>]
 acli notification delete <id>
 ```
 
-`delete` usuwa trwale. `list` zwraca po 30 powiadomień na stronę; aby pobrać kolejną, podaj `created_at` i `id` ostatniego z nich.
+`delete` usuwa trwale. `read-all --up-to` oznacza tylko powiadomienia utworzone do tej chwili, więc te, które przyszły po wyświetleniu listy, pozostają nieprzeczytane. `list` zwraca po 30 powiadomień na stronę; aby pobrać kolejną, podaj `created_at` i `id` ostatniego z nich.
 
 ### Tłumaczenia
 
@@ -314,13 +322,16 @@ acli rule validate | create --blueprint-id <id> [--context-id <id>] --file rule.
 acli rule update <rule-id> [--accept-existing-violations] --file rule.toml
 acli rule enable <rule-id> [--accept-existing-violations]
 acli rule disable <rule-id>
-acli rule run-now <rule-id> --idempotency-key <key> [--record-id <id>] [--dry-run [--definition-file rule.toml]]
-acli rule run-list [--record-id <id>] [--limit <n>] [--offset <n>]
+acli rule run-now <rule-id> --idempotency-key <key> [--record-id <id>] [--dry-run [--definition-file rule.toml | --definition-stdin]]
+acli rule run-list [--rule-id <id>] [--record-id <id>] [--scope all-records|record] [--limit <n>] [--offset <n>]
+acli rule run-get <run-id>
 acli rule run-replay <run-id>
 acli rule findings [--record-id <id>] [--rule-id <id>] [--blueprint-id <id>] [--context-id <id>] [--severity info|warning|error|critical] [--state open|acknowledged|resolved] [--unresolved] [--limit <n>] [--offset <n>]
-acli rule finding-count [--record-id <id>]
+acli rule finding-count [--record-id <id>] [--rule-id <id>] [--blueprint-id <id>] [--context-id <id>] [--severity <severity>] [--state <state> | --include-resolved]
 acli rule recheck --record-id <id> --idempotency-key <key>
 acli rule acknowledge <finding-id>
+acli rule acknowledge-many --finding-id <id> [--finding-id <id> ...]
+acli rule acknowledge-many --matching [--record-id <id>] [--rule-id <id>] [--blueprint-id <id>] [--context-id <id>] [--severity <severity>]
 
 acli workflow validate | create --file workflow.toml
 acli workflow list | get <workflow-id> | list-versions <workflow-id>
@@ -381,7 +392,7 @@ acli workspace tag-color list
 acli workspace tag-color set <tag> gray|blue|teal|green|yellow|orange|red|purple|pink
 acli workspace tag-color reset <tag>
 acli workspace publication-channel list
-acli workspace publication-channel set <context-id> --enabled true|false
+acli workspace publication-channel set <context-id> --enabled true|false [--required-rule-code <code> ... | --clear-required-rule-codes] [--require-valid-record true|false]
 acli workspace grant-target list workspace|blueprint-family|record|context-subtree
 acli workspace token-permission list
 acli directory list
@@ -400,7 +411,8 @@ acli extension registry list | discover
 acli extension registry add --source <owner/repository>
 acli extension registry remove <registry-id>
 acli extension registry get <owner> <repository>
-acli extension list | runtime
+acli extension list
+acli extension runtime [--blueprint-id <id> --blueprint-version <n>]
 acli extension get | enable | disable | remove <extension-id>
 acli extension install --owner <o> --repository <r> --release-id <github-release-id>
 acli extension sideload --file extension.tar.zst

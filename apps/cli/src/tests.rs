@@ -173,8 +173,23 @@ fn notification_commands_build_requests() {
         Some(json!({"read": false}))
     );
     assert_eq!(
-        parse(&["acli", "notification", "read-all"]).1,
-        "/notifications/read-all"
+        parse(&["acli", "notification", "read-all"]),
+        (
+            Method::POST,
+            "/notifications/read-all".to_owned(),
+            Some(json!({ "up_to": null }))
+        )
+    );
+    assert_eq!(
+        parse(&[
+            "acli",
+            "notification",
+            "read-all",
+            "--up-to",
+            "2026-10-29T10:00:00Z"
+        ])
+        .2,
+        Some(json!({ "up_to": "2026-10-29T10:00:00Z" }))
     );
     assert_eq!(
         parse(&["acli", "notification", "delete", id]),
@@ -913,6 +928,27 @@ fn rule_commands_require_definition_metadata_and_sources() {
     assert!(Cli::try_parse_from(["acli", "data-health", "background-processing"]).is_ok());
 }
 
+#[test]
+fn rule_run_now_reads_one_unsaved_definition_for_a_dry_run() {
+    let id = "00000000-0000-4000-8000-000000000001";
+    let run_now = |extra: &[&'static str]| {
+        let mut args = vec!["acli", "rule", "run-now", id, "--idempotency-key", "check"];
+        args.extend_from_slice(extra);
+        Cli::try_parse_from(args)
+    };
+    assert!(run_now(&["--dry-run", "--definition-stdin"]).is_ok());
+    assert!(run_now(&["--definition-stdin"]).is_err());
+    assert!(
+        run_now(&[
+            "--dry-run",
+            "--definition-stdin",
+            "--definition-file",
+            "rule.toml"
+        ])
+        .is_err()
+    );
+}
+
 #[tokio::test]
 async fn rule_routes_forward_definition_and_run_options() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -976,6 +1012,7 @@ async fn rule_routes_forward_definition_and_run_options() {
             record_id: Some(id),
             dry_run: true,
             definition_file: Some(file.path().to_owned()),
+            definition_stdin: false,
         },
     )
     .await
@@ -2433,6 +2470,250 @@ async fn reusable_attribute_commands_build_requests() {
 }
 
 #[tokio::test]
+async fn record_create_attaches_staged_files() {
+    let id = "00000000-0000-4000-8000-000000000001";
+    let files = format!(r#"[{{"attribute_code":"manual","file_ids":["{id}"]}}]"#);
+    let created = echo(&[
+        "record",
+        "create",
+        "--blueprint",
+        "product",
+        "--files",
+        &files,
+    ])
+    .await;
+    assert_eq!(created["path"], "/v1/records");
+    assert_eq!(
+        created["body"],
+        json!({
+            "blueprint": { "code": "product", "version": null },
+            "values": [],
+            "files": [{ "attribute_code": "manual", "file_ids": [id] }],
+        })
+    );
+}
+
+#[tokio::test]
+async fn publication_channel_set_sends_only_given_requirements() {
+    let id = "00000000-0000-4000-8000-000000000001";
+    let path = format!("/publication-channels/{id}");
+    let set = |extra: &[&'static str]| {
+        let mut args = vec![
+            "workspace",
+            "publication-channel",
+            "set",
+            id,
+            "--enabled",
+            "true",
+        ];
+        args.extend_from_slice(extra);
+        args
+    };
+    let kept = echo(&set(&[])).await;
+    assert_eq!(kept["method"], "PUT");
+    assert_eq!(kept["path"], path);
+    assert_eq!(
+        kept["body"],
+        json!({ "enabled": true, "required_rule_codes": null, "require_valid_record": null })
+    );
+    let changed = echo(&set(&[
+        "--required-rule-code",
+        "has_gtin",
+        "--required-rule-code",
+        "has_image",
+        "--require-valid-record",
+        "false",
+    ]))
+    .await;
+    assert_eq!(
+        changed["body"],
+        json!({
+            "enabled": true,
+            "required_rule_codes": ["has_gtin", "has_image"],
+            "require_valid_record": false,
+        })
+    );
+    let cleared = echo(&set(&["--clear-required-rule-codes"])).await;
+    assert_eq!(cleared["body"]["required_rule_codes"], json!([]));
+}
+
+#[tokio::test]
+async fn record_search_sends_every_filter_and_option() {
+    let id = "00000000-0000-4000-8000-000000000001";
+    let relationship_filters =
+        format!(r#"[{{"field":"model.brand","selected_target_ids":["{id}"]}}]"#);
+    let search = echo(&[
+        "record",
+        "search",
+        "--blueprint",
+        "product",
+        "--relationship-filters",
+        &relationship_filters,
+        "--export-extension-id",
+        "acme.pim",
+        "--export-status",
+        "rejected",
+        "--data-quality",
+        "open",
+        "--context-code",
+        "eu",
+        "--omit-blueprint",
+        "--omit-previews",
+        "--sort-field",
+        "publication_status",
+        "--sort-context-code",
+        "web",
+    ])
+    .await;
+    assert_eq!(search["path"], "/v1/records/search");
+    let body = &search["body"];
+    assert_eq!(
+        body["relationship_filters"],
+        json!([{ "field": "model.brand", "selected_target_ids": [id] }])
+    );
+    assert_eq!(
+        body["export_status"],
+        json!({ "extension_id": "acme.pim", "connection": null, "status": "rejected" })
+    );
+    assert_eq!(body["data_quality"], "open");
+    assert_eq!(body["context_code"], "eu");
+    assert_eq!(body["include_blueprint"], false);
+    assert_eq!(body["include_previews"], false);
+    assert_eq!(
+        body["sort"],
+        json!({ "field": "publication_status", "direction": "asc", "context_code": "web" })
+    );
+    let plain = echo(&["record", "search", "--blueprint", "product"]).await;
+    assert_eq!(plain["body"]["include_blueprint"], true);
+    assert_eq!(plain["body"]["include_previews"], true);
+    assert!(plain["body"].get("export_status").is_none());
+    for args in [
+        ["--export-status", "synced"],
+        ["--export-extension-id", "acme.pim"],
+        ["--sort-context-code", "web"],
+    ] {
+        let mut command = vec!["acli", "record", "search", "--blueprint", "product"];
+        command.extend(args);
+        assert!(Cli::try_parse_from(command).is_err());
+    }
+}
+
+#[tokio::test]
+async fn value_append_sends_expected_updated_at() {
+    let id = "00000000-0000-4000-8000-000000000001";
+    let directory = tempfile::tempdir().unwrap();
+    let file = directory.path().join("values.toml");
+    fs::write(
+        &file,
+        "[[values]]\nkind = \"scalar\"\nattribute_code = \"name\"\nvalue = \"Linen shirt\"\n",
+    )
+    .unwrap();
+    let file = file.to_str().unwrap();
+    let appended = echo(&[
+        "value",
+        "append",
+        id,
+        "--file",
+        file,
+        "--expected-updated-at",
+        "2026-10-29T10:00:00Z",
+    ])
+    .await;
+    assert_eq!(appended["path"], format!("/records/{id}/values"));
+    assert_eq!(
+        appended["body"]["expected_updated_at"],
+        "2026-10-29T10:00:00Z"
+    );
+    assert_eq!(appended["body"]["values"][0]["attribute_code"], "name");
+    let unchecked = echo(&["value", "append", id, "--file", file]).await;
+    assert!(unchecked["body"].get("expected_updated_at").is_none());
+}
+
+#[tokio::test]
+async fn extension_runtime_scopes_to_a_blueprint_version() {
+    let id = "00000000-0000-4000-8000-000000000001";
+    let all = echo(&["extension", "runtime"]).await;
+    assert_eq!(all["path"], "/extensions/runtime");
+    assert_eq!(all["query"], Value::Null);
+    let scoped = echo(&[
+        "extension",
+        "runtime",
+        "--blueprint-id",
+        id,
+        "--blueprint-version",
+        "3",
+    ])
+    .await;
+    assert_eq!(
+        scoped["query"],
+        format!("blueprint_id={id}&blueprint_version=3")
+    );
+    for args in [
+        vec!["acli", "extension", "runtime", "--blueprint-id", id],
+        vec!["acli", "extension", "runtime", "--blueprint-version", "3"],
+    ] {
+        assert!(Cli::try_parse_from(args).is_err());
+    }
+}
+
+#[tokio::test]
+async fn operation_input_may_be_any_json_value() {
+    for command in ["operation", "schedule"] {
+        let mut args = vec![
+            "extension",
+            command,
+            "start",
+            "example",
+            "--operation-id",
+            "export",
+            "--input",
+            r#"["sku-1","sku-2"]"#,
+        ];
+        if command == "operation" {
+            args.extend(["--idempotency-key", "once"]);
+        } else {
+            args[2] = "create";
+            args.extend(["--interval-seconds", "3600"]);
+        }
+        let request = echo(&args).await;
+        assert_eq!(request["body"]["input"], json!(["sku-1", "sku-2"]));
+    }
+}
+
+#[tokio::test]
+async fn record_facet_commands_build_requests() {
+    let fields = echo(&[
+        "reusable-attribute",
+        "filter-fields",
+        "--blueprint",
+        "product",
+    ])
+    .await;
+    assert_eq!(fields["path"], "/v1/records/reusable-attributes");
+    assert_eq!(fields["query"], "blueprint=product");
+    let tags = echo(&[
+        "record",
+        "system-tags",
+        "--blueprint",
+        "product",
+        "--prefix",
+        "eu",
+        "--limit",
+        "10",
+    ])
+    .await;
+    assert_eq!(tags["path"], "/v1/records/facets/system-tags");
+    assert_eq!(
+        tags["body"],
+        json!({
+            "blueprint": { "code": "product", "version": null },
+            "prefix": "eu",
+            "limit": 10,
+        })
+    );
+}
+
+#[tokio::test]
 async fn rule_finding_and_connector_job_commands_build_requests() {
     let id = "00000000-0000-4000-8000-000000000001";
     let findings = echo(&[
@@ -2453,6 +2734,104 @@ async fn rule_finding_and_connector_job_commands_build_requests() {
         findings["query"],
         format!("rule_id={id}&severity=critical&state=open&unresolved=true&limit=50")
     );
+    let runs = echo(&[
+        "rule",
+        "run-list",
+        "--rule-id",
+        id,
+        "--scope",
+        "all-records",
+    ])
+    .await;
+    assert_eq!(runs["path"], "/rule-runs");
+    assert_eq!(runs["query"], format!("rule_id={id}&scope=all_records"));
+    let count = echo(&[
+        "rule",
+        "finding-count",
+        "--blueprint-id",
+        id,
+        "--severity",
+        "error",
+        "--include-resolved",
+    ])
+    .await;
+    assert_eq!(count["path"], "/rule-findings/count");
+    assert_eq!(
+        count["query"],
+        format!("blueprint_id={id}&severity=error&unresolved=false")
+    );
+    assert!(
+        Cli::try_parse_from([
+            "acli",
+            "rule",
+            "finding-count",
+            "--state",
+            "open",
+            "--include-resolved",
+        ])
+        .is_err()
+    );
+    let listed = echo(&["rule", "acknowledge-many", "--finding-id", id, id]).await;
+    assert_eq!(listed["path"], "/rule-findings/acknowledge");
+    assert_eq!(listed["body"], json!({ "finding_ids": [id, id] }));
+    let matched = echo(&[
+        "rule",
+        "acknowledge-many",
+        "--matching",
+        "--rule-id",
+        id,
+        "--severity",
+        "warning",
+    ])
+    .await;
+    assert_eq!(
+        matched["body"],
+        json!({ "matching": {
+            "record_id": null,
+            "rule_id": id,
+            "blueprint_id": null,
+            "context_id": null,
+            "severity": "warning",
+        }})
+    );
+    for args in [
+        vec!["acli", "rule", "acknowledge-many"],
+        vec!["acli", "rule", "acknowledge-many", "--rule-id", id],
+        vec![
+            "acli",
+            "rule",
+            "acknowledge-many",
+            "--finding-id",
+            id,
+            "--matching",
+        ],
+    ] {
+        assert!(Cli::try_parse_from(args).is_err());
+    }
+    for (args, path, query) in [
+        (vec!["record", "rule", "list", id], "rules", None),
+        (
+            vec!["record", "rule", "findings", id, "--limit", "5"],
+            "rule-findings",
+            Some("limit=5"),
+        ),
+        (
+            vec!["record", "rule", "finding-count", id],
+            "rule-findings/count",
+            None,
+        ),
+        (
+            vec!["record", "rule", "runs", id, "--offset", "10"],
+            "rule-runs",
+            Some("offset=10"),
+        ),
+    ] {
+        let request = echo(&args).await;
+        assert_eq!(request["path"], format!("/v1/records/{id}/{path}"));
+        assert_eq!(request["query"], json!(query));
+    }
+    let run = echo(&["rule", "run-get", id]).await;
+    assert_eq!(run["path"], format!("/rule-runs/{id}"));
     let recheck = echo(&[
         "rule",
         "recheck",
@@ -2507,6 +2886,21 @@ async fn rule_finding_and_connector_job_commands_build_requests() {
         impact["path"],
         format!("/blueprints/{id}/versions/2/safe-migration-impact")
     );
+    let batch = echo(&[
+        "blueprint",
+        "safe-migration-batch",
+        id,
+        "2",
+        "--archive-removed-values",
+    ])
+    .await;
+    assert_eq!(
+        batch["path"],
+        format!("/blueprints/{id}/versions/2/safe-migration-batches")
+    );
+    assert_eq!(batch["body"], json!({ "removal_disposition": "archive" }));
+    let batch = echo(&["blueprint", "safe-migration-batch", id, "2"]).await;
+    assert_eq!(batch["body"], json!({ "removal_disposition": null }));
     let sequences = echo(&["blueprint", "sequences", id]).await;
     assert_eq!(sequences["path"], format!("/blueprints/{id}/sequences"));
     let advanced = echo(&[
@@ -2657,6 +3051,19 @@ fn token_stdin_rejects_commands_that_also_read_stdin() {
     assert!(matches!(&error, CliError::Input(_)));
     assert!(error.to_string().contains("--token-stdin"), "{error}");
     assert!(error.to_string().contains("--value-stdin"), "{error}");
+    let error = check(&[
+        "acli",
+        "--token-stdin",
+        "rule",
+        "run-now",
+        "00000000-0000-4000-8000-000000000001",
+        "--idempotency-key",
+        "check",
+        "--dry-run",
+        "--definition-stdin",
+    ])
+    .unwrap_err();
+    assert!(error.to_string().contains("--definition-stdin"), "{error}");
     let error = check(&[
         "acli",
         "auth",

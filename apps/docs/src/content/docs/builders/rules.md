@@ -268,7 +268,9 @@ In the [Explorer](/guides/explore/#filters), the **Data quality** filter narrows
 
 ```sh
 acli rule findings --record-id <uuid>
+acli rule finding-count --blueprint-id <uuid> --severity error
 acli rule acknowledge <finding-id>
+acli rule acknowledge-many --matching --rule-id <uuid>
 ```
 
 The **Run history** tab shows runs and failures. It lists runs over all records unless **Scope** is set to **One record**, which shows the runs that checked a single record, such as after each edit, or **Any**. **Outcome** gives the findings a run added and resolved, or for a dry run how many records would fail. A run that fails five times becomes a dead letter; fix the cause and replay it with `acli rule run-replay <run-id>`.
@@ -277,4 +279,4 @@ The **Run history** tab shows runs and failures. It lists runs over all records 
 
 `rules.read` lets someone see rules, runs, and findings. `rules.manage` lets them create, change, enable, disable, and run rules, and acknowledge findings. Both are granted to the owner and admin roles by default.
 
-Everyone who can read a record sees its findings: the **Data quality** tab, the chip in its header, and the highlighted fields, so the people who fix the data see what to fix. Without `rules.read` they see the rule's name but not its page.
+Everyone who can read a record sees its findings: the **Data quality** tab, the chip in its header, and the highlighted fields, so the people who fix the data see what to fix. Without `rules.read` they see the rule's name but not its page. From the CLI, `acli record rule list|findings|finding-count|runs <record-id>` reads a record's rules, findings, and runs without `rules.read`.

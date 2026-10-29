@@ -70,7 +70,7 @@ acli blueprint publish <blueprint-id> <version>
 acli blueprint publish-records <blueprint-id> <version> --context-id <context-id>
 acli blueprint publish-records-all <blueprint-id> <version>
 acli blueprint migration-impact <blueprint-id> <version>
-acli blueprint safe-migration-batch <blueprint-id> <version>
+acli blueprint safe-migration-batch <blueprint-id> <version> [--archive-removed-values]
 acli blueprint migration-batches <blueprint-id>
 acli blueprint sequences <blueprint-id>
 acli blueprint advance-sequence <blueprint-id> <attribute-code> <next-value> [--period <period>]
@@ -80,6 +80,7 @@ acli blueprint resolve <code> [--include-drafts]
 acli blueprint resolve <code> --version <version>
 
 acli reusable-attribute list [--include-drafts]
+acli reusable-attribute filter-fields --blueprint <code>
 acli reusable-attribute create --file gtin.toml
 acli reusable-attribute validate [--definition-id <definition-id>] --file gtin.toml
 acli reusable-attribute create-version <definition-id> --file gtin-v2.toml
@@ -96,7 +97,7 @@ acli context get en_GB
 acli context update <context-id> --parent-id <context-id> --data '{"language":"en-GB"}'
 acli context delete <context-id>
 
-acli record create --blueprint product --values values.toml [--version <version>] [--context-id <context-id>] [--system-tags <json>] [--system-metadata <json>]
+acli record create --blueprint product [--values values.toml] [--files <json-or-file>] [--version <version>] [--context-id <context-id>] [--system-tags <json>] [--system-metadata <json>]
 acli record get|delete|form|duplicate|export-status <record-id>
 acli record labels --record-id <record-id> [--record-id <record-id> ...]
 acli record batch --operations <json-or-file>
@@ -105,8 +106,9 @@ acli record preview <record-id> [--relationship-depth <depth>] [--relationship-l
 acli record resolved-preview <record-id> --context-id <context-id>
 acli record hierarchy <record-id> --context-id <context-id> --field <relationship-field>
 acli record incoming-relationships <record-id> --relationships <json-or-file> [--size <size>] [--cursor <opaque-cursor>]
+acli record system-tags --blueprint <code> [--version <version>] [--prefix <text>] [--limit <n>]
 acli record facet-children --blueprint <code> [--source-relationship-field <field>] --context-id <context-id> [--version <version>] [--query <text>] [--hierarchy-field <field>] [--parent-id <record-id>] [--cursor <record-id>] [--selected-target-ids <json-or-file>] [--include-ids <json-or-file>]
-acli record search --blueprint <code> [--version <version>] [--query <text>] [--size <size>] [--cursor <cursor>] [--system-tags <json>] [--filters <json-or-file>] [--outdated] [--include-total] [--relationship-tree-facets <json-or-file>] [--sort-field <field> --sort-direction asc|desc]
+acli record search --blueprint <code> [--version <version>] [--query <text>] [--size <size>] [--cursor <cursor>] [--system-tags <json>] [--filters <json-or-file>] [--outdated] [--include-total] [--relationship-tree-facets <json-or-file>] [--relationship-filters <json-or-file>] [--export-extension-id <id> [--export-connection <connection>] --export-status pending|retrying|uncertain|rejected|synced|withdrawn] [--data-quality open|acknowledged|clean] [--context-code <code>] [--omit-blueprint] [--omit-previews] [--sort-field <field> [--sort-direction asc|desc] [--sort-context-code <code>]]
 acli record update <record-id> [--values values.toml] [--relationships relationships.toml] [--remove-values removals.toml] [--context-id <context-id>] [--system-tags <json>] [--system-metadata <json>] [--expected-updated-at <rfc3339>]
 acli record changes|value-history <record-id> [--limit <n>] [--offset <n>]
 acli record restore-value <record-id> <history-id> [--expected-updated-at <rfc3339>]
@@ -118,6 +120,8 @@ acli record comment list <record-id> [--before-time <rfc3339> --before-id <id>]
 acli record comment add <record-id> --body <text>
 acli record comment count <record-id>
 acli record comment edit <record-id> <comment-id> --body <text> --revision <n>
+acli record rule list|finding-count <record-id>
+acli record rule findings|runs <record-id> [--limit <n>] [--offset <n>]
 acli record publication list <record-id>
 acli record publication publish <record-id> --context-id <context-id>
 acli record publication unpublish <record-id> --context-id <context-id>
@@ -127,7 +131,7 @@ acli record publication status --record-id <record-id> [--record-id <record-id> 
 acli record migrate <record-id> [--values <json-or-file>] [--relationships <json-or-file>] [--discard-attributes <json-or-file>] [--expected-updated-at <rfc3339>]
 acli record migrate-bulk --blueprint <code> --from-version <version> [--size <size>] [--dry-run]
 
-acli value append <record-id> --file values.toml --context-id <context-id>
+acli value append <record-id> --file values.toml --context-id <context-id> [--expected-updated-at <rfc3339>]
 acli value current <record-id>
 acli value replace-relationships <record-id> --file relationships.toml --context-id <context-id>
 acli value remove-relationships <record-id> --file relationships.toml --context-id <context-id>
@@ -155,13 +159,16 @@ acli rule validate|create --blueprint-id <uuid> [--context-id <uuid>] --stdin
 acli rule update <rule-id> [--accept-existing-violations] --file rule-v2.toml
 acli rule enable <rule-id> [--accept-existing-violations]
 acli rule disable <rule-id>
-acli rule run-now <rule-id> --idempotency-key <key> [--record-id <uuid>] [--dry-run [--definition-file rule-v2.toml]]
-acli rule run-list [--record-id <uuid>] [--limit <n>] [--offset <n>]
+acli rule run-now <rule-id> --idempotency-key <key> [--record-id <uuid>] [--dry-run [--definition-file rule-v2.toml | --definition-stdin]]
+acli rule run-list [--rule-id <uuid>] [--record-id <uuid>] [--scope all-records|record] [--limit <n>] [--offset <n>]
+acli rule run-get <run-id>
 acli rule run-replay <run-id>
 acli rule findings [--record-id <uuid>] [--rule-id <uuid>] [--blueprint-id <uuid>] [--context-id <uuid>] [--severity info|warning|error|critical] [--state open|acknowledged|resolved] [--unresolved] [--limit <n>] [--offset <n>]
-acli rule finding-count [--record-id <uuid>]
+acli rule finding-count [--record-id <uuid>] [--rule-id <uuid>] [--blueprint-id <uuid>] [--context-id <uuid>] [--severity info|warning|error|critical] [--state open|acknowledged|resolved | --include-resolved]
 acli rule recheck --record-id <uuid> --idempotency-key <key>
 acli rule acknowledge <finding-id>
+acli rule acknowledge-many --finding-id <uuid>...
+acli rule acknowledge-many --matching [--record-id <uuid>] [--rule-id <uuid>] [--blueprint-id <uuid>] [--context-id <uuid>] [--severity info|warning|error|critical]
 
 acli workspace navigation get|sidebar
 acli workspace navigation set --entries <json-or-file>
@@ -173,7 +180,7 @@ acli workspace tag-color reset <tag>
 acli workspace token-permission list
 acli workspace grant-target list workspace|blueprint-family|record|context-subtree
 acli workspace publication-channel list
-acli workspace publication-channel set <context-id> --enabled true|false
+acli workspace publication-channel set <context-id> --enabled true|false [--required-rule-code <code> ... | --clear-required-rule-codes] [--require-valid-record true|false]
 acli workspace member list
 acli workspace member set-state <member-id> --state active|inactive
 acli workspace member grant <member-id> --role-id <role-id> --scope-type workspace|blueprint-family|record|context-subtree --scope-target-id <id>
@@ -202,7 +209,8 @@ acli extension registry list|discover
 acli extension registry add --source <github-owner/repository>
 acli extension registry remove <registry-id>
 acli extension registry get <owner> <repository>
-acli extension list|runtime
+acli extension list
+acli extension runtime [--blueprint-id <uuid> --blueprint-version <n>]
 acli extension get|remove|enable|disable <extension-id>
 acli extension workspace-mode --enabled true|false
 acli extension install --owner <owner> --repository <repository> --release-id <github-release-id>
@@ -215,7 +223,7 @@ acli extension quarantine <extension-id> --diagnostic-code <code>
 acli extension artifact <extension-id> <contribution-id> --output contribution.js
 acli extension storage <extension-id> <contribution-id> <release-id> --body <json-or-file>
 acli extension command <extension-id> <contribution-id> --release-id <release-uuid> --command-id <id> --payload <json-or-file>
-acli extension operation start <extension-id> --operation-id <id> --input <json-object-or-file> --idempotency-key <key> [--input-file-id <uuid>] [--destination <json-object-or-file>]
+acli extension operation start <extension-id> --operation-id <id> --input <json-or-file> --idempotency-key <key> [--input-file-id <uuid>] [--destination <json-object-or-file>]
 acli extension operation list
 acli extension operation get|artifacts|deliveries|cancel|replay <run-id>
 acli extension operation download <run-id> <artifact-id> --output <path>
@@ -225,7 +233,7 @@ acli extension run download <run-id> <artifact-id> --output <path>
 acli extension annotations namespace|adopt <extension-id>
 acli extension annotations repair <extension-id> <record-id> --patch <json-object-or-file>
 acli extension schedule list
-acli extension schedule create <extension-id> --operation-id <id> --input <json-object-or-file> --interval-seconds <60-2592000> [--input-file-id <uuid>] [--destination <json-object-or-file>]
+acli extension schedule create <extension-id> --operation-id <id> --input <json-or-file> --interval-seconds <60-2592000> [--input-file-id <uuid>] [--destination <json-object-or-file>]
 acli extension schedule update <schedule-id> --enabled true|false --interval-seconds <60-2592000>
 acli extension connector-job list <blueprint-id>
 acli extension connector-job run <job-id> --idempotency-key <key>
@@ -278,8 +286,13 @@ Commands that page with `--limit` and `--offset` use the endpoint's default
 page size when you omit them; each endpoint enforces its own maximum, and
 offsets stop at 10,000.
 
-`--expected-updated-at` makes `record update`, `transition`, `migrate` and
-`restore-value` fail instead of overwriting a record someone changed after
+`file stage-upload` stores files for a record that does not exist yet. Pass
+the returned file IDs to `record create --files`, for example
+`[{"attribute_code":"manual","file_ids":["<file-id>"]}]`, to attach them as
+the record is created.
+
+`--expected-updated-at` makes `record update`, `transition`, `migrate`,
+`restore-value` and `value append` fail instead of overwriting a record someone changed after
 that `updated_at`. `record transition` writes the status option as a scalar
 value, so it follows the same workflow and approval rules as the web app;
 `record unlock` needs `records.unlock`. Comment, approval and retention-hold
@@ -343,7 +356,7 @@ acli notification count            # {"count": <unread>}
 acli notification get <id>
 acli notification read <id>        # mark as read
 acli notification unread <id>      # mark as unread
-acli notification read-all         # mark every unread notification as read
+acli notification read-all [--up-to <rfc3339>]  # mark every unread notification as read
 acli notification delete <id>      # permanent
 ```
 
@@ -456,9 +469,11 @@ any other tag's color.
 Extension `configure` takes its configuration JSON directly; `storage --body`
 takes exactly one tagged storage request (`get`, `set`, `delete`, or `list`),
 and `command --payload` is the contribution-defined JSON payload.
-`extension-operation start` and `extension-schedule create` require an object
-`--input` (inline JSON or a file). `--input-file-id` attaches a ready workspace
-file as the operation's `source_reference`; the destination reference is empty.
+`extension operation start` and `extension schedule create` take `--input` as
+any JSON value (inline or a file), which the operation's request schema checks.
+`--input-file-id` attaches a ready workspace file as the operation's
+`source_reference`, and `--destination` is a JSON object the extension reads as
+its `destination_reference`.
 Run and schedule listings omit stored inputs and configuration. Use `download
 --output` for completed operation artifacts; it never writes bytes to stdout.
 See [extension operations](extensions.md#durable-server-operations)
@@ -574,6 +589,12 @@ For example, after creating `seed_product` v2:
 acli record migrate-bulk --blueprint seed_product --from-version 1 --dry-run
 acli record migrate-bulk --blueprint seed_product --from-version 1
 ```
+
+`blueprint safe-migration-batch` starts a batch that migrates the blueprint's
+records to a version. When `blueprint migration-impact` reports
+`requires_removal_disposition`, the version removes attributes that still hold
+values; pass `--archive-removed-values` to archive them, or the batch is
+refused.
 
 Blueprint files are sent unchanged as the API's TOML `definition`, preserving
 the raw-source hash. See [Blueprint Authoring](blueprints.md) for the grammar.

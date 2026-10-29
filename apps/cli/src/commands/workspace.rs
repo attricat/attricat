@@ -195,10 +195,23 @@ pub(crate) enum GrantTargetCommand {
 #[derive(Subcommand)]
 pub(crate) enum PublicationChannelCommand {
     List,
+    /// Turn a context's publication channel on or off and change what a
+    /// record needs before it can be published there. Settings not given are
+    /// kept.
     Set {
         context_id: Uuid,
         #[arg(long, action = clap::ArgAction::Set)]
         enabled: bool,
+        /// Rule code a record must pass to publish; repeat for several.
+        /// Replaces the channel's required rules.
+        #[arg(long = "required-rule-code")]
+        required_rule_codes: Vec<String>,
+        /// Require no rules to publish.
+        #[arg(long, conflicts_with = "required_rule_codes")]
+        clear_required_rule_codes: bool,
+        /// Whether a record must pass validation to publish.
+        #[arg(long, action = clap::ArgAction::Set)]
+        require_valid_record: Option<bool>,
     },
 }
 
@@ -359,10 +372,20 @@ pub(crate) async fn workspace_command(
             PublicationChannelCommand::Set {
                 context_id,
                 enabled,
+                required_rule_codes,
+                clear_required_rule_codes,
+                require_valid_record,
             } => {
+                let required_rule_codes = (clear_required_rule_codes
+                    || !required_rule_codes.is_empty())
+                .then_some(required_rule_codes);
                 api.put_json(
                     &format!("/publication-channels/{}", segment(context_id)),
-                    json!({ "enabled": enabled }),
+                    json!({
+                        "enabled": enabled,
+                        "required_rule_codes": required_rule_codes,
+                        "require_valid_record": require_valid_record,
+                    }),
                 )
                 .await
             }
