@@ -1,4 +1,5 @@
 import {
+  Fade,
   IconButton,
   ListItemIcon,
   ListItemText,
@@ -81,19 +82,25 @@ export const ExtensionPopoverOutlet = ({
         </MenuItem>
       )}
       {hasContent && trigger !== extensionPopoverTriggers.menuItem && (
-        <Tooltip title={label}>
-          <IconButton
-            aria-label={label}
-            onClick={open}
-            size={toolbar ? 'medium' : 'small'}
-          >
-            {toolbar ? (
-              <ExtensionIcon />
-            ) : (
-              <ExtensionIcon size={compactIconSize} />
-            )}
-          </IconButton>
-        </Tooltip>
+        // The trigger appears once a frame has content; fading it in keeps
+        // that late arrival from drawing the eye.
+        <Fade appear in>
+          <span>
+            <Tooltip title={label}>
+              <IconButton
+                aria-label={label}
+                onClick={open}
+                size={toolbar ? 'medium' : 'small'}
+              >
+                {toolbar ? (
+                  <ExtensionIcon />
+                ) : (
+                  <ExtensionIcon size={compactIconSize} />
+                )}
+              </IconButton>
+            </Tooltip>
+          </span>
+        </Fade>
       )}
       {/* Keep the measuring frame in this popover so opening it never remounts
           the extension artifact. */}

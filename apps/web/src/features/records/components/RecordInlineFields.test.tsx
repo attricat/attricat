@@ -351,6 +351,37 @@ describe('RecordInlineFields', () => {
     expect(onPendingChange).toHaveBeenLastCalledWith(false);
   });
 
+  it('locks a cached form in place until its refresh completes', async () => {
+    const user = userEvent.setup();
+    const fields = (refreshing: boolean) => (
+      <QueryClientProvider client={new QueryClient()}>
+        <RecordInlineFields
+          attributes={attributes}
+          contextId={contextId}
+          defaultContextId={contextId}
+          recordId={recordId}
+          form={form(true)}
+          refreshing={refreshing}
+          resolvedValues={resolved}
+          reusableResolvedValues={{}}
+          statusParentContextIds={[]}
+          view={view}
+        />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(fields(true));
+
+    const name = screen.getByRole('textbox', { name: 'name' });
+    expect(name.matches(':disabled')).toBe(true);
+    await user.type(name, ' changed');
+    expect((name as HTMLInputElement).value).toBe('Lamp');
+
+    rerender(fields(false));
+    // The same control is enabled in place, so nothing remounts or moves.
+    expect(screen.getByRole('textbox', { name: 'name' })).toBe(name);
+    expect(name.matches(':disabled')).toBe(false);
+  });
+
   it('shows values read-only to users who cannot edit', () => {
     renderFields(false);
     expect(screen.queryByRole('textbox')).toBeNull();

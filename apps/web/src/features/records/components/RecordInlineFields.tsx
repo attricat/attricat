@@ -83,6 +83,11 @@ type Props = {
   onPendingChange?: (pending: boolean) => void;
   /** Lays the view out in one column, as in a narrow panel. */
   singleColumn?: boolean;
+  /**
+   * The form is a cached copy still being refreshed: its controls show but
+   * accept no input, so it never becomes the baseline of a save.
+   */
+  refreshing?: boolean;
 };
 
 export type RecordInlineFieldsHandle = {
@@ -125,6 +130,7 @@ export const RecordInlineFields = ({
   renderFilePanel,
   onPendingChange,
   singleColumn,
+  refreshing = false,
 }: Props & { ref?: Ref<RecordInlineFieldsHandle> }) => {
   const { t } = useTranslation();
   const client = useQueryClient();
@@ -402,64 +408,73 @@ export const RecordInlineFields = ({
           sx={{ mb: 2 }}
         />
       )}
-      {form.can_write && (
-        <StatusLockNotice
-          attributes={allAttributes}
-          locks={savedStatusLocks(
-            allAttributes,
-            existingValues,
-            contextId,
-            statusParentContextIds,
-          )}
-          contextId={contextId}
-          recordId={recordId}
-          transitions={statusTransitions}
-          updatedAt={form.record.updated_at}
+      {/* Disabling a fieldset blocks every control in it without restyling
+          them, so the fields keep their place when the refresh completes. */}
+      <Box
+        aria-busy={refreshing}
+        component="fieldset"
+        disabled={refreshing}
+        sx={{ border: 0, m: 0, minWidth: 0, p: 0 }}
+      >
+        {form.can_write && (
+          <StatusLockNotice
+            attributes={allAttributes}
+            locks={savedStatusLocks(
+              allAttributes,
+              existingValues,
+              contextId,
+              statusParentContextIds,
+            )}
+            contextId={contextId}
+            recordId={recordId}
+            transitions={statusTransitions}
+            updatedAt={form.record.updated_at}
+          />
+        )}
+        <InlineSaveStatus
+          pendingCodes={Object.keys(saves.pending)}
+          savedAny={saves.savedAny}
+          saving={saves.saving}
         />
-      )}
-      <InlineSaveStatus
-        pendingCodes={Object.keys(saves.pending)}
-        savedAny={saves.savedAny}
-        saving={saves.saving}
-      />
-      <Box>
-        <EditableRecordLayout
-          {...viewProps}
-          attributes={attributes}
-          fallbackVisibilityScope="detail"
-          headingAttributes={headingEditableAttributes(
-            blueprintChangeable,
-            view,
+        <Box>
+          <EditableRecordLayout
+            {...viewProps}
+            attributes={attributes}
+            fallbackVisibilityScope="detail"
+            headingAttributes={headingEditableAttributes(
+              blueprintChangeable,
+              view,
+            )}
+            otherAttributes={unplacedEditableAttributes(
+              blueprintChangeable,
+              view,
+            )}
+            values={resolvedValues}
+            view={view}
+          />
+          {form.reusable_attributes.length > 0 && (
+            <EditableRecordSection
+              headingLevel="h2"
+              title={t('records.additionalAttributes')}
+            >
+              <RecordView
+                {...viewProps}
+                attributes={form.reusable_attributes}
+                values={reusableResolvedValues}
+              />
+            </EditableRecordSection>
           )}
-          otherAttributes={unplacedEditableAttributes(
-            blueprintChangeable,
-            view,
-          )}
-          values={resolvedValues}
-          view={view}
-        />
-        {form.reusable_attributes.length > 0 && (
-          <EditableRecordSection
-            headingLevel="h2"
-            title={t('records.additionalAttributes')}
-          >
-            <RecordView
-              {...viewProps}
-              attributes={form.reusable_attributes}
-              values={reusableResolvedValues}
+        </Box>
+        {form.can_write && (
+          <Box sx={{ mt: 3 }}>
+            {/* Attaching changes the record; wait for field saves first. */}
+            <ReusableAttributeAttachControl
+              disabled={hasPending}
+              recordId={recordId}
             />
-          </EditableRecordSection>
+          </Box>
         )}
       </Box>
-      {form.can_write && (
-        <Box sx={{ mt: 3 }}>
-          {/* Attaching changes the record; wait for field saves first. */}
-          <ReusableAttributeAttachControl
-            disabled={hasPending}
-            recordId={recordId}
-          />
-        </Box>
-      )}
     </>
   );
 };

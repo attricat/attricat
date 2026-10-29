@@ -664,6 +664,7 @@
       "couldNotLoadFindings": "Could not load findings: {{message}}"
     },
     "loadingContexts": "Loading contexts...",
+    "loadingFields": "Loading fields...",
     "resolvingValues": "Resolving values...",
     "viewExtensionContent": "View extension content for {{attribute}}",
     "preparingMigration": "Preparing migration...",

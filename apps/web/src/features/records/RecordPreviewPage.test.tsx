@@ -366,6 +366,7 @@ describe('RecordPreviewPage', () => {
     const { getExtensionRuntime } = await import('../extensions/api');
     vi.mocked(getExtensionRuntime).mockResolvedValue([
       { outlet: 'record_preview_panel', kind: 'embedded' },
+      { outlet: 'record_attribute_decoration', kind: 'embedded' },
     ] as never);
     const { currentSession } = await import('../auth/api');
     vi.mocked(currentSession).mockResolvedValue({
@@ -756,5 +757,23 @@ describe('RecordPreviewPage', () => {
     await waitFor(() =>
       expect(document.title).toBe('Blue lamp · LMP-1 · Attricat'),
     );
+  });
+
+  it('waits for the form instead of showing read-only fields first', async () => {
+    await loadRecord({});
+    const api = await import('./api');
+    vi.mocked(api.getRecordForm).mockReturnValue(new Promise(() => {}));
+    renderPage();
+
+    expect(await screen.findByLabelText('Loading fields...')).toBeTruthy();
+    expect(screen.queryByLabelText('Title value')).toBeNull();
+  });
+
+  it('shows the values read-only when the form cannot be loaded', async () => {
+    await loadRecord({});
+    renderPage();
+
+    expect(await screen.findByLabelText('Title value')).toBeTruthy();
+    expect(screen.queryByLabelText('Loading fields...')).toBeNull();
   });
 });

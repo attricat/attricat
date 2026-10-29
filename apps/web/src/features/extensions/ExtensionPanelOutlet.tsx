@@ -5,14 +5,14 @@ import { ExtensionActionOverflow } from './ExtensionActionOverflow';
 import { ExtensionFrame } from './ExtensionFrame';
 import {
   contributionKey,
-  type ContentPolicy,
   type OutletContext,
+  type PanelPolicy,
 } from './outletContributions';
 
 type ExtensionPanelOutletProps = {
   context?: OutletContext;
   contributions: ExtensionContribution[];
-  policy: ContentPolicy;
+  policy: PanelPolicy;
 };
 
 export const ExtensionPanelOutlet = ({
@@ -30,6 +30,7 @@ export const ExtensionPanelOutlet = ({
           contribution={item}
           context={context}
           key={contributionKey(item)}
+          placeholder={policy.placeholder}
         />
       ))}
       {overflow.length > 0 && (

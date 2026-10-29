@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { defaultContextCode } from '../../contexts/constants';
 import { IconLabel } from '../../../components/IconLabel';
+import { compactIconButtonSize } from '../../../components/iconSizes';
 import { RelationshipIcon } from '../../../components/systemIcons';
 import { fileAttributeIcon } from '../../files/fileAttributeIcon';
 import type { Attribute, ComponentReference } from '../../records/api';
@@ -65,14 +66,30 @@ export const ValueField = ({
   const diagnostics = useFieldDiagnostics();
   const findings = useFieldFindings(attribute.code);
   const severity = findings && worstSeverity(findings);
-  // The diagnostics button keeps beside an editor, clear of its outline,
-  // label and save status.
+  // An extension decoration renders its trigger only once it has content, so
+  // its slot keeps a fixed size and the field never moves when it appears.
+  const decorationSlot = renderAttributeDecoration && (
+    <Box
+      sx={{
+        alignItems: 'center',
+        display: 'flex',
+        flexShrink: 0,
+        height: compactIconButtonSize,
+        width: compactIconButtonSize,
+      }}
+    >
+      {renderAttributeDecoration(attribute)}
+    </Box>
+  );
+  // The diagnostics button and decoration keep beside an editor, clear of its
+  // outline, label and save status.
   const editorField =
-    editor !== null && diagnostics ? (
+    editor !== null && (diagnostics || decorationSlot) ? (
       <Box sx={{ alignItems: 'flex-start', display: 'flex', gap: 0.5 }}>
         <Box sx={{ flex: 1, minWidth: 0 }}>{editor}</Box>
-        <Box sx={{ flexShrink: 0, pt: 0.25 }}>
+        <Box sx={{ display: 'flex', flexShrink: 0, pt: 0.25 }}>
           <FieldDiagnosticsButton attribute={attribute} resolved={resolved} />
+          {decorationSlot}
         </Box>
       </Box>
     ) : (
@@ -117,7 +134,7 @@ export const ValueField = ({
                 attribute={attribute}
                 resolved={resolved}
               />
-              {renderAttributeDecoration?.(attribute)}
+              {decorationSlot}
             </Box>
             {(() => {
               const ValueRenderer =
@@ -151,7 +168,6 @@ export const ValueField = ({
               )}
           </>
         )}
-        {editor !== null && renderAttributeDecoration?.(attribute)}
         {renderAttributePanel?.(attribute)}
       </Stack>
     </FieldErrorBoundary>

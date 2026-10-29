@@ -9,6 +9,7 @@ import type { ExtensionContribution } from './api';
 import {
   outletCapacities,
   contributionKinds,
+  extensionFramePlaceholders,
   extensionOutlets,
 } from './constants';
 import { outletContextSchemas } from './outletContextSchemas';
@@ -34,6 +35,12 @@ const navigationPolicy = {
 const panelPolicy = {
   kind: 'panel',
   visibleCapacity: outletCapacities.visibleContent,
+  placeholder: extensionFramePlaceholders.skeleton,
+} as const;
+// Panels beside a form field stay out of the layout until they render content.
+const fieldPanelPolicy = {
+  ...panelPolicy,
+  placeholder: extensionFramePlaceholders.none,
 } as const;
 const cardPolicy = {
   kind: 'card',
@@ -47,7 +54,8 @@ const actionBarPolicy = {
 } as const;
 
 export type ActionBarPolicy = typeof actionBarPolicy;
-export type ContentPolicy = typeof panelPolicy | typeof cardPolicy;
+export type PanelPolicy = typeof panelPolicy | typeof fieldPanelPolicy;
+export type ContentPolicy = PanelPolicy | typeof cardPolicy;
 export type NavigationPolicy = typeof navigationPolicy;
 
 // Every mounted surface has an explicit host policy. Extension manifests never
@@ -67,8 +75,8 @@ export const outletPolicies = {
   explorer_bulk_action: actionBarPolicy,
   data_health_card: cardPolicy,
   blueprint_publish_check: panelPolicy,
-  record_attribute_panel: panelPolicy,
-  file_panel: panelPolicy,
+  record_attribute_panel: fieldPanelPolicy,
+  file_panel: fieldPanelPolicy,
   export_mapping: panelPolicy,
 } as const satisfies Record<OutletName, { kind: string }>;
 

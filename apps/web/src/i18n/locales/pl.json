@@ -692,6 +692,7 @@
       "couldNotLoadFindings": "Nie udało się wczytać problemów: {{message}}"
     },
     "loadingContexts": "Wczytywanie kontekstów...",
+    "loadingFields": "Wczytywanie pól...",
     "resolvingValues": "Rozwiązywanie wartości...",
     "viewExtensionContent": "Wyświetl zawartość rozszerzenia dla {{attribute}}",
     "preparingMigration": "Przygotowywanie migracji...",

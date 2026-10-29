@@ -478,12 +478,13 @@ export const RecordPreview = ({
                                   contexts={contexts.data}
                                   defaultContextId={defaultContextId}
                                   recordId={recordId}
-                                  // A cached form must not become the save baseline before
-                                  // the opening refresh has completed.
-                                  form={
-                                    recordForm.isFetchedAfterMount
-                                      ? recordForm.data
-                                      : undefined
+                                  // A cached form keeps the fields in place while the
+                                  // opening refresh runs, but stays locked until it
+                                  // completes so it never becomes a save baseline.
+                                  form={recordForm.data}
+                                  formPending={recordForm.isPending}
+                                  formRefreshing={
+                                    !recordForm.isFetchedAfterMount
                                   }
                                   statusParentContextIds={statusParentContexts(
                                     contexts.data,

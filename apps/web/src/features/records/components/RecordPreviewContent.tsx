@@ -1,4 +1,4 @@
-import { Alert, Box, Typography } from '@mui/material';
+import { Alert, Box, CircularProgress, Typography } from '@mui/material';
 import { useState, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AttributeContext } from '../../contexts/api';
@@ -37,8 +37,12 @@ type Props = {
   contexts: readonly AttributeContext[];
   defaultContextId: string | null;
   recordId: string;
-  /** The editable form; values are shown read-only until it is loaded. */
+  /** The editable form; values are shown read-only only if it fails to load. */
   form?: RecordFormResponse;
+  /** No form has arrived yet; the fields wait for it instead of swapping. */
+  formPending?: boolean;
+  /** `form` is a cached copy that the opening refresh has not replaced yet. */
+  formRefreshing?: boolean;
   inlineFieldsRef?: Ref<RecordInlineFieldsHandle>;
   statusParentContextIds: readonly string[];
   statusTransitions?: readonly StatusTransitionAccess[];
@@ -56,6 +60,8 @@ export const RecordPreviewContent = ({
   defaultContextId,
   recordId,
   form,
+  formPending = false,
+  formRefreshing = false,
   inlineFieldsRef,
   statusParentContextIds,
   statusTransitions,
@@ -89,27 +95,35 @@ export const RecordPreviewContent = ({
       item.outlet === 'record_attribute_panel' &&
       item.kind === contributionKinds.panel,
   );
+  const hasAttributeDecorations = runtime.data?.some(
+    (item) =>
+      item.outlet === extensionOutlets.recordAttributeDecoration &&
+      item.kind === contributionKinds.embedded,
+  );
   const hasFilePanels = runtime.data?.some(
     (item) =>
       item.outlet === 'file_panel' && item.kind === contributionKinds.panel,
   );
-  const renderAttributeDecoration = (attribute: Attribute) => (
-    <ExtensionPopoverOutlet
-      context={{
-        attribute_id: attribute.id,
-        blueprint_id: blueprint.blueprint.id,
-        blueprint_version: blueprint.blueprint.version,
-        context_id: contextId,
-        record_id: recordId,
-      }}
-      key={String(attribute.id)}
-      label={t('records.viewExtensionContent', {
-        attribute: attributeLabel(attribute),
-      })}
-      outlet={extensionOutlets.recordAttributeDecoration}
-      runtimeScope={runtimeScope}
-    />
-  );
+  // Fields reserve a decoration slot only while a contribution can fill it.
+  const renderAttributeDecoration = hasAttributeDecorations
+    ? (attribute: Attribute) => (
+        <ExtensionPopoverOutlet
+          context={{
+            attribute_id: attribute.id,
+            blueprint_id: blueprint.blueprint.id,
+            blueprint_version: blueprint.blueprint.version,
+            context_id: contextId,
+            record_id: recordId,
+          }}
+          key={String(attribute.id)}
+          label={t('records.viewExtensionContent', {
+            attribute: attributeLabel(attribute),
+          })}
+          outlet={extensionOutlets.recordAttributeDecoration}
+          runtimeScope={runtimeScope}
+        />
+      )
+    : undefined;
   const renderAttributePanel = hasAttributePanels
     ? (attribute: Attribute) => (
         <ExtensionOutlet
@@ -171,6 +185,7 @@ export const RecordPreviewContent = ({
             form={form}
             ref={inlineFieldsRef}
             onPendingChange={setHasPendingChanges}
+            refreshing={formRefreshing}
             renderAttributeDecoration={renderAttributeDecoration}
             renderAttributePanel={renderAttributePanel}
             renderFilePanel={renderFilePanel}
@@ -181,6 +196,13 @@ export const RecordPreviewContent = ({
             statusTransitions={statusTransitions}
             view={blueprint.blueprint.views.detail}
           />
+        ) : formPending ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
+            <CircularProgress
+              aria-label={t('records.loadingFields')}
+              enableTrackSlot
+            />
+          </Box>
         ) : (
           <>
             <RecordView
