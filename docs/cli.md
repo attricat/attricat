@@ -223,7 +223,7 @@ acli extension quarantine <extension-id> --diagnostic-code <code>
 acli extension artifact <extension-id> <contribution-id> --output contribution.js
 acli extension storage <extension-id> <contribution-id> <release-id> --body <json-or-file>
 acli extension command <extension-id> <contribution-id> --release-id <release-uuid> --command-id <id> --payload <json-or-file>
-acli extension operation start <extension-id> --operation-id <id> --input <json-object-or-file> --idempotency-key <key> [--input-file-id <uuid>] [--destination <json-object-or-file>]
+acli extension operation start <extension-id> --operation-id <id> --input <json-or-file> --idempotency-key <key> [--input-file-id <uuid>] [--destination <json-object-or-file>]
 acli extension operation list
 acli extension operation get|artifacts|deliveries|cancel|replay <run-id>
 acli extension operation download <run-id> <artifact-id> --output <path>
@@ -233,7 +233,7 @@ acli extension run download <run-id> <artifact-id> --output <path>
 acli extension annotations namespace|adopt <extension-id>
 acli extension annotations repair <extension-id> <record-id> --patch <json-object-or-file>
 acli extension schedule list
-acli extension schedule create <extension-id> --operation-id <id> --input <json-object-or-file> --interval-seconds <60-2592000> [--input-file-id <uuid>] [--destination <json-object-or-file>]
+acli extension schedule create <extension-id> --operation-id <id> --input <json-or-file> --interval-seconds <60-2592000> [--input-file-id <uuid>] [--destination <json-object-or-file>]
 acli extension schedule update <schedule-id> --enabled true|false --interval-seconds <60-2592000>
 acli extension connector-job list <blueprint-id>
 acli extension connector-job run <job-id> --idempotency-key <key>
@@ -469,9 +469,11 @@ any other tag's color.
 Extension `configure` takes its configuration JSON directly; `storage --body`
 takes exactly one tagged storage request (`get`, `set`, `delete`, or `list`),
 and `command --payload` is the contribution-defined JSON payload.
-`extension-operation start` and `extension-schedule create` require an object
-`--input` (inline JSON or a file). `--input-file-id` attaches a ready workspace
-file as the operation's `source_reference`; the destination reference is empty.
+`extension operation start` and `extension schedule create` take `--input` as
+any JSON value (inline or a file), which the operation's request schema checks.
+`--input-file-id` attaches a ready workspace file as the operation's
+`source_reference`, and `--destination` is a JSON object the extension reads as
+its `destination_reference`.
 Run and schedule listings omit stored inputs and configuration. Use `download
 --output` for completed operation artifacts; it never writes bytes to stdout.
 See [extension operations](extensions.md#durable-server-operations)
