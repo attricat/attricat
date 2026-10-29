@@ -2608,6 +2608,33 @@ async fn value_append_sends_expected_updated_at() {
 }
 
 #[tokio::test]
+async fn extension_runtime_scopes_to_a_blueprint_version() {
+    let id = "00000000-0000-4000-8000-000000000001";
+    let all = echo(&["extension", "runtime"]).await;
+    assert_eq!(all["path"], "/extensions/runtime");
+    assert_eq!(all["query"], Value::Null);
+    let scoped = echo(&[
+        "extension",
+        "runtime",
+        "--blueprint-id",
+        id,
+        "--blueprint-version",
+        "3",
+    ])
+    .await;
+    assert_eq!(
+        scoped["query"],
+        format!("blueprint_id={id}&blueprint_version=3")
+    );
+    for args in [
+        vec!["acli", "extension", "runtime", "--blueprint-id", id],
+        vec!["acli", "extension", "runtime", "--blueprint-version", "3"],
+    ] {
+        assert!(Cli::try_parse_from(args).is_err());
+    }
+}
+
+#[tokio::test]
 async fn record_facet_commands_build_requests() {
     let fields = echo(&[
         "reusable-attribute",

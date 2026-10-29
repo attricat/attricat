@@ -209,7 +209,8 @@ acli extension registry list|discover
 acli extension registry add --source <github-owner/repository>
 acli extension registry remove <registry-id>
 acli extension registry get <owner> <repository>
-acli extension list|runtime
+acli extension list
+acli extension runtime [--blueprint-id <uuid> --blueprint-version <n>]
 acli extension get|remove|enable|disable <extension-id>
 acli extension workspace-mode --enabled true|false
 acli extension install --owner <owner> --repository <repository> --release-id <github-release-id>
