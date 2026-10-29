@@ -40,6 +40,8 @@ export const notificationMessage = (
         : t('inbox.messages.assigned', { actor, record });
     case notificationKinds.recordCommented:
       return t('inbox.messages.commented', { actor, record });
+    case notificationKinds.recordMentioned:
+      return t('inbox.messages.mentioned', { actor, record });
     case notificationKinds.agentApprovalRequired:
       return t('inbox.messages.approvalRequired', { conversation });
     case notificationKinds.agentRunCompleted:

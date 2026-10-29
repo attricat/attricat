@@ -1,4 +1,5 @@
 use super::{AttricatRepository, RepositoryError};
+use attricat_validation::principal::{PrincipalKind, PrincipalRef};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use sqlx::FromRow;
@@ -20,6 +21,31 @@ pub struct RecordComment {
     pub revision: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+/// Opens a Markdown link target. A mention is a link whose target is a user
+/// reference: `[@Ada](user:<uuid>)`.
+const LINK_TARGET_OPENING: &str = "](";
+const LINK_TARGET_CLOSING: char = ')';
+
+/// The distinct users a comment mentions, in order of first mention.
+pub fn comment_mentions(body: &str) -> Vec<Uuid> {
+    let mut mentioned = Vec::new();
+    for (start, opening) in body.match_indices(LINK_TARGET_OPENING) {
+        let target = &body[start + opening.len()..];
+        let Some(end) = target.find(LINK_TARGET_CLOSING) else {
+            continue;
+        };
+        if let Some(PrincipalRef {
+            kind: PrincipalKind::User,
+            id,
+        }) = PrincipalRef::parse(&target[..end])
+            && !mentioned.contains(&id)
+        {
+            mentioned.push(id);
+        }
+    }
+    mentioned
 }
 
 fn validate_body(body: &str) -> Result<(), RepositoryError> {
@@ -73,7 +99,10 @@ impl AttricatRepository {
         // Notify before inserting so the author's first comment does not make
         // them a previous commenter; notify_on skips the author anyway.
         let comment = Uuid::new_v4();
-        self.notify_comment_on(&mut transaction, record, comment, actor, body)
+        let mentioned = comment_mentions(body);
+        self.notify_mentions_on(&mut transaction, record, comment, actor, body, &mentioned)
+            .await?;
+        self.notify_comment_on(&mut transaction, record, comment, actor, body, &mentioned)
             .await?;
         sqlx::query("INSERT INTO record_comments (id,workspace_id,record_id,author_user_id,body) VALUES ($1,$2,$3,$4,$5)")
             .bind(comment).bind(self.workspace_id()).bind(record).bind(actor).bind(body)
@@ -93,13 +122,28 @@ impl AttricatRepository {
         validate_body(body)?;
         let mut transaction = self.pool.begin().await?;
         self.lock_record(&mut transaction, record).await?;
-        let current: Option<i64> = sqlx::query_scalar("SELECT revision FROM record_comments WHERE workspace_id=$1 AND record_id=$2 AND id=$3 AND author_user_id=$4 FOR UPDATE")
+        let current: Option<(i64, String)> = sqlx::query_as("SELECT revision,body FROM record_comments WHERE workspace_id=$1 AND record_id=$2 AND id=$3 AND author_user_id=$4 FOR UPDATE")
             .bind(self.workspace_id()).bind(record).bind(comment).bind(actor)
             .fetch_optional(&mut *transaction).await?;
-        let current = current.ok_or(RepositoryError::NotFound("comment"))?;
+        let (current, previous_body) = current.ok_or(RepositoryError::NotFound("comment"))?;
         if current != revision {
             return Err(RepositoryError::CommentConflict);
         }
+        // Only people the edit newly mentions are told about it.
+        let previously_mentioned = comment_mentions(&previous_body);
+        let newly_mentioned: Vec<Uuid> = comment_mentions(body)
+            .into_iter()
+            .filter(|user| !previously_mentioned.contains(user))
+            .collect();
+        self.notify_mentions_on(
+            &mut transaction,
+            record,
+            comment,
+            actor,
+            body,
+            &newly_mentioned,
+        )
+        .await?;
         sqlx::query(
             "UPDATE record_comments SET body=$2,revision=revision+1,updated_at=now() WHERE id=$1",
         )
@@ -123,5 +167,22 @@ mod tests {
         assert!(validate_body(&"🦀".repeat(MAX_COMMENT_LENGTH)).is_ok());
         assert!(validate_body(&"🦀".repeat(MAX_COMMENT_LENGTH + 1)).is_err());
         assert!(validate_body("**Markdown**\n\n<script>text</script>").is_ok());
+    }
+
+    #[test]
+    fn mentions_are_links_to_user_references() {
+        let ada = Uuid::new_v4();
+        let bob = Uuid::new_v4();
+        let team = Uuid::new_v4();
+        let body = format!(
+            "[@Ada](user:{ada}), [@Bob](user:{bob}) and [@Ada again](user:{ada}); \
+             [team](team:{team}), [site](https://example.test), [bad](user:{}), [open](user:{bob}",
+            ada.simple()
+        );
+        assert_eq!(comment_mentions(&body), [ada, bob]);
+        assert_eq!(
+            comment_mentions("No mentions, just @Ada."),
+            Vec::<Uuid>::new()
+        );
     }
 }

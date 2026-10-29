@@ -87,7 +87,7 @@ Karta **Kontrola rekordu** pod wartościami rekordu wyświetla, od najnowszych, 
 
 ## Komentarze
 
-Strona rekordu ma pod wartościami kartę **Komentarze** z najnowszymi komentarzami na początku; starsze wczytuje **Wczytaj więcej komentarzy**. Każdy, kto może odczytać rekord, może dodać komentarz w Markdownie; **Podgląd Markdown** pokazuje, jak będzie wyglądał. Możesz edytować tylko własne komentarze. Jeśli komentarz zmieni się, zanim zapiszesz edycję, zostanie ona odrzucona; odśwież komentarze i przywróć szkic, aby uzgodnić tekst.
+Strona rekordu ma pod wartościami kartę **Komentarze** z najnowszymi komentarzami na początku; starsze wczytuje **Wczytaj więcej komentarzy**. Każdy, kto może odczytać rekord, może dodać komentarz w Markdownie; **Podgląd Markdown** pokazuje, jak będzie wyglądał. Aby wspomnieć o osobie, wpisz `@` i część jej imienia, nazwiska lub adresu e-mail, a następnie wybierz ją z listy strzałkami i klawiszem **Enter** lub **Tab** albo myszą. Wzmianka prowadzi do profilu tej osoby i powiadamia ją w jej [skrzynce](/pl/guides/inbox/), o ile może ona otworzyć rekord. Edycja komentarza powiadamia tylko osoby, o których wspomniano w niej po raz pierwszy. Możesz edytować tylko własne komentarze. Jeśli komentarz zmieni się, zanim zapiszesz edycję, zostanie ona odrzucona; odśwież komentarze i przywróć szkic, aby uzgodnić tekst.
 
 ## Dodatkowe atrybuty
 

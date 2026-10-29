@@ -1115,7 +1115,8 @@ one. The agent can propose an approved `duplicate_record` (`records.write`)
 and, like any record reader, an approved `add_record_comment` written as the
 initiating user; `list_record_comments` returns bounded pages with each body cut
 to 1,000 characters. `list_notifications` reads the initiating user's
-[inbox](#notifications) with bodies cut to 500 characters; the approved
+[inbox](#notifications) with bodies cut to 500 characters and
+`get_notification` one notification in full; the approved
 `mark_notifications_read`, `mark_all_notifications_read` and
 `delete_notifications` change only that inbox and need an active membership
 rather than a permission. The agent may inspect a

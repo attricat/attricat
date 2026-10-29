@@ -22,6 +22,7 @@ export type InboxFilter = (typeof inboxFilters)[keyof typeof inboxFilters];
 export const notificationKinds = {
   recordAssigned: 'record.assigned',
   recordCommented: 'record.commented',
+  recordMentioned: 'record.mentioned',
   agentApprovalRequired: 'agent.approval_required',
   agentRunCompleted: 'agent.run_completed',
   agentRunFailed: 'agent.run_failed',

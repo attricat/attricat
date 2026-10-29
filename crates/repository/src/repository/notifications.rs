@@ -392,6 +392,7 @@ impl AttricatRepository {
 pub mod kinds {
     pub const RECORD_ASSIGNED: &str = "record.assigned";
     pub const RECORD_COMMENTED: &str = "record.commented";
+    pub const RECORD_MENTIONED: &str = "record.mentioned";
     pub const AGENT_APPROVAL_REQUIRED: &str = "agent.approval_required";
     pub const AGENT_RUN_COMPLETED: &str = "agent.run_completed";
     pub const AGENT_RUN_FAILED: &str = "agent.run_failed";
@@ -537,8 +538,57 @@ impl AttricatRepository {
         Ok(())
     }
 
+    /// Notifies the users a comment mentions. `notify_on` keeps the
+    /// notification to active members who may read the record.
+    pub(super) async fn notify_mentions_on(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        record: Uuid,
+        comment: Uuid,
+        author: Uuid,
+        body: &str,
+        mentioned: &[Uuid],
+    ) -> Result<(), RepositoryError> {
+        if mentioned.is_empty() {
+            return Ok(());
+        }
+        let Some((blueprint_code, blueprint_name)) =
+            self.notification_record_on(transaction, record).await?
+        else {
+            return Ok(());
+        };
+        let actor = self
+            .notification_actor_on(transaction, Some(author))
+            .await?;
+        self.notify_on(
+            transaction,
+            mentioned,
+            &NewNotification {
+                kind: kinds::RECORD_MENTIONED,
+                title: format!(
+                    "{} mentioned you in a comment on a {blueprint_name} record",
+                    actor.name
+                ),
+                body: Some(notification_excerpt(body, COMMENT_EXCERPT_LENGTH)),
+                actor_user_id: actor.id,
+                subject: Some(NotificationSubject {
+                    kind: NotificationSubjectKind::Record,
+                    id: record,
+                }),
+                data: json!({
+                    "blueprint_code": blueprint_code,
+                    "blueprint_name": blueprint_name,
+                    "comment_id": comment,
+                }),
+            },
+        )
+        .await?;
+        Ok(())
+    }
+
     /// Notifies the record's current assignees (teams expanded to their
-    /// members) and everyone who commented on it before, except the author.
+    /// members) and everyone who commented on it before, except the author
+    /// and the users the comment mentions, who are told about the mention.
     pub(super) async fn notify_comment_on(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -546,6 +596,7 @@ impl AttricatRepository {
         comment: Uuid,
         author: Uuid,
         body: &str,
+        mentioned: &[Uuid],
     ) -> Result<(), RepositoryError> {
         let Some((blueprint_code, blueprint_name)) =
             self.notification_record_on(transaction, record).await?
@@ -593,6 +644,7 @@ impl AttricatRepository {
             .fetch_all(&mut **transaction)
             .await?,
         );
+        recipients.retain(|recipient| !mentioned.contains(recipient));
         let actor = self
             .notification_actor_on(transaction, Some(author))
             .await?;

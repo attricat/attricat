@@ -65,6 +65,9 @@ describe('notificationMessage', () => {
         notification({ kind: 'extension.custom', title: 'Export ready' }),
       ),
     ).toBe('Export ready');
+    expect(
+      notificationMessage(t, notification({ kind: 'record.mentioned' })),
+    ).toBe('Ada mentioned you in a comment on a Task record');
     await i18n.changeLanguage('pl');
     expect(
       notificationMessage(

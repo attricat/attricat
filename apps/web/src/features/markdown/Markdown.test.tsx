@@ -1,10 +1,15 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, cleanup } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { MarkdownContent } from './MarkdownContent';
 import { markdownUrlTransform } from './markdownUrls';
 import { MarkdownEditor } from './MarkdownEditor';
+
+vi.mock(
+  '@tanstack/react-router',
+  async () => (await import('../../test/routerLinkMock')).routerLinkMock,
+);
 
 afterEach(cleanup);
 
@@ -57,6 +62,19 @@ describe('Markdown', () => {
     const good = screen.getByRole('link', { name: 'good' });
     expect(good.getAttribute('href')).toBe('https://example.com');
     expect(good.getAttribute('rel')).toBe('nofollow noreferrer noopener');
+  });
+
+  it('links a mention to the user profile and drops team references', () => {
+    const user = '6a1f9a54-2d0c-4f3a-9a7e-1c2b3d4e5f60';
+    render(
+      <MarkdownContent
+        value={`Thanks [@Ada](user:${user}) and [@QA](team:${user})`}
+      />,
+    );
+    expect(
+      screen.getByRole('link', { name: '@Ada' }).getAttribute('href'),
+    ).toBe(`/users/${user}`);
+    expect(screen.getByText('@QA', { exact: false }).closest('a')).toBeNull();
   });
 
   it('previews the source and keeps the disabled input unchanged', () => {

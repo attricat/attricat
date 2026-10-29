@@ -47,7 +47,8 @@ transaction for producers that have none. Both apply these rules:
 | Kind | Recipients | Subject | Created in |
 | --- | --- | --- | --- |
 | `record.assigned` | A newly assigned user, or each member of a newly assigned team (`data.team_id`, `data.team_name`) | Record | Every record write, through assignment validation (`validate_principal_values`). Saving an unchanged assignment notifies nobody. |
-| `record.commented` | The record's current user and team assignees and everyone who commented on it before | Record | `create_record_comment`; `body` holds the first 500 characters of the comment. |
+| `record.commented` | The record's current user and team assignees and everyone who commented on it before, except users the comment mentions | Record | `create_record_comment`; `body` holds the first 500 characters of the comment. |
+| `record.mentioned` | Users a comment mentions with `[@Name](user:<id>)`; on an edit, only users it newly mentions | Record | `create_record_comment` and `update_record_comment`; `body` holds the first 500 characters of the comment and `data.comment_id` the comment. |
 | `agent.approval_required` | The user who started the run | Agent conversation | `transition_agent_run` to `awaiting_approval` |
 | `agent.run_failed` | The user who started the run | Agent conversation | A run that fails, times out or is interrupted |
 | `agent.run_completed` | The user who started the run | Agent conversation | Completion of scheduled and manual runs; interactive completions are visible in the conversation |
@@ -83,7 +84,8 @@ own inbox. Notifications themselves are a consequence of audited changes.
   [API reference](api.md#notifications).
 - **CLI:** `acli notification list|count|get|read|unread|read-all|delete`; see
   [CLI](cli.md#notifications).
-- **Agents:** `list_notifications` reads the initiating user's inbox.
+- **Agents:** `list_notifications` reads the initiating user's inbox and
+  `get_notification` one notification with its whole body and `data`.
   `mark_notifications_read`, `mark_all_notifications_read` and
   `delete_notifications` change it after approval, like every other agent
   write. They act only on the initiating user's notifications and need only an

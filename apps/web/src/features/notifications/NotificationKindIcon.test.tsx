@@ -32,6 +32,7 @@ describe('NotificationKindIcon', () => {
     ['record.assigned', {}, 'lucide-user-round'],
     ['record.assigned', { team_name: 'Editors' }, 'lucide-users-round'],
     ['record.commented', {}, 'lucide-message-square'],
+    ['record.mentioned', {}, 'lucide-at-sign'],
     ['agent.run_failed', {}, 'lucide-bot'],
     ['workspace.invitation_accepted', {}, 'lucide-user-plus'],
     ['unknown.kind', {}, 'lucide-bell'],
