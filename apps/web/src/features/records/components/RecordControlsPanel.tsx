@@ -5,19 +5,28 @@ import { Box, Chip, CircularProgress, Stack, Typography } from '@mui/material';
 import { useId, type ReactNode } from 'react';
 import { monoFontFamily } from '../../../app/theme';
 import { Trans, useTranslation } from 'react-i18next';
-import { EmptyState } from '../../../components/EmptyState';
 import { QueryErrorNotice } from '../../../components/QueryErrorNotice';
-import { RecordControlIcon } from '../../../components/systemIcons';
 import { UserProfileLink } from '../../../components/UserProfileLink';
 import { Timestamp } from '../../../time/Timestamp';
-import type { Attribute, RecordApproval, RetentionHold } from '../api';
+import type {
+  ApprovalCause,
+  Attribute,
+  RecordApproval,
+  RetentionHold,
+} from '../api';
 import { attributeLabel } from '../recordDisplay';
 import {
   recordApprovalsOptions,
   recordRetentionHoldsOptions,
 } from '../queryOptions';
 import { statusLabel } from '../status';
-import { retentionHoldSources, approvalEndReasons } from '../constants';
+import {
+  retentionHoldSources,
+  approvalEndReasons,
+  approvalCauseKinds,
+  transitionChannels,
+  transitionOperations,
+} from '../constants';
 
 /** Display labels for attribute and status codes the panel reports. */
 const controlLabels = (attributes: readonly Attribute[]) => {
@@ -65,6 +74,69 @@ const ControlItem = ({
   </Box>
 );
 
+/** The status change that entered an approval's status, then how it arrived. */
+const ApprovalCauseText = ({
+  attributeCode,
+  cause,
+  labels,
+}: {
+  attributeCode: string;
+  cause: ApprovalCause | null;
+  labels: ControlLabels;
+}) => {
+  const { t } = useTranslation();
+  if (!cause) {
+    return (
+      <Typography variant="body2" color="text.secondary">
+        {t('records.recordControls.causeUnrecorded')}
+      </Typography>
+    );
+  }
+  const from = cause.from && labels.status(attributeCode, cause.from);
+  const transition = cause.transition_code;
+  const entered =
+    cause.kind === approvalCauseKinds.override
+      ? t('records.recordControls.causeOverride', { from })
+      : from
+        ? transition
+          ? t('records.recordControls.causeFrom', { from, transition })
+          : t('records.recordControls.causeFromWithoutCode', { from })
+        : transition
+          ? t('records.recordControls.causeInitial', { transition })
+          : t('records.recordControls.causeInitialWithoutCode');
+  const operation =
+    cause.operation === transitionOperations.historyRestore
+      ? t('records.recordControls.causeHistoryRestore')
+      : cause.operation === transitionOperations.blueprintMigration
+        ? t('records.recordControls.causeBlueprintMigration')
+        : null;
+  const channels = {
+    [transitionChannels.person]: null,
+    [transitionChannels.apiToken]: t('records.recordControls.causeApiToken'),
+    [transitionChannels.agent]: t('records.recordControls.causeAgent'),
+    [transitionChannels.workflow]: t('records.recordControls.causeWorkflow'),
+    [transitionChannels.extension]: t('records.recordControls.causeExtension'),
+    [transitionChannels.eventHandler]: t(
+      'records.recordControls.causeEventHandler',
+    ),
+    [transitionChannels.system]: t('records.recordControls.causeSystem'),
+  };
+  const channel = cause.channel ? channels[cause.channel] : null;
+  return (
+    <Typography variant="body2" color="text.secondary">
+      {[
+        entered,
+        operation,
+        channel,
+        cause.separation_waived &&
+          t('records.recordControls.causeSeparationWaived'),
+      ]
+        .filter(Boolean)
+        .join(' · ')}
+    </Typography>
+  );
+};
+
 const ApprovalItem = ({
   approval,
   labels,
@@ -111,6 +183,11 @@ const ApprovalItem = ({
         />{' '}
         <Timestamp value={approval.approved_at} />
       </Typography>
+      <ApprovalCauseText
+        attributeCode={approval.attribute_code}
+        cause={approval.cause}
+        labels={labels}
+      />
       {approval.end_reason === approvalEndReasons.contentChanged &&
         approval.ended_at && (
           <Typography variant="body2" color="text.secondary">
@@ -178,7 +255,8 @@ const HoldItem = ({
 
 /**
  * Approval history and file retention holds of a controlled record, page by
- * page. `attributes` label the reported codes.
+ * page. `attributes` label the reported codes. Shown only while
+ * `useHasRecordControls` holds.
  */
 export const RecordControlsPanel = ({
   recordId,
@@ -213,15 +291,6 @@ export const RecordControlsPanel = ({
           enableTrackSlot
         />
       )}
-      {approvals.isSuccess &&
-        holds.isSuccess &&
-        approvalItems.length === 0 &&
-        holdItems.length === 0 && (
-          <EmptyState
-            icon={RecordControlIcon}
-            title={t('records.recordControls.empty')}
-          />
-        )}
       {approvalItems.length > 0 && (
         <Box component="section" aria-labelledby={approvalsHeadingId}>
           <Typography

@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import {
+  render,
+  renderHook,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../../i18n';
@@ -10,7 +16,9 @@ import {
   type RecordApproval,
   type RetentionHold,
 } from '../api';
+import { recordQueryKeys } from '../queryKeys';
 import { RecordControlsPanel } from './RecordControlsPanel';
+import { useHasRecordControls } from '../useHasRecordControls';
 
 vi.mock('../api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api')>()),
@@ -33,6 +41,7 @@ const approval = (id: string, approvedAt: string): RecordApproval => ({
   ended_at: null,
   end_reason: null,
   void_status: null,
+  cause: null,
 });
 const hold: RetentionHold = {
   id: '00000000-0000-4000-8000-000000000010',
@@ -110,13 +119,89 @@ describe('RecordControlsPanel', () => {
     ).toBeNull();
   });
 
-  it('says when the record has no approvals or holds', async () => {
+  it('explains the status change behind each approval', async () => {
+    vi.mocked(getRecordApprovals).mockResolvedValue({
+      items: [
+        {
+          ...approval(
+            '00000000-0000-4000-8000-000000000002',
+            '2026-10-20T10:00:00Z',
+          ),
+          cause: {
+            from: 'review',
+            transition_code: 'approve',
+            kind: 'transition',
+            operation: 'history_restore',
+            channel: 'agent',
+            separation_waived: true,
+          },
+        },
+        {
+          ...approval(
+            '00000000-0000-4000-8000-000000000003',
+            '2026-10-19T10:00:00Z',
+          ),
+          cause: {
+            from: 'released',
+            transition_code: null,
+            kind: 'override',
+            operation: 'edit',
+            channel: 'person',
+            separation_waived: false,
+          },
+        },
+        approval(
+          '00000000-0000-4000-8000-000000000004',
+          '2026-10-18T10:00:00Z',
+        ),
+      ],
+      has_more: false,
+    });
+    vi.mocked(getRecordRetentionHolds).mockResolvedValue({
+      items: [],
+      has_more: false,
+    });
+    renderPanel();
+    const approvals = await screen.findByRole('region', { name: 'Approvals' });
+    expect(
+      within(approvals).getByText(
+        'Entered from review through “approve” · restored from history · by an agent · separation of duties waived',
+      ),
+    ).toBeTruthy();
+    expect(
+      within(approvals).getByText(
+        'Unlocked from released by an owner or administrator',
+      ),
+    ).toBeTruthy();
+    expect(within(approvals).getByText('Cause not recorded')).toBeTruthy();
+  });
+
+  it('has controls only when the record has approvals or holds', async () => {
     const empty = { items: [], has_more: false };
     vi.mocked(getRecordApprovals).mockResolvedValue(empty);
     vi.mocked(getRecordRetentionHolds).mockResolvedValue(empty);
-    renderPanel();
-    expect(
-      await screen.findByText('No approvals or retention holds.'),
-    ).toBeTruthy();
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const { result } = renderHook(() => useHasRecordControls(recordId), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    });
+    await waitFor(() =>
+      expect(
+        client.getQueryState(recordQueryKeys.retentionHolds(recordId))?.status,
+      ).toBe('success'),
+    );
+    expect(result.current).toBe(false);
+
+    vi.mocked(getRecordRetentionHolds).mockResolvedValue({
+      items: [hold],
+      has_more: false,
+    });
+    void client.invalidateQueries({
+      queryKey: recordQueryKeys.recordControls(recordId),
+    });
+    await waitFor(() => expect(result.current).toBe(true));
   });
 });

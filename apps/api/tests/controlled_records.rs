@@ -412,6 +412,48 @@ async fn owners_unlock_any_locking_status_outside_the_declared_transitions(pool:
 }
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
+async fn an_unlock_into_an_approval_status_records_its_override(pool: PgPool) {
+    let (_, server, _, record) = setup(&pool).await;
+    let owner = authenticated_client();
+    let reviewer = client_for(member_with_role(&pool, reviewer_role(&pool).await).await);
+    for (client, status) in [
+        (&owner, "review"),
+        (&reviewer, "approved"),
+        (&owner, "released"),
+    ] {
+        expect_status(record.set_status(client, status).await, StatusCode::OK).await;
+    }
+    let current = record.read(&owner).await;
+    expect_status(
+        owner
+            .post(format!("{}/status-unlock", record.url))
+            .json(&json!({
+                "attribute_code": "status",
+                "to": "approved",
+                "expected_updated_at": current["record"]["updated_at"],
+            }))
+            .send()
+            .await
+            .unwrap(),
+        StatusCode::OK,
+    )
+    .await;
+    let approvals: Value = get_json(&owner, &format!("{}/approvals", record.url)).await;
+    assert_eq!(
+        approvals["items"][0]["cause"],
+        json!({
+            "from": "released",
+            "transition_code": null,
+            "kind": "override",
+            "operation": "edit",
+            "channel": "person",
+            "separation_waived": false,
+        })
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn approvals_bind_to_content_and_void_on_change(pool: PgPool) {
     let (base, server, _, record) = setup(&pool).await;
     let owner = authenticated_client();
@@ -441,6 +483,18 @@ async fn approvals_bind_to_content_and_void_on_change(pool: PgPool) {
     assert_eq!(recorded[0]["status"], "approved");
     assert_eq!(recorded[0]["end_reason"], Value::Null);
     assert_eq!(recorded[0]["content_digest"].as_str().unwrap().len(), 64);
+    // The approval explains the status change that entered it.
+    assert_eq!(
+        recorded[0]["cause"],
+        json!({
+            "from": "review",
+            "transition_code": "approve",
+            "kind": "transition",
+            "operation": "edit",
+            "channel": "person",
+            "separation_waived": false,
+        })
+    );
     // Content outside the approval's coverage does not void it.
     expect_status(
         record
@@ -509,12 +563,46 @@ async fn approvals_bind_to_content_and_void_on_change(pool: PgPool) {
     .unwrap();
     assert_eq!(second["items"].as_array().unwrap().len(), 1);
     assert_eq!(second["has_more"], false);
+    // Approvals recorded without a transition have no cause.
+    assert_eq!(last["cause"], Value::Null);
     expect_error(
         page(vec![("before_id", last["id"].as_str().unwrap().to_owned())]).await,
         StatusCode::UNPROCESSABLE_ENTITY,
         "invalid_input",
     )
     .await;
+
+    // Restoring the approved status from history approves again, along the
+    // same edge, as a history restoration.
+    let history_id: Uuid = sqlx::query_scalar(
+        "SELECT h.id FROM attribute_value_history h JOIN attributes a ON a.id = h.attribute_id WHERE a.code = 'status' AND h.value_text = 'approved'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let record_id = record.url.rsplit('/').next().unwrap();
+    let current = record.read(&reviewer).await;
+    expect_status(
+        reviewer
+            .post(format!(
+                "{base}/records/{record_id}/values/history/{history_id}/restore"
+            ))
+            .query(&[(
+                "expected_updated_at",
+                current["record"]["updated_at"].as_str().unwrap(),
+            )])
+            .send()
+            .await
+            .unwrap(),
+        StatusCode::CREATED,
+    )
+    .await;
+    assert_eq!(record.status(&owner).await, "approved");
+    let restored = approvals(owner.clone()).await;
+    assert_eq!(restored[0]["cause"]["from"], "review");
+    assert_eq!(restored[0]["cause"]["transition_code"], "approve");
+    assert_eq!(restored[0]["cause"]["operation"], "history_restore");
+    assert_eq!(restored[0]["cause"]["channel"], "person");
     server.abort();
 }
 

@@ -67,6 +67,7 @@ import { refreshRecordTab } from '../refreshRecordTab';
 import { RecordPreviewTabs } from './RecordPreviewTabs';
 import { RecordPreviewToolbar } from './RecordPreviewToolbar';
 import { RecordControlsPanel } from './RecordControlsPanel';
+import { useHasRecordControls } from '../useHasRecordControls';
 import { RecordSystemAnnotationsPanel } from './RecordSystemAnnotationsPanel';
 import { visibleSystemTags } from '../systemTags';
 import { SystemTagChips } from './SystemTagChips';
@@ -185,6 +186,7 @@ export const RecordPreview = ({
   );
   const canCreateRecords = useCan(capabilities.recordsWrite);
   const canAskAgent = useCan(capabilities.agentsRun);
+  const hasRecordControls = useHasRecordControls(recordId);
   const publications = useRecordPublications(recordId, contextId, canPublish);
   const { blueprint, recordForm, resolved, statusTransitions } =
     useRecordPreviewData(recordId, contextId);
@@ -537,17 +539,21 @@ export const RecordPreview = ({
                           },
                         ]
                       : []),
-                    {
-                      key: recordPreviewTabs.recordControl,
-                      icon: RecordControlIcon,
-                      label: t('records.recordControls.title'),
-                      content: (
-                        <RecordControlsPanel
-                          attributes={blueprint.data?.attributes ?? []}
-                          recordId={recordId}
-                        />
-                      ),
-                    },
+                    ...(hasRecordControls
+                      ? [
+                          {
+                            key: recordPreviewTabs.recordControl,
+                            icon: RecordControlIcon,
+                            label: t('records.recordControls.title'),
+                            content: (
+                              <RecordControlsPanel
+                                attributes={blueprint.data?.attributes ?? []}
+                                recordId={recordId}
+                              />
+                            ),
+                          },
+                        ]
+                      : []),
                     {
                       key: recordPreviewTabs.systemAnnotations,
                       icon: SystemTagIcon,

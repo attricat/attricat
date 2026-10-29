@@ -70,6 +70,62 @@ impl TransitionKind {
     }
 }
 
+/// The operation that wrote a status change.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TransitionOperation {
+    /// A record edit: create, update, value append or removal, relationship
+    /// or file change, workflow action or extension batch.
+    #[default]
+    Edit,
+    /// A value restored from the record's history.
+    HistoryRestore,
+    /// A migration of the record to the latest blueprint revision.
+    BlueprintMigration,
+}
+
+impl TransitionOperation {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Edit => "edit",
+            Self::HistoryRestore => "history_restore",
+            Self::BlueprintMigration => "blueprint_migration",
+        }
+    }
+}
+
+/// How the write that changed a status arrived.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TransitionChannel {
+    /// A signed-in person's request.
+    Person,
+    /// A request authenticated with a personal API token.
+    ApiToken,
+    /// An agent's change, approved by its actor.
+    Agent,
+    /// A workflow action.
+    Workflow,
+    /// An extension command or event handler.
+    Extension,
+    /// Another event handler acting for the event's initiator.
+    EventHandler,
+    /// No identifiable actor.
+    System,
+}
+
+impl TransitionChannel {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Person => "person",
+            Self::ApiToken => "api_token",
+            Self::Agent => "agent",
+            Self::Workflow => "workflow",
+            Self::Extension => "extension",
+            Self::EventHandler => "event_handler",
+            Self::System => "system",
+        }
+    }
+}
+
 /// Whether the current principal may take one declared edge, for the status control.
 #[derive(Debug, serde::Serialize)]
 pub struct StatusTransitionAccess {
@@ -112,6 +168,60 @@ pub struct RecordApproval {
     pub end_reason: Option<String>,
     pub ended_by_user_id: Option<Uuid>,
     pub void_status: Option<String>,
+    /// The status change that entered the approved status; `None` for
+    /// approvals recorded before causes were.
+    #[sqlx(skip)]
+    pub cause: Option<ApprovalCause>,
+}
+
+/// The recorded status change behind an approval.
+#[derive(Debug, serde::Serialize)]
+pub struct ApprovalCause {
+    /// The effective status before; `None` when the status was unset.
+    pub from: Option<String>,
+    /// The declared edge's code, if it has one; overrides have none.
+    pub transition_code: Option<String>,
+    /// `transition`, or `override` for an owner's or administrator's unlock.
+    pub kind: String,
+    /// `edit`, `history_restore` or `blueprint_migration`.
+    pub operation: Option<String>,
+    /// `person`, `api_token`, `agent`, `workflow`, `extension`,
+    /// `event_handler` or `system`.
+    pub channel: Option<String>,
+    pub separation_waived: bool,
+}
+
+#[derive(sqlx::FromRow)]
+struct RecordApprovalRow {
+    #[sqlx(flatten)]
+    approval: RecordApproval,
+    transition_id: Option<Uuid>,
+    cause_from: Option<String>,
+    cause_code: Option<String>,
+    cause_kind: Option<String>,
+    cause_operation: Option<String>,
+    cause_channel: Option<String>,
+    cause_separation_waived: Option<bool>,
+}
+
+impl RecordApprovalRow {
+    fn into_approval(self) -> RecordApproval {
+        let cause = self
+            .transition_id
+            .zip(self.cause_kind)
+            .map(|(_, kind)| ApprovalCause {
+                from: self.cause_from,
+                transition_code: self.cause_code,
+                kind,
+                operation: self.cause_operation,
+                channel: self.cause_channel,
+                separation_waived: self.cause_separation_waived.unwrap_or(false),
+            });
+        RecordApproval {
+            cause,
+            ..self.approval
+        }
+    }
 }
 
 /// Leaves a locking status outside the declared transitions.
@@ -474,6 +584,33 @@ impl AttricatRepository {
         })
     }
 
+    /// How this repository's writes arrive, for the transitions they record.
+    fn transition_channel(&self) -> TransitionChannel {
+        let audit = self.audit_context.as_ref();
+        if audit.is_some_and(|audit| audit.agent.is_some()) {
+            TransitionChannel::Agent
+        } else if self.extension_id.is_some() {
+            TransitionChannel::Extension
+        } else if audit.is_some_and(|audit| audit.action == WORKFLOW_AUDIT_ACTION) {
+            TransitionChannel::Workflow
+        } else if self.event_context.is_some() {
+            TransitionChannel::EventHandler
+        } else {
+            match self.acting_principal() {
+                Some(actor) if actor.token_id.is_some() => TransitionChannel::ApiToken,
+                Some(_) => TransitionChannel::Person,
+                None => TransitionChannel::System,
+            }
+        }
+    }
+
+    /// The same repository, recording its status changes as `operation`.
+    pub(super) fn for_transition_operation(&self, operation: TransitionOperation) -> Self {
+        let mut repository = self.clone();
+        repository.transition_operation = operation;
+        repository
+    }
+
     async fn transition_denial(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -802,7 +939,8 @@ impl AttricatRepository {
         let changes = self
             .status_changes(transaction, record, &attributes, write)
             .await?;
-        self.record_write_transitions(transaction, record, &changes)
+        let transition_ids = self
+            .record_write_transitions(transaction, record, &changes)
             .await?;
         let needs_content = active_approvals > 0
             || changes.iter().any(|change| {
@@ -818,8 +956,15 @@ impl AttricatRepository {
             .unwrap_or_else(|| {
                 RecordValues::empty(record.id, record.blueprint_id, record.blueprint_version)
             });
-        self.store_approvals(transaction, record, &changes, tree, &content)
-            .await?;
+        self.store_approvals(
+            transaction,
+            record,
+            &changes,
+            &transition_ids,
+            tree,
+            &content,
+        )
+        .await?;
         self.void_changed_approvals(transaction, record, &attributes, write, &content)
             .await?;
         for change in &changes {
@@ -830,13 +975,14 @@ impl AttricatRepository {
     }
 
     /// Records the write's own transitions, auditing those that leave a
-    /// locked status.
+    /// locked status. Returns each change's transition ID, in order.
     async fn record_write_transitions(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         record: &Record,
         changes: &[StatusChange],
-    ) -> Result<(), RepositoryError> {
+    ) -> Result<Vec<Uuid>, RepositoryError> {
+        let mut transition_ids = Vec::with_capacity(changes.len());
         for change in changes {
             let overridden = self.unlocks_change(change);
             let edge_code = if overridden {
@@ -852,20 +998,22 @@ impl AttricatRepository {
                 self.waived_separation(transaction, record, change, self.acting_principal())
                     .await?
             };
-            self.record_status_transition(
-                transaction,
-                record,
-                change,
-                edge_code.as_deref(),
-                if overridden {
-                    TransitionKind::Override
-                } else {
-                    TransitionKind::Transition
-                },
-                unlocked,
-                waived.is_some(),
-            )
-            .await?;
+            let transition_id = self
+                .record_status_transition(
+                    transaction,
+                    record,
+                    change,
+                    edge_code.as_deref(),
+                    if overridden {
+                        TransitionKind::Override
+                    } else {
+                        TransitionKind::Transition
+                    },
+                    unlocked,
+                    waived.is_some(),
+                )
+                .await?;
+            transition_ids.push(transition_id);
             if let Some(separate_from) = waived {
                 self.write_control_audit_event(
                     transaction,
@@ -899,21 +1047,23 @@ impl AttricatRepository {
                 .await?;
             }
         }
-        Ok(())
+        Ok(transition_ids)
     }
 
     /// Records an approval for every change into a status that declares one,
     /// superseding the previous decision for that status attribute and context.
+    /// `transition_ids` are the changes' recorded transitions, in order.
     async fn store_approvals(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         record: &Record,
         changes: &[StatusChange],
+        transition_ids: &[Uuid],
         tree: &ContextTree,
         content: &RecordValues,
     ) -> Result<(), RepositoryError> {
         let actor = self.acting_principal();
-        for change in changes {
+        for (change, transition_id) in changes.iter().zip(transition_ids) {
             let Some(approval) = status_approval(&change.schema, &change.after) else {
                 continue;
             };
@@ -939,7 +1089,7 @@ impl AttricatRepository {
             );
             let approval_id = Uuid::new_v4();
             sqlx::query(
-                "INSERT INTO record_approvals (id, workspace_id, record_id, attribute_code, context_id, status, covers_all, covered_attributes, content_digest, approved_by_user_id, approved_by_token_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
+                "INSERT INTO record_approvals (id, workspace_id, record_id, attribute_code, context_id, status, covers_all, covered_attributes, content_digest, approved_by_user_id, approved_by_token_id, transition_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
             )
             .bind(approval_id)
             .bind(self.workspace_id.0)
@@ -952,6 +1102,7 @@ impl AttricatRepository {
             .bind(&content_digest)
             .bind(actor.map(|actor| actor.user_id))
             .bind(actor.and_then(|actor| actor.token_id))
+            .bind(transition_id)
             .execute(&mut **transaction)
             .await?;
             self.write_control_audit_event(
@@ -1187,12 +1338,13 @@ impl AttricatRepository {
         kind: TransitionKind,
         unlocked: bool,
         separation_waived: bool,
-    ) -> Result<(), RepositoryError> {
+    ) -> Result<Uuid, RepositoryError> {
         let actor = self.acting_principal();
+        let id = Uuid::new_v4();
         sqlx::query(
-            "INSERT INTO record_status_transitions (id, workspace_id, record_id, attribute_code, context_id, from_status, to_status, edge_code, kind, unlocked, separation_waived, actor_user_id, actor_token_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
+            "INSERT INTO record_status_transitions (id, workspace_id, record_id, attribute_code, context_id, from_status, to_status, edge_code, kind, unlocked, separation_waived, actor_user_id, actor_token_id, operation, channel) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)",
         )
-        .bind(Uuid::new_v4())
+        .bind(id)
         .bind(self.workspace_id.0)
         .bind(record.id)
         .bind(&change.attribute_code)
@@ -1205,9 +1357,11 @@ impl AttricatRepository {
         .bind(separation_waived)
         .bind(actor.map(|actor| actor.user_id))
         .bind(actor.and_then(|actor| actor.token_id))
+        .bind(self.transition_operation.as_str())
+        .bind(self.transition_channel().as_str())
         .execute(&mut **transaction)
         .await?;
-        Ok(())
+        Ok(id)
     }
 
     /// Adds a specific audit event to the current request's evidence, in the
@@ -1446,8 +1600,8 @@ impl AttricatRepository {
         limit: i64,
     ) -> Result<Vec<RecordApproval>, RepositoryError> {
         let (time, id) = before.map_or((None, None), |(time, id)| (Some(time), Some(id)));
-        Ok(sqlx::query_as::<_, RecordApproval>(
-            "SELECT a.id, a.attribute_code, a.context_id, c.code AS context_code, a.status, a.covers_all, a.covered_attributes, a.content_digest, a.approved_by_user_id, COALESCE(u.display_name, u.email) AS approved_by, a.approved_at, a.ended_at, a.end_reason, a.ended_by_user_id, a.void_status FROM record_approvals a JOIN attribute_contexts c ON c.id = a.context_id LEFT JOIN users u ON u.id = a.approved_by_user_id WHERE a.workspace_id = $1 AND a.record_id = $2 AND ($3::timestamptz IS NULL OR (a.approved_at, a.id) < ($3, $4::uuid)) ORDER BY a.approved_at DESC, a.id DESC LIMIT $5",
+        Ok(sqlx::query_as::<_, RecordApprovalRow>(
+            "SELECT a.id, a.attribute_code, a.context_id, c.code AS context_code, a.status, a.covers_all, a.covered_attributes, a.content_digest, a.approved_by_user_id, COALESCE(u.display_name, u.email) AS approved_by, a.approved_at, a.ended_at, a.end_reason, a.ended_by_user_id, a.void_status, a.transition_id, t.from_status AS cause_from, t.edge_code AS cause_code, t.kind AS cause_kind, t.operation AS cause_operation, t.channel AS cause_channel, t.separation_waived AS cause_separation_waived FROM record_approvals a JOIN attribute_contexts c ON c.id = a.context_id LEFT JOIN users u ON u.id = a.approved_by_user_id LEFT JOIN record_status_transitions t ON t.id = a.transition_id AND t.workspace_id = a.workspace_id WHERE a.workspace_id = $1 AND a.record_id = $2 AND ($3::timestamptz IS NULL OR (a.approved_at, a.id) < ($3, $4::uuid)) ORDER BY a.approved_at DESC, a.id DESC LIMIT $5",
         )
         .bind(self.workspace_id.0)
         .bind(record_id)
@@ -1455,6 +1609,9 @@ impl AttricatRepository {
         .bind(id)
         .bind(limit)
         .fetch_all(&self.pool)
-        .await?)
+        .await?
+        .into_iter()
+        .map(RecordApprovalRow::into_approval)
+        .collect())
     }
 }

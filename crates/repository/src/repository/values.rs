@@ -643,6 +643,17 @@ impl AttricatRepository {
         history_id: Uuid,
         expected_updated_at: Option<DateTime<Utc>>,
     ) -> Result<AttributeValue, RepositoryError> {
+        self.for_transition_operation(TransitionOperation::HistoryRestore)
+            .write_restored_value(record_id, history_id, expected_updated_at)
+            .await
+    }
+
+    async fn write_restored_value(
+        &self,
+        record_id: Uuid,
+        history_id: Uuid,
+        expected_updated_at: Option<DateTime<Utc>>,
+    ) -> Result<AttributeValue, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
         self.lock_relationship_cardinality_writes(&mut transaction)
             .await?;

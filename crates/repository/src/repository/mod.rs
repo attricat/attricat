@@ -290,7 +290,8 @@ pub use solution_packs::{
     SolutionPackPlan,
 };
 pub use status::{
-    RECORD_CONTROL_PAGE_SIZE, RecordApproval, StatusTransitionAccess, UnlockRecordStatus,
+    ApprovalCause, RECORD_CONTROL_PAGE_SIZE, RecordApproval, StatusTransitionAccess,
+    TransitionOperation, UnlockRecordStatus,
 };
 pub use tasks::{
     BackgroundProcessingStatus, ClaimedTask, TaskError, TaskSummary, bounded_task_error_message,
@@ -323,6 +324,9 @@ pub struct AttricatRepository<S = WorkspaceScope> {
     /// write may leave its locking status for any option, outside the
     /// declared transitions. Set only by `unlock_record_status`.
     status_unlock: Option<String>,
+    /// The operation a status change made through this repository belongs
+    /// to. Set only by history restoration and blueprint migration.
+    transition_operation: TransitionOperation,
     /// Shared by every repository derived from the same composition root.
     pub(crate) cache: QueryCache,
     /// The workspace's generations as read by this request's authentication.
@@ -495,6 +499,7 @@ impl AttricatRepository {
             extension_id: None,
             authorization_actor: None,
             status_unlock: None,
+            transition_operation: TransitionOperation::Edit,
             cache: QueryCache::default(),
             generations: None,
         }
@@ -583,7 +588,7 @@ impl AttricatRepository {
             // Event sources include the immutable workflow UUID (`workflow:<id>`),
             // but audit action identifiers deliberately use the constrained,
             // stable operation name rather than a namespaced source identifier.
-            audit.action = "workflow.execute".to_owned();
+            audit.action = WORKFLOW_AUDIT_ACTION.to_owned();
             audit.metadata = serde_json::json!({
                 "workflow_id": workflow_id,
                 "workflow_revision": revision,
@@ -646,6 +651,9 @@ impl AttricatRepository {
         repository
     }
 }
+
+/// The audit action of every workflow action's mutation.
+pub(super) const WORKFLOW_AUDIT_ACTION: &str = "workflow.execute";
 
 fn event_metadata_uuid(event: &crate::domain_events::DomainEvent, key: &str) -> Option<Uuid> {
     event.metadata.get(key)?.as_str()?.parse().ok()

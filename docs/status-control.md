@@ -293,6 +293,16 @@ are `record.approval.record` and `record.approval.void`.
 `GET /v1/records/{record_id}/approvals` lists approvals newest first, 20 per
 page; continue with `before_time` and `before_id` from the last item.
 
+Each approval links to the `record_status_transitions` row that entered its
+status and returns it as `cause`: `from` (the previous effective status, or
+`null`), `transition_code` (the edge's `code`, if any), `kind` (`transition`,
+or `override` for an [unlock](#locks)), `operation` (`edit`,
+`history_restore` or `blueprint_migration`), `channel` (`person`,
+`api_token`, `agent`, `workflow`, `extension`, `event_handler` or `system`)
+and `separation_waived`. Every transition row records its `operation` and
+`channel`. Approvals recorded before causes were have `cause: null`; they are
+not inferred. The record page's **Record control** tab explains each cause.
+
 ### Retention
 
 Entering an option with `retention_days` creates `file_retention_holds` rows for

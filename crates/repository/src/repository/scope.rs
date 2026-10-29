@@ -16,6 +16,7 @@ impl<S: RepositoryScope> AttricatRepository<S> {
             extension_id: self.extension_id.clone(),
             authorization_actor: self.authorization_actor,
             status_unlock: None,
+            transition_operation: TransitionOperation::Edit,
             cache: self.cache.clone(),
             // Generations belong to the workspace they were read for.
             generations: None,

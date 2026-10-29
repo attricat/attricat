@@ -132,6 +132,32 @@ export const approvalEndReasons = {
   superseded: 'superseded',
 } as const;
 
+/** How the status change behind an approval was taken. */
+export const approvalCauseKinds = {
+  /** Along a declared edge. */
+  transition: 'transition',
+  /** An owner's or administrator's unlock outside the declared edges. */
+  override: 'override',
+} as const;
+
+/** The operation that wrote a status change. */
+export const transitionOperations = {
+  edit: 'edit',
+  historyRestore: 'history_restore',
+  blueprintMigration: 'blueprint_migration',
+} as const;
+
+/** How the write that changed a status arrived. */
+export const transitionChannels = {
+  person: 'person',
+  apiToken: 'api_token',
+  agent: 'agent',
+  workflow: 'workflow',
+  extension: 'extension',
+  eventHandler: 'event_handler',
+  system: 'system',
+} as const;
+
 /** Status coverage that locks or approves every other attribute. */
 export const statusCoverageAll = 'all';
 

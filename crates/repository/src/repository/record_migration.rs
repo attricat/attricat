@@ -663,6 +663,17 @@ impl AttricatRepository {
     pub async fn migrate_record_to_latest_checked(
         &self,
         record_id: Uuid,
+        input: MigrateRecordRequest,
+        expected_updated_at: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Result<Record, RepositoryError> {
+        self.for_transition_operation(TransitionOperation::BlueprintMigration)
+            .write_migration(record_id, input, expected_updated_at)
+            .await
+    }
+
+    async fn write_migration(
+        &self,
+        record_id: Uuid,
         mut input: MigrateRecordRequest,
         expected_updated_at: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Result<Record, RepositoryError> {

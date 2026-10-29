@@ -44,6 +44,7 @@ export type {
   ViewNode,
 } from '../views/schemas';
 export type {
+  ApprovalCause,
   Attribute,
   Blueprint,
   BlueprintWithAttributes,

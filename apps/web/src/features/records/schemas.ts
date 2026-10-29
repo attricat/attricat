@@ -16,8 +16,11 @@ import {
   publicationStatuses,
   resultVersionScopeKinds,
   approvalEndReasons,
+  approvalCauseKinds,
   statusTransitionDenialCodes,
   retentionHoldSources,
+  transitionChannels,
+  transitionOperations,
 } from './constants';
 
 export const uuidSchema = z.uuid();
@@ -558,7 +561,19 @@ export const recordApprovalSchema = z.object({
   ended_at: z.string().nullable(),
   end_reason: z.enum(approvalEndReasons).nullable(),
   void_status: z.string().nullable(),
+  /** The status change that entered the approved status; `null` when it was not recorded. */
+  cause: z
+    .object({
+      from: z.string().nullable(),
+      transition_code: z.string().nullable(),
+      kind: z.enum(approvalCauseKinds),
+      operation: z.enum(transitionOperations).nullable(),
+      channel: z.enum(transitionChannels).nullable(),
+      separation_waived: z.boolean(),
+    })
+    .nullable(),
 });
+export type ApprovalCause = NonNullable<RecordApproval['cause']>;
 export type RecordApproval = z.infer<typeof recordApprovalSchema>;
 
 export const retentionHoldSchema = z.object({

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
@@ -487,6 +487,23 @@ describe('RecordPreviewPage', () => {
     vi.mocked(api.getCurrentBlueprint).mockResolvedValue({
       blueprint: { version: 1 },
     } as never);
+    vi.mocked(api.getRecordRetentionHolds).mockResolvedValue({
+      items: [
+        {
+          id: '00000000-0000-4000-8000-000000000010',
+          file_id: '00000000-0000-4000-8000-000000000011',
+          source: 'explicit',
+          attribute_code: null,
+          status: null,
+          reason: 'Legal hold',
+          held_until: '2027-10-20T10:00:00Z',
+          created_at: '2026-10-20T10:00:00Z',
+          released_at: null,
+          active: true,
+        },
+      ],
+      has_more: false,
+    } as never);
     renderPage();
 
     const tabs = within(await screen.findByRole('tablist')).getAllByRole('tab');
@@ -513,7 +530,7 @@ describe('RecordPreviewPage', () => {
     expect(
       within(
         screen.getByRole('tabpanel', { name: 'Record control' }),
-      ).getByText('No approvals or retention holds.'),
+      ).getByText('Retained: Legal hold'),
     ).toBeTruthy();
     expect(screen.queryByRole('tabpanel', { name: 'Data quality' })).toBeNull();
 
@@ -537,6 +554,51 @@ describe('RecordPreviewPage', () => {
     ).toBe('true');
     await waitFor(() => expect(document.activeElement).toBe(dataQuality));
     expect(scrollIntoView).toHaveBeenCalled();
+  });
+
+  it('hides record control when the record has no approvals or holds', async () => {
+    const api = await import('./api');
+    vi.mocked(listContexts).mockResolvedValue([
+      {
+        id: '33333333-3333-4333-8333-333333333333',
+        code: 'default',
+        data: {},
+        parent_id: null,
+      },
+    ]);
+    vi.mocked(api.getResolvedRecordPreview).mockResolvedValue({
+      record: {
+        id: '00000000-0000-4000-8000-000000000001',
+        blueprint_id: '22222222-2222-4222-8222-222222222222',
+        blueprint_version: 1,
+      },
+      values: {},
+      reusable_values: {},
+    } as never);
+    vi.mocked(api.getBlueprintRevision).mockResolvedValue({
+      blueprint: {
+        id: '22222222-2222-4222-8222-222222222222',
+        name: 'Product',
+        code: 'product',
+        version: 1,
+        views: {},
+      },
+      attributes: [],
+    } as never);
+    vi.mocked(api.getCurrentBlueprint).mockResolvedValue({
+      blueprint: { version: 1 },
+    } as never);
+    renderPage();
+
+    await screen.findByRole('tablist');
+    // Both lists have answered empty.
+    await waitFor(() => expect(api.getRecordRetentionHolds).toHaveBeenCalled());
+    await act(async () => {});
+    expect(
+      within(screen.getByRole('tablist'))
+        .getAllByRole('tab')
+        .map((tab) => tab.textContent),
+    ).not.toContain('Record control');
   });
 
   it('opens the data tab at the field a data quality finding is about', async () => {
