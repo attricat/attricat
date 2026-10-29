@@ -75,9 +75,17 @@ pub(crate) enum RuleCommand {
     },
     RunList {
         #[arg(long)]
+        rule_id: Option<Uuid>,
+        #[arg(long)]
         record_id: Option<Uuid>,
+        /// Keep only runs over every record, or only those that checked one.
+        #[arg(long, value_enum)]
+        scope: Option<RunScope>,
         #[command(flatten)]
         page: PageArgs,
+    },
+    RunGet {
+        run_id: Uuid,
     },
     RunReplay {
         run_id: Uuid,
@@ -204,20 +212,30 @@ pub(crate) async fn rule_command(api: &Api, command: RuleCommand) -> Result<Stri
             )
             .await
         }
-        RuleCommand::RunList { record_id, page } => {
+        RuleCommand::RunList {
+            rule_id,
+            record_id,
+            scope,
+            page,
+        } => {
             let [limit, offset] = page.query();
             api.get(&with_query(
-                "/rule-runs",
+                RUNS_PATH,
                 [
+                    ("rule_id", rule_id.map(|id| id.to_string())),
                     ("record_id", record_id.map(|id| id.to_string())),
+                    ("scope", scope.map(|scope| scope.as_str().to_owned())),
                     limit,
                     offset,
                 ],
             ))
             .await
         }
+        RuleCommand::RunGet { run_id } => {
+            api.get(&format!("{RUNS_PATH}/{}", segment(run_id))).await
+        }
         RuleCommand::RunReplay { run_id } => {
-            api.post(&format!("/rule-runs/{}/replay", segment(run_id)))
+            api.post(&format!("{RUNS_PATH}/{}/replay", segment(run_id)))
                 .await
         }
         RuleCommand::Findings {
@@ -279,6 +297,25 @@ pub(crate) async fn rule_command(api: &Api, command: RuleCommand) -> Result<Stri
 }
 
 const FINDINGS_PATH: &str = "/rule-findings";
+const RUNS_PATH: &str = "/rule-runs";
+
+/// Which runs `run-list` keeps.
+#[derive(Clone, Copy, ValueEnum)]
+pub(crate) enum RunScope {
+    /// Runs over every record.
+    AllRecords,
+    /// Runs that checked one record.
+    Record,
+}
+
+impl RunScope {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::AllRecords => "all_records",
+            Self::Record => "record",
+        }
+    }
+}
 
 #[derive(Clone, Copy, ValueEnum)]
 pub(crate) enum FindingSeverity {

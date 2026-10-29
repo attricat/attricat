@@ -2453,6 +2453,19 @@ async fn rule_finding_and_connector_job_commands_build_requests() {
         findings["query"],
         format!("rule_id={id}&severity=critical&state=open&unresolved=true&limit=50")
     );
+    let runs = echo(&[
+        "rule",
+        "run-list",
+        "--rule-id",
+        id,
+        "--scope",
+        "all-records",
+    ])
+    .await;
+    assert_eq!(runs["path"], "/rule-runs");
+    assert_eq!(runs["query"], format!("rule_id={id}&scope=all_records"));
+    let run = echo(&["rule", "run-get", id]).await;
+    assert_eq!(run["path"], format!("/rule-runs/{id}"));
     let recheck = echo(&[
         "rule",
         "recheck",
