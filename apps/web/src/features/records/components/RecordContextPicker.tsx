@@ -86,7 +86,6 @@ export const RecordContextPicker = ({
           disabled={disabled}
           label={t('records.moreContexts')}
           onChange={(event) => onChange(event.target.value)}
-          size="small"
           sx={{ maxWidth: '100%', width: CONTEXT_MENU_WIDTH }}
           value={remainingValue}
         >

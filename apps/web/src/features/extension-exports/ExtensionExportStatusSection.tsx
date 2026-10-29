@@ -140,7 +140,7 @@ export const ExtensionExportStatusSection = ({
         spacing={2}
         sx={{ mt: 3, mb: 1 }}
       >
-        <FormControl size="small" sx={{ minWidth: exportFilterMinWidth }}>
+        <FormControl sx={{ minWidth: exportFilterMinWidth }}>
           <InputLabel id={`${extensionId}-export-connection`} shrink>
             {t('extensionExports.connection')}
           </InputLabel>
@@ -171,7 +171,7 @@ export const ExtensionExportStatusSection = ({
             ))}
           </Select>
         </FormControl>
-        <FormControl size="small" sx={{ minWidth: exportFilterMinWidth }}>
+        <FormControl sx={{ minWidth: exportFilterMinWidth }}>
           <InputLabel id={`${extensionId}-export-status`}>
             {t('extensionExports.statusColumn')}
           </InputLabel>

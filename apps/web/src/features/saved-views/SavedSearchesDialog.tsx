@@ -71,7 +71,6 @@ export const SavedSearchesDialog = ({
           fullWidth
           label={t('explorer.filterSavedSearches')}
           onChange={(event) => setFilter(event.target.value)}
-          size="small"
           slotProps={{
             htmlInput: { maxLength: SAVED_VIEW_SEARCH_MAX_LENGTH },
             input: {

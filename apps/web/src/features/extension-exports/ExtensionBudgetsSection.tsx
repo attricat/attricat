@@ -86,14 +86,12 @@ const BudgetRow = ({
           >
             <TextField
               label={t('extensionExports.requests')}
-              size="small"
               type="number"
               value={requests}
               onChange={(event) => setRequests(event.target.value)}
             />
             <TextField
               label={t('extensionExports.perSeconds')}
-              size="small"
               type="number"
               value={perSeconds}
               onChange={(event) => setPerSeconds(event.target.value)}

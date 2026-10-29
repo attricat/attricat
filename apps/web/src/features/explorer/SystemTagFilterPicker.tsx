@@ -271,7 +271,6 @@ export const SystemTagFilterPicker = ({
                 </li>
               );
             }}
-            size="small"
             slots={{ popper: InlinePopper }}
             value={null}
           />

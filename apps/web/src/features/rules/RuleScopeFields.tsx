@@ -45,7 +45,6 @@ const ScopeSelect = ({
     <FormControl
       disabled={disabled}
       error={error}
-      size="small"
       sx={{ minWidth: RULE_SCOPE_SELECT_MIN_WIDTH }}
     >
       <InputLabel id={labelId} shrink>

@@ -89,6 +89,8 @@ export const makeTheme = (mode: DesignMode) => {
     lineHeight: r.lineHeight,
     letterSpacing: r.tracking,
   });
+  // A floated field label shrinks from body to label size.
+  const shrunkLabelScale = role.label.size / role.body.size;
   const border = `1px solid ${c.border.default}`;
   const subtleBorder = `1px solid ${c.border.subtle}`;
 
@@ -210,10 +212,9 @@ export const makeTheme = (mode: DesignMode) => {
           },
         },
       },
-      MuiTextField: { defaultProps: { size: 'small', variant: 'outlined' } },
-      MuiFormControl: { defaultProps: { size: 'small' } },
+      MuiTextField: { defaultProps: { variant: 'outlined' } },
       MuiSelect: {
-        defaultProps: { IconComponent: ChevronDownIcon, size: 'small' },
+        defaultProps: { IconComponent: ChevronDownIcon },
         styleOverrides: { icon: { fontSize: smallIconSize } },
       },
       MuiNativeSelect: {
@@ -233,9 +234,20 @@ export const makeTheme = (mode: DesignMode) => {
             },
           },
           input: { fontSize: role.body.size },
+          // The notch is sized by a hidden copy of the floated label.
+          notchedOutline: { '& legend': { fontSize: `${shrunkLabelScale}em` } },
         },
       },
-      MuiInputLabel: { styleOverrides: { root: { fontSize: role.body.size } } },
+      MuiInputLabel: {
+        styleOverrides: {
+          root: { fontSize: role.body.size },
+          shrink: {
+            '&.MuiInputLabel-outlined': {
+              transform: `translate(14px, -9px) scale(${shrunkLabelScale})`,
+            },
+          },
+        },
+      },
       MuiCheckbox: {
         defaultProps: { size: 'small' },
         styleOverrides: { root: { padding: 6 } },
