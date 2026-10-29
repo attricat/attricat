@@ -36,6 +36,10 @@ const contribution: ExtensionContribution = {
   title: 'Inspector',
   version: 1,
   invoke: null,
+  when: null,
+  confirm: null,
+  icon: null,
+  translations: {},
 };
 
 beforeEach(() => Object.assign(frameState, { height: 0, ready: false }));

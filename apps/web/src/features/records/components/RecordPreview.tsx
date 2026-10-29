@@ -78,6 +78,7 @@ import { useRecordPublications } from './useRecordPublications';
 import { capabilities, accessTargetKinds } from '../../auth/capabilities';
 import { currentBlueprintOptions } from '../queryOptions';
 import { extensionOutlets } from '../../extensions/constants';
+import { usePaletteSurface } from '../../extensions/actionPaletteStore';
 
 const loadRecordCommentsPanel = () =>
   import('../../record-comments/RecordCommentsPanel');
@@ -258,6 +259,32 @@ export const RecordPreview = ({
       extensionOutlets.recordPreviewPanel,
       extensionPanelContext,
     ).length > 0;
+  const headerTarget = blueprint.data
+    ? {
+        blueprintId: blueprint.data.blueprint.id,
+        blueprintVersion: blueprint.data.blueprint.version,
+        blueprintCode: blueprint.data.blueprint.code,
+        contextId: selectedContextId ?? null,
+        recordIds: [recordId],
+        canWrite: recordForm.data?.can_write,
+        recordTags: recordForm.data
+          ? [recordForm.data.record.system_tags ?? []]
+          : undefined,
+      }
+    : undefined;
+  usePaletteSurface(
+    'record-header',
+    blueprint.data && headerTarget
+      ? {
+          outlet: extensionOutlets.recordHeaderAction,
+          runtimeScope: {
+            blueprintId: blueprint.data.blueprint.id,
+            blueprintVersion: blueprint.data.blueprint.version,
+          },
+          target: headerTarget,
+        }
+      : undefined,
+  );
   const systemTags = recordForm.data?.record.system_tags ?? [];
   const knownLabels = useMemo(
     () =>
@@ -406,12 +433,7 @@ export const RecordPreview = ({
                         blueprintId: blueprint.data.blueprint.id,
                         blueprintVersion: blueprint.data.blueprint.version,
                       }}
-                      target={{
-                        blueprintId: blueprint.data.blueprint.id,
-                        blueprintVersion: blueprint.data.blueprint.version,
-                        contextId: selectedContextId ?? null,
-                        recordIds: [recordId],
-                      }}
+                      target={headerTarget!}
                     />
                   )
                 }

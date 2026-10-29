@@ -20,6 +20,7 @@ import { logout } from '../features/auth/api';
 import { authQueryKeys } from '../features/auth/queryKeys';
 import { ExtensionRunWatcher } from '../features/extension-runs/ExtensionRunWatcher';
 import { ExtensionActionDialogHost } from '../features/extensions/ExtensionActionDialogHost';
+import { ExtensionActionConfirmHost } from '../features/extensions/ExtensionActionConfirmHost';
 import { useWorkspaceLexicon } from '../features/lexicon/lexicon';
 import { useSessionCacheBoundary } from '../features/auth/useSessionCacheBoundary';
 import { DesktopNavigation } from './DesktopNavigation';
@@ -28,6 +29,7 @@ import { navigationRoutes, publicRoutes } from './navigation';
 import { SessionErrorState, SignOutErrorState } from './SessionErrorStates';
 import { isWithinRoute } from './sideNavigationLayout';
 import { sessionOptions } from '../features/auth/queryOptions';
+import { ActionPalette } from '../features/extensions/ActionPalette';
 
 const signOutErrorMaxWidth = 480;
 
@@ -151,6 +153,8 @@ export const AppLayout = () => {
         </Box>
       </Box>
       <ExtensionActionDialogHost />
+      <ExtensionActionConfirmHost />
+      <ActionPalette />
       <ExtensionRunWatcher />
     </Fragment>
   );

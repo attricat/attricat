@@ -26,6 +26,7 @@ export const toast = {
     options: Omit<ToastOptions, 'message' | 'severity'> = {},
   ) => toast.show({ ...options, message, severity: 'info' }),
   show: (options: ToastOptions) => useToastStore.getState().show(options),
+  dismiss: (id: number) => useToastStore.getState().dismiss(id),
   success: (
     message: string,
     options: Omit<ToastOptions, 'message' | 'severity'> = {},

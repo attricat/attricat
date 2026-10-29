@@ -2,25 +2,28 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://attricat.com/contracts/extension-field-notes-v1.schema.json",
   "title": "Attricat extension field notes v1",
-  "description": "What an extension's record_field_notes source answers for one record and value context. The host renders it beside the record's fields and files; it is plain text, never markup. Entries for unknown attributes or files, or for attributes the viewer cannot read, are dropped.",
+  "description": "What an extension's record_field_notes source answers for a batch of records in one value context. The host renders it beside the records' fields and files, in the Explorer's cells and on its actions; it is plain text, never markup. Entries for records, attributes, files or actions the host did not ask about or the extension does not declare are dropped.",
   "type": "object",
   "additionalProperties": false,
+  "required": ["records"],
   "properties": {
-    "attributes": {
-      "description": "Notes keyed by attribute code.",
+    "records": {
+      "description": "Notes keyed by record ID; a record may be left out.",
       "type": "object",
-      "maxProperties": 500,
-      "additionalProperties": {"$ref": "#/$defs/attributeNote"}
+      "maxProperties": 100,
+      "additionalProperties": {"$ref": "#/$defs/recordNotes"}
     },
-    "files": {
-      "description": "Notes keyed by file ID, for files in the record's file attributes.",
-      "type": "object",
-      "maxProperties": 500,
-      "additionalProperties": {"$ref": "#/$defs/fileNote"}
+    "cacheable": {
+      "description": "The answers depend only on the records and context, so the host may reuse them until a record changes.",
+      "type": "boolean",
+      "default": false
     }
   },
   "$defs": {
     "tone": {"enum": ["neutral", "info", "success", "warning", "error"]},
+    "icon": {
+      "enum": ["alert", "calculator", "check", "clock", "download", "file", "info", "link", "refresh", "search", "send", "settings", "sparkles", "tag", "wand"]
+    },
     "badge": {
       "type": "object",
       "additionalProperties": false,
@@ -28,6 +31,7 @@
       "properties": {
         "label": {"type": "string", "minLength": 1, "maxLength": 24},
         "tone": {"$ref": "#/$defs/tone", "default": "neutral"},
+        "icon": {"$ref": "#/$defs/icon"},
         "tooltip": {"type": "string", "minLength": 1, "maxLength": 200},
         "action": {
           "description": "The ID of one of the extension's record_attribute_action actions, run with this attribute in its context when the badge is chosen.",
@@ -51,6 +55,47 @@
       "required": ["note"],
       "properties": {
         "note": {"type": "string", "minLength": 1, "maxLength": 280}
+      }
+    },
+    "actionState": {
+      "description": "An action shown disabled with a reason, or not shown, for this record.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["disabled"],
+          "properties": {"disabled": {"type": "string", "minLength": 1, "maxLength": 200}}
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["hidden"],
+          "properties": {"hidden": {"const": true}}
+        }
+      ]
+    },
+    "recordNotes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "attributes": {
+          "description": "Notes keyed by attribute code.",
+          "type": "object",
+          "maxProperties": 500,
+          "additionalProperties": {"$ref": "#/$defs/attributeNote"}
+        },
+        "files": {
+          "description": "Notes keyed by file ID, for files in the record's file attributes.",
+          "type": "object",
+          "maxProperties": 500,
+          "additionalProperties": {"$ref": "#/$defs/fileNote"}
+        },
+        "actions": {
+          "description": "The state of the extension's actions for this record, keyed by action ID. Actions not named are available.",
+          "type": "object",
+          "maxProperties": 100,
+          "additionalProperties": {"$ref": "#/$defs/actionState"}
+        }
       }
     }
   }

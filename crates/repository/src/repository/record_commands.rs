@@ -751,6 +751,22 @@ impl AttricatRepository {
         Ok((rows.into_domain(), has_more))
     }
 
+    /// The revision and version of each live record among `record_ids`;
+    /// deleted and unknown IDs are left out. The version changes with its
+    /// values and with its annotations, which do not move `updated_at`.
+    pub async fn record_versions(
+        &self,
+        record_ids: &[Uuid],
+    ) -> Result<Vec<(Uuid, Uuid, i64, String)>, RepositoryError> {
+        Ok(sqlx::query_as(
+            "SELECT id, blueprint_id, blueprint_version, updated_at::text || ':' || md5(system_metadata::text || array_to_string(system_tags, ',')) FROM records WHERE workspace_id = $1 AND id = ANY($2) AND deleted_at IS NULL ORDER BY id",
+        )
+        .bind(self.workspace_id())
+        .bind(record_ids)
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
     pub async fn get_record(&self, record_id: Uuid) -> Result<Option<Record>, RepositoryError> {
         Ok(sqlx::query_as::<_, Db<Record>>(
             r#"SELECT id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, ('attricat.sample'=ANY(system_tags)) AS is_sample, created_at, updated_at, deleted_at

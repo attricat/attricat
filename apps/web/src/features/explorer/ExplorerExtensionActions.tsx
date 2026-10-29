@@ -34,6 +34,7 @@ export const ExplorerExtensionActions = ({
       target={{
         blueprintId: blueprint.id,
         blueprintVersion: blueprint.version,
+        blueprintCode: blueprint.code,
         contextId: contextId ?? null,
         recordIds: [],
       }}
@@ -67,8 +68,10 @@ export const ExplorerBulkExtensionActions = ({
       target={{
         blueprintId: blueprint.id,
         blueprintVersion: blueprint.version,
+        blueprintCode: blueprint.code,
         contextId: contextId ?? null,
         recordIds: selectedItems.map((item) => item.id),
+        recordTags: selectedItems.map((item) => item.system_tags),
       }}
     />
   );

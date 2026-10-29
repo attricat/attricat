@@ -1,69 +1,32 @@
 import { Chip, Fade, Stack, Tooltip, Typography } from '@mui/material';
-import { useQuery } from '@tanstack/react-query';
-import { createContext, useContext, useMemo, type ReactNode } from 'react';
-import { z } from 'zod';
-import { uuidSegment } from '../../api/pathSegments';
-import { request } from '../../api/request';
+import {
+  createContext,
+  useContext,
+  useMemo,
+  type MouseEvent,
+  type ReactNode,
+} from 'react';
+import { compactIconSize } from '../../components/iconSizes';
 import type { ActionTarget } from './actions';
 import type { ExtensionContribution, ExtensionRuntimeScope } from './api';
 import {
   contributionKinds,
   extensionOutlets,
-  fieldNoteTones,
-  fieldNotesRetryInterval,
-  maximumFieldNotesAttempts,
   type FieldNoteTone,
 } from './constants';
-import { extensionQueryKeys } from './queryKeys';
+import {
+  fieldNoteLookups,
+  useRecordFieldNotes,
+  type AttributeFieldNote,
+  type FieldNoteBadge,
+} from './fieldNotesData';
+import { renderHostIcon } from './hostIcons';
 import { useExtensionRuntime } from './useExtensionRuntime';
 import { useInvokeExtensionAction } from './useInvokeExtensionAction';
 
-const badgeSchema = z.object({
-  label: z.string().min(1),
-  tone: z.enum(fieldNoteTones),
-  tooltip: z.string().optional(),
-  action: z.string().optional(),
-});
-type FieldNoteBadge = z.infer<typeof badgeSchema>;
-
-/** The host-validated notes every provider gave for one record. */
-const fieldNotesSchema = z.object({
-  extensions: z.array(
-    z.object({
-      extension_id: z.string().min(1),
-      extension_name: z.string().min(1),
-      attributes: z.record(
-        z.string(),
-        z.object({
-          badge: badgeSchema.optional(),
-          note: z.string().optional(),
-        }),
-      ),
-      files: z.record(z.string(), z.object({ note: z.string() })),
-    }),
-  ),
-  incomplete: z.boolean(),
-});
-
-const getRecordFieldNotes = (recordId: string, contextId: string | null) =>
-  request(
-    `/api/records/${uuidSegment(recordId)}/extension-field-notes${
-      contextId ? `?context_id=${uuidSegment(contextId)}` : ''
-    }`,
-    fieldNotesSchema,
-  );
-
-type AttributeFieldNote = {
-  extensionId: string;
-  extensionName: string;
-  badge?: FieldNoteBadge;
-  note?: string;
-};
-type FileFieldNote = { extensionId: string; note: string };
-
 type FieldNotes = {
-  attribute: (code: string) => AttributeFieldNote[];
-  file: (fileId: string) => FileFieldNote[];
+  attribute: ReturnType<typeof fieldNoteLookups>['attribute'];
+  file: ReturnType<typeof fieldNoteLookups>['file'];
   /** The badge-only action a badge names, when it is enabled. */
   badgeAction: (
     extensionId: string,
@@ -89,40 +52,11 @@ export const FieldNotesProvider = ({
   recordId: string;
   runtimeScope: ExtensionRuntimeScope;
 }) => {
-  const notes = useQuery({
-    queryKey: extensionQueryKeys.fieldNotes(recordId, contextId),
-    queryFn: () => getRecordFieldNotes(recordId, contextId),
-    // A provider still starting answers on a later request.
-    refetchInterval: (query) =>
-      query.state.data?.incomplete &&
-      query.state.dataUpdateCount < maximumFieldNotesAttempts
-        ? fieldNotesRetryInterval
-        : false,
-  });
+  const notes = useRecordFieldNotes(recordId, contextId);
   const runtime = useExtensionRuntime(runtimeScope);
-  const value = useMemo<FieldNotes>(() => {
-    const extensions = notes.data?.extensions ?? [];
-    return {
-      attribute: (code) =>
-        extensions.flatMap((extension) => {
-          const note = extension.attributes[code];
-          return note
-            ? [
-                {
-                  extensionId: extension.extension_id,
-                  extensionName: extension.extension_name,
-                  ...note,
-                },
-              ]
-            : [];
-        }),
-      file: (fileId) =>
-        extensions.flatMap((extension) => {
-          const note = extension.files[fileId];
-          return note
-            ? [{ extensionId: extension.extension_id, note: note.note }]
-            : [];
-        }),
+  const value = useMemo<FieldNotes>(
+    () => ({
+      ...fieldNoteLookups(notes.data?.records[recordId] ?? []),
       badgeAction: (extensionId, actionId) =>
         actionId === undefined
           ? undefined
@@ -139,15 +73,48 @@ export const FieldNotesProvider = ({
         contextId,
         recordIds: [recordId],
       },
-    };
-  }, [contextId, notes.data, recordId, runtime.data, runtimeScope]);
+    }),
+    [contextId, notes.data, recordId, runtime.data, runtimeScope],
+  );
   return <FieldNotesContext value={value}>{children}</FieldNotesContext>;
 };
 
 const chipColor = (tone: FieldNoteTone) =>
   tone === 'neutral' ? 'default' : tone;
 
-const NoteBadge = ({
+/**
+ * A badge as a small chip whose tooltip also names its extension; a button
+ * when it runs one of the extension's actions.
+ */
+export const NoteBadge = ({
+  badge,
+  extensionName,
+  onClick,
+}: {
+  badge: FieldNoteBadge;
+  extensionName: string;
+  onClick?: (event: MouseEvent) => void;
+}) => {
+  const title = badge.tooltip
+    ? `${badge.tooltip} · ${extensionName}`
+    : extensionName;
+  return (
+    <Tooltip describeChild title={title}>
+      <Chip
+        color={chipColor(badge.tone)}
+        icon={
+          badge.icon ? renderHostIcon(badge.icon, compactIconSize) : undefined
+        }
+        label={badge.label}
+        onClick={onClick}
+        size="small"
+        variant="outlined"
+      />
+    </Tooltip>
+  );
+};
+
+const FieldBadge = ({
   attributeCode,
   entry,
   notes,
@@ -158,28 +125,20 @@ const NoteBadge = ({
 }) => {
   const invoke = useInvokeExtensionAction();
   const action = notes.badgeAction(entry.extensionId, entry.badge.action);
-  // The tooltip says which extension the badge comes from.
-  const title = entry.badge.tooltip
-    ? `${entry.badge.tooltip} · ${entry.extensionName}`
-    : entry.extensionName;
   return (
-    <Tooltip describeChild title={title}>
-      <Chip
-        color={chipColor(entry.badge.tone)}
-        label={entry.badge.label}
-        onClick={
-          action
-            ? () =>
-                void invoke(action, extensionOutlets.recordAttributeAction, {
-                  ...notes.target,
-                  attributeCode,
-                })
-            : undefined
-        }
-        size="small"
-        variant="outlined"
-      />
-    </Tooltip>
+    <NoteBadge
+      badge={entry.badge}
+      extensionName={entry.extensionName}
+      onClick={
+        action
+          ? () =>
+              void invoke(action, extensionOutlets.recordAttributeAction, {
+                ...notes.target,
+                attributeCode,
+              })
+          : undefined
+      }
+    />
   );
 };
 
@@ -201,7 +160,7 @@ export const FieldNotesRow = ({ attributeCode }: { attributeCode: string }) => {
       >
         {entries.map((entry) => [
           entry.badge && (
-            <NoteBadge
+            <FieldBadge
               attributeCode={attributeCode}
               entry={{ ...entry, badge: entry.badge }}
               key={`${entry.extensionId}:badge`}

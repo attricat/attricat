@@ -18,7 +18,7 @@ use super::{
     extractors::{ApiJson, ApiPath, ApiQuery},
 };
 use crate::{
-    extensions::{MAX_EXTENSION_IDENTIFIER_BYTES, UiOutlet, validate_schema},
+    extensions::{ActionInvocation, MAX_EXTENSION_IDENTIFIER_BYTES, UiOutlet, validate_schema},
     repository::{
         AttricatRepository, ExtensionAnnotationNamespace, ExtensionAnnotationPatch,
         ExtensionAnnotations, InteractiveRun, InteractiveRunArtifact, RepositoryError,
@@ -157,11 +157,13 @@ impl RunResponse {
     }
 }
 
-/// Starts an interactive operation from an action dialog, the only frame an
-/// action opens. Actions themselves are host-rendered and run no code.
+/// Starts an interactive operation from an action dialog, or from an action
+/// that names that operation. The host sends an action's run with the input
+/// the manifest fixes; a dialog chooses its own.
 pub(super) async fn start(
     ScopedRepository(repository): ScopedRepository,
     principal: AuthenticatedPrincipal,
+    ActiveWorkspace(workspace): ActiveWorkspace,
     ApiPath((extension_id, contribution_id)): ApiPath<(String, String)>,
     ApiJson(input): ApiJson<StartInteractiveRequest>,
 ) -> Result<(StatusCode, Json<StartRunResponse>), ApiError> {
@@ -173,7 +175,13 @@ pub(super) async fn start(
     let contribution = repository
         .client_extension_contribution(&extension_id, &contribution_id)
         .await?;
-    let selection_surface = contribution.outlet == Some(UiOutlet::ActionDialog);
+    let operation_action = match &contribution.invoke {
+        Some(ActionInvocation::Operation(operation)) => {
+            operation.id == input.operation_id && operation.input == input.input
+        }
+        _ => false,
+    };
+    let selection_surface = contribution.outlet == Some(UiOutlet::ActionDialog) || operation_action;
     if contribution.installed_release_id != input.release_id
         || !selection_surface
         || !contribution
@@ -183,6 +191,14 @@ pub(super) async fn start(
     {
         return Err(ApiError::forbidden());
     }
+    super::extensions::ensure_action_may_write(
+        &repository,
+        principal.0,
+        workspace,
+        contribution.when.as_ref(),
+        &input.selection.record_ids,
+    )
+    .await?;
     let installation = repository
         .runtime_extension_installation(&extension_id, input.release_id)
         .await?

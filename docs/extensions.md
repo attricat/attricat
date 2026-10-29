@@ -655,22 +655,55 @@ document history stay in the extension.
 
 ```json
 {"id": "check", "version": 1, "kind": "action", "outlet": "record_header_action",
- "title": "Check formulas", "invoke": {"command": "check-formulas"}}
+ "title": "Check formulas", "icon": "check", "invoke": {"command": "check-formulas"},
+ "translations": {"pl": {"title": "Sprawdź formuły"}}}
 {"id": "generate", "version": 1, "kind": "action", "outlet": "explorer_bulk_action",
  "title": "Generate documents…", "invoke": {"dialog": "documents"}}
+{"id": "recalculate-now", "version": 1, "kind": "action", "outlet": "explorer_bulk_action",
+ "title": "Recalculate now", "icon": "calculator",
+ "invoke": {"operation": {"id": "recalculate", "input": {"mode": "write"}}},
+ "when": {"requires_write": true, "max_records": 50},
+ "confirm": {"message": "Write recalculated values to the selected records?"}}
 {"id": "documents", "version": 1, "kind": "dialog", "artifact": "dialog",
  "outlet": "action_dialog", "title": "Generate documents"}
 ```
 
 An action has `version` 1, a `title` of at most 64 characters, one action
 outlet (`record_action`, `record_header_action`, `explorer_row_action`,
-`explorer_action` or `explorer_bulk_action`) and exactly one `invoke`. It
+`explorer_action`, `explorer_bulk_action`, or `record_attribute_action`, which
+only [field-note](#field-notes) badges reach) and exactly one `invoke`. It
 declares no `artifact` or `route`; an extension may place several actions in
-the same outlet. `invoke.command` names a `server.commands` entry and requires
-`client.commands`; the command endpoint refuses any other command for that
-action. `invoke.dialog` names a `dialog` contribution of the same extension and
-requires `client.action_dialog`; an extension may declare several dialogs.
-End an action's title with `…` when it opens a dialog.
+the same outlet and declare several dialogs. End a title with `…` when the
+action opens a dialog.
+
+| `invoke` | Needs | Effect |
+| --- | --- | --- |
+| `{"command": "<id>"}` | `client.commands` and a `server.commands` entry | Calls the command with the [action context](#action-context); the command endpoint refuses any other command for this action. |
+| `{"dialog": "<id>"}` | `client.action_dialog` and a `dialog` contribution | Opens that dialog with the action context. |
+| `{"operation": {"id", "input"}}` | `client.operations.start` and an interactive operation | Starts the operation for the action's records with the manifest's `input`, validated against the operation's `request_schema`. The run start endpoint accepts exactly that operation and input from this action. Not allowed at `explorer_action`, which names no records. |
+
+Optional fields:
+
+- `when` decides where the host offers the action; every condition holds for
+  every record. `blueprints` lists blueprint codes; `min_records` and
+  `max_records` (at most 50) bound the record count; `has_tags` and
+  `missing_tags` name system tags; `requires_write` offers it only to users who
+  may change the records. A condition a surface cannot judge, such as tags it
+  does not know, does not hide the action, but the host also enforces
+  `requires_write`: the action's command and operation runs refuse records the
+  user may not write.
+- `confirm` (`message` of at most 280 characters, optional `destructive`) shows
+  a host confirmation before the action runs.
+- `icon` names one of the host's icons: `alert`, `calculator`, `check`, `clock`,
+  `download`, `file`, `info`, `link`, `refresh`, `search`, `send`, `settings`,
+  `sparkles`, `tag`, `wand`.
+- `translations` maps language codes (`pl`, `pt-BR`) to `{"title"}`; the host
+  shows the viewer's language, then its base language, then `title`. Any
+  contribution with a title may declare them.
+
+The host also lists the actions the current page offers in its command palette
+(Ctrl/⌘+K), with the same conditions and states as the page's menus and
+buttons.
 
 ### Action context
 
@@ -685,85 +718,118 @@ comes from extension code:
   "blueprint_id": "<uuid>",
   "blueprint_version": 3,
   "context_id": "<uuid or null>",
-  "record_ids": ["<uuid>", "<uuid>"]
+  "record_ids": ["<uuid>", "<uuid>"],
+  "locale": "pl"
 }
 ```
 
 Record-page and row actions use a one-item `record_ids`; `explorer_action` is
-revision-wide and sends none. `context_id` is the effective value-resolution
-context of the surface (the preview's selected context or the Explorer
-context), or `null` for the workspace default. Selections contain only saved
-records from one blueprint revision in display order; the host never widens
-them to hidden rows or to all matching results. Generation reads saved data
-only: when a selected record has unsaved editor changes in the tab, the
-host-owned dialog says so and offers the editor.
+revision-wide and sends none. A badge's action adds the field's
+`attribute_code`. `context_id` is the effective value-resolution context of the
+surface (the preview's selected context or the Explorer context), or `null`
+for the workspace default. `locale` is the viewer's language. Selections
+contain only saved records from one blueprint revision in display order; the
+host never widens them to hidden rows or to all matching results. Generation
+reads saved data only: when a selected record has unsaved editor changes in the
+tab, the host-owned dialog says so and offers the editor.
 
 A command receives this object as its payload; declare it in the command's
-`request_schema`. The host then reads two optional fields of the command's
-response and ignores the rest:
+`request_schema`. While it runs the host shows a progress notification. It then
+reads these optional fields of the response and ignores the rest:
 
-```json
-{"notification": {"message": "2 valid formulas.", "severity": "info"}, "refresh": true}
-```
+| Field | Effect |
+| --- | --- |
+| `notification` | `{"message", "severity"}` shown as a host notification (`success`, `info`, `warning` or `error`). |
+| `refresh` | `true` reloads the host's views of the action's records and the Explorer's results. |
+| `navigate` | `{"record_id"}` opens a record; `{"route"}` opens one of the extension's own `route` contributions. |
+| `download` | `{"run_id", "artifact_id"}` downloads an output of one of the user's own runs of this extension. |
+| `open_dialog` | A dialog of the extension, opened with the same context. |
 
-`notification` is shown as a host notification (`severity` is `success`,
-`info`, `warning` or `error`). `refresh: true` reloads the host's views of the
-action's records and the Explorer's results. A failed command shows a host
-error naming the action. A dialog receives the context as `attricat.context`;
-its frame may start interactive runs for those records and close itself with
-`attricat.dialog.close()`.
+A failed command shows a host error naming the action. An operation action
+shows that its run started and, when the run ends, reports its outcome and
+reloads the records it ran on; runs a dialog starts do the same. A dialog
+receives the context as `attricat.context`; its frame may start interactive
+runs for those records and close itself with `attricat.dialog.close()`.
 
 ### Field notes
 
-An extension describes a record's fields and files with **field notes**, which
-the host renders beside them; no extension code runs beside a field. The
-manifest names one server command as the source:
+An extension describes records' fields and files with **field notes**, which
+the host renders beside them on record pages and as badges in the Explorer's
+cells; no extension code runs beside a field. The manifest names one source:
 
 ```json
 "record_field_notes": {"version": 1, "source": {"command": "describe-fields"}}
+"record_field_notes": {"version": 1, "source": {"client": "notes-handler"}}
 ```
 
-The release needs `client.record_field_notes`, and the command (like every
-command) `client.commands`. When it shows a record, the host calls the command
-once per record and value context, with
-`{"record_id", "blueprint_id", "blueprint_version", "context_id"}`; the context
-is always concrete, the workspace default when the page names none. Declare
-that shape in the command's `request_schema`. The command answers with the
+The release needs `client.record_field_notes`. A **command** source (which,
+like every command, needs `client.commands`) is called by the host with a
+batch of up to 25 records:
+`{"records": [{"record_id", "blueprint_id", "blueprint_version"}], "context_id",
+"locale"}`. The context is always concrete, the workspace default when the
+page names none. Declare that shape in the command's `request_schema`. Both
+sources answer with the
 [`extension-field-notes-v1`](../contracts/extension-field-notes-v1.schema.json)
 contract:
 
 ```json
 {
-  "attributes": {
-    "price_gross": {
-      "badge": {"label": "Computed", "tone": "info", "tooltip": "price_net * 1.23", "action": "recalculate-field"},
-      "note": "price_gross = price_net * 1.23 · Feeds price_deposit"
+  "records": {
+    "<record uuid>": {
+      "attributes": {
+        "price_gross": {
+          "badge": {"label": "Computed", "tone": "info", "icon": "calculator",
+                    "tooltip": "price_net * 1.23", "action": "recalculate-field"},
+          "note": "price_gross = price_net * 1.23 · Feeds price_deposit"
+        }
+      },
+      "files": {"<file uuid>": {"note": "Last document: summary template, separate PDF."}},
+      "actions": {"recalculate-record": {"disabled": "Formulas are invalid"}}
     }
   },
-  "files": {"<file uuid>": {"note": "Last document: summary template, separate PDF."}}
+  "cacheable": false
 }
 ```
 
-The host renders a badge as a chip and the note as caption text in one row
-below the field, and a file's note below the file; text is never markup. A
-badge's `tone` is `neutral` (the default), `info`, `success`, `warning` or
-`error`; its tooltip also names the extension. `badge.action` names one of the
-extension's actions at the `record_attribute_action` outlet, which appear in
-no menu: choosing the badge runs that action with the field's
-`attribute_code` added to its [action context](#action-context).
+On a record page the host renders a badge as a chip and the note as caption
+text in one row below the field, and a file's note below the file. In the
+Explorer it adds the badges after the cell's value, with the note in the
+badge's tooltip. Text is never markup. A badge's `tone` is `neutral` (the
+default), `info`, `success`, `warning` or `error`; its tooltip also names the
+extension. `badge.action` names one of the extension's actions at the
+`record_attribute_action` outlet, which appear in no menu: choosing the badge
+runs that action with the field's `attribute_code` added to its
+[action context](#action-context). `actions` gives the state of the
+extension's actions for that record: `{"disabled": "<reason>"}` shows one
+disabled with its reason, `{"hidden": true}` leaves it out; actions not named
+are available.
 
-`GET /records/{record_id}/extension-field-notes?context_id=…` asks every
-enabled extension that provides field notes, in parallel, and answers
-`{"extensions": [{"extension_id", "extension_name", "attributes", "files"}],
-"incomplete": false}`. Reading the record authorizes it. Each answer must match
-the command's `response_schema` and the contract; the host keeps notes only for
-the record's attributes (including attached reusable attributes) and current
-files, and drops a badge action the extension does not declare. A provider that
-fails or breaks the contract is left out and logged. One that has not answered
-after two seconds, typically while its component compiles on first use, is
-also left out, but keeps running so the next request finds it ready;
-`incomplete` is then `true` and the web app asks again shortly. Notes are
-refreshed whenever the record's resolved values are.
+`POST /records/extension-field-notes` with
+`{"record_ids", "context_id", "locale"}` (up to 100 records) asks every enabled
+command source in parallel and answers
+`{"records": {"<id>": [{"extension_id", "extension_name", "attributes",
+"files", "actions"}]}, "incomplete": false, "client_sources": [...]}`. Only
+records the caller may read are answered. Each answer must match the command's
+`response_schema` and the contract; the host keeps notes only for the records'
+attributes (including attached reusable attributes) and current files, and
+states and badge actions only for actions the extension declares. A provider
+that fails or breaks the contract is left out and logged. One that has not
+answered after two seconds, typically while its component compiles on first
+use, is also left out, but keeps running so the next request finds it ready;
+`incomplete` is then `true` and the web app asks again shortly. The host reuses
+an answer for 30 seconds, or for an hour when the extension marks it
+`cacheable`, while the record, its annotations, the context and the language
+are unchanged.
+
+A **client** source names a `client_component` artifact that the web app runs
+headless, in one sandboxed frame per release started on first use. The module
+exports `handle(request, attricat)`, which receives
+`{"record_ids", "context_id", "locale"}` and returns the same contract. Its
+only host call is `attricat.request(path)`, which needs `attricat.read`; it
+cannot run commands, use storage or render anything. The web app checks the
+answer against the contract's limits and keeps it only for records the server
+confirmed the viewer can read; an answer later than two seconds is asked for
+again.
 
 ### Interactive operations
 

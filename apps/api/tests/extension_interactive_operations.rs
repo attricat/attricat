@@ -84,7 +84,9 @@ fn archive(extension_id: &str, server: &[u8]) -> Vec<u8> {
         }]},
         "ui": [
             {"id": "bulk", "version": 1, "kind": "dialog", "artifact": "client", "outlet": "action_dialog", "title": "Bulk"},
-            {"id": "row", "version": 1, "kind": "action", "outlet": "explorer_row_action", "title": "Summarize", "invoke": {"dialog": "bulk"}}
+            {"id": "row", "version": 1, "kind": "action", "outlet": "explorer_row_action", "title": "Summarize", "invoke": {"dialog": "bulk"}},
+            {"id": "summarize-now", "version": 1, "kind": "action", "outlet": "explorer_row_action", "title": "Summarize now",
+             "invoke": {"operation": {"id": "summarize", "input": {"template": "summary"}}}, "when": {"requires_write": true}}
         ]
     }))
     .unwrap();
@@ -358,6 +360,55 @@ async fn interactive_run_reads_its_selection_and_annotates_through_the_v15_world
         .await
         .unwrap();
     assert_eq!(runs[0]["id"], run_id.as_str());
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn an_operation_action_starts_only_its_operation_for_writers(pool: sqlx::PgPool) {
+    let repository =
+        AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
+    let store = Arc::new(FakeObjectStore::available());
+    let release = install(&repository, store.clone(), &interactive_component()).await;
+    let blueprint = published_blueprint(&repository, DOCUMENT_BLUEPRINT).await;
+    let record = titled_record(&repository, blueprint, "Visible").await;
+    let viewer = record_scoped_viewer(&pool, record).await.user;
+    let (base, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
+    let url = format!("{base}/extensions/{EXTENSION}/summarize-now/operations");
+    let start = |client: reqwest::Client, body: Value| {
+        let url = url.clone();
+        async move { client.post(url).json(&body).send().await.unwrap().status() }
+    };
+
+    // The action starts its own operation with the input its manifest fixes.
+    let mut other_input = start_body(release, "other-input", blueprint, &[record]);
+    other_input["input"] = json!({"template": "other"});
+    assert_eq!(
+        start(authenticated_client(), other_input).await,
+        StatusCode::FORBIDDEN
+    );
+    let mut other_operation = start_body(release, "other-operation", blueprint, &[record]);
+    other_operation["operation_id"] = json!("summarize-again");
+    assert_eq!(
+        start(authenticated_client(), other_operation).await,
+        StatusCode::FORBIDDEN
+    );
+    // It requires write access, which a reader does not have.
+    assert_eq!(
+        start(
+            client_for(viewer),
+            start_body(release, "viewer", blueprint, &[record])
+        )
+        .await,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        start(
+            authenticated_client(),
+            start_body(release, "writer", blueprint, &[record])
+        )
+        .await,
+        StatusCode::ACCEPTED
+    );
     server.abort();
 }
 

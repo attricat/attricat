@@ -12,6 +12,7 @@ import {
   navigationGroups,
   supportedWorkspaceLayoutVersion,
   extensionOutlets,
+  hostIcons,
 } from './constants';
 
 export const extensionOutletSchema = z.enum(extensionOutlets);
@@ -22,13 +23,36 @@ const contributionKeySchema = z
   .max(maximumContributionKeyLength)
   .regex(contributionKeyPattern);
 
-/** One dialog to open, or one server command to call, with the action context. */
+/**
+ * One dialog to open, one server command to call, or one interactive
+ * operation to start, with the action context.
+ */
 const actionInvocationSchema = z.union([
   z.object({ dialog: z.string().min(1) }).strict(),
   z
     .object({ command: z.string().min(1).max(maximumExtensionCommandIdLength) })
     .strict(),
+  z
+    .object({
+      operation: z
+        .object({ id: z.string().min(1), input: z.unknown() })
+        .strict(),
+    })
+    .strict(),
 ]);
+
+/** When the host offers an action; every condition holds for every record. */
+const actionConditionSchema = z
+  .object({
+    blueprints: z.array(z.string()).optional(),
+    min_records: z.number().int().nonnegative().optional(),
+    max_records: z.number().int().positive().optional(),
+    requires_write: z.boolean().optional(),
+    has_tags: z.array(z.string()).optional(),
+    missing_tags: z.array(z.string()).optional(),
+  })
+  .strict();
+export type ActionCondition = z.infer<typeof actionConditionSchema>;
 export type ActionInvocation = z.infer<typeof actionInvocationSchema>;
 
 const contributionSchema = z
@@ -49,6 +73,20 @@ const contributionSchema = z
     title: z.string().nullable(),
     /** What a host-rendered action opens or calls; absent on other kinds. */
     invoke: actionInvocationSchema.nullable().default(null),
+    when: actionConditionSchema.nullable().default(null),
+    confirm: z
+      .object({
+        message: z.string().min(1),
+        destructive: z.boolean().optional(),
+      })
+      .strict()
+      .nullable()
+      .default(null),
+    icon: z.enum(hostIcons).nullable().default(null),
+    /** The title in other languages, keyed by language code. */
+    translations: z
+      .record(z.string(), z.object({ title: z.string().min(1) }).strict())
+      .default({}),
   })
   .strict();
 

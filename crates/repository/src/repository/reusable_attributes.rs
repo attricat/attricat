@@ -676,6 +676,30 @@ impl AttricatRepository {
         Ok(attachment_id)
     }
 
+    /// The qualified codes of each record's attached reusable attributes.
+    pub async fn records_reusable_attribute_codes(
+        &self,
+        record_ids: &[Uuid],
+    ) -> Result<std::collections::HashMap<Uuid, Vec<String>>, RepositoryError> {
+        let rows: Vec<(Uuid, String)> = sqlx::query_as(
+            r#"SELECT aat.record_id, d.namespace || ':' || d.code
+          FROM record_reusable_attribute_attachments aat
+          JOIN reusable_attribute_revisions r ON r.id = aat.reusable_attribute_revision_id
+          JOIN reusable_attribute_definitions d ON d.id = r.definition_id
+          JOIN attributes a ON a.record_id = aat.record_id AND a.reusable_attribute_revision_id = r.id AND a.workspace_id = aat.workspace_id
+          WHERE aat.workspace_id = $1 AND aat.record_id = ANY($2) AND a.deleted_at IS NULL"#,
+        )
+        .bind(self.workspace_id())
+        .bind(record_ids)
+        .fetch_all(&self.pool)
+        .await?;
+        let mut codes: std::collections::HashMap<Uuid, Vec<String>> = Default::default();
+        for (record_id, code) in rows {
+            codes.entry(record_id).or_default().push(code);
+        }
+        Ok(codes)
+    }
+
     pub async fn record_reusable_attributes(
         &self,
         record_id: Uuid,

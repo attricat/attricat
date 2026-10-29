@@ -59,6 +59,9 @@ import { RecordIcon } from '../../components/systemIcons';
 import { useCanOn } from '../auth/useCan';
 import { useLatestCallback } from '../../components/useLatestCallback';
 import { capabilities, accessTargetKinds } from '../auth/capabilities';
+import { ExplorerFieldNotesProvider } from '../extensions/ExplorerFieldNotes';
+import { extensionOutlets } from '../extensions/constants';
+import { usePaletteSurface } from '../extensions/actionPaletteStore';
 
 // The column dialog carries drag-and-drop; load it when first opened so it
 // stays out of the Explorer's startup bundle.
@@ -330,138 +333,196 @@ export const ExplorerResultsTable = ({
   const paddingBottom =
     rowVirtualizer.getTotalSize() - (virtualRows.at(-1)?.end ?? 0);
 
+  // Field notes are asked for the loaded rows, in display order.
+  const itemIds = items.map((item) => item.id);
+  // The palette offers the toolbar's actions, and the selection's while one
+  // exists in the shown revision.
+  const explorerScope = {
+    blueprintId: blueprint.blueprint.id,
+    blueprintVersion: blueprint.blueprint.version,
+  };
+  const selectedInRevision =
+    selection.selectedItems.length > 0 &&
+    selection.selectedItems.every(
+      (item) => item.blueprint_version === blueprint.blueprint.version,
+    );
+  usePaletteSurface(
+    'explorer-toolbar',
+    showExplorerActions
+      ? {
+          outlet: extensionOutlets.explorerAction,
+          runtimeScope: explorerScope,
+          target: {
+            ...explorerScope,
+            blueprintCode: blueprint.blueprint.code,
+            contextId: publicationContextId ?? null,
+            recordIds: [],
+          },
+        }
+      : undefined,
+  );
+  usePaletteSurface(
+    'explorer-selection',
+    showExplorerActions && selectedInRevision
+      ? {
+          outlet: extensionOutlets.explorerBulkAction,
+          runtimeScope: explorerScope,
+          target: {
+            ...explorerScope,
+            blueprintCode: blueprint.blueprint.code,
+            contextId: publicationContextId ?? null,
+            recordIds: selection.selectedItems.map((item) => item.id),
+            recordTags: selection.selectedItems.map((item) => item.system_tags),
+          },
+        }
+      : undefined,
+  );
   return (
-    <Paper component="section">
-      {error && <ApiErrorAlert error={error} sx={{ m: 2 }} />}
-      <ExplorerResultsToolbar
-        blueprintName={blueprint.blueprint.name}
-        itemCount={items.length}
-        totalCount={totalCount}
-        totalCountCapped={totalCountCapped}
-        selectionMode={selection.selectionMode}
-        selectedItems={selection.selectedItems}
-        onClearSelection={selection.clearSelection}
-        onRemoveSelected={selection.removeRecord}
-        onSaveSelectionAsSearch={() =>
-          onSaveSelectionAsSearch([...selection.selectedItems])
-        }
-        onSendSelection={() => setAgentSelection([...selection.selectedItems])}
-        onToggleSelection={selection.toggleSelectionMode}
-        onOpenColumnPreferences={() => {
-          setColumnPreferencesLoaded(true);
-          setColumnPreferencesOpen(true);
-        }}
-        extensionActions={
-          showExplorerActions && (
-            <ExplorerExtensionActions
-              blueprint={blueprint.blueprint}
-              contextId={publicationContextId}
-            />
-          )
-        }
-        selectionExtensionActions={
-          showExplorerActions && (
-            <ExplorerBulkExtensionActions
-              blueprint={blueprint.blueprint}
-              contextId={publicationContextId}
-              selectedItems={selection.selectedItems}
-            />
-          )
-        }
-      />
-      <ExplorerSortContext value={sort}>
-        <VirtualizedExplorerTable
-          table={table}
-          columnsLength={columns.length}
-          virtualRows={virtualRows}
-          paddingTop={paddingTop}
-          paddingBottom={paddingBottom}
-          measureElement={rowVirtualizer.measureElement}
-          tableContainerRef={tableContainerRef}
-          selection={selection}
-          items={items}
-          isFetching={isFetching}
-          isFetchingNextPage={isFetchingNextPage}
-          onLoadMore={onLoadMore}
-          highlightPanelRecord={hasPanel}
-          renderToken={frameAllocation}
-          fitRows={fitRows}
-        />
-      </ExplorerSortContext>
-      {items.length === 0 && (
-        <EmptyState icon={RecordIcon} title={t('explorer.noMatchingRecords')} />
-      )}
-      {actionMenu && activeActionRecord && (
-        <RecordActionsMenu
-          blueprintId={blueprint.blueprint.id}
-          canPublish={canPublish}
-          canDelete={canDelete}
-          canDuplicate={canDuplicate}
-          record={activeActionRecord}
-          onClose={() => setActionMenu(null)}
-          onDelete={() => setDeleteRecordId(activeActionRecord.id)}
-          onSearchInfo={setSearchInfoRecord}
-          position={actionMenu.position}
-          publication={publicationsByRecordId.get(activeActionRecord.id)}
-          publicationContextId={publicationContextId}
-          publish={() => publish(activeActionRecord.id)}
-          publishing={publishing}
-          readiness={readiness}
-          duplicate={() => setDuplicateRecordId(activeActionRecord.id)}
-          unpublish={() => unpublish(activeActionRecord.id)}
-          unpublishing={unpublishing}
-        />
-      )}
-      {duplicateRecordId && (
-        <DuplicateRecordDialog
-          recordId={duplicateRecordId}
-          onClose={() => setDuplicateRecordId(null)}
-          onDuplicated={(copy) => {
-            setDuplicateRecordId(null);
-            void navigate({
-              params: { recordId: copy.id },
-              to: '/records/$recordId',
-            });
+    <ExplorerFieldNotesProvider
+      contextId={publicationContextId ?? null}
+      recordIds={itemIds}
+      runtimeScope={{
+        blueprintId: blueprint.blueprint.id,
+        blueprintVersion: blueprint.blueprint.version,
+      }}
+    >
+      <Paper component="section">
+        {error && <ApiErrorAlert error={error} sx={{ m: 2 }} />}
+        <ExplorerResultsToolbar
+          blueprintName={blueprint.blueprint.name}
+          itemCount={items.length}
+          totalCount={totalCount}
+          totalCountCapped={totalCountCapped}
+          selectionMode={selection.selectionMode}
+          selectedItems={selection.selectedItems}
+          onClearSelection={selection.clearSelection}
+          onRemoveSelected={selection.removeRecord}
+          onSaveSelectionAsSearch={() =>
+            onSaveSelectionAsSearch([...selection.selectedItems])
+          }
+          onSendSelection={() =>
+            setAgentSelection([...selection.selectedItems])
+          }
+          onToggleSelection={selection.toggleSelectionMode}
+          onOpenColumnPreferences={() => {
+            setColumnPreferencesLoaded(true);
+            setColumnPreferencesOpen(true);
           }}
+          extensionActions={
+            showExplorerActions && (
+              <ExplorerExtensionActions
+                blueprint={blueprint.blueprint}
+                contextId={publicationContextId}
+              />
+            )
+          }
+          selectionExtensionActions={
+            showExplorerActions && (
+              <ExplorerBulkExtensionActions
+                blueprint={blueprint.blueprint}
+                contextId={publicationContextId}
+                selectedItems={selection.selectedItems}
+              />
+            )
+          }
         />
-      )}
-      {deleteRecordId && (
-        <DeleteRecordDialog
-          recordId={deleteRecordId}
-          onClose={() => setDeleteRecordId(null)}
-          onDeleted={() => {
-            selection.removeRecord(deleteRecordId);
-            setDeleteRecordId(null);
-          }}
-        />
-      )}
-      {agentSelection && (
-        <SendSelectedToAgentDialog
-          blueprintName={lexiconText(blueprint.blueprint.name)}
-          records={agentSelection}
-          onClose={() => setAgentSelection(null)}
-          onSuccess={() => {
-            setAgentSelection(null);
-            selection.exitSelectionMode();
-          }}
-        />
-      )}
-      {columnPreferencesLoaded && (
-        <Suspense fallback={null}>
-          <ExplorerColumnPreferencesDialog
-            columns={preferenceColumns}
-            onChange={columnPreferences.update}
-            onClear={columnPreferences.clear}
-            onClose={() => setColumnPreferencesOpen(false)}
-            open={columnPreferencesOpen}
-            preferences={columnPreferences.preferences}
+        <ExplorerSortContext value={sort}>
+          <VirtualizedExplorerTable
+            table={table}
+            columnsLength={columns.length}
+            virtualRows={virtualRows}
+            paddingTop={paddingTop}
+            paddingBottom={paddingBottom}
+            measureElement={rowVirtualizer.measureElement}
+            tableContainerRef={tableContainerRef}
+            selection={selection}
+            items={items}
+            isFetching={isFetching}
+            isFetchingNextPage={isFetchingNextPage}
+            onLoadMore={onLoadMore}
+            highlightPanelRecord={hasPanel}
+            renderToken={frameAllocation}
+            fitRows={fitRows}
           />
-        </Suspense>
-      )}
-      <SearchInfoDialog
-        record={searchInfoRecord}
-        onClose={() => setSearchInfoRecord(null)}
-      />
-    </Paper>
+        </ExplorerSortContext>
+        {items.length === 0 && (
+          <EmptyState
+            icon={RecordIcon}
+            title={t('explorer.noMatchingRecords')}
+          />
+        )}
+        {actionMenu && activeActionRecord && (
+          <RecordActionsMenu
+            blueprintId={blueprint.blueprint.id}
+            canPublish={canPublish}
+            canDelete={canDelete}
+            canDuplicate={canDuplicate}
+            record={activeActionRecord}
+            onClose={() => setActionMenu(null)}
+            onDelete={() => setDeleteRecordId(activeActionRecord.id)}
+            onSearchInfo={setSearchInfoRecord}
+            position={actionMenu.position}
+            publication={publicationsByRecordId.get(activeActionRecord.id)}
+            publicationContextId={publicationContextId}
+            publish={() => publish(activeActionRecord.id)}
+            publishing={publishing}
+            readiness={readiness}
+            duplicate={() => setDuplicateRecordId(activeActionRecord.id)}
+            unpublish={() => unpublish(activeActionRecord.id)}
+            unpublishing={unpublishing}
+          />
+        )}
+        {duplicateRecordId && (
+          <DuplicateRecordDialog
+            recordId={duplicateRecordId}
+            onClose={() => setDuplicateRecordId(null)}
+            onDuplicated={(copy) => {
+              setDuplicateRecordId(null);
+              void navigate({
+                params: { recordId: copy.id },
+                to: '/records/$recordId',
+              });
+            }}
+          />
+        )}
+        {deleteRecordId && (
+          <DeleteRecordDialog
+            recordId={deleteRecordId}
+            onClose={() => setDeleteRecordId(null)}
+            onDeleted={() => {
+              selection.removeRecord(deleteRecordId);
+              setDeleteRecordId(null);
+            }}
+          />
+        )}
+        {agentSelection && (
+          <SendSelectedToAgentDialog
+            blueprintName={lexiconText(blueprint.blueprint.name)}
+            records={agentSelection}
+            onClose={() => setAgentSelection(null)}
+            onSuccess={() => {
+              setAgentSelection(null);
+              selection.exitSelectionMode();
+            }}
+          />
+        )}
+        {columnPreferencesLoaded && (
+          <Suspense fallback={null}>
+            <ExplorerColumnPreferencesDialog
+              columns={preferenceColumns}
+              onChange={columnPreferences.update}
+              onClear={columnPreferences.clear}
+              onClose={() => setColumnPreferencesOpen(false)}
+              open={columnPreferencesOpen}
+              preferences={columnPreferences.preferences}
+            />
+          </Suspense>
+        )}
+        <SearchInfoDialog
+          record={searchInfoRecord}
+          onClose={() => setSearchInfoRecord(null)}
+        />
+      </Paper>
+    </ExplorerFieldNotesProvider>
   );
 };

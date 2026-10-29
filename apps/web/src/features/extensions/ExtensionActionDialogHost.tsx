@@ -22,6 +22,7 @@ import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { ExtensionFrame } from './ExtensionFrame';
 import { useExtensionRuntime } from './useExtensionRuntime';
 import { progressSizes } from '../../components/iconSizes';
+import { useContributionTitle } from './contributionTitle';
 
 /**
  * Host-managed dialog an extension's action opens. It is mounted once in the
@@ -80,7 +81,10 @@ const ActionDialog = ({
       item.outlet === extensionOutlets.actionDialog,
   );
   const count = context.record_ids.length;
-  const title = contribution?.title ?? t('extensions.actionDialogTitle');
+  const titleOf = useContributionTitle();
+  const title = contribution
+    ? titleOf(contribution)
+    : t('extensions.actionDialogTitle');
 
   return (
     <Dialog fullWidth maxWidth="sm" onClose={onClose} open>

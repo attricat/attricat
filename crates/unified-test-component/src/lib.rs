@@ -30,20 +30,30 @@ impl handler::Guest for Component {
         let payload = parse(&request.payload)?;
         // Field notes for the host: some belong to the record and some must
         // be dropped (an unknown attribute and file, an undeclared action).
+        let record_ids: Vec<String> = payload["records"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|record| record["record_id"].as_str().map(str::to_owned))
+            .collect();
         let notes = match request.handler.as_str() {
             "field-notes" => Some(json!({
-                "attributes": {
-                    "title": {
-                        "badge": {"label": "Checked", "tone": "success", "tooltip": "From the fixture", "action": "explain"},
-                        "note": format!("Checked record {}", payload["record_id"].as_str().unwrap_or_default())
+                "records": record_ids.iter().map(|record_id| (record_id.clone(), json!({
+                    "attributes": {
+                        "title": {
+                            "badge": {"label": "Checked", "tone": "success", "icon": "check", "tooltip": "From the fixture", "action": "explain"},
+                            "note": format!("Checked record {record_id} in {}", payload["locale"].as_str().unwrap_or_default())
+                        },
+                        "sku": {"badge": {"label": "SKU", "action": "undeclared"}},
+                        "not_an_attribute": {"note": "dropped"}
                     },
-                    "sku": {"badge": {"label": "SKU", "action": "undeclared"}},
-                    "not_an_attribute": {"note": "dropped"}
-                },
-                "files": {"00000000-0000-4000-8000-000000000000": {"note": "dropped"}}
+                    "files": {"00000000-0000-4000-8000-000000000000": {"note": "dropped"}},
+                    "actions": {"explain": {"disabled": "Nothing to explain"}, "undeclared": {"hidden": true}}
+                }))).collect::<serde_json::Map<_, _>>(),
+                "cacheable": true
             })),
             "field-notes-invalid" => Some(json!({
-                "attributes": {"title": {"badge": {"label": "x".repeat(30)}}}
+                "records": {"x": {"attributes": {"title": {"badge": {"label": "x".repeat(30)}}}}}
             })),
             _ => None,
         };

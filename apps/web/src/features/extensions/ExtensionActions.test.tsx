@@ -7,7 +7,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { toast } from '../../components/toast';
 import { recordQueryKeys } from '../records/queryKeys';
+import { useActionConfirmStore } from './actionConfirmStore';
 import { useActionDialogStore } from './actionDialogStore';
+import i18n from '../../i18n';
+import { startExtensionRun } from '../extension-runs/api';
+import { notifyRunStarted } from '../extension-runs/runNotifications';
 import { ActionMenuCloseContext } from './actions';
 import type { ExtensionContribution } from './api';
 
@@ -16,8 +20,16 @@ vi.mock('./api', async (importOriginal) => ({
   getExtensionRuntime: vi.fn(),
   extensionCommand: vi.fn(),
 }));
+vi.mock('../extension-runs/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../extension-runs/api')>()),
+  startExtensionRun: vi.fn(),
+}));
+vi.mock('../extension-runs/runNotifications', () => ({
+  notifyRunStarted: vi.fn(),
+}));
+vi.mock('@tanstack/react-router', () => ({ useNavigate: () => vi.fn() }));
 vi.mock('../../components/toast', () => ({
-  toast: { show: vi.fn(), error: vi.fn() },
+  toast: { show: vi.fn(() => 1), error: vi.fn(), dismiss: vi.fn() },
 }));
 
 import { extensionCommand, getExtensionRuntime } from './api';
@@ -56,6 +68,10 @@ const action = (
   title: `Title ${id}`,
   version: 1,
   invoke,
+  when: null,
+  confirm: null,
+  icon: null,
+  translations: {},
   ...overrides,
 });
 
@@ -229,5 +245,109 @@ describe('ExtensionActionButtons', () => {
     expect(useActionDialogStore.getState().dialog?.context.action_id).toBe(
       'a4',
     );
+  });
+});
+
+describe('action behaviours', () => {
+  const renderRow = () =>
+    renderWithClient(
+      <MenuList>
+        <ExtensionActionMenuItems
+          outlet="explorer_row_action"
+          runtimeScope={runtimeScope}
+          target={target}
+        />
+      </MenuList>,
+    );
+
+  it('asks for confirmation first and runs nothing when declined', async () => {
+    vi.mocked(getExtensionRuntime).mockResolvedValue([
+      action(
+        'wipe',
+        { command: 'wipe' },
+        { confirm: { message: 'Wipe it?', destructive: true } },
+      ),
+    ]);
+    renderRow();
+    await userEvent.click(
+      await screen.findByRole('menuitem', { name: 'Title wipe' }),
+    );
+    expect(useActionConfirmStore.getState().pending).toMatchObject({
+      title: 'Title wipe',
+      message: 'Wipe it?',
+      destructive: true,
+    });
+    useActionConfirmStore.getState().answer(false);
+    await waitFor(() =>
+      expect(useActionConfirmStore.getState().pending).toBeNull(),
+    );
+    expect(extensionCommand).not.toHaveBeenCalled();
+  });
+
+  it('starts its operation for the records and follows the run', async () => {
+    vi.mocked(getExtensionRuntime).mockResolvedValue([
+      action('run', {
+        operation: { id: 'summarize', input: { template: 'a' } },
+      }),
+    ]);
+    vi.mocked(startExtensionRun).mockResolvedValue({ run_id: 'run-1' });
+    renderRow();
+    await userEvent.click(
+      await screen.findByRole('menuitem', { name: 'Title run' }),
+    );
+    await waitFor(() =>
+      expect(startExtensionRun).toHaveBeenCalledWith(
+        'acme.tools',
+        'run',
+        expect.objectContaining({
+          operation_id: 'summarize',
+          input: { template: 'a' },
+          selection: expect.objectContaining({ record_ids: [recordId] }),
+        }),
+      ),
+    );
+    expect(notifyRunStarted).toHaveBeenCalledWith(
+      'run-1',
+      expect.any(Function),
+      [recordId],
+    );
+  });
+
+  it('opens a dialog a command names in its result', async () => {
+    vi.mocked(getExtensionRuntime).mockResolvedValue([
+      action('next', { command: 'next' }),
+    ]);
+    vi.mocked(extensionCommand).mockResolvedValue({ open_dialog: 'step-two' });
+    renderRow();
+    await userEvent.click(
+      await screen.findByRole('menuitem', { name: 'Title next' }),
+    );
+    await waitFor(() =>
+      expect(useActionDialogStore.getState().dialog).toMatchObject({
+        dialogId: 'step-two',
+        context: { action_id: 'next', record_ids: [recordId] },
+      }),
+    );
+  });
+
+  it('shows a translated title and hides actions whose conditions fail', async () => {
+    vi.mocked(getExtensionRuntime).mockResolvedValue([
+      action(
+        'pl',
+        { dialog: 'd' },
+        { translations: { pl: { title: 'Po polsku' } } },
+      ),
+      action('many', { dialog: 'd' }, { when: { min_records: 2 } }),
+    ]);
+    await i18n.changeLanguage('pl');
+    try {
+      renderRow();
+      expect(
+        await screen.findByRole('menuitem', { name: 'Po polsku' }),
+      ).toBeTruthy();
+      expect(screen.getAllByRole('menuitem')).toHaveLength(1);
+    } finally {
+      await i18n.changeLanguage('en');
+    }
   });
 });

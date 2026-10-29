@@ -239,13 +239,15 @@ pub struct RecordFieldNotes {
     pub source: FieldNotesSource,
 }
 
-/// The one source of field notes. A client-side source may be added later;
-/// both answer with the same response contract.
+/// Where field notes come from. Both sources answer with the same contract.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub enum FieldNotesSource {
-    /// A declared server command, called with the record, revision and context.
+    /// A declared server command, called with the records, revisions and context.
     Command(String),
+    /// A client component the host runs headless in a sandboxed frame; its
+    /// module exports `handle(request, attricat)`.
+    Client(String),
 }
 
 /// The only supported `record_field_notes` contract version.
@@ -686,7 +688,96 @@ pub struct UiContribution {
     /// and rejected on every other kind.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub invoke: Option<ActionInvocation>,
+    /// When the host offers an action; absent means wherever its outlet is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub when: Option<ActionCondition>,
+    /// A host-owned confirmation shown before an action runs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confirm: Option<ActionConfirmation>,
+    /// One of [`HOST_ICONS`], drawn by the host beside an action's title.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    /// The title in other languages, keyed by language code (`pl`, `pt-BR`).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub translations: BTreeMap<String, ContributionTranslation>,
 }
+
+/// Declarative conditions the host checks before offering an action. Every
+/// condition holds for every record the action would apply to.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ActionCondition {
+    /// Blueprint codes the action applies to; empty means every blueprint.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub blueprints: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_records: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_records: Option<u32>,
+    /// Offered only to users who may change every record; the host also
+    /// refuses the action's command or run otherwise.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub requires_write: bool,
+    /// System tags every record must carry.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub has_tags: Vec<String>,
+    /// System tags no record may carry.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub missing_tags: Vec<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ActionConfirmation {
+    pub message: String,
+    /// Shown as a destructive confirmation (a warning-coloured button).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub destructive: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ContributionTranslation {
+    pub title: String,
+}
+
+/// An interactive operation an action starts for its records, with input
+/// fixed in the manifest.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct OperationInvocation {
+    pub id: String,
+    #[serde(default = "empty_object")]
+    pub input: Value,
+}
+
+fn empty_object() -> Value {
+    Value::Object(serde_json::Map::new())
+}
+
+/// Icons the host draws for actions and field-note badges. Extensions name
+/// one; they never supply images.
+pub const HOST_ICONS: &[&str] = &[
+    "alert",
+    "calculator",
+    "check",
+    "clock",
+    "download",
+    "file",
+    "info",
+    "link",
+    "refresh",
+    "search",
+    "send",
+    "settings",
+    "sparkles",
+    "tag",
+    "wand",
+];
+/// The longest confirmation message an action may show.
+pub const MAX_ACTION_CONFIRMATION_CHARS: usize = 280;
+/// The longest translated title of any contribution.
+pub const MAX_TRANSLATED_TITLE_CHARS: usize = 128;
 
 /// The single effect of a host-rendered action. Both receive the action
 /// context: the outlet, the blueprint revision, the value context and the
@@ -698,6 +789,8 @@ pub enum ActionInvocation {
     Dialog(String),
     /// Calls this extension's server command with that ID.
     Command(String),
+    /// Starts this extension's interactive operation for the records.
+    Operation(OperationInvocation),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -791,15 +884,21 @@ impl Manifest {
                 "record_field_notes requires capability 'client.record_field_notes'".into(),
             ));
         }
-        let FieldNotesSource::Command(command) = &notes.source;
-        let declared = self
-            .server
-            .as_ref()
-            .is_some_and(|server| server.commands.iter().any(|item| item.id == *command));
+        let declared = match &notes.source {
+            FieldNotesSource::Command(command) => self
+                .server
+                .as_ref()
+                .is_some_and(|server| server.commands.iter().any(|item| item.id == *command)),
+            FieldNotesSource::Client(artifact) => self
+                .artifacts
+                .iter()
+                .any(|item| item.id == *artifact && item.kind == ArtifactKind::ClientComponent),
+        };
         if !declared {
-            return Err(ManifestError::Invalid(format!(
-                "record_field_notes uses undeclared command '{command}'"
-            )));
+            return Err(ManifestError::Invalid(
+                "record_field_notes must use a declared command or client_component artifact"
+                    .into(),
+            ));
         }
         Ok(())
     }
@@ -835,8 +934,68 @@ impl Manifest {
                 "requires a title of 1-{MAX_ACTION_TITLE_CHARS} characters"
             )));
         }
+        if let Some(when) = &contribution.when {
+            if when
+                .min_records
+                .zip(when.max_records)
+                .is_some_and(|(min, max)| min > max)
+                || when
+                    .max_records
+                    .is_some_and(|max| max == 0 || max > MAX_INTERACTIVE_SELECTION)
+            {
+                return Err(invalid(format!(
+                    "when.max_records must be 1-{MAX_INTERACTIVE_SELECTION} and not below min_records"
+                )));
+            }
+            for code in &when.blueprints {
+                valid_id(code, "when.blueprints entry")?;
+            }
+            for tag in when.has_tags.iter().chain(&when.missing_tags) {
+                if tag.trim().is_empty() || tag.len() > MAX_EXTENSION_IDENTIFIER_BYTES {
+                    return Err(invalid("names an empty or overlong tag".into()));
+                }
+            }
+        }
+        if let Some(confirm) = &contribution.confirm {
+            let message = confirm.message.trim();
+            if message.is_empty() || message.chars().count() > MAX_ACTION_CONFIRMATION_CHARS {
+                return Err(invalid(format!(
+                    "requires a confirmation message of 1-{MAX_ACTION_CONFIRMATION_CHARS} characters"
+                )));
+            }
+        }
+        if let Some(icon) = &contribution.icon
+            && !HOST_ICONS.contains(&icon.as_str())
+        {
+            return Err(invalid(format!("names unknown icon '{icon}'")));
+        }
         match &contribution.invoke {
             None => Err(invalid("must declare what it invokes".into())),
+            Some(ActionInvocation::Operation(operation)) => {
+                if !declares("client.operations.start") {
+                    return Err(invalid(
+                        "needs capability 'client.operations.start' to start an operation".into(),
+                    ));
+                }
+                // A revision-wide toolbar action names no records to run on.
+                if contribution.outlet == Some(UiOutlet::ExplorerAction) {
+                    return Err(invalid("cannot start an operation without records".into()));
+                }
+                let declared = self.server.as_ref().and_then(|server| {
+                    server
+                        .operations
+                        .iter()
+                        .find(|item| item.id == operation.id && item.interactive.is_some())
+                });
+                let Some(declared) = declared else {
+                    return Err(invalid(format!(
+                        "invokes undeclared interactive operation '{}'",
+                        operation.id
+                    )));
+                };
+                validate_schema(&declared.request_schema, &operation.input)
+                    .map_err(|error| invalid(format!("has invalid operation input: {error}")))
+            }
             Some(ActionInvocation::Dialog(_)) if !declares("client.action_dialog") => Err(invalid(
                 "needs capability 'client.action_dialog' to open a dialog".into(),
             )),
@@ -1166,11 +1325,28 @@ impl Manifest {
             }
             if matches!(contribution.kind, UiContributionKind::Action) {
                 self.validate_action(contribution)?;
-            } else if contribution.invoke.is_some() {
+            } else if contribution.invoke.is_some()
+                || contribution.when.is_some()
+                || contribution.confirm.is_some()
+                || contribution.icon.is_some()
+            {
                 return Err(ManifestError::Invalid(format!(
-                    "only action UI contributions may declare invoke ('{}')",
+                    "only action UI contributions may declare invoke, when, confirm or icon ('{}')",
                     contribution.id
                 )));
+            }
+            for (language, translation) in &contribution.translations {
+                let title = translation.title.trim();
+                if contribution.title.is_none()
+                    || !valid_language_tag(language)
+                    || title.is_empty()
+                    || title.chars().count() > MAX_TRANSLATED_TITLE_CHARS
+                {
+                    return Err(ManifestError::Invalid(format!(
+                        "UI contribution '{}' has an invalid '{language}' translation",
+                        contribution.id
+                    )));
+                }
             }
             if let Some(outlet) = &contribution.outlet {
                 let required = match outlet {
@@ -1866,6 +2042,19 @@ impl Webhook {
     }
 }
 
+/// A language code such as `pl` or `pt-BR`.
+fn valid_language_tag(tag: &str) -> bool {
+    let mut parts = tag.split('-');
+    let language = parts.next().unwrap_or_default();
+    let region = parts.next();
+    parts.next().is_none()
+        && (2..=3).contains(&language.len())
+        && language.bytes().all(|byte| byte.is_ascii_lowercase())
+        && region.is_none_or(|region| {
+            region.len() == 2 && region.bytes().all(|byte| byte.is_ascii_uppercase())
+        })
+}
+
 /// Outlets that render host-owned action items rather than frames.
 pub fn action_outlet(outlet: &UiOutlet) -> bool {
     matches!(
@@ -2415,6 +2604,10 @@ mod tests {
             outlet: Some(UiOutlet::Navigation),
             title: None,
             invoke: None,
+            when: None,
+            confirm: None,
+            icon: None,
+            translations: BTreeMap::new(),
         });
         value.attricat.id = "a".repeat(127);
         assert_eq!(
@@ -2646,6 +2839,10 @@ mod tests {
             route: None,
             title: Some("Explain".into()),
             invoke: Some(ActionInvocation::Dialog("dialog".into())),
+            when: None,
+            confirm: None,
+            icon: None,
+            translations: BTreeMap::new(),
         });
         assert!(
             value.validate(SUPPORTED_HOST_API).is_ok(),
@@ -2672,6 +2869,15 @@ mod tests {
             .retain(|permission| permission != "client.record_field_notes")));
         // A badge action is unreachable without the notes that show badges.
         assert!(invalid(&|m| m.record_field_notes = None));
+        // A client source names a client component artifact.
+        assert!(!invalid(&|m| {
+            m.record_field_notes.as_mut().unwrap().source =
+                FieldNotesSource::Client("client".into());
+        }));
+        assert!(invalid(&|m| {
+            m.record_field_notes.as_mut().unwrap().source =
+                FieldNotesSource::Client("server".into());
+        }));
         let parsed: Manifest = serde_json::from_value(serde_json::json!({
             "manifest_version": 1, "name": "N", "version": "1.0.0", "description": "D",
             "icons": {"48": "i.png"}, "attricat": {"id": "acme.notes", "host_api": "^1.0"},
@@ -2682,6 +2888,89 @@ mod tests {
         assert_eq!(
             parsed.record_field_notes.unwrap().source,
             FieldNotesSource::Command("describe-fields".into())
+        );
+    }
+
+    #[test]
+    fn actions_declare_conditions_confirmations_icons_operations_and_translations() {
+        let mut value = interactive_manifest();
+        value.ui[0].when = Some(ActionCondition {
+            blueprints: vec!["product".into()],
+            min_records: Some(1),
+            max_records: Some(10),
+            requires_write: true,
+            has_tags: vec!["checked".into()],
+            missing_tags: vec!["archived".into()],
+        });
+        value.ui[0].confirm = Some(ActionConfirmation {
+            message: "Generate documents for the selection?".into(),
+            destructive: false,
+        });
+        value.ui[0].icon = Some("file".into());
+        value.ui[0].translations.insert(
+            "pl".into(),
+            ContributionTranslation {
+                title: "Generuj dokumenty…".into(),
+            },
+        );
+        value.ui[0].invoke = Some(ActionInvocation::Operation(OperationInvocation {
+            id: "generate".into(),
+            input: serde_json::json!({}),
+        }));
+        assert!(
+            value.validate(SUPPORTED_HOST_API).is_ok(),
+            "{:?}",
+            value.validate(SUPPORTED_HOST_API)
+        );
+        // A dialog may be translated; it has a title.
+        value.ui[1].translations.insert(
+            "pt-BR".into(),
+            ContributionTranslation {
+                title: "Gerar".into(),
+            },
+        );
+        assert!(value.validate(SUPPORTED_HOST_API).is_ok());
+
+        let invalid = |change: &dyn Fn(&mut Manifest)| {
+            let mut manifest = value.clone();
+            change(&mut manifest);
+            manifest.validate(SUPPORTED_HOST_API).is_err()
+        };
+        assert!(invalid(
+            &|m| m.ui[0].when.as_mut().unwrap().min_records = Some(11)
+        ));
+        assert!(invalid(
+            &|m| m.ui[0].when.as_mut().unwrap().max_records = Some(51)
+        ));
+        assert!(invalid(
+            &|m| m.ui[0].confirm.as_mut().unwrap().message = " ".into()
+        ));
+        assert!(invalid(&|m| m.ui[0].icon = Some("rocket".into())));
+        assert!(invalid(&|m| {
+            m.ui[0].translations.insert(
+                "Polish".into(),
+                ContributionTranslation { title: "x".into() },
+            );
+        }));
+        assert!(invalid(&|m| {
+            m.ui[0].invoke = Some(ActionInvocation::Operation(OperationInvocation {
+                id: "missing".into(),
+                input: serde_json::json!({}),
+            }));
+        }));
+        assert!(invalid(&|m| m
+            .permissions
+            .retain(|permission| permission != "client.operations.start")));
+        // Only actions declare conditions, confirmations and icons.
+        assert!(invalid(&|m| m.ui[1].icon = Some("file".into())));
+        let parsed: ActionInvocation =
+            serde_json::from_value(serde_json::json!({"operation": {"id": "generate"}})).unwrap();
+        assert_eq!(
+            parsed,
+            ActionInvocation::Operation(OperationInvocation {
+                id: "generate".into(),
+                input: serde_json::json!({}),
+            })
         );
     }
 
@@ -2709,6 +2998,10 @@ mod tests {
             route: None,
             title: Some("Check".into()),
             invoke: Some(invoke),
+            when: None,
+            confirm: None,
+            icon: None,
+            translations: BTreeMap::new(),
         };
         // Several actions may share an outlet; each invokes one thing.
         value.ui.push(action(
@@ -2779,6 +3072,10 @@ mod tests {
             route: None,
             title: None,
             invoke: None,
+            when: None,
+            confirm: None,
+            icon: None,
+            translations: BTreeMap::new(),
         });
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
     }
@@ -2800,6 +3097,10 @@ mod tests {
                 route: None,
                 title: Some("Workbench".into()),
                 invoke: None,
+                when: None,
+                confirm: None,
+                icon: None,
+                translations: BTreeMap::new(),
             },
             UiContribution {
                 id: "workbench-nav".into(),
@@ -2810,6 +3111,10 @@ mod tests {
                 route: Some("workbench".into()),
                 title: Some("Workbench".into()),
                 invoke: None,
+                when: None,
+                confirm: None,
+                icon: None,
+                translations: BTreeMap::new(),
             },
         ];
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
@@ -2857,6 +3162,10 @@ mod tests {
             route: None,
             title: Some("Explore".into()),
             invoke: None,
+            when: None,
+            confirm: None,
+            icon: None,
+            translations: BTreeMap::new(),
         });
         value.permissions.push("client.action_dialog".into());
         value.ui.push(UiContribution {
@@ -2868,6 +3177,10 @@ mod tests {
             route: None,
             title: Some("Explore".into()),
             invoke: Some(ActionInvocation::Dialog("explorer-dialog".into())),
+            when: None,
+            confirm: None,
+            icon: None,
+            translations: BTreeMap::new(),
         });
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
         value
@@ -2900,6 +3213,10 @@ mod tests {
             route: None,
             title: None,
             invoke: None,
+            when: None,
+            confirm: None,
+            icon: None,
+            translations: BTreeMap::new(),
         });
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
         value.permissions.clear();
@@ -2944,6 +3261,10 @@ mod tests {
             route: None,
             title: Some("Refresh".into()),
             invoke: Some(ActionInvocation::Command("refresh".into())),
+            when: None,
+            confirm: None,
+            icon: None,
+            translations: BTreeMap::new(),
         });
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
         value
@@ -2978,6 +3299,10 @@ mod tests {
             route: None,
             title: Some("Row".into()),
             invoke: None,
+            when: None,
+            confirm: None,
+            icon: None,
+            translations: BTreeMap::new(),
         });
         value.ui.push(UiContribution {
             id: "explorer-action".into(),
@@ -2988,6 +3313,10 @@ mod tests {
             route: None,
             title: Some("Open".into()),
             invoke: Some(ActionInvocation::Dialog("row-dialog".into())),
+            when: None,
+            confirm: None,
+            icon: None,
+            translations: BTreeMap::new(),
         });
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
         value.ui[1].kind = UiContributionKind::Panel;

@@ -117,7 +117,7 @@ type BrokerDependencies = {
   queryClient: QueryClient;
   closeActionDialog: () => void;
   /** Lets the host track a run after the source frame unmounts. */
-  onRunStarted: (runId: string) => void;
+  onRunStarted: (runId: string, recordIds: readonly string[]) => void;
   downloadArtifact: (url: string) => void;
 };
 
@@ -234,7 +234,7 @@ const handleOperation = async (
         },
       },
     );
-    dependencies.onRunStarted(run_id);
+    dependencies.onRunStarted(run_id, selection.record_ids);
     return { run_id };
   }
   if (

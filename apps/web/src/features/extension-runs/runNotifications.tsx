@@ -26,8 +26,12 @@ const viewRunAction = (runId: string, navigate: Navigate) => (
 );
 
 /** Tracks a newly started run and tells the user where to follow it. */
-export const notifyRunStarted = (runId: string, navigate: Navigate) => {
-  useRunWatchStore.getState().watch(runId);
+export const notifyRunStarted = (
+  runId: string,
+  navigate: Navigate,
+  recordIds: readonly string[] = [],
+) => {
+  useRunWatchStore.getState().watch(runId, recordIds);
   toast.info(i18n.t('extensionRuns.started'), {
     action: viewRunAction(runId, navigate),
   });

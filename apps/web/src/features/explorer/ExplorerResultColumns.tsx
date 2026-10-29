@@ -15,6 +15,7 @@ import {
   cellValueFilter,
 } from './cellFilters';
 import { ConfiguredColumnCell } from './ConfiguredColumnCell';
+import { ExplorerCellNotes } from '../extensions/ExplorerFieldNotes';
 import {
   attricatRendererPrefix,
   explorerColumnIds,
@@ -143,13 +144,18 @@ export const buildExplorerColumnDefinitions = ({
             filter={filterFor(info.row.original)}
             onFilter={openFilter}
           >
-            <ConfiguredColumnCell
-              attribute={attribute}
-              column={column}
-              record={info.row.original}
-              extension={extension}
-              frameAllowed={usesExtensionRenderer(column) && takeCellFrame()}
-            />
+            <ExplorerCellNotes
+              attributeCode={column.field}
+              recordId={info.row.original.id}
+            >
+              <ConfiguredColumnCell
+                attribute={attribute}
+                column={column}
+                record={info.row.original}
+                extension={extension}
+                frameAllowed={usesExtensionRenderer(column) && takeCellFrame()}
+              />
+            </ExplorerCellNotes>
           </FilterableCell>
         ),
       }) as ExplorerColumnDef,

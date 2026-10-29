@@ -3,7 +3,9 @@ import { maximumWatchedExtensionRuns } from './constants';
 
 type RunWatchStore = {
   runIds: string[];
-  watch: (runId: string) => void;
+  /** Records whose host views reload when the run ends, by run ID. */
+  records: Record<string, readonly string[]>;
+  watch: (runId: string, recordIds?: readonly string[]) => void;
   unwatch: (runId: string) => void;
 };
 
@@ -13,7 +15,8 @@ type RunWatchStore = {
  */
 export const useRunWatchStore = create<RunWatchStore>((set) => ({
   runIds: [],
-  watch: (runId) =>
+  records: {},
+  watch: (runId, recordIds = []) =>
     set((state) =>
       state.runIds.includes(runId)
         ? state
@@ -21,8 +24,14 @@ export const useRunWatchStore = create<RunWatchStore>((set) => ({
             runIds: [...state.runIds, runId].slice(
               -maximumWatchedExtensionRuns,
             ),
+            records: { ...state.records, [runId]: recordIds },
           },
     ),
   unwatch: (runId) =>
-    set((state) => ({ runIds: state.runIds.filter((id) => id !== runId) })),
+    set((state) => ({
+      runIds: state.runIds.filter((id) => id !== runId),
+      records: Object.fromEntries(
+        Object.entries(state.records).filter(([id]) => id !== runId),
+      ),
+    })),
 }));

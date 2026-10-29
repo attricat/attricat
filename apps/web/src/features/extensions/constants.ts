@@ -127,6 +127,8 @@ export const extensionMessageTypes = {
   contextChanged: 'attricat:context-changed.v1',
   contextUpdate: 'attricat:context-update.v1',
   error: 'attricat:error.v1',
+  handle: 'attricat:handle.v1',
+  handled: 'attricat:handled.v1',
   init: 'attricat:init.v1',
   ready: 'attricat:ready.v1',
   request: 'attricat:request.v1',
@@ -174,6 +176,7 @@ export const extensionProtocolErrors = {
   hostRequestCancelled: 'Host request cancelled',
   hostRequestFailed: 'Host request failed',
   missingMountExport: 'Extension must export mount(root, attricat)',
+  missingHandleExport: 'Extension must export handle(request, attricat)',
   attricatResponseTooLarge: 'Attricat response is too large',
   commandPayloadTooLarge: 'Command payload is too large',
   invalidStorageKey: 'Invalid storage key',
@@ -223,6 +226,26 @@ export const extensionManagementTabIndex = {
   layout: 2,
 } as const;
 
+/** Icons the host draws for actions and badges; extensions name one. */
+export const hostIcons = [
+  'alert',
+  'calculator',
+  'check',
+  'clock',
+  'download',
+  'file',
+  'info',
+  'link',
+  'refresh',
+  'search',
+  'send',
+  'settings',
+  'sparkles',
+  'tag',
+  'wand',
+] as const;
+export type HostIcon = (typeof hostIcons)[number];
+
 /** Tones a field-note badge may take; `neutral` when an extension names none. */
 export const fieldNoteTones = [
   'neutral',
@@ -232,6 +255,8 @@ export const fieldNoteTones = [
   'error',
 ] as const;
 export type FieldNoteTone = (typeof fieldNoteTones)[number];
+/** Explorer rows whose field notes are asked for in one request. */
+export const explorerFieldNotesChunkSize = 50;
 /** How soon to ask again while a provider is still starting. */
 export const fieldNotesRetryInterval = 3_000;
 /** How many times to ask before showing what has arrived. */

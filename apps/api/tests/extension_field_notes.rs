@@ -55,7 +55,7 @@ fn archive(extension_id: &str, handler: &str) -> Vec<u8> {
             "id": "describe-fields", "handler": handler,
             "request_schema": {
                 "type": "object",
-                "required": ["record_id", "blueprint_id", "blueprint_version", "context_id"]
+                "required": ["records", "context_id", "locale"]
             },
             "response_schema": {"type": "object"}
         }]},
@@ -95,15 +95,17 @@ async fn field_notes_keep_what_belongs_to_the_record_from_each_provider(pool: sq
     let record = titled_record(&repository, blueprint, "Lamp").await;
     let (base, server) = start_server_with_object_store(pool.clone(), store).await;
 
+    let ask = |record_ids: Vec<Uuid>| {
+        authenticated_client()
+            .post(format!("{base}/records/extension-field-notes"))
+            .json(&json!({"record_ids": record_ids, "locale": "pl"}))
+            .send()
+    };
     // The first call compiles each provider's component, which may outlast
     // the host's wait; the response says so and a later call completes.
     let mut body = Value::Null;
     for _ in 0..60 {
-        let response = authenticated_client()
-            .get(format!("{base}/records/{record}/extension-field-notes"))
-            .send()
-            .await
-            .unwrap();
+        let response = ask(vec![record, Uuid::new_v4()]).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         body = response.json().await.unwrap();
         if body["incomplete"] == false {
@@ -112,16 +114,19 @@ async fn field_notes_keep_what_belongs_to_the_record_from_each_provider(pool: sq
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     }
     assert_eq!(body["incomplete"], false, "{body}");
-    // The provider breaking the contract is left out; the other answers.
-    let extensions = body["extensions"].as_array().unwrap();
+    // An unknown record is left out; the provider breaking the contract is
+    // left out of the known one, and the other answers.
+    let records = body["records"].as_object().unwrap();
+    assert_eq!(records.len(), 1, "{body}");
+    let extensions = records[&record.to_string()].as_array().unwrap();
     assert_eq!(extensions.len(), 1, "{body}");
     let notes = &extensions[0];
     assert_eq!(notes["extension_id"], "acme.notes");
     assert_eq!(
         notes["attributes"]["title"],
         json!({
-            "badge": {"label": "Checked", "tone": "success", "tooltip": "From the fixture", "action": "explain"},
-            "note": format!("Checked record {record}")
+            "badge": {"label": "Checked", "tone": "success", "icon": "check", "tooltip": "From the fixture", "action": "explain"},
+            "note": format!("Checked record {record} in pl")
         })
     );
     // A badge keeps its text but loses an action the extension never declared.
@@ -129,18 +134,26 @@ async fn field_notes_keep_what_belongs_to_the_record_from_each_provider(pool: sq
         notes["attributes"]["sku"],
         json!({"badge": {"label": "SKU", "tone": "neutral"}})
     );
-    // Notes for attributes and files the record does not have are dropped.
+    // Notes for attributes, files and actions the extension or record lacks
+    // are dropped.
     assert!(notes["attributes"].get("not_an_attribute").is_none());
     assert_eq!(notes["files"], json!({}));
+    assert_eq!(
+        notes["actions"],
+        json!({"explain": {"disabled": "Nothing to explain"}})
+    );
+    assert_eq!(body["client_sources"], json!([]));
 
-    let missing = authenticated_client()
-        .get(format!(
-            "{base}/records/{}/extension-field-notes",
-            Uuid::new_v4()
-        ))
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+    // A cacheable answer is reused while the record is unchanged: the next
+    // request is complete at once.
+    let cached: Value = ask(vec![record]).await.unwrap().json().await.unwrap();
+    assert_eq!(cached["incomplete"], false);
+    assert_eq!(
+        cached["records"][record.to_string()][0]["attributes"]["title"]["note"],
+        format!("Checked record {record} in pl")
+    );
+
+    let empty = ask(Vec::new()).await.unwrap();
+    assert_eq!(empty.status(), StatusCode::UNPROCESSABLE_ENTITY);
     server.abort();
 }

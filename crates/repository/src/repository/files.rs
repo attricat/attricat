@@ -848,15 +848,23 @@ impl AttricatRepository {
         .await?)
     }
 
-    /// The files a record's active values reference now, in any context.
-    pub async fn record_file_ids(&self, record_id: Uuid) -> Result<Vec<Uuid>, RepositoryError> {
-        Ok(sqlx::query_scalar(
-            "SELECT DISTINCT r.file_id FROM attribute_file_references r JOIN attribute_values v ON v.id = r.attribute_value_id AND v.workspace_id = r.workspace_id WHERE v.record_id = $1 AND v.workspace_id = $2 AND v.active",
+    /// The files each record's active values reference now, in any context.
+    pub async fn records_file_ids(
+        &self,
+        record_ids: &[Uuid],
+    ) -> Result<HashMap<Uuid, HashSet<Uuid>>, RepositoryError> {
+        let rows: Vec<(Uuid, Uuid)> = sqlx::query_as(
+            "SELECT DISTINCT v.record_id, r.file_id FROM attribute_file_references r JOIN attribute_values v ON v.id = r.attribute_value_id AND v.workspace_id = r.workspace_id WHERE v.record_id = ANY($1) AND v.workspace_id = $2 AND v.active",
         )
-        .bind(record_id)
+        .bind(record_ids)
         .bind(self.workspace_id.0)
         .fetch_all(&self.pool)
-        .await?)
+        .await?;
+        let mut files: HashMap<Uuid, HashSet<Uuid>> = HashMap::new();
+        for (record_id, file_id) in rows {
+            files.entry(record_id).or_default().insert(file_id);
+        }
+        Ok(files)
     }
 
     /// Reads client-safe metadata. Object keys and original filenames remain

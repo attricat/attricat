@@ -20,6 +20,7 @@ import {
   RecordInlineFields,
   type RecordInlineFieldsHandle,
 } from './RecordInlineFields';
+import { usePaletteSurface } from '../../extensions/actionPaletteStore';
 
 type Props = {
   blueprint: Awaited<ReturnType<typeof getBlueprintRevision>>;
@@ -79,6 +80,20 @@ export const RecordPreviewContent = ({
     blueprintId: blueprint.blueprint.id,
     blueprintVersion: blueprint.blueprint.version,
   };
+  const recordActionTarget = {
+    blueprintId: blueprint.blueprint.id,
+    blueprintVersion: blueprint.blueprint.version,
+    blueprintCode: blueprint.blueprint.code,
+    contextId: contextId ?? null,
+    recordIds: [recordId],
+    canWrite: form?.can_write,
+    recordTags: form ? [form.record.system_tags ?? []] : undefined,
+  };
+  usePaletteSurface('record-action', {
+    outlet: extensionOutlets.recordAction,
+    runtimeScope,
+    target: recordActionTarget,
+  });
   return (
     <>
       <FieldDiagnosticsContext value={diagnostics}>
@@ -163,12 +178,7 @@ export const RecordPreviewContent = ({
         <ExtensionActionButtons
           outlet={extensionOutlets.recordAction}
           runtimeScope={runtimeScope}
-          target={{
-            blueprintId: blueprint.blueprint.id,
-            blueprintVersion: blueprint.blueprint.version,
-            contextId: contextId ?? null,
-            recordIds: [recordId],
-          }}
+          target={recordActionTarget}
         />
       </Box>
     </>

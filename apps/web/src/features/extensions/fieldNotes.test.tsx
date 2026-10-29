@@ -43,6 +43,10 @@ const explain: ExtensionContribution = {
   title: 'Explain',
   version: 1,
   invoke: { dialog: 'explain-dialog' },
+  when: null,
+  confirm: null,
+  icon: null,
+  translations: {},
 };
 const attributes = [
   { id: 'a1', code: 'price', name: 'Price', value_type: 'number' },
@@ -51,21 +55,25 @@ const attributes = [
 ] as unknown as Attribute[];
 
 const notes = (incomplete = false) => ({
-  extensions: [
-    {
-      extension_id: 'acme.tools',
-      extension_name: 'Acme tools',
-      attributes: {
-        price: {
-          badge: { label: 'Computed', tone: 'info', action: 'explain' },
-          note: 'price = net * 1.23',
+  records: {
+    [recordId]: [
+      {
+        extension_id: 'acme.tools',
+        extension_name: 'Acme tools',
+        attributes: {
+          price: {
+            badge: { label: 'Computed', tone: 'info', action: 'explain' },
+            note: 'price = net * 1.23',
+          },
+          sku: { badge: { label: 'Checked', tone: 'success', action: 'gone' } },
         },
-        sku: { badge: { label: 'Checked', tone: 'success', action: 'gone' } },
+        files: { [fileId]: { note: 'Last document: summary' } },
+        actions: {},
       },
-      files: { [fileId]: { note: 'Last document: summary' } },
-    },
-  ],
+    ],
+  },
   incomplete,
+  client_sources: [],
 });
 
 const renderRecord = () =>
@@ -106,8 +114,9 @@ describe('field notes', () => {
     expect(screen.getByText('Computed')).toBeTruthy();
     expect(screen.getByText('Last document: summary')).toBeTruthy();
     expect(request).toHaveBeenCalledWith(
-      `/api/records/${recordId}/extension-field-notes`,
+      '/api/records/extension-field-notes',
       expect.anything(),
+      expect.objectContaining({ method: 'POST' }),
     );
     // The badge's tooltip names the extension it comes from.
     expect(

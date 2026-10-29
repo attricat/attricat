@@ -85,7 +85,7 @@ Limits are 1 GiB per output, 2 GiB per run, and 8 GiB per workspace. Outputs can
 
 ## Interactive operations
 
-Add `interactive` to an operation to let signed-in users start it for a record or a selection, from the [action dialog](/extensions/client/#action-dialog) one of your actions opens:
+Add `interactive` to an operation to let signed-in users start it for a record or a selection, from the [action dialog](/extensions/client/#action-dialog) one of your actions opens, or directly from an [operation action](/extensions/client/#actions) with fixed input:
 
 ```json
 {"id": "generate", "handler": "generate", "request_schema": {"type": "object"}, "interactive": {"version": 1, "max_selection": 50}}

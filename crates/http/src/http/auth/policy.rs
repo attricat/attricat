@@ -206,6 +206,7 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
         });
     }
     if path == "/extensions/runtime"
+        || path == "/extensions/{extension_id}/field-notes-source"
         || path == "/extensions/{extension_id}/{contribution_id}/artifact"
         || path == "/extensions/{extension_id}/{contribution_id}/storage/{release_id}"
     {
@@ -500,7 +501,10 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     if path == "/v1/records/batch" {
         return Some(write(TargetKind::RecordBatch));
     }
-    if path == "/v1/records/labels" || path == "/v1/records/publications" {
+    if path == "/v1/records/labels"
+        || path == "/v1/records/publications"
+        || path == "/records/extension-field-notes"
+    {
         return Some(read(TargetKind::RecordList));
     }
     if path == "/v1/records/search"

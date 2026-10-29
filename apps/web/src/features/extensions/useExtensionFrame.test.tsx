@@ -27,6 +27,10 @@ const contribution: ExtensionContribution = {
   title: 'Example panel',
   version: 1,
   invoke: null,
+  when: null,
+  confirm: null,
+  icon: null,
+  translations: {},
 };
 
 const Frame = ({ contribution }: { contribution: ExtensionContribution }) => {

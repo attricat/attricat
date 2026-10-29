@@ -77,7 +77,8 @@ fn manifest() -> Value {
         "ui": [
             {"id": "bulk", "version": 1, "kind": "dialog", "artifact": "client", "outlet": "action_dialog", "title": "Bulk"},
             {"id": "bulk-action", "version": 1, "kind": "action", "outlet": "explorer_bulk_action", "title": "Tag", "invoke": {"dialog": "bulk"}},
-            {"id": "check", "version": 1, "kind": "action", "outlet": "explorer_bulk_action", "title": "Probe", "invoke": {"command": "probe"}}
+            {"id": "check", "version": 1, "kind": "action", "outlet": "explorer_bulk_action", "title": "Probe", "invoke": {"command": "probe"}},
+            {"id": "probe-write", "version": 1, "kind": "action", "outlet": "explorer_bulk_action", "title": "Probe writable", "invoke": {"command": "probe"}, "when": {"requires_write": true}}
         ]
     })
 }
@@ -157,6 +158,24 @@ async fn one_unified_component_serves_commands_and_interactive_operations(pool: 
     assert_eq!(declared.json::<Value>().await.unwrap()["handler"], "probe");
     assert_eq!(
         command("other").await.unwrap().status(),
+        StatusCode::FORBIDDEN
+    );
+    // An action that requires write access runs only for writable records.
+    let probe_write = |payload: Value| {
+        authenticated_client()
+            .post(format!("{base}/extensions/{EXTENSION}/probe-write/command"))
+            .json(&json!({"release_id": release, "command_id": "probe", "payload": payload}))
+            .send()
+    };
+    assert_eq!(
+        probe_write(json!({"record_ids": [records[0]]}))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        probe_write(json!({})).await.unwrap().status(),
         StatusCode::FORBIDDEN
     );
     let response = authenticated_client()

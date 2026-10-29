@@ -80,23 +80,30 @@ Dodaj kontrybucję `navigation`, aby umieścić do niej link na pasku bocznym. A
 
 ### Notatki pól
 
-Notatki pól to odznaki i krótkie notatki, które Attricat pokazuje przy polach i plikach rekordu. Zadeklaruj polecenie serwerowe, które opisuje rekord:
+Notatki pól to odznaki i krótkie notatki, które Attricat pokazuje przy polach i plikach rekordu oraz jako odznaki w komórkach przeglądarki rekordów. Wskaż w manifeście jedno źródło: polecenie serwerowe albo procedurę kliencką.
 
 ```json
 "record_field_notes": { "version": 1, "source": { "command": "describe-fields" } }
+"record_field_notes": { "version": 1, "source": { "client": "notes-handler" } }
 ```
 
-Wymaga ono `client.record_field_notes` i `client.commands`. Gdy rekord jest wyświetlany, Attricat wywołuje polecenie raz z `{ record_id, blueprint_id, blueprint_version, context_id }` (kontekstem pokazywanym na stronie) i oczekuje:
+Oba wymagają `client.record_field_notes`; polecenie wymaga też `client.commands`. Attricat pyta polecenie o najwyżej 25 rekordów naraz, `{ records: [{ record_id, blueprint_id, blueprint_version }], context_id, locale }`, i oczekuje:
 
 ```json
 {
-  "attributes": {
-    "price_gross": {
-      "badge": { "label": "Wyliczane", "tone": "info", "tooltip": "price_net * 1.23", "action": "recalculate-field" },
-      "note": "price_gross = price_net * 1.23"
+  "records": {
+    "<id rekordu>": {
+      "attributes": {
+        "price_gross": {
+          "badge": { "label": "Wyliczane", "tone": "info", "icon": "calculator", "tooltip": "price_net * 1.23", "action": "recalculate-field" },
+          "note": "price_gross = price_net * 1.23"
+        }
+      },
+      "files": { "<id pliku>": { "note": "Ostatni dokument: szablon summary." } },
+      "actions": { "recalculate-record": { "disabled": "Formuły są nieprawidłowe" } }
     }
   },
-  "files": { "<id pliku>": { "note": "Ostatni dokument: szablon summary." } }
+  "cacheable": false
 }
 ```
 
@@ -104,11 +111,16 @@ Wymaga ono `client.record_field_notes` i `client.commands`. Gdy rekord jest wyś
 | --- | --- |
 | `badge.label` | od 1 do 24 znaków |
 | `badge.tone` | `neutral` (domyślnie), `info`, `success`, `warning`, `error` |
+| `badge.icon` | jedna z [ikon hosta](#akcje) |
 | `badge.tooltip` | do 200 znaków; podpowiedź podaje też nazwę Twojego rozszerzenia |
 | `badge.action` | Twoja akcja w miejscu `record_attribute_action`; wybranie odznaki uruchamia ją z `attribute_code` pola w kontekście |
 | `note` | do 280 znaków zwykłego tekstu |
+| `actions` | dla każdej Twojej akcji: `{ "disabled": "<powód>" }` albo `{ "hidden": true }` |
+| `cacheable` | `true` pozwala Attricat używać odpowiedzi przez godzinę, dopóki rekord i jego adnotacje się nie zmienią; w przeciwnym razie przez 30 sekund |
 
-Odznaki i notatka pola pojawiają się w jednym wierszu pod nim, a notatka pliku pod plikiem. Notatki dla atrybutów lub plików, których rekord nie ma, są pomijane, podobnie jak odpowiedź łamiąca te ograniczenia. Odpowiedź wolniejsza niż dwie sekundy jest pomijana, a Attricat wkrótce pyta ponownie, więc pierwsze wywołanie może skompilować Twój komponent bez wstrzymywania strony. Notatki odświeżają się razem z wartościami rekordu.
+Na stronie rekordu odznaki i notatka pola pojawiają się w jednym wierszu pod nim, a notatka pliku pod plikiem. W przeglądarce rekordów odznaki stoją za wartością komórki, a notatka trafia do podpowiedzi odznaki. Notatki dla rekordów, atrybutów, plików lub akcji, których rozszerzenie nie ma, są pomijane, podobnie jak odpowiedź łamiąca te ograniczenia. Odpowiedź wolniejsza niż dwie sekundy jest pomijana, a Attricat wkrótce pyta ponownie, więc pierwsze wywołanie może skompilować Twój komponent bez wstrzymywania strony.
+
+Procedura kliencka to komponent kliencki uruchamiany bez interfejsu w izolowanej ramce. Eksportuje `handle(request, attricat)`, otrzymuje `{ record_ids, context_id, locale }` i zwraca tę samą odpowiedź. Jedynym wywołaniem hosta jest `attricat.request`, które wymaga `attricat.read`.
 
 ### Przeglądarka rekordów
 
@@ -127,12 +139,28 @@ Akcja to pozycja menu lub przycisk, które Attricat rysuje sam. Deklarujesz jej 
 
 ```json
 { "id": "check", "version": 1, "kind": "action", "outlet": "record_header_action",
-  "title": "Sprawdź formuły", "invoke": { "command": "check-formulas" } }
-{ "id": "generate", "version": 1, "kind": "action", "outlet": "explorer_bulk_action",
-  "title": "Generuj dokumenty…", "invoke": { "dialog": "documents" } }
+  "title": "Check formulas", "icon": "check", "invoke": { "command": "check-formulas" },
+  "translations": { "pl": { "title": "Sprawdź formuły" } } }
+{ "id": "recalculate-now", "version": 1, "kind": "action", "outlet": "explorer_bulk_action",
+  "title": "Recalculate now", "invoke": { "operation": { "id": "recalculate", "input": { "mode": "write" } } },
+  "when": { "requires_write": true, "max_records": 50 },
+  "confirm": { "message": "Write recalculated values to the selected records?" } }
 ```
 
-`invoke.command` wywołuje jedno z Twoich [poleceń serwerowych](/pl/extensions/manifest/#serwer) i wymaga `client.commands`; akcja może wywołać tylko to polecenie. `invoke.dialog` otwiera jedną z Twoich kontrybucji `dialog` i wymaga `client.action_dialog`. W jednym miejscu osadzenia możesz dodać kilka akcji. Zakończ tytuł znakiem `…`, gdy akcja otwiera okno.
+| `invoke` | Wymaga | Działanie |
+| --- | --- | --- |
+| `{ "command": "<id>" }` | `client.commands` | Wywołuje jedno z Twoich [poleceń serwerowych](/pl/extensions/manifest/#serwer); akcja może wywołać tylko to polecenie. |
+| `{ "dialog": "<id>" }` | `client.action_dialog` | Otwiera jedną z Twoich kontrybucji `dialog`. |
+| `{ "operation": { "id", "input" } }` | `client.operations.start` | Uruchamia jedną z Twoich [operacji interaktywnych](/pl/extensions/operations/#operacje-interaktywne) dla rekordów akcji z `input` ustalonym w manifeście. Niedostępne w `explorer_action`, które nie ma rekordów. |
+
+| Pole opcjonalne | Działanie |
+| --- | --- |
+| `when` | Oferuje akcję tylko tam, gdzie ma sens: `blueprints` (kody), `min_records`, `max_records` (najwyżej 50), `has_tags`, `missing_tags`, `requires_write`. Attricat odrzuca też polecenia i uruchomienia akcji z `requires_write` dla rekordów, których użytkownik nie może zmieniać. |
+| `confirm` | `{ "message", "destructive" }`: Attricat pyta przed uruchomieniem akcji. |
+| `icon` | Jedna z `alert`, `calculator`, `check`, `clock`, `download`, `file`, `info`, `link`, `refresh`, `search`, `send`, `settings`, `sparkles`, `tag`, `wand`. |
+| `translations` | Tytuły w innych językach, np. `{ "pl": { "title": "…" } }`. Może je mieć każda kontrybucja z tytułem. |
+
+W jednym miejscu osadzenia możesz dodać kilka akcji. Zakończ tytuł znakiem `…`, gdy akcja otwiera okno. Attricat pokazuje też akcje strony w palecie poleceń (Ctrl/⌘+K). Twoje [notatki pól](#notatki-pól) mogą dla danego rekordu wyłączyć akcję z podaniem powodu albo ją ukryć.
 
 Polecenie otrzymuje, a okno dostaje jako `attricat.context`, kontekst akcji:
 
@@ -144,13 +172,24 @@ Polecenie otrzymuje, a okno dostaje jako `attricat.context`, kontekst akcji:
   "blueprint_id": "…",
   "blueprint_version": 3,
   "context_id": null,
-  "record_ids": ["…"]
+  "record_ids": ["…"],
+  "locale": "pl"
 }
 ```
 
-`record_ids` zawiera zapisane rekordy jednej wersji Schematu w kolejności wyświetlania: jeden na stronie rekordu lub w wierszu, od 1 do 50 dla zaznaczenia, żadnego dla akcji paska narzędzi. `context_id` to kontekst rozwiązywania wartości na danej powierzchni albo `null` dla domyślnego.
+`record_ids` zawiera zapisane rekordy jednej wersji Schematu w kolejności wyświetlania: jeden na stronie rekordu lub w wierszu, od 1 do 50 dla zaznaczenia, żadnego dla akcji paska narzędzi. Akcja odznaki dodaje `attribute_code`. `context_id` to kontekst rozwiązywania wartości na danej powierzchni albo `null` dla domyślnego. `locale` to język oglądającego.
 
-Polecenie może powiedzieć hostowi, co zrobić dalej. Zwróć `{ "notification": { "message": "…", "severity": "success" }, "refresh": true }`, aby pokazać powiadomienie i ponownie załadować widoki rekordów akcji. Pozostałe pola odpowiedzi są pomijane. Jeśli polecenie się nie powiedzie, host podaje, która akcja zawiodła.
+Odpowiedź polecenia może powiedzieć Attricat, co zrobić dalej; pozostałe pola są pomijane.
+
+| Pole | Działanie |
+| --- | --- |
+| `notification` | `{ "message", "severity" }` wyświetlane jako powiadomienie. |
+| `refresh` | `true` ponownie ładuje widoki rekordów akcji i wyniki przeglądarki rekordów. |
+| `navigate` | `{ "record_id" }` otwiera rekord; `{ "route" }` otwiera jedną z Twoich stron. |
+| `download` | `{ "run_id", "artifact_id" }` pobiera wynik jednego z uruchomień Twojego rozszerzenia przez użytkownika. |
+| `open_dialog` | ID jednego z Twoich okien, otwieranego z tym samym kontekstem. |
+
+Attricat pokazuje, że polecenie trwa, a jeśli się nie powiedzie, podaje, która akcja zawiodła. Akcja operacji lub okno, które uruchamia operację, dostaje powiadomienie o jej zakończeniu, a rekordy uruchomienia są ponownie ładowane.
 
 ### Okno akcji
 

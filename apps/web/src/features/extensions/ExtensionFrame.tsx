@@ -5,6 +5,7 @@ import { defaultExtensionFrameHeight } from './constants';
 import { ExtensionFrameLoading } from './ExtensionFrameLoading';
 import { frameDocument } from './frameDocument';
 import { useExtensionFrame } from './useExtensionFrame';
+import { useContributionTitle } from './contributionTitle';
 
 const emptyContext: Record<string, unknown> = {};
 
@@ -33,7 +34,7 @@ export const ExtensionFrame = ({
       onFailure,
       onReady,
     });
-  const label = contribution.title ?? contribution.id;
+  const label = useContributionTitle()(contribution);
 
   if (errorKey) return <Alert severity="warning">{t(errorKey)}</Alert>;
   return (

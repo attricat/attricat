@@ -18,6 +18,7 @@ import { publicationReadinessText } from '../records/checkViolations';
 import { useActionDialogStore } from '../extensions/actionDialogStore';
 import { ActionMenuCloseContext } from '../extensions/actions';
 import { ExtensionActionMenuItems } from '../extensions/ExtensionActions';
+import { useExplorerActionStates } from '../extensions/explorerFieldNotesContext';
 import { extensionOutlets } from '../extensions/constants';
 import { publicationStatuses } from '../records/constants';
 
@@ -62,6 +63,7 @@ export const RecordActionsMenu = ({
   unpublishing,
 }: Props) => {
   const { t } = useTranslation();
+  const actionStates = useExplorerActionStates(record.id);
   // A row action that opens the host dialog hands off to it; the dialog keeps
   // its captured selection after this menu and its frames unmount.
   const dialogKey = useActionDialogStore((state) => state.dialog?.key);
@@ -161,11 +163,13 @@ export const RecordActionsMenu = ({
             blueprintId,
             blueprintVersion: record.blueprint_version,
           }}
+          states={actionStates}
           target={{
             blueprintId,
             blueprintVersion: record.blueprint_version,
             contextId: publicationContextId ?? null,
             recordIds: [record.id],
+            recordTags: [record.system_tags],
           }}
         />
       </ActionMenuCloseContext>

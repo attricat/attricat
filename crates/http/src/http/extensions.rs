@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{collections::BTreeMap, str::FromStr};
 
 use axum::{
     Json,
@@ -24,8 +24,9 @@ use crate::{
     extension_installer::{ExtensionInstallError, ExtensionInstaller},
     extension_registry::{DiscoveredRelease, GitHubRepository},
     extensions::{
-        ActionInvocation, ExtensionPackage, MAX_EXTENSION_IDENTIFIER_BYTES, UiContributionKind,
-        UiOutlet, validate_schema,
+        ActionCondition, ActionConfirmation, ActionInvocation, ContributionTranslation,
+        ExtensionPackage, MAX_EXTENSION_IDENTIFIER_BYTES, UiContributionKind, UiOutlet,
+        validate_schema,
     },
     repository::{
         BlueprintConnectorJob, CreateExtensionOperationSchedule, ExtensionGrant,
@@ -75,6 +76,14 @@ pub(super) struct RuntimeContribution {
     /// What a host-rendered action invokes, e.g. `{"command": "check"}`.
     #[serde(skip_serializing_if = "Option::is_none")]
     invoke: Option<ActionInvocation>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    when: Option<ActionCondition>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    confirm: Option<ActionConfirmation>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    icon: Option<String>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    translations: BTreeMap<String, ContributionTranslation>,
 }
 
 #[derive(Serialize)]
@@ -842,6 +851,10 @@ pub(super) async fn runtime(
                 route: item.route,
                 title: item.title,
                 invoke: item.invoke,
+                when: item.when,
+                confirm: item.confirm,
+                icon: item.icon,
+                translations: item.translations,
             })
             .collect(),
     ))
@@ -898,6 +911,19 @@ pub(super) async fn command(
     {
         return Err(ApiError::forbidden());
     }
+    ensure_action_may_write(
+        &repository,
+        principal.0,
+        workspace.0,
+        contribution.when.as_ref(),
+        &input.payload["record_ids"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|id| id.as_str()?.parse().ok())
+            .collect::<Vec<_>>(),
+    )
+    .await?;
     if mapping_editor
         && !state
             .repository
@@ -951,6 +977,27 @@ pub(super) async fn command(
     validate_schema(&command.response_schema, &response)
         .map_err(|_| ApiError::service_unavailable("extension command returned invalid data"))?;
     Ok(Json(response))
+}
+
+/// An action whose `when.requires_write` is set runs only for records the
+/// user may change; the condition the browser checks is also enforced here.
+pub(super) async fn ensure_action_may_write(
+    repository: &crate::repository::AttricatRepository,
+    user: Uuid,
+    workspace: Uuid,
+    when: Option<&ActionCondition>,
+    record_ids: &[Uuid],
+) -> Result<(), ApiError> {
+    if !when.is_some_and(|when| when.requires_write) {
+        return Ok(());
+    }
+    let writable = repository
+        .authorized_record_ids(user, workspace, Permission::RecordsWrite, record_ids)
+        .await?;
+    if record_ids.is_empty() || record_ids.iter().any(|id| !writable.contains(id)) {
+        return Err(ApiError::forbidden());
+    }
+    Ok(())
 }
 
 pub(super) async fn storage(

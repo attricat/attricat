@@ -60,6 +60,10 @@ const contribution: ExtensionContribution = {
   title: 'Example action',
   version: 1,
   invoke: null,
+  when: null,
+  confirm: null,
+  icon: null,
+  translations: {},
 };
 
 beforeEach(() => vi.clearAllMocks());

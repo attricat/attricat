@@ -80,23 +80,30 @@ Add a `navigation` contribution to link to it from the sidebar. Workspace admini
 
 ### Field notes
 
-Field notes are badges and short notes Attricat shows beside a record's fields and files. Declare a server command that describes the record:
+Field notes are badges and short notes Attricat shows beside a record's fields and files, and as badges in Explorer cells. Name one source in the manifest: a server command, or a client handler.
 
 ```json
 "record_field_notes": { "version": 1, "source": { "command": "describe-fields" } }
+"record_field_notes": { "version": 1, "source": { "client": "notes-handler" } }
 ```
 
-It needs `client.record_field_notes` and `client.commands`. When a record is shown, Attricat calls the command once with `{ record_id, blueprint_id, blueprint_version, context_id }` (the context the page shows) and expects:
+Both need `client.record_field_notes`; a command also needs `client.commands`. Attricat asks a command with up to 25 records at a time, `{ records: [{ record_id, blueprint_id, blueprint_version }], context_id, locale }`, and expects:
 
 ```json
 {
-  "attributes": {
-    "price_gross": {
-      "badge": { "label": "Computed", "tone": "info", "tooltip": "price_net * 1.23", "action": "recalculate-field" },
-      "note": "price_gross = price_net * 1.23"
+  "records": {
+    "<record id>": {
+      "attributes": {
+        "price_gross": {
+          "badge": { "label": "Computed", "tone": "info", "icon": "calculator", "tooltip": "price_net * 1.23", "action": "recalculate-field" },
+          "note": "price_gross = price_net * 1.23"
+        }
+      },
+      "files": { "<file id>": { "note": "Last document: summary template." } },
+      "actions": { "recalculate-record": { "disabled": "Formulas are invalid" } }
     }
   },
-  "files": { "<file id>": { "note": "Last document: summary template." } }
+  "cacheable": false
 }
 ```
 
@@ -104,11 +111,16 @@ It needs `client.record_field_notes` and `client.commands`. When a record is sho
 | --- | --- |
 | `badge.label` | 1 to 24 characters |
 | `badge.tone` | `neutral` (default), `info`, `success`, `warning`, `error` |
+| `badge.icon` | one of the [host icons](#actions) |
 | `badge.tooltip` | up to 200 characters; the tooltip also names your extension |
 | `badge.action` | an action of yours at `record_attribute_action`; choosing the badge runs it with the field's `attribute_code` in its context |
 | `note` | up to 280 characters of plain text |
+| `actions` | per action of yours: `{ "disabled": "<reason>" }` or `{ "hidden": true }` |
+| `cacheable` | `true` lets Attricat reuse the answer for an hour while the record and its annotations don't change; otherwise for 30 seconds |
 
-Each field's badges and note appear in one row below it, and a file's note below the file. Notes for attributes or files the record doesn't have are dropped, as is an answer that breaks these limits. An answer slower than two seconds is left out, and Attricat asks again shortly, so the first call may compile your component without holding up the page. Notes refresh whenever the record's values do.
+On a record page each field's badges and note appear in one row below it, and a file's note below the file. In the Explorer the badges follow the cell's value and the note moves into the badge's tooltip. Notes for records, attributes, files or actions the extension doesn't have are dropped, as is an answer that breaks these limits. An answer slower than two seconds is left out, and Attricat asks again shortly, so the first call may compile your component without holding up the page.
+
+A client handler is a client component run headless in a sandboxed frame. It exports `handle(request, attricat)`, receives `{ record_ids, context_id, locale }`, and returns the same answer. Its only host call is `attricat.request`, which needs `attricat.read`.
 
 ### Explorer
 
@@ -127,12 +139,28 @@ An action is a menu item or button that Attricat draws itself. You declare its t
 
 ```json
 { "id": "check", "version": 1, "kind": "action", "outlet": "record_header_action",
-  "title": "Check formulas", "invoke": { "command": "check-formulas" } }
-{ "id": "generate", "version": 1, "kind": "action", "outlet": "explorer_bulk_action",
-  "title": "Generate documents…", "invoke": { "dialog": "documents" } }
+  "title": "Check formulas", "icon": "check", "invoke": { "command": "check-formulas" },
+  "translations": { "pl": { "title": "Sprawdź formuły" } } }
+{ "id": "recalculate-now", "version": 1, "kind": "action", "outlet": "explorer_bulk_action",
+  "title": "Recalculate now", "invoke": { "operation": { "id": "recalculate", "input": { "mode": "write" } } },
+  "when": { "requires_write": true, "max_records": 50 },
+  "confirm": { "message": "Write recalculated values to the selected records?" } }
 ```
 
-`invoke.command` calls one of your [server commands](/extensions/manifest/#server) and needs `client.commands`; the action can call only that command. `invoke.dialog` opens one of your `dialog` contributions and needs `client.action_dialog`. You may add several actions to the same outlet. End a title with `…` when the action opens a dialog.
+| `invoke` | Needs | Does |
+| --- | --- | --- |
+| `{ "command": "<id>" }` | `client.commands` | Calls one of your [server commands](/extensions/manifest/#server); the action can call only that command. |
+| `{ "dialog": "<id>" }` | `client.action_dialog` | Opens one of your `dialog` contributions. |
+| `{ "operation": { "id", "input" } }` | `client.operations.start` | Starts one of your [interactive operations](/extensions/operations/#interactive-operations) for the action's records with the `input` you fix in the manifest. Not at `explorer_action`, which has no records. |
+
+| Optional field | Does |
+| --- | --- |
+| `when` | Offers the action only where it applies: `blueprints` (codes), `min_records`, `max_records` (at most 50), `has_tags`, `missing_tags`, `requires_write`. Attricat also refuses commands and runs of a `requires_write` action for records the user can't change. |
+| `confirm` | `{ "message", "destructive" }`: Attricat asks before running the action. |
+| `icon` | One of `alert`, `calculator`, `check`, `clock`, `download`, `file`, `info`, `link`, `refresh`, `search`, `send`, `settings`, `sparkles`, `tag`, `wand`. |
+| `translations` | Titles in other languages, such as `{ "pl": { "title": "…" } }`. Any contribution with a title can have them. |
+
+You may add several actions to the same outlet. End a title with `…` when the action opens a dialog. Attricat also lists the actions a page offers in its command palette (Ctrl/⌘+K). Your [field notes](#field-notes) can disable an action with a reason, or hide it, for one record.
 
 The command receives, and the dialog gets as `attricat.context`, the action context:
 
@@ -144,13 +172,24 @@ The command receives, and the dialog gets as `attricat.context`, the action cont
   "blueprint_id": "…",
   "blueprint_version": 3,
   "context_id": null,
-  "record_ids": ["…"]
+  "record_ids": ["…"],
+  "locale": "pl"
 }
 ```
 
-`record_ids` lists the saved records of one blueprint revision in display order: one on a record page or row, 1 to 50 for a selection, none for a toolbar action. `context_id` is the surface's value-resolution context, or `null` for the default.
+`record_ids` lists the saved records of one blueprint revision in display order: one on a record page or row, 1 to 50 for a selection, none for a toolbar action. A badge's action adds `attribute_code`. `context_id` is the surface's value-resolution context, or `null` for the default. `locale` is the viewer's language.
 
-A command can tell the host what to do next. Return `{ "notification": { "message": "…", "severity": "success" }, "refresh": true }` to show a notification and reload the views of the action's records. Other fields of the response are ignored. If the command fails, the host says which action failed.
+A command's response can tell Attricat what to do next; other fields are ignored.
+
+| Field | Does |
+| --- | --- |
+| `notification` | `{ "message", "severity" }` shown as a notification. |
+| `refresh` | `true` reloads the views of the action's records and the Explorer's results. |
+| `navigate` | `{ "record_id" }` opens a record; `{ "route" }` opens one of your pages. |
+| `download` | `{ "run_id", "artifact_id" }` downloads an output of one of the user's runs of your extension. |
+| `open_dialog` | The ID of one of your dialogs, opened with the same context. |
+
+Attricat shows that a command is running and, if it fails, which action failed. An operation action, or a dialog, that starts a run gets a notification when the run ends, and the run's records are reloaded.
 
 ### Action dialog
 

@@ -15,8 +15,8 @@ use crate::{
     extension_installer::installed_artifact_key,
     extension_policy,
     extensions::{
-        ActionInvocation, Manifest, SUPPORTED_HOST_API, UiContributionKind, UiOutlet,
-        valid_contribution_key,
+        ActionCondition, ActionConfirmation, ActionInvocation, ContributionTranslation, Manifest,
+        SUPPORTED_HOST_API, UiContributionKind, UiOutlet, valid_contribution_key,
     },
 };
 
@@ -333,6 +333,10 @@ pub struct ClientExtensionContribution {
     pub title: Option<String>,
     /// What a host-rendered action invokes.
     pub invoke: Option<ActionInvocation>,
+    pub when: Option<ActionCondition>,
+    pub confirm: Option<ActionConfirmation>,
+    pub icon: Option<String>,
+    pub translations: std::collections::BTreeMap<String, ContributionTranslation>,
     pub artifact_key: Option<String>,
 }
 
@@ -634,6 +638,10 @@ impl AttricatRepository {
                     route: contribution.route,
                     title: contribution.title,
                     invoke: contribution.invoke,
+                    when: contribution.when,
+                    confirm: contribution.confirm,
+                    icon: contribution.icon,
+                    translations: contribution.translations,
                 });
             }
         }

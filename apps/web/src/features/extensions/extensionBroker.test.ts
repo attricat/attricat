@@ -40,6 +40,10 @@ const contribution: ExtensionContribution = {
   title: null,
   version: 1,
   invoke: null,
+  when: null,
+  confirm: null,
+  icon: null,
+  translations: {},
 };
 
 const dependencies = (capabilities: string[]) => ({

@@ -31,7 +31,7 @@ type UseExtensionFrameOptions = {
 };
 
 /** Downloads through a host-owned link; the frame never receives the URL. */
-const downloadArtifact = (url: string) => {
+export const downloadArtifact = (url: string) => {
   const link = document.createElement('a');
   link.href = url;
   link.rel = 'noopener';
@@ -160,7 +160,8 @@ export const useExtensionFrame = ({
                   }),
                 queryClient,
                 closeActionDialog: useActionDialogStore.getState().close,
-                onRunStarted: (runId) => notifyRunStarted(runId, navigate),
+                onRunStarted: (runId, recordIds) =>
+                  notifyRunStarted(runId, navigate, recordIds),
                 downloadArtifact,
               },
             );

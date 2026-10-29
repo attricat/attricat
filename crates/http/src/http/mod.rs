@@ -697,6 +697,10 @@ pub fn router(state: AppState) -> Router {
             "/extensions/{extension_id}/{contribution_id}/artifact",
             get(extensions::artifact),
         )
+        .route(
+            "/extensions/{extension_id}/field-notes-source",
+            get(extension_field_notes::client_source),
+        )
         .route("/auth/sample-logins", get(sessions::sample_logins))
         .route("/auth/discover", post(sessions::discover))
         .route("/auth/login", post(sessions::login))
@@ -1195,8 +1199,8 @@ pub fn router(state: AppState) -> Router {
             get(record_reads::get_resolved_preview),
         )
         .route(
-            "/records/{record_id}/extension-field-notes",
-            get(extension_field_notes::get),
+            "/records/extension-field-notes",
+            post(extension_field_notes::post),
         )
         .route(
             "/records/{record_id}/hierarchy",
