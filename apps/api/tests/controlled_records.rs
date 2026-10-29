@@ -606,6 +606,50 @@ async fn approvals_bind_to_content_and_void_on_change(pool: PgPool) {
     server.abort();
 }
 
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn approval_pages_keep_one_write_together(pool: PgPool) {
+    let (_, server, _, record) = setup(&pool).await;
+    let owner = authenticated_client();
+    let reviewer = client_for(member_with_role(&pool, reviewer_role(&pool).await).await);
+    expect_status(record.set_status(&owner, "review").await, StatusCode::OK).await;
+    expect_status(
+        record.set_status(&reviewer, "approved").await,
+        StatusCode::OK,
+    )
+    .await;
+    // 24 older copies recorded at one time, as one write across contexts
+    // records them, then 5 older still.
+    sqlx::query(
+        "INSERT INTO record_approvals (id, workspace_id, record_id, attribute_code, context_id, status, covers_all, covered_attributes, content_digest, approved_at, ended_at, end_reason) SELECT gen_random_uuid(), workspace_id, record_id, attribute_code, context_id, status, covers_all, covered_attributes, content_digest, approved_at - CASE WHEN n <= 24 THEN interval '1 hour' ELSE make_interval(hours => n) END, approved_at, 'superseded' FROM record_approvals, generate_series(1, 29) AS n",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let url = format!("{}/approvals", record.url);
+    let first: Value = get_json(&owner, &url).await;
+    let items = first["items"].as_array().unwrap();
+    // The 20th falls inside the batch, so the page runs to its end.
+    assert_eq!(items.len(), 25);
+    assert_eq!(first["has_more"], true);
+    assert_eq!(items[1]["approved_at"], items[24]["approved_at"]);
+    let last = &items[24];
+    let second: Value = owner
+        .get(&url)
+        .query(&[
+            ("before_time", last["approved_at"].as_str().unwrap()),
+            ("before_id", last["id"].as_str().unwrap()),
+        ])
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(second["items"].as_array().unwrap().len(), 5);
+    assert_eq!(second["has_more"], false);
+    server.abort();
+}
+
 const VOIDABLE: &str = r#"format_version = 1
 code = 'voidable_document'
 name = 'Voidable document'

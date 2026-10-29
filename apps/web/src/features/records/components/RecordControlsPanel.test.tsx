@@ -176,6 +176,42 @@ describe('RecordControlsPanel', () => {
     expect(within(approvals).getByText('Cause not recorded')).toBeTruthy();
   });
 
+  it('shows one decision recorded in several contexts once', async () => {
+    vi.mocked(getRecordApprovals).mockResolvedValue({
+      items: [
+        approval(
+          '00000000-0000-4000-8000-000000000002',
+          '2026-10-20T10:00:00Z',
+        ),
+        {
+          ...approval(
+            '00000000-0000-4000-8000-000000000003',
+            '2026-10-20T10:00:00Z',
+          ),
+          context_code: 'cars_pl',
+          content_digest: 'b'.repeat(64),
+        },
+      ],
+      has_more: false,
+    });
+    vi.mocked(getRecordRetentionHolds).mockResolvedValue({
+      items: [],
+      has_more: false,
+    });
+    renderPanel();
+    const approvals = await screen.findByRole('region', { name: 'Approvals' });
+    expect(within(approvals).getAllByRole('listitem')).toHaveLength(1);
+    expect(within(approvals).getByText('approved in 2 contexts')).toBeTruthy();
+    expect(
+      within(approvals).getByText('Contexts: default, cars_pl'),
+    ).toBeTruthy();
+    expect(
+      within(approvals).getByText(
+        `Content digest in cars_pl: ${'b'.repeat(64)}`,
+      ),
+    ).toBeTruthy();
+  });
+
   it('has controls only when the record has approvals or holds', async () => {
     const empty = { items: [], has_more: false };
     vi.mocked(getRecordApprovals).mockResolvedValue(empty);

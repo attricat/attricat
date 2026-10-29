@@ -109,11 +109,8 @@ pub(super) async fn approvals(
         .get_record(record_id)
         .await?
         .ok_or(ApiError::not_found("record"))?;
-    Ok(Json(Page::new(
-        repository
-            .record_approvals(record_id, before, RECORD_CONTROL_PAGE_SIZE + 1)
-            .await?,
-    )))
+    let (items, has_more) = repository.record_approval_page(record_id, before).await?;
+    Ok(Json(Page { items, has_more }))
 }
 
 pub(super) async fn record_holds(

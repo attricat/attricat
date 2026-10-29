@@ -1599,15 +1599,57 @@ impl AttricatRepository {
         before: Option<(DateTime<Utc>, Uuid)>,
         limit: i64,
     ) -> Result<Vec<RecordApproval>, RepositoryError> {
+        self.approval_rows(record_id, before, None, limit).await
+    }
+
+    /// A page of at least [`RECORD_CONTROL_PAGE_SIZE`] approvals, newest
+    /// first, and whether more follow. A page never ends inside one
+    /// `approved_at`: approvals one write recorded in several contexts share
+    /// it, and stay together.
+    pub async fn record_approval_page(
+        &self,
+        record_id: Uuid,
+        before: Option<(DateTime<Utc>, Uuid)>,
+    ) -> Result<(Vec<RecordApproval>, bool), RepositoryError> {
+        let mut items = self
+            .approval_rows(record_id, before, None, RECORD_CONTROL_PAGE_SIZE + 1)
+            .await?;
+        if items.len() <= RECORD_CONTROL_PAGE_SIZE as usize {
+            return Ok((items, false));
+        }
+        items.truncate(RECORD_CONTROL_PAGE_SIZE as usize);
+        let last = items.last().expect("a full page has a last item");
+        let cursor = (last.approved_at, last.id);
+        let rest = self
+            .approval_rows(record_id, Some(cursor), Some(cursor.0), i64::MAX)
+            .await?;
+        items.extend(rest);
+        let last = items.last().expect("a full page has a last item");
+        let has_more = !self
+            .approval_rows(record_id, Some((last.approved_at, last.id)), None, 1)
+            .await?
+            .is_empty();
+        Ok((items, has_more))
+    }
+
+    /// Approvals before `before`, newest first, recorded at `at` when given.
+    async fn approval_rows(
+        &self,
+        record_id: Uuid,
+        before: Option<(DateTime<Utc>, Uuid)>,
+        at: Option<DateTime<Utc>>,
+        limit: i64,
+    ) -> Result<Vec<RecordApproval>, RepositoryError> {
         let (time, id) = before.map_or((None, None), |(time, id)| (Some(time), Some(id)));
         Ok(sqlx::query_as::<_, RecordApprovalRow>(
-            "SELECT a.id, a.attribute_code, a.context_id, c.code AS context_code, a.status, a.covers_all, a.covered_attributes, a.content_digest, a.approved_by_user_id, COALESCE(u.display_name, u.email) AS approved_by, a.approved_at, a.ended_at, a.end_reason, a.ended_by_user_id, a.void_status, a.transition_id, t.from_status AS cause_from, t.edge_code AS cause_code, t.kind AS cause_kind, t.operation AS cause_operation, t.channel AS cause_channel, t.separation_waived AS cause_separation_waived FROM record_approvals a JOIN attribute_contexts c ON c.id = a.context_id LEFT JOIN users u ON u.id = a.approved_by_user_id LEFT JOIN record_status_transitions t ON t.id = a.transition_id AND t.workspace_id = a.workspace_id WHERE a.workspace_id = $1 AND a.record_id = $2 AND ($3::timestamptz IS NULL OR (a.approved_at, a.id) < ($3, $4::uuid)) ORDER BY a.approved_at DESC, a.id DESC LIMIT $5",
+            "SELECT a.id, a.attribute_code, a.context_id, c.code AS context_code, a.status, a.covers_all, a.covered_attributes, a.content_digest, a.approved_by_user_id, COALESCE(u.display_name, u.email) AS approved_by, a.approved_at, a.ended_at, a.end_reason, a.ended_by_user_id, a.void_status, a.transition_id, t.from_status AS cause_from, t.edge_code AS cause_code, t.kind AS cause_kind, t.operation AS cause_operation, t.channel AS cause_channel, t.separation_waived AS cause_separation_waived FROM record_approvals a JOIN attribute_contexts c ON c.id = a.context_id LEFT JOIN users u ON u.id = a.approved_by_user_id LEFT JOIN record_status_transitions t ON t.id = a.transition_id AND t.workspace_id = a.workspace_id WHERE a.workspace_id = $1 AND a.record_id = $2 AND ($3::timestamptz IS NULL OR (a.approved_at, a.id) < ($3, $4::uuid)) AND ($6::timestamptz IS NULL OR a.approved_at = $6) ORDER BY a.approved_at DESC, a.id DESC LIMIT $5",
         )
         .bind(self.workspace_id.0)
         .bind(record_id)
         .bind(time)
         .bind(id)
         .bind(limit)
+        .bind(at)
         .fetch_all(&self.pool)
         .await?
         .into_iter()

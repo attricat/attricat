@@ -8,18 +8,14 @@ import { Trans, useTranslation } from 'react-i18next';
 import { QueryErrorNotice } from '../../../components/QueryErrorNotice';
 import { UserProfileLink } from '../../../components/UserProfileLink';
 import { Timestamp } from '../../../time/Timestamp';
-import type {
-  ApprovalCause,
-  Attribute,
-  RecordApproval,
-  RetentionHold,
-} from '../api';
+import type { ApprovalCause, Attribute, RetentionHold } from '../api';
 import { attributeLabel } from '../recordDisplay';
 import {
   recordApprovalsOptions,
   recordRetentionHoldsOptions,
 } from '../queryOptions';
 import { statusLabel } from '../status';
+import { groupApprovals, type ApprovalGroup } from '../approvalGroups';
 import {
   retentionHoldSources,
   approvalEndReasons,
@@ -138,13 +134,15 @@ const ApprovalCauseText = ({
 };
 
 const ApprovalItem = ({
-  approval,
+  group: { approval, contexts },
   labels,
 }: {
-  approval: RecordApproval;
+  group: ApprovalGroup;
   labels: ControlLabels;
 }) => {
   const { t } = useTranslation();
+  const status = labels.status(approval.attribute_code, approval.status);
+  const digests = new Set(contexts.map((context) => context.digest));
   const state =
     approval.end_reason === approvalEndReasons.contentChanged
       ? t('records.recordControls.approvalVoided')
@@ -154,20 +152,32 @@ const ApprovalItem = ({
   return (
     <ControlItem
       title={
-        approval.context_code === defaultContextCode
-          ? t('records.recordControls.approvedAsInDefaultContext', {
-              status: labels.status(approval.attribute_code, approval.status),
+        contexts.length > 1
+          ? t('records.recordControls.approvedAsInContexts', {
+              status,
+              count: contexts.length,
             })
-          : t('records.recordControls.approvedAs', {
-              status: labels.status(approval.attribute_code, approval.status),
-              context: approval.context_code,
-            })
+          : approval.context_code === defaultContextCode
+            ? t('records.recordControls.approvedAsInDefaultContext', {
+                status,
+              })
+            : t('records.recordControls.approvedAs', {
+                status,
+                context: approval.context_code,
+              })
       }
       state={{
         label: state,
         color: approval.end_reason === null ? 'success' : 'default',
       }}
     >
+      {contexts.length > 1 && (
+        <Typography variant="body2" color="text.secondary">
+          {t('records.recordControls.contexts', {
+            contexts: contexts.map((context) => context.code).join(', '),
+          })}
+        </Typography>
+      )}
       <Typography variant="body2" color="text.secondary">
         <Trans
           components={{
@@ -202,15 +212,32 @@ const ApprovalItem = ({
               })}`}
           </Typography>
         )}
-      <Typography
-        variant="caption"
-        color="text.secondary"
-        sx={{ fontFamily: monoFontFamily, wordBreak: 'break-all' }}
-      >
-        {t('records.recordControls.digest', {
-          digest: approval.content_digest,
-        })}
-      </Typography>
+      {digests.size === 1 ? (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ fontFamily: monoFontFamily, wordBreak: 'break-all' }}
+        >
+          {t('records.recordControls.digest', {
+            digest: approval.content_digest,
+          })}
+        </Typography>
+      ) : (
+        contexts.map((context) => (
+          <Typography
+            key={context.id}
+            variant="caption"
+            component="p"
+            color="text.secondary"
+            sx={{ fontFamily: monoFontFamily, wordBreak: 'break-all' }}
+          >
+            {t('records.recordControls.contextDigest', {
+              context: context.code,
+              digest: context.digest,
+            })}
+          </Typography>
+        ))
+      )}
     </ControlItem>
   );
 };
@@ -301,10 +328,10 @@ export const RecordControlsPanel = ({
             {t('records.recordControls.approvals')}
           </Typography>
           <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0 }}>
-            {approvalItems.map((approval) => (
+            {groupApprovals(approvalItems).map((group) => (
               <ApprovalItem
-                key={approval.id}
-                approval={approval}
+                key={group.approval.id}
+                group={group}
                 labels={labels}
               />
             ))}
