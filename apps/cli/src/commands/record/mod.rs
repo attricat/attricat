@@ -1,4 +1,5 @@
 mod comment;
+mod rule;
 
 use std::path::PathBuf;
 
@@ -15,6 +16,7 @@ use crate::input::{
 };
 use crate::transport::{Api, segment, with_query};
 use comment::{CommentCommand, comment_command};
+use rule::{RecordRuleCommand, record_rule_command};
 
 /// Records `migrate-bulk` reads per search page.
 const MIGRATE_BULK_PAGE_SIZE: u32 = 100;
@@ -282,6 +284,11 @@ pub(crate) enum RecordCommand {
     Comment {
         #[command(subcommand)]
         command: CommentCommand,
+    },
+    /// The record's data quality rules, findings and runs.
+    Rule {
+        #[command(subcommand)]
+        command: RecordRuleCommand,
     },
     /// Show where connector exports sent a record and their state.
     ExportStatus {
@@ -632,6 +639,7 @@ pub(crate) async fn record_command(api: &Api, command: RecordCommand) -> Result<
             .await
         }
         RecordCommand::Comment { command } => comment_command(api, command).await,
+        RecordCommand::Rule { command } => record_rule_command(api, command).await,
         RecordCommand::ExportStatus { record_id } => {
             api.get(&format!("/v1/records/{}/export-status", segment(record_id)))
                 .await

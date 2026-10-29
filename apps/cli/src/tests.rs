@@ -2527,6 +2527,28 @@ async fn rule_finding_and_connector_job_commands_build_requests() {
     ] {
         assert!(Cli::try_parse_from(args).is_err());
     }
+    for (args, path, query) in [
+        (vec!["record", "rule", "list", id], "rules", None),
+        (
+            vec!["record", "rule", "findings", id, "--limit", "5"],
+            "rule-findings",
+            Some("limit=5"),
+        ),
+        (
+            vec!["record", "rule", "finding-count", id],
+            "rule-findings/count",
+            None,
+        ),
+        (
+            vec!["record", "rule", "runs", id, "--offset", "10"],
+            "rule-runs",
+            Some("offset=10"),
+        ),
+    ] {
+        let request = echo(&args).await;
+        assert_eq!(request["path"], format!("/v1/records/{id}/{path}"));
+        assert_eq!(request["query"], json!(query));
+    }
     let run = echo(&["rule", "run-get", id]).await;
     assert_eq!(run["path"], format!("/rule-runs/{id}"));
     let recheck = echo(&[

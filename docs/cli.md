@@ -118,6 +118,8 @@ acli record comment list <record-id> [--before-time <rfc3339> --before-id <id>]
 acli record comment add <record-id> --body <text>
 acli record comment count <record-id>
 acli record comment edit <record-id> <comment-id> --body <text> --revision <n>
+acli record rule list|finding-count <record-id>
+acli record rule findings|runs <record-id> [--limit <n>] [--offset <n>]
 acli record publication list <record-id>
 acli record publication publish <record-id> --context-id <context-id>
 acli record publication unpublish <record-id> --context-id <context-id>
