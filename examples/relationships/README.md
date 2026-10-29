@@ -25,9 +25,9 @@ cargo run -p acli -- blueprint publish "$PRODUCT_BLUEPRINT_ID" 1
 Create the records in the default context and retain their IDs:
 
 ```sh
-CATEGORY_ID=$(cargo run -p acli -- record create --blueprint category --values examples/relationships/category-values.toml | jq -r '.record.id')
-COLOR_ID=$(cargo run -p acli -- record create --blueprint color --values examples/relationships/color-values.toml | jq -r '.record.id')
-PRODUCT_ID=$(cargo run -p acli -- record create --blueprint product --values examples/relationships/product-values.toml | jq -r '.record.id')
+CATEGORY_ID=$(cargo run -p acli -- record create --blueprint category --values examples/relationships/category-values.toml | jq -r '.id')
+COLOR_ID=$(cargo run -p acli -- record create --blueprint color --values examples/relationships/color-values.toml | jq -r '.id')
+PRODUCT_ID=$(cargo run -p acli -- record create --blueprint product --values examples/relationships/product-values.toml | jq -r '.id')
 ```
 
 Create two child contexts and append the provided localized overrides:
