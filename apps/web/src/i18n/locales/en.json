@@ -812,7 +812,7 @@
     "recordTabs": "Record sections",
     "recordDataTab": "Data",
     "agentConversations": {
-      "title": "Conversations",
+      "title": "Agents",
       "showAll": "All conversations about this record",
       "startHint": "Ask the agent about this record. The conversation starts when you send your first message.",
       "empty": "No conversations yet",

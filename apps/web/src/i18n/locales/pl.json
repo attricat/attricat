@@ -864,7 +864,7 @@
     "recordTabs": "Sekcje rekordu",
     "recordDataTab": "Dane",
     "agentConversations": {
-      "title": "Rozmowy",
+      "title": "Agenci",
       "showAll": "Wszystkie rozmowy o tym rekordzie",
       "startHint": "Zapytaj agenta o ten rekord. Rozmowa rozpocznie się po wysłaniu pierwszej wiadomości.",
       "empty": "Brak rozmów",
