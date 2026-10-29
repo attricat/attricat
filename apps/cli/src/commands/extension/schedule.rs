@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::commands::extension::operation::{destination_reference, operation_source};
 use crate::error::CliError;
-use crate::input::json_object_input;
+use crate::input::json_input;
 use crate::transport::{Api, segment};
 
 pub(crate) const MIN_SCHEDULE_INTERVAL_SECONDS: i32 = 60;
@@ -19,7 +19,8 @@ pub(crate) enum ExtensionScheduleCommand {
         extension_id: String,
         #[arg(long)]
         operation_id: String,
-        /// JSON object or path to a JSON file.
+        /// JSON value or path to a JSON file, checked against the
+        /// operation's request schema.
         #[arg(long)]
         input: String,
         #[arg(long)]
@@ -61,7 +62,7 @@ pub(crate) async fn extension_schedule_command(
         } => {
             let body = json!({
                 "operation_id": operation_id,
-                "input": json_object_input(&input, "--input")?,
+                "input": json_input(&input, "--input")?,
                 "source_reference": operation_source(input_file_id),
                 "destination_reference": destination_reference(destination.as_deref())?,
                 "interval_seconds": interval_seconds,

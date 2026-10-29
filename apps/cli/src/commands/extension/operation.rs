@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::error::CliError;
-use crate::input::json_object_input;
+use crate::input::{json_input, json_object_input};
 use crate::transport::{Api, segment};
 
 #[derive(Subcommand)]
@@ -14,7 +14,8 @@ pub(crate) enum ExtensionOperationCommand {
         extension_id: String,
         #[arg(long)]
         operation_id: String,
-        /// JSON object or path to a JSON file.
+        /// JSON value or path to a JSON file, checked against the
+        /// operation's request schema.
         #[arg(long)]
         input: String,
         #[arg(long)]
@@ -67,7 +68,7 @@ pub(crate) async fn extension_operation_command(
         } => {
             let body = json!({
                 "operation_id": operation_id,
-                "input": json_object_input(&input, "--input")?,
+                "input": json_input(&input, "--input")?,
                 "idempotency_key": idempotency_key,
                 "source_reference": operation_source(input_file_id),
                 "destination_reference": destination_reference(destination.as_deref())?,

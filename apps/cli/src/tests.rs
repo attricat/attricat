@@ -2635,6 +2635,30 @@ async fn extension_runtime_scopes_to_a_blueprint_version() {
 }
 
 #[tokio::test]
+async fn operation_input_may_be_any_json_value() {
+    for command in ["operation", "schedule"] {
+        let mut args = vec![
+            "extension",
+            command,
+            "start",
+            "example",
+            "--operation-id",
+            "export",
+            "--input",
+            r#"["sku-1","sku-2"]"#,
+        ];
+        if command == "operation" {
+            args.extend(["--idempotency-key", "once"]);
+        } else {
+            args[2] = "create";
+            args.extend(["--interval-seconds", "3600"]);
+        }
+        let request = echo(&args).await;
+        assert_eq!(request["body"]["input"], json!(["sku-1", "sku-2"]));
+    }
+}
+
+#[tokio::test]
 async fn record_facet_commands_build_requests() {
     let fields = echo(&[
         "reusable-attribute",
