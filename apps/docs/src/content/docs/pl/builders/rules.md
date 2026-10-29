@@ -268,7 +268,9 @@ W [Eksploratorze](/pl/guides/explore/#filtry) filtr **Jakość danych** zawęża
 
 ```sh
 acli rule findings --record-id <uuid>
+acli rule finding-count --blueprint-id <uuid> --severity error
 acli rule acknowledge <finding-id>
+acli rule acknowledge-many --matching --rule-id <uuid>
 ```
 
 Karta **Historia wykonań** pokazuje wykonania i błędy. Wymienia wykonania obejmujące wszystkie rekordy, chyba że **Zakres** ustawisz na **Jeden rekord**, który pokazuje wykonania sprawdzające pojedynczy rekord, na przykład po każdej edycji, albo na **Dowolny**. **Wynik** podaje ustalenia, które wykonanie dodało i rozwiązało, a dla próbnego wykonania liczbę rekordów, które by nie przeszły. Wykonanie, które zakończy się niepowodzeniem pięć razy, staje się martwą wiadomością (dead letter); usuń przyczynę i odtwórz je poleceniem `acli rule run-replay <run-id>`.
@@ -277,4 +279,4 @@ Karta **Historia wykonań** pokazuje wykonania i błędy. Wymienia wykonania obe
 
 `rules.read` pozwala wyświetlać reguły, wykonania i ustalenia. `rules.manage` pozwala tworzyć, zmieniać, włączać, wyłączać i uruchamiać reguły oraz potwierdzać ustalenia. Oba uprawnienia są domyślnie przyznane rolom właściciela i administratora.
 
-Każdy, kto może odczytać rekord, widzi jego ustalenia: kartę **Jakość danych**, oznaczenie w nagłówku i wyróżnione pola, więc osoby poprawiające dane widzą, co poprawić. Bez `rules.read` widzą nazwę reguły, ale nie jej stronę.
+Każdy, kto może odczytać rekord, widzi jego ustalenia: kartę **Jakość danych**, oznaczenie w nagłówku i wyróżnione pola, więc osoby poprawiające dane widzą, co poprawić. Bez `rules.read` widzą nazwę reguły, ale nie jej stronę. W CLI polecenie `acli record rule list|findings|finding-count|runs <record-id>` odczytuje reguły, ustalenia i wykonania rekordu bez `rules.read`.
