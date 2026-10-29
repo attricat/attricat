@@ -20,6 +20,7 @@ import { ExtensionPopoverOutlet } from '../extensions/ExtensionOutlet';
 import {
   selectionSources,
   extensionOutlets,
+  extensionPopoverTriggers,
   supportedOutletContextVersion,
 } from '../extensions/constants';
 import { publicationStatuses } from '../records/constants';
@@ -173,6 +174,7 @@ export const RecordActionsMenu = ({
           contextId: publicationContextId ?? null,
           recordIds: [record.id],
         }}
+        trigger={extensionPopoverTriggers.menuItem}
       />
     </Menu>
   );

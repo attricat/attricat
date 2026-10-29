@@ -66,11 +66,9 @@ const renderToolbar = (
         canPublish
         canWrite
         recordId="123e4567-e89b-12d3-a456-426614174001"
-        extensionPanelOpen={false}
         onDelete={vi.fn()}
         onDuplicate={vi.fn()}
         onOpenAgent={vi.fn()}
-        onOpenExtensions={vi.fn()}
         publications={publications({
           notReadyChannels: readiness.ready ? [] : [readiness],
           publication: {
@@ -83,7 +81,7 @@ const renderToolbar = (
           publish: onPublish,
           readiness,
         })}
-        showExtensions={false}
+        loaded={false}
       />,
     ),
   );
@@ -156,13 +154,11 @@ describe('record actions menu', () => {
           canPublish={false}
           canWrite
           recordId="123e4567-e89b-12d3-a456-426614174001"
-          extensionPanelOpen={false}
           onDelete={vi.fn()}
           onDuplicate={vi.fn()}
           onOpenAgent={vi.fn()}
-          onOpenExtensions={vi.fn()}
           publications={publications({})}
-          showExtensions={false}
+          loaded={false}
           {...props}
         />
       </QueryClientProvider>,
@@ -239,7 +235,7 @@ describe('record actions menu', () => {
       canCreate: false,
       canWrite: false,
       schemaOutdated: true,
-      showExtensions: true,
+      loaded: true,
     });
     expect(
       screen.queryByRole('button', { name: 'Ask about this record' }),
@@ -250,30 +246,16 @@ describe('record actions menu', () => {
     ).toEqual(['Changes', 'Copy record ID']);
   });
 
-  it('keeps the agent beside the menu and moves extensions into it when compact', async () => {
+  it('keeps the agent beside the menu once the record has loaded', async () => {
     const onOpenAgent = vi.fn();
-    const onOpenExtensions = vi.fn();
-    renderActions({
-      compact: true,
-      onOpenAgent,
-      onOpenExtensions,
-      showExtensions: true,
-    });
+    renderActions({ loaded: true, onOpenAgent });
     await userEvent.click(
       screen.getByRole('button', { name: 'Ask about this record' }),
     );
     expect(onOpenAgent).toHaveBeenCalledOnce();
-    expect(
-      screen.queryByRole('button', { name: 'Extension contributions' }),
-    ).toBeNull();
-
     const menu = await openActions();
     expect(
       menu.queryByRole('menuitem', { name: 'Ask about this record' }),
     ).toBeNull();
-    await userEvent.click(
-      menu.getByRole('menuitem', { name: 'Extension contributions' }),
-    );
-    expect(onOpenExtensions).toHaveBeenCalledOnce();
   });
 });

@@ -1,25 +1,21 @@
-import { PanelRightIcon } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { AgentIcon } from '../../../components/systemIcons';
 import { Box, IconButton, Tooltip } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { RecordToolbar } from './RecordToolbar';
-import { RECORD_EXTENSION_DRAWER_ID } from '../constants';
-import { RecordActionsMenu, type PanelAction } from './RecordActionsMenu';
+import { RecordActionsMenu } from './RecordActionsMenu';
 import { RecordPublishControls } from './RecordPublishControls';
 import type { RecordPublications } from './useRecordPublications';
 
 type Props = {
   /** The record's blueprint, offered for creating another record. */
   blueprint?: { code: string; name: string };
-  /** Moves the extension button into the actions menu. */
-  compact?: boolean;
   recordId: string;
-  extensionPanelOpen: boolean;
-  onOpenExtensions: () => void;
   agentPanelOpen: boolean;
   onOpenAgent: () => void;
   schemaOutdated?: boolean;
-  showExtensions: boolean;
+  /** The record has loaded, so an agent can be asked about it. */
+  loaded: boolean;
   /** The caller may change this record (duplicate it or upgrade its blueprint). */
   canWrite: boolean;
   /** The caller may create records in the workspace. */
@@ -31,18 +27,17 @@ type Props = {
   onDelete: () => void;
   canPublish: boolean;
   publications: RecordPublications;
+  /** Extension header actions, offered in the actions menu. */
+  extensionActions?: ReactNode;
 };
 
 export const RecordPreviewToolbar = ({
   blueprint,
-  compact = false,
   recordId,
-  extensionPanelOpen,
-  onOpenExtensions,
   agentPanelOpen,
   onOpenAgent,
   schemaOutdated,
-  showExtensions,
+  loaded,
   canWrite,
   canCreate,
   canAskAgent,
@@ -51,32 +46,10 @@ export const RecordPreviewToolbar = ({
   onDelete,
   canPublish,
   publications,
+  extensionActions,
 }: Props) => {
   const { t } = useTranslation();
-  const agentAction: PanelAction | undefined =
-    showExtensions && canAskAgent
-      ? {
-          expanded: agentPanelOpen,
-          icon: AgentIcon,
-          label: t('records.askAboutRecord'),
-          onClick: onOpenAgent,
-        }
-      : undefined;
-  const extensionAction: PanelAction | undefined = showExtensions
-    ? {
-        controls: RECORD_EXTENSION_DRAWER_ID,
-        expanded: extensionPanelOpen,
-        icon: PanelRightIcon,
-        label: t('records.extensionContributions'),
-        onClick: onOpenExtensions,
-      }
-    : undefined;
-  // Starting a conversation stays one click away, as on the record page.
-  const menuActions = compact && extensionAction ? [extensionAction] : [];
-  const buttonActions = [
-    agentAction,
-    compact ? undefined : extensionAction,
-  ].filter((action) => action !== undefined);
+  const askLabel = t('records.askAboutRecord');
   return (
     <RecordToolbar label={t('records.recordPreview')}>
       <RecordActionsMenu
@@ -84,9 +57,9 @@ export const RecordPreviewToolbar = ({
         canCreate={canCreate}
         canDelete={canDelete}
         canWrite={canWrite}
+        extensionActions={extensionActions}
         onDelete={onDelete}
         onDuplicate={onDuplicate}
-        panelActions={menuActions}
         publications={canPublish ? publications : undefined}
         recordId={recordId}
         schemaOutdated={schemaOutdated}
@@ -96,19 +69,16 @@ export const RecordPreviewToolbar = ({
         canPublish={canPublish}
         publications={publications}
       />
-      {buttonActions.map(
-        ({ controls, expanded, icon: Icon, label, onClick }) => (
-          <Tooltip key={label} title={label}>
-            <IconButton
-              aria-controls={controls}
-              aria-expanded={expanded}
-              aria-label={label}
-              onClick={onClick}
-            >
-              <Icon />
-            </IconButton>
-          </Tooltip>
-        ),
+      {loaded && canAskAgent && (
+        <Tooltip title={askLabel}>
+          <IconButton
+            aria-expanded={agentPanelOpen}
+            aria-label={askLabel}
+            onClick={onOpenAgent}
+          >
+            <AgentIcon />
+          </IconButton>
+        </Tooltip>
       )}
     </RecordToolbar>
   );

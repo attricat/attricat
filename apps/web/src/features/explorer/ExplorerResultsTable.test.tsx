@@ -69,9 +69,15 @@ vi.mock('../extensions/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../extensions/api')>()),
   getExtensionRuntime: vi.fn().mockResolvedValue({ contributions: [] }),
 }));
-const { outletMount } = vi.hoisted(() => ({ outletMount: vi.fn() }));
+const { outletMount, popoverMount } = vi.hoisted(() => ({
+  outletMount: vi.fn(),
+  popoverMount: vi.fn(),
+}));
 vi.mock('../extensions/ExtensionOutlet', () => ({
-  ExtensionPopoverOutlet: () => null,
+  ExtensionPopoverOutlet: (props: unknown) => {
+    popoverMount(props);
+    return null;
+  },
   ExtensionOutlet: (props: unknown) => {
     outletMount(props);
     return null;
@@ -236,21 +242,24 @@ describe('ExplorerResultsTable', () => {
   });
 
   it('offers revision-scoped Explorer actions only for single-version results', () => {
-    outletMount.mockClear();
+    popoverMount.mockClear();
     renderTable([item], false, vi.fn(), undefined, true, false);
-    expect(outletMount).not.toHaveBeenCalled();
+    expect(popoverMount).not.toHaveBeenCalled();
     renderTable([item]);
-    expect(outletMount).toHaveBeenCalledWith({
+    // One toolbar button offers the Explorer's revision-wide actions.
+    expect(popoverMount).toHaveBeenCalledWith({
       outlet: 'explorer_action',
       context: {
         context_version: 1,
         blueprint_id: blueprint.blueprint.id,
         blueprint_version: blueprint.blueprint.version,
       },
+      label: 'Extension actions',
       runtimeScope: {
         blueprintId: blueprint.blueprint.id,
         blueprintVersion: blueprint.blueprint.version,
       },
+      trigger: 'toolbar',
     });
   });
 
@@ -337,7 +346,6 @@ describe('ExplorerResultsTable', () => {
   });
 
   it('selects individual and loaded rows, clears and exits selection mode', async () => {
-    outletMount.mockClear();
     const user = userEvent.setup();
     renderTable();
     await user.click(screen.getByRole('button', { name: 'Select records' }));
@@ -351,7 +359,11 @@ describe('ExplorerResultsTable', () => {
     expect((first as HTMLInputElement).checked).toBe(true);
     expect(selectAll.getAttribute('data-indeterminate')).toBe('true');
     expect(screen.getByText('1 selected')).toBeTruthy();
-    expect(outletMount).toHaveBeenCalledWith({
+    // The selection's actions menu offers its bulk actions, as a row's
+    // menu offers the row's.
+    popoverMount.mockClear();
+    await user.click(screen.getByRole('button', { name: 'Actions' }));
+    expect(popoverMount).toHaveBeenCalledWith({
       outlet: 'explorer_bulk_action',
       context: {
         context_version: 1,
@@ -359,6 +371,7 @@ describe('ExplorerResultsTable', () => {
         blueprint_version: blueprint.blueprint.version,
         record_ids: [item.id],
       },
+      label: 'More actions…',
       runtimeScope: {
         blueprintId: blueprint.blueprint.id,
         blueprintVersion: blueprint.blueprint.version,
@@ -369,7 +382,9 @@ describe('ExplorerResultsTable', () => {
         blueprintId: blueprint.blueprint.id,
         recordIds: [item.id],
       }),
+      trigger: 'menu_item',
     });
+    await user.keyboard('{Escape}');
     await user.click(selectAll);
     expect(selectAll.checked).toBe(true);
     expect(screen.getByText('2 selected')).toBeTruthy();
@@ -379,11 +394,7 @@ describe('ExplorerResultsTable', () => {
       screen.getByRole('button', { name: 'Actions' }).hasAttribute('disabled'),
     ).toBe(true);
     expect(selectAll.checked).toBe(false);
-    outletMount.mockClear();
     await user.click(screen.getByRole('button', { name: 'Exit selection' }));
-    expect(outletMount).not.toHaveBeenCalledWith(
-      expect.objectContaining({ outlet: 'explorer_bulk_action' }),
-    );
     expect(screen.queryByRole('checkbox')).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Select records' }));
     expect(screen.getByText('0 selected')).toBeTruthy();

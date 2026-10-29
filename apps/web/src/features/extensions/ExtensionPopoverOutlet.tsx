@@ -1,12 +1,24 @@
-import { IconButton, Popover, Stack, Tooltip } from '@mui/material';
-import { useState } from 'react';
+import {
+  IconButton,
+  ListItemIcon,
+  ListItemText,
+  MenuItem,
+  Popover,
+  Stack,
+  Tooltip,
+} from '@mui/material';
+import { useState, type MouseEvent } from 'react';
 import { ExtensionIcon } from '../../components/systemIcons';
 import {
   ActionSelectionContext,
   type ActionSelection,
 } from './actionSelection';
 import type { ExtensionContribution, ExtensionRuntimeScope } from './api';
-import { extensionPopoverWidth } from './constants';
+import {
+  extensionPopoverTriggers,
+  extensionPopoverWidth,
+  type ExtensionPopoverTrigger,
+} from './constants';
 import { ExtensionFrame } from './ExtensionFrame';
 import {
   contributionKey,
@@ -23,6 +35,8 @@ type ExtensionPopoverOutletProps = {
   outlet: OutletName;
   runtimeScope?: ExtensionRuntimeScope;
   selection?: ActionSelection;
+  /** A compact icon button by default; see `extensionPopoverTriggers`. */
+  trigger?: ExtensionPopoverTrigger;
 };
 
 /** Mounts contributions off-screen and reveals a trigger once any renders content. */
@@ -32,6 +46,7 @@ export const ExtensionPopoverOutlet = ({
   outlet,
   runtimeScope,
   selection,
+  trigger = extensionPopoverTriggers.icon,
 }: ExtensionPopoverOutletProps) => {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [contentHeights, setContentHeights] = useState<Record<string, number>>(
@@ -51,16 +66,32 @@ export const ExtensionPopoverOutlet = ({
     (contribution) => contentHeights[contentKey(contribution)] > 0,
   );
   if (!contributions.length) return null;
+  const open = (event: MouseEvent<HTMLElement>) =>
+    setAnchor(event.currentTarget);
+  const toolbar = trigger === extensionPopoverTriggers.toolbar;
+  const horizontal = toolbar ? 'right' : 'left';
   return (
     <ActionSelectionContext value={selection ?? null}>
-      {hasContent && (
+      {hasContent && trigger === extensionPopoverTriggers.menuItem && (
+        <MenuItem onClick={open}>
+          <ListItemIcon>
+            <ExtensionIcon size={compactIconSize} />
+          </ListItemIcon>
+          <ListItemText>{label}</ListItemText>
+        </MenuItem>
+      )}
+      {hasContent && trigger !== extensionPopoverTriggers.menuItem && (
         <Tooltip title={label}>
           <IconButton
             aria-label={label}
-            onClick={(event) => setAnchor(event.currentTarget)}
-            size="small"
+            onClick={open}
+            size={toolbar ? 'medium' : 'small'}
           >
-            <ExtensionIcon size={compactIconSize} />
+            {toolbar ? (
+              <ExtensionIcon />
+            ) : (
+              <ExtensionIcon size={compactIconSize} />
+            )}
           </IconButton>
         </Tooltip>
       )}
@@ -68,10 +99,11 @@ export const ExtensionPopoverOutlet = ({
           the extension artifact. */}
       <Popover
         anchorEl={anchor}
-        anchorOrigin={{ horizontal: 'left', vertical: 'bottom' }}
+        anchorOrigin={{ horizontal, vertical: 'bottom' }}
         keepMounted
         onClose={() => setAnchor(null)}
         open={Boolean(anchor)}
+        transformOrigin={{ horizontal, vertical: 'top' }}
       >
         <Stack
           sx={{

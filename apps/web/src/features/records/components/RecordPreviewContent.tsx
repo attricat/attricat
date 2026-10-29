@@ -213,18 +213,21 @@ export const RecordPreviewContent = ({
           </>
         )}
       </FieldDiagnosticsContext>
-      <ExtensionOutlet
-        context={{ record_id: recordId, context_id: contextId }}
-        outlet={extensionOutlets.recordAction}
-        runtimeScope={runtimeScope}
-        selection={{
-          source: selectionSources.recordPreview,
-          blueprintId: blueprint.blueprint.id,
-          blueprintVersion: blueprint.blueprint.version,
-          contextId: contextId ?? null,
-          recordIds: [recordId],
-        }}
-      />
+      {/* Set apart from the fields above; collapses without contributions. */}
+      <Box sx={{ mt: 6, '&:empty': { display: 'none' } }}>
+        <ExtensionOutlet
+          context={{ record_id: recordId, context_id: contextId }}
+          outlet={extensionOutlets.recordAction}
+          runtimeScope={runtimeScope}
+          selection={{
+            source: selectionSources.recordPreview,
+            blueprintId: blueprint.blueprint.id,
+            blueprintVersion: blueprint.blueprint.version,
+            contextId: contextId ?? null,
+            recordIds: [recordId],
+          }}
+        />
+      </Box>
     </>
   );
 };

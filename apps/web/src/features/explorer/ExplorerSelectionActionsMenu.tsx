@@ -6,21 +6,25 @@ import {
   MenuItem,
 } from '@mui/material';
 import { ChevronDownIcon } from 'lucide-react';
-import { useId, useState } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { compactIconSize } from '../../components/iconSizes';
 import { AgentIcon, SavedSearchIcon } from '../../components/systemIcons';
 import { useCan } from '../auth/useCan';
 import { capabilities } from '../auth/capabilities';
+import { useActionDialogStore } from '../extensions/actionDialogStore';
 
 type Props = {
   disabled: boolean;
+  /** Extension actions for the selection, rendered as menu items. */
+  extensionActions?: ReactNode;
   onSaveAsSearch: () => void;
   onSendToAgent: () => void;
 };
 
 export const ExplorerSelectionActionsMenu = ({
   disabled,
+  extensionActions,
   onSaveAsSearch,
   onSendToAgent,
 }: Props) => {
@@ -29,6 +33,14 @@ export const ExplorerSelectionActionsMenu = ({
   const menuId = useId();
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const close = () => setAnchor(null);
+  // An extension action that opens the host dialog hands off to it; the
+  // dialog keeps its captured selection after this menu and its frames close.
+  const dialogKey = useActionDialogStore((state) => state.dialog?.key);
+  const [openedDialogKey, setOpenedDialogKey] = useState(dialogKey);
+  if (anchor && dialogKey !== undefined && dialogKey !== openedDialogKey) {
+    setOpenedDialogKey(dialogKey);
+    setAnchor(null);
+  }
 
   return (
     <>
@@ -38,7 +50,10 @@ export const ExplorerSelectionActionsMenu = ({
         aria-haspopup="menu"
         disabled={disabled}
         endIcon={<ChevronDownIcon />}
-        onClick={(event) => setAnchor(event.currentTarget)}
+        onClick={(event) => {
+          setOpenedDialogKey(dialogKey);
+          setAnchor(event.currentTarget);
+        }}
         size="small"
         variant="contained"
       >
@@ -76,6 +91,7 @@ export const ExplorerSelectionActionsMenu = ({
           </ListItemIcon>
           <ListItemText>{t('explorer.saveSelectionAsSearch')}</ListItemText>
         </MenuItem>
+        {extensionActions}
       </Menu>
     </>
   );

@@ -8,19 +8,13 @@ import { ToastProvider } from '../../components/ToastProvider';
 import { listContexts } from '../contexts/api';
 import { RecordPreviewPage } from './RecordPreviewPage';
 
-const {
-  drawerRender,
-  agentDrawerRender,
-  outletRender,
-  popoverOutletRender,
-  navigate,
-} = vi.hoisted(() => ({
-  navigate: vi.fn(),
-  drawerRender: vi.fn(),
-  agentDrawerRender: vi.fn(),
-  outletRender: vi.fn(),
-  popoverOutletRender: vi.fn(),
-}));
+const { agentDrawerRender, outletRender, popoverOutletRender, navigate } =
+  vi.hoisted(() => ({
+    navigate: vi.fn(),
+    agentDrawerRender: vi.fn(),
+    outletRender: vi.fn(),
+    popoverOutletRender: vi.fn(),
+  }));
 
 vi.mock('@tanstack/react-router', () => ({
   createLink: <T,>(component: T) => component,
@@ -82,13 +76,6 @@ vi.mock('../record-comments/RecordCommentsPanel', () => ({
 vi.mock('./components/RecordAgentDrawer', () => ({
   RecordAgentDrawer: (props: unknown) => {
     agentDrawerRender(props);
-    return null;
-  },
-}));
-
-vi.mock('./components/RecordExtensionDrawer', () => ({
-  RecordExtensionDrawer: (props: unknown) => {
-    drawerRender(props);
     return null;
   },
 }));
@@ -376,6 +363,10 @@ describe('RecordPreviewPage', () => {
 
   it('scopes every blueprint-owned extension surface to the pinned revision', async () => {
     const api = await import('./api');
+    const { getExtensionRuntime } = await import('../extensions/api');
+    vi.mocked(getExtensionRuntime).mockResolvedValue([
+      { outlet: 'record_preview_panel', kind: 'embedded' },
+    ] as never);
     const { currentSession } = await import('../auth/api');
     vi.mocked(currentSession).mockResolvedValue({
       capabilities: { agents_run: true },
@@ -429,8 +420,24 @@ describe('RecordPreviewPage', () => {
         runtimeScope,
       }),
     );
-    expect(drawerRender).toHaveBeenCalledWith(
-      expect.objectContaining({ blueprintId, blueprintVersion: 7 }),
+    // Header actions are an item of the record's actions menu.
+    expect(popoverOutletRender).toHaveBeenCalledWith(
+      expect.objectContaining({
+        label: 'More actions…',
+        outlet: 'record_header_action',
+        runtimeScope,
+        trigger: 'menu_item',
+      }),
+    );
+    expect(outletRender).not.toHaveBeenCalledWith(
+      expect.objectContaining({ outlet: 'record_header_action' }),
+    );
+    // Record panels get their own tab, scoped to the revision.
+    await userEvent
+      .setup()
+      .click(await screen.findByRole('tab', { name: 'Extensions' }));
+    expect(outletRender).toHaveBeenCalledWith(
+      expect.objectContaining({ outlet: 'record_preview_panel', runtimeScope }),
     );
     await userEvent
       .setup()

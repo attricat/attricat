@@ -8,7 +8,6 @@ import {
   SendIcon,
   Trash2Icon,
   Undo2Icon,
-  type LucideIcon,
 } from 'lucide-react';
 import {
   Button,
@@ -18,7 +17,7 @@ import {
   Menu,
   MenuItem,
 } from '@mui/material';
-import { useId, useState } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RouterMenuItem } from '../../../components/RouterLink';
 import { useCopyToClipboard } from '../../../components/useCopyToClipboard';
@@ -28,29 +27,20 @@ import { RecordIdIcon, AuditLogIcon } from '../../../components/systemIcons';
 import { publicationStatuses } from '../constants';
 import { publicationReadinessText } from '../checkViolations';
 import type { RecordPublications } from './useRecordPublications';
-
-/** A button that opens one of the record's side panels. */
-export type PanelAction = {
-  /** The id of the panel it opens, when the panel is always mounted. */
-  controls?: string;
-  expanded: boolean;
-  icon: LucideIcon;
-  label: string;
-  onClick: () => void;
-};
+import { useActionDialogStore } from '../../extensions/actionDialogStore';
 
 /**
- * The record's Actions menu: history, copying, creating, publishing and
- * deleting.
+ * The record's Actions menu: history, copying, creating, extension actions,
+ * publishing and deleting.
  */
 export const RecordActionsMenu = ({
   blueprint,
   canCreate,
   canDelete,
   canWrite,
+  extensionActions,
   onDelete,
   onDuplicate,
-  panelActions,
   publications,
   recordId,
   schemaOutdated,
@@ -64,8 +54,8 @@ export const RecordActionsMenu = ({
   canWrite: boolean;
   onDelete: () => void;
   onDuplicate: () => void;
-  /** Panels opened from the menu rather than from the toolbar. */
-  panelActions: readonly PanelAction[];
+  /** Extension header actions, rendered as menu items. */
+  extensionActions?: ReactNode;
   /** Publishes or withdraws the record; given when the caller may publish. */
   publications?: RecordPublications;
   recordId: string;
@@ -75,6 +65,13 @@ export const RecordActionsMenu = ({
   const menuId = useId();
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const close = () => setAnchor(null);
+  // An extension action that opens the host dialog hands off to it.
+  const dialogKey = useActionDialogStore((state) => state.dialog?.key);
+  const [openedDialogKey, setOpenedDialogKey] = useState(dialogKey);
+  if (anchor && dialogKey !== undefined && dialogKey !== openedDialogKey) {
+    setOpenedDialogKey(dialogKey);
+    setAnchor(null);
+  }
   const copyText = useCopyToClipboard();
   const choose = (action: () => void) => () => {
     close();
@@ -93,7 +90,10 @@ export const RecordActionsMenu = ({
         aria-haspopup="menu"
         color="inherit"
         endIcon={<ChevronDownIcon />}
-        onClick={(event) => setAnchor(event.currentTarget)}
+        onClick={(event) => {
+          setOpenedDialogKey(dialogKey);
+          setAnchor(event.currentTarget);
+        }}
         size="small"
       >
         {t('records.recordActions')}
@@ -101,6 +101,9 @@ export const RecordActionsMenu = ({
       <Menu
         anchorEl={anchor}
         id={menuId}
+        // Extension actions load with the page, so their item is ready when
+        // the menu opens.
+        keepMounted
         onClose={close}
         open={Boolean(anchor)}
       >
@@ -156,6 +159,7 @@ export const RecordActionsMenu = ({
             <ListItemText>{t('records.upgradeBlueprint')}</ListItemText>
           </RouterMenuItem>
         )}
+        {extensionActions}
         {publications && <Divider />}
         {publications && publication && (
           <MenuItem
@@ -212,19 +216,6 @@ export const RecordActionsMenu = ({
               <ListItemText>{t('records.unpublish')}</ListItemText>
             </MenuItem>
           )}
-        {panelActions.length > 0 && <Divider />}
-        {panelActions.map(({ controls, icon: Icon, label, onClick }) => (
-          <MenuItem
-            aria-controls={controls}
-            key={label}
-            onClick={choose(onClick)}
-          >
-            <ListItemIcon>
-              <Icon size={compactIconSize} />
-            </ListItemIcon>
-            <ListItemText>{label}</ListItemText>
-          </MenuItem>
-        ))}
         {canDelete && <Divider />}
         {canDelete && (
           <MenuItem onClick={choose(onDelete)} sx={{ color: 'error.main' }}>

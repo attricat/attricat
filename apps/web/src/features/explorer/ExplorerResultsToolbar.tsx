@@ -1,5 +1,6 @@
 import { Box, Button, IconButton, Tooltip, Typography } from '@mui/material';
 import { Columns3CogIcon } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { RecordItem } from '../records/api';
 import { lexiconCountNoun } from '../lexicon/lexicon';
@@ -21,6 +22,10 @@ type Props = {
   onSendSelection: () => void;
   onToggleSelection: () => void;
   onOpenColumnPreferences: () => void;
+  /** Extension actions, shown beside the column preferences. */
+  extensionActions?: ReactNode;
+  /** Extension actions for the selection, items of its actions menu. */
+  selectionExtensionActions?: ReactNode;
 };
 
 export const ExplorerResultsToolbar = ({
@@ -36,6 +41,8 @@ export const ExplorerResultsToolbar = ({
   onSendSelection,
   onToggleSelection,
   onOpenColumnPreferences,
+  extensionActions,
+  selectionExtensionActions,
 }: Props) => {
   const { t } = useTranslation();
   const resultCount = (count: number, capped: boolean) => {
@@ -91,6 +98,7 @@ export const ExplorerResultsToolbar = ({
         {selectionMode && (
           <ExplorerSelectionActionsMenu
             disabled={selectedItems.length === 0}
+            extensionActions={selectionExtensionActions}
             onSaveAsSearch={onSaveSelectionAsSearch}
             onSendToAgent={onSendSelection}
           />
@@ -100,6 +108,7 @@ export const ExplorerResultsToolbar = ({
             selectionMode ? 'explorer.exitSelection' : 'explorer.selectRecords',
           )}
         </Button>
+        {extensionActions}
         <Tooltip title={t('explorer.columnPreferences')}>
           <IconButton
             aria-label={t('explorer.columnPreferences')}

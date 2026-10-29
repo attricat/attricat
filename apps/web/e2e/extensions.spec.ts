@@ -131,8 +131,9 @@ price_gross = "price_net * (1 + 0.23)"`,
   }).toPass({ timeout: 60_000 });
 
   await page.getByLabel(`Record actions for ${record.id}`).click();
-  await expect(page.getByLabel('Extension actions')).toBeVisible();
-  await page.getByLabel('Extension actions').click();
+  const moreActions = page.getByRole('menuitem', { name: 'More actions…' });
+  await expect(moreActions).toBeVisible();
+  await moreActions.click();
   const rowAction = page
     .frameLocator('iframe[title="recalculate-selection-row"]')
     .getByRole('button', { name: /^Recalculate formulas/ });

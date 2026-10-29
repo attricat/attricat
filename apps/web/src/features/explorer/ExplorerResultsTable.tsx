@@ -26,7 +26,10 @@ import {
 import { ExplorerSortContext } from './explorerSortContext';
 import { prefetchRecordPanel } from './prefetchRecordPanel';
 import { RecordActionsMenu } from './RecordActionsMenu';
-import { ExplorerExtensionActions } from './ExplorerExtensionActions';
+import {
+  ExplorerBulkExtensionActions,
+  ExplorerExtensionActions,
+} from './ExplorerExtensionActions';
 import {
   arrangeExplorerColumns,
   buildExplorerColumnDefinitions,
@@ -348,16 +351,21 @@ export const ExplorerResultsTable = ({
           setColumnPreferencesLoaded(true);
           setColumnPreferencesOpen(true);
         }}
+        extensionActions={
+          showExplorerActions && (
+            <ExplorerExtensionActions blueprint={blueprint.blueprint} />
+          )
+        }
+        selectionExtensionActions={
+          showExplorerActions && (
+            <ExplorerBulkExtensionActions
+              blueprint={blueprint.blueprint}
+              contextId={publicationContextId}
+              selectedItems={selection.selectedItems}
+            />
+          )
+        }
       />
-      {showExplorerActions && (
-        <ExplorerExtensionActions
-          blueprint={blueprint.blueprint}
-          contextId={publicationContextId}
-          selectedItems={
-            selection.selectionMode ? selection.selectedItems : null
-          }
-        />
-      )}
       <ExplorerSortContext value={sort}>
         <VirtualizedExplorerTable
           table={table}

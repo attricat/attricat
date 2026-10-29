@@ -8,10 +8,15 @@ import {
   createRouter,
   RouterProvider,
 } from '@tanstack/react-router';
+import { MenuList } from '@mui/material';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import type { ExtensionContribution } from './api';
+import {
+  extensionPopoverTriggers,
+  type ExtensionPopoverTrigger,
+} from './constants';
 
 const { frameMounts } = vi.hoisted(() => ({ frameMounts: vi.fn() }));
 
@@ -61,22 +66,30 @@ const contribution: ExtensionContribution = {
   version: 1,
 };
 
-const renderOutlet = () => {
+const renderOutlet = (trigger?: ExtensionPopoverTrigger) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
+  const outlet = (
+    <ExtensionPopoverOutlet
+      context={{
+        blueprint_id: '22222222-2222-4222-8222-222222222222',
+        blueprint_version: 1,
+        context_version: 1,
+        record_id: '33333333-3333-4333-8333-333333333333',
+      }}
+      label="Extension actions"
+      outlet="explorer_row_action"
+      trigger={trigger}
+    />
+  );
   return render(
     <QueryClientProvider client={queryClient}>
-      <ExtensionPopoverOutlet
-        context={{
-          blueprint_id: '22222222-2222-4222-8222-222222222222',
-          blueprint_version: 1,
-          context_version: 1,
-          record_id: '33333333-3333-4333-8333-333333333333',
-        }}
-        label="Extension actions"
-        outlet="explorer_row_action"
-      />
+      {trigger === extensionPopoverTriggers.menuItem ? (
+        <MenuList>{outlet}</MenuList>
+      ) : (
+        outlet
+      )}
     </QueryClientProvider>,
   );
 };
@@ -676,6 +689,23 @@ describe('ExtensionPopoverOutlet', () => {
     await waitFor(() => expect(frameMounts).toHaveBeenCalledOnce());
 
     await user.click(button);
+
+    expect(frameMounts).toHaveBeenCalledOnce();
+  });
+
+  it('offers its contributions as a labelled menu item inside a menu', async () => {
+    vi.mocked(getExtensionRuntime).mockResolvedValue([contribution]);
+    const user = userEvent.setup();
+
+    renderOutlet(extensionPopoverTriggers.menuItem);
+
+    const item = await screen.findByRole('menuitem', {
+      name: 'Extension actions',
+    });
+    expect(
+      screen.queryByRole('button', { name: 'Extension actions' }),
+    ).toBeNull();
+    await user.click(item);
 
     expect(frameMounts).toHaveBeenCalledOnce();
   });

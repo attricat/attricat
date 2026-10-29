@@ -213,6 +213,18 @@ export const controlCharacterRanges = {
 
 export const extensionCardMinWidth = 190;
 export const extensionPopoverWidth = 480;
+
+/** How an extension popover outlet offers its contributions. */
+export const extensionPopoverTriggers = {
+  /** A compact icon button beside the content it extends. */
+  icon: 'icon',
+  /** An item of the menu the outlet is placed in. */
+  menuItem: 'menu_item',
+  /** A full-size icon button among toolbar controls, opening to its left. */
+  toolbar: 'toolbar',
+} as const;
+export type ExtensionPopoverTrigger =
+  (typeof extensionPopoverTriggers)[keyof typeof extensionPopoverTriggers];
 export const extensionFrameSkeletonLines = [
   { height: 20, width: '45%' },
   { height: 16, width: '75%' },

@@ -11,8 +11,17 @@ import { refreshRecordTab } from './refreshRecordTab';
 const recordId = 'record-1';
 const otherRecordId = 'record-2';
 
+/** Tabs whose content the host caches; extension panels load their own. */
+type CachedTab = Exclude<
+  RecordPreviewTabKey,
+  typeof recordPreviewTabs.extensions
+>;
+const cachedTabs = Object.values(recordPreviewTabs).filter(
+  (tab): tab is CachedTab => tab !== recordPreviewTabs.extensions,
+);
+
 /** One query each tab shows, for this record and for another. */
-const tabQueries = (record: string): Record<RecordPreviewTabKey, QueryKey> => ({
+const tabQueries = (record: string): Record<CachedTab, QueryKey> => ({
   [recordPreviewTabs.data]: recordQueryKeys.resolvedPreviews(record),
   [recordPreviewTabs.dataQuality]: ruleQueryKeys.findings(record),
   [recordPreviewTabs.comments]: commentQueryKeys.record(
@@ -37,7 +46,7 @@ const invalidated = (client: QueryClient, key: QueryKey) =>
     .isInvalidated;
 
 describe('refreshRecordTab', () => {
-  it.each(Object.values(recordPreviewTabs))(
+  it.each(cachedTabs)(
     'reloads what the %s tab shows for this record only',
     async (tab) => {
       const own = tabQueries(recordId)[tab];

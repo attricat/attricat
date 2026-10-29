@@ -1420,8 +1420,9 @@ contextual actions—not an application-wide navigation tree.
 - **`navigation`** (`embedded`) remains available for a sandboxed compact
   iframe contribution, such as a button or status indicator in Attricat's side
   navigation.
-- **`record_preview_panel`** (`embedded`) appears in the record extension
-  drawer. It is appropriate for a record-specific summary, diagnostics, or a
+- **`record_preview_panel`** (`embedded`) appears in the record page's
+  **Extensions** tab, which is shown only when such a contribution exists. It
+  is appropriate for a record-specific summary, diagnostics, or a
   focused mini-workflow. Its context supplies `record_id` and optional
   `context_id`.
 - **`blueprint_attribute_configuration`** (`embedded`, requiring
@@ -1438,17 +1439,18 @@ contextual actions—not an application-wide navigation tree.
   host-owned record-page action area. Use it for a focused record action or
   status; mutations still go through declared `attricat.command` commands.
 - **`explorer_row_action`** (`action`, requiring
-  `client.explorer_row_action`) is the Explorer row overflow UI for one record.
+  `client.explorer_row_action`) opens from **More actions…** in an Explorer
+  row's actions menu, for one record.
   Its strict context is `record_id`, `blueprint_id`, `blueprint_version`, and
   `context_version: 1`; it deliberately does not include search state or record
   values. A version 2 contribution receives the
   [selection context](#selection-aware-actions-and-interactive-operations)
   instead.
 - **`record_header_action`** (`action`, requiring
-  `client.record_header_action`) mounts compact extension actions immediately
-  before the record's host-owned toolbar. Its strict v1 context is
-  `{ "context_version": 1, "record_id", "blueprint_id", "blueprint_version" }`;
-  the host shows one primary and three secondary actions before overflow.
+  `client.record_header_action`) opens from **More actions…** in the record
+  page's **Actions** menu; the item appears once a contribution renders
+  content. Its strict v1 context is
+  `{ "context_version": 1, "record_id", "blueprint_id", "blueprint_version" }`.
   Commands still need `client.commands`.
 - **`explorer_table_cell`** (`embedded`, requiring
   `client.explorer_table_cell`) mounts a sandboxed renderer for a configured
@@ -1473,17 +1475,17 @@ contextual actions—not an application-wide navigation tree.
   read-only and cannot invoke extension commands.
 
 - **`explorer_action`** (`action`, requiring `client.explorer_action`)
-  appears between the Explorer result toolbar and table when results are scoped
-  to one blueprint revision. Its strict v1 context contains only
+  opens from the **Extension actions** button in the Explorer result toolbar
+  when results are scoped to one blueprint revision; the button appears once a
+  contribution renders content. Its strict v1 context contains only
   `context_version: 1`, `blueprint_id`, and `blueprint_version`; it does not
-  expose search filters, selections, or record rows. The host shows one
-  primary and three secondary actions before overflow. Mutations still need
+  expose search filters, selections, or record rows. Mutations still need
   separately declared `client.commands`.
 
 - **`explorer_bulk_action`** (`action`, requiring
-  `client.explorer_bulk_action`) appears below the Explorer toolbar only while
-  1–50 loaded records are selected and all belong to the displayed blueprint
-  revision. Its strict v1 context contains `context_version: 1`,
+  `client.explorer_bulk_action`) opens from **More actions…** in the
+  selection's **Actions** menu only while 1–50 loaded records are selected and
+  all belong to the displayed blueprint revision. Its strict v1 context contains `context_version: 1`,
   `blueprint_id`, `blueprint_version`, and the selected `record_ids` in display
   order; it contains no row values or search filters. Closing selection mode
   unmounts the frame. Selection is a UI hint, not an authorization grant:

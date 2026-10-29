@@ -1,67 +1,82 @@
+import { useTranslation } from 'react-i18next';
 import type { BlueprintWithAttributes, RecordItem } from '../records/api';
-import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
+import { ExtensionPopoverOutlet } from '../extensions/ExtensionOutlet';
 import {
   selectionSources,
   extensionOutlets,
+  extensionPopoverTriggers,
   supportedOutletContextVersion,
 } from '../extensions/constants';
 
-type Props = {
-  blueprint: BlueprintWithAttributes['blueprint'];
-  /** The Explorer's value-resolution context, when one is selected. */
-  contextId: string | undefined;
-  selectedItems: RecordItem[] | null;
-};
+type Blueprint = BlueprintWithAttributes['blueprint'];
+
+const runtimeScope = (blueprint: Blueprint) => ({
+  blueprintId: blueprint.id,
+  blueprintVersion: blueprint.version,
+});
+
+const revisionContext = (blueprint: Blueprint) => ({
+  context_version: supportedOutletContextVersion,
+  blueprint_id: blueprint.id,
+  blueprint_version: blueprint.version,
+});
 
 /**
- * Mounts revision-scoped Explorer actions and, for a selection from the same
- * revision, selection-scoped bulk actions.
+ * Revision-scoped Explorer actions behind one toolbar button, which appears
+ * once an extension renders any.
  */
 export const ExplorerExtensionActions = ({
   blueprint,
+}: {
+  blueprint: Blueprint;
+}) => {
+  const { t } = useTranslation();
+  return (
+    <ExtensionPopoverOutlet
+      context={revisionContext(blueprint)}
+      label={t('explorer.extensionToolbarActions')}
+      outlet={extensionOutlets.explorerAction}
+      runtimeScope={runtimeScope(blueprint)}
+      trigger={extensionPopoverTriggers.toolbar}
+    />
+  );
+};
+
+/**
+ * Selection-scoped bulk actions as an item of the selection's actions menu,
+ * for a selection from the shown revision.
+ */
+export const ExplorerBulkExtensionActions = ({
+  blueprint,
   contextId,
   selectedItems,
-}: Props) => {
-  const runtimeScope = {
-    blueprintId: blueprint.id,
-    blueprintVersion: blueprint.version,
-  };
-  const revisionContext = {
-    context_version: supportedOutletContextVersion,
-    blueprint_id: blueprint.id,
-    blueprint_version: blueprint.version,
-  };
-  const bulkSelection =
-    selectedItems &&
-    selectedItems.length > 0 &&
-    selectedItems.every((item) => item.blueprint_version === blueprint.version)
-      ? selectedItems
-      : null;
-
+}: {
+  blueprint: Blueprint;
+  /** The Explorer's value-resolution context, when one is selected. */
+  contextId: string | undefined;
+  selectedItems: RecordItem[];
+}) => {
+  const { t } = useTranslation();
+  if (
+    selectedItems.length === 0 ||
+    selectedItems.some((item) => item.blueprint_version !== blueprint.version)
+  )
+    return null;
+  const recordIds = selectedItems.map((item) => item.id);
   return (
-    <>
-      <ExtensionOutlet
-        context={revisionContext}
-        outlet={extensionOutlets.explorerAction}
-        runtimeScope={runtimeScope}
-      />
-      {bulkSelection && (
-        <ExtensionOutlet
-          context={{
-            ...revisionContext,
-            record_ids: bulkSelection.map((item) => item.id),
-          }}
-          outlet={extensionOutlets.explorerBulkAction}
-          runtimeScope={runtimeScope}
-          selection={{
-            source: selectionSources.explorerSelection,
-            blueprintId: blueprint.id,
-            blueprintVersion: blueprint.version,
-            contextId: contextId ?? null,
-            recordIds: bulkSelection.map((item) => item.id),
-          }}
-        />
-      )}
-    </>
+    <ExtensionPopoverOutlet
+      context={{ ...revisionContext(blueprint), record_ids: recordIds }}
+      label={t('explorer.extensionActions')}
+      outlet={extensionOutlets.explorerBulkAction}
+      runtimeScope={runtimeScope(blueprint)}
+      selection={{
+        source: selectionSources.explorerSelection,
+        blueprintId: blueprint.id,
+        blueprintVersion: blueprint.version,
+        contextId: contextId ?? null,
+        recordIds,
+      }}
+      trigger={extensionPopoverTriggers.menuItem}
+    />
   );
 };

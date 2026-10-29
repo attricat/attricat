@@ -48,5 +48,9 @@ export const refreshRecordTab = (
       return invalidateAll(client, [recordQueryKeys.form(recordId)]);
     case recordPreviewTabs.exports:
       return invalidateAll(client, [extensionExportQueryKeys.record(recordId)]);
+    // Extension panels read through their own frames; the host caches
+    // nothing for them.
+    case recordPreviewTabs.extensions:
+      return Promise.resolve();
   }
 };

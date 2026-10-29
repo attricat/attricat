@@ -52,11 +52,11 @@ export const recordPreviewTabs = {
   recordControl: 'record-control',
   systemAnnotations: 'system-annotations',
   exports: 'exports',
+  extensions: 'extensions',
 } as const;
 export type RecordPreviewTabKey =
   (typeof recordPreviewTabs)[keyof typeof recordPreviewTabs];
 
-export const RECORD_EXTENSION_DRAWER_ID = 'record-extension-contributions';
 export const RECORD_DRAWER_WIDTH = 480;
 
 /** Separators for relationship target IDs stored in a single form field. */

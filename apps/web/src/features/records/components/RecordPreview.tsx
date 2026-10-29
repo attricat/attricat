@@ -15,6 +15,7 @@ import {
   AgentIcon,
   CommentIcon,
   ExportIcon,
+  ExtensionIcon,
   RecordControlIcon,
   RecordIcon,
   RuleIcon,
@@ -23,12 +24,16 @@ import {
 import { QueryErrorNotice } from '../../../components/QueryErrorNotice';
 import { ApiErrorAlert } from '../../../components/ApiErrorAlert';
 import { BlueprintLink } from '../../blueprints/BlueprintLink';
-import { ExtensionOutlet } from '../../extensions/ExtensionOutlet';
+import {
+  ExtensionOutlet,
+  ExtensionPopoverOutlet,
+} from '../../extensions/ExtensionOutlet';
+import { outletContributions } from '../../extensions/outletContributions';
+import { useExtensionRuntime } from '../../extensions/useExtensionRuntime';
 import { useCan, useCanOn } from '../../auth/useCan';
 import { type AttricatRecord, type Attribute } from '../api';
 import {
   attributeCardinalities,
-  FALLBACK_BLUEPRINT_VERSION,
   recordPreviewTabs,
   type RecordPreviewTabKey,
 } from '../constants';
@@ -54,7 +59,6 @@ import { DuplicateRecordDialog } from './DuplicateRecordDialog';
 import { RecordAgentDrawer } from './RecordAgentDrawer';
 import { RecordConversationsPanel } from '../../agents/RecordConversationsPanel';
 import { RecordBlueprintHeaderActions } from './RecordBlueprintHeaderActions';
-import { RecordExtensionDrawer } from './RecordExtensionDrawer';
 import { RecordHeading } from './RecordHeading';
 import type { RecordInlineFieldsHandle } from './RecordInlineFields';
 import { RecordPreviewContent } from './RecordPreviewContent';
@@ -77,6 +81,7 @@ import { capabilities, accessTargetKinds } from '../../auth/capabilities';
 import { currentBlueprintOptions } from '../queryOptions';
 import {
   extensionOutlets,
+  extensionPopoverTriggers,
   supportedOutletContextVersion,
 } from '../../extensions/constants';
 
@@ -136,7 +141,6 @@ export const RecordPreview = ({
   const { t } = useTranslation();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [duplicateOpen, setDuplicateOpen] = useState(false);
-  const [extensionPanelOpen, setExtensionPanelOpen] = useState(false);
   const [agentPanelOpen, setAgentPanelOpen] = useState(false);
   // The conversation in the agent panel, or `null` to start a new one.
   const [agentConversationId, setAgentConversationId] = useState<string | null>(
@@ -243,6 +247,23 @@ export const RecordPreview = ({
     revealField(pendingReveal.code);
   }
   const resolvedRecord = resolved.data?.record;
+  // Extension panels for the record get a tab of their own when any exist.
+  const extensionScope = resolvedRecord && {
+    blueprintId: resolvedRecord.blueprint_id,
+    blueprintVersion: resolvedRecord.blueprint_version,
+  };
+  const extensionPanelContext = {
+    record_id: recordId,
+    context_id: selectedContextId,
+  };
+  const extensionRuntime = useExtensionRuntime(extensionScope);
+  const hasExtensionPanels =
+    Boolean(extensionScope) &&
+    outletContributions(
+      extensionRuntime.data,
+      extensionOutlets.recordPreviewPanel,
+      extensionPanelContext,
+    ).length > 0;
   const systemTags = recordForm.data?.record.system_tags ?? [];
   const knownLabels = useMemo(
     () =>
@@ -272,7 +293,6 @@ export const RecordPreview = ({
   );
   const openAgent = (conversationId: string | null) => {
     setAgentConversationId(conversationId);
-    setExtensionPanelOpen(false);
     setAgentPanelOpen(true);
   };
   const client = useQueryClient();
@@ -368,34 +388,13 @@ export const RecordPreview = ({
                 </Box>
               )}
               <ApiErrorAlert error={actionError} sx={{ mt: 3 }} />
-              {blueprint.data && resolved.data && (
-                <ExtensionOutlet
-                  context={{
-                    context_version: supportedOutletContextVersion,
-                    record_id: recordId,
-                    blueprint_id: blueprint.data.blueprint.id,
-                    blueprint_version: blueprint.data.blueprint.version,
-                  }}
-                  outlet={extensionOutlets.recordHeaderAction}
-                  runtimeScope={{
-                    blueprintId: blueprint.data.blueprint.id,
-                    blueprintVersion: blueprint.data.blueprint.version,
-                  }}
-                />
-              )}
               <RecordPreviewToolbar
                 blueprint={blueprint.data?.blueprint}
-                compact={compact}
                 recordId={recordId}
-                extensionPanelOpen={extensionPanelOpen}
-                onOpenExtensions={() => {
-                  setAgentPanelOpen(false);
-                  setExtensionPanelOpen(true);
-                }}
                 agentPanelOpen={agentPanelOpen}
                 onOpenAgent={() => openAgent(null)}
                 schemaOutdated={schemaOutdated}
-                showExtensions={Boolean(loaded)}
+                loaded={Boolean(loaded)}
                 canWrite={recordForm.data?.can_write === true}
                 canCreate={canCreateRecords}
                 canAskAgent={canAskAgent}
@@ -404,6 +403,26 @@ export const RecordPreview = ({
                 onDelete={() => setDeleteOpen(true)}
                 canPublish={canPublish}
                 publications={publications}
+                extensionActions={
+                  blueprint.data &&
+                  resolved.data && (
+                    <ExtensionPopoverOutlet
+                      context={{
+                        context_version: supportedOutletContextVersion,
+                        record_id: recordId,
+                        blueprint_id: blueprint.data.blueprint.id,
+                        blueprint_version: blueprint.data.blueprint.version,
+                      }}
+                      label={t('records.extensionActions')}
+                      outlet={extensionOutlets.recordHeaderAction}
+                      runtimeScope={{
+                        blueprintId: blueprint.data.blueprint.id,
+                        blueprintVersion: blueprint.data.blueprint.version,
+                      }}
+                      trigger={extensionPopoverTriggers.menuItem}
+                    />
+                  )
+                }
               />
               {contexts.isPending && (
                 <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
@@ -573,6 +592,22 @@ export const RecordPreview = ({
                       label: t('extensionExports.recordTab'),
                       content: <RecordExportStatusPanel recordId={recordId} />,
                     },
+                    ...(hasExtensionPanels && extensionScope
+                      ? [
+                          {
+                            key: recordPreviewTabs.extensions,
+                            icon: ExtensionIcon,
+                            label: t('records.extensionsTab'),
+                            content: (
+                              <ExtensionOutlet
+                                context={extensionPanelContext}
+                                outlet={extensionOutlets.recordPreviewPanel}
+                                runtimeScope={extensionScope}
+                              />
+                            ),
+                          },
+                        ]
+                      : []),
                   ]}
                   value={tab}
                 />
@@ -629,18 +664,6 @@ export const RecordPreview = ({
               }
             : undefined
         }
-      />
-      <RecordExtensionDrawer
-        blueprintId={resolvedRecord?.blueprint_id ?? ''}
-        blueprintVersion={
-          resolvedRecord?.blueprint_version ?? FALLBACK_BLUEPRINT_VERSION
-        }
-        contextId={selectedContextId}
-        recordId={recordId}
-        offset={drawerOffset}
-        onClose={() => setExtensionPanelOpen(false)}
-        open={extensionPanelOpen}
-        showContent={Boolean(loaded)}
       />
     </>
   );
