@@ -19,6 +19,9 @@ export const conversationSchema = z.object({
   created_at: dateTime,
   updated_at: dateTime,
   archived_at: dateTime.nullable(),
+  /** Who has the agent apply this record's edits without asking. */
+  auto_approve_user_id: id.nullable().default(null),
+  auto_approve_enabled_at: dateTime.nullable().default(null),
 });
 export const conversationDetailSchema = conversationSchema.extend({
   read_only: z.boolean(),

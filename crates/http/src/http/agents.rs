@@ -53,6 +53,11 @@ pub(super) struct SendMessage {
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+pub(super) struct SetAutoApproval {
+    enabled: bool,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(super) struct UpdateConversation {
     title: String,
 }
@@ -365,6 +370,41 @@ pub(super) async fn update_conversation(
     Ok(Json(
         repository
             .update_conversation_title(conversation_id, &input.title)
+            .await?,
+    ))
+}
+
+/// Switches a record conversation's auto-approval on for the caller, who
+/// must be able to edit the record, or off. Any reader may switch it off.
+pub(super) async fn set_auto_approval(
+    AuthenticatedPrincipal(user, _): AuthenticatedPrincipal,
+    ActiveWorkspace(workspace): ActiveWorkspace,
+    ScopedRepository(repository): ScopedRepository,
+    ApiPath(conversation_id): ApiPath<Uuid>,
+    ApiJson(input): ApiJson<SetAutoApproval>,
+) -> Result<Json<crate::repository::Conversation>, ApiError> {
+    let conversation = readable_conversation(&repository, user, workspace, conversation_id).await?;
+    let Some(record_id) = conversation.record_id else {
+        return Err(ApiError::invalid_input(
+            "auto-approval needs a conversation about a record".into(),
+        ));
+    };
+    if input.enabled
+        && !repository
+            .principal_may(
+                request_actor(&repository, user),
+                workspace,
+                Permission::RecordsWrite,
+                Some(record_id),
+                None,
+            )
+            .await?
+    {
+        return Err(ApiError::forbidden());
+    }
+    Ok(Json(
+        repository
+            .set_conversation_auto_approval(conversation_id, input.enabled.then_some(user))
             .await?,
     ))
 }

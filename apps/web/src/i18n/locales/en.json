@@ -273,6 +273,12 @@
     "newPassword": "New password"
   },
   "agents": {
+    "autoApproval": {
+      "about": "About auto-approval",
+      "label": "Auto-approve changes to this record",
+      "hint": "For messages you send, the agent applies its edits to this record's fields, relationships, tags, files and comments without asking. Deleting, publishing and changes to other records still ask.",
+      "heldByOther": "On for someone else's messages. Switch it on to use it for yours instead."
+    },
     "conversation": "Conversation",
     "conversations": "Conversations",
     "agentConversation": "Agent conversation",

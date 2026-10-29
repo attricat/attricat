@@ -1027,6 +1027,19 @@ record's editable scalar fields in the conversation's context and appends them
 as a draft proposal message that the user applies to the form and saves. The
 record page's agent panel sends them while the user can edit the record;
 `POST /agent/smart-fill` still makes one-shot proposals, such as for the CLI.
+`PUT /agent/conversations/{id}/auto-approval` with `{"enabled": true}`
+switches a record conversation's auto-approval on for the caller, who needs
+`records.write` on the record; any reader may switch it off with `false`. While
+it is on, runs that person starts apply their changes to the conversation's
+record without asking: `set_record_values`, `remove_record_values`,
+`restore_record_value`, `replace_record_relationships`,
+`remove_record_relationships`, `update_record_annotations`, `link_file` and
+`add_record_comment` naming that record. Every other mutation, and every run
+someone else starts, still asks. Auto-approved changes are executed like
+approved ones, after re-checking the person's permissions, and audited as
+approved by them with `auto_approved: true` in the event metadata; switching it
+on or off is audited too. The conversation reports `auto_approve_user_id` and
+`auto_approve_enabled_at`.
 See [Agent provider attachment forwarding](configuration.md#attachment-forwarding)
 for tool-requested file behavior and provider-retention implications. Record
 file uploads remain available through their file-attribute endpoint. A message

@@ -102,6 +102,8 @@ describe('agent API client', () => {
       created_at: '2026-09-28T00:00:00Z',
       updated_at: '2026-09-28T00:00:00Z',
       archived_at: null,
+      auto_approve_user_id: null,
+      auto_approve_enabled_at: null,
     };
     fetchMock.mockResolvedValue({
       ok: true,

@@ -46,6 +46,13 @@ export const updateConversationTitle = (id: string, title: string) =>
     conversationSchema,
     jsonRequest('PATCH', { title }),
   );
+/** Switches auto-approval of a record conversation on for the caller, or off. */
+export const setConversationAutoApproval = (id: string, enabled: boolean) =>
+  request(
+    `/api/agent/conversations/${uuidSegment(id)}/auto-approval`,
+    conversationSchema,
+    jsonRequest('PUT', { enabled }),
+  );
 export const createConversation = (
   title = '',
   record?: { record_id: string; context_id?: string | null },

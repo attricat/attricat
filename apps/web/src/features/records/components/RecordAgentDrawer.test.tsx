@@ -9,18 +9,36 @@ import {
   createConversation,
   getConversation,
   sendMessage,
+  setConversationAutoApproval,
 } from '../../agents/api';
+import type { DraftContext } from '../../agents/ConversationPanel';
 import { RecordAgentDrawer } from './RecordAgentDrawer';
 
 vi.mock('../../agents/api', () => ({
   createConversation: vi.fn(),
   getConversation: vi.fn(),
   sendMessage: vi.fn(),
+  setConversationAutoApproval: vi.fn(),
+}));
+vi.mock('../../auth/api', () => ({
+  currentSession: async () => ({
+    user_id: '123e4567-e89b-12d3-a456-426614174010',
+    workspace_id: '123e4567-e89b-12d3-a456-426614174011',
+  }),
 }));
 vi.mock('../../agents/ConversationPanel', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../agents/ConversationPanel')>()),
-  ConversationPanel: ({ conversationId }: { conversationId: string }) => (
-    <p>Transcript of {conversationId}</p>
+  ConversationPanel: ({
+    conversationId,
+    settings,
+  }: {
+    conversationId: string;
+    settings?: React.ReactNode;
+  }) => (
+    <>
+      <p>Transcript of {conversationId}</p>
+      {settings}
+    </>
   ),
 }));
 
@@ -28,12 +46,21 @@ const recordId = '123e4567-e89b-12d3-a456-426614174000';
 const contextId = '123e4567-e89b-12d3-a456-426614174001';
 const conversationId = '123e4567-e89b-12d3-a456-426614174002';
 
-const Drawer = ({ onShowAll }: { onShowAll?: () => void }) => {
-  const [conversation, setConversation] = useState<string | null>(null);
+const Drawer = ({
+  draft,
+  initialConversation = null,
+  onShowAll,
+}: {
+  draft?: DraftContext;
+  initialConversation?: string | null;
+  onShowAll?: () => void;
+}) => {
+  const [conversation, setConversation] = useState(initialConversation);
   return (
     <RecordAgentDrawer
       contextId={contextId}
       conversationId={conversation}
+      draft={draft}
       onClose={vi.fn()}
       onConversationChange={setConversation}
       onShowAll={onShowAll}
@@ -43,7 +70,10 @@ const Drawer = ({ onShowAll }: { onShowAll?: () => void }) => {
   );
 };
 
-const renderDrawer = (onShowAll?: () => void) =>
+const renderDrawer = (
+  onShowAll?: () => void,
+  options: { draft?: DraftContext; initialConversation?: string } = {},
+) =>
   render(
     <QueryClientProvider
       client={
@@ -55,7 +85,7 @@ const renderDrawer = (onShowAll?: () => void) =>
         })
       }
     >
-      <Drawer onShowAll={onShowAll} />
+      <Drawer onShowAll={onShowAll} {...options} />
     </QueryClientProvider>,
   );
 
@@ -64,6 +94,106 @@ describe('RecordAgentDrawer', () => {
     vi.mocked(createConversation).mockReset();
     vi.mocked(getConversation).mockReset();
     vi.mocked(sendMessage).mockReset();
+    vi.mocked(setConversationAutoApproval).mockReset();
+  });
+
+  const draft: DraftContext = {
+    recordId,
+    contextId,
+    defaultContextId: contextId,
+    getDraftValues: () => ({ title: 'Trail shoe' }),
+    onApply: vi.fn(),
+  };
+
+  it('switches auto-approval on for a new conversation before its first message', async () => {
+    vi.mocked(createConversation).mockResolvedValue({
+      id: conversationId,
+      title: 'Set the price',
+    } as never);
+    vi.mocked(setConversationAutoApproval).mockResolvedValue({} as never);
+    vi.mocked(sendMessage).mockResolvedValue({
+      id: '123e4567-e89b-12d3-a456-426614174003',
+      status: 'queued',
+    });
+    vi.mocked(getConversation).mockResolvedValue({
+      id: conversationId,
+      title: 'Set the price',
+      record_id: recordId,
+      context_id: contextId,
+      auto_approve_user_id: '123e4567-e89b-12d3-a456-426614174010',
+    } as never);
+    const user = userEvent.setup();
+    renderDrawer(undefined, { draft });
+
+    await user.click(
+      screen.getByRole('switch', {
+        name: 'Auto-approve changes to this record',
+      }),
+    );
+    await user.type(
+      screen.getByRole('textbox', { name: 'Message' }),
+      'Set the price{Enter}',
+    );
+
+    await waitFor(() =>
+      expect(sendMessage).toHaveBeenCalledWith(
+        conversationId,
+        'Set the price',
+        [],
+        {
+          title: 'Trail shoe',
+        },
+      ),
+    );
+    expect(setConversationAutoApproval).toHaveBeenCalledWith(
+      conversationId,
+      true,
+    );
+    expect(
+      vi.mocked(setConversationAutoApproval).mock.invocationCallOrder[0],
+    ).toBeLessThan(vi.mocked(sendMessage).mock.invocationCallOrder[0]);
+  });
+
+  it('says when auto-approval is on for someone else and takes it over', async () => {
+    vi.mocked(getConversation).mockResolvedValue({
+      id: conversationId,
+      title: 'Prices',
+      record_id: recordId,
+      context_id: contextId,
+      auto_approve_user_id: '123e4567-e89b-12d3-a456-426614174099',
+    } as never);
+    vi.mocked(setConversationAutoApproval).mockResolvedValue({} as never);
+    const user = userEvent.setup();
+    renderDrawer(undefined, { draft, initialConversation: conversationId });
+
+    await user.hover(
+      await screen.findByRole('button', { name: 'About auto-approval' }),
+    );
+    expect(
+      await screen.findByText(/On for someone else's messages/),
+    ).toBeTruthy();
+    const toggle = screen.getByRole('switch', {
+      name: 'Auto-approve changes to this record',
+    });
+    expect((toggle as HTMLInputElement).checked).toBe(false);
+    await waitFor(() =>
+      expect((toggle as HTMLInputElement).disabled).toBe(false),
+    );
+    await user.click(toggle);
+    expect(setConversationAutoApproval).toHaveBeenCalledWith(
+      conversationId,
+      true,
+    );
+  });
+
+  it('offers no auto-approval to someone who cannot edit the record', async () => {
+    renderDrawer();
+    await screen.findByRole('textbox', { name: 'Message' });
+    expect(
+      screen.queryByRole('switch', {
+        name: 'Auto-approve changes to this record',
+      }),
+    ).toBeNull();
   });
 
   it('opens on a focused message box and creates the conversation on send', async () => {

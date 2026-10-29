@@ -76,6 +76,45 @@ const SYSTEM_PROMPT_SECTIONS: [&str; 7] = [
 /// out of the request.
 const READ_ONLY_PROMPT: &str = "This deployment is a read-only demo: you have no tools that change the catalogue, and no approval can be requested. When the user asks for a change, inspect what it would affect and explain the change you would propose and which approval it would need, then tell them they can make it themselves in the app. Do not claim or imply that you changed anything.";
 
+/// Changes to a conversation's record that its auto-approval applies without
+/// asking: values, relationships, tags and metadata, files and comments.
+/// Deleting, publishing and schema upgrades still ask, as does anything
+/// that creates or changes another record.
+const AUTO_APPROVABLE_TOOLS: [&str; 8] = [
+    "set_record_values",
+    "remove_record_values",
+    "restore_record_value",
+    "replace_record_relationships",
+    "remove_record_relationships",
+    "update_record_annotations",
+    "link_file",
+    "add_record_comment",
+];
+
+/// Appended when the conversation applies its record's edits without asking
+/// for the user who started this run.
+const AUTO_APPROVAL_PROMPT: &str = "Auto-approval is on for this conversation: once you propose them, changes to this record's field values, relationships, tags and metadata, files and comments are applied without asking the user. So save requested field changes with set_record_values rather than propose_record_form_values, unless the user asks for a draft. Make only the changes the user asked for, and say what you changed. Deleting, publishing or upgrading the record, and changes to other records, still need approval.";
+
+/// Whether the conversation's auto-approval applies `name` with
+/// `arguments` in a run started by `actor`: the switch must be theirs and
+/// the change must stay within the conversation's record.
+fn auto_approves(
+    conversation: &crate::repository::Conversation,
+    actor: Uuid,
+    name: &str,
+    arguments: &Value,
+) -> bool {
+    conversation.auto_approve_user_id == Some(actor)
+        && AUTO_APPROVABLE_TOOLS.contains(&name)
+        && conversation.record_id.is_some_and(|record_id| {
+            arguments
+                .get("record_id")
+                .and_then(Value::as_str)
+                .and_then(|id| id.parse::<Uuid>().ok())
+                == Some(record_id)
+        })
+}
+
 /// Appended for a run started beside a record's editable form.
 const RECORD_FORM_PROMPT: &str = "The user is editing this record in a form beside this conversation. To change its editable scalar fields, call propose_record_form_values with only the fields that should change and a short explanation, instead of proposing set_record_values: the values fill the form as a draft that the user reviews, applies and saves themselves, so never claim they were saved. Use the record form below for field codes, value types, saved values and the user's unsaved draft values. Never invent facts. Relationships, files, comments, tags and other changes still use their own tools.";
 
@@ -352,6 +391,20 @@ async fn drive(
     let form_prompt = form
         .map(|form| format!(" {RECORD_FORM_PROMPT} Record form: {}", form.describe()))
         .unwrap_or_default();
+    let (actor, workspace) = match memo.initiator {
+        Some(initiator) => initiator,
+        None => *memo
+            .initiator
+            .insert(repository.agent_run_initiator(run_id).await?),
+    };
+    let auto_approval_prompt = if conversation.record_id.is_some()
+        && conversation.auto_approve_user_id == Some(actor)
+        && !provider.read_only()
+    {
+        format!(" {AUTO_APPROVAL_PROMPT}")
+    } else {
+        String::new()
+    };
     let context_prompt = match conversation.record_id {
         Some(record_id) => format!(
             " This conversation is anchored to record {record_id} in attribute context {:?}. Before answering questions about what its preview shows, call get_record_context_preview with this record and context ID to see resolved inherited values (or get_record when no context is selected). Ground all responses in this record and its selected context, and do not assume values from another context apply here. For edits, always confirm before persisting changes.",
@@ -370,7 +423,7 @@ async fn drive(
     let mut request = vec![ChatMessage {
         role: "system".into(),
         content: Value::String(format!(
-            "{}{context_prompt}{form_prompt}{}{catalog_map}",
+            "{}{context_prompt}{form_prompt}{auto_approval_prompt}{}{catalog_map}",
             run_system_prompt(provider.read_only()),
             language_prompt(conversation.language.as_deref())
         )),
@@ -452,6 +505,7 @@ async fn drive(
     }
     let mut executed_read = false;
     let mut awaiting_approval = false;
+    let mut auto_approved = false;
     // Providers are asked not to parallelize calls, but persist every mutation
     // defensively if one still returns several. This keeps the assistant's
     // complete tool-call list matched by either an approval or a tool result.
@@ -501,14 +555,6 @@ async fn drive(
                 )
                 .await?;
                 return Ok(());
-            }
-        };
-        let (actor, workspace) = match memo.initiator {
-            Some(initiator) => initiator,
-            None => {
-                let initiator = repository.agent_run_initiator(run_id).await?;
-                memo.initiator = Some(initiator);
-                initiator
             }
         };
         if call.function.name == bulk_edits::TOOL {
@@ -577,6 +623,21 @@ async fn drive(
                         return Ok(());
                     }
                 };
+            if auto_approves(&conversation, actor, &call.function.name, &arguments) {
+                let tool = repository
+                    .create_auto_approved_agent_tool_call(
+                        run_id,
+                        Some(&call.id),
+                        &call.function.name,
+                        arguments,
+                        Some(&summary),
+                        actor,
+                    )
+                    .await?;
+                repository.append_run_event(run_id, "tool_call", json!({"tool_call_id":tool.id,"name":tool.tool_name,"state":"approved","auto_approved":true})).await?;
+                auto_approved = true;
+                continue;
+            }
             let tool = repository
                 .create_agent_tool_call(
                     run_id,
@@ -643,13 +704,18 @@ async fn drive(
             )
             .await?;
     }
+    // Auto-approved calls wait with any call that needs a person, and run
+    // together once it is decided.
     if awaiting_approval {
         repository
             .transition_agent_run(run_id, AgentRunStatus::AwaitingApproval, None, None)
             .await?;
         return Ok(());
     }
-    if executed_read {
+    if auto_approved {
+        execute_decided_calls(repository, provider, run_id).await?;
+    }
+    if executed_read || auto_approved {
         return Box::pin(drive(
             repository,
             provider,
@@ -1025,6 +1091,34 @@ pub async fn resume_claimed(
         .with_authorization_actor(repository.agent_run_actor(run_id).await?);
     let repository = &scoped;
     let agent_run = repository.get_agent_run(run_id).await?;
+    execute_decided_calls(repository, provider, run_id).await?;
+    // Normal resumes are queued only after every sibling decision. Keep this
+    // guard for legacy partial resumes as well: the provider must never see
+    // an incomplete tool-result set.
+    if repository.has_pending_agent_tool_calls(run_id).await? {
+        repository
+            .transition_agent_run(run_id, AgentRunStatus::AwaitingApproval, None, None)
+            .await?;
+        return Ok(());
+    }
+    run_claimed(
+        repository,
+        provider,
+        object_store,
+        run_id,
+        agent_run.conversation_id,
+    )
+    .await
+}
+
+/// Executes a run's decided calls, approved ones after re-authorizing the
+/// initiating user, and records each result. `repository` acts as that user.
+async fn execute_decided_calls(
+    repository: &AttricatRepository,
+    provider: &OpenAiCompatibleClient,
+    run_id: Uuid,
+) -> Result<(), RunError> {
+    let agent_run = repository.get_agent_run(run_id).await?;
     let (actor, workspace) = repository.agent_run_initiator(run_id).await?;
     for call in repository.decided_agent_tool_calls(run_id).await? {
         let result = if call.state == AgentToolCallState::Approved && provider.read_only() {
@@ -1081,23 +1175,7 @@ pub async fn resume_claimed(
         repository.complete_agent_tool_call(call.id, result).await?;
         repository.append_conversation_message(agent_run.conversation_id, Some(run_id), "tool", json!({"tool_call_id":call.provider_call_id,"name":call.tool_name,"result":payload})).await?;
     }
-    // Normal resumes are queued only after every sibling decision. Keep this
-    // guard for legacy partial resumes as well: the provider must never see
-    // an incomplete tool-result set.
-    if repository.has_pending_agent_tool_calls(run_id).await? {
-        repository
-            .transition_agent_run(run_id, AgentRunStatus::AwaitingApproval, None, None)
-            .await?;
-        return Ok(());
-    }
-    run_claimed(
-        repository,
-        provider,
-        object_store,
-        run_id,
-        agent_run.conversation_id,
-    )
-    .await
+    Ok(())
 }
 
 /// What authorizes a mutating tool.
@@ -1269,7 +1347,12 @@ fn agent_audit_context(
             Some(id) => json!({"id": id}),
             None => json!({"tool": call.tool_name}),
         },
-        metadata: json!({}),
+        // Approved for its holder by the conversation's auto-approval.
+        metadata: if call.auto_approved {
+            json!({"auto_approved": true})
+        } else {
+            json!({})
+        },
         agent: Some(AgentAuditAttribution {
             run_id: run.id,
             conversation_id: run.conversation_id,
@@ -1298,7 +1381,10 @@ pub(crate) async fn fail_run(
 
 #[cfg(test)]
 mod tests {
-    use super::{SYSTEM_PROMPT_SECTIONS, ToolAuthorization, mutation_authorization, system_prompt};
+    use super::{
+        SYSTEM_PROMPT_SECTIONS, ToolAuthorization, auto_approves, mutation_authorization,
+        system_prompt,
+    };
     use crate::repository::{AgentSettings, BulkEditPolicy};
     use attricat_domain::permissions::Permission;
     use serde_json::json;
@@ -1470,5 +1556,84 @@ mod tests {
                 ))
             );
         }
+    }
+
+    #[test]
+    fn auto_approval_covers_only_its_holders_edits_to_the_conversation_record() {
+        let holder = uuid::Uuid::new_v4();
+        let record = uuid::Uuid::new_v4();
+        let conversation = crate::repository::Conversation {
+            id: uuid::Uuid::new_v4(),
+            workspace_id: uuid::Uuid::new_v4(),
+            created_by_user_id: Some(holder),
+            title: String::new(),
+            title_source: "manual".into(),
+            record_id: Some(record),
+            context_id: None,
+            language: None,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+            archived_at: None,
+            auto_approve_user_id: Some(holder),
+            auto_approve_enabled_at: Some(chrono::Utc::now()),
+        };
+        let on_record = serde_json::json!({"record_id": record.to_string()});
+        for tool in [
+            "set_record_values",
+            "replace_record_relationships",
+            "update_record_annotations",
+            "link_file",
+            "add_record_comment",
+        ] {
+            assert!(
+                auto_approves(&conversation, holder, tool, &on_record),
+                "{tool}"
+            );
+        }
+        // Destructive and publishing changes, and anything beyond the record.
+        for tool in [
+            "delete_record",
+            "publish_record",
+            "migrate_record",
+            "duplicate_record",
+            "apply_record_batch",
+            "bulk_set_record_values",
+        ] {
+            assert!(
+                !auto_approves(&conversation, holder, tool, &on_record),
+                "{tool}"
+            );
+        }
+        let other_record = serde_json::json!({"record_id": uuid::Uuid::new_v4().to_string()});
+        assert!(!auto_approves(
+            &conversation,
+            holder,
+            "set_record_values",
+            &other_record
+        ));
+        assert!(!auto_approves(
+            &conversation,
+            holder,
+            "set_record_values",
+            &serde_json::json!({})
+        ));
+        // Someone else's runs in the same conversation still ask.
+        assert!(!auto_approves(
+            &conversation,
+            uuid::Uuid::new_v4(),
+            "set_record_values",
+            &on_record
+        ));
+        let switched_off = crate::repository::Conversation {
+            auto_approve_user_id: None,
+            auto_approve_enabled_at: None,
+            ..conversation
+        };
+        assert!(!auto_approves(
+            &switched_off,
+            holder,
+            "set_record_values",
+            &on_record
+        ));
     }
 }

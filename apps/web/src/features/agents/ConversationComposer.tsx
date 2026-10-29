@@ -1,12 +1,16 @@
 import { useForm, useStore } from '@tanstack/react-form';
-import { useState, type Ref } from 'react';
+import { useState, type ReactNode, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Alert, Box, Button } from '@mui/material';
 import { RotateCcwIcon } from 'lucide-react';
 import { uploadConversationFiles } from '../files/api';
 import { sendMessage } from './api';
-import { composerMinRows } from './constants';
+import {
+  composerMinRows,
+  composerSurfaces,
+  type ComposerSurface,
+} from './constants';
 import { agentQueryKeys } from './queryKeys';
 import { invalidateConversation } from './queryOptions';
 import { MessageInputBox } from './MessageInputBox';
@@ -41,6 +45,10 @@ type ConversationComposerProps = ComposerConversation & {
   ) => Promise<unknown>;
   /** Holds messages back while an earlier run is unfinished. */
   sendBlocked?: boolean;
+  /** Controls shown just above the message box. */
+  settings?: ReactNode;
+  /** The background the composer sits on, which its sticky footer repeats. */
+  surface?: ComposerSurface;
   /** Keeps the composer at the bottom of a scrolling conversation. */
   sticky?: boolean;
 };
@@ -53,7 +61,9 @@ export const ConversationComposer = (props: ConversationComposerProps) => {
     onSent,
     sendDraft,
     sendBlocked = false,
+    settings,
     sticky = true,
+    surface = composerSurfaces.page,
   } = props;
   const { t } = useTranslation();
   const client = useQueryClient();
@@ -134,7 +144,7 @@ export const ConversationComposer = (props: ConversationComposerProps) => {
       sx={
         sticky
           ? {
-              bgcolor: 'background.default',
+              bgcolor: surface,
               bottom: 0,
               mx: 'auto',
               pb: { xs: 1, md: 2 },
@@ -145,6 +155,7 @@ export const ConversationComposer = (props: ConversationComposerProps) => {
           : { mt: 4 }
       }
     >
+      {settings}
       <MessageInputBox
         canSend={!sendBlocked}
         content={content}

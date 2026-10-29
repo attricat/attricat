@@ -3674,3 +3674,217 @@ async fn record_form_runs_propose_draft_values_alongside_every_other_tool(pool: 
     api_server.abort();
     provider.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn auto_approval_applies_its_holders_edits_to_the_record_and_asks_for_the_rest(pool: PgPool) {
+    let (base_url, api_server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let blueprint = create_blueprint(&client, &base_url,
+        "format_version = 1\ncode = \"brand\"\nname = \"Brand\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"").await;
+    let record_id: Uuid = create_record(&client, &base_url, &blueprint).await["id"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    let create = |body: Value| {
+        let client = client.clone();
+        let base_url = base_url.clone();
+        async move {
+            client
+                .post(format!("{base_url}/agent/conversations"))
+                .json(&body)
+                .send()
+                .await
+                .unwrap()
+                .json::<Value>()
+                .await
+                .unwrap()
+        }
+    };
+    let conversation = create(json!({"title": "Edit", "record_id": record_id})).await;
+    let conversation_id: Uuid = conversation["id"].as_str().unwrap().parse().unwrap();
+    let standalone = create(json!({"title": "Chat"})).await;
+    let switch = |id: String, enabled: bool| {
+        let client = client.clone();
+        let base_url = base_url.clone();
+        async move {
+            client
+                .put(format!("{base_url}/agent/conversations/{id}/auto-approval"))
+                .json(&json!({"enabled": enabled}))
+                .send()
+                .await
+                .unwrap()
+        }
+    };
+    let response = switch(standalone["id"].as_str().unwrap().to_owned(), true).await;
+    assert_eq!(response.status(), reqwest::StatusCode::UNPROCESSABLE_ENTITY);
+    let owner: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
+    let switched: Value = switch(conversation_id.to_string(), true)
+        .await
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(switched["auto_approve_user_id"], json!(owner));
+
+    let round = Arc::new(std::sync::Mutex::new(0usize));
+    let provider_round = round.clone();
+    let provider_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let provider_address = provider_listener.local_addr().unwrap();
+    let provider = tokio::spawn(async move {
+        axum::serve(
+            provider_listener,
+            Router::new().route(
+                "/v1/chat/completions",
+                post(move || {
+                    let round = provider_round.clone();
+                    async move {
+                        let call = |name: &str, arguments: Value| {
+                            json!({"tool_calls": [{
+                                "index": 0,
+                                "id": format!("call_{name}"),
+                                "type": "function",
+                                "function": {"name": name, "arguments": arguments.to_string()},
+                            }]})
+                        };
+                        let delta = {
+                            let mut round = round.lock().unwrap();
+                            *round += 1;
+                            match *round {
+                                1 => call(
+                                    "set_record_values",
+                                    json!({"record_id": record_id, "values": [{
+                                        "kind": "scalar", "attribute_code": "title",
+                                        "context_id": null, "value": "Volkswagen",
+                                    }]}),
+                                ),
+                                2 => json!({"content": "Saved the name."}),
+                                _ => call("delete_record", json!({"record_id": record_id})),
+                            }
+                        };
+                        axum::response::Response::builder()
+                            .header("content-type", "text/event-stream")
+                            .body(axum::body::Body::from(format!(
+                                "data: {}\n\ndata: [DONE]\n\n",
+                                json!({"choices": [{"delta": delta}]})
+                            )))
+                            .unwrap()
+                    }
+                }),
+            ),
+        )
+        .await
+        .unwrap();
+    });
+    let config = AgentProviderConfig::from_values(
+        |name| match name {
+            "LLM_BASE_URL" => Some(format!("http://{provider_address}/v1")),
+            _ => None,
+        },
+        Some(secrecy::SecretString::from("test-key")),
+    )
+    .unwrap()
+    .unwrap();
+    let repository = AttricatRepository::system(pool.clone())
+        .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
+    let provider_client = api::agent_provider::OpenAiCompatibleClient::new(&config).unwrap();
+    let store: Arc<dyn api::storage::ObjectStore> = Arc::new(FakeObjectStore::available());
+    let submit = |content: &'static str| {
+        let repository = repository.clone();
+        let config = config.clone();
+        async move {
+            repository
+                .submit_agent_message(
+                    conversation_id,
+                    owner,
+                    json!(content),
+                    &[],
+                    config.base_url.as_str(),
+                    &config.model,
+                )
+                .await
+                .unwrap()
+        }
+    };
+
+    // The holder's edit to the record is applied without a decision.
+    let edit = submit("Name it Volkswagen").await;
+    api::agent_runner::run(
+        &repository,
+        &provider_client,
+        &store,
+        edit.id,
+        conversation_id,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        repository.get_agent_run(edit.id).await.unwrap().status,
+        AgentRunStatus::Completed
+    );
+    let title = repository
+        .form_values(record_id)
+        .await
+        .unwrap()
+        .into_iter()
+        .find_map(|value| match value {
+            api::model::FormAttributeValue::Scalar {
+                attribute_code,
+                value,
+                ..
+            } if attribute_code == "title" => Some(value),
+            _ => None,
+        });
+    assert_eq!(title, Some(json!("Volkswagen")));
+    let (decision, approver, metadata): (Option<String>, Option<Uuid>, Value) = sqlx::query_as(
+        "SELECT approval_decision, approved_by_user_id, metadata FROM audit_events WHERE agent_tool_name = 'set_record_values'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(decision.as_deref(), Some("approved"));
+    assert_eq!(approver, Some(owner));
+    assert_eq!(metadata["auto_approved"], true);
+
+    // Deleting the record still asks.
+    let delete = submit("Delete it").await;
+    api::agent_runner::run(
+        &repository,
+        &provider_client,
+        &store,
+        delete.id,
+        conversation_id,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        repository.get_agent_run(delete.id).await.unwrap().status,
+        AgentRunStatus::AwaitingApproval
+    );
+    let pending = repository
+        .pending_agent_tool_calls(Some(conversation_id))
+        .await
+        .unwrap();
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].tool_name, "delete_record");
+    assert!(!pending[0].auto_approved);
+
+    // Any reader may switch it off; both switches are audited.
+    let off: Value = switch(conversation_id.to_string(), false)
+        .await
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(off["auto_approve_user_id"], Value::Null);
+    let switches: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM audit_events WHERE metadata ? 'auto_approval'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(switches, 2);
+    api_server.abort();
+    provider.abort();
+}

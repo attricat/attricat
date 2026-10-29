@@ -99,3 +99,12 @@ export const thinkingAnimationDuration = '1.4s';
 
 export const uuidPattern =
   '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+
+/** Backgrounds a composer can sit on, as theme palette paths. */
+export const composerSurfaces = {
+  page: 'background.default',
+  /** A drawer or other raised surface. */
+  paper: 'background.paper',
+} as const;
+export type ComposerSurface =
+  (typeof composerSurfaces)[keyof typeof composerSurfaces];

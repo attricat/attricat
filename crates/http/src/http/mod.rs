@@ -394,6 +394,10 @@ pub fn router(state: AppState) -> Router {
                 .delete(agents::delete_conversation),
         )
         .route(
+            "/agent/conversations/{conversation_id}/auto-approval",
+            put(agents::set_auto_approval),
+        )
+        .route(
             "/agent/conversations/{conversation_id}/messages",
             get(agents::list_messages).post(agents::send_message),
         )

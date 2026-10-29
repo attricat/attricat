@@ -22,6 +22,10 @@ pub struct Conversation {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub archived_at: Option<DateTime<Utc>>,
+    /// Who had this record conversation apply its record's edits and comments
+    /// without asking, for the runs they start, and since when.
+    pub auto_approve_user_id: Option<Uuid>,
+    pub auto_approve_enabled_at: Option<DateTime<Utc>>,
 }
 
 /// Which conversations a listing includes, by the record they are about.
@@ -140,6 +144,8 @@ pub struct AgentToolCall {
     pub decided_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub completed_at: Option<DateTime<Utc>>,
+    /// Approved by the conversation's auto-approval rather than a decision.
+    pub auto_approved: bool,
 }
 
 #[derive(Clone, Debug, serde::Serialize, sqlx::FromRow)]
@@ -165,7 +171,7 @@ impl AttricatRepository {
         title: &str,
     ) -> Result<Conversation, RepositoryError> {
         let workspace_id = self.workspace_id.0;
-        Ok(sqlx::query_as("INSERT INTO conversations (id, workspace_id, created_by_user_id, title, title_source) VALUES ($1, $2, $3, $4, 'pending') RETURNING id, workspace_id, created_by_user_id, title, title_source, record_id, context_id, language, created_at, updated_at, archived_at")
+        Ok(sqlx::query_as("INSERT INTO conversations (id, workspace_id, created_by_user_id, title, title_source) VALUES ($1, $2, $3, $4, 'pending') RETURNING id, workspace_id, created_by_user_id, title, title_source, record_id, context_id, language, created_at, updated_at, archived_at, auto_approve_user_id, auto_approve_enabled_at")
             .bind(Uuid::new_v4()).bind(workspace_id).bind(created_by_user_id).bind(title)
             .fetch_one(&self.pool).await?)
     }
@@ -178,7 +184,7 @@ impl AttricatRepository {
         context_id: Option<Uuid>,
     ) -> Result<Conversation, RepositoryError> {
         let workspace = self.workspace_id.0;
-        Ok(sqlx::query_as("INSERT INTO conversations (id, workspace_id, created_by_user_id, title, record_id, context_id, title_source) VALUES ($1, $2, $3, $4, $5, $6, 'pending') RETURNING id, workspace_id, created_by_user_id, title, title_source, record_id, context_id, language, created_at, updated_at, archived_at")
+        Ok(sqlx::query_as("INSERT INTO conversations (id, workspace_id, created_by_user_id, title, record_id, context_id, title_source) VALUES ($1, $2, $3, $4, $5, $6, 'pending') RETURNING id, workspace_id, created_by_user_id, title, title_source, record_id, context_id, language, created_at, updated_at, archived_at, auto_approve_user_id, auto_approve_enabled_at")
             .bind(Uuid::new_v4()).bind(workspace).bind(actor).bind(title).bind(record_id).bind(context_id)
             .fetch_one(&self.pool).await?)
     }
@@ -655,7 +661,7 @@ impl AttricatRepository {
         &self,
         run_id: Uuid,
     ) -> Result<Vec<AgentToolCall>, RepositoryError> {
-        Ok(sqlx::query_as("SELECT call.id, call.run_id, call.sequence, call.provider_call_id, call.tool_name, call.arguments, call.change_summary, call.result, call.error, call.state, call.decided_by_user_id, call.decided_at, call.created_at, call.completed_at FROM agent_tool_calls call JOIN agent_runs run ON run.id = call.run_id WHERE call.run_id = $1 AND run.workspace_id = $2 AND call.state IN ('approved', 'rejected') AND call.completed_at IS NULL ORDER BY call.sequence")
+        Ok(sqlx::query_as("SELECT call.id, call.run_id, call.sequence, call.provider_call_id, call.tool_name, call.arguments, call.change_summary, call.result, call.error, call.state, call.decided_by_user_id, call.decided_at, call.created_at, call.completed_at, call.auto_approved FROM agent_tool_calls call JOIN agent_runs run ON run.id = call.run_id WHERE call.run_id = $1 AND run.workspace_id = $2 AND call.state IN ('approved', 'rejected') AND call.completed_at IS NULL ORDER BY call.sequence")
             .bind(run_id).bind(self.workspace_id.0).fetch_all(&self.pool).await?)
     }
 
@@ -680,6 +686,53 @@ impl AttricatRepository {
         change_summary: Option<&str>,
         state: AgentToolCallState,
     ) -> Result<AgentToolCall, RepositoryError> {
+        self.insert_agent_tool_call(
+            run_id,
+            provider_call_id,
+            tool_name,
+            arguments,
+            change_summary,
+            state,
+            None,
+        )
+        .await
+    }
+
+    /// Records a mutation the conversation's auto-approval approved on
+    /// behalf of `approver`, the person who switched it on and started the
+    /// run. It is executed like a call a person approved.
+    pub async fn create_auto_approved_agent_tool_call(
+        &self,
+        run_id: Uuid,
+        provider_call_id: Option<&str>,
+        tool_name: &str,
+        arguments: Value,
+        change_summary: Option<&str>,
+        approver: Uuid,
+    ) -> Result<AgentToolCall, RepositoryError> {
+        self.insert_agent_tool_call(
+            run_id,
+            provider_call_id,
+            tool_name,
+            arguments,
+            change_summary,
+            AgentToolCallState::Approved,
+            Some(approver),
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn insert_agent_tool_call(
+        &self,
+        run_id: Uuid,
+        provider_call_id: Option<&str>,
+        tool_name: &str,
+        arguments: Value,
+        change_summary: Option<&str>,
+        state: AgentToolCallState,
+        auto_approver: Option<Uuid>,
+    ) -> Result<AgentToolCall, RepositoryError> {
         let mut tx = self.pool.begin().await?;
         self.ensure_task_fence(&mut tx).await?;
         let exists = sqlx::query_scalar::<_, Uuid>(
@@ -699,9 +752,10 @@ impl AttricatRepository {
         .fetch_one(&mut *tx)
         .await?;
         // Every newly proposed or automatically executed call starts undecided.
-        // Only `decide_tool_call` may set an approval decision and timestamp.
-        let call = sqlx::query_as("INSERT INTO agent_tool_calls (id, run_id, sequence, provider_call_id, tool_name, arguments, change_summary, state) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, run_id, sequence, provider_call_id, tool_name, arguments, change_summary, result, error, state, decided_by_user_id, decided_at, created_at, completed_at")
-            .bind(Uuid::new_v4()).bind(run_id).bind(sequence).bind(provider_call_id).bind(tool_name).bind(arguments).bind(change_summary).bind(state.as_str()).fetch_one(&mut *tx).await?;
+        // Only `decide_tool_call`, or the conversation's auto-approval on
+        // behalf of the person who switched it on, sets a decision.
+        let call = sqlx::query_as("INSERT INTO agent_tool_calls (id, run_id, sequence, provider_call_id, tool_name, arguments, change_summary, state, decided_by_user_id, decided_at, auto_approved) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CASE WHEN $9::uuid IS NULL THEN NULL ELSE now() END, $9::uuid IS NOT NULL) RETURNING id, run_id, sequence, provider_call_id, tool_name, arguments, change_summary, result, error, state, decided_by_user_id, decided_at, created_at, completed_at, auto_approved")
+            .bind(Uuid::new_v4()).bind(run_id).bind(sequence).bind(provider_call_id).bind(tool_name).bind(arguments).bind(change_summary).bind(state.as_str()).bind(auto_approver).fetch_one(&mut *tx).await?;
         tx.commit().await?;
         Ok(call)
     }
@@ -732,7 +786,7 @@ impl AttricatRepository {
             Ok(value) => (Some(value), None, AgentToolCallState::Completed),
             Err(value) => (None, Some(value), AgentToolCallState::Failed),
         };
-        sqlx::query_as("UPDATE agent_tool_calls call SET result = $3, error = $4, state = CASE WHEN call.state = 'rejected' THEN 'rejected' ELSE $5 END, completed_at = now() FROM agent_runs run WHERE call.id = $1 AND call.run_id = run.id AND run.workspace_id = $2 AND call.state IN ('approved', 'pending_approval', 'rejected') RETURNING call.id, call.run_id, call.sequence, call.provider_call_id, call.tool_name, call.arguments, call.change_summary, call.result, call.error, call.state, call.decided_by_user_id, call.decided_at, call.created_at, call.completed_at")
+        sqlx::query_as("UPDATE agent_tool_calls call SET result = $3, error = $4, state = CASE WHEN call.state = 'rejected' THEN 'rejected' ELSE $5 END, completed_at = now() FROM agent_runs run WHERE call.id = $1 AND call.run_id = run.id AND run.workspace_id = $2 AND call.state IN ('approved', 'pending_approval', 'rejected') RETURNING call.id, call.run_id, call.sequence, call.provider_call_id, call.tool_name, call.arguments, call.change_summary, call.result, call.error, call.state, call.decided_by_user_id, call.decided_at, call.created_at, call.completed_at, call.auto_approved")
             .bind(tool_call_id).bind(self.workspace_id.0).bind(result).bind(error).bind(state.as_str()).fetch_optional(&mut **tx).await?.ok_or(RepositoryError::InvalidAgentState("tool call cannot be completed"))
     }
 
@@ -814,7 +868,7 @@ impl AttricatRepository {
             .bind(tool_call_id).bind(self.workspace_id.0).fetch_optional(&mut *tx).await?
             .ok_or(RepositoryError::NotFound("agent tool call"))
             .and_then(stored_code)?;
-        let call: AgentToolCall = sqlx::query_as("SELECT id, run_id, sequence, provider_call_id, tool_name, arguments, change_summary, result, error, state, decided_by_user_id, decided_at, created_at, completed_at FROM agent_tool_calls WHERE id = $1 AND EXISTS (SELECT 1 FROM agent_runs run WHERE run.id = agent_tool_calls.run_id AND run.workspace_id = $2) FOR UPDATE")
+        let call: AgentToolCall = sqlx::query_as("SELECT id, run_id, sequence, provider_call_id, tool_name, arguments, change_summary, result, error, state, decided_by_user_id, decided_at, created_at, completed_at, auto_approved FROM agent_tool_calls WHERE id = $1 AND EXISTS (SELECT 1 FROM agent_runs run WHERE run.id = agent_tool_calls.run_id AND run.workspace_id = $2) FOR UPDATE")
             .bind(tool_call_id).bind(self.workspace_id.0).fetch_optional(&mut *tx).await?.ok_or(RepositoryError::NotFound("agent tool call"))?;
         if call.state != AgentToolCallState::PendingApproval {
             return Err(RepositoryError::ApprovalAlreadyDecided);
@@ -828,7 +882,7 @@ impl AttricatRepository {
             ApprovalDecision::Approve => AgentToolCallState::Approved,
             ApprovalDecision::Reject => AgentToolCallState::Rejected,
         };
-        let call: AgentToolCall = sqlx::query_as("UPDATE agent_tool_calls SET state = $2, decided_by_user_id = $3, decided_at = now() WHERE id = $1 RETURNING id, run_id, sequence, provider_call_id, tool_name, arguments, change_summary, result, error, state, decided_by_user_id, decided_at, created_at, completed_at")
+        let call: AgentToolCall = sqlx::query_as("UPDATE agent_tool_calls SET state = $2, decided_by_user_id = $3, decided_at = now() WHERE id = $1 RETURNING id, run_id, sequence, provider_call_id, tool_name, arguments, change_summary, result, error, state, decided_by_user_id, decided_at, created_at, completed_at, auto_approved")
             .bind(tool_call_id).bind(state.as_str()).bind(actor).fetch_one(&mut *tx).await?;
         if run_status == AgentRunStatus::AwaitingApproval
             && Self::agent_decisions_ready(&mut tx, call.run_id).await?
@@ -903,7 +957,7 @@ impl AttricatRepository {
                 context_id,
             } => (false, Some(record_id), context_id),
         };
-        Ok(sqlx::query_as("SELECT c.id, c.workspace_id, c.created_by_user_id, c.title, c.title_source, c.record_id, c.context_id, c.language, c.created_at, c.updated_at, c.archived_at FROM conversations c WHERE c.workspace_id = $1 AND c.archived_at IS NULL AND ($2 = '' OR position(lower($2) in lower(c.title)) > 0 OR EXISTS (SELECT 1 FROM conversation_messages m WHERE m.conversation_id = c.id AND m.role = 'user' AND position(lower($2) in lower(m.content::text)) > 0)) AND ($3::timestamptz IS NULL OR (c.updated_at, c.id) < ($3, $4)) AND (NOT $6 OR c.record_id IS NULL) AND ($7::uuid IS NULL OR c.record_id = $7) AND ($8::uuid IS NULL OR c.context_id = $8) ORDER BY c.updated_at DESC, c.id DESC LIMIT $5")
+        Ok(sqlx::query_as("SELECT c.id, c.workspace_id, c.created_by_user_id, c.title, c.title_source, c.record_id, c.context_id, c.language, c.created_at, c.updated_at, c.archived_at, c.auto_approve_user_id, c.auto_approve_enabled_at FROM conversations c WHERE c.workspace_id = $1 AND c.archived_at IS NULL AND ($2 = '' OR position(lower($2) in lower(c.title)) > 0 OR EXISTS (SELECT 1 FROM conversation_messages m WHERE m.conversation_id = c.id AND m.role = 'user' AND position(lower($2) in lower(m.content::text)) > 0)) AND ($3::timestamptz IS NULL OR (c.updated_at, c.id) < ($3, $4)) AND (NOT $6 OR c.record_id IS NULL) AND ($7::uuid IS NULL OR c.record_id = $7) AND ($8::uuid IS NULL OR c.context_id = $8) ORDER BY c.updated_at DESC, c.id DESC LIMIT $5")
             .bind(self.workspace_id.0)
             .bind(query).bind(before_date).bind(before_id).bind(limit)
             .bind(unattached_only).bind(record_id).bind(context_id)
@@ -914,9 +968,33 @@ impl AttricatRepository {
         &self,
         conversation_id: Uuid,
     ) -> Result<Conversation, RepositoryError> {
-        sqlx::query_as("SELECT id, workspace_id, created_by_user_id, title, title_source, record_id, context_id, language, created_at, updated_at, archived_at FROM conversations WHERE id = $1 AND workspace_id = $2 AND archived_at IS NULL")
+        sqlx::query_as("SELECT id, workspace_id, created_by_user_id, title, title_source, record_id, context_id, language, created_at, updated_at, archived_at, auto_approve_user_id, auto_approve_enabled_at FROM conversations WHERE id = $1 AND workspace_id = $2 AND archived_at IS NULL")
             .bind(conversation_id).bind(self.workspace_id.0).fetch_optional(&self.pool).await?
             .ok_or(RepositoryError::NotFound("conversation"))
+    }
+
+    /// Switches a record conversation's auto-approval on for `user`, or off
+    /// with `None`, and audits the change. Switching it on again moves it to
+    /// the new user.
+    pub async fn set_conversation_auto_approval(
+        &self,
+        conversation_id: Uuid,
+        user: Option<Uuid>,
+    ) -> Result<Conversation, RepositoryError> {
+        let mut tx = self.pool.begin().await?;
+        let conversation: Conversation = sqlx::query_as("UPDATE conversations SET auto_approve_user_id = $3, auto_approve_enabled_at = CASE WHEN $3::uuid IS NULL THEN NULL ELSE now() END, updated_at = now() WHERE id = $1 AND workspace_id = $2 AND archived_at IS NULL AND record_id IS NOT NULL RETURNING id, workspace_id, created_by_user_id, title, title_source, record_id, context_id, language, created_at, updated_at, archived_at, auto_approve_user_id, auto_approve_enabled_at")
+            .bind(conversation_id).bind(self.workspace_id.0).bind(user).fetch_optional(&mut *tx).await?
+            .ok_or(RepositoryError::NotFound("conversation"))?;
+        self.write_audit_event_with_metadata(
+            &mut tx,
+            Some((
+                "auto_approval",
+                serde_json::json!({"enabled": user.is_some(), "record_id": conversation.record_id}),
+            )),
+        )
+        .await?;
+        tx.commit().await?;
+        Ok(conversation)
     }
 
     pub async fn update_conversation_title(
@@ -924,7 +1002,7 @@ impl AttricatRepository {
         conversation_id: Uuid,
         title: &str,
     ) -> Result<Conversation, RepositoryError> {
-        sqlx::query_as("UPDATE conversations SET title = $3, title_source = 'manual', updated_at = now() WHERE id = $1 AND workspace_id = $2 AND archived_at IS NULL RETURNING id, workspace_id, created_by_user_id, title, title_source, record_id, context_id, language, created_at, updated_at, archived_at")
+        sqlx::query_as("UPDATE conversations SET title = $3, title_source = 'manual', updated_at = now() WHERE id = $1 AND workspace_id = $2 AND archived_at IS NULL RETURNING id, workspace_id, created_by_user_id, title, title_source, record_id, context_id, language, created_at, updated_at, archived_at, auto_approve_user_id, auto_approve_enabled_at")
             .bind(conversation_id).bind(self.workspace_id.0).bind(title).fetch_optional(&self.pool).await?
             .ok_or(RepositoryError::NotFound("conversation"))
     }
@@ -964,7 +1042,7 @@ impl AttricatRepository {
     }
 
     pub async fn get_agent_tool_call(&self, id: Uuid) -> Result<AgentToolCall, RepositoryError> {
-        sqlx::query_as("SELECT call.id, call.run_id, call.sequence, call.provider_call_id, call.tool_name, call.arguments, call.change_summary, call.result, call.error, call.state, call.decided_by_user_id, call.decided_at, call.created_at, call.completed_at FROM agent_tool_calls call JOIN agent_runs run ON run.id = call.run_id WHERE call.id = $1 AND run.workspace_id = $2")
+        sqlx::query_as("SELECT call.id, call.run_id, call.sequence, call.provider_call_id, call.tool_name, call.arguments, call.change_summary, call.result, call.error, call.state, call.decided_by_user_id, call.decided_at, call.created_at, call.completed_at, call.auto_approved FROM agent_tool_calls call JOIN agent_runs run ON run.id = call.run_id WHERE call.id = $1 AND run.workspace_id = $2")
             .bind(id).bind(self.workspace_id.0)
             .fetch_optional(&self.pool).await?
             .ok_or(RepositoryError::NotFound("agent tool call"))
@@ -974,7 +1052,7 @@ impl AttricatRepository {
         &self,
         conversation_id: Option<Uuid>,
     ) -> Result<Vec<AgentToolCall>, RepositoryError> {
-        Ok(sqlx::query_as("SELECT call.id, call.run_id, call.sequence, call.provider_call_id, call.tool_name, call.arguments, call.change_summary, call.result, call.error, call.state, call.decided_by_user_id, call.decided_at, call.created_at, call.completed_at FROM agent_tool_calls call JOIN agent_runs run ON run.id = call.run_id WHERE run.workspace_id = $1 AND run.status IN ('running','awaiting_approval','queued') AND call.state = 'pending_approval' AND ($2::uuid IS NULL OR run.conversation_id = $2) ORDER BY call.created_at")
+        Ok(sqlx::query_as("SELECT call.id, call.run_id, call.sequence, call.provider_call_id, call.tool_name, call.arguments, call.change_summary, call.result, call.error, call.state, call.decided_by_user_id, call.decided_at, call.created_at, call.completed_at, call.auto_approved FROM agent_tool_calls call JOIN agent_runs run ON run.id = call.run_id WHERE run.workspace_id = $1 AND run.status IN ('running','awaiting_approval','queued') AND call.state = 'pending_approval' AND ($2::uuid IS NULL OR run.conversation_id = $2) ORDER BY call.created_at")
             .bind(self.workspace_id.0).bind(conversation_id).fetch_all(&self.pool).await?)
     }
 

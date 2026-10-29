@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Box,
   Button,
@@ -10,7 +10,14 @@ import {
 import { ListIcon, PencilIcon, PlusIcon, XIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useState } from 'react';
-import { createConversation } from '../../agents/api';
+import {
+  createConversation,
+  setConversationAutoApproval,
+} from '../../agents/api';
+import { AutoApprovalSwitch } from '../../agents/AutoApprovalSwitch';
+import { composerSurfaces } from '../../agents/constants';
+import { invalidateRecord } from '../invalidateRecord';
+import { sessionOptions } from '../../auth/queryOptions';
 import { conversationTitleFromFirstMessage } from '../../agents/conversationTitle';
 import { conversationOptions } from '../../agents/queryOptions';
 import { titlePollInterval } from '../../agents/titlePolling';
@@ -60,6 +67,39 @@ export const RecordAgentDrawer = ({
       titlePollInterval(query.state.data ? [query.state.data] : undefined),
   });
   const current = conversationId ? conversation.data : undefined;
+  const client = useQueryClient();
+  const session = useQuery({ ...sessionOptions(), enabled: open });
+  // Chosen before the first message, then switched on for the new conversation.
+  const [autoApproveOnStart, setAutoApproveOnStart] = useState(false);
+  const autoApproval = useMutation({
+    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
+      setConversationAutoApproval(id, enabled),
+    onSuccess: (_, { id }) =>
+      client.invalidateQueries({ queryKey: conversationOptions(id).queryKey }),
+  });
+  const autoApprovalUser = current?.auto_approve_user_id ?? null;
+  const ownAutoApproval =
+    autoApprovalUser !== null && autoApprovalUser === session.data?.user_id;
+  // Only someone who can edit the record may let the agent do so unasked.
+  const autoApprovalSwitch = draft ? (
+    conversationId ? (
+      current && (
+        <AutoApprovalSwitch
+          checked={ownAutoApproval}
+          disabled={autoApproval.isPending || !session.data}
+          heldByOther={autoApprovalUser !== null && !ownAutoApproval}
+          onChange={(enabled) =>
+            autoApproval.mutate({ id: conversationId, enabled })
+          }
+        />
+      )
+    ) : (
+      <AutoApprovalSwitch
+        checked={autoApproveOnStart}
+        onChange={setAutoApproveOnStart}
+      />
+    )
+  ) : undefined;
   // The agent proposes form values only for the context it was asked about.
   const conversationDraft =
     draft && current?.context_id === draft.contextId ? draft : undefined;
@@ -72,6 +112,7 @@ export const RecordAgentDrawer = ({
       conversationTitleFromFirstMessage(content),
       { record_id: recordId, context_id: contextId },
     );
+    if (autoApproveOnStart) await setConversationAutoApproval(created.id, true);
     return created.id;
   };
   return (
@@ -137,6 +178,7 @@ export const RecordAgentDrawer = ({
             </Button>
           </Box>
         )}
+        <ApiErrorAlert error={autoApproval.error} />
         {renameOpen && conversationId && current && (
           <RenameConversationDialog
             conversationId={conversationId}
@@ -151,6 +193,10 @@ export const RecordAgentDrawer = ({
               key={conversationId}
               conversationId={conversationId}
               draft={conversationDraft}
+              // The agent may have changed the record, with or without asking.
+              onRunFinished={() => void invalidateRecord(client, recordId)}
+              settings={autoApprovalSwitch}
+              surface={composerSurfaces.paper}
             />
           ) : (
             <StartConversationPanel
@@ -162,6 +208,8 @@ export const RecordAgentDrawer = ({
                 </Typography>
               }
               onStarted={onConversationChange}
+              settings={autoApprovalSwitch}
+              surface={composerSurfaces.paper}
             />
           ))}
       </Box>

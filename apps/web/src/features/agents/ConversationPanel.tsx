@@ -1,4 +1,10 @@
-import { useState, type ReactNode } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ReactNode,
+} from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Box } from '@mui/material';
 import { decideApproval, sendMessage } from './api';
@@ -28,9 +34,17 @@ export type DraftContext = {
 export const ConversationPanel = ({
   conversationId,
   draft,
+  onRunFinished,
+  settings,
+  surface,
 }: {
   conversationId: string;
   draft?: DraftContext;
+  /** Called when the agent stops working, such as after it changed data. */
+  onRunFinished?: () => void;
+  /** Controls shown just above the message box. */
+  settings?: ReactNode;
+  surface?: ComponentProps<typeof ConversationComposer>['surface'];
 }) => {
   const client = useQueryClient();
   const [isSending, setIsSending] = useState(false);
@@ -41,6 +55,14 @@ export const ConversationPanel = ({
       conversationPollInterval(query.state.data, false, isSending),
   });
   const live = useConversationLiveUpdates(conversationId, runs.data);
+  const working = Boolean(
+    runs.data?.some((run) => thinkingRunStatuses.includes(run.status)),
+  );
+  const wasWorking = useRef(working);
+  useEffect(() => {
+    if (wasWorking.current && !working) onRunFinished?.();
+    wasWorking.current = working;
+  }, [working, onRunFinished]);
   const interval = conversationPollInterval(
     runs.data,
     live.connected,
@@ -77,10 +99,7 @@ export const ConversationPanel = ({
           bulkProgress={live.bulkProgress}
           isDecidingApproval={decide.isPending}
           isLoadingMessages={messages.isPending}
-          isThinking={
-            isSending ||
-            runs.data?.some((run) => thinkingRunStatuses.includes(run.status))
-          }
+          isThinking={isSending || working}
           latestRun={runs.data?.[0]}
           messages={messages.data}
           onDecideApproval={(id, approved) => decide.mutate({ id, approved })}
@@ -95,6 +114,8 @@ export const ConversationPanel = ({
           unfinishedRunStatuses.includes(run.status),
         )}
         sendDraft={draftSender(draft)}
+        settings={settings}
+        surface={surface}
       />
     </Box>
   );
@@ -119,12 +140,17 @@ export const StartConversationPanel = ({
   draft,
   empty,
   onStarted,
+  settings,
+  surface,
 }: {
   createConversation: (content: string) => Promise<string>;
   draft?: DraftContext;
   /** Shown above the composer until the first message is sent. */
   empty: ReactNode;
   onStarted: (conversationId: string) => void;
+  /** Controls shown just above the message box. */
+  settings?: ReactNode;
+  surface?: ComponentProps<typeof ConversationComposer>['surface'];
 }) => {
   const [isSending, setIsSending] = useState(false);
   const ref = useInitialFocus<HTMLDivElement>();
@@ -147,6 +173,8 @@ export const StartConversationPanel = ({
         onSendingChange={setIsSending}
         onSent={onStarted}
         sendDraft={draftSender(draft)}
+        settings={settings}
+        surface={surface}
       />
     </Box>
   );
