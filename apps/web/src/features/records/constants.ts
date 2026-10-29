@@ -47,8 +47,9 @@ export const attributeFilterOperators = {
 export const RECORD_LABEL_BATCH_SIZE = 100;
 export const RECORD_CHANGES_PAGE_SIZE = 25;
 
-/** Sections shown in tabs below a record's values. */
+/** Sections of a record shown in tabs, its values first. */
 export const recordPreviewTabs = {
+  data: 'data',
   dataQuality: 'data-quality',
   comments: 'comments',
   conversations: 'conversations',

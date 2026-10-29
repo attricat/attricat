@@ -1,4 +1,4 @@
-import { Alert, Box, Paper, Typography } from '@mui/material';
+import { Alert, Box, Typography } from '@mui/material';
 import { useState, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AttributeContext } from '../../contexts/api';
@@ -143,78 +143,76 @@ export const RecordPreviewContent = ({
       )
     : undefined;
   return (
-    <Box sx={{ mt: 3 }}>
-      <Paper component="section" sx={{ p: { xs: 2, md: 3 } }}>
-        <FieldDiagnosticsContext value={diagnostics}>
-          <RecordContextPicker
-            contexts={contexts}
-            disabled={hasPendingChanges}
-            onChange={onContextChange}
-            value={contextId ?? ''}
+    <>
+      <FieldDiagnosticsContext value={diagnostics}>
+        <RecordContextPicker
+          contexts={contexts}
+          disabled={hasPendingChanges}
+          onChange={onContextChange}
+          value={contextId ?? ''}
+        />
+        {form && contextId && contextId !== defaultContextId && (
+          // Says whose values the fields change, and where the rest come from.
+          <Alert severity="info" sx={{ mt: 2 }}>
+            {t('records.editingContext', {
+              context:
+                contexts.find((context) => context.id === contextId)?.code ??
+                contextId,
+            })}
+          </Alert>
+        )}
+        {form ? (
+          <RecordInlineFields
+            key={`${recordId}:${contextId ?? ''}`}
+            attributes={blueprint.attributes}
+            contextId={contextId ?? null}
+            defaultContextId={defaultContextId}
+            recordId={recordId}
+            form={form}
+            ref={inlineFieldsRef}
+            onPendingChange={setHasPendingChanges}
+            renderAttributeDecoration={renderAttributeDecoration}
+            renderAttributePanel={renderAttributePanel}
+            renderFilePanel={renderFilePanel}
+            resolvedValues={resolved.values}
+            reusableResolvedValues={resolved.reusable_values ?? {}}
+            singleColumn={singleColumn}
+            statusParentContextIds={statusParentContextIds}
+            statusTransitions={statusTransitions}
+            view={blueprint.blueprint.views.detail}
           />
-          {form && contextId && contextId !== defaultContextId && (
-            // Says whose values the fields change, and where the rest come from.
-            <Alert severity="info" sx={{ mt: 2 }}>
-              {t('records.editingContext', {
-                context:
-                  contexts.find((context) => context.id === contextId)?.code ??
-                  contextId,
-              })}
-            </Alert>
-          )}
-          {form ? (
-            <RecordInlineFields
-              key={`${recordId}:${contextId ?? ''}`}
+        ) : (
+          <>
+            <RecordView
               attributes={blueprint.attributes}
-              contextId={contextId ?? null}
-              defaultContextId={defaultContextId}
+              fallbackVisibilityScope="detail"
+              contextId={contextId}
               recordId={recordId}
-              form={form}
-              ref={inlineFieldsRef}
-              onPendingChange={setHasPendingChanges}
               renderAttributeDecoration={renderAttributeDecoration}
               renderAttributePanel={renderAttributePanel}
               renderFilePanel={renderFilePanel}
-              resolvedValues={resolved.values}
-              reusableResolvedValues={resolved.reusable_values ?? {}}
-              singleColumn={singleColumn}
-              statusParentContextIds={statusParentContextIds}
-              statusTransitions={statusTransitions}
+              values={resolved.values}
               view={blueprint.blueprint.views.detail}
+              singleColumn={singleColumn}
+              skipComponentId={recordHeadingComponentId}
             />
-          ) : (
-            <>
-              <RecordView
-                attributes={blueprint.attributes}
-                fallbackVisibilityScope="detail"
-                contextId={contextId}
-                recordId={recordId}
-                renderAttributeDecoration={renderAttributeDecoration}
-                renderAttributePanel={renderAttributePanel}
-                renderFilePanel={renderFilePanel}
-                values={resolved.values}
-                view={blueprint.blueprint.views.detail}
-                singleColumn={singleColumn}
-                skipComponentId={recordHeadingComponentId}
-              />
-              {(resolved.reusable_attributes?.length ?? 0) > 0 && (
-                <Box component="section" sx={{ mt: 4 }}>
-                  <Typography component="h2" variant="h6">
-                    {t('records.additionalAttributes')}
-                  </Typography>
-                  <RecordView
-                    attributes={resolved.reusable_attributes}
-                    contextId={contextId}
-                    recordId={recordId}
-                    singleColumn={singleColumn}
-                    values={resolved.reusable_values ?? {}}
-                  />
-                </Box>
-              )}
-            </>
-          )}
-        </FieldDiagnosticsContext>
-      </Paper>
+            {(resolved.reusable_attributes?.length ?? 0) > 0 && (
+              <Box component="section" sx={{ mt: 4 }}>
+                <Typography component="h2" variant="h6">
+                  {t('records.additionalAttributes')}
+                </Typography>
+                <RecordView
+                  attributes={resolved.reusable_attributes}
+                  contextId={contextId}
+                  recordId={recordId}
+                  singleColumn={singleColumn}
+                  values={resolved.reusable_values ?? {}}
+                />
+              </Box>
+            )}
+          </>
+        )}
+      </FieldDiagnosticsContext>
       <ExtensionOutlet
         context={{ record_id: recordId, context_id: contextId }}
         outlet={extensionOutlets.recordAction}
@@ -227,6 +225,6 @@ export const RecordPreviewContent = ({
           recordIds: [recordId],
         }}
       />
-    </Box>
+    </>
   );
 };
