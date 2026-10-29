@@ -810,6 +810,7 @@
     "fieldsChanged_one": "{{count}} field changed",
     "fieldsChanged_other": "{{count}} fields changed",
     "recordTabs": "Record sections",
+    "recordDataTab": "Data",
     "agentConversations": {
       "title": "Conversations",
       "showAll": "All conversations about this record",

@@ -3,6 +3,7 @@ import { Box, CircularProgress, Typography } from '@mui/material';
 import {
   lazy,
   Suspense,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -10,6 +11,15 @@ import {
   type ReactNode,
 } from 'react';
 import { useTranslation } from 'react-i18next';
+import {
+  AgentIcon,
+  CommentIcon,
+  ExportIcon,
+  RecordControlIcon,
+  RecordIcon,
+  RuleIcon,
+  SystemTagIcon,
+} from '../../../components/systemIcons';
 import { QueryErrorNotice } from '../../../components/QueryErrorNotice';
 import { ApiErrorAlert } from '../../../components/ApiErrorAlert';
 import { BlueprintLink } from '../../blueprints/BlueprintLink';
@@ -134,13 +144,21 @@ export const RecordPreview = ({
   // Leads to a field from its save status, a connected field's diagnostics
   // or a data quality finding about it.
   const fieldsRef = useRef<HTMLDivElement>(null);
-  const { request: revealRequest, reveal: revealField } =
+  const { request: revealRequest, reveal: revealFieldInForm } =
     useFieldReveal(fieldsRef);
   // A link to the comments opens their tab.
   const [tab, setTab] = useState<RecordPreviewTabKey>(() =>
     showComments && window.location.hash === `#${commentsSectionId}`
       ? recordPreviewTabs.comments
-      : recordPreviewTabs.dataQuality,
+      : recordPreviewTabs.data,
+  );
+  // Fields live in the Data tab, whichever tab leads to one.
+  const revealField = useCallback(
+    (code: string) => {
+      setTab(recordPreviewTabs.data);
+      revealFieldInForm(code);
+    },
+    [revealFieldInForm],
   );
   const tabPanelRef = useRef<HTMLDivElement>(null);
   // Counts requests to bring the selected tab into view once it renders.
@@ -405,41 +423,6 @@ export const RecordPreview = ({
                   )}
                   <ApiErrorAlert error={resolved.error} sx={{ mt: 3 }} />
                   <ApiErrorAlert error={blueprint.error} sx={{ mt: 3 }} />
-                  {resolved.data && blueprint.data && (
-                    // A single relationship shows its record on the full page;
-                    // a panel beside another page keeps to links.
-                    <Box ref={fieldsRef}>
-                      <KnownRecordLabelsContext value={knownLabels}>
-                        <RelatedRecordPreviewContext.Provider
-                          value={compact ? null : (contextId ?? null)}
-                        >
-                          <RecordPreviewContent
-                            blueprint={blueprint.data}
-                            contextId={selectedContextId}
-                            contexts={contexts.data}
-                            defaultContextId={defaultContextId}
-                            recordId={recordId}
-                            // A cached form must not become the save baseline before
-                            // the opening refresh has completed.
-                            form={
-                              recordForm.isFetchedAfterMount
-                                ? recordForm.data
-                                : undefined
-                            }
-                            statusParentContextIds={statusParentContexts(
-                              contexts.data,
-                              contextId,
-                            )}
-                            statusTransitions={statusTransitions.data}
-                            inlineFieldsRef={inlineFieldsRef}
-                            onContextChange={setSelectedContext}
-                            resolved={resolved.data}
-                            singleColumn={compact}
-                          />
-                        </RelatedRecordPreviewContext.Provider>
-                      </KnownRecordLabelsContext>
-                    </Box>
-                  )}
                 </>
               )}
               {resolvedRecord && (
@@ -448,7 +431,50 @@ export const RecordPreview = ({
                   panelRef={tabPanelRef}
                   tabs={[
                     {
+                      key: recordPreviewTabs.data,
+                      icon: RecordIcon,
+                      label: t('records.recordDataTab'),
+                      content: resolved.data &&
+                        blueprint.data &&
+                        contexts.data && (
+                          // A single relationship shows its record on the full page;
+                          // a panel beside another page keeps to links.
+                          <Box ref={fieldsRef}>
+                            <KnownRecordLabelsContext value={knownLabels}>
+                              <RelatedRecordPreviewContext.Provider
+                                value={compact ? null : (contextId ?? null)}
+                              >
+                                <RecordPreviewContent
+                                  blueprint={blueprint.data}
+                                  contextId={selectedContextId}
+                                  contexts={contexts.data}
+                                  defaultContextId={defaultContextId}
+                                  recordId={recordId}
+                                  // A cached form must not become the save baseline before
+                                  // the opening refresh has completed.
+                                  form={
+                                    recordForm.isFetchedAfterMount
+                                      ? recordForm.data
+                                      : undefined
+                                  }
+                                  statusParentContextIds={statusParentContexts(
+                                    contexts.data,
+                                    contextId,
+                                  )}
+                                  statusTransitions={statusTransitions.data}
+                                  inlineFieldsRef={inlineFieldsRef}
+                                  onContextChange={setSelectedContext}
+                                  resolved={resolved.data}
+                                  singleColumn={compact}
+                                />
+                              </RelatedRecordPreviewContext.Provider>
+                            </KnownRecordLabelsContext>
+                          </Box>
+                        ),
+                    },
+                    {
                       key: recordPreviewTabs.dataQuality,
+                      icon: RuleIcon,
                       label: t('rules.recordFindings.title'),
                       content: (
                         <RecordFindingsPanel
@@ -467,6 +493,7 @@ export const RecordPreview = ({
                       ? [
                           {
                             key: recordPreviewTabs.comments,
+                            icon: CommentIcon,
                             label: t('comments.title'),
                             content: (
                               <Suspense
@@ -489,6 +516,7 @@ export const RecordPreview = ({
                       ? [
                           {
                             key: recordPreviewTabs.conversations,
+                            icon: AgentIcon,
                             label: t('records.agentConversations.title'),
                             content: (
                               <RecordConversationsPanel
@@ -504,6 +532,7 @@ export const RecordPreview = ({
                       : []),
                     {
                       key: recordPreviewTabs.recordControl,
+                      icon: RecordControlIcon,
                       label: t('records.recordControls.title'),
                       content: (
                         <RecordControlsPanel
@@ -514,6 +543,7 @@ export const RecordPreview = ({
                     },
                     {
                       key: recordPreviewTabs.systemAnnotations,
+                      icon: SystemTagIcon,
                       label: t('records.systemAnnotations.title'),
                       content: (
                         <RecordSystemAnnotationsPanel
@@ -526,6 +556,7 @@ export const RecordPreview = ({
                     },
                     {
                       key: recordPreviewTabs.exports,
+                      icon: ExportIcon,
                       label: t('extensionExports.recordTab'),
                       content: <RecordExportStatusPanel recordId={recordId} />,
                     },

@@ -1,18 +1,22 @@
 import { Box, Paper, Tab, Tabs } from '@mui/material';
+import type { LucideIcon } from 'lucide-react';
 import { useId, type ReactNode, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
+import { compactIconSize } from '../../../components/iconSizes';
 import type { RecordPreviewTabKey } from '../constants';
 
 type RecordPreviewTab = {
   key: RecordPreviewTabKey;
+  /** The system icon of the section's concept. */
+  icon: LucideIcon;
   label: string;
   content: ReactNode;
 };
 
 /**
- * Sections of a record shown below its values, one at a time. Hidden panels
- * stay mounted, so a panel keeps following its data and a comment being
- * written survives switching tabs.
+ * Sections of a record, its values first, shown one at a time. Hidden panels
+ * stay mounted, so a panel keeps following its data, and unsaved field edits
+ * and a comment being written survive switching tabs.
  */
 export const RecordPreviewTabs = ({
   tabs,
@@ -46,6 +50,7 @@ export const RecordPreviewTabs = ({
         {tabs.map((tab) => (
           <Tab
             aria-controls={`${id}-tabpanel-${tab.key}`}
+            icon={<tab.icon aria-hidden size={compactIconSize} />}
             id={`${id}-tab-${tab.key}`}
             key={tab.key}
             label={tab.label}

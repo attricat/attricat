@@ -113,6 +113,9 @@ vi.mock('../views/components/RecordView', () => ({
     ) => React.ReactNode;
   }) => (
     <>
+      <div data-field-code="title">
+        <input aria-label="Title value" />
+      </div>
       {renderAttributeDecoration?.({
         id: '44444444-4444-4444-8444-444444444444',
         code: 'title',
@@ -441,7 +444,7 @@ describe('RecordPreviewPage', () => {
     );
   });
 
-  it('shows data quality, comments, record control and exports in tabs, one at a time', async () => {
+  it('shows the data, data quality, comments, record control and exports in tabs, one at a time', async () => {
     const user = userEvent.setup();
     const scrollIntoView = vi.fn();
     Element.prototype.scrollIntoView = scrollIntoView;
@@ -488,18 +491,23 @@ describe('RecordPreviewPage', () => {
 
     const tabs = within(await screen.findByRole('tablist')).getAllByRole('tab');
     expect(tabs.map((tab) => tab.textContent)).toEqual([
+      'Data',
       'Data quality',
       'Comments',
       'Record control',
       'Tags and metadata',
       'Exports',
     ]);
+    // The record's values come first.
+    expect(screen.getByRole('tabpanel', { name: 'Data' })).toBeTruthy();
+    // Hidden panels stay mounted but out of the accessibility tree.
+    expect(screen.getAllByRole('tabpanel')).toHaveLength(1);
+
+    await user.click(screen.getByRole('tab', { name: 'Data quality' }));
     expect(
       (await screen.findByRole('tabpanel', { name: 'Data quality' }))
         .textContent,
     ).toContain('No open findings.');
-    // Hidden panels stay mounted but out of the accessibility tree.
-    expect(screen.getAllByRole('tabpanel')).toHaveLength(1);
 
     await user.click(screen.getByRole('tab', { name: 'Record control' }));
     expect(
@@ -529,6 +537,78 @@ describe('RecordPreviewPage', () => {
     ).toBe('true');
     await waitFor(() => expect(document.activeElement).toBe(dataQuality));
     expect(scrollIntoView).toHaveBeenCalled();
+  });
+
+  it('opens the data tab at the field a data quality finding is about', async () => {
+    const user = userEvent.setup();
+    const api = await import('./api');
+    const rules = await import('../rules/api');
+    vi.mocked(listContexts).mockResolvedValue([
+      {
+        id: '33333333-3333-4333-8333-333333333333',
+        code: 'default',
+        data: {},
+        parent_id: null,
+      },
+    ]);
+    vi.mocked(api.getResolvedRecordPreview).mockResolvedValue({
+      record: {
+        id: '00000000-0000-4000-8000-000000000001',
+        blueprint_id: '22222222-2222-4222-8222-222222222222',
+        blueprint_version: 1,
+      },
+      values: {},
+      reusable_values: {},
+    } as never);
+    vi.mocked(api.getBlueprintRevision).mockResolvedValue({
+      blueprint: {
+        id: '22222222-2222-4222-8222-222222222222',
+        name: 'Product',
+        code: 'product',
+        version: 1,
+        views: {},
+      },
+      attributes: [{ code: 'title', name: 'Listing title' }],
+    } as never);
+    vi.mocked(api.getCurrentBlueprint).mockResolvedValue({
+      blueprint: { version: 1 },
+    } as never);
+    vi.mocked(rules.listUnresolvedRecordFindings).mockResolvedValue({
+      items: [
+        {
+          id: '00000000-0000-4000-8000-000000000004',
+          rule_id: '00000000-0000-4000-8000-000000000003',
+          rule_version: 1,
+          record_id: '00000000-0000-4000-8000-000000000001',
+          context_id: null,
+          severity: 'error',
+          message: "'title' is required",
+          evidence: { attribute_code: 'title' },
+          state: 'open',
+          acknowledged_at: null,
+          resolved_at: null,
+          created_at: '2026-10-20T10:00:00Z',
+          updated_at: '2026-10-20T10:00:00Z',
+        },
+      ],
+    });
+    renderPage();
+
+    await user.click(await screen.findByRole('tab', { name: 'Data quality' }));
+    await user.click(
+      within(
+        await screen.findByRole('tabpanel', { name: 'Data quality' }),
+      ).getByRole('button', { name: 'Listing title' }),
+    );
+
+    expect(
+      screen.getByRole('tab', { name: 'Data' }).getAttribute('aria-selected'),
+    ).toBe('true');
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole('textbox', { name: 'Title value' }),
+      ),
+    );
   });
 
   it('shows a retryable error instead of a blank preview when contexts fail to load', async () => {
