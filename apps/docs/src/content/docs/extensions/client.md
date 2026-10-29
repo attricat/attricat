@@ -43,8 +43,8 @@ The frame stays mounted when the user switches context or theme. Listen for the 
 | `attricat.navigate({ record_id })` | `client.navigation` | Opens a record page. |
 | `attricat.notify({ message, severity })` | `client.notification` | Shows a host notification. Messages are trimmed to 512 characters. |
 | `attricat.refresh({ target: 'current_record' })` | `client.refresh` | Reloads the current record's views after your command changed it. Available in record page outlets. |
-| `attricat.dialog.open()` / `attricat.dialog.close()` | `client.action_dialog` | Opens the extension's `action_dialog` from a version 2 selection action, with that action's selection; `close` works inside the dialog. |
-| `attricat.operations.start({ operation_id, input, idempotency_key })` | `client.operations.start` | Starts an [interactive operation](/extensions/operations/#interactive-operations) for the frame's selection and resolves to `{ run_id }`. Available in version 2 selection actions and the action dialog. |
+| `attricat.dialog.close()` | `client.action_dialog` | Closes the dialog. Available only inside an action dialog; the host opens dialogs when the user chooses an [action](#actions). |
+| `attricat.operations.start({ operation_id, input, idempotency_key })` | `client.operations.start` | Starts an [interactive operation](/extensions/operations/#interactive-operations) for the records of the action that opened the dialog and resolves to `{ run_id }`. Available only in an action dialog. |
 | `attricat.operations.list()` / `get({ run_id })` / `download({ run_id, artifact_id })` | `client.operations.read` | Only runs of this extension that the signed-in user started, even when that user is an operator. The host performs downloads. |
 | `attricat.operations.cancel({ run_id })` | `client.operations.cancel` | Cancels one of those runs. |
 
@@ -72,33 +72,45 @@ Add a `navigation` contribution to link to it from the sidebar. Workspace admini
 | Outlet | Kind | Capability | Context |
 | --- | --- | --- | --- |
 | `record_preview_panel` | `embedded` | | `record_id`, optional `context_id` |
-| `record_action` | `embedded` | `client.record_action` | record, attribute, context |
+| `record_action` | `action` | `client.record_action` | The [action context](#actions), with this record |
 | `record_attribute_decoration` | `embedded` | `client.record_decoration` | record, attribute, blueprint and revision, optional context |
-| `record_header_action` | `action` | `client.record_header_action` | `record_id`, `blueprint_id`, `blueprint_version` |
+| `record_header_action` | `action` | `client.record_header_action` | The [action context](#actions), with this record |
 | `record_attribute_panel` | `panel` | `client.record_attribute_panel` | `record_id`, `attribute_id`, `blueprint_id`, `blueprint_version`, `context_id` |
 | `file_panel` | `panel` | `client.file_panel` | `file_id`, `record_id`, `attribute_id`, `blueprint_id`, `blueprint_version` |
 
-`record_preview_panel` appears in the record's extension drawer. A version 2 `record_action` receives the [selection context](#selection-context) instead. Action bars show one primary and three secondary actions before an overflow menu. Panels show up to three contributions before overflow.
+`record_preview_panel` appears in the record's **Extensions** tab. Record actions are buttons below the fields, four before an overflow menu; header actions are items of the record's **Actions** menu. Panels show up to three contributions before overflow.
 
 ### Explorer
 
 | Outlet | Kind | Capability | Context |
 | --- | --- | --- | --- |
-| `explorer_row_action` | `action` | `client.explorer_row_action` | `record_id`, `blueprint_id`, `blueprint_version` |
-| `explorer_action` | `action` | `client.explorer_action` | `blueprint_id`, `blueprint_version` |
-| `explorer_bulk_action` | `action` | `client.explorer_bulk_action` | `blueprint_id`, `blueprint_version`, selected `record_ids` (1 to 50) |
+| `explorer_row_action` | `action` | `client.explorer_row_action` | The [action context](#actions), with the row's record |
+| `explorer_action` | `action` | `client.explorer_action` | The [action context](#actions), with no records |
+| `explorer_bulk_action` | `action` | `client.explorer_bulk_action` | The [action context](#actions), with the selected records (1 to 50) |
 | `explorer_table_cell` | `embedded` | `client.explorer_table_cell` | The cell value, for a column using your [cell renderer](/extensions/manifest/#cell-renderers). |
 
-Explorer contexts never include the search query, filters, or row values. A selection is a hint about what the user is looking at, not an authorization: commands still check permissions on the server. Version 2 row and bulk actions receive the [selection context](#selection-context).
+Row actions are items of a row's actions menu, bulk actions items of the selection's **Actions** menu, and toolbar actions sit behind one **Extension actions** button. Explorer contexts never include the search query, filters, or row values. A selection is a hint about what the user is looking at, not an authorization: commands still check permissions on the server.
 
-### Selection context
+### Actions
 
-Contributions to `record_action`, `explorer_row_action`, and `explorer_bulk_action` can declare `"version": 2`. They then receive one shape for every surface:
+An action is a menu item or button that Attricat draws itself. You declare its title and what choosing it does; no frame loads until the user chooses it.
+
+```json
+{ "id": "check", "version": 1, "kind": "action", "outlet": "record_header_action",
+  "title": "Check formulas", "invoke": { "command": "check-formulas" } }
+{ "id": "generate", "version": 1, "kind": "action", "outlet": "explorer_bulk_action",
+  "title": "Generate documents…", "invoke": { "dialog": "documents" } }
+```
+
+`invoke.command` calls one of your [server commands](/extensions/manifest/#server) and needs `client.commands`; the action can call only that command. `invoke.dialog` opens one of your `dialog` contributions and needs `client.action_dialog`. You may add several actions to the same outlet. End a title with `…` when the action opens a dialog.
+
+The command receives, and the dialog gets as `attricat.context`, the action context:
 
 ```json
 {
-  "context_version": 2,
-  "selection_source": "record_preview",
+  "context_version": 1,
+  "action_id": "generate",
+  "outlet": "explorer_bulk_action",
   "blueprint_id": "…",
   "blueprint_version": 3,
   "context_id": null,
@@ -106,15 +118,17 @@ Contributions to `record_action`, `explorer_row_action`, and `explorer_bulk_acti
 }
 ```
 
-`selection_source` is `record_preview`, `explorer_row`, or `explorer_selection`. `record_ids` lists 1 to 50 saved records of one blueprint revision in display order. `context_id` is the surface's value-resolution context, or `null` for the default. Version 1 contributions keep the contexts above.
+`record_ids` lists the saved records of one blueprint revision in display order: one on a record page or row, 1 to 50 for a selection, none for a toolbar action. `context_id` is the surface's value-resolution context, or `null` for the default.
+
+A command can tell the host what to do next. Return `{ "notification": { "message": "…", "severity": "success" }, "refresh": true }` to show a notification and reload the views of the action's records. Other fields of the response are ignored. If the command fails, the host says which action failed.
 
 ### Action dialog
 
 | Outlet | Kind | Capability | Context |
 | --- | --- | --- | --- |
-| `action_dialog` | `dialog` | `client.action_dialog` | The opening action's selection context, captured when it opens. |
+| `action_dialog` | `dialog` | `client.action_dialog` | The opening action's context, captured when it opens. |
 
-A `dialog` contribution needs a `title`. Your version 2 actions open it with `attricat.dialog.open()`. The host draws the dialog around your frame, shows how many records it applies to, and warns about unsaved edits. It stays open when the row menu closes or the selection changes, and closes on navigation. Key presses inside your frame do not reach the host, so call `attricat.dialog.close()` when the user presses Escape. Closing it before starting a run does nothing; closing it afterwards does not cancel the run.
+A `dialog` contribution needs a `title`, and an extension may have several. The host draws the dialog around your frame, shows how many records it applies to, and warns about unsaved edits. It stays open when the row menu closes or the selection changes, and closes on navigation. Key presses inside your frame do not reach the host, so call `attricat.dialog.close()` when the user presses Escape. Closing it before starting a run does nothing; closing it afterwards does not cancel the run.
 
 ### Blueprints
 

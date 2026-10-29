@@ -29,9 +29,10 @@ describe('ExtensionActionDialogHost', () => {
     act(() =>
       useActionDialogStore.getState().open({
         extensionId: 'acme.tools',
+        dialogId: 'tools',
         context: {
           record_ids: ['record'],
-          selection_source: 'record',
+          outlet: 'record_action',
         } as never,
       }),
     );

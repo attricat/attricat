@@ -1,11 +1,6 @@
 import { Alert, Box, CircularProgress } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import {
-  ActionSelectionContext,
-  type ActionSelection,
-} from './actionSelection';
 import type { ExtensionRuntimeScope } from './api';
-import { ExtensionActionBarOutlet } from './ExtensionActionBarOutlet';
 import { ExtensionAppsList } from './ExtensionAppsList';
 import { ExtensionCardOutlet } from './ExtensionCardOutlet';
 import { ExtensionNavigationOutlet } from './ExtensionNavigationOutlet';
@@ -31,8 +26,6 @@ type Props = {
   onBrowseExtensions?: () => void;
   onNavigate?: () => void;
   runtimeScope?: ExtensionRuntimeScope;
-  /** Saved records this action surface applies to (selection-aware outlets). */
-  selection?: ActionSelection;
   /** Mounts only this extension's contributions, on its own page. */
   extensionId?: string;
 };
@@ -50,7 +43,6 @@ export const ExtensionOutlet = ({
   onBrowseExtensions,
   onNavigate,
   runtimeScope,
-  selection,
   extensionId,
 }: Props) => {
   const { t } = useTranslation();
@@ -79,7 +71,6 @@ export const ExtensionOutlet = ({
     runtime.data,
     outlet,
     context,
-    selection,
   ).filter(
     (contribution) =>
       extensionId === undefined || contribution.extension_id === extensionId,
@@ -93,16 +84,6 @@ export const ExtensionOutlet = ({
           contributions={contributions}
           policy={policy}
         />
-      );
-    case 'actionBar':
-      return (
-        <ActionSelectionContext value={selection ?? null}>
-          <ExtensionActionBarOutlet
-            context={context}
-            contributions={contributions}
-            policy={policy}
-          />
-        </ActionSelectionContext>
       );
     case 'navigation':
       return navigationDisplay === 'all' ? (

@@ -39,6 +39,7 @@ const contribution: ExtensionContribution = {
   route: null,
   title: 'Attribute panel',
   version: 1,
+  invoke: null,
 };
 
 const collapse = (container: HTMLElement) =>

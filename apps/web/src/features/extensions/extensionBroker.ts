@@ -10,11 +10,7 @@ import {
   startExtensionRun,
 } from '../extension-runs/api';
 import { extensionRunScopes } from '../extension-runs/constants';
-import {
-  isSelectionContribution,
-  parseSelectionContext,
-  type SelectionContext,
-} from './actionSelection';
+import { parseActionContext } from './actions';
 import {
   extensionCommand,
   extensionCommandRequestSchema,
@@ -119,17 +115,10 @@ type BrokerDependencies = {
   currentContext: () => FrameContext;
   navigateToRecord: (recordId: string) => Promise<void>;
   queryClient: QueryClient;
-  /** Opens the same extension's host-managed action dialog. */
-  openActionDialog: (request: ActionDialogRequest) => void;
   closeActionDialog: () => void;
   /** Lets the host track a run after the source frame unmounts. */
   onRunStarted: (runId: string) => void;
   downloadArtifact: (url: string) => void;
-};
-
-export type ActionDialogRequest = {
-  extensionId: string;
-  context: SelectionContext;
 };
 
 const holds = (contribution: ExtensionContribution, capability: string) =>
@@ -187,17 +176,17 @@ const handleAttricatRead = async (
   return JSON.parse(text) as unknown;
 };
 
-/** The selection a frame may act on: its own selection context, if any. */
+/**
+ * The records a frame may act on: only an action dialog has them, captured
+ * from the action that opened it.
+ */
 const frameSelection = ({
   contribution,
   currentContext,
 }: BrokerDependencies) => {
-  if (
-    !isSelectionContribution(contribution) &&
-    contribution.outlet !== extensionOutlets.actionDialog
-  )
+  if (contribution.outlet !== extensionOutlets.actionDialog)
     throw new Error(extensionProtocolErrors.selectionUnavailable);
-  const selection = parseSelectionContext(currentContext());
+  const selection = parseActionContext(currentContext());
   if (!selection) throw new Error(extensionProtocolErrors.selectionUnavailable);
   return selection;
 };
@@ -342,19 +331,6 @@ export const handleBrokerRequest = async (
     can(extensionCapabilities.attricatRead)
   )
     return handleAttricatRead(payload, dependencies);
-  if (
-    method === extensionBrokerMethods.dialogOpen &&
-    can(extensionCapabilities.actionDialog) &&
-    isSelectionContribution(contribution)
-  ) {
-    // The dialog captures the selection now; later Explorer changes never
-    // alter what the user is configuring.
-    dependencies.openActionDialog({
-      extensionId: contribution.extension_id,
-      context: frameSelection(dependencies),
-    });
-    return null;
-  }
   if (
     method === extensionBrokerMethods.dialogClose &&
     contribution.outlet === extensionOutlets.actionDialog

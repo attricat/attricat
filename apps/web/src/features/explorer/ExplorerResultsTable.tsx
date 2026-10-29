@@ -353,7 +353,10 @@ export const ExplorerResultsTable = ({
         }}
         extensionActions={
           showExplorerActions && (
-            <ExplorerExtensionActions blueprint={blueprint.blueprint} />
+            <ExplorerExtensionActions
+              blueprint={blueprint.blueprint}
+              contextId={publicationContextId}
+            />
           )
         }
         selectionExtensionActions={

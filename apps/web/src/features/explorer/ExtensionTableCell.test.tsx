@@ -57,6 +57,7 @@ const contribution: ExtensionContribution = {
   route: null,
   title: null,
   version: 1,
+  invoke: null,
 };
 
 describe('ExtensionTableCell', () => {

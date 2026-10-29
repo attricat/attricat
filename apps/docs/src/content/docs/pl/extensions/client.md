@@ -43,8 +43,8 @@ Ramka pozostaje zamontowana, gdy użytkownik przełącza kontekst lub motyw. Nas
 | `attricat.navigate({ record_id })` | `client.navigation` | Otwiera stronę rekordu. |
 | `attricat.notify({ message, severity })` | `client.notification` | Wyświetla powiadomienie hosta. Komunikaty są przycinane do 512 znaków. |
 | `attricat.refresh({ target: 'current_record' })` | `client.refresh` | Ponownie ładuje widoki bieżącego rekordu po zmianie wprowadzonej przez Twoje polecenie. Dostępne w miejscach osadzenia na stronach rekordów. |
-| `attricat.dialog.open()` / `attricat.dialog.close()` | `client.action_dialog` | Otwiera `action_dialog` rozszerzenia z akcji zaznaczenia w wersji 2, z zaznaczeniem tej akcji; `close` działa wewnątrz okna. |
-| `attricat.operations.start({ operation_id, input, idempotency_key })` | `client.operations.start` | Uruchamia [operację interaktywną](/pl/extensions/operations/#operacje-interaktywne) dla zaznaczenia ramki i zwraca `{ run_id }`. Dostępne w akcjach zaznaczenia w wersji 2 i w oknie akcji. |
+| `attricat.dialog.close()` | `client.action_dialog` | Zamyka okno. Dostępne tylko wewnątrz okna akcji; okna otwiera host, gdy użytkownik wybierze [akcję](#akcje). |
+| `attricat.operations.start({ operation_id, input, idempotency_key })` | `client.operations.start` | Uruchamia [operację interaktywną](/pl/extensions/operations/#operacje-interaktywne) dla rekordów akcji, która otworzyła okno, i zwraca `{ run_id }`. Dostępne tylko w oknie akcji. |
 | `attricat.operations.list()` / `get({ run_id })` / `download({ run_id, artifact_id })` | `client.operations.read` | Tylko uruchomienia tego rozszerzenia rozpoczęte przez zalogowanego użytkownika, także gdy jest on operatorem. Pobieranie wykonuje host. |
 | `attricat.operations.cancel({ run_id })` | `client.operations.cancel` | Anuluje jedno z tych uruchomień. |
 
@@ -72,33 +72,45 @@ Dodaj kontrybucję `navigation`, aby umieścić do niej link na pasku bocznym. A
 | Miejsce osadzenia | Rodzaj | Uprawnienie | Kontekst |
 | --- | --- | --- | --- |
 | `record_preview_panel` | `embedded` | | `record_id`, opcjonalnie `context_id` |
-| `record_action` | `embedded` | `client.record_action` | rekord, atrybut, kontekst |
+| `record_action` | `action` | `client.record_action` | [Kontekst akcji](#akcje) z tym rekordem |
 | `record_attribute_decoration` | `embedded` | `client.record_decoration` | rekord, atrybut, Schemat i wersja, opcjonalnie kontekst |
-| `record_header_action` | `action` | `client.record_header_action` | `record_id`, `blueprint_id`, `blueprint_version` |
+| `record_header_action` | `action` | `client.record_header_action` | [Kontekst akcji](#akcje) z tym rekordem |
 | `record_attribute_panel` | `panel` | `client.record_attribute_panel` | `record_id`, `attribute_id`, `blueprint_id`, `blueprint_version`, `context_id` |
 | `file_panel` | `panel` | `client.file_panel` | `file_id`, `record_id`, `attribute_id`, `blueprint_id`, `blueprint_version` |
 
-`record_preview_panel` pojawia się w szufladzie rozszerzeń rekordu. `record_action` w wersji 2 otrzymuje zamiast tego [kontekst zaznaczenia](#kontekst-zaznaczenia). Paski akcji pokazują jedną akcję główną i trzy dodatkowe przed menu przepełnienia. Panele pokazują do trzech kontrybucji przed przepełnieniem.
+`record_preview_panel` pojawia się na karcie **Rozszerzenia** rekordu. Akcje rekordu to przyciski pod polami, cztery przed menu przepełnienia; akcje nagłówka to pozycje menu **Akcje** rekordu. Panele pokazują do trzech kontrybucji przed przepełnieniem.
 
 ### Przeglądarka rekordów
 
 | Miejsce osadzenia | Rodzaj | Uprawnienie | Kontekst |
 | --- | --- | --- | --- |
-| `explorer_row_action` | `action` | `client.explorer_row_action` | `record_id`, `blueprint_id`, `blueprint_version` |
-| `explorer_action` | `action` | `client.explorer_action` | `blueprint_id`, `blueprint_version` |
-| `explorer_bulk_action` | `action` | `client.explorer_bulk_action` | `blueprint_id`, `blueprint_version`, zaznaczone `record_ids` (od 1 do 50) |
+| `explorer_row_action` | `action` | `client.explorer_row_action` | [Kontekst akcji](#akcje) z rekordem wiersza |
+| `explorer_action` | `action` | `client.explorer_action` | [Kontekst akcji](#akcje) bez rekordów |
+| `explorer_bulk_action` | `action` | `client.explorer_bulk_action` | [Kontekst akcji](#akcje) z zaznaczonymi rekordami (od 1 do 50) |
 | `explorer_table_cell` | `embedded` | `client.explorer_table_cell` | Wartość komórki, dla kolumny używającej Twojego [renderera komórek](/pl/extensions/manifest/#renderery-komórek). |
 
-Konteksty przeglądarki rekordów nigdy nie zawierają zapytania wyszukiwania, filtrów ani wartości wierszy. Zaznaczenie to wskazówka, na co patrzy użytkownik, a nie autoryzacja: polecenia nadal sprawdzają uprawnienia na serwerze. Akcje wiersza i akcje zbiorcze w wersji 2 otrzymują [kontekst zaznaczenia](#kontekst-zaznaczenia).
+Akcje wiersza to pozycje menu akcji wiersza, akcje zbiorcze to pozycje menu **Akcje** zaznaczenia, a akcje paska narzędzi kryją się za jednym przyciskiem **Akcje rozszerzeń**. Konteksty przeglądarki rekordów nigdy nie zawierają zapytania wyszukiwania, filtrów ani wartości wierszy. Zaznaczenie to wskazówka, na co patrzy użytkownik, a nie autoryzacja: polecenia nadal sprawdzają uprawnienia na serwerze.
 
-### Kontekst zaznaczenia
+### Akcje
 
-Kontrybucje do `record_action`, `explorer_row_action` i `explorer_bulk_action` mogą zadeklarować `"version": 2`. Otrzymują wtedy jeden kształt kontekstu na każdej powierzchni:
+Akcja to pozycja menu lub przycisk, które Attricat rysuje sam. Deklarujesz jej tytuł i to, co robi jej wybranie; żadna ramka nie ładuje się, dopóki użytkownik jej nie wybierze.
+
+```json
+{ "id": "check", "version": 1, "kind": "action", "outlet": "record_header_action",
+  "title": "Sprawdź formuły", "invoke": { "command": "check-formulas" } }
+{ "id": "generate", "version": 1, "kind": "action", "outlet": "explorer_bulk_action",
+  "title": "Generuj dokumenty…", "invoke": { "dialog": "documents" } }
+```
+
+`invoke.command` wywołuje jedno z Twoich [poleceń serwerowych](/pl/extensions/manifest/#serwer) i wymaga `client.commands`; akcja może wywołać tylko to polecenie. `invoke.dialog` otwiera jedną z Twoich kontrybucji `dialog` i wymaga `client.action_dialog`. W jednym miejscu osadzenia możesz dodać kilka akcji. Zakończ tytuł znakiem `…`, gdy akcja otwiera okno.
+
+Polecenie otrzymuje, a okno dostaje jako `attricat.context`, kontekst akcji:
 
 ```json
 {
-  "context_version": 2,
-  "selection_source": "record_preview",
+  "context_version": 1,
+  "action_id": "generate",
+  "outlet": "explorer_bulk_action",
   "blueprint_id": "…",
   "blueprint_version": 3,
   "context_id": null,
@@ -106,15 +118,17 @@ Kontrybucje do `record_action`, `explorer_row_action` i `explorer_bulk_action` m
 }
 ```
 
-`selection_source` to `record_preview`, `explorer_row` lub `explorer_selection`. `record_ids` zawiera od 1 do 50 zapisanych rekordów jednej wersji schematu w kolejności wyświetlania. `context_id` to kontekst rozwiązywania wartości na danej powierzchni albo `null` dla domyślnego. Kontrybucje w wersji 1 zachowują opisane wyżej konteksty.
+`record_ids` zawiera zapisane rekordy jednej wersji Schematu w kolejności wyświetlania: jeden na stronie rekordu lub w wierszu, od 1 do 50 dla zaznaczenia, żadnego dla akcji paska narzędzi. `context_id` to kontekst rozwiązywania wartości na danej powierzchni albo `null` dla domyślnego.
+
+Polecenie może powiedzieć hostowi, co zrobić dalej. Zwróć `{ "notification": { "message": "…", "severity": "success" }, "refresh": true }`, aby pokazać powiadomienie i ponownie załadować widoki rekordów akcji. Pozostałe pola odpowiedzi są pomijane. Jeśli polecenie się nie powiedzie, host podaje, która akcja zawiodła.
 
 ### Okno akcji
 
 | Miejsce osadzenia | Rodzaj | Uprawnienie | Kontekst |
 | --- | --- | --- | --- |
-| `action_dialog` | `dialog` | `client.action_dialog` | Kontekst zaznaczenia akcji, która je otworzyła, utrwalony w chwili otwarcia. |
+| `action_dialog` | `dialog` | `client.action_dialog` | Kontekst akcji, która je otworzyła, utrwalony w chwili otwarcia. |
 
-Kontrybucja `dialog` wymaga pola `title`. Twoje akcje w wersji 2 otwierają ją przez `attricat.dialog.open()`. Host rysuje okno wokół Twojej ramki, pokazuje, ilu rekordów dotyczy, i ostrzega o niezapisanych zmianach. Okno pozostaje otwarte po zamknięciu menu wiersza lub zmianie zaznaczenia i zamyka się przy nawigacji. Naciśnięcia klawiszy w Twojej ramce nie docierają do hosta, więc wywołaj `attricat.dialog.close()`, gdy użytkownik naciśnie Escape. Zamknięcie przed uruchomieniem niczego nie tworzy; zamknięcie później nie anuluje uruchomienia.
+Kontrybucja `dialog` wymaga pola `title`, a rozszerzenie może mieć kilka okien. Host rysuje okno wokół Twojej ramki, pokazuje, ilu rekordów dotyczy, i ostrzega o niezapisanych zmianach. Okno pozostaje otwarte po zamknięciu menu wiersza lub zmianie zaznaczenia i zamyka się przy nawigacji. Naciśnięcia klawiszy w Twojej ramce nie docierają do hosta, więc wywołaj `attricat.dialog.close()`, gdy użytkownik naciśnie Escape. Zamknięcie przed uruchomieniem niczego nie tworzy; zamknięcie później nie anuluje uruchomienia.
 
 ### Schematy
 

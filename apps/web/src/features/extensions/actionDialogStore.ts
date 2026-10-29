@@ -1,5 +1,12 @@
 import { create } from 'zustand';
-import type { ActionDialogRequest } from './extensionBroker';
+import type { ActionContext } from './actions';
+
+/** One of an extension's dialogs, opened by an action with its context. */
+export type ActionDialogRequest = {
+  extensionId: string;
+  dialogId: string;
+  context: ActionContext;
+};
 
 export type OpenActionDialog = ActionDialogRequest & {
   /** Distinguishes reopenings so the dialog frame always starts fresh. */

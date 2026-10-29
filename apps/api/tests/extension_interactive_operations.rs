@@ -44,6 +44,7 @@ const PERMISSIONS: &[&str] = &[
     "artifacts.write",
     "client.explorer_bulk_action",
     "client.explorer_row_action",
+    "client.action_dialog",
     "client.operations.start",
     "client.operations.read",
     "client.operations.cancel",
@@ -82,8 +83,8 @@ fn archive(extension_id: &str, server: &[u8]) -> Vec<u8> {
             "interactive": {"version": 1, "max_selection": 50}
         }]},
         "ui": [
-            {"id": "bulk", "version": 2, "kind": "action", "artifact": "client", "outlet": "explorer_bulk_action"},
-            {"id": "row", "version": 1, "kind": "action", "artifact": "client", "outlet": "explorer_row_action"}
+            {"id": "bulk", "version": 1, "kind": "dialog", "artifact": "client", "outlet": "action_dialog", "title": "Bulk"},
+            {"id": "row", "version": 1, "kind": "action", "outlet": "explorer_row_action", "title": "Summarize", "invoke": {"dialog": "bulk"}}
         ]
     }))
     .unwrap();
@@ -401,7 +402,7 @@ async fn interactive_runs_are_authorized_per_record_and_fail_closed(pool: sqlx::
         .await
         .unwrap();
     assert_eq!(mixed.status(), StatusCode::UNPROCESSABLE_ENTITY);
-    // Version 1 contributions keep their old contract and cannot start runs.
+    // Actions are host-rendered; only the dialog they open may start runs.
     let legacy = authenticated_client()
         .post(format!("{base}/extensions/{EXTENSION}/row/operations"))
         .json(&start_body(release, "legacy", blueprint, &[visible]))

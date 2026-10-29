@@ -73,11 +73,17 @@ const { outletMount, popoverMount } = vi.hoisted(() => ({
   outletMount: vi.fn(),
   popoverMount: vi.fn(),
 }));
-vi.mock('../extensions/ExtensionOutlet', () => ({
-  ExtensionPopoverOutlet: (props: unknown) => {
+vi.mock('../extensions/ExtensionActions', () => ({
+  ExtensionActionsMenuButton: (props: unknown) => {
     popoverMount(props);
     return null;
   },
+  ExtensionActionMenuItems: (props: unknown) => {
+    popoverMount(props);
+    return null;
+  },
+}));
+vi.mock('../extensions/ExtensionOutlet', () => ({
   ExtensionOutlet: (props: unknown) => {
     outletMount(props);
     return null;
@@ -249,17 +255,16 @@ describe('ExplorerResultsTable', () => {
     // One toolbar button offers the Explorer's revision-wide actions.
     expect(popoverMount).toHaveBeenCalledWith({
       outlet: 'explorer_action',
-      context: {
-        context_version: 1,
-        blueprint_id: blueprint.blueprint.id,
-        blueprint_version: blueprint.blueprint.version,
-      },
       label: 'Extension actions',
       runtimeScope: {
         blueprintId: blueprint.blueprint.id,
         blueprintVersion: blueprint.blueprint.version,
       },
-      trigger: 'toolbar',
+      // A revision-wide action names no rows.
+      target: expect.objectContaining({
+        blueprintId: blueprint.blueprint.id,
+        recordIds: [],
+      }),
     });
   });
 
@@ -365,24 +370,14 @@ describe('ExplorerResultsTable', () => {
     await user.click(screen.getByRole('button', { name: 'Actions' }));
     expect(popoverMount).toHaveBeenCalledWith({
       outlet: 'explorer_bulk_action',
-      context: {
-        context_version: 1,
-        blueprint_id: blueprint.blueprint.id,
-        blueprint_version: blueprint.blueprint.version,
-        record_ids: [item.id],
-      },
-      label: 'More actions…',
       runtimeScope: {
         blueprintId: blueprint.blueprint.id,
         blueprintVersion: blueprint.blueprint.version,
       },
-      // Selection-aware (v2) contributions receive the same ordered IDs.
-      selection: expect.objectContaining({
-        source: 'explorer_selection',
+      target: expect.objectContaining({
         blueprintId: blueprint.blueprint.id,
         recordIds: [item.id],
       }),
-      trigger: 'menu_item',
     });
     await user.keyboard('{Escape}');
     await user.click(selectAll);

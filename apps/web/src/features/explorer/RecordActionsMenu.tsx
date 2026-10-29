@@ -16,13 +16,9 @@ import type {
 } from '../records/api';
 import { publicationReadinessText } from '../records/checkViolations';
 import { useActionDialogStore } from '../extensions/actionDialogStore';
-import { ExtensionPopoverOutlet } from '../extensions/ExtensionOutlet';
-import {
-  selectionSources,
-  extensionOutlets,
-  extensionPopoverTriggers,
-  supportedOutletContextVersion,
-} from '../extensions/constants';
+import { ActionMenuCloseContext } from '../extensions/actions';
+import { ExtensionActionMenuItems } from '../extensions/ExtensionActions';
+import { extensionOutlets } from '../extensions/constants';
 import { publicationStatuses } from '../records/constants';
 
 type Props = {
@@ -158,24 +154,21 @@ export const RecordActionsMenu = ({
           )}
         </>
       )}
-      <ExtensionPopoverOutlet
-        context={{
-          context_version: supportedOutletContextVersion,
-          blueprint_id: blueprintId,
-          blueprint_version: record.blueprint_version,
-          record_id: record.id,
-        }}
-        label={t('explorer.extensionActions')}
-        outlet={extensionOutlets.explorerRowAction}
-        selection={{
-          source: selectionSources.explorerRow,
-          blueprintId,
-          blueprintVersion: record.blueprint_version,
-          contextId: publicationContextId ?? null,
-          recordIds: [record.id],
-        }}
-        trigger={extensionPopoverTriggers.menuItem}
-      />
+      <ActionMenuCloseContext value={onClose}>
+        <ExtensionActionMenuItems
+          outlet={extensionOutlets.explorerRowAction}
+          runtimeScope={{
+            blueprintId,
+            blueprintVersion: record.blueprint_version,
+          }}
+          target={{
+            blueprintId,
+            blueprintVersion: record.blueprint_version,
+            contextId: publicationContextId ?? null,
+            recordIds: [record.id],
+          }}
+        />
+      </ActionMenuCloseContext>
     </Menu>
   );
 };

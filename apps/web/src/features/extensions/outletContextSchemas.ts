@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { maximumAgentSelection } from '../explorer/agentSelection';
 import { supportedOutletContextVersion } from './constants';
 
 const contextVersion = z.literal(supportedOutletContextVersion);
@@ -20,15 +19,6 @@ const blueprintRevisionContextSchema = z
     blueprint_id: z.uuid(),
     blueprint_version: blueprintVersion,
     context_version: contextVersion,
-  })
-  .strict();
-
-const recordRevisionContextSchema = z
-  .object({
-    blueprint_id: z.uuid(),
-    blueprint_version: blueprintVersion,
-    context_version: contextVersion,
-    record_id: z.uuid(),
   })
   .strict();
 
@@ -63,23 +53,12 @@ export const outletContextSchemas = {
       export_id: z.string().regex(exportIdPattern),
     })
     .strict(),
-  explorer_bulk_action: z
-    .object({
-      context_version: contextVersion,
-      blueprint_id: z.uuid(),
-      blueprint_version: blueprintVersion,
-      record_ids: uniqueRecordIdsSchema(maximumAgentSelection),
-    })
-    .strict(),
-  explorer_action: blueprintRevisionContextSchema,
   audit_event_panel: z
     .object({
       context_version: contextVersion,
       event_id: z.uuid(),
     })
     .strict(),
-  record_header_action: recordRevisionContextSchema,
-  explorer_row_action: recordRevisionContextSchema,
   blueprint_panel: blueprintRevisionContextSchema,
   blueprint_detail_panel: blueprintRevisionContextSchema,
 };

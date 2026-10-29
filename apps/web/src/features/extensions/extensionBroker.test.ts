@@ -39,6 +39,7 @@ const contribution: ExtensionContribution = {
   route: null,
   title: null,
   version: 1,
+  invoke: null,
 };
 
 const dependencies = (capabilities: string[]) => ({
@@ -50,15 +51,15 @@ const dependencies = (capabilities: string[]) => ({
   currentContext: () => ({}),
   navigateToRecord: vi.fn(),
   queryClient: new QueryClient(),
-  openActionDialog: vi.fn(),
   closeActionDialog: vi.fn(),
   onRunStarted: vi.fn(),
   downloadArtifact: vi.fn(),
 });
 
 const selection = {
-  context_version: 2,
-  selection_source: 'explorer_selection',
+  context_version: 1,
+  action_id: 'generate',
+  outlet: 'explorer_bulk_action',
   blueprint_id: '22222222-2222-4222-8222-222222222222',
   blueprint_version: 3,
   context_id: null,
@@ -77,9 +78,9 @@ const selectionDependencies = (
     ...contribution,
     capabilities,
     id: 'bulk',
-    kind: 'action' as const,
-    outlet: 'explorer_bulk_action' as const,
-    version: 2,
+    kind: 'dialog' as const,
+    outlet: 'action_dialog' as const,
+    version: 1,
     ...overrides,
   },
   currentContext: () => selection,
@@ -138,20 +139,31 @@ describe('extension broker', () => {
     ).rejects.toThrow('Blueprint revision is outside this outlet context');
   });
 
-  it('opens the action dialog with the captured selection only for v2 actions', async () => {
-    const deps = selectionDependencies(['client.action_dialog']);
-    await handleBrokerRequest({ method: 'dialog.open', payload: {} }, deps);
-    expect(deps.openActionDialog).toHaveBeenCalledWith({
-      extensionId: 'example.extension',
-      context: selection,
-    });
-    const legacy = selectionDependencies(['client.action_dialog'], {
-      version: 1,
+  it("lets only an action dialog act on its action's records", async () => {
+    // Actions are host-rendered; no frame opens a dialog itself.
+    await expect(
+      handleBrokerRequest(
+        { method: 'dialog.open', payload: {} },
+        selectionDependencies(['client.action_dialog']),
+      ),
+    ).rejects.toThrow('Request denied');
+    const panel = selectionDependencies(['client.operations.start'], {
+      kind: 'panel',
+      outlet: 'record_attribute_panel',
     });
     await expect(
-      handleBrokerRequest({ method: 'dialog.open', payload: {} }, legacy),
-    ).rejects.toThrow('Request denied');
-    expect(legacy.openActionDialog).not.toHaveBeenCalled();
+      handleBrokerRequest(
+        {
+          method: 'operations.start',
+          payload: {
+            operation_id: 'generate',
+            input: {},
+            idempotency_key: 'k',
+          },
+        },
+        panel,
+      ),
+    ).rejects.toThrow('This contribution has no selection context');
   });
 
   it('starts runs for the host-captured selection, never a frame-supplied one', async () => {

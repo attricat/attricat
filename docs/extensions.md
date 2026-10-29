@@ -185,7 +185,7 @@ release's `attricat.host_api` range must accept that version, for example
 server and client feature in one component: event handlers, client commands,
 typed reads and writes, scoped configuration, scheduled, connector and
 interactive operations, artifacts, transfer, connector jobs, every UI outlet,
-and version 2 selection actions. There are no per-feature `host_api` gates.
+and host-rendered actions. There are no per-feature `host_api` gates.
 
 The package defines the interfaces `api`, `handler`, `artifacts`,
 `attricat-data`, `attricat` (connector calls), `transfer`, `selection` and
@@ -639,24 +639,50 @@ and schedules remain available separately. An export job may also declare a
 change `trigger` and a destination `connection`, and can be resynced; see
 [Connector jobs for exports](#connector-jobs-for-exports).
 
-## Selection-aware actions and interactive operations
+## Actions and interactive operations
 
-An extension can let a signed-in user process one record from its preview or
-Explorer row, or up to 50 selected Explorer records, as a durable background
-run. Core provides the action surfaces, authorization, the run, its artifacts,
-and annotations; templates, rendering, result reports and document history stay
-in the extension.
+An extension adds commands to Attricat's menus and toolbars as **actions**: a
+title and what choosing it invokes. The host renders every action itself, as a
+menu item or button, so an action runs no extension code and costs nothing
+until it is chosen. Choosing one either calls one of the extension's server
+commands or opens one of its dialogs, a single sandboxed frame. An extension
+can let a signed-in user process one record from its preview or Explorer row,
+or up to 50 selected Explorer records, as a durable background run started
+from such a dialog. Core provides the action surfaces, authorization, the run,
+its artifacts, and annotations; templates, rendering, result reports and
+document history stay in the extension.
 
-### Selection context
+### Declaring actions
 
-Contributions to `record_action`, `explorer_row_action`, and
-`explorer_bulk_action` may declare `"version": 2`. Version 1 contributions
-keep their released contexts. A version 2 contribution receives:
+```json
+{"id": "check", "version": 1, "kind": "action", "outlet": "record_header_action",
+ "title": "Check formulas", "invoke": {"command": "check-formulas"}}
+{"id": "generate", "version": 1, "kind": "action", "outlet": "explorer_bulk_action",
+ "title": "Generate documents…", "invoke": {"dialog": "documents"}}
+{"id": "documents", "version": 1, "kind": "dialog", "artifact": "dialog",
+ "outlet": "action_dialog", "title": "Generate documents"}
+```
+
+An action has `version` 1, a `title` of at most 64 characters, one action
+outlet (`record_action`, `record_header_action`, `explorer_row_action`,
+`explorer_action` or `explorer_bulk_action`) and exactly one `invoke`. It
+declares no `artifact` or `route`; an extension may place several actions in
+the same outlet. `invoke.command` names a `server.commands` entry and requires
+`client.commands`; the command endpoint refuses any other command for that
+action. `invoke.dialog` names a `dialog` contribution of the same extension and
+requires `client.action_dialog`; an extension may declare several dialogs.
+End an action's title with `…` when it opens a dialog.
+
+### Action context
+
+The host builds the context an action passes on from its own state; nothing
+comes from extension code:
 
 ```json
 {
-  "context_version": 2,
-  "selection_source": "explorer_selection",
+  "context_version": 1,
+  "action_id": "generate",
+  "outlet": "explorer_bulk_action",
   "blueprint_id": "<uuid>",
   "blueprint_version": 3,
   "context_id": "<uuid or null>",
@@ -664,13 +690,29 @@ keep their released contexts. A version 2 contribution receives:
 }
 ```
 
-Preview and row actions use a one-item `record_ids`. `context_id` is the
-effective value-resolution context of the surface (the preview's selected
-context or the Explorer context), or `null` for the workspace default.
-Selections contain only saved records from one blueprint revision in display
-order; the host never widens them to hidden rows or to all matching results.
-Generation reads saved data only: when a selected record has unsaved editor
-changes in the tab, the host-owned dialog says so and offers the editor.
+Record-page and row actions use a one-item `record_ids`; `explorer_action` is
+revision-wide and sends none. `context_id` is the effective value-resolution
+context of the surface (the preview's selected context or the Explorer
+context), or `null` for the workspace default. Selections contain only saved
+records from one blueprint revision in display order; the host never widens
+them to hidden rows or to all matching results. Generation reads saved data
+only: when a selected record has unsaved editor changes in the tab, the
+host-owned dialog says so and offers the editor.
+
+A command receives this object as its payload; declare it in the command's
+`request_schema`. The host then reads two optional fields of the command's
+response and ignores the rest:
+
+```json
+{"notification": {"message": "2 valid formulas.", "severity": "info"}, "refresh": true}
+```
+
+`notification` is shown as a host notification (`severity` is `success`,
+`info`, `warning` or `error`). `refresh: true` reloads the host's views of the
+action's records and the Explorer's results. A failed command shows a host
+error naming the action. A dialog receives the context as `attricat.context`;
+its frame may start interactive runs for those records and close itself with
+`attricat.dialog.close()`.
 
 ### Interactive operations
 
@@ -1338,17 +1380,19 @@ Enabled `client_component` artifacts can expose a strict `ui` contribution:
 
 A contribution is either `route` (which requires a non-empty `title`),
 `navigation` (which requires a non-empty `title` and targets one of that
-extension's `route` contribution IDs), `embedded`, explicit `action`, or
-explicit read-only `panel`. `action` is
-required for `explorer_row_action` (and requires `client.explorer_row_action`);
-`panel` is required for `blueprint_detail_panel` (and requires
-`client.blueprint_detail_panel`). `embedded` contributions use `navigation`,
-`record_preview_panel`, `blueprint_attribute_configuration`,
-`record_attribute_decoration`, or `record_action`; the additional mediated
-placement capabilities reserve their matching fixed outlets for their explicit
-host-owned action or panel layouts. Routes are always namespaced at
-`/extensions/:extensionId/:contributionId`; manifests cannot provide a path,
-selector, or host component. Each extension can use an outlet once and all
+extension's `route` contribution IDs), `embedded`, host-rendered `action`,
+`dialog`, or explicit read-only `panel`. `action` is required for the action
+outlets (`record_action`, `record_header_action`, `explorer_row_action`,
+`explorer_action`, `explorer_bulk_action`) and is described in
+[Actions](#actions-and-interactive-operations); `panel` is required for
+`blueprint_detail_panel` (and requires `client.blueprint_detail_panel`).
+`embedded` contributions use `navigation`, `record_preview_panel`,
+`blueprint_attribute_configuration`, or `record_attribute_decoration`; the
+additional mediated placement capabilities reserve their matching fixed outlets
+for their explicit host-owned action or panel layouts. Routes are always
+namespaced at `/extensions/:extensionId/:contributionId`; manifests cannot
+provide a path, selector, or host component. Each extension can use a frame
+outlet once, but may add several actions and dialogs, and all
 contribution/artifact IDs remain stable across releases. Multiple enabled
 extensions may contribute to a surface. The host orders them deterministically
 by `extension_id`, then contribution `id`, unless a workspace administrator
@@ -1435,23 +1479,17 @@ contextual actions—not an application-wide navigation tree.
   Use it for a concise indicator, explanation, or contextual detail. Its
   context identifies the record, attribute, blueprint/version, and optional
   context.
-- **`record_action`** (`embedded`, requiring `client.record_action`) is a
-  host-owned record-page action area. Use it for a focused record action or
-  status; mutations still go through declared `attricat.command` commands.
+- **`record_action`** (`action`, requiring `client.record_action`) is a row
+  of host-rendered buttons below a record's fields; the first four show and the
+  rest wait behind a **More extension actions** menu. Each acts on that record
+  in the selected context. See [Actions](#actions-and-interactive-operations)
+  for every action outlet.
 - **`explorer_row_action`** (`action`, requiring
-  `client.explorer_row_action`) opens from **More actions…** in an Explorer
-  row's actions menu, for one record.
-  Its strict context is `record_id`, `blueprint_id`, `blueprint_version`, and
-  `context_version: 1`; it deliberately does not include search state or record
-  values. A version 2 contribution receives the
-  [selection context](#selection-aware-actions-and-interactive-operations)
-  instead.
+  `client.explorer_row_action`) adds items to an Explorer row's actions menu,
+  acting on that one record.
 - **`record_header_action`** (`action`, requiring
-  `client.record_header_action`) opens from **More actions…** in the record
-  page's **Actions** menu; the item appears once a contribution renders
-  content. Its strict v1 context is
-  `{ "context_version": 1, "record_id", "blueprint_id", "blueprint_version" }`.
-  Commands still need `client.commands`.
+  `client.record_header_action`) adds items to the record page's **Actions**
+  menu, acting on that record.
 - **`explorer_table_cell`** (`embedded`, requiring
   `client.explorer_table_cell`) mounts a sandboxed renderer for a configured
   scalar Explorer table column when the enabled release declares a matching
@@ -1474,29 +1512,26 @@ contextual actions—not an application-wide navigation tree.
   details, and target values are never passed to the frame. The panel is
   read-only and cannot invoke extension commands.
 
-- **`explorer_action`** (`action`, requiring `client.explorer_action`)
-  opens from the **Extension actions** button in the Explorer result toolbar
-  when results are scoped to one blueprint revision; the button appears once a
-  contribution renders content. Its strict v1 context contains only
-  `context_version: 1`, `blueprint_id`, and `blueprint_version`; it does not
-  expose search filters, selections, or record rows. Mutations still need
-  separately declared `client.commands`.
+- **`explorer_action`** (`action`, requiring `client.explorer_action`) adds
+  items behind the **Extension actions** button in the Explorer result toolbar
+  when results are scoped to one blueprint revision; the button appears when
+  any extension declares one. Its context names the revision and no records; it
+  does not expose search filters, selections, or record rows.
 
 - **`explorer_bulk_action`** (`action`, requiring
-  `client.explorer_bulk_action`) opens from **More actions…** in the
-  selection's **Actions** menu only while 1–50 loaded records are selected and
-  all belong to the displayed blueprint revision. Its strict v1 context contains `context_version: 1`,
-  `blueprint_id`, `blueprint_version`, and the selected `record_ids` in display
-  order; it contains no row values or search filters. Closing selection mode
-  unmounts the frame. Selection is a UI hint, not an authorization grant:
-  commands still require `client.commands` and server-side permission checks.
-  A version 2 contribution receives the selection context described below.
+  `client.explorer_bulk_action`) adds items to the selection's **Actions** menu
+  only while 1–50 loaded records are selected and all belong to the displayed
+  blueprint revision. Its context names the selected `record_ids` in display
+  order and contains no row values or search filters. Selection is a UI hint,
+  not an authorization grant: commands and runs still check server-side
+  permissions.
 
 - **`action_dialog`** (`dialog`, requiring `client.action_dialog`) is a
-  host-managed dialog opened only by the same extension's version 2 selection
-  actions through `attricat.dialog.open()`. It requires a `title`, which the host
-  renders. Its context is the opening action's selection context, captured when
-  it opens; later Explorer selection changes do not alter it. The dialog
+  host-managed dialog opened only by the same extension's actions that name it
+  in `invoke.dialog`; an extension may declare several. It requires a `title`,
+  which the host renders. Its context is the opening action's
+  [action context](#action-context), captured when it opens; later Explorer
+  selection changes do not alter it. The dialog
   outlives the menu, row, or selection toolbar that opened it and closes on
   `attricat.dialog.close()`, its close controls, Escape pressed on the host, or
 navigation. Key presses inside the sandboxed frame never reach the host, so a
@@ -1613,12 +1648,11 @@ passes that same object to `mount`. It may use only granted operations:
   current record. It invalidates the host's record-scoped views and awaits
   active refetches; it cannot select another record or mutate server data.
   Call it after a successful command that changes the current record.
-- `attricat.dialog.open()` requires `client.action_dialog` and a version 2
-  selection action; `attricat.dialog.close()` is available only inside the
-  `action_dialog` frame.
+- `attricat.dialog.close()` is available only inside an `action_dialog`
+  frame. Dialogs are opened by the host when the user chooses an action.
 - `attricat.operations.start({ operation_id, input, idempotency_key })` requires
-  `client.operations.start` and is available in version 2 selection actions and
-  the action dialog. The host supplies the frame's selection; the frame cannot
+  `client.operations.start` and is available only in an action dialog. The host
+  supplies the records of the action that opened it; the frame cannot
   name records, a workspace, a release, or a user. `idempotency_key` is 1–64
   visible ASCII characters. It resolves to `{ run_id }`.
 - `attricat.operations.list()`, `attricat.operations.get({ run_id })`, and
@@ -1850,7 +1884,7 @@ contains the packaged `attricat-extension-example` formula component using the
 responds to `record.updated.v1` by writing a calculated numeric attribute.
 
 The same checkout's `just pack` also writes `dist/reference-documents.tar.zst`
-(`attricat.reference-documents`), which exercises selection-aware actions: grant all of
+(`attricat.reference-documents`), which exercises actions and dialogs: grant all of
 its permissions and enable it, then use **Generate document** from a record
 preview, an Explorer row, or an Explorer selection. It renders PDFs (separate,
 ZIP, or combined) in an interactive operation run, writes a `report.json` with

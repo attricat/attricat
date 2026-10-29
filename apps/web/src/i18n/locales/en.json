@@ -1724,6 +1724,7 @@
       "remove": "Remove"
     },
     "actionDialogTitle": "Extension action",
+    "actionFailed": "“{{action}}” could not be completed.",
     "actionDialogRecord": "Applies to this record.",
     "actionDialogSelection_one": "Applies to {{count}} selected record.",
     "actionDialogSelection_other": "Applies to {{count}} selected records.",

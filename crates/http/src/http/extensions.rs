@@ -24,8 +24,8 @@ use crate::{
     extension_installer::{ExtensionInstallError, ExtensionInstaller},
     extension_registry::{DiscoveredRelease, GitHubRepository},
     extensions::{
-        ExtensionPackage, MAX_EXTENSION_IDENTIFIER_BYTES, UiContributionKind, UiOutlet,
-        validate_schema,
+        ActionInvocation, ExtensionPackage, MAX_EXTENSION_IDENTIFIER_BYTES, UiContributionKind,
+        UiOutlet, validate_schema,
     },
     repository::{
         BlueprintConnectorJob, CreateExtensionOperationSchedule, ExtensionGrant,
@@ -72,6 +72,9 @@ pub(super) struct RuntimeContribution {
     outlet: Option<UiOutlet>,
     route: Option<String>,
     title: Option<String>,
+    /// What a host-rendered action invokes, e.g. `{"command": "check"}`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    invoke: Option<ActionInvocation>,
 }
 
 #[derive(Serialize)]
@@ -838,6 +841,7 @@ pub(super) async fn runtime(
                 outlet: item.outlet,
                 route: item.route,
                 title: item.title,
+                invoke: item.invoke,
             })
             .collect(),
     ))
@@ -884,7 +888,12 @@ pub(super) async fn command(
     // Panels are read-only, except the export mapping editor: it exists to
     // edit destination mappings, and only operators reach it.
     let mapping_editor = contribution.outlet == Some(UiOutlet::ExportMapping);
+    // A host-rendered action runs no code, so it calls only the command its
+    // manifest names; the host sends that request on the user's behalf.
+    let other_command = contribution.kind == UiContributionKind::Action
+        && contribution.invoke != Some(ActionInvocation::Command(input.command_id.clone()));
     if (contribution.kind == UiContributionKind::Panel && !mapping_editor)
+        || other_command
         || !installation.capability_grants.contains("client.commands")
     {
         return Err(ApiError::forbidden());

@@ -26,6 +26,7 @@ const contribution: ExtensionContribution = {
   route: null,
   title: 'Example panel',
   version: 1,
+  invoke: null,
 };
 
 const Frame = ({ contribution }: { contribution: ExtensionContribution }) => {

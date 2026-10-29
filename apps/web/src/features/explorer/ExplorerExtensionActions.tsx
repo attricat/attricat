@@ -1,12 +1,10 @@
 import { useTranslation } from 'react-i18next';
 import type { BlueprintWithAttributes, RecordItem } from '../records/api';
-import { ExtensionPopoverOutlet } from '../extensions/ExtensionOutlet';
 import {
-  selectionSources,
-  extensionOutlets,
-  extensionPopoverTriggers,
-  supportedOutletContextVersion,
-} from '../extensions/constants';
+  ExtensionActionMenuItems,
+  ExtensionActionsMenuButton,
+} from '../extensions/ExtensionActions';
+import { extensionOutlets } from '../extensions/constants';
 
 type Blueprint = BlueprintWithAttributes['blueprint'];
 
@@ -15,35 +13,36 @@ const runtimeScope = (blueprint: Blueprint) => ({
   blueprintVersion: blueprint.version,
 });
 
-const revisionContext = (blueprint: Blueprint) => ({
-  context_version: supportedOutletContextVersion,
-  blueprint_id: blueprint.id,
-  blueprint_version: blueprint.version,
-});
-
 /**
  * Revision-scoped Explorer actions behind one toolbar button, which appears
- * once an extension renders any.
+ * once an extension contributes any. They name no rows.
  */
 export const ExplorerExtensionActions = ({
   blueprint,
+  contextId,
 }: {
   blueprint: Blueprint;
+  /** The Explorer's value-resolution context, when one is selected. */
+  contextId: string | undefined;
 }) => {
   const { t } = useTranslation();
   return (
-    <ExtensionPopoverOutlet
-      context={revisionContext(blueprint)}
+    <ExtensionActionsMenuButton
       label={t('explorer.extensionToolbarActions')}
       outlet={extensionOutlets.explorerAction}
       runtimeScope={runtimeScope(blueprint)}
-      trigger={extensionPopoverTriggers.toolbar}
+      target={{
+        blueprintId: blueprint.id,
+        blueprintVersion: blueprint.version,
+        contextId: contextId ?? null,
+        recordIds: [],
+      }}
     />
   );
 };
 
 /**
- * Selection-scoped bulk actions as an item of the selection's actions menu,
+ * Selection-scoped bulk actions as items of the selection's actions menu,
  * for a selection from the shown revision.
  */
 export const ExplorerBulkExtensionActions = ({
@@ -56,27 +55,21 @@ export const ExplorerBulkExtensionActions = ({
   contextId: string | undefined;
   selectedItems: RecordItem[];
 }) => {
-  const { t } = useTranslation();
   if (
     selectedItems.length === 0 ||
     selectedItems.some((item) => item.blueprint_version !== blueprint.version)
   )
     return null;
-  const recordIds = selectedItems.map((item) => item.id);
   return (
-    <ExtensionPopoverOutlet
-      context={{ ...revisionContext(blueprint), record_ids: recordIds }}
-      label={t('explorer.extensionActions')}
+    <ExtensionActionMenuItems
       outlet={extensionOutlets.explorerBulkAction}
       runtimeScope={runtimeScope(blueprint)}
-      selection={{
-        source: selectionSources.explorerSelection,
+      target={{
         blueprintId: blueprint.id,
         blueprintVersion: blueprint.version,
         contextId: contextId ?? null,
-        recordIds,
+        recordIds: selectedItems.map((item) => item.id),
       }}
-      trigger={extensionPopoverTriggers.menuItem}
     />
   );
 };

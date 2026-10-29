@@ -13,6 +13,7 @@ import { AgentIcon, SavedSearchIcon } from '../../components/systemIcons';
 import { useCan } from '../auth/useCan';
 import { capabilities } from '../auth/capabilities';
 import { useActionDialogStore } from '../extensions/actionDialogStore';
+import { ActionMenuCloseContext } from '../extensions/actions';
 
 type Props = {
   disabled: boolean;
@@ -91,7 +92,9 @@ export const ExplorerSelectionActionsMenu = ({
           </ListItemIcon>
           <ListItemText>{t('explorer.saveSelectionAsSearch')}</ListItemText>
         </MenuItem>
-        {extensionActions}
+        <ActionMenuCloseContext value={close}>
+          {extensionActions}
+        </ActionMenuCloseContext>
       </Menu>
     </>
   );

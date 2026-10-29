@@ -98,12 +98,16 @@ price_gross = "price_net * (1 + 0.23)"`,
   await expect(
     page.getByLabel('View extension content for Price net'),
   ).toHaveCount(0);
-  const action = page
-    .frameLocator('iframe[title="recalculate-formulas-action"]')
-    .getByRole('button', { name: 'Recalculate formulas' });
-  // The sandboxed frame fetches and mounts its artifact after the page loads.
-  await expect(action).toBeVisible({ timeout: 20_000 });
-  await action.click();
+  // Record actions are host-rendered buttons; choosing this one calls the
+  // extension's server command, whose notification the host shows.
+  await page
+    .getByRole('button', { name: 'Recalculate formulas', exact: true })
+    .click();
+  await expect(
+    page.getByText(
+      /Updated \d+ computed value\(s\)\.|Computed values are up to date\./,
+    ),
+  ).toBeVisible({ timeout: 90_000 });
 
   const context = await defaultContext();
   await expect
@@ -130,18 +134,18 @@ price_gross = "price_net * (1 + 0.23)"`,
     });
   }).toPass({ timeout: 60_000 });
 
+  // A row action is an item of the row's menu; it opens the extension's
+  // dialog with that one record.
   await page.getByLabel(`Record actions for ${record.id}`).click();
-  const moreActions = page.getByRole('menuitem', { name: 'More actions…' });
-  await expect(moreActions).toBeVisible();
-  await moreActions.click();
-  const rowAction = page
-    .frameLocator('iframe[title="recalculate-selection-row"]')
-    .getByRole('button', { name: /^Recalculate formulas/ });
-  await expect(rowAction).toBeVisible();
-  await rowAction.click();
+  await page.getByRole('menuitem', { name: 'Recalculate formulas…' }).click();
   const dialog = page.frameLocator('iframe[title="Recalculate formulas"]');
-  await expect(dialog.getByText('1 selected record')).toBeVisible();
-  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog.getByText(/1 selected record/)).toBeVisible({
+    timeout: 20_000,
+  });
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: 'Close', exact: true })
+    .click();
   await expect(
     page.locator('iframe[title="Recalculate formulas"]'),
   ).toHaveCount(0);

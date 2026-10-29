@@ -45,7 +45,7 @@ describe('extension record refresh', () => {
     const client = new QueryClient();
     const contribution = {
       capabilities: ['client.refresh'],
-      outlet: 'record_action' as const,
+      outlet: 'record_preview_panel' as const,
     };
     const context = { record_id: recordId };
     const payload = { target: 'current_record' };
@@ -92,17 +92,18 @@ describe('extension record refresh', () => {
     client.clear();
   });
 
-  it('refreshes the previewed record of a version 2 selection context', async () => {
+  it("refreshes the record a record-page action's dialog was opened for", async () => {
     const client = new QueryClient();
     const invalidate = vi.spyOn(client, 'invalidateQueries');
     const contribution = {
       capabilities: ['client.refresh'],
-      outlet: 'record_action' as const,
+      outlet: 'action_dialog' as const,
     };
     const payload = { target: 'current_record' };
     const selection = {
-      context_version: 2,
-      selection_source: 'record_preview',
+      context_version: 1,
+      action_id: 'documents',
+      outlet: 'record_action',
       blueprint_id: recordId,
       blueprint_version: 1,
       context_id: null,
@@ -118,7 +119,7 @@ describe('extension record refresh', () => {
       refreshCurrentRecord(
         client,
         contribution,
-        { ...selection, selection_source: 'explorer_row' },
+        { ...selection, outlet: 'explorer_row_action' },
         payload,
       ),
     ).rejects.toThrow('Refresh denied');

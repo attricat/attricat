@@ -7,11 +7,11 @@ import {
   ExtensionPopoverOutlet,
 } from '../../extensions/ExtensionOutlet';
 import {
-  selectionSources,
   supportedOutletContextVersion,
   contributionKinds,
   extensionOutlets,
 } from '../../extensions/constants';
+import { ExtensionActionButtons } from '../../extensions/ExtensionActions';
 import { useExtensionRuntime } from '../../extensions/useExtensionRuntime';
 import { RecordView } from '../../views/components/RecordView';
 import { recordHeadingComponentId } from '../../views/components/blocks/RecordHeadingDefinition';
@@ -237,12 +237,10 @@ export const RecordPreviewContent = ({
       </FieldDiagnosticsContext>
       {/* Set apart from the fields above; collapses without contributions. */}
       <Box sx={{ mt: 6, '&:empty': { display: 'none' } }}>
-        <ExtensionOutlet
-          context={{ record_id: recordId, context_id: contextId }}
+        <ExtensionActionButtons
           outlet={extensionOutlets.recordAction}
           runtimeScope={runtimeScope}
-          selection={{
-            source: selectionSources.recordPreview,
+          target={{
             blueprintId: blueprint.blueprint.id,
             blueprintVersion: blueprint.blueprint.version,
             contextId: contextId ?? null,

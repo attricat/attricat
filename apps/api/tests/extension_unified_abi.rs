@@ -33,6 +33,7 @@ const PERMISSIONS: &[&str] = &[
     "events.subscribe",
     "client.commands",
     "client.explorer_bulk_action",
+    "client.action_dialog",
     "client.operations.start",
     "client.operations.read",
 ];
@@ -74,7 +75,9 @@ fn manifest() -> Value {
             }]
         },
         "ui": [
-            {"id": "bulk", "version": 2, "kind": "action", "artifact": "client", "outlet": "explorer_bulk_action"}
+            {"id": "bulk", "version": 1, "kind": "dialog", "artifact": "client", "outlet": "action_dialog", "title": "Bulk"},
+            {"id": "bulk-action", "version": 1, "kind": "action", "outlet": "explorer_bulk_action", "title": "Tag", "invoke": {"dialog": "bulk"}},
+            {"id": "check", "version": 1, "kind": "action", "outlet": "explorer_bulk_action", "title": "Probe", "invoke": {"command": "probe"}}
         ]
     })
 }
@@ -142,6 +145,20 @@ async fn one_unified_component_serves_commands_and_interactive_operations(pool: 
         records.push(titled_record(&repository, blueprint, title).await);
     }
     let (base, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
+    // A host-rendered action calls only the command its manifest names.
+    let command = |command_id: &str| {
+        authenticated_client()
+            .post(format!("{base}/extensions/{EXTENSION}/check/command"))
+            .json(&json!({"release_id": release, "command_id": command_id, "payload": {}}))
+            .send()
+    };
+    let declared = command("probe").await.unwrap();
+    assert_eq!(declared.status(), StatusCode::OK);
+    assert_eq!(declared.json::<Value>().await.unwrap()["handler"], "probe");
+    assert_eq!(
+        command("other").await.unwrap().status(),
+        StatusCode::FORBIDDEN
+    );
     let response = authenticated_client()
         .post(format!("{base}/extensions/{EXTENSION}/bulk/operations"))
         .json(&json!({

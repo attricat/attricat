@@ -85,7 +85,7 @@ Limity wynoszą 1 GiB na plik wyjściowy, 2 GiB na wykonanie i 8 GiB na obszar r
 
 ## Operacje interaktywne
 
-Dodaj `interactive` do operacji, aby zalogowani użytkownicy mogli ją uruchomić dla rekordu lub zaznaczenia z Twoich akcji w wersji 2:
+Dodaj `interactive` do operacji, aby zalogowani użytkownicy mogli ją uruchomić dla rekordu lub zaznaczenia z [okna akcji](/pl/extensions/client/#okno-akcji) otwieranego przez jedną z Twoich akcji:
 
 ```json
 {"id": "generate", "handler": "generate", "request_schema": {"type": "object"}, "interactive": {"version": 1, "max_selection": 50}}

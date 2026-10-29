@@ -17,20 +17,16 @@ import {
   useActionDialogStore,
   type OpenActionDialog,
 } from './actionDialogStore';
-import {
-  selectionSources,
-  contributionKinds,
-  extensionOutlets,
-} from './constants';
+import { contributionKinds, extensionOutlets } from './constants';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { ExtensionFrame } from './ExtensionFrame';
 import { useExtensionRuntime } from './useExtensionRuntime';
 import { progressSizes } from '../../components/iconSizes';
 
 /**
- * Host-managed dialog for an extension's selection actions. It is mounted once
- * in the application shell, so it outlives the menu, row or selection toolbar
- * that opened it. The selection is captured when it opens and never changes.
+ * Host-managed dialog an extension's action opens. It is mounted once in the
+ * application shell, so it outlives the menu, row or selection toolbar that
+ * opened it. The action's context is captured when it opens and never changes.
  */
 export const ExtensionActionDialogHost = () => {
   const dialog = useActionDialogStore((state) => state.dialog);
@@ -40,7 +36,7 @@ export const ExtensionActionDialogHost = () => {
 };
 
 const ActionDialog = ({
-  dialog: { context, extensionId },
+  dialog: { context, dialogId, extensionId },
   onClose,
 }: {
   dialog: OpenActionDialog;
@@ -79,6 +75,7 @@ const ActionDialog = ({
   const contribution = runtime.data?.find(
     (item) =>
       item.extension_id === extensionId &&
+      item.id === dialogId &&
       item.kind === contributionKinds.dialog &&
       item.outlet === extensionOutlets.actionDialog,
   );
@@ -90,12 +87,14 @@ const ActionDialog = ({
       <DialogTitle>{title}</DialogTitle>
       <DialogContent>
         <Stack spacing={3}>
-          <Typography color="text.secondary" variant="body2">
-            {context.selection_source === selectionSources.explorerSelection
-              ? t('extensions.actionDialogSelection', { count })
-              : t('extensions.actionDialogRecord')}{' '}
-            {t('extensions.actionDialogSavedData')}
-          </Typography>
+          {count > 0 && (
+            <Typography color="text.secondary" variant="body2">
+              {context.outlet === extensionOutlets.explorerBulkAction
+                ? t('extensions.actionDialogSelection', { count })
+                : t('extensions.actionDialogRecord')}{' '}
+              {t('extensions.actionDialogSavedData')}
+            </Typography>
+          )}
           {runtime.isPending ? (
             <Box
               aria-live="polite"

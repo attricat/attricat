@@ -125,8 +125,8 @@ pub const MAX_EXTENSION_IDENTIFIER_BYTES: usize = 128;
 /// Initial interactive operations keep the Explorer bulk-selection bound; a
 /// larger, server-managed selection resource is a separate contract.
 pub const MAX_INTERACTIVE_SELECTION: u32 = 50;
-/// Contribution contract that receives the selection-aware action context.
-pub const SELECTION_ACTION_CONTRIBUTION_VERSION: u32 = 2;
+/// The longest title a host-rendered action may show.
+pub const MAX_ACTION_TITLE_CHARS: usize = 64;
 pub const CAPABILITIES: &[&str] = &[
     "attricat.read",
     "attricat.write",
@@ -659,6 +659,22 @@ pub struct UiContribution {
     pub route: Option<String>,
     #[serde(default)]
     pub title: Option<String>,
+    /// What a host-rendered `action` does when chosen; required for actions
+    /// and rejected on every other kind.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub invoke: Option<ActionInvocation>,
+}
+
+/// The single effect of a host-rendered action. Both receive the action
+/// context: the outlet, the blueprint revision, the value context and the
+/// records the action applies to.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub enum ActionInvocation {
+    /// Opens this extension's `dialog` contribution with that ID.
+    Dialog(String),
+    /// Calls this extension's server command with that ID.
+    Command(String),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -670,10 +686,12 @@ pub enum UiContributionKind {
     /// Generic embedded contribution. New surfaces must use `Action` or
     /// `Panel`, so the host can own their compact/action or read-only layout.
     Embedded,
+    /// A host-rendered menu item or button: a title and what choosing it
+    /// invokes. It has no artifact; an extension may add several per outlet.
     Action,
     Panel,
-    /// Host-managed dialog opened by the same extension's selection actions.
-    /// It outlives the source outlet and receives that action's captured context.
+    /// Host-managed dialog opened by the same extension's actions. It outlives
+    /// the source outlet and receives the action's captured context.
     Dialog,
 }
 
@@ -719,6 +737,62 @@ pub enum ManifestError {
 impl Manifest {
     /// Validates only stable v1 contracts. Package retrieval and component
     /// execution deliberately stay outside this shared layer.
+    /// A host-rendered action: one action outlet, a short title, and one
+    /// invocation of a dialog or command this extension declares.
+    fn validate_action(&self, contribution: &UiContribution) -> Result<(), ManifestError> {
+        let invalid = |reason: String| {
+            ManifestError::Invalid(format!("action '{}' {reason}", contribution.id))
+        };
+        let declares = |capability: &str| {
+            self.permissions
+                .iter()
+                .chain(&self.optional_permissions)
+                .any(|item| item == capability)
+        };
+        if contribution.version != 1 {
+            return Err(invalid("must use version 1".into()));
+        }
+        if contribution.artifact.is_some() || contribution.route.is_some() {
+            return Err(invalid("cannot declare an artifact or route".into()));
+        }
+        if !contribution.outlet.as_ref().is_some_and(action_outlet) {
+            return Err(invalid("requires an action outlet".into()));
+        }
+        let title = contribution
+            .title
+            .as_deref()
+            .map(str::trim)
+            .unwrap_or_default();
+        if title.is_empty() || title.chars().count() > MAX_ACTION_TITLE_CHARS {
+            return Err(invalid(format!(
+                "requires a title of 1-{MAX_ACTION_TITLE_CHARS} characters"
+            )));
+        }
+        match &contribution.invoke {
+            None => Err(invalid("must declare what it invokes".into())),
+            Some(ActionInvocation::Dialog(_)) if !declares("client.action_dialog") => Err(invalid(
+                "needs capability 'client.action_dialog' to open a dialog".into(),
+            )),
+            Some(ActionInvocation::Command(command)) => {
+                if !declares("client.commands") {
+                    return Err(invalid(
+                        "needs capability 'client.commands' to call a command".into(),
+                    ));
+                }
+                let declared = self
+                    .server
+                    .as_ref()
+                    .is_some_and(|server| server.commands.iter().any(|item| item.id == *command));
+                if declared {
+                    Ok(())
+                } else {
+                    Err(invalid(format!("invokes undeclared command '{command}'")))
+                }
+            }
+            Some(ActionInvocation::Dialog(_)) => Ok(()),
+        }
+    }
+
     pub fn validate(&self, host_api: &str) -> Result<(), ManifestError> {
         if self.manifest_version != MANIFEST_VERSION {
             return Err(ManifestError::UnsupportedManifestVersion(
@@ -995,7 +1069,11 @@ impl Manifest {
                     contribution.id
                 )));
             }
-            if !matches!(contribution.kind, UiContributionKind::Navigation)
+            let host_rendered = matches!(
+                contribution.kind,
+                UiContributionKind::Navigation | UiContributionKind::Action
+            );
+            if !host_rendered
                 && (contribution.version == 0
                     || !contribution.artifact.as_ref().is_some_and(|artifact| {
                         self.artifacts.iter().any(|item| {
@@ -1016,6 +1094,14 @@ impl Manifest {
             {
                 return Err(ManifestError::Invalid(format!(
                     "navigation UI contribution '{}' requires a route and cannot declare an artifact or outlet",
+                    contribution.id
+                )));
+            }
+            if matches!(contribution.kind, UiContributionKind::Action) {
+                self.validate_action(contribution)?;
+            } else if contribution.invoke.is_some() {
+                return Err(ManifestError::Invalid(format!(
+                    "only action UI contributions may declare invoke ('{}')",
                     contribution.id
                 )));
             }
@@ -1061,9 +1147,14 @@ impl Manifest {
                 | (UiContributionKind::Action, Some(outlet))
                 | (UiContributionKind::Panel, Some(outlet))
                 | (UiContributionKind::Dialog, Some(outlet)) => {
-                    // Extensions may each contribute once to an outlet. A
-                    // single extension cannot rely on duplicate ordering.
-                    if !outlets.insert(outlet) {
+                    // Extensions may each contribute once to a content outlet.
+                    // A single extension cannot rely on duplicate ordering;
+                    // actions and dialogs are distinct items, so they may.
+                    let repeatable = matches!(
+                        contribution.kind,
+                        UiContributionKind::Action | UiContributionKind::Dialog
+                    );
+                    if !repeatable && !outlets.insert(outlet) {
                         return Err(ManifestError::Invalid(
                             "only one contribution may target each UI outlet".into(),
                         ));
@@ -1092,7 +1183,7 @@ impl Manifest {
                                 UiContributionKind::Embedded,
                                 UiOutlet::RecordAttributeDecoration
                             )
-                            | (UiContributionKind::Embedded, UiOutlet::RecordAction)
+                            | (UiContributionKind::Action, UiOutlet::RecordAction)
                             | (UiContributionKind::Dialog, UiOutlet::ActionDialog)
                             | (UiContributionKind::Panel, UiOutlet::ExportMapping)
                     );
@@ -1117,20 +1208,6 @@ impl Manifest {
                     ));
                 }
             }
-            if contribution
-                .outlet
-                .as_ref()
-                .is_some_and(selection_action_outlet)
-                && !matches!(
-                    contribution.version,
-                    1 | SELECTION_ACTION_CONTRIBUTION_VERSION
-                )
-            {
-                return Err(ManifestError::Invalid(format!(
-                    "selection action contribution '{}' supports versions 1 and {SELECTION_ACTION_CONTRIBUTION_VERSION}",
-                    contribution.id
-                )));
-            }
             if contribution.outlet == Some(UiOutlet::ActionDialog) && contribution.version != 1 {
                 return Err(ManifestError::Invalid(format!(
                     "action dialog contribution '{}' must use version 1",
@@ -1154,6 +1231,16 @@ impl Manifest {
             }
         }
         for contribution in &self.ui {
+            if let Some(ActionInvocation::Dialog(dialog)) = &contribution.invoke
+                && !self.ui.iter().any(|target| {
+                    target.id == *dialog && matches!(target.kind, UiContributionKind::Dialog)
+                })
+            {
+                return Err(ManifestError::Invalid(format!(
+                    "action '{}' must invoke a dialog UI contribution in the same extension",
+                    contribution.id
+                )));
+            }
             if matches!(contribution.kind, UiContributionKind::Navigation)
                 && !self.ui.iter().any(|target| {
                     target.id == contribution.route.as_deref().expect("validated route")
@@ -1718,11 +1805,15 @@ impl Webhook {
     }
 }
 
-/// Outlets whose v2 contribution contract receives a normalized selection.
-pub fn selection_action_outlet(outlet: &UiOutlet) -> bool {
+/// Outlets that render host-owned action items rather than frames.
+pub fn action_outlet(outlet: &UiOutlet) -> bool {
     matches!(
         outlet,
-        UiOutlet::RecordAction | UiOutlet::ExplorerRowAction | UiOutlet::ExplorerBulkAction
+        UiOutlet::RecordAction
+            | UiOutlet::RecordHeaderAction
+            | UiOutlet::ExplorerRowAction
+            | UiOutlet::ExplorerAction
+            | UiOutlet::ExplorerBulkAction
     )
 }
 
@@ -2261,6 +2352,7 @@ mod tests {
             route: None,
             outlet: Some(UiOutlet::Navigation),
             title: None,
+            invoke: None,
         });
         value.attricat.id = "a".repeat(127);
         assert_eq!(
@@ -2420,7 +2512,7 @@ mod tests {
                 "interactive": {"version": 1, "max_selection": 50}
             }]},
             "ui": [
-                {"id": "bulk", "version": 2, "kind": "action", "artifact": "client", "outlet": "explorer_bulk_action"},
+                {"id": "bulk", "version": 1, "kind": "action", "outlet": "explorer_bulk_action", "title": "Generate documents", "invoke": {"dialog": "dialog"}},
                 {"id": "dialog", "version": 1, "kind": "dialog", "artifact": "client", "outlet": "action_dialog", "title": "Generate"}
             ]
         }))
@@ -2428,7 +2520,7 @@ mod tests {
     }
 
     #[test]
-    fn interactive_operations_and_selection_actions_validate_their_contract() {
+    fn interactive_operations_and_dialog_actions_validate_their_contract() {
         let value = interactive_manifest();
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
 
@@ -2447,7 +2539,7 @@ mod tests {
         assert!(invalid.validate(SUPPORTED_HOST_API).is_err());
 
         invalid = value.clone();
-        invalid.ui[0].version = 3;
+        invalid.ui[0].version = 2;
         assert!(invalid.validate(SUPPORTED_HOST_API).is_err());
 
         invalid = value.clone();
@@ -2466,12 +2558,80 @@ mod tests {
     }
 
     #[test]
-    fn version_one_selection_actions_need_no_server_operation() {
+    fn actions_are_host_rendered_and_invoke_what_the_extension_declares() {
         let mut value = interactive_manifest();
-        value.server = None;
-        value.ui.truncate(1);
-        value.ui[0].version = 1;
+        value.permissions.extend([
+            "client.commands".into(),
+            "client.explorer_row_action".into(),
+        ]);
+        value.server.as_mut().unwrap().commands.push(ServerCommand {
+            id: "check".into(),
+            handler: "check".into(),
+            request_schema: serde_json::json!({"type":"object"}),
+            response_schema: serde_json::json!({"type":"object"}),
+            max_request_bytes: 1024,
+            max_response_bytes: 1024,
+        });
+        let action = |id: &str, outlet: UiOutlet, invoke: ActionInvocation| UiContribution {
+            id: id.into(),
+            version: 1,
+            kind: UiContributionKind::Action,
+            artifact: None,
+            outlet: Some(outlet),
+            route: None,
+            title: Some("Check".into()),
+            invoke: Some(invoke),
+        };
+        // Several actions may share an outlet; each invokes one thing.
+        value.ui.push(action(
+            "check-bulk",
+            UiOutlet::ExplorerBulkAction,
+            ActionInvocation::Command("check".into()),
+        ));
+        value.ui.push(action(
+            "open-row",
+            UiOutlet::ExplorerRowAction,
+            ActionInvocation::Dialog("dialog".into()),
+        ));
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
+
+        let invalid = |change: &dyn Fn(&mut Manifest)| {
+            let mut manifest = value.clone();
+            change(&mut manifest);
+            manifest.validate(SUPPORTED_HOST_API).is_err()
+        };
+        let last = |manifest: &mut Manifest| manifest.ui.len() - 1;
+        assert!(invalid(&|m| {
+            let index = last(m);
+            m.ui[index].artifact = Some("client".into());
+        }));
+        assert!(invalid(&|m| {
+            let index = last(m);
+            m.ui[index].invoke = None;
+        }));
+        assert!(invalid(&|m| {
+            let index = last(m);
+            m.ui[index].title = Some("x".repeat(MAX_ACTION_TITLE_CHARS + 1));
+        }));
+        assert!(invalid(&|m| {
+            let index = last(m);
+            m.ui[index].invoke = Some(ActionInvocation::Dialog("bulk".into()));
+        }));
+        assert!(invalid(&|m| {
+            let index = last(m);
+            m.ui[index].invoke = Some(ActionInvocation::Command("missing".into()));
+        }));
+        assert!(invalid(&|m| m
+            .permissions
+            .retain(|permission| permission != "client.commands")));
+        assert!(invalid(&|m| {
+            let index = last(m);
+            m.ui[index].outlet = Some(UiOutlet::RecordPreviewPanel);
+        }));
+        // Only actions declare what they invoke.
+        assert!(invalid(
+            &|m| m.ui[1].invoke = Some(ActionInvocation::Dialog("dialog".into()))
+        ));
     }
 
     #[test]
@@ -2490,6 +2650,7 @@ mod tests {
             outlet: Some(UiOutlet::RecordPreviewPanel),
             route: None,
             title: None,
+            invoke: None,
         });
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
     }
@@ -2510,6 +2671,7 @@ mod tests {
                 outlet: None,
                 route: None,
                 title: Some("Workbench".into()),
+                invoke: None,
             },
             UiContribution {
                 id: "workbench-nav".into(),
@@ -2519,6 +2681,7 @@ mod tests {
                 outlet: None,
                 route: Some("workbench".into()),
                 title: Some("Workbench".into()),
+                invoke: None,
             },
         ];
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
@@ -2558,13 +2721,25 @@ mod tests {
             path: "client.js".into(),
         });
         value.ui.push(UiContribution {
+            id: "explorer-dialog".into(),
+            version: 1,
+            kind: UiContributionKind::Dialog,
+            artifact: Some("client".into()),
+            outlet: Some(UiOutlet::ActionDialog),
+            route: None,
+            title: Some("Explore".into()),
+            invoke: None,
+        });
+        value.permissions.push("client.action_dialog".into());
+        value.ui.push(UiContribution {
             id: "explorer-action".into(),
             version: 1,
             kind: UiContributionKind::Action,
-            artifact: Some("client".into()),
+            artifact: None,
             outlet: Some(UiOutlet::ExplorerAction),
             route: None,
-            title: None,
+            title: Some("Explore".into()),
+            invoke: Some(ActionInvocation::Dialog("explorer-dialog".into())),
         });
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
         value
@@ -2596,6 +2771,7 @@ mod tests {
             outlet: Some(UiOutlet::ExplorerTableCell),
             route: None,
             title: None,
+            invoke: None,
         });
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
         value.permissions.clear();
@@ -2634,11 +2810,12 @@ mod tests {
         value.ui.push(UiContribution {
             id: "action".into(),
             version: 1,
-            kind: UiContributionKind::Embedded,
-            artifact: Some("client".into()),
+            kind: UiContributionKind::Action,
+            artifact: None,
             outlet: Some(UiOutlet::RecordAction),
             route: None,
-            title: None,
+            title: Some("Refresh".into()),
+            invoke: Some(ActionInvocation::Command("refresh".into())),
         });
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
         value
@@ -2663,19 +2840,31 @@ mod tests {
             kind: ArtifactKind::ClientComponent,
             path: "client.js".into(),
         });
+        value.permissions.push("client.action_dialog".into());
+        value.ui.push(UiContribution {
+            id: "row-dialog".into(),
+            version: 1,
+            kind: UiContributionKind::Dialog,
+            artifact: Some("client".into()),
+            outlet: Some(UiOutlet::ActionDialog),
+            route: None,
+            title: Some("Row".into()),
+            invoke: None,
+        });
         value.ui.push(UiContribution {
             id: "explorer-action".into(),
             version: 1,
             kind: UiContributionKind::Action,
-            artifact: Some("client".into()),
+            artifact: None,
             outlet: Some(UiOutlet::ExplorerRowAction),
             route: None,
-            title: None,
+            title: Some("Open".into()),
+            invoke: Some(ActionInvocation::Dialog("row-dialog".into())),
         });
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
-        value.ui[0].kind = UiContributionKind::Panel;
+        value.ui[1].kind = UiContributionKind::Panel;
         assert!(value.validate(SUPPORTED_HOST_API).is_err());
-        value.ui[0].kind = UiContributionKind::Action;
+        value.ui[1].kind = UiContributionKind::Action;
         value
             .permissions
             .retain(|permission| permission != "client.explorer_row_action");

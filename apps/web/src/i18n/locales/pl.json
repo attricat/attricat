@@ -1802,6 +1802,7 @@
       "remove": "Usunięcie"
     },
     "actionDialogTitle": "Akcja rozszerzenia",
+    "actionFailed": "Nie udało się wykonać akcji „{{action}}”.",
     "actionDialogRecord": "Dotyczy tego rekordu.",
     "actionDialogSelection_one": "Dotyczy {{count}} zaznaczonego rekordu.",
     "actionDialogSelection_few": "Dotyczy {{count}} zaznaczonych rekordów.",

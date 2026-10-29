@@ -163,7 +163,6 @@ export const useExtensionFrame = ({
                     params: { recordId },
                   }),
                 queryClient,
-                openActionDialog: useActionDialogStore.getState().open,
                 closeActionDialog: useActionDialogStore.getState().close,
                 onRunStarted: (runId) => notifyRunStarted(runId, navigate),
                 downloadArtifact,

@@ -1,6 +1,5 @@
 import { Alert, Box, Collapse } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { useActionSelection } from './actionSelection';
 import type { ExtensionContribution } from './api';
 import {
   defaultExtensionFrameHeight,
@@ -9,7 +8,6 @@ import {
 } from './constants';
 import { ExtensionFrameLoading } from './ExtensionFrameLoading';
 import { frameDocument } from './frameDocument';
-import { contributionContext } from './outletContributions';
 import { useExtensionFrame } from './useExtensionFrame';
 
 const emptyContext: Record<string, unknown> = {};
@@ -34,11 +32,6 @@ export const ExtensionFrame = ({
   placeholder = extensionFramePlaceholders.skeleton,
 }: Props) => {
   const { t } = useTranslation();
-  // A selection-aware outlet supplies its selection through context so the
-  // shared action-bar and overflow layouts need no per-version knowledge.
-  const selection = useActionSelection();
-  const frameContext =
-    contributionContext(contribution, context, selection) ?? emptyContext;
   const {
     errorKey,
     frameKey,
@@ -49,7 +42,7 @@ export const ExtensionFrame = ({
     ready,
   } = useExtensionFrame({
     contribution,
-    context: frameContext,
+    context,
     onContentHeight,
     onFailure,
     onReady,

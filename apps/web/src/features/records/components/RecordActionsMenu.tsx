@@ -28,6 +28,7 @@ import { publicationStatuses } from '../constants';
 import { publicationReadinessText } from '../checkViolations';
 import type { RecordPublications } from './useRecordPublications';
 import { useActionDialogStore } from '../../extensions/actionDialogStore';
+import { ActionMenuCloseContext } from '../../extensions/actions';
 
 /**
  * The record's Actions menu: history, copying, creating, extension actions,
@@ -159,7 +160,9 @@ export const RecordActionsMenu = ({
             <ListItemText>{t('records.upgradeBlueprint')}</ListItemText>
           </RouterMenuItem>
         )}
-        {extensionActions}
+        <ActionMenuCloseContext value={close}>
+          {extensionActions}
+        </ActionMenuCloseContext>
         {publications && <Divider />}
         {publications && publication && (
           <MenuItem

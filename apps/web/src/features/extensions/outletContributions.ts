@@ -1,26 +1,23 @@
 import { z } from 'zod';
-import {
-  isSelectionContribution,
-  selectionContext,
-  selectionContextSchema,
-  type ActionSelection,
-} from './actionSelection';
 import type { ExtensionContribution } from './api';
 import {
   outletCapacities,
   contributionKinds,
   extensionFramePlaceholders,
   extensionOutlets,
+  type ActionOutlet,
 } from './constants';
 import { outletContextSchemas } from './outletContextSchemas';
 import { extensionOutletSchema } from './schemas';
 
-// The Explorer table-cell renderer and the action dialog have their own
-// host-controlled mount paths.
+// Outlets that mount extension frames. The Explorer table-cell renderer and
+// the action dialog have their own host-controlled mount paths, and action
+// outlets render host-owned items (see ExtensionActions).
 export type OutletName = Exclude<
   z.infer<typeof extensionOutletSchema>,
   | typeof extensionOutlets.explorerTableCell
   | typeof extensionOutlets.actionDialog
+  | ActionOutlet
 >;
 
 export type OutletContext = Record<string, unknown>;
@@ -47,13 +44,7 @@ const cardPolicy = {
   visibleCapacity: outletCapacities.visibleContent,
 } as const;
 const popoverPolicy = { kind: 'popover' } as const;
-const actionBarPolicy = {
-  kind: 'actionBar',
-  primaryCapacity: outletCapacities.actionBarPrimary,
-  secondaryCapacity: outletCapacities.actionBarSecondary,
-} as const;
 
-export type ActionBarPolicy = typeof actionBarPolicy;
 export type PanelPolicy = typeof panelPolicy | typeof fieldPanelPolicy;
 export type ContentPolicy = PanelPolicy | typeof cardPolicy;
 export type NavigationPolicy = typeof navigationPolicy;
@@ -65,14 +56,9 @@ export const outletPolicies = {
   record_preview_panel: panelPolicy,
   blueprint_attribute_configuration: panelPolicy,
   record_attribute_decoration: popoverPolicy,
-  record_action: actionBarPolicy,
-  record_header_action: actionBarPolicy,
-  explorer_row_action: popoverPolicy,
   blueprint_detail_panel: panelPolicy,
   blueprint_panel: panelPolicy,
   audit_event_panel: panelPolicy,
-  explorer_action: actionBarPolicy,
-  explorer_bulk_action: actionBarPolicy,
   data_health_card: cardPolicy,
   blueprint_publish_check: panelPolicy,
   record_attribute_panel: fieldPanelPolicy,
@@ -85,13 +71,6 @@ const embeddedOutlets = new Set<OutletName>([
   extensionOutlets.recordPreviewPanel,
   extensionOutlets.blueprintAttributeConfiguration,
   extensionOutlets.recordAttributeDecoration,
-  extensionOutlets.recordAction,
-]);
-const actionOutlets = new Set<OutletName>([
-  extensionOutlets.recordHeaderAction,
-  extensionOutlets.explorerRowAction,
-  extensionOutlets.explorerAction,
-  extensionOutlets.explorerBulkAction,
 ]);
 const panelOutlets = new Set<OutletName>([
   extensionOutlets.blueprintDetailPanel,
@@ -111,8 +90,6 @@ const supportsOutlet = (
   contribution.outlet === outlet &&
   ((contribution.kind === contributionKinds.embedded &&
     embeddedOutlets.has(outlet)) ||
-    (contribution.kind === contributionKinds.action &&
-      actionOutlets.has(outlet)) ||
     (contribution.kind === contributionKinds.panel &&
       panelOutlets.has(outlet)) ||
     (outlet === extensionOutlets.navigation &&
@@ -128,37 +105,14 @@ const hasValidContext = (
   return !schema || schema.safeParse(context).success;
 };
 
-/**
- * The context one contribution receives. Selection-aware (version 2) action
- * contributions get the normalized selection; all others keep their released
- * outlet context, so old releases are unaffected.
- */
-export const contributionContext = (
-  contribution: ExtensionContribution,
-  context: OutletContext | undefined,
-  selection: ActionSelection | null | undefined,
-): OutletContext | undefined =>
-  isSelectionContribution(contribution)
-    ? selection
-      ? selectionContext(selection)
-      : undefined
-    : context;
-
 /** Contributions mounted in an outlet, in host-computed display order. */
 export const outletContributions = (
   runtime: ExtensionContribution[] | undefined,
   outlet: OutletName,
   context: OutletContext | undefined,
-  selection?: ActionSelection | null,
 ) =>
   runtime?.filter(
-    (item) =>
-      supportsOutlet(item, outlet) &&
-      (isSelectionContribution(item)
-        ? selectionContextSchema.safeParse(
-            contributionContext(item, context, selection),
-          ).success
-        : hasValidContext(outlet, context)),
+    (item) => supportsOutlet(item, outlet) && hasValidContext(outlet, context),
   ) ?? [];
 
 /** Groups navigation contributions by extension, preserving display order. */

@@ -640,8 +640,9 @@ async fn install_layout_extension(pool: &PgPool) -> Uuid {
                 "id": "action",
                 "version": 1,
                 "kind": "action",
-                "artifact": "client",
-                "outlet": "record_action"
+                "outlet": "record_action",
+                "title": "Act",
+                "invoke": {"command": "act"}
             }
         ]
     });

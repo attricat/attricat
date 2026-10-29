@@ -22,6 +22,15 @@ const contributionKeySchema = z
   .max(maximumContributionKeyLength)
   .regex(contributionKeyPattern);
 
+/** One dialog to open, or one server command to call, with the action context. */
+const actionInvocationSchema = z.union([
+  z.object({ dialog: z.string().min(1) }).strict(),
+  z
+    .object({ command: z.string().min(1).max(maximumExtensionCommandIdLength) })
+    .strict(),
+]);
+export type ActionInvocation = z.infer<typeof actionInvocationSchema>;
+
 const contributionSchema = z
   .object({
     contribution_key: contributionKeySchema,
@@ -38,6 +47,8 @@ const contributionSchema = z
     outlet: extensionOutletSchema.nullable(),
     route: z.string().nullable().default(null),
     title: z.string().nullable(),
+    /** What a host-rendered action opens or calls; absent on other kinds. */
+    invoke: actionInvocationSchema.nullable().default(null),
   })
   .strict();
 

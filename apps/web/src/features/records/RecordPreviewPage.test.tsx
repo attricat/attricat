@@ -8,13 +8,19 @@ import { ToastProvider } from '../../components/ToastProvider';
 import { listContexts } from '../contexts/api';
 import { RecordPreviewPage } from './RecordPreviewPage';
 
-const { agentDrawerRender, outletRender, popoverOutletRender, navigate } =
-  vi.hoisted(() => ({
-    navigate: vi.fn(),
-    agentDrawerRender: vi.fn(),
-    outletRender: vi.fn(),
-    popoverOutletRender: vi.fn(),
-  }));
+const {
+  actionsRender,
+  agentDrawerRender,
+  outletRender,
+  popoverOutletRender,
+  navigate,
+} = vi.hoisted(() => ({
+  navigate: vi.fn(),
+  agentDrawerRender: vi.fn(),
+  outletRender: vi.fn(),
+  popoverOutletRender: vi.fn(),
+  actionsRender: vi.fn(),
+}));
 
 vi.mock('@tanstack/react-router', () => ({
   createLink: <T,>(component: T) => component,
@@ -44,6 +50,16 @@ vi.mock('./api', async (importOriginal) => ({
 vi.mock('../extensions/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../extensions/api')>()),
   getExtensionRuntime: vi.fn(),
+}));
+vi.mock('../extensions/ExtensionActions', () => ({
+  ExtensionActionButtons: (props: unknown) => {
+    actionsRender(props);
+    return null;
+  },
+  ExtensionActionMenuItems: (props: unknown) => {
+    actionsRender(props);
+    return null;
+  },
 }));
 vi.mock('../extensions/ExtensionOutlet', () => ({
   ExtensionOutlet: (props: unknown) => {
@@ -410,9 +426,16 @@ describe('RecordPreviewPage', () => {
 
     expect(await screen.findByText('Sample')).toBeTruthy();
     const runtimeScope = { blueprintId, blueprintVersion: 7 };
+    // Record actions are host-rendered buttons acting on this record.
     await waitFor(() =>
-      expect(outletRender).toHaveBeenCalledWith(
-        expect.objectContaining({ outlet: 'record_action', runtimeScope }),
+      expect(actionsRender).toHaveBeenCalledWith(
+        expect.objectContaining({
+          outlet: 'record_action',
+          runtimeScope,
+          target: expect.objectContaining({
+            recordIds: ['00000000-0000-4000-8000-000000000001'],
+          }),
+        }),
       ),
     );
     expect(popoverOutletRender).toHaveBeenCalledWith(
@@ -421,14 +444,9 @@ describe('RecordPreviewPage', () => {
         runtimeScope,
       }),
     );
-    // Header actions are an item of the record's actions menu.
-    expect(popoverOutletRender).toHaveBeenCalledWith(
-      expect.objectContaining({
-        label: 'More actions…',
-        outlet: 'record_header_action',
-        runtimeScope,
-        trigger: 'menu_item',
-      }),
+    // Header actions are items of the record's actions menu.
+    expect(actionsRender).toHaveBeenCalledWith(
+      expect.objectContaining({ outlet: 'record_header_action', runtimeScope }),
     );
     expect(outletRender).not.toHaveBeenCalledWith(
       expect.objectContaining({ outlet: 'record_header_action' }),

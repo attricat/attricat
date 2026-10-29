@@ -1,25 +1,8 @@
-import {
-  Fade,
-  IconButton,
-  ListItemIcon,
-  ListItemText,
-  MenuItem,
-  Popover,
-  Stack,
-  Tooltip,
-} from '@mui/material';
-import { useState, type MouseEvent } from 'react';
+import { Fade, IconButton, Popover, Stack, Tooltip } from '@mui/material';
+import { useState } from 'react';
 import { ExtensionIcon } from '../../components/systemIcons';
-import {
-  ActionSelectionContext,
-  type ActionSelection,
-} from './actionSelection';
 import type { ExtensionContribution, ExtensionRuntimeScope } from './api';
-import {
-  extensionPopoverTriggers,
-  extensionPopoverWidth,
-  type ExtensionPopoverTrigger,
-} from './constants';
+import { extensionPopoverWidth } from './constants';
 import { ExtensionFrame } from './ExtensionFrame';
 import {
   contributionKey,
@@ -35,19 +18,17 @@ type ExtensionPopoverOutletProps = {
   label: string;
   outlet: OutletName;
   runtimeScope?: ExtensionRuntimeScope;
-  selection?: ActionSelection;
-  /** A compact icon button by default; see `extensionPopoverTriggers`. */
-  trigger?: ExtensionPopoverTrigger;
 };
 
-/** Mounts contributions off-screen and reveals a trigger once any renders content. */
+/**
+ * Mounts contributions off-screen and reveals a compact icon button beside
+ * the content it extends once any renders content.
+ */
 export const ExtensionPopoverOutlet = ({
   context,
   label,
   outlet,
   runtimeScope,
-  selection,
-  trigger = extensionPopoverTriggers.icon,
 }: ExtensionPopoverOutletProps) => {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [contentHeights, setContentHeights] = useState<Record<string, number>>(
@@ -55,33 +36,16 @@ export const ExtensionPopoverOutlet = ({
   );
   const contextKey = JSON.stringify(context);
   const runtime = useExtensionRuntime(runtimeScope);
-  const contributions = outletContributions(
-    runtime.data,
-    outlet,
-    context,
-    selection,
-  );
+  const contributions = outletContributions(runtime.data, outlet, context);
   const contentKey = (contribution: ExtensionContribution) =>
     `${contextKey}:${contributionKey(contribution)}`;
   const hasContent = contributions.some(
     (contribution) => contentHeights[contentKey(contribution)] > 0,
   );
   if (!contributions.length) return null;
-  const open = (event: MouseEvent<HTMLElement>) =>
-    setAnchor(event.currentTarget);
-  const toolbar = trigger === extensionPopoverTriggers.toolbar;
-  const horizontal = toolbar ? 'right' : 'left';
   return (
-    <ActionSelectionContext value={selection ?? null}>
-      {hasContent && trigger === extensionPopoverTriggers.menuItem && (
-        <MenuItem onClick={open}>
-          <ListItemIcon>
-            <ExtensionIcon size={compactIconSize} />
-          </ListItemIcon>
-          <ListItemText>{label}</ListItemText>
-        </MenuItem>
-      )}
-      {hasContent && trigger !== extensionPopoverTriggers.menuItem && (
+    <>
+      {hasContent && (
         // The trigger appears once a frame has content; fading it in keeps
         // that late arrival from drawing the eye.
         <Fade appear in>
@@ -89,14 +53,10 @@ export const ExtensionPopoverOutlet = ({
             <Tooltip title={label}>
               <IconButton
                 aria-label={label}
-                onClick={open}
-                size={toolbar ? 'medium' : 'small'}
+                onClick={(event) => setAnchor(event.currentTarget)}
+                size="small"
               >
-                {toolbar ? (
-                  <ExtensionIcon />
-                ) : (
-                  <ExtensionIcon size={compactIconSize} />
-                )}
+                <ExtensionIcon size={compactIconSize} />
               </IconButton>
             </Tooltip>
           </span>
@@ -106,11 +66,11 @@ export const ExtensionPopoverOutlet = ({
           the extension artifact. */}
       <Popover
         anchorEl={anchor}
-        anchorOrigin={{ horizontal, vertical: 'bottom' }}
+        anchorOrigin={{ horizontal: 'left', vertical: 'bottom' }}
         keepMounted
         onClose={() => setAnchor(null)}
         open={Boolean(anchor)}
-        transformOrigin={{ horizontal, vertical: 'top' }}
+        transformOrigin={{ horizontal: 'left', vertical: 'top' }}
       >
         <Stack
           sx={{
@@ -134,6 +94,6 @@ export const ExtensionPopoverOutlet = ({
           ))}
         </Stack>
       </Popover>
-    </ActionSelectionContext>
+    </>
   );
 };

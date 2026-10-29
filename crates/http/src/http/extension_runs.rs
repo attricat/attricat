@@ -18,10 +18,7 @@ use super::{
     extractors::{ApiJson, ApiPath, ApiQuery},
 };
 use crate::{
-    extensions::{
-        MAX_EXTENSION_IDENTIFIER_BYTES, SELECTION_ACTION_CONTRIBUTION_VERSION, UiOutlet,
-        selection_action_outlet, validate_schema,
-    },
+    extensions::{MAX_EXTENSION_IDENTIFIER_BYTES, UiOutlet, validate_schema},
     repository::{
         AttricatRepository, ExtensionAnnotationNamespace, ExtensionAnnotationPatch,
         ExtensionAnnotations, InteractiveRun, InteractiveRunArtifact, RepositoryError,
@@ -160,7 +157,8 @@ impl RunResponse {
     }
 }
 
-/// Starts an interactive operation from a selection-aware contribution.
+/// Starts an interactive operation from an action dialog, the only frame an
+/// action opens. Actions themselves are host-rendered and run no code.
 pub(super) async fn start(
     ScopedRepository(repository): ScopedRepository,
     principal: AuthenticatedPrincipal,
@@ -175,14 +173,7 @@ pub(super) async fn start(
     let contribution = repository
         .client_extension_contribution(&extension_id, &contribution_id)
         .await?;
-    let selection_surface = match &contribution.outlet {
-        Some(UiOutlet::ActionDialog) => true,
-        Some(outlet) => {
-            selection_action_outlet(outlet)
-                && contribution.version == SELECTION_ACTION_CONTRIBUTION_VERSION
-        }
-        None => false,
-    };
+    let selection_surface = contribution.outlet == Some(UiOutlet::ActionDialog);
     if contribution.installed_release_id != input.release_id
         || !selection_surface
         || !contribution

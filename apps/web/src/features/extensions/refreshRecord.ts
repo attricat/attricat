@@ -1,10 +1,10 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import type { ExtensionContribution } from './api';
+import { parseActionContext } from './actions';
 import {
   extensionCapabilities,
   extensionProtocolErrors,
-  selectionSources,
   extensionOutlets,
 } from './constants';
 import { recordQueryKeys } from '../records/queryKeys';
@@ -14,24 +14,31 @@ const refreshSchema = z
   .object({ target: z.literal('current_record') })
   .strict();
 const recordRefreshOutlets = new Set<ExtensionContribution['outlet']>([
-  extensionOutlets.recordAction,
+  extensionOutlets.actionDialog,
   extensionOutlets.recordPreviewPanel,
   extensionOutlets.recordAttributeDecoration,
 ]);
 
+/** Action outlets on a record page, whose dialogs act on that one record. */
+const recordActionOutlets = new Set<string>([
+  extensionOutlets.recordAction,
+  extensionOutlets.recordHeaderAction,
+]);
+
 /**
- * The record a host-supplied context describes. A version 2 record action
- * receives a selection context instead, whose preview selection holds exactly
- * that one record; any other selection names no single current record.
+ * The record a host-supplied context describes. A dialog receives its
+ * action's context instead, which names the current record only when the
+ * action was on a record page; an Explorer selection names none.
  */
 const contextRecordId = (context: Record<string, unknown>) => {
   if (context.record_id !== undefined) return z.uuid().parse(context.record_id);
+  const action = parseActionContext(context);
   if (
-    context.selection_source === selectionSources.recordPreview &&
-    Array.isArray(context.record_ids) &&
-    context.record_ids.length === 1
+    action &&
+    recordActionOutlets.has(action.outlet) &&
+    action.record_ids.length === 1
   )
-    return z.uuid().parse(context.record_ids[0]);
+    return action.record_ids[0];
   throw new Error(extensionProtocolErrors.refreshDenied);
 };
 

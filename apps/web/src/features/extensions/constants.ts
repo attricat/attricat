@@ -22,9 +22,8 @@ export const maximumNotificationMessageLength = 512;
 export const maximumExtensionStorageListLimit = 100;
 export const supportedWorkspaceLayoutVersion = 1;
 export const supportedOutletContextVersion = 1;
-/** Selection-aware action contributions (contribution version 2) receive this context. */
-export const selectionActionContributionVersion = 2;
-export const selectionContextVersion = 2;
+/** Version of the context an action's dialog or command receives. */
+export const actionContextVersion = 1;
 /** Mirrors the host's initial interactive selection bound. */
 export const maximumActionSelection = 50;
 
@@ -50,17 +49,19 @@ export const extensionOutlets = {
   actionDialog: 'action_dialog',
   exportMapping: 'export_mapping',
 } as const;
-/** Outlets whose version 2 contributions receive a normalized selection. */
-export const selectionActionOutlets = [
+/**
+ * Outlets that render an extension's actions as host-owned menu items or
+ * buttons. An action runs no code of its own: choosing it opens one of the
+ * extension's dialogs or calls one of its server commands.
+ */
+export const actionOutlets = [
   extensionOutlets.recordAction,
+  extensionOutlets.recordHeaderAction,
   extensionOutlets.explorerRowAction,
+  extensionOutlets.explorerAction,
   extensionOutlets.explorerBulkAction,
 ] as const;
-export const selectionSources = {
-  recordPreview: 'record_preview',
-  explorerRow: 'explorer_row',
-  explorerSelection: 'explorer_selection',
-} as const;
+export type ActionOutlet = (typeof actionOutlets)[number];
 
 export const contributionKinds = {
   route: 'route',
@@ -142,7 +143,6 @@ export const extensionBrokerMethods = {
   attricatRead: 'attricat.read',
   command: 'command',
   dialogClose: 'dialog.close',
-  dialogOpen: 'dialog.open',
   operationsCancel: 'operations.cancel',
   operationsDownload: 'operations.download',
   operationsGet: 'operations.get',
@@ -213,18 +213,6 @@ export const controlCharacterRanges = {
 
 export const extensionCardMinWidth = 190;
 export const extensionPopoverWidth = 480;
-
-/** How an extension popover outlet offers its contributions. */
-export const extensionPopoverTriggers = {
-  /** A compact icon button beside the content it extends. */
-  icon: 'icon',
-  /** An item of the menu the outlet is placed in. */
-  menuItem: 'menu_item',
-  /** A full-size icon button among toolbar controls, opening to its left. */
-  toolbar: 'toolbar',
-} as const;
-export type ExtensionPopoverTrigger =
-  (typeof extensionPopoverTriggers)[keyof typeof extensionPopoverTriggers];
 
 /** What a frame shows in its place until its artifact has rendered. */
 export const extensionFramePlaceholders = {

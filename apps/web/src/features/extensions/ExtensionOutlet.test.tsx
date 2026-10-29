@@ -8,15 +8,10 @@ import {
   createRouter,
   RouterProvider,
 } from '@tanstack/react-router';
-import { MenuList } from '@mui/material';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import type { ExtensionContribution } from './api';
-import {
-  extensionPopoverTriggers,
-  type ExtensionPopoverTrigger,
-} from './constants';
 
 const { frameMounts } = vi.hoisted(() => ({ frameMounts: vi.fn() }));
 
@@ -58,39 +53,33 @@ const contribution: ExtensionContribution = {
   extension_id: 'example.extension',
   extension_name: 'Example Extension',
   id: 'row-action',
-  kind: 'action',
-  outlet: 'explorer_row_action',
+  kind: 'embedded',
+  outlet: 'record_attribute_decoration',
   release_id: '11111111-1111-4111-8111-111111111111',
   route: null,
   title: 'Example action',
   version: 1,
+  invoke: null,
 };
 
-const renderOutlet = (trigger?: ExtensionPopoverTrigger) => {
+const renderOutlet = () => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   const outlet = (
     <ExtensionPopoverOutlet
       context={{
+        attribute_id: '44444444-4444-4444-8444-444444444444',
         blueprint_id: '22222222-2222-4222-8222-222222222222',
         blueprint_version: 1,
-        context_version: 1,
         record_id: '33333333-3333-4333-8333-333333333333',
       }}
       label="Extension actions"
-      outlet="explorer_row_action"
-      trigger={trigger}
+      outlet="record_attribute_decoration"
     />
   );
   return render(
-    <QueryClientProvider client={queryClient}>
-      {trigger === extensionPopoverTriggers.menuItem ? (
-        <MenuList>{outlet}</MenuList>
-      ) : (
-        outlet
-      )}
-    </QueryClientProvider>,
+    <QueryClientProvider client={queryClient}>{outlet}</QueryClientProvider>,
   );
 };
 
@@ -268,99 +257,6 @@ describe('ExtensionOutlet', () => {
     expect(screen.queryByText('health-card')).toBeNull();
   });
 
-  it('mounts bulk actions only with bounded, unique selected IDs', async () => {
-    vi.mocked(getExtensionRuntime).mockResolvedValue([
-      {
-        ...contribution,
-        id: 'bulk-action',
-        kind: 'action',
-        outlet: 'explorer_bulk_action',
-      },
-      {
-        ...contribution,
-        id: 'wrong-kind',
-        kind: 'embedded',
-        outlet: 'explorer_bulk_action',
-      },
-    ]);
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    const context = {
-      context_version: 1,
-      blueprint_id: '22222222-2222-4222-8222-222222222222',
-      blueprint_version: 1,
-      record_ids: ['33333333-3333-4333-8333-333333333333'],
-    };
-    const { rerender } = render(
-      <QueryClientProvider client={queryClient}>
-        <ExtensionOutlet outlet="explorer_bulk_action" context={context} />
-      </QueryClientProvider>,
-    );
-    expect(await screen.findByText('bulk-action')).toBeTruthy();
-    expect(screen.queryByText('wrong-kind')).toBeNull();
-    for (const record_ids of [
-      [],
-      [context.record_ids[0], context.record_ids[0]],
-      Array.from(
-        { length: 51 },
-        (_, index) =>
-          `33333333-3333-4333-8333-${String(index).padStart(12, '0')}`,
-      ),
-    ]) {
-      rerender(
-        <QueryClientProvider client={queryClient}>
-          <ExtensionOutlet
-            outlet="explorer_bulk_action"
-            context={{ ...context, record_ids }}
-          />
-        </QueryClientProvider>,
-      );
-      expect(screen.queryByText('bulk-action')).toBeNull();
-    }
-  });
-
-  it('mounts only Explorer actions for a strict blueprint revision context', async () => {
-    vi.mocked(getExtensionRuntime).mockResolvedValue([
-      {
-        ...contribution,
-        id: 'explorer-action',
-        kind: 'action',
-        outlet: 'explorer_action',
-      },
-      {
-        ...contribution,
-        id: 'wrong-kind',
-        kind: 'panel',
-        outlet: 'explorer_action',
-      },
-    ]);
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    const context = {
-      context_version: 1,
-      blueprint_id: '22222222-2222-4222-8222-222222222222',
-      blueprint_version: 1,
-    };
-    const { rerender } = render(
-      <QueryClientProvider client={queryClient}>
-        <ExtensionOutlet outlet="explorer_action" context={context} />
-      </QueryClientProvider>,
-    );
-    expect(await screen.findByText('explorer-action')).toBeTruthy();
-    expect(screen.queryByText('wrong-kind')).toBeNull();
-    rerender(
-      <QueryClientProvider client={queryClient}>
-        <ExtensionOutlet
-          outlet="explorer_action"
-          context={{ ...context, query: 'private' }}
-        />
-      </QueryClientProvider>,
-    );
-    expect(screen.queryByText('explorer-action')).toBeNull();
-  });
-
   it('mounts only audit panels with an event ID and no event payload', async () => {
     vi.mocked(getExtensionRuntime).mockResolvedValue([
       {
@@ -440,74 +336,6 @@ describe('ExtensionOutlet', () => {
       </QueryClientProvider>,
     );
     expect(screen.queryByText('blueprint-panel')).toBeNull();
-  });
-
-  it('mounts only action contributions with a valid record header context', async () => {
-    vi.mocked(getExtensionRuntime).mockResolvedValue([
-      { ...contribution, id: 'header-action', outlet: 'record_header_action' },
-      {
-        ...contribution,
-        id: 'wrong-kind',
-        kind: 'panel',
-        outlet: 'record_header_action',
-      },
-    ]);
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    const context = {
-      context_version: 1,
-      record_id: '33333333-3333-4333-8333-333333333333',
-      blueprint_id: '22222222-2222-4222-8222-222222222222',
-      blueprint_version: 1,
-    };
-    const { rerender } = render(
-      <QueryClientProvider client={queryClient}>
-        <ExtensionOutlet outlet="record_header_action" context={context} />
-      </QueryClientProvider>,
-    );
-    expect(await screen.findByText('header-action')).toBeTruthy();
-    expect(screen.queryByText('wrong-kind')).toBeNull();
-    rerender(
-      <QueryClientProvider client={queryClient}>
-        <ExtensionOutlet
-          outlet="record_header_action"
-          context={{ ...context, unexpected: 'private' }}
-        />
-      </QueryClientProvider>,
-    );
-    expect(screen.queryByText('header-action')).toBeNull();
-  });
-
-  it.each([
-    'record_preview_panel',
-    'record_action',
-    'record_attribute_decoration',
-  ] as const)('requests an explicit blueprint scope for %s', async (outlet) => {
-    vi.mocked(getExtensionRuntime).mockResolvedValue([]);
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    const props = {
-      context: { record_id: '33333333-3333-4333-8333-333333333333' },
-      outlet,
-      runtimeScope: {
-        blueprintId: '22222222-2222-4222-8222-222222222222',
-        blueprintVersion: 4,
-      },
-    };
-    render(
-      <QueryClientProvider client={queryClient}>
-        {outlet === 'record_attribute_decoration' ? (
-          <ExtensionPopoverOutlet {...props} label="Decorations" />
-        ) : (
-          <ExtensionOutlet {...props} />
-        )}
-      </QueryClientProvider>,
-    );
-    await waitFor(() =>
-      expect(getExtensionRuntime).toHaveBeenCalledWith(props.runtimeScope),
-    );
   });
 
   it('keeps navigation grouped unless the host descriptor promotes it', async () => {
@@ -646,33 +474,6 @@ describe('ExtensionOutlet', () => {
     ).toBeTruthy();
     expect(screen.queryByText('Browse extensions')).toBeNull();
   });
-
-  it('keeps one primary and three secondary record actions before overflow', async () => {
-    const actions = Array.from({ length: 5 }, (_, index) => ({
-      ...contribution,
-      contribution_key: `example.extension:action-${index}`,
-      display_order: index,
-      id: `action-${index}`,
-      outlet: 'record_action' as const,
-      kind: 'embedded' as const,
-    }));
-    vi.mocked(getExtensionRuntime).mockResolvedValue(actions);
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    const user = userEvent.setup();
-    render(
-      <QueryClientProvider client={queryClient}>
-        <ExtensionOutlet outlet="record_action" />
-      </QueryClientProvider>,
-    );
-    await screen.findByText('action-3');
-    expect(screen.queryByText('action-4')).toBeNull();
-    await user.click(
-      screen.getByRole('button', { name: 'More extension actions' }),
-    );
-    expect(await screen.findByText('action-4')).toBeTruthy();
-  });
 });
 
 describe('ExtensionPopoverOutlet', () => {
@@ -689,23 +490,6 @@ describe('ExtensionPopoverOutlet', () => {
     await waitFor(() => expect(frameMounts).toHaveBeenCalledOnce());
 
     await user.click(button);
-
-    expect(frameMounts).toHaveBeenCalledOnce();
-  });
-
-  it('offers its contributions as a labelled menu item inside a menu', async () => {
-    vi.mocked(getExtensionRuntime).mockResolvedValue([contribution]);
-    const user = userEvent.setup();
-
-    renderOutlet(extensionPopoverTriggers.menuItem);
-
-    const item = await screen.findByRole('menuitem', {
-      name: 'Extension actions',
-    });
-    expect(
-      screen.queryByRole('button', { name: 'Extension actions' }),
-    ).toBeNull();
-    await user.click(item);
 
     expect(frameMounts).toHaveBeenCalledOnce();
   });

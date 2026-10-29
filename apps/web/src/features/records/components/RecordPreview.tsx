@@ -24,10 +24,8 @@ import {
 import { QueryErrorNotice } from '../../../components/QueryErrorNotice';
 import { ApiErrorAlert } from '../../../components/ApiErrorAlert';
 import { BlueprintLink } from '../../blueprints/BlueprintLink';
-import {
-  ExtensionOutlet,
-  ExtensionPopoverOutlet,
-} from '../../extensions/ExtensionOutlet';
+import { ExtensionOutlet } from '../../extensions/ExtensionOutlet';
+import { ExtensionActionMenuItems } from '../../extensions/ExtensionActions';
 import { outletContributions } from '../../extensions/outletContributions';
 import { useExtensionRuntime } from '../../extensions/useExtensionRuntime';
 import { useCan, useCanOn } from '../../auth/useCan';
@@ -79,11 +77,7 @@ import { RelationshipPickerActionBar } from './RelationshipPickerActionBar';
 import { useRecordPublications } from './useRecordPublications';
 import { capabilities, accessTargetKinds } from '../../auth/capabilities';
 import { currentBlueprintOptions } from '../queryOptions';
-import {
-  extensionOutlets,
-  extensionPopoverTriggers,
-  supportedOutletContextVersion,
-} from '../../extensions/constants';
+import { extensionOutlets } from '../../extensions/constants';
 
 const loadRecordCommentsPanel = () =>
   import('../../record-comments/RecordCommentsPanel');
@@ -406,20 +400,18 @@ export const RecordPreview = ({
                 extensionActions={
                   blueprint.data &&
                   resolved.data && (
-                    <ExtensionPopoverOutlet
-                      context={{
-                        context_version: supportedOutletContextVersion,
-                        record_id: recordId,
-                        blueprint_id: blueprint.data.blueprint.id,
-                        blueprint_version: blueprint.data.blueprint.version,
-                      }}
-                      label={t('records.extensionActions')}
+                    <ExtensionActionMenuItems
                       outlet={extensionOutlets.recordHeaderAction}
                       runtimeScope={{
                         blueprintId: blueprint.data.blueprint.id,
                         blueprintVersion: blueprint.data.blueprint.version,
                       }}
-                      trigger={extensionPopoverTriggers.menuItem}
+                      target={{
+                        blueprintId: blueprint.data.blueprint.id,
+                        blueprintVersion: blueprint.data.blueprint.version,
+                        contextId: selectedContextId ?? null,
+                        recordIds: [recordId],
+                      }}
                     />
                   )
                 }

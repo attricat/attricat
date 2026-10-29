@@ -27,6 +27,7 @@ const contribution = {
   outlet: 'record_preview_panel',
   route: null,
   title: null,
+  invoke: null,
 };
 
 describe('extension runtime API', () => {
@@ -41,6 +42,7 @@ describe('extension runtime API', () => {
       capabilities: ['client.explorer_row_action'],
       kind: 'action',
       outlet: 'explorer_row_action',
+      invoke: { dialog: 'documents' },
     };
     fetchMock.mockResolvedValue({
       ok: true,
