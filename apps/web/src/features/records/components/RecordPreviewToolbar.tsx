@@ -87,6 +87,7 @@ export const RecordPreviewToolbar = ({
         onDelete={onDelete}
         onDuplicate={onDuplicate}
         panelActions={menuActions}
+        publications={canPublish ? publications : undefined}
         recordId={recordId}
         schemaOutdated={schemaOutdated}
       />

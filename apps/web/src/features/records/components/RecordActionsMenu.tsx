@@ -2,8 +2,12 @@ import {
   ChevronDownIcon,
   CircleArrowUpIcon,
   CopyIcon,
+  GlobeIcon,
   PlusIcon,
+  RefreshCwIcon,
+  SendIcon,
   Trash2Icon,
+  Undo2Icon,
   type LucideIcon,
 } from 'lucide-react';
 import {
@@ -21,6 +25,9 @@ import { useCopyToClipboard } from '../../../components/useCopyToClipboard';
 import { compactIconSize } from '../../../components/iconSizes';
 import { lexiconText } from '../../lexicon/lexicon';
 import { RecordIdIcon, AuditLogIcon } from '../../../components/systemIcons';
+import { publicationStatuses } from '../constants';
+import { publicationReadinessText } from '../checkViolations';
+import type { RecordPublications } from './useRecordPublications';
 
 /** A button that opens one of the record's side panels. */
 export type PanelAction = {
@@ -32,7 +39,10 @@ export type PanelAction = {
   onClick: () => void;
 };
 
-/** The record's Actions menu: history, copying, creating and deleting. */
+/**
+ * The record's Actions menu: history, copying, creating, publishing and
+ * deleting.
+ */
 export const RecordActionsMenu = ({
   blueprint,
   canCreate,
@@ -41,6 +51,7 @@ export const RecordActionsMenu = ({
   onDelete,
   onDuplicate,
   panelActions,
+  publications,
   recordId,
   schemaOutdated,
 }: {
@@ -55,6 +66,8 @@ export const RecordActionsMenu = ({
   onDuplicate: () => void;
   /** Panels opened from the menu rather than from the toolbar. */
   panelActions: readonly PanelAction[];
+  /** Publishes or withdraws the record; given when the caller may publish. */
+  publications?: RecordPublications;
   recordId: string;
   schemaOutdated?: boolean;
 }) => {
@@ -67,6 +80,11 @@ export const RecordActionsMenu = ({
     close();
     action();
   };
+  const publication = publications?.publication;
+  const notReady = publications?.readiness?.ready === false;
+  const readinessText =
+    publications?.readiness && publicationReadinessText(publications.readiness);
+  const notReadyChannels = publications?.notReadyChannels ?? [];
   return (
     <>
       <Button
@@ -138,6 +156,62 @@ export const RecordActionsMenu = ({
             <ListItemText>{t('records.upgradeBlueprint')}</ListItemText>
           </RouterMenuItem>
         )}
+        {publications && <Divider />}
+        {publications && publication && (
+          <MenuItem
+            disabled={publications.isPending || notReady}
+            onClick={choose(publications.publish)}
+          >
+            <ListItemIcon>
+              {publication.status === publicationStatuses.notPublished ? (
+                <SendIcon size={compactIconSize} />
+              ) : (
+                <RefreshCwIcon size={compactIconSize} />
+              )}
+            </ListItemIcon>
+            <ListItemText secondary={notReady ? readinessText : undefined}>
+              {publication.status === publicationStatuses.notPublished
+                ? t('records.publish')
+                : t('records.republish')}
+            </ListItemText>
+          </MenuItem>
+        )}
+        {publications && (
+          <MenuItem
+            disabled={publications.isPending || notReadyChannels.length > 0}
+            onClick={choose(publications.publishAll)}
+          >
+            <ListItemIcon>
+              <GlobeIcon size={compactIconSize} />
+            </ListItemIcon>
+            <ListItemText
+              secondary={
+                notReadyChannels.length > 0
+                  ? t('records.publication.channelsNotReady', {
+                      channels: notReadyChannels
+                        .map((channel) => channel.context_code)
+                        .join(', '),
+                    })
+                  : undefined
+              }
+            >
+              {t('records.publishAllChannels')}
+            </ListItemText>
+          </MenuItem>
+        )}
+        {publications &&
+          publication?.status === publicationStatuses.published && (
+            <MenuItem
+              disabled={publications.isPending}
+              onClick={choose(publications.unpublish)}
+              sx={{ color: 'warning.main' }}
+            >
+              <ListItemIcon sx={{ color: 'inherit' }}>
+                <Undo2Icon size={compactIconSize} />
+              </ListItemIcon>
+              <ListItemText>{t('records.unpublish')}</ListItemText>
+            </MenuItem>
+          )}
         {panelActions.length > 0 && <Divider />}
         {panelActions.map(({ controls, icon: Icon, label, onClick }) => (
           <MenuItem

@@ -91,7 +91,7 @@ const renderToolbar = (
 };
 
 const openPublicationMenu = () => {
-  fireEvent.click(screen.getByRole('button', { name: 'Publication' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Actions' }));
   return screen.getByRole('menu');
 };
 
@@ -121,6 +121,12 @@ describe('RecordPreviewToolbar readiness', () => {
     expect(document.activeElement).toBe(chip);
     // Closed, the tooltip describes the focused chip through its title.
     expect(chip?.getAttribute('title')).toBe('SKU is required.');
+  });
+
+  it('shows the publication status as an icon', () => {
+    renderToolbar({ ...notReady, ready: true, violations: [] });
+    expect(screen.getByRole('button', { name: 'Not published' })).toBeTruthy();
+    expect(screen.queryByText('Not published')).toBeNull();
   });
 
   it('allows publishing a ready record', () => {

@@ -681,14 +681,13 @@
     "unpublish": "Unpublish",
     "publishAllChannels": "Publish to all channels",
     "publication": {
-      "actionsHelp": "About publication",
       "actionsDescription": "Publication approves this record for export in the channel. Editing the record withdraws that approval until you publish it again.",
-      "actions": "Publication",
       "not_published": "Not published",
+      "notPublishedDescription": "This record is not approved for export in this channel yet.",
       "published": "Published",
       "publishedDetails": "Published {{publishedAt}} by {{publishedBy}}",
       "channelDisabled": "Not an export channel",
-      "channelDisabledDescription": "Enable this context as an export channel in Manage > Exports before publishing.",
+      "channelDisabledDescription": "Enable this context as an export channel in <exportsLink>Manage > Exports</exportsLink> before publishing.",
       "notReady": "Not ready",
       "channelsNotReady": "Not ready for: {{channels}}"
     },
