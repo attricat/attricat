@@ -16,7 +16,6 @@ const refreshSchema = z
 const recordRefreshOutlets = new Set<ExtensionContribution['outlet']>([
   extensionOutlets.actionDialog,
   extensionOutlets.recordPreviewPanel,
-  extensionOutlets.recordAttributeDecoration,
 ]);
 
 /** Action outlets on a record page, whose dialogs act on that one record. */

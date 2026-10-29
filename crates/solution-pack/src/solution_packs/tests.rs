@@ -900,7 +900,6 @@ fn workspace_layout_accepts_every_manifest_outlet_and_both_primary_lists() {
         "navigation",
         "record_preview_panel",
         "blueprint_attribute_configuration",
-        "record_attribute_decoration",
         "record_action",
         "explorer_row_action",
         "explorer_table_cell",
@@ -908,10 +907,8 @@ fn workspace_layout_accepts_every_manifest_outlet_and_both_primary_lists() {
         "explorer_action",
         "explorer_bulk_action",
         "record_header_action",
-        "record_attribute_panel",
         "blueprint_panel",
         "blueprint_publish_check",
-        "file_panel",
         "audit_event_panel",
         "data_health_card",
     ] {

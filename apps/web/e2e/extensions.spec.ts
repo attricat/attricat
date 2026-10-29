@@ -90,14 +90,13 @@ price_gross = "price_net * (1 + 0.23)"`,
   const record = await createRecord(blueprint, [scalar('price_net', 100)]);
 
   await page.goto(`/records/${record.id}`);
-  // The decoration asks the server component for the formula index, which
-  // compiles its WASM on first use.
-  await expect(
-    page.getByLabel('View extension content for Price gross'),
-  ).toBeVisible({ timeout: 90_000 });
-  await expect(
-    page.getByLabel('View extension content for Price net'),
-  ).toHaveCount(0);
+  // Field notes come from the extension's server component, which compiles
+  // its WASM on first use; the host asks again until it answers. Only the
+  // formula target carries the Computed badge.
+  const computed = page.getByRole('button', { name: 'Computed' });
+  await expect(computed).toBeVisible({ timeout: 90_000 });
+  await expect(computed).toHaveCount(1);
+  await expect(page.getByText('Feeds price_gross')).toBeVisible();
   // Record actions are host-rendered buttons; choosing this one calls the
   // extension's server command, whose notification the host shows.
   await page

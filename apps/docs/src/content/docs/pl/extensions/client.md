@@ -73,12 +73,42 @@ Dodaj kontrybucję `navigation`, aby umieścić do niej link na pasku bocznym. A
 | --- | --- | --- | --- |
 | `record_preview_panel` | `embedded` | | `record_id`, opcjonalnie `context_id` |
 | `record_action` | `action` | `client.record_action` | [Kontekst akcji](#akcje) z tym rekordem |
-| `record_attribute_decoration` | `embedded` | `client.record_decoration` | rekord, atrybut, Schemat i wersja, opcjonalnie kontekst |
 | `record_header_action` | `action` | `client.record_header_action` | [Kontekst akcji](#akcje) z tym rekordem |
-| `record_attribute_panel` | `panel` | `client.record_attribute_panel` | `record_id`, `attribute_id`, `blueprint_id`, `blueprint_version`, `context_id` |
-| `file_panel` | `panel` | `client.file_panel` | `file_id`, `record_id`, `attribute_id`, `blueprint_id`, `blueprint_version` |
+| `record_attribute_action` | `action` | `client.record_field_notes` | [Kontekst akcji](#akcje) z tym rekordem i `attribute_code` pola. Dostępne tylko z odznaki [notatki pola](#notatki-pól). |
 
-`record_preview_panel` pojawia się na karcie **Rozszerzenia** rekordu. Akcje rekordu to przyciski pod polami, cztery przed menu przepełnienia; akcje nagłówka to pozycje menu **Akcje** rekordu. Panele pokazują do trzech kontrybucji przed przepełnieniem.
+`record_preview_panel` pojawia się na karcie **Rozszerzenia** rekordu. Akcje rekordu to przyciski pod polami, cztery przed menu przepełnienia; akcje nagłówka to pozycje menu **Akcje** rekordu. Panele pokazują do trzech kontrybucji przed przepełnieniem. Pola i pliki nie mają ramek; opisuj je [notatkami pól](#notatki-pól).
+
+### Notatki pól
+
+Notatki pól to odznaki i krótkie notatki, które Attricat pokazuje przy polach i plikach rekordu. Zadeklaruj polecenie serwerowe, które opisuje rekord:
+
+```json
+"record_field_notes": { "version": 1, "source": { "command": "describe-fields" } }
+```
+
+Wymaga ono `client.record_field_notes` i `client.commands`. Gdy rekord jest wyświetlany, Attricat wywołuje polecenie raz z `{ record_id, blueprint_id, blueprint_version, context_id }` (kontekstem pokazywanym na stronie) i oczekuje:
+
+```json
+{
+  "attributes": {
+    "price_gross": {
+      "badge": { "label": "Wyliczane", "tone": "info", "tooltip": "price_net * 1.23", "action": "recalculate-field" },
+      "note": "price_gross = price_net * 1.23"
+    }
+  },
+  "files": { "<id pliku>": { "note": "Ostatni dokument: szablon summary." } }
+}
+```
+
+| Pole | Ograniczenie |
+| --- | --- |
+| `badge.label` | od 1 do 24 znaków |
+| `badge.tone` | `neutral` (domyślnie), `info`, `success`, `warning`, `error` |
+| `badge.tooltip` | do 200 znaków; podpowiedź podaje też nazwę Twojego rozszerzenia |
+| `badge.action` | Twoja akcja w miejscu `record_attribute_action`; wybranie odznaki uruchamia ją z `attribute_code` pola w kontekście |
+| `note` | do 280 znaków zwykłego tekstu |
+
+Odznaki i notatka pola pojawiają się w jednym wierszu pod nim, a notatka pliku pod plikiem. Notatki dla atrybutów lub plików, których rekord nie ma, są pomijane, podobnie jak odpowiedź łamiąca te ograniczenia. Odpowiedź wolniejsza niż dwie sekundy jest pomijana, a Attricat wkrótce pyta ponownie, więc pierwsze wywołanie może skompilować Twój komponent bez wstrzymywania strony. Notatki odświeżają się razem z wartościami rekordu.
 
 ### Przeglądarka rekordów
 

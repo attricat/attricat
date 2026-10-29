@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { defaultContextCode } from '../../contexts/constants';
 import { IconLabel } from '../../../components/IconLabel';
-import { compactIconButtonSize } from '../../../components/iconSizes';
+import { FieldNotesRow } from '../../extensions/fieldNotes';
 import { RelationshipIcon } from '../../../components/systemIcons';
 import { fileAttributeIcon } from '../../files/fileAttributeIcon';
 import type { Attribute, ComponentReference } from '../../records/api';
@@ -32,9 +32,6 @@ export const ValueField = ({
   attribute,
   resolved,
   renderEditor,
-  renderAttributeDecoration,
-  renderAttributePanel,
-  renderFilePanel,
   component,
   contextId,
   recordId,
@@ -45,9 +42,6 @@ export const ValueField = ({
     attribute: Attribute,
     component?: ComponentReference | null,
   ) => ReactNode;
-  renderAttributeDecoration?: (attribute: Attribute) => ReactNode;
-  renderAttributePanel?: (attribute: Attribute) => ReactNode;
-  renderFilePanel?: (attribute: Attribute, fileId: string) => ReactNode;
   component?: ComponentReference | null;
   contextId?: string;
   recordId?: string;
@@ -66,30 +60,14 @@ export const ValueField = ({
   const diagnostics = useFieldDiagnostics();
   const findings = useFieldFindings(attribute.code);
   const severity = findings && worstSeverity(findings);
-  // An extension decoration renders its trigger only once it has content, so
-  // its slot keeps a fixed size and the field never moves when it appears.
-  const decorationSlot = renderAttributeDecoration && (
-    <Box
-      sx={{
-        alignItems: 'center',
-        display: 'flex',
-        flexShrink: 0,
-        height: compactIconButtonSize,
-        width: compactIconButtonSize,
-      }}
-    >
-      {renderAttributeDecoration(attribute)}
-    </Box>
-  );
-  // The diagnostics button and decoration keep beside an editor, clear of its
-  // outline, label and save status.
+  // The diagnostics button keeps beside an editor, clear of its outline,
+  // label and save status.
   const editorField =
-    editor !== null && (diagnostics || decorationSlot) ? (
+    editor !== null && diagnostics ? (
       <Box sx={{ alignItems: 'flex-start', display: 'flex', gap: 0.5 }}>
         <Box sx={{ flex: 1, minWidth: 0 }}>{editor}</Box>
-        <Box sx={{ display: 'flex', flexShrink: 0, pt: 0.25 }}>
+        <Box sx={{ flexShrink: 0, pt: 0.25 }}>
           <FieldDiagnosticsButton attribute={attribute} resolved={resolved} />
-          {decorationSlot}
         </Box>
       </Box>
     ) : (
@@ -134,7 +112,6 @@ export const ValueField = ({
                 attribute={attribute}
                 resolved={resolved}
               />
-              {decorationSlot}
             </Box>
             {(() => {
               const ValueRenderer =
@@ -145,12 +122,6 @@ export const ValueField = ({
                   component={component}
                   contextId={contextId}
                   recordId={recordId}
-                  renderFilePanel={
-                    renderFilePanel &&
-                    attribute.value_type === attributeValueTypes.file
-                      ? (fileId) => renderFilePanel(attribute, fileId)
-                      : undefined
-                  }
                   value={resolved?.value}
                 />
               );
@@ -168,7 +139,7 @@ export const ValueField = ({
               )}
           </>
         )}
-        {renderAttributePanel?.(attribute)}
+        <FieldNotesRow attributeCode={attribute.code} />
       </Stack>
     </FieldErrorBoundary>
   );

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   createMemoryHistory,
@@ -42,7 +42,7 @@ vi.mock('./ExtensionFrame', async () => {
 });
 
 import { getExtensionRuntime } from './api';
-import { ExtensionOutlet, ExtensionPopoverOutlet } from './ExtensionOutlet';
+import { ExtensionOutlet } from './ExtensionOutlet';
 
 const contribution: ExtensionContribution = {
   contribution_key: 'example.extension:row-action',
@@ -54,7 +54,7 @@ const contribution: ExtensionContribution = {
   extension_name: 'Example Extension',
   id: 'row-action',
   kind: 'embedded',
-  outlet: 'record_attribute_decoration',
+  outlet: 'record_preview_panel',
   release_id: '11111111-1111-4111-8111-111111111111',
   route: null,
   title: 'Example action',
@@ -62,118 +62,9 @@ const contribution: ExtensionContribution = {
   invoke: null,
 };
 
-const renderOutlet = () => {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  const outlet = (
-    <ExtensionPopoverOutlet
-      context={{
-        attribute_id: '44444444-4444-4444-8444-444444444444',
-        blueprint_id: '22222222-2222-4222-8222-222222222222',
-        blueprint_version: 1,
-        record_id: '33333333-3333-4333-8333-333333333333',
-      }}
-      label="Extension actions"
-      outlet="record_attribute_decoration"
-    />
-  );
-  return render(
-    <QueryClientProvider client={queryClient}>{outlet}</QueryClientProvider>,
-  );
-};
-
 beforeEach(() => vi.clearAllMocks());
 
 describe('ExtensionOutlet', () => {
-  it('mounts file panels only with a bounded file reference context', async () => {
-    vi.mocked(getExtensionRuntime).mockResolvedValue([
-      {
-        ...contribution,
-        id: 'file-panel',
-        kind: 'panel',
-        outlet: 'file_panel',
-      },
-      {
-        ...contribution,
-        id: 'wrong-kind',
-        kind: 'action',
-        outlet: 'file_panel',
-      },
-    ]);
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    const context = {
-      context_version: 1,
-      file_id: '55555555-5555-4555-8555-555555555555',
-      record_id: '33333333-3333-4333-8333-333333333333',
-      attribute_id: '44444444-4444-4444-8444-444444444444',
-      blueprint_id: '22222222-2222-4222-8222-222222222222',
-      blueprint_version: 1,
-    };
-    const { rerender } = render(
-      <QueryClientProvider client={queryClient}>
-        <ExtensionOutlet outlet="file_panel" context={context} />
-      </QueryClientProvider>,
-    );
-    expect(await screen.findByText('file-panel')).toBeTruthy();
-    expect(screen.queryByText('wrong-kind')).toBeNull();
-    rerender(
-      <QueryClientProvider client={queryClient}>
-        <ExtensionOutlet
-          outlet="file_panel"
-          context={{ ...context, filename: 'secret' }}
-        />
-      </QueryClientProvider>,
-    );
-    expect(screen.queryByText('file-panel')).toBeNull();
-  });
-
-  it('mounts only attribute panels with a strict record and revision context', async () => {
-    vi.mocked(getExtensionRuntime).mockResolvedValue([
-      {
-        ...contribution,
-        id: 'attribute-panel',
-        kind: 'panel',
-        outlet: 'record_attribute_panel',
-      },
-      {
-        ...contribution,
-        id: 'wrong-kind',
-        kind: 'embedded',
-        outlet: 'record_attribute_panel',
-      },
-    ]);
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    const context = {
-      context_version: 1,
-      record_id: '33333333-3333-4333-8333-333333333333',
-      attribute_id: '44444444-4444-4444-8444-444444444444',
-      blueprint_id: '22222222-2222-4222-8222-222222222222',
-      blueprint_version: 1,
-      context_id: null,
-    };
-    const { rerender } = render(
-      <QueryClientProvider client={queryClient}>
-        <ExtensionOutlet outlet="record_attribute_panel" context={context} />
-      </QueryClientProvider>,
-    );
-    expect(await screen.findByText('attribute-panel')).toBeTruthy();
-    expect(screen.queryByText('wrong-kind')).toBeNull();
-    rerender(
-      <QueryClientProvider client={queryClient}>
-        <ExtensionOutlet
-          outlet="record_attribute_panel"
-          context={{ ...context, value: 'private' }}
-        />
-      </QueryClientProvider>,
-    );
-    expect(screen.queryByText('attribute-panel')).toBeNull();
-  });
-
   it('mounts only read-only publish panels for a strict blueprint revision', async () => {
     vi.mocked(getExtensionRuntime).mockResolvedValue([
       {
@@ -473,24 +364,5 @@ describe('ExtensionOutlet', () => {
       ),
     ).toBeTruthy();
     expect(screen.queryByText('Browse extensions')).toBeNull();
-  });
-});
-
-describe('ExtensionPopoverOutlet', () => {
-  it('keeps one mounted frame while measuring and opening the popover', async () => {
-    vi.mocked(getExtensionRuntime).mockResolvedValue([contribution]);
-    const user = userEvent.setup();
-
-    renderOutlet();
-
-    const button = await screen.findByRole('button', {
-      name: 'Extension actions',
-    });
-    expect(getExtensionRuntime).toHaveBeenCalledWith(undefined);
-    await waitFor(() => expect(frameMounts).toHaveBeenCalledOnce());
-
-    await user.click(button);
-
-    expect(frameMounts).toHaveBeenCalledOnce();
   });
 });

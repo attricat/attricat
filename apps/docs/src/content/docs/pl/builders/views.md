@@ -241,4 +241,4 @@ order = ["acme.inventory:summary", "acme.pricing:margin"]
 hidden = ["acme.legacy:panel"]
 ```
 
-Miejsca osadzenia, które można tu ustawić, to `record_preview_panel`, `record_attribute_decoration` i `record_action`. Układ nigdy nie nadaje uprawnień ani nie włącza rozszerzenia. Wpisy dla brakujących lub wyłączonych rozszerzeń są zachowywane i ignorowane, więc układ przetrwa wyłączenie i ponowne włączenie rozszerzenia.
+Miejsca osadzenia, które można tu ustawić, to `record_preview_panel` i `record_action`. Układ nigdy nie nadaje uprawnień ani nie włącza rozszerzenia. Wpisy dla brakujących lub wyłączonych rozszerzeń są zachowywane i ignorowane, więc układ przetrwa wyłączenie i ponowne włączenie rozszerzenia.

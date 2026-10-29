@@ -39,6 +39,7 @@ mod extension_attribute_types;
 mod extension_brokered_egress;
 mod extension_export_platform;
 mod extension_export_scale;
+mod extension_field_notes;
 mod extension_interactive_operations;
 mod extension_registries;
 mod extension_unified_abi;

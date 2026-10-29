@@ -28,6 +28,30 @@ impl handler::Guest for Component {
 
     fn handle_command(request: CommandRequest) -> Result<CommandResponse, String> {
         let payload = parse(&request.payload)?;
+        // Field notes for the host: some belong to the record and some must
+        // be dropped (an unknown attribute and file, an undeclared action).
+        let notes = match request.handler.as_str() {
+            "field-notes" => Some(json!({
+                "attributes": {
+                    "title": {
+                        "badge": {"label": "Checked", "tone": "success", "tooltip": "From the fixture", "action": "explain"},
+                        "note": format!("Checked record {}", payload["record_id"].as_str().unwrap_or_default())
+                    },
+                    "sku": {"badge": {"label": "SKU", "action": "undeclared"}},
+                    "not_an_attribute": {"note": "dropped"}
+                },
+                "files": {"00000000-0000-4000-8000-000000000000": {"note": "dropped"}}
+            })),
+            "field-notes-invalid" => Some(json!({
+                "attributes": {"title": {"badge": {"label": "x".repeat(30)}}}
+            })),
+            _ => None,
+        };
+        if let Some(notes) = notes {
+            return Ok(CommandResponse {
+                payload: notes.to_string(),
+            });
+        }
         let response = json!({
             "handler": request.handler,
             "echo": payload,

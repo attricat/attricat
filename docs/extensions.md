@@ -115,11 +115,10 @@ The v1 capability catalogue is: `attricat.read`, `attricat.write`,
 `client.files.read`, `client.files.upload`, `client.search`,
 `client.live_updates`, `client.clipboard`, `client.theme.read`,
 `client.locale.read`, `client.blueprint_configuration`,
-`client.record_decoration`, `client.record_action`, `client.explorer_row_action`,
+`client.record_field_notes`, `client.record_action`, `client.explorer_row_action`,
 `client.explorer_table_cell`, `client.blueprint_detail_panel`, `client.explorer_action`,
 `client.explorer_bulk_action`, `client.record_header_action`,
-`client.record_attribute_panel`, `client.blueprint_panel`,
-`client.blueprint_publish_check`, `client.file_panel`,
+`client.blueprint_panel`, `client.blueprint_publish_check`,
 `client.audit_event_panel`, `client.data_health_card`, `client.action_dialog`,
 `client.operations.start`, `client.operations.read`,
 `client.operations.cancel`, `attricat.annotations.write`, `network.request`,
@@ -713,6 +712,58 @@ action's records and the Explorer's results. A failed command shows a host
 error naming the action. A dialog receives the context as `attricat.context`;
 its frame may start interactive runs for those records and close itself with
 `attricat.dialog.close()`.
+
+### Field notes
+
+An extension describes a record's fields and files with **field notes**, which
+the host renders beside them; no extension code runs beside a field. The
+manifest names one server command as the source:
+
+```json
+"record_field_notes": {"version": 1, "source": {"command": "describe-fields"}}
+```
+
+The release needs `client.record_field_notes`, and the command (like every
+command) `client.commands`. When it shows a record, the host calls the command
+once per record and value context, with
+`{"record_id", "blueprint_id", "blueprint_version", "context_id"}`; the context
+is always concrete, the workspace default when the page names none. Declare
+that shape in the command's `request_schema`. The command answers with the
+[`extension-field-notes-v1`](../contracts/extension-field-notes-v1.schema.json)
+contract:
+
+```json
+{
+  "attributes": {
+    "price_gross": {
+      "badge": {"label": "Computed", "tone": "info", "tooltip": "price_net * 1.23", "action": "recalculate-field"},
+      "note": "price_gross = price_net * 1.23 · Feeds price_deposit"
+    }
+  },
+  "files": {"<file uuid>": {"note": "Last document: summary template, separate PDF."}}
+}
+```
+
+The host renders a badge as a chip and the note as caption text in one row
+below the field, and a file's note below the file; text is never markup. A
+badge's `tone` is `neutral` (the default), `info`, `success`, `warning` or
+`error`; its tooltip also names the extension. `badge.action` names one of the
+extension's actions at the `record_attribute_action` outlet, which appear in
+no menu: choosing the badge runs that action with the field's
+`attribute_code` added to its [action context](#action-context).
+
+`GET /records/{record_id}/extension-field-notes?context_id=…` asks every
+enabled extension that provides field notes, in parallel, and answers
+`{"extensions": [{"extension_id", "extension_name", "attributes", "files"}],
+"incomplete": false}`. Reading the record authorizes it. Each answer must match
+the command's `response_schema` and the contract; the host keeps notes only for
+the record's attributes (including attached reusable attributes) and current
+files, and drops a badge action the extension does not declare. A provider that
+fails or breaks the contract is left out and logged. One that has not answered
+after two seconds, typically while its component compiles on first use, is
+also left out, but keeps running so the next request finds it ready;
+`incomplete` is then `true` and the web app asks again shortly. Notes are
+refreshed whenever the record's resolved values are.
 
 ### Interactive operations
 
@@ -1387,7 +1438,7 @@ outlets (`record_action`, `record_header_action`, `explorer_row_action`,
 [Actions](#actions-and-interactive-operations); `panel` is required for
 `blueprint_detail_panel` (and requires `client.blueprint_detail_panel`).
 `embedded` contributions use `navigation`, `record_preview_panel`,
-`blueprint_attribute_configuration`, or `record_attribute_decoration`; the
+or `blueprint_attribute_configuration`; the
 additional mediated placement capabilities reserve their matching fixed outlets
 for their explicit host-owned action or panel layouts. Routes are always
 namespaced at `/extensions/:extensionId/:contributionId`; manifests cannot
@@ -1474,11 +1525,6 @@ contextual actions—not an application-wide navigation tree.
   blueprint editor. Use it to configure extension-owned behavior for that
   blueprint/attribute; scoped configuration is separately declared and requires
   `configuration.write`.
-- **`record_attribute_decoration`** (`embedded`, requiring
-  `client.record_decoration`) is an attribute-level popover on a record page.
-  Use it for a concise indicator, explanation, or contextual detail. Its
-  context identifies the record, attribute, blueprint/version, and optional
-  context.
 - **`record_action`** (`action`, requiring `client.record_action`) is a row
   of host-rendered buttons below a record's fields; the first four show and the
   rest wait behind a **More extension actions** menu. Each acts on that record
@@ -1567,22 +1613,8 @@ dialog frame should call `attricat.dialog.close()` on Escape. Closing it
   call commands, or replace the host's server-side validation. Authoritative
   publish-time checks require a separate server contract.
 
-- **`record_attribute_panel`** (`panel`, requiring
-  `client.record_attribute_panel`) appears below each rendered field in the
-  record detail view when an enabled extension contributes that outlet. Its
-  strict v1 context contains `context_version: 1`, `record_id`, `attribute_id`,
-  `blueprint_id`, `blueprint_version`, and nullable `context_id`. No field
-  values are passed automatically. The panel is read-only; it does not appear
-  for attributes outside the blueprint detail view.
-
-- **`file_panel`** (`panel`, requiring `client.file_panel`) appears beneath
-  each file link rendered by the default file-value renderer in a record's
-  detail view. Its strict v1 context contains `context_version: 1`, `file_id`,
-  `record_id`, `attribute_id`, `blueprint_id`, and `blueprint_version`. It
-  receives no filename, file bytes, or field value automatically. It is
-  read-only, appears only for actual file values (not empty fields), and does
-  not render in custom file-value renderers that do not forward the optional
-  file-panel callback. No separate file-detail page is implied.
+- Fields and files on a record page carry no frames. Extensions describe
+  them with [field notes](#field-notes) instead.
 
 Every manifest-declared outlet has a host-owned client mount path;
 `explorer_table_cell` uses the Explorer table renderer rather than

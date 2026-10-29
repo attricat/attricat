@@ -79,24 +79,17 @@ describe('ImageGallery', () => {
     expect(document.activeElement).toBe(trigger);
   });
 
-  it('bounds thumbnail requests with pagination and preserves file panels', async () => {
+  it('bounds thumbnail requests with pagination', async () => {
     const many = Array.from({ length: GALLERY_PAGE_SIZE + 1 }, (_, index) => ({
       id: `id-${index}`,
       filename: `photo-${index}.png`,
     }));
-    renderGallery(
-      <ImageGallery
-        files={many}
-        renderFilePanel={(id) => <span>Panel {id}</span>}
-      />,
-    );
+    renderGallery(<ImageGallery files={many} />);
     expect(screen.getAllByRole('button', { name: /^Preview/ })).toHaveLength(
       GALLERY_PAGE_SIZE,
     );
-    expect(screen.queryByText(`Panel id-${GALLERY_PAGE_SIZE}`)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Go to page 2' }));
     expect(screen.getAllByRole('button', { name: /^Preview/ })).toHaveLength(1);
-    expect(screen.getByText(`Panel id-${GALLERY_PAGE_SIZE}`)).toBeTruthy();
   });
 
   it('shows picked images after the attached ones, on the last page', () => {

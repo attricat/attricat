@@ -31,6 +31,7 @@ IDs used in the manifest (`attricat.id`, artifact, dependency, permission-rule, 
 | `ui` | | Client contributions. |
 | `cell_renderers` | | Explorer table cell renderers. |
 | `attribute_types` | | Attribute types for blueprints. |
+| `record_field_notes` | | The server command that describes a record's fields and files. See [Field notes](/extensions/client/#field-notes). |
 
 ## Artifacts
 
@@ -89,7 +90,7 @@ The manifest also accepts `client.confirmation`, `client.download`, `client.exte
 
 Each placement capability allows a contribution at one outlet. See [Client contributions](/extensions/client/#outlets).
 
-`client.blueprint_configuration`, `client.record_decoration`, `client.record_action`, `client.record_header_action`, `client.record_attribute_panel`, `client.explorer_row_action`, `client.explorer_table_cell`, `client.explorer_action`, `client.explorer_bulk_action`, `client.blueprint_detail_panel`, `client.blueprint_panel`, `client.blueprint_publish_check`, `client.file_panel`, `client.audit_event_panel`, `client.data_health_card`, `client.action_dialog`, `client.export_mapping`.
+`client.blueprint_configuration`, `client.record_action`, `client.record_header_action`, `client.record_field_notes`, `client.explorer_row_action`, `client.explorer_table_cell`, `client.explorer_action`, `client.explorer_bulk_action`, `client.blueprint_detail_panel`, `client.blueprint_panel`, `client.blueprint_publish_check`, `client.audit_event_panel`, `client.data_health_card`, `client.action_dialog`, `client.export_mapping`.
 
 ## Host permissions
 
@@ -274,9 +275,9 @@ An export destination gives Attricat's export status, preview, retry, and resync
 | --- | --- | --- |
 | `route` | `artifact`, `title` | A full page at `/extensions/<extension-id>/<contribution-id>`. |
 | `navigation` | `route`, `title` | A sidebar link to one of this extension's routes. |
-| `embedded` | `artifact`, `outlet` | A frame at `navigation`, `record_preview_panel`, `blueprint_attribute_configuration`, `record_attribute_decoration`, or `explorer_table_cell`. |
-| `action` | `outlet`, `title`, `invoke` | A menu item or button the host draws at `record_action`, `record_header_action`, `explorer_row_action`, `explorer_action`, or `explorer_bulk_action`. `invoke` is `{ "command": "<id>" }` or `{ "dialog": "<id>" }`. No artifact. See [Actions](/extensions/client/#actions). |
-| `panel` | `artifact`, `outlet` | A host-laid-out panel, read-only except `export_mapping`, at `blueprint_detail_panel`, `blueprint_panel`, `blueprint_publish_check`, `record_attribute_panel`, `file_panel`, `audit_event_panel`, `data_health_card`, or `export_mapping`. |
+| `embedded` | `artifact`, `outlet` | A frame at `navigation`, `record_preview_panel`, `blueprint_attribute_configuration`, or `explorer_table_cell`. |
+| `action` | `outlet`, `title`, `invoke` | A menu item or button the host draws at `record_action`, `record_header_action`, `explorer_row_action`, `explorer_action`, or `explorer_bulk_action`, or a field-note badge's action at `record_attribute_action`. `invoke` is `{ "command": "<id>" }` or `{ "dialog": "<id>" }`. No artifact. See [Actions](/extensions/client/#actions). |
+| `panel` | `artifact`, `outlet` | A host-laid-out panel, read-only except `export_mapping`, at `blueprint_detail_panel`, `blueprint_panel`, `blueprint_publish_check`, `audit_event_panel`, `data_health_card`, or `export_mapping`. |
 | `dialog` | `artifact`, `outlet`, `title` | A host-managed `action_dialog` opened by this extension's actions. |
 
 Each extension can use each frame outlet once, but may add several actions and dialogs. Actions and dialogs use `version` 1. An action's `title` has at most 64 characters.

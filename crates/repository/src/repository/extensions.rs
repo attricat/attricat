@@ -703,11 +703,7 @@ impl AttricatRepository {
                 let workspace_outlets = layout["outlets"]
                     .as_object_mut()
                     .expect("normalized extension layout");
-                for outlet in [
-                    "record_preview_panel",
-                    "record_attribute_decoration",
-                    "record_action",
-                ] {
+                for &outlet in attricat_blueprint::EXTENSION_LAYOUT_OUTLETS {
                     if let Some(value) = override_outlets.get(outlet) {
                         workspace_outlets.insert(outlet.to_owned(), value.clone());
                     }
@@ -956,6 +952,28 @@ impl AttricatRepository {
             }
         }
         Ok(enabled)
+    }
+
+    /// Enabled, authorized installations whose release provides record field
+    /// notes, in extension ID order.
+    pub async fn enabled_field_note_providers(
+        &self,
+    ) -> Result<Vec<ExtensionRuntimeInstallation>, RepositoryError> {
+        let mut providers = Vec::new();
+        for row in self.runtime_installation_rows(None).await? {
+            if !extension_policy::allows(&row.extension_id, row.installed_release_id) {
+                continue;
+            }
+            if let Some(installation) = self.runtime_installation(row).await?
+                && installation.manifest.record_field_notes.is_some()
+                && installation
+                    .capability_grants
+                    .contains("client.record_field_notes")
+            {
+                providers.push(installation);
+            }
+        }
+        Ok(providers)
     }
 
     /// Returns exact event versions that an enabled, authorized server handler
@@ -1665,19 +1683,19 @@ impl AttricatRepository {
         .bind(self.workspace_id())
         .fetch_all(&mut **transaction)
         .await?;
+        // Only the dependency fields are read, so an installation whose
+        // manifest predates a manifest contract change can still be disabled
+        // or removed.
+        let names = |items: &Value, field: &str| {
+            items
+                .as_array()
+                .into_iter()
+                .flatten()
+                .any(|item| item[field].as_str() == Some(dependency_id))
+        };
         for (_extension_id, raw_manifest) in rows {
-            let manifest: Manifest = serde_json::from_value(raw_manifest).map_err(|_| {
-                RepositoryError::InvalidExtension("stored manifest is invalid".into())
-            })?;
-            if manifest
-                .dependencies
-                .iter()
-                .any(|item| item.id == dependency_id)
-                || manifest
-                    .event_contracts
-                    .consumes
-                    .iter()
-                    .any(|item| item.provider == dependency_id)
+            if names(&raw_manifest["dependencies"], "id")
+                || names(&raw_manifest["event_contracts"]["consumes"], "provider")
             {
                 return Err(RepositoryError::InvalidExtensionTransition(
                     "disable dependent extensions before changing this dependency",

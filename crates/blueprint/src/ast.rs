@@ -109,11 +109,7 @@ pub struct ConnectorJobTrigger {
 }
 
 /// Record-owned outlets whose placement a blueprint `extension_layout` may override.
-pub const EXTENSION_LAYOUT_OUTLETS: &[&str] = &[
-    "record_preview_panel",
-    "record_attribute_decoration",
-    "record_action",
-];
+pub const EXTENSION_LAYOUT_OUTLETS: &[&str] = &["record_preview_panel", "record_action"];
 /// View names with platform meaning, offered to editors as suggestions.
 pub const KNOWN_VIEW_NAMES: &[&str] = &[
     "dropdown_option",
@@ -289,8 +285,8 @@ pub enum ViewDefinition {
         /// Layout format version. Only `1` is supported.
         #[schemars(extend("const" = 1))]
         version: u32,
-        /// Layouts keyed by record outlet: `record_preview_panel`,
-        /// `record_attribute_decoration`, or `record_action`.
+        /// Layouts keyed by record outlet: `record_preview_panel` or
+        /// `record_action`.
         #[schemars(extend("x-attricat-key-suggestions" = EXTENSION_LAYOUT_OUTLETS))]
         outlets: HashMap<String, ExtensionOutletLayout>,
     },

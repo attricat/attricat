@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://attricat.com/contracts/extension-field-notes-v1.schema.json",
+  "title": "Attricat extension field notes v1",
+  "description": "What an extension's record_field_notes source answers for one record and value context. The host renders it beside the record's fields and files; it is plain text, never markup. Entries for unknown attributes or files, or for attributes the viewer cannot read, are dropped.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "attributes": {
+      "description": "Notes keyed by attribute code.",
+      "type": "object",
+      "maxProperties": 500,
+      "additionalProperties": {"$ref": "#/$defs/attributeNote"}
+    },
+    "files": {
+      "description": "Notes keyed by file ID, for files in the record's file attributes.",
+      "type": "object",
+      "maxProperties": 500,
+      "additionalProperties": {"$ref": "#/$defs/fileNote"}
+    }
+  },
+  "$defs": {
+    "tone": {"enum": ["neutral", "info", "success", "warning", "error"]},
+    "badge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label"],
+      "properties": {
+        "label": {"type": "string", "minLength": 1, "maxLength": 24},
+        "tone": {"$ref": "#/$defs/tone", "default": "neutral"},
+        "tooltip": {"type": "string", "minLength": 1, "maxLength": 200},
+        "action": {
+          "description": "The ID of one of the extension's record_attribute_action actions, run with this attribute in its context when the badge is chosen.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    },
+    "attributeNote": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "badge": {"$ref": "#/$defs/badge"},
+        "note": {"type": "string", "minLength": 1, "maxLength": 280}
+      }
+    },
+    "fileNote": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["note"],
+      "properties": {
+        "note": {"type": "string", "minLength": 1, "maxLength": 280}
+      }
+    }
+  }
+}

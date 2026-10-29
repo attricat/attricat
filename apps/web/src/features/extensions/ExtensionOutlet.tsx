@@ -15,7 +15,6 @@ import { useExtensionRuntime } from './useExtensionRuntime';
 import { progressSizes } from '../../components/iconSizes';
 
 // Existing callers import every outlet surface from this module.
-export { ExtensionPopoverOutlet } from './ExtensionPopoverOutlet';
 export { ExtensionRoutePage } from './ExtensionRoutePage';
 
 type Props = {

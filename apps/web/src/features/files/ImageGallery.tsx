@@ -6,6 +6,7 @@ import { FileCard } from './FileCard';
 import { FileThumbnail } from './FileThumbnail';
 import { ImagePreviewDialog } from './ImagePreviewDialog';
 import { focusRing } from '../../app/theme';
+import { FileNotes } from '../extensions/fieldNotes';
 
 export type GalleryFile = { id: string; filename: string };
 
@@ -13,7 +14,6 @@ export type GalleryFile = { id: string; filename: string };
 export const ImageGallery = ({
   files,
   pendingTiles = [],
-  renderFilePanel,
   renderActions,
   renderItem = ({ file, children }) => (
     <Fragment key={file.id}>{children}</Fragment>
@@ -22,7 +22,6 @@ export const ImageGallery = ({
   files: readonly GalleryFile[];
   /** Images picked but not attached yet, shown after the attached ones. */
   pendingTiles?: readonly ReactNode[];
-  renderFilePanel?: (fileId: string) => ReactNode;
   renderActions?: (file: GalleryFile, index: number) => ReactNode;
   /** Wraps each card, e.g. to make it sortable; must return a keyed element. */
   renderItem?: (item: {
@@ -83,7 +82,7 @@ export const ImageGallery = ({
                   </ButtonBase>
                 }
               >
-                {renderFilePanel?.(file.id)}
+                <FileNotes fileId={file.id} />
               </FileCard>
             ),
           }),

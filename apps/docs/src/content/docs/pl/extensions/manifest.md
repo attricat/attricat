@@ -31,6 +31,7 @@ Identyfikatory używane w manifeście (`attricat.id` oraz identyfikatory artefak
 | `ui` | | Kontrybucje klienckie. |
 | `cell_renderers` | | Renderery komórek tabeli przeglądarki rekordów. |
 | `attribute_types` | | Typy atrybutów dla Schematów. |
+| `record_field_notes` | | Polecenie serwerowe opisujące pola i pliki rekordu. Zobacz [Notatki pól](/pl/extensions/client/#notatki-pól). |
 
 ## Artefakty
 
@@ -89,7 +90,7 @@ Manifest przyjmuje też `client.confirmation`, `client.download`, `client.extern
 
 Każde uprawnienie umiejscowienia zezwala na kontrybucję w jednym miejscu osadzenia. Zobacz [Kontrybucje klienckie](/pl/extensions/client/#miejsca-osadzenia).
 
-`client.blueprint_configuration`, `client.record_decoration`, `client.record_action`, `client.record_header_action`, `client.record_attribute_panel`, `client.explorer_row_action`, `client.explorer_table_cell`, `client.explorer_action`, `client.explorer_bulk_action`, `client.blueprint_detail_panel`, `client.blueprint_panel`, `client.blueprint_publish_check`, `client.file_panel`, `client.audit_event_panel`, `client.data_health_card`, `client.action_dialog`, `client.export_mapping`.
+`client.blueprint_configuration`, `client.record_action`, `client.record_header_action`, `client.record_field_notes`, `client.explorer_row_action`, `client.explorer_table_cell`, `client.explorer_action`, `client.explorer_bulk_action`, `client.blueprint_detail_panel`, `client.blueprint_panel`, `client.blueprint_publish_check`, `client.audit_event_panel`, `client.data_health_card`, `client.action_dialog`, `client.export_mapping`.
 
 ## Uprawnienia hosta
 
@@ -274,9 +275,9 @@ Miejsce docelowe eksportu nadaje ekranom stanu eksportu, podglądu, ponawiania i
 | --- | --- | --- |
 | `route` | `artifact`, `title` | Pełna strona pod adresem `/extensions/<extension-id>/<contribution-id>`. |
 | `navigation` | `route`, `title` | Link na pasku bocznym do jednej ze stron tego rozszerzenia. |
-| `embedded` | `artifact`, `outlet` | Ramka w miejscu `navigation`, `record_preview_panel`, `blueprint_attribute_configuration`, `record_attribute_decoration` lub `explorer_table_cell`. |
-| `action` | `outlet`, `title`, `invoke` | Pozycja menu lub przycisk rysowane przez host w miejscu `record_action`, `record_header_action`, `explorer_row_action`, `explorer_action` lub `explorer_bulk_action`. `invoke` to `{ "command": "<id>" }` albo `{ "dialog": "<id>" }`. Bez artefaktu. Zobacz [Akcje](/pl/extensions/client/#akcje). |
-| `panel` | `artifact`, `outlet` | Panel rozmieszczany przez host, tylko do odczytu z wyjątkiem `export_mapping`, w miejscu `blueprint_detail_panel`, `blueprint_panel`, `blueprint_publish_check`, `record_attribute_panel`, `file_panel`, `audit_event_panel`, `data_health_card` lub `export_mapping`. |
+| `embedded` | `artifact`, `outlet` | Ramka w miejscu `navigation`, `record_preview_panel`, `blueprint_attribute_configuration` lub `explorer_table_cell`. |
+| `action` | `outlet`, `title`, `invoke` | Pozycja menu lub przycisk rysowane przez host w miejscu `record_action`, `record_header_action`, `explorer_row_action`, `explorer_action` lub `explorer_bulk_action` albo akcja odznaki notatki pola w miejscu `record_attribute_action`. `invoke` to `{ "command": "<id>" }` albo `{ "dialog": "<id>" }`. Bez artefaktu. Zobacz [Akcje](/pl/extensions/client/#akcje). |
+| `panel` | `artifact`, `outlet` | Panel rozmieszczany przez host, tylko do odczytu z wyjątkiem `export_mapping`, w miejscu `blueprint_detail_panel`, `blueprint_panel`, `blueprint_publish_check`, `audit_event_panel`, `data_health_card` lub `export_mapping`. |
 | `dialog` | `artifact`, `outlet`, `title` | Zarządzane przez host okno `action_dialog` otwierane przez akcje tego rozszerzenia. |
 
 Każde rozszerzenie może użyć każdego miejsca osadzenia z ramką jeden raz, ale może dodać kilka akcji i okien. Akcje i okna używają `version` 1. `title` akcji ma najwyżej 64 znaki.

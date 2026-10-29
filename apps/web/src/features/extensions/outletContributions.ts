@@ -3,7 +3,6 @@ import type { ExtensionContribution } from './api';
 import {
   outletCapacities,
   contributionKinds,
-  extensionFramePlaceholders,
   extensionOutlets,
   type ActionOutlet,
 } from './constants';
@@ -32,20 +31,13 @@ const navigationPolicy = {
 const panelPolicy = {
   kind: 'panel',
   visibleCapacity: outletCapacities.visibleContent,
-  placeholder: extensionFramePlaceholders.skeleton,
-} as const;
-// Panels beside a form field stay out of the layout until they render content.
-const fieldPanelPolicy = {
-  ...panelPolicy,
-  placeholder: extensionFramePlaceholders.none,
 } as const;
 const cardPolicy = {
   kind: 'card',
   visibleCapacity: outletCapacities.visibleContent,
 } as const;
-const popoverPolicy = { kind: 'popover' } as const;
 
-export type PanelPolicy = typeof panelPolicy | typeof fieldPanelPolicy;
+export type PanelPolicy = typeof panelPolicy;
 export type ContentPolicy = PanelPolicy | typeof cardPolicy;
 export type NavigationPolicy = typeof navigationPolicy;
 
@@ -55,14 +47,11 @@ export const outletPolicies = {
   navigation: navigationPolicy,
   record_preview_panel: panelPolicy,
   blueprint_attribute_configuration: panelPolicy,
-  record_attribute_decoration: popoverPolicy,
   blueprint_detail_panel: panelPolicy,
   blueprint_panel: panelPolicy,
   audit_event_panel: panelPolicy,
   data_health_card: cardPolicy,
   blueprint_publish_check: panelPolicy,
-  record_attribute_panel: fieldPanelPolicy,
-  file_panel: fieldPanelPolicy,
   export_mapping: panelPolicy,
 } as const satisfies Record<OutletName, { kind: string }>;
 
@@ -70,7 +59,6 @@ const embeddedOutlets = new Set<OutletName>([
   extensionOutlets.navigation,
   extensionOutlets.recordPreviewPanel,
   extensionOutlets.blueprintAttributeConfiguration,
-  extensionOutlets.recordAttributeDecoration,
 ]);
 const panelOutlets = new Set<OutletName>([
   extensionOutlets.blueprintDetailPanel,
@@ -78,8 +66,6 @@ const panelOutlets = new Set<OutletName>([
   extensionOutlets.auditEventPanel,
   extensionOutlets.dataHealthCard,
   extensionOutlets.blueprintPublishCheck,
-  extensionOutlets.recordAttributePanel,
-  extensionOutlets.filePanel,
   extensionOutlets.exportMapping,
 ]);
 

@@ -39,9 +39,6 @@ export type RecordViewProps = {
     attribute: Attribute,
     component?: ComponentReference | null,
   ) => ReactNode;
-  renderAttributeDecoration?: (attribute: Attribute) => ReactNode;
-  renderAttributePanel?: (attribute: Attribute) => ReactNode;
-  renderFilePanel?: (attribute: Attribute, fileId: string) => ReactNode;
   skipComponentId?: string;
   contextId?: string;
   recordId?: string;
@@ -57,9 +54,6 @@ export const RecordView = ({
   attributes,
   values,
   renderEditor,
-  renderAttributeDecoration,
-  renderAttributePanel,
-  renderFilePanel,
   skipComponentId,
   contextId,
   recordId,
@@ -199,9 +193,6 @@ export const RecordView = ({
           contextId={contextId}
           recordId={recordId}
           key={key}
-          renderAttributeDecoration={renderAttributeDecoration}
-          renderAttributePanel={renderAttributePanel}
-          renderFilePanel={renderFilePanel}
           renderEditor={renderEditor}
           resolved={values[attribute.code]}
         />

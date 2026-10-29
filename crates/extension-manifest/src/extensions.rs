@@ -139,7 +139,6 @@ pub const CAPABILITIES: &[&str] = &[
     "configuration.write",
     "client.commands",
     "client.blueprint_configuration",
-    "client.record_decoration",
     "client.record_action",
     "client.explorer_row_action",
     "client.explorer_table_cell",
@@ -163,10 +162,9 @@ pub const CAPABILITIES: &[&str] = &[
     "client.explorer_action",
     "client.explorer_bulk_action",
     "client.record_header_action",
-    "client.record_attribute_panel",
     "client.blueprint_panel",
     "client.blueprint_publish_check",
-    "client.file_panel",
+    "client.record_field_notes",
     "client.audit_event_panel",
     "client.data_health_card",
     "client.action_dialog",
@@ -226,7 +224,32 @@ pub struct Manifest {
     /// validation primitives; they never execute code while validating values.
     #[serde(default)]
     pub attribute_types: Vec<ExtensionAttributeType>,
+    /// Badges and notes the host shows beside a record's fields and files.
+    /// The host asks for them once per record and context and renders them
+    /// itself; no extension frame runs beside a field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub record_field_notes: Option<RecordFieldNotes>,
 }
+
+/// Where the host gets a record's field notes from.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct RecordFieldNotes {
+    pub version: u32,
+    pub source: FieldNotesSource,
+}
+
+/// The one source of field notes. A client-side source may be added later;
+/// both answer with the same response contract.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub enum FieldNotesSource {
+    /// A declared server command, called with the record, revision and context.
+    Command(String),
+}
+
+/// The only supported `record_field_notes` contract version.
+pub const RECORD_FIELD_NOTES_VERSION: u32 = 1;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -701,7 +724,6 @@ pub enum UiOutlet {
     Navigation,
     RecordPreviewPanel,
     BlueprintAttributeConfiguration,
-    RecordAttributeDecoration,
     RecordAction,
     /// A compact, per-record explorer menu action. The host provides only the
     /// record and immutable blueprint revision identifiers.
@@ -713,10 +735,11 @@ pub enum UiOutlet {
     ExplorerAction,
     ExplorerBulkAction,
     RecordHeaderAction,
-    RecordAttributePanel,
+    /// An action reached only from one of the extension's field-note badges,
+    /// with that attribute in its context. It never appears in a menu.
+    RecordAttributeAction,
     BlueprintPanel,
     BlueprintPublishCheck,
-    FilePanel,
     AuditEventPanel,
     DataHealthCard,
     ActionDialog,
@@ -737,6 +760,50 @@ pub enum ManifestError {
 impl Manifest {
     /// Validates only stable v1 contracts. Package retrieval and component
     /// execution deliberately stay outside this shared layer.
+    /// Field notes come from a declared command, and badge actions exist only
+    /// when the extension provides the notes that reach them.
+    fn validate_record_field_notes(&self) -> Result<(), ManifestError> {
+        let badge_actions = self
+            .ui
+            .iter()
+            .any(|item| item.outlet == Some(UiOutlet::RecordAttributeAction));
+        let Some(notes) = &self.record_field_notes else {
+            return if badge_actions {
+                Err(ManifestError::Invalid(
+                    "record_attribute_action contributions require record_field_notes".into(),
+                ))
+            } else {
+                Ok(())
+            };
+        };
+        if notes.version != RECORD_FIELD_NOTES_VERSION {
+            return Err(ManifestError::Invalid(format!(
+                "record_field_notes must use version {RECORD_FIELD_NOTES_VERSION}"
+            )));
+        }
+        if !self
+            .permissions
+            .iter()
+            .chain(&self.optional_permissions)
+            .any(|item| item == "client.record_field_notes")
+        {
+            return Err(ManifestError::Invalid(
+                "record_field_notes requires capability 'client.record_field_notes'".into(),
+            ));
+        }
+        let FieldNotesSource::Command(command) = &notes.source;
+        let declared = self
+            .server
+            .as_ref()
+            .is_some_and(|server| server.commands.iter().any(|item| item.id == *command));
+        if !declared {
+            return Err(ManifestError::Invalid(format!(
+                "record_field_notes uses undeclared command '{command}'"
+            )));
+        }
+        Ok(())
+    }
+
     /// A host-rendered action: one action outlet, a short title, and one
     /// invocation of a dialog or command this extension declares.
     fn validate_action(&self, contribution: &UiContribution) -> Result<(), ManifestError> {
@@ -1111,7 +1178,6 @@ impl Manifest {
                     UiOutlet::BlueprintAttributeConfiguration => {
                         Some("client.blueprint_configuration")
                     }
-                    UiOutlet::RecordAttributeDecoration => Some("client.record_decoration"),
                     UiOutlet::RecordAction => Some("client.record_action"),
                     UiOutlet::ExplorerRowAction => Some("client.explorer_row_action"),
                     UiOutlet::ExplorerTableCell => Some("client.explorer_table_cell"),
@@ -1119,10 +1185,9 @@ impl Manifest {
                     UiOutlet::ExplorerAction => Some("client.explorer_action"),
                     UiOutlet::ExplorerBulkAction => Some("client.explorer_bulk_action"),
                     UiOutlet::RecordHeaderAction => Some("client.record_header_action"),
-                    UiOutlet::RecordAttributePanel => Some("client.record_attribute_panel"),
+                    UiOutlet::RecordAttributeAction => Some("client.record_field_notes"),
                     UiOutlet::BlueprintPanel => Some("client.blueprint_panel"),
                     UiOutlet::BlueprintPublishCheck => Some("client.blueprint_publish_check"),
-                    UiOutlet::FilePanel => Some("client.file_panel"),
                     UiOutlet::AuditEventPanel => Some("client.audit_event_panel"),
                     UiOutlet::DataHealthCard => Some("client.data_health_card"),
                     UiOutlet::ActionDialog => Some("client.action_dialog"),
@@ -1167,10 +1232,8 @@ impl Manifest {
                             | (UiContributionKind::Action, UiOutlet::ExplorerBulkAction)
                             | (UiContributionKind::Action, UiOutlet::RecordHeaderAction)
                             | (UiContributionKind::Panel, UiOutlet::BlueprintDetailPanel)
-                            | (UiContributionKind::Panel, UiOutlet::RecordAttributePanel)
                             | (UiContributionKind::Panel, UiOutlet::BlueprintPanel)
                             | (UiContributionKind::Panel, UiOutlet::BlueprintPublishCheck)
-                            | (UiContributionKind::Panel, UiOutlet::FilePanel)
                             | (UiContributionKind::Panel, UiOutlet::AuditEventPanel)
                             | (UiContributionKind::Panel, UiOutlet::DataHealthCard)
                             | (UiContributionKind::Embedded, UiOutlet::Navigation)
@@ -1179,11 +1242,8 @@ impl Manifest {
                                 UiContributionKind::Embedded,
                                 UiOutlet::BlueprintAttributeConfiguration
                             )
-                            | (
-                                UiContributionKind::Embedded,
-                                UiOutlet::RecordAttributeDecoration
-                            )
                             | (UiContributionKind::Action, UiOutlet::RecordAction)
+                            | (UiContributionKind::Action, UiOutlet::RecordAttributeAction)
                             | (UiContributionKind::Dialog, UiOutlet::ActionDialog)
                             | (UiContributionKind::Panel, UiOutlet::ExportMapping)
                     );
@@ -1253,6 +1313,7 @@ impl Manifest {
                 )));
             }
         }
+        self.validate_record_field_notes()?;
         for renderer in &self.cell_renderers {
             if !self.ui.iter().any(|contribution| {
                 contribution.outlet == Some(UiOutlet::ExplorerTableCell)
@@ -1811,6 +1872,7 @@ pub fn action_outlet(outlet: &UiOutlet) -> bool {
         outlet,
         UiOutlet::RecordAction
             | UiOutlet::RecordHeaderAction
+            | UiOutlet::RecordAttributeAction
             | UiOutlet::ExplorerRowAction
             | UiOutlet::ExplorerAction
             | UiOutlet::ExplorerBulkAction
@@ -2555,6 +2617,72 @@ mod tests {
             .permissions
             .retain(|permission| permission != "client.action_dialog");
         assert!(invalid.validate(SUPPORTED_HOST_API).is_err());
+    }
+
+    #[test]
+    fn field_notes_come_from_a_declared_command_and_reach_badge_actions() {
+        let mut value = interactive_manifest();
+        value
+            .permissions
+            .extend(["client.record_field_notes".into(), "client.commands".into()]);
+        value.server.as_mut().unwrap().commands.push(ServerCommand {
+            id: "describe-fields".into(),
+            handler: "describe-fields".into(),
+            request_schema: serde_json::json!({"type":"object"}),
+            response_schema: serde_json::json!({"type":"object"}),
+            max_request_bytes: 1024,
+            max_response_bytes: 1024,
+        });
+        value.record_field_notes = Some(RecordFieldNotes {
+            version: RECORD_FIELD_NOTES_VERSION,
+            source: FieldNotesSource::Command("describe-fields".into()),
+        });
+        value.ui.push(UiContribution {
+            id: "explain".into(),
+            version: 1,
+            kind: UiContributionKind::Action,
+            artifact: None,
+            outlet: Some(UiOutlet::RecordAttributeAction),
+            route: None,
+            title: Some("Explain".into()),
+            invoke: Some(ActionInvocation::Dialog("dialog".into())),
+        });
+        assert!(
+            value.validate(SUPPORTED_HOST_API).is_ok(),
+            "{:?}",
+            value.validate(SUPPORTED_HOST_API)
+        );
+
+        let invalid = |change: &dyn Fn(&mut Manifest)| {
+            let mut manifest = value.clone();
+            change(&mut manifest);
+            manifest.validate(SUPPORTED_HOST_API).is_err()
+        };
+        assert!(invalid(&|m| m
+            .record_field_notes
+            .as_mut()
+            .unwrap()
+            .version = 2));
+        assert!(invalid(&|m| {
+            m.record_field_notes.as_mut().unwrap().source =
+                FieldNotesSource::Command("missing".into());
+        }));
+        assert!(invalid(&|m| m
+            .permissions
+            .retain(|permission| permission != "client.record_field_notes")));
+        // A badge action is unreachable without the notes that show badges.
+        assert!(invalid(&|m| m.record_field_notes = None));
+        let parsed: Manifest = serde_json::from_value(serde_json::json!({
+            "manifest_version": 1, "name": "N", "version": "1.0.0", "description": "D",
+            "icons": {"48": "i.png"}, "attricat": {"id": "acme.notes", "host_api": "^1.0"},
+            "permissions": [], "artifacts": [],
+            "record_field_notes": {"version": 1, "source": {"command": "describe-fields"}}
+        }))
+        .unwrap();
+        assert_eq!(
+            parsed.record_field_notes.unwrap().source,
+            FieldNotesSource::Command("describe-fields".into())
+        );
     }
 
     #[test]

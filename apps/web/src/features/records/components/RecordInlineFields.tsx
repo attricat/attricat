@@ -1,11 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Box, Button, Stack } from '@mui/material';
-import {
-  useEffect,
-  useImperativeHandle,
-  type Ref,
-  type ReactNode,
-} from 'react';
+import { useEffect, useImperativeHandle, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RotateCcwIcon } from 'lucide-react';
 import { checkViolationError } from '../../../api/checkViolations';
@@ -76,9 +71,6 @@ type Props = {
   resolvedValues: Record<string, ResolvedValue>;
   reusableResolvedValues: Record<string, ResolvedValue>;
   view: RecordFormResponse['blueprint']['blueprint']['views']['detail'];
-  renderAttributeDecoration?: (attribute: Attribute) => ReactNode;
-  renderAttributePanel?: (attribute: Attribute) => ReactNode;
-  renderFilePanel?: (attribute: Attribute, fileId: string) => ReactNode;
   /** Reports whether changes are waiting to be saved in this context. */
   onPendingChange?: (pending: boolean) => void;
   /** Lays the view out in one column, as in a narrow panel. */
@@ -125,9 +117,6 @@ export const RecordInlineFields = ({
   resolvedValues,
   reusableResolvedValues,
   view,
-  renderAttributeDecoration,
-  renderAttributePanel,
-  renderFilePanel,
   onPendingChange,
   singleColumn,
   refreshing = false,
@@ -366,9 +355,6 @@ export const RecordInlineFields = ({
     recordId,
     // Tabs and accordions point to a field whose change was not saved.
     invalidFields: new Set(Object.keys(fieldErrors)),
-    renderAttributeDecoration,
-    renderAttributePanel,
-    renderFilePanel,
     renderEditor,
     singleColumn,
   };

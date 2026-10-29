@@ -21,6 +21,8 @@ export type ActionTarget = {
   /** The effective value-resolution context, when the surface has one. */
   contextId: string | null;
   recordIds: readonly string[];
+  /** The field a field-note badge's action was chosen for. */
+  attributeCode?: string;
 };
 
 /** What an action's dialog or command receives. */
@@ -36,6 +38,7 @@ export const actionContextSchema = z
       .array(z.uuid())
       .max(maximumActionSelection)
       .refine((ids) => new Set(ids).size === ids.length),
+    attribute_code: z.string().min(1).optional(),
   })
   .strict();
 export type ActionContext = z.infer<typeof actionContextSchema>;
@@ -52,6 +55,9 @@ export const actionContext = (
   blueprint_version: target.blueprintVersion,
   context_id: target.contextId,
   record_ids: [...target.recordIds],
+  ...(target.attributeCode !== undefined && {
+    attribute_code: target.attributeCode,
+  }),
 });
 
 /** Parses a frame context, returning it only when it is an action context. */

@@ -241,4 +241,4 @@ order = ["acme.inventory:summary", "acme.pricing:margin"]
 hidden = ["acme.legacy:panel"]
 ```
 
-The outlets you can set here are `record_preview_panel`, `record_attribute_decoration`, and `record_action`. The layout never grants permissions or enables an extension. Entries for extensions that are missing or disabled are kept and ignored, so a layout survives an extension being turned off and on again.
+The outlets you can set here are `record_preview_panel` and `record_action`. The layout never grants permissions or enables an extension. Entries for extensions that are missing or disabled are kept and ignored, so a layout survives an extension being turned off and on again.

@@ -1,4 +1,4 @@
-import type { ComponentType, ReactNode } from 'react';
+import type { ComponentType } from 'react';
 import type {
   Attribute,
   ComponentReference,
@@ -20,7 +20,6 @@ export type ValueRenderer = ComponentType<{
   contextId?: string;
   recordId?: string;
   value: unknown;
-  renderFilePanel?: (fileId: string) => ReactNode;
 }>;
 
 export type ValueEditorProps = {

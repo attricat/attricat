@@ -533,7 +533,7 @@ hidden = ["acme.legacy:panel"]
 | Key | Description |
 | --- | --- |
 | `version` | Must be `1`. |
-| `outlets` | Keyed by `record_preview_panel`, `record_attribute_decoration`, or `record_action`. |
+| `outlets` | Keyed by `record_preview_panel` or `record_action`. |
 | `outlets.<outlet>.order` | Contribution keys (`<extension-id>:<contribution-id>`) in display order. |
 | `outlets.<outlet>.hidden` | Contribution keys to hide. |
 

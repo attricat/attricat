@@ -3843,3 +3843,33 @@ async fn extension_lookup_resolves_like_an_upsert(pool: sqlx::PgPool) {
     // A value shared by several records names none of them.
     assert!(lookup(attribute("title"), "shared title").await.is_err());
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn an_installation_from_an_older_manifest_contract_can_be_disabled_and_removed(
+    pool: sqlx::PgPool,
+) {
+    let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
+    let repository = AttricatRepository::system(pool.clone()).for_workspace(workspace);
+    let installer =
+        ExtensionInstaller::new(repository.clone(), Arc::new(FakeObjectStore::available()));
+    installer
+        .install(
+            "github:acme/client@v1.0.0",
+            &client_release_archive("acme.client"),
+        )
+        .await
+        .unwrap();
+    repository
+        .grant_extension("acme.client", "capability", "configuration.read")
+        .await
+        .unwrap();
+    repository.enable_extension("acme.client").await.unwrap();
+    // The stored release declares an outlet this host no longer has.
+    sqlx::query("UPDATE installed_extension_releases SET manifest = jsonb_set(manifest, '{ui,0,outlet}', '\"retired_outlet\"') WHERE extension_id = 'acme.client'")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    repository.disable_extension("acme.client").await.unwrap();
+    repository.remove_extension("acme.client").await.unwrap();
+}

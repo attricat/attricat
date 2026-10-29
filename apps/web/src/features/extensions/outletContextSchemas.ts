@@ -25,26 +25,6 @@ const blueprintRevisionContextSchema = z
 // New outlet contexts are deliberately small, strict, and versioned. They are
 // the only page data an extension frame receives for these surfaces.
 export const outletContextSchemas = {
-  file_panel: z
-    .object({
-      context_version: contextVersion,
-      file_id: z.uuid(),
-      record_id: z.uuid(),
-      attribute_id: z.uuid(),
-      blueprint_id: z.uuid(),
-      blueprint_version: blueprintVersion,
-    })
-    .strict(),
-  record_attribute_panel: z
-    .object({
-      context_version: contextVersion,
-      record_id: z.uuid(),
-      attribute_id: z.uuid(),
-      blueprint_id: z.uuid(),
-      blueprint_version: blueprintVersion,
-      context_id: z.uuid().nullable(),
-    })
-    .strict(),
   blueprint_publish_check: blueprintRevisionContextSchema,
   data_health_card: z.object({ context_version: contextVersion }).strict(),
   export_mapping: z

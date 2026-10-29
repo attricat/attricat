@@ -1,7 +1,6 @@
 import { Box, Chip, Stack, Typography } from '@mui/material';
 import { Link } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
-import type { ReactNode } from 'react';
 import type { Attribute } from '../../../records/api';
 import { fileDownloadUrl } from '../../../files/api';
 import { ImageGallery } from '../../../files/ImageGallery';
@@ -23,6 +22,7 @@ import {
   RelatedRecordPreviewDetails,
   RelatedRecordPreviewToggle,
 } from '../../../records/components/RelatedRecordPreview';
+import { FileNotes } from '../../../extensions/fieldNotes';
 
 type RelationshipValue = {
   items?: { id: string; display?: string }[];
@@ -54,7 +54,6 @@ export const AttributeValue = ({
   attribute,
   value,
   compact = false,
-  renderFilePanel,
   contextId,
   recordId,
 }: {
@@ -63,7 +62,6 @@ export const AttributeValue = ({
   compact?: boolean;
   contextId?: string;
   recordId?: string;
-  renderFilePanel?: (fileId: string) => ReactNode;
 }) => {
   const { t } = useTranslation();
   const linkedRecord = compact
@@ -155,7 +153,6 @@ export const AttributeValue = ({
         <ImageGallery
           key={`${recordId ?? ''}:${contextId ?? ''}:${attribute.code}`}
           files={value}
-          renderFilePanel={renderFilePanel}
         />
       );
     }
@@ -173,7 +170,7 @@ export const AttributeValue = ({
                 {file.filename}
               </Typography>
             </Stack>
-            {renderFilePanel?.(file.id)}
+            <FileNotes fileId={file.id} />
           </Stack>
         ))}
       </Stack>

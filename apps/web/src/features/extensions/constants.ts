@@ -32,7 +32,6 @@ export const extensionOutlets = {
   navigation: 'navigation',
   recordPreviewPanel: 'record_preview_panel',
   blueprintAttributeConfiguration: 'blueprint_attribute_configuration',
-  recordAttributeDecoration: 'record_attribute_decoration',
   recordAction: 'record_action',
   explorerRowAction: 'explorer_row_action',
   explorerTableCell: 'explorer_table_cell',
@@ -40,10 +39,9 @@ export const extensionOutlets = {
   explorerAction: 'explorer_action',
   explorerBulkAction: 'explorer_bulk_action',
   recordHeaderAction: 'record_header_action',
-  recordAttributePanel: 'record_attribute_panel',
+  recordAttributeAction: 'record_attribute_action',
   blueprintPanel: 'blueprint_panel',
   blueprintPublishCheck: 'blueprint_publish_check',
-  filePanel: 'file_panel',
   auditEventPanel: 'audit_event_panel',
   dataHealthCard: 'data_health_card',
   actionDialog: 'action_dialog',
@@ -57,6 +55,7 @@ export const extensionOutlets = {
 export const actionOutlets = [
   extensionOutlets.recordAction,
   extensionOutlets.recordHeaderAction,
+  extensionOutlets.recordAttributeAction,
   extensionOutlets.explorerRowAction,
   extensionOutlets.explorerAction,
   extensionOutlets.explorerBulkAction,
@@ -212,21 +211,7 @@ export const controlCharacterRanges = {
 } as const;
 
 export const extensionCardMinWidth = 190;
-export const extensionPopoverWidth = 480;
 
-/** What a frame shows in its place until its artifact has rendered. */
-export const extensionFramePlaceholders = {
-  /** A skeleton in a reserved area, for surfaces set apart from other content. */
-  skeleton: 'skeleton',
-  /**
-   * Nothing: the frame takes no space until it measures content, then reveals
-   * once. Slots inside a form use it so fields never move for a frame that is
-   * still loading or renders nothing.
-   */
-  none: 'none',
-} as const;
-export type ExtensionFramePlaceholder =
-  (typeof extensionFramePlaceholders)[keyof typeof extensionFramePlaceholders];
 export const extensionFrameSkeletonLines = [
   { height: 20, width: '45%' },
   { height: 16, width: '75%' },
@@ -237,6 +222,20 @@ export const extensionManagementTabIndex = {
   installed: 1,
   layout: 2,
 } as const;
+
+/** Tones a field-note badge may take; `neutral` when an extension names none. */
+export const fieldNoteTones = [
+  'neutral',
+  'info',
+  'success',
+  'warning',
+  'error',
+] as const;
+export type FieldNoteTone = (typeof fieldNoteTones)[number];
+/** How soon to ask again while a provider is still starting. */
+export const fieldNotesRetryInterval = 3_000;
+/** How many times to ask before showing what has arrived. */
+export const maximumFieldNotesAttempts = 10;
 
 /** Host-owned outlet capacities; extension manifests never choose them. */
 export const outletCapacities = {

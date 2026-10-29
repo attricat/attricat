@@ -73,12 +73,42 @@ Add a `navigation` contribution to link to it from the sidebar. Workspace admini
 | --- | --- | --- | --- |
 | `record_preview_panel` | `embedded` | | `record_id`, optional `context_id` |
 | `record_action` | `action` | `client.record_action` | The [action context](#actions), with this record |
-| `record_attribute_decoration` | `embedded` | `client.record_decoration` | record, attribute, blueprint and revision, optional context |
 | `record_header_action` | `action` | `client.record_header_action` | The [action context](#actions), with this record |
-| `record_attribute_panel` | `panel` | `client.record_attribute_panel` | `record_id`, `attribute_id`, `blueprint_id`, `blueprint_version`, `context_id` |
-| `file_panel` | `panel` | `client.file_panel` | `file_id`, `record_id`, `attribute_id`, `blueprint_id`, `blueprint_version` |
+| `record_attribute_action` | `action` | `client.record_field_notes` | The [action context](#actions), with this record and the field's `attribute_code`. Reached only from a [field note](#field-notes) badge. |
 
-`record_preview_panel` appears in the record's **Extensions** tab. Record actions are buttons below the fields, four before an overflow menu; header actions are items of the record's **Actions** menu. Panels show up to three contributions before overflow.
+`record_preview_panel` appears in the record's **Extensions** tab. Record actions are buttons below the fields, four before an overflow menu; header actions are items of the record's **Actions** menu. Panels show up to three contributions before overflow. Fields and files carry no frames; describe them with [field notes](#field-notes).
+
+### Field notes
+
+Field notes are badges and short notes Attricat shows beside a record's fields and files. Declare a server command that describes the record:
+
+```json
+"record_field_notes": { "version": 1, "source": { "command": "describe-fields" } }
+```
+
+It needs `client.record_field_notes` and `client.commands`. When a record is shown, Attricat calls the command once with `{ record_id, blueprint_id, blueprint_version, context_id }` (the context the page shows) and expects:
+
+```json
+{
+  "attributes": {
+    "price_gross": {
+      "badge": { "label": "Computed", "tone": "info", "tooltip": "price_net * 1.23", "action": "recalculate-field" },
+      "note": "price_gross = price_net * 1.23"
+    }
+  },
+  "files": { "<file id>": { "note": "Last document: summary template." } }
+}
+```
+
+| Field | Limit |
+| --- | --- |
+| `badge.label` | 1 to 24 characters |
+| `badge.tone` | `neutral` (default), `info`, `success`, `warning`, `error` |
+| `badge.tooltip` | up to 200 characters; the tooltip also names your extension |
+| `badge.action` | an action of yours at `record_attribute_action`; choosing the badge runs it with the field's `attribute_code` in its context |
+| `note` | up to 280 characters of plain text |
+
+Each field's badges and note appear in one row below it, and a file's note below the file. Notes for attributes or files the record doesn't have are dropped, as is an answer that breaks these limits. An answer slower than two seconds is left out, and Attricat asks again shortly, so the first call may compile your component without holding up the page. Notes refresh whenever the record's values do.
 
 ### Explorer
 

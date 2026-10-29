@@ -11,14 +11,14 @@ import { RecordPreviewPage } from './RecordPreviewPage';
 const {
   actionsRender,
   agentDrawerRender,
+  fieldNotesRender,
   outletRender,
-  popoverOutletRender,
   navigate,
 } = vi.hoisted(() => ({
   navigate: vi.fn(),
   agentDrawerRender: vi.fn(),
   outletRender: vi.fn(),
-  popoverOutletRender: vi.fn(),
+  fieldNotesRender: vi.fn(),
   actionsRender: vi.fn(),
 }));
 
@@ -66,10 +66,6 @@ vi.mock('../extensions/ExtensionOutlet', () => ({
     outletRender(props);
     return null;
   },
-  ExtensionPopoverOutlet: (props: unknown) => {
-    popoverOutletRender(props);
-    return null;
-  },
 }));
 
 vi.mock('../rules/api', async (importOriginal) => ({
@@ -97,42 +93,22 @@ vi.mock('./components/RecordAgentDrawer', () => ({
 }));
 
 vi.mock('../views/components/RecordView', () => ({
-  RecordView: ({
-    renderAttributeDecoration,
-    renderAttributePanel,
-    renderFilePanel,
-  }: {
-    renderAttributeDecoration?: (attribute: {
-      id: string;
-      code: string;
-    }) => React.ReactNode;
-    renderAttributePanel?: (attribute: {
-      id: string;
-      code: string;
-    }) => React.ReactNode;
-    renderFilePanel?: (
-      attribute: { id: string; code: string },
-      fileId: string,
-    ) => React.ReactNode;
-  }) => (
-    <>
-      <div data-field-code="title">
-        <input aria-label="Title value" />
-      </div>
-      {renderAttributeDecoration?.({
-        id: '44444444-4444-4444-8444-444444444444',
-        code: 'title',
-      })}
-      {renderAttributePanel?.({
-        id: '44444444-4444-4444-8444-444444444444',
-        code: 'title',
-      })}
-      {renderFilePanel?.(
-        { id: '44444444-4444-4444-8444-444444444444', code: 'file' },
-        '55555555-5555-4555-8555-555555555555',
-      )}
-    </>
+  RecordView: () => (
+    <div data-field-code="title">
+      <input aria-label="Title value" />
+    </div>
   ),
+}));
+vi.mock('../extensions/fieldNotes', () => ({
+  FieldNotesProvider: ({
+    children,
+    ...props
+  }: {
+    children: React.ReactNode;
+  } & Record<string, unknown>) => {
+    fieldNotesRender(props);
+    return children;
+  },
 }));
 
 vi.mock('../auth/api', async (importOriginal) => ({
@@ -236,38 +212,17 @@ describe('RecordPreviewPage', () => {
     const { unmount } = renderPage();
     // The eyebrow links the blueprint once the record has loaded.
     await screen.findByText('See all');
+    // Field notes are asked for once, for this record in its context.
     await waitFor(() =>
-      expect(outletRender).toHaveBeenCalledWith({
-        outlet: 'record_attribute_panel',
-        context: {
-          context_version: 1,
-          record_id: '00000000-0000-4000-8000-000000000001',
-          attribute_id: '44444444-4444-4444-8444-444444444444',
-          blueprint_id: '22222222-2222-4222-8222-222222222222',
-          blueprint_version: 1,
-          context_id: '33333333-3333-4333-8333-333333333333',
-        },
+      expect(fieldNotesRender).toHaveBeenCalledWith({
+        contextId: '33333333-3333-4333-8333-333333333333',
+        recordId: '00000000-0000-4000-8000-000000000001',
         runtimeScope: {
           blueprintId: '22222222-2222-4222-8222-222222222222',
           blueprintVersion: 1,
         },
       }),
     );
-    expect(outletRender).toHaveBeenCalledWith({
-      outlet: 'file_panel',
-      context: {
-        context_version: 1,
-        file_id: '55555555-5555-4555-8555-555555555555',
-        record_id: '00000000-0000-4000-8000-000000000001',
-        attribute_id: '44444444-4444-4444-8444-444444444444',
-        blueprint_id: '22222222-2222-4222-8222-222222222222',
-        blueprint_version: 1,
-      },
-      runtimeScope: {
-        blueprintId: '22222222-2222-4222-8222-222222222222',
-        blueprintVersion: 1,
-      },
-    });
     await user.click(screen.getByRole('button', { name: 'Actions' }));
     expect(
       within(screen.getByRole('menu')).queryByRole('menuitem', {
@@ -438,11 +393,8 @@ describe('RecordPreviewPage', () => {
         }),
       ),
     );
-    expect(popoverOutletRender).toHaveBeenCalledWith(
-      expect.objectContaining({
-        outlet: 'record_attribute_decoration',
-        runtimeScope,
-      }),
+    expect(fieldNotesRender).toHaveBeenCalledWith(
+      expect.objectContaining({ runtimeScope }),
     );
     // Header actions are items of the record's actions menu.
     expect(actionsRender).toHaveBeenCalledWith(

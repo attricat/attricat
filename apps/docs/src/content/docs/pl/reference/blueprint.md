@@ -533,7 +533,7 @@ hidden = ["acme.legacy:panel"]
 | Klucz | Opis |
 | --- | --- |
 | `version` | Musi wynosić `1`. |
-| `outlets` | Klucze `record_preview_panel`, `record_attribute_decoration` lub `record_action`. |
+| `outlets` | Klucze `record_preview_panel` lub `record_action`. |
 | `outlets.<outlet>.order` | Klucze kontrybucji (`<extension-id>:<contribution-id>`) w kolejności wyświetlania. |
 | `outlets.<outlet>.hidden` | Klucze kontrybucji do ukrycia. |
 

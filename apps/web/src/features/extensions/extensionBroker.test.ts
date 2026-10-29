@@ -149,7 +149,7 @@ describe('extension broker', () => {
     ).rejects.toThrow('Request denied');
     const panel = selectionDependencies(['client.operations.start'], {
       kind: 'panel',
-      outlet: 'record_attribute_panel',
+      outlet: 'blueprint_panel',
     });
     await expect(
       handleBrokerRequest(

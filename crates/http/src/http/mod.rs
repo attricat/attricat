@@ -10,6 +10,7 @@ mod data_health;
 mod error;
 mod event_deliveries;
 mod extension_exports;
+mod extension_field_notes;
 mod extension_registries;
 mod extension_runs;
 mod extensions;
@@ -1192,6 +1193,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/records/{record_id}/resolved-preview",
             get(record_reads::get_resolved_preview),
+        )
+        .route(
+            "/records/{record_id}/extension-field-notes",
+            get(extension_field_notes::get),
         )
         .route(
             "/records/{record_id}/hierarchy",
