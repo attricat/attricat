@@ -2434,6 +2434,15 @@ async fn reusable_attribute_commands_build_requests() {
 
 #[tokio::test]
 async fn record_facet_commands_build_requests() {
+    let fields = echo(&[
+        "reusable-attribute",
+        "filter-fields",
+        "--blueprint",
+        "product",
+    ])
+    .await;
+    assert_eq!(fields["path"], "/v1/records/reusable-attributes");
+    assert_eq!(fields["query"], "blueprint=product");
     let tags = echo(&[
         "record",
         "system-tags",

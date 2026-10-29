@@ -80,6 +80,7 @@ acli blueprint resolve <code> [--include-drafts]
 acli blueprint resolve <code> --version <version>
 
 acli reusable-attribute list [--include-drafts]
+acli reusable-attribute filter-fields --blueprint <code>
 acli reusable-attribute create --file gtin.toml
 acli reusable-attribute validate [--definition-id <definition-id>] --file gtin.toml
 acli reusable-attribute create-version <definition-id> --file gtin-v2.toml
