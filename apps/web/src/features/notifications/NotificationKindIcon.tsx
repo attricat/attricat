@@ -6,6 +6,7 @@ import {
   CommentIcon,
   InboxIcon,
   InvitationIcon,
+  MentionIcon,
   RuleIcon,
   TeamIcon,
 } from '../../components/systemIcons';
@@ -15,6 +16,7 @@ import type { Notification } from './schemas';
 const kindIcons: Record<string, LucideIcon> = {
   [notificationKinds.recordAssigned]: AssignedUserIcon,
   [notificationKinds.recordCommented]: CommentIcon,
+  [notificationKinds.recordMentioned]: MentionIcon,
   [notificationKinds.agentApprovalRequired]: AgentIcon,
   [notificationKinds.agentRunCompleted]: AgentIcon,
   [notificationKinds.agentRunFailed]: AgentIcon,

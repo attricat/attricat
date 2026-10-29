@@ -8,3 +8,7 @@ export const commentsSectionId = 'comments';
  */
 export const systemAuthorKind = 'system';
 export const authorKinds = ['person', systemAuthorKind] as const;
+/** Users the mention autocomplete lists at once. */
+export const maxMentionSuggestions = 8;
+// The mention list shows about eight users before scrolling.
+export const mentionSuggestionListMaxHeight = 360;

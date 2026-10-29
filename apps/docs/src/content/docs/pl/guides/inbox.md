@@ -11,6 +11,7 @@ Twoja skrzynka zbiera powiadomienia o sprawach, które dotyczą Cię w bieżący
 | --- | --- |
 | **Przypisanie do rekordu** | Ktoś przypisuje Ciebie lub Twój zespół do rekordu przez atrybut użytkownika lub zespołu. Zapisanie rekordu bez zmiany przypisania nie wysyła kolejnego powiadomienia. |
 | **Nowy komentarz** | Ktoś komentuje rekord, do którego masz przypisanie (bezpośrednio lub przez zespół) albo pod którym jest już Twój komentarz. Powiadomienie pokazuje początek komentarza. |
+| **Wzmianka w komentarzu** | Ktoś wspomina o Tobie w komentarzu albo edytuje swój komentarz, dodając wzmiankę o Tobie. Dostajesz wtedy to powiadomienie zamiast *Nowego komentarza*. |
 | **Agent czeka na zatwierdzenie** | Uruchomienie agenta rozpoczęte przez Ciebie czeka na zatwierdzenie zmiany. |
 | **Błąd pracy agenta** | Uruchomienie agenta rozpoczęte przez Ciebie zakończyło się błędem lub zostało przerwane. |
 | **Agent zakończył pracę** | Zaplanowane przez Ciebie uruchomienie agenta zostało zakończone. Wynik uruchomień rozpoczętych w rozmowie widać w samej rozmowie. |

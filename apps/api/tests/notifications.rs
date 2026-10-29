@@ -293,6 +293,105 @@ async fn comments_notify_current_assignees_not_earlier_ones(pool: PgPool) {
 }
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
+async fn mentions_notify_readers_once_instead_of_a_comment_notification(pool: PgPool) {
+    let (base, _server) = start_server(pool.clone()).await;
+    let owner_client = authenticated_client();
+    let owner: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
+    let (ada, ada_client) = add_member(&pool, "ada@example.test", "Ada", true).await;
+    let (bob, bob_client) = add_member(&pool, "bob@example.test", "Bob", true).await;
+    let (carol, carol_client) = add_member(&pool, "carol@example.test", "Carol", true).await;
+    let (outsider, outsider_client) =
+        add_member(&pool, "no-read@example.test", "Outsider", false).await;
+    create_blueprint(&owner_client, &base, DEFINITION).await;
+    let record: Value = post_record(
+        &owner_client,
+        &base,
+        "task",
+        json!([scalar("assignee", format!("user:{ada}"))]),
+    )
+    .await
+    .error_for_status()
+    .unwrap()
+    .json()
+    .await
+    .unwrap();
+    let comments = format!(
+        "{base}/v1/records/{}/comments",
+        record["id"].as_str().unwrap()
+    );
+    let body = format!(
+        "[@Ada](user:{ada}) and [@Bob](user:{bob}), see [@Ada](user:{ada}); \
+         [@Outsider](user:{outsider}) [@Me](user:{owner})"
+    );
+    owner_client
+        .post(&comments)
+        .json(&json!({"body": body}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    // A mentioned assignee is told about the mention, not the comment too.
+    assert_eq!(
+        kinds(&inbox(&ada_client, &base, "").await),
+        ["record.mentioned", "record.assigned"]
+    );
+    let page = inbox(&bob_client, &base, "").await;
+    assert_eq!(kinds(&page), ["record.mentioned"]);
+    let mention = &page["items"][0];
+    assert_eq!(mention["body"], json!(body));
+    assert_eq!(mention["actor_user_id"], json!(owner));
+    assert_eq!(mention["subject"]["id"], record["id"]);
+    assert!(mention["data"]["comment_id"].is_string());
+    assert!(
+        mention["title"]
+            .as_str()
+            .unwrap()
+            .ends_with("mentioned you in a comment on a Task record"),
+        "{}",
+        mention["title"]
+    );
+    // Neither someone who cannot read the record nor the author is told.
+    assert_eq!(inbox(&outsider_client, &base, "").await["items"], json!([]));
+    assert_eq!(inbox(&owner_client, &base, "").await["items"], json!([]));
+
+    // An edit notifies only the people it newly mentions.
+    let listed: Value = owner_client
+        .get(&comments)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let comment = &listed["items"][0];
+    owner_client
+        .patch(format!("{comments}/{}", comment["id"].as_str().unwrap()))
+        .json(&json!({
+            "body": format!("{body} and [@Carol](user:{carol})"),
+            "revision": comment["revision"],
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    assert_eq!(
+        kinds(&inbox(&carol_client, &base, "").await),
+        ["record.mentioned"]
+    );
+    assert_eq!(
+        kinds(&inbox(&bob_client, &base, "").await),
+        ["record.mentioned"]
+    );
+    assert_eq!(
+        kinds(&inbox(&ada_client, &base, "").await),
+        ["record.mentioned", "record.assigned"]
+    );
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn members_read_mark_and_delete_only_their_own_notifications(pool: PgPool) {
     let (base, _server) = start_server(pool.clone()).await;
     let owner_client = authenticated_client();
@@ -496,8 +595,33 @@ async fn agent_tools_act_on_the_initiating_users_inbox(pool: PgPool) {
     let first = listed["items"][0]["id"].clone();
     let second = rest["items"][0]["id"].clone();
 
+    let full = execute_read(
+        &repository,
+        member,
+        workspace,
+        "get_notification",
+        json!({"notification_id": first}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(full["id"], first);
+    assert_eq!(full["kind"], "record.assigned");
+    assert_eq!(full["read"], false);
+    assert_eq!(full["data"]["attribute_code"], "assignee");
+
     // The owner's inbox is separate: the member's IDs change nothing there.
     let owner: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
+    assert!(
+        execute_read(
+            &repository,
+            owner,
+            workspace,
+            "get_notification",
+            json!({"notification_id": first}),
+        )
+        .await
+        .is_err()
+    );
     let foreign = execute_mutation(
         &repository,
         owner,

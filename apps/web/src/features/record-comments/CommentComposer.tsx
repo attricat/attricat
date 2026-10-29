@@ -1,13 +1,6 @@
 import { useForm, useStore } from '@tanstack/react-form';
 import { useMutation } from '@tanstack/react-query';
-import {
-  Alert,
-  Box,
-  Button,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
+import { Alert, Box, Button, Stack, Typography } from '@mui/material';
 import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ApiRequestError } from '../../api/request';
@@ -17,6 +10,7 @@ import { useEditorDraft } from '../drafts/useEditorDraft';
 import { createComment, updateComment } from './api';
 import { MarkdownContent } from '../markdown/MarkdownContent';
 import { maxCommentLength, commentComposerMaxWidth } from './constants';
+import { MentionTextField } from './MentionTextField';
 import {
   commentDraftSchema,
   commentInputSchema,
@@ -98,17 +92,16 @@ export const CommentComposer = ({
       <Stack spacing={2}>
         <form.Field name="body">
           {(field) => (
-            <TextField
+            <MentionTextField
               id={inputId}
               label={t(comment ? 'comments.editComment' : 'comments.comment')}
               required
-              multiline
               minRows={3}
               fullWidth
               disabled={disabled || mutation.isPending || forbidden}
               value={field.state.value}
               onBlur={field.handleBlur}
-              onChange={(event) => field.handleChange(event.target.value)}
+              onValueChange={field.handleChange}
               error={field.state.meta.isTouched && !valid}
               helperText={
                 field.state.meta.isTouched && !valid

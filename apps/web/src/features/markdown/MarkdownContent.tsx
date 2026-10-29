@@ -1,12 +1,19 @@
 import { Box, Link } from '@mui/material';
 import ReactMarkdown from 'react-markdown';
 import { monoFontFamily } from '../../app/theme';
+import { UserProfileLink } from '../../components/UserProfileLink';
 import { markdownUrlTransform } from './markdownUrls';
+import { mentionedUserId } from './mentions';
+
+/** Keeps mentions' user references and passes other URLs through the filter. */
+const urlTransform = (url: string) =>
+  mentionedUserId(url) ? url : markdownUrlTransform(url);
 
 /**
  * Attricat-authored Markdown (field values and comments). Raw HTML is skipped,
- * images show their alt text instead of loading remote resources, and links
- * pass through `markdownUrlTransform`.
+ * images show their alt text instead of loading remote resources, links
+ * pass through `markdownUrlTransform`, and mentions (`[@Ada](user:<uuid>)`)
+ * link to the user's profile.
  */
 export const MarkdownContent = ({ value }: { value: string }) => (
   <Box
@@ -39,16 +46,27 @@ export const MarkdownContent = ({ value }: { value: string }) => (
   >
     <ReactMarkdown
       skipHtml
-      urlTransform={markdownUrlTransform}
+      urlTransform={urlTransform}
       components={{
-        a: ({ href, children }) =>
-          href ? (
+        a: ({ href, children }) => {
+          const userId = mentionedUserId(href);
+          if (userId)
+            return (
+              <Box
+                component="span"
+                sx={{ color: 'primary.main', fontWeight: 600 }}
+              >
+                <UserProfileLink userId={userId}>{children}</UserProfileLink>
+              </Box>
+            );
+          return href ? (
             <Link href={href} rel="nofollow noreferrer noopener">
               {children}
             </Link>
           ) : (
             <>{children}</>
-          ),
+          );
+        },
         img: ({ alt }) => <span>{alt}</span>,
         h1: ({ children }) => <h2>{children}</h2>,
         h2: ({ children }) => <h3>{children}</h3>,

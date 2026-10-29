@@ -87,7 +87,7 @@ The **Record control** tab below the record's values lists approvals, newest fir
 
 ## Comments
 
-The record page has a **Comments** tab below the record's values, with the newest comments first and **Load more comments** for older ones. Anyone who can read the record can add a comment, written in Markdown; **Preview Markdown** shows how it will look. You can edit only your own comments. If someone else's change reaches a comment before your edit is saved, the edit is rejected; reload the comments and restore your draft to reconcile it.
+The record page has a **Comments** tab below the record's values, with the newest comments first and **Load more comments** for older ones. Anyone who can read the record can add a comment, written in Markdown; **Preview Markdown** shows how it will look. To mention someone, type `@` and part of their name or email, then choose them from the list with the arrow keys and **Enter** or **Tab**, or with the mouse. A mention links to the person's profile and notifies them in their [inbox](/guides/inbox/), as long as they can open the record. Editing a comment notifies only the people it newly mentions. You can edit only your own comments. If someone else's change reaches a comment before your edit is saved, the edit is rejected; reload the comments and restore your draft to reconcile it.
 
 ## Additional attributes
 

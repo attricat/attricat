@@ -11,6 +11,7 @@ Your inbox collects notifications about things that concern you in the current w
 | --- | --- |
 | **Assigned to a record** | Someone assigns you, or a team you belong to, to a record through a user or team attribute. Saving a record without changing the assignment does not notify you again. |
 | **New comment** | Someone comments on a record you are assigned to (directly or through a team) or have commented on before. The notification shows the start of the comment. |
+| **Mentioned in a comment** | Someone mentions you in a comment, or edits their comment to add a mention of you. You get this instead of *New comment* for that comment. |
 | **Agent needs approval** | An agent run you started is waiting for you to approve a change. |
 | **Agent run failed** | An agent run you started failed or was interrupted. |
 | **Agent run finished** | A scheduled agent run you set up has finished. Runs you start in a conversation show their result there instead. |
@@ -42,4 +43,4 @@ Select a notification about a record, an agent conversation, or a rule to open i
 
 - The [CLI](/reference/cli/#notifications) has `acli notification` commands.
 - The [API](/reference/api/#notifications) has the `/notifications` routes.
-- An [agent](/guides/agents/) can read your inbox, and with your approval mark notifications as read or delete them.
+- An [agent](/guides/agents/) can list your notifications and read one in full, and with your approval mark notifications as read or delete them.
