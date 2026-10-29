@@ -2464,6 +2464,32 @@ async fn rule_finding_and_connector_job_commands_build_requests() {
     .await;
     assert_eq!(runs["path"], "/rule-runs");
     assert_eq!(runs["query"], format!("rule_id={id}&scope=all_records"));
+    let count = echo(&[
+        "rule",
+        "finding-count",
+        "--blueprint-id",
+        id,
+        "--severity",
+        "error",
+        "--include-resolved",
+    ])
+    .await;
+    assert_eq!(count["path"], "/rule-findings/count");
+    assert_eq!(
+        count["query"],
+        format!("blueprint_id={id}&severity=error&unresolved=false")
+    );
+    assert!(
+        Cli::try_parse_from([
+            "acli",
+            "rule",
+            "finding-count",
+            "--state",
+            "open",
+            "--include-resolved",
+        ])
+        .is_err()
+    );
     let run = echo(&["rule", "run-get", id]).await;
     assert_eq!(run["path"], format!("/rule-runs/{id}"));
     let recheck = echo(&[

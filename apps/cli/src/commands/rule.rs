@@ -109,10 +109,24 @@ pub(crate) enum RuleCommand {
         #[command(flatten)]
         page: PageArgs,
     },
-    /// Count unresolved findings, optionally of one record.
+    /// Count the findings the filters match: unresolved ones unless a state
+    /// is chosen or --include-resolved is given.
     FindingCount {
         #[arg(long)]
         record_id: Option<Uuid>,
+        #[arg(long)]
+        rule_id: Option<Uuid>,
+        #[arg(long)]
+        blueprint_id: Option<Uuid>,
+        #[arg(long)]
+        context_id: Option<Uuid>,
+        #[arg(long, value_enum)]
+        severity: Option<FindingSeverity>,
+        #[arg(long, value_enum)]
+        state: Option<FindingState>,
+        /// Count findings in every state.
+        #[arg(long, conflicts_with = "state")]
+        include_resolved: bool,
     },
     /// Re-check one record against every enabled rule of its blueprint.
     Recheck {
@@ -269,10 +283,30 @@ pub(crate) async fn rule_command(api: &Api, command: RuleCommand) -> Result<Stri
             ))
             .await
         }
-        RuleCommand::FindingCount { record_id } => {
+        RuleCommand::FindingCount {
+            record_id,
+            rule_id,
+            blueprint_id,
+            context_id,
+            severity,
+            state,
+            include_resolved,
+        } => {
+            let id = |id: Option<Uuid>| id.map(|id| id.to_string());
             api.get(&with_query(
                 &format!("{FINDINGS_PATH}/count"),
-                [("record_id", record_id.map(|id| id.to_string()))],
+                [
+                    ("record_id", id(record_id)),
+                    ("rule_id", id(rule_id)),
+                    ("blueprint_id", id(blueprint_id)),
+                    ("context_id", id(context_id)),
+                    (
+                        "severity",
+                        severity.map(|severity| severity.as_str().to_owned()),
+                    ),
+                    ("state", state.map(|state| state.as_str().to_owned())),
+                    ("unresolved", include_resolved.then(|| "false".to_owned())),
+                ],
             ))
             .await
         }

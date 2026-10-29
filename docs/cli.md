@@ -160,7 +160,7 @@ acli rule run-list [--rule-id <uuid>] [--record-id <uuid>] [--scope all-records|
 acli rule run-get <run-id>
 acli rule run-replay <run-id>
 acli rule findings [--record-id <uuid>] [--rule-id <uuid>] [--blueprint-id <uuid>] [--context-id <uuid>] [--severity info|warning|error|critical] [--state open|acknowledged|resolved] [--unresolved] [--limit <n>] [--offset <n>]
-acli rule finding-count [--record-id <uuid>]
+acli rule finding-count [--record-id <uuid>] [--rule-id <uuid>] [--blueprint-id <uuid>] [--context-id <uuid>] [--severity info|warning|error|critical] [--state open|acknowledged|resolved | --include-resolved]
 acli rule recheck --record-id <uuid> --idempotency-key <key>
 acli rule acknowledge <finding-id>
 
