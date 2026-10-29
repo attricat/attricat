@@ -2433,6 +2433,30 @@ async fn reusable_attribute_commands_build_requests() {
 }
 
 #[tokio::test]
+async fn record_facet_commands_build_requests() {
+    let tags = echo(&[
+        "record",
+        "system-tags",
+        "--blueprint",
+        "product",
+        "--prefix",
+        "eu",
+        "--limit",
+        "10",
+    ])
+    .await;
+    assert_eq!(tags["path"], "/v1/records/facets/system-tags");
+    assert_eq!(
+        tags["body"],
+        json!({
+            "blueprint": { "code": "product", "version": null },
+            "prefix": "eu",
+            "limit": 10,
+        })
+    );
+}
+
+#[tokio::test]
 async fn rule_finding_and_connector_job_commands_build_requests() {
     let id = "00000000-0000-4000-8000-000000000001";
     let findings = echo(&[

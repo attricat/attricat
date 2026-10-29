@@ -176,6 +176,18 @@ pub(crate) enum RecordCommand {
         #[arg(long)]
         cursor: Option<String>,
     },
+    /// List the system tags on a blueprint's records, most used first.
+    SystemTags {
+        #[arg(long)]
+        blueprint: String,
+        #[arg(long)]
+        version: Option<i64>,
+        /// Only tags starting with this text, ignoring case.
+        #[arg(long)]
+        prefix: Option<String>,
+        #[arg(long, value_parser = clap::value_parser!(u32).range(1..))]
+        limit: Option<u32>,
+    },
     FacetChildren {
         #[arg(long)]
         blueprint: String,
@@ -503,6 +515,22 @@ pub(crate) async fn record_command(api: &Api, command: RecordCommand) -> Result<
                 json!({
                     "relationships": json_array_input(&relationships, "--relationships")?,
                     "page": { "size": size, "cursor": cursor },
+                }),
+            )
+            .await
+        }
+        RecordCommand::SystemTags {
+            blueprint,
+            version,
+            prefix,
+            limit,
+        } => {
+            api.post_json(
+                "/v1/records/facets/system-tags",
+                json!({
+                    "blueprint": { "code": blueprint, "version": version },
+                    "prefix": prefix,
+                    "limit": limit,
                 }),
             )
             .await

@@ -105,6 +105,7 @@ acli record preview <record-id> [--relationship-depth <depth>] [--relationship-l
 acli record resolved-preview <record-id> --context-id <context-id>
 acli record hierarchy <record-id> --context-id <context-id> --field <relationship-field>
 acli record incoming-relationships <record-id> --relationships <json-or-file> [--size <size>] [--cursor <opaque-cursor>]
+acli record system-tags --blueprint <code> [--version <version>] [--prefix <text>] [--limit <n>]
 acli record facet-children --blueprint <code> [--source-relationship-field <field>] --context-id <context-id> [--version <version>] [--query <text>] [--hierarchy-field <field>] [--parent-id <record-id>] [--cursor <record-id>] [--selected-target-ids <json-or-file>] [--include-ids <json-or-file>]
 acli record search --blueprint <code> [--version <version>] [--query <text>] [--size <size>] [--cursor <cursor>] [--system-tags <json>] [--filters <json-or-file>] [--outdated] [--include-total] [--relationship-tree-facets <json-or-file>] [--sort-field <field> --sort-direction asc|desc]
 acli record update <record-id> [--values values.toml] [--relationships relationships.toml] [--remove-values removals.toml] [--context-id <context-id>] [--system-tags <json>] [--system-metadata <json>] [--expected-updated-at <rfc3339>]
