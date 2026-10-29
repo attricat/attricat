@@ -48,6 +48,10 @@ const DEFAULT_BIND_ADDR: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCAL
 const DEFAULT_FILE_WORKER_OPERATIONS_BIND_ADDR: SocketAddr =
     SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 3001);
 const DEFAULT_FILE_WORKER_POLL_MILLISECONDS: u64 = 500;
+const DEFAULT_FILE_WORKER_CONCURRENCY: usize = 4;
+/// Each job can hold up to two pool connections, so this bounds the worker's
+/// pool well below PostgreSQL's default connection limit.
+pub const MAX_FILE_WORKER_CONCURRENCY: usize = 32;
 const DEFAULT_WORKSPACE_ID: Uuid = Uuid::from_u128(0x00000000_0000_4000_8000_000000000002);
 const DEFAULT_BOOTSTRAP_OWNER_EMAIL: &str = "owner@example.test";
 // Local development defaults: a mail catcher and the Vite dev server.
@@ -222,6 +226,8 @@ pub struct FileWorkerConfig {
     /// Required when `operations_bind_addr` is not loopback.
     pub metrics_token: Option<SecretString>,
     pub poll_interval: Duration,
+    /// Jobs one process runs at once.
+    pub concurrency: usize,
 }
 
 pub struct ConfigError(String);
@@ -587,6 +593,11 @@ fn file_worker(source: &Source) -> Result<FileWorkerConfig, ConfigError> {
             "FILE_WORKER_POLL_MILLISECONDS",
             DEFAULT_FILE_WORKER_POLL_MILLISECONDS,
         )?),
+        concurrency: source.bounded(
+            "FILE_WORKER_CONCURRENCY",
+            DEFAULT_FILE_WORKER_CONCURRENCY,
+            MAX_FILE_WORKER_CONCURRENCY,
+        )?,
     })
 }
 
@@ -695,15 +706,21 @@ impl Source {
     }
 
     fn pool_connections(&self, name: &str, default: u32) -> Result<u32, ConfigError> {
+        self.bounded(name, default, MAX_GLOBAL_POOL_CONNECTIONS)
+    }
+
+    fn bounded<T: FromStr + PartialOrd + From<u8> + fmt::Display + Copy>(
+        &self,
+        name: &str,
+        default: T,
+        maximum: T,
+    ) -> Result<T, ConfigError> {
         match self.var(name) {
             Some(value) => value
-                .parse::<u32>()
+                .parse::<T>()
                 .ok()
-                .filter(|value| (1..=MAX_GLOBAL_POOL_CONNECTIONS).contains(value))
-                .ok_or_else(|| {
-                    format!("{name} must be an integer between 1 and {MAX_GLOBAL_POOL_CONNECTIONS}")
-                        .into()
-                }),
+                .filter(|value| (T::from(1)..=maximum).contains(value))
+                .ok_or_else(|| format!("{name} must be an integer between 1 and {maximum}").into()),
             None => Ok(default),
         }
     }
@@ -785,6 +802,7 @@ mod tests {
         assert_eq!(config.bootstrap.owner_email, "owner@example.test");
         assert!(!config.bootstrap.sample_accounts);
         assert_eq!(config.file_worker.poll_interval, Duration::from_millis(500));
+        assert_eq!(config.file_worker.concurrency, 4);
     }
 
     #[test]
@@ -986,6 +1004,11 @@ mod tests {
         }
         for invalid in ["0", "n/a"] {
             assert!(load(&secrets, &[("FILE_WORKER_POLL_MILLISECONDS", invalid)]).is_err());
+        }
+        let config = load(&secrets, &[("FILE_WORKER_CONCURRENCY", "32")]).unwrap();
+        assert_eq!(config.file_worker.concurrency, 32);
+        for invalid in ["0", "33", "invalid"] {
+            assert!(load(&secrets, &[("FILE_WORKER_CONCURRENCY", invalid)]).is_err());
         }
         assert!(load(&secrets, &[("HTTP_MAX_CONCURRENT_REQUESTS", "0")]).is_err());
     }
