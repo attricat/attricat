@@ -276,7 +276,7 @@
     "autoApproval": {
       "about": "About auto-approval",
       "label": "Auto-approve changes within this conversation",
-      "hint": "For messages you send, the agent applies its edits to this record's fields, relationships, tags, files and comments without asking. Deleting, publishing and changes to other records still ask.",
+      "hint": "For messages you send in this conversation, the agent applies its changes to the record's fields, relationships, tags, files and comments without asking. Deleting or publishing the record, and changes to other records, still need your approval.",
       "heldByOther": "On for someone else's messages. Switch it on to use it for yours instead."
     },
     "conversation": "Conversation",
