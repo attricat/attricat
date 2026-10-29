@@ -2490,6 +2490,43 @@ async fn rule_finding_and_connector_job_commands_build_requests() {
         ])
         .is_err()
     );
+    let listed = echo(&["rule", "acknowledge-many", "--finding-id", id, id]).await;
+    assert_eq!(listed["path"], "/rule-findings/acknowledge");
+    assert_eq!(listed["body"], json!({ "finding_ids": [id, id] }));
+    let matched = echo(&[
+        "rule",
+        "acknowledge-many",
+        "--matching",
+        "--rule-id",
+        id,
+        "--severity",
+        "warning",
+    ])
+    .await;
+    assert_eq!(
+        matched["body"],
+        json!({ "matching": {
+            "record_id": null,
+            "rule_id": id,
+            "blueprint_id": null,
+            "context_id": null,
+            "severity": "warning",
+        }})
+    );
+    for args in [
+        vec!["acli", "rule", "acknowledge-many"],
+        vec!["acli", "rule", "acknowledge-many", "--rule-id", id],
+        vec![
+            "acli",
+            "rule",
+            "acknowledge-many",
+            "--finding-id",
+            id,
+            "--matching",
+        ],
+    ] {
+        assert!(Cli::try_parse_from(args).is_err());
+    }
     let run = echo(&["rule", "run-get", id]).await;
     assert_eq!(run["path"], format!("/rule-runs/{id}"));
     let recheck = echo(&[

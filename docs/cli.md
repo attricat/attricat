@@ -163,6 +163,8 @@ acli rule findings [--record-id <uuid>] [--rule-id <uuid>] [--blueprint-id <uuid
 acli rule finding-count [--record-id <uuid>] [--rule-id <uuid>] [--blueprint-id <uuid>] [--context-id <uuid>] [--severity info|warning|error|critical] [--state open|acknowledged|resolved | --include-resolved]
 acli rule recheck --record-id <uuid> --idempotency-key <key>
 acli rule acknowledge <finding-id>
+acli rule acknowledge-many --finding-id <uuid>...
+acli rule acknowledge-many --matching [--record-id <uuid>] [--rule-id <uuid>] [--blueprint-id <uuid>] [--context-id <uuid>] [--severity info|warning|error|critical]
 
 acli workspace navigation get|sidebar
 acli workspace navigation set --entries <json-or-file>

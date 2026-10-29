@@ -138,6 +138,31 @@ pub(crate) enum RuleCommand {
     Acknowledge {
         finding_id: Uuid,
     },
+    /// Acknowledge many open findings: the listed ones, or with --matching
+    /// every open finding the filters match. Prints how many it acknowledged.
+    #[command(group(
+        clap::ArgGroup::new("selection")
+            .required(true)
+            .args(["finding_ids", "matching"])
+    ))]
+    AcknowledgeMany {
+        /// Finding to acknowledge; repeat for up to 5000.
+        #[arg(long = "finding-id", num_args = 1..)]
+        finding_ids: Vec<Uuid>,
+        /// Acknowledge every open finding the filters below match.
+        #[arg(long)]
+        matching: bool,
+        #[arg(long, requires = "matching")]
+        record_id: Option<Uuid>,
+        #[arg(long, requires = "matching")]
+        rule_id: Option<Uuid>,
+        #[arg(long, requires = "matching")]
+        blueprint_id: Option<Uuid>,
+        #[arg(long, requires = "matching")]
+        context_id: Option<Uuid>,
+        #[arg(long, value_enum, requires = "matching")]
+        severity: Option<FindingSeverity>,
+    },
 }
 
 pub(crate) async fn rule_command(api: &Api, command: RuleCommand) -> Result<String, CliError> {
@@ -326,6 +351,29 @@ pub(crate) async fn rule_command(api: &Api, command: RuleCommand) -> Result<Stri
                 segment(finding_id)
             ))
             .await
+        }
+        RuleCommand::AcknowledgeMany {
+            finding_ids,
+            matching,
+            record_id,
+            rule_id,
+            blueprint_id,
+            context_id,
+            severity,
+        } => {
+            let body = if matching {
+                json!({ "matching": {
+                    "record_id": record_id,
+                    "rule_id": rule_id,
+                    "blueprint_id": blueprint_id,
+                    "context_id": context_id,
+                    "severity": severity.map(FindingSeverity::as_str),
+                }})
+            } else {
+                json!({ "finding_ids": finding_ids })
+            };
+            api.post_json(&format!("{FINDINGS_PATH}/acknowledge"), body)
+                .await
         }
     }
 }
