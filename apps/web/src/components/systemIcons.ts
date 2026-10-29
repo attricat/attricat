@@ -9,7 +9,7 @@ export { HashIcon as RecordIdIcon } from 'lucide-react';
 export { StampIcon as RecordControlIcon } from 'lucide-react';
 export { MessageSquareIcon as CommentIcon } from 'lucide-react';
 export { ShapesIcon as BlueprintIcon } from 'lucide-react';
-export { FolderIcon as ContextIcon } from 'lucide-react';
+export { LayersIcon as ContextIcon } from 'lucide-react';
 export { ChartColumnIcon as DataHealthIcon } from 'lucide-react';
 export { CompassIcon as ExplorerIcon } from 'lucide-react';
 export { BookmarkIcon as ExplorerShortcutIcon } from 'lucide-react';

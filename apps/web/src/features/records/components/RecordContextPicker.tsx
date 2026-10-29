@@ -1,5 +1,7 @@
 import { Box, MenuItem, Tab, Tabs, TextField } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { compactIconSize } from '../../../components/iconSizes';
+import { ContextIcon } from '../../../components/systemIcons';
 import type { AttributeContext } from '../../contexts/api';
 import { defaultContextCode } from '../../contexts/constants';
 import { contextLabel } from '../../contexts/defaultContext';
@@ -68,12 +70,13 @@ export const RecordContextPicker = ({
         {tabContexts.map((context) => (
           <Tab
             disabled={disabled}
+            icon={<ContextIcon aria-hidden size={compactIconSize} />}
             key={context.id}
             label={contextLabel(t, context.code)}
             sx={{
               minHeight: CONTEXT_TAB_MIN_HEIGHT,
               minWidth: 0,
-              px: 1,
+              px: 3,
               py: 0.25,
             }}
             value={context.id}
