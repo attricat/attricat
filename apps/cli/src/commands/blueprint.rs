@@ -8,6 +8,9 @@ use crate::error::CliError;
 use crate::input::read_source;
 use crate::transport::{Api, flag, segment, with_query};
 
+/// The removal disposition that archives a removed attribute's values.
+const ARCHIVE_DISPOSITION: &str = "archive";
+
 #[derive(Subcommand)]
 pub(crate) enum BlueprintCommand {
     List {
@@ -65,6 +68,10 @@ pub(crate) enum BlueprintCommand {
     SafeMigrationBatch {
         blueprint_id: Uuid,
         version: i64,
+        /// Archive the values of attributes the version removes; required
+        /// when `migration-impact` reports `requires_removal_disposition`.
+        #[arg(long)]
+        archive_removed_values: bool,
     },
     /// List the counters behind the blueprint's generated attributes.
     Sequences {
@@ -202,11 +209,17 @@ pub(crate) async fn blueprint_command(
         BlueprintCommand::SafeMigrationBatch {
             blueprint_id,
             version,
+            archive_removed_values,
         } => {
-            api.post(&format!(
-                "/blueprints/{}/versions/{version}/safe-migration-batches",
-                segment(blueprint_id)
-            ))
+            api.post_json(
+                &format!(
+                    "/blueprints/{}/versions/{version}/safe-migration-batches",
+                    segment(blueprint_id)
+                ),
+                json!({
+                    "removal_disposition": archive_removed_values.then_some(ARCHIVE_DISPOSITION),
+                }),
+            )
             .await
         }
         BlueprintCommand::Sequences { blueprint_id } => {

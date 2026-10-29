@@ -70,7 +70,7 @@ acli blueprint publish <blueprint-id> <version>
 acli blueprint publish-records <blueprint-id> <version> --context-id <context-id>
 acli blueprint publish-records-all <blueprint-id> <version>
 acli blueprint migration-impact <blueprint-id> <version>
-acli blueprint safe-migration-batch <blueprint-id> <version>
+acli blueprint safe-migration-batch <blueprint-id> <version> [--archive-removed-values]
 acli blueprint migration-batches <blueprint-id>
 acli blueprint sequences <blueprint-id>
 acli blueprint advance-sequence <blueprint-id> <attribute-code> <next-value> [--period <period>]
@@ -586,6 +586,12 @@ For example, after creating `seed_product` v2:
 acli record migrate-bulk --blueprint seed_product --from-version 1 --dry-run
 acli record migrate-bulk --blueprint seed_product --from-version 1
 ```
+
+`blueprint safe-migration-batch` starts a batch that migrates the blueprint's
+records to a version. When `blueprint migration-impact` reports
+`requires_removal_disposition`, the version removes attributes that still hold
+values; pass `--archive-removed-values` to archive them, or the batch is
+refused.
 
 Blueprint files are sent unchanged as the API's TOML `definition`, preserving
 the raw-source hash. See [Blueprint Authoring](blueprints.md) for the grammar.

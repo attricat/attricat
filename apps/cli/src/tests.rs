@@ -2662,6 +2662,21 @@ async fn rule_finding_and_connector_job_commands_build_requests() {
         impact["path"],
         format!("/blueprints/{id}/versions/2/safe-migration-impact")
     );
+    let batch = echo(&[
+        "blueprint",
+        "safe-migration-batch",
+        id,
+        "2",
+        "--archive-removed-values",
+    ])
+    .await;
+    assert_eq!(
+        batch["path"],
+        format!("/blueprints/{id}/versions/2/safe-migration-batches")
+    );
+    assert_eq!(batch["body"], json!({ "removal_disposition": "archive" }));
+    let batch = echo(&["blueprint", "safe-migration-batch", id, "2"]).await;
+    assert_eq!(batch["body"], json!({ "removal_disposition": null }));
     let sequences = echo(&["blueprint", "sequences", id]).await;
     assert_eq!(sequences["path"], format!("/blueprints/{id}/sequences"));
     let advanced = echo(&[
