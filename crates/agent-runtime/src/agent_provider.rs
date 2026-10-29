@@ -48,7 +48,28 @@ pub struct ChatRequest {
     /// Agent approvals are sequential, so a response must contain at most one
     /// call. This prevents an unresolved call from invalidating the next turn.
     pub parallel_tool_calls: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_choice: Option<ToolChoice>,
     pub stream: bool,
+}
+/// Makes the model call one named tool instead of answering in text.
+#[derive(Clone, Debug, Serialize)]
+pub struct ToolChoice {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    function: ToolChoiceFunction,
+}
+#[derive(Clone, Debug, Serialize)]
+struct ToolChoiceFunction {
+    name: &'static str,
+}
+impl ToolChoice {
+    pub fn function(name: &'static str) -> Self {
+        Self {
+            kind: "function",
+            function: ToolChoiceFunction { name },
+        }
+    }
 }
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ToolCall {
@@ -120,6 +141,7 @@ impl OpenAiCompatibleClient {
         &self,
         messages: Vec<ChatMessage>,
         tools: Vec<ToolDefinition>,
+        tool_choice: Option<ToolChoice>,
     ) -> Result<ChatCompletion, ProviderError> {
         let url = chat_completions_url(&self.base_url);
         let response = self
@@ -132,6 +154,7 @@ impl OpenAiCompatibleClient {
                 messages,
                 tools,
                 parallel_tool_calls: false,
+                tool_choice,
                 stream: false,
             })
             .send()
@@ -178,6 +201,7 @@ impl OpenAiCompatibleClient {
                 messages,
                 tools,
                 parallel_tool_calls: false,
+                tool_choice: None,
                 stream: true,
             })
             .send()
@@ -389,8 +413,8 @@ fn finish_calls(calls: Vec<PartialToolCall>) -> Result<Vec<ToolCall>, ProviderEr
 #[cfg(test)]
 mod tests {
     use super::{
-        ChatRequest, OpenAiCompatibleClient, PartialToolCall, ProviderError, chat_completions_url,
-        finish_calls,
+        ChatRequest, OpenAiCompatibleClient, PartialToolCall, ProviderError, ToolChoice,
+        chat_completions_url, finish_calls,
     };
     use crate::agents::{
         AgentProviderConfig, MAX_ASSISTANT_CONTENT_BYTES, MAX_PROVIDER_BODY_BYTES,
@@ -454,11 +478,31 @@ mod tests {
             messages: vec![],
             tools: vec![],
             parallel_tool_calls: false,
+            tool_choice: None,
             stream: true,
         };
         let body = serde_json::to_value(request).unwrap();
         assert_eq!(body["parallel_tool_calls"], false);
         assert!(body.get("reasoning_effort").is_none());
+        assert!(body.get("tool_choice").is_none());
+    }
+
+    #[test]
+    fn names_a_required_tool_in_provider_requests() {
+        let body = serde_json::to_value(ChatRequest {
+            model: "test".into(),
+            reasoning_effort: None,
+            messages: vec![],
+            tools: vec![],
+            parallel_tool_calls: false,
+            tool_choice: Some(ToolChoice::function("propose")),
+            stream: false,
+        })
+        .unwrap();
+        assert_eq!(
+            body["tool_choice"],
+            serde_json::json!({"type": "function", "function": {"name": "propose"}})
+        );
     }
 
     #[test]
@@ -479,6 +523,7 @@ mod tests {
             messages: vec![],
             tools: vec![],
             parallel_tool_calls: false,
+            tool_choice: None,
             stream: true,
         })
         .unwrap();
@@ -565,7 +610,7 @@ mod tests {
     fn rejects_oversized_unframed_completion_without_content_length() {
         tokio::runtime::Runtime::new().unwrap().block_on(async {
             let (client, server) = mock_client("x".repeat(MAX_PROVIDER_BODY_BYTES + 1)).await;
-            let result = client.complete(vec![], vec![]).await;
+            let result = client.complete(vec![], vec![], None).await;
             server.abort();
             assert!(matches!(result, Err(ProviderError::Malformed)));
         });

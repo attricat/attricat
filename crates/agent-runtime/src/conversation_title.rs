@@ -83,6 +83,7 @@ pub async fn maybe_generate_title(
                 },
             ],
             Vec::new(),
+            None,
         )
         .await;
     match result {

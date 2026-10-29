@@ -15,7 +15,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use crate::{
-    agent_provider::{ChatMessage, OpenAiCompatibleClient},
+    agent_provider::{AssistantMessage, ChatMessage, OpenAiCompatibleClient, ToolChoice},
     agent_runner::language_prompt,
     agent_tools::{ToolDefinition, ToolFunction},
     agents::{
@@ -124,11 +124,16 @@ async fn document_attachment_text(
     }
 }
 
+/// The one tool a draft proposal answers with.
+const SMART_FILL_TOOL_NAME: &str = "propose_record_form_values";
+const MISSING_FORM_VALUES: &str = "agent did not return form values";
+const INVALID_FORM_VALUES: &str = "agent returned invalid form values";
+
 fn smart_fill_definition() -> ToolDefinition {
     ToolDefinition {
         kind: "function",
         function: ToolFunction {
-            name: "propose_record_form_values",
+            name: SMART_FILL_TOOL_NAME,
             description: "Propose editable record form field values. This does not save catalog data.",
             parameters: json!({
                 "type": "object",
@@ -144,6 +149,53 @@ fn smart_fill_definition() -> ToolDefinition {
             }),
         },
     }
+}
+
+/// The proposal's arguments. A provider that ignores the required tool may
+/// still answer in text, such as about a long attachment; that answer becomes
+/// the explanation of a proposal without fields, as for a question.
+fn smart_fill_arguments(message: Option<AssistantMessage>) -> Result<Value, SmartFillError> {
+    let message = message.ok_or(SmartFillError::BadGateway(MISSING_FORM_VALUES))?;
+    let Some(call) = message
+        .tool_calls
+        .into_iter()
+        .next()
+        .filter(|call| call.function.name == SMART_FILL_TOOL_NAME)
+    else {
+        return message
+            .content
+            .filter(|content| !content.trim().is_empty())
+            .map(|content| json!({"fields": {}, "explanation": content}))
+            .ok_or(SmartFillError::BadGateway(MISSING_FORM_VALUES));
+    };
+    if call.function.arguments.len() > MAX_TOOL_CALL_ARGUMENT_BYTES {
+        return Err(SmartFillError::BadGateway(
+            "agent returned oversized form values",
+        ));
+    }
+    serde_json::from_str::<Value>(&call.function.arguments)
+        .map_err(|_| SmartFillError::BadGateway(INVALID_FORM_VALUES))
+}
+
+/// The proposed values as form text. Models often send numbers and booleans as
+/// JSON scalars despite the tool's string schema; other values are skipped.
+fn proposed_fields(arguments: &Value) -> Result<BTreeMap<String, String>, SmartFillError> {
+    let fields = arguments
+        .get("fields")
+        .and_then(Value::as_object)
+        .ok_or(SmartFillError::BadGateway(INVALID_FORM_VALUES))?;
+    Ok(fields
+        .iter()
+        .filter_map(|(code, value)| {
+            let text = match value {
+                Value::String(text) => text.clone(),
+                Value::Number(number) => number.to_string(),
+                Value::Bool(flag) => flag.to_string(),
+                _ => return None,
+            };
+            Some((code.clone(), text))
+        })
+        .collect())
 }
 
 /// Asks the agent provider for draft values of a record form's editable
@@ -406,23 +458,17 @@ pub async fn propose_record_form_values(
                 },
             ],
             vec![smart_fill_definition()],
+            Some(ToolChoice::function(SMART_FILL_TOOL_NAME)),
         )
         .await
         .map_err(|_| SmartFillError::Unavailable("agent provider is unavailable"))?;
-    let call = completion
-        .choices
-        .into_iter()
-        .next()
-        .and_then(|choice| choice.message.tool_calls.into_iter().next())
-        .filter(|call| call.function.name == "propose_record_form_values")
-        .ok_or_else(|| SmartFillError::BadGateway("agent did not return form values"))?;
-    if call.function.arguments.len() > MAX_TOOL_CALL_ARGUMENT_BYTES {
-        return Err(SmartFillError::BadGateway(
-            "agent returned oversized form values",
-        ));
-    }
-    let arguments = serde_json::from_str::<Value>(&call.function.arguments)
-        .map_err(|_| SmartFillError::BadGateway("agent returned invalid form values"))?;
+    let arguments = smart_fill_arguments(
+        completion
+            .choices
+            .into_iter()
+            .next()
+            .map(|choice| choice.message),
+    )?;
     let explanation = arguments
         .get("explanation")
         .and_then(Value::as_str)
@@ -430,11 +476,7 @@ pub async fn propose_record_form_values(
         .chars()
         .take(MAX_SMART_FILL_EXPLANATION_CHARS)
         .collect::<String>();
-    let fields = Some(arguments)
-        .and_then(|value| value.get("fields").cloned())
-        .and_then(|value| serde_json::from_value::<BTreeMap<String, String>>(value).ok())
-        .ok_or_else(|| SmartFillError::BadGateway("agent returned invalid form values"))?;
-    let fields = fields
+    let fields = proposed_fields(&arguments)?
         .into_iter()
         .filter(|(code, value)| {
             editable
@@ -597,5 +639,84 @@ mod tests {
         };
         assert!(smart_fill_value_is_valid(&date, "2026-09-23"));
         assert!(!smart_fill_value_is_valid(&date, "2026-9-23"));
+    }
+
+    fn assistant_message(content: Option<&str>, call: Option<(&str, &str)>) -> AssistantMessage {
+        serde_json::from_value(json!({
+            "content": content,
+            "tool_calls": call.map(|(name, arguments)| vec![json!({
+                "id": "call_1",
+                "type": "function",
+                "function": {"name": name, "arguments": arguments},
+            })]).unwrap_or_default(),
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn proposals_come_from_the_tool_call() {
+        let arguments = smart_fill_arguments(Some(assistant_message(
+            Some("ignored"),
+            Some((
+                SMART_FILL_TOOL_NAME,
+                r#"{"fields":{"name":"Golf"},"explanation":"From the brochure."}"#,
+            )),
+        )))
+        .unwrap();
+        assert_eq!(arguments["fields"]["name"], "Golf");
+    }
+
+    #[test]
+    fn a_text_answer_without_the_tool_proposes_no_fields() {
+        let arguments = smart_fill_arguments(Some(assistant_message(
+            Some("The PDF does not name a model year."),
+            None,
+        )))
+        .unwrap();
+        assert_eq!(arguments["fields"], json!({}));
+        assert_eq!(
+            arguments["explanation"],
+            "The PDF does not name a model year."
+        );
+    }
+
+    #[test]
+    fn scalar_proposals_become_form_text() {
+        let fields = proposed_fields(&json!({"fields": {
+            "name": "Golf",
+            "founded_year": 1937,
+            "price": 24.5,
+            "electric": false,
+            "notes": null,
+            "dimensions": {"length": 4},
+        }}))
+        .unwrap();
+        assert_eq!(
+            fields,
+            BTreeMap::from([
+                ("electric".to_owned(), "false".to_owned()),
+                ("founded_year".to_owned(), "1937".to_owned()),
+                ("name".to_owned(), "Golf".to_owned()),
+                ("price".to_owned(), "24.5".to_owned()),
+            ])
+        );
+        assert!(matches!(
+            proposed_fields(&json!({"explanation": "No fields"})),
+            Err(SmartFillError::BadGateway(INVALID_FORM_VALUES))
+        ));
+    }
+
+    #[test]
+    fn an_empty_answer_or_another_tool_is_rejected() {
+        for message in [
+            None,
+            Some(assistant_message(Some("  "), None)),
+            Some(assistant_message(None, Some(("other_tool", "{}")))),
+        ] {
+            assert!(matches!(
+                smart_fill_arguments(message),
+                Err(SmartFillError::BadGateway(MISSING_FORM_VALUES))
+            ));
+        }
     }
 }
