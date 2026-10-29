@@ -928,6 +928,27 @@ fn rule_commands_require_definition_metadata_and_sources() {
     assert!(Cli::try_parse_from(["acli", "data-health", "background-processing"]).is_ok());
 }
 
+#[test]
+fn rule_run_now_reads_one_unsaved_definition_for_a_dry_run() {
+    let id = "00000000-0000-4000-8000-000000000001";
+    let run_now = |extra: &[&'static str]| {
+        let mut args = vec!["acli", "rule", "run-now", id, "--idempotency-key", "check"];
+        args.extend_from_slice(extra);
+        Cli::try_parse_from(args)
+    };
+    assert!(run_now(&["--dry-run", "--definition-stdin"]).is_ok());
+    assert!(run_now(&["--definition-stdin"]).is_err());
+    assert!(
+        run_now(&[
+            "--dry-run",
+            "--definition-stdin",
+            "--definition-file",
+            "rule.toml"
+        ])
+        .is_err()
+    );
+}
+
 #[tokio::test]
 async fn rule_routes_forward_definition_and_run_options() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -991,6 +1012,7 @@ async fn rule_routes_forward_definition_and_run_options() {
             record_id: Some(id),
             dry_run: true,
             definition_file: Some(file.path().to_owned()),
+            definition_stdin: false,
         },
     )
     .await
@@ -3029,6 +3051,19 @@ fn token_stdin_rejects_commands_that_also_read_stdin() {
     assert!(matches!(&error, CliError::Input(_)));
     assert!(error.to_string().contains("--token-stdin"), "{error}");
     assert!(error.to_string().contains("--value-stdin"), "{error}");
+    let error = check(&[
+        "acli",
+        "--token-stdin",
+        "rule",
+        "run-now",
+        "00000000-0000-4000-8000-000000000001",
+        "--idempotency-key",
+        "check",
+        "--dry-run",
+        "--definition-stdin",
+    ])
+    .unwrap_err();
+    assert!(error.to_string().contains("--definition-stdin"), "{error}");
     let error = check(&[
         "acli",
         "auth",

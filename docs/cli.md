@@ -159,7 +159,7 @@ acli rule validate|create --blueprint-id <uuid> [--context-id <uuid>] --stdin
 acli rule update <rule-id> [--accept-existing-violations] --file rule-v2.toml
 acli rule enable <rule-id> [--accept-existing-violations]
 acli rule disable <rule-id>
-acli rule run-now <rule-id> --idempotency-key <key> [--record-id <uuid>] [--dry-run [--definition-file rule-v2.toml]]
+acli rule run-now <rule-id> --idempotency-key <key> [--record-id <uuid>] [--dry-run [--definition-file rule-v2.toml | --definition-stdin]]
 acli rule run-list [--rule-id <uuid>] [--record-id <uuid>] [--scope all-records|record] [--limit <n>] [--offset <n>]
 acli rule run-get <run-id>
 acli rule run-replay <run-id>

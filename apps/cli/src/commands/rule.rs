@@ -70,8 +70,11 @@ pub(crate) enum RuleCommand {
         #[arg(long, default_value_t = false)]
         dry_run: bool,
         /// Dry-run this unsaved definition instead of the current one.
-        #[arg(long, requires = "dry_run")]
+        #[arg(long, requires = "dry_run", conflicts_with = "definition_stdin")]
         definition_file: Option<std::path::PathBuf>,
+        /// Dry-run an unsaved definition read from standard input.
+        #[arg(long, requires = "dry_run")]
+        definition_stdin: bool,
     },
     RunList {
         #[arg(long)]
@@ -236,12 +239,13 @@ pub(crate) async fn rule_command(api: &Api, command: RuleCommand) -> Result<Stri
             record_id,
             dry_run,
             definition_file,
+            definition_stdin,
         } => {
-            let definition = definition_file
-                .map(|file| {
+            let definition = (definition_file.is_some() || definition_stdin)
+                .then(|| {
                     read_source(SourceInput {
-                        file: Some(file),
-                        stdin: false,
+                        file: definition_file,
+                        stdin: definition_stdin,
                     })
                 })
                 .transpose()?;
