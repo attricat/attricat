@@ -355,7 +355,7 @@ acli notification count            # {"count": <unread>}
 acli notification get <id>
 acli notification read <id>        # mark as read
 acli notification unread <id>      # mark as unread
-acli notification read-all         # mark every unread notification as read
+acli notification read-all [--up-to <rfc3339>]  # mark every unread notification as read
 acli notification delete <id>      # permanent
 ```
 

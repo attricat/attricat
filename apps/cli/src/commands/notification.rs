@@ -26,7 +26,12 @@ pub(crate) enum NotificationCommand {
     /// Mark a notification as unread.
     Unread { id: Uuid },
     /// Mark every unread notification as read.
-    ReadAll,
+    ReadAll {
+        /// Only notifications created at or before this instant (RFC 3339),
+        /// such as the newest `created_at` you listed.
+        #[arg(long)]
+        up_to: Option<String>,
+    },
     /// Permanently delete a notification.
     Delete { id: Uuid },
 }
@@ -57,10 +62,10 @@ pub(crate) fn notification_request(
             format!("/notifications/{}", segment(id)),
             Some(json!({"read": false})),
         ),
-        NotificationCommand::ReadAll => (
+        NotificationCommand::ReadAll { up_to } => (
             Method::POST,
             "/notifications/read-all".to_owned(),
-            Some(json!({})),
+            Some(json!({ "up_to": up_to })),
         ),
         NotificationCommand::Delete { id } => (
             Method::DELETE,

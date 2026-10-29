@@ -173,8 +173,23 @@ fn notification_commands_build_requests() {
         Some(json!({"read": false}))
     );
     assert_eq!(
-        parse(&["acli", "notification", "read-all"]).1,
-        "/notifications/read-all"
+        parse(&["acli", "notification", "read-all"]),
+        (
+            Method::POST,
+            "/notifications/read-all".to_owned(),
+            Some(json!({ "up_to": null }))
+        )
+    );
+    assert_eq!(
+        parse(&[
+            "acli",
+            "notification",
+            "read-all",
+            "--up-to",
+            "2026-10-29T10:00:00Z"
+        ])
+        .2,
+        Some(json!({ "up_to": "2026-10-29T10:00:00Z" }))
     );
     assert_eq!(
         parse(&["acli", "notification", "delete", id]),
