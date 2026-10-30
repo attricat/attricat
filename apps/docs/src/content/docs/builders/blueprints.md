@@ -32,6 +32,9 @@ The blueprint editor and the [reusable attribute](/builders/modeling/#reuse-attr
 - Typing suggests keys and values, and hovering a key explains it. Mistakes against the format are underlined as you type.
 - A moment after you stop typing, the editor runs every check that saving runs, without saving. The status above the editor says **Ready to save**, or names the line with the problem, which is also underlined.
 - **Preview** shows the last version that passed the checks. For a blueprint it shows each view and an editable sample record; for a reusable attribute, its field. Sample values are checked against the attribute's `value_schema` and the blueprint's `record_schema`, and are never saved.
+- In a blueprint's preview, a field's details (the ⓘ button beside it) offer **Show in definition**, which selects the attribute's code in the editor; the button beside the view tabs does the same for the view shown. Moving the cursor the other way, into an attribute or a view, makes the preview show and highlight it.
+- **Go to…** (Ctrl+Shift+O, or Command+Shift+O) lists the definition's sections, attributes and views; type part of a name and press Enter to jump there.
+- With the cursor on an attribute code or include alias, every use of it is highlighted. Shift+F12 lists the uses, and F2 renames it everywhere at once. A new revision can't rename codes its records already store values under; add a new attribute instead.
 - Press Ctrl+S (Command+S on a Mac) to save.
 
 ## Step 1: the smallest valid blueprint

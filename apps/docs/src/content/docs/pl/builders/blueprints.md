@@ -32,6 +32,9 @@ Edytor schematów i edytor [atrybutów wielokrotnego użytku](/pl/builders/model
 - Podczas pisania edytor podpowiada klucze i wartości, a po najechaniu na klucz wyjaśnia go. Błędy względem formatu są podkreślane na bieżąco.
 - Chwilę po tym, jak przestaniesz pisać, edytor uruchamia wszystkie kontrole wykonywane przy zapisie, niczego nie zapisując. Status nad edytorem pokazuje **Gotowe do zapisu** albo numer wiersza z problemem, który jest też podkreślony.
 - **Podgląd** pokazuje ostatnią wersję, która przeszła kontrole. Dla schematu pokazuje każdy widok i edytowalny przykładowy rekord, a dla atrybutu wielokrotnego użytku jego pole. Przykładowe wartości są sprawdzane względem `value_schema` atrybutu i `record_schema` schematu i nigdy nie są zapisywane.
+- W podglądzie schematu szczegóły pola (przycisk ⓘ obok niego) zawierają **Pokaż w definicji**, co zaznacza kod atrybutu w edytorze; przycisk obok kart widoków robi to samo dla pokazanego widoku. W drugą stronę: gdy kursor trafi do atrybutu lub widoku, podgląd go pokazuje i wyróżnia.
+- **Przejdź do…** (Ctrl+Shift+O lub Command+Shift+O) wyświetla sekcje, atrybuty i widoki definicji; wpisz fragment nazwy i naciśnij Enter, aby tam przejść.
+- Gdy kursor stoi na kodzie atrybutu lub aliasie mixinu, wszystkie jego użycia są wyróżnione. Shift+F12 je wyświetla, a F2 zmienia nazwę wszędzie naraz. Nowa wersja nie może zmienić kodów, pod którymi rekordy już przechowują wartości; zamiast tego dodaj nowy atrybut.
 - Naciśnij Ctrl+S (Command+S na Macu), aby zapisać.
 
 ## Krok 1: najmniejszy poprawny schemat

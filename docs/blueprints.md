@@ -876,6 +876,10 @@ values; show each key's documentation on hover; and flag YAML syntax errors, unk
 suggestions include workspace blueprints and mixins, attributes declared in the
 definition, relationship hops in table column paths, included mixin attributes
 for `from`, roles, contexts, and view components that fit the block.
+They outline the definition for Go to, find, highlight and rename attribute
+codes and include aliases together with every reference to them, and link the
+blueprint preview with the definition both ways: a field or view leads to its
+declaration, and the cursor's attribute or view is shown in the preview.
 
 The editors read JSON Schemas generated from the Rust parser types:
 `contracts/blueprint-definition-v1.schema.json` and
