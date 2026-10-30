@@ -359,13 +359,14 @@ predicate:
 
     it('offers event trigger keys and the typed trigger variants', async () => {
       const { labels } = await workflow('triggers:\n  - |');
+      // Keys follow the contract's declaration order.
       expect(labels).toEqual([
+        'event_type',
+        'envelope',
+        'facts',
         'attributes',
         'blueprints',
         'change_kinds',
-        'envelope',
-        'event_type',
-        'facts',
         'tags_added',
         'tags_removed',
         'type: manual',
@@ -382,7 +383,7 @@ predicate:
 
     it('completes the keys of a typed trigger', async () => {
       const { labels } = await workflow('triggers:\n  - type: schedule\n    |');
-      expect(labels).toEqual(['cron', 'target_record_id', 'timezone']);
+      expect(labels).toEqual(['cron', 'timezone', 'target_record_id']);
     });
   });
 });
