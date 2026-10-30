@@ -379,13 +379,25 @@ async fn an_operation_action_starts_only_its_operation_for_writers(pool: sqlx::P
         async move { client.post(url).json(&body).send().await.unwrap().status() }
     };
 
-    // The action starts its own operation with the input its manifest fixes.
+    // The action starts its own operation with the input its manifest fixes,
+    // whatever input the browser sends back.
     let mut other_input = start_body(release, "other-input", blueprint, &[record]);
     other_input["input"] = json!({"template": "other"});
-    assert_eq!(
-        start(authenticated_client(), other_input).await,
-        StatusCode::FORBIDDEN
-    );
+    let response = authenticated_client()
+        .post(&url)
+        .json(&other_input)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
+    let run_id = response.json::<Value>().await.unwrap()["run_id"].clone();
+    let stored: Value =
+        sqlx::query_scalar("SELECT input FROM extension_operation_runs WHERE id=$1::uuid")
+            .bind(run_id.as_str().unwrap())
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(stored, json!({"template": "summary"}));
     let mut other_operation = start_body(release, "other-operation", blueprint, &[record]);
     other_operation["operation_id"] = json!("summarize-again");
     assert_eq!(

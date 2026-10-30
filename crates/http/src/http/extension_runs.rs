@@ -158,8 +158,8 @@ impl RunResponse {
 }
 
 /// Starts an interactive operation from an action dialog, or from an action
-/// that names that operation. The host sends an action's run with the input
-/// the manifest fixes; a dialog chooses its own.
+/// that names that operation. An action's run uses the input its manifest
+/// fixes, whatever the browser echoes back; a dialog chooses its own.
 pub(super) async fn start(
     ScopedRepository(repository): ScopedRepository,
     principal: AuthenticatedPrincipal,
@@ -175,12 +175,15 @@ pub(super) async fn start(
     let contribution = repository
         .client_extension_contribution(&extension_id, &contribution_id)
         .await?;
-    let operation_action = match &contribution.invoke {
-        Some(ActionInvocation::Operation(operation)) => {
-            operation.id == input.operation_id && operation.input == input.input
+    // The stored input, not the browser's copy of it: JSON numbers such as
+    // 1.0 do not survive a round trip through JavaScript unchanged.
+    let action_input = match &contribution.invoke {
+        Some(ActionInvocation::Operation(operation)) if operation.id == input.operation_id => {
+            Some(operation.input.clone())
         }
-        _ => false,
+        _ => None,
     };
+    let operation_action = action_input.is_some();
     let selection_surface = contribution.outlet == Some(UiOutlet::ActionDialog) || operation_action;
     if contribution.installed_release_id != input.release_id
         || !selection_surface
@@ -215,7 +218,8 @@ pub(super) async fn start(
         })
         .filter(|operation| operation.interactive.is_some())
         .ok_or_else(|| ApiError::not_found("interactive extension operation"))?;
-    validate_schema(&operation.request_schema, &input.input)
+    let operation_input = action_input.unwrap_or(input.input);
+    validate_schema(&operation.request_schema, &operation_input)
         .map_err(|error| ApiError::invalid_input(error.to_string()))?;
     let run_id = repository
         .start_interactive_extension_operation(StartInteractiveOperation {
@@ -223,7 +227,7 @@ pub(super) async fn start(
             contribution_id,
             expected_release_id: input.release_id,
             operation_id: input.operation_id,
-            input: input.input,
+            input: operation_input,
             idempotency_key: input.idempotency_key,
             record_ids: input.selection.record_ids,
             blueprint_id: input.selection.blueprint_id,
