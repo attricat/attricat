@@ -35,6 +35,7 @@ The blueprint editor and the [reusable attribute](/builders/modeling/#reuse-attr
 - In a blueprint's preview, a field's details (the ⓘ button beside it) offer **Show in definition**, which selects the attribute's code in the editor; the button beside the view tabs does the same for the view shown. Moving the cursor the other way, into an attribute or a view, makes the preview show and highlight it.
 - **Go to…** (Ctrl+Shift+O, or Command+Shift+O) lists the definition's sections, attributes and views; type part of a name and press Enter to jump there.
 - With the cursor on an attribute code or include alias, every use of it is highlighted. Shift+F12 lists the uses, and F2 renames it everywhere at once. A new revision can't rename codes its records already store values under; add a new attribute instead.
+- Drag the divider between the editor and **Preview** to resize them, or choose **Hide preview** to give the editor the full width. Every definition editor remembers the layout.
 - Press Ctrl+S (Command+S on a Mac) to save.
 
 ## Step 1: the smallest valid blueprint

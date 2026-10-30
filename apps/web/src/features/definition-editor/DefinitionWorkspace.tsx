@@ -9,6 +9,7 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
+import { PanelRightCloseIcon, PanelRightOpenIcon } from 'lucide-react';
 import type { editor } from 'monaco-editor';
 import {
   useEffect,
@@ -30,7 +31,9 @@ import type { ReferenceAttribute } from './definitionReferences';
 import { locateDefinitionError } from './definitionErrorLocation';
 import { DefinitionFoldControls } from './DefinitionFoldControls';
 import { DefinitionInsertMenu } from './DefinitionInsertMenu';
+import { useDefinitionLayout } from './definitionLayout';
 import { DefinitionOutlineButton } from './DefinitionOutlineButton';
+import { DefinitionSplitHandle } from './DefinitionSplitHandle';
 import type { DefinitionTarget } from './definitionNavigation';
 import {
   DefinitionCursorContext,
@@ -40,7 +43,7 @@ import {
 import { updateServerDiagnostic } from './definitionLanguage';
 import { snippetEdit, type DefinitionSnippet } from './definitionSnippets';
 import { checkStatuses, type DefinitionCheck } from './useDefinitionCheck';
-import { captionIconSize } from '../../components/iconSizes';
+import { captionIconSize, compactIconSize } from '../../components/iconSizes';
 
 type Mounted = { editor: editor.IStandaloneCodeEditor; monaco: Monaco };
 
@@ -167,6 +170,7 @@ export const DefinitionWorkspace = ({
   const previewHeadingId = useId();
   const [mounted, setMounted] = useState<Mounted>();
   const [cursor, setCursor] = useState<number>();
+  const layout = useDefinitionLayout();
   // Monaco keeps commands registered on mount, so they read the latest
   // handlers through refs instead of capturing stale ones.
   const handlers = useRef({ onChange, onSave, readOnly });
@@ -263,6 +267,21 @@ export const DefinitionWorkspace = ({
         <DefinitionOutlineButton editor={mounted?.editor} />
         <DefinitionFoldControls editor={mounted?.editor} />
         <Box sx={{ flexGrow: 1 }} />
+        <Button
+          aria-pressed={layout.previewHidden}
+          onClick={layout.togglePreview}
+          startIcon={
+            layout.previewHidden ? (
+              <PanelRightOpenIcon aria-hidden size={compactIconSize} />
+            ) : (
+              <PanelRightCloseIcon aria-hidden size={compactIconSize} />
+            )
+          }
+        >
+          {layout.previewHidden
+            ? t('definitionEditor.layout.showPreview')
+            : t('definitionEditor.layout.hidePreview')}
+        </Button>
         <CheckStatusChip
           check={check}
           errorLine={errorLine}
@@ -272,8 +291,13 @@ export const DefinitionWorkspace = ({
       <Box
         sx={{
           display: 'grid',
-          gap: 2,
-          gridTemplateColumns: { lg: 'minmax(0, 3fr) minmax(0, 2fr)' },
+          // At the large breakpoint the split handle is the gap.
+          gap: { lg: 0, xs: 2 },
+          gridTemplateColumns: {
+            lg: layout.previewHidden
+              ? 'minmax(0, 1fr)'
+              : `minmax(0, ${layout.editorShare}fr) auto minmax(0, ${1 - layout.editorShare}fr)`,
+          },
         }}
       >
         <DefinitionEditor
@@ -298,8 +322,16 @@ export const DefinitionWorkspace = ({
           scopeAttributes={scopeAttributes}
           value={value}
         />
+        {!layout.previewHidden && (
+          <DefinitionSplitHandle
+            editorShare={layout.editorShare}
+            onCommit={layout.commitResize}
+            onResize={layout.resize}
+          />
+        )}
         <Paper
           aria-labelledby={previewHeadingId}
+          hidden={layout.previewHidden}
           component="section"
           sx={{
             maxHeight: { lg: definitionEditorHeight },

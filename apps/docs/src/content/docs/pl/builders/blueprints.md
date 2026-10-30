@@ -35,6 +35,7 @@ Edytor schematów i edytor [atrybutów wielokrotnego użytku](/pl/builders/model
 - W podglądzie schematu szczegóły pola (przycisk ⓘ obok niego) zawierają **Pokaż w definicji**, co zaznacza kod atrybutu w edytorze; przycisk obok kart widoków robi to samo dla pokazanego widoku. W drugą stronę: gdy kursor trafi do atrybutu lub widoku, podgląd go pokazuje i wyróżnia.
 - **Przejdź do…** (Ctrl+Shift+O lub Command+Shift+O) wyświetla sekcje, atrybuty i widoki definicji; wpisz fragment nazwy i naciśnij Enter, aby tam przejść.
 - Gdy kursor stoi na kodzie atrybutu lub aliasie mixinu, wszystkie jego użycia są wyróżnione. Shift+F12 je wyświetla, a F2 zmienia nazwę wszędzie naraz. Nowa wersja nie może zmienić kodów, pod którymi rekordy już przechowują wartości; zamiast tego dodaj nowy atrybut.
+- Przeciągnij separator między edytorem a **Podglądem**, aby zmienić ich szerokość, albo wybierz **Ukryj podgląd**, aby edytor zajął całą szerokość. Każdy edytor definicji zapamiętuje ten układ.
 - Naciśnij Ctrl+S (Command+S na Macu), aby zapisać.
 
 ## Krok 1: najmniejszy poprawny schemat

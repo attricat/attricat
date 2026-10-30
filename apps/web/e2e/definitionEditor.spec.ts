@@ -186,6 +186,31 @@ test('renames a new blueprint attribute everywhere it is used', async ({
   ).toBeVisible();
 });
 
+test('resizes and hides the definition preview', async ({ page }) => {
+  await page.goto('/manage/blueprints/new');
+  await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
+  await expect(page.getByText('Ready to save')).toBeVisible();
+  const handle = page.getByRole('separator', {
+    name: 'Resize the editor and preview',
+  });
+  const box = (await handle.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x - 200, box.y + box.height / 2, { steps: 5 });
+  await page.mouse.up();
+  await expect(handle).not.toHaveAttribute('aria-valuenow', '60');
+
+  await page.getByRole('button', { name: 'Hide preview' }).click();
+  await expect(preview(page)).toBeHidden();
+  await page.reload();
+  await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
+  await expect(
+    page.getByRole('button', { name: 'Show preview' }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Show preview' }).click();
+  await expect(preview(page)).toBeVisible();
+});
+
 test('checks, previews and inserts into a reusable attribute definition', async ({
   page,
 }) => {

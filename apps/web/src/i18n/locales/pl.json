@@ -1123,6 +1123,11 @@
       "invalidAtLine": "Problem w wierszu {{line}}",
       "goToLine": "Przejdź do wiersza {{line}}"
     },
+    "layout": {
+      "resize": "Zmień szerokość edytora i podglądu",
+      "hidePreview": "Ukryj podgląd",
+      "showPreview": "Pokaż podgląd"
+    },
     "outline": {
       "button": "Przejdź do…",
       "shortcut": "Ctrl+Shift+O (lub Command+Shift+O)"
