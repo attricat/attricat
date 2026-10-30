@@ -870,6 +870,19 @@
     "requiredRulesLimit": "A channel can require at most {{max}} rules. Remove one before adding another."
   },
   "blueprints": {
+    "review": {
+      "title": "Changes from version {{version}}",
+      "summaryPending": "The attribute summary appears once the definition passes the save checks.",
+      "sameAttributes": "Keeps the same attributes.",
+      "added_one": "Adds the attribute {{codes}}.",
+      "added_other": "Adds the attributes {{codes}}.",
+      "removed_one": "Removes the attribute {{codes}}. Records migrated to this revision won't keep its values.",
+      "removed_other": "Removes the attributes {{codes}}. Records migrated to this revision won't keep their values.",
+      "loadingDiff": "Loading the comparison…",
+      "unsaved": "Unsaved changes",
+      "sourceVersion": "Version {{version}}",
+      "button": "Review changes"
+    },
     "blueprint": "Blueprint",
     "blueprints": "Blueprints",
     "newBlueprint": "New blueprint",
@@ -1082,6 +1095,11 @@
       "empty": "The preview appears once the definition passes the save checks.",
       "stale": "Showing the last version that passed the save checks.",
       "showView": "Show the {{view}} view in the definition"
+    },
+    "problems": {
+      "count_one": "{{count}} problem",
+      "count_other": "{{count}} problems",
+      "next": "Show the next problem (F8)"
     },
     "rename": {
       "nothingToRename": "There is no attribute code or include alias here to rename.",

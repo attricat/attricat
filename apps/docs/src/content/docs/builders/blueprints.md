@@ -36,6 +36,8 @@ The blueprint editor and the [reusable attribute](/builders/modeling/#reuse-attr
 - **Go to…** (Ctrl+Shift+O, or Command+Shift+O) lists the definition's sections, attributes and views; type part of a name and press Enter to jump there.
 - With the cursor on an attribute code or include alias, every use of it is highlighted. Shift+F12 lists the uses, and F2 renames it everywhere at once. A new revision can't rename codes its records already store values under; add a new attribute instead.
 - Drag the divider between the editor and **Preview** to resize them, or choose **Hide preview** to give the editor the full width. Every definition editor remembers the layout.
+- When the editor marks mistakes, a button above it counts them; each click (or F8) shows the next one with its explanation.
+- When you revise a blueprint, **Review changes** compares your edits with the version you started from and names the attributes the revision adds and removes, before you save.
 - Press Ctrl+S (Command+S on a Mac) to save.
 
 ## Step 1: the smallest valid blueprint

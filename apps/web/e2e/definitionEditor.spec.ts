@@ -211,6 +211,45 @@ test('resizes and hides the definition preview', async ({ page }) => {
   await expect(preview(page)).toBeVisible();
 });
 
+test('steps through problems and reviews a revision before saving', async ({
+  page,
+}) => {
+  const code = `reviewed_${suffix()}`;
+  const definition = (attributes: string) =>
+    `format_version: 1\ncode: ${code}\nname: Reviewed\nkind: record\n\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\n\nattributes:\n  - code: title\n    value_type: string\n${attributes}`;
+  await page.goto('/manage/blueprints/new');
+  await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
+  await replaceDefinition(
+    page,
+    definition('  - code: notes\n    value_type: string\n    colour: red\n'),
+  );
+  await page.getByRole('button', { name: '1 problem' }).click();
+  await expect(page.locator('.monaco-editor .marker-widget')).toBeVisible();
+
+  await replaceDefinition(
+    page,
+    definition('  - code: notes\n    value_type: string\n'),
+  );
+  await expect(page.getByRole('button', { name: /problem/ })).toBeHidden();
+  await expect(page.getByText('Ready to save')).toBeVisible();
+  await page.keyboard.press('Control+s');
+  await expect(page).toHaveURL(/\/manage\/blueprints\/[0-9a-f-]{36}$/);
+
+  await page.goto(`${new URL(page.url()).pathname}/revisions/1/new`);
+  await expect(
+    page.getByRole('button', { name: 'Review changes' }),
+  ).toBeDisabled();
+  await replaceDefinition(page, definition(''));
+  await expect(page.getByText('Ready to save')).toBeVisible();
+  await page.getByRole('button', { name: 'Review changes' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Changes from version 1' });
+  await expect(dialog.getByRole('alert')).toContainText(
+    'Removes the attribute notes.',
+  );
+  await dialog.getByRole('button', { name: 'Save draft' }).click();
+  await expect(page).toHaveURL(/\/manage\/blueprints\/[0-9a-f-]{36}$/);
+});
+
 test('checks, previews and inserts into a reusable attribute definition', async ({
   page,
 }) => {

@@ -5,8 +5,10 @@ import {
   Button,
   Chip,
   CircularProgress,
+  IconButton,
   Paper,
   Stack,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import { PanelRightCloseIcon, PanelRightOpenIcon } from 'lucide-react';
@@ -33,6 +35,7 @@ import { DefinitionFoldControls } from './DefinitionFoldControls';
 import { DefinitionInsertMenu } from './DefinitionInsertMenu';
 import { useDefinitionLayout } from './definitionLayout';
 import { DefinitionOutlineButton } from './DefinitionOutlineButton';
+import { DefinitionProblemsButton } from './DefinitionProblemsButton';
 import { DefinitionSplitHandle } from './DefinitionSplitHandle';
 import type { DefinitionTarget } from './definitionNavigation';
 import {
@@ -267,21 +270,29 @@ export const DefinitionWorkspace = ({
         <DefinitionOutlineButton editor={mounted?.editor} />
         <DefinitionFoldControls editor={mounted?.editor} />
         <Box sx={{ flexGrow: 1 }} />
-        <Button
-          aria-pressed={layout.previewHidden}
-          onClick={layout.togglePreview}
-          startIcon={
-            layout.previewHidden ? (
+        <DefinitionProblemsButton mounted={mounted} />
+        <Tooltip
+          title={
+            layout.previewHidden
+              ? t('definitionEditor.layout.showPreview')
+              : t('definitionEditor.layout.hidePreview')
+          }
+        >
+          <IconButton
+            aria-label={
+              layout.previewHidden
+                ? t('definitionEditor.layout.showPreview')
+                : t('definitionEditor.layout.hidePreview')
+            }
+            onClick={layout.togglePreview}
+          >
+            {layout.previewHidden ? (
               <PanelRightOpenIcon aria-hidden size={compactIconSize} />
             ) : (
               <PanelRightCloseIcon aria-hidden size={compactIconSize} />
-            )
-          }
-        >
-          {layout.previewHidden
-            ? t('definitionEditor.layout.showPreview')
-            : t('definitionEditor.layout.hidePreview')}
-        </Button>
+            )}
+          </IconButton>
+        </Tooltip>
         <CheckStatusChip
           check={check}
           errorLine={errorLine}

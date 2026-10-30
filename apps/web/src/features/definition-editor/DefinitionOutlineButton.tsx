@@ -20,7 +20,7 @@ export const DefinitionOutlineButton = ({
 }) => {
   const { t } = useTranslation();
   return (
-    <Tooltip title={t('definitionEditor.outline.shortcut')}>
+    <Tooltip describeChild title={t('definitionEditor.outline.shortcut')}>
       <span>
         <Button
           disabled={!editor}

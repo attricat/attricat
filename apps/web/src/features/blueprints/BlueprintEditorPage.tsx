@@ -1,8 +1,10 @@
 import { blueprintRevisionOptions } from './queryOptions';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { Alert } from '@mui/material';
-import { useMemo } from 'react';
+import { Alert, Button } from '@mui/material';
+import { GitCompareArrowsIcon } from 'lucide-react';
+import { compactIconSize } from '../../components/iconSizes';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
@@ -17,6 +19,7 @@ import {
   validateBlueprint,
 } from './api';
 import { blueprintTemplates } from './blueprintEditorUtils';
+import { BlueprintChangesDialog } from './BlueprintChangesDialog';
 import { BlueprintViewsPreview } from './BlueprintViewsPreview';
 import { BlueprintIcon } from '../../components/systemIcons';
 import { errorMessage } from '../../api/errors';
@@ -60,6 +63,7 @@ export const BlueprintEditorPage = ({
     templates: blueprintTemplates,
   });
   const { definition, isDirty } = editor;
+  const [reviewOpen, setReviewOpen] = useState(false);
   const savedAttributeCodes = useMemo(
     () => sourceRevision?.attributes.map(({ code }) => code),
     [sourceRevision],
@@ -171,16 +175,49 @@ export const BlueprintEditorPage = ({
         readOnly={save.isPending}
         savedAttributeCodes={savedAttributeCodes}
         toolbar={
-          editor.creating && (
+          editor.creating ? (
             <DefinitionTemplatesButton
               disabled={save.isPending}
               onClick={editor.openTemplates}
             />
+          ) : (
+            <Button
+              disabled={!isDirty || !sourceRevision}
+              onClick={() => setReviewOpen(true)}
+              startIcon={
+                <GitCompareArrowsIcon aria-hidden size={compactIconSize} />
+              }
+            >
+              {t('blueprints.review.button')}
+            </Button>
           )
         }
         value={definition}
       />
       <DefinitionSaveHint unchanged={!editor.creating && !isDirty} />
+      {sourceRevision && savedAttributeCodes && (
+        <BlueprintChangesDialog
+          checkedAttributeCodes={
+            check.result && !check.stale
+              ? check.result.attributes.map(({ code }) => code)
+              : undefined
+          }
+          definition={definition}
+          error={save.error}
+          isPending={save.isPending}
+          onClose={() => setReviewOpen(false)}
+          onSave={saveDefinition}
+          open={reviewOpen}
+          saveLabel={
+            save.isPending ? t('blueprints.saving') : t('blueprints.saveDraft')
+          }
+          source={{
+            attributeCodes: savedAttributeCodes,
+            definition: sourceRevision.blueprint.definition,
+            version: sourceRevision.blueprint.version,
+          }}
+        />
+      )}
     </PageContainer>
   );
 };

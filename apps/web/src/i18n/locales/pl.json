@@ -924,6 +924,23 @@
     "requiredRulesLimit": "Kanał może wymagać najwyżej {{max}} reguł. Usuń jedną, zanim dodasz kolejną."
   },
   "blueprints": {
+    "review": {
+      "title": "Zmiany względem wersji {{version}}",
+      "summaryPending": "Podsumowanie atrybutów pojawi się, gdy definicja przejdzie kontrole zapisu.",
+      "sameAttributes": "Zachowuje te same atrybuty.",
+      "added_one": "Dodaje atrybut {{codes}}.",
+      "added_few": "Dodaje atrybuty {{codes}}.",
+      "added_many": "Dodaje atrybuty {{codes}}.",
+      "added_other": "Dodaje atrybuty {{codes}}.",
+      "removed_one": "Usuwa atrybut {{codes}}. Rekordy zmigrowane do tej wersji nie zachowają jego wartości.",
+      "removed_few": "Usuwa atrybuty {{codes}}. Rekordy zmigrowane do tej wersji nie zachowają ich wartości.",
+      "removed_many": "Usuwa atrybuty {{codes}}. Rekordy zmigrowane do tej wersji nie zachowają ich wartości.",
+      "removed_other": "Usuwa atrybuty {{codes}}. Rekordy zmigrowane do tej wersji nie zachowają ich wartości.",
+      "loadingDiff": "Wczytywanie porównania…",
+      "unsaved": "Niezapisane zmiany",
+      "sourceVersion": "Wersja {{version}}",
+      "button": "Przejrzyj zmiany"
+    },
     "blueprint": "Schemat",
     "blueprints": "Schematy",
     "newBlueprint": "Nowy schemat",
@@ -1138,6 +1155,13 @@
       "empty": "Podgląd pojawi się, gdy definicja przejdzie kontrole zapisu.",
       "stale": "Pokazano ostatnią wersję, która przeszła kontrole zapisu.",
       "showView": "Pokaż widok {{view}} w definicji"
+    },
+    "problems": {
+      "count_one": "{{count}} problem",
+      "count_few": "{{count}} problemy",
+      "count_many": "{{count}} problemów",
+      "count_other": "{{count}} problemu",
+      "next": "Pokaż następny problem (F8)"
     },
     "rename": {
       "nothingToRename": "Tutaj nie ma kodu atrybutu ani aliasu mixinu do zmiany nazwy.",
