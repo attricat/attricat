@@ -3,6 +3,9 @@
 //! ordinary key rather than a YAML 1.1 merge, and alias expansion stays within
 //! the parser's default budget. The web editor parses with the same rules.
 
+mod layout;
+
+pub use layout::rewrite_preserving_layout;
 use serde::{Serialize, de::DeserializeOwned};
 use serde_saphyr::{DuplicateKeyPolicy, MergeKeyPolicy, Options};
 use thiserror::Error;

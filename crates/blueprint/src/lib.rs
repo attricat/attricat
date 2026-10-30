@@ -15,7 +15,7 @@ pub use ast::{
     MAX_UNIQUE_KEY_ATTRIBUTES, PublicationPolicy, ResolvedInclude, TableColumn, UNIQUE_KEY_SCOPES,
     UniqueKeyDefinition, ViewDefinition, ViewNode, ViewSection, ViewTab,
 };
-pub use compiler::{compile, raw_hash};
+pub use compiler::{canonical_definition_hash, compile, raw_hash};
 pub use component_manifest::validate_table_renderer;
 pub use error::BlueprintError;
 pub use generated::{

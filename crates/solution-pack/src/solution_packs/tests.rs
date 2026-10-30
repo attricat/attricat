@@ -2472,13 +2472,78 @@ fn planner_rewrites_relationship_target_lists() {
 }
 
 #[test]
+fn planner_keeps_the_authors_comments_and_order() {
+    let product = br#"# Products the shop sells.
+format_version: 1
+kind: record
+name: Product # shown in navigation
+code: product
+attributes:
+  - code: name
+    value_type: string
+  # Products may sit in several categories.
+  - code: categories
+    value_type: relationship
+    target_blueprints: [blueprints/category, blueprints/product]
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+"#;
+    let mut manifest = manifest_value();
+    manifest["resources"]["blueprints"][0]["sha256"] = json!(digest(product));
+    let mut files = valid_files();
+    files[0] = (files[0].0, product);
+    let pack = ValidatedSolutionPack::from_tar_zst(&archive(&manifest, &files)).unwrap();
+    let plan = build_solution_pack_plan(
+        &pack,
+        "ecom",
+        BlueprintPublication::Publish,
+        &PlanningWorkspaceSnapshot {
+            workspace_id: uuid::Uuid::nil(),
+            physical_codes: BTreeSet::from(["default".to_owned()]),
+            existing_blueprints: BTreeMap::new(),
+            existing_presentation_assets: BTreeMap::new(),
+            installed_extensions: BTreeMap::new(),
+            explore_navigation: Vec::new(),
+            explore_navigation_valid: true,
+            extension_layout: serde_json::json!({"version":1,"outlets":{}}),
+            extension_layout_valid: true,
+            role_codes: BTreeSet::new(),
+            published_record_codes: BTreeSet::new(),
+            seed: Default::default(),
+        },
+    )
+    .unwrap();
+    assert!(plan.ready);
+    let definition = plan
+        .actions
+        .iter()
+        .find(|action| action.logical_key == "blueprints/product")
+        .unwrap()
+        .normalized_payload
+        .as_ref()
+        .unwrap()["definition"]
+        .as_str()
+        .unwrap();
+    let expected = std::str::from_utf8(product)
+        .unwrap()
+        .replace("code: product", "code: ecom_product")
+        .replace(
+            "[blueprints/category, blueprints/product]",
+            "[ecom_category, ecom_product]",
+        );
+    assert_eq!(definition, expected);
+}
+
+#[test]
 fn planner_rewrites_portable_includes_to_mapped_revision_one() {
     let record = br#"format_version: 1
 code: product
 name: Product
 kind: record
 includes:
-  - alias: base
+  - alias: base # shared fields
     key: blueprints/base
 views:
   dropdown_option:
@@ -2537,9 +2602,11 @@ attributes:
     let definition = plan.actions[1].normalized_payload.as_ref().unwrap()["definition"]
         .as_str()
         .unwrap();
-    assert!(definition.contains("code: mapped_base"));
-    assert!(definition.contains("version: 1"));
-    assert!(!definition.contains("key: blueprints/base"));
+    assert!(
+        definition
+            .contains("  - alias: base # shared fields\n    code: mapped_base\n    version: 1\n"),
+        "{definition}"
+    );
 
     let base_definition = plan.actions[0].normalized_payload.as_ref().unwrap()["definition"]
         .as_str()
@@ -2560,7 +2627,10 @@ attributes:
                     code: "mapped_base".to_owned(),
                     version: 7,
                     kind: "mixin".to_owned(),
-                    canonical_definition_hash: attricat_blueprint::raw_hash(base_definition),
+                    canonical_definition_hash: attricat_blueprint::canonical_definition_hash(
+                        base_definition,
+                    )
+                    .unwrap(),
                     definition_hash: attricat_blueprint::raw_hash(base_definition),
                 },
             )]),
@@ -2732,7 +2802,10 @@ attributes:
                     code: "shared".to_owned(),
                     version: 3,
                     kind: "record".to_owned(),
-                    canonical_definition_hash: attricat_blueprint::raw_hash(&definition),
+                    canonical_definition_hash: attricat_blueprint::canonical_definition_hash(
+                        &definition,
+                    )
+                    .unwrap(),
                     definition_hash: attricat_blueprint::raw_hash(&definition),
                 },
             )]),
@@ -2886,7 +2959,10 @@ fn planner_blocks_required_resources_when_optional_dependencies_are_skipped() {
                     code: "ecom_product".to_owned(),
                     version: 1,
                     kind: "record".to_owned(),
-                    canonical_definition_hash: attricat_blueprint::raw_hash(product_definition),
+                    canonical_definition_hash: attricat_blueprint::canonical_definition_hash(
+                        product_definition,
+                    )
+                    .unwrap(),
                     definition_hash: attricat_blueprint::raw_hash(product_definition),
                 },
             )]),
@@ -3091,7 +3167,10 @@ attributes:
                         code: "deps_main".to_owned(),
                         version: 1,
                         kind: main_kind.to_owned(),
-                        canonical_definition_hash: attricat_blueprint::raw_hash(main_definition),
+                        canonical_definition_hash: attricat_blueprint::canonical_definition_hash(
+                            main_definition,
+                        )
+                        .unwrap(),
                         definition_hash: attricat_blueprint::raw_hash(main_definition),
                     },
                 )]),
@@ -3400,9 +3479,10 @@ attributes:
                 code: code.to_owned(),
                 version,
                 kind: "record".to_owned(),
-                canonical_definition_hash: attricat_blueprint::raw_hash(
+                canonical_definition_hash: attricat_blueprint::canonical_definition_hash(
                     payload["definition"].as_str().unwrap(),
-                ),
+                )
+                .unwrap(),
                 definition_hash: attricat_blueprint::raw_hash(
                     payload["definition"].as_str().unwrap(),
                 ),

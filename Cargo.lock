@@ -759,6 +759,7 @@ dependencies = [
 name = "attricat-yaml"
 version = "0.1.0"
 dependencies = [
+ "granit-parser",
  "serde",
  "serde-saphyr",
  "serde_json",

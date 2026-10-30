@@ -357,3 +357,29 @@ pub fn raw_hash(source: &str) -> String {
     let hash = Sha256::digest(source.as_bytes());
     format!("{hash:x}")
 }
+
+/// Digest of what a definition says rather than how it is written: comments,
+/// key order, quoting and the formatting of embedded JSON schemas do not
+/// change it. `None` when the source is not YAML.
+pub fn canonical_definition_hash(source: &str) -> Option<String> {
+    fn parsed_json(schema: Option<&mut serde_json::Value>) {
+        if let Some(schema) = schema
+            && let Some(parsed) = schema
+                .as_str()
+                .and_then(|text| serde_json::from_str(text).ok())
+        {
+            *schema = parsed;
+        }
+    }
+    let mut value: serde_json::Value = attricat_yaml::from_str(source).ok()?;
+    parsed_json(value.get_mut("record_schema"));
+    if let Some(attributes) = value
+        .get_mut("attributes")
+        .and_then(serde_json::Value::as_array_mut)
+    {
+        for attribute in attributes {
+            parsed_json(attribute.get_mut("value_schema"));
+        }
+    }
+    attricat_domain::canonical_json::canonical_json_sha256(&value).ok()
+}

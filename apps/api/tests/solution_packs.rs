@@ -3177,9 +3177,13 @@ async fn explicit_exact_blueprint_mapping_reuses_without_mutation_and_revalidate
     );
 
     let shared_id = first["mappings"][0]["target_id"].as_str().unwrap();
-    let revision_definition = std::str::from_utf8(PRODUCT_BLUEPRINT)
-        .unwrap()
-        .replace("code: product", "code: shared_product");
+    // A comment makes a new revision that still exactly matches the pack.
+    let revision_definition = format!(
+        "# Revised by hand.\n{}",
+        std::str::from_utf8(PRODUCT_BLUEPRINT)
+            .unwrap()
+            .replace("code: product", "code: shared_product")
+    );
     let revision = client
         .post(format!("{base_url}/blueprints/{shared_id}/versions"))
         .json(&json!({"definition":revision_definition}))

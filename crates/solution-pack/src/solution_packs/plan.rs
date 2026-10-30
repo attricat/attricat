@@ -943,11 +943,12 @@ fn plan_blueprint_outcomes(
             workspace,
             manifest,
         )?;
-        let canonical_definition_hash = attricat_blueprint::raw_hash(
+        let canonical_definition_hash = attricat_blueprint::canonical_definition_hash(
             normalized["definition"]
                 .as_str()
                 .expect("normalized blueprint definition is a string"),
-        );
+        )
+        .expect("normalized blueprint definition is YAML");
         let explicitly_mapped = mapping.mapping_kind == MappingKind::Existing;
         let mapping_compatible = explicitly_mapped && {
             let existing = &workspace.existing_blueprints[logical_key];
@@ -1676,9 +1677,14 @@ pub(super) fn normalized_blueprint_payload(
             })
         })
         .collect::<Vec<_>>();
-    let definition = attricat_yaml::to_string(&value).map_err(|_| {
-        SolutionPackError::Invalid(format!("blueprint '{}' is invalid", blueprint.key()))
-    })?;
+    // Edit the author's text in place so their comments and layout survive;
+    // serialize the value only when that edit cannot be made.
+    let definition = match attricat_yaml::rewrite_preserving_layout(blueprint.source(), &value) {
+        Some(definition) => definition,
+        None => attricat_yaml::to_string(&value).map_err(|_| {
+            SolutionPackError::Invalid(format!("blueprint '{}' is invalid", blueprint.key()))
+        })?,
+    };
     Ok(serde_json::json!({
         "definition": definition,
         "version": 1,

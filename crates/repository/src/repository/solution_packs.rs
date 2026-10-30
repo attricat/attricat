@@ -684,9 +684,7 @@ async fn latest_published_blueprint(
             "existing blueprint '{code}' does not match its stored definition evidence"
         )));
     }
-    let canonical_definition = attricat_yaml::from_str::<Value>(&existing.5)
-        .ok()
-        .and_then(|value| attricat_yaml::to_string(&value).ok())
+    let canonical_definition_hash = attricat_blueprint::canonical_definition_hash(&existing.5)
         .ok_or_else(|| {
             RepositoryError::InvalidSolutionPackPlan(format!(
                 "existing blueprint '{code}' cannot be canonicalized"
@@ -697,7 +695,7 @@ async fn latest_published_blueprint(
         code: existing.1,
         version: existing.2,
         kind: existing.3,
-        canonical_definition_hash: attricat_blueprint::raw_hash(&canonical_definition),
+        canonical_definition_hash,
         definition_hash: existing.4,
     }))
 }
