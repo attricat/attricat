@@ -17,9 +17,9 @@ describe('BlueprintViewsPreview', () => {
             { code: 'make', name: 'Make', value_type: 'string' },
           ]}
           definition={`
-[[unique_keys]]
-code = "vin_make"
-attributes = ["vin", "make"]
+unique_keys:
+  - code: vin_make
+    attributes: [vin, make]
 `}
           views={{
             detail: {

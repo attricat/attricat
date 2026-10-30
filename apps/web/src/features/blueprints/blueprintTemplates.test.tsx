@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { parse } from 'smol-toml';
+import { parse } from 'yaml';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import '../../i18n';

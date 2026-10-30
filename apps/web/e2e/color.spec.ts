@@ -19,21 +19,28 @@ for (const mode of ['light', 'dark'] as const) {
       code,
       'Color samples',
       `
-[[attributes]]
-code = "title"
-value_type = "string"
-[[attributes]]
-code = "hex"
-value_type = "string"
+attributes:
+  - code: title
+    value_type: string
+  - code: hex
+    value_type: string
 `,
       {
         views: `
-[views.detail]
-type = "stack"
-children = [{ type = "field", field = "title" }, { type = "field", field = "hex", component = { id = "attricat.color_display", version = 1 } }]
-[views.table]
-type = "table"
-columns = [{ field = "title" }, { field = "hex", renderer = { id = "attricat.color_display", version = 1 } }]
+views:
+  detail:
+    type: stack
+    children:
+      - {type: field, field: title}
+      - type: field
+        field: hex
+        component: {id: attricat.color_display, version: 1}
+  table:
+    type: table
+    columns:
+      - {field: title}
+      - field: hex
+        renderer: {id: attricat.color_display, version: 1}
 `,
       },
     );

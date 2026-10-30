@@ -1,8 +1,8 @@
 import { Paper, Typography } from '@mui/material';
-import { TomlEditor } from '../../components/TomlEditor';
+import { YamlEditor } from '../../components/YamlEditor';
 import { editorHeight } from './constants';
 
-/** A read-only view of one workflow revision's TOML definition. */
+/** A read-only view of one workflow revision's YAML definition. */
 export const WorkflowSourcePanel = ({
   definition,
   title,
@@ -14,7 +14,7 @@ export const WorkflowSourcePanel = ({
     <Typography component="h2" variant="h6">
       {title}
     </Typography>
-    <TomlEditor
+    <YamlEditor
       ariaLabel={title}
       height={editorHeight}
       marginTop={1}

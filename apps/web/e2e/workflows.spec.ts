@@ -16,7 +16,7 @@ test('authors, enables, runs and disables a manual workflow', async ({
   const blueprint = await createRecordBlueprint(
     code,
     'Workflow product',
-    '[[attributes]]\ncode = "title"\nvalue_type = "string"\n\n[[attributes]]\ncode = "review_state"\nvalue_type = "string"',
+    'attributes:\n  - code: title\n    value_type: string\n  - code: review_state\n    value_type: string',
   );
   const record = await createRecord(blueprint, [
     scalar('title', 'Workflow subject'),
@@ -27,20 +27,18 @@ test('authors, enables, runs and disables a manual workflow', async ({
   await page.getByRole('link', { name: 'New workflow' }).click();
   await replaceDefinition(
     page,
-    `format_version = 2
-code = "${workflowCode}"
-name = "${workflowName}"
-
-[[triggers]]
-type = "manual"
-
-[[actions]]
-type = "attribute_write"
-attribute_code = "review_state"
-fixed = "reviewed"
+    `format_version: 2
+code: ${workflowCode}
+name: ${workflowName}
+triggers:
+  - type: manual
+actions:
+  - type: attribute_write
+    attribute_code: review_state
+    fixed: reviewed
 `,
   );
-  await page.getByRole('button', { name: 'Validate TOML' }).click();
+  await page.getByRole('button', { name: 'Validate YAML' }).click();
   await expect(
     page.getByText(`Valid: ${workflowName} has 1 triggers and 1 actions.`),
   ).toBeVisible();
@@ -60,7 +58,7 @@ fixed = "reviewed"
   await page.getByRole('tab', { name: 'Source' }).click();
   await expect(
     page.getByRole('tabpanel').locator('.monaco-editor .view-lines'),
-  ).toContainText(`code = "${workflowCode}"`);
+  ).toContainText(`code: ${workflowCode}`);
   await page.getByRole('tab', { name: 'Compare' }).click();
   await expect(
     page.getByRole('tabpanel').locator('.monaco-diff-editor'),

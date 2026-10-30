@@ -22,7 +22,7 @@ import type { LexiconFile } from './schemas';
 import { useLexiconMutations } from './useLexiconMutations';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 
-/** Imports a JSON or TOML lexicon file, the format `acli lexicon export` writes. */
+/** Imports a JSON or YAML lexicon file, the format `acli lexicon export` writes. */
 export const ImportLexiconDialog = ({
   onClose,
   onImported,

@@ -8,7 +8,7 @@ test('translates a blueprint name reference and falls back after deleting it', a
   const blueprint = await createRecordBlueprint(
     `lexicon_${suffix()}`,
     `{{${key}}}`,
-    '[[attributes]]\ncode = "title"\nvalue_type = "string"',
+    'attributes:\n  - code: title\n    value_type: string',
   );
   const blueprintUrl = `/manage/blueprints/${blueprint.blueprint.id}`;
 

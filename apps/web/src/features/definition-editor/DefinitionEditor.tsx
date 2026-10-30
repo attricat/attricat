@@ -2,7 +2,7 @@ import type { Monaco } from '@monaco-editor/react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { editor } from 'monaco-editor';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { TomlEditor, type TomlEditorProps } from '../../components/TomlEditor';
+import { YamlEditor, type YamlEditorProps } from '../../components/YamlEditor';
 import { diagnosticsDelayMs, type DefinitionKind } from './constants';
 import {
   attachDefinitionModel,
@@ -24,7 +24,7 @@ const definitionEditorOptions: editor.IStandaloneEditorConstructionOptions = {
 type MountedEditor = { model: editor.ITextModel; monaco: Monaco };
 
 /**
- * A TOML editor that completes, documents, and validates a blueprint,
+ * A YAML editor that completes, documents, and validates a blueprint,
  * reusable attribute or rule definition from its Rust-derived contract.
  */
 export const DefinitionEditor = ({
@@ -33,7 +33,7 @@ export const DefinitionEditor = ({
   scopeAttributes,
   value,
   ...props
-}: Omit<TomlEditorProps, 'options'> & {
+}: Omit<YamlEditorProps, 'options'> & {
   kind: DefinitionKind;
   /** Attributes the definition refers to without declaring them. */
   scopeAttributes?: readonly ReferenceAttribute[];
@@ -65,7 +65,7 @@ export const DefinitionEditor = ({
   }, [kind, mounted, value]);
 
   return (
-    <TomlEditor
+    <YamlEditor
       {...props}
       onMount={(mountedEditor, monaco) => {
         const model = mountedEditor.getModel();

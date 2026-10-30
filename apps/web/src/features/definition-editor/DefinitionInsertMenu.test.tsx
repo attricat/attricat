@@ -5,10 +5,12 @@ import '../../i18n';
 import { definitionKinds } from './constants';
 import { DefinitionInsertMenu } from './DefinitionInsertMenu';
 
-const definition = `code = "size"
-name = "Size"
-value_type = "string"
-value_schema = { type = "string", enum = ["s"] }
+const definition = `code: size
+name: Size
+value_type: string
+value_schema:
+  type: string
+  enum: [s]
 `;
 
 const renderMenu = () => {

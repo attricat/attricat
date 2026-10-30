@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import '../../i18n';
-import { scanToml } from '../../components/tomlOutline';
+import { scanYaml } from '../../components/yamlOutline';
 import { definitionKinds } from './constants';
 import type { DefinitionReferences } from './definitionReferences';
 import {
@@ -26,27 +26,26 @@ const references: DefinitionReferences = {
   roles: vi.fn(async () => ['attricat_manager']),
 };
 
-const definition = (target: string) => `format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[[attributes]]
-code = "maker"
-value_type = "relationship"
-target_blueprint = "${target}"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["maker"]
+const definition = (target: string) => `format_version: 1
+code: product
+name: Product
+kind: record
+attributes:
+  - code: maker
+    value_type: relationship
+    target_blueprint: ${target}
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [maker]
 `;
 
 const at = (text: string, value: string) => {
-  const outline = scanToml(text);
+  const outline = scanYaml(text);
   const target = referenceAt(
     definitionKinds.blueprint,
     outline,
-    text.lastIndexOf(`"${value}"`) + 1,
+    text.lastIndexOf(value),
   );
   return { context: { outline, references }, outline, target: target! };
 };
@@ -73,7 +72,7 @@ describe('definition reference targets', () => {
   it('warns about blueprints the workspace does not have', async () => {
     const text = definition('brnd');
     const warnings = await unknownReferences(definitionKinds.blueprint, {
-      outline: scanToml(text),
+      outline: scanYaml(text),
       references,
     });
     expect(
@@ -84,7 +83,7 @@ describe('definition reference targets', () => {
     ).toEqual([
       {
         message: '“brnd” does not exist in this workspace.',
-        source: '"brnd"',
+        source: 'brnd',
       },
     ]);
   });
@@ -93,9 +92,7 @@ describe('definition reference targets', () => {
     const text = definition('brand');
     const { outline, target } = at(text, 'maker');
     const declared = referenceDeclaration(outline, target);
-    expect(declared && text.slice(declared.start, declared.end)).toBe(
-      '"maker"',
-    );
+    expect(declared && text.slice(declared.start, declared.end)).toBe('maker');
     expect(declared!.start).toBeLessThan(text.indexOf('fields'));
   });
 });

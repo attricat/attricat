@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-/** A TOML definition kept by the source editors. */
+/** A YAML definition kept by the source editors. */
 export const definitionDraftSchema = z.string();
 
 /** Scalar and relationship field values keyed by attribute code. */

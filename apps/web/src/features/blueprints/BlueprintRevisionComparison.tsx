@@ -7,9 +7,9 @@ import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { LoadingState } from '../../components/LoadingState';
 import { RevisionSelect } from '../../components/RevisionSelect';
 
-const TomlDiffEditor = lazy(() =>
-  import('../../components/TomlDiffEditor').then(({ TomlDiffEditor }) => ({
-    default: TomlDiffEditor,
+const YamlDiffEditor = lazy(() =>
+  import('../../components/YamlDiffEditor').then(({ YamlDiffEditor }) => ({
+    default: YamlDiffEditor,
   })),
 );
 
@@ -66,7 +66,7 @@ export const BlueprintRevisionComparison = ({
           }
         >
           {left.data && right.data && (
-            <TomlDiffEditor
+            <YamlDiffEditor
               modified={right.data.blueprint.definition}
               modifiedTitle={revisionTitle(right.data.blueprint)}
               original={left.data.blueprint.definition}

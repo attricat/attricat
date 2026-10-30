@@ -165,7 +165,7 @@ describe('ReusableAttributeEditorPage', () => {
       ),
     );
     fireEvent.change(definitionBox(), {
-      target: { value: 'code = "size"\nname = "Size"\nvalue_type = "colour"' },
+      target: { value: 'code: size\nname: Size\nvalue_type: colour' },
     });
     expect(
       await screen.findByText('Problem on line 3', {}, { timeout: 2000 }),

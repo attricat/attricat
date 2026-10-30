@@ -14,12 +14,12 @@ test('previews blueprint views and inspects revision metadata', async ({
   const blueprint = await createRecordBlueprint(
     code,
     'Preview product',
-    '[[attributes]]\ncode = "title"\nvalue_type = "string"',
+    'attributes:\n  - code: title\n    value_type: string',
     {
       recordSchema:
         '{"type":"object","required":["title"],"properties":{"title":{"type":"string"}}}',
       views:
-        '[views.detail]\ntype = "stack"\nchildren = [{ type = "heading", text = "Preview detail" }, { type = "field", field = "title" }]\n\n[views.table]\ntype = "table"\ncolumns = [{ field = "title" }]',
+        'views:\n  detail:\n    type: stack\n    children:\n      - {type: heading, text: Preview detail}\n      - {type: field, field: title}\n  table:\n    type: table\n    columns:\n      - {field: title}',
     },
   );
 
@@ -51,25 +51,24 @@ test('browses, filters, and compares blueprint revisions', async ({ page }) => {
   const first = await createRecordBlueprint(
     code,
     'Catalogue product',
-    '[[attributes]]\ncode = "title"\nvalue_type = "string"',
+    'attributes:\n  - code: title\n    value_type: string',
   );
   await createRevision(
     first.blueprint.id,
-    `format_version = 1
-code = "${code}"
-name = "Catalogue product revision"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["sku"]
-
-[[attributes]]
-code = "sku"
-value_type = "string"`,
+    `format_version: 1
+code: '${code}'
+name: Catalogue product revision
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [sku]
+attributes:
+  - code: sku
+    value_type: string`,
   );
   await createBlueprint(
-    `format_version = 1\ncode = "mixin_${suffix()}"\nname = "Catalogue mixin"\nkind = "mixin"\n\n[[attributes]]\ncode = "label"\nvalue_type = "string"`,
+    `format_version: 1\ncode: mixin_${suffix()}\nname: Catalogue mixin\nkind: mixin\n\nattributes:\n  - code: label\n    value_type: string`,
   );
 
   await page.goto('/manage/blueprints');
@@ -92,7 +91,7 @@ value_type = "string"`,
   await page.getByRole('tab', { name: 'Compare definitions' }).click();
   await page.getByLabel('Left version').click();
   await page.getByRole('option', { name: 'v1 (published)' }).click();
-  await expect(page.getByText('code = "title"').first()).toBeVisible();
+  await expect(page.getByText('code: title').first()).toBeVisible();
   await page.getByRole('tab', { name: /Version \d+ metadata/ }).click();
   await page.getByRole('tab', { name: /Attributes/ }).click();
   await expect(page.getByText('title', { exact: true })).toBeVisible();
@@ -103,23 +102,22 @@ test('opens on the latest published version metadata', async ({ page }) => {
   const first = await createRecordBlueprint(
     code,
     'Latest product',
-    '[[attributes]]\ncode = "title"\nvalue_type = "string"',
+    'attributes:\n  - code: title\n    value_type: string',
   );
   await publishRevision(
     await createRevision(
       first.blueprint.id,
-      `format_version = 1
-code = "${code}"
-name = "Latest product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["sku"]
-
-[[attributes]]
-code = "sku"
-value_type = "string"`,
+      `format_version: 1
+code: '${code}'
+name: Latest product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [sku]
+attributes:
+  - code: sku
+    value_type: string`,
     ),
   );
 

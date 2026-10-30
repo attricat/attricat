@@ -11,21 +11,26 @@ for (const colorScheme of ['light', 'dark'] as const) {
       code,
       'Phone contacts',
       `
-[[attributes]]
-code = "title"
-value_type = "string"
-[[attributes]]
-code = "phone"
-value_type = "string"
+attributes:
+  - code: title
+    value_type: string
+  - code: phone
+    value_type: string
 `,
       {
         views: `
-[views.detail]
-type = "stack"
-children = [{ type = "field", field = "phone", component = { id = "attricat.phone_display", version = 1 } }]
-[views.table]
-type = "table"
-columns = [{ field = "phone", renderer = { id = "attricat.phone_display", version = 1 } }]
+views:
+  detail:
+    type: stack
+    children:
+      - type: field
+        field: phone
+        component: {id: attricat.phone_display, version: 1}
+  table:
+    type: table
+    columns:
+      - field: phone
+        renderer: {id: attricat.phone_display, version: 1}
 `,
       },
     );

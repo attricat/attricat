@@ -2,8 +2,10 @@ import { loader } from '@monaco-editor/react';
 import * as monaco from 'monaco-editor/editor';
 import EditorWorker from 'monaco-editor/editor/editor.worker?worker';
 // Preserve standard editing/accessibility features without bundling every
-// language service. TOML uses our providers. All of this stays in editor chunks.
+// language service. YAML uses our providers. All of this stays in editor chunks.
 import 'monaco-editor/features/register.all';
+// Highlighting, brackets and indentation folding for definitions.
+import 'monaco-editor/languages/definitions/yaml/register';
 import 'monaco-editor/editor/browser/coreCommands';
 import {
   monacoBaseThemes,

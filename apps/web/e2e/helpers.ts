@@ -4,6 +4,7 @@ import {
   type Locator,
   type Page,
 } from '@playwright/test';
+import { parse, stringify } from 'yaml';
 import { e2eApiUrl, e2eMailpitUrl } from './ports.ts';
 
 const fixtureEmail = 'fixture@example.test';
@@ -73,8 +74,20 @@ export const createRecordBlueprint = async (
   attributes: string,
   options: { recordSchema?: string; views?: string } = {},
 ) => {
+  // `attributes` and `views` are YAML documents with those top-level keys.
   const blueprint = await createBlueprint(
-    `format_version = 1\ncode = "${code}"\nname = "${name}"\nkind = "record"${options.recordSchema ? `\nrecord_schema = '${options.recordSchema}'` : ''}\n\n[views.dropdown_option]\ntype = "dropdown_option"\nfields = ["title"]\n\n${attributes}${options.views ? `\n\n${options.views}` : ''}`,
+    stringify({
+      format_version: 1,
+      code,
+      name,
+      kind: 'record',
+      ...(options.recordSchema ? { record_schema: options.recordSchema } : {}),
+      views: {
+        dropdown_option: { type: 'dropdown_option', fields: ['title'] },
+        ...(options.views ? parse(options.views).views : {}),
+      },
+      attributes: parse(attributes).attributes,
+    }),
   );
   return publishRevision(blueprint);
 };
@@ -101,7 +114,7 @@ export const createRule = (blueprint: Blueprint, definition: string) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       blueprint_id: blueprint.blueprint.id,
-      definition: `format_version = 1\n${definition}`,
+      definition: `format_version: 1\n${definition}`,
     }),
   });
 
@@ -242,7 +255,12 @@ export const replaceDefinition = async (page: Page, value: string) => {
   await page.keyboard.press('Control+End');
   await page.keyboard.press('Shift+Control+Home');
   await page.keyboard.press('Backspace');
-  await page.keyboard.insertText(value);
+  // Pasting keeps the YAML's indentation; typed newlines are auto-indented.
+  await page
+    .context()
+    .grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.evaluate((text) => navigator.clipboard.writeText(text), value);
+  await page.keyboard.press('ControlOrMeta+v');
 };
 
 /** Signs a new member holding `roleCode` in through the login page. */

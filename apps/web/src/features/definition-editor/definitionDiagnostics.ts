@@ -2,7 +2,6 @@ import Ajv2020, {
   type ErrorObject,
   type ValidateFunction,
 } from 'ajv/dist/2020';
-import { parse, TomlError } from 'smol-toml';
 import i18n from '../../i18n';
 import { discriminatorKey, type DefinitionKind } from './constants';
 import {
@@ -16,11 +15,16 @@ import {
   type SchemaNode,
 } from './definitionSchema';
 import {
-  scanToml,
+  scanYaml,
   type TextRange,
-  type TomlOutline,
-  type TomlPath,
-} from '../../components/tomlOutline';
+  type YamlOutline,
+  type YamlPath,
+} from '../../components/yamlOutline';
+import {
+  parseStrictYaml,
+  yamlKey,
+  yamlValue,
+} from '../../components/yamlSyntax';
 
 /** A text change that resolves a diagnostic, offered as a quick fix. */
 export type DefinitionFix = {
@@ -95,9 +99,9 @@ const validatorFor = (kind: DefinitionKind) => {
 const unescapePointer = (segment: string) =>
   segment.replaceAll('~1', '/').replaceAll('~0', '~');
 
-/** Converts a JSON pointer into a TOML path, using the data to type indices. */
-const pointerPath = (pointer: string, data: unknown): TomlPath => {
-  const path: TomlPath = [];
+/** Converts a JSON pointer into a YAML path, using the data to type indices. */
+const pointerPath = (pointer: string, data: unknown): YamlPath => {
+  const path: YamlPath = [];
   let current = data;
   for (const raw of pointer.split('/').slice(1)) {
     const segment = unescapePointer(raw);
@@ -151,7 +155,7 @@ type FixIntent =
   | { kind: 'insertKey'; key: string; node: SchemaNode }
   | { kind: 'replaceValue'; choices: unknown[] };
 
-type Located = { fix?: FixIntent; message: string; path: TomlPath };
+type Located = { fix?: FixIntent; message: string; path: YamlPath };
 
 /**
  * The description of the conditional rule (a schema with `if` and no
@@ -179,7 +183,7 @@ const ruleDescription = (schema: unknown, schemaPath: string) => {
 
 const describeError = (
   error: ErrorObject,
-  path: TomlPath,
+  path: YamlPath,
   schema: unknown,
 ): Located | undefined => {
   const t = i18n.t.bind(i18n);
@@ -358,60 +362,73 @@ const startingValue = (root: SchemaNode, property: SchemaNode) => {
   }
 };
 
-const bareKey = /^[A-Za-z0-9_-]+$/;
-const tomlKey = (key: string) =>
-  bareKey.test(key) ? key : JSON.stringify(key);
-const tomlValue = (value: unknown): string =>
-  Array.isArray(value)
-    ? `[${value.map(tomlValue).join(', ')}]`
-    : JSON.stringify(value);
-
-const samePath = (left: TomlPath, right: TomlPath) =>
-  left.length === right.length &&
-  left.every((segment, index) => segment === right[index]);
-
 const lineStart = (text: string, offset: number) =>
   text.lastIndexOf('\n', offset - 1) + 1;
 
+const lineEnd = (text: string, offset: number) => {
+  const end = text.indexOf('\n', offset);
+  return end < 0 ? text.length : end;
+};
+
+const isSingleLine = (text: string, { start, end }: TextRange) =>
+  !text.slice(start, end).includes('\n');
+
 /**
- * Where a new key of `table` goes: after its `[header]` line, or before the
- * first root key or header for the root table. Inline and dotted tables get
- * no insertion point.
+ * Where a new key of `mapping` goes: before the first root key for the root
+ * mapping, or after a block mapping's first single-line `key: value`, at its
+ * indentation. Flow mappings and mappings without one get no insertion point.
  */
-const keyInsertion = (outline: TomlOutline, text: string, table: TomlPath) => {
-  if (!table.length) {
-    const first = [
-      ...outline.entries.filter(({ path }) => path.length === 1),
-      ...outline.headers,
-    ].sort((left, right) => left.range.start - right.range.start)[0];
+const keyInsertion = (
+  outline: YamlOutline,
+  text: string,
+  mapping: YamlPath,
+) => {
+  const children = outline.entries.filter(
+    ({ path }) =>
+      path.length === mapping.length + 1 &&
+      typeof path.at(-1) === 'string' &&
+      mapping.every((segment, index) => path[index] === segment),
+  );
+  if (!mapping.length) {
+    const first = children.sort(
+      (left, right) => left.range.start - right.range.start,
+    )[0];
     const offset = first ? lineStart(text, first.range.start) : text.length;
     return { offset, line: (body: string) => `${body}\n` };
   }
-  const header = outline.headers.find(({ path }) => samePath(path, table));
-  if (!header) return undefined;
-  const lineEnd = text.indexOf('\n', header.range.end);
-  const offset = lineEnd < 0 ? text.length : lineEnd;
-  return { offset, line: (body: string) => `\n${body}` };
+  const collection = outline.collections.find(
+    ({ kind, path }) =>
+      kind === 'map' &&
+      path.length === mapping.length &&
+      mapping.every((segment, index) => path[index] === segment),
+  );
+  if (!collection || collection.flow) return undefined;
+  const anchor = children.find(
+    ({ valueRange }) => valueRange && isSingleLine(text, valueRange),
+  );
+  if (!anchor) return undefined;
+  const indent = ' '.repeat(
+    anchor.range.start - lineStart(text, anchor.range.start),
+  );
+  return {
+    offset: lineEnd(text, anchor.range.start),
+    line: (body: string) => `\n${indent}${body}`,
+  };
 };
 
 const resolveFix = (
   root: SchemaNode,
-  outline: TomlOutline,
+  outline: YamlOutline,
   text: string,
   { fix, path }: Located,
-  range: TextRange,
 ): DefinitionFix | undefined => {
   const t = i18n.t.bind(i18n);
   switch (fix?.kind) {
     case 'renameKey': {
-      const located =
-        outline.entryAt(path) ??
-        outline.headers.find((header) => samePath(header.path, path));
+      const located = outline.entryAt(path);
       if (!located) return undefined;
-      // A quoted key's range covers only its content.
-      const quoted = /["']/.test(text[range.start - 1] ?? '');
       return {
-        edits: [{ range, text: quoted ? fix.to : tomlKey(fix.to) }],
+        edits: [{ range: located.range, text: yamlKey(fix.to) }],
         title: t('definitionEditor.fixes.renameKey', { key: fix.to }),
       };
     }
@@ -419,7 +436,7 @@ const resolveFix = (
       const value = startingValue(root, fix.node);
       const insertion = keyInsertion(outline, text, path);
       if (value === undefined || !insertion) return undefined;
-      const body = `${tomlKey(fix.key)} = ${tomlValue(value)}`;
+      const body = `${yamlKey(fix.key)}: ${yamlValue(value)}`;
       return {
         edits: [
           {
@@ -445,9 +462,9 @@ const resolveFix = (
         choices.find((candidate) => String(candidate) === String(choice)) ??
         choice;
       return {
-        edits: [{ range: entry.valueRange, text: tomlValue(value) }],
+        edits: [{ range: entry.valueRange, text: yamlValue(value) }],
         title: t('definitionEditor.fixes.replaceValue', {
-          value: tomlValue(value),
+          value: yamlValue(value),
         }),
       };
     }
@@ -490,25 +507,21 @@ export const definitionDiagnostics = (
   kind: DefinitionKind,
   text: string,
 ): DefinitionDiagnostic[] => {
-  let data: unknown;
-  try {
-    data = parse(text);
-  } catch (error) {
-    if (!(error instanceof TomlError)) throw error;
-    const [summary] = error.message.split('\n');
+  const parsed = parseStrictYaml(text);
+  if ('error' in parsed) {
+    const { column, line, message } = parsed.error;
     return [
       {
-        message: i18n.t('definitionEditor.diagnostics.syntax', {
-          message: summary,
-        }),
-        range: lineRange(text, error.line, error.column),
+        message: i18n.t('definitionEditor.diagnostics.syntax', { message }),
+        range: lineRange(text, line, column),
       },
     ];
   }
+  const { data } = parsed;
   const validate = validatorFor(kind);
   if (validate(data)) return [];
   const errors = validate.errors ?? [];
-  const outline = scanToml(text);
+  const outline = scanYaml(text);
   const root = definitionSchemas[kind];
   const diagnostics = new Map<string, DefinitionDiagnostic>();
   for (const error of errors) {
@@ -521,7 +534,7 @@ export const definitionDiagnostics = (
     if (!located) continue;
     const range = outline.rangeOf(located.path) ?? { end: 0, start: 0 };
     diagnostics.set(`${range.start}:${range.end}:${located.message}`, {
-      fix: resolveFix(root, outline, text, located, range),
+      fix: resolveFix(root, outline, text, located),
       message: located.message,
       range,
     });

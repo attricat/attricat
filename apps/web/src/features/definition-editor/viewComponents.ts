@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import contract from '../../../../../contracts/view-components.json';
-import type { TomlPath } from '../../components/tomlOutline';
+import type { YamlPath } from '../../components/yamlOutline';
 
 const viewComponentSchema = z.object({
   capabilities: z.array(z.string()),
@@ -31,8 +31,8 @@ const viewCapabilities: Record<string, string> = {
  * a table column), the view's required capability, and the rendered field.
  */
 export const viewComponentPlacement = (
-  path: TomlPath,
-  valueAt: (path: TomlPath) => string | undefined,
+  path: YamlPath,
+  valueAt: (path: YamlPath) => string | undefined,
 ) => {
   const view = path[0] === viewsKey ? path[1] : undefined;
   const owner = path.slice(0, -1);

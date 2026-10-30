@@ -34,13 +34,11 @@ test('enables an export channel, publishes to it and enforces its checks', async
   const blueprint = await createRecordBlueprint(
     code,
     'Exported product',
-    `[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "summary"
-value_type = "string"`,
+    `attributes:
+  - code: title
+    value_type: string
+  - code: summary
+    value_type: string`,
   );
   const root = await defaultContext();
   const channel = await createContext(`export_${suffix()}`, root.id);
@@ -51,16 +49,14 @@ value_type = "string"`,
   await enableRule(
     await createRule(
       blueprint,
-      `code = "${ruleCode}"
-name = "Summary required ${code}"
-severity = "error"
-
-[[triggers]]
-type = "manual"
-
-[predicate]
-type = "required"
-attribute_code = "summary"`,
+      `code: '${ruleCode}'
+name: Summary required ${code}
+severity: error
+triggers:
+  - type: manual
+predicate:
+  type: required
+  attribute_code: summary`,
     ),
   );
 

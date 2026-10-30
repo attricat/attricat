@@ -17,22 +17,28 @@ for (const colorScheme of ['light', 'dark'] as const) {
       code,
       'Email contact',
       `
-[[attributes]]
-code = "title"
-value_type = "string"
-[[attributes]]
-code = "contact"
-value_type = "string"
-value_schema = '{"type":"string","format":"email"}'
+attributes:
+  - code: title
+    value_type: string
+  - code: contact
+    value_type: string
+    value_schema: '{"type":"string","format":"email"}'
 `,
       {
         views: `
-[views.detail]
-type = "stack"
-children = [{ type = "field", field = "contact", component = { id = "attricat.email_display", version = 1 } }]
-[views.table]
-type = "table"
-columns = [{ field = "title" }, { field = "contact", renderer = { id = "attricat.email_display", version = 1 } }]
+views:
+  detail:
+    type: stack
+    children:
+      - type: field
+        field: contact
+        component: {id: attricat.email_display, version: 1}
+  table:
+    type: table
+    columns:
+      - {field: title}
+      - field: contact
+        renderer: {id: attricat.email_display, version: 1}
 `,
       },
     );

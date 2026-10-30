@@ -9,7 +9,7 @@ import {
   schemaExtensions,
   type DefinitionKind,
 } from './constants';
-import type { TomlPath } from '../../components/tomlOutline';
+import type { YamlPath } from '../../components/yamlOutline';
 
 /**
  * The subset of JSON Schema that the Rust definition types generate. Unused
@@ -207,13 +207,13 @@ type ResolvedSchema = {
 };
 
 /**
- * Resolves the schema at a TOML path, selecting tagged-union variants from
+ * Resolves the schema at a YAML path, selecting tagged-union variants from
  * the `type` values already written in the document.
  */
 export const schemaAtPath = (
   root: SchemaNode,
-  path: TomlPath,
-  valueAt: (path: TomlPath) => unknown,
+  path: YamlPath,
+  valueAt: (path: YamlPath) => unknown,
 ): ResolvedSchema | undefined => {
   let resolved = selectVariant(root, unwrapSchema(root, root), [], valueAt);
   for (let index = 0; index < path.length; index++) {
@@ -261,8 +261,8 @@ export const schemaAtPath = (
 const selectVariant = (
   root: SchemaNode,
   node: SchemaNode,
-  path: TomlPath,
-  valueAt: (path: TomlPath) => unknown,
+  path: YamlPath,
+  valueAt: (path: YamlPath) => unknown,
 ): ResolvedSchema => {
   const variants = taggedVariants(root, node);
   if (!variants) {

@@ -47,8 +47,12 @@ export const MAX_LEXICON_CONTEXT_LENGTH = 100;
 export const MAX_LEXICON_TEXT_LENGTH = 1000;
 /** Characters a key or context cannot contain. */
 export const LEXICON_RESERVED_CHARACTERS = /[{}|]/u;
-export const LEXICON_FILE_ACCEPT = '.json,.toml,application/json';
-export const TOML_FILE_EXTENSION = '.toml';
+export const YAML_FILE_EXTENSIONS = ['.yaml', '.yml'];
+export const LEXICON_FILE_ACCEPT = [
+  '.json',
+  ...YAML_FILE_EXTENSIONS,
+  'application/json',
+].join(',');
 /** How many sample numbers to show for each plural category. */
 export const PLURAL_EXAMPLE_COUNT = 3;
 /** Integers scanned for plural examples; covers every CLDR rule's first hits. */

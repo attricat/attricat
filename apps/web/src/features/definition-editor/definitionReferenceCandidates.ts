@@ -17,7 +17,7 @@ import {
   definitionReferenceKinds,
   type DefinitionReferenceKind,
 } from './definitionSchema';
-import type { TomlOutline, TomlPath } from '../../components/tomlOutline';
+import type { YamlOutline, YamlPath } from '../../components/yamlOutline';
 import { viewComponentPlacement, viewComponents } from './viewComponents';
 import { attributeValueTypes } from '../records/valueTypes';
 import { blueprintKinds } from '../blueprints/constants';
@@ -38,7 +38,7 @@ type DocumentAttribute = {
   valueType?: string;
 };
 
-const documentAttributes = (outline: TomlOutline): DocumentAttribute[] =>
+const documentAttributes = (outline: YamlOutline): DocumentAttribute[] =>
   outline.entries.flatMap(({ path, value }) => {
     if (
       path.length !== 3 ||
@@ -63,7 +63,7 @@ const documentAttributes = (outline: TomlOutline): DocumentAttribute[] =>
 
 /** Attributes the document declares, then those of its scope. */
 const knownAttributes = (
-  outline: TomlOutline,
+  outline: YamlOutline,
   references: DefinitionReferences,
 ): DocumentAttribute[] => [
   ...documentAttributes(outline),
@@ -85,7 +85,7 @@ const attributeDetail = (attribute: {
         })
       : (attribute.valueType ?? '');
 
-const includes = (outline: TomlOutline) =>
+const includes = (outline: YamlOutline) =>
   outline.entries.flatMap(({ path, value }) => {
     if (
       path.length !== 3 ||
@@ -111,9 +111,9 @@ export const referenceCandidates = async (
   {
     outline,
     references,
-  }: { outline: TomlOutline; references: DefinitionReferences },
+  }: { outline: YamlOutline; references: DefinitionReferences },
   reference: DefinitionReferenceKind,
-  path: TomlPath,
+  path: YamlPath,
   prefix: string,
 ): Promise<Candidate[]> => {
   const sibling = (key: string) => outline.valueAt([...path.slice(0, -1), key]);
@@ -253,8 +253,8 @@ export const referenceCandidates = async (
 };
 
 export const componentCandidates = (
-  outline: TomlOutline,
-  referencePath: TomlPath,
+  outline: YamlOutline,
+  referencePath: YamlPath,
 ) => {
   const attributes = documentAttributes(outline);
   const placement = viewComponentPlacement(referencePath, (path) => {

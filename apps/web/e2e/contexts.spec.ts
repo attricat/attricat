@@ -16,7 +16,7 @@ test('resolves inherited values and saves a context-specific override', async ({
   const blueprint = await createRecordBlueprint(
     code,
     'Contextual product',
-    '[[attributes]]\ncode = "title"\nvalue_type = "string"\n\n[[attributes]]\ncode = "stock"\nvalue_type = "integer"\ncontext_editable = "default"',
+    'attributes:\n  - code: title\n    value_type: string\n  - code: stock\n    value_type: integer\n    context_editable: default',
   );
   const record = await createRecord(blueprint, [
     scalar('title', 'Default title'),

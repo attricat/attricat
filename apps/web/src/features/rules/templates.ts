@@ -1,10 +1,10 @@
 import type { DefinitionTemplate } from '../definition-editor/DefinitionTemplateDialog';
-import choiceDefinition from './templates/choice.toml?raw';
-import expiryDefinition from './templates/expiry.toml?raw';
-import linkedDefinition from './templates/linked.toml?raw';
-import requiredDefinition from './templates/required.toml?raw';
-import staleDefinition from './templates/stale.toml?raw';
-import uniqueDefinition from './templates/unique.toml?raw';
+import choiceDefinition from './templates/choice.yaml?raw';
+import expiryDefinition from './templates/expiry.yaml?raw';
+import linkedDefinition from './templates/linked.yaml?raw';
+import requiredDefinition from './templates/required.yaml?raw';
+import staleDefinition from './templates/stale.yaml?raw';
+import uniqueDefinition from './templates/unique.yaml?raw';
 
 export const ruleTemplates: readonly DefinitionTemplate[] = [
   {

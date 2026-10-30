@@ -172,7 +172,7 @@ describe('blueprint API client', () => {
       status: 422,
     });
 
-    await expect(createBlueprint('not valid TOML')).rejects.toMatchObject({
+    await expect(createBlueprint('not valid YAML')).rejects.toMatchObject({
       name: 'ApiRequestError',
       status: 422,
       code: 'invalid_blueprint_definition',

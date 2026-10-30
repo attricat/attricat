@@ -104,7 +104,7 @@ export const WorkflowDefinitionForm = ({
         <form.Field name="definition">
           {(field) => (
             <DefinitionEditor
-              ariaLabel={t('workflows.tomlDefinition')}
+              ariaLabel={t('workflows.yamlDefinition')}
               height={editorHeight}
               kind={definitionKinds.workflow}
               onChange={(value) => {

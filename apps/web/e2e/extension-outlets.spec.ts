@@ -25,18 +25,17 @@ test('mounts a blueprint panel and a publish check only in its confirmation', as
 }) => {
   const code = `outlet_${suffix()}`;
   const blueprint = await createBlueprint(`
-format_version = 1
-code = "${code}"
-name = "Outlet fixture"
-kind = "record"
-
-[[attributes]]
-code = "title"
-value_type = "string"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]`);
+format_version: 1
+code: '${code}'
+name: Outlet fixture
+kind: record
+attributes:
+  - code: title
+    value_type: string
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]`);
   const blueprintId = blueprint.blueprint.id;
   const version = blueprint.blueprint.version;
   await page.route('**/api/extensions/runtime*', (route) =>

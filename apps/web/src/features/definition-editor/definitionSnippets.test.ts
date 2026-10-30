@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parse } from 'smol-toml';
+import { parseStrictYaml } from '../../components/yamlSyntax';
 import '../../i18n';
 import { definitionKinds, type DefinitionKind } from './constants';
 import { definitionDiagnostics } from './definitionDiagnostics';
@@ -9,7 +9,7 @@ import {
   snippetIsPresent,
   type DefinitionSnippet,
 } from './definitionSnippets';
-import { scanToml } from '../../components/tomlOutline';
+import { scanYaml } from '../../components/yamlOutline';
 
 /** Expands Monaco snippet syntax the way accepting every default would. */
 const expand = (body: string) => {
@@ -36,37 +36,38 @@ const apply = (text: string, snippet: DefinitionSnippet) => {
   );
 };
 
-const ruleHeader = `format_version = 1
-code = "title-required"
-name = "Title required"
-severity = "error"
+const ruleHeader = `format_version: 1
+code: title-required
+name: Title required
+severity: error
 
-[[triggers]]
-type = "manual"
+triggers:
+  - type: manual
 `;
 
 const bases: Record<DefinitionKind, string> = {
-  [definitionKinds.blueprint]: `format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
+  [definitionKinds.blueprint]: `format_version: 1
+code: product
+name: Product
+kind: record
 
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["code"]
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [code]
 
-[[attributes]]
-code = "code"
-value_type = "string"
+attributes:
+  - code: code
+    value_type: string
 `,
-  [definitionKinds.reusableAttribute]: `code = "size"
-name = "Size"
-value_type = "string"
+  [definitionKinds.reusableAttribute]: `code: size
+name: Size
+value_type: string
 `,
   [definitionKinds.rule]: `${ruleHeader}
-[predicate]
-type = "required"
-attribute_code = "title"
+predicate:
+  type: required
+  attribute_code: title
 `,
   [definitionKinds.workflow]: '',
 };
@@ -82,38 +83,58 @@ describe('definition snippets', () => {
     for (const snippet of definitionSnippets[kind]) {
       it(`${kind} ${snippet.id} keeps the definition valid`, () => {
         const text = apply(baseFor(kind, snippet), snippet);
-        expect(() => parse(text)).not.toThrow();
+        expect(parseStrictYaml(text)).not.toHaveProperty('error');
         expect(definitionDiagnostics(kind, text)).toEqual([]);
-        expect(snippetIsPresent(scanToml(text), snippet)).toBe(
+        expect(snippetIsPresent(scanYaml(text), snippet)).toBe(
           Boolean(snippet.conflicts),
         );
       });
     }
   }
 
-  it('puts keys before the first table and sections at the end', () => {
+  it('puts keys after the root keys and blocks into their parent', () => {
     const key = definitionSnippets.blueprint.find(
       ({ id }) => id === 'requiredAttributes',
     )!;
     const text = apply(bases.blueprint, key);
-    expect(text.indexOf('record_schema')).toBeLessThan(
-      text.indexOf('[views.dropdown_option]'),
-    );
-    expect(text).toContain('kind = "record"\n\nrecord_schema');
-    const section = definitionSnippets.blueprint.find(
+    expect(text).toContain('kind: record\nrecord_schema:');
+    const view = definitionSnippets.blueprint.find(
       ({ id }) => id === 'tableView',
     )!;
-    expect(apply(bases.blueprint, section)).toMatch(
-      /value_type = "string"\n\n\[views\.table\]\ntype = "table"\ncolumns = \[\{ field = "code" \}\]\n$/,
+    expect(apply(bases.blueprint, view)).toContain(
+      'fields: [code]\n  table:\n    type: table\n    columns:\n      - { field: code }\n\nattributes:',
+    );
+    const attribute = definitionSnippets.blueprint.find(
+      ({ id }) => id === 'textAttribute',
+    )!;
+    expect(apply(bases.blueprint, attribute)).toMatch(
+      /value_type: string\n {2}- code: code\n {4}name: Name\n {4}value_type: string\n$/,
     );
   });
 
-  it('appends keys to a definition without tables', () => {
+  it('creates a missing parent at the end, after a blank line', () => {
+    const snippet = definitionSnippets.blueprint.find(
+      ({ id }) => id === 'uniqueKey',
+    )!;
+    expect(apply(bases.blueprint, snippet)).toMatch(
+      /value_type: string\n\nunique_keys:\n {2}- code: code\n {4}attributes: \[code\]\n$/,
+    );
+    const transition = definitionSnippets.rule.find(
+      ({ id }) => id === 'enforceTransition',
+    )!;
+    expect(
+      apply(`${bases.rule}\nenforcement:\n  on_save: true\n`, transition),
+    ).toMatch(
+      /enforcement:\n {2}on_save: true\n {2}transitions:\n {4}- attribute_code: status\n {6}to: released\n$/,
+    );
+  });
+
+  it('appends keys to a definition with only keys', () => {
     const snippet = definitionSnippets.reusableAttribute.find(
       ({ id }) => id === 'defaultValue',
     )!;
-    expect(apply('code = "size"', snippet)).toBe(
-      'code = "size"\ndefault_value = "value"\n',
+    expect(apply('code: size', snippet)).toBe(
+      'code: size\ndefault_value: value',
     );
   });
 
@@ -121,12 +142,12 @@ describe('definition snippets', () => {
     const target = definitionSnippets.reusableAttribute.find(
       ({ id }) => id === 'relationshipTarget',
     )!;
-    expect(snippetIsPresent(scanToml(bases.reusableAttribute), target)).toBe(
+    expect(snippetIsPresent(scanYaml(bases.reusableAttribute), target)).toBe(
       false,
     );
     expect(
       snippetIsPresent(
-        scanToml(`${bases.reusableAttribute}cardinality = "one"\n`),
+        scanYaml(`${bases.reusableAttribute}cardinality: one\n`),
         target,
       ),
     ).toBe(true);

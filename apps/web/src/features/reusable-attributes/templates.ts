@@ -1,10 +1,10 @@
 import type { DefinitionTemplate } from '../definition-editor/DefinitionTemplateDialog';
-import assigneeDefinition from './templates/assignee.toml?raw';
-import choiceDefinition from './templates/choice.toml?raw';
-import imageDefinition from './templates/image.toml?raw';
-import numberDefinition from './templates/number.toml?raw';
-import statusDefinition from './templates/status.toml?raw';
-import textDefinition from './templates/text.toml?raw';
+import assigneeDefinition from './templates/assignee.yaml?raw';
+import choiceDefinition from './templates/choice.yaml?raw';
+import imageDefinition from './templates/image.yaml?raw';
+import numberDefinition from './templates/number.yaml?raw';
+import statusDefinition from './templates/status.yaml?raw';
+import textDefinition from './templates/text.yaml?raw';
 
 export const reusableAttributeTemplates: readonly DefinitionTemplate[] = [
   {

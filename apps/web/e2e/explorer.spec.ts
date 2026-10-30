@@ -34,10 +34,10 @@ test('shows explorer empty states and configured table fields', async ({
   const blueprint = await createRecordBlueprint(
     code,
     'Explorer products',
-    '[[attributes]]\ncode = "title"\nvalue_type = "string"\ntags = ["searchable"]\n\n[[attributes]]\ncode = "stock"\nvalue_type = "integer"',
+    'attributes:\n  - code: title\n    value_type: string\n    tags: [searchable]\n  - code: stock\n    value_type: integer',
     {
       views:
-        '[views.table]\ntype = "table"\ncolumns = [{ field = "title" }, { field = "stock" }]',
+        'views:\n  table:\n    type: table\n    columns:\n      - {field: title}\n      - {field: stock}',
     },
   );
   await createRecord(blueprint, [
@@ -93,10 +93,10 @@ test('reorders Explorer columns by dragging their handles', async ({
   const blueprint = await createRecordBlueprint(
     code,
     'Explorer column order',
-    '[[attributes]]\ncode = "title"\nvalue_type = "string"\n\n[[attributes]]\ncode = "stock"\nvalue_type = "integer"',
+    'attributes:\n  - code: title\n    value_type: string\n  - code: stock\n    value_type: integer',
     {
       views:
-        '[views.table]\ntype = "table"\ncolumns = [{ field = "title" }, { field = "stock" }]',
+        'views:\n  table:\n    type: table\n    columns:\n      - {field: title}\n      - {field: stock}',
     },
   );
   await createRecord(blueprint, [
@@ -157,7 +157,7 @@ test('saves an Explorer search and restores it through a short URL', async ({
   await createRecordBlueprint(
     code,
     'Saved products',
-    '[[attributes]]\ncode = "title"\nvalue_type = "string"\ntags = ["searchable"]',
+    'attributes:\n  - code: title\n    value_type: string\n    tags: [searchable]',
   );
   await page.goto(`/?blueprint=${code}&query=example`);
   await page.getByRole('button', { name: 'Saved searches' }).click();
@@ -228,16 +228,14 @@ test('prepares an equality filter from a hovered table cell', async ({
   const blueprint = await createRecordBlueprint(
     code,
     'Cell filter products',
-    `[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "color"
-value_type = "string"`,
+    `attributes:
+  - code: title
+    value_type: string
+  - code: color
+    value_type: string`,
     {
       views:
-        '[views.table]\ntype = "table"\ncolumns = [{ field = "title" }, { field = "color" }]',
+        'views:\n  table:\n    type: table\n    columns:\n      - {field: title}\n      - {field: color}',
     },
   );
   await createRecord(blueprint, [
@@ -294,16 +292,14 @@ test('applies and removes an attribute filter on mobile', async ({ page }) => {
   const blueprint = await createRecordBlueprint(
     code,
     'Attribute filter products',
-    `[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "stock"
-value_type = "integer"`,
+    `attributes:
+  - code: title
+    value_type: string
+  - code: stock
+    value_type: integer`,
     {
       views:
-        '[views.table]\ntype = "table"\ncolumns = [{ field = "title" }, { field = "stock" }]',
+        'views:\n  table:\n    type: table\n    columns:\n      - {field: title}\n      - {field: stock}',
     },
   );
   await createRecord(blueprint, [
@@ -372,14 +368,12 @@ test('filters explorer results with a relationship hierarchy facet', async ({
   const category = await createRecordBlueprint(
     categoryCode,
     'Facet categories',
-    `[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "parent"
-value_type = "relationship"
-target_blueprint = "${categoryCode}"`,
+    `attributes:
+  - code: title
+    value_type: string
+  - code: parent
+    value_type: relationship
+    target_blueprint: '${categoryCode}'`,
   );
   const parent = await createRecord(category, [scalar('title', 'Departments')]);
   const child = await createRecord(category, [
@@ -390,15 +384,13 @@ target_blueprint = "${categoryCode}"`,
   const product = await createRecordBlueprint(
     productCode,
     'Faceted products',
-    `[[attributes]]
-code = "title"
-value_type = "string"
-tags = ["searchable"]
-
-[[attributes]]
-code = "category"
-value_type = "relationship"
-target_blueprint = "${categoryCode}"`,
+    `attributes:
+  - code: title
+    value_type: string
+    tags: [searchable]
+  - code: category
+    value_type: relationship
+    target_blueprint: '${categoryCode}'`,
   );
   await createRecord(product, [
     scalar('title', 'Running shoe'),
@@ -439,16 +431,14 @@ test('browses explorer results through a category tree rail', async ({
   const category = await createRecordBlueprint(
     categoryCode,
     'Rail categories',
-    `[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "parent"
-value_type = "relationship"
-target_blueprint = "${categoryCode}"
-tree = true
-context_editable = "default"`,
+    `attributes:
+  - code: title
+    value_type: string
+  - code: parent
+    value_type: relationship
+    target_blueprint: '${categoryCode}'
+    tree: true
+    context_editable: default`,
   );
   const departments = await createRecord(category, [
     scalar('title', 'Departments'),
@@ -463,14 +453,12 @@ context_editable = "default"`,
   const product = await createRecordBlueprint(
     productCode,
     'Rail products',
-    `[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "categories"
-value_type = "relationship"
-target_blueprint = "${categoryCode}"`,
+    `attributes:
+  - code: title
+    value_type: string
+  - code: categories
+    value_type: relationship
+    target_blueprint: '${categoryCode}'`,
   );
   await createRecord(product, [
     scalar('title', 'Running shoe'),
@@ -539,15 +527,13 @@ target_blueprint = "${categoryCode}"`,
   await createRecordBlueprint(
     closedCode,
     'Rail closed products',
-    `[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "categories"
-value_type = "relationship"
-target_blueprint = "${categoryCode}"`,
-    { views: '[views.explorer]\ntype = "explorer"\nbrowse_by = false' },
+    `attributes:
+  - code: title
+    value_type: string
+  - code: categories
+    value_type: relationship
+    target_blueprint: '${categoryCode}'`,
+    { views: 'views:\n  explorer:\n    type: explorer\n    browse_by: false' },
   );
   await page.goto(`/?blueprint=${closedCode}`);
   await expect(
@@ -563,16 +549,14 @@ test('opens the browse rail to a selection past the first page', async ({
   const category = await createRecordBlueprint(
     categoryCode,
     'Paged rail categories',
-    `[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "parent"
-value_type = "relationship"
-target_blueprint = "${categoryCode}"
-tree = true
-context_editable = "default"`,
+    `attributes:
+  - code: title
+    value_type: string
+  - code: parent
+    value_type: relationship
+    target_blueprint: '${categoryCode}'
+    tree: true
+    context_editable: default`,
   );
   const parent = await createRecord(category, [scalar('title', 'Catalog')]);
   // One more child than a page holds. Pages follow ID order, so the highest
@@ -633,24 +617,22 @@ test("opens the browse rail on the blueprint's browse_by field", async ({
   const brand = await createRecordBlueprint(
     brandCode,
     'Rail brands',
-    `[[attributes]]
-code = "title"
-value_type = "string"`,
+    `attributes:
+  - code: title
+    value_type: string`,
   );
   const acme = await createRecord(brand, [scalar('title', 'Acme')]);
   const product = await createRecordBlueprint(
     productCode,
     'Rail brand products',
-    `[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "brand"
-value_type = "relationship"
-target_blueprint = "${brandCode}"
-cardinality = "one"`,
-    { views: '[views.explorer]\ntype = "explorer"\nbrowse_by = "brand"' },
+    `attributes:
+  - code: title
+    value_type: string
+  - code: brand
+    value_type: relationship
+    target_blueprint: '${brandCode}'
+    cardinality: one`,
+    { views: 'views:\n  explorer:\n    type: explorer\n    browse_by: brand' },
   );
   await createRecord(product, [
     scalar('title', 'Anvil'),
@@ -671,25 +653,23 @@ test('filters explorer results with a one-level relationship facet', async ({
   const color = await createRecordBlueprint(
     colorCode,
     'Facet colors',
-    `[[attributes]]
-code = "title"
-value_type = "string"`,
+    `attributes:
+  - code: title
+    value_type: string`,
   );
   const red = await createRecord(color, [scalar('title', 'Red')]);
   const blue = await createRecord(color, [scalar('title', 'Blue')]);
   const product = await createRecordBlueprint(
     productCode,
     'Color products',
-    `[[attributes]]
-code = "title"
-value_type = "string"
-tags = ["searchable"]
-
-[[attributes]]
-code = "color"
-value_type = "relationship"
-target_blueprint = "${colorCode}"
-cardinality = "one"`,
+    `attributes:
+  - code: title
+    value_type: string
+    tags: [searchable]
+  - code: color
+    value_type: relationship
+    target_blueprint: '${colorCode}'
+    cardinality: one`,
   );
   await createRecord(product, [
     scalar('title', 'Red shirt'),
@@ -720,12 +700,12 @@ test('intersects selections from multiple relationship facets', async ({
   const color = await createRecordBlueprint(
     colorCode,
     'Colors',
-    '[[attributes]]\ncode = "title"\nvalue_type = "string"',
+    'attributes:\n  - code: title\n    value_type: string',
   );
   const size = await createRecordBlueprint(
     sizeCode,
     'Sizes',
-    '[[attributes]]\ncode = "title"\nvalue_type = "string"',
+    'attributes:\n  - code: title\n    value_type: string',
   );
   const red = await createRecord(color, [scalar('title', 'Red')]);
   const blue = await createRecord(color, [scalar('title', 'Blue')]);
@@ -734,20 +714,16 @@ test('intersects selections from multiple relationship facets', async ({
   const product = await createRecordBlueprint(
     productCode,
     'Products with multiple facets',
-    `[[attributes]]
-code = "title"
-value_type = "string"
-tags = ["searchable"]
-
-[[attributes]]
-code = "color"
-value_type = "relationship"
-target_blueprint = "${colorCode}"
-
-[[attributes]]
-code = "size"
-value_type = "relationship"
-target_blueprint = "${sizeCode}"`,
+    `attributes:
+  - code: title
+    value_type: string
+    tags: [searchable]
+  - code: color
+    value_type: relationship
+    target_blueprint: '${colorCode}'
+  - code: size
+    value_type: relationship
+    target_blueprint: '${sizeCode}'`,
   );
   await createRecord(product, [
     scalar('title', 'Red large shirt'),
@@ -793,7 +769,7 @@ test('loads additional explorer search pages', async ({ page }) => {
   const blueprint = await createRecordBlueprint(
     code,
     'Paginated products',
-    '[[attributes]]\ncode = "title"\nvalue_type = "string"\ntags = ["searchable"]',
+    'attributes:\n  - code: title\n    value_type: string\n    tags: [searchable]',
   );
   for (let index = 0; index < 52; index += 1) {
     await createRecord(blueprint, [
@@ -828,32 +804,29 @@ test('searches a requested blueprint version and identifies outdated records', a
   page,
 }) => {
   const code = `versions_${suffix()}`;
-  const firstDefinition = `format_version = 1
-code = "${code}"
-name = "Versioned products"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-tags = ["searchable"]`;
+  const firstDefinition = `format_version: 1
+code: '${code}'
+name: Versioned products
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+    tags: [searchable]`;
   const first = await createRecordBlueprint(
     code,
     'Versioned products',
-    '[[attributes]]\ncode = "title"\nvalue_type = "string"\ntags = ["searchable"]',
+    'attributes:\n  - code: title\n    value_type: string\n    tags: [searchable]',
   );
   const oldRecord = await createRecord(first, [scalar('title', 'Old product')]);
   const second = await createRevision(
     first.blueprint.id,
     `${firstDefinition}
-
-[[attributes]]
-code = "sku"
-value_type = "string"`,
+  - code: sku
+    value_type: string`,
   );
   await publishRevision(second);
 

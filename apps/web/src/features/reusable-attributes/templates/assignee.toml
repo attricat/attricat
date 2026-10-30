@@ -1,8 +1,0 @@
-code = "owner"
-name = "Owner"
-value_type = "string"
-# Offered as a filter in the Explorer.
-searchable = true
-facetable = true
-# Accepts an active workspace member or a team, chosen from a picker.
-value_schema = { type = "string", "x-attricat-principal" = { version = 1, kinds = ["user", "team"] } }

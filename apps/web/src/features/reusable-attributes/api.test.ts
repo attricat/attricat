@@ -32,10 +32,10 @@ const attribute = {
   facetable: false,
   status: 'draft',
   published_at: null,
-  definition: 'code = "material"\nname = "Material"\nvalue_type = "string"',
+  definition: 'code: material\nname: Material\nvalue_type: string',
 };
 const input = {
-  definition: 'code = "material"\nname = "Material"\nvalue_type = "string"',
+  definition: 'code: material\nname: Material\nvalue_type: string',
 };
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);

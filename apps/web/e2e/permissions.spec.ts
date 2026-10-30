@@ -13,18 +13,17 @@ import {
   type Context,
 } from './helpers';
 
-const draftDefinition = (code: string) => `format_version = 1
-code = "${code}"
-name = "Restricted draft"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"`;
+const draftDefinition = (code: string) => `format_version: 1
+code: '${code}'
+name: Restricted draft
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string`;
 
 const latestStatus = async (blueprintId: string) => {
   const [latest] = await request<Array<{ status: string }>>(
@@ -61,7 +60,7 @@ test('a viewer can browse the catalog but every write is refused', async ({
   const blueprint = await createRecordBlueprint(
     code,
     'Viewer product',
-    '[[attributes]]\ncode = "title"\nvalue_type = "string"',
+    'attributes:\n  - code: title\n    value_type: string',
   );
   const record = await createRecord(blueprint, [
     scalar('title', 'Readable product'),
@@ -142,7 +141,7 @@ test('an editor saves blueprint drafts and records but cannot publish', async ({
   const blueprint = await createRecordBlueprint(
     code,
     'Editor product',
-    '[[attributes]]\ncode = "title"\nvalue_type = "string"',
+    'attributes:\n  - code: title\n    value_type: string',
   );
   const record = await createRecord(blueprint, [
     scalar('title', 'Original title'),

@@ -11,7 +11,7 @@ test('records a browser edit and filters the audit log', async ({ page }) => {
   const blueprint = await createRecordBlueprint(
     `audited_${suffix()}`,
     'Audited product',
-    '[[attributes]]\ncode = "title"\nvalue_type = "string"',
+    'attributes:\n  - code: title\n    value_type: string',
   );
   const record = await createRecord(blueprint, [scalar('title', 'Before')]);
 

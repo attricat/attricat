@@ -162,22 +162,20 @@ describe('blueprintConnections', () => {
       attributes: [],
       recordSchema: null,
       definition: `
-[[attributes]]
-code = "meta_description"
-from = "seo.meta_description"
-
-[[includes]]
-alias = "seo"
-code = "cars_seo"
-version = 1
-
-[[unique_keys]]
-code = "vin"
-attributes = ["vin"]
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["stock_number", "title"]
+attributes:
+  - code: meta_description
+    from: seo.meta_description
+includes:
+  - alias: seo
+    code: cars_seo
+    version: 1
+unique_keys:
+  - code: vin
+    attributes: [vin]
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [stock_number, title]
 `,
     });
 

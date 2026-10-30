@@ -68,24 +68,25 @@ test('side-loads the example extension and recalculates a blueprint formula', as
   const blueprint = await createRecordBlueprint(
     code,
     'Formula product',
-    `[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "price_net"
-value_type = "number"
-
-[[attributes]]
-code = "price_gross"
-value_type = "number"
-
-[views.table]
-type = "table"
-columns = [{ field = "price_net", renderer = { id = "attricat-extension-example.computed-number", version = 1, props = { precision = 2, unit = "EUR" } } }]
-
-[extensions.attricat-extension-example.formulas]
-price_gross = "price_net * (1 + 0.23)"`,
+    `attributes:
+  - code: title
+    value_type: string
+  - code: price_net
+    value_type: number
+  - code: price_gross
+    value_type: number
+views:
+  table:
+    type: table
+    columns:
+      - field: price_net
+        renderer:
+          id: attricat-extension-example.computed-number
+          version: 1
+          props: {precision: 2, unit: EUR}
+extensions:
+  attricat-extension-example:
+    formulas: {price_gross: price_net * (1 + 0.23)}`,
   );
   const record = await createRecord(blueprint, [scalar('price_net', 100)]);
 

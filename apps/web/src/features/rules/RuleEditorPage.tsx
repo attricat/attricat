@@ -44,9 +44,9 @@ import { RulePreview } from './RulePreview';
 import { RuleScopeFields, type RuleScope } from './RuleScopeFields';
 import { ruleTemplates } from './templates';
 
-const TomlDiffEditor = lazy(() =>
-  import('../../components/TomlDiffEditor').then(({ TomlDiffEditor }) => ({
-    default: TomlDiffEditor,
+const YamlDiffEditor = lazy(() =>
+  import('../../components/YamlDiffEditor').then(({ YamlDiffEditor }) => ({
+    default: YamlDiffEditor,
   })),
 );
 const noScope: RuleScope = { contextId: null };
@@ -332,7 +332,7 @@ export const RuleEditorPage = ({ ruleId }: { ruleId?: string }) => {
                 <LoadingState>{t('rules.changelog.loadingDiff')}</LoadingState>
               }
             >
-              <TomlDiffEditor
+              <YamlDiffEditor
                 modified={definition}
                 modifiedTitle={t('rules.editor.unsavedChange')}
                 original={source.definition}

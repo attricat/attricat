@@ -49,7 +49,7 @@ test('checks, previews and inserts into a blueprint definition', async ({
   const code = `checked_${suffix()}`;
   await replaceDefinition(
     page,
-    `format_version = 1\ncode = "${code}"\nname = "Checked"\nkind = "record"\n\n[views.dropdown_option]\ntype = "dropdown_option"\nfields = ["title"]\n\n[[attributes]]\ncode = "title"\nvalue_type = "string"\n`,
+    `format_version: 1\ncode: ${code}\nname: Checked\nkind: record\n\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\n\nattributes:\n  - code: title\n    value_type: string\n`,
   );
   await expect(page.getByText('Ready to save')).toBeVisible();
   await expect(preview(page).getByLabel('title')).toBeVisible();
@@ -84,13 +84,13 @@ test('checks, previews and inserts into a reusable attribute definition', async 
   const code = `checked_${suffix()}`;
   await replaceDefinition(
     page,
-    `code = "${code}"\nname = "Checked"\nvalue_type = "colour"\n`,
+    `code: ${code}\nname: Checked\nvalue_type: colour\n`,
   );
   await expect(page.getByText('Problem on line 3')).toBeVisible();
 
   await replaceDefinition(
     page,
-    `code = "${code}"\nname = "Checked"\nvalue_type = "number"\n`,
+    `code: ${code}\nname: Checked\nvalue_type: number\n`,
   );
   await expect(page.getByText('Ready to save')).toBeVisible();
   await expect(

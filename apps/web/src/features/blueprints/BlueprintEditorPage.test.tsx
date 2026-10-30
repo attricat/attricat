@@ -216,7 +216,7 @@ describe('BlueprintEditorPage', () => {
       ),
     );
     editDefinition(
-      'format_version = 1\ncode = "p"\n\n[views.dropdown_option]\ntype = "dropdown_option"\nfields = ["sku"]\n',
+      'format_version: 1\ncode: p\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [sku]\n',
     );
     expect(
       await screen.findByText('Problem on line 6', {}, { timeout: 2000 }),

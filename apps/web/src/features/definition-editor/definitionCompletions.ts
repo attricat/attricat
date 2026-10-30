@@ -23,11 +23,17 @@ import {
   type SchemaNode,
 } from './definitionSchema';
 import {
-  scanToml,
+  scanYaml,
   type TextRange,
-  type TomlCursor,
-  type TomlOutline,
-} from '../../components/tomlOutline';
+  type YamlCursor,
+  type YamlOutline,
+} from '../../components/yamlOutline';
+import {
+  yamlFlowMapping,
+  yamlKey,
+  yamlString,
+  yamlValue,
+} from '../../components/yamlSyntax';
 import {
   componentCandidates,
   referenceCandidates,
@@ -67,7 +73,7 @@ type CompletionInput = {
 };
 
 type Context = {
-  outline: TomlOutline;
+  outline: YamlOutline;
   references: DefinitionReferences;
   root: SchemaNode;
 };
@@ -75,15 +81,13 @@ type Context = {
 /** Values of these types are written without quotes. */
 const unquotedTypes = new Set(['boolean', 'integer', 'number']);
 
-const isString = (segment: string | number): segment is string =>
-  typeof segment === 'string';
+/** Spaces per nesting level in inserted YAML. */
+const indentUnit = '  ';
 
-const bareKey = /^[A-Za-z0-9_-]+$/;
-const tomlKey = (key: string) =>
-  bareKey.test(key) ? key : JSON.stringify(key);
-const tomlString = (value: string) => JSON.stringify(value);
 const escapeSnippet = (value: string) => value.replace(/[$}\\]/g, '\\$&');
 const escapeChoice = (value: string) => value.replace(/[$}\\|,]/g, '\\$&');
+const choiceList = (values: string[]) =>
+  values.map((value) => escapeChoice(yamlString(value))).join(',');
 
 /** Numbers snippet tab stops across the placeholders of one insertion. */
 class TabStops {
@@ -93,50 +97,42 @@ class TabStops {
   }
 }
 
-const isTable = (node: SchemaNode) =>
+const isMapping = (node: SchemaNode) =>
   primaryType(node) === 'object' || Boolean(node.oneOf);
 
-/** Whether a table holds nested tables, so it reads best as a `[section]`. */
-const hasNestedTables = (root: SchemaNode, node: SchemaNode) =>
-  Object.values(node.properties ?? {}).some((property) => {
-    const unwrapped = unwrapSchema(root, property);
-    const items = unwrapped.items && unwrapSchema(root, unwrapped.items);
-    return isTable(unwrapped) || (items !== undefined && isTable(items));
-  });
+const indented = (lines: string[]) => lines.map((line) => indentUnit + line);
 
+/** Lines of a sequence item: `- ` before the first, aligned after it. */
+const itemLines = (body: string[]) =>
+  body.length
+    ? body.map((line, index) => (index ? indentUnit : '- ') + line)
+    : ['- '];
+
+/** A placeholder for a value written after `key: ` on the same line. */
 const placeholder = (
   root: SchemaNode,
   node: SchemaNode,
   stops: TabStops,
 ): string => {
-  if (node.const !== undefined) return JSON.stringify(node.const);
+  if (node.const !== undefined) return yamlValue(node.const);
   const type = primaryType(node);
   const choices = choicesOf(node);
   if (choices && type === 'boolean')
     return `\${${stops.take()}|${choices.join(',')}|}`;
-  if (choices)
-    return `"\${${stops.take()}|${choices.map(escapeChoice).join(',')}|}"`;
+  if (choices) return `\${${stops.take()}|${choiceList(choices)}|}`;
   switch (type) {
-    case 'string':
-      return `"\${${stops.take()}}"`;
-    case 'array': {
-      const items = node.items && unwrapSchema(root, node.items);
-      return items && primaryType(items) === 'string'
-        ? `["\${${stops.take()}}"]`
-        : `[\${${stops.take()}}]`;
-    }
+    case 'array':
+      return `[\${${stops.take()}}]`;
     case 'object': {
       const fields = requiredLines(root, node, new Set(), stops);
-      return fields.length
-        ? `{ ${fields.join(', ')} }`
-        : `{ \${${stops.take()}} }`;
+      return yamlFlowMapping(fields.length ? fields : [`\${${stops.take()}}`]);
     }
     default:
       return `\${${stops.take()}}`;
   }
 };
 
-/** `key = placeholder` lines for a table's required scalar keys. */
+/** `key: placeholder` lines for a mapping's required scalar keys. */
 const requiredLines = (
   root: SchemaNode,
   node: SchemaNode,
@@ -148,8 +144,8 @@ const requiredLines = (
     if (skip.has(key) || !property) return [];
     const unwrapped = unwrapSchema(root, property);
     const items = unwrapped.items && unwrapSchema(root, unwrapped.items);
-    if (isTable(unwrapped) || (items && isTable(items))) return [];
-    return [`${tomlKey(key)} = ${placeholder(root, unwrapped, stops)}`];
+    if (isMapping(unwrapped) || (items && isMapping(items))) return [];
+    return [`${yamlKey(key)}: ${placeholder(root, unwrapped, stops)}`];
   });
 
 const variantBody = (
@@ -157,7 +153,7 @@ const variantBody = (
   variant: SchemaNode,
   stops: TabStops,
 ) => [
-  `${discriminatorKey} = ${tomlString(variantTag(variant))}`,
+  `${discriminatorKey}: ${yamlString(variantTag(variant))}`,
   ...requiredLines(root, variant, new Set([discriminatorKey]), stops),
 ];
 
@@ -182,14 +178,25 @@ const variantSuggestions = (
     };
   });
 
+type KeyCursor = Extract<YamlCursor, { kind: 'key' }>;
+
+/**
+ * Joins inserted lines. Monaco indents every line after the first like the
+ * cursor's line; after a `- `, the rest also align with the item's first key.
+ */
+const joinLines = (cursor: KeyCursor, lines: string[]) =>
+  cursor.inline
+    ? lines.join(', ')
+    : lines.join(cursor.item ? `\n${indentUnit}` : '\n');
+
 const propertySuggestions = (
   root: SchemaNode,
-  cursor: Extract<TomlCursor, { kind: 'key' }>,
+  cursor: KeyCursor,
   key: string,
   property: SchemaNode,
   required: boolean,
 ): DefinitionSuggestion[] => {
-  const names = [...cursor.table.filter(isString), key].map(tomlKey);
+  const name = yamlKey(key);
   const base = {
     detail: required
       ? i18n.t('definitionEditor.details.requiredType', {
@@ -207,71 +214,75 @@ const propertySuggestions = (
     typeof property.additionalProperties === 'object'
       ? unwrapSchema(root, property.additionalProperties)
       : undefined;
-  // Maps of scalars read best as one `[table]` of keys, not a table per key.
-  const tableMap = mapValue && isTable(mapValue) ? mapValue : undefined;
+  // Maps of mappings read best as one block of named entries.
+  const namedMappings = mapValue && isMapping(mapValue) ? mapValue : undefined;
 
   if (!cursor.inline) {
-    if (items && isTable(items)) {
-      const header = `[[${names.join('.')}]]`;
+    if (items && isMapping(items)) {
       if (itemVariants)
         return variantSuggestions(
           root,
           itemVariants,
           cursor.range,
-          (body) => [header, ...body].join('\n'),
-          (tag) => `${header} ${tag}`,
+          (body) =>
+            joinLines(cursor, [`${name}:`, ...indented(itemLines(body))]),
+          (tag) => `${key}: ${tag}`,
         ).map((suggestion) => ({
           ...base,
           ...suggestion,
           sortText: base.sortText,
         }));
-      const stops = new TabStops();
+      const body = requiredLines(root, items, new Set(), new TabStops());
       return [
         {
           ...base,
-          insertText: [
-            header,
-            ...requiredLines(root, items, new Set(), stops),
-          ].join('\n'),
+          insertText: joinLines(cursor, [
+            `${name}:`,
+            ...indented(itemLines(body.length ? body : ['$1'])),
+          ]),
           kind: suggestionKinds.section,
-          label: header,
+          label: key,
           snippet: true,
         },
       ];
     }
-    if (tableMap) {
+    if (namedMappings) {
       const stops = new TabStops();
       const keyChoices = property[schemaExtensions.keySuggestions];
-      const name = keyChoices?.length
-        ? `\${${stops.take()}|${keyChoices.map(escapeChoice).join(',')}|}`
+      const entry = keyChoices?.length
+        ? `\${${stops.take()}|${choiceList(keyChoices)}|}`
         : `\${${stops.take()}:${i18n.t('definitionEditor.placeholders.name')}}`;
-      const variants = taggedVariants(root, tableMap);
+      const variants = taggedVariants(root, namedMappings);
       const body = variants
         ? [
-            `${discriminatorKey} = "\${${stops.take()}|${variants.map((variant) => escapeChoice(variantTag(variant))).join(',')}|}"`,
+            `${discriminatorKey}: \${${stops.take()}|${choiceList(variants.map(variantTag))}|}`,
           ]
-        : [];
+        : [`\${${stops.take()}}`];
       return [
         {
           ...base,
-          insertText: [`[${names.join('.')}.${name}]`, ...body].join('\n'),
+          insertText: joinLines(cursor, [
+            `${name}:`,
+            `${indentUnit}${entry}:`,
+            ...indented(indented(body)),
+          ]),
           kind: suggestionKinds.section,
-          label: `[${names.join('.')}.…]`,
+          label: key,
           snippet: true,
         },
       ];
     }
-    if (primaryType(property) === 'object' && hasNestedTables(root, property)) {
-      const header = `[${names.join('.')}]`;
+    if (primaryType(property) === 'object') {
+      const body = requiredLines(root, property, new Set(), new TabStops());
       return [
         {
           ...base,
-          insertText: [
-            header,
-            ...requiredLines(root, property, new Set(), new TabStops()),
-          ].join('\n'),
+          insertText: joinLines(cursor, [
+            `${name}:`,
+            ...indented(body.length ? body : ['$1']),
+          ]),
           kind: suggestionKinds.section,
-          label: header,
+          label: key,
           snippet: true,
         },
       ];
@@ -280,9 +291,9 @@ const propertySuggestions = (
 
   const stops = new TabStops();
   const value = mapValue
-    ? `{ \${${stops.take()}} }`
-    : items && isTable(items)
-      ? `[{ \${${stops.take()}} }]`
+    ? yamlFlowMapping([`\${${stops.take()}}`])
+    : items && isMapping(items)
+      ? `[${yamlFlowMapping([`\${${stops.take()}}`])}]`
       : placeholder(root, property, stops);
   const hinted = Boolean(
     property[schemaExtensions.reference] ??
@@ -292,7 +303,7 @@ const propertySuggestions = (
   return [
     {
       ...base,
-      insertText: `${tomlKey(key)} = ${value}`,
+      insertText: `${name}: ${value}`,
       kind: suggestionKinds.property,
       label: key,
       snippet: true,
@@ -301,36 +312,56 @@ const propertySuggestions = (
   ];
 };
 
-const keySuggestions = (
-  { outline, root }: Context,
-  cursor: Extract<TomlCursor, { kind: 'key' }>,
-): DefinitionSuggestion[] => {
-  const resolved = schemaAtPath(root, cursor.table, outline.valueAt);
+const keySuggestions = async (
+  context: Context,
+  cursor: KeyCursor,
+  prefix: string,
+): Promise<DefinitionSuggestion[]> => {
+  const { outline, root } = context;
+  const resolved = schemaAtPath(root, cursor.mapping, outline.valueAt);
   if (!resolved) return [];
-  const present = outline.keysIn(cursor.table);
+  // A `- ` item of a sequence of scalars takes a value, not a key.
+  if (
+    cursor.item &&
+    !resolved.variants &&
+    !isMapping(resolved.node) &&
+    typeof cursor.mapping.at(-1) === 'number'
+  )
+    return valueSuggestions(
+      context,
+      {
+        flow: false,
+        kind: 'value',
+        path: cursor.mapping,
+        quoted: false,
+        range: cursor.range,
+      },
+      prefix,
+    );
+  const present = outline.keysIn(cursor.mapping);
+  const variantLabel = (tag: string) => `${discriminatorKey}: ${tag}`;
   if (resolved.variants && !resolved.defaulted) {
-    const separator = cursor.inline ? ', ' : '\n';
     return variantSuggestions(
       root,
       resolved.variants,
       cursor.range,
-      (body) => body.join(separator),
-      (tag) => `${discriminatorKey} = ${tomlString(tag)}`,
+      (body) => joinLines(cursor, body),
+      variantLabel,
     );
   }
   const { node } = resolved;
-  // An empty defaulted table can still become one of the tagged variants.
+  // An empty defaulted mapping can still become one of the tagged variants.
   const alternatives =
     resolved.defaulted && resolved.variants && !present.size
       ? variantSuggestions(
           root,
           resolved.variants,
           cursor.range,
-          (body) => body.join(cursor.inline ? ', ' : '\n'),
-          (tag) => `${discriminatorKey} = ${tomlString(tag)}`,
+          (body) => joinLines(cursor, body),
+          variantLabel,
         )
       : [];
-  const valueType = outline.valueAt([...cursor.table, valueTypeKey]);
+  const valueType = outline.valueAt([...cursor.mapping, valueTypeKey]);
   const required = new Set(node.required);
   const properties = Object.entries(node.properties ?? {});
   if (typeof node.additionalProperties === 'object') {
@@ -360,48 +391,6 @@ const keySuggestions = (
   ];
 };
 
-const headerSuggestions = (
-  { outline, root }: Context,
-  cursor: Extract<TomlCursor, { kind: 'header' }>,
-  text: string,
-): DefinitionSuggestion[] => {
-  const closing = cursor.array ? ']]' : ']';
-  const closed = text.startsWith(closing, cursor.range.end);
-  const tables = cursor.table.length ? [[], cursor.table] : [[]];
-  const suggestions = new Map<string, DefinitionSuggestion>();
-  for (const table of tables) {
-    const resolved = schemaAtPath(root, table, outline.valueAt);
-    if (!resolved || resolved.variants) continue;
-    const names = table.filter(isString).map(tomlKey);
-    for (const [key, schema] of Object.entries(
-      resolved.node.properties ?? {},
-    )) {
-      const property = unwrapSchema(root, schema);
-      const items = property.items && unwrapSchema(root, property.items);
-      const isArrayTable = items !== undefined && isTable(items);
-      const isMap = typeof property.additionalProperties === 'object';
-      const isSection =
-        isMap || (primaryType(property) === 'object' && !isArrayTable);
-      if (cursor.array ? !isArrayTable : !isSection) continue;
-      const name = [...names, tomlKey(key)].join('.');
-      const keyChoices = property[schemaExtensions.keySuggestions];
-      const insertName = isMap
-        ? `${escapeSnippet(name)}.${keyChoices?.length ? `\${1|${keyChoices.map(escapeChoice).join(',')}|}` : `\${1:${i18n.t('definitionEditor.placeholders.name')}}`}`
-        : escapeSnippet(name);
-      suggestions.set(name, {
-        detail: i18n.t('definitionEditor.details.section'),
-        documentation: property.description,
-        insertText: `${insertName}${closed ? '' : closing}`,
-        kind: suggestionKinds.section,
-        label: isMap ? `${name}.…` : name,
-        range: cursor.range,
-        snippet: true,
-      });
-    }
-  }
-  return [...suggestions.values()];
-};
-
 /** Narrows a replacement range to the dotted segment being typed. */
 const segmentRange = (range: TextRange, prefix: string): TextRange => {
   const separator = prefix.lastIndexOf(attributePathSeparator);
@@ -410,11 +399,11 @@ const segmentRange = (range: TextRange, prefix: string): TextRange => {
     : { ...range, start: range.start + separator + 1 };
 };
 
-const valueSuggestions = async (
+async function valueSuggestions(
   context: Context,
-  cursor: Extract<TomlCursor, { kind: 'value' }>,
+  cursor: Extract<YamlCursor, { kind: 'value' }>,
   prefix: string,
-): Promise<DefinitionSuggestion[]> => {
+): Promise<DefinitionSuggestion[]> {
   const { outline, root } = context;
   const resolved = schemaAtPath(root, cursor.path, outline.valueAt);
   if (!resolved) return [];
@@ -439,8 +428,8 @@ const valueSuggestions = async (
       root,
       variants,
       cursor.range,
-      (body) => (wrap ? `[{ ${body.join(', ')} }]` : `{ ${body.join(', ')} }`),
-      (tag) => `{ ${discriminatorKey} = ${tomlString(tag)} }`,
+      (body) => (wrap ? `[${yamlFlowMapping(body)}]` : yamlFlowMapping(body)),
+      (tag) => yamlFlowMapping([`${discriminatorKey}: ${tag}`]),
     );
   }
 
@@ -454,7 +443,7 @@ const valueSuggestions = async (
         version: component.version,
       }),
       filterText: component.id,
-      insertText: `{ id = ${tomlString(component.id)}, version = ${component.version} }`,
+      insertText: yamlValue({ id: component.id, version: component.version }),
       kind: suggestionKinds.reference,
       label: component.id,
       range: cursor.range,
@@ -498,10 +487,13 @@ const valueSuggestions = async (
     let insertText = text;
     let snippet = false;
     if (!cursor.quoted) {
+      const flow = cursor.flow || wrap;
       const literal = quote
         ? candidate.continues
-          ? `"${escapeSnippet(raw)}$0"`
-          : tomlString(raw)
+          ? yamlString(raw, flow) === raw
+            ? `${escapeSnippet(raw)}$0`
+            : `'${escapeSnippet(raw.replaceAll("'", "''"))}$0'`
+          : yamlString(raw, flow)
         : raw;
       insertText = wrap ? `[${literal}]` : literal;
       snippet = Boolean(candidate.continues);
@@ -519,7 +511,7 @@ const valueSuggestions = async (
       triggerSuggest: candidate.continues,
     };
   });
-};
+}
 
 export const definitionCompletions = async ({
   kind,
@@ -527,7 +519,7 @@ export const definitionCompletions = async ({
   references,
   text,
 }: CompletionInput): Promise<DefinitionSuggestion[]> => {
-  const outline = scanToml(text, offset);
+  const outline = scanYaml(text, offset);
   const context: Context = {
     outline,
     references,
@@ -536,9 +528,11 @@ export const definitionCompletions = async ({
   const { cursor } = outline;
   switch (cursor?.kind) {
     case 'key':
-      return keySuggestions(context, cursor);
-    case 'header':
-      return headerSuggestions(context, cursor, text);
+      return keySuggestions(
+        context,
+        cursor,
+        text.slice(cursor.range.start, offset),
+      );
     case 'value':
       return valueSuggestions(
         context,

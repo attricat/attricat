@@ -5,8 +5,8 @@ import type {
   MarkerSeverity,
   Position,
 } from 'monaco-editor';
-import { tomlLanguageId } from '../../components/tomlLanguage';
-import { scanToml } from '../../components/tomlOutline';
+import { yamlLanguageId } from '../../components/yamlLanguage';
+import { scanYaml } from '../../components/yamlOutline';
 import {
   diagnosticsOwner,
   referenceDiagnosticsOwner,
@@ -33,7 +33,7 @@ import {
   referenceValues,
   unknownReferences,
 } from './definitionReferenceTargets';
-import type { TextRange } from '../../components/tomlOutline';
+import type { TextRange } from '../../components/yamlOutline';
 
 export type DefinitionModelConfig = {
   kind: DefinitionKind;
@@ -41,9 +41,9 @@ export type DefinitionModelConfig = {
 };
 
 /**
- * Providers are registered once per Monaco instance for the shared TOML
+ * Providers are registered once per Monaco instance for the shared YAML
  * language and read each model's current configuration through this map, so
- * plain TOML editors (such as the revision diff) stay unaffected.
+ * plain YAML editors (such as the revision diff) stay unaffected.
  */
 const modelConfigs = new WeakMap<
   editor.ITextModel,
@@ -65,7 +65,7 @@ const sameMarker = (left: editor.IMarkerData, right: editor.IMarkerData) =>
   left.endLineNumber === right.endLineNumber &&
   left.endColumn === right.endColumn;
 
-const triggerCharacters = ['"', "'", '.', '[', '=', ' ', ',', '{'];
+const triggerCharacters = ['"', "'", '.', '[', ' ', ',', '{'];
 const triggerSuggestCommand = 'editor.action.triggerSuggest';
 
 const completionKind = (
@@ -128,7 +128,7 @@ const toCompletionItem = (
 const registerProviders = (monaco: Monaco) => {
   if (registeredInstances.has(monaco)) return;
   registeredInstances.add(monaco);
-  monaco.languages.registerCompletionItemProvider(tomlLanguageId, {
+  monaco.languages.registerCompletionItemProvider(yamlLanguageId, {
     provideCompletionItems: async (
       model: editor.ITextModel,
       position: Position,
@@ -149,7 +149,7 @@ const registerProviders = (monaco: Monaco) => {
     },
     triggerCharacters,
   });
-  monaco.languages.registerCodeActionProvider(tomlLanguageId, {
+  monaco.languages.registerCodeActionProvider(yamlLanguageId, {
     provideCodeActions: (
       model: editor.ITextModel,
       _range: unknown,
@@ -176,13 +176,13 @@ const registerProviders = (monaco: Monaco) => {
       return { actions, dispose: () => {} };
     },
   });
-  monaco.languages.registerHoverProvider(tomlLanguageId, {
+  monaco.languages.registerHoverProvider(yamlLanguageId, {
     provideHover: async (model: editor.ITextModel, position: Position) => {
       const config = modelConfigs.get(model)?.current;
       if (!config) return undefined;
       const text = model.getValue();
       const offset = model.getOffsetAt(position);
-      const outline = scanToml(text);
+      const outline = scanYaml(text);
       const target = referenceAt(config.kind, outline, offset);
       if (target) {
         const contents = await referenceHover(
@@ -205,11 +205,11 @@ const registerProviders = (monaco: Monaco) => {
       );
     },
   });
-  monaco.languages.registerDefinitionProvider(tomlLanguageId, {
+  monaco.languages.registerDefinitionProvider(yamlLanguageId, {
     provideDefinition: (model: editor.ITextModel, position: Position) => {
       const config = modelConfigs.get(model)?.current;
       if (!config) return undefined;
-      const outline = scanToml(model.getValue());
+      const outline = scanYaml(model.getValue());
       const target = referenceAt(
         config.kind,
         outline,
@@ -224,11 +224,11 @@ const registerProviders = (monaco: Monaco) => {
       );
     },
   });
-  monaco.languages.registerLinkProvider(tomlLanguageId, {
+  monaco.languages.registerLinkProvider(yamlLanguageId, {
     provideLinks: async (model: editor.ITextModel) => {
       const config = modelConfigs.get(model)?.current;
       if (!config) return { links: [] };
-      const outline = scanToml(model.getValue());
+      const outline = scanYaml(model.getValue());
       const context = { outline, references: config.references };
       const links = await Promise.all(
         referenceValues(config.kind, outline).map(async (target) => {
@@ -324,7 +324,7 @@ const updateReferenceDiagnostics = async (
   if (!config) return;
   const version = model.getVersionId();
   const unknown = await unknownReferences(kind, {
-    outline: scanToml(model.getValue()),
+    outline: scanYaml(model.getValue()),
     references: config.references,
   });
   if (model.isDisposed() || model.getVersionId() !== version) return;

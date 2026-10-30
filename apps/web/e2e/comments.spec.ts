@@ -8,7 +8,7 @@ for (const mode of ['light', 'dark'] as const) {
     const blueprint = await createRecordBlueprint(
       `comments_${suffix()}`,
       'Commented records',
-      '[[attributes]]\ncode = "title"\nvalue_type = "string"',
+      'attributes:\n  - code: title\n    value_type: string',
     );
     const record = await createRecord(blueprint, [
       scalar('title', 'Comments example'),

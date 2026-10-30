@@ -30,9 +30,9 @@ import { RULE_DEFINITION_VIEWER_HEIGHT, ruleRoutes } from './constants';
 import { ruleRevisionsOptions } from './queryOptions';
 import type { RuleComparisonSearch } from './schemas';
 
-const TomlDiffEditor = lazy(() =>
-  import('../../components/TomlDiffEditor').then(({ TomlDiffEditor }) => ({
-    default: TomlDiffEditor,
+const YamlDiffEditor = lazy(() =>
+  import('../../components/YamlDiffEditor').then(({ YamlDiffEditor }) => ({
+    default: YamlDiffEditor,
   })),
 );
 const ignoreChange = () => undefined;
@@ -223,7 +223,7 @@ export const RuleChangelog = ({
                   </LoadingState>
                 }
               >
-                <TomlDiffEditor
+                <YamlDiffEditor
                   modified={right.definition}
                   modifiedTitle={label(right.version)}
                   original={left.definition}

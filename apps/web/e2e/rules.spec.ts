@@ -51,26 +51,22 @@ test('dry-runs and runs a rule, then acknowledges and resolves its finding', asy
   const blueprint = await createRecordBlueprint(
     code,
     'Ruled product',
-    `[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "${attribute}"
-value_type = "string"`,
+    `attributes:
+  - code: title
+    value_type: string
+  - code: '${attribute}'
+    value_type: string`,
   );
   await createRule(
     blueprint,
-    `code = "summary-required-${suffix()}"
-name = "${ruleName}"
-severity = "error"
-
-[[triggers]]
-type = "manual"
-
-[predicate]
-type = "required"
-attribute_code = "${attribute}"`,
+    `code: summary-required-${suffix()}
+name: '${ruleName}'
+severity: error
+triggers:
+  - type: manual
+predicate:
+  type: required
+  attribute_code: '${attribute}'`,
   );
   await createRecord(blueprint, [
     scalar('title', 'Complete product'),
@@ -165,27 +161,23 @@ test('filters records by data quality', async ({ page }) => {
   const blueprint = await createRecordBlueprint(
     code,
     'Quality product',
-    `[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "summary"
-value_type = "string"`,
+    `attributes:
+  - code: title
+    value_type: string
+  - code: summary
+    value_type: string`,
   );
   await enableRule(
     await createRule(
       blueprint,
-      `code = "${ruleCode}"
-name = "Summary required ${code}"
-severity = "error"
-
-[[triggers]]
-type = "manual"
-
-[predicate]
-type = "required"
-attribute_code = "summary"`,
+      `code: '${ruleCode}'
+name: Summary required ${code}
+severity: error
+triggers:
+  - type: manual
+predicate:
+  type: required
+  attribute_code: summary`,
     ),
   );
   // Saving a record checks it against every enabled rule of its blueprint.

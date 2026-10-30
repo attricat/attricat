@@ -31,7 +31,7 @@ test('guides an administrator from onboarding to the explorer', async ({
   await createRecordBlueprint(
     `onboarding_${id}`,
     `Onboarding ${id}`,
-    '[[attributes]]\ncode = "title"\nvalue_type = "string"',
+    'attributes:\n  - code: title\n    value_type: string',
   );
   await page.goto('/');
 

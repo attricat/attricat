@@ -26,7 +26,7 @@ test('offers a reusable attribute draft over a newer revision', async ({
   page,
 }) => {
   const code = `draft_attribute_${suffix()}`;
-  const definition = `code = "${code}"\nname = "Draft attribute"\nvalue_type = "string"\n`;
+  const definition = `code: ${code}\nname: Draft attribute\nvalue_type: string\n`;
   const attribute = await request<{ definition_id: string }>(
     '/reusable-attributes',
     {

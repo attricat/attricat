@@ -1,5 +1,5 @@
 import { isJsonObject } from '../../api/jsonObject';
-import { parse } from 'smol-toml';
+import { parseStrictYaml } from '../../components/yamlSyntax';
 import type { Rule } from '../rules/schemas';
 import type { Attribute } from './api';
 import { attributeLabel } from './recordDisplay';
@@ -264,12 +264,9 @@ const ruleConnections = (rules: readonly Rule[]): AttributeConnection[] =>
 
 /** Parts that only the blueprint's definition source records. */
 const definitionConnections = (definition: string): AttributeConnection[] => {
-  let source: JsonObject;
-  try {
-    source = parse(definition);
-  } catch {
-    return [];
-  }
+  const parsed = parseStrictYaml(definition);
+  if ('error' in parsed || !isJsonObject(parsed.data)) return [];
+  const source = parsed.data;
   const includes = new Map(
     (Array.isArray(source.includes) ? source.includes : [])
       .filter(isJsonObject)

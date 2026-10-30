@@ -15,7 +15,7 @@ test('shows health sections, custom stale threshold, and refreshes data', async 
   const blueprint = await createRecordBlueprint(
     code,
     'Healthy product',
-    '[[attributes]]\ncode = "title"\nvalue_type = "string"',
+    'attributes:\n  - code: title\n    value_type: string',
     { recordSchema: '{"type":"object","required":["title"]}' },
   );
   await createRecord(blueprint, [scalar('title', 'Health check')]);

@@ -69,7 +69,7 @@
     "export": "Eksportuj",
     "import": "Importuj",
     "importTranslations": "Importuj tłumaczenia",
-    "importDescription": "Wybierz plik JSON lub TOML utworzony przez Eksportuj lub acli lexicon export. Język jest określony w pliku.",
+    "importDescription": "Wybierz plik JSON lub YAML utworzony przez Eksportuj lub acli lexicon export. Język jest określony w pliku.",
     "chooseFile": "Wybierz plik",
     "selectedFile_one": "{{name}}: {{count}} wpis, język {{language}}",
     "selectedFile_few": "{{name}}: {{count}} wpisy, język {{language}}",

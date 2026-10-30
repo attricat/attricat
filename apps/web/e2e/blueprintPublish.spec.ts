@@ -1,18 +1,20 @@
 import { expect, test, type Page } from '@playwright/test';
 import { replaceDefinition, suffix } from './helpers';
 
-const definition = (code: string, extraAttributes = '') => `format_version = 1
-code = "${code}"
-name = "Authored product"
-kind = "record"
+/** `extraAttributes` are further items of the `attributes` list. */
+const definition = (code: string, extraAttributes = '') => `format_version: 1
+code: ${code}
+name: Authored product
+kind: record
 
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
 
-[[attributes]]
-code = "title"
-value_type = "string"
+attributes:
+  - code: title
+    value_type: string
 ${extraAttributes}`;
 
 const publishDraft = async (page: Page, version: number) => {
@@ -66,10 +68,7 @@ test('authors, publishes, revises and migrates a blueprint in the browser', asyn
   ).toBeVisible();
   await replaceDefinition(
     page,
-    definition(
-      code,
-      '\n[[attributes]]\ncode = "description"\nvalue_type = "string"\n',
-    ),
+    definition(code, '  - code: description\n    value_type: string\n'),
   );
   await page.getByRole('button', { name: 'Save draft' }).click();
   await expect(page).toHaveURL(blueprintUrl);

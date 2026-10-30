@@ -7,7 +7,7 @@ test.beforeAll(async () => {
   await createRecordBlueprint(
     `navigation_${id}`,
     `Navigation ${id}`,
-    '[[attributes]]\ncode = "title"\nvalue_type = "string"',
+    'attributes:\n  - code: title\n    value_type: string',
   );
 });
 

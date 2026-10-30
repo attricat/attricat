@@ -61,7 +61,7 @@ describe('workflow API client', () => {
     );
   });
 
-  it('sends TOML to the server compiler for canonical validation', async () => {
+  it('sends YAML to the server compiler for canonical validation', async () => {
     fetchMock.mockResolvedValue({
       ok: true,
       json: () =>

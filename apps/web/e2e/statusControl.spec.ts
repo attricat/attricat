@@ -29,7 +29,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
     await createRecordBlueprint(
       code,
       'Status items',
-      `[[attributes]]\ncode = "title"\nvalue_type = "string"\n\n[[attributes]]\ncode = "status"\nvalue_type = "string"\nvalue_schema = '${statusSchema}'`,
+      `attributes:\n  - code: title\n    value_type: string\n  - code: status\n    value_type: string\n    value_schema: '${statusSchema}'`,
     );
     await page.goto('/records/new');
     await page.getByLabel('Blueprint').click();

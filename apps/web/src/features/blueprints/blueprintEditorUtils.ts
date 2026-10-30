@@ -1,6 +1,6 @@
-import basicDefinition from './templates/basic.toml?raw';
-import productDefinition from './templates/product.toml?raw';
-import seoDefinition from './templates/seo.toml?raw';
+import basicDefinition from './templates/basic.yaml?raw';
+import productDefinition from './templates/product.yaml?raw';
+import seoDefinition from './templates/seo.yaml?raw';
 
 export const blueprintTemplates = [
   {
@@ -20,4 +20,4 @@ export const blueprintTemplates = [
   },
 ] as const;
 
-export const minimumTomlEditorHeight = 480;
+export const minimumYamlEditorHeight = 480;

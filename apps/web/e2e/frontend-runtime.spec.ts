@@ -61,7 +61,7 @@ test('loads Monaco and its worker without external network access', async ({
   await expect(input).toBeFocused();
   await page.keyboard.press('ControlOrMeta+a');
   await page.keyboard.insertText(
-    'format_version = 1\ncode = "offline"\nname = "Offline"\nkind = "record"\n',
+    'format_version: 1\ncode: offline\nname: Offline\nkind: record\n',
   );
   expect(errors).toEqual([]);
   await expect(editor).toContainText('offline');
@@ -101,7 +101,7 @@ test('loads Polish translations only after they are selected', async ({
   expect(localeRequests.some((url) => /\/pl-/.test(url))).toBe(true);
 });
 
-test('follows the dark theme and edits TOML with language features', async ({
+test('follows the dark theme and edits YAML with language features', async ({
   page,
   baseURL,
 }) => {
@@ -121,10 +121,10 @@ test('follows the dark theme and edits TOML with language features', async ({
   await input.focus();
   await page.keyboard.press('ControlOrMeta+a');
   await page.keyboard.insertText(
-    'format_version = 1\ncode = "offline"\nnme = "Offline"\nkind = "record" # inline note\ntags = ["a"]\n',
+    'format_version: 1\ncode: offline\nnme: Offline\nkind: record  # inline note\ntags: [a]\n',
   );
-  // Inline comments are highlighted, and arrays hold strings rather than
-  // reading as table headers.
+  // Inline comments are highlighted, and flow sequence items read as values
+  // like other plain scalars.
   const tokenClass = (text: RegExp) =>
     editor
       .locator('.view-line span span')
@@ -132,9 +132,7 @@ test('follows the dark theme and edits TOML with language features', async ({
       .first()
       .getAttribute('class');
   await expect.poll(() => tokenClass(/^#.inline.note$/)).not.toBe('mtk1');
-  await expect
-    .poll(() => tokenClass(/^"a"$/))
-    .toBe(await tokenClass(/^"record"$/));
+  await expect.poll(() => tokenClass(/^a$/)).toBe(await tokenClass(/^record$/));
 
   // Ctrl+/ toggles a # line comment.
   await page.keyboard.press('ControlOrMeta+Home');
@@ -151,6 +149,6 @@ test('follows the dark theme and edits TOML with language features', async ({
   await page.keyboard.press('Control+.');
   await expect(page.getByText('Change to “name”')).toBeVisible();
   await page.keyboard.press('Enter');
-  await expect(editor).toContainText('name = "Offline"');
+  await expect(editor).toContainText('name: Offline');
   await expect(editor).not.toContainText('nme');
 });

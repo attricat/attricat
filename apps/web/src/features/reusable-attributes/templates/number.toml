@@ -1,7 +1,0 @@
-code = "weight_kg"
-name = "Weight (kg)"
-value_type = "number"
-# Offered as a filter in the Explorer.
-searchable = true
-facetable = true
-value_schema = { type = "number", minimum = 0 }

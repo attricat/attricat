@@ -65,14 +65,14 @@ describe('WorkflowEditorPage', () => {
     expect(
       (
         screen.getByRole('textbox', {
-          name: 'Workflow TOML definition',
+          name: 'Workflow YAML definition',
         }) as HTMLTextAreaElement
       ).readOnly,
     ).toBe(true);
     expect(
       (
         screen.getByRole('button', {
-          name: 'Validate TOML',
+          name: 'Validate YAML',
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
@@ -108,14 +108,14 @@ describe('WorkflowEditorPage', () => {
     vi.mocked(currentSession).mockResolvedValue({
       capabilities: { workflows_manage: true },
     } as Awaited<ReturnType<typeof currentSession>>);
-    const source = { definition: 'original TOML' } as Awaited<
+    const source = { definition: 'original YAML' } as Awaited<
       ReturnType<typeof getWorkflowRevision>
     >;
     vi.mocked(getWorkflowRevision)
       .mockResolvedValueOnce(source)
       .mockResolvedValueOnce({
         ...source,
-        definition: 'server updated TOML',
+        definition: 'server updated YAML',
       });
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -127,14 +127,14 @@ describe('WorkflowEditorPage', () => {
     );
     const user = userEvent.setup();
     const editor = await screen.findByRole('textbox', {
-      name: 'Workflow TOML definition',
+      name: 'Workflow YAML definition',
     });
     await user.type(editor, ' changed');
-    expect((editor as HTMLTextAreaElement).value).toBe('original TOML changed');
+    expect((editor as HTMLTextAreaElement).value).toBe('original YAML changed');
     await client.refetchQueries({
       queryKey: workflowQueryKeys.revision('workflow-1', 1),
     });
-    expect((editor as HTMLTextAreaElement).value).toBe('original TOML changed');
+    expect((editor as HTMLTextAreaElement).value).toBe('original YAML changed');
     expect(getWorkflowRevision).toHaveBeenCalledTimes(2);
   });
 
@@ -162,7 +162,7 @@ describe('WorkflowEditorPage', () => {
     );
 
     await user.click(
-      await screen.findByRole('button', { name: 'Validate TOML' }),
+      await screen.findByRole('button', { name: 'Validate YAML' }),
     );
     expect(
       await screen.findByText(
@@ -171,7 +171,7 @@ describe('WorkflowEditorPage', () => {
     ).toBeDefined();
 
     await user.type(
-      screen.getByRole('textbox', { name: 'Workflow TOML definition' }),
+      screen.getByRole('textbox', { name: 'Workflow YAML definition' }),
       '\n# changed',
     );
     expect(

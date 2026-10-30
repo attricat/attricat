@@ -15,30 +15,27 @@ test('upgrades an outdated record to the current blueprint revision', async ({
   const first = await createRecordBlueprint(
     code,
     'Migrated product',
-    '[[attributes]]\ncode = "title"\nvalue_type = "string"',
+    'attributes:\n  - code: title\n    value_type: string',
   );
   const record = await createRecord(first, [
     scalar('title', 'Existing product'),
   ]);
   const second = await createRevision(
     first.blueprint.id,
-    `format_version = 1
-code = "${code}"
-name = "Migrated product"
-kind = "record"
-record_schema = '{"type":"object","required":["description"]}'
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "description"
-value_type = "string"`,
+    `format_version: 1
+code: '${code}'
+name: Migrated product
+kind: record
+record_schema: '{"type":"object","required":["description"]}'
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+  - code: description
+    value_type: string`,
   );
   await publishRevision(second);
 

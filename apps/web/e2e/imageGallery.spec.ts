@@ -26,17 +26,16 @@ for (const mode of ['light', 'dark'] as const) {
       `photos_${suffix()}`,
       'Gallery example',
       `
-[[attributes]]
-code = "title"
-value_type = "string"
-[[attributes]]
-code = "photos"
-value_type = "file"
-cardinality = "many"
-ordered = true
-image_only = true
-allowed_mime_groups = ["image"]
-max_bytes = 1048576
+attributes:
+  - code: title
+    value_type: string
+  - code: photos
+    value_type: file
+    cardinality: many
+    ordered: true
+    image_only: true
+    allowed_mime_groups: [image]
+    max_bytes: 1048576
 `,
     );
     const record = await createRecord(blueprint, [

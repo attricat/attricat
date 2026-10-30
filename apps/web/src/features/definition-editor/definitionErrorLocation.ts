@@ -1,14 +1,14 @@
 import {
-  scanToml,
+  scanYaml,
   type TextRange,
-  type TomlPath,
-} from '../../components/tomlOutline';
+  type YamlPath,
+} from '../../components/yamlOutline';
 
 const quotedNames = /'([^']+)'/g;
 /** Leading definition keys that server messages name without quotes. */
 const keyPrefix = /^([a-z_]+(?:\.[a-z_]+)*)\b/;
 
-const within = (path: TomlPath, scope: string | undefined) =>
+const within = (path: YamlPath, scope: string | undefined) =>
   scope === undefined || path.includes(scope);
 
 const lastMatch = <T>(items: readonly T[], matches: (item: T) => boolean) => {
@@ -28,7 +28,7 @@ export const locateDefinitionError = (
   text: string,
   message: string,
 ): TextRange | undefined => {
-  const outline = scanToml(text);
+  const outline = scanYaml(text);
   const names = [...message.matchAll(quotedNames)].map((match) => match[1]);
   for (let index = names.length - 1; index >= 0; index--) {
     const name = names[index];
@@ -40,7 +40,7 @@ export const locateDefinitionError = (
       );
       if (value) return value.range;
       const key = lastMatch(
-        [...outline.entries, ...outline.headers],
+        outline.entries,
         ({ path }) => path.at(-1) === name && within(path, scope),
       );
       if (key) return key.range;

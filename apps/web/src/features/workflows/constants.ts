@@ -29,14 +29,12 @@ export const compareSelectMinWidth = 220;
 export const runTableEmptyColSpan = 6;
 export const editorHeight = 'calc(100vh - 380px)';
 
-export const starterWorkflowDefinition = `format_version = 1
-code = "example-workflow"
-name = "Example workflow"
-
-[[triggers]]
-event_type = "record.created.v1"
-
-[[actions]]
-type = "system_tags_add"
-tags = ["example"]
+export const starterWorkflowDefinition = `format_version: 1
+code: example-workflow
+name: Example workflow
+triggers:
+  - event_type: record.created.v1
+actions:
+  - type: system_tags_add
+    tags: [example]
 `;

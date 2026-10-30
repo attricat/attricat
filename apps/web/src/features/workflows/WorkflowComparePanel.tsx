@@ -1,6 +1,6 @@
 import { Box, MenuItem, Paper, TextField } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { TomlDiffEditor } from '../../components/TomlDiffEditor';
+import { YamlDiffEditor } from '../../components/YamlDiffEditor';
 import { compareSelectMinWidth } from './constants';
 import type { Workflow } from './schemas';
 
@@ -34,7 +34,7 @@ export const WorkflowComparePanel = ({
         ))}
       </TextField>
       <Box sx={{ mt: 2 }}>
-        <TomlDiffEditor
+        <YamlDiffEditor
           modified={current.definition}
           modifiedTitle={t('workflows.currentRevision')}
           original={compared?.definition ?? ''}

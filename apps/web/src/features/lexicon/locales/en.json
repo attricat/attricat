@@ -65,7 +65,7 @@
     "export": "Export",
     "import": "Import",
     "importTranslations": "Import translations",
-    "importDescription": "Choose a JSON or TOML file created by Export or acli lexicon export. The file sets the language.",
+    "importDescription": "Choose a JSON or YAML file created by Export or acli lexicon export. The file sets the language.",
     "chooseFile": "Choose file",
     "selectedFile_one": "{{name}}: {{count}} entry in {{language}}",
     "selectedFile_other": "{{name}}: {{count}} entries in {{language}}",

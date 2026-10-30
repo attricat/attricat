@@ -6,27 +6,28 @@ import {
   schemaAtPath,
   typeLabel,
 } from './definitionSchema';
-import { scanToml, type TextRange } from '../../components/tomlOutline';
+import { scanYaml, type TextRange } from '../../components/yamlOutline';
 
 type DefinitionHover = { contents: string[]; range: TextRange };
 
 const contains = (range: TextRange, offset: number) =>
   offset >= range.start && offset <= range.end;
 
-/** Documents the key or table header under the cursor from its contract. */
+/** Documents the key under the cursor from its contract. */
 export const definitionHover = (
   kind: DefinitionKind,
   text: string,
   offset: number,
 ): DefinitionHover | undefined => {
   const root = definitionSchemas[kind];
-  const outline = scanToml(text);
-  const target =
-    outline.entries.find(({ range }) => contains(range, offset)) ??
-    outline.headers.find(({ range }) => contains(range, offset));
+  const outline = scanYaml(text);
+  const target = outline.entries.find(
+    ({ path, range }) =>
+      typeof path.at(-1) === 'string' && contains(range, offset),
+  );
   if (!target) return undefined;
   const { path } = target;
-  // Elements and `[[array]]` headers end in an index; describe the array.
+  // Keys of sequence items end in an index; describe the sequence.
   const described = typeof path.at(-1) === 'number' ? path.slice(0, -1) : path;
   const node = schemaAtPath(root, described, outline.valueAt)?.node;
   if (!node) return undefined;

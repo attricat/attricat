@@ -1,9 +1,9 @@
 import i18n from '../../i18n';
 import type {
   TextRange,
-  TomlEntry,
-  TomlOutline,
-} from '../../components/tomlOutline';
+  YamlEntry,
+  YamlOutline,
+} from '../../components/yamlOutline';
 import {
   aliasKey,
   attributePathSeparator,
@@ -28,14 +28,14 @@ import {
 
 /** A string value in the document that names something else. */
 export type ReferenceValue = {
-  entry: TomlEntry;
+  entry: YamlEntry;
   range: TextRange;
   reference: DefinitionReferenceKind;
   value: string;
 };
 
 type ReferenceContext = {
-  outline: TomlOutline;
+  outline: YamlOutline;
   references: DefinitionReferences;
 };
 
@@ -64,7 +64,7 @@ const contains = (range: TextRange, offset: number) =>
 
 export const referenceValues = (
   kind: DefinitionKind,
-  outline: TomlOutline,
+  outline: YamlOutline,
 ): ReferenceValue[] => {
   const root = definitionSchemas[kind];
   return outline.entries.flatMap((entry) => {
@@ -84,7 +84,7 @@ export const referenceValues = (
 
 export const referenceAt = (
   kind: DefinitionKind,
-  outline: TomlOutline,
+  outline: YamlOutline,
   offset: number,
 ) =>
   referenceValues(kind, outline).find(({ range }) => contains(range, offset));
@@ -158,7 +158,7 @@ export const unknownReferences = async (
 };
 
 const declaration = (
-  outline: TomlOutline,
+  outline: YamlOutline,
   table: string,
   key: string,
   value: string,
@@ -173,7 +173,7 @@ const declaration = (
 
 /** Where the document declares what a reference names, for Go to Definition. */
 export const referenceDeclaration = (
-  outline: TomlOutline,
+  outline: YamlOutline,
   { reference, value }: ReferenceValue,
 ): TextRange | undefined => {
   if (!documentReferences.has(reference)) return undefined;
