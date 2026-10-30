@@ -814,10 +814,7 @@ views:
         } else {
             for contributions in [
                 BTreeMap::new(),
-                BTreeMap::from([(
-                    "acme.shop:action".to_owned(),
-                    "record_preview_panel".to_owned(),
-                )]),
+                BTreeMap::from([("acme.shop:action".to_owned(), "record_tab".to_owned())]),
             ] {
                 let mapped = build_solution_pack_plan(
                     &pack,
@@ -886,7 +883,7 @@ views:
 fn workspace_layout_accepts_every_manifest_outlet_and_both_primary_lists() {
     for outlet in [
         "navigation",
-        "record_preview_panel",
+        "record_tab",
         "blueprint_attribute_configuration",
         "record_action",
         "explorer_row_action",
@@ -928,7 +925,7 @@ views:
     type: extension_layout
     version: 1
     outlets:
-      record_preview_panel:
+      record_tab:
         order: ['acme.shop:preview']
         hidden: []
       record_action:
@@ -950,7 +947,7 @@ views:
     let expected = vec![
         ("record_action", "acme.shop:a_action"),
         ("record_action", "acme.shop:z_action"),
-        ("record_preview_panel", "acme.shop:preview"),
+        ("record_tab", "acme.shop:preview"),
     ];
     for _ in 0..20 {
         let pack = ValidatedSolutionPack::from_tar_zst(&archive).unwrap();

@@ -15,7 +15,7 @@ const refreshSchema = z
   .strict();
 const recordRefreshOutlets = new Set<ExtensionContribution['outlet']>([
   extensionOutlets.actionDialog,
-  extensionOutlets.recordPreviewPanel,
+  extensionOutlets.recordTab,
 ]);
 
 /** Action outlets on a record page, whose dialogs act on that one record. */

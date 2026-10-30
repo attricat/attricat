@@ -34,7 +34,7 @@ const contribution: ExtensionContribution = {
   extension_name: 'Example Extension',
   id: 'inspector',
   kind: 'embedded',
-  outlet: 'record_preview_panel',
+  outlet: 'record_tab',
   release_id: '11111111-1111-4111-8111-111111111111',
   route: null,
   title: 'Inspector',

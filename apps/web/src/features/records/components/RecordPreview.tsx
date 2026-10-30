@@ -15,7 +15,6 @@ import {
   AgentIcon,
   CommentIcon,
   ExportIcon,
-  ExtensionIcon,
   RecordControlIcon,
   RecordIcon,
   RuleIcon,
@@ -24,9 +23,16 @@ import {
 import { QueryErrorNotice } from '../../../components/QueryErrorNotice';
 import { ApiErrorAlert } from '../../../components/ApiErrorAlert';
 import { BlueprintLink } from '../../blueprints/BlueprintLink';
-import { ExtensionOutlet } from '../../extensions/ExtensionOutlet';
 import { ExtensionActionMenuItems } from '../../extensions/ExtensionActions';
-import { outletContributions } from '../../extensions/outletContributions';
+import { ExtensionFrame } from '../../extensions/ExtensionFrame';
+import { hostIconComponent } from '../../extensions/hostIcons';
+import {
+  isExtensionRecordTabKey,
+  recordTabContributions,
+  recordTabKey,
+  type RecordTabContext,
+} from '../../extensions/recordTabs';
+import { useContributionTitle } from '../../extensions/contributionTitle';
 import { useExtensionRuntime } from '../../extensions/useExtensionRuntime';
 import { useCan, useCanOn } from '../../auth/useCan';
 import { type AttricatRecord, type Attribute } from '../api';
@@ -77,7 +83,11 @@ import { RelationshipPickerActionBar } from './RelationshipPickerActionBar';
 import { useRecordPublications } from './useRecordPublications';
 import { capabilities, accessTargetKinds } from '../../auth/capabilities';
 import { currentBlueprintOptions } from '../queryOptions';
-import { extensionOutlets } from '../../extensions/constants';
+import {
+  extensionOutlets,
+  outletCapacities,
+  supportedOutletContextVersion,
+} from '../../extensions/constants';
 import { usePaletteSurface } from '../../extensions/actionPaletteStore';
 
 const loadRecordCommentsPanel = () =>
@@ -112,6 +122,10 @@ type Props = {
   relationshipPickerToken?: string;
   /** Shows the record's comments in a tab. */
   showComments?: boolean;
+  /** The tab to open; changing it opens another. */
+  requestedTab?: RecordPreviewTabKey;
+  /** Called when the viewer opens another tab. */
+  onTabChange?: (key: RecordPreviewTabKey) => void;
   onDeleted: () => void;
   onDuplicated: (copy: AttricatRecord) => void;
   /** Places the preview in its page or panel. */
@@ -129,6 +143,8 @@ export const RecordPreview = ({
   drawerOffset,
   relationshipPickerToken,
   showComments = false,
+  requestedTab,
+  onTabChange,
   onDeleted,
   onDuplicated,
   renderFrame,
@@ -151,8 +167,21 @@ export const RecordPreview = ({
   const [tab, setTab] = useState<RecordPreviewTabKey>(() =>
     showComments && window.location.hash === `#${commentsSectionId}`
       ? recordPreviewTabs.comments
-      : recordPreviewTabs.data,
+      : (requestedTab ?? recordPreviewTabs.data),
   );
+  // A new request, such as an extension leading to its tab, opens that tab.
+  const [shownRequest, setShownRequest] = useState(requestedTab);
+  if (requestedTab !== shownRequest) {
+    setShownRequest(requestedTab);
+    if (requestedTab) setTab(requestedTab);
+  }
+  // Extension tabs mount their frame once first opened, then stay mounted
+  // like every other tab.
+  const [openedExtensionTabs, setOpenedExtensionTabs] = useState<
+    ReadonlySet<RecordPreviewTabKey>
+  >(() => new Set());
+  if (isExtensionRecordTabKey(tab) && !openedExtensionTabs.has(tab))
+    setOpenedExtensionTabs(new Set(openedExtensionTabs).add(tab));
   // Fields live in the Data tab, whichever tab leads to one.
   const revealField = useCallback(
     (code: string) => {
@@ -242,23 +271,43 @@ export const RecordPreview = ({
     revealField(pendingReveal.code);
   }
   const resolvedRecord = resolved.data?.record;
-  // Extension panels for the record get a tab of their own when any exist.
   const extensionScope = resolvedRecord && {
     blueprintId: resolvedRecord.blueprint_id,
     blueprintVersion: resolvedRecord.blueprint_version,
   };
-  const extensionPanelContext = {
+  const extensionRuntime = useExtensionRuntime(extensionScope);
+  const extensionTabContext: RecordTabContext | undefined = resolvedRecord && {
+    context_version: supportedOutletContextVersion,
     record_id: recordId,
     context_id: selectedContextId,
+    blueprint_id: resolvedRecord.blueprint_id,
+    blueprint_version: resolvedRecord.blueprint_version,
   };
-  const extensionRuntime = useExtensionRuntime(extensionScope);
-  const hasExtensionPanels =
-    Boolean(extensionScope) &&
-    outletContributions(
-      extensionRuntime.data,
-      extensionOutlets.recordPreviewPanel,
-      extensionPanelContext,
-    ).length > 0;
+  const contributionTitle = useContributionTitle();
+  // Tabs extensions add after the built-in ones; those beyond the bar's
+  // capacity wait in its More menu.
+  const extensionTabs = extensionTabContext
+    ? recordTabContributions(
+        extensionRuntime.data,
+        blueprint.data?.blueprint.code,
+      ).map((contribution, index) => {
+        const key = recordTabKey(contribution.extension_id, contribution.id);
+        return {
+          key,
+          icon: hostIconComponent(contribution.icon),
+          label: contributionTitle(contribution),
+          overflow: index >= outletCapacities.recordTabs,
+          content: openedExtensionTabs.has(key) && (
+            <ExtensionFrame
+              contribution={contribution}
+              context={extensionTabContext}
+              // A new release is a new frame.
+              key={contribution.release_id}
+            />
+          ),
+        };
+      })
+    : [];
   const headerTarget = blueprint.data
     ? {
         blueprintId: blueprint.data.blueprint.id,
@@ -320,6 +369,7 @@ export const RecordPreview = ({
   // Opening a tab reloads what it shows.
   const openTab = (key: RecordPreviewTabKey) => {
     setTab(key);
+    onTabChange?.(key);
     void refreshRecordTab(client, recordId, key);
   };
   const showTab = (key: RecordPreviewTabKey) => {
@@ -607,22 +657,7 @@ export const RecordPreview = ({
                       label: t('extensionExports.recordTab'),
                       content: <RecordExportStatusPanel recordId={recordId} />,
                     },
-                    ...(hasExtensionPanels && extensionScope
-                      ? [
-                          {
-                            key: recordPreviewTabs.extensions,
-                            icon: ExtensionIcon,
-                            label: t('records.extensionsTab'),
-                            content: (
-                              <ExtensionOutlet
-                                context={extensionPanelContext}
-                                outlet={extensionOutlets.recordPreviewPanel}
-                                runtimeScope={extensionScope}
-                              />
-                            ),
-                          },
-                        ]
-                      : []),
+                    ...extensionTabs,
                   ]}
                   value={tab}
                 />

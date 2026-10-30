@@ -45,7 +45,7 @@ describe('extension record refresh', () => {
     const client = new QueryClient();
     const contribution = {
       capabilities: ['client.refresh'],
-      outlet: 'record_preview_panel' as const,
+      outlet: 'record_tab' as const,
     };
     const context = { record_id: recordId };
     const payload = { target: 'current_record' };

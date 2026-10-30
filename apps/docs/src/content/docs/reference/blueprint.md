@@ -539,7 +539,7 @@ views:
     type: extension_layout
     version: 1
     outlets:
-      record_preview_panel:
+      record_tab:
         order: ['acme.inventory:summary']
         hidden: ['acme.legacy:panel']
 ```
@@ -547,7 +547,7 @@ views:
 | Key | Description |
 | --- | --- |
 | `version` | Must be `1`. |
-| `outlets` | Keyed by `record_preview_panel` or `record_action`. |
+| `outlets` | Keyed by `record_tab` or `record_action`. |
 | `outlets.<outlet>.order` | Contribution keys (`<extension-id>:<contribution-id>`) in display order. |
 | `outlets.<outlet>.hidden` | Contribution keys to hide. |
 

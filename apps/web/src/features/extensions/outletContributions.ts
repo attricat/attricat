@@ -10,13 +10,14 @@ import {
 import { outletContextSchemas } from './outletContextSchemas';
 import { extensionOutletSchema } from './schemas';
 
-// Outlets that mount extension frames. The Explorer table-cell renderer and
-// the action dialog have their own host-controlled mount paths, and action
-// outlets render host-owned items (see ExtensionActions).
+// Outlets that mount extension frames. The Explorer table-cell renderer, the
+// action dialog and record tabs have their own host-controlled mount paths,
+// and action outlets render host-owned items (see ExtensionActions).
 export type OutletName = Exclude<
   z.infer<typeof extensionOutletSchema>,
   | typeof extensionOutlets.explorerTableCell
   | typeof extensionOutlets.actionDialog
+  | typeof extensionOutlets.recordTab
   | ActionOutlet
 >;
 
@@ -53,7 +54,6 @@ export type NavigationPolicy = typeof navigationPolicy;
 // select capacity, grouping, or overflow behavior.
 export const outletPolicies = {
   navigation: navigationPolicy,
-  record_preview_panel: panelPolicy,
   blueprint_attribute_configuration: inlinePanelPolicy,
   blueprint_detail_panel: panelPolicy,
   blueprint_panel: panelPolicy,
@@ -65,7 +65,6 @@ export const outletPolicies = {
 
 const embeddedOutlets = new Set<OutletName>([
   extensionOutlets.navigation,
-  extensionOutlets.recordPreviewPanel,
   extensionOutlets.blueprintAttributeConfiguration,
 ]);
 const panelOutlets = new Set<OutletName>([

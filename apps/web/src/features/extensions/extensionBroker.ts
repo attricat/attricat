@@ -36,11 +36,13 @@ import {
   maximumExtensionStorageKeyBytes,
   maximumOperationIdempotencyKeyLength,
   operationIdempotencyKeyPattern,
+  contributionIdPattern,
   operationMethodPrefix,
   contributionKinds,
   extensionOutlets,
 } from './constants';
 import { refreshCurrentRecord } from './refreshRecord';
+import { recordTabKey, type ExtensionRecordTabKey } from './recordTabs';
 import { jsonByteLength, utf8ByteLength } from './utf8';
 
 type FrameContext = Record<string, unknown>;
@@ -51,7 +53,13 @@ const notificationSchema = z
     severity: z.enum(notificationSeverities).optional(),
   })
   .strict();
-const navigationSchema = z.object({ record_id: z.uuid() }).strict();
+const navigationSchema = z
+  .object({
+    record_id: z.uuid(),
+    /** One of the calling extension's own record tab contributions. */
+    tab: z.string().regex(contributionIdPattern).optional(),
+  })
+  .strict();
 const runReferenceSchema = z.object({ run_id: z.uuid() }).strict();
 const artifactReferenceSchema = z
   .object({ run_id: z.uuid(), artifact_id: z.uuid() })
@@ -113,7 +121,10 @@ type BrokerDependencies = {
   initialContext: FrameContext;
   /** Reads the latest host context when the request is handled. */
   currentContext: () => FrameContext;
-  navigateToRecord: (recordId: string) => Promise<void>;
+  navigateToRecord: (
+    recordId: string,
+    tab?: ExtensionRecordTabKey,
+  ) => Promise<void>;
   queryClient: QueryClient;
   closeActionDialog: () => void;
   /** Lets the host track a run after the source frame unmounts. */
@@ -290,7 +301,13 @@ export const handleBrokerRequest = async (
     can(extensionCapabilities.navigation)
   ) {
     const detail = navigationSchema.parse(payload);
-    await dependencies.navigateToRecord(detail.record_id);
+    await dependencies.navigateToRecord(
+      detail.record_id,
+      // Scoped to the caller, so a frame can only open its extension's tabs.
+      detail.tab === undefined
+        ? undefined
+        : recordTabKey(contribution.extension_id, detail.tab),
+    );
     return null;
   }
   if (method === extensionBrokerMethods.refresh) {

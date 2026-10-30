@@ -249,9 +249,9 @@ views:
     type: extension_layout
     version: 1
     outlets:
-      record_preview_panel:
+      record_tab:
         order: ['acme.inventory:summary', 'acme.pricing:margin']
         hidden: ['acme.legacy:panel']
 ```
 
-Miejsca osadzenia, które można tu ustawić, to `record_preview_panel` i `record_action`. Układ nigdy nie nadaje uprawnień ani nie włącza rozszerzenia. Wpisy dla brakujących lub wyłączonych rozszerzeń są zachowywane i ignorowane, więc układ przetrwa wyłączenie i ponowne włączenie rozszerzenia.
+Miejsca osadzenia, które można tu ustawić, to `record_tab` i `record_action`. Układ nigdy nie nadaje uprawnień ani nie włącza rozszerzenia. Wpisy dla brakujących lub wyłączonych rozszerzeń są zachowywane i ignorowane, więc układ przetrwa wyłączenie i ponowne włączenie rozszerzenia.

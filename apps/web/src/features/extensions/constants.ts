@@ -9,6 +9,8 @@ export const maximumExtensionResponseBytes = 1_048_576;
 export const minimumContributionKeyLength = 3;
 export const maximumContributionKeyLength = 256;
 export const contributionKeyPattern = /^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$/;
+/** One contribution ID, the part of a key after the extension ID. */
+export const contributionIdPattern = /^[A-Za-z0-9._-]{1,128}$/;
 export const maximumExtensionCommandIdLength = 128;
 /** Severities an extension may give the notifications it shows. */
 export const notificationSeverities = [
@@ -30,7 +32,7 @@ export const maximumActionSelection = 50;
 /** Host-owned insertion points an extension contribution may target. */
 export const extensionOutlets = {
   navigation: 'navigation',
-  recordPreviewPanel: 'record_preview_panel',
+  recordTab: 'record_tab',
   blueprintAttributeConfiguration: 'blueprint_attribute_configuration',
   recordAction: 'record_action',
   explorerRowAction: 'explorer_row_action',
@@ -69,6 +71,7 @@ export const contributionKinds = {
   action: 'action',
   panel: 'panel',
   dialog: 'dialog',
+  tab: 'tab',
 } as const;
 export const navigationGroups = ['promoted', 'grouped'] as const;
 export const promotedNavigationGroup = 'promoted';
@@ -291,4 +294,6 @@ export const outletCapacities = {
   actionBarSecondary: 3,
   navigationPromoted: 3,
   visibleContent: 3,
+  /** Extension tabs in a record's tab bar before the rest move to More. */
+  recordTabs: 3,
 } as const;

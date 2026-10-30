@@ -455,7 +455,7 @@
     "duplicateRecord": "Duplicate record",
     "createAnother": "Create another {{blueprint}}",
     "deleteRecord": "Delete record",
-    "extensionsTab": "Extensions",
+    "moreTabs": "More",
     "extensionActions": "More actions…",
     "recordActions": "Actions",
     "deleteRecordConfirmation": "Delete this record? It will disappear from searches and previews, but its history will be retained.",

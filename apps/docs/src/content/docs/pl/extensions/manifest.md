@@ -90,7 +90,7 @@ Manifest przyjmuje też `client.confirmation`, `client.download`, `client.extern
 
 Każde uprawnienie umiejscowienia zezwala na kontrybucję w jednym miejscu osadzenia. Zobacz [Kontrybucje klienckie](/pl/extensions/client/#miejsca-osadzenia).
 
-`client.blueprint_configuration`, `client.record_action`, `client.record_header_action`, `client.record_field_notes`, `client.explorer_row_action`, `client.explorer_table_cell`, `client.explorer_action`, `client.explorer_bulk_action`, `client.blueprint_detail_panel`, `client.blueprint_panel`, `client.blueprint_publish_check`, `client.audit_event_panel`, `client.data_health_card`, `client.action_dialog`, `client.export_mapping`.
+`client.blueprint_configuration`, `client.record_tab`, `client.record_action`, `client.record_header_action`, `client.record_field_notes`, `client.explorer_row_action`, `client.explorer_table_cell`, `client.explorer_action`, `client.explorer_bulk_action`, `client.blueprint_detail_panel`, `client.blueprint_panel`, `client.blueprint_publish_check`, `client.audit_event_panel`, `client.data_health_card`, `client.action_dialog`, `client.export_mapping`.
 
 ## Uprawnienia hosta
 
@@ -265,7 +265,7 @@ Miejsce docelowe eksportu nadaje ekranom stanu eksportu, podglądu, ponawiania i
 "ui": [
   { "id": "workbench", "version": 1, "kind": "route", "artifact": "app", "title": "Formula workbench" },
   { "id": "workbench-nav", "version": 1, "kind": "navigation", "route": "workbench", "title": "Formula workbench" },
-  { "id": "stock", "version": 1, "kind": "embedded", "artifact": "panel", "outlet": "record_preview_panel" },
+  { "id": "stock", "version": 1, "kind": "tab", "artifact": "panel", "outlet": "record_tab", "title": "Stany", "icon": "tag", "when": { "blueprints": ["product"] } },
   { "id": "recalc", "version": 1, "kind": "action", "outlet": "explorer_row_action", "title": "Przelicz…", "invoke": { "dialog": "recalc-dialog" } },
   { "id": "recalc-dialog", "version": 1, "kind": "dialog", "artifact": "dialog", "outlet": "action_dialog", "title": "Przelicz" }
 ]
@@ -275,12 +275,13 @@ Miejsce docelowe eksportu nadaje ekranom stanu eksportu, podglądu, ponawiania i
 | --- | --- | --- |
 | `route` | `artifact`, `title` | Pełna strona pod adresem `/extensions/<extension-id>/<contribution-id>`. |
 | `navigation` | `route`, `title` | Link na pasku bocznym do jednej ze stron tego rozszerzenia. |
-| `embedded` | `artifact`, `outlet` | Ramka w miejscu `navigation`, `record_preview_panel`, `blueprint_attribute_configuration` lub `explorer_table_cell`. |
+| `embedded` | `artifact`, `outlet` | Ramka w miejscu `navigation`, `blueprint_attribute_configuration` lub `explorer_table_cell`. |
 | `action` | `outlet`, `title`, `invoke` | Pozycja menu lub przycisk rysowane przez host w miejscu `record_action`, `record_header_action`, `explorer_row_action`, `explorer_action` lub `explorer_bulk_action` albo akcja odznaki notatki pola w miejscu `record_attribute_action`. `invoke` to `{ "command": "<id>" }`, `{ "dialog": "<id>" }` albo `{ "operation": { "id", "input" } }`; opcjonalnie `when`, `confirm`, `icon`. Bez artefaktu. Zobacz [Akcje](/pl/extensions/client/#akcje). |
 | `panel` | `artifact`, `outlet` | Panel rozmieszczany przez host, tylko do odczytu z wyjątkiem `export_mapping`, w miejscu `blueprint_detail_panel`, `blueprint_panel`, `blueprint_publish_check`, `audit_event_panel`, `data_health_card` lub `export_mapping`. |
 | `dialog` | `artifact`, `outlet`, `title` | Zarządzane przez host okno `action_dialog` otwierane przez akcje tego rozszerzenia. |
+| `tab` | `artifact`, `outlet`, `title` | Karta na stronie rekordu w miejscu `record_tab`, której panelem jest ramka; opcjonalnie `icon` oraz `when` ograniczone do `blueprints`. Zobacz [Strony rekordów](/pl/extensions/client/#strony-rekordów). |
 
-Każde rozszerzenie może użyć każdego miejsca osadzenia z ramką jeden raz, ale może dodać kilka akcji i okien. Akcje i okna używają `version` 1. `title` akcji ma najwyżej 64 znaki.
+Każde rozszerzenie może użyć każdego miejsca osadzenia z ramką jeden raz, ale może dodać kilka akcji i okien oraz do dwóch kart rekordu. Akcje, okna i karty używają `version` 1. `title` akcji ma najwyżej 64 znaki; tytuł karty, w każdym języku, najwyżej 24.
 
 ## Renderery komórek
 

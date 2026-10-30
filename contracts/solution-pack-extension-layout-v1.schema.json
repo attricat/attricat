@@ -26,7 +26,7 @@
           "outlet": {
             "enum": [
               "navigation",
-              "record_preview_panel",
+              "record_tab",
               "blueprint_attribute_configuration",
               "record_action",
               "explorer_row_action",

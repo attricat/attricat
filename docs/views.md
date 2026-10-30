@@ -37,7 +37,7 @@ heading fields, the layout, then **Other attributes**.
 ## Extension layout
 
 Record blueprint revisions may override workspace extension placement for their
-owned surfaces (`record_preview_panel` and `record_action`). This is versioned declarative data, published with the normal
+owned surfaces (`record_tab` and `record_action`). This is versioned declarative data, published with the normal
 blueprint revision flow; it neither grants permissions nor runs extension code.
 Use stable contribution keys (`<extension-id>:<contribution-id>`). Missing or
 disabled contributions are ignored at runtime while their entries remain in the
@@ -51,7 +51,7 @@ views:
     type: extension_layout
     version: 1
     outlets:
-      record_preview_panel:
+      record_tab:
         order: ['acme.inventory:summary']
         hidden: ['acme.legacy:panel']
 ```

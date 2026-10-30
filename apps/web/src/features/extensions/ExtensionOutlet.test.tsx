@@ -54,7 +54,7 @@ const contribution: ExtensionContribution = {
   extension_name: 'Example Extension',
   id: 'row-action',
   kind: 'embedded',
-  outlet: 'record_preview_panel',
+  outlet: 'navigation',
   release_id: '11111111-1111-4111-8111-111111111111',
   route: null,
   title: 'Example action',

@@ -90,7 +90,7 @@ The manifest also accepts `client.confirmation`, `client.download`, `client.exte
 
 Each placement capability allows a contribution at one outlet. See [Client contributions](/extensions/client/#outlets).
 
-`client.blueprint_configuration`, `client.record_action`, `client.record_header_action`, `client.record_field_notes`, `client.explorer_row_action`, `client.explorer_table_cell`, `client.explorer_action`, `client.explorer_bulk_action`, `client.blueprint_detail_panel`, `client.blueprint_panel`, `client.blueprint_publish_check`, `client.audit_event_panel`, `client.data_health_card`, `client.action_dialog`, `client.export_mapping`.
+`client.blueprint_configuration`, `client.record_tab`, `client.record_action`, `client.record_header_action`, `client.record_field_notes`, `client.explorer_row_action`, `client.explorer_table_cell`, `client.explorer_action`, `client.explorer_bulk_action`, `client.blueprint_detail_panel`, `client.blueprint_panel`, `client.blueprint_publish_check`, `client.audit_event_panel`, `client.data_health_card`, `client.action_dialog`, `client.export_mapping`.
 
 ## Host permissions
 
@@ -265,7 +265,7 @@ An export destination gives Attricat's export status, preview, retry, and resync
 "ui": [
   { "id": "workbench", "version": 1, "kind": "route", "artifact": "app", "title": "Formula workbench" },
   { "id": "workbench-nav", "version": 1, "kind": "navigation", "route": "workbench", "title": "Formula workbench" },
-  { "id": "stock", "version": 1, "kind": "embedded", "artifact": "panel", "outlet": "record_preview_panel" },
+  { "id": "stock", "version": 1, "kind": "tab", "artifact": "panel", "outlet": "record_tab", "title": "Stock", "icon": "tag", "when": { "blueprints": ["product"] } },
   { "id": "recalc", "version": 1, "kind": "action", "outlet": "explorer_row_action", "title": "Recalculate…", "invoke": { "dialog": "recalc-dialog" } },
   { "id": "recalc-dialog", "version": 1, "kind": "dialog", "artifact": "dialog", "outlet": "action_dialog", "title": "Recalculate" }
 ]
@@ -275,12 +275,13 @@ An export destination gives Attricat's export status, preview, retry, and resync
 | --- | --- | --- |
 | `route` | `artifact`, `title` | A full page at `/extensions/<extension-id>/<contribution-id>`. |
 | `navigation` | `route`, `title` | A sidebar link to one of this extension's routes. |
-| `embedded` | `artifact`, `outlet` | A frame at `navigation`, `record_preview_panel`, `blueprint_attribute_configuration`, or `explorer_table_cell`. |
+| `embedded` | `artifact`, `outlet` | A frame at `navigation`, `blueprint_attribute_configuration`, or `explorer_table_cell`. |
 | `action` | `outlet`, `title`, `invoke` | A menu item or button the host draws at `record_action`, `record_header_action`, `explorer_row_action`, `explorer_action`, or `explorer_bulk_action`, or a field-note badge's action at `record_attribute_action`. `invoke` is `{ "command": "<id>" }`, `{ "dialog": "<id>" }` or `{ "operation": { "id", "input" } }`; optional `when`, `confirm`, `icon`. No artifact. See [Actions](/extensions/client/#actions). |
 | `panel` | `artifact`, `outlet` | A host-laid-out panel, read-only except `export_mapping`, at `blueprint_detail_panel`, `blueprint_panel`, `blueprint_publish_check`, `audit_event_panel`, `data_health_card`, or `export_mapping`. |
 | `dialog` | `artifact`, `outlet`, `title` | A host-managed `action_dialog` opened by this extension's actions. |
+| `tab` | `artifact`, `outlet`, `title` | A tab on the record page at `record_tab`, whose panel is the frame; optional `icon`, and `when` limited to `blueprints`. See [Record pages](/extensions/client/#record-pages). |
 
-Each extension can use each frame outlet once, but may add several actions and dialogs. Actions and dialogs use `version` 1. An action's `title` has at most 64 characters.
+Each extension can use each frame outlet once, but may add several actions and dialogs and up to two record tabs. Actions, dialogs and tabs use `version` 1. An action's `title` has at most 64 characters; a tab's, in every language, at most 24.
 
 ## Cell renderers
 

@@ -114,7 +114,7 @@ The v1 capability catalogue is: `attricat.read`, `attricat.write`,
 `client.confirmation`, `client.download`, `client.external_navigation`,
 `client.files.read`, `client.files.upload`, `client.search`,
 `client.live_updates`, `client.clipboard`, `client.theme.read`,
-`client.locale.read`, `client.blueprint_configuration`,
+`client.locale.read`, `client.blueprint_configuration`, `client.record_tab`,
 `client.record_field_notes`, `client.record_action`, `client.explorer_row_action`,
 `client.explorer_table_cell`, `client.blueprint_detail_panel`, `client.explorer_action`,
 `client.explorer_bulk_action`, `client.record_header_action`,
@@ -1504,34 +1504,39 @@ Enabled `client_component` artifacts can expose a strict `ui` contribution:
 
 ```json
 {
-  "id": "inventory-panel",
+  "id": "inventory",
   "version": 1,
-  "kind": "embedded",
+  "kind": "tab",
   "artifact": "client",
-  "outlet": "record_preview_panel"
+  "outlet": "record_tab",
+  "title": "Stock",
+  "icon": "tag",
+  "when": {"blueprints": ["product"]}
 }
 ```
 
 A contribution is either `route` (which requires a non-empty `title`),
 `navigation` (which requires a non-empty `title` and targets one of that
 extension's `route` contribution IDs), `embedded`, host-rendered `action`,
-`dialog`, or explicit read-only `panel`. `action` is required for the action
+`dialog`, record `tab`, or explicit read-only `panel`. `action` is required for the action
 outlets (`record_action`, `record_header_action`, `explorer_row_action`,
 `explorer_action`, `explorer_bulk_action`) and is described in
 [Actions](#actions-and-interactive-operations); `panel` is required for
 `blueprint_detail_panel` (and requires `client.blueprint_detail_panel`).
-`embedded` contributions use `navigation`, `record_preview_panel`,
-or `blueprint_attribute_configuration`; the
+`embedded` contributions use `navigation`
+or `blueprint_attribute_configuration`; `tab` is required for `record_tab`
+(and requires `client.record_tab`); the
 additional mediated placement capabilities reserve their matching fixed outlets
 for their explicit host-owned action or panel layouts. Routes are always
 namespaced at `/extensions/:extensionId/:contributionId`; manifests cannot
 provide a path, selector, or host component. Each extension can use a frame
-outlet once, but may add several actions and dialogs, and all
+outlet once, but may add several actions and dialogs and up to two record
+tabs, and all
 contribution/artifact IDs remain stable across releases. Multiple enabled
 extensions may contribute to a surface. The host orders them deterministically
 by `extension_id`, then contribution `id`, unless a workspace administrator
 sets an outlet layout through `PUT /workspace/extension-layout`. Layouts use
-`{"version":1,"outlets":{"record_preview_panel":{"order":["acme.panel:summary"],"hidden":[]},"navigation":{"order":["acme.app:entry"],"hidden":[],"promoted":["acme.app:entry"]}}}`.
+`{"version":1,"outlets":{"record_tab":{"order":["acme.inventory:stock"],"hidden":[]},"navigation":{"order":["acme.app:entry"],"hidden":[],"promoted":["acme.app:entry"]}}}`.
 Keys are stable `<extension-id>:<contribution-id>` values; unavailable keys are
 retained for restoration. Navigation contributions are kept in a host-owned
 extension group unless an administrator lists their key in `promoted`; built-in
@@ -1598,11 +1603,20 @@ contextual actions—not an application-wide navigation tree.
 - **`navigation`** (`embedded`) remains available for a sandboxed compact
   iframe contribution, such as a button or status indicator in Attricat's side
   navigation.
-- **`record_preview_panel`** (`embedded`) appears in the record page's
-  **Extensions** tab, which is shown only when such a contribution exists. It
-  is appropriate for a record-specific summary, diagnostics, or a
-  focused mini-workflow. Its context supplies `record_id` and optional
-  `context_id`.
+- **`record_tab`** (`tab`, requiring `client.record_tab`) adds a tab to the
+  record page after its built-in tabs; the tab's panel is the extension's
+  frame. Use it for a record-specific view: stock, pricing, diagnostics, or a
+  focused workflow. The host renders the `title` (1-24 characters, as is every
+  translation) and optional host `icon`; `when` may only list `blueprints`,
+  matched against the record's blueprint code. An extension may declare up to
+  two tabs. Three extension tabs fit in the tab bar and the rest are listed in
+  its host-owned **More** menu; layout ordering and hiding use the `record_tab`
+  outlet, workspace-wide or per blueprint. A frame mounts when its tab is
+  first opened and stays mounted, like the built-in tabs, while the record is
+  open. Its strict v1 context is `{ "context_version": 1, "record_id",
+  "context_id"?, "blueprint_id", "blueprint_version" }`. The open tab is kept in
+  the record address as `?tab=<extension-id>:<contribution-id>`; an unavailable
+  tab shows the record's data instead.
 - **`blueprint_attribute_configuration`** (`embedded`, requiring
   `client.blueprint_configuration`) is rendered for an attribute in the
   blueprint editor. Use it to configure extension-owned behavior for that
@@ -1745,8 +1759,10 @@ export const mount = (root, attricat) => {
 The frame provides a versioned `MessageChannel` API as `globalThis.attricat` and
 passes that same object to `mount`. It may use only granted operations:
 
-- `attricat.navigate({ record_id })` requires `client.navigation` and resolves
-  only to Attricat's record route.
+- `attricat.navigate({ record_id, tab? })` requires `client.navigation` and
+  resolves only to Attricat's record route. `tab` names one of the calling
+  extension's own `record_tab` contribution IDs; the host prefixes it with
+  that extension's ID, so a frame cannot open another extension's tab.
 - `attricat.notify({ message, severity? })` requires `client.notification`;
   messages are trimmed and limited to 512 characters and are displayed through
   a host-owned accessible notification surface.

@@ -13,9 +13,11 @@ const {
   agentDrawerRender,
   fieldNotesRender,
   outletRender,
+  frameRender,
   navigate,
 } = vi.hoisted(() => ({
   navigate: vi.fn(),
+  frameRender: vi.fn(),
   agentDrawerRender: vi.fn(),
   outletRender: vi.fn(),
   fieldNotesRender: vi.fn(),
@@ -59,6 +61,12 @@ vi.mock('../extensions/ExtensionActions', () => ({
   ExtensionActionMenuItems: (props: unknown) => {
     actionsRender(props);
     return null;
+  },
+}));
+vi.mock('../extensions/ExtensionFrame', () => ({
+  ExtensionFrame: (props: { contribution: { id: string } }) => {
+    frameRender(props);
+    return <span>{`frame:${props.contribution.id}`}</span>;
   },
 }));
 vi.mock('../extensions/ExtensionOutlet', () => ({
@@ -121,7 +129,7 @@ vi.mock('../contexts/api', async (importOriginal) => ({
   listContexts: vi.fn(),
 }));
 
-const renderPage = (relationshipPickerToken?: string) => {
+const renderPage = (relationshipPickerToken?: string, tab?: string) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -132,6 +140,7 @@ const renderPage = (relationshipPickerToken?: string) => {
         <RecordPreviewPage
           recordId="00000000-0000-4000-8000-000000000001"
           relationshipPickerToken={relationshipPickerToken}
+          tab={tab}
         />
       </ToastProvider>
     </QueryClientProvider>,
@@ -337,7 +346,6 @@ describe('RecordPreviewPage', () => {
     const api = await import('./api');
     const { getExtensionRuntime } = await import('../extensions/api');
     vi.mocked(getExtensionRuntime).mockResolvedValue([
-      { outlet: 'record_preview_panel', kind: 'embedded' },
       { outlet: 'record_attribute_decoration', kind: 'embedded' },
     ] as never);
     const { currentSession } = await import('../auth/api');
@@ -404,13 +412,6 @@ describe('RecordPreviewPage', () => {
     expect(outletRender).not.toHaveBeenCalledWith(
       expect.objectContaining({ outlet: 'record_header_action' }),
     );
-    // Record panels get their own tab, scoped to the revision.
-    await userEvent
-      .setup()
-      .click(await screen.findByRole('tab', { name: 'Extensions' }));
-    expect(outletRender).toHaveBeenCalledWith(
-      expect.objectContaining({ outlet: 'record_preview_panel', runtimeScope }),
-    );
     await userEvent
       .setup()
       .click(screen.getByRole('button', { name: 'Ask about this record' }));
@@ -421,6 +422,165 @@ describe('RecordPreviewPage', () => {
         open: true,
       }),
     );
+  });
+
+  it('adds extension tabs for the record, mounting each frame once opened', async () => {
+    const user = userEvent.setup();
+    const api = await import('./api');
+    const { getExtensionRuntime } = await import('../extensions/api');
+    const tab = (extension: string, id: string, title: string) => ({
+      contribution_key: `${extension}:${id}`,
+      extension_id: extension,
+      id,
+      kind: 'tab',
+      outlet: 'record_tab',
+      release_id: '44444444-4444-4444-8444-444444444444',
+      title,
+      translations: {},
+      icon: null,
+      when: null,
+    });
+    vi.mocked(getExtensionRuntime).mockResolvedValue([
+      tab('acme.inventory', 'stock', 'Stock'),
+      {
+        ...tab('acme.inventory', 'variants', 'Variants'),
+        when: { blueprints: ['variant'] },
+      },
+      {
+        ...tab('acme.pricing', 'prices', 'Prices'),
+        when: { blueprints: ['product'] },
+      },
+      tab('acme.reviews', 'reviews', 'Reviews'),
+      tab('acme.shipping', 'rates', 'Rates'),
+    ] as never);
+    const blueprintId = '22222222-2222-4222-8222-222222222222';
+    const contextId = '33333333-3333-4333-8333-333333333333';
+    vi.mocked(listContexts).mockResolvedValue([
+      { id: contextId, code: 'default', data: {}, parent_id: null },
+    ]);
+    vi.mocked(api.getResolvedRecordPreview).mockResolvedValue({
+      record: {
+        id: '00000000-0000-4000-8000-000000000001',
+        blueprint_id: blueprintId,
+        blueprint_version: 7,
+      },
+      values: {},
+      reusable_values: {},
+    } as never);
+    const blueprint = {
+      blueprint: {
+        id: blueprintId,
+        code: 'product',
+        name: 'Product',
+        version: 7,
+        status: 'published',
+        views: { detail: { type: 'stack', children: [] } },
+      },
+      attributes: [],
+      table_path_attributes: [],
+    };
+    vi.mocked(api.getBlueprintRevision).mockResolvedValue(blueprint as never);
+    vi.mocked(api.getCurrentBlueprint).mockResolvedValue(blueprint as never);
+    frameRender.mockClear();
+    navigate.mockClear();
+
+    renderPage();
+
+    await screen.findByRole('tab', { name: 'Stock' });
+    // A tab for another blueprint is left out; the fourth waits in More.
+    expect(screen.queryByRole('tab', { name: 'Variants' })).toBeNull();
+    expect(screen.getByRole('tab', { name: 'Prices' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Reviews' })).toBeTruthy();
+    expect(screen.queryByRole('tab', { name: 'Rates' })).toBeNull();
+    expect(frameRender).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('tab', { name: 'Stock' }));
+    expect(await screen.findByText('frame:stock')).toBeTruthy();
+    expect(frameRender).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        context: {
+          context_version: 1,
+          record_id: '00000000-0000-4000-8000-000000000001',
+          context_id: contextId,
+          blueprint_id: blueprintId,
+          blueprint_version: 7,
+        },
+      }),
+    );
+    // The open tab is kept in the address so a link can return to it.
+    expect(navigate).toHaveBeenLastCalledWith(
+      expect.objectContaining({ replace: true }),
+    );
+    expect(
+      navigate.mock.lastCall?.[0].search({ relationshipPicker: 'x' }),
+    ).toEqual({ relationshipPicker: 'x', tab: 'acme.inventory:stock' });
+
+    await user.click(screen.getByRole('tab', { name: 'More' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Rates' }));
+    expect(await screen.findByText('frame:rates')).toBeTruthy();
+    // The More tab stands in for the open overflow tab.
+    expect(
+      screen.getByRole('tab', { name: 'Rates' }).getAttribute('aria-selected'),
+    ).toBe('true');
+    // Opened frames stay mounted when another tab is shown.
+    expect(screen.getByText('frame:stock')).toBeTruthy();
+  });
+
+  it('opens the extension tab a link names', async () => {
+    const api = await import('./api');
+    const { getExtensionRuntime } = await import('../extensions/api');
+    vi.mocked(getExtensionRuntime).mockResolvedValue([
+      {
+        contribution_key: 'acme.inventory:stock',
+        extension_id: 'acme.inventory',
+        id: 'stock',
+        kind: 'tab',
+        outlet: 'record_tab',
+        release_id: '44444444-4444-4444-8444-444444444444',
+        title: 'Stock',
+        translations: { pl: { title: 'Stany' } },
+        icon: 'tag',
+        when: null,
+      },
+    ] as never);
+    vi.mocked(listContexts).mockResolvedValue([
+      {
+        id: '33333333-3333-4333-8333-333333333333',
+        code: 'default',
+        data: {},
+        parent_id: null,
+      },
+    ]);
+    vi.mocked(api.getResolvedRecordPreview).mockResolvedValue({
+      record: {
+        id: '00000000-0000-4000-8000-000000000001',
+        blueprint_id: '22222222-2222-4222-8222-222222222222',
+        blueprint_version: 7,
+      },
+      values: {},
+      reusable_values: {},
+    } as never);
+    const blueprint = {
+      blueprint: {
+        id: '22222222-2222-4222-8222-222222222222',
+        code: 'product',
+        name: 'Product',
+        version: 7,
+        status: 'published',
+        views: { detail: { type: 'stack', children: [] } },
+      },
+      attributes: [],
+      table_path_attributes: [],
+    };
+    vi.mocked(api.getBlueprintRevision).mockResolvedValue(blueprint as never);
+    vi.mocked(api.getCurrentBlueprint).mockResolvedValue(blueprint as never);
+
+    renderPage(undefined, 'acme.inventory:stock');
+
+    expect(await screen.findByText('frame:stock')).toBeTruthy();
+    expect(
+      screen.getByRole('tab', { name: 'Stock' }).getAttribute('aria-selected'),
+    ).toBe('true');
   });
 
   it('shows the data, data quality, comments, record control and exports in tabs, one at a time', async () => {

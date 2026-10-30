@@ -7,6 +7,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { RecordPageEyebrow } from './components/RecordPageEyebrow';
 import { RecordPreview } from './components/RecordPreview';
 import { recordLabelOptions } from './queryOptions';
+import { recordPreviewTabs, type RecordPreviewTabKey } from './constants';
 
 /**
  * Names the browser tab after the record's `page_title` view, then its
@@ -34,9 +35,12 @@ const RecordDocumentTitle = ({
 export const RecordPreviewPage = ({
   recordId,
   relationshipPickerToken,
+  tab,
 }: {
   recordId: string;
   relationshipPickerToken?: string;
+  /** The open tab, from the address so a link can lead to it. */
+  tab?: string;
 }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -53,6 +57,18 @@ export const RecordPreviewPage = ({
         })
       }
       relationshipPickerToken={relationshipPickerToken}
+      // An unknown tab is unavailable, so the record's data shows instead.
+      requestedTab={tab as RecordPreviewTabKey | undefined}
+      onTabChange={(next) =>
+        void navigate({
+          to: '.',
+          search: (previous) => ({
+            ...previous,
+            tab: next === recordPreviewTabs.data ? undefined : next,
+          }),
+          replace: true,
+        })
+      }
       renderFrame={({ blueprint, children, headerActions, title }) => (
         <PageContainer>
           <RecordDocumentTitle recordId={recordId} title={title} />

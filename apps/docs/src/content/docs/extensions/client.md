@@ -40,7 +40,7 @@ The frame stays mounted when the user switches context or theme. Listen for the 
 | `attricat.request(path)` | `attricat.read` | `GET` one of `/api/records`, `/api/v1/records/<uuid>`, or `/api/blueprints/<uuid>/versions/<n>`. Responses are limited to 1 MiB. Revision reads in `blueprint_attribute_configuration` are limited to that outlet's blueprint revision. |
 | `attricat.command({ command_id, payload })` | `client.commands` | Calls one of the extension's declared server commands. |
 | `attricat.storage.get/set/delete/list(…)` | `storage.extension` | The extension's key-value storage. `set` and `delete` accept `expected_revision`. |
-| `attricat.navigate({ record_id })` | `client.navigation` | Opens a record page. |
+| `attricat.navigate({ record_id, tab? })` | `client.navigation` | Opens a record page, or with `tab` one of your record tabs on it. |
 | `attricat.notify({ message, severity })` | `client.notification` | Shows a host notification. Messages are trimmed to 512 characters. |
 | `attricat.refresh({ target: 'current_record' })` | `client.refresh` | Reloads the current record's views after your command changed it. Available in record page outlets. |
 | `attricat.dialog.close()` | `client.action_dialog` | Closes the dialog. Available only inside an action dialog; the host opens dialogs when the user chooses an [action](#actions). |
@@ -71,12 +71,12 @@ Add a `navigation` contribution to link to it from the sidebar. Workspace admini
 
 | Outlet | Kind | Capability | Context |
 | --- | --- | --- | --- |
-| `record_preview_panel` | `embedded` | | `record_id`, optional `context_id` |
+| `record_tab` | `tab` | `client.record_tab` | `context_version`, `record_id`, optional `context_id`, `blueprint_id`, `blueprint_version` |
 | `record_action` | `action` | `client.record_action` | The [action context](#actions), with this record |
 | `record_header_action` | `action` | `client.record_header_action` | The [action context](#actions), with this record |
 | `record_attribute_action` | `action` | `client.record_field_notes` | The [action context](#actions), with this record and the field's `attribute_code`. Reached only from a [field note](#field-notes) badge. |
 
-`record_preview_panel` appears in the record's **Extensions** tab. Record actions are buttons below the fields, four before an overflow menu; header actions are items of the record's **Actions** menu. Panels show up to three contributions before overflow. Fields and files carry no frames; describe them with [field notes](#field-notes).
+Each `record_tab` contribution is a tab after the record's own tabs, with your `title` and `icon`; `when.blueprints` limits which records show it. After three extension tabs the rest are in a **More** menu, and administrators can reorder or hide them with the `record_tab` layout. The frame mounts the first time its tab is opened and stays mounted while the record is open. The open tab is part of the record's address (`?tab=<extension-id>:<contribution-id>`), and `attricat.navigate({ record_id, tab })` leads there. Record actions are buttons below the fields, four before an overflow menu; header actions are items of the record's **Actions** menu. Fields and files carry no frames; describe them with [field notes](#field-notes).
 
 ### Field notes
 

@@ -15,7 +15,7 @@ const validLayout = {
       hidden: [],
       promoted: ['acme.navigation:entry'],
     },
-    record_preview_panel: {
+    record_tab: {
       order: ['acme.inventory:summary'],
       hidden: ['acme.legacy:summary'],
     },
@@ -97,7 +97,7 @@ describe('workspaceExtensionLayoutSchema', () => {
     {
       ...validLayout,
       outlets: {
-        record_preview_panel: {
+        record_tab: {
           order: ['acme.inventory:summary'],
           hidden: ['acme.inventory:summary'],
         },
@@ -123,7 +123,7 @@ describe('workspaceExtensionLayoutSchema', () => {
       ...validLayout,
       outlets: {
         record_action: { order: ['acme.shared:action'], hidden: [] },
-        record_preview_panel: { order: ['acme.shared:action'], hidden: [] },
+        record_tab: { order: ['acme.shared:action'], hidden: [] },
       },
     },
   ])('rejects malformed or ambiguous layout %#', (layout) => {

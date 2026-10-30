@@ -461,9 +461,9 @@
               "additionalProperties": {
                 "$ref": "#/$defs/ExtensionOutletLayout"
               },
-              "description": "Layouts keyed by record outlet: `record_preview_panel` or\n`record_action`.",
+              "description": "Layouts keyed by record outlet: `record_tab` or\n`record_action`.",
               "x-attricat-key-suggestions": [
-                "record_preview_panel",
+                "record_tab",
                 "record_action"
               ]
             },

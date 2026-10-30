@@ -40,7 +40,7 @@ Ramka pozostaje zamontowana, gdy użytkownik przełącza kontekst lub motyw. Nas
 | `attricat.request(path)` | `attricat.read` | `GET` jednego z adresów `/api/records`, `/api/v1/records/<uuid>` lub `/api/blueprints/<uuid>/versions/<n>`. Odpowiedzi są ograniczone do 1 MiB. Odczyty wersji w `blueprint_attribute_configuration` są ograniczone do wersji Schematu tego miejsca osadzenia. |
 | `attricat.command({ command_id, payload })` | `client.commands` | Wywołuje jedno z zadeklarowanych poleceń serwerowych rozszerzenia. |
 | `attricat.storage.get/set/delete/list(…)` | `storage.extension` | Magazyn klucz-wartość rozszerzenia. `set` i `delete` przyjmują `expected_revision`. |
-| `attricat.navigate({ record_id })` | `client.navigation` | Otwiera stronę rekordu. |
+| `attricat.navigate({ record_id, tab? })` | `client.navigation` | Otwiera stronę rekordu, a z `tab` jedną z Twoich kart na niej. |
 | `attricat.notify({ message, severity })` | `client.notification` | Wyświetla powiadomienie hosta. Komunikaty są przycinane do 512 znaków. |
 | `attricat.refresh({ target: 'current_record' })` | `client.refresh` | Ponownie ładuje widoki bieżącego rekordu po zmianie wprowadzonej przez Twoje polecenie. Dostępne w miejscach osadzenia na stronach rekordów. |
 | `attricat.dialog.close()` | `client.action_dialog` | Zamyka okno. Dostępne tylko wewnątrz okna akcji; okna otwiera host, gdy użytkownik wybierze [akcję](#akcje). |
@@ -71,12 +71,12 @@ Dodaj kontrybucję `navigation`, aby umieścić do niej link na pasku bocznym. A
 
 | Miejsce osadzenia | Rodzaj | Uprawnienie | Kontekst |
 | --- | --- | --- | --- |
-| `record_preview_panel` | `embedded` | | `record_id`, opcjonalnie `context_id` |
+| `record_tab` | `tab` | `client.record_tab` | `context_version`, `record_id`, opcjonalnie `context_id`, `blueprint_id`, `blueprint_version` |
 | `record_action` | `action` | `client.record_action` | [Kontekst akcji](#akcje) z tym rekordem |
 | `record_header_action` | `action` | `client.record_header_action` | [Kontekst akcji](#akcje) z tym rekordem |
 | `record_attribute_action` | `action` | `client.record_field_notes` | [Kontekst akcji](#akcje) z tym rekordem i `attribute_code` pola. Dostępne tylko z odznaki [notatki pola](#notatki-pól). |
 
-`record_preview_panel` pojawia się na karcie **Rozszerzenia** rekordu. Akcje rekordu to przyciski pod polami, cztery przed menu przepełnienia; akcje nagłówka to pozycje menu **Akcje** rekordu. Panele pokazują do trzech kontrybucji przed przepełnieniem. Pola i pliki nie mają ramek; opisuj je [notatkami pól](#notatki-pól).
+Każda kontrybucja `record_tab` to karta za własnymi kartami rekordu, z Twoim `title` i `icon`; `when.blueprints` ogranicza rekordy, które ją pokazują. Po trzech kartach rozszerzeń pozostałe trafiają do menu **Więcej**, a administratorzy mogą zmieniać ich kolejność lub je ukrywać w układzie `record_tab`. Ramka montuje się przy pierwszym otwarciu karty i pozostaje zamontowana, dopóki rekord jest otwarty. Otwarta karta jest częścią adresu rekordu (`?tab=<extension-id>:<contribution-id>`), a `attricat.navigate({ record_id, tab })` do niej prowadzi. Akcje rekordu to przyciski pod polami, cztery przed menu przepełnienia; akcje nagłówka to pozycje menu **Akcje** rekordu. Pola i pliki nie mają ramek; opisuj je [notatkami pól](#notatki-pól).
 
 ### Notatki pól
 

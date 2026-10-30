@@ -127,6 +127,10 @@ pub const MAX_EXTENSION_IDENTIFIER_BYTES: usize = 128;
 pub const MAX_INTERACTIVE_SELECTION: u32 = 50;
 /// The longest title a host-rendered action may show.
 pub const MAX_ACTION_TITLE_CHARS: usize = 64;
+/// The longest record tab label, in any language; tab bars are narrow.
+pub const MAX_RECORD_TAB_TITLE_CHARS: usize = 24;
+/// How many record tabs one extension may add.
+pub const MAX_RECORD_TABS_PER_EXTENSION: usize = 2;
 pub const CAPABILITIES: &[&str] = &[
     "attricat.read",
     "attricat.write",
@@ -143,6 +147,7 @@ pub const CAPABILITIES: &[&str] = &[
     "client.explorer_row_action",
     "client.explorer_table_cell",
     "client.blueprint_detail_panel",
+    "client.record_tab",
     "secrets.read",
     "logging.write",
     "client.navigation",
@@ -811,13 +816,17 @@ pub enum UiContributionKind {
     /// Host-managed dialog opened by the same extension's actions. It outlives
     /// the source outlet and receives the action's captured context.
     Dialog,
+    /// A titled tab on the record page whose panel is the extension's frame.
+    /// An extension may add up to [`MAX_RECORD_TABS_PER_EXTENSION`].
+    Tab,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum UiOutlet {
     Navigation,
-    RecordPreviewPanel,
+    /// The record page's tab bar; each `tab` contribution is one tab.
+    RecordTab,
     BlueprintAttributeConfiguration,
     RecordAction,
     /// A compact, per-record explorer menu action. The host provides only the
@@ -901,6 +910,65 @@ impl Manifest {
                 "record_field_notes must use a declared command or client_component artifact"
                     .into(),
             ));
+        }
+        Ok(())
+    }
+
+    /// A record tab: a short title the host renders in the tab bar, an
+    /// optional host icon, and at most the blueprints it appears on.
+    fn validate_record_tab(&self, contribution: &UiContribution) -> Result<(), ManifestError> {
+        let invalid =
+            |reason: String| ManifestError::Invalid(format!("tab '{}' {reason}", contribution.id));
+        if contribution.version != 1 {
+            return Err(invalid("must use version 1".into()));
+        }
+        if self
+            .ui
+            .iter()
+            .filter(|item| matches!(item.kind, UiContributionKind::Tab))
+            .count()
+            > MAX_RECORD_TABS_PER_EXTENSION
+        {
+            return Err(invalid(format!(
+                "exceeds the limit of {MAX_RECORD_TABS_PER_EXTENSION} record tabs per extension"
+            )));
+        }
+        let fits = |title: &str| {
+            let title = title.trim();
+            !title.is_empty() && title.chars().count() <= MAX_RECORD_TAB_TITLE_CHARS
+        };
+        if !contribution.title.as_deref().is_some_and(fits)
+            || !contribution
+                .translations
+                .values()
+                .all(|translation| fits(&translation.title))
+        {
+            return Err(invalid(format!(
+                "requires titles of 1-{MAX_RECORD_TAB_TITLE_CHARS} characters"
+            )));
+        }
+        if contribution.invoke.is_some() || contribution.confirm.is_some() {
+            return Err(invalid("cannot declare invoke or confirm".into()));
+        }
+        if let Some(when) = &contribution.when {
+            // A tab belongs to one record the viewer already opened; only the
+            // blueprint decides whether it appears.
+            if when.min_records.is_some()
+                || when.max_records.is_some()
+                || when.requires_write
+                || !when.has_tags.is_empty()
+                || !when.missing_tags.is_empty()
+            {
+                return Err(invalid("may only limit when.blueprints".into()));
+            }
+            for code in &when.blueprints {
+                valid_id(code, "when.blueprints entry")?;
+            }
+        }
+        if let Some(icon) = &contribution.icon
+            && !HOST_ICONS.contains(&icon.as_str())
+        {
+            return Err(invalid(format!("names unknown icon '{icon}'")));
         }
         Ok(())
     }
@@ -1334,13 +1402,15 @@ impl Manifest {
             }
             if matches!(contribution.kind, UiContributionKind::Action) {
                 self.validate_action(contribution)?;
+            } else if matches!(contribution.kind, UiContributionKind::Tab) {
+                self.validate_record_tab(contribution)?;
             } else if contribution.invoke.is_some()
                 || contribution.when.is_some()
                 || contribution.confirm.is_some()
                 || contribution.icon.is_some()
             {
                 return Err(ManifestError::Invalid(format!(
-                    "only action UI contributions may declare invoke, when, confirm or icon ('{}')",
+                    "only action and tab UI contributions may declare invoke, when, confirm or icon ('{}')",
                     contribution.id
                 )));
             }
@@ -1359,7 +1429,8 @@ impl Manifest {
             }
             if let Some(outlet) = &contribution.outlet {
                 let required = match outlet {
-                    UiOutlet::Navigation | UiOutlet::RecordPreviewPanel => None,
+                    UiOutlet::Navigation => None,
+                    UiOutlet::RecordTab => Some("client.record_tab"),
                     UiOutlet::BlueprintAttributeConfiguration => {
                         Some("client.blueprint_configuration")
                     }
@@ -1396,13 +1467,16 @@ impl Manifest {
                 (UiContributionKind::Embedded, Some(outlet))
                 | (UiContributionKind::Action, Some(outlet))
                 | (UiContributionKind::Panel, Some(outlet))
-                | (UiContributionKind::Dialog, Some(outlet)) => {
+                | (UiContributionKind::Dialog, Some(outlet))
+                | (UiContributionKind::Tab, Some(outlet)) => {
                     // Extensions may each contribute once to a content outlet.
                     // A single extension cannot rely on duplicate ordering;
                     // actions and dialogs are distinct items, so they may.
                     let repeatable = matches!(
                         contribution.kind,
-                        UiContributionKind::Action | UiContributionKind::Dialog
+                        UiContributionKind::Action
+                            | UiContributionKind::Dialog
+                            | UiContributionKind::Tab
                     );
                     if !repeatable && !outlets.insert(outlet) {
                         return Err(ManifestError::Invalid(
@@ -1422,7 +1496,7 @@ impl Manifest {
                             | (UiContributionKind::Panel, UiOutlet::AuditEventPanel)
                             | (UiContributionKind::Panel, UiOutlet::DataHealthCard)
                             | (UiContributionKind::Embedded, UiOutlet::Navigation)
-                            | (UiContributionKind::Embedded, UiOutlet::RecordPreviewPanel)
+                            | (UiContributionKind::Tab, UiOutlet::RecordTab)
                             | (
                                 UiContributionKind::Embedded,
                                 UiOutlet::BlueprintAttributeConfiguration
@@ -1447,7 +1521,8 @@ impl Manifest {
                 (UiContributionKind::Embedded, None)
                 | (UiContributionKind::Action, None)
                 | (UiContributionKind::Panel, None)
-                | (UiContributionKind::Dialog, None) => {
+                | (UiContributionKind::Dialog, None)
+                | (UiContributionKind::Tab, None) => {
                     return Err(ManifestError::Invalid(
                         "embedded UI contributions require an outlet".into(),
                     ));
@@ -3056,7 +3131,7 @@ mod tests {
             .retain(|permission| permission != "client.commands")));
         assert!(invalid(&|m| {
             let index = last(m);
-            m.ui[index].outlet = Some(UiOutlet::RecordPreviewPanel);
+            m.ui[index].outlet = Some(UiOutlet::RecordTab);
         }));
         // Only actions declare what they invoke.
         assert!(invalid(
@@ -3065,29 +3140,81 @@ mod tests {
     }
 
     #[test]
-    fn validates_client_ui_contributions() {
+    fn validates_record_tabs() {
         let mut value = manifest();
+        value.permissions.push("client.record_tab".into());
         value.artifacts.push(Artifact {
             id: "client".into(),
             kind: ArtifactKind::ClientComponent,
             path: "client.js".into(),
         });
-        value.ui.push(UiContribution {
-            id: "panel".into(),
+        let tab = |id: &str| UiContribution {
+            id: id.into(),
             version: 1,
-            kind: UiContributionKind::Embedded,
+            kind: UiContributionKind::Tab,
             artifact: Some("client".into()),
-            outlet: Some(UiOutlet::RecordPreviewPanel),
+            outlet: Some(UiOutlet::RecordTab),
             route: None,
-            title: None,
+            title: Some("Stock".into()),
             invoke: None,
-            when: None,
+            when: Some(ActionCondition {
+                blueprints: vec!["product".into()],
+                ..ActionCondition::default()
+            }),
             confirm: None,
-            icon: None,
-            translations: BTreeMap::new(),
-        });
-        assert!(value.validate(SUPPORTED_HOST_API).is_ok());
+            icon: Some("tag".into()),
+            translations: BTreeMap::from([(
+                "pl".into(),
+                ContributionTranslation {
+                    title: "Stany".into(),
+                },
+            )]),
+        };
+        // An extension may add several tabs, up to its limit.
+        value.ui.push(tab("stock"));
+        value.ui.push(tab("pricing"));
+        assert!(
+            value.validate(SUPPORTED_HOST_API).is_ok(),
+            "{:?}",
+            value.validate(SUPPORTED_HOST_API)
+        );
+
+        let invalid = |change: &dyn Fn(&mut Manifest)| {
+            let mut manifest = value.clone();
+            change(&mut manifest);
+            manifest.validate(SUPPORTED_HOST_API).is_err()
+        };
+        assert!(invalid(&|m| m.ui.push(tab("third"))));
+        assert!(invalid(&|m| m
+            .permissions
+            .retain(|permission| permission != "client.record_tab")));
+        assert!(invalid(&|m| m.ui[0].title = None));
+        assert!(invalid(
+            &|m| m.ui[0].title = Some("x".repeat(MAX_RECORD_TAB_TITLE_CHARS + 1))
+        ));
+        assert!(invalid(&|m| {
+            m.ui[0].translations.insert(
+                "de".into(),
+                ContributionTranslation {
+                    title: "x".repeat(MAX_RECORD_TAB_TITLE_CHARS + 1),
+                },
+            );
+        }));
+        assert!(invalid(&|m| m.ui[0].artifact = None));
+        assert!(invalid(&|m| m.ui[0].icon = Some("rocket".into())));
+        assert!(invalid(
+            &|m| m.ui[0].invoke = Some(ActionInvocation::Command("check".into()))
+        ));
+        assert!(invalid(&|m| {
+            m.ui[0].when.as_mut().unwrap().requires_write = true;
+        }));
+        assert!(invalid(&|m| {
+            m.ui[0].when.as_mut().unwrap().max_records = Some(1);
+        }));
+        assert!(invalid(&|m| m.ui[0].outlet = Some(UiOutlet::Navigation)));
+        assert!(invalid(&|m| m.ui[0].kind = UiContributionKind::Embedded));
     }
+
     #[test]
     fn validates_navigation_targets() {
         let mut value = manifest();

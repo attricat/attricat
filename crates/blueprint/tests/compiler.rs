@@ -1072,7 +1072,7 @@ views:
     type: extension_layout
     version: 1
     outlets:
-      record_preview_panel:
+      record_tab:
         order: ['acme.inventory:summary']
         hidden: ['acme.legacy:panel']
 attributes:
@@ -1088,7 +1088,7 @@ attributes:
     for invalid in [
         source.replace("kind: record", "kind: mixin"),
         source.replace("    version: 1\n    outlets:", "    version: 2\n    outlets:"),
-        source.replace("record_preview_panel", "navigation"),
+        source.replace("record_tab", "navigation"),
         source.replace("acme.inventory:summary", "malformed"),
         source.replace(
             "hidden: ['acme.legacy:panel']",

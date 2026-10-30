@@ -43,7 +43,7 @@ Design with that in mind: your extension asks for capabilities; an administrator
     "id": "acme.inventory",
     "host_api": ">=1.0.0, <2.0.0"
   },
-  "permissions": ["attricat.read"],
+  "permissions": ["attricat.read", "client.record_tab"],
   "artifacts": [
     { "id": "panel", "kind": "client_component", "path": "dist/panel.js" }
   ],
@@ -51,9 +51,10 @@ Design with that in mind: your extension asks for capabilities; an administrator
     {
       "id": "summary",
       "version": 1,
-      "kind": "embedded",
+      "kind": "tab",
       "artifact": "panel",
-      "outlet": "record_preview_panel"
+      "outlet": "record_tab",
+      "title": "Stock"
     }
   ]
 }

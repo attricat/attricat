@@ -1,3 +1,4 @@
+import type { ExtensionRecordTabKey } from '../extensions/recordTabs';
 import { checkViolationErrorCodes } from '../../api/checkViolations';
 import type { ApiErrorCode } from '../../api/errors';
 
@@ -52,10 +53,13 @@ export const recordPreviewTabs = {
   recordControl: 'record-control',
   systemAnnotations: 'system-annotations',
   exports: 'exports',
-  extensions: 'extensions',
 } as const;
+/** A built-in tab, or a tab an extension adds to the record. */
 export type RecordPreviewTabKey =
-  (typeof recordPreviewTabs)[keyof typeof recordPreviewTabs];
+  | (typeof recordPreviewTabs)[keyof typeof recordPreviewTabs]
+  | ExtensionRecordTabKey;
+/** The tab bar's menu of tabs that do not fit; never a selectable tab. */
+export const recordPreviewMoreTab = 'more';
 
 export const RECORD_DRAWER_WIDTH = 480;
 

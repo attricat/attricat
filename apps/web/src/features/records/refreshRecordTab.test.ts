@@ -4,21 +4,16 @@ import { agentQueryKeys } from '../agents/queryKeys';
 import { extensionExportQueryKeys } from '../extension-exports/queryKeys';
 import { commentQueryKeys } from '../record-comments/queryKeys';
 import { ruleQueryKeys } from '../rules/queryKeys';
-import { recordPreviewTabs, type RecordPreviewTabKey } from './constants';
+import { recordPreviewTabs } from './constants';
 import { recordQueryKeys } from './queryKeys';
 import { refreshRecordTab } from './refreshRecordTab';
 
 const recordId = 'record-1';
 const otherRecordId = 'record-2';
 
-/** Tabs whose content the host caches; extension panels load their own. */
-type CachedTab = Exclude<
-  RecordPreviewTabKey,
-  typeof recordPreviewTabs.extensions
->;
-const cachedTabs = Object.values(recordPreviewTabs).filter(
-  (tab): tab is CachedTab => tab !== recordPreviewTabs.extensions,
-);
+/** Built-in tabs, whose content the host caches; extension tabs load their own. */
+type CachedTab = (typeof recordPreviewTabs)[keyof typeof recordPreviewTabs];
+const cachedTabs = Object.values(recordPreviewTabs);
 
 /** One query each tab shows, for this record and for another. */
 const tabQueries = (record: string): Record<CachedTab, QueryKey> => ({
@@ -71,5 +66,15 @@ describe('refreshRecordTab', () => {
     expect(invalidated(client, queries[recordPreviewTabs.dataQuality])).toBe(
       false,
     );
+  });
+
+  it('leaves the cache alone for an extension tab', async () => {
+    const queries = tabQueries(recordId);
+    const client = cacheWith(...Object.values(queries));
+
+    await refreshRecordTab(client, recordId, 'acme.inventory:stock');
+
+    for (const key of Object.values(queries))
+      expect(invalidated(client, key)).toBe(false);
   });
 });

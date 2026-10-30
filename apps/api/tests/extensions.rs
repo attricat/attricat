@@ -302,9 +302,10 @@ fn storage_client_release_archive(version: &str) -> Vec<u8> {
         "icons": {"48": "icon.png"},
         "attricat": {"id": "acme.storage", "host_api": "^1.0"},
         "permissions": ["storage.extension"],
+        "optional_permissions": ["client.record_tab"],
         "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
         "artifacts": [{"id": "client", "kind": "client_component", "path": "client.js"}],
-        "ui": [{"id": "panel", "version": 1, "kind": "embedded", "artifact": "client", "outlet": "record_preview_panel"}]
+        "ui": [{"id": "panel", "version": 1, "kind": "tab", "artifact": "client", "outlet": "record_tab", "title": "Panel"}]
     }))
     .unwrap();
     let mut tar_bytes = Vec::new();
@@ -322,6 +323,8 @@ fn client_release_archive_for_outlet(
     contribution_id: &str,
     outlet: &str,
 ) -> Vec<u8> {
+    // Record tabs are titled tabs; every other frame outlet is embedded.
+    let record_tab = outlet == "record_tab";
     let manifest = serde_json::to_vec(&json!({
         "manifest_version": 1,
         "name": "Client extension",
@@ -330,6 +333,7 @@ fn client_release_archive_for_outlet(
         "icons": {"48": "icon.png"},
         "attricat": {"id": extension_id, "host_api": "^1.0"},
         "permissions": ["configuration.read"],
+        "optional_permissions": if record_tab { vec!["client.record_tab"] } else { vec![] },
         "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
         "attribute_types": [{
             "id": "money", "version": "1.0.0", "primitive": "number",
@@ -344,9 +348,10 @@ fn client_release_archive_for_outlet(
         "ui": [{
             "id": contribution_id,
             "version": 1,
-            "kind": "embedded",
+            "kind": if record_tab { "tab" } else { "embedded" },
             "artifact": "client",
-            "outlet": outlet
+            "outlet": outlet,
+            "title": record_tab.then_some("Panel")
         }]
     }))
     .unwrap();
@@ -361,7 +366,7 @@ fn client_release_archive_for_outlet(
 }
 
 fn client_release_archive(extension_id: &str) -> Vec<u8> {
-    client_release_archive_for_outlet(extension_id, "panel", "record_preview_panel")
+    client_release_archive_for_outlet(extension_id, "panel", "record_tab")
 }
 
 fn client_release_archive_with_navigation(extension_id: &str) -> Vec<u8> {
@@ -1014,7 +1019,7 @@ async fn enabled_client_contributions_are_hidden_after_state_changes(pool: sqlx:
         .update_workspace_extension_layout(json!({
             "version": 1,
             "outlets": {
-                "record_preview_panel": {
+                "record_tab": {
                     "order": [],
                     "hidden": ["acme.client:panel"]
                 }
@@ -1033,7 +1038,7 @@ async fn enabled_client_contributions_are_hidden_after_state_changes(pool: sqlx:
         .update_workspace_extension_layout(json!({
             "version": 1,
             "outlets": {
-                "record_preview_panel": { "order": [], "hidden": [] }
+                "record_tab": { "order": [], "hidden": [] }
             }
         }))
         .await
@@ -1252,7 +1257,7 @@ async fn extension_layout_order_is_stable_and_host_owned(pool: sqlx::PgPool) {
         .update_workspace_extension_layout(json!({
             "version": 1,
             "outlets": {
-                "record_preview_panel": {
+                "record_tab": {
                     "order": ["acme.zebra:panel"],
                     "hidden": []
                 }
@@ -1273,7 +1278,7 @@ async fn extension_layout_order_is_stable_and_host_owned(pool: sqlx::PgPool) {
         json!({
             "version": 1,
             "outlets": {
-                "record_preview_panel": {
+                "record_tab": {
                     "order": ["acme.alpha:panel"],
                     "hidden": ["acme.alpha:panel"]
                 }
@@ -1295,7 +1300,7 @@ async fn extension_layout_order_is_stable_and_host_owned(pool: sqlx::PgPool) {
             "version": 1,
             "outlets": {
                 "record_action": {"order": ["acme.shared:item"], "hidden": []},
-                "record_preview_panel": {"order": ["acme.shared:item"], "hidden": []}
+                "record_tab": {"order": ["acme.shared:item"], "hidden": []}
             }
         }),
         json!({
@@ -1395,7 +1400,7 @@ async fn blueprint_layout_overlays_owned_outlets_and_preserves_global_workspace_
         .update_workspace_extension_layout(json!({
             "version": 1,
             "outlets": {
-                "record_preview_panel": {
+                "record_tab": {
                     "order": ["acme.alpha:panel", "acme.zebra:panel"],
                     "hidden": []
                 },
@@ -1421,7 +1426,7 @@ views:
     type: extension_layout
     version: 1
     outlets:
-      record_preview_panel:
+      record_tab:
         order: ['acme.zebra:panel']
         hidden: ['acme.alpha:panel']
 attributes:
@@ -1848,7 +1853,7 @@ async fn hidden_contributions_remain_authorized_and_are_validated_on_publish(poo
         .update_workspace_extension_layout(json!({
             "version": 1,
             "outlets": {
-                "record_preview_panel": {
+                "record_tab": {
                     "order": [],
                     "hidden": ["acme.client:panel"]
                 }

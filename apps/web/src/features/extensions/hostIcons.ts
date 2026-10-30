@@ -38,8 +38,12 @@ const hostIconComponents: Record<HostIcon, LucideIcon> = {
   wand: WandIcon,
 };
 
-/** The icon an extension named, or the generic extension icon, drawn at `size`. */
+/** The icon an extension named, or the generic extension icon. */
+export const hostIconComponent = (icon: HostIcon | null | undefined) =>
+  icon ? hostIconComponents[icon] : ExtensionIcon;
+
+/** {@link hostIconComponent}, drawn at `size`. */
 export const renderHostIcon = (
   icon: HostIcon | null | undefined,
   size: number,
-) => createElement(icon ? hostIconComponents[icon] : ExtensionIcon, { size });
+) => createElement(hostIconComponent(icon), { size });
