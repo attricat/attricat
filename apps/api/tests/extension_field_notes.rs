@@ -27,6 +27,8 @@ const PERMISSIONS: &[&str] = &[
     "client.commands",
     "client.record_field_notes",
     "client.action_dialog",
+    // The slow fixture counts its calls in its storage.
+    "storage.extension",
 ];
 
 fn component() -> Vec<u8> {
@@ -177,6 +179,166 @@ async fn field_notes_answer_nothing_without_a_provider(pool: sqlx::PgPool) {
     assert_eq!(
         response.json::<Value>().await.unwrap(),
         json!({"records": {}, "incomplete": false, "client_sources": []})
+    );
+    server.abort();
+}
+
+/// Asks for `record`'s field notes until no provider is still starting.
+async fn complete_notes(base: &str, record: Uuid) -> Value {
+    let mut body = Value::Null;
+    for _ in 0..60 {
+        body = authenticated_client()
+            .post(format!("{base}/records/extension-field-notes"))
+            .json(&json!({"record_ids": [record]}))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        if body["incomplete"] == false {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
+    assert_eq!(body["incomplete"], false, "{body}");
+    body
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn attaching_a_reusable_attribute_refreshes_cached_field_notes(pool: sqlx::PgPool) {
+    let repository =
+        AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
+    let store = Arc::new(FakeObjectStore::available());
+    install_extension(
+        &repository,
+        store.clone(),
+        "acme.notes",
+        &archive("acme.notes", "field-notes"),
+        PERMISSIONS,
+    )
+    .await;
+    let blueprint = published_blueprint(&repository, BLUEPRINT).await;
+    let record = titled_record(&repository, blueprint, "Lamp").await;
+    let (base, server) = start_server_with_object_store(pool, store).await;
+    let depth_note = |body: &Value| {
+        body["records"][record.to_string()][0]["attributes"]["default:depth"].clone()
+    };
+
+    // The provider notes an attribute the record does not have yet, so the
+    // host drops it, and marks the answer cacheable for an hour.
+    let body = complete_notes(&base, record).await;
+    assert_eq!(depth_note(&body), Value::Null, "{body}");
+
+    let client = authenticated_client();
+    let draft: Value = client
+        .post(format!("{base}/reusable-attributes"))
+        .json(
+            &json!({"definition": "code = \"depth\"\nname = \"Depth\"\nvalue_type = \"number\"\n"}),
+        )
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let published: Value = client
+        .post(format!(
+            "{base}/reusable-attribute-revisions/{}/publish",
+            draft["id"].as_str().unwrap()
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    client
+        .post(format!("{base}/v1/records/{record}/reusable-attributes"))
+        .json(&json!({"reusable_attribute_revision_id": published["id"]}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    // The cached answer was filtered without the attribute, so it is not
+    // reused once the attribute is attached.
+    let body = complete_notes(&base, record).await;
+    assert_eq!(
+        depth_note(&body),
+        json!({"note": "Depth is attached"}),
+        "{body}"
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_slow_provider_is_called_once_and_its_late_answer_is_kept(pool: sqlx::PgPool) {
+    let repository =
+        AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
+    let store = Arc::new(FakeObjectStore::available());
+    let release = install_extension(
+        &repository,
+        store.clone(),
+        "acme.slow",
+        &archive("acme.slow", "field-notes-counted"),
+        PERMISSIONS,
+    )
+    .await;
+    let blueprint = published_blueprint(&repository, BLUEPRINT).await;
+    let record = titled_record(&repository, blueprint, "Lamp").await;
+    let (base, server) = start_server_with_object_store(pool.clone(), store).await;
+    let ask = || async {
+        authenticated_client()
+            .post(format!("{base}/records/extension-field-notes"))
+            .json(&json!({"record_ids": [record]}))
+            .send()
+            .await
+            .unwrap()
+            .json::<Value>()
+            .await
+            .unwrap()
+    };
+
+    // The provider records its call in storage, which this lock holds up,
+    // so the call outlasts the host's wait.
+    let mut lock = pool.begin().await.unwrap();
+    sqlx::query("LOCK TABLE extension_storage_entries IN EXCLUSIVE MODE")
+        .execute(&mut *lock)
+        .await
+        .unwrap();
+    assert_eq!(ask().await["incomplete"], true);
+    // Asking again, as the web app does, waits for the running call instead
+    // of starting another.
+    for _ in 0..3 {
+        let started = std::time::Instant::now();
+        assert_eq!(ask().await["incomplete"], true);
+        assert!(started.elapsed() < std::time::Duration::from_secs(1));
+    }
+    lock.commit().await.unwrap();
+
+    // The late answer is kept for the next request.
+    let body = complete_notes(&base, record).await;
+    assert_eq!(
+        body["records"][record.to_string()][0]["attributes"]["title"],
+        json!({"note": "Counted"}),
+        "{body}"
+    );
+    let calls = repository
+        .extension_storage_list("acme.slow", release, Some("call-"), None, 100)
+        .await
+        .unwrap()
+        .entries;
+    assert_eq!(
+        calls.len(),
+        1,
+        "the provider was called {} times",
+        calls.len()
     );
     server.abort();
 }

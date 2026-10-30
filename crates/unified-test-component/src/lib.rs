@@ -8,7 +8,7 @@ wit_bindgen::generate!({
     world: "attricat-extension",
 });
 
-use attricat::host::{api, attricat_data, selection};
+use attricat::host::{api, attricat_data, clock, selection};
 use exports::attricat::host::{
     handler::{self, CommandRequest, CommandResponse},
     operations::{self, BatchResult, OperationRequest},
@@ -19,6 +19,19 @@ struct Component;
 
 fn parse(value: &str) -> Result<Value, String> {
     serde_json::from_str(value).map_err(|error| error.to_string())
+}
+
+/// Records this call under its own storage key, so a test can count calls;
+/// a test that holds the storage table locked makes the call as slow as it
+/// likes without spending the call's fuel.
+fn record_field_notes_call() -> Result<(), String> {
+    let now = clock::now();
+    api::call(
+        "storage.set.v1",
+        &json!({"key": format!("call-{}-{}", now.seconds, now.nanoseconds), "value": true})
+            .to_string(),
+    )?;
+    Ok(())
 }
 
 impl handler::Guest for Component {
@@ -37,6 +50,14 @@ impl handler::Guest for Component {
             .filter_map(|record| record["record_id"].as_str().map(str::to_owned))
             .collect();
         let notes = match request.handler.as_str() {
+            "field-notes-counted" => {
+                record_field_notes_call()?;
+                Some(json!({
+                    "records": record_ids.iter().map(|record_id| (record_id.clone(), json!({
+                        "attributes": {"title": {"note": "Counted"}}
+                    }))).collect::<serde_json::Map<_, _>>()
+                }))
+            }
             "field-notes" => Some(json!({
                 "records": record_ids.iter().map(|record_id| (record_id.clone(), json!({
                     "attributes": {
@@ -45,6 +66,7 @@ impl handler::Guest for Component {
                             "note": format!("Checked record {record_id} in {}", payload["locale"].as_str().unwrap_or_default())
                         },
                         "sku": {"badge": {"label": "SKU", "action": "undeclared"}},
+                        "default:depth": {"note": "Depth is attached"},
                         "not_an_attribute": {"note": "dropped"}
                     },
                     "files": {"00000000-0000-4000-8000-000000000000": {"note": "dropped"}},
