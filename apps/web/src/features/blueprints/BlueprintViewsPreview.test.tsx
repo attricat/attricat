@@ -4,7 +4,10 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import '../../i18n';
-import { DefinitionRevealContext } from '../definition-editor/definitionReveal';
+import {
+  DefinitionCursorContext,
+  DefinitionRevealContext,
+} from '../definition-editor/definitionReveal';
 import { BlueprintViewsPreview } from './BlueprintViewsPreview';
 
 describe('BlueprintViewsPreview', () => {
@@ -112,6 +115,43 @@ views:
           start: definition.indexOf('detail:'),
         },
       }),
+    );
+  });
+
+  it('follows the definition cursor between views and attributes', () => {
+    const definition = `attributes:
+  - code: vin
+    value_type: string
+views:
+  table:
+    type: table
+    columns:
+      - {field: vin}
+`;
+    const views = {
+      table: { type: 'table' as const, columns: [{ field: 'vin' }] },
+    };
+    const preview = (cursor: number) => (
+      <QueryClientProvider client={new QueryClient()}>
+        <DefinitionCursorContext value={cursor}>
+          <BlueprintViewsPreview
+            attributes={[{ code: 'vin', name: 'VIN', value_type: 'string' }]}
+            definition={definition}
+            views={views}
+          />
+        </DefinitionCursorContext>
+      </QueryClientProvider>
+    );
+    const { rerender } = render(preview(definition.indexOf('type: table')));
+    expect(screen.getByRole('tab', { name: 'table' })).toHaveProperty(
+      'ariaSelected',
+      'true',
+    );
+
+    rerender(preview(definition.indexOf('value_type')));
+    expect(screen.getByRole('tab', { name: 'Edit' })).toHaveProperty(
+      'ariaSelected',
+      'true',
     );
   });
 });

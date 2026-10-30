@@ -16,9 +16,14 @@ import { compactIconSize } from '../../components/iconSizes';
 import { useTabAccessibility } from '../../components/useTabAccessibility';
 import {
   attributeDefinition,
+  definitionSectionAt,
+  definitionSectionKinds,
   viewDefinition,
 } from '../definition-editor/definitionNavigation';
-import { useRevealDefinition } from '../definition-editor/definitionReveal';
+import {
+  useDefinitionCursor,
+  useRevealDefinition,
+} from '../definition-editor/definitionReveal';
 import type {
   Attribute,
   Blueprint,
@@ -109,6 +114,35 @@ export const BlueprintViewsPreview = ({
   const fieldsRef = useRef<HTMLDivElement>(null);
   const { request: revealRequest, reveal: revealField } =
     useFieldReveal(fieldsRef);
+
+  // Follows the editor's cursor: an attribute shows in the sandbox editor,
+  // a view in its tab, and the field either names is scrolled to.
+  const cursor = useDefinitionCursor();
+  const section = useMemo(
+    () =>
+      cursor === undefined || definition === undefined
+        ? undefined
+        : definitionSectionAt(definition, cursor),
+    [cursor, definition],
+  );
+  const followedCode =
+    section?.kind === definitionSectionKinds.attribute
+      ? section.code
+      : section?.field;
+  const sectionKey = section && JSON.stringify(section);
+  const [followedSection, setFollowedSection] = useState<string>();
+  if (sectionKey !== followedSection) {
+    setFollowedSection(sectionKey);
+    if (section?.kind === definitionSectionKinds.attribute)
+      setSelectedView(sandboxEditTab);
+    else if (
+      section &&
+      section.name !== viewName &&
+      tabs.some(([name]) => name === section.name)
+    )
+      setSelectedView(section.name);
+    if (followedCode) revealField(followedCode, { focus: false });
+  }
   const updateField = (code: string, value: string) =>
     setFields((current) => ({ ...current, [code]: value }));
   // Display components on the detail layout edit with their paired editor.
@@ -173,7 +207,18 @@ export const BlueprintViewsPreview = ({
       <Paper
         {...tabId.panel(activeViewIndex)}
         ref={fieldsRef}
-        sx={{ mt: 2, p: 2.5 }}
+        sx={{
+          mt: 2,
+          p: 2.5,
+          ...(followedCode && {
+            [`& [data-field-code=${JSON.stringify(followedCode)}]`]: {
+              bgcolor: 'action.selected',
+              borderRadius: 1,
+              boxShadow: (theme) =>
+                `0 0 0 ${theme.spacing(0.5)} ${theme.palette.action.selected}`,
+            },
+          }),
+        }}
         variant="outlined"
       >
         <FieldDiagnosticsContext value={fieldDiagnostics}>

@@ -13,3 +13,13 @@ export const DefinitionRevealContext = createContext<RevealDefinition | null>(
 );
 
 export const useRevealDefinition = () => useContext(DefinitionRevealContext);
+
+/**
+ * Where the cursor is in the definition being edited, as a text offset, so
+ * its preview can follow it; `undefined` until the cursor moves.
+ */
+export const DefinitionCursorContext = createContext<number | undefined>(
+  undefined,
+);
+
+export const useDefinitionCursor = () => useContext(DefinitionCursorContext);

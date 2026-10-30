@@ -92,6 +92,32 @@ test('leads from the blueprint preview to the definition', async ({ page }) => {
   );
 });
 
+test('follows the blueprint definition cursor in the preview', async ({
+  page,
+}) => {
+  await page.goto('/manage/blueprints/new');
+  await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
+  await replaceDefinition(
+    page,
+    `format_version: 1\ncode: followed_${suffix()}\nname: Followed\nkind: record\n\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\n\nattributes:\n  - code: title\n    value_type: string\n  - code: summary\n    value_type: string\n`,
+  );
+  await expect(page.getByText('Ready to save')).toBeVisible();
+  const line = (text: string) =>
+    page.locator('.monaco-editor .view-line', { hasText: text });
+
+  await line('type: dropdown_option').click();
+  await expect(
+    preview(page).getByRole('tab', { name: 'dropdown_option' }),
+  ).toHaveAttribute('aria-selected', 'true');
+
+  await line('code: summary').click();
+  await expect(
+    preview(page).getByRole('tab', { name: 'Edit' }),
+  ).toHaveAttribute('aria-selected', 'true');
+  // Following the cursor leaves typing in the editor.
+  await expect(page.locator('.monaco-editor').first()).toContainText('summary');
+});
+
 test('checks, previews and inserts into a reusable attribute definition', async ({
   page,
 }) => {

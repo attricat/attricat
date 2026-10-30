@@ -10,7 +10,13 @@ import {
 import { focusControlIn } from '../../components/initialFocus';
 
 /** A request to show a field; each request has a new `sequence`. */
-type FieldRevealRequest = { code: string; sequence: number };
+type FieldRevealRequest = { code: string; focus: boolean; sequence: number };
+
+/**
+ * Whether revealing a field also focuses it; leading to a field from
+ * elsewhere on the page only scrolls it into view.
+ */
+export type FieldRevealOptions = { focus?: boolean };
 
 /** The field the user asked to see, so the tab or accordion holding it opens. */
 export const FieldRevealContext = createContext<FieldRevealRequest | null>(
@@ -22,7 +28,7 @@ export const FieldRevealContext = createContext<FieldRevealRequest | null>(
  * field's diagnostics; `null` where nothing reveals fields.
  */
 export const RevealFieldContext = createContext<
-  ((code: string) => void) | null
+  ((code: string, options?: FieldRevealOptions) => void) | null
 >(null);
 export const useRevealField = () => useContext(RevealFieldContext);
 
@@ -47,7 +53,7 @@ export const useFieldRevealRequest = (onRequest: (code: string) => void) => {
 /**
  * Shows a field on request: provide `request` through `FieldRevealContext` so
  * the tab or accordion holding it opens, and the field, marked with
- * `data-field-code`, is focused inside `root`.
+ * `data-field-code`, is focused inside `root`, or only scrolled into view.
  */
 export const useFieldReveal = (root: RefObject<HTMLElement | null>) => {
   const [request, setRequest] = useState<FieldRevealRequest | null>(null);
@@ -63,14 +69,18 @@ export const useFieldReveal = (root: RefObject<HTMLElement | null>) => {
         ...(root.current?.querySelectorAll<HTMLElement>('[data-field-code]') ??
           []),
       ].find((element) => element.dataset.fieldCode === request.code);
-      if (focusControlIn(field) || --remaining === 0) setRequest(null);
+      // Not implemented by every environment, such as jsdom.
+      if (!request.focus) field?.scrollIntoView?.({ block: 'nearest' });
+      const shown = request.focus ? focusControlIn(field) : Boolean(field);
+      if (shown || --remaining === 0) setRequest(null);
       else frame = requestAnimationFrame(attempt);
     };
     frame = requestAnimationFrame(attempt);
     return () => cancelAnimationFrame(frame);
   }, [request, root]);
   const reveal = useCallback(
-    (code: string) => setRequest({ code, sequence: ++sequence.current }),
+    (code: string, { focus = true }: FieldRevealOptions = {}) =>
+      setRequest({ code, focus, sequence: ++sequence.current }),
     [],
   );
   return { request, reveal };

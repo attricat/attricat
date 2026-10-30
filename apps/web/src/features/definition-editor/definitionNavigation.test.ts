@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { attributeDefinition, viewDefinition } from './definitionNavigation';
+import {
+  attributeDefinition,
+  definitionSectionAt,
+  viewDefinition,
+} from './definitionNavigation';
 
 const definition = `code: car
 attributes:
@@ -45,5 +49,33 @@ describe('viewDefinition', () => {
 
   it('finds nothing for an undeclared view', () => {
     expect(viewDefinition(definition, 'table')).toBeUndefined();
+  });
+});
+
+describe('definitionSectionAt', () => {
+  const offset = (text: string) => definition.indexOf(text);
+
+  it('names the attribute whose block holds the cursor', () => {
+    expect(definitionSectionAt(definition, offset('from: base'))).toEqual({
+      code: 'make',
+      kind: 'attribute',
+    });
+  });
+
+  it('names the view and the field reference under the cursor', () => {
+    expect(definitionSectionAt(definition, offset('type: stack'))).toEqual({
+      field: undefined,
+      kind: 'view',
+      name: 'detail',
+    });
+    expect(definitionSectionAt(definition, offset('vin}'))).toEqual({
+      field: 'vin',
+      kind: 'view',
+      name: 'detail',
+    });
+  });
+
+  it('names nothing outside attributes and views', () => {
+    expect(definitionSectionAt(definition, offset('car'))).toBeUndefined();
   });
 });

@@ -32,6 +32,7 @@ import { DefinitionFoldControls } from './DefinitionFoldControls';
 import { DefinitionInsertMenu } from './DefinitionInsertMenu';
 import type { DefinitionTarget } from './definitionNavigation';
 import {
+  DefinitionCursorContext,
   DefinitionRevealContext,
   type RevealDefinition,
 } from './definitionReveal';
@@ -161,6 +162,7 @@ export const DefinitionWorkspace = ({
   const { t } = useTranslation();
   const previewHeadingId = useId();
   const [mounted, setMounted] = useState<Mounted>();
+  const [cursor, setCursor] = useState<number>();
   // Monaco keeps commands registered on mount, so they read the latest
   // handlers through refs instead of capturing stale ones.
   const handlers = useRef({ onChange, onSave, readOnly });
@@ -281,6 +283,9 @@ export const DefinitionWorkspace = ({
               monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
               () => handlers.current.onSave(),
             );
+            mountedEditor.onDidChangeCursorPosition(({ position }) =>
+              setCursor(mountedEditor.getModel()?.getOffsetAt(position)),
+            );
             setMounted({ editor: mountedEditor, monaco });
           }}
           readOnly={readOnly}
@@ -335,7 +340,9 @@ export const DefinitionWorkspace = ({
                 </Typography>
               )}
               <DefinitionRevealContext value={reveal ?? null}>
-                {preview}
+                <DefinitionCursorContext value={cursor}>
+                  {preview}
+                </DefinitionCursorContext>
               </DefinitionRevealContext>
             </>
           )}
