@@ -66,7 +66,7 @@ async fn attricat_routes_distinguish_missing_identity_from_missing_permission(po
         .post(format!("{base_url}/blueprints"))
         .header("x-attricat-user-id", viewer_id.to_string())
         .header("x-attricat-workspace-id", workspace_id.to_string())
-        .json(&json!({ "definition": "kind = \"record\"\ncode = \"forbidden\"" }))
+        .json(&json!({ "definition": "kind: record\ncode: forbidden" }))
         .send()
         .await
         .unwrap();
@@ -311,7 +311,7 @@ async fn batched_record_authorization_matches_per_target_checks(pool: PgPool) {
     let owner = authenticated_client();
     let definition = |code: &str| {
         format!(
-            "format_version = 1\ncode = \"{code}\"\nname = \"{code}\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"name\"]\n\n[[attributes]]\ncode = \"name\"\nvalue_type = \"string\"\n"
+            "format_version: 1\ncode: '{code}'\nname: '{code}'\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [name]\nattributes:\n  - code: name\n    value_type: string\n"
         )
     };
     let blueprint_a = create_blueprint(&owner, &base_url, &definition("batch_a")).await;
@@ -437,7 +437,7 @@ async fn explore_navigation_lists_only_readable_published_entries(pool: PgPool) 
     let owner = authenticated_client();
     let definition = |code: &str| {
         format!(
-            "format_version = 1\ncode = \"{code}\"\nname = \"Name of {code}\"\nkind = \"record\"\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\n"
+            "format_version: 1\ncode: '{code}'\nname: 'Name of {code}'\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string\n"
         )
     };
     let alpha = create_blueprint(&owner, &base_url, &definition("nav_alpha")).await;
@@ -520,7 +520,7 @@ async fn access_checks_report_scoped_grants_per_target(pool: PgPool) {
     let owner = authenticated_client();
     let definition = |code: &str| {
         format!(
-            "format_version = 1\ncode = \"{code}\"\nname = \"{code}\"\nkind = \"record\"\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\n"
+            "format_version: 1\ncode: '{code}'\nname: '{code}'\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string\n"
         )
     };
     let granted_blueprint =

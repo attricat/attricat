@@ -2,8 +2,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum BlueprintError {
-    #[error("invalid TOML: {0}")]
-    Toml(#[from] toml::de::Error),
+    #[error("invalid YAML: {0}")]
+    Yaml(#[from] attricat_yaml::Error),
     #[error("unsupported format version {0}")]
     UnsupportedFormatVersion(u32),
     #[error("{0} must not be empty")]
@@ -16,7 +16,7 @@ pub enum BlueprintError {
     DuplicateIncludeAlias(String),
     #[error("attribute code '{0}' is duplicated")]
     DuplicateAttributeCode(String),
-    #[error("blueprints cannot declare [[rules]]; create rules separately with POST /rules")]
+    #[error("blueprints cannot declare rules; create rules separately with POST /rules")]
     EmbeddedRules,
     #[error("invalid connector job: {0}")]
     InvalidConnectorJob(String),
@@ -45,7 +45,7 @@ pub enum BlueprintError {
     #[error("views.edit is no longer supported; records are edited on the detail view")]
     EditViewRemoved,
     #[error(
-        "views.explorer browse_by '{0}' must be false, a relationship with a single target blueprint, or a path of up to three such relationships with cardinality = \"one\""
+        "views.explorer browse_by '{0}' must be false, a relationship with a single target blueprint, or a path of up to three such relationships with cardinality: one"
     )]
     InvalidBrowseByField(String),
     #[error("views.dropdown_option contains duplicate field '{0}'")]

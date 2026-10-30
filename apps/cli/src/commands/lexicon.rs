@@ -47,7 +47,7 @@ pub(crate) enum LexiconCommand {
         #[arg(long)]
         language: String,
     },
-    /// Import a JSON or TOML lexicon file for one language.
+    /// Import a JSON or YAML lexicon file for one language.
     Import {
         #[arg(long)]
         file: PathBuf,
@@ -150,16 +150,18 @@ impl ImportMode {
     }
 }
 
-/// Reads a lexicon file as JSON, or as TOML when the extension is `.toml`.
+/// File extensions read as YAML lexicon files.
+const YAML_EXTENSIONS: [&str; 2] = ["yaml", "yml"];
+
+/// Reads a lexicon file as JSON, or as YAML when the extension is `.yaml` or `.yml`.
 pub(crate) fn lexicon_file(path: &PathBuf) -> Result<Value, CliError> {
     let source = fs::read_to_string(path).map_err(|error| CliError::Input(error.to_string()))?;
     if path
         .extension()
-        .is_some_and(|extension| extension == "toml")
+        .is_some_and(|extension| YAML_EXTENSIONS.iter().any(|yaml| extension == *yaml))
     {
-        let value: toml::Value = toml::from_str(&source)
-            .map_err(|error| CliError::Input(format!("invalid lexicon TOML: {error}")))?;
-        serde_json::to_value(value).map_err(|error| CliError::Input(error.to_string()))
+        attricat_yaml::from_str(&source)
+            .map_err(|error| CliError::Input(format!("invalid lexicon YAML: {error}")))
     } else {
         serde_json::from_str(&source)
             .map_err(|error| CliError::Input(format!("invalid lexicon JSON: {error}")))

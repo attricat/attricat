@@ -53,7 +53,7 @@
     },
     "file_policy": {
       "default": null,
-      "description": "File upload policy table.",
+      "description": "File upload policy mapping.",
       "x-attricat-value-types": [
         "file"
       ]
@@ -117,7 +117,7 @@
     },
     "value_schema": {
       "default": null,
-      "description": "JSON Schema (Draft 2020-12) for scalar values, written as a TOML table."
+      "description": "JSON Schema (Draft 2020-12) for scalar values, written as a YAML mapping."
     },
     "value_type": {
       "description": "Stored value type.",

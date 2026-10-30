@@ -773,19 +773,20 @@ async fn record_files_reach_marketplaces_by_public_link_or_as_run_input(pool: sq
     let blueprint = create_blueprint(
         &client,
         &base_url,
-        r#"format_version = 1
-code = "listing_with_image"
-name = "Listing with image"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["image"]
-[[attributes]]
-code = "image"
-value_type = "file"
-allowed_mime_groups = ["text/plain"]
-allowed_extensions = ["txt"]
-max_bytes = 1024
+        r#"format_version: 1
+code: listing_with_image
+name: Listing with image
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [image]
+attributes:
+  - code: image
+    value_type: file
+    allowed_mime_groups: [text/plain]
+    allowed_extensions: [txt]
+    max_bytes: 1024
 "#,
     )
     .await;

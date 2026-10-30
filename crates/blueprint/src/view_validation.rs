@@ -335,7 +335,7 @@ fn validate_table_columns(
 
 /// Checks the local part of a browse path: one to three relationship hops,
 /// the first of which this blueprint declares. Each hop needs a single target
-/// blueprint and, on a multi-hop path, `cardinality = "one"`, as for sortable
+/// blueprint and, on a multi-hop path, `cardinality: one`, as for sortable
 /// relationship table paths. Hops past the first are resolved against the
 /// published target blueprints when the blueprint is saved.
 fn validate_browse_by_path(

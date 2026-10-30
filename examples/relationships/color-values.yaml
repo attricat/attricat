@@ -1,0 +1,8 @@
+values:
+  - kind: scalar
+    attribute_code: name
+    value: Navy
+
+  - kind: scalar
+    attribute_code: hex
+    value: '#1c2d4a'

@@ -59,7 +59,7 @@ thiserror = "2"
 tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
 tokio-stream = "0.1"
 tower-http = { version = "0.6", features = ["catch-panic", "fs"] }
-toml = "0.8"
+serde-saphyr = "2.0.0"
 tracing = "0.1"
 tracing-opentelemetry = "0.33"
 unicode-normalization = "0.1"

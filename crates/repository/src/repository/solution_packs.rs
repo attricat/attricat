@@ -686,9 +686,9 @@ async fn latest_published_blueprint(
             "existing blueprint '{code}' does not match its stored definition evidence"
         )));
     }
-    let canonical_definition = toml::from_str::<toml::Value>(&existing.5)
+    let canonical_definition = attricat_yaml::from_str::<Value>(&existing.5)
         .ok()
-        .and_then(|value| toml::to_string(&value).ok())
+        .and_then(|value| attricat_yaml::to_string(&value).ok())
         .ok_or_else(|| {
             RepositoryError::InvalidSolutionPackPlan(format!(
                 "existing blueprint '{code}' cannot be canonicalized"
@@ -6181,16 +6181,17 @@ mod tests {
                 CreateBlueprint {
                     definition: format!(
                         r#"
-format_version = 1
-code = "{code}"
-name = "{name}"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[[attributes]]
-code = "name"
-value_type = "string"
+format_version: 1
+code: '{code}'
+name: '{name}'
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
 "#
                     ),
                 },

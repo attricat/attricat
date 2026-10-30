@@ -1,0 +1,8 @@
+values:
+  - kind: scalar
+    attribute_code: name
+    value: Shirts
+
+  - kind: scalar
+    attribute_code: slug
+    value: shirts

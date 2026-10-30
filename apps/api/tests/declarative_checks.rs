@@ -63,45 +63,41 @@ async fn drain_rule_tasks(pool: &PgPool) {
     }
 }
 
-const VALIDITY: &str = r#"format_version = 1
-code = "certificate"
-name = "Certificate"
-kind = "record"
-record_schema = '''{
-  "type": "object",
-  "x-attricat-checks": [
-    {"code": "valid-range", "message": "Valid until must not be before valid from",
-     "predicate": {"type": "compare", "attribute_code": "valid_until", "op": "gte", "other_attribute_code": "valid_from"}},
-    {"code": "limits", "predicate": {"type": "compare", "attribute_code": "lower", "op": "lte", "other_attribute_code": "upper"}},
-    {"code": "distinct-ends", "predicate": {"type": "compare", "attribute_code": "source", "op": "disjoint", "other_attribute_code": "target"}}
-  ]
-}'''
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-[[attributes]]
-code = "title"
-value_type = "string"
-[[attributes]]
-code = "valid_from"
-value_type = "date"
-[[attributes]]
-code = "valid_until"
-value_type = "date"
-[[attributes]]
-code = "lower"
-value_type = "number"
-[[attributes]]
-code = "upper"
-value_type = "integer"
-[[attributes]]
-code = "source"
-value_type = "relationship"
-target_blueprint = "certificate"
-[[attributes]]
-code = "target"
-value_type = "relationship"
-target_blueprint = "certificate"
+const VALIDITY: &str = r#"format_version: 1
+code: certificate
+name: Certificate
+kind: record
+record_schema: |-
+  {
+    "type": "object",
+    "x-attricat-checks": [
+      {"code": "valid-range", "message": "Valid until must not be before valid from",
+       "predicate": {"type": "compare", "attribute_code": "valid_until", "op": "gte", "other_attribute_code": "valid_from"}},
+      {"code": "limits", "predicate": {"type": "compare", "attribute_code": "lower", "op": "lte", "other_attribute_code": "upper"}},
+      {"code": "distinct-ends", "predicate": {"type": "compare", "attribute_code": "source", "op": "disjoint", "other_attribute_code": "target"}}
+    ]
+  }
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+  - code: valid_from
+    value_type: date
+  - code: valid_until
+    value_type: date
+  - code: lower
+    value_type: number
+  - code: upper
+    value_type: integer
+  - code: source
+    value_type: relationship
+    target_blueprint: certificate
+  - code: target
+    value_type: relationship
+    target_blueprint: certificate
 "#;
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
@@ -188,68 +184,68 @@ async fn record_schema_checks_compare_attributes_on_every_write(pool: PgPool) {
     server.abort();
 }
 
-const SUPPLY: &str = r#"format_version = 1
-code = "supplier"
-name = "Supplier"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[[attributes]]
-code = "name"
-value_type = "string"
+const SUPPLY: &str = r#"format_version: 1
+code: supplier
+name: Supplier
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
 "#;
 
-const FACILITY: &str = r#"format_version = 1
-code = "facility"
-name = "Facility"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[[attributes]]
-code = "name"
-value_type = "string"
-[[attributes]]
-code = "state"
-value_type = "string"
-[[attributes]]
-code = "supplier"
-value_type = "relationship"
-target_blueprint = "supplier"
-cardinality = "one"
+const FACILITY: &str = r#"format_version: 1
+code: facility
+name: Facility
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: state
+    value_type: string
+  - code: supplier
+    value_type: relationship
+    target_blueprint: supplier
+    cardinality: one
 "#;
 
-const ASSESSMENT: &str = r#"format_version = 1
-code = "assessment"
-name = "Assessment"
-kind = "record"
-record_schema = '''{
-  "x-attricat-checks": [
-    {"code": "facility-of-supplier", "message": "The facility must belong to the selected supplier",
-     "predicate": {"type": "linked", "relationship_code": "facility",
-       "predicate": {"type": "compare", "attribute_code": "supplier", "op": "eq", "subject_attribute_code": "supplier"}}},
-    {"code": "facility-approved",
-     "predicate": {"type": "linked", "relationship_code": "facility",
-       "predicate": {"type": "one_of", "attribute_code": "state", "values": ["approved"]}}}
-  ]
-}'''
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["reference"]
-[[attributes]]
-code = "reference"
-value_type = "string"
-[[attributes]]
-code = "supplier"
-value_type = "relationship"
-target_blueprint = "supplier"
-cardinality = "one"
-[[attributes]]
-code = "facility"
-value_type = "relationship"
-target_blueprint = "facility"
-cardinality = "one"
+const ASSESSMENT: &str = r#"format_version: 1
+code: assessment
+name: Assessment
+kind: record
+record_schema: |-
+  {
+    "x-attricat-checks": [
+      {"code": "facility-of-supplier", "message": "The facility must belong to the selected supplier",
+       "predicate": {"type": "linked", "relationship_code": "facility",
+         "predicate": {"type": "compare", "attribute_code": "supplier", "op": "eq", "subject_attribute_code": "supplier"}}},
+      {"code": "facility-approved",
+       "predicate": {"type": "linked", "relationship_code": "facility",
+         "predicate": {"type": "one_of", "attribute_code": "state", "values": ["approved"]}}}
+    ]
+  }
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [reference]
+attributes:
+  - code: reference
+    value_type: string
+  - code: supplier
+    value_type: relationship
+    target_blueprint: supplier
+    cardinality: one
+  - code: facility
+    value_type: relationship
+    target_blueprint: facility
+    cardinality: one
 "#;
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
@@ -327,47 +323,47 @@ async fn linked_record_checks_read_one_hop_on_save(pool: PgPool) {
     server.abort();
 }
 
-const NONCONFORMANCE: &str = r#"format_version = 1
-code = "nonconformance"
-name = "Nonconformance"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-[[attributes]]
-code = "title"
-value_type = "string"
-[[attributes]]
-code = "root_cause"
-value_type = "string"
-[[attributes]]
-code = "status"
-value_type = "string"
-value_schema = '''{"type":"string","enum":["open","closed"],"x-attricat-status":{"version":1,
-  "options":[{"code":"open","label":"Open"},{"code":"closed","label":"Closed"}],
-  "transitions":[{"from":null,"to":"open"},{"from":"closed","to":"open"},
-    {"from":"open","to":"closed","conditions":[
-      {"code":"root-cause","message":"Record the root cause","predicate":{"type":"required","attribute_code":"root_cause"}},
-      {"code":"actions-closed","predicate":{"type":"referenced_by","blueprint_code":"corrective_action","relationship_code":"nonconformance","max":0,
-        "predicate":{"type":"one_of","attribute_code":"state","values":["open"]}}}
-    ]}]}}'''
+const NONCONFORMANCE: &str = r#"format_version: 1
+code: nonconformance
+name: Nonconformance
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+  - code: root_cause
+    value_type: string
+  - code: status
+    value_type: string
+    value_schema: |-
+      {"type":"string","enum":["open","closed"],"x-attricat-status":{"version":1,
+        "options":[{"code":"open","label":"Open"},{"code":"closed","label":"Closed"}],
+        "transitions":[{"from":null,"to":"open"},{"from":"closed","to":"open"},
+          {"from":"open","to":"closed","conditions":[
+            {"code":"root-cause","message":"Record the root cause","predicate":{"type":"required","attribute_code":"root_cause"}},
+            {"code":"actions-closed","predicate":{"type":"referenced_by","blueprint_code":"corrective_action","relationship_code":"nonconformance","max":0,
+              "predicate":{"type":"one_of","attribute_code":"state","values":["open"]}}}
+          ]}]}}
 "#;
 
-const ACTION: &str = r#"format_version = 1
-code = "corrective_action"
-name = "Corrective action"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["state"]
-[[attributes]]
-code = "state"
-value_type = "string"
-[[attributes]]
-code = "nonconformance"
-value_type = "relationship"
-target_blueprint = "nonconformance"
-cardinality = "one"
+const ACTION: &str = r#"format_version: 1
+code: corrective_action
+name: Corrective action
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [state]
+attributes:
+  - code: state
+    value_type: string
+  - code: nonconformance
+    value_type: relationship
+    target_blueprint: nonconformance
+    cardinality: one
 "#;
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
@@ -448,22 +444,21 @@ async fn transition_conditions_block_and_explain_status_changes(pool: PgPool) {
     server.abort();
 }
 
-const PRODUCT: &str = r#"format_version = 1
-code = "rule_product"
-name = "Rule product"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["sku"]
-[[attributes]]
-code = "sku"
-value_type = "string"
-[[attributes]]
-code = "price"
-value_type = "number"
-[[attributes]]
-code = "expires_on"
-value_type = "date"
+const PRODUCT: &str = r#"format_version: 1
+code: rule_product
+name: Rule product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [sku]
+attributes:
+  - code: sku
+    value_type: string
+  - code: price
+    value_type: number
+  - code: expires_on
+    value_type: date
 "#;
 
 async fn create_rule(
@@ -502,9 +497,14 @@ async fn run_rule(client: &Client, base: &str, rule_id: &str, idempotency_key: &
     assert_eq!(status, StatusCode::ACCEPTED, "{body}");
 }
 
+/// A manual rule; `extra` either adds trigger items or follows as top-level keys.
 fn rule(code: &str, predicate: &str, extra: &str) -> String {
+    let predicate: String = predicate
+        .lines()
+        .map(|line| format!("  {line}\n"))
+        .collect();
     format!(
-        "format_version = 1\ncode = \"{code}\"\nname = \"{code}\"\nseverity = \"error\"\n[[triggers]]\ntype = \"manual\"\n[predicate]\n{predicate}\n{extra}"
+        "format_version: 1\ncode: {code}\nname: {code}\nseverity: error\npredicate:\n{predicate}triggers:\n  - type: manual\n{extra}"
     )
 }
 
@@ -527,7 +527,7 @@ async fn new_rule_predicates_open_and_resolve_findings(pool: PgPool) {
         ]),
     )
     .await;
-    // `unique` compares values as `[[unique_keys]]` do: trimmed, whitespace
+    // `unique` compares values as `unique_keys` do: trimmed, whitespace
     // collapsed and case-insensitive.
     let second = create_record_with(
         &client,
@@ -544,25 +544,17 @@ async fn new_rule_predicates_open_and_resolve_findings(pool: PgPool) {
         &client,
         &base,
         &blueprint,
-        &rule(
-            "bad",
-            "type = \"unique\"\nattribute_codes = [\"missing\"]",
-            "",
-        ),
+        &rule("bad", "type: unique\nattribute_codes: [missing]", ""),
     )
     .await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
 
     let mut rules = Vec::new();
     for definition in [
-        rule(
-            "unique-sku",
-            "type = \"unique\"\nattribute_codes = [\"sku\"]",
-            "",
-        ),
+        rule("unique-sku", "type: unique\nattribute_codes: [sku]", ""),
         rule(
             "not-expired",
-            "type = \"relative_date\"\nattribute_code = \"expires_on\"\nop = \"gt\"\noffset_days = 30",
+            "type: relative_date\nattribute_code: expires_on\nop: gt\noffset_days: 30",
             "",
         ),
     ] {
@@ -609,23 +601,23 @@ async fn new_rule_predicates_open_and_resolve_findings(pool: PgPool) {
     server.abort();
 }
 
-const GALLERY: &str = r#"format_version = 1
-code = "gallery_item"
-name = "Gallery item"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-[[attributes]]
-code = "title"
-value_type = "string"
-[[attributes]]
-code = "photo"
-value_type = "file"
-cardinality = "many"
-allowed_mime_groups = ["image"]
-allowed_extensions = ["png"]
-max_bytes = 1048576
+const GALLERY: &str = r#"format_version: 1
+code: gallery_item
+name: Gallery item
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+  - code: photo
+    value_type: file
+    cardinality: many
+    allowed_mime_groups: [image]
+    allowed_extensions: [png]
+    max_bytes: 1048576
 "#;
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
@@ -678,11 +670,7 @@ async fn predicates_see_file_values_and_explicit_empty_local_values(pool: PgPool
         &client,
         &base,
         &blueprint,
-        &rule(
-            "has-photo",
-            "type = \"required\"\nattribute_code = \"photo\"",
-            "",
-        ),
+        &rule("has-photo", "type: required\nattribute_code: photo", ""),
     )
     .await;
     assert_eq!(status, StatusCode::CREATED, "{created}");
@@ -728,14 +716,14 @@ async fn enforcing_rules_dry_run_before_enabling_and_reject_writes(pool: PgPool)
     )
     .await;
 
-    let enforce = "[enforcement]\non_save = true";
+    let enforce = "enforcement:\n  on_save: true";
     let (status, body) = create_rule(
         &client,
         &base,
         &blueprint,
         &rule(
             "unique-enforced",
-            "type = \"unique\"\nattribute_codes = [\"sku\"]",
+            "type: unique\nattribute_codes: [sku]",
             enforce,
         ),
     )
@@ -755,7 +743,7 @@ async fn enforcing_rules_dry_run_before_enabling_and_reject_writes(pool: PgPool)
         &blueprint,
         &rule(
             "price-non-negative",
-            "type = \"compare\"\nattribute_code = \"price\"\nop = \"gte\"\nvalue = 0",
+            "type: compare\nattribute_code: price\nop: gte\nvalue: 0",
             enforce,
         ),
     )
@@ -859,11 +847,7 @@ async fn channels_require_checks_before_publication(pool: PgPool) {
         &client,
         &base,
         &blueprint,
-        &rule(
-            "has-sku",
-            "type = \"required\"\nattribute_code = \"sku\"",
-            "",
-        ),
+        &rule("has-sku", "type: required\nattribute_code: sku", ""),
     )
     .await;
     assert_eq!(status, StatusCode::CREATED, "{created}");
@@ -951,17 +935,13 @@ async fn retained_edits_withdraw_publications_whose_channel_checks_now_fail(pool
     let (base, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     let definition = PRODUCT.replace("rule_product", "retained_product")
-        + "[publication]\nretain_on_edit_roles = [\"owner\"]\n";
+        + "publication:\n  retain_on_edit_roles: [owner]\n";
     let blueprint = create_blueprint(&client, &base, &definition).await;
     let (status, created) = create_rule(
         &client,
         &base,
         &blueprint,
-        &rule(
-            "retained-sku",
-            "type = \"required\"\nattribute_code = \"sku\"",
-            "",
-        ),
+        &rule("retained-sku", "type: required\nattribute_code: sku", ""),
     )
     .await;
     assert_eq!(status, StatusCode::CREATED, "{created}");
@@ -1079,50 +1059,51 @@ async fn retained_edits_withdraw_publications_whose_channel_checks_now_fail(pool
     server.abort();
 }
 
-const PAGE_ITEM: &str = r#"format_version = 1
-code = "page_item"
-name = "Page item"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["state"]
-[[attributes]]
-code = "state"
-value_type = "string"
+const PAGE_ITEM: &str = r#"format_version: 1
+code: page_item
+name: Page item
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [state]
+attributes:
+  - code: state
+    value_type: string
 "#;
 
-const PAGE_ORDER: &str = r#"format_version = 1
-code = "page_order"
-name = "Page order"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-[[attributes]]
-code = "title"
-value_type = "string"
-[[attributes]]
-code = "items"
-value_type = "relationship"
-target_blueprint = "page_item"
-cardinality = "many"
+const PAGE_ORDER: &str = r#"format_version: 1
+code: page_order
+name: Page order
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+  - code: items
+    value_type: relationship
+    target_blueprint: page_item
+    cardinality: many
 "#;
 
-const PAGE_NOTE: &str = r#"format_version = 1
-code = "page_note"
-name = "Page note"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["state"]
-[[attributes]]
-code = "state"
-value_type = "string"
-[[attributes]]
-code = "order"
-value_type = "relationship"
-target_blueprint = "page_order"
-cardinality = "one"
+const PAGE_NOTE: &str = r#"format_version: 1
+code: page_note
+name: Page note
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [state]
+attributes:
+  - code: state
+    value_type: string
+  - code: order
+    value_type: relationship
+    target_blueprint: page_order
+    cardinality: one
 "#;
 
 /// A rule run reads linked and referencing records for a whole candidate
@@ -1179,11 +1160,23 @@ async fn rule_pages_resolve_related_records_per_candidate(pool: PgPool) {
 
     let definition = rule(
         "page-related",
-        r#"type = "all_of"
-predicates = [
-  {type = "linked", relationship_code = "items", quantifier = "all", predicate = {type = "one_of", attribute_code = "state", values = ["ok"]}},
-  {type = "referenced_by", blueprint_code = "page_note", relationship_code = "order", max = 0, predicate = {type = "one_of", attribute_code = "state", values = ["open"]}},
-]"#,
+        r#"type: all_of
+predicates:
+  - type: linked
+    relationship_code: items
+    quantifier: all
+    predicate:
+      type: one_of
+      attribute_code: state
+      values: [ok]
+  - type: referenced_by
+    blueprint_code: page_note
+    relationship_code: order
+    max: 0
+    predicate:
+      type: one_of
+      attribute_code: state
+      values: [open]"#,
         "",
     );
     let (status, created) = create_rule(&client, &base, &orders, &definition).await;
@@ -1285,12 +1278,15 @@ async fn referenced_by_rules_reevaluate_records_that_lose_a_reference(pool: PgPo
         &nonconformances,
         &rule(
             "no-open-actions",
-            r#"type = "referenced_by"
-blueprint_code = "corrective_action"
-relationship_code = "nonconformance"
-max = 0
-predicate = {type = "one_of", attribute_code = "state", values = ["open"]}"#,
-            "[[triggers]]\ntype = \"event\"\nevent_type = \"relationship.changed.v1\"",
+            r#"type: referenced_by
+blueprint_code: corrective_action
+relationship_code: nonconformance
+max: 0
+predicate:
+  type: one_of
+  attribute_code: state
+  values: [open]"#,
+            "  - type: event\n    event_type: relationship.changed.v1",
         ),
     )
     .await;
@@ -1372,12 +1368,15 @@ async fn referenced_by_rules_reevaluate_records_a_migration_releases(pool: PgPoo
         &nonconformances,
         &rule(
             "no-open-actions-migrated",
-            r#"type = "referenced_by"
-blueprint_code = "corrective_action"
-relationship_code = "nonconformance"
-max = 0
-predicate = {type = "one_of", attribute_code = "state", values = ["open"]}"#,
-            "[[triggers]]\ntype = \"event\"\nevent_type = \"record.migrated.v1\"",
+            r#"type: referenced_by
+blueprint_code: corrective_action
+relationship_code: nonconformance
+max: 0
+predicate:
+  type: one_of
+  attribute_code: state
+  values: [open]"#,
+            "  - type: event\n    event_type: record.migrated.v1",
         ),
     )
     .await;
@@ -1462,8 +1461,8 @@ async fn transition_preview_covers_inheriting_contexts(pool: PgPool) {
     let client = authenticated_client();
     // The root cause is recorded per context; the status is inherited.
     let local_root_cause = NONCONFORMANCE.replace(
-        "code = \"root_cause\"\nvalue_type = \"string\"",
-        "code = \"root_cause\"\nvalue_type = \"string\"\ncontext_fallback = \"none\"",
+        "code: root_cause\n    value_type: string",
+        "code: root_cause\n    value_type: string\n    context_fallback: none",
     );
     assert_ne!(local_root_cause, NONCONFORMANCE);
     create_blueprint(&client, &base, &local_root_cause).await;

@@ -27,114 +27,92 @@ use support::*;
 use uuid::Uuid;
 
 const CATEGORY: &str = r#"
-format_version = 1
-code = "bench_category"
-name = "Bench category"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[[attributes]]
-code = "name"
-value_type = "string"
-
-[[attributes]]
-code = "parent"
-value_type = "relationship"
-target_blueprint = "bench_category"
-cardinality = "one"
-tree = true
-context_editable = "default"
+format_version: 1
+code: bench_category
+name: Bench category
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: parent
+    value_type: relationship
+    target_blueprint: bench_category
+    cardinality: one
+    tree: true
+    context_editable: default
 "#;
 
 const PRODUCT: &str = r#"
-format_version = 1
-code = "bench_product"
-name = "Bench product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[[attributes]]
-code = "name"
-value_type = "string"
-
-[[attributes]]
-code = "sku"
-value_type = "string"
-
-[[attributes]]
-code = "description"
-value_type = "string"
-
-[[attributes]]
-code = "category"
-value_type = "relationship"
-target_blueprint = "bench_category"
-
-[[attributes]]
-code = "line"
-value_type = "relationship"
-target_blueprint = "bench_line"
-cardinality = "one"
-
-[[attributes]]
-code = "listing"
-value_type = "relationship"
-target_blueprint = "bench_listing"
-cardinality = "one"
+format_version: 1
+code: bench_product
+name: Bench product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: sku
+    value_type: string
+  - code: description
+    value_type: string
+  - code: category
+    value_type: relationship
+    target_blueprint: bench_category
+  - code: line
+    value_type: relationship
+    target_blueprint: bench_line
+    cardinality: one
+  - code: listing
+    value_type: relationship
+    target_blueprint: bench_listing
+    cardinality: one
 "#;
 
 const LISTING: &str = r#"
-format_version = 1
-code = "bench_listing"
-name = "Bench listing"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[[attributes]]
-code = "name"
-value_type = "string"
-
-[[attributes]]
-code = "category"
-value_type = "relationship"
-target_blueprint = "bench_category"
-cardinality = "one"
-
-[[attributes]]
-code = "line"
-value_type = "relationship"
-target_blueprint = "bench_line"
-cardinality = "one"
+format_version: 1
+code: bench_listing
+name: Bench listing
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: category
+    value_type: relationship
+    target_blueprint: bench_category
+    cardinality: one
+  - code: line
+    value_type: relationship
+    target_blueprint: bench_line
+    cardinality: one
 "#;
 
 const LINE: &str = r#"
-format_version = 1
-code = "bench_line"
-name = "Bench line"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[[attributes]]
-code = "name"
-value_type = "string"
-
-[[attributes]]
-code = "category"
-value_type = "relationship"
-target_blueprint = "bench_category"
-cardinality = "one"
+format_version: 1
+code: bench_line
+name: Bench line
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: category
+    value_type: relationship
+    target_blueprint: bench_category
+    cardinality: one
 "#;
 
 /// Bulk rows bypass the record API, which would take minutes at this size.

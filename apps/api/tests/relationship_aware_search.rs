@@ -25,16 +25,17 @@ async fn search_requires_an_explicit_relationship_selector_for_traversal(pool: s
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "search_color"
-name = "Search color"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[[attributes]]
-code = "name"
-value_type = "string"
+format_version: 1
+code: search_color
+name: Search color
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
 "#,
     )
     .await;
@@ -42,20 +43,20 @@ value_type = "string"
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "search_product"
-name = "Search product"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["sku"]
-[[attributes]]
-code = "sku"
-value_type = "string"
-[[attributes]]
-code = "color"
-value_type = "relationship"
-target_blueprint = "search_color"
+format_version: 1
+code: search_product
+name: Search product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [sku]
+attributes:
+  - code: sku
+    value_type: string
+  - code: color
+    value_type: relationship
+    target_blueprint: search_color
 "#,
     )
     .await;
@@ -124,16 +125,17 @@ async fn search_selects_records_by_id_directly_and_through_relationships(pool: s
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "id_color"
-name = "ID color"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[[attributes]]
-code = "name"
-value_type = "string"
+format_version: 1
+code: id_color
+name: ID color
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
 "#,
     )
     .await;
@@ -141,20 +143,20 @@ value_type = "string"
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "id_product"
-name = "ID product"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["sku"]
-[[attributes]]
-code = "sku"
-value_type = "string"
-[[attributes]]
-code = "color"
-value_type = "relationship"
-target_blueprint = "id_color"
+format_version: 1
+code: id_product
+name: ID product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [sku]
+attributes:
+  - code: sku
+    value_type: string
+  - code: color
+    value_type: relationship
+    target_blueprint: id_color
 "#,
     )
     .await;

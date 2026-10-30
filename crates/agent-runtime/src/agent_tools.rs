@@ -476,7 +476,7 @@ pub fn definitions() -> Vec<ToolDefinition> {
     vec![
         definition(
             "blueprint_authoring_guide",
-            "Get one topic of the authoring documentation. blueprints (the default) covers the TOML syntax, attributes, relationships, includes, unique_keys, file attributes and checks; views covers view configuration; json_schema covers value_schema validation; status_control covers status attributes, transitions and controlled records; rules and workflows cover rule and workflow definitions. Call it with blueprints before drafting a blueprint, and with another topic when the draft needs that feature.",
+            "Get one topic of the authoring documentation. blueprints (the default) covers the YAML syntax, attributes, relationships, includes, unique_keys, file attributes and checks; views covers view configuration; json_schema covers value_schema validation; status_control covers status attributes, transitions and controlled records; rules and workflows cover rule and workflow definitions. Call it with blueprints before drafting a blueprint, and with another topic when the draft needs that feature.",
             json!({"type":"object","properties":{"topic":{"type":"string","enum":AUTHORING_GUIDE_TOPICS.map(|(topic, _)| topic)}},"additionalProperties":false}),
         ),
         definition(
@@ -486,12 +486,12 @@ pub fn definitions() -> Vec<ToolDefinition> {
         ),
         definition(
             "get_blueprint",
-            "Get one blueprint by code, including its TOML definition and compiled attributes. Without version, returns the highest published revision, or the latest draft when none is published; with version, returns that exact revision, including drafts. Call this before creating records of a blueprint or revising it.",
+            "Get one blueprint by code, including its YAML definition and compiled attributes. Without version, returns the highest published revision, or the latest draft when none is published; with version, returns that exact revision, including drafts. Call this before creating records of a blueprint or revising it.",
             json!({"type":"object","required":["code"],"properties":{"code":{"type":"string"},"version":{"type":"integer","minimum":1}},"additionalProperties":false}),
         ),
         definition(
             "get_blueprint_revision",
-            "Get one exact blueprint revision by ID and version, including its TOML definition and attributes. Use this instead of listing every blueprint when inspecting a known revision.",
+            "Get one exact blueprint revision by ID and version, including its YAML definition and attributes. Use this instead of listing every blueprint when inspecting a known revision.",
             json!({"type":"object","required":["blueprint_id","version"],"properties":{"blueprint_id":{"type":"string","format":"uuid"},"version":{"type":"integer","minimum":1}},"additionalProperties":false}),
         ),
         definition(
@@ -601,7 +601,7 @@ pub fn definitions() -> Vec<ToolDefinition> {
         ),
         definition(
             "list_reusable_attributes",
-            "List the workspace's reusable attribute definitions (referenced as namespace:code) and reusable attribute groups. Without code, returns summaries of each published revision (and drafts with include_drafts); with code (or namespace:code), returns the full revisions of that definition, including its TOML definition and value_schema.",
+            "List the workspace's reusable attribute definitions (referenced as namespace:code) and reusable attribute groups. Without code, returns summaries of each published revision (and drafts with include_drafts); with code (or namespace:code), returns the full revisions of that definition, including its YAML definition and value_schema.",
             json!({"type":"object","properties":{"code":{"type":"string"},"include_drafts":{"type":"boolean"}},"additionalProperties":false}),
         ),
         definition(
@@ -621,12 +621,12 @@ pub fn definitions() -> Vec<ToolDefinition> {
         ),
         definition(
             "validate_rule_definition",
-            "Compile a draft rule definition (TOML) without saving it, and report whether it is valid or the invalid_rule_definition error. Read blueprint_authoring_guide with topic rules first. You cannot create or enable rules; give the validated definition to the user.",
+            "Compile a draft rule definition (YAML) without saving it, and report whether it is valid or the invalid_rule_definition error. Read blueprint_authoring_guide with topic rules first. You cannot create or enable rules; give the validated definition to the user.",
             json!({"type":"object","required":["definition"],"properties":{"definition":{"type":"string"}},"additionalProperties":false}),
         ),
         definition(
             "validate_workflow_definition",
-            "Compile a draft workflow definition (TOML) without saving it, and report whether it is valid or the invalid_workflow_definition error. Read blueprint_authoring_guide with topic workflows first. You cannot create or enable workflows; give the validated definition to the user.",
+            "Compile a draft workflow definition (YAML) without saving it, and report whether it is valid or the invalid_workflow_definition error. Read blueprint_authoring_guide with topic workflows first. You cannot create or enable workflows; give the validated definition to the user.",
             json!({"type":"object","required":["definition"],"properties":{"definition":{"type":"string"}},"additionalProperties":false}),
         ),
         definition(
@@ -666,13 +666,13 @@ pub fn definitions() -> Vec<ToolDefinition> {
         ),
         definition(
             "create_blueprint",
-            "Create a version-1 blueprint from a complete TOML definition. Call blueprint_authoring_guide first. This change requires approval.",
-            json!({"type":"object","required":["definition"],"properties":{"definition":{"type":"string","description":"Complete blueprint TOML beginning with format_version, code, name, and kind."}},"additionalProperties":false}),
+            "Create a version-1 blueprint from a complete YAML definition. Call blueprint_authoring_guide first. This change requires approval.",
+            json!({"type":"object","required":["definition"],"properties":{"definition":{"type":"string","description":"Complete blueprint YAML beginning with format_version, code, name, and kind."}},"additionalProperties":false}),
         ),
         definition(
             "create_blueprint_revision",
-            "Create the next draft revision of an existing blueprint from complete revised TOML. Use get_blueprint for the id and current definition, and blueprint_authoring_guide before drafting. This change requires approval.",
-            json!({"type":"object","required":["blueprint_id","definition"],"properties":{"blueprint_id":{"type":"string","format":"uuid"},"definition":{"type":"string","description":"Complete revised TOML; retain the existing blueprint code."}},"additionalProperties":false}),
+            "Create the next draft revision of an existing blueprint from complete revised YAML. Use get_blueprint for the id and current definition, and blueprint_authoring_guide before drafting. This change requires approval.",
+            json!({"type":"object","required":["blueprint_id","definition"],"properties":{"blueprint_id":{"type":"string","format":"uuid"},"definition":{"type":"string","description":"Complete revised YAML; retain the existing blueprint code."}},"additionalProperties":false}),
         ),
         definition(
             "publish_blueprint",
@@ -1091,7 +1091,7 @@ pub fn change_summary_named(
     };
     match name {
         "create_blueprint" => {
-            Ok("Create a blueprint from the supplied TOML definition.".to_owned())
+            Ok("Create a blueprint from the supplied YAML definition.".to_owned())
         }
         "create_blueprint_revision" => Ok(format!(
             "Create a new draft revision for blueprint {}.",
@@ -3984,7 +3984,7 @@ mod tests {
             );
         }
         assert!(super::JSON_SCHEMA_GUIDE.contains("x-attricat-checks"));
-        assert!(super::RULES_GUIDE.contains("[enforcement]"));
+        assert!(super::RULES_GUIDE.contains("enforcement:"));
         assert!(super::STATUS_CONTROL_GUIDE.contains("x-attricat-status"));
     }
 

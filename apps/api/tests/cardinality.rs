@@ -10,18 +10,17 @@ async fn directional_cardinality_rejects_source_and_target_conflicts_per_context
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "cardinality_target"
-name = "Cardinality target"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[[attributes]]
-code = "name"
-value_type = "string"
+format_version: 1
+code: cardinality_target
+name: Cardinality target
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
 "#,
     )
     .await;
@@ -29,25 +28,22 @@ value_type = "string"
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "cardinality_source"
-name = "Cardinality source"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[[attributes]]
-code = "name"
-value_type = "string"
-
-[[attributes]]
-code = "target"
-value_type = "relationship"
-target_blueprint = "cardinality_target"
-cardinality = "one"
-target_cardinality = "one"
+format_version: 1
+code: cardinality_source
+name: Cardinality source
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: target
+    value_type: relationship
+    target_blueprint: cardinality_target
+    cardinality: one
+    target_cardinality: one
 "#,
     )
     .await;
@@ -100,36 +96,37 @@ async fn source_one_allows_many_sources_to_share_a_target(pool: PgPool) {
     let target = create_blueprint(
         &client,
         &base_url,
-        r#"format_version = 1
-code = "shared_cardinality_target"
-name = "Shared target"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[[attributes]]
-code = "name"
-value_type = "string""#,
+        r#"format_version: 1
+code: shared_cardinality_target
+name: Shared target
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string"#,
     )
     .await;
     let source = create_blueprint(
         &client,
         &base_url,
-        r#"format_version = 1
-code = "shared_cardinality_source"
-name = "Shared source"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[[attributes]]
-code = "name"
-value_type = "string"
-[[attributes]]
-code = "target"
-value_type = "relationship"
-target_blueprint = "shared_cardinality_target"
-cardinality = "one""#,
+        r#"format_version: 1
+code: shared_cardinality_source
+name: Shared source
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: target
+    value_type: relationship
+    target_blueprint: shared_cardinality_target
+    cardinality: one"#,
     )
     .await;
     let target = create_record(&client, &base_url, &target).await;
@@ -161,36 +158,37 @@ async fn concurrent_opposite_order_appends_do_not_deadlock(pool: PgPool) {
     let target = create_blueprint(
         &client,
         &base_url,
-        r#"format_version = 1
-code = "concurrent_cardinality_target"
-name = "Concurrent target"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[[attributes]]
-code = "name"
-value_type = "string""#,
+        r#"format_version: 1
+code: concurrent_cardinality_target
+name: Concurrent target
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string"#,
     )
     .await;
     let source = create_blueprint(
         &client,
         &base_url,
-        r#"format_version = 1
-code = "concurrent_cardinality_source"
-name = "Concurrent source"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[[attributes]]
-code = "name"
-value_type = "string"
-[[attributes]]
-code = "targets"
-value_type = "relationship"
-target_blueprint = "concurrent_cardinality_target"
-target_cardinality = "one""#,
+        r#"format_version: 1
+code: concurrent_cardinality_source
+name: Concurrent source
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: targets
+    value_type: relationship
+    target_blueprint: concurrent_cardinality_target
+    target_cardinality: one"#,
     )
     .await;
     let target_a = create_record(&client, &base_url, &target).await;
@@ -245,34 +243,35 @@ async fn cardinality_is_enforced_when_an_record_migrates_to_declaring_revision(p
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "migration_cardinality_target"
-name = "Target"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[[attributes]]
-code = "name"
-value_type = "string"
+format_version: 1
+code: migration_cardinality_target
+name: Target
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
 "#,
     )
     .await;
     let source_definition = r#"
-format_version = 1
-code = "migration_cardinality_source"
-name = "Source"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[[attributes]]
-code = "name"
-value_type = "string"
-[[attributes]]
-code = "target"
-value_type = "relationship"
-target_blueprint = "migration_cardinality_target"
+format_version: 1
+code: migration_cardinality_source
+name: Source
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: target
+    value_type: relationship
+    target_blueprint: migration_cardinality_target
 "#;
     let source = create_blueprint(&client, &base_url, source_definition).await;
     let record = create_record(&client, &base_url, &source).await;
@@ -287,7 +286,7 @@ target_blueprint = "migration_cardinality_target"
 
     let blueprint_id = source["blueprint"]["id"].as_str().unwrap();
     let revision: Value = client.post(format!("{base_url}/blueprints/{blueprint_id}/versions"))
-        .json(&json!({"definition": source_definition.replace("target_blueprint = \"migration_cardinality_target\"", "target_blueprint = \"migration_cardinality_target\"\ncardinality = \"one\"")}))
+        .json(&json!({"definition": source_definition.replace("target_blueprint: migration_cardinality_target", "target_blueprint: migration_cardinality_target\n    cardinality: one")}))
         .send().await.unwrap().error_for_status().unwrap().json().await.unwrap();
     let version = revision["blueprint"]["version"].as_i64().unwrap();
     client

@@ -17,8 +17,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum WorkflowError {
-    #[error("invalid TOML: {0}")]
-    Toml(#[from] toml::de::Error),
+    #[error("invalid YAML: {0}")]
+    Yaml(#[from] attricat_yaml::Error),
     #[error("unsupported format_version {0}")]
     UnsupportedFormatVersion(u32),
     #[error("{0}")]
@@ -211,7 +211,7 @@ struct RawEventTrigger {
     #[schemars(schema_with = "trigger_tags_schema")]
     tags_removed: Option<Vec<String>>,
 }
-/// Schema of the typed (`format_version = 2`) triggers. [`RawTrigger::V2`]
+/// Schema of the typed (`format_version: 2`) triggers. [`RawTrigger::V2`]
 /// reads them loosely and [`trigger`] applies these rules.
 #[derive(JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
@@ -220,9 +220,9 @@ struct RawEventTrigger {
     reason = "describes RawTrigger::V2 for the JSON Schema only"
 )]
 enum TypedTriggerSchema {
-    /// Runs when started on demand for one record. Requires `format_version = 2`.
+    /// Runs when started on demand for one record. Requires `format_version: 2`.
     Manual,
-    /// Runs on a UTC cron schedule for one fixed record. Requires `format_version = 2`.
+    /// Runs on a UTC cron schedule for one fixed record. Requires `format_version: 2`.
     Schedule {
         /// Six-field cron expression, including seconds: `sec min hour day month weekday`.
         #[schemars(regex(pattern = SIX_FIELD_CRON_PATTERN))]
@@ -235,7 +235,7 @@ enum TypedTriggerSchema {
         target_record_id: String,
     },
     /// Reserved: runs when an extension emits a versioned event. Delivery is
-    /// not enabled yet. Requires `format_version = 2`.
+    /// not enabled yet. Requires `format_version: 2`.
     ExtensionEvent {
         /// Extension that emits the event.
         #[schemars(
@@ -358,7 +358,7 @@ const CODE_PATH_PATTERN: &str = r"^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$";
 const EVENT_FIELD_PATTERN: &str = r"^facts\.\+?[0-9]+(?:\.[A-Za-z0-9_-]+)+$";
 const ENVELOPE_METADATA_PATTERN: &str = r"^metadata\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$";
 
-/// TOML values a trigger filter or written value may hold.
+/// YAML values a trigger filter or written value may hold.
 fn scalar_schema() -> Value {
     json!({ "type": ["string", "number", "boolean"] })
 }
@@ -567,7 +567,7 @@ const MAX_METADATA_KEYS_PER_ACTION: usize = 100;
 const CRON_FIELDS: usize = 6;
 
 pub fn parse(source: &str) -> Result<WorkflowDefinition, WorkflowError> {
-    let raw: Raw = toml::from_str(source)?;
+    let raw: Raw = attricat_yaml::from_str(source)?;
     if !(raw.format_version == 1 || raw.format_version == 2) {
         return Err(WorkflowError::UnsupportedFormatVersion(raw.format_version));
     }
@@ -1121,63 +1121,63 @@ mod tests {
     use super::*;
     #[test]
     fn v1_remains_compatible() {
-        assert!(parse("format_version=1\ncode='x'\nname='x'\n[[triggers]]\nevent_type='record.updated.v1'\n[[actions]]\ntype='system_tags_add'\ntags=['x']").is_ok())
+        assert!(parse("format_version: 1\ncode: x\nname: x\ntriggers:\n  - event_type: record.updated.v1\nactions:\n  - type: system_tags_add\n    tags: [x]").is_ok())
     }
     #[test]
     fn v2_manual_and_utc_schedule_are_strict() {
-        assert!(parse("format_version=2\ncode='x'\nname='x'\n[[triggers]]\ntype='manual'\n[[actions]]\ntype='system_tags_add'\ntags=['x']").is_ok());
-        assert!(parse("format_version=2\ncode='x'\nname='x'\n[[triggers]]\ntype='schedule'\ncron='0 */5 * * * *'\ntimezone='UTC'\ntarget_record_id='00000000-0000-0000-0000-000000000001'\n[[actions]]\ntype='system_tags_add'\ntags=['x']").is_ok());
-        assert!(parse("format_version=2\ncode='x'\nname='x'\n[[triggers]]\ntype='schedule'\ncron='0 */5 * * * *'\ntimezone='America/New_York'\ntarget_record_id='00000000-0000-0000-0000-000000000001'\n[[actions]]\ntype='system_tags_add'\ntags=['x']").is_err());
+        assert!(parse("format_version: 2\ncode: x\nname: x\ntriggers:\n  - type: manual\nactions:\n  - type: system_tags_add\n    tags: [x]").is_ok());
+        assert!(parse("format_version: 2\ncode: x\nname: x\ntriggers:\n  - type: schedule\n    cron: '0 */5 * * * *'\n    timezone: UTC\n    target_record_id: '00000000-0000-0000-0000-000000000001'\nactions:\n  - type: system_tags_add\n    tags: [x]").is_ok());
+        assert!(parse("format_version: 2\ncode: x\nname: x\ntriggers:\n  - type: schedule\n    cron: '0 */5 * * * *'\n    timezone: America/New_York\n    target_record_id: '00000000-0000-0000-0000-000000000001'\nactions:\n  - type: system_tags_add\n    tags: [x]").is_err());
         for cron in ["*/5 * * * *", "0 0 */5 * * * *"] {
-            assert!(parse(&format!("format_version=2\ncode='x'\nname='x'\n[[triggers]]\ntype='schedule'\ncron='{cron}'\ntimezone='UTC'\ntarget_record_id='00000000-0000-0000-0000-000000000001'\n[[actions]]\ntype='system_tags_add'\ntags=['x']")).is_err());
+            assert!(parse(&format!("format_version: 2\ncode: x\nname: x\ntriggers:\n  - type: schedule\n    cron: '{cron}'\n    timezone: UTC\n    target_record_id: '00000000-0000-0000-0000-000000000001'\nactions:\n  - type: system_tags_add\n    tags: [x]")).is_err());
         }
     }
     #[test]
     fn extension_contract_is_explicit_but_not_generic() {
-        assert!(parse("format_version=2\ncode='x'\nname='x'\n[[triggers]]\ntype='extension_event'\nprovider='example'\nevent_type='plugin.example.changed.v1'\ncontract_version=1\n[[actions]]\ntype='system_tags_add'\ntags=['x']").is_ok());
-        assert!(parse("format_version=2\ncode='x'\nname='x'\n[[triggers]]\ntype='extension_event'\nprovider='example'\nevent_type='record.updated.v1'\ncontract_version=1\n[[actions]]\ntype='system_tags_add'\ntags=['x']").is_err())
+        assert!(parse("format_version: 2\ncode: x\nname: x\ntriggers:\n  - type: extension_event\n    provider: example\n    event_type: plugin.example.changed.v1\n    contract_version: 1\nactions:\n  - type: system_tags_add\n    tags: [x]").is_ok());
+        assert!(parse("format_version: 2\ncode: x\nname: x\ntriggers:\n  - type: extension_event\n    provider: example\n    event_type: record.updated.v1\n    contract_version: 1\nactions:\n  - type: system_tags_add\n    tags: [x]").is_err())
     }
 
-    const HEAD: &str = "format_version=2\ncode='x'\nname='x'\n";
+    const HEAD: &str = "format_version: 2\ncode: x\nname: x\n";
 
     #[test]
     fn event_trigger_filters_on_changed_attributes() {
-        let parsed = parse(&format!("{HEAD}[[triggers]]\nevent_type='attribute_value.changed.v1'\nattributes=['body','title']\n[[actions]]\ntype='system_tags_add'\ntags=['x']")).unwrap();
+        let parsed = parse(&format!("{HEAD}triggers:\n  - event_type: attribute_value.changed.v1\n    attributes: [body, title]\nactions:\n  - type: system_tags_add\n    tags: [x]")).unwrap();
         let Trigger::Event { attributes, .. } = &parsed.triggers[0] else {
             panic!("expected an event trigger")
         };
         assert_eq!(attributes, &["body".to_owned(), "title".to_owned()]);
         for invalid in [
-            "attributes=[]",
-            "attributes=['a','a']",
-            "attributes=['Not A Code']",
+            "attributes: []",
+            "attributes: [a, a]",
+            "attributes: [Not A Code]",
         ] {
-            assert!(parse(&format!("{HEAD}[[triggers]]\nevent_type='record.updated.v1'\n{invalid}\n[[actions]]\ntype='system_tags_add'\ntags=['x']")).is_err(), "{invalid}");
+            assert!(parse(&format!("{HEAD}triggers:\n  - event_type: record.updated.v1\n    {invalid}\nactions:\n  - type: system_tags_add\n    tags: [x]")).is_err(), "{invalid}");
         }
-        assert!(parse(&format!("{HEAD}[[triggers]]\nevent_type='record.migrated.v1'\nattributes=['a']\n[[actions]]\ntype='system_tags_add'\ntags=['x']")).is_err());
-        assert!(parse(&format!("{HEAD}[[triggers]]\ntype='manual'\nattributes=['a']\n[[actions]]\ntype='system_tags_add'\ntags=['x']")).is_err());
+        assert!(parse(&format!("{HEAD}triggers:\n  - event_type: record.migrated.v1\n    attributes: [a]\nactions:\n  - type: system_tags_add\n    tags: [x]")).is_err());
+        assert!(parse(&format!("{HEAD}triggers:\n  - type: manual\n    attributes: [a]\nactions:\n  - type: system_tags_add\n    tags: [x]")).is_err());
     }
 
     #[test]
     fn event_trigger_filters_on_change_kinds() {
-        let parsed = parse(&format!("{HEAD}[[triggers]]\nevent_type='relationship.changed.v1'\nattributes=['license']\nchange_kinds=['relationship_add']\n[[actions]]\ntype='system_tags_add'\ntags=['x']")).unwrap();
+        let parsed = parse(&format!("{HEAD}triggers:\n  - event_type: relationship.changed.v1\n    attributes: [license]\n    change_kinds: [relationship_add]\nactions:\n  - type: system_tags_add\n    tags: [x]")).unwrap();
         let Trigger::Event { change_kinds, .. } = &parsed.triggers[0] else {
             panic!("expected an event trigger")
         };
         assert_eq!(change_kinds, &["relationship_add".to_owned()]);
         for invalid in [
-            "change_kinds=[]",
-            "change_kinds=['set','set']",
-            "change_kinds=['linked']",
+            "change_kinds: []",
+            "change_kinds: [set, set]",
+            "change_kinds: [linked]",
         ] {
-            assert!(parse(&format!("{HEAD}[[triggers]]\nevent_type='record.updated.v1'\n{invalid}\n[[actions]]\ntype='system_tags_add'\ntags=['x']")).is_err(), "{invalid}");
+            assert!(parse(&format!("{HEAD}triggers:\n  - event_type: record.updated.v1\n    {invalid}\nactions:\n  - type: system_tags_add\n    tags: [x]")).is_err(), "{invalid}");
         }
-        assert!(parse(&format!("{HEAD}[[triggers]]\nevent_type='record.migrated.v1'\nchange_kinds=['set']\n[[actions]]\ntype='system_tags_add'\ntags=['x']")).is_err());
+        assert!(parse(&format!("{HEAD}triggers:\n  - event_type: record.migrated.v1\n    change_kinds: [set]\nactions:\n  - type: system_tags_add\n    tags: [x]")).is_err());
     }
 
     #[test]
     fn event_trigger_filters_on_tag_changes() {
-        let parsed = parse(&format!("{HEAD}[[triggers]]\nevent_type='record.updated.v1'\ntags_added=['approved']\ntags_removed=['draft']\n[[actions]]\ntype='system_tags_add'\ntags=['x']")).unwrap();
+        let parsed = parse(&format!("{HEAD}triggers:\n  - event_type: record.updated.v1\n    tags_added: [approved]\n    tags_removed: [draft]\nactions:\n  - type: system_tags_add\n    tags: [x]")).unwrap();
         let Trigger::Event {
             tags_added,
             tags_removed,
@@ -1188,14 +1188,14 @@ mod tests {
         };
         assert_eq!(tags_added, &["approved".to_owned()]);
         assert_eq!(tags_removed, &["draft".to_owned()]);
-        assert!(parse(&format!("{HEAD}[[triggers]]\nevent_type='record.created.v1'\ntags_added=['approved']\n[[actions]]\ntype='system_tags_add'\ntags=['x']")).is_ok());
+        assert!(parse(&format!("{HEAD}triggers:\n  - event_type: record.created.v1\n    tags_added: [approved]\nactions:\n  - type: system_tags_add\n    tags: [x]")).is_ok());
         for (event_type, filter) in [
-            ("record.created.v1", "tags_removed=['draft']"),
-            ("relationship.changed.v1", "tags_added=['approved']"),
-            ("record.updated.v1", "tags_added=[]"),
-            ("record.updated.v1", "tags_added=['a','a']"),
+            ("record.created.v1", "tags_removed: [draft]"),
+            ("relationship.changed.v1", "tags_added: [approved]"),
+            ("record.updated.v1", "tags_added: []"),
+            ("record.updated.v1", "tags_added: [a, a]"),
         ] {
-            assert!(parse(&format!("{HEAD}[[triggers]]\nevent_type='{event_type}'\n{filter}\n[[actions]]\ntype='system_tags_add'\ntags=['x']")).is_err(), "{event_type} {filter}");
+            assert!(parse(&format!("{HEAD}triggers:\n  - event_type: '{event_type}'\n    {filter}\nactions:\n  - type: system_tags_add\n    tags: [x]")).is_err(), "{event_type} {filter}");
         }
     }
 
@@ -1254,19 +1254,19 @@ mod tests {
 
     #[test]
     fn event_trigger_filters_on_blueprints() {
-        let parsed = parse(&format!("{HEAD}[[triggers]]\nevent_type='record.updated.v1'\nblueprints=['product','service']\n[[actions]]\ntype='system_tags_add'\ntags=['x']")).unwrap();
+        let parsed = parse(&format!("{HEAD}triggers:\n  - event_type: record.updated.v1\n    blueprints: [product, service]\nactions:\n  - type: system_tags_add\n    tags: [x]")).unwrap();
         let Trigger::Event { blueprints, .. } = &parsed.triggers[0] else {
             panic!("expected an event trigger")
         };
         assert_eq!(blueprints, &["product".to_owned(), "service".to_owned()]);
         for invalid in [
-            "blueprints=[]",
-            "blueprints=['a','a']",
-            "blueprints=['Not A Code']",
+            "blueprints: []",
+            "blueprints: [a, a]",
+            "blueprints: [Not A Code]",
         ] {
-            assert!(parse(&format!("{HEAD}[[triggers]]\nevent_type='record.updated.v1'\n{invalid}\n[[actions]]\ntype='system_tags_add'\ntags=['x']")).is_err(), "{invalid}");
+            assert!(parse(&format!("{HEAD}triggers:\n  - event_type: record.updated.v1\n    {invalid}\nactions:\n  - type: system_tags_add\n    tags: [x]")).is_err(), "{invalid}");
         }
-        assert!(parse(&format!("{HEAD}[[triggers]]\ntype='manual'\nblueprints=['a']\n[[actions]]\ntype='system_tags_add'\ntags=['x']")).is_err());
+        assert!(parse(&format!("{HEAD}triggers:\n  - type: manual\n    blueprints: [a]\nactions:\n  - type: system_tags_add\n    tags: [x]")).is_err());
     }
 
     #[test]
@@ -1298,7 +1298,7 @@ mod tests {
 
     #[test]
     fn referencing_update_is_bounded_and_fixed() {
-        let ok = parse(&format!("{HEAD}[[triggers]]\nevent_type='record.updated.v1'\n[[actions]]\ntype='referencing_records_update'\nrelationship_attribute='license'\nmax_targets=25\n[[actions.actions]]\ntype='attribute_write'\nattribute_code='status'\nfixed='in_review'\n[[actions.actions]]\ntype='system_tags_add'\ntags=['needs-review']")).unwrap();
+        let ok = parse(&format!("{HEAD}triggers:\n  - event_type: record.updated.v1\nactions:\n  - type: referencing_records_update\n    relationship_attribute: license\n    max_targets: 25\n    actions:\n      - type: attribute_write\n        attribute_code: status\n        fixed: in_review\n      - type: system_tags_add\n        tags: [needs-review]")).unwrap();
         assert_eq!(
             ok.actions[0],
             Action::ReferencingRecordsUpdate {
@@ -1317,7 +1317,7 @@ mod tests {
                 ],
             }
         );
-        let default = parse(&format!("{HEAD}[[triggers]]\ntype='manual'\n[[actions]]\ntype='referencing_records_update'\nrelationship_attribute='license'\n[[actions.actions]]\ntype='system_tags_add'\ntags=['x']")).unwrap();
+        let default = parse(&format!("{HEAD}triggers:\n  - type: manual\nactions:\n  - type: referencing_records_update\n    relationship_attribute: license\n    actions:\n      - type: system_tags_add\n        tags: [x]")).unwrap();
         assert!(matches!(
             default.actions[0],
             Action::ReferencingRecordsUpdate {
@@ -1326,22 +1326,22 @@ mod tests {
             }
         ));
         for invalid in [
-            "max_targets=0\n[[actions.actions]]\ntype='system_tags_add'\ntags=['x']",
-            "max_targets=501\n[[actions.actions]]\ntype='system_tags_add'\ntags=['x']",
-            "actions=[]",
-            "[[actions.actions]]\ntype='attribute_write'\nattribute_code='status'\nevent_field='facts.0.after_value'",
-            "[[actions.actions]]\ntype='referencing_records_update'\nrelationship_attribute='x'\n[[actions.actions.actions]]\ntype='system_tags_add'\ntags=['x']",
-            "unknown=1\n[[actions.actions]]\ntype='system_tags_add'\ntags=['x']",
+            "max_targets: 0\n    actions:\n      - {type: system_tags_add, tags: [x]}",
+            "max_targets: 501\n    actions:\n      - {type: system_tags_add, tags: [x]}",
+            "actions: []",
+            "actions:\n      - {type: attribute_write, attribute_code: status, event_field: facts.0.after_value}",
+            "actions:\n      - type: referencing_records_update\n        relationship_attribute: x\n        actions:\n          - {type: system_tags_add, tags: [x]}",
+            "unknown: 1\n    actions:\n      - {type: system_tags_add, tags: [x]}",
         ] {
-            assert!(parse(&format!("{HEAD}[[triggers]]\nevent_type='record.updated.v1'\n[[actions]]\ntype='referencing_records_update'\nrelationship_attribute='license'\n{invalid}")).is_err(), "{invalid}");
+            assert!(parse(&format!("{HEAD}triggers:\n  - event_type: record.updated.v1\nactions:\n  - type: referencing_records_update\n    relationship_attribute: license\n    {invalid}")).is_err(), "{invalid}");
         }
-        let compiled = compile(&format!("{HEAD}[[triggers]]\ntype='manual'\n[[actions]]\ntype='referencing_records_update'\nrelationship_attribute='license'\n[[actions.actions]]\ntype='system_tags_add'\ntags=['x']")).unwrap();
+        let compiled = compile(&format!("{HEAD}triggers:\n  - type: manual\nactions:\n  - type: referencing_records_update\n    relationship_attribute: license\n    actions:\n      - type: system_tags_add\n        tags: [x]")).unwrap();
         let round_trip: CompiledWorkflow =
             serde_json::from_value(serde_json::to_value(&compiled).unwrap()).unwrap();
         assert_eq!(round_trip, compiled);
     }
 
-    /// The JSON Schema for workflow definition TOML, published as
+    /// The JSON Schema for workflow definition YAML, published as
     /// `contracts/workflow-definition-v1.schema.json` for the web editor.
     fn definition_json_schema() -> serde_json::Value {
         schemars::generate::SchemaSettings::draft2020_12()
@@ -1372,21 +1372,21 @@ mod tests {
         );
     }
 
-    const EVENT_WORKFLOW: &str = "format_version=2\ncode='review-license'\nname='Review license'\n[[triggers]]\nevent_type='attribute_value.changed.v1'\nattributes=['license']\n[triggers.envelope]\nsource_kind='api'\n[triggers.facts]\n'facts.0.attribute_code'='license'\n[[actions]]\ntype='attribute_write'\nattribute_code='status'\nevent_field='facts.0.after_value'\n[[actions]]\ntype='referencing_records_update'\nrelationship_attribute='license'\nmax_targets=25\n[[actions.actions]]\ntype='attribute_write'\nattribute_code='status'\nfixed='in_review'\n[[actions.actions]]\ntype='system_tags_add'\ntags=['needs-review']\n[[actions]]\ntype='system_metadata_merge'\nvalues={'review.state'='open'}";
-    const SCHEDULE_WORKFLOW: &str = "format_version=2\ncode='x'\nname='x'\n[[triggers]]\ntype='schedule'\ncron='0 */5 * * * *'\ntimezone='UTC'\ntarget_record_id='00000000-0000-0000-0000-000000000001'\n[[triggers]]\ntype='extension_event'\nprovider='example'\nevent_type='plugin.example.changed.v1'\ncontract_version=1\n[[actions]]\ntype='system_tags_add'\ntags=['x']\n[[actions]]\ntype='system_metadata_delete'\nkeys=['review.state']";
+    const EVENT_WORKFLOW: &str = "format_version: 2\ncode: review-license\nname: Review license\ntriggers:\n  - event_type: attribute_value.changed.v1\n    attributes: [license]\n    envelope: {source_kind: api}\n    facts: {\"facts.0.attribute_code\": license}\nactions:\n  - type: attribute_write\n    attribute_code: status\n    event_field: facts.0.after_value\n  - type: referencing_records_update\n    relationship_attribute: license\n    max_targets: 25\n    actions:\n      - type: attribute_write\n        attribute_code: status\n        fixed: in_review\n      - type: system_tags_add\n        tags: [needs-review]\n  - type: system_metadata_merge\n    values: {\"review.state\": open}";
+    const SCHEDULE_WORKFLOW: &str = "format_version: 2\ncode: x\nname: x\ntriggers:\n  - type: schedule\n    cron: '0 */5 * * * *'\n    timezone: UTC\n    target_record_id: '00000000-0000-0000-0000-000000000001'\n  - type: extension_event\n    provider: example\n    event_type: plugin.example.changed.v1\n    contract_version: 1\nactions:\n  - type: system_tags_add\n    tags: [x]\n  - type: system_metadata_delete\n    keys: [review.state]";
 
     #[test]
     fn schema_matches_parser_for_representative_definitions() {
         let schema = definition_json_schema();
-        let fixed_write = "type='attribute_write'\nattribute_code='status'\nfixed='done'";
+        let fixed_write = "type: attribute_write\n    attribute_code: status\n    fixed: done";
         for (definition, accepted) in [
             (EVENT_WORKFLOW.to_owned(), true),
             (SCHEDULE_WORKFLOW.to_owned(), true),
-            (EVENT_WORKFLOW.replace("format_version=2", "format_version=1"), true),
-            (EVENT_WORKFLOW.replace("format_version=2", "format_version=3"), false),
-            (EVENT_WORKFLOW.replace("name='Review license'\n", ""), false),
-            (EVENT_WORKFLOW.replace("name='Review license'", "name=' '"), false),
-            (format!("{EVENT_WORKFLOW}\nlabel='Review'"), false),
+            (EVENT_WORKFLOW.replace("format_version: 2", "format_version: 1"), true),
+            (EVENT_WORKFLOW.replace("format_version: 2", "format_version: 3"), false),
+            (EVENT_WORKFLOW.replace("name: Review license\n", ""), false),
+            (EVENT_WORKFLOW.replace("name: Review license", "name: ' '"), false),
+            (format!("{EVENT_WORKFLOW}\nlabel: Review"), false),
             (
                 EVENT_WORKFLOW.replace("attribute_value.changed.v1", "record.migrated.v1"),
                 false,
@@ -1395,90 +1395,90 @@ mod tests {
                 EVENT_WORKFLOW.replace("attribute_value.changed.v1", "record.deleted.v1"),
                 false,
             ),
-            (EVENT_WORKFLOW.replace("attributes=['license']\n", ""), true),
+            (EVENT_WORKFLOW.replace("\n    attributes: [license]", ""), true),
             (
                 EVENT_WORKFLOW
-                    .replace("attributes=['license']\n", "")
+                    .replace("\n    attributes: [license]", "")
                     .replace("attribute_value.changed.v1", "record.migrated.v1"),
                 true,
             ),
             (
-                EVENT_WORKFLOW.replace("attributes=['license']\n", "attributes=['license']\nchange_kinds=['set','replace']\n"),
+                EVENT_WORKFLOW.replace("\n    attributes: [license]", "\n    attributes: [license]\n    change_kinds: [set, replace]"),
                 true,
             ),
             (
-                EVENT_WORKFLOW.replace("attributes=['license']\n", "change_kinds=['linked']\n"),
+                EVENT_WORKFLOW.replace("\n    attributes: [license]", "\n    change_kinds: [linked]"),
                 false,
             ),
             (
                 EVENT_WORKFLOW
-                    .replace("attributes=['license']\n", "change_kinds=['set']\n")
+                    .replace("\n    attributes: [license]", "\n    change_kinds: [set]")
                     .replace("attribute_value.changed.v1", "record.migrated.v1"),
                 false,
             ),
             (
                 EVENT_WORKFLOW
-                    .replace("attributes=['license']\n", "tags_added=['a']\ntags_removed=['b']\n")
+                    .replace("\n    attributes: [license]", "\n    tags_added: [a]\n    tags_removed: [b]")
                     .replace("attribute_value.changed.v1", "record.updated.v1"),
                 true,
             ),
             (
                 EVENT_WORKFLOW
-                    .replace("attributes=['license']\n", "tags_added=['a']\n")
+                    .replace("\n    attributes: [license]", "\n    tags_added: [a]")
                     .replace("attribute_value.changed.v1", "record.created.v1"),
                 true,
             ),
             (
                 EVENT_WORKFLOW
-                    .replace("attributes=['license']\n", "tags_removed=['a']\n")
+                    .replace("\n    attributes: [license]", "\n    tags_removed: [a]")
                     .replace("attribute_value.changed.v1", "record.created.v1"),
                 false,
             ),
-            (EVENT_WORKFLOW.replace("attributes=['license']\n", "tags_added=['a']\n"), false),
-            (EVENT_WORKFLOW.replace("source_kind=", "origin="), false),
-            (EVENT_WORKFLOW.replace("'facts.0.attribute_code'", "'facts.x.attribute_code'"), false),
-            (EVENT_WORKFLOW.replace("max_targets=25", "max_targets=501"), false),
+            (EVENT_WORKFLOW.replace("\n    attributes: [license]", "\n    tags_added: [a]"), false),
+            (EVENT_WORKFLOW.replace("source_kind:", "origin:"), false),
+            (EVENT_WORKFLOW.replace("\"facts.0.attribute_code\"", "\"facts.x.attribute_code\""), false),
+            (EVENT_WORKFLOW.replace("max_targets: 25", "max_targets: 501"), false),
             (
-                EVENT_WORKFLOW.replace("fixed='in_review'", "event_field='facts.0.after_value'"),
+                EVENT_WORKFLOW.replace("fixed: in_review", "event_field: facts.0.after_value"),
                 false,
             ),
             (
-                EVENT_WORKFLOW.replace("event_field='facts.0.after_value'", "fixed='x'\nevent_field='facts.0.after_value'"),
+                EVENT_WORKFLOW.replace("event_field: facts.0.after_value", "fixed: x\n    event_field: facts.0.after_value"),
                 false,
             ),
-            (EVENT_WORKFLOW.replace("type='system_tags_add'", "type='system_tags_set'"), false),
-            (EVENT_WORKFLOW.replace("tags=['needs-review']", "tags=['a','a']"), false),
-            (EVENT_WORKFLOW.replace("{'review.state'='open'}", "{}"), false),
-            (SCHEDULE_WORKFLOW.replace("format_version=2", "format_version=1"), false),
-            (SCHEDULE_WORKFLOW.replace("timezone='UTC'", "timezone='Europe/Warsaw'"), false),
-            (SCHEDULE_WORKFLOW.replace("cron='0 */5 * * * *'", "cron='*/5 * * * *'"), false),
+            (EVENT_WORKFLOW.replace("type: system_tags_add", "type: system_tags_set"), false),
+            (EVENT_WORKFLOW.replace("tags: [needs-review]", "tags: [a, a]"), false),
+            (EVENT_WORKFLOW.replace("{\"review.state\": open}", "{}"), false),
+            (SCHEDULE_WORKFLOW.replace("format_version: 2", "format_version: 1"), false),
+            (SCHEDULE_WORKFLOW.replace("timezone: UTC", "timezone: Europe/Warsaw"), false),
+            (SCHEDULE_WORKFLOW.replace("cron: '0 */5 * * * *'", "cron: '*/5 * * * *'"), false),
             (SCHEDULE_WORKFLOW.replace("00000000-0000-0000-0000-000000000001", "record-1"), false),
             (SCHEDULE_WORKFLOW.replace("plugin.example.changed.v1", "record.updated.v1"), false),
-            (SCHEDULE_WORKFLOW.replace("contract_version=1", "contract_version=0"), false),
-            (SCHEDULE_WORKFLOW.replace("keys=['review.state']", "keys=[]"), false),
+            (SCHEDULE_WORKFLOW.replace("contract_version: 1", "contract_version: 0"), false),
+            (SCHEDULE_WORKFLOW.replace("keys: [review.state]", "keys: []"), false),
             (
-                SCHEDULE_WORKFLOW.replace("type='system_tags_add'\ntags=['x']", fixed_write),
+                SCHEDULE_WORKFLOW.replace("type: system_tags_add\n    tags: [x]", fixed_write),
                 true,
             ),
             (
                 SCHEDULE_WORKFLOW.replace(
-                    "type='system_tags_add'\ntags=['x']",
-                    "type='attribute_write'\nattribute_code='status'\nevent_field='facts.0.after_value'",
+                    "type: system_tags_add\n    tags: [x]",
+                    "type: attribute_write\n    attribute_code: status\n    event_field: facts.0.after_value",
                 ),
                 false,
             ),
             (
-                SCHEDULE_WORKFLOW.replace("type='schedule'\ncron='0 */5 * * * *'\ntimezone='UTC'\ntarget_record_id='00000000-0000-0000-0000-000000000001'", "type='manual'"),
+                SCHEDULE_WORKFLOW.replace("type: schedule\n    cron: '0 */5 * * * *'\n    timezone: UTC\n    target_record_id: '00000000-0000-0000-0000-000000000001'", "type: manual"),
                 true,
             ),
             (
-                SCHEDULE_WORKFLOW.replace("type='schedule'\ncron='0 */5 * * * *'\ntimezone='UTC'\ntarget_record_id='00000000-0000-0000-0000-000000000001'", "type='manual'\nattributes=['a']"),
+                SCHEDULE_WORKFLOW.replace("type: schedule\n    cron: '0 */5 * * * *'\n    timezone: UTC\n    target_record_id: '00000000-0000-0000-0000-000000000001'", "type: manual\n    attributes: [a]"),
                 false,
             ),
         ] {
             assert_eq!(parse(&definition).is_ok(), accepted, "{definition}");
             let instance =
-                serde_json::to_value(toml::from_str::<toml::Value>(&definition).unwrap()).unwrap();
+                attricat_yaml::from_str::<serde_json::Value>(&definition).unwrap();
             let violations = attricat_validation::validate_json_schema(&schema, &instance).unwrap();
             assert_eq!(
                 violations.is_empty(),
@@ -1491,10 +1491,10 @@ mod tests {
     #[test]
     fn tag_length_counts_bytes_and_the_schema_never_rejects_a_valid_tag() {
         let schema = definition_json_schema();
-        let with_tag = |tag: String| EVENT_WORKFLOW.replace("'needs-review'", &format!("'{tag}'"));
+        let with_tag =
+            |tag: String| EVENT_WORKFLOW.replace("[needs-review]", &format!("['{tag}']"));
         let schema_accepts = |definition: &str| {
-            let instance =
-                serde_json::to_value(toml::from_str::<toml::Value>(definition).unwrap()).unwrap();
+            let instance = attricat_yaml::from_str::<serde_json::Value>(definition).unwrap();
             attricat_validation::validate_json_schema(&schema, &instance)
                 .unwrap()
                 .is_empty()

@@ -149,7 +149,7 @@ impl Entry {
 }
 
 /// The exchange format for one language, used by lexicon import and export
-/// (as JSON or TOML). Solution-pack lexicon files reuse its entry shape.
+/// (as JSON or YAML). Solution-pack lexicon files reuse its entry shape.
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 #[schemars(title = "Attricat lexicon v1")]

@@ -1,0 +1,81 @@
+format_version: 1
+code: product
+name: Product
+kind: record
+
+attributes:
+  - code: title
+    value_type: string
+
+  - code: price
+    value_type: number
+
+  - code: stock_on_hand
+    value_type: integer
+
+  - code: available
+    value_type: boolean
+
+  - code: available_on
+    value_type: date
+
+  - code: released_at
+    value_type: datetime
+
+  - code: order_cutoff
+    value_type: time
+
+  - code: categories
+    value_type: relationship
+    target_blueprint: category
+
+  - code: colors
+    value_type: relationship
+    target_blueprint: color
+
+  - code: variants
+    value_type: relationship
+    target_blueprint: product
+
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+  detail:
+    type: stack
+    children:
+      - type: stack
+        component: {id: attricat.record_heading, version: 1}
+        children:
+          - {type: field, field: title}
+          - {type: text, text: Product details}
+      - type: text
+        text: Availability and linked catalog classifications.
+      - type: tabs
+        tabs:
+          - label: Overview
+            children:
+              - type: grid
+                children:
+                  - {type: field, field: title}
+                  - {type: field, field: price}
+              - {type: relationship_list, field: categories}
+          - label: Operations
+            children:
+              - type: accordion
+                sections:
+                  - label: Availability
+                    children:
+                      - {type: field, field: stock_on_hand}
+                      - {type: field, field: available}
+                      - {type: field, field: available_on}
+      - {type: divider}
+      - {type: relationship_list, field: colors}
+      - {type: relationship_list, field: variants}
+  table:
+    type: table
+    columns:
+      - {field: title}
+      - {field: price}
+      - {field: stock_on_hand}
+      - {field: available}

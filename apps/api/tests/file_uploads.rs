@@ -18,27 +18,27 @@ async fn upload_blueprint(client: &Client, base_url: &str) -> Value {
     create_blueprint(
         client,
         base_url,
-        r#"format_version = 1
-code = "file_upload_product"
-name = "File upload product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["image"]
-
-[views.table]
-type = "table"
-columns = [{ field = "image", renderer = { id = "attricat.table_image", version = 1 } }]
-
-[[attributes]]
-code = "image"
-value_type = "file"
-cardinality = "one"
-allowed_mime_groups = ["image"]
-allowed_extensions = ["png"]
-max_bytes = 1024
-image_only = true"#,
+        r#"format_version: 1
+code: file_upload_product
+name: File upload product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [image]
+  table:
+    type: table
+    columns:
+      - field: image
+        renderer: {id: attricat.table_image, version: 1}
+attributes:
+  - code: image
+    value_type: file
+    cardinality: one
+    allowed_mime_groups: [image]
+    allowed_extensions: [png]
+    max_bytes: 1024
+    image_only: true"#,
     )
     .await
 }
@@ -148,19 +148,20 @@ async fn text_upload_with_binary_tail_is_rejected(pool: PgPool) {
     let blueprint = create_blueprint(
         &client,
         &base_url,
-        r#"format_version = 1
-code = "text_upload_product"
-name = "Text upload product"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["document"]
-[[attributes]]
-code = "document"
-value_type = "file"
-allowed_mime_groups = ["text/plain"]
-allowed_extensions = ["txt"]
-max_bytes = 1024
+        r#"format_version: 1
+code: text_upload_product
+name: Text upload product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [document]
+attributes:
+  - code: document
+    value_type: file
+    allowed_mime_groups: [text/plain]
+    allowed_extensions: [txt]
+    max_bytes: 1024
 "#,
     )
     .await;
@@ -376,23 +377,22 @@ async fn migration_retains_files_on_compatible_file_attributes(pool: PgPool) {
 
     let revision: Value = client
         .post(format!("{base_url}/blueprints/{blueprint_id}/versions"))
-        .json(&serde_json::json!({ "definition": r#"format_version = 1
-code = "file_upload_product"
-name = "Renamed file upload product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["image"]
-
-[[attributes]]
-code = "image"
-value_type = "file"
-cardinality = "one"
-allowed_mime_groups = ["image"]
-allowed_extensions = ["png"]
-max_bytes = 1024
-image_only = true"# }))
+        .json(&serde_json::json!({ "definition": r#"format_version: 1
+code: file_upload_product
+name: Renamed file upload product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [image]
+attributes:
+  - code: image
+    value_type: file
+    cardinality: one
+    allowed_mime_groups: [image]
+    allowed_extensions: [png]
+    max_bytes: 1024
+    image_only: true"# }))
         .send()
         .await
         .unwrap()

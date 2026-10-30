@@ -42,22 +42,19 @@ async fn drain_rule_tasks(pool: &PgPool) {
     }
 }
 
-const DEFINITION: &str = r#"format_version = 1
-code = "generation_item"
-name = "Generation item"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "price"
-value_type = "number"
+const DEFINITION: &str = r#"format_version: 1
+code: generation_item
+name: Generation item
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+  - code: price
+    value_type: number
 "#;
 
 async fn send(request: reqwest::RequestBuilder) -> (StatusCode, Value) {
@@ -151,7 +148,7 @@ async fn published_versions_contexts_and_rules_apply_to_the_next_request(pool: P
     let (status, rule) = send(client.post(format!("{base}/rules")).json(&json!({
         "blueprint_id": blueprint_id,
         "context_id": null,
-        "definition": "format_version = 1\ncode = \"price-positive\"\nname = \"price-positive\"\nseverity = \"error\"\n[[triggers]]\ntype = \"manual\"\n[predicate]\ntype = \"compare\"\nattribute_code = \"price\"\nop = \"gte\"\nvalue = 0\n[enforcement]\non_save = true",
+        "definition": "format_version: 1\ncode: price-positive\nname: price-positive\nseverity: error\ntriggers:\n  - type: manual\npredicate:\n  type: compare\n  attribute_code: price\n  op: gte\n  value: 0\nenforcement:\n  on_save: true",
     })))
     .await;
     assert_eq!(status, StatusCode::CREATED, "{rule}");

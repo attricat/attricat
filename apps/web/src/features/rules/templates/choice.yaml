@@ -1,0 +1,14 @@
+format_version: 1
+code: status-allowed
+name: Status uses an allowed value
+description: Only the agreed statuses keep reports and exports consistent.
+severity: error
+
+triggers:
+  - type: event
+    event_type: record.updated.v1
+
+predicate:
+  type: one_of
+  attribute_code: status
+  values: [draft, active, retired]

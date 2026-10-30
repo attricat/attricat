@@ -12,7 +12,7 @@ async fn record_and_scalar_value_writes_enqueue_one_normalized_event_each(pool: 
     let blueprint = create_blueprint(
         &client,
         &base_url,
-        "format_version = 1\ncode = \"evented_product\"\nname = \"Evented product\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"",
+        "format_version: 1\ncode: evented_product\nname: Evented product\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string",
     )
     .await;
     let record = create_record(&client, &base_url, &blueprint).await;
@@ -89,13 +89,13 @@ async fn relationship_set_mutation_emits_one_targeted_event(pool: PgPool) {
     let target_blueprint = create_blueprint(
         &client,
         &base_url,
-        "format_version = 1\ncode = \"event_target\"\nname = \"Event target\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"name\"]\n\n[[attributes]]\ncode = \"name\"\nvalue_type = \"string\"",
+        "format_version: 1\ncode: event_target\nname: Event target\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [name]\nattributes:\n  - code: name\n    value_type: string",
     )
     .await;
     let source_blueprint = create_blueprint(
         &client,
         &base_url,
-        "format_version = 1\ncode = \"event_source\"\nname = \"Event source\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"name\"]\n\n[[attributes]]\ncode = \"name\"\nvalue_type = \"string\"\n\n[[attributes]]\ncode = \"target\"\nvalue_type = \"relationship\"\ntarget_blueprint = \"event_target\"",
+        "format_version: 1\ncode: event_source\nname: Event source\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [name]\nattributes:\n  - code: name\n    value_type: string\n  - code: target\n    value_type: relationship\n    target_blueprint: event_target",
     )
     .await;
     let target = create_record(&client, &base_url, &target_blueprint).await;
@@ -172,7 +172,7 @@ async fn record_outbox_failure_rolls_back_the_record_write(pool: PgPool) {
     let blueprint = create_blueprint(
         &client,
         &base_url,
-        "format_version = 1\ncode = \"event_rollback_product\"\nname = \"Event rollback product\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"",
+        "format_version: 1\ncode: event_rollback_product\nname: Event rollback product\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string",
     )
     .await;
     let events_before = sqlx::query_scalar::<_, i64>("SELECT count(*) FROM domain_events")

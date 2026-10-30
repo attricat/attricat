@@ -1,4 +1,4 @@
-//! JSON, TOML and standard-input arguments converted to API bodies.
+//! JSON, YAML and standard-input arguments converted to API bodies.
 
 use std::{
     fs,
@@ -6,7 +6,7 @@ use std::{
     path::PathBuf,
 };
 
-use serde::Deserialize;
+use serde::{Deserialize, de::DeserializeOwned};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -17,7 +17,7 @@ use crate::error::CliError;
 #[serde(deny_unknown_fields)]
 pub(crate) struct ContextFile {
     pub(crate) code: String,
-    pub(crate) data: toml::Value,
+    pub(crate) data: Value,
     pub(crate) parent_id: Option<Uuid>,
 }
 
@@ -34,7 +34,7 @@ pub(crate) struct ValueInput {
     pub(crate) attribute_id: Option<Uuid>,
     pub(crate) attribute_code: Option<String>,
     pub(crate) context_id: Option<Uuid>,
-    pub(crate) value: Option<toml::Value>,
+    pub(crate) value: Option<Value>,
     pub(crate) target_record_id: Option<Uuid>,
 }
 
@@ -165,10 +165,10 @@ pub(crate) fn read_source(input: SourceInput) -> Result<String, CliError> {
 }
 
 pub(crate) fn context_body_from_file(path: &PathBuf) -> Result<Value, CliError> {
-    let input: ContextFile = parse_toml_file(path)?;
+    let input: ContextFile = parse_yaml_file(path)?;
     Ok(json!({
         "code": input.code,
-        "data": toml_to_json(input.data)?,
+        "data": input.data,
         "parent_id": input.parent_id,
     }))
 }
@@ -177,7 +177,7 @@ pub(crate) fn values_body_from_file(
     path: &PathBuf,
     context_id: Option<Uuid>,
 ) -> Result<Value, CliError> {
-    let input: ValueFile = parse_toml_file(path)?;
+    let input: ValueFile = parse_yaml_file(path)?;
     values_body(input, context_id)
 }
 
@@ -213,7 +213,7 @@ pub(crate) fn values_body(
                     let mut output = json!({
                         "kind": "scalar",
                         "context_id": value.context_id.or(default_context_id),
-                        "value": toml_to_json(payload)?,
+                        "value": payload,
                     });
                     output[attribute_key] = attribute_value;
                     Ok(output)
@@ -248,7 +248,7 @@ pub(crate) fn relationships_body_from_file(
     path: &PathBuf,
     context_id: Option<Uuid>,
 ) -> Result<Value, CliError> {
-    let input: RelationshipFile = parse_toml_file(path)?;
+    let input: RelationshipFile = parse_yaml_file(path)?;
     relationships_body(input, context_id)
 }
 
@@ -338,7 +338,7 @@ pub(crate) fn remove_values_body_from_file(
     path: &PathBuf,
     default_context_id: Option<Uuid>,
 ) -> Result<Value, CliError> {
-    let input: RemoveValuesFile = parse_toml_file(path)?;
+    let input: RemoveValuesFile = parse_yaml_file(path)?;
     Ok(Value::Array(
         input
             .remove_values
@@ -353,31 +353,8 @@ pub(crate) fn remove_values_body_from_file(
     ))
 }
 
-pub(crate) fn parse_toml_file<T: for<'de> Deserialize<'de>>(path: &PathBuf) -> Result<T, CliError> {
+pub(crate) fn parse_yaml_file<T: DeserializeOwned>(path: &PathBuf) -> Result<T, CliError> {
     let source = fs::read_to_string(path).map_err(|error| CliError::Input(error.to_string()))?;
-    toml::from_str(&source).map_err(|error| CliError::Input(format!("invalid TOML: {error}")))
-}
-
-pub(crate) fn toml_to_json(value: toml::Value) -> Result<Value, CliError> {
-    Ok(match value {
-        toml::Value::String(value) => Value::String(value),
-        toml::Value::Integer(value) => json!(value),
-        toml::Value::Float(value) => json!(value),
-        toml::Value::Boolean(value) => Value::Bool(value),
-        // TOML's serde representation makes temporal literals objects. The API
-        // accepts its canonical ISO 8601 text representation instead.
-        toml::Value::Datetime(value) => Value::String(value.to_string()),
-        toml::Value::Array(values) => Value::Array(
-            values
-                .into_iter()
-                .map(toml_to_json)
-                .collect::<Result<_, _>>()?,
-        ),
-        toml::Value::Table(values) => Value::Object(
-            values
-                .into_iter()
-                .map(|(key, value)| Ok((key, toml_to_json(value)?)))
-                .collect::<Result<_, CliError>>()?,
-        ),
-    })
+    attricat_yaml::from_str(&source)
+        .map_err(|error| CliError::Input(format!("invalid YAML: {error}")))
 }

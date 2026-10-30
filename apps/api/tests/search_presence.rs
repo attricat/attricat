@@ -2,53 +2,43 @@ use crate::support;
 use api::value_type::ValueType;
 use support::*;
 
-const ITEM: &str = r#"format_version = 1
-code = 'presence_item'
-name = 'Presence item'
-kind = 'record'
-[views.dropdown_option]
-type = 'dropdown_option'
-fields = ['name']
-[[attributes]]
-code = 'name'
-value_type = 'string'
-[[attributes]]
-code = 'text'
-value_type = 'string'
-context_editable = 'all'
-[[attributes]]
-code = 'amount'
-value_type = 'number'
-[[attributes]]
-code = 'count'
-value_type = 'integer'
-[[attributes]]
-code = 'flag'
-value_type = 'boolean'
-[[attributes]]
-code = 'day'
-value_type = 'date'
-[[attributes]]
-code = 'instant'
-value_type = 'datetime'
-[[attributes]]
-code = 'clock'
-value_type = 'time'
-[[attributes]]
-code = 'assignee'
-value_type = 'string'
-value_schema = '''{"type":"string","x-attricat-principal":{"version":1,"kinds":["user","team"]}}'''
-[[attributes]]
-code = 'parent'
-value_type = 'relationship'
-cardinality = 'one'
-target_blueprint = 'presence_item'
-[[attributes]]
-code = 'payload'
-value_type = 'json'
-[[attributes]]
-code = 'files'
-value_type = 'file'
+const ITEM: &str = r#"format_version: 1
+code: presence_item
+name: Presence item
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: text
+    value_type: string
+    context_editable: all
+  - code: amount
+    value_type: number
+  - code: count
+    value_type: integer
+  - code: flag
+    value_type: boolean
+  - code: day
+    value_type: date
+  - code: instant
+    value_type: datetime
+  - code: clock
+    value_type: time
+  - code: assignee
+    value_type: string
+    value_schema: '{"type":"string","x-attricat-principal":{"version":1,"kinds":["user","team"]}}'
+  - code: parent
+    value_type: relationship
+    cardinality: one
+    target_blueprint: presence_item
+  - code: payload
+    value_type: json
+  - code: files
+    value_type: file
 "#;
 
 async fn search(client: &Client, base: &str, filters: Value, version: Option<i64>) -> Value {
@@ -468,9 +458,9 @@ async fn presence_traverses_paths_and_preserves_version_and_blueprint_scope(pool
     );
     let id = first["blueprint"]["id"].as_str().unwrap();
     let definition = ITEM.replace(
-        "code = 'amount'\nvalue_type = 'number'",
-        "code = 'amount'\nvalue_type = 'string'",
-    ) + "\n[[attributes]]\ncode = 'new_field'\nvalue_type = 'string'\n";
+        "code: amount\n    value_type: number",
+        "code: amount\n    value_type: string",
+    ) + "  - code: new_field\n    value_type: string\n";
     let draft = expect_status(
         client
             .post(format!("{base}/blueprints/{id}/versions"))
@@ -540,7 +530,7 @@ async fn presence_searches_attached_reusable_values_and_round_trips_saved_views(
         json!([scalar("name", "Attached")]),
     )
     .await;
-    let draft=expect_status(client.post(format!("{base}/reusable-attributes")).json(&json!({"definition":"code = 'weight'\nname = 'Weight'\nvalue_type = 'number'\nsearchable = true\ndefault_value = 0"})).send().await.unwrap(),StatusCode::CREATED).await;
+    let draft=expect_status(client.post(format!("{base}/reusable-attributes")).json(&json!({"definition":"code: weight\nname: Weight\nvalue_type: number\nsearchable: true\ndefault_value: 0"})).send().await.unwrap(),StatusCode::CREATED).await;
     let published = expect_status(
         client
             .post(format!(
@@ -623,7 +613,7 @@ async fn absence_is_scoped_and_paginated_and_requires_no_reachable_value(pool: P
     let (base, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     let definition = format!(
-        "{ITEM}\n[[attributes]]\ncode = 'children'\nvalue_type = 'relationship'\ncardinality = 'many'\ntarget_blueprint = 'presence_item'\n"
+        "{ITEM}  - code: children\n    value_type: relationship\n    cardinality: many\n    target_blueprint: presence_item\n"
     );
     let blueprint = create_blueprint(&client, &base, &definition).await;
     let absent = create_record_with(

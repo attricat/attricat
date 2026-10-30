@@ -16,25 +16,33 @@ use support::json;
 use uuid::Uuid;
 
 const EXPORT_JOB: &str = r#"
-[[connector_jobs]]
-code = "csv_export"
-direction = "export"
-extension_id = "attricat-connector-csv"
-operation_id = "export"
-input = {profile = {version = 1, blueprint_id = "00000000-0000-4000-8000-000000000001", blueprint_version = 1, context_id = "00000000-0000-4000-8000-000000000001", columns = [{header = "ID", attribute = "external_id", kind = "string"}]}}
+connector_jobs:
+  - code: csv_export
+    direction: export
+    extension_id: attricat-connector-csv
+    operation_id: export
+    input:
+      profile:
+        version: 1
+        blueprint_id: '00000000-0000-4000-8000-000000000001'
+        blueprint_version: 1
+        context_id: '00000000-0000-4000-8000-000000000001'
+        columns:
+          - {header: ID, attribute: external_id, kind: string}
 "#;
 
 const BLUEPRINT: &str = r#"
-format_version = 1
-code = "connector_test"
-name = "Connector Test"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["external_id"]
-[[attributes]]
-code = "external_id"
-value_type = "string"
+format_version: 1
+code: connector_test
+name: Connector Test
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [external_id]
+attributes:
+  - code: external_id
+    value_type: string
 "#;
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
@@ -189,26 +197,46 @@ async fn scoped_export_fans_out_to_channels_via_existing_task_queue(pool: sqlx::
             .fetch_one(&pool)
             .await
             .unwrap();
-    let revision = repository.create_blueprint_revision(blueprint.blueprint.id, CreateBlueprint {
-        definition: format!(r#"{BLUEPRINT}
-{EXPORT_JOB}
-[[connector_jobs]]
-code = "csv_import"
-direction = "import"
-extension_id = "attricat-connector-csv"
-operation_id = "import"
-context = "{context_code}"
-input_file_id = "{file}"
-input = {{profile = {{version = 1, blueprint_id = "00000000-0000-4000-8000-000000000001", blueprint_version = 1, context_id = "00000000-0000-4000-8000-000000000001", business_key = "external_id", columns = [{{header = "ID", attribute = "external_id", kind = "string"}}]}}}}
-[[connector_jobs]]
-code = "scheduled_export"
-direction = "export"
-extension_id = "attricat-connector-csv"
-operation_id = "export"
-interval_seconds = 60
-input = {{profile = {{version = 1, blueprint_id = "00000000-0000-4000-8000-000000000001", blueprint_version = 1, context_id = "00000000-0000-4000-8000-000000000001", columns = [{{header = "ID", attribute = "external_id", kind = "string"}}]}}}}
-"#),
-    }).await.unwrap();
+    let revision = repository
+        .create_blueprint_revision(
+            blueprint.blueprint.id,
+            CreateBlueprint {
+                definition: format!(
+                    r#"{BLUEPRINT}{EXPORT_JOB}
+  - code: csv_import
+    direction: import
+    extension_id: attricat-connector-csv
+    operation_id: import
+    context: '{context_code}'
+    input_file_id: '{file}'
+    input:
+      profile:
+        version: 1
+        blueprint_id: '00000000-0000-4000-8000-000000000001'
+        blueprint_version: 1
+        context_id: '00000000-0000-4000-8000-000000000001'
+        business_key: external_id
+        columns:
+          - {{header: ID, attribute: external_id, kind: string}}
+  - code: scheduled_export
+    direction: export
+    extension_id: attricat-connector-csv
+    operation_id: export
+    interval_seconds: 60
+    input:
+      profile:
+        version: 1
+        blueprint_id: '00000000-0000-4000-8000-000000000001'
+        blueprint_version: 1
+        context_id: '00000000-0000-4000-8000-000000000001'
+        columns:
+          - {{header: ID, attribute: external_id, kind: string}}
+"#
+                ),
+            },
+        )
+        .await
+        .unwrap();
     repository
         .publish_blueprint_revision(blueprint.blueprint.id, revision.blueprint.version)
         .await
@@ -363,10 +391,7 @@ input = {{profile = {{version = 1, blueprint_id = "00000000-0000-4000-8000-00000
             CreateBlueprint {
                 definition: format!(
                     "{BLUEPRINT}\n{}",
-                    EXPORT_JOB.replace(
-                        "code = \"csv_export\"",
-                        "code = \"csv_export\"\nenabled = false"
-                    )
+                    EXPORT_JOB.replace("code: csv_export", "code: csv_export\n    enabled: false")
                 ),
             },
         )

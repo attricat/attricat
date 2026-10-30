@@ -13,16 +13,17 @@ use uuid::Uuid;
 const EXTENSION: &str = "acme.scale";
 const RECORDS: i64 = 100_000;
 const BLUEPRINT: &str = r#"
-format_version = 1
-code = "scale_item"
-name = "Scale item"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["sku"]
-[[attributes]]
-code = "sku"
-value_type = "string"
+format_version: 1
+code: scale_item
+name: Scale item
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [sku]
+attributes:
+  - code: sku
+    value_type: string
 "#;
 
 /// The slowest an index-backed lookup may take on a busy CI machine.

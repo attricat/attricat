@@ -52,22 +52,17 @@ struct ReusableAttributeDefinition {
     /// Stored value type.
     #[schemars(extend("enum" = reusable_attribute_value_type_codes()))]
     value_type: String,
-    /// JSON Schema (Draft 2020-12) for scalar values, written as a TOML table.
+    /// JSON Schema (Draft 2020-12) for scalar values, written as a YAML mapping.
     #[serde(default)]
-    #[schemars(with = "Option<serde_json::Value>")]
-    value_schema: Option<toml::Value>,
+    value_schema: Option<serde_json::Value>,
     /// Value stored in the default context when a record is created.
     /// Not supported for relationships and files.
     #[serde(default)]
-    #[schemars(with = "Option<serde_json::Value>")]
-    default_value: Option<toml::Value>,
-    /// File upload policy table.
+    default_value: Option<serde_json::Value>,
+    /// File upload policy mapping.
     #[serde(default)]
-    #[schemars(
-        with = "Option<serde_json::Value>",
-        extend("x-attricat-value-types" = ["file"])
-    )]
-    file_policy: Option<toml::Value>,
+    #[schemars(extend("x-attricat-value-types" = ["file"]))]
+    file_policy: Option<serde_json::Value>,
     /// Blueprint that relationship targets must use.
     #[serde(default)]
     #[schemars(extend(
@@ -121,22 +116,10 @@ struct ReusableAttributeDefinition {
     facetable: bool,
 }
 
-fn toml_value_to_json(
-    value: Option<toml::Value>,
-) -> Result<Option<serde_json::Value>, RepositoryError> {
-    value
-        .map(|value| {
-            serde_json::to_value(value).map_err(|error| {
-                RepositoryError::InvalidReusableAttributeDefinition(error.to_string())
-            })
-        })
-        .transpose()
-}
-
 fn parse_definition(
     input: &CreateReusableAttribute,
 ) -> Result<ReusableAttributeDefinition, RepositoryError> {
-    let definition = toml::from_str::<ReusableAttributeDefinition>(&input.definition)
+    let definition = attricat_yaml::from_str::<ReusableAttributeDefinition>(&input.definition)
         .map_err(|error| RepositoryError::InvalidReusableAttributeDefinition(error.to_string()))?;
     if !is_valid_code(&definition.code) {
         return Err(RepositoryError::InvalidReusableAttributeCode);
@@ -179,7 +162,7 @@ fn parse_definition(
             "name has an invalid lexicon reference: {error}"
         ))
     })?;
-    if let Some(schema) = toml_value_to_json(definition.value_schema.clone())? {
+    if let Some(schema) = definition.value_schema.clone() {
         attricat_validation::validate_json_schema_definition(&schema)
             .map_err(RepositoryError::InvalidReusableAttributeDefinition)?;
         for text in attricat_blueprint::option_label_texts("attribute", &schema) {
@@ -190,7 +173,7 @@ fn parse_definition(
                 ))
             })?;
         }
-        if let Some(default) = toml_value_to_json(definition.default_value.clone())? {
+        if let Some(default) = definition.default_value.clone() {
             attricat_validation::status::validate_status_transition(
                 &schema,
                 &Value::Null,
@@ -363,7 +346,7 @@ impl AttricatRepository {
         sqlx::query(r#"INSERT INTO reusable_attribute_revisions (id, workspace_id, definition_id, version, value_type, value_schema, default_value, file_policy, target_blueprint_code, cardinality, target_cardinality, tags, context_fallback, context_editable, readonly, searchable, facetable, status, definition)
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'draft',$18)"#)
             .bind(revision_id).bind(self.workspace_id()).bind(definition_id).bind(version)
-            .bind(definition.value_type).bind(toml_value_to_json(definition.value_schema)?).bind(toml_value_to_json(definition.default_value)?).bind(toml_value_to_json(definition.file_policy)?)
+            .bind(definition.value_type).bind(definition.value_schema).bind(definition.default_value).bind(definition.file_policy)
             .bind(definition.target_blueprint_code).bind(definition.cardinality).bind(definition.target_cardinality)
             .bind(serde_json::json!(definition.tags)).bind(definition.context_fallback).bind(definition.context_editable).bind(definition.readonly)
             .bind(definition.searchable).bind(definition.facetable).bind(&input.definition).execute(&mut **transaction).await?;
@@ -733,7 +716,7 @@ mod tests {
 
     use super::{CreateReusableAttribute, ReusableAttributeDefinition, parse_definition};
 
-    /// The JSON Schema for reusable attribute definition TOML, published as
+    /// The JSON Schema for reusable attribute definition YAML, published as
     /// `contracts/reusable-attribute-definition-v1.schema.json`.
     fn definition_json_schema() -> serde_json::Value {
         SchemaSettings::draft2020_12()
@@ -768,32 +751,26 @@ mod tests {
     fn schema_matches_parser_for_representative_definitions() {
         let schema = definition_json_schema();
         for (definition, accepted) in [
+            ("code: sku\nname: SKU\nvalue_type: string\n", true),
             (
-                "code = \"sku\"\nname = \"SKU\"\nvalue_type = \"string\"\n",
+                "code: brand\nname: Brand\nvalue_type: relationship\ntarget_blueprint_code: brand\ncardinality: one\nsearchable: true\n",
                 true,
             ),
             (
-                "code = \"brand\"\nname = \"Brand\"\nvalue_type = \"relationship\"\ntarget_blueprint_code = \"brand\"\ncardinality = \"one\"\nsearchable = true\n",
+                "code: images\nname: Images\nvalue_type: file\nfile_policy:\n  cardinality: many\ntags: ['hidden:form']\n",
                 true,
             ),
             (
-                "code = \"images\"\nname = \"Images\"\nvalue_type = \"file\"\nfile_policy = { cardinality = \"many\" }\ntags = [\"hidden:form\"]\n",
+                "code: price\nname: Price\nvalue_type: number\nvalue_schema:\n  minimum: 0\ndefault_value: 0\ncontext_editable: default\n",
                 true,
             ),
+            ("code: sku\nname: SKU\nvalue_type: json\n", false),
             (
-                "code = \"price\"\nname = \"Price\"\nvalue_type = \"number\"\nvalue_schema = { minimum = 0 }\ndefault_value = 0\ncontext_editable = \"default\"\n",
-                true,
-            ),
-            (
-                "code = \"sku\"\nname = \"SKU\"\nvalue_type = \"json\"\n",
+                "code: sku\nname: SKU\nvalue_type: string\nlabel: SKU\n",
                 false,
             ),
             (
-                "code = \"sku\"\nname = \"SKU\"\nvalue_type = \"string\"\nlabel = \"SKU\"\n",
-                false,
-            ),
-            (
-                "code = \"sku\"\nname = \"SKU\"\nvalue_type = \"string\"\ncontext_fallback = \"parent\"\n",
+                "code: sku\nname: SKU\nvalue_type: string\ncontext_fallback: parent\n",
                 false,
             ),
         ] {
@@ -801,8 +778,7 @@ mod tests {
                 definition: definition.to_owned(),
             });
             assert_eq!(parsed.is_ok(), accepted, "{definition}");
-            let instance =
-                serde_json::to_value(toml::from_str::<toml::Value>(definition).unwrap()).unwrap();
+            let instance = attricat_yaml::from_str::<serde_json::Value>(definition).unwrap();
             let violations = attricat_validation::validate_json_schema(&schema, &instance).unwrap();
             assert_eq!(
                 violations.is_empty(),

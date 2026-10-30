@@ -5,33 +5,27 @@ use chrono::{Datelike, Utc};
 use support::*;
 
 const INVOICE: &str = r#"
-format_version = 1
-code = "gs_invoice"
-name = "Invoice"
-kind = "record"
-record_schema = '{"type":"object","required":["number","title"]}'
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["number"]
-
-[[unique_keys]]
-code = "number"
-attributes = ["number"]
-
-[[attributes]]
-code = "number"
-value_type = "string"
-generated = { format = "INV-{n:04}" }
-
-[[attributes]]
-code = "position"
-value_type = "integer"
-generated = { start = 1000 }
-
-[[attributes]]
-code = "title"
-value_type = "string"
+format_version: 1
+code: gs_invoice
+name: Invoice
+kind: record
+record_schema: '{"type":"object","required":["number","title"]}'
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [number]
+unique_keys:
+  - code: number
+    attributes: [number]
+attributes:
+  - code: number
+    value_type: string
+    generated: {format: 'INV-{n:04}'}
+  - code: position
+    value_type: integer
+    generated: {start: 1000}
+  - code: title
+    value_type: string
 "#;
 
 fn value_of(form: &Value, code: &str) -> Value {
@@ -325,14 +319,14 @@ async fn records_are_numbered_when_they_migrate_onto_a_generating_revision(pool:
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
     let first_revision = INVOICE
-        .replace("generated = { format = \"INV-{n:04}\" }", "")
-        .replace("generated = { start = 1000 }", "")
+        .replace("generated: {format: 'INV-{n:04}'}", "")
+        .replace("generated: {start: 1000}", "")
         .replace(
-            r#"record_schema = '{"type":"object","required":["number","title"]}'"#,
+            r#"record_schema: '{"type":"object","required":["number","title"]}'"#,
             "",
         )
         .replace(
-            "[[unique_keys]]\ncode = \"number\"\nattributes = [\"number\"]\n",
+            "unique_keys:\n  - code: number\n    attributes: [number]\n",
             "",
         );
     let blueprint = create_blueprint(&client, &base_url, &first_revision).await;
@@ -345,8 +339,8 @@ async fn records_are_numbered_when_they_migrate_onto_a_generating_revision(pool:
     );
 
     let yearly = INVOICE.replace(
-        "generated = { format = \"INV-{n:04}\" }",
-        "generated = { format = \"INV-{yyyy}-{n:03}\", reset = \"yearly\" }",
+        "generated: {format: 'INV-{n:04}'}",
+        "generated: {format: 'INV-{yyyy}-{n:03}', reset: yearly}",
     );
     let revision = expect_status(
         client
@@ -430,8 +424,8 @@ async fn revisions_cannot_change_the_reset_of_a_generated_attribute(pool: PgPool
             .send()
     };
     let yearly = INVOICE.replace(
-        "generated = { format = \"INV-{n:04}\" }",
-        "generated = { format = \"INV-{yyyy}-{n:04}\", reset = \"yearly\" }",
+        "generated: {format: 'INV-{n:04}'}",
+        "generated: {format: 'INV-{yyyy}-{n:04}', reset: yearly}",
     );
     let expected = json!({"attribute": "number", "previous": "never", "requested": "yearly"});
     for url in [versions.clone(), format!("{versions}/validate")] {
@@ -447,16 +441,16 @@ async fn revisions_cannot_change_the_reset_of_a_generated_attribute(pool: PgPool
     // `start`, `format` and dropping `generated` stay allowed.
     let restarted = INVOICE
         .replace("{n:04}", "N{n:06}")
-        .replace("generated = { start = 1000 }", "generated = { start = 1 }");
+        .replace("generated: {start: 1000}", "generated: {start: 1}");
     expect_status(
         save(versions.clone(), restarted).await.unwrap(),
         StatusCode::CREATED,
     )
     .await;
     let plain = INVOICE
-        .replace("generated = { format = \"INV-{n:04}\" }", "")
+        .replace("generated: {format: 'INV-{n:04}'}", "")
         .replace(
-            r#"record_schema = '{"type":"object","required":["number","title"]}'"#,
+            r#"record_schema: '{"type":"object","required":["number","title"]}'"#,
             "",
         );
     expect_status(
@@ -479,23 +473,20 @@ async fn revisions_cannot_change_the_reset_of_a_generated_attribute(pool: PgPool
 #[sqlx::test(migrator = "api::MIGRATOR")]
 async fn batches_creating_on_several_blueprints_in_opposite_orders_do_not_deadlock(pool: PgPool) {
     const ORDER: &str = r#"
-format_version = 1
-code = "gs_order"
-name = "Order"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "number"
-value_type = "integer"
-generated = { start = 1 }
-
-[[attributes]]
-code = "title"
-value_type = "string"
+format_version: 1
+code: gs_order
+name: Order
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: number
+    value_type: integer
+    generated: {start: 1}
+  - code: title
+    value_type: string
 "#;
     const ROUNDS: usize = 12;
     let (base_url, server) = start_server(pool).await;
@@ -576,8 +567,8 @@ async fn publication_alongside_creates_does_not_deadlock(pool: PgPool) {
         let base_url = base_url.clone();
         work.spawn(async move {
             let keyed = INVOICE.replace(
-                "[[attributes]]\ncode = \"number\"",
-                "[[unique_keys]]\ncode = \"title\"\nattributes = [\"title\"]\n\n[[attributes]]\ncode = \"number\"",
+                "unique_keys:\n",
+                "unique_keys:\n  - code: title\n    attributes: [title]\n",
             );
             let revision = expect_status(
                 client

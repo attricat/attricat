@@ -1,20 +1,20 @@
 use crate::support;
 use support::*;
 
-const DEFINITION: &str = r#"format_version = 1
-code = 'status_item'
-name = 'Status item'
-kind = 'record'
-[views.dropdown_option]
-type = 'dropdown_option'
-fields = ['status']
-[[attributes]]
-code = 'status'
-value_type = 'string'
-value_schema = '''{"type":"string","enum":["draft","live","done"],"x-attricat-status":{"version":1,"options":[{"code":"draft","label":"Draft"},{"code":"live","label":"Live","tone":"success"},{"code":"done","label":"Done"}],"transitions":[{"from":null,"to":"draft"},{"from":"draft","to":"live"},{"from":"live","to":"done"}]}}'''
-[[attributes]]
-code = 'title'
-value_type = 'string'
+const DEFINITION: &str = r#"format_version: 1
+code: status_item
+name: Status item
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [status]
+attributes:
+  - code: status
+    value_type: string
+    value_schema: '{"type":"string","enum":["draft","live","done"],"x-attricat-status":{"version":1,"options":[{"code":"draft","label":"Draft"},{"code":"live","label":"Live","tone":"success"},{"code":"done","label":"Done"}],"transitions":[{"from":null,"to":"draft"},{"from":"draft","to":"live"},{"from":"live","to":"done"}]}}'
+  - code: title
+    value_type: string
 "#;
 fn value(status: &str) -> Value {
     json!({"kind":"scalar","attribute_code":"status","value":status})
@@ -248,7 +248,7 @@ async fn migration_does_not_silently_clear_a_status(pool: PgPool) {
         .await
         .unwrap();
     let blueprint_id = blueprint["blueprint"]["id"].as_str().unwrap();
-    let definition = "format_version = 1\ncode = 'status_item'\nname = 'Status item'\nkind = 'record'\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'";
+    let definition = "format_version: 1\ncode: status_item\nname: Status item\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string";
     client
         .post(format!("{base}/blueprints/{blueprint_id}/versions"))
         .json(&json!({"definition":definition}))

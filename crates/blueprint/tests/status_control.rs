@@ -2,17 +2,18 @@ use attricat_blueprint::parse;
 
 fn definition(value_type: &str, schema: serde_json::Value) -> String {
     format!(
-        r#"format_version = 1
-code = "status_item"
-name = "Status item"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["status"]
-[[attributes]]
-code = "status"
-value_type = "{value_type}"
-value_schema = '''{schema}'''
+        r#"format_version: 1
+code: status_item
+name: Status item
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [status]
+attributes:
+  - code: status
+    value_type: '{value_type}'
+    value_schema: '{schema}'
 "#
     )
 }

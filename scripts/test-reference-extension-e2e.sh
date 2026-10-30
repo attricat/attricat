@@ -45,44 +45,45 @@ test -s "$work/workbench.js"
 # existing development fixture. The extension must write the computed value in
 # the same default context after an ordinary Attricat mutation.
 code="reference_formula_$(date +%s)_$$"
-cat > "$work/blueprint.toml" <<TOML
-format_version = 1
-code = "$code"
-name = "Reference formula E2E"
-kind = "record"
+cat > "$work/blueprint.yaml" <<YAML
+format_version: 1
+code: $code
+name: Reference formula E2E
+kind: record
 
-[[attributes]]
-code = "price_net"
-value_type = "number"
+attributes:
+  - code: price_net
+    value_type: number
+  - code: price_gross
+    value_type: number
 
-[[attributes]]
-code = "price_gross"
-value_type = "number"
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [price_net]
 
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["price_net"]
-
-[extensions.$extension_id.formulas]
-price_gross = "price_net * 2"
-TOML
-blueprint_id=$("${cli[@]}" blueprint create --file "$work/blueprint.toml" | jq -er '.blueprint.id')
+extensions:
+  $extension_id:
+    formulas:
+      price_gross: price_net * 2
+YAML
+blueprint_id=$("${cli[@]}" blueprint create --file "$work/blueprint.yaml" | jq -er '.blueprint.id')
 "${cli[@]}" blueprint publish "$blueprint_id" 1 >/dev/null
-cat > "$work/values.toml" <<'TOML'
-[[values]]
-kind = "scalar"
-attribute_code = "price_net"
-value = 10.0
-TOML
+cat > "$work/values.yaml" <<'YAML'
+values:
+  - kind: scalar
+    attribute_code: price_net
+    value: 10.0
+YAML
 context_id=00000000-0000-4000-8000-000000000001
-record_id=$("${cli[@]}" record create --blueprint "$code" --values "$work/values.toml" --context-id "$context_id" | jq -er '.id')
-cat > "$work/updated.toml" <<'TOML'
-[[values]]
-kind = "scalar"
-attribute_code = "price_net"
-value = 17.0
-TOML
-"${cli[@]}" record update "$record_id" --values "$work/updated.toml" --context-id "$context_id" >/dev/null
+record_id=$("${cli[@]}" record create --blueprint "$code" --values "$work/values.yaml" --context-id "$context_id" | jq -er '.id')
+cat > "$work/updated.yaml" <<'YAML'
+values:
+  - kind: scalar
+    attribute_code: price_net
+    value: 17.0
+YAML
+"${cli[@]}" record update "$record_id" --values "$work/updated.yaml" --context-id "$context_id" >/dev/null
 for _ in $(seq 1 60); do
   preview=$("${cli[@]}" record resolved-preview "$record_id" --context-id "$context_id")
   if echo "$preview" | jq -e --arg context "$context_id" '.values.price_gross.value == 34 and .values.price_gross.source_context.id == $context' >/dev/null; then

@@ -10,18 +10,17 @@ async fn rejects_unsafe_reference_codes_in_api_requests(pool: PgPool) {
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "product-type"
-name = "Product type"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["display-name"]
-
-[[attributes]]
-code = "display-name"
-value_type = "string"
+format_version: 1
+code: product-type
+name: Product type
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [display-name]
+attributes:
+  - code: display-name
+    value_type: string
 "#,
     )
     .await;

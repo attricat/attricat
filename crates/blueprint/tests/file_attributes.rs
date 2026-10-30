@@ -2,18 +2,18 @@ use attricat_blueprint::{BlueprintError, compile, parse};
 use attricat_domain::attribute_options::Cardinality;
 
 fn source(attribute: &str) -> String {
+    let attribute = attribute.replace('\n', "\n    ");
     format!(
-        r#"format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["asset"]
-
-[[attributes]]
-{attribute}
+        r#"format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [asset]
+attributes:
+  - {attribute}
 "#
     )
 }
@@ -21,14 +21,14 @@ fields = ["asset"]
 #[test]
 fn compiles_file_policy_with_ordered_many_defaults() {
     let definition = parse(&source(
-        r#"code = "asset"
-value_type = "file"
-cardinality = "many"
-allowed_mime_groups = ["image"]
-allowed_extensions = ["jpg", "png"]
-max_bytes = 10
-purposes = ["product_image"]
-image_only = true"#,
+        r#"code: asset
+value_type: file
+cardinality: many
+allowed_mime_groups: [image]
+allowed_extensions: [jpg, png]
+max_bytes: 10
+purposes: [product_image]
+image_only: true"#,
     ))
     .unwrap();
     let compiled = compile(definition, &[], "source").unwrap();
@@ -41,9 +41,9 @@ image_only = true"#,
 #[test]
 fn rejects_file_policy_on_scalar_and_ordered_single_file() {
     let scalar = parse(&source(
-        r#"code = "asset"
-value_type = "string"
-max_bytes = 10"#,
+        r#"code: asset
+value_type: string
+max_bytes: 10"#,
     ));
     assert!(matches!(
         scalar,
@@ -51,10 +51,10 @@ max_bytes = 10"#,
     ));
 
     let ordered_single = parse(&source(
-        r#"code = "asset"
-value_type = "file"
-cardinality = "one"
-ordered = true"#,
+        r#"code: asset
+value_type: file
+cardinality: one
+ordered: true"#,
     ));
     assert!(matches!(
         ordered_single,
@@ -63,9 +63,9 @@ ordered = true"#,
 
     for extension in [".", "..."] {
         let invalid_extension = parse(&source(&format!(
-            r#"code = "asset"
-value_type = "file"
-allowed_extensions = ["{extension}"]"#
+            r#"code: asset
+value_type: file
+allowed_extensions: ['{extension}']"#
         )));
         assert!(matches!(
             invalid_extension,

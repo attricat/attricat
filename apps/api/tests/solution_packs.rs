@@ -16,34 +16,31 @@ use support::*;
 
 const SAMPLE: &[u8] = br#"{"format_version":1,"kind":"solution_pack_sample_data","classification":"synthetic","records":[{"key":"sample-records/navy-shirt","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/name","value":"Sample Navy Shirt"}],"relationships":[]}]}"#;
 const PRODUCT_BLUEPRINT: &[u8] = br#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[[attributes]]
-code = "name"
-value_type = "string"
-
+format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
 # source-only marker: BLUEPRINT_SOURCE_SECRET
 "#;
 const CATEGORY_BLUEPRINT: &[u8] = br#"
-format_version = 1
-code = "category"
-name = "Category"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[[attributes]]
-code = "name"
-value_type = "string"
+format_version: 1
+code: category
+name: Category
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
 "#;
 
 fn digest(bytes: &[u8]) -> String {
@@ -70,7 +67,7 @@ fn archive_with_sample_blueprint(blueprint: &[u8]) -> Vec<u8> {
         "description":"Explicit synthetic samples",
         "attricat":{"host_api":"^1.0"},
         "resources":{
-            "blueprints":[{"key":"blueprints/product","path":"blueprints/product.toml","required":true,"sha256":digest(blueprint)}],
+            "blueprints":[{"key":"blueprints/product","path":"blueprints/product.yaml","required":true,"sha256":digest(blueprint)}],
             "sample_data":{"key":"sample-data/default","path":"sample-data/sample-data.json","sha256":digest(SAMPLE)}
         }
     })).unwrap();
@@ -78,7 +75,7 @@ fn archive_with_sample_blueprint(blueprint: &[u8]) -> Vec<u8> {
     {
         let mut tar = tar::Builder::new(&mut tar_bytes);
         append_file(&mut tar, "solution-pack.json", &manifest);
-        append_file(&mut tar, "blueprints/product.toml", blueprint);
+        append_file(&mut tar, "blueprints/product.yaml", blueprint);
         append_file(&mut tar, "sample-data/sample-data.json", SAMPLE);
         tar.finish().unwrap();
     }
@@ -94,7 +91,7 @@ fn archive_with_sample(version: &str, blueprint: &[u8], sample: &[u8]) -> Vec<u8
         "description":"Explicit synthetic samples",
         "attricat":{"host_api":"^1.0"},
         "resources":{
-            "blueprints":[{"key":"blueprints/product","path":"blueprints/product.toml","required":true,"sha256":digest(blueprint)}],
+            "blueprints":[{"key":"blueprints/product","path":"blueprints/product.yaml","required":true,"sha256":digest(blueprint)}],
             "sample_data":{"key":"sample-data/default","path":"sample-data/sample-data.json","sha256":digest(sample)}
         }
     })).unwrap();
@@ -102,7 +99,7 @@ fn archive_with_sample(version: &str, blueprint: &[u8], sample: &[u8]) -> Vec<u8
     {
         let mut tar = tar::Builder::new(&mut tar_bytes);
         append_file(&mut tar, "solution-pack.json", &manifest);
-        append_file(&mut tar, "blueprints/product.toml", blueprint);
+        append_file(&mut tar, "blueprints/product.yaml", blueprint);
         append_file(&mut tar, "sample-data/sample-data.json", sample);
         tar.finish().unwrap();
     }
@@ -120,7 +117,7 @@ fn archive_with_rejected_context_resource() -> Vec<u8> {
         "description": "Contexts are not pack resources",
         "attricat": {"host_api": "^1.0"},
         "resources": {
-            "blueprints": [{"key":"blueprints/product","path":"blueprints/product.toml","required":true,"sha256":digest(PRODUCT_BLUEPRINT)}],
+            "blueprints": [{"key":"blueprints/product","path":"blueprints/product.yaml","required":true,"sha256":digest(PRODUCT_BLUEPRINT)}],
             "contexts": [{"key":"contexts/web","path":"contexts/web.json","required":true,"sha256":digest(CONTEXT)}]
         }
     }))
@@ -129,7 +126,7 @@ fn archive_with_rejected_context_resource() -> Vec<u8> {
     {
         let mut tar = tar::Builder::new(&mut tar_bytes);
         append_file(&mut tar, "solution-pack.json", &manifest);
-        append_file(&mut tar, "blueprints/product.toml", PRODUCT_BLUEPRINT);
+        append_file(&mut tar, "blueprints/product.yaml", PRODUCT_BLUEPRINT);
         append_file(&mut tar, "contexts/web.json", CONTEXT);
         tar.finish().unwrap();
     }
@@ -147,7 +144,7 @@ fn archive_with_guidance_and_checks() -> Vec<u8> {
         "version":"1.0.0",
         "description":"Guidance and informational checks",
         "attricat":{"host_api":"^1.0"},
-        "resources":{"blueprints":[{"key":"blueprints/product","path":"blueprints/product.toml","required":true,"sha256":digest(PRODUCT_BLUEPRINT)}]},
+        "resources":{"blueprints":[{"key":"blueprints/product","path":"blueprints/product.yaml","required":true,"sha256":digest(PRODUCT_BLUEPRINT)}]},
         "documentation":{
             "readme":{"path":"README.md","sha256":digest(README)},
             "setup_checklist":{"path":"setup/checklist.json","sha256":digest(CHECKLIST)}
@@ -158,7 +155,7 @@ fn archive_with_guidance_and_checks() -> Vec<u8> {
     {
         let mut tar = tar::Builder::new(&mut tar_bytes);
         append_file(&mut tar, "solution-pack.json", &manifest);
-        append_file(&mut tar, "blueprints/product.toml", PRODUCT_BLUEPRINT);
+        append_file(&mut tar, "blueprints/product.yaml", PRODUCT_BLUEPRINT);
         append_file(&mut tar, "README.md", README);
         append_file(&mut tar, "setup/checklist.json", CHECKLIST);
         append_file(&mut tar, "checks/checks.json", CHECKS);
@@ -180,8 +177,8 @@ fn archive_with_two_blueprints() -> Vec<u8> {
         "description": "Retry fixture",
         "attricat": {"host_api": "^1.0"},
         "resources": {"blueprints": [
-            {"key":"blueprints/product","path":"blueprints/product.toml","required":true,"sha256":digest(PRODUCT_BLUEPRINT)},
-            {"key":"blueprints/category","path":"blueprints/category.toml","required":true,"sha256":digest(CATEGORY_BLUEPRINT)}
+            {"key":"blueprints/product","path":"blueprints/product.yaml","required":true,"sha256":digest(PRODUCT_BLUEPRINT)},
+            {"key":"blueprints/category","path":"blueprints/category.yaml","required":true,"sha256":digest(CATEGORY_BLUEPRINT)}
         ]}
     }))
     .unwrap();
@@ -189,8 +186,8 @@ fn archive_with_two_blueprints() -> Vec<u8> {
     {
         let mut tar = tar::Builder::new(&mut tar_bytes);
         append_file(&mut tar, "solution-pack.json", &manifest);
-        append_file(&mut tar, "blueprints/product.toml", PRODUCT_BLUEPRINT);
-        append_file(&mut tar, "blueprints/category.toml", CATEGORY_BLUEPRINT);
+        append_file(&mut tar, "blueprints/product.yaml", PRODUCT_BLUEPRINT);
+        append_file(&mut tar, "blueprints/category.yaml", CATEGORY_BLUEPRINT);
         tar.finish().unwrap();
     }
     zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
@@ -198,23 +195,20 @@ fn archive_with_two_blueprints() -> Vec<u8> {
 
 fn archive_with_reverse_order_dependency() -> Vec<u8> {
     const DEPENDENT_PRODUCT: &[u8] = br#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[[attributes]]
-code = "name"
-value_type = "string"
-
-[[attributes]]
-code = "category"
-value_type = "relationship"
-target_blueprint = "blueprints/category"
+format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: category
+    value_type: relationship
+    target_blueprint: blueprints/category
 "#;
     let manifest = serde_json::to_vec(&json!({
         "manifest_version": 1,
@@ -224,8 +218,8 @@ target_blueprint = "blueprints/category"
         "description": "Declaration order differs from dependency order",
         "attricat": {"host_api": "^1.0"},
         "resources": {"blueprints": [
-            {"key":"blueprints/product","path":"blueprints/product.toml","required":true,"sha256":digest(DEPENDENT_PRODUCT)},
-            {"key":"blueprints/category","path":"blueprints/category.toml","required":true,"sha256":digest(CATEGORY_BLUEPRINT)}
+            {"key":"blueprints/product","path":"blueprints/product.yaml","required":true,"sha256":digest(DEPENDENT_PRODUCT)},
+            {"key":"blueprints/category","path":"blueprints/category.yaml","required":true,"sha256":digest(CATEGORY_BLUEPRINT)}
         ]}
     }))
     .unwrap();
@@ -233,8 +227,8 @@ target_blueprint = "blueprints/category"
     {
         let mut tar = tar::Builder::new(&mut tar_bytes);
         append_file(&mut tar, "solution-pack.json", &manifest);
-        append_file(&mut tar, "blueprints/product.toml", DEPENDENT_PRODUCT);
-        append_file(&mut tar, "blueprints/category.toml", CATEGORY_BLUEPRINT);
+        append_file(&mut tar, "blueprints/product.yaml", DEPENDENT_PRODUCT);
+        append_file(&mut tar, "blueprints/category.yaml", CATEGORY_BLUEPRINT);
         tar.finish().unwrap();
     }
     zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
@@ -272,7 +266,7 @@ fn archive_with_all_checks() -> Vec<u8> {
         "description":"All informational check predicates",
         "attricat":{"host_api":"^1.0"},
         "resources":{
-            "blueprints":[{"key":"blueprints/product","path":"blueprints/product.toml","required":true,"sha256":digest(PRODUCT_BLUEPRINT)}],
+            "blueprints":[{"key":"blueprints/product","path":"blueprints/product.yaml","required":true,"sha256":digest(PRODUCT_BLUEPRINT)}],
             "workspace_settings":[
                 {"key":"workspace/explore-navigation","path":"workspace/explore-navigation.json","required":true,"sha256":digest(&navigation)},
                 {"key":"workspace/extension-layout","path":"workspace/extension-layout.json","required":true,"sha256":digest(&layout)}
@@ -285,7 +279,7 @@ fn archive_with_all_checks() -> Vec<u8> {
     {
         let mut tar = tar::Builder::new(&mut tar_bytes);
         append_file(&mut tar, "solution-pack.json", &manifest);
-        append_file(&mut tar, "blueprints/product.toml", PRODUCT_BLUEPRINT);
+        append_file(&mut tar, "blueprints/product.yaml", PRODUCT_BLUEPRINT);
         append_file(&mut tar, "workspace/explore-navigation.json", &navigation);
         append_file(&mut tar, "workspace/extension-layout.json", &layout);
         append_file(&mut tar, "extensions/layout.json", TEMPLATE);
@@ -303,14 +297,14 @@ fn archive_with_checklist(checklist: &[u8]) -> Vec<u8> {
         "version":"1.0.0",
         "description":"Checklist boundary",
         "attricat":{"host_api":"^1.0"},
-        "resources":{"blueprints":[{"key":"blueprints/product","path":"blueprints/product.toml","required":true,"sha256":digest(PRODUCT_BLUEPRINT)}]},
+        "resources":{"blueprints":[{"key":"blueprints/product","path":"blueprints/product.yaml","required":true,"sha256":digest(PRODUCT_BLUEPRINT)}]},
         "documentation":{"setup_checklist":{"path":"setup/checklist.json","sha256":digest(checklist)}}
     })).unwrap();
     let mut tar_bytes = Vec::new();
     {
         let mut tar = tar::Builder::new(&mut tar_bytes);
         append_file(&mut tar, "solution-pack.json", &manifest);
-        append_file(&mut tar, "blueprints/product.toml", PRODUCT_BLUEPRINT);
+        append_file(&mut tar, "blueprints/product.yaml", PRODUCT_BLUEPRINT);
         append_file(&mut tar, "setup/checklist.json", checklist);
         tar.finish().unwrap();
     }
@@ -329,7 +323,7 @@ fn archive_with_extension_requirement(required: bool) -> Vec<u8> {
         "resources": {
             "blueprints": [{
                 "key": "blueprints/product",
-                "path": "blueprints/product.toml",
+                "path": "blueprints/product.yaml",
                 "required": true,
                 "sha256": digest(PRODUCT_BLUEPRINT)
             }]
@@ -350,7 +344,7 @@ fn archive_with_extension_requirement(required: bool) -> Vec<u8> {
     {
         let mut tar = tar::Builder::new(&mut tar_bytes);
         append_file(&mut tar, "solution-pack.json", &manifest);
-        append_file(&mut tar, "blueprints/product.toml", PRODUCT_BLUEPRINT);
+        append_file(&mut tar, "blueprints/product.yaml", PRODUCT_BLUEPRINT);
         append_file(&mut tar, "extensions/shopify.json", TEMPLATE);
         tar.finish().unwrap();
     }
@@ -358,22 +352,22 @@ fn archive_with_extension_requirement(required: bool) -> Vec<u8> {
 }
 
 fn archive_with_blueprint_extension_layout() -> Vec<u8> {
-    let blueprint = PRODUCT_BLUEPRINT
-        .iter()
-        .copied()
-        .chain(
-            br#"
-[views.extension_layout]
-type = "extension_layout"
-version = 1
-[views.extension_layout.outlets.record_action]
-order = ["acme.layout:action"]
-hidden = []
-"#
-            .iter()
-            .copied(),
+    let blueprint = std::str::from_utf8(PRODUCT_BLUEPRINT)
+        .unwrap()
+        .replacen(
+            "views:\n",
+            r#"views:
+  extension_layout:
+    type: extension_layout
+    version: 1
+    outlets:
+      record_action:
+        order: ['acme.layout:action']
+        hidden: []
+"#,
+            1,
         )
-        .collect::<Vec<_>>();
+        .into_bytes();
     let manifest = serde_json::to_vec(&json!({
         "manifest_version": 1,
         "id": "attricat.blueprint-layout",
@@ -384,7 +378,7 @@ hidden = []
         "resources": {
             "blueprints": [{
                 "key": "blueprints/product",
-                "path": "blueprints/product.toml",
+                "path": "blueprints/product.yaml",
                 "required": true,
                 "sha256": digest(&blueprint)
             }]
@@ -401,7 +395,7 @@ hidden = []
     {
         let mut tar = tar::Builder::new(&mut tar_bytes);
         append_file(&mut tar, "solution-pack.json", &manifest);
-        append_file(&mut tar, "blueprints/product.toml", &blueprint);
+        append_file(&mut tar, "blueprints/product.yaml", &blueprint);
         tar.finish().unwrap();
     }
     zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
@@ -496,7 +490,7 @@ fn archive_with_both_workspace_settings(extension_layout_first: bool) -> Vec<u8>
         "resources": {
             "blueprints": [{
                 "key": "blueprints/product",
-                "path": "blueprints/product.toml",
+                "path": "blueprints/product.yaml",
                 "required": true,
                 "sha256": digest(PRODUCT_BLUEPRINT)
             }],
@@ -514,7 +508,7 @@ fn archive_with_both_workspace_settings(extension_layout_first: bool) -> Vec<u8>
     {
         let mut tar = tar::Builder::new(&mut tar_bytes);
         append_file(&mut tar, "solution-pack.json", &manifest);
-        append_file(&mut tar, "blueprints/product.toml", PRODUCT_BLUEPRINT);
+        append_file(&mut tar, "blueprints/product.yaml", PRODUCT_BLUEPRINT);
         append_file(&mut tar, "workspace/explore-navigation.json", &navigation);
         append_file(&mut tar, "workspace/extension-layout.json", &layout);
         tar.finish().unwrap();
@@ -546,7 +540,7 @@ fn archive_with_explore_navigation_roles(role_codes: &[&str]) -> Vec<u8> {
         "resources": {
             "blueprints": [{
                 "key": "blueprints/product",
-                "path": "blueprints/product.toml",
+                "path": "blueprints/product.yaml",
                 "required": true,
                 "sha256": digest(PRODUCT_BLUEPRINT)
             }],
@@ -563,7 +557,7 @@ fn archive_with_explore_navigation_roles(role_codes: &[&str]) -> Vec<u8> {
     {
         let mut tar = tar::Builder::new(&mut tar_bytes);
         append_file(&mut tar, "solution-pack.json", &manifest);
-        append_file(&mut tar, "blueprints/product.toml", PRODUCT_BLUEPRINT);
+        append_file(&mut tar, "blueprints/product.yaml", PRODUCT_BLUEPRINT);
         append_file(&mut tar, "workspace/explore-navigation.json", &navigation);
         tar.finish().unwrap();
     }
@@ -588,7 +582,7 @@ fn release_archive(pack_id: &str, version: &str, blueprints: &[(&str, &[u8])]) -
         .map(|(key, definition)| {
             json!({
                 "key": key,
-                "path": format!("{key}.toml"),
+                "path": format!("{key}.yaml"),
                 "required": true,
                 "sha256": digest(definition),
             })
@@ -609,7 +603,7 @@ fn release_archive(pack_id: &str, version: &str, blueprints: &[(&str, &[u8])]) -
         let mut tar = tar::Builder::new(&mut tar_bytes);
         append_file(&mut tar, "solution-pack.json", &manifest);
         for (key, definition) in blueprints {
-            append_file(&mut tar, &format!("{key}.toml"), definition);
+            append_file(&mut tar, &format!("{key}.yaml"), definition);
         }
         tar.finish().unwrap();
     }
@@ -1118,20 +1112,20 @@ async fn inspection_requires_browser_session_csrf(pool: PgPool) {
 #[sqlx::test(migrator = "api::MIGRATOR")]
 async fn sample_matcher_rejects_an_omitted_effective_default(pool: PgPool) {
     const BLUEPRINT: &[u8] = br#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[[attributes]]
-code = "name"
-value_type = "string"
-[[attributes]]
-code = "contact"
-value_type = "string"
-default_value = "Jane@example.com"
+format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: contact
+    value_type: string
+    default_value: 'Jane@example.com'
 "#;
     let (base_url, server) = start_server(pool).await;
     let response = inspect(
@@ -1172,7 +1166,7 @@ async fn matcher_substrings_cover_explicit_defaulted_and_encoded_values(pool: Pg
         for candidate in variants {
             let default_json = serde_json::to_string(&candidate).unwrap();
             let blueprint = format!(
-                "format_version = 1\ncode = \"product\"\nname = \"Product\"\nkind = \"record\"\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"contact\"]\n[[attributes]]\ncode = \"contact\"\nvalue_type = \"string\"\ndefault_value = {default_json}\n"
+                "format_version: 1\ncode: product\nname: Product\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [contact]\nattributes:\n  - code: contact\n    value_type: string\n    default_value: {default_json}\n"
             );
             let omitted = br#"{"format_version":1,"kind":"solution_pack_sample_data","classification":"synthetic","records":[{"key":"sample-records/item","blueprint":"blueprints/product","facts":[],"relationships":[]}] }"#;
             assert_eq!(
@@ -1208,17 +1202,18 @@ async fn matcher_substrings_cover_explicit_defaulted_and_encoded_values(pool: Pg
     }
 
     let prohibited_default_blueprint = br#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["contact"]
-[[attributes]]
-code = "contact"
-value_type = "string"
-default_value = "Jane@example.com"
+format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [contact]
+attributes:
+  - code: contact
+    value_type: string
+    default_value: 'Jane@example.com'
 "#;
     let safe_override = br#"{"format_version":1,"kind":"solution_pack_sample_data","classification":"synthetic","records":[{"key":"sample-records/item","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/contact","value":"Sample contact"}],"relationships":[]}]}"#;
     assert_eq!(
@@ -1255,16 +1250,17 @@ default_value = "Jane@example.com"
 #[sqlx::test(migrator = "api::MIGRATOR")]
 async fn sample_temporal_values_are_type_aware_and_strict(pool: PgPool) {
     const DATE_BLUEPRINT: &[u8] = br#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["available_on"]
-[[attributes]]
-code = "available_on"
-value_type = "date"
+format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [available_on]
+attributes:
+  - code: available_on
+    value_type: date
 "#;
     const VALID_DATE: &[u8] = br#"{"format_version":1,"kind":"solution_pack_sample_data","classification":"synthetic","records":[{"key":"sample-records/item","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/available_on","value":"2026-09-18"}],"relationships":[]}]}"#;
     let (base_url, server) = start_server(pool).await;
@@ -1294,7 +1290,7 @@ value_type = "date"
         "native-date exemption must follow strict native parsing"
     );
 
-    let time_blueprint = b"format_version = 1\ncode = \"product\"\nname = \"Product\"\nkind = \"record\"\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"temporal\"]\n[[attributes]]\ncode = \"temporal\"\nvalue_type = \"time\"\n";
+    let time_blueprint = b"format_version: 1\ncode: product\nname: Product\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [temporal]\nattributes:\n  - code: temporal\n    value_type: time\n";
     let valid_time = serde_json::to_vec(&json!({
         "format_version":1,"kind":"solution_pack_sample_data","classification":"synthetic",
         "records":[{"key":"sample-records/item","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/temporal","value":{"time":"12:34:56","time_zone":"America/New_York"}}],"relationships":[]}]
@@ -1378,7 +1374,7 @@ value_type = "date"
         ("datetime", "not-a-datetime"),
     ] {
         let blueprint = format!(
-            "format_version = 1\ncode = \"product\"\nname = \"Product\"\nkind = \"record\"\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"temporal\"]\n[[attributes]]\ncode = \"temporal\"\nvalue_type = \"{value_type}\"\n"
+            "format_version: 1\ncode: product\nname: Product\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [temporal]\nattributes:\n  - code: temporal\n    value_type: '{value_type}'\n"
         );
         let sample = serde_json::to_vec(&json!({
             "format_version":1,
@@ -1400,12 +1396,12 @@ value_type = "date"
     }
 
     for (value_type, default_value) in [
-        ("date", "\"2026-02-30\""),
-        ("time", "{ time = \"25:00:00\", time_zone = \"UTC\" }"),
-        ("datetime", "\"not-a-datetime\""),
+        ("date", "'2026-02-30'"),
+        ("time", "{time: '25:00:00', time_zone: UTC}"),
+        ("datetime", "not-a-datetime"),
     ] {
         let blueprint = format!(
-            "format_version = 1\ncode = \"product\"\nname = \"Product\"\nkind = \"record\"\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"temporal\"]\n[[attributes]]\ncode = \"temporal\"\nvalue_type = \"{value_type}\"\ndefault_value = {default_value}\n"
+            "format_version: 1\ncode: product\nname: Product\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [temporal]\nattributes:\n  - code: temporal\n    value_type: '{value_type}'\n    default_value: {default_value}\n"
         );
         let empty = br#"{"format_version":1,"kind":"solution_pack_sample_data","classification":"synthetic","records":[{"key":"sample-records/item","blueprint":"blueprints/product","facts":[],"relationships":[]}]}"#;
         assert_eq!(
@@ -2107,19 +2103,18 @@ async fn inspection_rejects_missing_or_wrong_media_type_and_invalid_archives(poo
     );
 
     let invalid_blueprint = br#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-leaked = "SENSITIVE_MARKER"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[[attributes]]
-code = "name"
-value_type = "string"
+format_version: 1
+code: product
+name: Product
+kind: record
+leaked: SENSITIVE_MARKER
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
 "#;
     let invalid = inspect(
         &client,
@@ -2556,7 +2551,7 @@ async fn plan_creation_persists_an_audited_immutable_dry_run_without_attricat_mu
         normalized["definition"]
             .as_str()
             .unwrap()
-            .contains("code = \"ecom_product\"")
+            .contains("code: ecom_product")
     );
     let retained_archive_columns: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public' AND table_name LIKE 'solution_pack_plan%' AND data_type = 'bytea'",
@@ -2609,7 +2604,7 @@ async fn plan_validates_prefix_and_reports_existing_code_conflicts(pool: PgPool)
 
     let definition = std::str::from_utf8(PRODUCT_BLUEPRINT)
         .unwrap()
-        .replace("code = \"product\"", "code = \"ecom_product\"");
+        .replace("code: product", "code: ecom_product");
     let created = client
         .post(format!("{base_url}/blueprints"))
         .json(&json!({"definition": definition}))
@@ -2728,7 +2723,7 @@ async fn mapped_plan_digest_rejects_kind_downgrade_and_resource_row_removal(pool
     let create_payload = json!({
         "definition": std::str::from_utf8(PRODUCT_BLUEPRINT)
             .unwrap()
-            .replace("code = \"product\"", "code = \"shared_product\""),
+            .replace("code: product", "code: shared_product"),
         "version": 1,
         "publication": "publish",
         "extension_contributions": []
@@ -2867,7 +2862,7 @@ async fn explicit_exact_blueprint_mapping_reuses_without_mutation_and_revalidate
         "# administrator-authored formatting\n\n{}\n# another harmless comment\n",
         std::str::from_utf8(PRODUCT_BLUEPRINT)
             .unwrap()
-            .replace("code = \"product\"", "code = \"semantic_product\"")
+            .replace("code: product", "code: semantic_product")
     );
     let semantic_created = client
         .post(format!("{base_url}/blueprints"))
@@ -3184,7 +3179,7 @@ async fn explicit_exact_blueprint_mapping_reuses_without_mutation_and_revalidate
     let shared_id = first["mappings"][0]["target_id"].as_str().unwrap();
     let revision_definition = std::str::from_utf8(PRODUCT_BLUEPRINT)
         .unwrap()
-        .replace("code = \"product\"", "code = \"shared_product\"");
+        .replace("code: product", "code: shared_product");
     let revision = client
         .post(format!("{base_url}/blueprints/{shared_id}/versions"))
         .json(&json!({"definition":revision_definition}))
@@ -3231,7 +3226,7 @@ async fn explicit_exact_blueprint_mapping_reuses_without_mutation_and_revalidate
 
     let incompatible_source = std::str::from_utf8(PRODUCT_BLUEPRINT)
         .unwrap()
-        .replace("name = \"Product\"", "name = \"Similar Product\"");
+        .replace("name: Product", "name: Similar Product");
     let incompatible = create_plan_with_maps(
         &client,
         &base_url,
@@ -4569,7 +4564,7 @@ async fn apply_respects_publish_and_rejects_expired_blocked_and_stale_plans(pool
         .json::<Value>()
         .await
         .unwrap();
-    let created = client.post(format!("{base_url}/blueprints")).json(&json!({"definition": std::str::from_utf8(PRODUCT_BLUEPRINT).unwrap().replace("code = \"product\"", "code = \"stale_product\"")})).send().await.unwrap();
+    let created = client.post(format!("{base_url}/blueprints")).json(&json!({"definition": std::str::from_utf8(PRODUCT_BLUEPRINT).unwrap().replace("code: product", "code: stale_product")})).send().await.unwrap();
     assert_eq!(created.status(), StatusCode::CREATED);
     let response = apply_plan(&client, &base_url, stale["id"].as_str().unwrap()).await;
     assert_eq!(response.status(), StatusCode::CONFLICT);

@@ -254,7 +254,7 @@ fn validate_unique_key_attributes(
                 return Err(BlueprintError::InvalidUniqueKey {
                     key: key.code.clone(),
                     message: format!(
-                        "attribute '{code}' must be a scalar other than json, or a relationship with cardinality = \"one\""
+                        "attribute '{code}' must be a scalar other than json, or a relationship with cardinality: one"
                     ),
                 });
             }

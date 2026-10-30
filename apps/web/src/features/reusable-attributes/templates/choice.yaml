@@ -1,0 +1,17 @@
+code: size
+name: Size
+value_type: string
+
+# Offered as a filter in the Explorer.
+searchable: true
+facetable: true
+
+# The form offers these values to choose from; saving rejects any other.
+value_schema:
+  type: string
+  enum: [s, m, l]
+  # Optional labels; a value without one shows as itself.
+  x-attricat-enum-labels:
+    s: Small
+    m: Medium
+    l: Large

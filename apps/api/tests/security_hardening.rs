@@ -143,7 +143,7 @@ async fn queued_agent_runs_retain_and_enforce_the_initiating_token(pool: PgPool)
     let token = token(&owner, &base, &["agents.run", "blueprints.read"]).await;
     let limited = bearer(&token);
     let blueprint = create_blueprint(&owner, &base,
-        "format_version = 1\ncode = 'token_private'\nname = 'Private'\nkind = 'record'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'").await;
+        "format_version: 1\ncode: token_private\nname: Private\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string").await;
     let record = create_record(&owner, &base, &blueprint).await;
     let anchored = json!({"title":"Private record", "record_id":record["id"]});
     let private: Value = owner
@@ -423,7 +423,7 @@ async fn relationship_hydration_does_not_expose_unreadable_records(pool: PgPool)
     let (base, server) = start_server(pool.clone()).await;
     let owner = authenticated_client();
     let blueprint = create_blueprint(&owner, &base,
-        "format_version = 1\ncode = 'scoped_links'\nname = 'Links'\nkind = 'record'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'\n\n[[attributes]]\ncode = 'related'\nvalue_type = 'relationship'\ntarget_blueprint = 'scoped_links'").await;
+        "format_version: 1\ncode: scoped_links\nname: Links\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string\n  - code: related\n    value_type: relationship\n    target_blueprint: scoped_links").await;
     let root = create_record(&owner, &base, &blueprint).await;
     let hidden = create_record(&owner, &base, &blueprint).await;
     let visible = create_record(&owner, &base, &blueprint).await;
@@ -527,7 +527,7 @@ async fn relationship_previews_have_a_global_expansion_budget(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
     let owner = authenticated_client();
     let blueprint = create_blueprint(&owner, &base,
-        "format_version = 1\ncode = 'bounded_links'\nname = 'Links'\nkind = 'record'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'\n\n[[attributes]]\ncode = 'related'\nvalue_type = 'relationship'\ntarget_blueprint = 'bounded_links'").await;
+        "format_version: 1\ncode: bounded_links\nname: Links\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string\n  - code: related\n    value_type: relationship\n    target_blueprint: bounded_links").await;
     let root = create_record(&owner, &base, &blueprint).await;
     let root_id: Uuid = root["id"].as_str().unwrap().parse().unwrap();
     let blueprint_id: Uuid = blueprint["blueprint"]["id"]

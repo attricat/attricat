@@ -342,7 +342,7 @@ async fn validate_browse_by(
             })
             .ok_or_else(|| {
                 RepositoryError::InvalidBlueprintDefinition(format!(
-                    "views.explorer browse_by '{path}' segment '{hop}' must be a relationship of published blueprint '{target}' with a single target blueprint and cardinality = \"one\""
+                    "views.explorer browse_by '{path}' segment '{hop}' must be a relationship of published blueprint '{target}' with a single target blueprint and cardinality: one"
                 ))
             })?;
         target = segment

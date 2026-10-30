@@ -14,16 +14,17 @@ use support::*;
 
 const EXTENSION: &str = "acme.unified";
 const BLUEPRINT: &str = r#"
-format_version = 1
-code = "unified_item"
-name = "Unified item"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-[[attributes]]
-code = "title"
-value_type = "string"
+format_version: 1
+code: unified_item
+name: Unified item
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
 "#;
 const PERMISSIONS: &[&str] = &[
     "attricat.read",

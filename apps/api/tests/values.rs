@@ -10,24 +10,21 @@ async fn creates_default_scalar_attribute_values(pool: PgPool) {
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "defaulted_product"
-name = "Defaulted product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-default_value = "Untitled"
-
-[[attributes]]
-code = "stock"
-value_type = "integer"
-default_value = 0
+format_version: 1
+code: defaulted_product
+name: Defaulted product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+    default_value: Untitled
+  - code: stock
+    value_type: integer
+    default_value: 0
 "#,
     )
     .await;
@@ -61,19 +58,18 @@ async fn create_values_override_default_attribute_values(pool: PgPool) {
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "overridden_default_product"
-name = "Overridden default product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-default_value = "Untitled"
+format_version: 1
+code: overridden_default_product
+name: Overridden default product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+    default_value: Untitled
 "#,
     )
     .await;
@@ -131,7 +127,7 @@ async fn paginates_record_changes_and_value_history_without_breaking_legacy_read
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
     let blueprint = create_blueprint(&client, &base_url,
-        "format_version = 1\ncode = \"paged_history_product\"\nname = \"Paged product\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"").await;
+        "format_version: 1\ncode: paged_history_product\nname: Paged product\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string").await;
     let record = create_record(&client, &base_url, &blueprint).await;
     let id = record["id"].as_str().unwrap();
     for title in ["first", "second", "third", "fourth"] {
@@ -213,7 +209,7 @@ async fn restores_a_scalar_value_from_synchronous_history(pool: PgPool) {
     let blueprint = create_blueprint(
         &client,
         &base_url,
-        "format_version = 1\ncode = \"restorable_product\"\nname = \"Restorable product\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"",
+        "format_version: 1\ncode: restorable_product\nname: Restorable product\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string",
     )
     .await;
     let record = create_record(&client, &base_url, &blueprint).await;
@@ -290,42 +286,29 @@ async fn stores_typed_scalar_values_in_native_columns(pool: PgPool) {
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "measurement"
-name = "Measurement"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[[attributes]]
-code = "name"
-value_type = "string"
-
-[[attributes]]
-code = "price"
-value_type = "number"
-
-[[attributes]]
-code = "quantity"
-value_type = "integer"
-
-[[attributes]]
-code = "available"
-value_type = "boolean"
-
-[[attributes]]
-code = "available_on"
-value_type = "date"
-
-[[attributes]]
-code = "released_at"
-value_type = "datetime"
-
-[[attributes]]
-code = "cutoff"
-value_type = "time"
+format_version: 1
+code: measurement
+name: Measurement
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: price
+    value_type: number
+  - code: quantity
+    value_type: integer
+  - code: available
+    value_type: boolean
+  - code: available_on
+    value_type: date
+  - code: released_at
+    value_type: datetime
+  - code: cutoff
+    value_type: time
 "#,
     )
     .await;
@@ -400,18 +383,17 @@ async fn rejects_mismatched_native_value_storage_on_read(pool: PgPool) {
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "typed_read"
-name = "Typed read"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
+format_version: 1
+code: typed_read
+name: Typed read
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
 "#,
     )
     .await;
@@ -452,19 +434,18 @@ async fn rejects_values_from_another_blueprint_version(pool: PgPool) {
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "first"
-name = "First"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-tags = ["searchable"]
+format_version: 1
+code: first
+name: First
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+    tags: [searchable]
 "#,
     )
     .await;
@@ -472,19 +453,18 @@ tags = ["searchable"]
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "second"
-name = "Second"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-tags = ["searchable"]
+format_version: 1
+code: second
+name: Second
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+    tags: [searchable]
 "#,
     )
     .await;
@@ -557,34 +537,25 @@ async fn multi_value_writes_archive_each_replaced_value_once(pool: PgPool) {
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "batched_product"
-name = "Batched product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "price"
-value_type = "number"
-
-[[attributes]]
-code = "stock"
-value_type = "integer"
-
-[[attributes]]
-code = "released_on"
-value_type = "date"
-
-[[attributes]]
-code = "available"
-value_type = "boolean"
+format_version: 1
+code: batched_product
+name: Batched product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+  - code: price
+    value_type: number
+  - code: stock
+    value_type: integer
+  - code: released_on
+    value_type: date
+  - code: available
+    value_type: boolean
 "#,
     )
     .await;

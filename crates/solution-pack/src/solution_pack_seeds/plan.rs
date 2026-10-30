@@ -351,19 +351,19 @@ impl DependentPlanInput<'_> {
     }
 }
 
-/// Visits the blueprint codes named by a TOML predicate, rewriting it only
+/// Visits the blueprint codes named by a definition predicate, rewriting it only
 /// when a code changes so the authored definition is otherwise preserved.
-pub(crate) fn visit_toml_predicate_blueprint_codes(
-    predicate: &mut toml::Value,
+pub(crate) fn visit_definition_predicate_blueprint_codes(
+    predicate: &mut Value,
     visit: &mut dyn FnMut(&mut String) -> Result<(), SolutionPackError>,
 ) -> Result<(), SolutionPackError> {
     let original = serde_json::to_value(&*predicate)
-        .map_err(|_| SolutionPackError::Invalid("predicate is not valid TOML".into()))?;
+        .map_err(|_| SolutionPackError::Invalid("predicate is not valid YAML".into()))?;
     let mut rewritten = original.clone();
     attricat_validation::predicate::visit_predicate_blueprint_codes(&mut rewritten, visit)?;
     if rewritten != original {
-        *predicate = toml::Value::try_from(rewritten)
-            .map_err(|_| SolutionPackError::Invalid("predicate is not valid TOML".into()))?;
+        *predicate = serde_json::to_value(rewritten)
+            .map_err(|_| SolutionPackError::Invalid("predicate is not valid YAML".into()))?;
     }
     Ok(())
 }
@@ -389,21 +389,21 @@ fn replace_codes(
     code: &str,
     blueprints: Option<&BTreeMap<String, PlannedMapping>>,
 ) -> Result<String, SolutionPackError> {
-    let mut value: toml::Value = toml::from_str(definition)
+    let mut value: Value = attricat_yaml::from_str(definition)
         .map_err(|_| SolutionPackError::Invalid("validated definition is invalid".into()))?;
     let table = value
-        .as_table_mut()
+        .as_object_mut()
         .expect("validated definition is a table");
-    table.insert("code".into(), toml::Value::String(code.to_owned()));
+    table.insert("code".into(), Value::String(code.to_owned()));
     if let Some(blueprints) = blueprints
         && let Some(predicate) = table.get_mut("predicate")
     {
-        visit_toml_predicate_blueprint_codes(predicate, &mut |code| {
+        visit_definition_predicate_blueprint_codes(predicate, &mut |code| {
             *code = physical_blueprint_code(blueprints, code)?;
             Ok(())
         })?;
     }
-    toml::to_string(&value)
+    attricat_yaml::to_string(&value)
         .map_err(|_| SolutionPackError::Invalid("validated definition is invalid".into()))
 }
 

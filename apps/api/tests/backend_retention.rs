@@ -14,17 +14,18 @@ async fn history_cleanup_is_batched_concurrent_and_preserves_current_and_recent_
         &owner,
         &base,
         r#"
-format_version = 1
-code = "retention_test"
-name = "Retention"
-kind = "record"
-[[attributes]]
-code = "title"
-value_type = "string"
-default_value = "Current"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
+format_version: 1
+code: retention_test
+name: Retention
+kind: record
+attributes:
+  - code: title
+    value_type: string
+    default_value: Current
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
 "#,
     )
     .await;

@@ -14,7 +14,7 @@ pub(crate) enum ConnectionCommand {
     /// Create a connection to an external system (requires `extensions.manage`).
     Create {
         extension_id: String,
-        /// Name connector jobs use with `connection = "…"`.
+        /// Name connector jobs use with `connection: …`.
         #[arg(long)]
         connection: String,
         /// Connection kind the extension declares.

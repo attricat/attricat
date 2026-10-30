@@ -16,30 +16,29 @@ use api::{
 use axum::{Router, routing::post};
 use support::*;
 
-const PRODUCT: &str = r#"format_version = 1
-code = 'bulk_product'
-name = 'Product'
-kind = 'record'
-[views.dropdown_option]
-type = 'dropdown_option'
-fields = ['title']
-[[attributes]]
-code = 'title'
-value_type = 'string'
-[[attributes]]
-code = 'brand'
-name = 'Brand'
-value_type = 'string'
-[[attributes]]
-code = 'season'
-name = 'Season'
-value_type = 'string'
-[[attributes]]
-code = 'state'
-value_type = 'string'
-value_schema = '''{"type":"string","enum":["draft","live"],"x-attricat-status":{"version":1,
-  "options":[{"code":"draft","label":"Draft"},{"code":"live","label":"Live"}],
-  "transitions":[{"from":null,"to":"draft"},{"from":"draft","to":"live"}]}}'''
+const PRODUCT: &str = r#"format_version: 1
+code: bulk_product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+  - code: brand
+    name: Brand
+    value_type: string
+  - code: season
+    name: Season
+    value_type: string
+  - code: state
+    value_type: string
+    value_schema: |-
+      {"type":"string","enum":["draft","live"],"x-attricat-status":{"version":1,
+        "options":[{"code":"draft","label":"Draft"},{"code":"live","label":"Live"}],
+        "transitions":[{"from":null,"to":"draft"},{"from":"draft","to":"live"}]}}
 "#;
 
 const EDITOR_ROLE_ID: &str = "00000000-0000-4000-8000-000000000103";

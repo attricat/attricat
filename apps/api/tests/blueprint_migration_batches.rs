@@ -10,18 +10,17 @@ use serde_json::json;
 use sqlx::PgPool;
 
 const DEFINITION: &str = r#"
-format_version = 1
-code = "batch_product"
-name = "Batch product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
+format_version: 1
+code: batch_product
+name: Batch product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
 "#;
 
 async fn batch_with_two_old_records(
@@ -106,7 +105,7 @@ async fn safe_batch_uses_the_nearest_published_ancestor_when_drafts_intervene(po
             source.blueprint.id,
             CreateBlueprint {
                 definition: format!(
-                    "{DEFINITION}\n# leave this revision as a draft\n\n[[attributes]]\ncode = \"draft_only\"\nvalue_type = \"string\"\n"
+                    "{DEFINITION}\n# leave this revision as a draft\n  - code: draft_only\n    value_type: string\n"
                 ),
             },
         )
@@ -148,9 +147,7 @@ async fn safe_batch_rejects_an_unsafe_older_source_revision(pool: PgPool) {
     );
     let source = repository
         .create_blueprint(CreateBlueprint {
-            definition: format!(
-                "{DEFINITION}\n[[attributes]]\ncode = \"legacy\"\nvalue_type = \"string\"\n"
-            ),
+            definition: format!("{DEFINITION}  - code: legacy\n    value_type: string\n"),
         })
         .await
         .unwrap();
@@ -511,9 +508,7 @@ async fn safe_batch_archives_explicitly_approved_removed_values(pool: PgPool) {
     );
     let source = repository
         .create_blueprint(CreateBlueprint {
-            definition: format!(
-                "{DEFINITION}\n[[attributes]]\ncode = \"obsolete\"\nvalue_type = \"string\"\n"
-            ),
+            definition: format!("{DEFINITION}  - code: obsolete\n    value_type: string\n"),
         })
         .await
         .unwrap();

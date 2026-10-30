@@ -10,22 +10,21 @@ async fn devtools_search_timings_are_aggregate_and_sanitized(pool: PgPool) {
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "timing_product"
-name = "Timing product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[views.table]
-type = "table"
-columns = [{ field = "title", label = "Title" }]
-
-[[attributes]]
-code = "title"
-value_type = "string"
+format_version: 1
+code: timing_product
+name: Timing product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+  table:
+    type: table
+    columns:
+      - {field: title, label: Title}
+attributes:
+  - code: title
+    value_type: string
 "#,
     )
     .await;

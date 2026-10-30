@@ -1560,9 +1560,10 @@ mod tests {
         let stored = json!({"type": "required", "attribute_code": "title"});
         let parsed = predicate(stored.clone());
         assert_eq!(serde_json::to_value(&parsed).unwrap(), stored);
-        let toml: Predicate =
-            toml::from_str("type='stale'\nattribute_code='title'\nmax_age_seconds=60").unwrap();
-        assert!(matches!(toml, Predicate::Stale { .. }));
+        let yaml: Predicate =
+            attricat_yaml::from_str("type: stale\nattribute_code: title\nmax_age_seconds: 60")
+                .unwrap();
+        assert!(matches!(yaml, Predicate::Stale { .. }));
     }
 
     #[test]

@@ -196,7 +196,7 @@
       "additionalProperties": false,
       "properties": {
         "alias": {
-          "description": "Local name used by `from = \"<alias>.<attribute>\"` selections.",
+          "description": "Local name used by `from: <alias>.<attribute>` selections.",
           "pattern": "^[A-Za-z0-9_-]+$",
           "type": "string"
         },
@@ -260,7 +260,7 @@
       "description": "An attribute declared by the blueprint or selected from an include.",
       "properties": {
         "acyclic": {
-          "description": "Reject relationship writes that would form a cycle through this\nself-referencing attribute. Requires `context_editable = \"default\"`.",
+          "description": "Reject relationship writes that would form a cycle through this\nself-referencing attribute. Requires `context_editable: default`.",
           "type": [
             "boolean",
             "null"
@@ -490,7 +490,7 @@
           ]
         },
         "tree": {
-          "description": "An acyclic hierarchy in which every record has at most one target\n(parent). Implies `acyclic` and `cardinality = \"one\"`.",
+          "description": "An acyclic hierarchy in which every record has at most one target\n(parent). Implies `acyclic` and `cardinality: one`.",
           "type": [
             "boolean",
             "null"
@@ -533,7 +533,7 @@
     },
     "RawGeneratedValue": {
       "additionalProperties": false,
-      "description": "`generated = { … }` on an attribute.",
+      "description": "`generated: { … }` on an attribute.",
       "properties": {
         "format": {
           "description": "Required on string attributes: literal text with exactly one `{n}` or\n`{n:0W}` counter token (W from 1 to 18 zero-pads), plus optional\n`{yyyy}`, `{yy}`, `{mm}` and `{dd}` date tokens. `{{` and `}}` are\nliteral braces. Integer attributes take no format.",
@@ -761,7 +761,7 @@
                 }
               ],
               "default": null,
-              "description": "Relationship field the browse rail lists until a person picks\nanother, or `false` to keep the rail closed. The field must have\na single target blueprint. A dotted path such as `model.brand`\nfollows up to three such relationships, each with\n`cardinality = \"one\"`, and lists the last one's targets."
+              "description": "Relationship field the browse rail lists until a person picks\nanother, or `false` to keep the rail closed. The field must have\na single target blueprint. A dotted path such as `model.brand`\nfollows up to three such relationships, each with\n`cardinality: one`, and lists the last one's targets."
             },
             "type": {
               "const": "explorer",

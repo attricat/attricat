@@ -12,22 +12,19 @@ async fn search_bulk_hydrates_direct_related_table_previews_without_multiplying_
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "search_projection_category"
-name = "Search projection category"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[[attributes]]
-code = "name"
-value_type = "string"
-
-[[attributes]]
-code = "sku"
-value_type = "string"
+format_version: 1
+code: search_projection_category
+name: Search projection category
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: sku
+    value_type: string
 "#,
     )
     .await;
@@ -89,22 +86,21 @@ value_type = "string"
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "search_projection_product"
-name = "Search projection product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[views.table]
-type = "table"
-columns = [{ field = "title" }]
-
-[[attributes]]
-code = "title"
-value_type = "string"
+format_version: 1
+code: search_projection_product
+name: Search projection product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+  table:
+    type: table
+    columns:
+      - {field: title}
+attributes:
+  - code: title
+    value_type: string
 "#,
     )
     .await;
@@ -113,36 +109,29 @@ value_type = "string"
     let source_v2: Value = client
         .post(format!("{base_url}/blueprints/{source_id}/versions"))
         .json(&json!({ "definition": r#"
-format_version = 1
-code = "search_projection_product"
-name = "Search projection product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[views.table]
-type = "table"
-columns = [
-  { field = "categories.name", label = "Category" },
-  { field = "categories.sku", label = "Category SKU" },
-  { field = "rank", label = "Rank" }
-]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "categories"
-value_type = "relationship"
-target_blueprint = "search_projection_category"
-cardinality = "one"
-
-[[attributes]]
-code = "rank"
-value_type = "integer"
+format_version: 1
+code: search_projection_product
+name: Search projection product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+  table:
+    type: table
+    columns:
+      - {field: categories.name, label: Category}
+      - {field: categories.sku, label: Category SKU}
+      - {field: rank, label: Rank}
+attributes:
+  - code: title
+    value_type: string
+  - code: categories
+    value_type: relationship
+    target_blueprint: search_projection_category
+    cardinality: one
+  - code: rank
+    value_type: integer
 "# }))
         .send()
         .await

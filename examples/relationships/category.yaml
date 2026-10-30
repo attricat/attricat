@@ -1,0 +1,32 @@
+format_version: 1
+code: category
+name: Category
+kind: record
+
+attributes:
+  - code: name
+    value_type: string
+
+  - code: slug
+    value_type: string
+
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+  detail:
+    type: stack
+    children:
+      - {type: heading, text: Category}
+      - {type: field, field: name}
+      - {type: field, field: slug}
+      - type: incoming_relationship_list
+        label: Products in this category
+        page_size: 10
+        relationships:
+          - {source_blueprint: product, field: categories}
+  table:
+    type: table
+    columns:
+      - {field: name}
+      - {field: slug}

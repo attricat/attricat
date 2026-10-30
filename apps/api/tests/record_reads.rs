@@ -11,18 +11,17 @@ async fn resolved_preview_includes_record_identity(pool: PgPool) {
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "category"
-name = "Category"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[[attributes]]
-code = "name"
-value_type = "string"
+format_version: 1
+code: category
+name: Category
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
 "#,
     )
     .await;
@@ -59,18 +58,17 @@ async fn incoming_relationships_are_deduplicated_and_paginated(pool: PgPool) {
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "category"
-name = "Category"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[[attributes]]
-code = "name"
-value_type = "string"
+format_version: 1
+code: category
+name: Category
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
 "#,
     )
     .await;
@@ -78,28 +76,23 @@ value_type = "string"
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "categories"
-value_type = "relationship"
-target_blueprint = "category"
-
-[[attributes]]
-code = "featured_category"
-value_type = "relationship"
-target_blueprint = "category"
+format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+  - code: categories
+    value_type: relationship
+    target_blueprint: category
+  - code: featured_category
+    value_type: relationship
+    target_blueprint: category
 "#,
     )
     .await;
@@ -229,37 +222,33 @@ async fn related_record_previews_are_workspace_scoped_across_pages_and_deletions
         .unwrap();
 
     let category_definition = r#"
-format_version = 1
-code = "previewcategory"
-name = "Preview category"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[[attributes]]
-code = "name"
-value_type = "string"
+format_version: 1
+code: previewcategory
+name: Preview category
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
 "#;
     let product_definition = r#"
-format_version = 1
-code = "previewproduct"
-name = "Preview product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[[attributes]]
-code = "name"
-value_type = "string"
-
-[[attributes]]
-code = "categories"
-value_type = "relationship"
-target_blueprint = "previewcategory"
+format_version: 1
+code: previewproduct
+name: Preview product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: categories
+    value_type: relationship
+    target_blueprint: previewcategory
 "#;
     let category = create_blueprint(&client, &base_url, category_definition).await;
     let product = create_blueprint(&client, &base_url, product_definition).await;
@@ -426,13 +415,13 @@ async fn soft_deleted_record_is_hidden_from_reads_and_relationship_previews(pool
     let category = create_blueprint(
         &client,
         &base_url,
-        "format_version = 1\ncode = \"deletablecategory\"\nname = \"Deletable category\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"name\"]\n\n[[attributes]]\ncode = \"name\"\nvalue_type = \"string\"\ntags = [\"searchable\"]",
+        "format_version: 1\ncode: deletablecategory\nname: Deletable category\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [name]\nattributes:\n  - code: name\n    value_type: string\n    tags: [searchable]",
     )
     .await;
     let product = create_blueprint(
         &client,
         &base_url,
-        "format_version = 1\ncode = \"deletableproduct\"\nname = \"Deletable product\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\ntags = [\"searchable\"]\n\n[[attributes]]\ncode = \"categories\"\nvalue_type = \"relationship\"\ntarget_blueprint = \"deletablecategory\"",
+        "format_version: 1\ncode: deletableproduct\nname: Deletable product\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string\n    tags: [searchable]\n  - code: categories\n    value_type: relationship\n    target_blueprint: deletablecategory",
     )
     .await;
     let default_context = client
@@ -514,16 +503,17 @@ async fn record_labels_name_only_live_records_the_caller_may_read(pool: PgPool) 
         &owner,
         &base_url,
         r#"
-format_version = 1
-code = "labelled_product"
-name = "Labelled product"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-[[attributes]]
-code = "title"
-value_type = "string"
+format_version: 1
+code: labelled_product
+name: Labelled product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
 "#,
     )
     .await;

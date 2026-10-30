@@ -74,28 +74,26 @@ async fn create_node_blueprint(client: &Client, base_url: &str, code: &str) -> V
         base_url,
         &format!(
             r#"
-format_version = 1
-code = "{code}"
-name = "{code}"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["needle"]
-[[attributes]]
-code = "needle"
-value_type = "string"
-[[attributes]]
-code = "link_one"
-value_type = "relationship"
-target_blueprint = "{code}"
-[[attributes]]
-code = "link_two"
-value_type = "relationship"
-target_blueprint = "{code}"
-[[attributes]]
-code = "link_three"
-value_type = "relationship"
-target_blueprint = "{code}"
+format_version: 1
+code: '{code}'
+name: '{code}'
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [needle]
+attributes:
+  - code: needle
+    value_type: string
+  - code: link_one
+    value_type: relationship
+    target_blueprint: '{code}'
+  - code: link_two
+    value_type: relationship
+    target_blueprint: '{code}'
+  - code: link_three
+    value_type: relationship
+    target_blueprint: '{code}'
 "#
         ),
     )

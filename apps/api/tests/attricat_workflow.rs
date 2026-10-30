@@ -3,7 +3,7 @@ use crate::support;
 use support::*;
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
-async fn attricat_workflow_compiles_explicit_toml_selections_and_rebuilds_preview(pool: PgPool) {
+async fn attricat_workflow_compiles_explicit_yaml_selections_and_rebuilds_preview(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
 
@@ -23,55 +23,44 @@ async fn attricat_workflow_compiles_explicit_toml_selections_and_rebuilds_previe
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "seo"
-name = "SEO metadata"
-kind = "mixin"
-
-[[attributes]]
-code = "meta_title"
-value_type = "string"
-
-[[attributes]]
-code = "meta_description"
-value_type = "string"
+format_version: 1
+code: seo
+name: SEO metadata
+kind: mixin
+attributes:
+  - code: meta_title
+    value_type: string
+  - code: meta_description
+    value_type: string
 "#,
     )
     .await;
     assert_eq!(seo["blueprint"]["kind"], "mixin");
 
     let product_definition = r#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[includes]]
-alias = "seo"
-code = "seo"
-version = 1
-
-[[attributes]]
-code = "title"
-value_type = "string"
-tags = ["searchable"]
-
-[[attributes]]
-code = "meta_title"
-from = "seo.meta_title"
-
-[[attributes]]
-code = "related_products"
-value_type = "relationship"
-
-[[attributes]]
-code = "stock"
-value_type = "integer"
-context_editable = "default"
+format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+includes:
+  - alias: seo
+    code: seo
+    version: 1
+attributes:
+  - code: title
+    value_type: string
+    tags: [searchable]
+  - code: meta_title
+    from: seo.meta_title
+  - code: related_products
+    value_type: relationship
+  - code: stock
+    value_type: integer
+    context_editable: default
 "#;
     let blueprint = create_blueprint(&client, &base_url, product_definition).await;
     let blueprint_id: Uuid = blueprint["blueprint"]["id"]
@@ -135,19 +124,18 @@ context_editable = "default"
         .post(format!("{base_url}/blueprints/{blueprint_id}/versions"))
         .json(&json!({
             "definition": r#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["sku"]
-
-[[attributes]]
-code = "sku"
-value_type = "string"
-tags = ["searchable"]
+format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [sku]
+attributes:
+  - code: sku
+    value_type: string
+    tags: [searchable]
 "#
         }))
         .send()

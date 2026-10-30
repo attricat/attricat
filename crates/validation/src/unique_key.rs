@@ -1,10 +1,10 @@
-//! Normalization of business-key values, shared by blueprint `[[unique_keys]]`
+//! Normalization of business-key values, shared by blueprint `unique_keys`
 //! and the rules-only `unique` predicate so both decide "same value" alike.
 use attricat_domain::value_type::ValueType;
 use serde_json::Value;
 
 /// Whether the `unique` predicate compares strings case-sensitively. It uses
-/// the `[[unique_keys]]` default (`case_sensitive = false`).
+/// the `unique_keys` default (`case_sensitive: false`).
 pub const UNIQUE_PREDICATE_CASE_SENSITIVE: bool = false;
 
 /// Normalizes one key component, or returns `None` when the value counts as

@@ -7,31 +7,31 @@ use support::*;
 use tokio::time::sleep;
 
 const PRODUCT: &str = r#"
-format_version = 1
-code = "rule_task_product"
-name = "Rule task product"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-[[attributes]]
-code = "title"
-value_type = "string"
-default_value = "untitled"
-[[attributes]]
-code = "summary"
-value_type = "string"
+format_version: 1
+code: rule_task_product
+name: Rule task product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+    default_value: untitled
+  - code: summary
+    value_type: string
 "#;
 
-const RULE: &str = r#"format_version = 1
-code = "required_title"
-name = "Title is required"
-severity = "error"
-[[triggers]]
-type = "manual"
-[predicate]
-type = "required"
-attribute_code = "summary"
+const RULE: &str = r#"format_version: 1
+code: required_title
+name: Title is required
+severity: error
+triggers:
+  - type: manual
+predicate:
+  type: required
+  attribute_code: summary
 "#;
 
 async fn setup_rule(pool: &PgPool) -> (String, tokio::task::JoinHandle<()>, Uuid, Value) {
@@ -145,7 +145,7 @@ async fn saving_a_rule_adds_its_current_revision_to_the_changelog(pool: PgPool) 
     .await;
     assert_eq!(unchanged["error"]["details"], json!({ "version": 1 }));
 
-    let warning = RULE.replace("severity = \"error\"", "severity = \"warning\"");
+    let warning = RULE.replace("severity: error", "severity: warning");
     let changed = expect_status(save(&warning).await.unwrap(), StatusCode::OK).await;
     assert_eq!(
         (changed["version"].clone(), changed["enabled"].clone()),
@@ -246,10 +246,7 @@ async fn rules_follow_blueprint_revisions_and_skip_those_they_do_not_fit(pool: P
         &client,
         &base_url,
         &first,
-        &PRODUCT.replace(
-            "[[attributes]]\ncode = \"summary\"\nvalue_type = \"string\"\n",
-            "",
-        ),
+        &PRODUCT.replace("  - code: summary\n    value_type: string\n", ""),
     )
     .await;
     assert_eq!(without_summary["blueprint"]["version"], 3);
@@ -352,7 +349,7 @@ async fn rules_follow_blueprint_revisions_and_skip_those_they_do_not_fit(pool: P
     );
     let title_rule = RULE
         .replace("required_title", "titled")
-        .replace("\"summary\"", "\"title\"");
+        .replace("attribute_code: summary", "attribute_code: title");
     expect_status(
         client
             .post(format!("{base_url}/rules/validate"))
@@ -375,7 +372,7 @@ async fn enforcing_changes_are_dry_run_before_they_are_saved(pool: PgPool) {
     let client = authenticated_client();
     let repository = AttricatRepository::new(pool.clone(), BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
     create_record(&client, &base_url, &blueprint).await;
-    let enforcing = format!("{RULE}[enforcement]\non_save = true\n");
+    let enforcing = format!("{RULE}enforcement:\n  on_save: true\n");
     let save = |accept: bool| {
         client
             .put(format!("{base_url}/rules/{rule_id}"))
@@ -755,7 +752,7 @@ async fn validate_checks_the_definition_against_its_blueprint(pool: PgPool) {
     let compiled: Value = valid.json().await.unwrap();
     assert_eq!(compiled["code"], "another_rule");
 
-    let unknown = validate(RULE.replace("\"summary\"", "\"missing\""))
+    let unknown = validate(RULE.replace("attribute_code: summary", "attribute_code: missing"))
         .await
         .unwrap();
     assert_eq!(unknown.status(), 422);

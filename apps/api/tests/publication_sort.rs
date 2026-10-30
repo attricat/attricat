@@ -9,16 +9,17 @@ async fn publication_sort_uses_selected_channel_and_keyset_pages(pool: PgPool) {
     let blueprint = create_blueprint(
         &client,
         &base_url,
-        r#"format_version = 1
-code = "publication_sort_product"
-name = "Publication sort product"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-[[attributes]]
-code = "title"
-value_type = "string""#,
+        r#"format_version: 1
+code: publication_sort_product
+name: Publication sort product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string"#,
     )
     .await;
     let first = create_record(&client, &base_url, &blueprint).await;

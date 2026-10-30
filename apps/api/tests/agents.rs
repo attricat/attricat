@@ -30,7 +30,7 @@ async fn agent_blueprint_reads_list_summaries_and_fetch_one_definition(pool: PgP
     let repository = AttricatRepository::system(pool).for_workspace(workspace);
     let definition = |attribute: &str| {
         format!(
-            "format_version = 1\ncode = \"agent_desk\"\nname = \"Desk\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"{attribute}\"]\n\n[[attributes]]\ncode = \"{attribute}\"\nvalue_type = \"string\""
+            "format_version: 1\ncode: agent_desk\nname: Desk\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: ['{attribute}']\nattributes:\n  - code: '{attribute}'\n    value_type: string"
         )
     };
     let created = execute_mutation(
@@ -149,7 +149,7 @@ async fn approved_record_edits_apply_to_the_proposed_state_and_name_their_target
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     let blueprint = create_blueprint(&client, &base_url,
-        "format_version = 1\ncode = \"pinned_desk\"\nname = \"Pinned desk\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\n\n[[attributes]]\ncode = \"related\"\nvalue_type = \"relationship\"\ntarget_blueprint = \"pinned_desk\"").await;
+        "format_version: 1\ncode: pinned_desk\nname: Pinned desk\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string\n  - code: related\n    value_type: relationship\n    target_blueprint: pinned_desk").await;
     let record = create_record(&client, &base_url, &blueprint).await;
     let record_id = record["id"].as_str().unwrap().to_owned();
     let other = create_record(&client, &base_url, &blueprint).await;
@@ -280,7 +280,7 @@ async fn approved_record_edits_apply_to_the_proposed_state_and_name_their_target
     let blueprint_id = blueprint["blueprint"]["id"].as_str().unwrap();
     let revision = execute_mutation(&repository, actor, "create_blueprint_revision", json!({
         "blueprint_id": blueprint_id,
-        "definition": "format_version = 1\ncode = \"pinned_desk\"\nname = \"Pinned desk\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\n\n[[attributes]]\ncode = \"related\"\nvalue_type = \"relationship\"\ntarget_blueprint = \"pinned_desk\"\n\n[[attributes]]\ncode = \"finish\"\nvalue_type = \"string\""
+        "definition": "format_version: 1\ncode: pinned_desk\nname: Pinned desk\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string\n  - code: related\n    value_type: relationship\n    target_blueprint: pinned_desk\n  - code: finish\n    value_type: string"
     }))
     .await
     .unwrap();
@@ -334,9 +334,9 @@ async fn agent_reads_incoming_links_hierarchies_labels_and_reusable_attributes(p
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     create_blueprint(&client, &base_url,
-        "format_version = 1\ncode = \"linked_part\"\nname = \"Linked part\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\n\n[[attributes]]\ncode = \"parent\"\nvalue_type = \"relationship\"\ntarget_blueprint = \"linked_part\"\ncardinality = \"one\"").await;
+        "format_version: 1\ncode: linked_part\nname: Linked part\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string\n  - code: parent\n    value_type: relationship\n    target_blueprint: linked_part\n    cardinality: one").await;
     create_blueprint(&client, &base_url,
-        "format_version = 1\ncode = \"linked_order\"\nname = \"Linked order\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\n\n[[attributes]]\ncode = \"parts\"\nvalue_type = \"relationship\"\ntarget_blueprint = \"linked_part\"").await;
+        "format_version: 1\ncode: linked_order\nname: Linked order\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string\n  - code: parts\n    value_type: relationship\n    target_blueprint: linked_part").await;
     let create = |blueprint: &'static str,
                   title: &'static str,
                   links: Vec<(&'static str, Value)>| {
@@ -447,7 +447,7 @@ async fn agent_reads_incoming_links_hierarchies_labels_and_reusable_attributes(p
 
     let draft: Value = client
         .post(format!("{base_url}/reusable-attributes"))
-        .json(&json!({"definition": "code = \"weight\"\nname = \"Weight\"\nvalue_type = \"number\"\n"}))
+        .json(&json!({"definition": "code: weight\nname: Weight\nvalue_type: number\n"}))
         .send()
         .await
         .unwrap()
@@ -493,7 +493,7 @@ async fn agent_duplicates_comments_validates_and_reviews_attricat_health(pool: P
     let client = authenticated_client();
     let definition = |extra: &str| {
         format!(
-            "format_version = 1\ncode = \"noted_item\"\nname = \"Noted item\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"{extra}"
+            "format_version: 1\ncode: noted_item\nname: Noted item\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string\n{extra}"
         )
     };
     let blueprint = create_blueprint(&client, &base_url, &definition("")).await;
@@ -575,7 +575,7 @@ async fn agent_duplicates_comments_validates_and_reviews_attricat_health(pool: P
     assert_eq!(rest["items"][0]["body"], "First note");
     assert!(rest["next_before"].is_null());
 
-    let rule = "format_version = 1\ncode = \"noted_title\"\nname = \"Noted title\"\nseverity = \"warning\"\n[[triggers]]\ntype = \"manual\"\n[predicate]\ntype = \"required\"\nattribute_code = \"title\"";
+    let rule = "format_version: 1\ncode: noted_title\nname: Noted title\nseverity: warning\ntriggers:\n  - type: manual\npredicate:\n  type: required\n  attribute_code: title";
     assert_eq!(
         read("validate_rule_definition", json!({"definition": rule}))
             .await
@@ -585,14 +585,14 @@ async fn agent_duplicates_comments_validates_and_reviews_attricat_health(pool: P
     assert!(matches!(
         read(
             "validate_rule_definition",
-            json!({"definition": "format_version = 1"})
+            json!({"definition": "format_version: 1"})
         )
         .await,
         Err(ToolError::Repository(
             RepositoryError::InvalidRuleDefinition(_)
         ))
     ));
-    let workflow = "format_version = 2\ncode = \"noted_workflow\"\nname = \"Noted workflow\"\n[[triggers]]\ntype = \"manual\"\n[[actions]]\ntype = \"system_tags_add\"\ntags = [\"checked\"]";
+    let workflow = "format_version: 2\ncode: noted_workflow\nname: Noted workflow\ntriggers:\n  - type: manual\nactions:\n  - type: system_tags_add\n    tags: [checked]";
     assert_eq!(
         read(
             "validate_workflow_definition",
@@ -605,7 +605,7 @@ async fn agent_duplicates_comments_validates_and_reviews_attricat_health(pool: P
     assert!(matches!(
         read(
             "validate_workflow_definition",
-            json!({"definition": "code = 'x'"})
+            json!({"definition": "code: x"})
         )
         .await,
         Err(ToolError::Repository(
@@ -647,7 +647,7 @@ async fn agent_duplicates_comments_validates_and_reviews_attricat_health(pool: P
     // migration would drop.
     let revision = execute_mutation(&repository, actor, "create_blueprint_revision", json!({
         "blueprint_id": blueprint_id,
-        "definition": "format_version = 1\ncode = \"noted_item\"\nname = \"Noted item\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"label\"]\n\n[[attributes]]\ncode = \"label\"\nvalue_type = \"string\"",
+        "definition": "format_version: 1\ncode: noted_item\nname: Noted item\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [label]\nattributes:\n  - code: label\n    value_type: string",
     }))
     .await
     .unwrap();
@@ -695,7 +695,7 @@ async fn agent_annotation_and_context_edits_use_attricat_validation(pool: PgPool
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     let blueprint = create_blueprint(&client, &base_url,
-        "format_version = 1\ncode = \"annotation_product\"\nname = \"Annotation product\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"").await;
+        "format_version: 1\ncode: annotation_product\nname: Annotation product\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string").await;
     let record = create_record(&client, &base_url, &blueprint).await;
     let record_id = record["id"].as_str().unwrap();
     let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
@@ -775,12 +775,12 @@ async fn agent_operational_diagnostics_are_bounded_and_omit_internal_payloads(po
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     let blueprint = create_blueprint(&client, &base_url,
-        "format_version = 1\ncode = \"diagnostic_product\"\nname = \"Diagnostic product\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"").await;
+        "format_version: 1\ncode: diagnostic_product\nname: Diagnostic product\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string").await;
     let record = create_record(&client, &base_url, &blueprint).await;
     let record_id = record["id"].as_str().unwrap();
     let rule: Value = client.post(format!("{base_url}/rules"))
         .json(&json!({"blueprint_id":blueprint["blueprint"]["id"],"context_id":null,
-            "definition":"format_version = 1\ncode = \"diagnostic_rule\"\nname = \"Diagnostic rule\"\nseverity = \"warning\"\n[[triggers]]\ntype = \"manual\"\n[predicate]\ntype = \"required\"\nattribute_code = \"title\""}))
+            "definition":"format_version: 1\ncode: diagnostic_rule\nname: Diagnostic rule\nseverity: warning\ntriggers:\n  - type: manual\npredicate:\n  type: required\n  attribute_code: title"}))
         .send().await.unwrap().error_for_status().unwrap().json().await.unwrap();
     let rule_id: Uuid = rule["id"].as_str().unwrap().parse().unwrap();
     let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
@@ -805,7 +805,7 @@ async fn agent_operational_diagnostics_are_bounded_and_omit_internal_payloads(po
         .unwrap()
         .error_for_status()
         .unwrap();
-    let definition = "format_version = 2\ncode = \"diagnostic_workflow\"\nname = \"Diagnostic workflow\"\n[[triggers]]\ntype = \"manual\"\n[[actions]]\ntype = \"system_tags_add\"\ntags = [\"checked\"]";
+    let definition = "format_version: 2\ncode: diagnostic_workflow\nname: Diagnostic workflow\ntriggers:\n  - type: manual\nactions:\n  - type: system_tags_add\n    tags: [checked]";
     let workflow: Value = client
         .post(format!("{base_url}/workflows"))
         .json(&json!({"definition":definition}))
@@ -946,7 +946,7 @@ async fn agent_history_reads_and_record_value_edits_use_scoped_attricat_services
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     let blueprint = create_blueprint(&client, &base_url,
-        "format_version = 1\ncode = \"agent_history_product\"\nname = \"Agent history product\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"").await;
+        "format_version: 1\ncode: agent_history_product\nname: Agent history product\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string").await;
     let record = create_record(&client, &base_url, &blueprint).await;
     let record_id = record["id"].as_str().unwrap();
     for title in ["first", "second", "third"] {
@@ -1308,7 +1308,7 @@ async fn record_conversations_validate_their_context_and_record(pool: PgPool) {
         .unwrap();
     assert!(!missing.status().is_success());
     let blueprint = create_blueprint(&client, &base_url,
-        "format_version = 1\ncode = 'record_chat_test'\nname = 'Record chat test'\nkind = 'record'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'").await;
+        "format_version: 1\ncode: record_chat_test\nname: Record chat test\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string").await;
     let record = create_record(&client, &base_url, &blueprint).await;
     let selected_context: Value = client
         .post(format!("{base_url}/contexts"))
@@ -1760,7 +1760,7 @@ async fn record_conversation_mutations_uploads_and_events_require_record_read(po
     let blueprint = create_blueprint(
         &owner,
         &base_url,
-        "format_version = 1\ncode = 'conversation_access'\nname = 'Conversation access'\nkind = 'record'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'",
+        "format_version: 1\ncode: conversation_access\nname: Conversation access\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string",
     )
     .await;
     let record = create_record(&owner, &base_url, &blueprint).await;
@@ -1942,7 +1942,7 @@ async fn agent_read_tools_enforce_initiator_permissions_and_scopes(pool: PgPool)
     let blueprint = create_blueprint(
         &owner,
         &base_url,
-        "format_version = 1\ncode = 'agent_scoped'\nname = 'Agent scoped'\nkind = 'record'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'",
+        "format_version: 1\ncode: agent_scoped\nname: Agent scoped\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string",
     )
     .await;
     let record = create_record(&owner, &base_url, &blueprint).await;
@@ -2036,7 +2036,7 @@ async fn agent_read_tools_enforce_initiator_permissions_and_scopes(pool: PgPool)
         ("list_record_comments", json!({"record_id": record["id"]})),
         (
             "validate_rule_definition",
-            json!({"definition": "format_version = 1"}),
+            json!({"definition": "format_version: 1"}),
         ),
         ("data_health_details", json!({"section": "blueprints"})),
         (
@@ -2758,13 +2758,13 @@ async fn agent_finds_a_named_record_and_counts_what_links_to_it(pool: PgPool) {
     let category = create_blueprint(
         &client,
         &base_url,
-        "format_version = 1\ncode = \"category\"\nname = \"Categories\"\ndescription = \"Product groupings, such as Basic tools\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"",
+        "format_version: 1\ncode: category\nname: Categories\ndescription: 'Product groupings, such as Basic tools'\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string",
     )
     .await;
     let product = create_blueprint(
         &client,
         &base_url,
-        "format_version = 1\ncode = \"product\"\nname = \"Products\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\n\n[[attributes]]\ncode = \"category\"\ndescription = \"Where the product is shelved\"\nvalue_type = \"relationship\"\ntarget_blueprint = \"category\"",
+        "format_version: 1\ncode: product\nname: Products\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string\n  - code: category\n    description: Where the product is shelved\n    value_type: relationship\n    target_blueprint: category",
     )
     .await;
     let create = |blueprint: &Value, values: Value| {
@@ -3346,7 +3346,7 @@ async fn smart_fill_reads_attached_documents(pool: PgPool) {
     let (base_url, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
     let client = authenticated_client();
     let blueprint = create_blueprint(&client, &base_url,
-        "format_version = 1\ncode = \"spec_sheet\"\nname = \"Spec sheet\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"").await;
+        "format_version: 1\ncode: spec_sheet\nname: Spec sheet\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string").await;
     let record_id: Uuid = create_record(&client, &base_url, &blueprint).await["id"]
         .as_str()
         .unwrap()
@@ -3454,7 +3454,7 @@ async fn record_form_runs_propose_draft_values_alongside_every_other_tool(pool: 
     let (base_url, api_server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     let blueprint = create_blueprint(&client, &base_url,
-        "format_version = 1\ncode = \"brand\"\nname = \"Brand\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\n\n[[attributes]]\ncode = \"founded\"\nvalue_type = \"integer\"").await;
+        "format_version: 1\ncode: brand\nname: Brand\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string\n  - code: founded\n    value_type: integer").await;
     let record_id: Uuid = create_record(&client, &base_url, &blueprint).await["id"]
         .as_str()
         .unwrap()
@@ -3680,7 +3680,7 @@ async fn auto_approval_applies_its_holders_edits_to_the_record_and_asks_for_the_
     let (base_url, api_server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     let blueprint = create_blueprint(&client, &base_url,
-        "format_version = 1\ncode = \"brand\"\nname = \"Brand\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"").await;
+        "format_version: 1\ncode: brand\nname: Brand\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string").await;
     let record_id: Uuid = create_record(&client, &base_url, &blueprint).await["id"]
         .as_str()
         .unwrap()

@@ -86,7 +86,7 @@ pub struct ExistingBlueprintSnapshot {
     pub code: String,
     pub version: i64,
     pub kind: String,
-    /// Hash of the stored definition after the same TOML parse/serialize
+    /// Hash of the stored definition after the same YAML parse/serialize
     /// canonicalization used for normalized pack definitions.
     pub canonical_definition_hash: String,
     /// Raw stored-source hash retained as immutable stale evidence.
@@ -1576,23 +1576,20 @@ pub(super) fn normalized_blueprint_payload(
     workspace: &PlanningWorkspaceSnapshot,
     manifest: &SolutionPackManifest,
 ) -> Result<Value, SolutionPackError> {
-    let mut value: toml::Value = toml::from_str(blueprint.source()).map_err(|_| {
+    let mut value: Value = attricat_yaml::from_str(blueprint.source()).map_err(|_| {
         SolutionPackError::Invalid(format!("blueprint '{}' is invalid", blueprint.key()))
     })?;
     let table = value
-        .as_table_mut()
+        .as_object_mut()
         .expect("validated blueprint is a table");
     table.insert(
         "code".to_owned(),
-        toml::Value::String(mappings[blueprint.key()].target_code.clone()),
+        Value::String(mappings[blueprint.key()].target_code.clone()),
     );
-    if let Some(includes) = table
-        .get_mut("includes")
-        .and_then(toml::Value::as_array_mut)
-    {
+    if let Some(includes) = table.get_mut("includes").and_then(Value::as_array_mut) {
         for include in includes {
             let include = include
-                .as_table_mut()
+                .as_object_mut()
                 .expect("validated include is a table");
             let key = include
                 .remove("key")
@@ -1600,11 +1597,11 @@ pub(super) fn normalized_blueprint_payload(
                 .expect("validated include has a key");
             include.insert(
                 "code".to_owned(),
-                toml::Value::String(mappings[&key].target_code.clone()),
+                Value::String(mappings[&key].target_code.clone()),
             );
             include.insert(
                 "version".to_owned(),
-                toml::Value::Integer(
+                Value::from(
                     mappings[&key]
                         .target_version
                         .expect("blueprint mappings have a revision"),
@@ -1612,23 +1609,20 @@ pub(super) fn normalized_blueprint_payload(
             );
         }
     }
-    if let Some(attributes) = table
-        .get_mut("attributes")
-        .and_then(toml::Value::as_array_mut)
-    {
+    if let Some(attributes) = table.get_mut("attributes").and_then(Value::as_array_mut) {
         for attribute in attributes {
-            if let Some(attribute) = attribute.as_table_mut() {
+            if let Some(attribute) = attribute.as_object_mut() {
                 normalize_reference(attribute, "target_blueprint", mappings);
                 if let Some(targets) = attribute
                     .get_mut("target_blueprints")
-                    .and_then(toml::Value::as_array_mut)
+                    .and_then(Value::as_array_mut)
                 {
                     for target in targets {
                         let key = target
                             .as_str()
                             .expect("validated reference is a string")
                             .to_owned();
-                        *target = toml::Value::String(mappings[&key].target_code.clone());
+                        *target = Value::String(mappings[&key].target_code.clone());
                     }
                 }
             }
@@ -1638,19 +1632,18 @@ pub(super) fn normalized_blueprint_payload(
         *code = crate::solution_pack_seeds::physical_blueprint_code(mappings, code)?;
         Ok(())
     })?;
-    if let Some(views) = table.get_mut("views").and_then(toml::Value::as_table_mut) {
+    if let Some(views) = table.get_mut("views").and_then(Value::as_object_mut) {
         for (name, view) in views.iter_mut() {
-            if let Some(view) = view.as_table_mut() {
+            if let Some(view) = view.as_object_mut() {
                 normalize_view_references(view, mappings);
                 if name == "extension_layout"
-                    && let Some(outlets) =
-                        view.get_mut("outlets").and_then(toml::Value::as_table_mut)
+                    && let Some(outlets) = view.get_mut("outlets").and_then(Value::as_object_mut)
                 {
                     for (_, outlet) in outlets.iter_mut() {
-                        if let Some(outlet) = outlet.as_table_mut() {
+                        if let Some(outlet) = outlet.as_object_mut() {
                             for list in ["order", "hidden"] {
                                 if let Some(entries) =
-                                    outlet.get_mut(list).and_then(toml::Value::as_array_mut)
+                                    outlet.get_mut(list).and_then(Value::as_array_mut)
                                 {
                                     entries.retain(|entry| {
                                         entry.as_str().is_some_and(|entry| {
@@ -1683,7 +1676,7 @@ pub(super) fn normalized_blueprint_payload(
             })
         })
         .collect::<Vec<_>>();
-    let definition = toml::to_string(&value).map_err(|_| {
+    let definition = attricat_yaml::to_string(&value).map_err(|_| {
         SolutionPackError::Invalid(format!("blueprint '{}' is invalid", blueprint.key()))
     })?;
     Ok(serde_json::json!({
@@ -1695,7 +1688,7 @@ pub(super) fn normalized_blueprint_payload(
 }
 
 fn normalize_reference(
-    table: &mut toml::map::Map<String, toml::Value>,
+    table: &mut serde_json::Map<String, Value>,
     field: &str,
     mappings: &BTreeMap<String, PlannedMapping>,
 ) {
@@ -1704,29 +1697,27 @@ fn normalize_reference(
             .as_str()
             .expect("validated reference is a string")
             .to_owned();
-        *reference = toml::Value::String(mappings[&key].target_code.clone());
+        *reference = Value::String(mappings[&key].target_code.clone());
     }
 }
 
 fn normalize_view_references(
-    node: &mut toml::map::Map<String, toml::Value>,
+    node: &mut serde_json::Map<String, Value>,
     mappings: &BTreeMap<String, PlannedMapping>,
 ) {
-    if node.get("type").and_then(toml::Value::as_str) == Some("incoming_relationship_list")
-        && let Some(relationships) = node
-            .get_mut("relationships")
-            .and_then(toml::Value::as_array_mut)
+    if node.get("type").and_then(Value::as_str) == Some("incoming_relationship_list")
+        && let Some(relationships) = node.get_mut("relationships").and_then(Value::as_array_mut)
     {
         for relationship in relationships {
-            if let Some(relationship) = relationship.as_table_mut() {
+            if let Some(relationship) = relationship.as_object_mut() {
                 normalize_reference(relationship, "source_blueprint", mappings);
             }
         }
     }
     for collection in ["children", "tabs", "sections"] {
-        if let Some(children) = node.get_mut(collection).and_then(toml::Value::as_array_mut) {
+        if let Some(children) = node.get_mut(collection).and_then(Value::as_array_mut) {
             for child in children {
-                if let Some(child) = child.as_table_mut() {
+                if let Some(child) = child.as_object_mut() {
                     normalize_view_references(child, mappings);
                 }
             }

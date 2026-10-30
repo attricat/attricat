@@ -10,18 +10,17 @@ use sqlx::PgPool;
 use support::{authenticated_client, start_server};
 
 const SCALAR_DEFINITION: &str = r#"
-format_version = 1
-code = "migration_identity_product"
-name = "Migration identity product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
+format_version: 1
+code: migration_identity_product
+name: Migration identity product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
 "#;
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
@@ -248,16 +247,17 @@ async fn compatible_relationship_migration_preserves_row_identity(pool: PgPool) 
         support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
     );
     let target_definition = r#"
-format_version = 1
-code = "migration_identity_target"
-name = "Migration identity target"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[[attributes]]
-code = "name"
-value_type = "string"
+format_version: 1
+code: migration_identity_target
+name: Migration identity target
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
 "#;
     let target_blueprint = repository
         .create_blueprint(CreateBlueprint {
@@ -285,21 +285,21 @@ value_type = "string"
         .await
         .unwrap();
     let source_definition = r#"
-format_version = 1
-code = "migration_identity_source"
-name = "Migration identity source"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[[attributes]]
-code = "name"
-value_type = "string"
-[[attributes]]
-code = "target"
-value_type = "relationship"
-target_blueprint = "migration_identity_target"
-cardinality = "one"
+format_version: 1
+code: migration_identity_source
+name: Migration identity source
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: target
+    value_type: relationship
+    target_blueprint: migration_identity_target
+    cardinality: one
 "#;
     let source_blueprint = repository
         .create_blueprint(CreateBlueprint {
@@ -402,10 +402,8 @@ async fn explicitly_discarded_removed_value_is_the_only_row_archived(pool: PgPoo
         support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
     );
     let source_definition = format!(
-        r#"{SCALAR_DEFINITION}
-[[attributes]]
-code = "obsolete"
-value_type = "string"
+        r#"{SCALAR_DEFINITION}  - code: obsolete
+    value_type: string
 "#,
     );
     let source = repository
@@ -524,16 +522,17 @@ async fn ui_shaped_unchanged_payload_preserves_scalar_and_relationship_rows(pool
     );
     let target_blueprint = repository
         .create_blueprint(CreateBlueprint {
-            definition: r#"format_version = 1
-code = "migration_http_target"
-name = "Migration HTTP target"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[[attributes]]
-code = "name"
-value_type = "string"
+            definition: r#"format_version: 1
+code: migration_http_target
+name: Migration HTTP target
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
 "#
             .to_owned(),
         })
@@ -558,21 +557,21 @@ value_type = "string"
         )
         .await
         .unwrap();
-    let definition = r#"format_version = 1
-code = "migration_http_source"
-name = "Migration HTTP source"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-[[attributes]]
-code = "title"
-value_type = "string"
-[[attributes]]
-code = "target"
-value_type = "relationship"
-target_blueprint = "migration_http_target"
-cardinality = "one"
+    let definition = r#"format_version: 1
+code: migration_http_source
+name: Migration HTTP source
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+  - code: target
+    value_type: relationship
+    target_blueprint: migration_http_target
+    cardinality: one
 "#;
     let source_blueprint = repository
         .create_blueprint(CreateBlueprint {
@@ -692,7 +691,7 @@ async fn migration_requires_replacements_in_every_affected_context(pool: PgPool)
     sqlx::query("INSERT INTO attribute_contexts (id, code, data) VALUES ($1, 'migration-other', '{}'::jsonb)")
         .bind(other_context).execute(&pool).await.unwrap();
     let definition = format!(
-        "{SCALAR_DEFINITION}\n[[attributes]]\ncode = \"rating\"\nvalue_type = \"string\"\ncontext_editable = \"all\"\n"
+        "{SCALAR_DEFINITION}  - code: rating\n    value_type: string\n    context_editable: all\n"
     );
     let blueprint = repository
         .create_blueprint(CreateBlueprint {
@@ -738,8 +737,8 @@ async fn migration_requires_replacements_in_every_affected_context(pool: PgPool)
             blueprint.blueprint.id,
             CreateBlueprint {
                 definition: definition.replace(
-                    "value_type = \"string\"\ncontext_editable = \"all\"",
-                    "value_type = \"integer\"\ncontext_editable = \"all\"",
+                    "value_type: string\n    context_editable: all",
+                    "value_type: integer\n    context_editable: all",
                 ),
             },
         )
@@ -799,17 +798,18 @@ async fn migration_rejects_non_default_value_when_target_becomes_default_only(po
     .execute(&pool)
     .await
     .unwrap();
-    let source_definition = r#"format_version = 1
-code = "migration_context_product"
-name = "Migration context product"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-[[attributes]]
-code = "title"
-value_type = "string"
-context_editable = "all"
+    let source_definition = r#"format_version: 1
+code: migration_context_product
+name: Migration context product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+    context_editable: all
 "#;
     let source = repository
         .create_blueprint(CreateBlueprint {
@@ -846,10 +846,8 @@ context_editable = "all"
         .create_blueprint_revision(
             source.blueprint.id,
             CreateBlueprint {
-                definition: source_definition.replace(
-                    "context_editable = \"all\"",
-                    "context_editable = \"default\"",
-                ),
+                definition: source_definition
+                    .replace("context_editable: all", "context_editable: default"),
             },
         )
         .await
@@ -920,9 +918,7 @@ async fn migration_audits_field_changes_and_reconciles_publication(pool: PgPool)
     });
     let source = repository
         .create_blueprint(CreateBlueprint {
-            definition: format!(
-                "{SCALAR_DEFINITION}\n[[attributes]]\ncode = \"obsolete\"\nvalue_type = \"string\"\n"
-            ),
+            definition: format!("{SCALAR_DEFINITION}  - code: obsolete\n    value_type: string\n"),
         })
         .await
         .unwrap();
@@ -1049,9 +1045,9 @@ async fn migration_reports_only_properties_the_target_schema_requires(pool: PgPo
     // The forbidden-property violation's message quotes "title", which is
     // not a missing value.
     let target = SCALAR_DEFINITION.replace(
-        "kind = \"record\"\n",
-        "kind = \"record\"\nrecord_schema = '''{\"type\": \"object\", \"required\": [\"sku\"], \"not\": {\"required\": [\"title\"]}}'''\n",
-    ) + "\n[[attributes]]\ncode = \"sku\"\nvalue_type = \"string\"\n";
+        "kind: record\n",
+        "kind: record\nrecord_schema: '{\"type\": \"object\", \"required\": [\"sku\"], \"not\": {\"required\": [\"title\"]}}'\n",
+    ) + "  - code: sku\n    value_type: string\n";
     repository
         .create_blueprint_revision(source.blueprint.id, CreateBlueprint { definition: target })
         .await

@@ -3,26 +3,22 @@ use crate::support;
 use support::*;
 
 const PART: &str = r#"
-format_version = 1
-code = "uk_part"
-name = "Part"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["part_number"]
-
-[[unique_keys]]
-code = "part_number"
-attributes = ["part_number"]
-
-[[attributes]]
-code = "part_number"
-value_type = "string"
-
-[[attributes]]
-code = "description"
-value_type = "string"
+format_version: 1
+code: uk_part
+name: Part
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [part_number]
+unique_keys:
+  - code: part_number
+    attributes: [part_number]
+attributes:
+  - code: part_number
+    value_type: string
+  - code: description
+    value_type: string
 "#;
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
@@ -177,16 +173,17 @@ async fn composite_keys_combine_relationships_and_scalars(pool: PgPool) {
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "uk_document"
-name = "Document"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["number"]
-[[attributes]]
-code = "number"
-value_type = "string"
+format_version: 1
+code: uk_document
+name: Document
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [number]
+attributes:
+  - code: number
+    value_type: string
 "#,
     )
     .await;
@@ -194,25 +191,25 @@ value_type = "string"
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "uk_revision"
-name = "Revision"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["label"]
-[[unique_keys]]
-code = "document_revision"
-attributes = ["document", "label"]
-case_sensitive = true
-[[attributes]]
-code = "document"
-value_type = "relationship"
-target_blueprint = "uk_document"
-cardinality = "one"
-[[attributes]]
-code = "label"
-value_type = "string"
+format_version: 1
+code: uk_revision
+name: Revision
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [label]
+unique_keys:
+  - code: document_revision
+    attributes: [document, label]
+    case_sensitive: true
+attributes:
+  - code: document
+    value_type: relationship
+    target_blueprint: uk_document
+    cardinality: one
+  - code: label
+    value_type: string
 "#,
     )
     .await;
@@ -260,7 +257,7 @@ async fn publishing_a_key_reports_existing_duplicates_and_then_covers_older_revi
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
     let without_key = PART.replace(
-        "[[unique_keys]]\ncode = \"part_number\"\nattributes = [\"part_number\"]\n",
+        "unique_keys:\n  - code: part_number\n    attributes: [part_number]\n",
         "",
     );
     let blueprint = create_blueprint(&client, &base_url, &without_key).await;
@@ -342,20 +339,21 @@ async fn context_scoped_keys_compare_resolved_values_in_every_context(pool: PgPo
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "uk_page"
-name = "Page"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["slug"]
-[[unique_keys]]
-code = "slug"
-attributes = ["slug"]
-scope = "context"
-[[attributes]]
-code = "slug"
-value_type = "string"
+format_version: 1
+code: uk_page
+name: Page
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [slug]
+unique_keys:
+  - code: slug
+    attributes: [slug]
+    scope: context
+attributes:
+  - code: slug
+    value_type: string
 "#,
     )
     .await;
@@ -468,23 +466,23 @@ async fn duplicating_leaves_out_enforced_key_values(pool: PgPool) {
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "uk_listing"
-name = "Listing"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["slug"]
-[[unique_keys]]
-code = "slug"
-attributes = ["slug"]
-scope = "context"
-[[attributes]]
-code = "slug"
-value_type = "string"
-[[attributes]]
-code = "title"
-value_type = "string"
+format_version: 1
+code: uk_listing
+name: Listing
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [slug]
+unique_keys:
+  - code: slug
+    attributes: [slug]
+    scope: context
+attributes:
+  - code: slug
+    value_type: string
+  - code: title
+    value_type: string
 "#,
     )
     .await;
@@ -621,21 +619,22 @@ async fn new_contexts_do_not_inherit_keys_of_attributes_without_fallback(pool: P
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "uk_handle"
-name = "Handle"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["handle"]
-[[unique_keys]]
-code = "handle"
-attributes = ["handle"]
-scope = "context"
-[[attributes]]
-code = "handle"
-value_type = "string"
-context_fallback = "none"
+format_version: 1
+code: uk_handle
+name: Handle
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [handle]
+unique_keys:
+  - code: handle
+    attributes: [handle]
+    scope: context
+attributes:
+  - code: handle
+    value_type: string
+    context_fallback: none
 "#,
     )
     .await;
@@ -672,20 +671,21 @@ async fn reparenting_a_context_can_swap_two_records_key_values(pool: PgPool) {
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "uk_swap"
-name = "Swap"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["slug"]
-[[unique_keys]]
-code = "slug"
-attributes = ["slug"]
-scope = "context"
-[[attributes]]
-code = "slug"
-value_type = "string"
+format_version: 1
+code: uk_swap
+name: Swap
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [slug]
+unique_keys:
+  - code: slug
+    attributes: [slug]
+    scope: context
+attributes:
+  - code: slug
+    value_type: string
 "#,
     )
     .await;

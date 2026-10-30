@@ -10,29 +10,25 @@ use attricat_domain::value_type::ValueType;
 #[test]
 fn compiles_only_explicitly_selected_mixin_attributes_in_local_order() {
     let source = r#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-record_schema = '{"type":"object","required":["meta_title"]}'
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[includes]]
-alias = "seo"
-code = "seo"
-version = 2
-
-[[attributes]]
-code = "title"
-value_type = "string"
-tags = ["display"]
-
-[[attributes]]
-code = "meta_title"
-from = "seo.meta_title"
+format_version: 1
+code: product
+name: Product
+kind: record
+record_schema: '{"type":"object","required":["meta_title"]}'
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+includes:
+  - alias: seo
+    code: seo
+    version: 2
+attributes:
+  - code: title
+    value_type: string
+    tags: [display]
+  - code: meta_title
+    from: seo.meta_title
 "#;
     let definition = parse(source).unwrap();
     let compiled = compile(
@@ -109,28 +105,23 @@ from = "seo.meta_title"
 #[test]
 fn compiles_optional_attribute_names() {
     let source = r#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["product_family"]
-
-[[attributes]]
-code = "product_family"
-name = "Family"
-value_type = "string"
-
-[[attributes]]
-code = "rating"
-name = "Rating"
-extension_type = "acme:stars@^1"
-
-[[attributes]]
-code = "sku"
-value_type = "string"
+format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [product_family]
+attributes:
+  - code: product_family
+    name: Family
+    value_type: string
+  - code: rating
+    name: Rating
+    extension_type: 'acme:stars@^1'
+  - code: sku
+    value_type: string
 "#;
     let compiled = compile(parse(source).unwrap(), &[], source).unwrap();
     let names: Vec<_> = compiled
@@ -144,15 +135,14 @@ value_type = "string"
 #[test]
 fn rejects_blank_attribute_names() {
     let source = r#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[[attributes]]
-code = "title"
-name = "  "
-value_type = "string"
+format_version: 1
+code: product
+name: Product
+kind: record
+attributes:
+  - code: title
+    name: '  '
+    value_type: string
 "#;
     assert!(matches!(
         parse(source),
@@ -163,20 +153,18 @@ value_type = "string"
 #[test]
 fn rejects_names_on_selected_attributes() {
     let source = r#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[[includes]]
-alias = "seo"
-code = "seo"
-version = 1
-
-[[attributes]]
-code = "meta_title"
-name = "Title"
-from = "seo.meta_title"
+format_version: 1
+code: product
+name: Product
+kind: record
+includes:
+  - alias: seo
+    code: seo
+    version: 1
+attributes:
+  - code: meta_title
+    name: Title
+    from: seo.meta_title
 "#;
     assert!(matches!(
         parse(source),
@@ -187,16 +175,15 @@ from = "seo.meta_title"
 #[test]
 fn parses_blueprint_and_attribute_descriptions() {
     let source = r#"
-format_version = 1
-code = "category"
-name = "Category"
-description = "Product groupings, such as Basic tools"
-kind = "record"
-
-[[attributes]]
-code = "title"
-description = "The category name shown to shoppers"
-value_type = "string"
+format_version: 1
+code: category
+name: Category
+description: 'Product groupings, such as Basic tools'
+kind: record
+attributes:
+  - code: title
+    description: The category name shown to shoppers
+    value_type: string
 "#;
     let definition = parse(source).unwrap();
     assert_eq!(
@@ -221,7 +208,7 @@ value_type = "string"
 fn rejects_blank_long_and_selected_descriptions() {
     let with = |description: &str| {
         format!(
-            "format_version = 1\ncode = \"product\"\nname = \"Product\"\nkind = \"record\"\n\n[[attributes]]\ncode = \"title\"\ndescription = \"{description}\"\nvalue_type = \"string\"\n"
+            "format_version: 1\ncode: product\nname: Product\nkind: record\nattributes:\n  - code: title\n    description: '{description}'\n    value_type: string\n"
         )
     };
     assert!(matches!(
@@ -236,20 +223,18 @@ fn rejects_blank_long_and_selected_descriptions() {
         })
     ));
     let selected = r#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[[includes]]
-alias = "seo"
-code = "seo"
-version = 1
-
-[[attributes]]
-code = "meta_title"
-description = "Search title"
-from = "seo.meta_title"
+format_version: 1
+code: product
+name: Product
+kind: record
+includes:
+  - alias: seo
+    code: seo
+    version: 1
+attributes:
+  - code: meta_title
+    description: Search title
+    from: seo.meta_title
 "#;
     assert!(matches!(
         parse(selected),
@@ -260,19 +245,18 @@ from = "seo.meta_title"
 #[test]
 fn compiles_scalar_attribute_default_values() {
     let source = r#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-default_value = "Untitled"
+format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+    default_value: Untitled
 "#;
     let compiled = compile(parse(source).unwrap(), &[], source).unwrap();
     assert_eq!(
@@ -284,15 +268,14 @@ default_value = "Untitled"
 #[test]
 fn rejects_default_values_on_non_scalar_attributes() {
     let source = r#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[[attributes]]
-code = "related"
-value_type = "relationship"
-default_value = "00000000-0000-0000-0000-000000000000"
+format_version: 1
+code: product
+name: Product
+kind: record
+attributes:
+  - code: related
+    value_type: relationship
+    default_value: '00000000-0000-0000-0000-000000000000'
 "#;
     assert!(matches!(
         parse(source),
@@ -303,24 +286,21 @@ default_value = "00000000-0000-0000-0000-000000000000"
 #[test]
 fn supports_context_fallback_on_all_attribute_types() {
     let source = r#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-context_fallback = "none"
-
-[[attributes]]
-code = "related"
-value_type = "relationship"
-context_fallback = "none"
+format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+    context_fallback: none
+  - code: related
+    value_type: relationship
+    context_fallback: none
 "#;
     let compiled = compile(parse(source).unwrap(), &[], source).unwrap();
     assert!(
@@ -334,23 +314,20 @@ context_fallback = "none"
 #[test]
 fn supports_readonly_attributes() {
     let source = r#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "stock"
-value_type = "integer"
-readonly = true
+format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+  - code: stock
+    value_type: integer
+    readonly: true
 "#;
     let compiled = compile(parse(source).unwrap(), &[], source).unwrap();
     assert!(!compiled.attributes[0].readonly);
@@ -360,23 +337,20 @@ readonly = true
 #[test]
 fn supports_default_only_context_editing() {
     let source = r#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "stock"
-value_type = "integer"
-context_editable = "default"
+format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+  - code: stock
+    value_type: integer
+    context_editable: default
 "#;
     let compiled = compile(parse(source).unwrap(), &[], source).unwrap();
     assert_eq!(
@@ -392,31 +366,29 @@ context_editable = "default"
 #[test]
 fn rejects_unknown_fields_and_invalid_selections() {
     let unknown_field = r#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-unexpected = true
-
-[[attributes]]
-code = "title"
-value_type = "string"
+format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+    unexpected: true
+attributes:
+  - code: title
+    value_type: string
 "#;
     assert!(parse(unknown_field).is_err());
 
     let invalid_selection = r#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[[attributes]]
-code = "title"
-from = "seo.meta_title"
+format_version: 1
+code: product
+name: Product
+kind: record
+attributes:
+  - code: title
+    from: seo.meta_title
 "#;
     assert!(parse(invalid_selection).is_err());
 }
@@ -424,18 +396,17 @@ from = "seo.meta_title"
 #[test]
 fn validates_reference_codes_with_the_shared_character_set() {
     let source = r#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
+format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
 "#;
     for replacement in ["product-name", "product_name"] {
         assert!(parse(&source.replacen("product", replacement, 1)).is_ok());
@@ -444,35 +415,27 @@ value_type = "string"
         assert!(parse(&source.replacen("product", replacement, 1)).is_err());
     }
     for replacement in ["page-title", "page_title"] {
-        assert!(
-            parse(&source.replace("code = \"title\"", &format!("code = \"{replacement}\"")))
-                .is_ok()
-        );
+        assert!(parse(&source.replace("code: title", &format!("code: '{replacement}'"))).is_ok());
     }
     for replacement in ["page title", "page.title", "page.titlé", ""] {
-        assert!(
-            parse(&source.replace("code = \"title\"", &format!("code = \"{replacement}\"")))
-                .is_err()
-        );
+        assert!(parse(&source.replace("code: title", &format!("code: '{replacement}'"))).is_err());
     }
 }
 
 #[test]
 fn validates_include_aliases_with_the_shared_character_set() {
     let source = r#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[[includes]]
-alias = "seo-metadata"
-code = "seo"
-version = 1
-
-[[attributes]]
-code = "meta_title"
-from = "seo-metadata.meta_title"
+format_version: 1
+code: product
+name: Product
+kind: record
+includes:
+  - alias: seo-metadata
+    code: seo
+    version: 1
+attributes:
+  - code: meta_title
+    from: seo-metadata.meta_title
 "#;
     assert!(parse(source).is_ok());
     for alias in ["seo metadata", "seo.metadata", "seo-métadata", ""] {
@@ -483,24 +446,21 @@ from = "seo-metadata.meta_title"
 #[test]
 fn compiles_relationship_target_blueprint() {
     let source = r#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[[attributes]]
-code = "categories"
-value_type = "relationship"
-target_blueprint = "category"
-
-[[attributes]]
-code = "name"
-value_type = "string"
-tags = ["searchable"]
+format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: categories
+    value_type: relationship
+    target_blueprint: category
+  - code: name
+    value_type: string
+    tags: [searchable]
 "#;
     let compiled = compile(parse(source).unwrap(), &[], source).unwrap();
     assert_eq!(
@@ -508,27 +468,26 @@ tags = ["searchable"]
         Some("category")
     );
 
-    let invalid = source.replace("value_type = \"relationship\"", "value_type = \"string\"");
+    let invalid = source.replace("value_type: relationship", "value_type: string");
     assert!(parse(&invalid).is_err());
 }
 
 #[test]
 fn requires_valid_dropdown_option_view_and_preserves_generic_tags() {
     let missing_display = r#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[[attributes]]
-code = "title"
-value_type = "string"
+format_version: 1
+code: product
+name: Product
+kind: record
+attributes:
+  - code: title
+    value_type: string
 "#;
     assert!(compile(parse(missing_display).unwrap(), &[], missing_display).is_err());
 
     let source = missing_display.replace(
-        "value_type = \"string\"",
-        "value_type = \"string\"\ntags = [\"searchable\"]\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]",
+        "value_type: string",
+        "value_type: string\n    tags: [searchable]\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]",
     );
     let compiled = compile(parse(&source).unwrap(), &[], &source).unwrap();
     assert_eq!(compiled.attributes[0].tags, ["searchable"]);
@@ -537,7 +496,7 @@ value_type = "string"
         ViewDefinition::DropdownOption { ref separator, .. } if separator == " · "
     ));
 
-    let relationship_display = source.replace("fields = [\"title\"]", "fields = [\"unknown\"]");
+    let relationship_display = source.replace("fields: [title]", "fields: [unknown]");
     assert!(
         compile(
             parse(&relationship_display).unwrap(),
@@ -547,49 +506,55 @@ value_type = "string"
         .is_err()
     );
 
-    let empty_fields = source.replace("fields = [\"title\"]", "fields = []");
+    let empty_fields = source.replace("fields: [title]", "fields: []");
     assert!(compile(parse(&empty_fields).unwrap(), &[], &empty_fields).is_err());
 
-    let duplicate_fields =
-        source.replace("fields = [\"title\"]", "fields = [\"title\", \"title\"]");
+    let duplicate_fields = source.replace("fields: [title]", "fields: [title, title]");
     assert!(compile(parse(&duplicate_fields).unwrap(), &[], &duplicate_fields).is_err());
 }
 
 #[test]
 fn compiles_optional_recursive_views_with_component_references() {
     let source = r#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[views.detail]
-type = "stack"
-children = [
-  { type = "heading", text = "Product" },
-  { type = "section", children = [
-    { type = "grid", children = [{ type = "field", field = "title", component = { id = "attricat.field_display", version = 1 } }] },
-    { type = "tabs", tabs = [{ label = "Details", children = [{ type = "text", text = "Information" }] }] },
-    { type = "accordion", sections = [{ label = "Related", children = [{ type = "relationship_list", field = "categories" }] }] },
-    { type = "divider" }
-  ] }
-]
-
-[views.index]
-type = "table"
-columns = [{ field = "title" }]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "categories"
-value_type = "relationship"
+format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+  detail:
+    type: stack
+    children:
+      - {type: heading, text: Product}
+      - type: section
+        children:
+          - type: grid
+            children:
+              - type: field
+                field: title
+                component: {id: attricat.field_display, version: 1}
+          - type: tabs
+            tabs:
+              - label: Details
+                children:
+                  - {type: text, text: Information}
+          - type: accordion
+            sections:
+              - label: Related
+                children:
+                  - {type: relationship_list, field: categories}
+          - {type: divider}
+  index:
+    type: table
+    columns:
+      - {field: title}
+attributes:
+  - code: title
+    value_type: string
+  - code: categories
+    value_type: relationship
 "#;
     let compiled = compile(parse(source).unwrap(), &[], source).unwrap();
     assert_eq!(compiled.views.len(), 3);
@@ -602,32 +567,38 @@ value_type = "relationship"
 #[test]
 fn compiles_incoming_relationship_lists() {
     let source = r#"
-format_version = 1
-code = "category"
-name = "Category"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[views.detail]
-type = "stack"
-children = [{ type = "incoming_relationship_list", label = "Products in this category", page_size = 10, relationships = [{ source_blueprint = "product", field = "categories" }], component = { id = "attricat.incoming_relationship_list_display", version = 1 } }]
-
-[[attributes]]
-code = "name"
-value_type = "string"
+format_version: 1
+code: category
+name: Category
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+  detail:
+    type: stack
+    children:
+      - type: incoming_relationship_list
+        label: Products in this category
+        page_size: 10
+        relationships:
+          - {source_blueprint: product, field: categories}
+        component:
+          id: attricat.incoming_relationship_list_display
+          version: 1
+attributes:
+  - code: name
+    value_type: string
 "#;
     assert!(compile(parse(source).unwrap(), &[], source).is_ok());
 
     for invalid in [
-        source.replace("page_size = 10", "page_size = 0"),
-        source.replace("label = \"Products in this category\"", "label = \" \""),
-        source.replace("[views.detail]", "[views.edit]"),
+        source.replace("page_size: 10", "page_size: 0"),
+        source.replace("label: Products in this category", "label: ' '"),
+        source.replace("  detail:\n", "  edit:\n"),
         source.replace(
-            "relationships = [{ source_blueprint = \"product\", field = \"categories\" }]",
-            "relationships = []",
+            "relationships:\n          - {source_blueprint: product, field: categories}",
+            "relationships: []",
         ),
     ] {
         assert!(compile(parse(&invalid).unwrap(), &[], &invalid).is_err());
@@ -637,32 +608,29 @@ value_type = "string"
 #[test]
 fn rejects_invalid_view_fields_and_component_references() {
     let source = r#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[views.index]
-type = "table"
-columns = [{ field = "categories" }]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "categories"
-value_type = "relationship"
+format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+  index:
+    type: table
+    columns:
+      - {field: categories}
+attributes:
+  - code: title
+    value_type: string
+  - code: categories
+    value_type: relationship
 "#;
     assert!(compile(parse(source).unwrap(), &[], source).is_err());
 
     let invalid_component_id = source.replace(
-        "columns = [{ field = \"categories\" }]",
-        "columns = [{ field = \"title\" }]\ncomponent = { id = \"attricat.bad-id\", version = 1 }",
+        "columns: [{field: categories}]",
+        "columns:\n  - field: title\ncomponent:\n  id: attricat.bad-id\n  version: 1",
     );
     assert!(
         compile(
@@ -674,8 +642,8 @@ value_type = "relationship"
     );
 
     let invalid_component_version = source.replace(
-        "columns = [{ field = \"categories\" }]",
-        "columns = [{ field = \"title\" }]\ncomponent = { id = \"attricat.table\", version = 0 }",
+        "columns: [{field: categories}]",
+        "columns:\n  - field: title\ncomponent:\n  id: attricat.table\n  version: 0",
     );
     assert!(
         compile(
@@ -687,8 +655,8 @@ value_type = "relationship"
     );
 
     let invalid_relationship_leaf = source.replace(
-        "type = \"table\"\ncolumns = [{ field = \"categories\" }]",
-        "type = \"stack\"\nchildren = [{ type = \"relationship_list\", field = \"title\" }]",
+        "type: table\ncolumns:\n  - field: categories",
+        "type: stack\nchildren:\n  - type: relationship_list\n    field: title",
     );
     assert!(
         compile(
@@ -703,36 +671,37 @@ value_type = "relationship"
 #[test]
 fn validates_component_manifest_applicability() {
     let source = r#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[views.detail]
-type = "stack"
-children = [{ type = "field", field = "title", component = { id = "attricat.field_display", version = 1 } }]
-
-[[attributes]]
-code = "title"
-value_type = "string"
+format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+  detail:
+    type: stack
+    children:
+      - type: field
+        field: title
+        component: {id: attricat.field_display, version: 1}
+attributes:
+  - code: title
+    value_type: string
 "#;
     assert!(compile(parse(source).unwrap(), &[], source).is_ok());
 
     for invalid in [
-        source.replace("[views.detail]", "[views.edit]"),
+        source.replace("  detail:\n", "  edit:\n"),
         source.replace("attricat.field_display", "attricat.table_display"),
-        source.replace("version = 1 }", "version = 2 }"),
+        source.replace("version: 1}", "version: 2}"),
         source.replace(
-            "version = 1 }",
-            "version = 1, props = { label = \"Title\" } }",
+            "version: 1}",
+            "version: 1, props: {label: Title}}",
         ),
         source.replace(
-            "children = [{ type = \"field\", field = \"title\", component = { id = \"attricat.field_display\", version = 1 } }]",
-            "component = { id = \"attricat.field_display\", version = 1 }\nchildren = []",
+            "    children:\n      - type: field\n        field: title\n        component: {id: attricat.field_display, version: 1}",
+            "    component: {id: attricat.field_display, version: 1}\n    children: []",
         ),
     ] {
         assert!(compile(parse(&invalid).unwrap(), &[], &invalid).is_err());
@@ -742,36 +711,35 @@ value_type = "string"
 #[test]
 fn validates_phone_components() {
     let source = r#"
-format_version = 1
-code = "contact"
-name = "Contact"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["phone"]
-
-[views.detail]
-type = "stack"
-children = [{ type = "field", field = "phone", component = { id = "attricat.phone_display", version = 1 } }]
-
-[views.table]
-type = "table"
-columns = [{ field = "phone", renderer = { id = "attricat.phone_display", version = 1 } }]
-
-[[attributes]]
-code = "phone"
-value_type = "string"
+format_version: 1
+code: contact
+name: Contact
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [phone]
+  detail:
+    type: stack
+    children:
+      - type: field
+        field: phone
+        component: {id: attricat.phone_display, version: 1}
+  table:
+    type: table
+    columns:
+      - field: phone
+        renderer: {id: attricat.phone_display, version: 1}
+attributes:
+  - code: phone
+    value_type: string
 "#;
     assert!(compile(parse(source).unwrap(), &[], source).is_ok());
     for invalid in [
-        source.replace("value_type = \"string\"", "value_type = \"integer\""),
+        source.replace("value_type: string", "value_type: integer"),
         source.replace("attricat.phone_display", "attricat.phone_edit"),
-        source.replace("version = 1 }", "version = 2 }"),
-        source.replace(
-            "version = 1 }",
-            "version = 1, props = { region = \"PL\" } }",
-        ),
+        source.replace("version: 1}", "version: 2}"),
+        source.replace("version: 1}", "version: 1, props: {region: PL}}"),
     ] {
         assert!(compile(parse(&invalid).unwrap(), &[], &invalid).is_err());
     }
@@ -780,29 +748,35 @@ value_type = "string"
 #[test]
 fn validates_url_components() {
     let source = r#"
-format_version = 1
-code = "website"
-name = "Website"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["url"]
-[views.detail]
-type = "stack"
-children = [{ type = "field", field = "url", component = { id = "attricat.url_display", version = 1 } }]
-[views.table]
-type = "table"
-columns = [{ field = "url", renderer = { id = "attricat.url_display", version = 1 } }]
-[[attributes]]
-code = "url"
-value_type = "string"
+format_version: 1
+code: website
+name: Website
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [url]
+  detail:
+    type: stack
+    children:
+      - type: field
+        field: url
+        component: {id: attricat.url_display, version: 1}
+  table:
+    type: table
+    columns:
+      - field: url
+        renderer: {id: attricat.url_display, version: 1}
+attributes:
+  - code: url
+    value_type: string
 "#;
     assert!(compile(parse(source).unwrap(), &[], source).is_ok());
     for invalid in [
-        source.replace("value_type = \"string\"", "value_type = \"number\""),
+        source.replace("value_type: string", "value_type: number"),
         source.replace("attricat.url_display", "attricat.url_edit"),
-        source.replace("version = 1 }", "version = 2 }"),
-        source.replace("version = 1 }", "version = 1, props = { unsafe = true } }"),
+        source.replace("version: 1}", "version: 2}"),
+        source.replace("version: 1}", "version: 1, props: {unsafe: true}}"),
     ] {
         assert!(compile(parse(&invalid).unwrap(), &[], &invalid).is_err());
     }
@@ -811,28 +785,36 @@ value_type = "string"
 #[test]
 fn validates_color_components() {
     let source = r#"
-format_version = 1
-code = "color"
-name = "Color"
-kind = "record"
-attributes = [{ code = "hex", value_type = "string" }]
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["hex"]
-[views.detail]
-type = "stack"
-children = [{ type = "field", field = "hex", component = { id = "attricat.color_display", version = 1 } }]
-[views.table]
-type = "table"
-columns = [{ field = "hex", renderer = { id = "attricat.color_display", version = 1 } }]
+format_version: 1
+code: color
+name: Color
+kind: record
+attributes:
+  - code: hex
+    value_type: string
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [hex]
+  detail:
+    type: stack
+    children:
+      - type: field
+        field: hex
+        component: {id: attricat.color_display, version: 1}
+  table:
+    type: table
+    columns:
+      - field: hex
+        renderer: {id: attricat.color_display, version: 1}
 "#;
     assert!(compile(parse(source).unwrap(), &[], source).is_ok());
     for invalid in [
-        source.replace("value_type = \"string\"", "value_type = \"number\""),
+        source.replace("value_type: string", "value_type: number"),
         source.replace("attricat.color_display", "attricat.color_edit"),
-        source.replace("version = 1 }", "version = 2 }"),
-        source.replace("version = 1 }", "version = 1, props = { alpha = true } }"),
-        source.replace("type = \"field\"", "type = \"relationship_list\""),
+        source.replace("version: 1}", "version: 2}"),
+        source.replace("version: 1}", "version: 1, props: {alpha: true}}"),
+        source.replace("type: field", "type: relationship_list"),
     ] {
         assert!(compile(parse(&invalid).unwrap(), &[], &invalid).is_err());
     }
@@ -841,24 +823,21 @@ columns = [{ field = "hex", renderer = { id = "attricat.color_display", version 
 #[test]
 fn compiles_json_schema_contracts() {
     let source = r#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-record_schema = '{"type":"object","required":["price"]}'
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "price"
-value_type = "number"
-value_schema = '{"type":"number","minimum":0}'
+format_version: 1
+code: product
+name: Product
+kind: record
+record_schema: '{"type":"object","required":["price"]}'
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+  - code: price
+    value_type: number
+    value_schema: '{"type":"number","minimum":0}'
 "#;
     let compiled = compile(parse(source).unwrap(), &[], source).unwrap();
     assert_eq!(compiled.record_schema.unwrap()["required"][0], "price");
@@ -871,19 +850,18 @@ value_schema = '{"type":"number","minimum":0}'
 #[test]
 fn rejects_record_schema_references_to_unknown_attributes() {
     let source = r#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-record_schema = '__SCHEMA__'
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
+format_version: 1
+code: product
+name: Product
+kind: record
+record_schema: '__SCHEMA__'
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
 "#;
 
     for (schema, keyword) in [
@@ -916,23 +894,20 @@ value_type = "string"
 #[test]
 fn allows_nested_record_schema_value_properties() {
     let source = r#"
-format_version = 1
-code = "schedule"
-name = "Schedule"
-kind = "record"
-record_schema = '{"type":"object","properties":{"cutoff":{"type":"object","required":["time"],"properties":{"time":{"type":"string"}}}}}'
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "cutoff"
-value_type = "time"
+format_version: 1
+code: schedule
+name: Schedule
+kind: record
+record_schema: '{"type":"object","properties":{"cutoff":{"type":"object","required":["time"],"properties":{"time":{"type":"string"}}}}}'
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+  - code: cutoff
+    value_type: time
 "#;
 
     assert!(compile(parse(source).unwrap(), &[], source).is_ok());
@@ -941,31 +916,30 @@ value_type = "time"
 #[test]
 fn rejects_invalid_json_schema_contracts() {
     let source = r#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
+format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
 "#;
     for invalid in [
         source.replace(
-            "value_type = \"string\"",
-            "value_type = \"string\"\nvalue_schema = \"not json\"",
+            "value_type: string",
+            "value_type: string\nvalue_schema: not json",
         ),
         source.replace(
-            "kind = \"record\"",
-            "kind = \"mixin\"\nrecord_schema = '{\"type\":\"object\"}'",
+            "kind: record",
+            "kind: mixin\nrecord_schema: '{\"type\":\"object\"}'",
         ),
         source.replace(
-            "value_type = \"string\"",
-            "value_type = \"relationship\"\nvalue_schema = '{\"type\":\"array\"}'",
+            "value_type: string",
+            "value_type: relationship\nvalue_schema: '{\"type\":\"array\"}'",
         ),
     ] {
         assert!(parse(&invalid).is_err());
@@ -975,57 +949,44 @@ value_type = "string"
 #[test]
 fn validates_record_heading_stack_component() {
     let source = r#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[views.detail]
-type = "stack"
-component = { id = "attricat.record_heading", version = 1 }
-children = [
-  { type = "field", field = "title" },
-  { type = "text", text = "SKU" },
-  { type = "field", field = "sku" }
-]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "sku"
-value_type = "string"
-
-[[attributes]]
-code = "category"
-value_type = "relationship"
+format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+  detail:
+    type: stack
+    component: {id: attricat.record_heading, version: 1}
+    children:
+      - {type: field, field: title}
+      - {type: text, text: SKU}
+      - {type: field, field: sku}
+attributes:
+  - code: title
+    value_type: string
+  - code: sku
+    value_type: string
+  - code: category
+    value_type: relationship
 "#;
     assert!(compile(parse(source).unwrap(), &[], source).is_ok());
 
     for invalid in [
-        source.replace("[views.detail]", "[views.edit]"),
+        source.replace("  detail:\n", "  edit:\n"),
         source.replace(
-            "component = { id = \"attricat.record_heading\", version = 1 }",
-            "component = { id = \"attricat.field_display\", version = 1 }",
+            "component: {id: attricat.record_heading, version: 1}",
+            "component: {id: attricat.field_display, version: 1}",
         ),
+        source.replace("{type: field, field: title}", "{type: text, text: Product}"),
+        source.replace("field: title", "field: category"),
         source.replace(
-            "{ type = \"field\", field = \"title\" }",
-            "{ type = \"text\", text = \"Product\" }",
+            "{type: text, text: SKU}",
+            "{type: relationship_list, field: category}",
         ),
-        source.replace("field = \"title\"", "field = \"category\""),
-        source.replace(
-            "{ type = \"text\", text = \"SKU\" }",
-            "{ type = \"relationship_list\", field = \"category\" }",
-        ),
-        source.replace(
-            "{ type = \"text\", text = \"SKU\" }",
-            "{ type = \"grid\", children = [] }",
-        ),
+        source.replace("{type: text, text: SKU}", "{type: grid, children: []}"),
     ] {
         assert!(compile(parse(&invalid).unwrap(), &[], &invalid).is_err());
     }
@@ -1034,42 +995,34 @@ value_type = "relationship"
 #[test]
 fn validates_self_referential_hierarchy_component() {
     let source = r#"
-format_version = 1
-code = "category"
-name = "Category"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[views.detail]
-type = "stack"
-children = [
-  { type = "relationship_list", field = "parent", component = { id = "attricat.relationship_hierarchy", version = 1 } }
-]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "parent"
-value_type = "relationship"
-target_blueprint = "category"
+format_version: 1
+code: category
+name: Category
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+  detail:
+    type: stack
+    children:
+      - type: relationship_list
+        field: parent
+        component: {id: attricat.relationship_hierarchy, version: 1}
+attributes:
+  - code: title
+    value_type: string
+  - code: parent
+    value_type: relationship
+    target_blueprint: category
 "#;
     compile(parse(source).unwrap(), &[], source).unwrap();
 
-    let invalid = source.replace(
-        "target_blueprint = \"category\"",
-        "target_blueprint = \"product\"",
-    );
+    let invalid = source.replace("target_blueprint: category", "target_blueprint: product");
     assert!(compile(parse(&invalid).unwrap(), &[], &invalid).is_err());
 
-    let blank_parent_field = invalid.replace(
-        "version = 1 }",
-        "version = 1, props = { parent_field = \"\" } }",
-    );
+    let blank_parent_field =
+        invalid.replace("version: 1}", "version: 1, props: {parent_field: ''}}");
     assert!(
         compile(
             parse(&blank_parent_field).unwrap(),
@@ -1083,22 +1036,20 @@ target_blueprint = "category"
 #[test]
 fn rejects_empty_legacy_table_fields() {
     let source = r#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[views.table]
-type = "table"
-columns = []
-
-[[attributes]]
-code = "title"
-value_type = "string"
+format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+  table:
+    type: table
+    columns: []
+attributes:
+  - code: title
+    value_type: string
 "#;
     assert!(matches!(
         compile(parse(source).unwrap(), &[], source),
@@ -1109,26 +1060,24 @@ value_type = "string"
 #[test]
 fn extension_layout_is_record_only_and_rejects_ambiguous_keys() {
     let source = r#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[views.extension_layout]
-type = "extension_layout"
-version = 1
-
-[views.extension_layout.outlets.record_preview_panel]
-order = ["acme.inventory:summary"]
-hidden = ["acme.legacy:panel"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
+format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+  extension_layout:
+    type: extension_layout
+    version: 1
+    outlets:
+      record_preview_panel:
+        order: ['acme.inventory:summary']
+        hidden: ['acme.legacy:panel']
+attributes:
+  - code: title
+    value_type: string
 "#;
     let compiled = compile(parse(source).unwrap(), &[], source).unwrap();
     assert!(matches!(
@@ -1137,19 +1086,17 @@ value_type = "string"
     ));
 
     for invalid in [
-        source.replace("kind = \"record\"", "kind = \"mixin\""),
-        source.replace(
-            "version = 1\n\n[views.extension_layout.outlets",
-            "version = 2\n\n[views.extension_layout.outlets",
-        ),
+        source.replace("kind: record", "kind: mixin"),
+        source.replace("    version: 1\n    outlets:", "    version: 2\n    outlets:"),
         source.replace("record_preview_panel", "navigation"),
         source.replace("acme.inventory:summary", "malformed"),
         source.replace(
-            "hidden = [\"acme.legacy:panel\"]",
-            "hidden = [\"acme.inventory:summary\"]",
+            "hidden: ['acme.legacy:panel']",
+            "hidden: ['acme.inventory:summary']",
         ),
-        format!(
-            "{source}\n[views.extension_layout.outlets.record_action]\norder = [\"acme.inventory:summary\"]\nhidden = []\n"
+        source.replace(
+            "    outlets:\n",
+            "    outlets:\n      record_action:\n        order: ['acme.inventory:summary']\n        hidden: []\n",
         ),
     ] {
         assert!(compile(parse(&invalid).unwrap(), &[], &invalid).is_err());
@@ -1159,44 +1106,34 @@ value_type = "string"
 #[test]
 fn explorer_view_browse_by_requires_a_single_target_relationship_or_path() {
     let source = r#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[views.explorer]
-type = "explorer"
-browse_by = "categories"
-
-[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "categories"
-value_type = "relationship"
-target_blueprint = "category"
-
-[[attributes]]
-code = "related"
-value_type = "relationship"
-target_blueprints = ["category", "brand"]
-
-[[attributes]]
-code = "model"
-value_type = "relationship"
-target_blueprint = "model"
-cardinality = "one"
-
-[[attributes]]
-code = "tags"
-value_type = "relationship"
-target_blueprint = "tag"
-cardinality = "many"
+format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+  explorer:
+    type: explorer
+    browse_by: categories
+attributes:
+  - code: title
+    value_type: string
+  - code: categories
+    value_type: relationship
+    target_blueprint: category
+  - code: related
+    value_type: relationship
+    target_blueprints: [category, brand]
+  - code: model
+    value_type: relationship
+    target_blueprint: model
+    cardinality: one
+  - code: tags
+    value_type: relationship
+    target_blueprint: tag
+    cardinality: many
 "#;
     let compiled = compile(parse(source).unwrap(), &[], source).unwrap();
     assert_eq!(
@@ -1205,7 +1142,7 @@ cardinality = "many"
             browse_by: Some(BrowseBy::Field("categories".to_owned()))
         })
     );
-    let hidden = source.replace("browse_by = \"categories\"", "browse_by = false");
+    let hidden = source.replace("browse_by: categories", "browse_by: false");
     assert_eq!(
         compile(parse(&hidden).unwrap(), &[], &hidden)
             .unwrap()
@@ -1218,10 +1155,7 @@ cardinality = "many"
 
     // Later hops resolve against published targets when the blueprint is saved.
     for path in ["model.brand", "model.brand.group", "tags"] {
-        let valid = source.replace(
-            "browse_by = \"categories\"",
-            &format!("browse_by = \"{path}\""),
-        );
+        let valid = source.replace("browse_by: categories", &format!("browse_by: '{path}'"));
         assert_eq!(
             compile(parse(&valid).unwrap(), &[], &valid)
                 .unwrap()
@@ -1235,39 +1169,39 @@ cardinality = "many"
 
     for (invalid, error) in [
         (
-            source.replace("browse_by = \"categories\"", "browse_by = \"title\""),
+            source.replace("browse_by: categories", "browse_by: title"),
             "title",
         ),
         // A path's hops must hold one value each.
         (
-            source.replace("browse_by = \"categories\"", "browse_by = \"tags.parent\""),
+            source.replace("browse_by: categories", "browse_by: tags.parent"),
             "tags.parent",
         ),
         (
-            source.replace("browse_by = \"categories\"", "browse_by = \"title.brand\""),
+            source.replace("browse_by: categories", "browse_by: title.brand"),
             "title.brand",
         ),
         (
             source.replace(
-                "browse_by = \"categories\"",
-                "browse_by = \"model.brand.group.parent\"",
+                "browse_by: categories",
+                "browse_by: model.brand.group.parent",
             ),
             "model.brand.group.parent",
         ),
         (
-            source.replace("browse_by = \"categories\"", "browse_by = \"model..brand\""),
+            source.replace("browse_by: categories", "browse_by: model..brand"),
             "model..brand",
         ),
         (
-            source.replace("browse_by = \"categories\"", "browse_by = \"related\""),
+            source.replace("browse_by: categories", "browse_by: related"),
             "related",
         ),
         (
-            source.replace("browse_by = \"categories\"", "browse_by = \"missing\""),
+            source.replace("browse_by: categories", "browse_by: missing"),
             "missing",
         ),
         (
-            source.replace("browse_by = \"categories\"", "browse_by = true"),
+            source.replace("browse_by: categories", "browse_by: true"),
             "true",
         ),
     ] {
@@ -1276,7 +1210,7 @@ cardinality = "many"
             Err(BlueprintError::InvalidBrowseByField(field)) if field == error
         ));
     }
-    let renamed = source.replace("[views.explorer]", "[views.browse]");
+    let renamed = source.replace("  explorer:\n", "  browse:\n");
     assert!(matches!(
         compile(parse(&renamed).unwrap(), &[], &renamed),
         Err(BlueprintError::InvalidExplorerView)
@@ -1286,31 +1220,25 @@ cardinality = "many"
 #[test]
 fn page_title_view_joins_scalar_fields_on_record_blueprints() {
     let source = r#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title", "sku"]
-
-[views.page_title]
-type = "page_title"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "sku"
-value_type = "string"
-
-[[attributes]]
-code = "category"
-value_type = "relationship"
-target_blueprint = "category"
+format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title, sku]
+  page_title:
+    type: page_title
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+  - code: sku
+    value_type: string
+  - code: category
+    value_type: relationship
+    target_blueprint: category
 "#;
     let compiled = compile(parse(source).unwrap(), &[], source).unwrap();
     assert_eq!(
@@ -1321,29 +1249,30 @@ target_blueprint = "category"
         })
     );
 
-    let empty = source.replace("fields = [\"title\"]", "fields = []");
+    let empty = source.replace("fields: [title]", "fields: []");
     assert!(matches!(
         compile(parse(&empty).unwrap(), &[], &empty),
         Err(BlueprintError::EmptyPageTitleFields)
     ));
-    let duplicate = source.replace("fields = [\"title\"]", "fields = [\"title\", \"title\"]");
+    let duplicate = source.replace("fields: [title]", "fields: [title, title]");
     assert!(matches!(
         compile(parse(&duplicate).unwrap(), &[], &duplicate),
         Err(BlueprintError::DuplicatePageTitleField(field)) if field == "title"
     ));
-    let relationship = source.replace("fields = [\"title\"]", "fields = [\"category\"]");
+    let relationship = source.replace("fields: [title]", "fields: [category]");
     assert!(matches!(
         compile(parse(&relationship).unwrap(), &[], &relationship),
         Err(BlueprintError::NonScalarViewField { field, .. }) if field == "category"
     ));
-    let renamed = source.replace("[views.page_title]", "[views.heading]");
+    let renamed = source.replace("  page_title:\n", "  heading:\n");
     assert!(matches!(
         compile(parse(&renamed).unwrap(), &[], &renamed),
         Err(BlueprintError::InvalidPageTitleView)
     ));
-    let mixin = source
-        .replace("kind = \"record\"", "kind = \"mixin\"")
-        .replace("[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\", \"sku\"]\n\n", "");
+    let mixin = source.replace("kind: record", "kind: mixin").replace(
+        "  dropdown_option:\n    type: dropdown_option\n    fields: [title, sku]\n",
+        "",
+    );
     assert!(matches!(
         compile(parse(&mixin).unwrap(), &[], &mixin),
         Err(BlueprintError::InvalidPageTitleView)
@@ -1353,31 +1282,28 @@ target_blueprint = "category"
 #[test]
 fn table_columns_resolve_relationship_paths_and_reject_invalid_ones() {
     let source = r#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[views.table]
-type = "table"
-columns = [
-  { field = "title", label = "Title", renderer = { id = "attricat.table_display", version = 1 } },
-  { field = "category.name" },
-]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "category"
-value_type = "relationship"
-target_blueprint = "category"
-cardinality = "one"
+format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+  table:
+    type: table
+    columns:
+      - field: title
+        label: Title
+        renderer: {id: attricat.table_display, version: 1}
+      - {field: category.name}
+attributes:
+  - code: title
+    value_type: string
+  - code: category
+    value_type: relationship
+    target_blueprint: category
+    cardinality: one
 "#;
     let compiled = compile(parse(source).unwrap(), &[], source).unwrap();
     assert_eq!(compiled.attributes[1].cardinality, Some(Cardinality::One));
@@ -1386,7 +1312,7 @@ cardinality = "one"
         Some(Cardinality::Many)
     );
     let legacy = compile(
-        parse(&source.replace("cardinality = \"one\"", "cardinality = \"one_to_one\"")).unwrap(),
+        parse(&source.replace("cardinality: one", "cardinality: one_to_one")).unwrap(),
         &[],
         source,
     )
@@ -1406,12 +1332,14 @@ cardinality = "one"
         .is_err()
     );
     // The former `fields` shorthand is no longer part of the table view.
-    assert!(parse(&source.replace("columns = [", "fields = [\"title\"]\ncolumns = [")).is_err());
-    assert!(parse(&source.replace("cardinality = \"one\"", "cardinality = \"invalid\"")).is_err());
+    assert!(
+        parse(&source.replace("    columns:\n", "    fields: [title]\n    columns:\n")).is_err()
+    );
+    assert!(parse(&source.replace("cardinality: one", "cardinality: invalid")).is_err());
     // Modern column tables must validate their table-level component too.
     let invalid_table_component = source.replace(
-        "columns = [",
-        "component = { id = \"attricat.table_edit\", version = 1 }\ncolumns = [",
+        "    columns:\n",
+        "    component: {id: attricat.table_edit, version: 1}\n    columns:\n",
     );
     assert!(
         compile(
@@ -1421,29 +1349,26 @@ cardinality = "one"
         )
         .is_err()
     );
-    assert!(parse(&source.replace("version = 1", "version = -1")).is_err());
+    assert!(parse(&source.replace("version: 1", "version: -1")).is_err());
 }
 
 #[test]
 fn parses_extension_type_reference_and_json_primitive() {
     let source = r#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["price"]
-
-[[attributes]]
-code = "price"
-extension_type = "com.acme.commerce:money@^1"
-extension_configuration = '{"currency":"USD"}'
-
-[[attributes]]
-code = "metadata"
-value_type = "json"
+format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [price]
+attributes:
+  - code: price
+    extension_type: 'com.acme.commerce:money@^1'
+    extension_configuration: '{"currency":"USD"}'
+  - code: metadata
+    value_type: json
 "#;
     let compiled = compile(parse(source).unwrap(), &[], source).unwrap();
     assert_eq!(compiled.attributes[0].value_type, ValueType::String);
@@ -1458,27 +1383,24 @@ value_type = "json"
 fn edit_views_are_rejected() {
     // Records are edited in place on the detail view.
     let source = r#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-record_schema = '{"type":"object","required":["title","price"]}'
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[views.edit]
-type = "stack"
-children = [{ type = "field", field = "title" }]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "price"
-value_type = "number"
+format_version: 1
+code: product
+name: Product
+kind: record
+record_schema: '{"type":"object","required":["title","price"]}'
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+  edit:
+    type: stack
+    children:
+      - {type: field, field: title}
+attributes:
+  - code: title
+    value_type: string
+  - code: price
+    value_type: number
 "#;
     assert!(matches!(
         compile(parse(source).unwrap(), &[], source),
@@ -1491,57 +1413,43 @@ fn compile_source(source: &str) -> Result<attricat_blueprint::CompiledBlueprint,
 }
 
 const STRUCTURAL_BLUEPRINT: &str = r#"
-format_version = 1
-code = "part"
-name = "Part"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["part_number"]
-
-[[unique_keys]]
-code = "manufacturer_part"
-attributes = ["manufacturer", "part_number"]
-
-[[unique_keys]]
-code = "slug"
-attributes = ["slug"]
-scope = "context"
-case_sensitive = true
-
-[[attributes]]
-code = "part_number"
-value_type = "string"
-
-[[attributes]]
-code = "slug"
-value_type = "string"
-
-[[attributes]]
-code = "manufacturer"
-value_type = "relationship"
-target_blueprint = "manufacturer"
-cardinality = "one"
-
-[[attributes]]
-code = "subject"
-value_type = "relationship"
-target_blueprints = ["product", "material", "part"]
-
-[[attributes]]
-code = "parent"
-value_type = "relationship"
-target_blueprint = "part"
-tree = true
-context_editable = "default"
-
-[[attributes]]
-code = "predecessors"
-value_type = "relationship"
-target_blueprints = ["part"]
-acyclic = true
-context_editable = "default"
+format_version: 1
+code: part
+name: Part
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [part_number]
+unique_keys:
+  - code: manufacturer_part
+    attributes: [manufacturer, part_number]
+  - code: slug
+    attributes: [slug]
+    scope: context
+    case_sensitive: true
+attributes:
+  - code: part_number
+    value_type: string
+  - code: slug
+    value_type: string
+  - code: manufacturer
+    value_type: relationship
+    target_blueprint: manufacturer
+    cardinality: one
+  - code: subject
+    value_type: relationship
+    target_blueprints: [product, material, part]
+  - code: parent
+    value_type: relationship
+    target_blueprint: part
+    tree: true
+    context_editable: default
+  - code: predecessors
+    value_type: relationship
+    target_blueprints: [part]
+    acyclic: true
+    context_editable: default
 "#;
 
 #[test]
@@ -1583,68 +1491,60 @@ fn compiles_unique_keys_target_sets_and_hierarchies() {
 fn rejects_invalid_structural_constraints() {
     let cases = [
         (
-            STRUCTURAL_BLUEPRINT.replace(r#"attributes = ["slug"]"#, r#"attributes = ["missing"]"#),
+            STRUCTURAL_BLUEPRINT.replace(r#"attributes: [slug]"#, r#"attributes: [missing]"#),
             "unknown attribute 'missing'",
         ),
         (
-            STRUCTURAL_BLUEPRINT.replace(
-                r#"attributes = ["slug"]"#,
-                r#"attributes = ["slug", "slug"]"#,
-            ),
+            STRUCTURAL_BLUEPRINT.replace(r#"attributes: [slug]"#, r#"attributes: [slug, slug]"#),
             "listed twice",
         ),
         (
-            STRUCTURAL_BLUEPRINT.replace(r#"attributes = ["slug"]"#, r#"attributes = ["subject"]"#),
-            "cardinality = \"one\"",
+            STRUCTURAL_BLUEPRINT.replace(r#"attributes: [slug]"#, r#"attributes: [subject]"#),
+            "cardinality: one",
         ),
         (
-            STRUCTURAL_BLUEPRINT.replace(r#"scope = "context""#, r#"scope = "channel""#),
+            STRUCTURAL_BLUEPRINT.replace(r#"scope: context"#, r#"scope: channel"#),
             "unsupported scope",
         ),
         (
             STRUCTURAL_BLUEPRINT.replace(
-                r#"code = "slug"
-attributes"#,
-                r#"code = "manufacturer_part"
-attributes"#,
+                "  - code: slug\n    attributes: [slug]",
+                "  - code: manufacturer_part\n    attributes: [slug]",
             ),
             "duplicated",
         ),
         (
             STRUCTURAL_BLUEPRINT.replace(
-                r#"target_blueprints = ["product", "material", "part"]"#,
-                r#"target_blueprints = ["product", "product"]"#,
+                r#"target_blueprints: [product, material, part]"#,
+                r#"target_blueprints: [product, product]"#,
             ),
             "listed more than once",
         ),
         (
             STRUCTURAL_BLUEPRINT.replace(
-                r#"target_blueprints = ["product", "material", "part"]"#,
-                r#"target_blueprints = ["product"]
-target_blueprint = "part""#,
+                r#"target_blueprints: [product, material, part]"#,
+                "target_blueprints: [product]\n    target_blueprint: part",
             ),
             "not both",
         ),
         (
             STRUCTURAL_BLUEPRINT.replace(
-                "tree = true\ncontext_editable = \"default\"",
-                "tree = true\ncardinality = \"many\"\ncontext_editable = \"default\"",
+                "tree: true\n    context_editable: default",
+                "tree: true\n    cardinality: many\n    context_editable: default",
             ),
             "at most one target",
         ),
         (
             STRUCTURAL_BLUEPRINT.replace(
-                "acyclic = true\ncontext_editable = \"default\"",
-                "acyclic = true",
+                "acyclic: true\n    context_editable: default",
+                "acyclic: true",
             ),
             "context_editable",
         ),
         (
             STRUCTURAL_BLUEPRINT.replace(
-                r#"target_blueprints = ["part"]
-acyclic = true"#,
-                r#"target_blueprints = ["product"]
-acyclic = true"#,
+                "target_blueprints: [part]\n    acyclic: true",
+                "target_blueprints: [product]\n    acyclic: true",
             ),
             "own blueprint 'part'",
         ),
@@ -1655,19 +1555,18 @@ acyclic = true"#,
     }
 
     let scalar_hierarchy = r#"
-format_version = 1
-code = "note"
-name = "Note"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-acyclic = true
+format_version: 1
+code: note
+name: Note
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+    acyclic: true
 "#;
     assert!(matches!(
         compile_source(scalar_hierarchy),
@@ -1675,18 +1574,16 @@ acyclic = true
     ));
 
     let mixin_key = r#"
-format_version = 1
-code = "identity"
-name = "Identity"
-kind = "mixin"
-
-[[unique_keys]]
-code = "sku"
-attributes = ["sku"]
-
-[[attributes]]
-code = "sku"
-value_type = "string"
+format_version: 1
+code: identity
+name: Identity
+kind: mixin
+unique_keys:
+  - code: sku
+    attributes: [sku]
+attributes:
+  - code: sku
+    value_type: string
 "#;
     assert!(
         compile_source(mixin_key)

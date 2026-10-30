@@ -10,13 +10,13 @@ use api::{
 use support::*;
 use tokio::sync::watch;
 
-const DEFINITION: &str = "format_version = 1\ncode = \"tag_new_products\"\nname = \"Tag new products\"\n[[triggers]]\nevent_type = \"record.created.v1\"\n[[actions]]\ntype = \"system_tags_add\"\ntags = [\"new\"]";
+const DEFINITION: &str = "format_version: 1\ncode: tag_new_products\nname: Tag new products\ntriggers:\n  - event_type: record.created.v1\nactions:\n  - type: system_tags_add\n    tags: [new]";
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
 async fn workflow_lifecycle_keeps_immutable_revisions(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
-    let invalid = client.post(format!("{base_url}/workflows/validate")).json(&json!({"definition":"format_version=1\ncode='x'\nname='x'\nscript='no'\ntriggers=[]\nactions=[]"})).send().await.unwrap();
+    let invalid = client.post(format!("{base_url}/workflows/validate")).json(&json!({"definition":"format_version: 1\ncode: x\nname: x\nscript: 'no'\ntriggers: []\nactions: []"})).send().await.unwrap();
     assert_eq!(invalid.status(), StatusCode::UNPROCESSABLE_ENTITY);
     let created: Value = client
         .post(format!("{base_url}/workflows"))
@@ -92,25 +92,24 @@ async fn completion_failure_on_final_attempt_dead_letters_workflow_run_and_repla
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "workflow_completion_failure_product"
-name = "Workflow completion failure product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-default_value = "untitled"
+format_version: 1
+code: workflow_completion_failure_product
+name: Workflow completion failure product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+    default_value: untitled
 "#,
     )
     .await;
     let record = create_record(&client, &base_url, &blueprint).await;
     let record_id = record["id"].as_str().unwrap();
-    let definition = "format_version = 2\ncode = \"completion_failure\"\nname = \"Completion failure\"\n[[triggers]]\ntype = \"manual\"\n[[actions]]\ntype = \"system_tags_add\"\ntags = [\"completed\"]";
+    let definition = "format_version: 2\ncode: completion_failure\nname: Completion failure\ntriggers:\n  - type: manual\nactions:\n  - type: system_tags_add\n    tags: [completed]";
     let workflow: Value = client
         .post(format!("{base_url}/workflows"))
         .json(&json!({"definition": definition}))
@@ -261,17 +260,18 @@ async fn sample_marker_is_preserved_by_ordinary_tag_add_automation(pool: PgPool)
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "sample_workflow_product"
-name = "Sample workflow product"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-[[attributes]]
-code = "title"
-value_type = "string"
-default_value = "untitled"
+format_version: 1
+code: sample_workflow_product
+name: Sample workflow product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+    default_value: untitled
 "#,
     )
     .await;
@@ -426,19 +426,18 @@ async fn workflow_outbox_dispatcher_and_worker_are_idempotent_and_disable_safe(p
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "workflow_test_product"
-name = "Workflow test product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-default_value = "untitled"
+format_version: 1
+code: workflow_test_product
+name: Workflow test product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+    default_value: untitled
 "#,
     )
     .await;
@@ -766,40 +765,38 @@ async fn event_triggers_run_only_when_a_listed_attribute_changed(pool: PgPool) {
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "reviewed_document"
-name = "Reviewed document"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-[[attributes]]
-code = "title"
-value_type = "string"
-[[attributes]]
-code = "body"
-value_type = "string"
-[[attributes]]
-code = "license"
-value_type = "relationship"
+format_version: 1
+code: reviewed_document
+name: Reviewed document
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+  - code: body
+    value_type: string
+  - code: license
+    value_type: relationship
 "#,
     )
     .await;
     enabled_workflow(
         &client,
         &base_url,
-        r#"format_version = 2
-code = "rereview_on_content_change"
-name = "Re-review on content change"
-[[triggers]]
-event_type = "attribute_value.changed.v1"
-attributes = ["body", "license"]
-[[triggers]]
-event_type = "relationship.changed.v1"
-attributes = ["body", "license"]
-[[actions]]
-type = "system_tags_add"
-tags = ["needs-review"]"#,
+        r#"format_version: 2
+code: rereview_on_content_change
+name: Re-review on content change
+triggers:
+  - event_type: attribute_value.changed.v1
+    attributes: [body, license]
+  - event_type: relationship.changed.v1
+    attributes: [body, license]
+actions:
+  - type: system_tags_add
+    tags: [needs-review]"#,
     )
     .await;
     let document = create_record(&client, &base_url, &blueprint).await;
@@ -877,35 +874,35 @@ async fn event_triggers_filter_on_relationship_change_kinds(pool: PgPool) {
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "licensed_document"
-name = "Licensed document"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-[[attributes]]
-code = "title"
-value_type = "string"
-[[attributes]]
-code = "license"
-value_type = "relationship"
+format_version: 1
+code: licensed_document
+name: Licensed document
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+  - code: license
+    value_type: relationship
 "#,
     )
     .await;
     enabled_workflow(
         &client,
         &base_url,
-        r#"format_version = 2
-code = "license_added"
-name = "License added"
-[[triggers]]
-event_type = "relationship.changed.v1"
-attributes = ["license"]
-change_kinds = ["relationship_add"]
-[[actions]]
-type = "system_tags_add"
-tags = ["licensed"]"#,
+        r#"format_version: 2
+code: license_added
+name: License added
+triggers:
+  - event_type: relationship.changed.v1
+    attributes: [license]
+    change_kinds: [relationship_add]
+actions:
+  - type: system_tags_add
+    tags: [licensed]"#,
     )
     .await;
     let document = create_record(&client, &base_url, &blueprint).await;
@@ -950,34 +947,34 @@ async fn event_triggers_filter_on_added_and_removed_tags(pool: PgPool) {
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "tagged_document"
-name = "Tagged document"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-[[attributes]]
-code = "title"
-value_type = "string"
+format_version: 1
+code: tagged_document
+name: Tagged document
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
 "#,
     )
     .await;
     enabled_workflow(
         &client,
         &base_url,
-        r#"format_version = 2
-code = "approval_changed"
-name = "Approval changed"
-[[triggers]]
-event_type = "record.updated.v1"
-tags_added = ["approved"]
-[[triggers]]
-event_type = "record.updated.v1"
-tags_removed = ["approved"]
-[[actions]]
-type = "system_tags_add"
-tags = ["approval-changed"]"#,
+        r#"format_version: 2
+code: approval_changed
+name: Approval changed
+triggers:
+  - event_type: record.updated.v1
+    tags_added: [approved]
+  - event_type: record.updated.v1
+    tags_removed: [approved]
+actions:
+  - type: system_tags_add
+    tags: [approval-changed]"#,
     )
     .await;
     let document = create_record(&client, &base_url, &blueprint).await;
@@ -1038,16 +1035,17 @@ async fn event_triggers_run_only_for_listed_blueprints(pool: PgPool) {
     let blueprint = |code: &str| {
         format!(
             r#"
-format_version = 1
-code = "{code}"
-name = "{code}"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-[[attributes]]
-code = "title"
-value_type = "string"
+format_version: 1
+code: '{code}'
+name: '{code}'
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
 "#
         )
     };
@@ -1056,15 +1054,15 @@ value_type = "string"
     let other = create_blueprint(&client, &base_url, &blueprint("scoped_other")).await;
     let definition = |blueprints: &str| {
         format!(
-            r#"format_version = 2
-code = "tag_catalogue_changes"
-name = "Tag catalogue changes"
-[[triggers]]
-event_type = "attribute_value.changed.v1"
-blueprints = [{blueprints}]
-[[actions]]
-type = "system_tags_add"
-tags = ["catalogue-changed"]"#
+            r#"format_version: 2
+code: tag_catalogue_changes
+name: Tag catalogue changes
+triggers:
+  - event_type: attribute_value.changed.v1
+    blueprints: [{blueprints}]
+actions:
+  - type: system_tags_add
+    tags: [catalogue-changed]"#
         )
     };
 
@@ -1090,7 +1088,7 @@ tags = ["catalogue-changed"]"#
     // attribute those blueprints declare, or a reusable attribute.
     client
         .post(format!("{base_url}/reusable-attributes"))
-        .json(&json!({ "definition": "code = \"reviewer\"\nname = \"Reviewer\"\nvalue_type = \"string\"\n" }))
+        .json(&json!({ "definition": "code: reviewer\nname: Reviewer\nvalue_type: string\n" }))
         .send()
         .await
         .unwrap()
@@ -1098,16 +1096,16 @@ tags = ["catalogue-changed"]"#
         .unwrap();
     let writing = |code: &str, attribute: &str| {
         json!({ "definition": format!(
-            r#"format_version = 2
-code = "{code}"
-name = "Write {attribute}"
-[[triggers]]
-event_type = "record.created.v1"
-blueprints = ["scoped_product"]
-[[actions]]
-type = "attribute_write"
-attribute_code = "{attribute}"
-fixed = "x""#
+            r#"format_version: 2
+code: '{code}'
+name: 'Write {attribute}'
+triggers:
+  - event_type: record.created.v1
+    blueprints: [scoped_product]
+actions:
+  - type: attribute_write
+    attribute_code: '{attribute}'
+    fixed: x"#
         ) })
     };
     // The editor's live check runs the same rule as a save.
@@ -1169,23 +1167,22 @@ fixed = "x""#
 }
 
 const LICENSED_PRODUCT: &str = r#"
-format_version = 1
-code = "licensed_product"
-name = "Licensed product"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-[[attributes]]
-code = "title"
-value_type = "string"
-[[attributes]]
-code = "license"
-value_type = "relationship"
-[[attributes]]
-code = "status"
-value_type = "string"
-value_schema = '''{"type":"string","enum":["draft","approved","in_review","retired"],"x-attricat-status":{"version":1,"options":[{"code":"draft","label":"Draft"},{"code":"approved","label":"Approved"},{"code":"in_review","label":"In review"},{"code":"retired","label":"Retired"}],"transitions":[{"from":null,"to":"draft"},{"from":"draft","to":"approved"},{"from":"approved","to":"in_review"},{"from":"draft","to":"retired"}]}}'''
+format_version: 1
+code: licensed_product
+name: Licensed product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+  - code: license
+    value_type: relationship
+  - code: status
+    value_type: string
+    value_schema: '{"type":"string","enum":["draft","approved","in_review","retired"],"x-attricat-status":{"version":1,"options":[{"code":"draft","label":"Draft"},{"code":"approved","label":"Approved"},{"code":"in_review","label":"In review"},{"code":"retired","label":"Retired"}],"transitions":[{"from":null,"to":"draft"},{"from":"draft","to":"approved"},{"from":"approved","to":"in_review"},{"from":"draft","to":"retired"}]}}'
 "#;
 
 async fn licensed_product(
@@ -1265,16 +1262,17 @@ async fn referencing_update_validates_each_target_and_retries_only_failures(pool
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "license_record"
-name = "License"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-[[attributes]]
-code = "title"
-value_type = "string"
+format_version: 1
+code: license_record
+name: License
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
 "#,
     )
     .await;
@@ -1290,22 +1288,21 @@ value_type = "string"
     let workflow_id = enabled_workflow(
         &client,
         &base_url,
-        r#"format_version = 2
-code = "license_changed"
-name = "Send licensed products back to review"
-[[triggers]]
-type = "manual"
-[[actions]]
-type = "referencing_records_update"
-relationship_attribute = "license"
-max_targets = 10
-[[actions.actions]]
-type = "attribute_write"
-attribute_code = "status"
-fixed = "in_review"
-[[actions.actions]]
-type = "system_tags_add"
-tags = ["needs-review"]"#,
+        r#"format_version: 2
+code: license_changed
+name: Send licensed products back to review
+triggers:
+  - type: manual
+actions:
+  - type: referencing_records_update
+    relationship_attribute: license
+    max_targets: 10
+    actions:
+      - type: attribute_write
+        attribute_code: status
+        fixed: in_review
+      - type: system_tags_add
+        tags: [needs-review]"#,
     )
     .await;
     let run: Value = client
@@ -1447,7 +1444,7 @@ async fn referencing_update_refuses_more_targets_than_its_limit(pool: PgPool) {
     let license_blueprint = create_blueprint(
         &client,
         &base_url,
-        "format_version = 1\ncode = \"limited_license\"\nname = \"License\"\nkind = \"record\"\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"",
+        "format_version: 1\ncode: limited_license\nname: License\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string",
     )
     .await;
     create_blueprint(&client, &base_url, LICENSED_PRODUCT).await;
@@ -1457,7 +1454,7 @@ async fn referencing_update_refuses_more_targets_than_its_limit(pool: PgPool) {
     let workflow_id = enabled_workflow(
         &client,
         &base_url,
-        "format_version = 2\ncode = \"limited\"\nname = \"Limited\"\n[[triggers]]\ntype = \"manual\"\n[[actions]]\ntype = \"referencing_records_update\"\nrelationship_attribute = \"license\"\nmax_targets = 1\n[[actions.actions]]\ntype = \"system_tags_add\"\ntags = [\"needs-review\"]",
+        "format_version: 2\ncode: limited\nname: Limited\ntriggers:\n  - type: manual\nactions:\n  - type: referencing_records_update\n    relationship_attribute: license\n    max_targets: 1\n    actions:\n      - type: system_tags_add\n        tags: [needs-review]",
     )
     .await;
     client
@@ -1491,35 +1488,35 @@ async fn workflow_writes_withdraw_changed_publications(pool: PgPool) {
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "published_document"
-name = "Published document"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-[[attributes]]
-code = "title"
-value_type = "string"
-[[attributes]]
-code = "body"
-value_type = "string"
+format_version: 1
+code: published_document
+name: Published document
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+  - code: body
+    value_type: string
 "#,
     )
     .await;
     enabled_workflow(
         &client,
         &base_url,
-        r#"format_version = 2
-code = "retitle_on_body_change"
-name = "Retitle on body change"
-[[triggers]]
-event_type = "attribute_value.changed.v1"
-attributes = ["body"]
-[[actions]]
-type = "attribute_write"
-attribute_code = "title"
-fixed = "Reworked""#,
+        r#"format_version: 2
+code: retitle_on_body_change
+name: Retitle on body change
+triggers:
+  - event_type: attribute_value.changed.v1
+    attributes: [body]
+actions:
+  - type: attribute_write
+    attribute_code: title
+    fixed: Reworked"#,
     )
     .await;
     let document = create_record(&client, &base_url, &blueprint).await;
@@ -1578,19 +1575,18 @@ async fn manual_run_of_a_disabled_workflow_explains_it_is_not_enabled(pool: PgPo
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "disabled_workflow_product"
-name = "Disabled workflow product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-default_value = "untitled"
+format_version: 1
+code: disabled_workflow_product
+name: Disabled workflow product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+    default_value: untitled
 "#,
     )
     .await;
@@ -1598,7 +1594,7 @@ default_value = "untitled"
     let workflow_id = enabled_workflow(
         &client,
         &base_url,
-        "format_version = 2\ncode = \"disabled_manual\"\nname = \"Disabled manual\"\n[[triggers]]\ntype = \"manual\"\n[[actions]]\ntype = \"system_tags_add\"\ntags = [\"never\"]",
+        "format_version: 2\ncode: disabled_manual\nname: Disabled manual\ntriggers:\n  - type: manual\nactions:\n  - type: system_tags_add\n    tags: [never]",
     )
     .await;
     client

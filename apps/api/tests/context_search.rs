@@ -1,50 +1,47 @@
 use crate::support;
 use support::*;
 
-const CATEGORY: &str = r#"format_version = 1
-code = 'ctx_category'
-name = 'Context category'
-kind = 'record'
-[views.dropdown_option]
-type = 'dropdown_option'
-fields = ['title']
-[[attributes]]
-code = 'title'
-value_type = 'string'
+const CATEGORY: &str = r#"format_version: 1
+code: ctx_category
+name: Context category
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
 "#;
 
-const ITEM: &str = r#"format_version = 1
-code = 'ctx_item'
-name = 'Context item'
-kind = 'record'
-[views.dropdown_option]
-type = 'dropdown_option'
-fields = ['name']
-[views.table]
-type = 'table'
-[[views.table.columns]]
-field = 'name'
-[[views.table.columns]]
-field = 'sku'
-[[views.table.columns]]
-field = 'category.title'
-[[attributes]]
-code = 'name'
-value_type = 'string'
-[[attributes]]
-code = 'sku'
-value_type = 'string'
-context_fallback = 'none'
-[[attributes]]
-code = 'category'
-value_type = 'relationship'
-cardinality = 'one'
-target_blueprint = 'ctx_category'
-[[attributes]]
-code = 'alt_category'
-value_type = 'relationship'
-cardinality = 'one'
-target_blueprint = 'ctx_category'
+const ITEM: &str = r#"format_version: 1
+code: ctx_item
+name: Context item
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+  table:
+    type: table
+    columns:
+      - {field: name}
+      - {field: sku}
+      - {field: category.title}
+attributes:
+  - code: name
+    value_type: string
+  - code: sku
+    value_type: string
+    context_fallback: none
+  - code: category
+    value_type: relationship
+    cardinality: one
+    target_blueprint: ctx_category
+  - code: alt_category
+    value_type: relationship
+    cardinality: one
+    target_blueprint: ctx_category
 "#;
 
 async fn create_context(client: &Client, base: &str, code: &str, parent: Option<&Value>) -> Value {

@@ -1,0 +1,8 @@
+values:
+  - kind: scalar
+    attribute_code: title
+    value: Granatowa koszula
+
+  - kind: scalar
+    attribute_code: price
+    value: 219.95

@@ -459,7 +459,7 @@
         },
         {
           "additionalProperties": false,
-          "description": "Runs when started on demand for one record. Requires `format_version = 2`.",
+          "description": "Runs when started on demand for one record. Requires `format_version: 2`.",
           "properties": {
             "type": {
               "const": "manual",
@@ -473,7 +473,7 @@
         },
         {
           "additionalProperties": false,
-          "description": "Runs on a UTC cron schedule for one fixed record. Requires `format_version = 2`.",
+          "description": "Runs on a UTC cron schedule for one fixed record. Requires `format_version: 2`.",
           "properties": {
             "cron": {
               "description": "Six-field cron expression, including seconds: `sec min hour day month weekday`.",
@@ -507,7 +507,7 @@
         },
         {
           "additionalProperties": false,
-          "description": "Reserved: runs when an extension emits a versioned event. Delivery is\nnot enabled yet. Requires `format_version = 2`.",
+          "description": "Reserved: runs when an extension emits a versioned event. Delivery is\nnot enabled yet. Requires `format_version: 2`.",
           "properties": {
             "contract_version": {
               "description": "Version of the event payload contract.",

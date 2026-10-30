@@ -1247,7 +1247,7 @@ fn describe_attributes(definition: &str, attributes: &mut [Attribute]) {
 }
 
 /// Compiles a definition that is about to be saved. Stored revisions may still
-/// declare the removed `[[rules]]` tables; new ones may not.
+/// declare the removed `rules` list; new ones may not.
 async fn compile_new_definition(
     transaction: &mut Transaction<'_, Postgres>,
     workspace_id: Uuid,

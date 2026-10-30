@@ -73,13 +73,13 @@ struct RawBlueprintDefinition {
     /// definition and intentionally ignored by the core blueprint compiler.
     #[serde(default)]
     #[schemars(with = "HashMap<String, serde_json::Value>")]
-    extensions: HashMap<String, toml::Value>,
+    extensions: HashMap<String, serde_json::Value>,
     /// Removed: rules are standalone resources created through `/rules`.
-    /// Stored revisions that still contain `[[rules]]` keep parsing, and
+    /// Stored revisions that still contain `rules` keep parsing, and
     /// saving a definition that declares them is refused.
     #[serde(default)]
     #[schemars(skip)]
-    rules: Option<toml::Value>,
+    rules: Option<serde_json::Value>,
     /// Business keys whose normalized values must be unique across the
     /// blueprint family. Record blueprints only.
     #[serde(default)]
@@ -176,11 +176,11 @@ struct RawAttributeDeclaration {
     )]
     target_blueprints: Vec<String>,
     /// Reject relationship writes that would form a cycle through this
-    /// self-referencing attribute. Requires `context_editable = "default"`.
+    /// self-referencing attribute. Requires `context_editable: default`.
     #[schemars(extend("x-attricat-value-types" = ["relationship"]))]
     acyclic: Option<bool>,
     /// An acyclic hierarchy in which every record has at most one target
-    /// (parent). Implies `acyclic` and `cardinality = "one"`.
+    /// (parent). Implies `acyclic` and `cardinality: one`.
     #[schemars(extend("x-attricat-value-types" = ["relationship"]))]
     tree: Option<bool>,
     /// Free-form metadata. `hidden`, `hidden:form`, `hidden:detail`,
@@ -217,7 +217,7 @@ struct RawAttributeDeclaration {
     from: Option<String>,
 }
 
-/// `generated = { … }` on an attribute.
+/// `generated: { … }` on an attribute.
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct RawGeneratedValue {
@@ -238,7 +238,7 @@ struct RawGeneratedValue {
     time_zone: Option<String>,
 }
 
-/// The JSON Schema for blueprint definition TOML, published as
+/// The JSON Schema for blueprint definition YAML, published as
 /// `contracts/blueprint-definition-v1.schema.json`. It describes structure
 /// and allowed values; cross-field rules remain enforced by [`parse`].
 pub fn definition_json_schema() -> serde_json::Value {
@@ -257,8 +257,8 @@ fn default_context_editable() -> String {
 }
 
 pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
-    let raw: RawBlueprintDefinition = toml::from_str(source)?;
-    // Parsing this field here makes `[extensions.<extension-id>]` a supported,
+    let raw: RawBlueprintDefinition = attricat_yaml::from_str(source)?;
+    // Parsing this field here makes `extensions.<extension-id>` a supported,
     // namespaced escape hatch while retaining strict validation for every core
     // blueprint field. Extension runtimes read their own data from the saved
     // immutable `definition` text.
@@ -320,7 +320,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                 !(MIN_CONNECTOR_INTERVAL_SECONDS..=MAX_CONNECTOR_INTERVAL_SECONDS)
                     .contains(&seconds)
             })
-            || !job.input.is_table()
+            || !job.input.is_object()
         {
             return Err(BlueprintError::InvalidConnectorJob(format!(
                 "invalid connector job '{}'",
@@ -449,7 +449,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                         if hierarchy.as_deref() == Some("tree") && cardinality != Cardinality::One {
                             return Err(BlueprintError::InvalidRelationshipHierarchy {
                                 code: attribute.code,
-                                message: "a tree allows at most one target per record; use cardinality = \"one\"".into(),
+                                message: "a tree allows at most one target per record; use cardinality: one".into(),
                             });
                         }
                         (Some(cardinality), Some(target_cardinality))

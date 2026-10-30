@@ -42,7 +42,7 @@ pub(super) fn validate_content(
     let mut prepared = BTreeMap::new();
     for resource in &manifest.resources.blueprints {
         let source = std::str::from_utf8(&files[&resource.path]).map_err(|_| {
-            SolutionPackError::Invalid(format!("blueprint '{}' must be UTF-8 TOML", resource.key))
+            SolutionPackError::Invalid(format!("blueprint '{}' must be UTF-8 YAML", resource.key))
         })?;
         let blueprint = prepare_blueprint(&resource.key, source, &blueprint_codes)?;
         prepared.insert(resource.key.clone(), blueprint);
@@ -98,14 +98,14 @@ pub(super) fn validate_content(
 /// definition: its record checks (`x-attricat-checks`) and status transition
 /// conditions. Packs name these blueprints by pack-local code.
 pub(super) fn visit_embedded_predicate_blueprint_codes(
-    table: &mut toml::Table,
+    table: &mut serde_json::Map<String, Value>,
     visit: &mut dyn FnMut(&mut String) -> Result<(), SolutionPackError>,
 ) -> Result<(), SolutionPackError> {
     fn json_string(
-        schema: &mut toml::Value,
+        schema: &mut Value,
         visit: &mut dyn FnMut(&mut String) -> Result<(), SolutionPackError>,
     ) -> Result<(), SolutionPackError> {
-        let toml::Value::String(source) = schema else {
+        let Value::String(source) = schema else {
             return Ok(());
         };
         // Malformed JSON is reported by the ordinary blueprint parser.
@@ -122,10 +122,7 @@ pub(super) fn visit_embedded_predicate_blueprint_codes(
     if let Some(schema) = table.get_mut("record_schema") {
         json_string(schema, visit)?;
     }
-    if let Some(attributes) = table
-        .get_mut("attributes")
-        .and_then(toml::Value::as_array_mut)
-    {
+    if let Some(attributes) = table.get_mut("attributes").and_then(Value::as_array_mut) {
         for attribute in attributes {
             if let Some(schema) = attribute.get_mut("value_schema") {
                 json_string(schema, visit)?;
@@ -135,8 +132,8 @@ pub(super) fn visit_embedded_predicate_blueprint_codes(
     Ok(())
 }
 
-fn table_of(value: &mut toml::Value) -> &mut toml::Table {
-    value.as_table_mut().expect("blueprint source is a table")
+fn table_of(value: &mut Value) -> &mut serde_json::Map<String, Value> {
+    value.as_object_mut().expect("blueprint source is a table")
 }
 
 fn prepare_blueprint(
@@ -144,14 +141,14 @@ fn prepare_blueprint(
     source: &str,
     blueprint_codes: &HashMap<&str, &str>,
 ) -> Result<PreparedBlueprint, SolutionPackError> {
-    let mut value: toml::Value = toml::from_str(source).map_err(|_| {
+    let mut value: Value = attricat_yaml::from_str(source).map_err(|_| {
         SolutionPackError::Invalid(format!(
-            "blueprint '{key}' is not valid strict blueprint TOML"
+            "blueprint '{key}' is not valid strict blueprint YAML"
         ))
     })?;
-    let table = value.as_table_mut().ok_or_else(|| {
+    let table = value.as_object_mut().ok_or_else(|| {
         SolutionPackError::Invalid(format!(
-            "blueprint '{key}' is not valid strict blueprint TOML"
+            "blueprint '{key}' is not valid strict blueprint YAML"
         ))
     })?;
     if table.contains_key("extensions") {
@@ -161,7 +158,7 @@ fn prepare_blueprint(
     }
     if table.contains_key("rules") {
         return invalid(format!(
-            "blueprint '{key}' cannot declare [[rules]]; declare them as pack rules"
+            "blueprint '{key}' cannot declare rules; declare them as pack rules"
         ));
     }
 
@@ -175,7 +172,7 @@ fn prepare_blueprint(
             ))
         })?;
         for include in includes {
-            let include = include.as_table_mut().ok_or_else(|| {
+            let include = include.as_object_mut().ok_or_else(|| {
                 SolutionPackError::Invalid(format!(
                     "blueprint '{key}' includes must use portable logical references"
                 ))
@@ -187,7 +184,7 @@ fn prepare_blueprint(
             }
             let alias = include
                 .get("alias")
-                .and_then(toml::Value::as_str)
+                .and_then(Value::as_str)
                 .ok_or_else(|| {
                     SolutionPackError::Invalid(format!(
                         "blueprint '{key}' include must declare an alias"
@@ -207,11 +204,8 @@ fn prepare_blueprint(
                     "blueprint '{key}' references undeclared include '{dependency}'"
                 ))
             })?;
-            include.insert(
-                "code".into(),
-                toml::Value::String((*dependency_code).into()),
-            );
-            include.insert("version".into(), toml::Value::Integer(1));
+            include.insert("code".into(), Value::String((*dependency_code).into()));
+            include.insert("version".into(), Value::from(1));
             portable_includes.push(SolutionPackBlueprintInclude {
                 alias,
                 key: dependency.clone(),
@@ -221,12 +215,9 @@ fn prepare_blueprint(
         }
     }
 
-    if let Some(attributes) = table
-        .get_mut("attributes")
-        .and_then(toml::Value::as_array_mut)
-    {
+    if let Some(attributes) = table.get_mut("attributes").and_then(Value::as_array_mut) {
         for attribute in attributes {
-            if let Some(attribute) = attribute.as_table_mut() {
+            if let Some(attribute) = attribute.as_object_mut() {
                 rewrite_blueprint_reference(
                     key,
                     attribute,
@@ -246,9 +237,9 @@ fn prepare_blueprint(
             }
         }
     }
-    if let Some(views) = table.get_mut("views").and_then(toml::Value::as_table_mut) {
+    if let Some(views) = table.get_mut("views").and_then(Value::as_object_mut) {
         for (_, view) in views.iter_mut() {
-            if let Some(view) = view.as_table_mut() {
+            if let Some(view) = view.as_object_mut() {
                 rewrite_view_references(key, view, blueprint_codes, Some(&mut dependencies))?;
             }
         }
@@ -264,14 +255,14 @@ fn prepare_blueprint(
             ))
         }
     })?;
-    let native_source = toml::to_string(&value).map_err(|_| {
+    let native_source = attricat_yaml::to_string(&value).map_err(|_| {
         SolutionPackError::Invalid(format!(
-            "blueprint '{key}' is not valid strict blueprint TOML"
+            "blueprint '{key}' is not valid strict blueprint YAML"
         ))
     })?;
     let definition = attricat_blueprint::parse(&native_source).map_err(|error| {
         let message = match error {
-            BlueprintError::Toml(_) => format!("blueprint '{key}' is invalid"),
+            BlueprintError::Yaml(_) => format!("blueprint '{key}' is invalid"),
             error => format!("blueprint '{key}' is invalid: {error}"),
         };
         SolutionPackError::Invalid(message)
@@ -378,7 +369,7 @@ fn reject_workspace_dependent_blueprint_constructs(
 
 fn rewrite_blueprint_reference(
     owner_key: &str,
-    table: &mut toml::map::Map<String, toml::Value>,
+    table: &mut serde_json::Map<String, Value>,
     field: &str,
     label: &str,
     blueprint_codes: &HashMap<&str, &str>,
@@ -400,13 +391,13 @@ fn rewrite_blueprint_reference(
     if let Some(dependencies) = dependencies {
         dependencies.insert(logical_key.to_owned());
     }
-    *reference = toml::Value::String((*code).to_owned());
+    *reference = Value::String((*code).to_owned());
     Ok(())
 }
 
 fn rewrite_blueprint_reference_list(
     owner_key: &str,
-    table: &mut toml::map::Map<String, toml::Value>,
+    table: &mut serde_json::Map<String, Value>,
     field: &str,
     label: &str,
     blueprint_codes: &HashMap<&str, &str>,
@@ -421,7 +412,7 @@ fn rewrite_blueprint_reference_list(
         ))
     })?;
     for reference in references {
-        let mut entry = toml::map::Map::new();
+        let mut entry = serde_json::Map::new();
         entry.insert(field.to_owned(), reference.clone());
         rewrite_blueprint_reference(
             owner_key,
@@ -438,17 +429,15 @@ fn rewrite_blueprint_reference_list(
 
 fn rewrite_view_references(
     owner_key: &str,
-    node: &mut toml::map::Map<String, toml::Value>,
+    node: &mut serde_json::Map<String, Value>,
     blueprint_codes: &HashMap<&str, &str>,
     mut dependencies: Option<&mut BTreeSet<String>>,
 ) -> Result<(), SolutionPackError> {
-    if node.get("type").and_then(toml::Value::as_str) == Some("incoming_relationship_list")
-        && let Some(relationships) = node
-            .get_mut("relationships")
-            .and_then(toml::Value::as_array_mut)
+    if node.get("type").and_then(Value::as_str) == Some("incoming_relationship_list")
+        && let Some(relationships) = node.get_mut("relationships").and_then(Value::as_array_mut)
     {
         for relationship in relationships {
-            if let Some(relationship) = relationship.as_table_mut() {
+            if let Some(relationship) = relationship.as_object_mut() {
                 rewrite_blueprint_reference(
                     owner_key,
                     relationship,
@@ -462,9 +451,9 @@ fn rewrite_view_references(
     }
 
     for collection in ["children", "tabs", "sections"] {
-        if let Some(children) = node.get_mut(collection).and_then(toml::Value::as_array_mut) {
+        if let Some(children) = node.get_mut(collection).and_then(Value::as_array_mut) {
             for child in children {
-                if let Some(child) = child.as_table_mut() {
+                if let Some(child) = child.as_object_mut() {
                     rewrite_view_references(
                         owner_key,
                         child,
@@ -638,7 +627,7 @@ fn validate_table_paths(
                     })
                     .ok_or_else(|| {
                         SolutionPackError::Invalid(format!(
-                            "blueprint '{owner_key}' views.explorer browse_by '{path}' segment '{hop}' must be a relationship with a single target blueprint and cardinality = \"one\""
+                            "blueprint '{owner_key}' views.explorer browse_by '{path}' segment '{hop}' must be a relationship with a single target blueprint and cardinality: one"
                         ))
                     })?;
                 if index + 1 == hops.len() {

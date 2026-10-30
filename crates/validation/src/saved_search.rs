@@ -281,7 +281,7 @@ pub fn normalize_state(state: &Value) -> Value {
 
 /// Whether one hop of a relationship path of `hops` hops can be browsed: a
 /// relationship with one target blueprint and, on a path of several hops, a
-/// single value (`cardinality = "one"`), as for sortable table paths. Each
+/// single value (`cardinality: one`), as for sortable table paths. Each
 /// source then reaches at most one node of the browsed blueprint.
 pub fn browse_path_hop(
     value_type: ValueType,

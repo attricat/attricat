@@ -87,21 +87,21 @@ async fn rule_run_retention_keeps_the_enable_gate_latest_and_live_runs(pool: PgP
         &client,
         &base,
         r#"
-format_version = 1
-code = "retention_rule_product"
-name = "Retention rule product"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-[[attributes]]
-code = "title"
-value_type = "string"
-default_value = "untitled"
-[[attributes]]
-code = "price"
-value_type = "number"
-default_value = 1
+format_version: 1
+code: retention_rule_product
+name: Retention rule product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+    default_value: untitled
+  - code: price
+    value_type: number
+    default_value: 1
 "#,
     )
     .await;
@@ -113,7 +113,7 @@ default_value = 1
         json!({
             "blueprint_id": blueprint["blueprint"]["id"],
             "context_id": null,
-            "definition": "format_version = 1\ncode = \"price-positive\"\nname = \"Price positive\"\nseverity = \"error\"\n[[triggers]]\ntype = \"manual\"\n[predicate]\ntype = \"compare\"\nattribute_code = \"price\"\nop = \"gte\"\nvalue = 0\n[enforcement]\non_save = true",
+            "definition": "format_version: 1\ncode: price-positive\nname: Price positive\nseverity: error\ntriggers:\n  - type: manual\npredicate:\n  type: compare\n  attribute_code: price\n  op: gte\n  value: 0\nenforcement:\n  on_save: true",
         }),
     )
     .await;
@@ -672,17 +672,18 @@ async fn sweep_drains_every_family_in_bounded_round_robin_batches(pool: PgPool) 
         &owner,
         &base,
         r#"
-format_version = 1
-code = "retention_sweep"
-name = "Retention sweep"
-kind = "record"
-[[attributes]]
-code = "title"
-value_type = "string"
-default_value = "Current"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
+format_version: 1
+code: retention_sweep
+name: Retention sweep
+kind: record
+attributes:
+  - code: title
+    value_type: string
+    default_value: Current
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
 "#,
     )
     .await;

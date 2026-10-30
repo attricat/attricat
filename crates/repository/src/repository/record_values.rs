@@ -16,7 +16,7 @@
 //!   preview projection that reads use.
 //!
 //! The nearest context on the path with a direct value wins; an attribute with
-//! `context_fallback = "none"` only looks at the requested context.
+//! `context_fallback: none` only looks at the requested context.
 use super::RepositoryError;
 use super::values::{NativeValueRow, native_value_json};
 use attricat_domain::attribute_options::ContextFallback;
@@ -117,7 +117,7 @@ impl ContextTree {
 }
 
 /// The resolution rule: the nearest context on `path` with a direct value
-/// wins. An attribute that does not inherit (`context_fallback = "none"`)
+/// wins. An attribute that does not inherit (`context_fallback: none`)
 /// only looks at the first context of the path.
 pub(crate) fn resolve_on_path<T>(
     path: &[Uuid],

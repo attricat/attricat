@@ -61,7 +61,7 @@ pub(crate) enum UniqueKeyScope {
     Context,
 }
 
-/// A `[[unique_keys]]` declaration of the latest published revision.
+/// A `unique_keys` declaration of the latest published revision.
 #[derive(Clone, Debug, serde::Deserialize)]
 pub(crate) struct EnforcedUniqueKey {
     pub code: String,
@@ -298,7 +298,7 @@ impl AttricatRepository {
 
     /// Indexes a new context's context-scoped key values. The context has no
     /// values yet, so each record resolves there like in the parent except
-    /// for attributes with `context_fallback = "none"`, which are missing.
+    /// for attributes with `context_fallback: none`, which are missing.
     /// The caller holds [`Self::lock_context_unique_keys`].
     pub(super) async fn seed_context_unique_keys(
         &self,

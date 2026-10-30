@@ -1,0 +1,12 @@
+code: thumbnail
+name: Thumbnail
+value_type: file
+cardinality: one
+
+file_policy:
+  cardinality: one
+  ordered: false
+  allowed_mime_groups: [image]
+  allowed_extensions: [jpg, jpeg, png, webp]
+  purposes: []
+  image_only: true

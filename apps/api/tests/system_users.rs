@@ -6,18 +6,17 @@ use api::{
 use support::*;
 
 const BLUEPRINT: &str = r#"
-format_version = 1
-code = "system_note_record"
-name = "System note record"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
+format_version: 1
+code: system_note_record
+name: System note record
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
 "#;
 
 async fn system_user_of(pool: &PgPool, workspace: Uuid) -> Option<Uuid> {

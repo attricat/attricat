@@ -6,42 +6,41 @@ use api::storage::FakeObjectStore;
 use reqwest::multipart::{Form, Part};
 use support::*;
 
-const DEFINITION: &str = r#"format_version = 1
-code = 'controlled_document'
-name = 'Controlled document'
-kind = 'record'
-[views.dropdown_option]
-type = 'dropdown_option'
-fields = ['title']
-[[attributes]]
-code = 'title'
-value_type = 'string'
-[[attributes]]
-code = 'notes'
-value_type = 'string'
-[[attributes]]
-code = 'document'
-value_type = 'file'
-allowed_mime_groups = ['text/plain']
-allowed_extensions = ['txt']
-max_bytes = 1024
-[[attributes]]
-code = 'status'
-value_type = 'string'
-value_schema = '''{"type":"string","enum":["draft","review","approved","released"],"x-attricat-status":{"version":1,
-  "options":[
-    {"code":"draft","label":"Draft"},
-    {"code":"review","label":"In review"},
-    {"code":"approved","label":"Approved","approval":{"covers":["title","document"],"void_to":"review"}},
-    {"code":"released","label":"Released","lock":"all","retention_days":30}
-  ],
-  "transitions":[
-    {"from":null,"to":"draft"},
-    {"from":"draft","to":"review","code":"submit"},
-    {"from":"review","to":"approved","code":"approve","roles":["reviewer"],"separate_from":["submit"]},
-    {"from":"approved","to":"released","code":"release","permission":"records.publish"},
-    {"from":"released","to":"draft","code":"correct","roles":["owner"]}
-  ]}}'''
+const DEFINITION: &str = r#"format_version: 1
+code: controlled_document
+name: Controlled document
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+  - code: notes
+    value_type: string
+  - code: document
+    value_type: file
+    allowed_mime_groups: [text/plain]
+    allowed_extensions: [txt]
+    max_bytes: 1024
+  - code: status
+    value_type: string
+    value_schema: |-
+      {"type":"string","enum":["draft","review","approved","released"],"x-attricat-status":{"version":1,
+        "options":[
+          {"code":"draft","label":"Draft"},
+          {"code":"review","label":"In review"},
+          {"code":"approved","label":"Approved","approval":{"covers":["title","document"],"void_to":"review"}},
+          {"code":"released","label":"Released","lock":"all","retention_days":30}
+        ],
+        "transitions":[
+          {"from":null,"to":"draft"},
+          {"from":"draft","to":"review","code":"submit"},
+          {"from":"review","to":"approved","code":"approve","roles":["reviewer"],"separate_from":["submit"]},
+          {"from":"approved","to":"released","code":"release","permission":"records.publish"},
+          {"from":"released","to":"draft","code":"correct","roles":["owner"]}
+        ]}}
 "#;
 
 async fn reviewer_role(pool: &PgPool) -> Uuid {
@@ -650,34 +649,34 @@ async fn approval_pages_keep_one_write_together(pool: PgPool) {
     server.abort();
 }
 
-const VOIDABLE: &str = r#"format_version = 1
-code = 'voidable_document'
-name = 'Voidable document'
-kind = 'record'
-[views.dropdown_option]
-type = 'dropdown_option'
-fields = ['title']
-[[attributes]]
-code = 'title'
-value_type = 'string'
-[[attributes]]
-code = 'reason'
-value_type = 'string'
-[[attributes]]
-code = 'status'
-value_type = 'string'
-value_schema = '''{"type":"string","enum":["draft","approved"],"x-attricat-status":{"version":1,
-  "options":[
-    {"code":"draft","label":"Draft"},
-    {"code":"approved","label":"Approved","approval":{"covers":["title"],"void_to":"draft"}}
-  ],
-  "transitions":[
-    {"from":null,"to":"draft"},
-    {"from":"draft","to":"approved"},
-    {"from":"approved","to":"draft","conditions":[
-      {"code":"reason","predicate":{"type":"required","attribute_code":"reason"}}
-    ]}
-  ]}}'''
+const VOIDABLE: &str = r#"format_version: 1
+code: voidable_document
+name: Voidable document
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+  - code: reason
+    value_type: string
+  - code: status
+    value_type: string
+    value_schema: |-
+      {"type":"string","enum":["draft","approved"],"x-attricat-status":{"version":1,
+        "options":[
+          {"code":"draft","label":"Draft"},
+          {"code":"approved","label":"Approved","approval":{"covers":["title"],"void_to":"draft"}}
+        ],
+        "transitions":[
+          {"from":null,"to":"draft"},
+          {"from":"draft","to":"approved"},
+          {"from":"approved","to":"draft","conditions":[
+            {"code":"reason","predicate":{"type":"required","attribute_code":"reason"}}
+          ]}
+        ]}}
 "#;
 
 #[sqlx::test(migrator = "api::MIGRATOR")]

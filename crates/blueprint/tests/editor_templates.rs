@@ -11,7 +11,7 @@ fn every_editor_template_compiles_without_workspace_dependencies() {
 
     for entry in fs::read_dir(directory).unwrap() {
         let path = entry.unwrap().path();
-        if path.extension().is_none_or(|extension| extension != "toml") {
+        if path.extension().is_none_or(|extension| extension != "yaml") {
             continue;
         }
         let source = fs::read_to_string(&path).unwrap();
@@ -20,8 +20,7 @@ fn every_editor_template_compiles_without_workspace_dependencies() {
         compile(definition, &[], &source)
             .unwrap_or_else(|error| panic!("{} failed to compile: {error}", path.display()));
 
-        let instance =
-            serde_json::to_value(toml::from_str::<toml::Value>(&source).unwrap()).unwrap();
+        let instance = attricat_yaml::from_str::<serde_json::Value>(&source).unwrap();
         let violations = attricat_validation::validate_json_schema(&schema, &instance).unwrap();
         assert!(
             violations.is_empty(),

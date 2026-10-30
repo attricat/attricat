@@ -2,59 +2,50 @@ use attricat_blueprint::{BlueprintError, lexicon_references, parse};
 use attricat_lexicon::{Reference, ReferenceError};
 
 const SOURCE: &str = r#"
-format_version = 1
-code = "product"
-name = "{{Product}}"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[views.table]
-type = "table"
-columns = [{ field = "title", label = "{{Title|heading}}" }]
-
-[views.detail]
-type = "tabs"
-
-[[views.detail.tabs]]
-label = "{{Overview}}"
-
-[[views.detail.tabs.children]]
-type = "heading"
-text = "{{Not translated}}"
-
-[[views.detail.tabs.children]]
-type = "incoming_relationship_list"
-label = "SKU \\{{literal}} {{Products in this category}}"
-page_size = 10
-relationships = [{ source_blueprint = "product", field = "category" }]
-
-[[attributes]]
-code = "title"
-name = "{{Name}}"
-value_type = "string"
-
-[[attributes]]
-code = "status"
-value_type = "string"
-value_schema = '''{
-  "type": "string",
-  "enum": ["draft", "live"],
-  "x-attricat-status": {
-    "version": 1,
-    "options": [
-      { "code": "draft", "label": "{{Draft|status}}" },
-      { "code": "live", "label": "Live" }
-    ]
-  }
-}'''
-
-[[attributes]]
-code = "sku"
-value_type = "string"
-value_schema = '{"pattern":"^[A-Z]{3}$","x-attricat-pattern-hint":"{{Three capital letters}}"}'
+format_version: 1
+code: product
+name: '{{Product}}'
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+  table:
+    type: table
+    columns:
+      - {field: title, label: '{{Title|heading}}'}
+  detail:
+    type: tabs
+    tabs:
+      - label: '{{Overview}}'
+        children:
+          - {type: heading, text: '{{Not translated}}'}
+          - type: incoming_relationship_list
+            label: 'SKU \{{literal}} {{Products in this category}}'
+            page_size: 10
+            relationships:
+              - {source_blueprint: product, field: category}
+attributes:
+  - code: title
+    name: '{{Name}}'
+    value_type: string
+  - code: status
+    value_type: string
+    value_schema: |-
+      {
+        "type": "string",
+        "enum": ["draft", "live"],
+        "x-attricat-status": {
+          "version": 1,
+          "options": [
+            { "code": "draft", "label": "{{Draft|status}}" },
+            { "code": "live", "label": "Live" }
+          ]
+        }
+      }
+  - code: sku
+    value_type: string
+    value_schema: '{"pattern":"^[A-Z]{3}$","x-attricat-pattern-hint":"{{Three capital letters}}"}'
 "#;
 
 fn reference(key: &str, context: Option<&str>) -> Reference {
@@ -89,23 +80,19 @@ fn extracts_references_from_translatable_labels_only() {
 fn rejects_malformed_references_in_translatable_labels() {
     for (from, to, expected) in [
         (
-            "name = \"{{Product}}\"",
-            "name = \"{{Product\"",
+            "name: '{{Product}}'",
+            "name: '{{Product'",
             ReferenceError::Unclosed,
         ),
+        ("name: '{{Name}}'", "name: '{{}}'", ReferenceError::EmptyKey),
         (
-            "name = \"{{Name}}\"",
-            "name = \"{{}}\"",
-            ReferenceError::EmptyKey,
-        ),
-        (
-            "label = \"{{Overview}}\"",
-            "label = \"{{Overview|}}\"",
+            "label: '{{Overview}}'",
+            "label: '{{Overview|}}'",
             ReferenceError::EmptyContext,
         ),
         (
-            "label = \"{{Title|heading}}\"",
-            "label = \"{{a|b|c}}\"",
+            "label: '{{Title|heading}}'",
+            "label: '{{a|b|c}}'",
             ReferenceError::MultipleContexts,
         ),
         ("{{Draft|status}}", "{{Draft", ReferenceError::Unclosed),

@@ -60,7 +60,7 @@ pub struct RecordSearchSort {
 /// The context whose values search filters, sorts and table cells read: the
 /// requested context first, then its ancestors up to the default context.
 /// An attribute resolves to the nearest context on the path with an active
-/// value; one with `context_fallback = "none"` only reads the first.
+/// value; one with `context_fallback: none` only reads the first.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SearchContext {
     pub ids: Vec<Uuid>,

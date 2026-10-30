@@ -2,20 +2,24 @@ use attricat_blueprint::{compile, parse};
 use attricat_domain::value_type::ValueType;
 
 const SOURCE: &str = r#"
-format_version = 1
-code = "contact"
-name = "Contact"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["email"]
-[views.detail]
-type = "stack"
-children = [{ type = "field", field = "email", component = { id = "attricat.email_display", version = 1 } }]
-[[attributes]]
-code = "email"
-value_type = "string"
-value_schema = '{"type":"string","format":"email"}'
+format_version: 1
+code: contact
+name: Contact
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [email]
+  detail:
+    type: stack
+    children:
+      - type: field
+        field: email
+        component: {id: attricat.email_display, version: 1}
+attributes:
+  - code: email
+    value_type: string
+    value_schema: '{"type":"string","format":"email"}'
 "#;
 
 #[test]
@@ -60,12 +64,9 @@ fn rejects_incompatible_email_components() {
     for invalid in [
         // A detail view displays values; edit components pair with it in the UI.
         SOURCE.replace("attricat.email_display", "attricat.email_edit"),
-        SOURCE.replace("value_type = \"string\"", "value_type = \"number\""),
-        SOURCE.replace("version = 1 }", "version = 2 }"),
-        SOURCE.replace(
-            "version = 1 }",
-            "version = 1, props = { subject = \"Hi\" } }",
-        ),
+        SOURCE.replace("value_type: string", "value_type: number"),
+        SOURCE.replace("version: 1}", "version: 2}"),
+        SOURCE.replace("version: 1}", "version: 1, props: {subject: Hi}}"),
     ] {
         assert!(compile(parse(&invalid).unwrap(), &[], &invalid).is_err());
     }

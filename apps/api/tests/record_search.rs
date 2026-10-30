@@ -10,18 +10,17 @@ async fn search_includes_all_blueprint_versions_and_marks_outdated_records(pool:
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
+format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
 "#,
     )
     .await;
@@ -31,18 +30,17 @@ value_type = "string"
         .post(format!("{base_url}/blueprints/{blueprint_id}/versions"))
         .json(&json!({
             "definition": r#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["sku"]
-
-[[attributes]]
-code = "sku"
-value_type = "string"
+format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [sku]
+attributes:
+  - code: sku
+    value_type: string
 "#
         }))
         .send()
@@ -155,34 +153,25 @@ async fn search_filters_scalar_attributes_with_type_appropriate_operators(pool: 
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "filter_product"
-name = "Filter product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[[attributes]]
-code = "name"
-value_type = "string"
-
-[[attributes]]
-code = "price"
-value_type = "number"
-
-[[attributes]]
-code = "stock"
-value_type = "integer"
-
-[[attributes]]
-code = "available"
-value_type = "boolean"
-
-[[attributes]]
-code = "released_on"
-value_type = "date"
+format_version: 1
+code: filter_product
+name: Filter product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: price
+    value_type: number
+  - code: stock
+    value_type: integer
+  - code: available
+    value_type: boolean
+  - code: released_on
+    value_type: date
 "#,
     )
     .await;
@@ -272,23 +261,20 @@ async fn search_returns_contextual_relationship_tree_facet_and_filters_selected_
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "facet_category"
-name = "Facet category"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[[attributes]]
-code = "name"
-value_type = "string"
-
-[[attributes]]
-code = "parent"
-value_type = "relationship"
-target_blueprint = "facet_category"
+format_version: 1
+code: facet_category
+name: Facet category
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: parent
+    value_type: relationship
+    target_blueprint: facet_category
 "#,
     )
     .await;
@@ -296,23 +282,20 @@ target_blueprint = "facet_category"
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "facet_product"
-name = "Facet product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "categories"
-value_type = "relationship"
-target_blueprint = "facet_category"
+format_version: 1
+code: facet_product
+name: Facet product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+  - code: categories
+    value_type: relationship
+    target_blueprint: facet_category
 "#,
     )
     .await;
@@ -753,23 +736,20 @@ async fn relationship_tree_facets_resolve_each_source_in_its_nearest_context(poo
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "nearest_category"
-name = "Nearest category"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[[attributes]]
-code = "name"
-value_type = "string"
-
-[[attributes]]
-code = "parent"
-value_type = "relationship"
-target_blueprint = "nearest_category"
+format_version: 1
+code: nearest_category
+name: Nearest category
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: parent
+    value_type: relationship
+    target_blueprint: nearest_category
 "#,
     )
     .await;
@@ -777,29 +757,24 @@ target_blueprint = "nearest_category"
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "nearest_product"
-name = "Nearest product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "category"
-value_type = "relationship"
-target_blueprint = "nearest_category"
-
-[[attributes]]
-code = "local_category"
-value_type = "relationship"
-target_blueprint = "nearest_category"
-context_fallback = "none"
+format_version: 1
+code: nearest_product
+name: Nearest product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+  - code: category
+    value_type: relationship
+    target_blueprint: nearest_category
+  - code: local_category
+    value_type: relationship
+    target_blueprint: nearest_category
+    context_fallback: none
 "#,
     )
     .await;
@@ -954,23 +929,20 @@ async fn relationship_tree_facet_counts_without_a_query_may_lag_while_nodes_do_n
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "lagging_category"
-name = "Lagging category"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[[attributes]]
-code = "name"
-value_type = "string"
-
-[[attributes]]
-code = "parent"
-value_type = "relationship"
-target_blueprint = "lagging_category"
+format_version: 1
+code: lagging_category
+name: Lagging category
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: parent
+    value_type: relationship
+    target_blueprint: lagging_category
 "#,
     )
     .await;
@@ -978,23 +950,20 @@ target_blueprint = "lagging_category"
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "lagging_product"
-name = "Lagging product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "category"
-value_type = "relationship"
-target_blueprint = "lagging_category"
+format_version: 1
+code: lagging_product
+name: Lagging product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+  - code: category
+    value_type: relationship
+    target_blueprint: lagging_category
 "#,
     )
     .await;
@@ -1100,23 +1069,20 @@ async fn relationship_tree_facet_children_page_through_roots_by_cursor(pool: PgP
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "paged_category"
-name = "Paged category"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[[attributes]]
-code = "name"
-value_type = "string"
-
-[[attributes]]
-code = "parent"
-value_type = "relationship"
-target_blueprint = "paged_category"
+format_version: 1
+code: paged_category
+name: Paged category
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: parent
+    value_type: relationship
+    target_blueprint: paged_category
 "#,
     )
     .await;
@@ -1210,103 +1176,86 @@ async fn relationship_tree_facet_paths_resolve_every_hop_in_its_nearest_context(
     let client = authenticated_client();
     for definition in [
         r#"
-format_version = 1
-code = "path_style"
-name = "Path style"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[[attributes]]
-code = "name"
-value_type = "string"
-
-[[attributes]]
-code = "parent"
-value_type = "relationship"
-target_blueprint = "path_style"
-cardinality = "one"
-tree = true
-context_editable = "default"
+format_version: 1
+code: path_style
+name: Path style
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: parent
+    value_type: relationship
+    target_blueprint: path_style
+    cardinality: one
+    tree: true
+    context_editable: default
 "#,
         r#"
-format_version = 1
-code = "path_brand"
-name = "Path brand"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[[attributes]]
-code = "name"
-value_type = "string"
+format_version: 1
+code: path_brand
+name: Path brand
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
 "#,
         r#"
-format_version = 1
-code = "path_model"
-name = "Path model"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[[attributes]]
-code = "name"
-value_type = "string"
-
-[[attributes]]
-code = "brand"
-value_type = "relationship"
-target_blueprint = "path_brand"
-cardinality = "one"
-
-[[attributes]]
-code = "style"
-value_type = "relationship"
-target_blueprint = "path_style"
-cardinality = "one"
-
-[[attributes]]
-code = "local_style"
-value_type = "relationship"
-target_blueprint = "path_style"
-cardinality = "one"
-context_fallback = "none"
-
-[[attributes]]
-code = "styles"
-value_type = "relationship"
-target_blueprint = "path_style"
-cardinality = "many"
+format_version: 1
+code: path_model
+name: Path model
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: brand
+    value_type: relationship
+    target_blueprint: path_brand
+    cardinality: one
+  - code: style
+    value_type: relationship
+    target_blueprint: path_style
+    cardinality: one
+  - code: local_style
+    value_type: relationship
+    target_blueprint: path_style
+    cardinality: one
+    context_fallback: none
+  - code: styles
+    value_type: relationship
+    target_blueprint: path_style
+    cardinality: many
 "#,
         r#"
-format_version = 1
-code = "path_vehicle"
-name = "Path vehicle"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["vin"]
-
-[views.explorer]
-type = "explorer"
-browse_by = "model.brand"
-
-[[attributes]]
-code = "vin"
-value_type = "string"
-
-[[attributes]]
-code = "model"
-value_type = "relationship"
-target_blueprint = "path_model"
-cardinality = "one"
+format_version: 1
+code: path_vehicle
+name: Path vehicle
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [vin]
+  explorer:
+    type: explorer
+    browse_by: model.brand
+attributes:
+  - code: vin
+    value_type: string
+  - code: model
+    value_type: relationship
+    target_blueprint: path_model
+    cardinality: one
 "#,
     ] {
         create_blueprint(&client, &base_url, definition).await;

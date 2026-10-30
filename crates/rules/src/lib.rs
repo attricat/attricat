@@ -31,8 +31,8 @@ const SIX_FIELD_CRON_PATTERN: &str = r"^\s*\S+(?:\s+\S+){5}\s*$";
 
 #[derive(Debug, Error)]
 pub enum RuleError {
-    #[error("invalid TOML: {0}")]
-    Toml(#[from] toml::de::Error),
+    #[error("invalid YAML: {0}")]
+    Yaml(#[from] attricat_yaml::Error),
     #[error("unsupported format_version {0}")]
     UnsupportedFormatVersion(u32),
     /// The predicate names an attribute the blueprint does not declare.
@@ -233,7 +233,7 @@ enum RawTrigger {
     PostImport {},
 }
 pub fn parse(source: &str) -> Result<RuleDefinition, RuleError> {
-    let raw: Raw = toml::from_str(source)?;
+    let raw: Raw = attricat_yaml::from_str(source)?;
     if !FORMAT_VERSIONS.contains(&raw.format_version) {
         return Err(RuleError::UnsupportedFormatVersion(raw.format_version));
     }
@@ -547,7 +547,12 @@ const RECORD_EVENTS: &[&str] = attricat_events::RECORD_TRIGGER_EVENT_TYPES_V1;
 #[cfg(test)]
 mod tests {
     use super::*;
-    const REQUIRED: &str = "format_version=1\ncode='product-title'\nname='Product title required'\nseverity='error'\n[[triggers]]\ntype='manual'\n[[triggers]]\ntype='schedule'\ncron='0 0 * * * *'\ntimezone='UTC'\n[predicate]\ntype='required'\nattribute_code='title'";
+    const REQUIRED: &str = "format_version: 1\ncode: product-title\nname: Product title required\nseverity: error\ntriggers:\n  - type: manual\n  - type: schedule\n    cron: '0 0 * * * *'\n    timezone: UTC\npredicate:\n  type: required\n  attribute_code: title";
+    /// `REQUIRED` with its predicate replaced by a flow mapping.
+    fn with_predicate(predicate: &str) -> String {
+        REQUIRED.replace(PREDICATE, &format!("predicate: {predicate}"))
+    }
+    const PREDICATE: &str = "predicate:\n  type: required\n  attribute_code: title";
     #[test]
     fn parses_bounded_host_owned_rule() {
         assert!(parse(REQUIRED).is_ok());
@@ -561,45 +566,42 @@ mod tests {
             Some(&serde_json::json!({"type": "string", "enum": ["new", "used"]})),
         );
         attributes.insert("title", ValueType::String, None);
-        let rule = |predicate: &str| {
-            compile(&REQUIRED.replace("type='required'\nattribute_code='title'", predicate))
-                .unwrap()
-        };
-        let allowed = rule("type='one_of'\nattribute_code='condition'\nvalues=['new']");
+        let rule = |predicate: &str| compile(&with_predicate(predicate)).unwrap();
+        let allowed = rule("{type: one_of, attribute_code: condition, values: [new]}");
         assert!(check_option_values(&allowed, &attributes).is_ok());
-        let misspelt = rule("type='one_of'\nattribute_code='condition'\nvalues=['brand_new']");
+        let misspelt = rule("{type: one_of, attribute_code: condition, values: [brand_new]}");
         assert_eq!(
             check_option_values(&misspelt, &attributes).unwrap_err(),
             "'condition' has no value \"brand_new\"; it allows \"new\", \"used\""
         );
         let nested = rule(
-            "type='any_of'\npredicates=[{type='compare',attribute_code='condition',op='eq',value='mint'},{type='required',attribute_code='title'}]",
+            "{type: any_of, predicates: [{type: compare, attribute_code: condition, op: eq, value: mint}, {type: required, attribute_code: title}]}",
         );
         assert!(check_option_values(&nested, &attributes).is_err());
         // Attributes without fixed values take any value.
-        let free = rule("type='one_of'\nattribute_code='title'\nvalues=['anything']");
+        let free = rule("{type: one_of, attribute_code: title, values: [anything]}");
         assert!(check_option_values(&free, &attributes).is_ok());
     }
     #[test]
     fn carries_an_optional_bounded_description() {
         assert_eq!(compile(REQUIRED).unwrap().description, None);
         let described = REQUIRED.replace(
-            "severity='error'",
-            "severity='error'\ndescription='Shoppers need a title to find the product.'",
+            "severity: error",
+            "severity: error\ndescription: Shoppers need a title to find the product.",
         );
         assert_eq!(
             compile(&described).unwrap().description.as_deref(),
             Some("Shoppers need a title to find the product.")
         );
         assert!(
-            parse(&REQUIRED.replace("severity='error'", "severity='error'\ndescription='  '"))
+            parse(&REQUIRED.replace("severity: error", "severity: error\ndescription: '  '"))
                 .is_err()
         );
         let long = "x".repeat(MAX_DESCRIPTION_CHARS + 1);
         assert!(
             parse(&REQUIRED.replace(
-                "severity='error'",
-                &format!("severity='error'\ndescription='{long}'")
+                "severity: error",
+                &format!("severity: error\ndescription: '{long}'")
             ))
             .is_err()
         );
@@ -608,47 +610,41 @@ mod tests {
     fn definitions_spell_severity_as_findings_store_it() {
         for &severity in Severity::ALL {
             let source = REQUIRED.replace(
-                "severity='error'",
-                &format!("severity='{}'", severity.as_str()),
+                "severity: error",
+                &format!("severity: '{}'", severity.as_str()),
             );
             assert_eq!(parse(&source).unwrap().severity, severity);
         }
-        assert!(parse(&REQUIRED.replace("severity='error'", "severity='fatal'")).is_err());
+        assert!(parse(&REQUIRED.replace("severity: error", "severity: fatal")).is_err());
     }
     #[test]
     fn rejects_unbounded_or_invalid_contracts() {
-        assert!(parse(&REQUIRED.replace("timezone='UTC'", "timezone='Europe/Warsaw'")).is_err());
+        assert!(parse(&REQUIRED.replace("timezone: UTC", "timezone: Europe/Warsaw")).is_err());
         assert!(
-            parse(&REQUIRED.replace("attribute_code='title'", "attribute_code='bad code'"))
-                .is_err()
+            parse(&REQUIRED.replace("attribute_code: title", "attribute_code: bad code")).is_err()
         );
-        assert!(parse(&REQUIRED.replace("type='required'", "type='sql'")).is_err());
+        assert!(parse(&REQUIRED.replace("type: required", "type: sql")).is_err());
     }
     #[test]
     fn parses_new_predicates_and_enforcement() {
-        let range = REQUIRED.replace(
-            "type='required'\nattribute_code='title'",
-            "type='compare'\nattribute_code='valid_from'\nop='lte'\nother_attribute_code='valid_until'\n[enforcement]\non_save=true\n[[enforcement.transitions]]\nattribute_code='status'\nto='released'",
+        let range = with_predicate(
+            "{type: compare, attribute_code: valid_from, op: lte, other_attribute_code: valid_until}\nenforcement:\n  on_save: true\n  transitions:\n    - {attribute_code: status, to: released}",
         );
         let rule = compile(&range).unwrap();
         let enforcement = rule.enforcement.unwrap();
         assert!(enforcement.on_save);
         assert!(enforcement.guards_transition("status", Some("draft"), Some("released")));
         assert!(!enforcement.guards_transition("status", Some("released"), Some("released")));
-        let expiry = REQUIRED.replace(
-            "type='required'\nattribute_code='title'",
-            "type='relative_date'\nattribute_code='expires_on'\nop='gt'\noffset_days=30",
+        let expiry = with_predicate(
+            "{type: relative_date, attribute_code: expires_on, op: gt, offset_days: 30}",
         );
         assert!(parse(&expiry).is_ok());
-        let duplicate = REQUIRED.replace(
-            "type='required'\nattribute_code='title'",
-            "type='unique'\nattribute_codes=['sku']",
-        );
+        let duplicate = with_predicate("{type: unique, attribute_codes: [sku]}");
         assert!(parse(&duplicate).is_ok());
         // Only synchronous-safe predicates can enforce, and only at error severity.
-        assert!(parse(&format!("{duplicate}\n[enforcement]\non_save=true")).is_err());
-        assert!(parse(&range.replace("severity='error'", "severity='warning'")).is_err());
-        assert!(parse(&format!("{REQUIRED}\n[enforcement]")).is_err());
+        assert!(parse(&format!("{duplicate}\nenforcement:\n  on_save: true")).is_err());
+        assert!(parse(&range.replace("severity: error", "severity: warning")).is_err());
+        assert!(parse(&format!("{REQUIRED}\nenforcement: {{}}")).is_err());
     }
     #[test]
     fn applies_only_to_revisions_whose_attributes_fit() {
@@ -660,7 +656,7 @@ mod tests {
         fits.insert("title", ValueType::String, None);
         fits.insert("status", ValueType::String, Some(&status));
         let guarded = compile(&format!(
-            "{REQUIRED}\n[enforcement]\n[[enforcement.transitions]]\nattribute_code='status'\nfrom='draft'\nto='released'"
+            "{REQUIRED}\nenforcement:\n  transitions:\n    - {{attribute_code: status, from: draft, to: released}}"
         ))
         .unwrap();
         assert_eq!(applicability(&guarded, &fits), Ok(()));
@@ -676,9 +672,8 @@ mod tests {
             reason(&missing, &guarded),
             RuleInapplicability::AttributeMissing
         );
-        let ordered = compile(&REQUIRED.replace(
-            "type='required'\nattribute_code='title'",
-            "type='compare'\nattribute_code='title'\nop='gt'\nvalue=3",
+        let ordered = compile(&with_predicate(
+            "{type: compare, attribute_code: title, op: gt, value: 3}",
         ))
         .unwrap();
         let mut numeric = fits.clone();
@@ -718,7 +713,7 @@ mod tests {
         assert!(rule.enforcement.is_none());
     }
 
-    /// The JSON Schema for standalone rule definition TOML, published as
+    /// The JSON Schema for standalone rule definition YAML, published as
     /// `contracts/rule-definition-v1.schema.json` for the web editor.
     fn definition_json_schema() -> serde_json::Value {
         schemars::generate::SchemaSettings::draft2020_12()
@@ -755,40 +750,36 @@ mod tests {
         for (definition, accepted) in [
             (REQUIRED.to_owned(), true),
             (
-                REQUIRED.replace("severity='error'", "severity='fatal'"),
+                REQUIRED.replace("severity: error", "severity: fatal"),
                 false,
             ),
-            (REQUIRED.replace("type='required'", "type='sql'"), false),
-            (REQUIRED.replace("format_version=1\n", ""), false),
-            (format!("{REQUIRED}\nlabel='Title'"), false),
+            (REQUIRED.replace("type: required", "type: sql"), false),
+            (REQUIRED.replace("format_version: 1\n", ""), false),
+            (format!("{REQUIRED}\nlabel: Title"), false),
             (
-                REQUIRED.replace("format_version=1", "format_version=2"),
-                false,
-            ),
-            (
-                REQUIRED.replace("name='Product title required'", "name='  '"),
+                REQUIRED.replace("format_version: 1", "format_version: 2"),
                 false,
             ),
             (
-                REQUIRED.replace("cron='0 0 * * * *'", "cron='0 * * * *'"),
+                REQUIRED.replace("name: Product title required", "name: '  '"),
                 false,
             ),
             (
-                REQUIRED.replace("type='manual'", "type='manual'\nlabel='x'"),
+                REQUIRED.replace("cron: '0 0 * * * *'", "cron: '0 * * * *'"),
                 false,
             ),
             (
-                REQUIRED.replace("type='manual'", "type='post_import'"),
-                true,
+                REQUIRED.replace("type: manual", "type: manual\n    label: x"),
+                false,
             ),
+            (REQUIRED.replace("type: manual", "type: post_import"), true),
             (
-                REQUIRED.replace("type='manual'", "type='post_import'\nlabel='x'"),
+                REQUIRED.replace("type: manual", "type: post_import\n    label: x"),
                 false,
             ),
         ] {
             assert_eq!(parse(&definition).is_ok(), accepted, "{definition}");
-            let instance =
-                serde_json::to_value(toml::from_str::<toml::Value>(&definition).unwrap()).unwrap();
+            let instance = attricat_yaml::from_str::<serde_json::Value>(&definition).unwrap();
             let violations = attricat_validation::validate_json_schema(&schema, &instance).unwrap();
             assert_eq!(
                 violations.is_empty(),

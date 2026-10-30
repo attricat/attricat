@@ -39,63 +39,42 @@ use api::{
 use support::*;
 
 const BLUEPRINT: &str = r#"
-format_version = 1
-code = "rt_product"
-name = "Round-trip product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[views.table]
-type = "table"
-columns = [
-    { field = "name", label = "Name" },
-    { field = "brand", label = "Brand" },
-    { field = "price", label = "Price" },
-    { field = "stock", label = "Stock" },
-]
-
-[[attributes]]
-code = "name"
-value_type = "string"
-
-[[attributes]]
-code = "description"
-value_type = "string"
-
-[[attributes]]
-code = "brand"
-value_type = "string"
-
-[[attributes]]
-code = "color"
-value_type = "string"
-
-[[attributes]]
-code = "material"
-value_type = "string"
-
-[[attributes]]
-code = "sku"
-value_type = "string"
-
-[[attributes]]
-code = "price"
-value_type = "number"
-
-[[attributes]]
-code = "weight"
-value_type = "number"
-
-[[attributes]]
-code = "stock"
-value_type = "integer"
-
-[[attributes]]
-code = "available"
-value_type = "boolean"
+format_version: 1
+code: rt_product
+name: Round-trip product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+  table:
+    type: table
+    columns:
+      - {field: name, label: Name}
+      - {field: brand, label: Brand}
+      - {field: price, label: Price}
+      - {field: stock, label: Stock}
+attributes:
+  - code: name
+    value_type: string
+  - code: description
+    value_type: string
+  - code: brand
+    value_type: string
+  - code: color
+    value_type: string
+  - code: material
+    value_type: string
+  - code: sku
+    value_type: string
+  - code: price
+    value_type: number
+  - code: weight
+    value_type: number
+  - code: stock
+    value_type: integer
+  - code: available
+    value_type: boolean
 "#;
 
 const UNIFIED_EXTENSION: &str = "acme.round_trips";

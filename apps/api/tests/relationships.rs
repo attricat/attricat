@@ -10,19 +10,18 @@ async fn typed_category_and_color_relationships_can_be_replaced_and_removed(pool
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "category"
-name = "Category"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[[attributes]]
-code = "name"
-value_type = "string"
-tags = ["searchable"]
+format_version: 1
+code: category
+name: Category
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+    tags: [searchable]
 "#,
     )
     .await;
@@ -30,23 +29,20 @@ tags = ["searchable"]
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "color"
-name = "Color"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name", "hex"]
-
-[[attributes]]
-code = "name"
-value_type = "string"
-tags = ["searchable"]
-
-[[attributes]]
-code = "hex"
-value_type = "string"
+format_version: 1
+code: color
+name: Color
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name, hex]
+attributes:
+  - code: name
+    value_type: string
+    tags: [searchable]
+  - code: hex
+    value_type: string
 "#,
     )
     .await;
@@ -54,29 +50,24 @@ value_type = "string"
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-tags = ["searchable"]
-
-[[attributes]]
-code = "categories"
-value_type = "relationship"
-target_blueprint = "category"
-
-[[attributes]]
-code = "colors"
-value_type = "relationship"
-target_blueprint = "color"
+format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+    tags: [searchable]
+  - code: categories
+    value_type: relationship
+    target_blueprint: category
+  - code: colors
+    value_type: relationship
+    target_blueprint: color
 "#,
     )
     .await;
@@ -412,23 +403,20 @@ async fn previews_expand_cycles_and_shared_targets_per_path(pool: PgPool) {
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "linked_node"
-name = "Linked node"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[[attributes]]
-code = "name"
-value_type = "string"
-
-[[attributes]]
-code = "links"
-value_type = "relationship"
-target_blueprint = "linked_node"
+format_version: 1
+code: linked_node
+name: Linked node
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: links
+    value_type: relationship
+    target_blueprint: linked_node
 "#,
     )
     .await;

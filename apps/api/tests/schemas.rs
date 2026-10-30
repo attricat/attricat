@@ -9,25 +9,22 @@ async fn validates_attribute_and_record_json_schemas(pool: PgPool) {
     let blueprint = create_blueprint(
         &client,
         &base_url,
-        r#"format_version = 1
-code = "schema_product"
-name = "Schema product"
-kind = "record"
-record_schema = '{"type":"object","required":["title","price"]}'
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-value_schema = '{"type":"string","minLength":3}'
-
-[[attributes]]
-code = "price"
-value_type = "number"
-value_schema = '{"type":"number","minimum":0}'"#,
+        r#"format_version: 1
+code: schema_product
+name: Schema product
+kind: record
+record_schema: '{"type":"object","required":["title","price"]}'
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+    value_schema: '{"type":"string","minLength":3}'
+  - code: price
+    value_type: number
+    value_schema: '{"type":"number","minimum":0}'"#,
     )
     .await;
     let contexts: Vec<Value> = client

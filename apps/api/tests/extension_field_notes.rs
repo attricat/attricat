@@ -9,19 +9,19 @@ use api::{repository::AttricatRepository, storage::FakeObjectStore};
 use support::*;
 
 const BLUEPRINT: &str = r#"
-format_version = 1
-code = "noted_item"
-name = "Noted item"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-[[attributes]]
-code = "title"
-value_type = "string"
-[[attributes]]
-code = "sku"
-value_type = "string"
+format_version: 1
+code: noted_item
+name: Noted item
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+  - code: sku
+    value_type: string
 "#;
 const PERMISSIONS: &[&str] = &[
     "client.commands",
@@ -233,9 +233,7 @@ async fn attaching_a_reusable_attribute_refreshes_cached_field_notes(pool: sqlx:
     let client = authenticated_client();
     let draft: Value = client
         .post(format!("{base}/reusable-attributes"))
-        .json(
-            &json!({"definition": "code = \"depth\"\nname = \"Depth\"\nvalue_type = \"number\"\n"}),
-        )
+        .json(&json!({"definition": "code: depth\nname: Depth\nvalue_type: number\n"}))
         .send()
         .await
         .unwrap()

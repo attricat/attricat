@@ -2,18 +2,17 @@ use crate::support;
 use support::*;
 
 const BLUEPRINT: &str = r#"
-format_version = 1
-code = "comment_record"
-name = "Comment record"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
+format_version: 1
+code: comment_record
+name: Comment record
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
 "#;
 
 #[sqlx::test(migrator = "api::MIGRATOR")]

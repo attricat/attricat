@@ -10,19 +10,20 @@ async fn blueprint(client: &Client, base: &str, policy: &str) -> Value {
         client,
         base,
         &format!(
-            r#"format_version = 1
-code = "gallery"
-name = "Gallery"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["photos"]
-[[attributes]]
-code = "photos"
-value_type = "file"
-cardinality = "many"
-image_only = true
-{policy}
+            r#"format_version: 1
+code: gallery
+name: Gallery
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [photos]
+attributes:
+  - code: photos
+    value_type: file
+    cardinality: many
+    image_only: true
+    {policy}
 "#
         ),
     )
@@ -51,7 +52,7 @@ async fn gallery_references_are_ordered_conflict_checked_and_archived(pool: PgPo
     let store = Arc::new(FakeObjectStore::available());
     let (base, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
     let client = authenticated_client();
-    let bp = blueprint(&client, &base, "ordered = true").await;
+    let bp = blueprint(&client, &base, "ordered: true").await;
     let record = create_record(&client, &base, &bp).await;
     let record_id = record["id"].as_str().unwrap();
     let url = format!("{base}/records/{record_id}/file-attributes/photos");
@@ -175,7 +176,7 @@ async fn unordered_gallery_allows_removal_but_not_reordering_or_foreign_referenc
     let (base, server) =
         start_server_with_object_store(pool, Arc::new(FakeObjectStore::available())).await;
     let client = authenticated_client();
-    let bp = blueprint(&client, &base, "ordered = false").await;
+    let bp = blueprint(&client, &base, "ordered: false").await;
     let record = create_record(&client, &base, &bp).await;
     let other = create_record(&client, &base, &bp).await;
     let url = format!(
@@ -221,7 +222,7 @@ async fn readonly_file_attributes_reject_uploads_and_reference_changes(pool: PgP
     let store = Arc::new(FakeObjectStore::available());
     let (base, server) = start_server_with_object_store(pool, store.clone()).await;
     let client = authenticated_client();
-    let bp = blueprint(&client, &base, "readonly = true").await;
+    let bp = blueprint(&client, &base, "readonly: true").await;
     let record = create_record(&client, &base, &bp).await;
     let url = format!(
         "{base}/records/{}/file-attributes/photos",
@@ -247,7 +248,7 @@ async fn gallery_edits_are_local_and_empty_values_stop_inheritance(pool: PgPool)
     let (base, server) =
         start_server_with_object_store(pool, Arc::new(FakeObjectStore::available())).await;
     let client = authenticated_client();
-    let bp = blueprint(&client, &base, "ordered = true").await;
+    let bp = blueprint(&client, &base, "ordered: true").await;
     let record = create_record(&client, &base, &bp).await;
     let id = record["id"].as_str().unwrap();
     let url = format!("{base}/records/{id}/file-attributes/photos");
@@ -342,7 +343,7 @@ async fn default_context_policy_blocks_reference_changes_in_children(pool: PgPoo
     let (base, server) =
         start_server_with_object_store(pool, Arc::new(FakeObjectStore::available())).await;
     let client = authenticated_client();
-    let bp = blueprint(&client, &base, "context_editable = \"default\"").await;
+    let bp = blueprint(&client, &base, "context_editable: default").await;
     let record = create_record(&client, &base, &bp).await;
     let url = format!(
         "{base}/records/{}/file-attributes/photos",
@@ -396,7 +397,7 @@ async fn gallery_changes_return_the_version_an_open_form_saves_against(pool: PgP
     let store = Arc::new(FakeObjectStore::available());
     let (base, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
     let client = authenticated_client();
-    let bp = blueprint(&client, &base, "ordered = true").await;
+    let bp = blueprint(&client, &base, "ordered: true").await;
     let record = create_record(&client, &base, &bp).await;
     let record_id = record["id"].as_str().unwrap();
     let loaded_version = record["updated_at"].clone();
@@ -447,7 +448,7 @@ async fn gallery_writes_archive_history_and_emit_audited_value_changes(pool: PgP
     let store = Arc::new(FakeObjectStore::available());
     let (base, server) = start_server_with_object_store(pool.clone(), store).await;
     let client = authenticated_client();
-    let bp = blueprint(&client, &base, "ordered = true").await;
+    let bp = blueprint(&client, &base, "ordered: true").await;
     let record = create_record(&client, &base, &bp).await;
     let record_id: Uuid = record["id"].as_str().unwrap().parse().unwrap();
     let url = format!("{base}/records/{record_id}/file-attributes/photos");
@@ -521,7 +522,7 @@ async fn duplicating_a_gallery_writes_its_list_once_without_history(pool: PgPool
     let store = Arc::new(FakeObjectStore::available());
     let (base, server) = start_server_with_object_store(pool.clone(), store).await;
     let client = authenticated_client();
-    let bp = blueprint(&client, &base, "ordered = true").await;
+    let bp = blueprint(&client, &base, "ordered: true").await;
     let record = create_record(&client, &base, &bp).await;
     let record_id = record["id"].as_str().unwrap();
     let url = format!("{base}/records/{record_id}/file-attributes/photos");

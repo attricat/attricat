@@ -1,24 +1,23 @@
 use crate::support;
 use support::*;
 
-const DEFINITION: &str = r#"format_version = 1
-code = 'task'
-name = 'Task'
-kind = 'record'
-[views.dropdown_option]
-type = 'dropdown_option'
-fields = ['title']
-[[attributes]]
-code = 'title'
-value_type = 'string'
-[[attributes]]
-code = 'assignee'
-value_type = 'string'
-value_schema = '''{"type":"string","x-attricat-principal":{"version":1,"kinds":["user","team"]}}'''
-[[attributes]]
-code = 'owner'
-value_type = 'string'
-value_schema = '''{"type":"string","x-attricat-principal":{"version":1,"kinds":["user"]}}'''
+const DEFINITION: &str = r#"format_version: 1
+code: task
+name: Task
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+  - code: assignee
+    value_type: string
+    value_schema: '{"type":"string","x-attricat-principal":{"version":1,"kinds":["user","team"]}}'
+  - code: owner
+    value_type: string
+    value_schema: '{"type":"string","x-attricat-principal":{"version":1,"kinds":["user"]}}'
 "#;
 
 async fn add_member(pool: &PgPool, email: &str, state: &str) -> Uuid {
@@ -319,12 +318,12 @@ async fn assignment_definitions_are_validated(pool: PgPool) {
             r#"{"type":"string","enum":["a"],"x-attricat-principal""#,
         ),
         (
-            "code = 'assignee'\nvalue_type = 'string'",
-            "code = 'assignee'\nvalue_type = 'json'",
+            "code: assignee\n    value_type: string",
+            "code: assignee\n    value_type: json",
         ),
         (
-            "code = 'owner'\nvalue_type = 'string'",
-            "code = 'owner'\nvalue_type = 'string'\ndefault_value = 'user:00000000-0000-4000-8000-000000000201'",
+            "code: owner\n    value_type: string",
+            "code: owner\n    value_type: string\n    default_value: 'user:00000000-0000-4000-8000-000000000201'",
         ),
     ] {
         let definition = DEFINITION.replacen(from, to, 1);

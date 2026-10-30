@@ -2,29 +2,24 @@ use crate::support;
 use support::*;
 
 const BLUEPRINT: &str = r#"
-format_version = 1
-code = "product"
-name = "{{Product}}"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[views.detail]
-type = "tabs"
-
-[[views.detail.tabs]]
-label = "{{Overview}}"
-
-[[views.detail.tabs.children]]
-type = "field"
-field = "title"
-
-[[attributes]]
-code = "title"
-name = "{{Name}}"
-value_type = "string"
+format_version: 1
+code: product
+name: '{{Product}}'
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+  detail:
+    type: tabs
+    tabs:
+      - label: '{{Overview}}'
+        children:
+          - {type: field, field: title}
+attributes:
+  - code: title
+    name: '{{Name}}'
+    value_type: string
 "#;
 
 async fn json_response(response: reqwest::Response, status: u16) -> Value {
@@ -299,8 +294,12 @@ const STATUS_SCHEMA: &str = r#"{
 async fn status_option_labels_are_lexicon_references(pool: PgPool) {
     let (base, _server) = start_server(pool).await;
     let client = authenticated_client();
+    let schema: String = STATUS_SCHEMA
+        .lines()
+        .map(|line| format!("      {line}\n"))
+        .collect();
     let blueprint = format!(
-        "{BLUEPRINT}\n[[attributes]]\ncode = \"status\"\nvalue_type = \"string\"\nvalue_schema = '''{STATUS_SCHEMA}'''\n"
+        "{BLUEPRINT}  - code: status\n    value_type: string\n    value_schema: |\n{schema}"
     );
     let response = client
         .post(format!("{base}/blueprints"))
@@ -318,13 +317,23 @@ async fn status_option_labels_are_lexicon_references(pool: PgPool) {
     );
     create_blueprint(&client, &base, &blueprint).await;
 
-    // Reusable definitions declare the schema as a TOML table.
+    // Reusable definitions declare the schema as a YAML mapping.
     let reusable = |draft: &str, live: &str| {
         format!(
-            "code = \"review_state\"\nname = \"{{{{Review state}}}}\"\nvalue_type = \"string\"\n\
-             [value_schema]\ntype = \"string\"\nenum = [\"draft\", \"live\"]\n\
-             [value_schema.x-attricat-status]\nversion = 1\noptions = [\
-             {{ code = \"draft\", label = \"{draft}\" }}, {{ code = \"live\", label = \"{live}\" }}]\n"
+            "code: review_state
+name: '{{{{Review state}}}}'
+value_type: string
+value_schema:
+  type: string
+  enum: [draft, live]
+  x-attricat-status:
+    version: 1
+    options:
+      - code: draft
+        label: '{draft}'
+      - code: live
+        label: '{live}'
+"
         )
     };
     for (draft, status) in [("{{|status}}", 422), ("{{Draft|status}}", 201)] {

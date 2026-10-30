@@ -53,7 +53,7 @@ fn assert_lease_lost<T>(result: Result<T, RepositoryError>) {
 
 async fn record(owner: &Client, base: &str) -> Uuid {
     let blueprint = create_blueprint(owner, base,
-        "format_version = 1\ncode = 'worker_record'\nname = 'Record'\nkind = 'record'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'").await;
+        "format_version: 1\ncode: worker_record\nname: Record\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string").await;
     create_record(owner, base, &blueprint).await["id"]
         .as_str()
         .unwrap()

@@ -15,28 +15,30 @@ use support::*;
 
 const EXTENSION: &str = "acme.interactive";
 const DOCUMENT_BLUEPRINT: &str = r#"
-format_version = 1
-code = "interactive_document_item"
-name = "Interactive document item"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-[[attributes]]
-code = "title"
-value_type = "string"
+format_version: 1
+code: interactive_document_item
+name: Interactive document item
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
 "#;
 const OTHER_BLUEPRINT: &str = r#"
-format_version = 1
-code = "interactive_other_item"
-name = "Interactive other item"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-[[attributes]]
-code = "title"
-value_type = "string"
+format_version: 1
+code: interactive_other_item
+name: Interactive other item
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
 "#;
 const PERMISSIONS: &[&str] = &[
     "attricat.read",
@@ -739,21 +741,23 @@ fn batch(key: &str, intents: Vec<ExtensionAttricatIntent>) -> ExtensionAttricatB
 }
 
 const TAG_CHECKED_BLUEPRINT: &str = r#"
-format_version = 1
-code = "tag_checked_item"
-name = "Tag checked item"
-kind = "record"
-record_schema = '''{
-  "x-attricat-checks": [
-    {"code": "not-blocked", "predicate": {"type": "missing_tag", "tag": "acme.docs:blocked"}}
-  ]
-}'''
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-[[attributes]]
-code = "title"
-value_type = "string"
+format_version: 1
+code: tag_checked_item
+name: Tag checked item
+kind: record
+record_schema: |-
+  {
+    "x-attricat-checks": [
+      {"code": "not-blocked", "predicate": {"type": "missing_tag", "tag": "acme.docs:blocked"}}
+    ]
+  }
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
 "#;
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
@@ -1233,22 +1237,22 @@ async fn selection_pages_hold_at_most_one_pool_connection(pool: sqlx::PgPool) {
 }
 
 const LINKING_BLUEPRINT: &str = r#"
-format_version = 1
-code = "interactive_linking_item"
-name = "Interactive linking item"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-[[attributes]]
-code = "title"
-value_type = "string"
-[[attributes]]
-code = "related"
-value_type = "relationship"
-target_blueprint = "interactive_other_item"
-cardinality = "many"
-target_cardinality = "many"
+format_version: 1
+code: interactive_linking_item
+name: Interactive linking item
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+  - code: related
+    value_type: relationship
+    target_blueprint: interactive_other_item
+    cardinality: many
+    target_cardinality: many
 "#;
 #[sqlx::test(migrator = "api::MIGRATOR")]
 async fn interactive_links_require_read_access_to_every_target(pool: sqlx::PgPool) {

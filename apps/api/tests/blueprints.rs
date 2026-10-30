@@ -9,7 +9,7 @@ async fn blueprint_catalogue_lists_all_kinds_and_revision_history(pool: PgPool) 
     let first: Value = client
         .post(format!("{base_url}/blueprints"))
         .json(&json!({
-            "definition": "format_version = 1\ncode = \"catalogued_record\"\nname = \"Catalogued record revision two\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\""
+            "definition": "format_version: 1\ncode: catalogued_record\nname: Catalogued record revision two\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string"
         }))
         .send()
         .await
@@ -23,7 +23,7 @@ async fn blueprint_catalogue_lists_all_kinds_and_revision_history(pool: PgPool) 
     client
         .post(format!("{base_url}/blueprints/{blueprint_id}/versions"))
         .json(&json!({
-            "definition": "format_version = 1\ncode = \"catalogued_record\"\nname = \"Catalogued record\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\""
+            "definition": "format_version: 1\ncode: catalogued_record\nname: Catalogued record\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string"
         }))
         .send()
         .await
@@ -33,7 +33,7 @@ async fn blueprint_catalogue_lists_all_kinds_and_revision_history(pool: PgPool) 
     create_blueprint(
         &client,
         &base_url,
-        "format_version = 1\ncode = \"catalogued_mixin\"\nname = \"Catalogued mixin\"\nkind = \"mixin\"\n\n[[attributes]]\ncode = \"label\"\nvalue_type = \"string\"",
+        "format_version: 1\ncode: catalogued_mixin\nname: Catalogued mixin\nkind: mixin\nattributes:\n  - code: label\n    value_type: string",
     )
     .await;
 
@@ -91,24 +91,21 @@ async fn persists_readonly_attribute_metadata_and_describes_attributes(pool: PgP
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "system_managed_product"
-name = "System managed product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "external_id"
-description = "The ID in the supplier's system"
-value_type = "string"
-readonly = true
+format_version: 1
+code: system_managed_product
+name: System managed product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+  - code: external_id
+    description: 'The ID in the supplier''s system'
+    value_type: string
+    readonly: true
 "#,
     )
     .await;
@@ -149,15 +146,14 @@ async fn persists_attribute_names_through_includes(pool: PgPool) {
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "named_seo"
-name = "Named SEO"
-kind = "mixin"
-
-[[attributes]]
-code = "meta_title"
-name = "SEO title"
-value_type = "string"
+format_version: 1
+code: named_seo
+name: Named SEO
+kind: mixin
+attributes:
+  - code: meta_title
+    name: SEO title
+    value_type: string
 "#,
     )
     .await;
@@ -165,32 +161,26 @@ value_type = "string"
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "named_product"
-name = "Named product"
-kind = "record"
-
-[[includes]]
-alias = "seo"
-code = "named_seo"
-version = 1
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["product_family"]
-
-[[attributes]]
-code = "product_family"
-name = "Family"
-value_type = "string"
-
-[[attributes]]
-code = "sku"
-value_type = "string"
-
-[[attributes]]
-code = "meta_title"
-from = "seo.meta_title"
+format_version: 1
+code: named_product
+name: Named product
+kind: record
+includes:
+  - alias: seo
+    code: named_seo
+    version: 1
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [product_family]
+attributes:
+  - code: product_family
+    name: Family
+    value_type: string
+  - code: sku
+    value_type: string
+  - code: meta_title
+    from: seo.meta_title
 "#,
     )
     .await;
@@ -220,14 +210,14 @@ from = "seo.meta_title"
 }
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
-async fn rejects_invalid_toml_and_mixin_record_creation(pool: PgPool) {
+async fn rejects_invalid_yaml_and_mixin_record_creation(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
 
     let invalid = client
         .post(format!("{base_url}/blueprints"))
         .json(&json!({
-            "definition": "format_version = 1\ncode = 'bad'\nname = 'Bad'\nkind = 'record'"
+            "definition": "format_version: 1\ncode: bad\nname: Bad\nkind: record"
         }))
         .send()
         .await
@@ -242,14 +232,13 @@ async fn rejects_invalid_toml_and_mixin_record_creation(pool: PgPool) {
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "visibility"
-name = "Visibility"
-kind = "mixin"
-
-[[attributes]]
-code = "visible"
-value_type = "boolean"
+format_version: 1
+code: visibility
+name: Visibility
+kind: mixin
+attributes:
+  - code: visible
+    value_type: boolean
 "#,
     )
     .await;
@@ -278,18 +267,17 @@ async fn saves_rich_table_columns_with_resolved_relationship_targets(pool: PgPoo
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "table_category"
-name = "Table category"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[[attributes]]
-code = "name"
-value_type = "string"
+format_version: 1
+code: table_category
+name: Table category
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
 "#,
     )
     .await;
@@ -297,28 +285,26 @@ value_type = "string"
         .post(format!("{base_url}/blueprints"))
         .json(&json!({
             "definition": r#"
-format_version = 1
-code = "table_product"
-name = "Table product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[views.table]
-type = "table"
-columns = [{ field = "category.name", renderer = { id = "attricat.table_display", version = 1 } }]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "category"
-value_type = "relationship"
-target_blueprint = "table_category"
-cardinality = "one"
+format_version: 1
+code: table_product
+name: Table product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+  table:
+    type: table
+    columns:
+      - field: category.name
+        renderer: {id: attricat.table_display, version: 1}
+attributes:
+  - code: title
+    value_type: string
+  - code: category
+    value_type: relationship
+    target_blueprint: table_category
+    cardinality: one
 "#
         }))
         .send()
@@ -341,44 +327,38 @@ async fn explorer_browse_by_paths_resolve_through_published_targets(pool: PgPool
     let client = authenticated_client();
     for definition in [
         r#"
-format_version = 1
-code = "browse_brand"
-name = "Browse brand"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[[attributes]]
-code = "name"
-value_type = "string"
+format_version: 1
+code: browse_brand
+name: Browse brand
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
 "#,
         r#"
-format_version = 1
-code = "browse_model"
-name = "Browse model"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[[attributes]]
-code = "name"
-value_type = "string"
-
-[[attributes]]
-code = "brand"
-value_type = "relationship"
-target_blueprint = "browse_brand"
-cardinality = "one"
-
-[[attributes]]
-code = "brands"
-value_type = "relationship"
-target_blueprint = "browse_brand"
-cardinality = "many"
+format_version: 1
+code: browse_model
+name: Browse model
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: brand
+    value_type: relationship
+    target_blueprint: browse_brand
+    cardinality: one
+  - code: brands
+    value_type: relationship
+    target_blueprint: browse_brand
+    cardinality: many
 "#,
     ] {
         create_blueprint(&client, &base_url, definition).await;
@@ -386,28 +366,24 @@ cardinality = "many"
     let vehicle = |browse_by: &str| {
         format!(
             r#"
-format_version = 1
-code = "browse_vehicle"
-name = "Browse vehicle"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["vin"]
-
-[views.explorer]
-type = "explorer"
-browse_by = "{browse_by}"
-
-[[attributes]]
-code = "vin"
-value_type = "string"
-
-[[attributes]]
-code = "model"
-value_type = "relationship"
-target_blueprint = "browse_model"
-cardinality = "one"
+format_version: 1
+code: browse_vehicle
+name: Browse vehicle
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [vin]
+  explorer:
+    type: explorer
+    browse_by: '{browse_by}'
+attributes:
+  - code: vin
+    value_type: string
+  - code: model
+    value_type: relationship
+    target_blueprint: browse_model
+    cardinality: one
 "#
         )
     };
@@ -445,35 +421,33 @@ cardinality = "one"
 
 fn plain_blueprint(code: &str) -> String {
     format!(
-        r#"format_version = 1
-code = "{code}"
-name = "{code}"
-kind = "record"
-
-[[attributes]]
-code = "title"
-value_type = "string"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
+        r#"format_version: 1
+code: '{code}'
+name: '{code}'
+kind: record
+attributes:
+  - code: title
+    value_type: string
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
 "#
     )
 }
 
-/// A blueprint with the `[[rules]]` tables that blueprints no longer accept.
+/// A blueprint with the `rules` list that blueprints no longer accept.
 fn blueprint_with_rule(code: &str) -> String {
     format!(
-        r#"{}
-[[rules]]
-code = "title-required"
-name = "Title required"
-severity = "error"
-[[rules.triggers]]
-type = "manual"
-[rules.predicate]
-type = "required"
-attribute_code = "title"
+        r#"{}rules:
+  - code: title-required
+    name: Title required
+    severity: error
+    triggers:
+      - type: manual
+    predicate:
+      type: required
+      attribute_code: title
 "#,
         plain_blueprint(code)
     )
@@ -509,7 +483,7 @@ async fn blueprints_cannot_declare_rules_but_stored_ones_still_publish(pool: PgP
             .await
     ));
 
-    // A draft saved before rules became standalone keeps its `[[rules]]`
+    // A draft saved before rules became standalone keeps its `rules`
     // text; publishing it creates no rule.
     sqlx::query("UPDATE blueprints SET definition = $1 WHERE id = $2")
         .bind(blueprint_with_rule("ruled"))
@@ -534,7 +508,7 @@ async fn validates_definitions_without_storing_them(pool: PgPool) {
     let client = authenticated_client();
     let definition = |code: &str, field: &str| {
         format!(
-            "format_version = 1\ncode = \"{code}\"\nname = \"Checked\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"{field}\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\""
+            "format_version: 1\ncode: '{code}'\nname: Checked\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: ['{field}']\nattributes:\n  - code: title\n    value_type: string"
         )
     };
 
@@ -629,12 +603,12 @@ async fn checks_enum_value_labels(pool: PgPool) {
     let client = authenticated_client();
     let blueprint = |labels: &str| {
         format!(
-            "format_version = 1\ncode = \"sized\"\nname = \"Sized\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"size\"]\n\n[[attributes]]\ncode = \"size\"\nvalue_type = \"string\"\nvalue_schema = '{{\"type\":\"string\",\"enum\":[\"s\",\"l\"],\"x-attricat-enum-labels\":{labels}}}'\n"
+            "format_version: 1\ncode: sized\nname: Sized\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [size]\nattributes:\n  - code: size\n    value_type: string\n    value_schema: '{{\"type\":\"string\",\"enum\":[\"s\",\"l\"],\"x-attricat-enum-labels\":{labels}}}'\n"
         )
     };
     let reusable = |labels: &str| {
         format!(
-            "code = \"size\"\nname = \"Size\"\nvalue_type = \"string\"\nvalue_schema = {{ type = \"string\", enum = [\"s\", \"l\"], \"x-attricat-enum-labels\" = {labels} }}\n"
+            "code: size\nname: Size\nvalue_type: string\nvalue_schema:\n  type: string\n  enum: [s, l]\n  x-attricat-enum-labels: {labels}\n"
         )
     };
     for (route, definition) in [
@@ -642,10 +616,7 @@ async fn checks_enum_value_labels(pool: PgPool) {
             "blueprints/validate",
             blueprint(r#"{"s":"Small","l":"{{Large}}"}"#),
         ),
-        (
-            "reusable-attributes/validate",
-            reusable(r#"{ s = "Small" }"#),
-        ),
+        ("reusable-attributes/validate", reusable("{s: Small}")),
     ] {
         let response = client
             .post(format!("{base_url}/{route}"))
@@ -672,7 +643,7 @@ async fn checks_enum_value_labels(pool: PgPool) {
         ),
         (
             "reusable-attributes/validate",
-            reusable(r#"{ s = " " }"#),
+            reusable("{s: ' '}"),
             "label for 's' must be 1 to 200 characters",
         ),
     ] {
@@ -704,7 +675,7 @@ async fn checks_enum_value_labels(pool: PgPool) {
 async fn checks_an_unchanged_definition_as_the_revision_it_matches(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
-    let definition = "format_version = 1\ncode = \"unchanged\"\nname = \"Unchanged\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"";
+    let definition = "format_version: 1\ncode: unchanged\nname: Unchanged\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string";
     let created = create_blueprint(&client, &base_url, definition).await;
     let blueprint_id = created["blueprint"]["id"].as_str().unwrap();
 
@@ -757,8 +728,10 @@ async fn a_revision_can_return_to_an_earlier_definition(pool: PgPool) {
         .create_blueprint_revision(
             blueprint_id,
             api::model::CreateBlueprint {
-                definition: format!(
-                    "{original}\n[[attributes]]\ncode = \"subtitle\"\nvalue_type = \"string\"\n"
+                definition: original.replacen(
+                    "views:\n",
+                    "  - code: subtitle\n    value_type: string\nviews:\n",
+                    1,
                 ),
             },
         )
@@ -794,7 +767,7 @@ async fn checks_running_during_a_save_number_the_revision_after_it(pool: PgPool)
     let client = authenticated_client();
     let definition = |name: &str| {
         format!(
-            "format_version = 1\ncode = \"raced\"\nname = \"{name}\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\""
+            "format_version: 1\ncode: raced\nname: '{name}'\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string"
         )
     };
     let created = create_blueprint(&client, &base_url, &definition("Raced")).await;

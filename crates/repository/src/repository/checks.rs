@@ -368,7 +368,7 @@ fn key_components(
 
 /// Other live records of the subject's blueprint family whose `key`
 /// resolves, in the same context, to the same normalized values. Values are
-/// compared as `[[unique_keys]]` compare them (see
+/// compared as `unique_keys` compare them (see
 /// [`normalize_key_component`]); strings ignore case. When a declared key of
 /// the family covers exactly these attributes, its index answers directly.
 /// Otherwise candidates are scanned in batches with no limit.

@@ -16,10 +16,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::solution_packs::{
-    MAX_IDENTIFIER_BYTES, MAX_VERSION_REQUIREMENT_BYTES, SolutionPackBlueprint, SolutionPackError,
-    SolutionPackManifest, SolutionPackResource, ValidatedSolutionPack, invalid,
-    is_valid_stable_code, parse_sha256, parse_version_req, resource_code, safe_archive_path,
-    validate_acyclic, validate_pack_id,
+    MAX_IDENTIFIER_BYTES, MAX_VERSION_REQUIREMENT_BYTES, SOLUTION_PACK_DEFINITION_EXTENSION,
+    SolutionPackBlueprint, SolutionPackError, SolutionPackManifest, SolutionPackResource,
+    ValidatedSolutionPack, invalid, is_valid_stable_code, parse_sha256, parse_version_req,
+    resource_code, safe_archive_path, validate_acyclic, validate_pack_id,
 };
 
 mod plan;
@@ -73,7 +73,7 @@ pub struct SeedRule {
     pub referenced_blueprints: BTreeSet<String>,
     pub context: Option<String>,
     pub enabled: bool,
-    /// Native rule TOML without pack-only keys, still using the pack-local code.
+    /// Native rule YAML without pack-only keys, still using the pack-local code.
     pub definition: String,
     pub compiled: attricat_rules::CompiledRule,
 }
@@ -83,7 +83,7 @@ pub struct SeedWorkflow {
     pub key: String,
     pub code: String,
     pub enabled: bool,
-    /// Native workflow TOML without pack-only keys, still using the pack-local code.
+    /// Native workflow YAML without pack-only keys, still using the pack-local code.
     pub definition: String,
     pub compiled: attricat_workflow::CompiledWorkflow,
 }
@@ -140,12 +140,12 @@ pub(crate) fn seed_resources(
     resources
         .rules
         .iter()
-        .map(|resource| ("rules", ".toml", resource))
+        .map(|resource| ("rules", SOLUTION_PACK_DEFINITION_EXTENSION, resource))
         .chain(
             resources
                 .workflows
                 .iter()
-                .map(|resource| ("workflows", ".toml", resource)),
+                .map(|resource| ("workflows", SOLUTION_PACK_DEFINITION_EXTENSION, resource)),
         )
         .chain(
             resources
@@ -372,37 +372,37 @@ fn utf8_source<'a>(key: &str, bytes: &'a [u8]) -> Result<&'a str, SolutionPackEr
         .map_err(|_| SolutionPackError::Invalid(format!("resource '{key}' must be UTF-8")))
 }
 
-/// Removes pack-only keys from a native TOML definition. The remainder must
+/// Removes pack-only keys from a native YAML definition. The remainder must
 /// be accepted by the ordinary native parser.
 fn split_pack_keys(
     key: &str,
     source: &str,
     pack_keys: &[&str],
-) -> Result<(BTreeMap<String, toml::Value>, String), SolutionPackError> {
-    let mut value: toml::Value = toml::from_str(source)
-        .map_err(|_| SolutionPackError::Invalid(format!("resource '{key}' is not valid TOML")))?;
+) -> Result<(BTreeMap<String, Value>, String), SolutionPackError> {
+    let mut value: Value = attricat_yaml::from_str(source)
+        .map_err(|_| SolutionPackError::Invalid(format!("resource '{key}' is not valid YAML")))?;
     let table = value
-        .as_table_mut()
-        .ok_or_else(|| SolutionPackError::Invalid(format!("resource '{key}' is not valid TOML")))?;
+        .as_object_mut()
+        .ok_or_else(|| SolutionPackError::Invalid(format!("resource '{key}' is not valid YAML")))?;
     let mut extracted = BTreeMap::new();
     for pack_key in pack_keys {
         if let Some(value) = table.remove(*pack_key) {
             extracted.insert((*pack_key).to_owned(), value);
         }
     }
-    let native = toml::to_string(&value)
-        .map_err(|_| SolutionPackError::Invalid(format!("resource '{key}' is not valid TOML")))?;
+    let native = attricat_yaml::to_string(&value)
+        .map_err(|_| SolutionPackError::Invalid(format!("resource '{key}' is not valid YAML")))?;
     Ok((extracted, native))
 }
 
 fn required_bool(
     key: &str,
-    extracted: &BTreeMap<String, toml::Value>,
+    extracted: &BTreeMap<String, Value>,
     field: &str,
 ) -> Result<bool, SolutionPackError> {
     extracted
         .get(field)
-        .and_then(toml::Value::as_bool)
+        .and_then(Value::as_bool)
         .ok_or_else(|| {
             SolutionPackError::Invalid(format!("resource '{key}' must declare boolean '{field}'"))
         })
@@ -410,7 +410,7 @@ fn required_bool(
 
 fn optional_key(
     key: &str,
-    extracted: &BTreeMap<String, toml::Value>,
+    extracted: &BTreeMap<String, Value>,
     field: &str,
 ) -> Result<Option<String>, SolutionPackError> {
     extracted
@@ -957,7 +957,7 @@ fn validate_browse_path(
             segments.len(),
         ) {
             return Err(format!(
-                "browseBy '{path}' segment '{}' must be a relationship with a single target blueprint and cardinality = \"one\"",
+                "browseBy '{path}' segment '{}' must be a relationship with a single target blueprint and cardinality: one",
                 segments[end - 1]
             ));
         }

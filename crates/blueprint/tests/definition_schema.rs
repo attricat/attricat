@@ -32,7 +32,7 @@ fn definition_schema_contract_is_current() {
     );
 }
 
-/// Extracts raw-string TOML definitions embedded in Rust test sources.
+/// Extracts raw-string YAML definitions embedded in Rust test sources.
 fn embedded_definitions(source: &str) -> Vec<String> {
     let mut definitions = Vec::new();
     let mut rest = source;
@@ -65,7 +65,7 @@ fn schema_accepts_every_parsed_repository_definition() {
     let mut definitions: Vec<String> = ["category", "color", "product"]
         .iter()
         .map(|name| {
-            fs::read_to_string(root.join(format!("examples/relationships/{name}.toml"))).unwrap()
+            fs::read_to_string(root.join(format!("examples/relationships/{name}.yaml"))).unwrap()
         })
         .collect();
     for directory in ["crates/blueprint/tests", "apps/api/tests"] {
@@ -77,12 +77,12 @@ fn schema_accepts_every_parsed_repository_definition() {
     let schema = attricat_blueprint::definition_json_schema();
     let mut checked = 0;
     for definition in definitions {
-        // Stored definitions may still declare the removed `[[rules]]`,
+        // Stored definitions may still declare the removed `rules`,
         // which saving refuses and the schema does not describe.
         if !attricat_blueprint::parse(&definition).is_ok_and(|parsed| !parsed.embedded_rules) {
             continue;
         }
-        let value: toml::Value = toml::from_str(&definition).unwrap();
+        let value: serde_json::Value = attricat_yaml::from_str(&definition).unwrap();
         let instance = serde_json::to_value(value).unwrap();
         let violations = attricat_validation::validate_json_schema(&schema, &instance).unwrap();
         assert!(
@@ -98,38 +98,39 @@ fn schema_accepts_every_parsed_repository_definition() {
 fn schema_rejects_unknown_keys_and_values() {
     let schema = attricat_blueprint::definition_json_schema();
     for definition in [
-        r#"format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-colour = "red"
-[[attributes]]
-code = "name"
-value_type = "string"
+        r#"format_version: 1
+code: product
+name: Product
+kind: record
+colour: red
+attributes:
+  - code: name
+    value_type: string
 "#,
-        r#"format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-[[attributes]]
-code = "name"
-value_type = "text"
+        r#"format_version: 1
+code: product
+name: Product
+kind: record
+attributes:
+  - code: name
+    value_type: text
 "#,
-        r#"format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-[views.detail]
-type = "stack"
-children = [{ type = "field", field = "name", label = "Name" }]
-[[attributes]]
-code = "name"
-value_type = "string"
+        r#"format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  detail:
+    type: stack
+    children:
+      - {type: field, field: name, label: Name}
+attributes:
+  - code: name
+    value_type: string
 "#,
     ] {
         assert!(attricat_blueprint::parse(definition).is_err());
-        let instance =
-            serde_json::to_value(toml::from_str::<toml::Value>(definition).unwrap()).unwrap();
+        let instance = attricat_yaml::from_str::<serde_json::Value>(definition).unwrap();
         assert!(
             !attricat_validation::validate_json_schema(&schema, &instance)
                 .unwrap()

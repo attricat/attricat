@@ -166,7 +166,7 @@ async fn data_health_completeness_counts_default_values(pool: PgPool) {
     let blueprint = create_blueprint(
         &client,
         &base_url,
-        "format_version = 1\ncode = \"health_product\"\nname = \"Health product\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"",
+        "format_version: 1\ncode: health_product\nname: Health product\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string",
     )
     .await;
     create_record(&client, &base_url, &blueprint).await;

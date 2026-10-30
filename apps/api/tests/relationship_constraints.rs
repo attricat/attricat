@@ -3,32 +3,27 @@ use crate::support;
 use support::*;
 
 const LOCATION: &str = r#"
-format_version = 1
-code = "rc_location"
-name = "Location"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[[attributes]]
-code = "name"
-value_type = "string"
-
-[[attributes]]
-code = "parent"
-value_type = "relationship"
-target_blueprint = "rc_location"
-tree = true
-context_editable = "default"
-
-[[attributes]]
-code = "depends_on"
-value_type = "relationship"
-target_blueprint = "rc_location"
-acyclic = true
-context_editable = "default"
+format_version: 1
+code: rc_location
+name: Location
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: parent
+    value_type: relationship
+    target_blueprint: rc_location
+    tree: true
+    context_editable: default
+  - code: depends_on
+    value_type: relationship
+    target_blueprint: rc_location
+    acyclic: true
+    context_editable: default
 "#;
 
 async fn record(client: &Client, base_url: &str, blueprint: &str) -> String {
@@ -157,8 +152,8 @@ async fn publishing_a_hierarchy_reports_existing_cycles_and_extra_parents(pool: 
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
     let unconstrained = LOCATION
-        .replace("tree = true\n", "")
-        .replace("acyclic = true\n", "");
+        .replace("    tree: true\n", "")
+        .replace("    acyclic: true\n", "");
     let blueprint = create_blueprint(&client, &base_url, &unconstrained).await;
     let blueprint_id = blueprint["blueprint"]["id"].as_str().unwrap().to_owned();
     let [a, b, c] = [
@@ -204,14 +199,14 @@ async fn publishing_a_hierarchy_reports_existing_cycles_and_extra_parents(pool: 
         }
     };
 
-    let tree = publish(LOCATION.replace("acyclic = true\n", "")).await;
+    let tree = publish(LOCATION.replace("    acyclic: true\n", "")).await;
     assert_eq!(tree.status(), StatusCode::CONFLICT);
     let body: Value = tree.json().await.unwrap();
     assert_eq!(body["error"]["code"], "relationship_hierarchy_violations");
     assert_eq!(body["error"]["details"]["attribute"], "parent");
     assert_eq!(body["error"]["details"]["multiple_parents"], json!([a]));
 
-    let acyclic = publish(LOCATION.replace("tree = true\n", "")).await;
+    let acyclic = publish(LOCATION.replace("    tree: true\n", "")).await;
     assert_eq!(acyclic.status(), StatusCode::CONFLICT);
     let body: Value = acyclic.json().await.unwrap();
     assert_eq!(body["error"]["details"]["attribute"], "depends_on");
@@ -268,8 +263,8 @@ async fn hierarchies_follow_edges_inherited_from_parent_contexts(pool: PgPool) {
     // Revision 1 lets records set the field per context; revision 2 makes it
     // a hierarchy, which records pinned to revision 1 must still respect.
     let contextual = LOCATION
-        .replace("tree = true\n", "")
-        .replace("acyclic = true\ncontext_editable = \"default\"\n", "");
+        .replace("    tree: true\n", "")
+        .replace("    acyclic: true\n    context_editable: default\n", "");
     let blueprint = create_blueprint(&client, &base_url, &contextual).await;
     let blueprint_id = blueprint["blueprint"]["id"].as_str().unwrap().to_owned();
     let french: Value = client
@@ -300,7 +295,7 @@ async fn hierarchies_follow_edges_inherited_from_parent_contexts(pool: PgPool) {
 
     let revision: Value = client
         .post(format!("{base_url}/blueprints/{blueprint_id}/versions"))
-        .json(&json!({ "definition": LOCATION.replace("tree = true\n", "") }))
+        .json(&json!({ "definition": LOCATION.replace("    tree: true\n", "") }))
         .send()
         .await
         .unwrap()
@@ -368,16 +363,17 @@ async fn relationships_accept_only_listed_target_blueprints(pool: PgPool) {
             &base_url,
             &format!(
                 r#"
-format_version = 1
-code = "{code}"
-name = "{code}"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[[attributes]]
-code = "name"
-value_type = "string"
+format_version: 1
+code: '{code}'
+name: '{code}'
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
 "#
             ),
         )
@@ -387,20 +383,20 @@ value_type = "string"
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "rc_assessment"
-name = "Assessment"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[[attributes]]
-code = "name"
-value_type = "string"
-[[attributes]]
-code = "subject"
-value_type = "relationship"
-target_blueprints = ["rc_product", "rc_material"]
+format_version: 1
+code: rc_assessment
+name: Assessment
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: subject
+    value_type: relationship
+    target_blueprints: [rc_product, rc_material]
 "#,
     )
     .await;

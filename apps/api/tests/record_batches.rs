@@ -3,51 +3,46 @@ use crate::support;
 use support::*;
 
 const REVISION: &str = r#"
-format_version = 1
-code = "eb_revision"
-name = "Document revision"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["label"]
-
-[[unique_keys]]
-code = "label"
-attributes = ["label"]
-
-[[attributes]]
-code = "label"
-value_type = "string"
-
-[[attributes]]
-code = "status"
-value_type = "string"
-value_schema = '''{
-  "type": "string",
-  "enum": ["draft", "released", "superseded"],
-  "x-attricat-status": {
-    "version": 1,
-    "options": [
-      { "code": "draft", "label": "Draft" },
-      { "code": "released", "label": "Released" },
-      { "code": "superseded", "label": "Superseded" }
-    ],
-    "transitions": [
-      { "from": null, "to": "draft" },
-      { "from": null, "to": "released" },
-      { "from": "draft", "to": "released" },
-      { "from": "released", "to": "superseded" }
-    ]
-  }
-}'''
-
-[[attributes]]
-code = "previous"
-value_type = "relationship"
-target_blueprint = "eb_revision"
-tree = true
-context_editable = "default"
+format_version: 1
+code: eb_revision
+name: Document revision
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [label]
+unique_keys:
+  - code: label
+    attributes: [label]
+attributes:
+  - code: label
+    value_type: string
+  - code: status
+    value_type: string
+    value_schema: |-
+      {
+        "type": "string",
+        "enum": ["draft", "released", "superseded"],
+        "x-attricat-status": {
+          "version": 1,
+          "options": [
+            { "code": "draft", "label": "Draft" },
+            { "code": "released", "label": "Released" },
+            { "code": "superseded", "label": "Superseded" }
+          ],
+          "transitions": [
+            { "from": null, "to": "draft" },
+            { "from": null, "to": "released" },
+            { "from": "draft", "to": "released" },
+            { "from": "released", "to": "superseded" }
+          ]
+        }
+      }
+  - code: previous
+    value_type: relationship
+    target_blueprint: eb_revision
+    tree: true
+    context_editable: default
 "#;
 
 async fn released(client: &Client, base_url: &str, label: &str) -> Value {

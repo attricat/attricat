@@ -51,6 +51,8 @@ pub use presentation_assets::validate_presentation_asset_bytes;
 pub const SOLUTION_PACK_MANIFEST_VERSION: u32 = 1;
 pub const SOLUTION_PACK_RESOURCE_FORMAT_VERSION: u32 = 1;
 pub const SOLUTION_PACK_MANIFEST_PATH: &str = "solution-pack.json";
+/// File extension of blueprint, rule and workflow definition resources.
+pub const SOLUTION_PACK_DEFINITION_EXTENSION: &str = ".yaml";
 pub const MAX_SOLUTION_PACK_ARCHIVE_BYTES: usize = 32 * 1024 * 1024;
 pub const MAX_SOLUTION_PACK_EXPANDED_BYTES: usize = 128 * 1024 * 1024;
 pub const MAX_SOLUTION_PACK_FILE_BYTES: usize = 8 * 1024 * 1024;
@@ -1020,10 +1022,9 @@ fn validate_resource(kind: &str, resource: &SolutionPackResource) -> Result<(), 
     {
         return invalid(format!("resource path '{}' is invalid", resource.path));
     }
-    let expected_extension = ".toml";
-    if !resource.path.ends_with(expected_extension) {
+    if !resource.path.ends_with(SOLUTION_PACK_DEFINITION_EXTENSION) {
         return invalid(format!(
-            "resource path '{}' must end in {expected_extension}",
+            "resource path '{}' must end in {SOLUTION_PACK_DEFINITION_EXTENSION}",
             resource.path
         ));
     }

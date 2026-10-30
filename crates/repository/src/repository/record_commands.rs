@@ -366,7 +366,7 @@ impl AttricatRepository {
     }
 
     /// Copies a record's blueprint values, relationships and file
-    /// references into a new record. Values of enforced `[[unique_keys]]`
+    /// references into a new record. Values of enforced `unique_keys`
     /// attributes are left out, because the copy could never share them with
     /// its source: default-context values for workspace-scoped keys and every
     /// context's values for context-scoped keys. Generated values are left

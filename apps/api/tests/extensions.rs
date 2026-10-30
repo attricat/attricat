@@ -23,19 +23,19 @@ use uuid::Uuid;
 
 const ARTIFACT_BYTES: &[u8] = b"server bytes";
 const SYNC_BLUEPRINT: &str = r#"
-format_version = 1
-code = "extension_sync_item"
-name = "Extension sync item"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["external_id"]
-[[attributes]]
-code = "external_id"
-value_type = "string"
-[[attributes]]
-code = "title"
-value_type = "string"
+format_version: 1
+code: extension_sync_item
+name: Extension sync item
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [external_id]
+attributes:
+  - code: external_id
+    value_type: string
+  - code: title
+    value_type: string
 "#;
 
 #[derive(Clone, Copy)]
@@ -398,20 +398,20 @@ async fn extension_attricat_upsert_create_writes_declared_relationships(pool: sq
     let blueprint = repository
         .create_blueprint(CreateBlueprint {
             definition: r#"
-format_version = 1
-code = "extension_linked_item"
-name = "Extension linked item"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["external_id"]
-[[attributes]]
-code = "external_id"
-value_type = "string"
-[[attributes]]
-code = "related"
-value_type = "relationship"
-target_blueprint = "extension_linked_item"
+format_version: 1
+code: extension_linked_item
+name: Extension linked item
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [external_id]
+attributes:
+  - code: external_id
+    value_type: string
+  - code: related
+    value_type: relationship
+    target_blueprint: extension_linked_item
 "#
             .into(),
         })
@@ -665,22 +665,22 @@ async fn extension_attricat_upsert_is_idempotent_and_emits_a_change_feed(pool: s
 }
 
 const KEYED_SYNC_BLUEPRINT: &str = r#"
-format_version = 1
-code = "extension_keyed_item"
-name = "Extension keyed item"
-kind = "record"
-[[unique_keys]]
-code = "external_id"
-attributes = ["external_id"]
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["external_id"]
-[[attributes]]
-code = "external_id"
-value_type = "string"
-[[attributes]]
-code = "title"
-value_type = "string"
+format_version: 1
+code: extension_keyed_item
+name: Extension keyed item
+kind: record
+unique_keys:
+  - code: external_id
+    attributes: [external_id]
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [external_id]
+attributes:
+  - code: external_id
+    value_type: string
+  - code: title
+    value_type: string
 "#;
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
@@ -1409,26 +1409,24 @@ async fn blueprint_layout_overlays_owned_outlets_and_preserves_global_workspace_
         .await
         .unwrap();
     let definition = r#"
-format_version = 1
-code = "extension_layout_product"
-name = "Extension layout product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[views.extension_layout]
-type = "extension_layout"
-version = 1
-
-[views.extension_layout.outlets.record_preview_panel]
-order = ["acme.zebra:panel"]
-hidden = ["acme.alpha:panel"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
+format_version: 1
+code: extension_layout_product
+name: Extension layout product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+  extension_layout:
+    type: extension_layout
+    version: 1
+    outlets:
+      record_preview_panel:
+        order: ['acme.zebra:panel']
+        hidden: ['acme.alpha:panel']
+attributes:
+  - code: title
+    value_type: string
 "#;
     let blueprint = repository
         .create_blueprint(CreateBlueprint {
@@ -1774,19 +1772,18 @@ async fn extension_attribute_types_are_pinned_and_survive_provider_disable(pool:
         .unwrap();
     repository.enable_extension("acme.client").await.unwrap();
     let definition = r#"
-format_version = 1
-code = "extension_type_product"
-name = "Extension type product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["price"]
-
-[[attributes]]
-code = "price"
-extension_type = "acme.client:money@^1"
-extension_configuration = '{"currency":"USD"}'
+format_version: 1
+code: extension_type_product
+name: Extension type product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [price]
+attributes:
+  - code: price
+    extension_type: 'acme.client:money@^1'
+    extension_configuration: '{"currency":"USD"}'
 "#;
     let blueprint = repository
         .create_blueprint(CreateBlueprint {
@@ -1878,26 +1875,24 @@ async fn hidden_contributions_remain_authorized_and_are_validated_on_publish(poo
     );
 
     let incompatible = r#"
-format_version = 1
-code = "invalid_extension_layout"
-name = "Invalid extension layout"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[views.extension_layout]
-type = "extension_layout"
-version = 1
-
-[views.extension_layout.outlets.record_action]
-order = ["acme.client:panel"]
-hidden = []
-
-[[attributes]]
-code = "title"
-value_type = "string"
+format_version: 1
+code: invalid_extension_layout
+name: Invalid extension layout
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+  extension_layout:
+    type: extension_layout
+    version: 1
+    outlets:
+      record_action:
+        order: ['acme.client:panel']
+        hidden: []
+attributes:
+  - code: title
+    value_type: string
 "#;
     let blueprint = repository
         .create_blueprint(CreateBlueprint {

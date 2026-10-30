@@ -12,82 +12,82 @@ async fn search_resolves_three_hop_table_query_filter_and_sort_paths(pool: PgPoo
     let kind = create_blueprint(
         &client,
         &base_url,
-        r#"format_version = 1
-code = "deep_kind"
-name = "Deep kind"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[[attributes]]
-code = "name"
-value_type = "string""#,
+        r#"format_version: 1
+code: deep_kind
+name: Deep kind
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string"#,
     )
     .await;
     let class = create_blueprint(
         &client,
         &base_url,
-        r#"format_version = 1
-code = "deep_class"
-name = "Deep class"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[[attributes]]
-code = "name"
-value_type = "string"
-[[attributes]]
-code = "kind"
-value_type = "relationship"
-target_blueprint = "deep_kind"
-cardinality = "one""#,
+        r#"format_version: 1
+code: deep_class
+name: Deep class
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: kind
+    value_type: relationship
+    target_blueprint: deep_kind
+    cardinality: one"#,
     )
     .await;
     let family = create_blueprint(
         &client,
         &base_url,
-        r#"format_version = 1
-code = "deep_family"
-name = "Deep family"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[[attributes]]
-code = "name"
-value_type = "string"
-[[attributes]]
-code = "class"
-value_type = "relationship"
-target_blueprint = "deep_class"
-cardinality = "one""#,
+        r#"format_version: 1
+code: deep_family
+name: Deep family
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: class
+    value_type: relationship
+    target_blueprint: deep_class
+    cardinality: one"#,
     )
     .await;
     let sku = create_blueprint(
         &client,
         &base_url,
-        r#"format_version = 1
-code = "deep_sku"
-name = "Deep SKU"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["sku"]
-[views.table]
-type = "table"
-columns = [
-  { field = "sku", label = "SKU" },
-  { field = "family.class.kind.name", label = "Kind" }
-]
-[[attributes]]
-code = "sku"
-value_type = "string"
-[[attributes]]
-code = "family"
-value_type = "relationship"
-target_blueprint = "deep_family"
-cardinality = "one""#,
+        r#"format_version: 1
+code: deep_sku
+name: Deep SKU
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [sku]
+  table:
+    type: table
+    columns:
+      - {field: sku, label: SKU}
+      - {field: family.class.kind.name, label: Kind}
+attributes:
+  - code: sku
+    value_type: string
+  - code: family
+    value_type: relationship
+    target_blueprint: deep_family
+    cardinality: one"#,
     )
     .await;
 
@@ -347,16 +347,17 @@ cardinality = "one""#,
         .post(format!(
             "{base_url}/blueprints/{kind_blueprint_id}/versions"
         ))
-        .json(&json!({"definition": r#"format_version = 1
-code = "deep_kind"
-name = "Deep kind"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[[attributes]]
-code = "name"
-value_type = "integer""#}))
+        .json(&json!({"definition": r#"format_version: 1
+code: deep_kind
+name: Deep kind
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: integer"#}))
         .send()
         .await
         .unwrap()
@@ -425,55 +426,57 @@ async fn relationship_sort_requires_one_effective_source_version(pool: PgPool) {
     let leaf = create_blueprint(
         &client,
         &base_url,
-        r#"format_version = 1
-code = "versioned_sort_leaf"
-name = "Versioned sort leaf"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[[attributes]]
-code = "name"
-value_type = "string""#,
+        r#"format_version: 1
+code: versioned_sort_leaf
+name: Versioned sort leaf
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string"#,
     )
     .await;
     let middle = create_blueprint(
         &client,
         &base_url,
-        r#"format_version = 1
-code = "versioned_sort_middle"
-name = "Versioned sort middle"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[[attributes]]
-code = "name"
-value_type = "string"
-[[attributes]]
-code = "leaf"
-value_type = "relationship"
-target_blueprint = "versioned_sort_leaf"
-cardinality = "one""#,
+        r#"format_version: 1
+code: versioned_sort_middle
+name: Versioned sort middle
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: leaf
+    value_type: relationship
+    target_blueprint: versioned_sort_leaf
+    cardinality: one"#,
     )
     .await;
-    let source_v1_definition = r#"format_version = 1
-code = "versioned_sort_source"
-name = "Versioned sort source"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[views.table]
-type = "table"
-columns = [{ field = "middle.leaf.name", label = "Leaf" }]
-[[attributes]]
-code = "name"
-value_type = "string"
-[[attributes]]
-code = "middle"
-value_type = "relationship"
-target_blueprint = "versioned_sort_middle""#;
+    let source_v1_definition = r#"format_version: 1
+code: versioned_sort_source
+name: Versioned sort source
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+  table:
+    type: table
+    columns:
+      - {field: middle.leaf.name, label: Leaf}
+attributes:
+  - code: name
+    value_type: string
+  - code: middle
+    value_type: relationship
+    target_blueprint: versioned_sort_middle"#;
     let source_v1 = create_blueprint(&client, &base_url, source_v1_definition).await;
     let leaf_record = create_record(&client, &base_url, &leaf).await;
     let middle_record = create_record(&client, &base_url, &middle).await;
@@ -503,8 +506,8 @@ target_blueprint = "versioned_sort_middle""#;
     let revision: Value = client
         .post(format!("{base_url}/blueprints/{source_id}/versions"))
         .json(&json!({"definition": source_v1_definition.replace(
-            "target_blueprint = \"versioned_sort_middle\"",
-            "target_blueprint = \"versioned_sort_middle\"\ncardinality = \"one\"",
+            "target_blueprint: versioned_sort_middle",
+            "target_blueprint: versioned_sort_middle\n    cardinality: one",
         )}))
         .send()
         .await
@@ -669,12 +672,12 @@ target_blueprint = "versioned_sort_middle""#;
         .post(format!("{base_url}/blueprints/{source_id}/versions"))
         .json(&json!({"definition": source_v1_definition
         .replace(
-            "target_blueprint = \"versioned_sort_middle\"",
-            "target_blueprint = \"versioned_sort_middle\"\ncardinality = \"one\"",
+            "target_blueprint: versioned_sort_middle",
+            "target_blueprint: versioned_sort_middle\n    cardinality: one",
         )
         .replace(
-            "name = \"Versioned sort source\"",
-            "name = \"Versioned sort source v3\"",
+            "name: Versioned sort source",
+            "name: Versioned sort source v3",
         )}))
         .send()
         .await

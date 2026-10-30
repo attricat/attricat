@@ -14,32 +14,29 @@ async fn required_image_blueprint(client: &Client, base_url: &str, code: &str) -
         client,
         base_url,
         &format!(
-            r#"format_version = 1
-code = "{code}"
-name = "Required image"
-kind = "record"
-record_schema = '''{{"required": ["image"]}}'''
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["image"]
-
-[[attributes]]
-code = "image"
-value_type = "file"
-cardinality = "one"
-allowed_mime_groups = ["image"]
-allowed_extensions = ["png"]
-max_bytes = 1024
-image_only = true
-
-[[attributes]]
-code = "gallery"
-value_type = "file"
-cardinality = "many"
-allowed_mime_groups = ["image"]
-allowed_extensions = ["png"]
-image_only = true"#
+            r#"format_version: 1
+code: '{code}'
+name: Required image
+kind: record
+record_schema: '{{"required": ["image"]}}'
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [image]
+attributes:
+  - code: image
+    value_type: file
+    cardinality: one
+    allowed_mime_groups: [image]
+    allowed_extensions: [png]
+    max_bytes: 1024
+    image_only: true
+  - code: gallery
+    value_type: file
+    cardinality: many
+    allowed_mime_groups: [image]
+    allowed_extensions: [png]
+    image_only: true"#
         ),
     )
     .await

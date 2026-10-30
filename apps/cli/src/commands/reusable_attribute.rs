@@ -20,7 +20,7 @@ pub(crate) enum ReusableAttributeCommand {
         #[arg(long)]
         blueprint: String,
     },
-    /// Create a definition from a TOML definition file.
+    /// Create a definition from a YAML definition file.
     Create(SourceInput),
     /// Run every save check on a definition without storing it. With
     /// `--definition-id`, check it as that definition's next version.

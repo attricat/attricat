@@ -15,60 +15,51 @@ use super::{
 use crate::solution_pack_seeds::SeedWorkspaceSnapshot;
 
 const PRODUCT_BLUEPRINT: &[u8] = br#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[[attributes]]
-code = "name"
-value_type = "string"
-
-[[attributes]]
-code = "categories"
-value_type = "relationship"
-target_blueprint = "blueprints/category"
+format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: categories
+    value_type: relationship
+    target_blueprint: blueprints/category
 "#;
 const CATEGORY_BLUEPRINT: &[u8] = br#"
-format_version = 1
-code = "category"
-name = "Category"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[views.detail]
-type = "stack"
-
-[[views.detail.children]]
-type = "tabs"
-
-[[views.detail.children.tabs]]
-label = "Relationships"
-
-[[views.detail.children.tabs.children]]
-type = "grid"
-
-[[views.detail.children.tabs.children.children]]
-type = "incoming_relationship_list"
-label = "Products"
-relationships = [{ source_blueprint = "blueprints/product", field = "categories" }]
-page_size = 10
-
-[[attributes]]
-code = "name"
-value_type = "string"
-
-[[attributes]]
-code = "products"
-value_type = "relationship"
-target_blueprint = "blueprints/product"
+format_version: 1
+code: category
+name: Category
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+  detail:
+    type: stack
+    children:
+      - type: tabs
+        tabs:
+          - label: Relationships
+            children:
+              - type: grid
+                children:
+                  - type: incoming_relationship_list
+                    label: Products
+                    relationships:
+                      - source_blueprint: blueprints/product
+                        field: categories
+                    page_size: 10
+attributes:
+  - code: name
+    value_type: string
+  - code: products
+    value_type: relationship
+    target_blueprint: blueprints/product
 "#;
 const EXPLORE_NAVIGATION: &[u8] = br#"{"format_version":1,"kind":"explore_navigation","entries":[{"blueprint":"blueprints/product","visible_to_role_codes":["viewer","editor"]}]}"#;
 
@@ -90,8 +81,8 @@ fn manifest_value() -> Value {
         "attricat": {"host_api": ">=1.0.0, <2.0.0"},
         "resources": {
             "blueprints": [
-                resource("blueprints/product", "blueprints/product.toml", PRODUCT_BLUEPRINT),
-                resource("blueprints/category", "blueprints/category.toml", CATEGORY_BLUEPRINT)
+                resource("blueprints/product", "blueprints/product.yaml", PRODUCT_BLUEPRINT),
+                resource("blueprints/category", "blueprints/category.yaml", CATEGORY_BLUEPRINT)
             ]
         }
     })
@@ -99,8 +90,8 @@ fn manifest_value() -> Value {
 
 fn valid_files() -> Vec<(&'static str, &'static [u8])> {
     vec![
-        ("blueprints/product.toml", PRODUCT_BLUEPRINT),
-        ("blueprints/category.toml", CATEGORY_BLUEPRINT),
+        ("blueprints/product.yaml", PRODUCT_BLUEPRINT),
+        ("blueprints/category.yaml", CATEGORY_BLUEPRINT),
     ]
 }
 
@@ -758,22 +749,19 @@ fn validates_and_plans_extension_layout_item_level_merge() {
 
 #[test]
 fn blueprint_layout_skips_optional_unavailable_contributions_and_blocks_required() {
-    let blueprint = PRODUCT_BLUEPRINT
-        .iter()
-        .copied()
-        .chain(
-            br#"
-[views.extension_layout]
-type = "extension_layout"
-version = 1
-[views.extension_layout.outlets.record_action]
-order = ["acme.shop:action"]
-hidden = []
-"#
-            .iter()
-            .copied(),
-        )
-        .collect::<Vec<_>>();
+    let blueprint = with_additional_views(
+        PRODUCT_BLUEPRINT,
+        br#"
+views:
+  extension_layout:
+    type: extension_layout
+    version: 1
+    outlets:
+      record_action:
+        order: ['acme.shop:action']
+        hidden: []
+"#,
+    );
     for (required, expected_action) in [
         (false, PlanActionKind::Create),
         (true, PlanActionKind::Blocked),
@@ -932,25 +920,22 @@ fn workspace_layout_accepts_every_manifest_outlet_and_both_primary_lists() {
 
 #[test]
 fn blueprint_layout_contribution_evidence_order_is_deterministic() {
-    let blueprint = PRODUCT_BLUEPRINT
-        .iter()
-        .copied()
-        .chain(
-            br#"
-[views.extension_layout]
-type = "extension_layout"
-version = 1
-[views.extension_layout.outlets.record_preview_panel]
-order = ["acme.shop:preview"]
-hidden = []
-[views.extension_layout.outlets.record_action]
-order = ["acme.shop:z_action"]
-hidden = ["acme.shop:a_action"]
-"#
-            .iter()
-            .copied(),
-        )
-        .collect::<Vec<_>>();
+    let blueprint = with_additional_views(
+        PRODUCT_BLUEPRINT,
+        br#"
+views:
+  extension_layout:
+    type: extension_layout
+    version: 1
+    outlets:
+      record_preview_panel:
+        order: ['acme.shop:preview']
+        hidden: []
+      record_action:
+        order: ['acme.shop:z_action']
+        hidden: ['acme.shop:a_action']
+"#,
+    );
     let mut manifest = manifest_value();
     manifest["resources"]["blueprints"][0]["sha256"] = json!(digest(&blueprint));
     manifest["extensions"] = json!([{
@@ -1179,8 +1164,8 @@ fn planner_blocks_required_navigation_and_skips_optional_unmet_navigation() {
         "sha256": digest(navigation),
     }]);
     let files = [
-        ("blueprints/product.toml", PRODUCT_BLUEPRINT),
-        ("blueprints/category.toml", CATEGORY_BLUEPRINT),
+        ("blueprints/product.yaml", PRODUCT_BLUEPRINT),
+        ("blueprints/category.yaml", CATEGORY_BLUEPRINT),
         ("workspace/explore-navigation.json", navigation.as_slice()),
     ];
     let pack = ValidatedSolutionPack::from_tar_zst(&archive(&manifest, &files)).unwrap();
@@ -1493,7 +1478,7 @@ fn published_manifest_schema_accepts_the_v1_fixture_and_is_strict() {
     );
     for contexts in [
         json!([{"key": "contexts/web"}]),
-        json!([{"key": "contexts/web", "path": "contexts/web.toml", "required": true, "sha256": "0".repeat(64)}]),
+        json!([{"key": "contexts/web", "path": "contexts/web.yaml", "required": true, "sha256": "0".repeat(64)}]),
     ] {
         let mut with_contexts = manifest_value();
         with_contexts["resources"]["contexts"] = contexts;
@@ -1961,7 +1946,7 @@ fn rejects_invalid_manifest_versions_ids_keys_paths_and_digests() {
         ),
         (
             "/resources/blueprints/0/path",
-            json!("contexts/product.toml"),
+            json!("contexts/product.yaml"),
             "resource path",
         ),
         (
@@ -1984,7 +1969,7 @@ fn rejects_invalid_manifest_versions_ids_keys_paths_and_digests() {
     );
 
     let mut duplicate_path = manifest_value();
-    duplicate_path["resources"]["blueprints"][1]["path"] = json!("blueprints/product.toml");
+    duplicate_path["resources"]["blueprints"][1]["path"] = json!("blueprints/product.yaml");
     assert_invalid(
         &archive(&duplicate_path, &valid_files()),
         "duplicate resource path",
@@ -1995,14 +1980,14 @@ fn rejects_invalid_manifest_versions_ids_keys_paths_and_digests() {
 fn validates_blueprint_content_and_logical_reference_closure() {
     let mut files = valid_files();
     let invalid = br#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-unknown = true
-[[attributes]]
-code = "name"
-value_type = "string"
+format_version: 1
+code: product
+name: Product
+kind: record
+unknown: true
+attributes:
+  - code: name
+    value_type: string
 "#;
     files[0] = (files[0].0, invalid);
     let mut manifest = manifest_value();
@@ -2026,61 +2011,61 @@ value_type = "string"
 #[test]
 fn rejects_blueprints_that_fail_ordinary_compiler_validation() {
     let missing_dropdown = br#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-[[attributes]]
-code = "name"
-value_type = "string"
+format_version: 1
+code: product
+name: Product
+kind: record
+attributes:
+  - code: name
+    value_type: string
 "#;
     assert_blueprint_error(missing_dropdown, "must define views.dropdown_option");
 
     let unknown_view_field =
-        PRODUCT_BLUEPRINT.replace_ascii(b"fields = [\"name\"]", b"fields = [\"missing\"]");
+        PRODUCT_BLUEPRINT.replace_ascii(b"fields: [name]", b"fields: [missing]");
     assert_blueprint_error(&unknown_view_field, "unknown attribute 'missing'");
 
-    let malformed_component = PRODUCT_BLUEPRINT
-        .iter()
-        .copied()
-        .chain(
-            br#"
-[views.table]
-type = "table"
-columns = [{ field = "name" }]
-component = { id = "INVALID", version = 1 }
-"#
-            .iter()
-            .copied(),
-        )
-        .collect::<Vec<_>>();
+    let malformed_component = with_additional_views(
+        PRODUCT_BLUEPRINT,
+        br#"
+views:
+  table:
+    type: table
+    columns:
+      - {field: name}
+    component: {id: INVALID, version: 1}
+"#,
+    );
     assert_blueprint_error(&malformed_component, "component id");
 
     let product = br#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-includes = [{ alias = "base", key = "blueprints/category" }]
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[[attributes]]
-code = "name"
-from = "base.name"
+format_version: 1
+code: product
+name: Product
+kind: record
+includes:
+  - alias: base
+    key: blueprints/category
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    from: base.name
 "#;
     let mixin = br#"
-format_version = 1
-code = "category"
-name = "Category fields"
-kind = "mixin"
-[[attributes]]
-code = "title"
-value_type = "string"
+format_version: 1
+code: category
+name: Category fields
+kind: mixin
+attributes:
+  - code: title
+    value_type: string
 "#;
     let files = vec![
-        ("blueprints/product.toml", product.as_slice()),
-        ("blueprints/category.toml", mixin.as_slice()),
+        ("blueprints/product.yaml", product.as_slice()),
+        ("blueprints/category.yaml", mixin.as_slice()),
     ];
     let mut manifest = manifest_value();
     manifest["resources"]["blueprints"][0]["sha256"] = json!(digest(product));
@@ -2120,72 +2105,75 @@ fn rejects_manifests_that_exceed_resource_count_limits() {
 #[test]
 fn rejects_blueprints_that_exceed_structural_complexity_limits() {
     let includes = (0..=MAX_SOLUTION_PACK_BLUEPRINT_INCLUDES)
-        .map(|index| format!("{{ alias = \"m{index}\", key = \"blueprints/category\" }}"))
+        .map(|index| format!("{{alias: m{index}, key: blueprints/category}}"))
         .collect::<Vec<_>>()
         .join(", ");
     let excessive_includes = format!(
-        r#"format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-includes = [{includes}]
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[[attributes]]
-code = "name"
-value_type = "string"
+        r#"format_version: 1
+code: product
+name: Product
+kind: record
+includes: [{includes}]
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
 "#
     )
     .into_bytes();
     assert_blueprint_error(&excessive_includes, "exceeds the include limit");
 
-    let mut excessive_attributes = br#"format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["field_0"]
+    let mut excessive_attributes = br#"format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [field_0]
+attributes:
 "#
     .to_vec();
     for index in 0..=MAX_SOLUTION_PACK_BLUEPRINT_ATTRIBUTES {
         excessive_attributes.extend_from_slice(
-            format!("[[attributes]]\ncode = \"field_{index}\"\nvalue_type = \"string\"\n")
-                .as_bytes(),
+            format!("  - code: field_{index}\n    value_type: string\n").as_bytes(),
         );
     }
     assert_blueprint_error(&excessive_attributes, "exceeds the attribute limit");
 
     let includes = (0..5)
-        .map(|index| format!("{{ alias = \"m{index}\", key = \"blueprints/category\" }}"))
+        .map(|index| format!("{{alias: m{index}, key: blueprints/category}}"))
         .collect::<Vec<_>>()
         .join(", ");
     let product = format!(
-        r#"format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-includes = [{includes}]
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[[attributes]]
-code = "name"
-value_type = "string"
+        r#"format_version: 1
+code: product
+name: Product
+kind: record
+includes: [{includes}]
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
 "#
     )
     .into_bytes();
-    let mut mixin = br#"format_version = 1
-code = "category"
-name = "Category fields"
-kind = "mixin"
+    let mut mixin = br#"format_version: 1
+code: category
+name: Category fields
+kind: mixin
+attributes:
 "#
     .to_vec();
     for index in 0..MAX_SOLUTION_PACK_BLUEPRINT_ATTRIBUTES {
         mixin.extend_from_slice(
-            format!("[[attributes]]\ncode = \"field_{index}\"\nvalue_type = \"string\"\n")
-                .as_bytes(),
+            format!("  - code: field_{index}\n    value_type: string\n").as_bytes(),
         );
     }
     assert_blueprints_error(
@@ -2198,17 +2186,14 @@ kind = "mixin"
     let mut resources = Vec::new();
     for blueprint_index in 0..17 {
         let code = format!("mixin_{blueprint_index}");
-        let path = format!("blueprints/{code}.toml");
+        let path = format!("blueprints/{code}.yaml");
         let mut source = format!(
-            "format_version = 1\ncode = \"{code}\"\nname = \"Mixin {blueprint_index}\"\nkind = \"mixin\"\n"
+            "format_version: 1\ncode: {code}\nname: Mixin {blueprint_index}\nkind: mixin\nattributes:\n"
         )
         .into_bytes();
         for attribute_index in 0..MAX_SOLUTION_PACK_BLUEPRINT_ATTRIBUTES {
             source.extend_from_slice(
-                format!(
-                    "[[attributes]]\ncode = \"field_{attribute_index}\"\nvalue_type = \"string\"\n"
-                )
-                .as_bytes(),
+                format!("  - code: field_{attribute_index}\n    value_type: string\n").as_bytes(),
             );
         }
         resources.push(resource(&format!("blueprints/{code}"), &path, &source));
@@ -2235,11 +2220,10 @@ kind = "mixin"
 
 #[test]
 fn validates_incoming_relationship_selectors_across_blueprints() {
-    let missing =
-        CATEGORY_BLUEPRINT.replace_ascii(b"field = \"categories\"", b"field = \"missing\"");
+    let missing = CATEGORY_BLUEPRINT.replace_ascii(b"field: categories", b"field: missing");
     assert_blueprints_error(PRODUCT_BLUEPRINT, &missing, "has no field 'missing'");
 
-    let scalar = CATEGORY_BLUEPRINT.replace_ascii(b"field = \"categories\"", b"field = \"name\"");
+    let scalar = CATEGORY_BLUEPRINT.replace_ascii(b"field: categories", b"field: name");
     assert_blueprints_error(
         PRODUCT_BLUEPRINT,
         &scalar,
@@ -2247,8 +2231,8 @@ fn validates_incoming_relationship_selectors_across_blueprints() {
     );
 
     let wrong_target = PRODUCT_BLUEPRINT.replace_ascii(
-        b"target_blueprint = \"blueprints/category\"",
-        b"target_blueprint = \"blueprints/product\"",
+        b"target_blueprint: blueprints/category",
+        b"target_blueprint: blueprints/product",
     );
     assert_blueprints_error(
         &wrong_target,
@@ -2259,8 +2243,8 @@ fn validates_incoming_relationship_selectors_across_blueprints() {
 
 fn assert_blueprints_error(product: &[u8], category: &[u8], expected: &str) {
     let files = vec![
-        ("blueprints/product.toml", product),
-        ("blueprints/category.toml", category),
+        ("blueprints/product.yaml", product),
+        ("blueprints/category.yaml", category),
     ];
     let mut manifest = manifest_value();
     manifest["resources"]["blueprints"][0]["sha256"] = json!(digest(product));
@@ -2279,22 +2263,22 @@ fn assert_blueprint_error(blueprint: &[u8], expected: &str) {
 #[test]
 fn requires_portable_include_keys_instead_of_native_revisions() {
     let native_include = PRODUCT_BLUEPRINT.replace_ascii(
-        b"kind = \"record\"",
-        b"kind = \"record\"\nincludes = [{ alias = \"base\", code = \"category\", version = 1 }]",
+        b"kind: record",
+        b"kind: record\nincludes:\n  - alias: base\n    code: category\n    version: 1",
     );
     assert_blueprint_error(&native_include, "native code or revision fields");
 
     let mixed_include = PRODUCT_BLUEPRINT.replace_ascii(
-        b"kind = \"record\"",
-        b"kind = \"record\"\nincludes = [{ alias = \"base\", key = \"blueprints/category\", version = 1 }]",
+        b"kind: record",
+        b"kind: record\nincludes:\n  - alias: base\n    key: blueprints/category\n    version: 1",
     );
     assert_blueprint_error(&mixed_include, "native code or revision fields");
 
     let portable = blueprint_with_include("product", "category");
     let mixin = blueprint_with_include_without_dependencies("category");
     let files = vec![
-        ("blueprints/product.toml", portable.as_slice()),
-        ("blueprints/category.toml", mixin.as_slice()),
+        ("blueprints/product.yaml", portable.as_slice()),
+        ("blueprints/category.yaml", mixin.as_slice()),
     ];
     let mut manifest = manifest_value();
     manifest["resources"]["blueprints"][0]["sha256"] = json!(digest(&portable));
@@ -2310,8 +2294,8 @@ fn rejects_blueprint_include_cycles_and_extension_metadata() {
     let first = blueprint_with_include("product", "category");
     let second = blueprint_with_include("category", "product");
     let files = vec![
-        ("blueprints/product.toml", first.as_slice()),
-        ("blueprints/category.toml", second.as_slice()),
+        ("blueprints/product.yaml", first.as_slice()),
+        ("blueprints/category.yaml", second.as_slice()),
     ];
     let mut manifest = manifest_value();
     manifest["resources"]["blueprints"][0]["sha256"] = json!(digest(&first));
@@ -2325,7 +2309,7 @@ fn rejects_blueprint_include_cycles_and_extension_metadata() {
         .iter()
         .copied()
         .chain(
-            b"\n[extensions.\"acme.test\"]\nenabled = true\n"
+            b"\nextensions:\n  \"acme.test\":\n    enabled: true\n"
                 .iter()
                 .copied(),
         )
@@ -2342,14 +2326,16 @@ fn rejects_blueprint_include_cycles_and_extension_metadata() {
 
 fn blueprint_with_include(code: &str, include: &str) -> Vec<u8> {
     format!(
-        r#"format_version = 1
-code = "{code}"
-name = "{code}"
-kind = "mixin"
-includes = [{{ alias = "base", key = "blueprints/{include}" }}]
-[[attributes]]
-code = "name"
-value_type = "string"
+        r#"format_version: 1
+code: '{code}'
+name: '{code}'
+kind: mixin
+includes:
+  - alias: base
+    key: 'blueprints/{include}'
+attributes:
+  - code: name
+    value_type: string
 "#
     )
     .into_bytes()
@@ -2357,13 +2343,13 @@ value_type = "string"
 
 fn blueprint_with_include_without_dependencies(code: &str) -> Vec<u8> {
     format!(
-        r#"format_version = 1
-code = "{code}"
-name = "{code}"
-kind = "mixin"
-[[attributes]]
-code = "name"
-value_type = "string"
+        r#"format_version: 1
+code: '{code}'
+name: '{code}'
+kind: mixin
+attributes:
+  - code: name
+    value_type: string
 "#
     )
     .into_bytes()
@@ -2415,8 +2401,8 @@ fn planner_rewrites_portable_references_and_orders_dependencies() {
     let definition = product.normalized_payload.as_ref().unwrap()["definition"]
         .as_str()
         .unwrap();
-    assert!(definition.contains("code = \"ecom_product\""));
-    assert!(definition.contains("target_blueprint = \"ecom_category\""));
+    assert!(definition.contains("code: ecom_product"));
+    assert!(definition.contains("target_blueprint: ecom_category"));
     assert_eq!(
         product.normalized_payload.as_ref().unwrap()["publication"],
         "publish"
@@ -2431,15 +2417,15 @@ fn planner_rewrites_portable_references_and_orders_dependencies() {
         .unwrap()["definition"]
         .as_str()
         .unwrap();
-    assert!(category_definition.contains("source_blueprint = \"ecom_product\""));
-    assert!(category_definition.contains("target_blueprint = \"ecom_product\""));
+    assert!(category_definition.contains("source_blueprint: ecom_product"));
+    assert!(category_definition.contains("target_blueprint: ecom_product"));
 }
 
 #[test]
 fn planner_rewrites_relationship_target_lists() {
     let product = PRODUCT_BLUEPRINT.replace_ascii(
-        b"target_blueprint = \"blueprints/category\"",
-        b"target_blueprints = [\"blueprints/category\", \"blueprints/product\"]",
+        b"target_blueprint: blueprints/category",
+        b"target_blueprints: [blueprints/category, blueprints/product]",
     );
     let mut manifest = manifest_value();
     manifest["resources"]["blueprints"][0]["sha256"] = json!(digest(&product));
@@ -2477,33 +2463,38 @@ fn planner_rewrites_relationship_target_lists() {
         .unwrap()["definition"]
         .as_str()
         .unwrap();
-    assert!(
-        definition.contains("target_blueprints = [\"ecom_category\", \"ecom_product\"]"),
+    let definition: Value = attricat_yaml::from_str(definition).unwrap();
+    assert_eq!(
+        definition["attributes"][1]["target_blueprints"],
+        json!(["ecom_category", "ecom_product"]),
         "{definition}"
     );
 }
 
 #[test]
 fn planner_rewrites_portable_includes_to_mapped_revision_one() {
-    let record = br#"format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-includes = [{ alias = "base", key = "blueprints/base" }]
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[[attributes]]
-code = "name"
-from = "base.name"
+    let record = br#"format_version: 1
+code: product
+name: Product
+kind: record
+includes:
+  - alias: base
+    key: blueprints/base
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    from: base.name
 "#;
-    let mixin = br#"format_version = 1
-code = "base"
-name = "Base"
-kind = "mixin"
-[[attributes]]
-code = "name"
-value_type = "string"
+    let mixin = br#"format_version: 1
+code: base
+name: Base
+kind: mixin
+attributes:
+  - code: name
+    value_type: string
 "#;
     let manifest = json!({
         "manifest_version": 1,
@@ -2513,13 +2504,13 @@ value_type = "string"
         "description": "Include rewrite",
         "attricat": {"host_api": "^1.0"},
         "resources": {"blueprints": [
-            resource("blueprints/product", "blueprints/product.toml", record),
-            resource("blueprints/base", "blueprints/base.toml", mixin)
+            resource("blueprints/product", "blueprints/product.yaml", record),
+            resource("blueprints/base", "blueprints/base.yaml", mixin)
         ]}
     });
     let files = [
-        ("blueprints/product.toml", record.as_slice()),
-        ("blueprints/base.toml", mixin.as_slice()),
+        ("blueprints/product.yaml", record.as_slice()),
+        ("blueprints/base.yaml", mixin.as_slice()),
     ];
     let pack = ValidatedSolutionPack::from_tar_zst(&archive(&manifest, &files)).unwrap();
     let plan = build_solution_pack_plan(
@@ -2546,9 +2537,9 @@ value_type = "string"
     let definition = plan.actions[1].normalized_payload.as_ref().unwrap()["definition"]
         .as_str()
         .unwrap();
-    assert!(definition.contains("code = \"mapped_base\""));
-    assert!(definition.contains("version = 1"));
-    assert!(!definition.contains("key = \"blueprints/base\""));
+    assert!(definition.contains("code: mapped_base"));
+    assert!(definition.contains("version: 1"));
+    assert!(!definition.contains("key: blueprints/base"));
 
     let base_definition = plan.actions[0].normalized_payload.as_ref().unwrap()["definition"]
         .as_str()
@@ -2594,7 +2585,7 @@ value_type = "string"
     let dependent = reused.actions[1].normalized_payload.as_ref().unwrap()["definition"]
         .as_str()
         .unwrap();
-    assert!(dependent.contains("version = 7"));
+    assert!(dependent.contains("version: 7"));
 
     let incompatible = build_solution_pack_plan(
         &pack,
@@ -2691,16 +2682,17 @@ fn fully_mapped_resource_does_not_validate_an_unused_generated_code() {
     let key = format!("blueprints/{suffix}");
     assert_eq!(key.len(), MAX_IDENTIFIER_BYTES);
     let blueprint = format!(
-        r#"format_version = 1
-code = "{suffix}"
-name = "Portable"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[[attributes]]
-code = "name"
-value_type = "string"
+        r#"format_version: 1
+code: '{suffix}'
+name: Portable
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
 "#
     )
     .into_bytes();
@@ -2711,20 +2703,20 @@ value_type = "string"
         "version": "1.0.0",
         "description": "Mapped long logical key",
         "attricat": {"host_api": "^1.0"},
-        "resources": {"blueprints": [resource(&key, "blueprints/long.toml", &blueprint)]}
+        "resources": {"blueprints": [resource(&key, "blueprints/long.yaml", &blueprint)]}
     });
     let pack = ValidatedSolutionPack::from_tar_zst(&archive(
         &manifest,
-        &[("blueprints/long.toml", blueprint.as_slice())],
+        &[("blueprints/long.yaml", blueprint.as_slice())],
     ))
     .unwrap();
-    let mut canonical: toml::Value =
-        toml::from_str(std::str::from_utf8(&blueprint).unwrap()).unwrap();
-    canonical
-        .as_table_mut()
-        .unwrap()
-        .insert("code".to_owned(), toml::Value::String("shared".to_owned()));
-    let definition = toml::to_string(&canonical).unwrap();
+    let mut canonical: serde_json::Value =
+        attricat_yaml::from_str(std::str::from_utf8(&blueprint).unwrap()).unwrap();
+    canonical.as_object_mut().unwrap().insert(
+        "code".to_owned(),
+        serde_json::Value::String("shared".to_owned()),
+    );
+    let definition = attricat_yaml::to_string(&canonical).unwrap();
     let plan = build_solution_pack_plan(
         &pack,
         "a2345678901234567890123456789012",
@@ -2926,100 +2918,105 @@ fn mapped_blueprints_are_blocked_by_skipped_include_relationship_and_view_depend
     let cases = [
         (
             "include",
-            br#"format_version = 1
-code = "main"
-name = "Main"
-kind = "mixin"
-includes = [{ alias = "base", key = "blueprints/dep" }]
-[[attributes]]
-code = "name"
-from = "base.name"
+            br#"format_version: 1
+code: main
+name: Main
+kind: mixin
+includes:
+  - alias: base
+    key: blueprints/dep
+attributes:
+  - code: name
+    from: base.name
 "#
             .as_slice(),
-            br#"format_version = 1
-code = "dep"
-name = "Dependency"
-kind = "mixin"
-[[attributes]]
-code = "name"
-value_type = "string"
+            br#"format_version: 1
+code: dep
+name: Dependency
+kind: mixin
+attributes:
+  - code: name
+    value_type: string
 "#
             .as_slice(),
             "mixin",
         ),
         (
             "relationship",
-            br#"format_version = 1
-code = "main"
-name = "Main"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[[attributes]]
-code = "name"
-value_type = "string"
-[[attributes]]
-code = "dep"
-value_type = "relationship"
-target_blueprint = "blueprints/dep"
+            br#"format_version: 1
+code: main
+name: Main
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: dep
+    value_type: relationship
+    target_blueprint: blueprints/dep
 "#
             .as_slice(),
-            br#"format_version = 1
-code = "dep"
-name = "Dependency"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[[attributes]]
-code = "name"
-value_type = "string"
+            br#"format_version: 1
+code: dep
+name: Dependency
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
 "#
             .as_slice(),
             "record",
         ),
         (
             "view",
-            br#"format_version = 1
-code = "main"
-name = "Main"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[views.detail]
-type = "stack"
-[[views.detail.children]]
-type = "tabs"
-[[views.detail.children.tabs]]
-label = "Relationships"
-[[views.detail.children.tabs.children]]
-type = "grid"
-[[views.detail.children.tabs.children.children]]
-type = "incoming_relationship_list"
-label = "Dependencies"
-relationships = [{ source_blueprint = "blueprints/dep", field = "main_ref" }]
-page_size = 10
-[[attributes]]
-code = "name"
-value_type = "string"
+            br#"format_version: 1
+code: main
+name: Main
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+  detail:
+    type: stack
+    children:
+      - type: tabs
+        tabs:
+          - label: Relationships
+            children:
+              - type: grid
+                children:
+                  - type: incoming_relationship_list
+                    label: Dependencies
+                    relationships:
+                      - {source_blueprint: blueprints/dep, field: main_ref}
+                    page_size: 10
+attributes:
+  - code: name
+    value_type: string
 "#
             .as_slice(),
-            br#"format_version = 1
-code = "dep"
-name = "Dependency"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[[attributes]]
-code = "name"
-value_type = "string"
-[[attributes]]
-code = "main_ref"
-value_type = "relationship"
-target_blueprint = "blueprints/main"
+            br#"format_version: 1
+code: dep
+name: Dependency
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: main_ref
+    value_type: relationship
+    target_blueprint: blueprints/main
 "#
             .as_slice(),
             "record",
@@ -3027,7 +3024,7 @@ target_blueprint = "blueprints/main"
     ];
     for (case, main, dep, main_kind) in cases {
         let manifest_for = |dep_required| {
-            let mut dep_resource = resource("blueprints/dep", "blueprints/dep.toml", dep);
+            let mut dep_resource = resource("blueprints/dep", "blueprints/dep.yaml", dep);
             dep_resource["required"] = json!(dep_required);
             json!({
                 "manifest_version": 1,
@@ -3037,12 +3034,12 @@ target_blueprint = "blueprints/main"
                 "description": "Mapped dependency closure",
                 "attricat": {"host_api": "^1.0"},
                 "resources": {"blueprints": [
-                    resource("blueprints/main", "blueprints/main.toml", main),
+                    resource("blueprints/main", "blueprints/main.yaml", main),
                     dep_resource
                 ]}
             })
         };
-        let files = [("blueprints/main.toml", main), ("blueprints/dep.toml", dep)];
+        let files = [("blueprints/main.yaml", main), ("blueprints/dep.yaml", dep)];
         let required_pack =
             ValidatedSolutionPack::from_tar_zst(&archive(&manifest_for(true), &files))
                 .unwrap_or_else(|error| panic!("{case}: {error}"));
@@ -3125,51 +3122,52 @@ target_blueprint = "blueprints/main"
 
 #[test]
 fn browse_by_paths_resolve_within_the_pack_and_order_publish_targets() {
-    let vehicle = br#"format_version = 1
-code = "vehicle"
-name = "Vehicle"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["vin"]
-[views.explorer]
-type = "explorer"
-browse_by = "model.brand"
-[[attributes]]
-code = "vin"
-value_type = "string"
-[[attributes]]
-code = "model"
-value_type = "relationship"
-target_blueprint = "blueprints/model"
-cardinality = "one"
+    let vehicle = br#"format_version: 1
+code: vehicle
+name: Vehicle
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [vin]
+  explorer:
+    type: explorer
+    browse_by: model.brand
+attributes:
+  - code: vin
+    value_type: string
+  - code: model
+    value_type: relationship
+    target_blueprint: blueprints/model
+    cardinality: one
 "#;
-    let model = br#"format_version = 1
-code = "model"
-name = "Model"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[[attributes]]
-code = "name"
-value_type = "string"
-[[attributes]]
-code = "brand"
-value_type = "relationship"
-target_blueprint = "blueprints/brand"
-cardinality = "one"
+    let model = br#"format_version: 1
+code: model
+name: Model
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: brand
+    value_type: relationship
+    target_blueprint: blueprints/brand
+    cardinality: one
 "#;
-    let brand = br#"format_version = 1
-code = "brand"
-name = "Brand"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[[attributes]]
-code = "name"
-value_type = "string"
+    let brand = br#"format_version: 1
+code: brand
+name: Brand
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
 "#;
     let pack_with = |model: &[u8]| {
         let manifest = json!({
@@ -3180,15 +3178,15 @@ value_type = "string"
             "description": "Browse paths",
             "attricat": {"host_api": "^1.0"},
             "resources": {"blueprints": [
-                resource("blueprints/vehicle", "blueprints/vehicle.toml", vehicle),
-                resource("blueprints/model", "blueprints/model.toml", model),
-                resource("blueprints/brand", "blueprints/brand.toml", brand)
+                resource("blueprints/vehicle", "blueprints/vehicle.yaml", vehicle),
+                resource("blueprints/model", "blueprints/model.yaml", model),
+                resource("blueprints/brand", "blueprints/brand.yaml", brand)
             ]}
         });
         let files = [
-            ("blueprints/vehicle.toml", vehicle.as_slice()),
-            ("blueprints/model.toml", model),
-            ("blueprints/brand.toml", brand.as_slice()),
+            ("blueprints/vehicle.yaml", vehicle.as_slice()),
+            ("blueprints/model.yaml", model),
+            ("blueprints/brand.yaml", brand.as_slice()),
         ];
         ValidatedSolutionPack::from_tar_zst(&archive(&manifest, &files))
     };
@@ -3202,7 +3200,7 @@ value_type = "string"
 
     let many_brands = String::from_utf8(model.to_vec())
         .unwrap()
-        .replace("cardinality = \"one\"", "cardinality = \"many\"");
+        .replace("cardinality: one", "cardinality: many");
     let error = pack_with(many_brands.as_bytes()).unwrap_err().to_string();
     assert!(
         error.contains("browse_by 'model.brand' segment 'brand' must be a relationship"),
@@ -3210,40 +3208,42 @@ value_type = "string"
     );
     let unknown = String::from_utf8(model.to_vec())
         .unwrap()
-        .replace("code = \"brand\"", "code = \"maker\"");
+        .replace("code: brand", "code: maker");
     assert!(pack_with(unknown.as_bytes()).is_err());
 }
 
 #[test]
 fn planner_blocks_draft_relationship_paths_and_orders_publish_targets() {
-    let product = br#"format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[views.table]
-type = "table"
-columns = [{ field = "category.name" }]
-[[attributes]]
-code = "name"
-value_type = "string"
-[[attributes]]
-code = "category"
-value_type = "relationship"
-target_blueprint = "blueprints/category"
+    let product = br#"format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+  table:
+    type: table
+    columns:
+      - {field: category.name}
+attributes:
+  - code: name
+    value_type: string
+  - code: category
+    value_type: relationship
+    target_blueprint: blueprints/category
 "#;
-    let category = br#"format_version = 1
-code = "category"
-name = "Category"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[[attributes]]
-code = "name"
-value_type = "string"
+    let category = br#"format_version: 1
+code: category
+name: Category
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
 "#;
     let manifest = json!({
         "manifest_version": 1,
@@ -3253,13 +3253,13 @@ value_type = "string"
         "description": "Relationship table paths",
         "attricat": {"host_api": "^1.0"},
         "resources": {"blueprints": [
-            resource("blueprints/product", "blueprints/product.toml", product),
-            resource("blueprints/category", "blueprints/category.toml", category)
+            resource("blueprints/product", "blueprints/product.yaml", product),
+            resource("blueprints/category", "blueprints/category.yaml", category)
         ]}
     });
     let files = [
-        ("blueprints/product.toml", product.as_slice()),
-        ("blueprints/category.toml", category.as_slice()),
+        ("blueprints/product.yaml", product.as_slice()),
+        ("blueprints/category.yaml", category.as_slice()),
     ];
     let pack = ValidatedSolutionPack::from_tar_zst(&archive(&manifest, &files)).unwrap();
     let workspace = PlanningWorkspaceSnapshot {
@@ -3306,29 +3306,30 @@ value_type = "string"
         ["blueprints/category", "blueprints/product"]
     );
 
-    let cyclic_category = br#"format_version = 1
-code = "category"
-name = "Category"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[views.table]
-type = "table"
-columns = [{ field = "product.name" }]
-[[attributes]]
-code = "name"
-value_type = "string"
-[[attributes]]
-code = "product"
-value_type = "relationship"
-target_blueprint = "blueprints/product"
+    let cyclic_category = br#"format_version: 1
+code: category
+name: Category
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+  table:
+    type: table
+    columns:
+      - {field: product.name}
+attributes:
+  - code: name
+    value_type: string
+  - code: product
+    value_type: relationship
+    target_blueprint: blueprints/product
 "#;
     let mut cyclic_manifest = manifest;
     cyclic_manifest["resources"]["blueprints"][1]["sha256"] = json!(digest(cyclic_category));
     let cyclic_files = [
-        ("blueprints/product.toml", product.as_slice()),
-        ("blueprints/category.toml", cyclic_category.as_slice()),
+        ("blueprints/product.yaml", product.as_slice()),
+        ("blueprints/category.yaml", cyclic_category.as_slice()),
     ];
     let cyclic_pack =
         ValidatedSolutionPack::from_tar_zst(&archive(&cyclic_manifest, &cyclic_files)).unwrap();
@@ -3485,45 +3486,52 @@ fn planner_uses_workspace_wide_codes_and_deterministic_target_ids() {
 #[test]
 fn rejects_unsafe_workspace_dependent_blueprint_constructs_and_allows_layouts() {
     let role = PRODUCT_BLUEPRINT.replace_ascii(
-        b"kind = \"record\"",
-        b"kind = \"record\"\n[publication]\nretain_on_edit_roles = [\"editor\"]",
+        b"kind: record",
+        b"kind: record\npublication:\n  retain_on_edit_roles: [editor]",
     );
     assert_blueprint_error(&role, "cannot declare workspace roles");
 
-    let renderer = PRODUCT_BLUEPRINT
-        .iter()
-        .copied()
-        .chain(
-            br#"
-[views.table]
-type = "table"
-columns = [{ field = "name", renderer = { id = "acme.custom", version = 1 } }]
-"#
-            .iter()
-            .copied(),
-        )
-        .collect::<Vec<_>>();
+    let renderer = with_additional_views(
+        PRODUCT_BLUEPRINT,
+        br#"
+views:
+  table:
+    type: table
+    columns:
+      - field: name
+        renderer: {id: acme.custom, version: 1}
+"#,
+    );
     assert_blueprint_error(&renderer, "cannot declare extension table renderers");
 
-    let layout = PRODUCT_BLUEPRINT
-        .iter()
-        .copied()
-        .chain(
-            br#"
-[views.extension_layout]
-type = "extension_layout"
-version = 1
-outlets = {}
-"#
-            .iter()
-            .copied(),
-        )
-        .collect::<Vec<_>>();
+    let layout = with_additional_views(
+        PRODUCT_BLUEPRINT,
+        br#"
+views:
+  extension_layout:
+    type: extension_layout
+    version: 1
+    outlets: {}
+"#,
+    );
     let mut files = valid_files();
     files[0] = (files[0].0, &layout);
     let mut manifest = manifest_value();
     manifest["resources"]["blueprints"][0]["sha256"] = json!(digest(&layout));
     ValidatedSolutionPack::from_tar_zst(&archive(&manifest, &files)).unwrap();
+}
+
+/// Merges a YAML `views:` fragment into the blueprint's existing `views` mapping.
+fn with_additional_views(blueprint: &[u8], views: &[u8]) -> Vec<u8> {
+    let views = std::str::from_utf8(views)
+        .unwrap()
+        .strip_prefix("\nviews:\n")
+        .expect("fragment starts with a views mapping");
+    let blueprint = std::str::from_utf8(blueprint).unwrap();
+    assert!(blueprint.contains("\nviews:\n"));
+    blueprint
+        .replacen("\nviews:\n", &format!("\nviews:\n{views}"), 1)
+        .into_bytes()
 }
 
 trait ReplaceAscii {
@@ -3542,80 +3550,68 @@ impl ReplaceAscii for [u8] {
 }
 
 const DOCUMENT_BLUEPRINT: &[u8] = br#"
-format_version = 1
-code = "document"
-name = "Document"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "summary"
-value_type = "string"
-context_editable = "all"
-
-[[attributes]]
-code = "internal_note"
-value_type = "string"
-context_editable = "default"
-
-[[attributes]]
-code = "scan"
-value_type = "file"
-cardinality = "one"
-image_only = true
-
-[[attributes]]
-code = "evidence"
-value_type = "file"
-cardinality = "many"
+format_version: 1
+code: document
+name: Document
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+  - code: summary
+    value_type: string
+    context_editable: all
+  - code: internal_note
+    value_type: string
+    context_editable: default
+  - code: scan
+    value_type: file
+    cardinality: one
+    image_only: true
+  - code: evidence
+    value_type: file
+    cardinality: many
 "#;
 const EU_CONTEXT: &[u8] =
     br#"{"format_version":1,"kind":"solution_pack_context","data":{"region":"eu"}}"#;
 const PL_CONTEXT: &[u8] = br#"{"format_version":1,"kind":"solution_pack_context","data":{"language":"pl"},"parent":"contexts/eu","publication_channel":{"enabled":true}}"#;
 const NAME_RULE: &[u8] = br#"
-format_version = 1
-code = "name-required"
-name = "Products have a name"
-severity = "error"
-blueprint = "blueprints/product"
-context = "contexts/pl"
-enabled = true
-
-[[triggers]]
-type = "manual"
-
-[predicate]
-type = "required"
-attribute_code = "name"
+format_version: 1
+code: name-required
+name: Products have a name
+severity: error
+blueprint: blueprints/product
+context: contexts/pl
+enabled: true
+triggers:
+  - type: manual
+predicate:
+  type: required
+  attribute_code: name
 "#;
 const REVIEW_WORKFLOW: &[u8] = br#"
-format_version = 2
-code = "mark-reviewed"
-name = "Mark reviewed"
-enabled = false
-
-[[triggers]]
-type = "manual"
-
-[[actions]]
-type = "system_tags_add"
-tags = ["reviewed"]
+format_version: 2
+code: mark-reviewed
+name: Mark reviewed
+enabled: false
+triggers:
+  - type: manual
+actions:
+  - type: system_tags_add
+    tags: [reviewed]
 "#;
 const UNNAMED_SEARCH: &[u8] = br#"{"format_version":1,"kind":"solution_pack_saved_search","name":"Unnamed products","description":"Products without a name","state":{"blueprint":"blueprints/product","context":"contexts/pl","sort":{"field":"categories.name","direction":"asc"},"attributeFilters":[{"field":"name","operator":"eq","value":""}],"relationshipFacets":[{"field":"categories","targetBlueprint":"blueprints/category"}],"browseBy":"categories","locked":false}}"#;
 
-/// The name rule with its predicate (and anything after it) replaced.
-fn rule_with_predicate(predicate: &str) -> Vec<u8> {
-    String::from_utf8(NAME_RULE.to_vec())
-        .unwrap()
-        .replace("type = \"required\"\nattribute_code = \"name\"", predicate)
-        .into_bytes()
+/// The name rule with its trailing `predicate` mapping replaced by `tail`,
+/// which is top-level YAML starting with `predicate:`.
+fn rule_with_predicate(tail: &str) -> Vec<u8> {
+    let rule = String::from_utf8(NAME_RULE.to_vec()).unwrap();
+    let predicate = "predicate:\n  type: required\n  attribute_code: name\n";
+    assert!(rule.ends_with(predicate));
+    format!("{}{tail}", rule.strip_suffix(predicate).unwrap()).into_bytes()
 }
 
 fn replace_seed_file(
@@ -3645,25 +3641,25 @@ fn predicates_resolve_and_rewrite_pack_blueprint_codes() {
     // A nested `linked` code belongs to the linked blueprint, not to the
     // rule's own; a `referenced_by` source is a pack-local blueprint code.
     let rule = rule_with_predicate(
-        "type = \"all_of\"\n\n[[predicate.predicates]]\ntype = \"linked\"\nrelationship_code = \"categories\"\n\n[predicate.predicates.predicate]\ntype = \"required\"\nattribute_code = \"products\"\n\n[[predicate.predicates]]\ntype = \"referenced_by\"\nblueprint_code = \"category\"\nrelationship_code = \"products\"\nmin = 1",
+        "predicate:\n  type: all_of\n  predicates:\n    - type: linked\n      relationship_code: categories\n      predicate: {type: required, attribute_code: products}\n    - type: referenced_by\n      blueprint_code: category\n      relationship_code: products\n      min: 1\n",
     );
     replace_seed_file(
         &mut manifest,
         &mut files,
         "rules",
-        "rules/name-required.toml",
+        "rules/name-required.yaml",
         Box::leak(rule.into_boxed_slice()),
     );
     let product = String::from_utf8(PRODUCT_BLUEPRINT.to_vec()).unwrap().replace(
-        "kind = \"record\"\n",
-        "kind = \"record\"\nrecord_schema = '{\"type\":\"object\",\"x-attricat-checks\":[{\"code\":\"in_category\",\"predicate\":{\"type\":\"referenced_by\",\"blueprint_code\":\"category\",\"relationship_code\":\"products\",\"min\":1}}]}'\n",
+        "kind: record\n",
+        "kind: record\nrecord_schema: '{\"type\":\"object\",\"x-attricat-checks\":[{\"code\":\"in_category\",\"predicate\":{\"type\":\"referenced_by\",\"blueprint_code\":\"category\",\"relationship_code\":\"products\",\"min\":1}}]}'\n",
     );
     let product: &'static [u8] = Box::leak(product.into_bytes().into_boxed_slice());
     replace_seed_file(
         &mut manifest,
         &mut files,
         "blueprints",
-        "blueprints/product.toml",
+        "blueprints/product.yaml",
         product,
     );
     let pack = ValidatedSolutionPack::from_tar_zst(&archive(&manifest, &files)).unwrap();
@@ -3683,7 +3679,7 @@ fn predicates_resolve_and_rewrite_pack_blueprint_codes() {
         .unwrap()
         .to_owned();
     assert!(
-        definition.contains("blueprint_code = \"ecom_category\""),
+        definition.contains("blueprint_code: ecom_category"),
         "{definition}"
     );
     assert!(attricat_rules::compile(&definition).is_ok());
@@ -3704,7 +3700,7 @@ fn predicates_resolve_and_rewrite_pack_blueprint_codes() {
         &mut manifest,
         &mut files,
         "blueprints",
-        "blueprints/product.toml",
+        "blueprints/product.yaml",
         Box::leak(unknown.into_bytes().into_boxed_slice()),
     );
     assert_invalid(&archive(&manifest, &files), "the pack does not declare");
@@ -3725,13 +3721,13 @@ fn channels_require_rules_by_physical_code_and_enforcing_rules_on_mapped_bluepri
         Box::leak(context.into_bytes().into_boxed_slice()),
     );
     let rule = rule_with_predicate(
-        "type = \"required\"\nattribute_code = \"name\"\n\n[enforcement]\non_save = true",
+        "predicate:\n  type: required\n  attribute_code: name\nenforcement:\n  on_save: true\n",
     );
     replace_seed_file(
         &mut manifest,
         &mut files,
         "rules",
-        "rules/name-required.toml",
+        "rules/name-required.yaml",
         Box::leak(rule.into_boxed_slice()),
     );
     let pack = ValidatedSolutionPack::from_tar_zst(&archive(&manifest, &files)).unwrap();
@@ -3803,12 +3799,12 @@ fn seed_manifest() -> (Value, Vec<(&'static str, &'static [u8])>) {
     ]);
     manifest["resources"]["rules"] = json!([resource(
         "rules/name-required",
-        "rules/name-required.toml",
+        "rules/name-required.yaml",
         NAME_RULE
     )]);
     manifest["resources"]["workflows"] = json!([resource(
         "workflows/mark-reviewed",
-        "workflows/mark-reviewed.toml",
+        "workflows/mark-reviewed.yaml",
         REVIEW_WORKFLOW
     )]);
     manifest["resources"]["saved_searches"] = json!([resource(
@@ -3820,8 +3816,8 @@ fn seed_manifest() -> (Value, Vec<(&'static str, &'static [u8])>) {
     files.extend([
         ("contexts/pl.json", PL_CONTEXT),
         ("contexts/eu.json", EU_CONTEXT),
-        ("rules/name-required.toml", NAME_RULE),
-        ("workflows/mark-reviewed.toml", REVIEW_WORKFLOW),
+        ("rules/name-required.yaml", NAME_RULE),
+        ("workflows/mark-reviewed.yaml", REVIEW_WORKFLOW),
         ("saved-searches/unnamed.json", UNNAMED_SEARCH),
     ]);
     (manifest, files)
@@ -3919,7 +3915,7 @@ fn seed_resources_plan_with_physical_references_in_dependency_order() {
     assert_eq!(payload["context_id"], json!(pl.target_id));
     assert_eq!(payload["enabled"], json!(true));
     let definition = payload["definition"].as_str().unwrap();
-    assert!(definition.contains("code = \"ecom_name-required\""));
+    assert!(definition.contains("code: ecom_name-required"));
     assert!(!definition.contains("blueprint"));
     assert!(attricat_rules::compile(definition).is_ok());
     assert_eq!(
@@ -4065,16 +4061,16 @@ fn invalid_seed_resources_are_rejected_offline() {
     let cases: Vec<(&str, &str, Vec<u8>, &str)> = vec![
         (
             "rules",
-            "rules/name-required.toml",
+            "rules/name-required.yaml",
             String::from_utf8(NAME_RULE.to_vec())
                 .unwrap()
-                .replace("attribute_code = \"name\"", "attribute_code = \"missing\"")
+                .replace("attribute_code: name", "attribute_code: missing")
                 .into_bytes(),
             "unknown attribute 'missing'",
         ),
         (
             "rules",
-            "rules/name-required.toml",
+            "rules/name-required.yaml",
             String::from_utf8(NAME_RULE.to_vec())
                 .unwrap()
                 .replace("blueprints/product", "blueprints/missing")
@@ -4083,21 +4079,21 @@ fn invalid_seed_resources_are_rejected_offline() {
         ),
         (
             "rules",
-            "rules/name-required.toml",
+            "rules/name-required.yaml",
             String::from_utf8(NAME_RULE.to_vec())
                 .unwrap()
-                .replace("enabled = true\n", "")
+                .replace("enabled: true\n", "")
                 .into_bytes(),
             "must declare boolean 'enabled'",
         ),
         (
             "workflows",
-            "workflows/mark-reviewed.toml",
+            "workflows/mark-reviewed.yaml",
             String::from_utf8(REVIEW_WORKFLOW.to_vec())
                 .unwrap()
                 .replace(
-                    "type = \"manual\"",
-                    "type = \"schedule\"\ncron = \"0 0 * * * *\"\ntimezone = \"UTC\"\ntarget_record_id = \"00000000-0000-0000-0000-000000000001\"",
+                    "  - type: manual",
+                    "  - type: schedule\n    cron: '0 0 * * * *'\n    timezone: UTC\n    target_record_id: '00000000-0000-0000-0000-000000000001'",
                 )
                 .into_bytes(),
             "schedule trigger",
@@ -4134,80 +4130,80 @@ fn invalid_seed_resources_are_rejected_offline() {
         ),
         (
             "rules",
-            "rules/name-required.toml",
+            "rules/name-required.yaml",
             rule_with_predicate(
-                "type = \"referenced_by\"\nblueprint_code = \"missing\"\nrelationship_code = \"products\"\nmin = 1",
+                "predicate:\n  type: referenced_by\n  blueprint_code: missing\n  relationship_code: products\n  min: 1\n",
             ),
             "not a pack record blueprint",
         ),
         (
             "rules",
-            "rules/name-required.toml",
+            "rules/name-required.yaml",
             rule_with_predicate(
-                "type = \"referenced_by\"\nblueprint_code = \"category\"\nrelationship_code = \"name\"\nmin = 1",
+                "predicate:\n  type: referenced_by\n  blueprint_code: category\n  relationship_code: name\n  min: 1\n",
             ),
             "unknown relationship 'name'",
         ),
         (
             "rules",
-            "rules/name-required.toml",
+            "rules/name-required.yaml",
             rule_with_predicate(
-                "type = \"compare\"\nattribute_code = \"name\"\nop = \"eq\"\nother_attribute_code = \"missing\"",
+                "predicate:\n  type: compare\n  attribute_code: name\n  op: eq\n  other_attribute_code: missing\n",
             ),
             "unknown attribute 'missing'",
         ),
         (
             "rules",
-            "rules/name-required.toml",
+            "rules/name-required.yaml",
             rule_with_predicate(
-                "type = \"required\"\nattribute_code = \"name\"\n\n[enforcement]\non_save = false\n\n[[enforcement.transitions]]\nattribute_code = \"missing\"\nto = \"done\"",
+                "predicate:\n  type: required\n  attribute_code: name\nenforcement:\n  on_save: false\n  transitions:\n    - {attribute_code: missing, to: done}\n",
             ),
             "enforcement attribute 'missing' is not a status attribute",
         ),
         (
             "workflows",
-            "workflows/mark-reviewed.toml",
+            "workflows/mark-reviewed.yaml",
             String::from_utf8(REVIEW_WORKFLOW.to_vec())
                 .unwrap()
                 .replace(
-                    "[[actions]]\ntype = \"system_tags_add\"\ntags = [\"reviewed\"]",
-                    "[[actions]]\ntype = \"referencing_records_update\"\nrelationship_attribute = \"categories\"\nmax_targets = 5\n[[actions.actions]]\ntype = \"attribute_write\"\nattribute_code = \"products\"\nfixed = \"x\"",
+                    "actions:\n  - type: system_tags_add\n    tags: [reviewed]",
+                    "actions:\n  - type: referencing_records_update\n    relationship_attribute: categories\n    max_targets: 5\n    actions:\n      - type: attribute_write\n        attribute_code: products\n        fixed: x",
                 )
                 .into_bytes(),
             "writes attribute 'products'",
         ),
         (
             "workflows",
-            "workflows/mark-reviewed.toml",
+            "workflows/mark-reviewed.yaml",
             String::from_utf8(REVIEW_WORKFLOW.to_vec())
                 .unwrap()
                 .replace(
-                    "[[actions]]\ntype = \"system_tags_add\"\ntags = [\"reviewed\"]",
-                    "[[actions]]\ntype = \"referencing_records_update\"\nrelationship_attribute = \"name\"\nmax_targets = 5\n[[actions.actions]]\ntype = \"system_tags_add\"\ntags = [\"x\"]",
+                    "actions:\n  - type: system_tags_add\n    tags: [reviewed]",
+                    "actions:\n  - type: referencing_records_update\n    relationship_attribute: name\n    max_targets: 5\n    actions:\n      - type: system_tags_add\n        tags: [x]",
                 )
                 .into_bytes(),
             "follows relationship 'name'",
         ),
         (
             "workflows",
-            "workflows/mark-reviewed.toml",
+            "workflows/mark-reviewed.yaml",
             String::from_utf8(REVIEW_WORKFLOW.to_vec())
                 .unwrap()
                 .replace(
-                    "[[triggers]]\ntype = \"manual\"",
-                    "[[triggers]]\nevent_type = \"record.updated.v1\"\nblueprints = [\"missing\"]",
+                    "triggers:\n  - type: manual",
+                    "triggers:\n  - event_type: record.updated.v1\n    blueprints: [missing]",
                 )
                 .into_bytes(),
             "names blueprint 'missing'",
         ),
         (
             "workflows",
-            "workflows/mark-reviewed.toml",
+            "workflows/mark-reviewed.yaml",
             String::from_utf8(REVIEW_WORKFLOW.to_vec())
                 .unwrap()
                 .replace(
-                    "[[triggers]]\ntype = \"manual\"\n\n[[actions]]\ntype = \"system_tags_add\"\ntags = [\"reviewed\"]",
-                    "[[triggers]]\nevent_type = \"record.updated.v1\"\nblueprints = [\"category\"]\n\n[[actions]]\ntype = \"referencing_records_update\"\nrelationship_attribute = \"categories\"\nmax_targets = 5\n[[actions.actions]]\ntype = \"attribute_write\"\nattribute_code = \"categories\"\nfixed = \"x\"\n\n[[actions]]\ntype = \"attribute_write\"\nattribute_code = \"categories\"\nfixed = \"x\"",
+                    "triggers:\n  - type: manual\nactions:\n  - type: system_tags_add\n    tags: [reviewed]",
+                    "triggers:\n  - event_type: record.updated.v1\n    blueprints: [category]\nactions:\n  - type: referencing_records_update\n    relationship_attribute: categories\n    max_targets: 5\n    actions:\n      - type: attribute_write\n        attribute_code: categories\n        fixed: x\n  - type: attribute_write\n    attribute_code: categories\n    fixed: x",
                 )
                 .into_bytes(),
             "writes attribute 'categories'",
@@ -4456,7 +4452,7 @@ fn prerequisites_are_declared_and_reused_blueprints_must_match_exactly() {
         product.normalized_payload.as_ref().unwrap()["definition"]
             .as_str()
             .unwrap()
-            .contains("target_blueprint = \"base_category\"")
+            .contains("target_blueprint: base_category")
     );
     assert_eq!(
         mapping(&reused, "prerequisites/base").snapshot["pack_version"],
@@ -4474,7 +4470,7 @@ fn sample_seed_archive(sample: &[u8], file_paths: &[(&'static str, &'static [u8]
         .unwrap()
         .push(resource(
             "blueprints/document",
-            "blueprints/document.toml",
+            "blueprints/document.yaml",
             DOCUMENT_BLUEPRINT,
         ));
     manifest["resources"]["contexts"] =
@@ -4486,7 +4482,7 @@ fn sample_seed_archive(sample: &[u8], file_paths: &[(&'static str, &'static [u8]
         "files": file_paths.iter().map(|(path, bytes)| json!({"path": path, "sha256": digest(bytes)})).collect::<Vec<_>>(),
     });
     let mut files = valid_files();
-    files.push(("blueprints/document.toml", DOCUMENT_BLUEPRINT));
+    files.push(("blueprints/document.yaml", DOCUMENT_BLUEPRINT));
     files.push(("contexts/eu.json", EU_CONTEXT));
     files.push(("sample-data/sample-data.json", sample));
     files.extend_from_slice(file_paths);
@@ -4506,7 +4502,7 @@ fn document_sample(record: Value) -> Vec<u8> {
 #[test]
 fn samples_cannot_share_a_unique_key() {
     let keyed = format!(
-        "{}\n[[unique_keys]]\ncode = \"title\"\nattributes = [\"title\"]\n",
+        "{}unique_keys:\n  - code: title\n    attributes: [title]\n",
         String::from_utf8(DOCUMENT_BLUEPRINT.to_vec()).unwrap()
     );
     let keyed: &'static [u8] = Box::leak(keyed.into_bytes().into_boxed_slice());
@@ -4530,7 +4526,7 @@ fn samples_cannot_share_a_unique_key() {
             .unwrap()
             .push(resource(
                 "blueprints/document",
-                "blueprints/document.toml",
+                "blueprints/document.yaml",
                 keyed,
             ));
         manifest["resources"]["sample_data"] = json!({
@@ -4540,7 +4536,7 @@ fn samples_cannot_share_a_unique_key() {
             "files": [],
         });
         let mut files = valid_files();
-        files.push(("blueprints/document.toml", keyed));
+        files.push(("blueprints/document.yaml", keyed));
         files.push(("sample-data/sample-data.json", sample));
         archive(&manifest, &files)
     };
@@ -4555,7 +4551,7 @@ fn samples_cannot_share_a_unique_key() {
 #[test]
 fn samples_cannot_set_status_values() {
     let statused = format!(
-        "{}\n[[attributes]]\ncode = \"state\"\nvalue_type = \"string\"\nvalue_schema = '{{\"type\":\"string\",\"enum\":[\"draft\"],\"x-attricat-status\":{{\"version\":1,\"options\":[{{\"code\":\"draft\",\"label\":\"Draft\"}}]}}}}'\n",
+        "{}  - code: state\n    value_type: string\n    value_schema: '{{\"type\":\"string\",\"enum\":[\"draft\"],\"x-attricat-status\":{{\"version\":1,\"options\":[{{\"code\":\"draft\",\"label\":\"Draft\"}}]}}}}'\n",
         String::from_utf8(DOCUMENT_BLUEPRINT.to_vec()).unwrap()
     );
     let statused: &'static [u8] = Box::leak(statused.into_bytes().into_boxed_slice());
@@ -4575,7 +4571,7 @@ fn samples_cannot_set_status_values() {
         .unwrap()
         .push(resource(
             "blueprints/document",
-            "blueprints/document.toml",
+            "blueprints/document.yaml",
             statused,
         ));
     manifest["resources"]["sample_data"] = json!({
@@ -4585,7 +4581,7 @@ fn samples_cannot_set_status_values() {
         "files": [],
     });
     let mut files = valid_files();
-    files.push(("blueprints/document.toml", statused));
+    files.push(("blueprints/document.yaml", statused));
     files.push(("sample-data/sample-data.json", sample));
     assert_invalid(
         &archive(&manifest, &files),

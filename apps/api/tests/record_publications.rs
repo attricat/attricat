@@ -4,22 +4,19 @@ use reqwest::header::{HeaderMap, HeaderValue};
 use support::*;
 
 const PUBLICATION_BLUEPRINT: &str = r#"
-format_version = 1
-code = "publication_product"
-name = "Publication product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "related"
-value_type = "relationship"
+format_version: 1
+code: publication_product
+name: Publication product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+  - code: related
+    value_type: relationship
 "#;
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
@@ -169,7 +166,7 @@ async fn trusted_blueprint_role_retains_publication_after_an_record_edit(pool: P
         .error_for_status()
         .unwrap();
     let definition =
-        format!("{PUBLICATION_BLUEPRINT}\n[publication]\nretain_on_edit_roles = [\"owner\"]\n");
+        format!("{PUBLICATION_BLUEPRINT}publication:\n  retain_on_edit_roles: [owner]\n");
     let blueprint = create_blueprint(&client, &base_url, &definition).await;
     let record = create_record(&client, &base_url, &blueprint).await;
     let record_id = record["id"].as_str().unwrap();

@@ -1,0 +1,23 @@
+format_version: 1
+code: linked-supplier-active
+name: Records link only to active suppliers
+description: An inactive supplier cannot deliver, so replace it on the record.
+severity: error
+
+triggers:
+  # Re-check when the record or its links change. A change to a linked
+  # supplier also re-checks the records that link to it.
+  - type: event
+    event_type: record.updated.v1
+
+  - type: event
+    event_type: relationship.changed.v1
+
+predicate:
+  type: linked
+  relationship_code: supplier
+  quantifier: all
+  predicate:
+    type: one_of
+    attribute_code: status
+    values: [active]

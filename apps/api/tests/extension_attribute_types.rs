@@ -10,19 +10,18 @@ async fn json_values_round_trip_through_current_and_history_reads(pool: PgPool) 
         &client,
         &base_url,
         r#"
-format_version = 1
-code = "json_product"
-name = "JSON product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["metadata"]
-
-[[attributes]]
-code = "metadata"
-value_type = "json"
-value_schema = '{"type":"object","required":["currency"]}'
+format_version: 1
+code: json_product
+name: JSON product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [metadata]
+attributes:
+  - code: metadata
+    value_type: json
+    value_schema: '{"type":"object","required":["currency"]}'
 "#,
     )
     .await;

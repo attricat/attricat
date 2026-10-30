@@ -5,20 +5,20 @@ use api::{
 };
 use support::*;
 
-const DEFINITION: &str = r#"format_version = 1
-code = 'task'
-name = 'Task'
-kind = 'record'
-[views.dropdown_option]
-type = 'dropdown_option'
-fields = ['title']
-[[attributes]]
-code = 'title'
-value_type = 'string'
-[[attributes]]
-code = 'assignee'
-value_type = 'string'
-value_schema = '''{"type":"string","x-attricat-principal":{"version":1,"kinds":["user","team"]}}'''
+const DEFINITION: &str = r#"format_version: 1
+code: task
+name: Task
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+  - code: assignee
+    value_type: string
+    value_schema: '{"type":"string","x-attricat-principal":{"version":1,"kinds":["user","team"]}}'
 "#;
 
 const VIEWER_ROLE_ID: &str = "00000000-0000-4000-8000-000000000104";

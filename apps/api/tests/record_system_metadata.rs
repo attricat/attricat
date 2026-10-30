@@ -10,7 +10,7 @@ async fn system_annotations_are_persisted_updated_and_searchable(pool: PgPool) {
     let blueprint = create_blueprint(
         &client,
         &base_url,
-        "format_version = 1\ncode = 'annotated_product'\nname = 'Annotated product'\nkind = 'record'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'",
+        "format_version: 1\ncode: annotated_product\nname: Annotated product\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string",
     )
     .await;
 
@@ -144,7 +144,7 @@ async fn system_tag_facet_counts_tags_most_used_first(pool: PgPool) {
         create_blueprint(
             &client,
             &base_url,
-            &format!("format_version = 1\ncode = '{code}'\nname = '{code}'\nkind = 'record'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'"),
+            &format!("format_version: 1\ncode: '{code}'\nname: '{code}'\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string"),
         )
         .await;
     }
@@ -268,7 +268,7 @@ async fn system_annotations_require_an_object_and_unique_tags(pool: PgPool) {
     create_blueprint(
         &client,
         &base_url,
-        "format_version = 1\ncode = 'system_annotation_validation'\nname = 'System annotation validation'\nkind = 'record'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'", 
+        "format_version: 1\ncode: system_annotation_validation\nname: System annotation validation\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string", 
     )
     .await;
 

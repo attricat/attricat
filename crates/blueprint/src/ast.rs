@@ -15,7 +15,7 @@ pub struct BlueprintDefinition {
     pub record_schema: Option<serde_json::Value>,
     pub publication: PublicationPolicy,
     pub connector_jobs: Vec<ConnectorJobDefinition>,
-    /// The source still declares the removed `[[rules]]` tables, which a
+    /// The source still declares the removed `rules` list, which a
     /// stored revision may; saving such a definition is refused.
     pub embedded_rules: bool,
     pub unique_keys: Vec<UniqueKeyDefinition>,
@@ -73,7 +73,7 @@ pub struct ConnectorJobDefinition {
     pub operation_id: String,
     /// Operation input table passed to the extension.
     #[schemars(with = "serde_json::Map<String, serde_json::Value>")]
-    pub input: toml::Value,
+    pub input: serde_json::Value,
     /// Context code that receives imported values, required for imports; for
     /// an export, the publication channel it exports.
     #[schemars(extend("x-attricat-reference" = "context"))]
@@ -236,7 +236,7 @@ pub enum ViewDefinition {
         /// another, or `false` to keep the rail closed. The field must have
         /// a single target blueprint. A dotted path such as `model.brand`
         /// follows up to three such relationships, each with
-        /// `cardinality = "one"`, and lists the last one's targets.
+        /// `cardinality: one`, and lists the last one's targets.
         #[serde(default)]
         browse_by: Option<BrowseBy>,
     },
@@ -446,7 +446,7 @@ impl BlueprintKind {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct IncludeRef {
-    /// Local name used by `from = "<alias>.<attribute>"` selections.
+    /// Local name used by `from: <alias>.<attribute>` selections.
     #[schemars(regex(pattern = attricat_validation::CODE_PATTERN))]
     pub alias: String,
     /// Code of the included mixin blueprint.
@@ -573,7 +573,7 @@ pub struct CompiledBlueprint {
     pub includes: Vec<IncludeRef>,
     pub views: HashMap<String, ViewDefinition>,
     pub record_schema: Option<serde_json::Value>,
-    /// The source still declares the removed `[[rules]]` tables, which a
+    /// The source still declares the removed `rules` list, which a
     /// stored revision may; saving such a definition is refused.
     pub embedded_rules: bool,
     pub unique_keys: Vec<UniqueKeyDefinition>,

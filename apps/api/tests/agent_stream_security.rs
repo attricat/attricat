@@ -221,7 +221,7 @@ async fn open_agent_streams_stop_when_agent_permission_is_removed(pool: PgPool) 
 async fn open_agent_streams_stop_when_the_conversation_record_becomes_unreadable(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
     let owner = authenticated_client();
-    let blueprint = create_blueprint(&owner, &base, "format_version = 1\ncode = 'stream_record'\nname = 'Record'\nkind = 'record'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'").await;
+    let blueprint = create_blueprint(&owner, &base, "format_version: 1\ncode: stream_record\nname: Record\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string").await;
     let record: Uuid = create_record(&owner, &base, &blueprint).await["id"]
         .as_str()
         .unwrap()

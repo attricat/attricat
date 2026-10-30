@@ -34,48 +34,50 @@ const PERMISSIONS: &[&str] = &[
 ];
 
 const VARIANT_BLUEPRINT: &str = r#"
-format_version = 1
-code = "export_variant"
-name = "Export variant"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-[[attributes]]
-code = "title"
-value_type = "string"
+format_version: 1
+code: export_variant
+name: Export variant
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
 "#;
 
 fn product_blueprint(job: &str) -> String {
     format!(
         r#"
-format_version = 1
-code = "export_product"
-name = "Export product"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-[[attributes]]
-code = "title"
-value_type = "string"
-[[attributes]]
-code = "variants"
-value_type = "relationship"
-target_blueprint = "export_variant"
-cardinality = "many"
+format_version: 1
+code: export_product
+name: Export product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+  - code: variants
+    value_type: relationship
+    target_blueprint: export_variant
+    cardinality: many
 {job}
 "#
     )
 }
 
 const EXPORT_JOB: &str = r#"
-[[connector_jobs]]
-code = "marketplace"
-direction = "export"
-extension_id = "acme.exporter"
-operation_id = "export"
-input = {expand = ["variants"]}
+connector_jobs:
+  - code: marketplace
+    direction: export
+    extension_id: acme.exporter
+    operation_id: export
+    input:
+      expand: [variants]
 "#;
 
 fn manifest() -> Value {
@@ -1258,13 +1260,12 @@ async fn batch_failures_retry_reject_or_fault_by_their_kind(pool: sqlx::PgPool) 
     let products = published_blueprint(&repository, &product_blueprint("")).await;
     let job_for = |fail: &str| {
         format!(
-            r#"
-[[connector_jobs]]
-code = "fail_{fail}"
-direction = "export"
-extension_id = "acme.exporter"
-operation_id = "export"
-input = {{fail = "{fail}"}}
+            r#"  - code: fail_{fail}
+    direction: export
+    extension_id: acme.exporter
+    operation_id: export
+    input:
+      fail: {fail}
 "#
         )
     };
@@ -1273,7 +1274,7 @@ input = {{fail = "{fail}"}}
             products.0,
             CreateBlueprint {
                 definition: product_blueprint(&format!(
-                    "{}{}{}{}{}{}",
+                    "connector_jobs:\n{}{}{}{}{}{}",
                     job_for("none"),
                     job_for("retry"),
                     job_for("reject"),
@@ -1702,13 +1703,16 @@ async fn related_record_changes_trigger_and_advance_the_linking_row(pool: sqlx::
         &repository,
         &product_blueprint(
             r#"
-[[connector_jobs]]
-code = "near_real_time"
-direction = "export"
-extension_id = "acme.exporter"
-operation_id = "export"
-input = {expand = ["variants"]}
-trigger = {events = ["attribute_value.changed.v1"], debounce_seconds = 1}
+connector_jobs:
+  - code: near_real_time
+    direction: export
+    extension_id: acme.exporter
+    operation_id: export
+    input:
+      expand: [variants]
+    trigger:
+      events: [attribute_value.changed.v1]
+      debounce_seconds: 1
 "#,
         ),
     )
@@ -1824,13 +1828,15 @@ async fn change_triggered_jobs_export_only_the_changed_records(pool: sqlx::PgPoo
         &repository,
         &product_blueprint(
             r#"
-[[connector_jobs]]
-code = "near_real_time"
-direction = "export"
-extension_id = "acme.exporter"
-operation_id = "export"
-input = {}
-trigger = {events = ["attribute_value.changed.v1"], debounce_seconds = 1}
+connector_jobs:
+  - code: near_real_time
+    direction: export
+    extension_id: acme.exporter
+    operation_id: export
+    input: {}
+    trigger:
+      events: [attribute_value.changed.v1]
+      debounce_seconds: 1
 "#,
         ),
     )

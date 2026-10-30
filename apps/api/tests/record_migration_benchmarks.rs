@@ -37,43 +37,44 @@ impl Workload {
             "title"
         };
         let mut definition = format!(
-            r#"format_version = 1
-code = "{code}"
-name = "Record migration {code}"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["{fields}"]
+            r#"format_version: 1
+code: '{code}'
+name: 'Record migration {code}'
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: ['{fields}']
 "#,
         );
         if !matches!(self, Self::File) {
             definition.push_str(
-                r#"[[attributes]]
-code = "title"
-value_type = "string"
+                r#"attributes:
+  - code: title
+    value_type: string
 "#,
             );
         }
         if matches!(self, Self::Relationship | Self::Mixed) {
             definition.push_str(
-                r#"[[attributes]]
-code = "target"
-value_type = "relationship"
-target_blueprint = "migration_bench_target"
-cardinality = "one"
+                r#"attributes:
+  - code: target
+    value_type: relationship
+    target_blueprint: migration_bench_target
+    cardinality: one
 "#,
             );
         }
         if matches!(self, Self::File | Self::Mixed) {
             definition.push_str(
-                r#"[[attributes]]
-code = "image"
-value_type = "file"
-cardinality = "many"
-allowed_mime_groups = ["image"]
-allowed_extensions = ["png"]
-max_bytes = 1048576
-image_only = true
+                r#"attributes:
+  - code: image
+    value_type: file
+    cardinality: many
+    allowed_mime_groups: [image]
+    allowed_extensions: [png]
+    max_bytes: 1048576
+    image_only: true
 "#,
             );
         }
@@ -100,16 +101,17 @@ async fn preserved_value_workloads_report_writes_and_throughput(pool: PgPool) {
     );
     let target_blueprint = repository
         .create_blueprint(CreateBlueprint {
-            definition: r#"format_version = 1
-code = "migration_bench_target"
-name = "Migration benchmark target"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-[[attributes]]
-code = "name"
-value_type = "string"
+            definition: r#"format_version: 1
+code: migration_bench_target
+name: Migration benchmark target
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
 "#
             .to_owned(),
         })

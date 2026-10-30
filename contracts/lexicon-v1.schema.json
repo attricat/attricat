@@ -46,7 +46,7 @@
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "The exchange format for one language, used by lexicon import and export\n(as JSON or TOML). Solution-pack lexicon files reuse its entry shape.",
+  "description": "The exchange format for one language, used by lexicon import and export\n(as JSON or YAML). Solution-pack lexicon files reuse its entry shape.",
   "properties": {
     "entries": {
       "description": "Translations for the language.",

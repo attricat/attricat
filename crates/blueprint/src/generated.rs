@@ -18,7 +18,7 @@ pub const DEFAULT_GENERATED_TIME_ZONE: &str = "UTC";
 /// The counter period of attributes whose numbering never restarts.
 pub const UNPERIODIC: &str = "";
 
-/// A compiled `generated = { … }` declaration, stored as JSON on the
+/// A compiled `generated: { … }` declaration, stored as JSON on the
 /// attribute row.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct GeneratedValue {

@@ -599,7 +599,7 @@ pub struct RelationshipTreeFacetRequest {
     /// Relationship whose targets form the tree, or a dotted path of up to
     /// three relationships, such as `model.brand`, whose last targets do;
     /// each hop of a path needs a single target blueprint and
-    /// `cardinality = "one"`. Omit it to facet the searched blueprint by its
+    /// `cardinality: one`. Omit it to facet the searched blueprint by its
     /// own `hierarchy_field`: a record then matches when it is a selected
     /// node or one of its descendants.
     #[serde(default)]

@@ -6,26 +6,28 @@ use support::*;
 async fn schema_version_sort_paginates_all_revisions_in_both_directions(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
-    let definition = r#"format_version = 1
-code = "schema_sort_product"
-name = "Schema sort product"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-[views.table]
-type = "table"
-columns = [{ field = "title" }]
-[[attributes]]
-code = "title"
-value_type = "string""#;
+    let definition = r#"format_version: 1
+code: schema_sort_product
+name: Schema sort product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+  table:
+    type: table
+    columns:
+      - {field: title}
+attributes:
+  - code: title
+    value_type: string"#;
     let first = create_blueprint(&client, &base_url, definition).await;
     let old_a = create_record(&client, &base_url, &first).await;
     let old_b = create_record(&client, &base_url, &first).await;
     let id = first["blueprint"]["id"].as_str().unwrap();
     let revision: Value = client
         .post(format!("{base_url}/blueprints/{id}/versions"))
-        .json(&json!({"definition": definition.replace("name = \"Schema sort product\"", "name = \"Schema sort products\"")}))
+        .json(&json!({"definition": definition.replace("name: Schema sort product", "name: Schema sort products")}))
         .send().await.unwrap().error_for_status().unwrap().json().await.unwrap();
     let version = revision["blueprint"]["version"].as_i64().unwrap();
     let second: Value = client

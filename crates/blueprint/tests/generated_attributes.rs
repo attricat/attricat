@@ -1,22 +1,22 @@
 use attricat_blueprint::{BlueprintError, GeneratedValue, compile, parse};
 use attricat_domain::attribute_options::{ContextEditable, SequenceReset};
 
+/// An invoice blueprint whose attribute list continues with `attributes`,
+/// further list items written at the list's indentation.
 fn record(attributes: &str) -> String {
     format!(
         r#"
-format_version = 1
-code = "invoice"
-name = "Invoice"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-
+format_version: 1
+code: invoice
+name: Invoice
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
 {attributes}
 "#
     )
@@ -35,16 +35,15 @@ fn rejected(source: &str) -> String {
 #[test]
 fn generated_attributes_compile_read_only_in_the_default_context() {
     let source = record(
-        r#"
-[[attributes]]
-code = "number"
-value_type = "string"
-generated = { format = "INV-{yyyy}-{n:05}", reset = "yearly", time_zone = "Europe/Warsaw" }
-
-[[attributes]]
-code = "sequence"
-value_type = "integer"
-generated = { start = 1000 }
+        r#"  - code: number
+    value_type: string
+    generated:
+      format: 'INV-{yyyy}-{n:05}'
+      reset: yearly
+      time_zone: Europe/Warsaw
+  - code: sequence
+    value_type: integer
+    generated: {start: 1000}
 "#,
     );
     let compiled = compile(parse(&source).unwrap(), &[], &source).unwrap();
@@ -69,26 +68,25 @@ generated = { start = 1000 }
 fn generated_attributes_reject_conflicting_options() {
     for (attribute, expected) in [
         (
-            "value_type = \"date\"\ngenerated = { format = \"{n}\" }",
+            "value_type: date\ngenerated:\n  format: '{n}'",
             "only string and integer",
         ),
-        ("value_type = \"string\"\ngenerated = {}", "need a format"),
+        ("value_type: string\ngenerated: {}", "need a format"),
         (
-            "value_type = \"string\"\ndefault_value = \"x\"\ngenerated = { format = \"{n}\" }",
+            "value_type: string\ndefault_value: x\ngenerated:\n  format: '{n}'",
             "default_value",
         ),
         (
-            "value_type = \"string\"\nvalue_schema = '{\"type\":\"string\",\"enum\":[\"draft\"],\"x-attricat-status\":{\"version\":1,\"options\":[{\"code\":\"draft\",\"label\":\"Draft\"}],\"transitions\":[{\"from\":null,\"to\":\"draft\"}]}}'\ngenerated = { format = \"{n}\" }",
+            "value_type: string\nvalue_schema: '{\"type\":\"string\",\"enum\":[\"draft\"],\"x-attricat-status\":{\"version\":1,\"options\":[{\"code\":\"draft\",\"label\":\"Draft\"}],\"transitions\":[{\"from\":null,\"to\":\"draft\"}]}}'\ngenerated:\n  format: '{n}'",
             "status",
         ),
         (
-            "value_type = \"string\"\ngenerated = { format = \"{n}\", reset = \"yearly\" }",
+            "value_type: string\ngenerated:\n  format: '{n}'\n  reset: yearly",
             "identify the period",
         ),
     ] {
-        let message = rejected(&record(&format!(
-            "[[attributes]]\ncode = \"number\"\n{attribute}"
-        )));
+        let attribute = attribute.replace('\n', "\n    ");
+        let message = rejected(&record(&format!("  - code: number\n    {attribute}")));
         assert!(message.contains(expected), "{message}");
     }
 }
@@ -96,20 +94,19 @@ fn generated_attributes_reject_conflicting_options() {
 #[test]
 fn mixins_and_extension_types_cannot_generate() {
     let mixin = r#"
-format_version = 1
-code = "numbered"
-name = "Numbered"
-kind = "mixin"
-
-[[attributes]]
-code = "number"
-value_type = "string"
-generated = { format = "{n}" }
+format_version: 1
+code: numbered
+name: Numbered
+kind: mixin
+attributes:
+  - code: number
+    value_type: string
+    generated: {format: '{n}'}
 "#;
     assert!(rejected(mixin).contains("record blueprints"));
     assert!(matches!(
         parse(&record(
-            "[[attributes]]\ncode = \"number\"\nextension_type = \"acme:id@^1\"\ngenerated = { format = \"{n}\" }"
+            "  - code: number\n    extension_type: 'acme:id@^1'\n    generated: {format: '{n}'}"
         )),
         Err(BlueprintError::InvalidAttributeDeclaration(_))
     ));
@@ -119,8 +116,8 @@ generated = { format = "{n}" }
 fn unknown_generated_options_are_rejected() {
     assert!(matches!(
         parse(&record(
-            "[[attributes]]\ncode = \"number\"\nvalue_type = \"string\"\ngenerated = { format = \"{n}\", sequence = \"shared\" }"
+            "  - code: number\n    value_type: string\n    generated: {format: '{n}', sequence: shared}"
         )),
-        Err(BlueprintError::Toml(_))
+        Err(BlueprintError::Yaml(_))
     ));
 }

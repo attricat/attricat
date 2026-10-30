@@ -4,31 +4,32 @@ use serde_json::{Value, json};
 use sqlx::PgPool;
 use support::*;
 
-const PRODUCT: &str = r#"format_version = 1
-code = "reusable_product"
-name = "Reusable product"
-kind = "record"
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-[[attributes]]
-code = "title"
-value_type = "string""#;
+const PRODUCT: &str = r#"format_version: 1
+code: reusable_product
+name: Reusable product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string"#;
 
 fn reusable_definition(input: &Value) -> String {
     let mut definition = format!(
-        "code = \"{}\"\nname = \"{}\"\nvalue_type = \"{}\"\n",
+        "code: '{}'\nname: '{}'\nvalue_type: '{}'\n",
         input["code"].as_str().unwrap(),
         input["name"].as_str().unwrap(),
         input["value_type"].as_str().unwrap(),
     );
     for key in ["searchable", "facetable"] {
         if let Some(value) = input[key].as_bool() {
-            definition.push_str(&format!("{key} = {value}\n"));
+            definition.push_str(&format!("{key}: {value}\n"));
         }
     }
     if let Some(value) = input.get("default_value") {
-        definition.push_str(&format!("default_value = {value}\n"));
+        definition.push_str(&format!("default_value: {value}\n"));
     }
     definition
 }
@@ -111,7 +112,7 @@ async fn attaches_published_reusable_attributes_as_distinct_typed_values(pool: P
     // the searchable revision that this record already pinned.
     let newer_draft: Value = client
         .post(format!("{base_url}/reusable-attributes/{}/versions", published["definition_id"].as_str().unwrap()))
-        .json(&json!({ "definition": "code = \"weight\"\nname = \"Weight\"\nvalue_type = \"number\"\nsearchable = false" }))
+        .json(&json!({ "definition": "code: weight\nname: Weight\nvalue_type: number\nsearchable: false" }))
         .send().await.unwrap().error_for_status().unwrap().json().await.unwrap();
     client
         .post(format!(
@@ -265,9 +266,19 @@ async fn reusable_relationships_and_group_attachments_use_record_owned_attribute
     );
 
     let relationship_v2: Value = client
-        .post(format!("{base_url}/reusable-attributes/{}/versions", relationship["definition_id"].as_str().unwrap()))
-        .json(&json!({ "definition": "code = \"related\"\nname = \"Related\"\nvalue_type = \"relationship\"" }))
-        .send().await.unwrap().error_for_status().unwrap().json().await.unwrap();
+        .post(format!(
+            "{base_url}/reusable-attributes/{}/versions",
+            relationship["definition_id"].as_str().unwrap()
+        ))
+        .json(&json!({ "definition": "code: related\nname: Related\nvalue_type: relationship" }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
     let relationship_v2: Value = client
         .post(format!(
             "{base_url}/reusable-attribute-revisions/{}/publish",
@@ -356,7 +367,7 @@ async fn migration_preserves_reusable_attribute_values(pool: PgPool) {
             "{base_url}/blueprints/{}/versions",
             blueprint["blueprint"]["id"].as_str().unwrap()
         ))
-        .json(&json!({ "definition": PRODUCT.replace("name = \"Reusable product\"", "name = \"Reusable product v2\"") }))
+        .json(&json!({ "definition": PRODUCT.replace("name: Reusable product", "name: Reusable product v2") }))
         .send()
         .await
         .unwrap()
@@ -492,7 +503,7 @@ async fn validates_definitions_without_storing_them(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
     let definition = |code: &str, value_type: &str| {
-        format!("code = \"{code}\"\nname = \"Checked\"\nvalue_type = \"{value_type}\"\n")
+        format!("code: '{code}'\nname: Checked\nvalue_type: '{value_type}'\n")
     };
     let list = || async {
         client

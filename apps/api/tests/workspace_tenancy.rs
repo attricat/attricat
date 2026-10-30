@@ -89,7 +89,7 @@ async fn workspace_scoped_blueprints_reject_foreign_ids_codes_versions_and_attri
         .await
         .unwrap();
     let other = repository.for_workspace(other_workspace);
-    let definition = "format_version = 1\ncode = 'shared_code'\nname = 'Shared'\nkind = 'record'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'";
+    let definition = "format_version: 1\ncode: shared_code\nname: Shared\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string";
     let other_blueprint = other
         .create_blueprint(CreateBlueprint {
             definition: definition.to_owned(),
@@ -210,7 +210,7 @@ async fn current_values_hides_foreign_record_values(pool: PgPool) {
     let other = repository.for_workspace(other_workspace);
     let blueprint = other
         .create_blueprint(CreateBlueprint {
-            definition: "format_version = 1\ncode = 'private_values'\nname = 'Private values'\nkind = 'record'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'".to_owned(),
+            definition: "format_version: 1\ncode: private_values\nname: Private values\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string".to_owned(),
         })
         .await
         .unwrap();
@@ -262,8 +262,8 @@ async fn reachable_search_never_traverses_another_workspace(pool: PgPool) {
         .await
         .unwrap();
     let other = repository.for_workspace(other_workspace);
-    let target_definition = "format_version = 1\ncode = 'shared_search_target'\nname = 'Shared target'\nkind = 'record'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['name']\n\n[[attributes]]\ncode = 'name'\nvalue_type = 'string'";
-    let source_definition = "format_version = 1\ncode = 'shared_search_source'\nname = 'Shared source'\nkind = 'record'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['name']\n\n[[attributes]]\ncode = 'name'\nvalue_type = 'string'\n\n[[attributes]]\ncode = 'target'\nvalue_type = 'relationship'\ntarget_blueprint = 'shared_search_target'";
+    let target_definition = "format_version: 1\ncode: shared_search_target\nname: Shared target\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [name]\nattributes:\n  - code: name\n    value_type: string";
+    let source_definition = "format_version: 1\ncode: shared_search_source\nname: Shared source\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [name]\nattributes:\n  - code: name\n    value_type: string\n  - code: target\n    value_type: relationship\n    target_blueprint: shared_search_target";
 
     for scoped in [&bootstrap, &other] {
         let target = scoped

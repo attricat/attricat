@@ -7,61 +7,52 @@ use sha2::{Digest, Sha256};
 use support::*;
 
 const PRODUCT_BLUEPRINT: &[u8] = br#"
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[[attributes]]
-code = "name"
-value_type = "string"
-
-[[attributes]]
-code = "category"
-value_type = "relationship"
-cardinality = "one"
-target_blueprint = "blueprints/category"
+format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: category
+    value_type: relationship
+    cardinality: one
+    target_blueprint: blueprints/category
 "#;
 const CATEGORY_BLUEPRINT: &[u8] = br#"
-format_version = 1
-code = "category"
-name = "Category"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[[attributes]]
-code = "name"
-value_type = "string"
+format_version: 1
+code: category
+name: Category
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
 "#;
 const DOCUMENT_BLUEPRINT: &[u8] = br#"
-format_version = 1
-code = "document"
-name = "Document"
-kind = "record"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
-
-[[attributes]]
-code = "title"
-value_type = "string"
-
-[[attributes]]
-code = "summary"
-value_type = "string"
-
-[[attributes]]
-code = "evidence"
-value_type = "file"
-cardinality = "many"
+format_version: 1
+code: document
+name: Document
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+  - code: summary
+    value_type: string
+  - code: evidence
+    value_type: file
+    cardinality: many
 "#;
 const EU_CONTEXT: &[u8] =
     br#"{"format_version":1,"kind":"solution_pack_context","data":{"region":"eu"}}"#;
@@ -70,33 +61,29 @@ const PL_CONTEXT: &[u8] = br#"{"format_version":1,"kind":"solution_pack_context"
 /// only matches on its enabled state.
 const PLAIN_PL_CONTEXT: &[u8] = br#"{"format_version":1,"kind":"solution_pack_context","data":{"language":"pl"},"parent":"contexts/eu","publication_channel":{"enabled":true}}"#;
 const NAME_RULE: &[u8] = br#"
-format_version = 1
-code = "name-required"
-name = "Products have a name"
-severity = "error"
-blueprint = "blueprints/product"
-context = "contexts/pl"
-enabled = true
-
-[[triggers]]
-type = "manual"
-
-[predicate]
-type = "required"
-attribute_code = "name"
+format_version: 1
+code: name-required
+name: Products have a name
+severity: error
+blueprint: blueprints/product
+context: contexts/pl
+enabled: true
+triggers:
+  - type: manual
+predicate:
+  type: required
+  attribute_code: name
 "#;
 const REVIEW_WORKFLOW: &[u8] = br#"
-format_version = 2
-code = "mark-reviewed"
-name = "Mark reviewed"
-enabled = false
-
-[[triggers]]
-type = "manual"
-
-[[actions]]
-type = "system_tags_add"
-tags = ["reviewed"]
+format_version: 2
+code: mark-reviewed
+name: Mark reviewed
+enabled: false
+triggers:
+  - type: manual
+actions:
+  - type: system_tags_add
+    tags: [reviewed]
 "#;
 const UNNAMED_SEARCH: &[u8] = br#"{"format_version":1,"kind":"solution_pack_saved_search","name":"Unnamed products","description":"Products awaiting a name","state":{"blueprint":"blueprints/product","context":"contexts/pl","attributeFilters":[{"field":"name","operator":"eq","value":""}],"sort":{"field":"category.name","direction":"asc"}}}"#;
 const PDF_BYTES: &[u8] = b"%PDF-1.7\nsynthetic evidence";
@@ -141,26 +128,26 @@ fn seed_archive_with(version: &str, pl_context: &[u8]) -> Vec<u8> {
     let mut manifest = manifest("attricat.seeds", version);
     manifest["resources"] = json!({
         "blueprints": [
-            resource("blueprints/product", "blueprints/product.toml", PRODUCT_BLUEPRINT),
-            resource("blueprints/category", "blueprints/category.toml", CATEGORY_BLUEPRINT),
+            resource("blueprints/product", "blueprints/product.yaml", PRODUCT_BLUEPRINT),
+            resource("blueprints/category", "blueprints/category.yaml", CATEGORY_BLUEPRINT),
         ],
         "contexts": [
             resource("contexts/eu", "contexts/eu.json", EU_CONTEXT),
             resource("contexts/pl", "contexts/pl.json", pl_context),
         ],
-        "rules": [resource("rules/name-required", "rules/name-required.toml", NAME_RULE)],
-        "workflows": [resource("workflows/mark-reviewed", "workflows/mark-reviewed.toml", REVIEW_WORKFLOW)],
+        "rules": [resource("rules/name-required", "rules/name-required.yaml", NAME_RULE)],
+        "workflows": [resource("workflows/mark-reviewed", "workflows/mark-reviewed.yaml", REVIEW_WORKFLOW)],
         "saved_searches": [resource("saved-searches/unnamed", "saved-searches/unnamed.json", UNNAMED_SEARCH)],
     });
     archive(
         &manifest,
         &[
-            ("blueprints/product.toml", PRODUCT_BLUEPRINT),
-            ("blueprints/category.toml", CATEGORY_BLUEPRINT),
+            ("blueprints/product.yaml", PRODUCT_BLUEPRINT),
+            ("blueprints/category.yaml", CATEGORY_BLUEPRINT),
             ("contexts/eu.json", EU_CONTEXT),
             ("contexts/pl.json", pl_context),
-            ("rules/name-required.toml", NAME_RULE),
-            ("workflows/mark-reviewed.toml", REVIEW_WORKFLOW),
+            ("rules/name-required.yaml", NAME_RULE),
+            ("workflows/mark-reviewed.yaml", REVIEW_WORKFLOW),
             ("saved-searches/unnamed.json", UNNAMED_SEARCH),
         ],
     )
@@ -585,12 +572,12 @@ fn base_archive(version: &str) -> Vec<u8> {
     let mut manifest = manifest("attricat.base", version);
     manifest["resources"]["blueprints"] = json!([resource(
         "blueprints/category",
-        "blueprints/category.toml",
+        "blueprints/category.yaml",
         CATEGORY_BLUEPRINT
     )]);
     archive(
         &manifest,
-        &[("blueprints/category.toml", CATEGORY_BLUEPRINT)],
+        &[("blueprints/category.yaml", CATEGORY_BLUEPRINT)],
     )
 }
 
@@ -600,7 +587,7 @@ fn dependent_archive(range: &str) -> Vec<u8> {
         json!([{"key": "prerequisites/base", "id": "attricat.base", "version": range}]);
     let mut category = resource(
         "blueprints/category",
-        "blueprints/category.toml",
+        "blueprints/category.yaml",
         CATEGORY_BLUEPRINT,
     );
     category["reuse"] =
@@ -608,7 +595,7 @@ fn dependent_archive(range: &str) -> Vec<u8> {
     manifest["resources"]["blueprints"] = json!([
         resource(
             "blueprints/product",
-            "blueprints/product.toml",
+            "blueprints/product.yaml",
             PRODUCT_BLUEPRINT
         ),
         category,
@@ -616,8 +603,8 @@ fn dependent_archive(range: &str) -> Vec<u8> {
     archive(
         &manifest,
         &[
-            ("blueprints/product.toml", PRODUCT_BLUEPRINT),
-            ("blueprints/category.toml", CATEGORY_BLUEPRINT),
+            ("blueprints/product.yaml", PRODUCT_BLUEPRINT),
+            ("blueprints/category.yaml", CATEGORY_BLUEPRINT),
         ],
     )
 }
@@ -715,7 +702,7 @@ async fn seeds_reuse_exact_blueprints_from_applied_prerequisites(pool: PgPool) {
             .unwrap();
     let changed = client
         .post(format!("{base_url}/blueprints/{category_id}/versions"))
-        .json(&json!({"definition": String::from_utf8(CATEGORY_BLUEPRINT.to_vec()).unwrap().replace("code = \"category\"", "code = \"base_category\"").replace("value_type = \"string\"", "value_type = \"string\"\n\n[[attributes]]\ncode = \"rank\"\nvalue_type = \"integer\"")}))
+        .json(&json!({"definition": String::from_utf8(CATEGORY_BLUEPRINT.to_vec()).unwrap().replace("code: category", "code: base_category").replace("value_type: string", "value_type: string\n  - code: rank\n    value_type: integer")}))
         .send()
         .await
         .unwrap();
@@ -778,7 +765,7 @@ fn sample_archive() -> (Vec<u8>, Vec<u8>) {
     .unwrap();
     let mut manifest = manifest("attricat.documents", "1.0.0");
     manifest["resources"] = json!({
-        "blueprints": [resource("blueprints/document", "blueprints/document.toml", DOCUMENT_BLUEPRINT)],
+        "blueprints": [resource("blueprints/document", "blueprints/document.yaml", DOCUMENT_BLUEPRINT)],
         "contexts": [resource("contexts/eu", "contexts/eu.json", EU_CONTEXT)],
         "sample_data": {
             "key": "sample-data/default",
@@ -790,7 +777,7 @@ fn sample_archive() -> (Vec<u8>, Vec<u8>) {
     let archive = archive(
         &manifest,
         &[
-            ("blueprints/document.toml", DOCUMENT_BLUEPRINT),
+            ("blueprints/document.yaml", DOCUMENT_BLUEPRINT),
             ("contexts/eu.json", EU_CONTEXT),
             ("sample-data/sample-data.json", &sample),
             ("sample-data/files/spec.pdf", PDF_BYTES),

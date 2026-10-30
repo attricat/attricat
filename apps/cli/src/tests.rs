@@ -34,7 +34,7 @@ use crate::events::{EventParser, ServerEvent};
 use crate::input::{
     ContextFile, RelationshipFile, ValueFile, form_update_body, json_array_input, json_input,
     json_object_input, json_string_array_input, parse_stdin_lines, read_source, relationships_body,
-    toml_to_json, values_body,
+    values_body,
 };
 use crate::run;
 use crate::session::SessionFile;
@@ -345,7 +345,7 @@ fn team_commands_build_requests() {
 }
 
 #[test]
-fn lexicon_commands_build_requests_and_read_toml_files() {
+fn lexicon_commands_build_requests_and_read_yaml_files() {
     let parse = |args: &[&str]| match Cli::try_parse_from(args).unwrap().command {
         Command::Lexicon { command } => lexicon_request(command).unwrap(),
         _ => unreachable!(),
@@ -391,10 +391,10 @@ fn lexicon_commands_build_requests_and_read_toml_files() {
     ]);
     assert_eq!(body.unwrap()["plural_category"], "few");
 
-    let file = tempfile::Builder::new().suffix(".toml").tempfile().unwrap();
+    let file = tempfile::Builder::new().suffix(".yaml").tempfile().unwrap();
     fs::write(
         file.path(),
-        "format_version = 1\nlanguage = \"pl\"\n[[entries]]\nkey = \"Product\"\ntext = \"Produkt\"\n",
+        "format_version: 1\nlanguage: pl\nentries:\n  - key: Product\n    text: Produkt\n",
     )
     .unwrap();
     let path = file.path().to_str().unwrap();
@@ -450,12 +450,12 @@ fn only_allows_plaintext_credential_transport_to_loopback() {
 #[test]
 fn converts_value_file_to_api_shape() {
     let source = r#"
-[[values]]
-kind = "scalar"
-attribute_id = "00000000-0000-0000-0000-000000000001"
-value = "Blue shirt"
+values:
+  - kind: scalar
+    attribute_id: '00000000-0000-0000-0000-000000000001'
+    value: Blue shirt
 "#;
-    let input: ValueFile = toml::from_str(source).unwrap();
+    let input: ValueFile = attricat_yaml::from_str(source).unwrap();
     assert_eq!(
         values_body(input, None).unwrap(),
         json!({
@@ -472,12 +472,12 @@ value = "Blue shirt"
 #[test]
 fn converts_attribute_code_to_api_shape() {
     let source = r#"
-[[values]]
-kind = "relationship"
-attribute_code = "related_products"
-target_record_id = "00000000-0000-0000-0000-000000000002"
+values:
+  - kind: relationship
+    attribute_code: related_products
+    target_record_id: '00000000-0000-0000-0000-000000000002'
 "#;
-    let input: ValueFile = toml::from_str(source).unwrap();
+    let input: ValueFile = attricat_yaml::from_str(source).unwrap();
     assert_eq!(
         values_body(input, None).unwrap(),
         json!({
@@ -492,18 +492,16 @@ target_record_id = "00000000-0000-0000-0000-000000000002"
 }
 
 #[test]
-fn converts_toml_temporal_literals_to_iso_strings() {
-    let input: ValueFile = toml::from_str(
+fn keeps_unquoted_yaml_temporal_values_as_iso_strings() {
+    let input: ValueFile = attricat_yaml::from_str(
         r#"
-[[values]]
-kind = "scalar"
-attribute_code = "available_on"
-value = 2026-08-12
-
-[[values]]
-kind = "scalar"
-attribute_code = "released_at"
-value = 2026-08-12T14:30:00Z
+values:
+  - kind: scalar
+    attribute_code: available_on
+    value: 2026-08-12
+  - kind: scalar
+    attribute_code: released_at
+    value: 2026-08-12T14:30:00Z
 "#,
     )
     .unwrap();
@@ -519,14 +517,13 @@ value = 2026-08-12T14:30:00Z
 #[test]
 fn converts_relationship_replacement_file_to_api_shape() {
     let source = r#"
-[[relationships]]
-attribute_code = "categories"
-target_record_ids = [
-  "00000000-0000-0000-0000-000000000002",
-  "00000000-0000-0000-0000-000000000003",
-]
+relationships:
+  - attribute_code: categories
+    target_record_ids:
+      - '00000000-0000-0000-0000-000000000002'
+      - '00000000-0000-0000-0000-000000000003'
 "#;
-    let input: RelationshipFile = toml::from_str(source).unwrap();
+    let input: RelationshipFile = attricat_yaml::from_str(source).unwrap();
     assert_eq!(
         relationships_body(input, None).unwrap(),
         json!({
@@ -547,13 +544,13 @@ fn combines_record_update_files_into_the_form_contract() {
     let values = tempfile::NamedTempFile::new().unwrap();
     fs::write(
         values.path(),
-        "[[values]]\nkind = \"scalar\"\nattribute_code = \"title\"\nvalue = \"Updated shirt\"\n",
+        "values:\n  - kind: scalar\n    attribute_code: title\n    value: Updated shirt\n",
     )
     .unwrap();
     let removals = tempfile::NamedTempFile::new().unwrap();
     fs::write(
         removals.path(),
-        "[[remove_values]]\nattribute_code = \"subtitle\"\n",
+        "remove_values:\n  - attribute_code: subtitle\n",
     )
     .unwrap();
     let context_id = Uuid::parse_str("00000000-0000-4000-8000-000000000001").unwrap();
@@ -580,25 +577,25 @@ fn combines_record_update_files_into_the_form_contract() {
 }
 
 #[test]
-fn rejects_incompatible_value_fields_and_unknown_toml_keys() {
+fn rejects_incompatible_value_fields_and_unknown_yaml_keys() {
     let relationship_with_value = r#"
-[[values]]
-kind = "relationship"
-attribute_id = "00000000-0000-0000-0000-000000000001"
-target_record_id = "00000000-0000-0000-0000-000000000002"
-value = "ignored before this validation"
+values:
+  - kind: relationship
+    attribute_id: '00000000-0000-0000-0000-000000000001'
+    target_record_id: '00000000-0000-0000-0000-000000000002'
+    value: ignored before this validation
 "#;
-    let input: ValueFile = toml::from_str(relationship_with_value).unwrap();
+    let input: ValueFile = attricat_yaml::from_str(relationship_with_value).unwrap();
     assert!(matches!(values_body(input, None), Err(CliError::Input(_))));
 
     let conflicting_selectors = r#"
-[[values]]
-kind = "scalar"
-attribute_id = "00000000-0000-0000-0000-000000000001"
-attribute_code = "title"
-value = "Blue shirt"
+values:
+  - kind: scalar
+    attribute_id: '00000000-0000-0000-0000-000000000001'
+    attribute_code: title
+    value: Blue shirt
 "#;
-    let input: ValueFile = toml::from_str(conflicting_selectors).unwrap();
+    let input: ValueFile = attricat_yaml::from_str(conflicting_selectors).unwrap();
     assert!(matches!(values_body(input, None), Err(CliError::Input(_))));
 }
 
@@ -791,8 +788,8 @@ fn context_creation_defaults_the_parent_and_role_duplication_requires_a_code() {
 #[test]
 fn context_file_can_omit_parent_id() {
     let input: ContextFile =
-        toml::from_str("code = \"en-GB\"\ndata = { language = \"en-GB\" }").unwrap();
-    let body = json!({ "code": input.code, "data": toml_to_json(input.data).unwrap(), "parent_id": input.parent_id });
+        attricat_yaml::from_str("code: en-GB\ndata:\n  language: en-GB").unwrap();
+    let body = json!({ "code": input.code, "data": input.data, "parent_id": input.parent_id });
     assert_eq!(body["parent_id"], Value::Null);
 }
 
@@ -870,11 +867,11 @@ fn rule_commands_require_definition_metadata_and_sources() {
             "--blueprint-id",
             id,
             "--file",
-            "rule.toml"
+            "rule.yaml"
         ])
         .is_ok()
     );
-    assert!(Cli::try_parse_from(["acli", "rule", "update", id, "--file", "rule.toml"]).is_ok());
+    assert!(Cli::try_parse_from(["acli", "rule", "update", id, "--file", "rule.yaml"]).is_ok());
     assert!(Cli::try_parse_from(["acli", "rule", "revisions", id]).is_ok());
     // Only a dry run checks an unsaved definition.
     assert!(
@@ -886,12 +883,12 @@ fn rule_commands_require_definition_metadata_and_sources() {
             "--idempotency-key",
             "check",
             "--definition-file",
-            "rule.toml"
+            "rule.yaml"
         ])
         .is_err()
     );
     assert!(Cli::try_parse_from(["acli", "rule", "validate", "--stdin"]).is_err());
-    assert!(Cli::try_parse_from(["acli", "blueprint", "validate", "--file", "b.toml"]).is_ok());
+    assert!(Cli::try_parse_from(["acli", "blueprint", "validate", "--file", "b.yaml"]).is_ok());
     assert!(
         Cli::try_parse_from([
             "acli",
@@ -943,7 +940,7 @@ fn rule_run_now_reads_one_unsaved_definition_for_a_dry_run() {
             "--dry-run",
             "--definition-stdin",
             "--definition-file",
-            "rule.toml"
+            "rule.yaml"
         ])
         .is_err()
     );
@@ -985,7 +982,7 @@ async fn rule_routes_forward_definition_and_run_options() {
     );
     let id = Uuid::from_u128(1);
     let file = tempfile::NamedTempFile::new().unwrap();
-    fs::write(file.path(), "format_version = 1\n").unwrap();
+    fs::write(file.path(), "format_version: 1\n").unwrap();
     let result = rule_command(
         &api,
         RuleCommand::Validate {
@@ -1002,7 +999,7 @@ async fn rule_routes_forward_definition_and_run_options() {
     let body: Value = serde_json::from_str(&result).unwrap();
     assert_eq!(
         body,
-        json!({"blueprint_id":id,"context_id":null,"definition":"format_version = 1\n"})
+        json!({"blueprint_id":id,"context_id":null,"definition":"format_version: 1\n"})
     );
     let result = rule_command(
         &api,
@@ -1019,7 +1016,7 @@ async fn rule_routes_forward_definition_and_run_options() {
     .unwrap();
     assert_eq!(
         serde_json::from_str::<Value>(&result).unwrap(),
-        json!({"idempotency_key":"check","record_id":id,"dry_run":true,"definition":"format_version = 1\n"})
+        json!({"idempotency_key":"check","record_id":id,"dry_run":true,"definition":"format_version: 1\n"})
     );
     let result = rule_command(
         &api,
@@ -2426,7 +2423,7 @@ async fn file_reference_and_hold_commands_build_requests() {
 async fn reusable_attribute_commands_build_requests() {
     let id = "00000000-0000-4000-8000-000000000001";
     let file = tempfile::NamedTempFile::new().unwrap();
-    fs::write(file.path(), "code = \"gtin\"").unwrap();
+    fs::write(file.path(), "code: gtin").unwrap();
     let path = file.path().to_str().unwrap();
     let validate = echo(&[
         "reusable-attribute",
@@ -2441,7 +2438,7 @@ async fn reusable_attribute_commands_build_requests() {
         validate["path"],
         format!("/reusable-attributes/{id}/versions/validate")
     );
-    assert_eq!(validate["body"], json!({ "definition": "code = \"gtin\"" }));
+    assert_eq!(validate["body"], json!({ "definition": "code: gtin" }));
     let apply = echo(&["reusable-attribute", "apply", id, "--revision-id", id]).await;
     assert_eq!(
         apply["path"],
@@ -2602,10 +2599,10 @@ async fn record_search_sends_every_filter_and_option() {
 async fn value_append_sends_expected_updated_at() {
     let id = "00000000-0000-4000-8000-000000000001";
     let directory = tempfile::tempdir().unwrap();
-    let file = directory.path().join("values.toml");
+    let file = directory.path().join("values.yaml");
     fs::write(
         &file,
-        "[[values]]\nkind = \"scalar\"\nattribute_code = \"name\"\nvalue = \"Linen shirt\"\n",
+        "values:\n  - kind: scalar\n    attribute_code: name\n    value: Linen shirt\n",
     )
     .unwrap();
     let file = file.to_str().unwrap();
