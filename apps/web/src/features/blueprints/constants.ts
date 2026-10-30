@@ -54,6 +54,8 @@ export type BlueprintVersionMetadataTab =
 
 /** Sandbox tab that edits sample values through the detail layout. */
 export const sandboxEditTab = 'sandbox';
+/** The view whose layout the sandbox tab edits with. */
+export const sandboxEditView = 'detail';
 
 export const blueprintFilterWidth = 420;
 export const migrationProgressMinWidth = 150;

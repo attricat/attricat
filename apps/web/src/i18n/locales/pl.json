@@ -672,6 +672,8 @@
       "openWithFindings_other": "Szczegóły pola {{field}}, {{count}} problemu z jakością danych",
       "code": "Kod",
       "copyCode": "Kopiuj kod",
+      "showInDefinition": "Pokaż w definicji",
+      "notInDefinition": "Definicja nie deklaruje już tego pola.",
       "valueType": "Typ wartości",
       "linksToOne": "Łączy z jednym rekordem.",
       "linksToMany": "Łączy z wieloma rekordami.",
@@ -1125,7 +1127,8 @@
       "title": "Podgląd",
       "checking": "Sprawdzanie definicji…",
       "empty": "Podgląd pojawi się, gdy definicja przejdzie kontrole zapisu.",
-      "stale": "Pokazano ostatnią wersję, która przeszła kontrole zapisu."
+      "stale": "Pokazano ostatnią wersję, która przeszła kontrole zapisu.",
+      "showView": "Pokaż widok {{view}} w definicji"
     },
     "snippetGroups": {
       "attributes": "Atrybuty",

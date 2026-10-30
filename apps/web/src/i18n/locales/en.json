@@ -644,6 +644,8 @@
       "openWithFindings_other": "Details of {{field}}, {{count}} data quality findings",
       "code": "Code",
       "copyCode": "Copy code",
+      "showInDefinition": "Show in definition",
+      "notInDefinition": "The definition no longer declares this field.",
       "valueType": "Value type",
       "linksToOne": "Links to one record.",
       "linksToMany": "Links to many records.",
@@ -1069,7 +1071,8 @@
       "title": "Preview",
       "checking": "Checking the definition…",
       "empty": "The preview appears once the definition passes the save checks.",
-      "stale": "Showing the last version that passed the save checks."
+      "stale": "Showing the last version that passed the save checks.",
+      "showView": "Show the {{view}} view in the definition"
     },
     "snippetGroups": {
       "attributes": "Attributes",

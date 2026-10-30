@@ -34,6 +34,8 @@ export const monacoThemeColors = (mode: DesignMode) => {
     'editor.lineHighlightBorder': c.action.hover,
     'editor.selectionBackground': c.action.selected,
     'editor.inactiveSelectionBackground': c.action.selected,
+    // Blocks the editor navigates to, kept apart from the selection inside.
+    'editor.rangeHighlightBackground': c.action.navigationHover,
     'editorCursor.foreground': c.brand.primary,
     'editorLineNumber.foreground': c.text.disabled,
     'editorLineNumber.activeForeground': c.text.secondary,

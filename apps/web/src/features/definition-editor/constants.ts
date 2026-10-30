@@ -19,6 +19,7 @@ export const schemaExtensions = {
 export const discriminatorKey = 'type';
 export const attributesKey = 'attributes';
 export const includesKey = 'includes';
+export const viewsKey = 'views';
 export const valueTypeKey = 'value_type';
 export const codeKey = 'code';
 export const fromKey = 'from';
@@ -40,6 +41,8 @@ export const serverDiagnosticsOwner = 'attricat-definition-server';
 export const referenceDiagnosticsOwner = 'attricat-definition-references';
 /** Server checks wait for a longer pause than local diagnostics. */
 export const checkDelayMs = 600;
+/** How long a place shown from the preview stays highlighted. */
+export const revealHighlightMs = 1500;
 export const definitionEditorHeight = 'calc(100vh - 280px)';
 /** Completion lookups reuse cached workspace data for this long. */
 export const referenceStaleTimeMs = 60_000;

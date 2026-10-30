@@ -39,6 +39,12 @@ export type FieldDiagnostics = {
    * where each comes from; a form being filled in has none.
    */
   showsValues?: boolean;
+  /**
+   * Leads to where the definition being edited declares an attribute, or is
+   * `undefined` for an attribute it no longer declares. Only the blueprint
+   * editor's preview supplies it.
+   */
+  showInDefinition?: (code: string) => (() => void) | undefined;
 };
 
 /**

@@ -1,7 +1,24 @@
-import { Alert, Box, Paper, Tab, Tabs, Typography } from '@mui/material';
-import { useRef, useState } from 'react';
+import {
+  Alert,
+  Box,
+  IconButton,
+  Paper,
+  Stack,
+  Tab,
+  Tabs,
+  Tooltip,
+  Typography,
+} from '@mui/material';
+import { CodeXmlIcon } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { compactIconSize } from '../../components/iconSizes';
 import { useTabAccessibility } from '../../components/useTabAccessibility';
+import {
+  attributeDefinition,
+  viewDefinition,
+} from '../definition-editor/definitionNavigation';
+import { useRevealDefinition } from '../definition-editor/definitionReveal';
 import type {
   Attribute,
   Blueprint,
@@ -22,7 +39,7 @@ import {
   headingEditableAttributes,
   unplacedEditableAttributes,
 } from '../records/recordFormAttributes';
-import { sandboxEditTab } from './constants';
+import { sandboxEditTab, sandboxEditView } from './constants';
 import { RenderedBlueprintView } from './RenderedBlueprintView';
 import { SandboxAttributeEditor } from './SandboxAttributeEditor';
 import { sandboxValidation, sandboxValuesForFields } from './sandboxValues';
@@ -68,6 +85,27 @@ export const BlueprintViewsPreview = ({
     definition,
     revision,
   });
+  const revealDefinition = useRevealDefinition();
+  const fieldDiagnostics = useMemo(
+    () =>
+      revealDefinition && definition !== undefined
+        ? {
+            ...diagnostics,
+            showInDefinition: (code: string) => {
+              const target = attributeDefinition(definition, code);
+              return target && (() => revealDefinition(target));
+            },
+          }
+        : diagnostics,
+    [definition, diagnostics, revealDefinition],
+  );
+  // The sandbox editor lays fields out like the detail view.
+  const viewName =
+    activeViewName === sandboxEditTab ? sandboxEditView : activeViewName;
+  const activeViewTarget =
+    revealDefinition && definition !== undefined
+      ? viewDefinition(definition, viewName)
+      : undefined;
   const fieldsRef = useRef<HTMLDivElement>(null);
   const { request: revealRequest, reveal: revealField } =
     useFieldReveal(fieldsRef);
@@ -96,30 +134,49 @@ export const BlueprintViewsPreview = ({
       <Typography color="text.secondary" sx={{ mt: 1 }}>
         {t('blueprints.sandboxDescription')}
       </Typography>
-      <Tabs
-        allowScrollButtonsMobile
-        onChange={(_, value: string) => setSelectedView(value)}
-        scrollButtons="auto"
-        sx={{ mt: 1 }}
-        value={activeViewName}
-        variant="scrollable"
-      >
-        {tabs.map(([name], index) => (
-          <Tab
-            {...tabId.tab(index)}
-            key={name}
-            label={name === sandboxEditTab ? t('blueprints.sandboxEdit') : name}
-            value={name}
-          />
-        ))}
-      </Tabs>
+      <Stack direction="row" sx={{ alignItems: 'center', mt: 1 }}>
+        <Tabs
+          allowScrollButtonsMobile
+          onChange={(_, value: string) => setSelectedView(value)}
+          scrollButtons="auto"
+          sx={{ flexGrow: 1, minWidth: 0 }}
+          value={activeViewName}
+          variant="scrollable"
+        >
+          {tabs.map(([name], index) => (
+            <Tab
+              {...tabId.tab(index)}
+              key={name}
+              label={
+                name === sandboxEditTab ? t('blueprints.sandboxEdit') : name
+              }
+              value={name}
+            />
+          ))}
+        </Tabs>
+        {activeViewTarget && (
+          <Tooltip
+            title={t('definitionEditor.preview.showView', { view: viewName })}
+          >
+            <IconButton
+              aria-label={t('definitionEditor.preview.showView', {
+                view: viewName,
+              })}
+              onClick={() => revealDefinition?.(activeViewTarget)}
+              size="small"
+            >
+              <CodeXmlIcon size={compactIconSize} />
+            </IconButton>
+          </Tooltip>
+        )}
+      </Stack>
       <Paper
         {...tabId.panel(activeViewIndex)}
         ref={fieldsRef}
         sx={{ mt: 2, p: 2.5 }}
         variant="outlined"
       >
-        <FieldDiagnosticsContext value={diagnostics}>
+        <FieldDiagnosticsContext value={fieldDiagnostics}>
           <RevealFieldContext value={revealField}>
             <FieldRevealContext value={revealRequest}>
               {activeViewName === sandboxEditTab && validation.formError && (

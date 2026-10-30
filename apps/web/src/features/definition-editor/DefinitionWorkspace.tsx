@@ -20,12 +20,21 @@ import {
   type ReactNode,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { definitionEditorHeight, type DefinitionKind } from './constants';
+import {
+  definitionEditorHeight,
+  revealHighlightMs,
+  type DefinitionKind,
+} from './constants';
 import { DefinitionEditor } from './DefinitionEditor';
 import type { ReferenceAttribute } from './definitionReferences';
 import { locateDefinitionError } from './definitionErrorLocation';
 import { DefinitionFoldControls } from './DefinitionFoldControls';
 import { DefinitionInsertMenu } from './DefinitionInsertMenu';
+import type { DefinitionTarget } from './definitionNavigation';
+import {
+  DefinitionRevealContext,
+  type RevealDefinition,
+} from './definitionReveal';
 import { updateServerDiagnostic } from './definitionLanguage';
 import { snippetEdit, type DefinitionSnippet } from './definitionSnippets';
 import { checkStatuses, type DefinitionCheck } from './useDefinitionCheck';
@@ -39,6 +48,39 @@ const lineOf = (text: string, offset: number) =>
 const firstLineEnd = (text: string) => {
   const end = text.indexOf('\n');
   return end < 0 ? text.length : end;
+};
+
+/** Monaco's class for briefly highlighting a range it navigated to. */
+const rangeHighlightClass = 'rangeHighlight';
+
+/**
+ * Selects `focus` in the editor, scrolls it into view, and highlights the
+ * block around it for a moment so the eye finds it.
+ */
+const revealDefinitionTarget = (
+  { editor, monaco }: Mounted,
+  { block, focus }: DefinitionTarget,
+) => {
+  const model = editor.getModel();
+  if (!model) return;
+  const toRange = ({ end, start }: { end: number; start: number }) =>
+    monaco.Range.fromPositions(
+      model.getPositionAt(start),
+      model.getPositionAt(end),
+    );
+  const selection = toRange(focus);
+  // Below the large breakpoint the preview sits under the editor.
+  editor.getDomNode()?.scrollIntoView({ block: 'nearest' });
+  editor.setSelection(selection);
+  editor.revealRangeInCenterIfOutsideViewport(selection);
+  editor.focus();
+  const highlight = editor.createDecorationsCollection([
+    {
+      options: { className: rangeHighlightClass, isWholeLine: true },
+      range: toRange(block),
+    },
+  ]);
+  window.setTimeout(() => highlight.clear(), revealHighlightMs);
 };
 
 const CheckStatusChip = ({
@@ -159,6 +201,11 @@ export const DefinitionWorkspace = ({
     mounted.editor.revealLineInCenter(position.lineNumber);
     mounted.editor.focus();
   };
+
+  const reveal = useMemo<RevealDefinition | undefined>(
+    () => mounted && ((target) => revealDefinitionTarget(mounted, target)),
+    [mounted],
+  );
 
   const insert = (snippet: DefinitionSnippet) => {
     const model = mounted?.editor.getModel();
@@ -287,7 +334,9 @@ export const DefinitionWorkspace = ({
                   {t('definitionEditor.preview.stale')}
                 </Typography>
               )}
-              {preview}
+              <DefinitionRevealContext value={reveal ?? null}>
+                {preview}
+              </DefinitionRevealContext>
             </>
           )}
         </Paper>

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import contract from '../../../../../contracts/view-components.json';
 import type { YamlPath } from '../../components/yamlOutline';
+import { viewsKey } from './constants';
 
 const viewComponentSchema = z.object({
   capabilities: z.array(z.string()),
@@ -15,7 +16,6 @@ export const viewComponents = z
   .object({ components: z.array(viewComponentSchema) })
   .parse(contract).components;
 
-const viewsKey = 'views';
 const rendererKey = 'renderer';
 /** Column renderers are validated as display components of the table. */
 const tablePlacement = 'table';

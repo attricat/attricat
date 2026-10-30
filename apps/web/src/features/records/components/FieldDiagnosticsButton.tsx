@@ -7,8 +7,8 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import { CircleAlertIcon, CopyIcon, InfoIcon } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { CircleAlertIcon, CodeXmlIcon, CopyIcon, InfoIcon } from 'lucide-react';
+import { useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { monoFontFamily } from '../../../app/theme';
 import { compactIconSize, smallIconSize } from '../../../components/iconSizes';
@@ -81,10 +81,13 @@ export const FieldDiagnosticsButton = ({
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   // Set when the popover closes to lead to another field, which keeps focus.
   const [revealing, setRevealing] = useState(false);
+  // Runs once the popover has closed, whose focus trap would take focus back.
+  const afterClose = useRef<() => void>(undefined);
   const copyText = useCopyToClipboard();
   const revealField = useRevealField();
   if (!diagnostics) return null;
   const { contextCode } = diagnostics;
+  const showInDefinition = diagnostics.showInDefinition?.(attribute.code);
   const label = attributeLabel(attribute);
   const connections =
     diagnostics.connections?.filter((connection) =>
@@ -131,6 +134,12 @@ export const FieldDiagnosticsButton = ({
         open={Boolean(anchor)}
         slotProps={{
           paper: { sx: { maxWidth: diagnosticsPopoverMaxWidth, p: 2 } },
+          transition: {
+            onExited: () => {
+              afterClose.current?.();
+              afterClose.current = undefined;
+            },
+          },
         }}
       >
         <Stack spacing={2}>
@@ -155,6 +164,32 @@ export const FieldDiagnosticsButton = ({
                   <CopyIcon size={smallIconSize} />
                 </IconButton>
               </Tooltip>
+              {diagnostics.showInDefinition && (
+                <Tooltip
+                  title={
+                    showInDefinition
+                      ? t('records.fieldDiagnostics.showInDefinition')
+                      : t('records.fieldDiagnostics.notInDefinition')
+                  }
+                >
+                  <span>
+                    <IconButton
+                      aria-label={t(
+                        'records.fieldDiagnostics.showInDefinition',
+                      )}
+                      disabled={!showInDefinition}
+                      onClick={() => {
+                        afterClose.current = showInDefinition;
+                        setRevealing(true);
+                        setAnchor(null);
+                      }}
+                      size="small"
+                    >
+                      <CodeXmlIcon size={smallIconSize} />
+                    </IconButton>
+                  </span>
+                </Tooltip>
+              )}
             </Stack>
           </DiagnosticSection>
           <DiagnosticSection title={t('records.fieldDiagnostics.valueType')}>

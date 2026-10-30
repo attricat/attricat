@@ -57,6 +57,41 @@ test('checks, previews and inserts into a blueprint definition', async ({
   await expect(page).toHaveURL(/\/manage\/blueprints\/[0-9a-f-]{36}$/);
 });
 
+test('leads from the blueprint preview to the definition', async ({ page }) => {
+  await page.goto('/manage/blueprints/new');
+  await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
+  await replaceDefinition(
+    page,
+    `format_version: 1\ncode: shown_${suffix()}\nname: Shown\nkind: record\n\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\n\nattributes:\n  - code: title\n    value_type: string\n  - code: summary\n    value_type: string\n`,
+  );
+  await expect(page.getByText('Ready to save')).toBeVisible();
+
+  await preview(page)
+    .getByRole('button', { name: 'Details of summary' })
+    .click();
+  await page.getByRole('button', { name: 'Show in definition' }).click();
+  await expect(page.locator('.monaco-editor .rangeHighlight')).not.toHaveCount(
+    0,
+  );
+  // The code is selected, so replacing it renames the attribute.
+  await page.keyboard.press('Backspace');
+  await page.keyboard.type('abstract');
+  await expect(page.getByText('Ready to save')).toBeVisible();
+  await expect(fieldByLabel(preview(page), 'abstract')).toBeVisible();
+
+  await preview(page).getByRole('tab', { name: 'dropdown_option' }).click();
+  await preview(page)
+    .getByRole('button', {
+      name: 'Show the dropdown_option view in the definition',
+    })
+    .click();
+  await page.keyboard.press('Backspace');
+  await page.keyboard.type('renamed_view');
+  await expect(preview(page).getByRole('alert')).toContainText(
+    'views.dropdown_option',
+  );
+});
+
 test('checks, previews and inserts into a reusable attribute definition', async ({
   page,
 }) => {
