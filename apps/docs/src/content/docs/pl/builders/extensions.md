@@ -63,7 +63,7 @@ Attricat przechowuje sekrety klienta i tokeny w postaci zaszyfrowanej, sam pobie
 Aby dodać połączenie, wybierz **Dodaj połączenie** i wypełnij:
 
 - **Rodzaj**, spośród rodzajów zadeklarowanych przez rozszerzenie;
-- **Nazwa**, krótki identyfikator, którego [zadania konektorów](/pl/reference/blueprint/#zadania-konektorów) używają w `connection = "…"`, oraz **Nazwa wyświetlana**;
+- **Nazwa**, krótki identyfikator, którego [zadania konektorów](/pl/reference/blueprint/#zadania-konektorów) używają w `connection: …`, oraz **Nazwa wyświetlana**;
 - **Identyfikator klienta** i, jeśli miejsce docelowe tego wymaga, **Sekret klienta**;
 - **Autoryzacja**, czyli przepływ OAuth używany przez miejsce docelowe:
   - **Dane klienta** wymagają sekretu klienta. Połączenie działa od razu.

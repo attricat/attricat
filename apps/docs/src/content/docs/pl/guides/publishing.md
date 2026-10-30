@@ -66,9 +66,9 @@ Usunięcie rekordu cofa wszystkie jego publikacje.
 
 Schemat może wskazać role, których edycje zachowują istniejące publikacje:
 
-```toml
-[publication]
-retain_on_edit_roles = ["admin", "product_owner"]
+```yaml
+publication:
+  retain_on_edit_roles: [admin, product_owner]
 ```
 
 Role muszą istnieć w chwili publikowania wersji schematu. To ustawienie nie pozwala nikomu edytować ani publikować; nadal potrzebne są odpowiednie uprawnienia. Nie dotyczy zmian ani usuwania kontekstu, które zawsze cofają publikację.

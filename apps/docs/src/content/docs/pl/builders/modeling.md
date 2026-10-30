@@ -12,7 +12,7 @@ Większość pytań o modelowanie w Attricat sprowadza się do czterech element�
 | **Relacji** | Powiązania między rekordami | Produkt → kategorie, produkt → marka |
 | **Kontekstu** | Zakresu, w którym wartości się różnią | Rynek, język, kanał sprzedaży, sklep |
 
-`kind = "record"`.
+`kind: record`.
 
 ## Klasyfikacje to rekordy
 
@@ -20,32 +20,32 @@ Tagi, etykiety, kategorie, kolory, materiały i certyfikaty powinny być rekorda
 
 Klasyfikacja zwykle potrzebuje tego, czego łańcuch znaków nie zapewni: stałej tożsamości po zmianie nazwy, przetłumaczonej nazwy, rodzica w hierarchii, opisu, właściciela. Rekord ma to wszystko, a relacja zapisuje, które klasyfikacje mają zastosowanie.
 
-```toml
-format_version = 1
-code = "material"
-name = "Material"
-kind = "record"
+```yaml
+format_version: 1
+code: material
+name: Material
+kind: record
 
-[[attributes]]
-code = "name"
-value_type = "string"
+attributes:
+  - code: name
+    value_type: string
 
-[[attributes]]
-code = "code"
-value_type = "string"
-context_editable = "default"
+  - code: code
+    value_type: string
+    context_editable: default
 
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
 ```
 
-```toml
-# On product
-[[attributes]]
-code = "materials"
-value_type = "relationship"
-target_blueprint = "material"
+```yaml
+attributes:
+  # On product
+  - code: materials
+    value_type: relationship
+    target_blueprint: material
 ```
 
 Kilka wskazówek:
@@ -57,27 +57,27 @@ Kilka wskazówek:
 
 ### Pojedynczy wybór i powiązania wyłączne
 
-`cardinality = "one"` sprawia, że relacja pozwala wybrać tylko jeden cel. Wiele produktów nadal może mieć tę samą markę:
+`cardinality: one` sprawia, że relacja pozwala wybrać tylko jeden cel. Wiele produktów nadal może mieć tę samą markę:
 
-```toml
-[[attributes]]
-code = "brand"
-value_type = "relationship"
-target_blueprint = "brand"
-cardinality = "one"
+```yaml
+attributes:
+  - code: brand
+    value_type: relationship
+    target_blueprint: brand
+    cardinality: one
 ```
 
-Dodaj `target_cardinality = "one"` tylko wtedy, gdy każdy cel może zostać przypisany tylko raz, na przykład produkt i jego unikalny rekord kodu kreskowego.
+Dodaj `target_cardinality: one` tylko wtedy, gdy każdy cel może zostać przypisany tylko raz, na przykład produkt i jego unikalny rekord kodu kreskowego.
 
 ### Powiązania z kilkoma rodzajami rekordów
 
 Relacja może wskazywać dowolny schemat, jeden schemat albo listę schematów. Użyj listy, gdy powiązanie ma jasne znaczenie, ale więcej niż jeden rodzaj celu, np. przedmiot oceny zgodności:
 
-```toml
-[[attributes]]
-code = "subject"
-value_type = "relationship"
-target_blueprints = ["product", "product_revision", "material", "part"]
+```yaml
+attributes:
+  - code: subject
+    value_type: relationship
+    target_blueprints: [product, product_revision, material, part]
 ```
 
 Powiązania z innymi schematami są odrzucane, okno wyboru rekordu pozwala wskazać, który z wymienionych schematów przeszukać, a każdy z nich może pokazać powiązania blokiem `incoming_relationship_list`. Zamiast jednej nieograniczonej relacji wybieraj jedną relację na znaczenie.
@@ -90,17 +90,17 @@ Numery części, dokumentów czy inwentarzowe identyfikują rekord dla ludzi i i
 
 Dodaj do schematu klasyfikacji relację do niego samego:
 
-```toml
-# On category
-[[attributes]]
-code = "parent"
-value_type = "relationship"
-target_blueprint = "category"
-tree = true
-context_editable = "default"
+```yaml
+attributes:
+  # On category
+  - code: parent
+    value_type: relationship
+    target_blueprint: category
+    tree: true
+    context_editable: default
 ```
 
-`tree = true` sprawia, że relacja jest jednokrotnego wyboru, i odrzuca każde powiązanie, które uczyniłoby kategorię własnym przodkiem (`409 relationship_cycle`). Dla struktur, w których rekord może mieć kilka celów, ale nigdy nie może wrócić do siebie, takich jak zależności czy łańcuchy poprzedników, użyj `acyclic = true`. Oba ustawienia wymagają `context_editable = "default"`, więc hierarchia jest taka sama w każdym kontekście. Publikacja któregokolwiek z nich na istniejących danych zgłasza cykle, które już istnieją.
+`tree: true` sprawia, że relacja jest jednokrotnego wyboru, i odrzuca każde powiązanie, które uczyniłoby kategorię własnym przodkiem (`409 relationship_cycle`). Dla struktur, w których rekord może mieć kilka celów, ale nigdy nie może wrócić do siebie, takich jak zależności czy łańcuchy poprzedników, użyj `acyclic: true`. Oba ustawienia wymagają `context_editable: default`, więc hierarchia jest taka sama w każdym kontekście. Publikacja któregokolwiek z nich na istniejących danych zgłasza cykle, które już istnieją.
 
 **Przeglądarka rekordów** wykrywa relacje odwołujące się do własnego schematu i zamienia filtr dla `product.categories` w drzewo z sumowanymi licznikami. Wybranie *Shirts* obejmuje także produkty przypisane do kategorii podrzędnych. Zobacz [Przeglądanie rekordów](/pl/guides/explore/#fasety-relacji).
 
@@ -132,7 +132,7 @@ W tym drzewie opis produktu zapisany w `PL` jest używany przez `PL-web` i `PL-m
 
 - **Konteksty nie są automatycznie językami.** Jeśli drzewo odpowiada lokalizacjom, zapisz to w `data` kontekstu (na przykład `{"language": "pl"}`) i w konwencjach zespołu.
 - **Łącz wymiary ostrożnie.** Jedno drzewo może łączyć rynek i kanał, jak powyżej, ale każda potrzebna kombinacja musi istnieć jako węzeł.
-- **Decyduj dla każdego atrybutu.** `context_fallback = "none"` zatrzymuje dziedziczenie wartości, które nigdy nie mogą trafić do kontekstu potomnego, takich jak promocja w jednym kanale. `context_editable = "default"` blokuje wartości globalne, takie jak SKU.
+- **Decyduj dla każdego atrybutu.** `context_fallback: none` zatrzymuje dziedziczenie wartości, które nigdy nie mogą trafić do kontekstu potomnego, takich jak promocja w jednym kanale. `context_editable: default` blokuje wartości globalne, takie jak SKU.
 - **Tłumacz nazwy klasyfikacji na miejscu.** `name` materiału może mieć nadpisania w kontekstach językowych. Selektory relacji i kolumny tabeli pokazują etykietę rozstrzygniętą w wybranym kontekście.
 - **Relacje też zależą od kontekstu.** Produkt może mieć inny zestaw kategorii na jednym z rynków.
 
@@ -142,15 +142,15 @@ Konteksty pełnią też rolę [kanałów eksportu](/pl/guides/publishing/), gdy 
 
 Definicje atrybutów można współdzielić na dwa sposoby.
 
-**Mixiny** współdzielą atrybuty między schematami. Mixin to schemat z `kind = "mixin"`; inne schematy przypinają przez include jedną konkretną wersję i wybierają jej atrybuty przez `from`. Używaj ich dla grup pól, których wiele schematów potrzebuje w tej samej postaci, np. SEO lub wymiarów. Zobacz [Tworzenie schematu](/pl/builders/blueprints/#krok-9-udostępnij-atrybuty-w-mixinie).
+**Mixiny** współdzielą atrybuty między schematami. Mixin to schemat z `kind: mixin`; inne schematy przypinają przez include jedną konkretną wersję i wybierają jej atrybuty przez `from`. Używaj ich dla grup pól, których wiele schematów potrzebuje w tej samej postaci, np. SEO lub wymiarów. Zobacz [Tworzenie schematu](/pl/builders/blueprints/#krok-9-udostępnij-atrybuty-w-mixinie).
 
-**Atrybuty wielokrotnego użytku** to rejestr pojedynczych definicji atrybutów w obszarze roboczym, zarządzany w **Zarządzanie → Atrybuty wielokrotnego użytku**. Edytorzy mogą dołączyć opublikowany atrybut wielokrotnego użytku lub ich grupę do pojedynczego rekordu. Używaj ich dla okazjonalnych pól, których potrzebują tylko niektóre rekordy i które nie należą do schematu. Definicja jest zapisana w TOML:
+**Atrybuty wielokrotnego użytku** to rejestr pojedynczych definicji atrybutów w obszarze roboczym, zarządzany w **Zarządzanie → Atrybuty wielokrotnego użytku**. Edytorzy mogą dołączyć opublikowany atrybut wielokrotnego użytku lub ich grupę do pojedynczego rekordu. Używaj ich dla okazjonalnych pól, których potrzebują tylko niektóre rekordy i które nie należą do schematu. Definicja jest zapisana w YAML:
 
-```toml
-code = "country_of_origin"
-name = "Country of origin"
-value_type = "string"
-searchable = true
+```yaml
+code: country_of_origin
+name: Country of origin
+value_type: string
+searchable: true
 ```
 
 Przyjmuje te same klucze atrybutów co schemat (`value_type`, `value_schema`, `default_value`, `tags`, `context_fallback`, `context_editable`, `readonly` oraz klucze relacji z `target_blueprint_code`), a także `searchable`, który uwzględnia wartości w wyszukiwaniu i filtrach **Przeglądarki rekordów**, oraz `facetable`, który razem z `searchable` udostępnia atrybut w **Dodaj filtr** w **Przeglądarce rekordów**. Każda zmiana tworzy nową wersję; wersję trzeba opublikować, zanim będzie można ją dołączyć. Przestrzeń nazw pochodzi z obszaru roboczego, więc pełny kod atrybutu wielokrotnego użytku to `<namespace>:<code>`. Edytor oferuje przykłady, gotowe fragmenty, kontrole zapisu podczas pisania i podgląd pola; zobacz [Edytor w aplikacji internetowej](/pl/builders/blueprints/#edytor-w-aplikacji-internetowej).
@@ -161,15 +161,16 @@ Tworzenie i publikowanie atrybutów wielokrotnego użytku wymaga uprawnienia `bl
 
 Zapisuj osobę odpowiedzialną za rekord, na przykład wykonawcę, właściciela czy recenzenta, w **atrybucie użytkownika lub zespołu**, a nie jako dowolny tekst. Dowolny tekst nie sprawdza, czy osoba istnieje i nadal należy do obszaru roboczego, i nie nadaje się do pewnego filtrowania. Atrybut użytkownika lub zespołu to atrybut `string` z adnotacją `x-attricat-principal`, która określa, co przyjmuje:
 
-```toml
-[[attributes]]
-code = "reviewer"
-name = "Recenzent"
-value_type = "string"
-value_schema = '''{
-  "type": "string",
-  "x-attricat-principal": { "version": 1, "kinds": ["user", "team"] }
-}'''
+```yaml
+attributes:
+  - code: reviewer
+    name: Recenzent
+    value_type: string
+    value_schema: |-
+      {
+        "type": "string",
+        "x-attricat-principal": { "version": 1, "kinds": ["user", "team"] }
+      }
 ```
 
 - Pole oferuje listę aktywnych członków obszaru roboczego i zespołów, a rekord wyświetla wybraną nazwę. Użyj `"kinds": ["user"]`, gdy odpowiedzialność musi należeć do jednej osoby.

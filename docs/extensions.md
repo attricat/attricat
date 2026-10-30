@@ -573,34 +573,48 @@ workspace-scoped run and artifact endpoints.
 
 ### Blueprint connector jobs
 
-Blueprint connector jobs are declared **in the record blueprint TOML**, not
+Blueprint connector jobs are declared **in the record blueprint YAML**, not
 configured through a separate write API. For example (alongside the regular
 `format_version`, `code`, `name`, `kind`, views and attributes):
 
-```toml
-[[connector_jobs]]
-code = "csv_export"
-direction = "export"
-extension_id = "attricat-connector-csv"
-operation_id = "export"
-interval_seconds = 3600
-input = { profile = { version = 1, blueprint_id = "00000000-0000-4000-8000-000000000001", blueprint_version = 1, context_id = "00000000-0000-4000-8000-000000000001", columns = [{ header = "ID", attribute = "external_id", kind = "string" }] } }
+```yaml
+connector_jobs:
+  - code: csv_export
+    direction: export
+    extension_id: attricat-connector-csv
+    operation_id: export
+    interval_seconds: 3600
+    input:
+      profile:
+        version: 1
+        blueprint_id: '00000000-0000-4000-8000-000000000001'
+        blueprint_version: 1
+        context_id: '00000000-0000-4000-8000-000000000001'
+        columns:
+          - {header: ID, attribute: external_id, kind: string}
 
-[[connector_jobs]]
-code = "csv_import"
-direction = "import"
-extension_id = "attricat-connector-csv"
-operation_id = "import"
-context = "en_GB" # workspace context code
-input_file_id = "<ready workspace file UUID>" # optional if using HTTPS transfer
-input = { profile = { version = 1, blueprint_id = "00000000-0000-4000-8000-000000000001", blueprint_version = 1, context_id = "00000000-0000-4000-8000-000000000001", business_key = "external_id", columns = [{ header = "ID", attribute = "external_id", kind = "string" }] } }
+  - code: csv_import
+    direction: import
+    extension_id: attricat-connector-csv
+    operation_id: import
+    context: en_GB  # workspace context code
+    input_file_id: '<ready workspace file UUID>'  # optional if using HTTPS transfer
+    input:
+      profile:
+        version: 1
+        blueprint_id: '00000000-0000-4000-8000-000000000001'
+        blueprint_version: 1
+        context_id: '00000000-0000-4000-8000-000000000001'
+        business_key: external_id
+        columns:
+          - {header: ID, attribute: external_id, kind: string}
 ```
 
 Connector jobs are validated against the enabled extension, its declared
 operation/schema, input file and import context **at blueprint publication**.
 An invalid connector rejects publication atomically. Publishing a new revision
 reconciles jobs by stable `code`; removed jobs become disabled while their run
-history remains available. Set `enabled = false` in the TOML to pause a job.
+history remains available. Set `enabled: false` in the YAML to pause a job.
 For the packaged CSV connector, supply its `profile` and columns in `input`;
 Attricat overwrites the profile's blueprint ID, version and context on each
 run. Export declarations have no channel field: they cover all enabled
@@ -1390,15 +1404,17 @@ job runs once per enabled channel; because export mappings hold one status
 per record and connection, a job of an extension with `exports.mappings` is
 refused when several channels are enabled and it names none.
 
-```toml
-[[connector_jobs]]
-code = "shopify"
-direction = "export"
-extension_id = "acme.shopify"
-operation_id = "export"
-connection = "shop-eu"
-trigger = {events = ["record.updated.v1", "attribute_value.changed.v1"], debounce_seconds = 30}
-input = {}
+```yaml
+connector_jobs:
+  - code: shopify
+    direction: export
+    extension_id: acme.shopify
+    operation_id: export
+    connection: shop-eu
+    trigger:
+      events: [record.updated.v1, attribute_value.changed.v1]
+      debounce_seconds: 30
+    input: {}
 ```
 
 A trigger starts a run once the newest matching event of the blueprint's
@@ -1873,7 +1889,7 @@ With this worktree's local stack running, upload the resulting
 Upload archive**. Grant every requested permission and enable the extension.
 Each side-loaded replacement is a new release and must be granted and enabled
 again. Exercise an extension UI contribution and a server event (for example,
-update a formula dependency in the example's blueprint TOML) to verify both the
+update a formula dependency in the example's blueprint YAML) to verify both the
 browser and WASM runtime paths. Use this workflow when changing extension
 installation, permissions, artifact storage, runtime, or event dispatch; unit
 tests alone do not prove host integration.

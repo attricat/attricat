@@ -11,78 +11,74 @@ You need a workspace where you are an owner or admin. To try Attricat on your ow
 
 Open **Manage → Blueprints → New blueprint** and paste:
 
-```toml
-format_version = 1
-code = "category"
-name = "Category"
-kind = "record"
+```yaml
+format_version: 1
+code: category
+name: Category
+kind: record
 
-[[attributes]]
-code = "name"
-value_type = "string"
+attributes:
+  - code: name
+    value_type: string
 
-[[attributes]]
-code = "parent"
-value_type = "relationship"
-target_blueprint = "category"
-cardinality = "one"
+  - code: parent
+    value_type: relationship
+    target_blueprint: category
+    cardinality: one
 
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
 ```
 
 Save it, then **Publish** revision 1.
 
-`parent` points at another category, so categories can form a tree. `kind = "record"` makes this a record blueprint.
+`parent` points at another category, so categories can form a tree. `kind: record` makes this a record blueprint.
 
 ## 2. Create a product blueprint
 
 Create a second blueprint:
 
-```toml
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-record_schema = '{"type":"object","required":["sku","title"]}'
+```yaml
+format_version: 1
+code: product
+name: Product
+kind: record
+record_schema: '{"type":"object","required":["sku","title"]}'
 
-[[attributes]]
-code = "sku"
-value_type = "string"
-context_editable = "default"
+attributes:
+  - code: sku
+    value_type: string
+    context_editable: default
 
-[[attributes]]
-code = "title"
-value_type = "string"
+  - code: title
+    value_type: string
 
-[[attributes]]
-code = "price"
-value_type = "number"
-value_schema = '{"type":"number","minimum":0}'
+  - code: price
+    value_type: number
+    value_schema: '{"type":"number","minimum":0}'
 
-[[attributes]]
-code = "categories"
-value_type = "relationship"
-target_blueprint = "category"
+  - code: categories
+    value_type: relationship
+    target_blueprint: category
 
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title", "sku"]
-separator = " / "
-
-[views.table]
-type = "table"
-columns = [
-  { field = "sku", label = "SKU" },
-  { field = "title" },
-  { field = "price" },
-]
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title, sku]
+    separator: ' / '
+  table:
+    type: table
+    columns:
+      - {field: sku, label: SKU}
+      - {field: title}
+      - {field: price}
 ```
 
 Publish it.
 
-`record_schema` holds the record schema. It sits above the first `[[attributes]]` on purpose. In TOML, every key after a `[table]` header belongs to that table, so a top-level key placed further down would become part of the last attribute.
+`record_schema` holds the record schema. It is a top-level key, so it sits at the same indentation as `attributes`, not under an attribute. A key indented under the last attribute would become part of that attribute.
 
 ## 3. Add categories
 

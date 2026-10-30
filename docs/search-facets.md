@@ -22,7 +22,7 @@ children endpoint below, and loads a node's children when it is expanded.
    `model.brand`, labelled by their hops ("Model → Brand"), built by
    `useBrowseBy` from the target blueprints. A path follows up to three
    relationships that each have a single target blueprint and
-   `cardinality = "one"`, are not hidden from Explorer, and never return to a
+   `cardinality: one`, are not hidden from Explorer, and never return to a
    blueprint the path has passed. At most 15 paths are offered, shortest
    first, plus the URL, stored and blueprint-default choices when they are
    paths beyond that. A path is a tree when its last target has a hierarchy.
@@ -31,7 +31,7 @@ children endpoint below, and loads a node's children when it is expanded.
    `views.explorer.browse_by`, then the own tree, then the first direct tree
    field (a path opens the rail only when one of the earlier sources names
    it). `browseBy: false`
-   in the URL or storage, or `browse_by = false` in the blueprint, hides the
+   in the URL or storage, or `browse_by: false` in the blueprint, hides the
    rail. A field the current revision no longer has falls through to the
    next source.
 3. Choosing a node writes a `relationshipFacets` entry with one selected ID.
@@ -55,25 +55,25 @@ that targets the same blueprint. Without one, the facet is a one-level picker.
 A source may also be a relationship path of up to three hops, such as
 `model.brand` on a vehicle whose `model` targets `model` and whose model's
 `brand` targets `brand`. Every hop must be a relationship with a single target
-blueprint and `cardinality = "one"`, the rule for sortable relationship table
+blueprint and `cardinality: one`, the rule for sortable relationship table
 paths, so each source reaches at most one node. Hops after the first are read
 from the latest published revision of the previous hop's target. The last
 hop's target holds the facet's nodes and supplies the hierarchy field.
 
-```toml
-# Product
-[[attributes]]
-code = "categories"
-value_type = "relationship"
-target_blueprint = "category"
+```yaml
+attributes:
+  # Product
+  - code: categories
+    value_type: relationship
+    target_blueprint: category
 ```
 
-```toml
-# Category
-[[attributes]]
-code = "parent"
-value_type = "relationship"
-target_blueprint = "category"
+```yaml
+attributes:
+  # Category
+  - code: parent
+    value_type: relationship
+    target_blueprint: category
 ```
 
 The API validates these conditions for every facet request. A target blueprint
@@ -87,7 +87,7 @@ chain, respecting each attribute's `context_fallback` policy. This ensures the
 displayed tree and the filter use the same effective relationships. On a path,
 every hop resolves this way on its own: a vehicle's model and that model's
 brand may each come from a different context on the chain, and a hop with
-`context_fallback = "none"` reads only the selected context.
+`context_fallback: none` reads only the selected context.
 
 The facet's context is chosen separately from the search's `context_code`,
 which resolves the result table, filters, and sorting (see
@@ -146,7 +146,7 @@ Add `relationship_tree_facets` to `POST /v1/records/search`:
 `relationship_filters` and table columns: `"model.brand"` lists brands and
 counts the vehicles that reach each one through their model. A path with more
 than three hops, a hop that is not a relationship with a single target, or a
-hop of a multi-hop path without `cardinality = "one"` is rejected with
+hop of a multi-hop path without `cardinality: one` is rejected with
 `422 invalid_input`. Single-field requests are unchanged.
 
 Omit `source_relationship_field` to facet the searched blueprint by its own

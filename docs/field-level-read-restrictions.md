@@ -122,7 +122,7 @@ remain:
 
 ### Model
 
-- An attribute declares `restricted = true` (inline blueprint attributes and
+- An attribute declares `restricted: true` (inline blueprint attributes and
   reusable attribute revisions). It is part of the definition, so changing it
   needs a new revision, and the revision diff shows it.
 - A new system permission, `records.read_restricted`, grants reading

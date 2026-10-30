@@ -228,9 +228,9 @@ export default defineConfig({
               translations: polish('Konfiguracja'),
             },
             {
-              label: 'Blueprint TOML',
+              label: 'Blueprint YAML',
               slug: 'reference/blueprint',
-              translations: polish('Składnia TOML schematu'),
+              translations: polish('Składnia YAML schematu'),
             },
             {
               label: 'Permissions',

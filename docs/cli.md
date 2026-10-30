@@ -61,10 +61,10 @@ acli data-health refresh
 
 acli blueprint list [--include-drafts]
 acli blueprint catalogue
-acli blueprint create --file product.toml
+acli blueprint create --file product.yaml
 acli blueprint create --stdin
-acli blueprint validate --file product.toml [--blueprint-id <blueprint-id>]
-acli blueprint create-version <blueprint-id> --file product-v2.toml
+acli blueprint validate --file product.yaml [--blueprint-id <blueprint-id>]
+acli blueprint create-version <blueprint-id> --file product-v2.yaml
 acli blueprint list-versions <blueprint-id>
 acli blueprint publish <blueprint-id> <version>
 acli blueprint publish-records <blueprint-id> <version> --context-id <context-id>
@@ -81,9 +81,9 @@ acli blueprint resolve <code> --version <version>
 
 acli reusable-attribute list [--include-drafts]
 acli reusable-attribute filter-fields --blueprint <code>
-acli reusable-attribute create --file gtin.toml
-acli reusable-attribute validate [--definition-id <definition-id>] --file gtin.toml
-acli reusable-attribute create-version <definition-id> --file gtin-v2.toml
+acli reusable-attribute create --file gtin.yaml
+acli reusable-attribute validate [--definition-id <definition-id>] --file gtin.yaml
+acli reusable-attribute create-version <definition-id> --file gtin-v2.yaml
 acli reusable-attribute publish <revision-id>
 acli reusable-attribute apply <record-id> --revision-id <revision-id>
 acli reusable-attribute group list
@@ -91,13 +91,13 @@ acli reusable-attribute group create --code <code> --name <name> [--position <n>
 acli reusable-attribute group apply <record-id> <group-id>
 
 acli context list
-acli context create --file locale.toml
+acli context create --file locale.yaml
 acli context create --code en_GB --data '{"language":"en-GB"}' [--parent-id <context-id>]
 acli context get en_GB
 acli context update <context-id> --parent-id <context-id> --data '{"language":"en-GB"}'
 acli context delete <context-id>
 
-acli record create --blueprint product [--values values.toml] [--files <json-or-file>] [--version <version>] [--context-id <context-id>] [--system-tags <json>] [--system-metadata <json>]
+acli record create --blueprint product [--values values.yaml] [--files <json-or-file>] [--version <version>] [--context-id <context-id>] [--system-tags <json>] [--system-metadata <json>]
 acli record get|delete|form|duplicate|export-status <record-id>
 acli record labels --record-id <record-id> [--record-id <record-id> ...]
 acli record batch --operations <json-or-file>
@@ -109,7 +109,7 @@ acli record incoming-relationships <record-id> --relationships <json-or-file> [-
 acli record system-tags --blueprint <code> [--version <version>] [--prefix <text>] [--limit <n>]
 acli record facet-children --blueprint <code> [--source-relationship-field <field>] --context-id <context-id> [--version <version>] [--query <text>] [--hierarchy-field <field>] [--parent-id <record-id>] [--cursor <record-id>] [--selected-target-ids <json-or-file>] [--include-ids <json-or-file>]
 acli record search --blueprint <code> [--version <version>] [--query <text>] [--size <size>] [--cursor <cursor>] [--system-tags <json>] [--filters <json-or-file>] [--outdated] [--include-total] [--relationship-tree-facets <json-or-file>] [--relationship-filters <json-or-file>] [--export-extension-id <id> [--export-connection <connection>] --export-status pending|retrying|uncertain|rejected|synced|withdrawn] [--data-quality open|acknowledged|clean] [--context-code <code>] [--omit-blueprint] [--omit-previews] [--sort-field <field> [--sort-direction asc|desc] [--sort-context-code <code>]]
-acli record update <record-id> [--values values.toml] [--relationships relationships.toml] [--remove-values removals.toml] [--context-id <context-id>] [--system-tags <json>] [--system-metadata <json>] [--expected-updated-at <rfc3339>]
+acli record update <record-id> [--values values.yaml] [--relationships relationships.yaml] [--remove-values removals.yaml] [--context-id <context-id>] [--system-tags <json>] [--system-metadata <json>] [--expected-updated-at <rfc3339>]
 acli record changes|value-history <record-id> [--limit <n>] [--offset <n>]
 acli record restore-value <record-id> <history-id> [--expected-updated-at <rfc3339>]
 acli record transitions <record-id> [--context-id <context-id>]
@@ -131,18 +131,18 @@ acli record publication status --record-id <record-id> [--record-id <record-id> 
 acli record migrate <record-id> [--values <json-or-file>] [--relationships <json-or-file>] [--discard-attributes <json-or-file>] [--expected-updated-at <rfc3339>]
 acli record migrate-bulk --blueprint <code> --from-version <version> [--size <size>] [--dry-run]
 
-acli value append <record-id> --file values.toml --context-id <context-id> [--expected-updated-at <rfc3339>]
+acli value append <record-id> --file values.yaml --context-id <context-id> [--expected-updated-at <rfc3339>]
 acli value current <record-id>
-acli value replace-relationships <record-id> --file relationships.toml --context-id <context-id>
-acli value remove-relationships <record-id> --file relationships.toml --context-id <context-id>
+acli value replace-relationships <record-id> --file relationships.yaml --context-id <context-id>
+acli value remove-relationships <record-id> --file relationships.yaml --context-id <context-id>
 
-acli workflow validate|create --file workflow.toml
+acli workflow validate|create --file workflow.yaml
 acli workflow validate|create --stdin
 acli workflow list
 acli workflow get <workflow-id>
 acli workflow list-versions <workflow-id>
 acli workflow get-version <workflow-id> <version>
-acli workflow create-version <workflow-id> --file workflow-v2.toml
+acli workflow create-version <workflow-id> --file workflow-v2.yaml
 acli workflow publish|enable <workflow-id> <version>
 acli workflow disable <workflow-id>
 acli workflow run-now <workflow-id> --record-id <record-id> --idempotency-key <key>
@@ -154,12 +154,12 @@ acli rule list [--blueprint-id <uuid>]
 acli rule get <rule-id>
 acli rule revisions <rule-id>
 acli rule revision <rule-id> <version>
-acli rule validate|create --blueprint-id <uuid> [--context-id <uuid>] --file rule.toml
+acli rule validate|create --blueprint-id <uuid> [--context-id <uuid>] --file rule.yaml
 acli rule validate|create --blueprint-id <uuid> [--context-id <uuid>] --stdin
-acli rule update <rule-id> [--accept-existing-violations] --file rule-v2.toml
+acli rule update <rule-id> [--accept-existing-violations] --file rule-v2.yaml
 acli rule enable <rule-id> [--accept-existing-violations]
 acli rule disable <rule-id>
-acli rule run-now <rule-id> --idempotency-key <key> [--record-id <uuid>] [--dry-run [--definition-file rule-v2.toml | --definition-stdin]]
+acli rule run-now <rule-id> --idempotency-key <key> [--record-id <uuid>] [--dry-run [--definition-file rule-v2.yaml | --definition-stdin]]
 acli rule run-list [--rule-id <uuid>] [--record-id <uuid>] [--scope all-records|record] [--limit <n>] [--offset <n>]
 acli rule run-get <run-id>
 acli rule run-replay <run-id>
@@ -381,7 +381,7 @@ acli lexicon report [--language pl --language de]
 language uses. `export` prints an import file (`format_version`, `language`,
 and `entries` with `key`, optional `context`, optional `plural_category`, and
 `text`; see `contracts/lexicon-v1.schema.json`). `import` accepts the same
-format as JSON, or as TOML when the file ends in `.toml`. It upserts entries
+format as JSON, or as YAML when the file ends in `.yaml` or `.yml`. It upserts entries
 and reports `created`, `updated`, `unchanged`, and `deleted` counts;
 `--replace` also deletes the language's entries missing from the file.
 `report` defaults to `en` plus every language with entries. Reads need
@@ -410,7 +410,7 @@ non-array JSON locally. This keeps complex request bodies out of shell quoting.
 `workflow validate`, `workflow create`, `workflow revision`, and rule
 `validate`/`create`/`update` use the same exclusive `--file`/`--stdin`
 source contract as blueprint commands: the source is sent unchanged as the
-API's TOML `definition`. Rule validation and creation additionally require the
+API's YAML `definition`. Rule validation and creation additionally require the
 blueprint ID; `--context-id` is optional. A rule applies to every revision of
 its blueprint that it fits, and `rule update` saves a new current revision.
 
@@ -596,7 +596,7 @@ records to a version. When `blueprint migration-impact` reports
 values; pass `--archive-removed-values` to archive them, or the batch is
 refused.
 
-Blueprint files are sent unchanged as the API's TOML `definition`, preserving
+Blueprint files are sent unchanged as the API's YAML `definition`, preserving
 the raw-source hash. See [Blueprint Authoring](blueprints.md) for the grammar.
 
 Blueprint creation and revision commands create drafts. Publish a revision
@@ -614,47 +614,49 @@ Default blueprint listing and resolution return only published revisions. Use
 
 Context file:
 
-```toml
-code = "en-GB"
-# Omit parent_id to use the default root context.
-parent_id = "00000000-0000-4000-8000-000000000001"
+```yaml
+code: en-GB
 
-[data]
-language = "en-GB"
+# Omit parent_id to use the default root context.
+parent_id: '00000000-0000-4000-8000-000000000001'
+
+data:
+  language: en-GB
 ```
 
 Value file:
 
-```toml
-[[values]]
-kind = "scalar"
-attribute_code = "title"
-value = "Blue shirt"
+```yaml
+values:
+  - kind: scalar
+    attribute_code: title
+    value: Blue shirt
 
-[[values]]
-kind = "relationship"
-attribute_code = "related_products"
-target_record_id = "00000000-0000-0000-0000-000000000004"
+  - kind: relationship
+    attribute_code: related_products
+    target_record_id: '00000000-0000-0000-0000-000000000004'
 ```
 
-Scalar payloads must match the blueprint attribute type. TOML maps naturally to
-the API's typed JSON values: quoted text for `string`, decimals for `number`,
-integers for `integer`, booleans for `boolean`, TOML dates and RFC 3339
-timestamps for `date` and `datetime`. A `time` value requires a wall-clock time
+Scalar payloads must match the blueprint attribute type. YAML maps naturally to
+the API's typed JSON values: text for `string`, decimals for `number`,
+integers for `integer`, `true`/`false` for `boolean`, dates such as
+`2026-03-01` and RFC 3339 timestamps for `date` and `datetime`. Quote text
+that YAML would read as another type, such as `'09:30:00'`, `'yes'`, or a
+UUID that starts with digits. A `time` value requires a wall-clock time
 and IANA timezone:
 
-```toml
-[[values]]
-kind = "scalar"
-attribute_code = "order_cutoff"
-value = { time = "09:30:00", time_zone = "America/New_York" }
+```yaml
+values:
+  - kind: scalar
+    attribute_code: order_cutoff
+    value: {time: '09:30:00', time_zone: America/New_York}
 ```
 
 Each value must provide exactly one of `attribute_code` or `attribute_id`. Codes
 are resolved against the source record's pinned blueprint version.
 
 Every value and relationship needs a context. Supply `--context-id` to use it
-for all entries in a file, or set `context_id` on an individual TOML entry. Use
+for all entries in a file, or set `context_id` on an individual entry. Use
 `acli context list` or `acli context get default` to obtain IDs. The
 persisted `default` root is `00000000-0000-4000-8000-000000000001`. Context
 creation uses that root when `--parent-id` (or `parent_id` in a context file) is
@@ -664,17 +666,17 @@ Relationship replacement and removal files use this shape. `replace` makes the
 listed targets the complete current set for each attribute; `remove` unlinks only
 listed currently linked targets.
 
-```toml
-[[relationships]]
-attribute_code = "categories"
-target_record_ids = ["00000000-0000-0000-0000-000000000004"]
+```yaml
+relationships:
+  - attribute_code: categories
+    target_record_ids: ['00000000-0000-0000-0000-000000000004']
 ```
 
 Scalar removals used by `record update --remove-values` use:
 
-```toml
-[[remove_values]]
-attribute_code = "subtitle"
+```yaml
+remove_values:
+  - attribute_code: subtitle
 ```
 
 ## Manual Test Data

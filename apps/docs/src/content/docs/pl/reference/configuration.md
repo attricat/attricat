@@ -189,7 +189,7 @@ Pliki o rozmiarze co najmniej 8 MiB są przesyłane wieloczęściowo. Takie prze
 | Zmienna | Domyślnie | Używa | Opis |
 | --- | --- | --- | --- |
 | `FILE_UPLOAD_MAX_BYTES` | `52428800` (50 MiB) | API | Największy pojedynczy przesyłany plik. Klucz `max_bytes` atrybutu plikowego może ustawić niższy limit. |
-| `FILE_UPLOAD_MAX_FILES` | `10` | API | Maksymalna liczba plików w jednym żądaniu przesyłania. Atrybut z `cardinality = "one"` przyjmuje dokładnie jeden. |
+| `FILE_UPLOAD_MAX_FILES` | `10` | API | Maksymalna liczba plików w jednym żądaniu przesyłania. Atrybut z `cardinality: one` przyjmuje dokładnie jeden. |
 | `FILE_WORKER_ID` | Losowy dla każdego procesu | Proces roboczy plików | Stały identyfikator zapisywany w zadaniach przejmowanych przez ten proces roboczy. |
 | `FILE_WORKER_POLL_MILLISECONDS` | `500` | Proces roboczy plików | Opóźnienie między odpytaniami o zadania. |
 | `FILE_WORKER_OPERATIONS_BIND_ADDR` | `127.0.0.1:3001` | Proces roboczy plików | Prywatny nasłuch dla `/health/live`, `/health/ready` i `/metrics`. Poza interfejsem loopback `/metrics` wymaga [sekretu](#sekrety) `file_worker_metrics_token`. |

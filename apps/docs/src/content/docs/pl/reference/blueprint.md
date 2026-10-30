@@ -1,5 +1,5 @@
 ---
-title: Dokumentacja TOML schematu
+title: Dokumentacja YAML schematu
 description: Wszystkie klucze akceptowane w definicji schematu, z typami, wartościami domyślnymi i regułami walidacji.
 ---
 
@@ -7,9 +7,13 @@ Ta strona wymienia wszystkie klucze akceptowane przez kompilator schematów. Prz
 
 Kompilator jest rygorystyczny. Nieznany klucz, wartość złego typu lub odwołanie do czegoś, co nie istnieje, powoduje odrzucenie całej definicji z `422 invalid_blueprint_definition` i komunikatem wskazującym problem.
 
+## Składnia YAML
+
+W YAML liczą się wcięcia: wcinaj spacjami, nigdy tabulatorami, a elementy jednej listy trzymaj na tej samej głębokości. Ujmij w cudzysłów ciąg znaków, który zawiera `: ` lub ` #` albo zaczyna się od `{`, `[`, `*`, `&`, `!`, `|`, `>`, `'`, `"`, `%` lub `@`. Dotyczy to każdej etykiety zaczynającej się od odwołania do leksykonu: pisz `name: '{{Product}}'`, a nie `name: {{Product}}`. Wartościami logicznymi są tylko `true` i `false`; `yes`, `no`, `on` i `off` to ciągi znaków.
+
 ## Kody
 
-Kody schematów, kody atrybutów, aliasy include, cele relacji, kody reguł, kody zadań konektorów i kody ról w `[publication]` muszą być **kodami**: niepustymi ciągami złożonymi z liter ASCII, cyfr, `-` i `_`. `product`, `seo-fields` i `stock_on_hand` są prawidłowe. `product type` i `prodükt` nie są.
+Kody schematów, kody atrybutów, aliasy include, cele relacji, kody reguł, kody zadań konektorów i kody ról w `publication` muszą być **kodami**: niepustymi ciągami złożonymi z liter ASCII, cyfr, `-` i `_`. `product`, `seo-fields` i `stock_on_hand` są prawidłowe. `product type` i `prodükt` nie są.
 
 ## Tłumaczone etykiety
 
@@ -17,15 +21,15 @@ Pola `name` i `description` schematu, `name` i `description` atrybutu, `label` k
 
 ## Poziom główny
 
-```toml
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-record_schema = '''{ "type": "object", "required": ["title"] }'''
+```yaml
+format_version: 1
+code: product
+name: Product
+kind: record
+record_schema: '{ "type": "object", "required": ["title"] }'
 ```
 
-Schematy rekordów mają `kind = "record"`.
+Schematy rekordów mają `kind: record`.
 
 | Klucz | Typ | Wymagany | Opis |
 | --- | --- | --- | --- |
@@ -33,25 +37,25 @@ Schematy rekordów mają `kind = "record"`.
 | `code` | kod | Tak | Identyfikator rodziny schematów. Nie może się zmieniać między wersjami. |
 | `name` | ciąg znaków | Tak | Nazwa wyświetlana. Może się zmieniać między wersjami. |
 | `description` | ciąg znaków | Nie | Czym są rekordy schematu, do 500 znaków, np. „Grupy produktów, np. Narzędzia podstawowe”. Agent czyta go, by dopasować słowa użytkowników do rekordów; aplikacja webowa jeszcze go nie wyświetla. |
-| `kind` | `"record"` lub `"mixin"` | Tak | Schemat `record` może mieć rekordy. Mixin jedynie dostarcza atrybuty innym schematom przez `[[includes]]`. |
-| `attributes` | tablica tabel | Tak | Co najmniej jeden atrybut. Zobacz [Atrybuty](#atrybuty). |
-| `includes` | tablica tabel | Nie | Mixiny, z których ten schemat pobiera atrybuty. Zobacz [Include](#include). |
-| `views` | tabela | Dla `record`: tak | Układy dla aplikacji webowej. Schematy rekordów muszą definiować `views.dropdown_option`. Zobacz [Widoki](#widoki). |
+| `kind` | `"record"` lub `"mixin"` | Tak | Schemat `record` może mieć rekordy. Mixin jedynie dostarcza atrybuty innym schematom przez `includes`. |
+| `attributes` | lista mapowań | Tak | Co najmniej jeden atrybut. Zobacz [Atrybuty](#atrybuty). |
+| `includes` | lista mapowań | Nie | Mixiny, z których ten schemat pobiera atrybuty. Zobacz [Include](#include). |
+| `views` | mapowanie | Dla `record`: tak | Układy dla aplikacji webowej. Schematy rekordów muszą definiować `views.dropdown_option`. Zobacz [Widoki](#widoki). |
 | `record_schema` | ciąg znaków (JSON) | Nie | JSON Schema dla całego rekordu, opcjonalnie z [`x-attricat-checks`](#kontrole-rekordów). Tylko schematy rekordów. Zobacz [Walidacja](/pl/builders/validation/). |
-| `publication` | tabela | Nie | Zasady ponownego zatwierdzania publikacji. Zobacz [Publikacja](#publikacja). |
-| `rules` | tablica tabel | Nie | Reguły jakości danych należące do tego schematu. Zobacz [Reguły](/pl/builders/rules/). |
-| `unique_keys` | tablica tabel | Nie | Klucze biznesowe, których wartości muszą być unikalne. Tylko schematy rekordów. Zobacz [Klucze unikalne](#klucze-unikalne). |
-| `connector_jobs` | tablica tabel | Nie | Zaplanowane lub ręczne zadania importu i eksportu wykonywane przez rozszerzenie konektora. Tylko schematy rekordów. Zobacz [Zadania konektorów](#zadania-konektorów). |
-| `extensions` | tabela | Nie | Dowolne dane dla rozszerzeń, w przestrzeniach nazw `[extensions.<extension-id>]`. Kompilator rdzenia je ignoruje; rozszerzenia odczytują je z zapisanej definicji. |
+| `publication` | mapowanie | Nie | Zasady ponownego zatwierdzania publikacji. Zobacz [Publikacja](#publikacja). |
+| `rules` | lista mapowań | Nie | Reguły jakości danych należące do tego schematu. Zobacz [Reguły](/pl/builders/rules/). |
+| `unique_keys` | lista mapowań | Nie | Klucze biznesowe, których wartości muszą być unikalne. Tylko schematy rekordów. Zobacz [Klucze unikalne](#klucze-unikalne). |
+| `connector_jobs` | lista mapowań | Nie | Zaplanowane lub ręczne zadania importu i eksportu wykonywane przez rozszerzenie konektora. Tylko schematy rekordów. Zobacz [Zadania konektorów](#zadania-konektorów). |
+| `extensions` | mapowanie | Nie | Dowolne dane dla rozszerzeń, w przestrzeniach nazw `extensions.<extension-id>`. Kompilator rdzenia je ignoruje; rozszerzenia odczytują je z zapisanej definicji. |
 
 ## Atrybuty
 
-Każda tabela `[[attributes]]` deklaruje dokładnie jeden z kluczy `value_type`, `from` lub `extension_type`.
+Każdy wpis w `attributes` deklaruje dokładnie jeden z kluczy `value_type`, `from` lub `extension_type`.
 
-```toml
-[[attributes]]
-code = "title"
-value_type = "string"
+```yaml
+attributes:
+  - code: title
+    value_type: string
 ```
 
 ### Klucze wspólne
@@ -70,19 +74,19 @@ value_type = "string"
 | `tags` | tablica ciągów znaków | `[]` | Dowolne metadane. Muszą być unikalne i niepuste. Niektóre tagi ukrywają atrybut w aplikacji webowej; zobacz [Tagi widoczności](#tagi-widoczności). |
 | `default_value` | zgodny z typem | Nieustawiony | Wartość zapisywana w kontekście domyślnym, gdy rekord zostaje utworzony bez niej. Tylko typy skalarne. |
 | `value_schema` | ciąg znaków (JSON) | Nieustawiony | JSON Schema dla jednej wartości. Tylko typy skalarne. Schemat atrybutu `string` może uczynić go [statusem](#statusy) lub [przypisaniem użytkownika lub zespołu](#przypisania-użytkowników-i-zespołów). Zobacz [Walidacja](/pl/builders/validation/). |
-| `generated` | tabela | Nieustawiony | Serwer numeruje nowe rekordy, np. numerami faktur lub zamówień. Tylko atrybuty `string` i `integer` w schematach rekordów. Zobacz [Wartości generowane](#wartości-generowane). |
+| `generated` | mapowanie | Nieustawiony | Serwer numeruje nowe rekordy, np. numerami faktur lub zamówień. Tylko atrybuty `string` i `integer` w schematach rekordów. Zobacz [Wartości generowane](#wartości-generowane). |
 
 ### Typy wartości
 
-| `value_type` | Przechowywana wartość | Przykład CLI/TOML | Uwagi |
+| `value_type` | Przechowywana wartość | Przykład CLI/YAML | Uwagi |
 | --- | --- | --- | --- |
-| `string` | Tekst | `value = "Blue shirt"` | Wyczyszczenie ciągu znaków w kontekście innym niż domyślny usuwa nadpisanie zamiast zapisywać `""`. Może też być [statusem](#statusy) lub [przypisaniem użytkownika lub zespołu](#przypisania-użytkowników-i-zespołów). |
-| `number` | Liczba dziesiętna | `value = 19.99` | |
-| `integer` | 64-bitowa liczba całkowita | `value = 12` | |
-| `boolean` | `true` lub `false` | `value = true` | |
-| `date` | Data kalendarzowa | `value = 2026-03-01` | |
-| `datetime` | Znacznik czasu z przesunięciem | `value = 2026-03-01T09:30:00Z` | RFC 3339. |
-| `time` | Godzina zegarowa i strefa czasowa IANA | `value = { time = "09:30:00", time_zone = "Europe/Warsaw" }` | Obie części są wymagane. |
+| `string` | Tekst | `value: Blue shirt` | Wyczyszczenie ciągu znaków w kontekście innym niż domyślny usuwa nadpisanie zamiast zapisywać `""`. Może też być [statusem](#statusy) lub [przypisaniem użytkownika lub zespołu](#przypisania-użytkowników-i-zespołów). |
+| `number` | Liczba dziesiętna | `value: 19.99` | |
+| `integer` | 64-bitowa liczba całkowita | `value: 12` | |
+| `boolean` | `true` lub `false` | `value: true` | |
+| `date` | Data kalendarzowa | `value: 2026-03-01` | |
+| `datetime` | Znacznik czasu z przesunięciem | `value: 2026-03-01T09:30:00Z` | RFC 3339. |
+| `time` | Godzina zegarowa i strefa czasowa IANA | `value: {time: '09:30:00', time_zone: Europe/Warsaw}` | Obie części są wymagane. |
 | `json` | Dowolna wartość JSON | | Nie można według niej sortować ani używać jej w filtrach przeglądarki rekordów. Preferuj atrybuty typowane lub relacje. |
 | `relationship` | Powiązania z innymi rekordami | | Zobacz [Klucze relacji](#klucze-relacji). |
 | `file` | Przesłane pliki | | Zobacz [Klucze plików](#klucze-plików). |
@@ -99,38 +103,39 @@ Atrybut `string`, którego `value_schema` ma `enum`, edytuje się przez wybór j
 
 Atrybut `string`, którego `value_schema` ma `enum` i adnotację `x-attricat-status`, jest statusem. Działanie statusów opisuje sekcja [Statusy](/pl/builders/validation/#statusy).
 
-```toml
-[[attributes]]
-code = "status"
-value_type = "string"
-value_schema = '''{
-  "type": "string",
-  "enum": ["draft", "review", "released"],
-  "x-attricat-status": {
-    "version": 1,
-    "options": [
-      { "code": "draft", "label": "Draft" },
-      { "code": "review", "label": "In review",
-        "approval": { "covers": "all", "void_to": "draft" } },
-      { "code": "released", "label": "Released", "tone": "success",
-        "lock": "all", "retention_days": 3650 }
-    ],
-    "transitions": [
-      { "from": null, "to": "draft" },
-      { "from": "draft", "to": "review", "code": "submit" },
-      { "from": "review", "to": "released", "code": "release",
-        "roles": ["reviewer"], "separate_from": ["submit"] },
-      { "from": "released", "to": "draft", "code": "correct", "permission": "records.publish" }
-    ]
-  }
-}'''
+```yaml
+attributes:
+  - code: status
+    value_type: string
+    value_schema: |-
+      {
+        "type": "string",
+        "enum": ["draft", "review", "released"],
+        "x-attricat-status": {
+          "version": 1,
+          "options": [
+            { "code": "draft", "label": "Draft" },
+            { "code": "review", "label": "In review",
+              "approval": { "covers": "all", "void_to": "draft" } },
+            { "code": "released", "label": "Released", "tone": "success",
+              "lock": "all", "retention_days": 3650 }
+          ],
+          "transitions": [
+            { "from": null, "to": "draft" },
+            { "from": "draft", "to": "review", "code": "submit" },
+            { "from": "review", "to": "released", "code": "release",
+              "roles": ["reviewer"], "separate_from": ["submit"] },
+            { "from": "released", "to": "draft", "code": "correct", "permission": "records.publish" }
+          ]
+        }
+      }
 ```
 
 | Klucz | Wartość | Opis |
 | --- | --- | --- |
 | `version` | `1` | Wymagany. |
-| `options` | tablica od 1 do 100 tabel | Wymagany. Jedna opcja dla każdego kodu z `enum`, w kolejności wyświetlania. |
-| `transitions` | tablica do 10 000 tabel | Dozwolone zmiany. Pomiń, aby dopuścić każdą zmianę; jeśli jest podana, dozwolone są tylko wymienione zmiany, a pusta tablica nie dopuszcza żadnej. |
+| `options` | lista od 1 do 100 mapowań | Wymagany. Jedna opcja dla każdego kodu z `enum`, w kolejności wyświetlania. |
+| `transitions` | lista do 10 000 mapowań | Dozwolone zmiany. Pomiń, aby dopuścić każdą zmianę; jeśli jest podana, dozwolone są tylko wymienione zmiany, a pusta tablica nie dopuszcza żadnej. |
 
 Każda opcja:
 
@@ -140,7 +145,7 @@ Każda opcja:
 | `label` | ciąg znaków, od 1 do 200 znaków | Wymagany. Może zawierać [odwołania do leksykonu](/pl/builders/translations/#etykiety-statusów-i-list-wyboru). |
 | `tone` | `default`, `success`, `warning`, `error` lub `info` | Kolor znacznika statusu. |
 | `lock` | `"all"` lub od 1 do 500 kodów atrybutów | Sprawia, że wymienione atrybuty są tylko do odczytu, dopóki rekord ma ten status. `"all"` obejmuje wszystkie atrybuty, relacje i pliki oprócz samego statusu. Atrybut wielokrotnego użytku zapisuje się jako `namespace:code`. Rekordu ze statusem z blokadą nie można usunąć. Właściciele i administratorzy zawsze mogą go odblokować, zmieniając status. Wymaga `transitions`. |
-| `approval` | tabela z `covers` i `void_to` | Rejestruje zatwierdzenie, gdy rekord przechodzi do tego statusu. `covers` to `"all"` lub od 1 do 500 kodów atrybutów; `void_to` to inna opcja, do której rekord przechodzi, gdy objęta treść się zmieni. |
+| `approval` | mapowanie z `covers` i `void_to` | Rejestruje zatwierdzenie, gdy rekord przechodzi do tego statusu. `covers` to `"all"` lub od 1 do 500 kodów atrybutów; `void_to` to inna opcja, do której rekord przechodzi, gdy objęta treść się zmieni. |
 | `retention_days` | liczba całkowita od 1 do 36 600 | Zakłada blokadę retencji na pliki zablokowanych atrybutów, gdy rekord przechodzi do tego statusu. Wymaga `lock`. |
 
 Każde przejście:
@@ -161,11 +166,11 @@ Każda para `from`/`to` może wystąpić tylko raz. `permission`, `roles` i `sep
 
 Atrybut `string`, którego `value_schema` ma adnotację `x-attricat-principal`, przechowuje odwołanie do użytkownika lub zespołu obszaru roboczego:
 
-```toml
-[[attributes]]
-code = "assignee"
-value_type = "string"
-value_schema = '''{"type": "string", "x-attricat-principal": {"version": 1, "kinds": ["user", "team"]}}'''
+```yaml
+attributes:
+  - code: assignee
+    value_type: string
+    value_schema: '{"type": "string", "x-attricat-principal": {"version": 1, "kinds": ["user", "team"]}}'
 ```
 
 | Klucz | Wartość | Opis |
@@ -181,36 +186,36 @@ value_schema = '''{"type": "string", "x-attricat-principal": {"version": 1, "kin
 
 ### Klucze relacji
 
-```toml
-[[attributes]]
-code = "brand"
-value_type = "relationship"
-target_blueprint = "brand"
-cardinality = "one"
+```yaml
+attributes:
+  - code: brand
+    value_type: relationship
+    target_blueprint: brand
+    cardinality: one
 ```
 
 | Klucz | Typ | Domyślnie | Opis |
 | --- | --- | --- | --- |
 | `target_blueprint` | kod | Dowolny schemat rekordu | Ogranicza cele do rekordów z tej rodziny schematów. |
 | `target_blueprints` | tablica kodów | Dowolny schemat rekordu | Ogranicza cele do rekordów z dowolnej z tych rodzin schematów. Nie można łączyć z `target_blueprint`; lista z jednym elementem działa tak samo jak `target_blueprint`. |
-| `cardinality` | `"one"`, `"many"` lub `"one_to_one"` | `"many"` | Z iloma celami jeden rekord może być powiązany w jednym kontekście. `one_to_one` to skrót dla `cardinality = "one"` razem z `target_cardinality = "one"` i nie można go łączyć z `target_cardinality`. |
+| `cardinality` | `"one"`, `"many"` lub `"one_to_one"` | `"many"` | Z iloma celami jeden rekord może być powiązany w jednym kontekście. `one_to_one` to skrót dla `cardinality: one` razem z `target_cardinality: one` i nie można go łączyć z `target_cardinality`. |
 | `target_cardinality` | `"one"` lub `"many"` | `"many"` | Ile rekordów może wskazywać ten sam cel przez ten atrybut w jednym kontekście. |
-| `acyclic` | wartość logiczna | `false` | Odrzuca powiązania, które utworzyłyby cykl przez ten atrybut. Wymaga `context_editable = "default"`, a cele muszą obejmować sam schemat. Zobacz [Hierarchie](#hierarchie). |
-| `tree` | wartość logiczna | `false` | Hierarchia acykliczna, w której każdy rekord ma co najwyżej jeden cel (rodzica). Oznacza `acyclic = true` i domyślnie ustawia `cardinality` na `"one"`; `cardinality = "many"` jest odrzucane. |
+| `acyclic` | wartość logiczna | `false` | Odrzuca powiązania, które utworzyłyby cykl przez ten atrybut. Wymaga `context_editable: default`, a cele muszą obejmować sam schemat. Zobacz [Hierarchie](#hierarchie). |
+| `tree` | wartość logiczna | `false` | Hierarchia acykliczna, w której każdy rekord ma co najwyżej jeden cel (rodzica). Oznacza `acyclic: true` i domyślnie ustawia `cardinality` na `"one"`; `cardinality: many` jest odrzucane. |
 
-`cardinality = "one"` daje pole jednokrotnego wyboru, którego opcje mogą być współdzielone, np. marka. Dodaj `target_cardinality = "one"` tylko dla wyłącznego powiązania, w którym każdy cel może zostać zajęty raz. Zapis naruszający którykolwiek limit zwraca `409 relationship_cardinality_conflict`.
+`cardinality: one` daje pole jednokrotnego wyboru, którego opcje mogą być współdzielone, np. marka. Dodaj `target_cardinality: one` tylko dla wyłącznego powiązania, w którym każdy cel może zostać zajęty raz. Zapis naruszający którykolwiek limit zwraca `409 relationship_cardinality_conflict`.
 
 Zapis wiążący rekord schematu niedozwolonego przez `target_blueprint` lub `target_blueprints` zwraca `422 relationship_target_type_mismatch`. Okno wyboru rekordu w aplikacji webowej oferuje tylko dozwolone schematy; gdy jest ich kilka, ma pole **Schemat celu**. Blok `incoming_relationship_list` w każdym z dozwolonych schematów docelowych może wyświetlać to pole.
 
 #### Hierarchie
 
-```toml
-[[attributes]]
-code = "parent"
-value_type = "relationship"
-target_blueprint = "location"
-tree = true
-context_editable = "default"
+```yaml
+attributes:
+  - code: parent
+    value_type: relationship
+    target_blueprint: location
+    tree: true
+    context_editable: default
 ```
 
 `acyclic` i `tree` chronią struktury odwołujące się do siebie, takie jak hierarchie lokalizacji czy zasobów, oraz łańcuchy poprzedników, np. wersja → poprzednia wersja.
@@ -225,15 +230,15 @@ Relacje nie mogą mieć `value_schema` ani `default_value`. Ograniczaj je zamias
 
 ### Klucze plików
 
-```toml
-[[attributes]]
-code = "gallery"
-value_type = "file"
-cardinality = "many"
-allowed_mime_groups = ["image"]
-allowed_extensions = ["jpg", "png", "webp"]
-max_bytes = 10485760
-image_only = true
+```yaml
+attributes:
+  - code: gallery
+    value_type: file
+    cardinality: many
+    allowed_mime_groups: [image]
+    allowed_extensions: [jpg, png, webp]
+    max_bytes: 10485760
+    image_only: true
 ```
 
 | Klucz | Typ | Domyślnie | Opis |
@@ -246,7 +251,7 @@ image_only = true
 | `purposes` | tablica kodów | `[]` | Etykiety opisujące przeznaczenie plików, np. `product_image`. |
 | `image_only` | wartość logiczna | `false` | Akceptuje tylko obrazy. Wymagane dla renderera `attricat.table_image`. |
 
-Te klucze są odrzucane w każdym atrybucie, który nie ma `value_type = "file"`. Atrybuty plikowe nie mogą mieć `value_schema`, `default_value` ani `target_blueprint`.
+Te klucze są odrzucane w każdym atrybucie, który nie ma `value_type: file`. Atrybuty plikowe nie mogą mieć `value_schema`, `default_value` ani `target_blueprint`.
 
 Przesłane obrazy otrzymują dwa wygenerowane warianty, `thumbnail` i `display`, oba w formacie WebP. Pozostałe pliki są przechowywane w postaci, w jakiej je przesłano.
 
@@ -266,11 +271,15 @@ Niektóre tagi zmieniają miejsca, w których aplikacja webowa pokazuje atrybut,
 
 `generated` sprawia, że serwer nadaje każdemu nowemu rekordowi kolejny numer z licznika, np. numer faktury, zamówienia lub dokumentu:
 
-```toml
-[[attributes]]
-code = "invoice_number"
-value_type = "string"
-generated = { format = "INV-{yyyy}-{n:05}", start = 1, reset = "yearly", time_zone = "Europe/Warsaw" }
+```yaml
+attributes:
+  - code: invoice_number
+    value_type: string
+    generated:
+      format: 'INV-{yyyy}-{n:05}'
+      start: 1
+      reset: yearly
+      time_zone: Europe/Warsaw
 ```
 
 Pierwsza faktura utworzona w 2026 roku otrzymuje `INV-2026-00001`, następna `INV-2026-00002`, a pierwsza utworzona w 2027 roku `INV-2027-00001`.
@@ -284,7 +293,7 @@ Pierwsza faktura utworzona w 2026 roku otrzymuje `INV-2026-00001`, następna `IN
 
 Generowane mogą być tylko atrybuty `string` i `integer`. `string` wymaga `format`; `integer` przechowuje sam numer i przyjmuje tylko `start`.
 
-`generated` jest dozwolony tylko w lokalnym atrybucie schematu rekordu. Jest odrzucany w mixinie, w atrybucie wybranym przez `from`, w `extension_type`, razem z `default_value` oraz w [statusie](#statusy) lub [przypisaniu użytkownika lub zespołu](#przypisania-użytkowników-i-zespołów). Atrybut generowany jest zawsze tylko do odczytu i zapisywany wyłącznie w kontekście domyślnym (`context_editable = "default"`), niezależnie od wartości `readonly` i `context_editable`.
+`generated` jest dozwolony tylko w lokalnym atrybucie schematu rekordu. Jest odrzucany w mixinie, w atrybucie wybranym przez `from`, w `extension_type`, razem z `default_value` oraz w [statusie](#statusy) lub [przypisaniu użytkownika lub zespołu](#przypisania-użytkowników-i-zespołów). Atrybut generowany jest zawsze tylko do odczytu i zapisywany wyłącznie w kontekście domyślnym (`context_editable: default`), niezależnie od wartości `readonly` i `context_editable`.
 
 #### Tokeny formatu
 
@@ -330,11 +339,11 @@ W CLI użyj `acli blueprint sequences <blueprint-id>` i `acli blueprint advance-
 
 Włączone rozszerzenie może deklarować typy atrybutów, np. typ kwoty pieniężnej z ustawieniem waluty:
 
-```toml
-[[attributes]]
-code = "price"
-extension_type = "com.acme.commerce:money@^1"
-extension_configuration = '{"currency":"USD"}'
+```yaml
+attributes:
+  - code: price
+    extension_type: 'com.acme.commerce:money@^1'
+    extension_configuration: '{"currency":"USD"}'
 ```
 
 Gdy schemat jest zapisywany, Attricat odnajduje włączone rozszerzenie `com.acme.commerce`, wybiera najwyższą zadeklarowaną wersję typu `money` pasującą do `^1`, weryfikuje `extension_configuration` względem schematu konfiguracji typu i zapisuje rozstrzygnięty typ w wersji schematu. Wartość jest przechowywana w bazowym typie prostym tego typu (`string`, `number`, `integer`, `boolean`, `date`, `datetime`, `time` lub `json`) i sprawdzana względem schematu wartości typu. Wartości pozostają czytelne, jeśli rozszerzenie zostanie później wyłączone.
@@ -345,15 +354,15 @@ Gdy schemat jest zapisywany, Attricat odnajduje włączone rozszerzenie `com.acm
 
 Mixiny współdzielą definicje atrybutów między schematami. Include przypina jedną konkretną opublikowaną wersję mixinu. Każdy potrzebny atrybut trzeba następnie wybrać przez `from`.
 
-```toml
-[[includes]]
-alias = "seo"
-code = "seo"
-version = 2
+```yaml
+includes:
+  - alias: seo
+    code: seo
+    version: 2
 
-[[attributes]]
-code = "meta_title"
-from = "seo.meta_title"
+attributes:
+  - code: meta_title
+    from: seo.meta_title
 ```
 
 | Klucz | Typ | Opis |
@@ -382,11 +391,12 @@ Gdy brakuje `detail` lub `table`, aplikacja webowa wyświetla atrybuty w kolejno
 
 ### `dropdown_option`
 
-```toml
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name", "sku"]
-separator = " / "
+```yaml
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name, sku]
+    separator: ' / '
 ```
 
 | Klucz | Typ | Domyślnie | Opis |
@@ -398,10 +408,11 @@ Etykiety są rozstrzygane dla każdego kontekstu i respektują `context_fallback
 
 ### `page_title`
 
-```toml
-[views.page_title]
-type = "page_title"
-fields = ["name"]
+```yaml
+views:
+  page_title:
+    type: page_title
+    fields: [name]
 ```
 
 | Klucz | Typ | Domyślnie | Opis |
@@ -413,63 +424,58 @@ Może go zdefiniować tylko schemat rekordów i tylko pod nazwą `page_title`. T
 
 ### `table`
 
-```toml
-[views.table]
-type = "table"
-
-[[views.table.columns]]
-field = "title"
-label = "Product"
-
-[[views.table.columns]]
-field = "category.name"
-label = "Category"
-
-[[views.table.columns]]
-field = "main_photo"
-label = "Image"
-renderer = { id = "attricat.table_image", version = 1 }
+```yaml
+views:
+  table:
+    type: table
+    columns:
+      - {field: title, label: Product}
+      - {field: category.name, label: Category}
+      - field: main_photo
+        label: Image
+        renderer: {id: attricat.table_image, version: 1}
 ```
 
 | Klucz | Typ | Opis |
 | --- | --- | --- |
-| `columns` | tablica tabel | Definicje kolumn. Musi być niepusta, z unikalnymi wartościami `field`. |
+| `columns` | lista mapowań | Definicje kolumn. Musi być niepusta, z unikalnymi wartościami `field`. |
 | `columns[].field` | ciąg znaków | Lokalny atrybut skalarny, lokalny atrybut plikowy ze zgodnym rendererem lub ścieżka o maksymalnie trzech krokach relacji zakończona atrybutem skalarnym, np. `family.product_type.name`. |
 | `columns[].label` | ciąg znaków | Nagłówek kolumny. Domyślnie nazwa atrybutu. |
 | `columns[].renderer` | odwołanie do komponentu | `attricat.table_image@1`, komponent wyświetlania tekstu (`attricat.color_display@1`, `attricat.email_display@1`, `attricat.url_display@1` lub `attricat.phone_display@1`) albo renderer komórek z rozszerzenia. |
 | `fields` | tablica kodów atrybutów | Starszy skrót dla lokalnych kolumn skalarnych. Nie można go łączyć z `columns`. |
 | `component` | odwołanie do komponentu | Opcjonalny komponent tabeli. |
 
-Kolumnę można sortować w przeglądarce rekordów tylko wtedy, gdy jest skalarna, a każdy krok relacji w jej ścieżce ma `cardinality = "one"`.
+Kolumnę można sortować w przeglądarce rekordów tylko wtedy, gdy jest skalarna, a każdy krok relacji w jej ścieżce ma `cardinality: one`.
 
 ### `explorer`
 
-```toml
-[views.explorer]
-type = "explorer"
-browse_by = "categories"
+```yaml
+views:
+  explorer:
+    type: explorer
+    browse_by: categories
 ```
 
 | Klucz | Typ | Opis |
 | --- | --- | --- |
-| `browse_by` | kod atrybutu, ścieżka relacji lub `false` | Atrybut relacji wyświetlany w panelu **Przeglądaj według**, dopóki użytkownik nie wybierze innego. Musi mieć jeden schemat docelowy. Ścieżka z kropkami, na przykład `model.brand`, przechodzi przez maksymalnie trzy relacje, z których każda ma jeden schemat docelowy i `cardinality = "one"`, i wyświetla cele ostatniej z nich. `false` pozostawia panel zamknięty, dopóki użytkownik go nie otworzy. |
+| `browse_by` | kod atrybutu, ścieżka relacji lub `false` | Atrybut relacji wyświetlany w panelu **Przeglądaj według**, dopóki użytkownik nie wybierze innego. Musi mieć jeden schemat docelowy. Ścieżka z kropkami, na przykład `model.brand`, przechodzi przez maksymalnie trzy relacje, z których każda ma jeden schemat docelowy i `cardinality: one`, i wyświetla cele ostatniej z nich. `false` pozostawia panel zamknięty, dopóki użytkownik go nie otworzy. |
 
 Może go zdefiniować tylko schemat rekordów i tylko pod nazwą `explorer`. Bez `browse_by` panel otwiera się dla pierwszej relacji, której schemat docelowy ma hierarchię. Kolejne relacje na ścieżce są sprawdzane względem opublikowanych schematów docelowych podczas zapisywania i publikowania schematu.
 
 ### Bloki układu
 
-`detail` i `edit` zaczynają się od bloku kontenera i zagnieżdżają w nim inne bloki. Bloki to tabele TOML z kluczem `type`. Możesz je zapisać jako zagnieżdżone tablice tabel lub jako tabele wbudowane; oba zapisy dają ten sam wynik.
+`detail` i `edit` zaczynają się od bloku kontenera i zagnieżdżają w nim inne bloki. Bloki to mapowania YAML z kluczem `type`. Możesz je zapisać w stylu blokowym, z jednym kluczem w wierszu, lub w stylu przepływowym jako `{type: field, field: title}`; oba zapisy dają ten sam wynik.
 
 | `type` | Klucze | Opis |
 | --- | --- | --- |
 | `stack` | `children` | Elementy podrzędne ułożone pionowo. |
 | `grid` | `children` | Elementy podrzędne w responsywnej siatce. |
 | `section` | `children` | Zgrupowany obszar. |
-| `tabs` | `tabs` = tablica `{ label, children }` | Jedna karta na wpis. |
-| `accordion` | `sections` = tablica `{ label, children }` | Zwijane sekcje. |
+| `tabs` | `tabs`: lista `{label, children}` | Jedna karta na wpis. |
+| `accordion` | `sections`: lista `{label, children}` | Zwijane sekcje. |
 | `field` | `field` | Jeden atrybut skalarny lub plikowy. |
 | `relationship_list` | `field` | Jeden atrybut relacji i jego cele. |
-| `incoming_relationship_list` | `label`, `relationships`, `page_size` | Link otwierający Przeglądarkę rekordów w nowej karcie, przefiltrowaną do rekordów wskazujących na ten rekord; osobny link dla każdej relacji. `relationships` to tablica `{ source_blueprint, field }`. `page_size` jest ograniczane przez `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE` serwera; aplikacja webowa go nie używa. |
+| `incoming_relationship_list` | `label`, `relationships`, `page_size` | Link otwierający Przeglądarkę rekordów w nowej karcie, przefiltrowaną do rekordów wskazujących na ten rekord; osobny link dla każdej relacji. `relationships` to lista `{source_blueprint, field}`. `page_size` jest ograniczane przez `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE` serwera; aplikacja webowa go nie używa. |
 | `heading` | `text` | Statyczny nagłówek. |
 | `text` | `text` | Statyczny akapit. |
 | `divider` | | Linia pozioma. |
@@ -478,16 +484,23 @@ Każdy blok przyjmuje opcjonalne odwołanie `component`. Każdy `field` i `relat
 
 ### Odwołania do komponentów
 
-```toml
-component = { id = "attricat.url_display", version = 1 }
-renderer = { id = "example.currency", version = 1, props = { currency = "USD" } }
+```yaml
+component:
+  id: attricat.url_display
+  version: 1
+
+renderer:
+  id: example.currency
+  version: 1
+  props:
+    currency: USD
 ```
 
 | Klucz | Typ | Opis |
 | --- | --- | --- |
 | `id` | ciąg znaków | Identyfikator zarejestrowanego komponentu. |
 | `version` | liczba całkowita | Wersja komponentu. |
-| `props` | tabela | Opcje komponentu. Akceptowane są tylko właściwości zadeklarowane przez komponent. |
+| `props` | mapowanie | Opcje komponentu. Akceptowane są tylko właściwości zadeklarowane przez komponent. |
 
 Wbudowane komponenty:
 
@@ -502,7 +515,7 @@ Wbudowane komponenty:
 | `attricat.record_heading` | 1 | `stack` (detail) | | |
 | `attricat.table_display` | 1 | `table` | Skalarne | |
 | `attricat.table_edit` | 1 | `table` | Skalarne | |
-| `attricat.table_image` | 1 | `renderer` kolumny tabeli | `file` z `cardinality = "one"` i `image_only = true` | |
+| `attricat.table_image` | 1 | `renderer` kolumny tabeli | `file` z `cardinality: one` i `image_only: true` | |
 | `attricat.color_display` | 1 | `field` (detail), `renderer` kolumny tabeli | `string` | |
 | `attricat.color_edit` | 1 | `field` (edit) | `string` | |
 | `attricat.email_display` | 1 | `field` (detail), `renderer` kolumny tabeli | `string` | |
@@ -520,14 +533,15 @@ Identyfikator i wersja renderera komórek z rozszerzenia muszą odpowiadać rend
 
 ### `extension_layout`
 
-```toml
-[views.extension_layout]
-type = "extension_layout"
-version = 1
-
-[views.extension_layout.outlets.record_preview_panel]
-order = ["acme.inventory:summary"]
-hidden = ["acme.legacy:panel"]
+```yaml
+views:
+  extension_layout:
+    type: extension_layout
+    version: 1
+    outlets:
+      record_preview_panel:
+        order: ['acme.inventory:summary']
+        hidden: ['acme.legacy:panel']
 ```
 
 | Klucz | Opis |
@@ -541,9 +555,9 @@ Punkt osadzenia wymieniony tutaj zastępuje domyślny układ obszaru roboczego d
 
 ## Publikacja
 
-```toml
-[publication]
-retain_on_edit_roles = ["editor"]
+```yaml
+publication:
+  retain_on_edit_roles: [editor]
 ```
 
 | Klucz | Typ | Domyślnie | Opis |
@@ -554,11 +568,11 @@ Nie przyznaje to żadnych uprawnień. Zobacz [Publikowanie](/pl/guides/publishin
 
 ## Reguły
 
-Schematy nie zawierają reguł jakości danych. Regułę tworzy się osobno i dotyczy ona rekordów Schematu; zobacz [Reguły](/pl/builders/rules/). Definicja z tabelami `[[rules]]` jest odrzucana.
+Schematy nie zawierają reguł jakości danych. Regułę tworzy się osobno i dotyczy ona rekordów Schematu; zobacz [Reguły](/pl/builders/rules/). Definicja z listą `rules` jest odrzucana.
 
 ## Predykaty
 
-Reguły, kontrole rekordów, warunki przejść i kontrole kanałów publikacji używają jednego języka predykatów. Predykat to tabela (w TOML) lub obiekt (w JSON) rozróżniany kluczem `type`. Jest **spełniony**, gdy dane są poprawne. Nieznane klucze są odrzucane.
+Reguły, kontrole rekordów, warunki przejść i kontrole kanałów publikacji używają jednego języka predykatów. Predykat to mapowanie (w YAML) lub obiekt (w JSON) rozróżniany kluczem `type`. Jest **spełniony**, gdy dane są poprawne. Nieznane klucze są odrzucane.
 
 | `type` | Klucze | Spełniony, gdy |
 | --- | --- | --- |
@@ -571,7 +585,7 @@ Reguły, kontrole rekordów, warunki przejść i kontrole kanałów publikacji u
 | `relative_date` | `attribute_code`, `op` (`lt`, `lte`, `gt`, `gte`), `offset_days` (od -36500 do 36500, domyślnie `0`) | Data lub data z godziną spełnia porównanie z bieżącym czasem przesuniętym o `offset_days`. |
 | `unique` | `attribute_codes` (od 1 do 4 atrybutów typu string, number, integer, boolean, date lub datetime) | Żaden inny aktywny rekord z rodziny schematów, w dowolnej wersji, nie ma tych samych wartości w tym samym kontekście. Tylko reguły zgłaszające ustalenia. |
 | `linked` | `relationship_code`, `quantifier` (`all`, `any`, `none`; domyślnie `all`), `predicate` | `all`: każdy powiązany rekord spełnia `predicate` (prawda, gdy nie ma powiązań). `any`: co najmniej jeden go spełnia. `none`: żaden go nie spełnia. |
-| `referenced_by` | `blueprint_code`, `relationship_code`, opcjonalnie `predicate`, `min` i/lub `max` (od 0 do 1000) | Liczba rekordów `blueprint_code`, których relacja `relationship_code` wskazuje ten rekord i które spełniają `predicate`, mieści się między `min` a `max`. `max = 0` oznacza „żaden”. |
+| `referenced_by` | `blueprint_code`, `relationship_code`, opcjonalnie `predicate`, `min` i/lub `max` (od 0 do 1000) | Liczba rekordów `blueprint_code`, których relacja `relationship_code` wskazuje ten rekord i które spełniają `predicate`, mieści się między `min` a `max`. `max: 0` oznacza „żaden”. |
 | `acyclic` | `relationship_code` | Podążanie za relacją nigdy nie wraca do rekordu. Tylko reguły zgłaszające ustalenia. |
 | `all_of` | `predicates` (od 1 do 16) | Każdy zagnieżdżony predykat jest spełniony. |
 | `any_of` | `predicates` (od 1 do 16) | Co najmniej jeden zagnieżdżony predykat jest spełniony. |
@@ -597,16 +611,15 @@ Operatory `compare`:
 
 `x-attricat-checks` to tablica wewnątrz `record_schema`:
 
-```toml
-record_schema = '''
-{
-  "type": "object",
-  "x-attricat-checks": [
-    { "code": "valid-range", "message": "Valid until must not be before valid from",
-      "predicate": { "type": "compare", "attribute_code": "valid_until", "op": "gte", "other_attribute_code": "valid_from" } }
-  ]
-}
-'''
+```yaml
+record_schema: |
+  {
+    "type": "object",
+    "x-attricat-checks": [
+      { "code": "valid-range", "message": "Valid until must not be before valid from",
+        "predicate": { "type": "compare", "attribute_code": "valid_until", "op": "gte", "other_attribute_code": "valid_from" } }
+    ]
+  }
 ```
 
 | Klucz | Typ | Wymagany | Opis |
@@ -634,28 +647,27 @@ Każda para `from`/`to` może wystąpić tylko raz. Niespełnione warunki zwraca
 
 Klucz unikalny deklaruje identyfikator biznesowy, którego dwa rekordy z tej rodziny schematów nie mogą współdzielić, np. numer części, numer dokumentu albo kombinację, taką jak producent i numer części.
 
-```toml
-[[unique_keys]]
-code = "manufacturer_part"
-attributes = ["manufacturer", "part_number"]
+```yaml
+unique_keys:
+  - code: manufacturer_part
+    attributes: [manufacturer, part_number]
 
-[[unique_keys]]
-code = "slug"
-attributes = ["slug"]
-scope = "context"
-case_sensitive = true
+  - code: slug
+    attributes: [slug]
+    scope: context
+    case_sensitive: true
 ```
 
 | Klucz | Typ | Domyślnie | Opis |
 | --- | --- | --- | --- |
 | `code` | kod | Wymagany | Unikalny w obrębie schematu. Podawany w błędach. |
-| `attributes` | tablica kodów atrybutów | Wymagany | Od jednego do ośmiu atrybutów, których łączne wartości muszą być unikalne. Każdy musi być wartością skalarną innego typu niż `json` albo relacją z `cardinality = "one"`. |
+| `attributes` | tablica kodów atrybutów | Wymagany | Od jednego do ośmiu atrybutów, których łączne wartości muszą być unikalne. Każdy musi być wartością skalarną innego typu niż `json` albo relacją z `cardinality: one`. |
 | `scope` | `"workspace"` lub `"context"` | `"workspace"` | `workspace` porównuje wartości w kontekście domyślnym. `context` porównuje wartości wyświetlane w każdym kontekście, także dziedziczone, osobno dla każdego kontekstu. |
 | `case_sensitive` | wartość logiczna | `false` | Porównuje tekst dokładnie zamiast bez rozróżniania wielkości liter. |
 
 Jak porównywane są wartości:
 
-- Tekst jest przycinany, a każdy ciąg białych znaków zamieniany na jedną spację. Jeśli nie ustawiono `case_sensitive = true`, tekst jest też porównywany małymi literami, więc `ABC-1  Rev` i ` abc-1 rev` to ten sam klucz.
+- Tekst jest przycinany, a każdy ciąg białych znaków zamieniany na jedną spację. Jeśli nie ustawiono `case_sensitive: true`, tekst jest też porównywany małymi literami, więc `ABC-1  Rev` i ` abc-1 rev` to ten sam klucz.
 - Liczby są porównywane według wartości (`1.50` równa się `1.5`), daty z czasem według chwili, a relacje według powiązanego rekordu.
 - Rekord, który nie ma wartości (albo ma tylko pusty tekst) dla któregokolwiek atrybutu klucza, nie jest sprawdzany względem tego klucza. Jeśli każdy rekord musi mieć klucz, oznacz atrybuty jako wymagane w `record_schema`.
 - Klucz obejmuje całą rodzinę schematów zgodnie z jej najnowszą opublikowaną wersją, także rekordy przypięte do starszych wersji. Atrybuty są dopasowywane według kodu.
@@ -668,14 +680,18 @@ Publikacja wersji, która dodaje lub zmienia klucze unikalne, najpierw sprawdza 
 
 Zadania konektorów uruchamiają operację zainstalowanego rozszerzenia konektora, np. import lub eksport CSV, dla tego schematu.
 
-```toml
-[[connector_jobs]]
-code = "csv_export"
-direction = "export"
-extension_id = "attricat-connector-csv"
-operation_id = "export"
-interval_seconds = 3600
-input = { profile = { version = 1, columns = [{ header = "ID", attribute = "external_id", kind = "string" }] } }
+```yaml
+connector_jobs:
+  - code: csv_export
+    direction: export
+    extension_id: attricat-connector-csv
+    operation_id: export
+    interval_seconds: 3600
+    input:
+      profile:
+        version: 1
+        columns:
+          - {header: ID, attribute: external_id, kind: string}
 ```
 
 | Klucz | Typ | Domyślnie | Opis |
@@ -684,25 +700,27 @@ input = { profile = { version = 1, columns = [{ header = "ID", attribute = "exte
 | `direction` | `"import"` lub `"export"` | Wymagany | |
 | `extension_id` | ciąg znaków | Wymagany | Identyfikator rozszerzenia konektora. |
 | `operation_id` | ciąg znaków | Wymagany | Operacja zadeklarowana przez rozszerzenie. |
-| `input` | tabela | Wymagany | Dane wejściowe operacji, weryfikowane względem schematu operacji. |
+| `input` | mapowanie | Wymagany | Dane wejściowe operacji, weryfikowane względem schematu operacji. |
 | `context` | kod kontekstu | | Wymagany dla importów: zaimportowane wartości są zapisywane w tym kontekście. Dla eksportów kanał publikacji do eksportu (musi nim być); bez niego zadanie uruchamia się raz dla każdego włączonego kanału. Zadanie rozszerzenia, które prowadzi mapowania eksportu, musi go ustawić, gdy włączonych jest kilka kanałów. |
 | `input_file_id` | UUID | | Tylko importy. Gotowy plik obszaru roboczego do zaimportowania. |
 | `interval_seconds` | liczba całkowita | Tylko ręcznie | Uruchamia zadanie co N sekund, od 60 do 2592000. |
 | `enabled` | wartość logiczna | `true` | Ustaw `false`, aby wstrzymać zadanie. |
 | `connection` | ciąg znaków | Domyślne miejsce docelowe | Tylko eksporty. [Połączenie](/pl/builders/extensions/#połączenia) rozszerzenia, do którego zadanie wysyła dane: od 1 do 128 liter ASCII, cyfr, `.`, `_` lub `-`. |
-| `trigger` | tabela | | Tylko eksporty. Uruchamia zadanie także wtedy, gdy rekordy się zmieniają: `{ events = [...], debounce_seconds = N }`. |
+| `trigger` | mapowanie | | Tylko eksporty. Uruchamia zadanie także wtedy, gdy rekordy się zmieniają: `{events: [...], debounce_seconds: N}`. |
 
 `trigger.events` zawiera co najmniej jedno z: `record.created.v1`, `record.updated.v1`, `record.deleted.v1`, `record.migrated.v1`, `record.published.v1`, `record.unpublished.v1`, `attribute_value.changed.v1`, `attribute_value.restored.v1` i `relationship.changed.v1`. `trigger.debounce_seconds` ma wartość od 1 do 3600: wykonanie rusza, gdy od najnowszego pasującego zdarzenia rekordów schematu minie tyle sekund albo gdy najstarsza oczekująca zmiana ma dziesięciokrotność tego czasu, i obejmuje tylko zmienione rekordy. Zdarzenie rekordu, do którego rekordy schematu odwołują się przez relację, liczy się jako zmiana rekordów odwołujących się.
 
-```toml
-[[connector_jobs]]
-code = "shopify"
-direction = "export"
-extension_id = "acme.shopify"
-operation_id = "export"
-connection = "shop-eu"
-trigger = { events = ["record.updated.v1", "record.published.v1"], debounce_seconds = 30 }
-input = {}
+```yaml
+connector_jobs:
+  - code: shopify
+    direction: export
+    extension_id: acme.shopify
+    operation_id: export
+    connection: shop-eu
+    trigger:
+      events: [record.updated.v1, record.published.v1]
+      debounce_seconds: 30
+    input: {}
 ```
 
 Zadania są sprawdzane względem włączonego rozszerzenia podczas publikacji wersji; nieprawidłowe zadanie blokuje publikację. Zadanie usunięte w późniejszej wersji zostaje wyłączone, a jego historia uruchomień jest zachowywana. Zadanie eksportu uruchamia się raz dla każdego włączonego kanału eksportu i eksportuje tylko rekordy opublikowane w tym kanale. Zobacz [Operacje i konektory](/pl/extensions/operations/).

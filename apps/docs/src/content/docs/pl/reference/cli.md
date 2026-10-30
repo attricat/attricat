@@ -86,56 +86,54 @@ Gdy API zwraca szczegóły w formie czytelnej dla maszyn (na przykład naruszeni
 
 Opcje przyjmujące dane strukturalne (`--permissions`, `--entries`, `--filters`, `--relationship-tree-facets`, `--relationship-filters`, `--relationships`, `--files`, `--selected-target-ids`, `--include-ids`, `--values`, `--discard-attributes`, `--configuration`, `--body`, `--payload`, `--input`, `--state`, `--operations`) akceptują JSON podany bezpośrednio albo ścieżkę do pliku JSON.
 
-Polecenia schematów, przepływów pracy i reguł przyjmują `--file <path>` lub `--stdin` i wysyłają TOML bez zmian.
+Polecenia schematów, przepływów pracy i reguł przyjmują `--file <path>` lub `--stdin` i wysyłają YAML bez zmian.
 
 ## Pliki wartości
 
-`record create --values`, `record update --values` i `value append --file` odczytują TOML:
+`record create --values`, `record update --values` i `value append --file` odczytują YAML:
 
-```toml
-[[values]]
-kind = "scalar"
-attribute_code = "title"
-value = "Linen shirt"
+```yaml
+values:
+  - kind: scalar
+    attribute_code: title
+    value: Linen shirt
 
-[[values]]
-kind = "scalar"
-attribute_code = "order_cutoff"
-value = { time = "09:30:00", time_zone = "Europe/Warsaw" }
+  - kind: scalar
+    attribute_code: order_cutoff
+    value: {time: '09:30:00', time_zone: Europe/Warsaw}
 
-[[values]]
-kind = "relationship"
-attribute_code = "categories"
-target_record_id = "00000000-0000-0000-0000-000000000004"
+  - kind: relationship
+    attribute_code: categories
+    target_record_id: '00000000-0000-0000-0000-000000000004'
 ```
 
-Każdy wpis wskazuje atrybut przez `attribute_code` lub `attribute_id`. Wartości skalarne używają natywnych typów TOML: ciągów znaków, liczb dziesiętnych, liczb całkowitych, wartości logicznych, dat i dat z godziną w formacie RFC 3339. Każda wartość potrzebuje kontekstu: przekaż `--context-id` dla całego pliku lub ustaw `context_id` we wpisie.
+Każdy wpis wskazuje atrybut przez `attribute_code` lub `attribute_id`. Wartości skalarne używają natywnych typów YAML: ciągów znaków, liczb dziesiętnych, liczb całkowitych, wartości logicznych (`true` lub `false`), dat i dat z godziną w formacie RFC 3339. Ujmij w cudzysłów ciąg znaków, który YAML odczytałby jako inny typ, np. UUID zaczynający się od cyfr albo `'09:30:00'`. Każda wartość potrzebuje kontekstu: przekaż `--context-id` dla całego pliku lub ustaw `context_id` we wpisie.
 
 Pliki zastępowania i usuwania relacji (`value replace`, `value remove`, `record update --relationships`):
 
-```toml
-[[relationships]]
-attribute_code = "categories"
-target_record_ids = ["00000000-0000-0000-0000-000000000004"]
+```yaml
+relationships:
+  - attribute_code: categories
+    target_record_ids: ['00000000-0000-0000-0000-000000000004']
 ```
 
 `replace` ustawia listę jako pełny zbiór; `remove` odłącza tylko wymienione cele.
 
 Usuwanie nadpisań w kontekstach (`record update --remove-values`):
 
-```toml
-[[remove_values]]
-attribute_code = "subtitle"
+```yaml
+remove_values:
+  - attribute_code: subtitle
 ```
 
 Pliki kontekstów (`context create --file`):
 
-```toml
-code = "PL"
-parent_id = "00000000-0000-4000-8000-000000000001"  # omit for a top-level context
+```yaml
+code: PL
+parent_id: '00000000-0000-4000-8000-000000000001'  # omit for a top-level context
 
-[data]
-language = "pl"
+data:
+  language: pl
 ```
 
 ## Polecenia
@@ -165,9 +163,9 @@ acli token revoke <token-id>
 ```sh
 acli blueprint list [--include-drafts]
 acli blueprint catalogue
-acli blueprint create --file product.toml
-acli blueprint validate [--blueprint-id <id>] --file product.toml
-acli blueprint create-version <blueprint-id> --file product-v2.toml
+acli blueprint create --file product.yaml
+acli blueprint validate [--blueprint-id <id>] --file product.yaml
+acli blueprint create-version <blueprint-id> --file product-v2.yaml
 acli blueprint list-versions <blueprint-id>
 acli blueprint publish <blueprint-id> <version>
 acli blueprint get <blueprint-id>
@@ -183,9 +181,9 @@ acli blueprint publish-records-all <blueprint-id> <version>
 
 acli reusable-attribute list [--include-drafts]
 acli reusable-attribute filter-fields --blueprint <code>
-acli reusable-attribute create --file gtin.toml
-acli reusable-attribute validate [--definition-id <definition-id>] --file gtin.toml
-acli reusable-attribute create-version <definition-id> --file gtin-v2.toml
+acli reusable-attribute create --file gtin.yaml
+acli reusable-attribute validate [--definition-id <definition-id>] --file gtin.yaml
+acli reusable-attribute create-version <definition-id> --file gtin-v2.yaml
 acli reusable-attribute publish <revision-id>
 acli reusable-attribute apply <record-id> --revision-id <revision-id>
 acli reusable-attribute group list
@@ -201,7 +199,7 @@ acli reusable-attribute group apply <record-id> <group-id>
 acli context list
 acli context get <code>
 acli context create --code <code> [--parent-id <id>] [--data <json>]
-acli context create --file context.toml
+acli context create --file context.yaml
 acli context update <context-id> --parent-id <id> --data <json>
 acli context delete <context-id>
 ```
@@ -209,10 +207,10 @@ acli context delete <context-id>
 ### Rekordy i wartości
 
 ```sh
-acli record create --blueprint <code> [--values values.toml] [--files <json-or-file>] [--context-id <id>] [--system-tags <json>] [--system-metadata <json>]
+acli record create --blueprint <code> [--values values.yaml] [--files <json-or-file>] [--context-id <id>] [--system-tags <json>] [--system-metadata <json>]
 acli record get | form | delete | duplicate | export-status <record-id>
 acli record labels --record-id <id> [--record-id <id> ...]
-acli record update <record-id> [--values f.toml] [--relationships f.toml] [--remove-values f.toml] [--context-id <id>] [--expected-updated-at <t>]
+acli record update <record-id> [--values f.yaml] [--relationships f.yaml] [--remove-values f.yaml] [--context-id <id>] [--expected-updated-at <t>]
 acli record batch --operations <json-or-file>
 acli record preview <record-id> [--relationship-depth <n>] [--relationship-limit <n>]
 acli record resolved-preview <record-id> --context-id <id>
@@ -242,8 +240,8 @@ acli record publication publish-all | readiness <record-id>
 acli record publication status --record-id <id> [--record-id <id> ...]
 
 acli value current <record-id>
-acli value append <record-id> --file values.toml --context-id <id> [--expected-updated-at <t>]
-acli value replace-relationships | remove-relationships <record-id> --file relationships.toml --context-id <id>
+acli value append <record-id> --file values.yaml --context-id <id> [--expected-updated-at <t>]
+acli value replace-relationships | remove-relationships <record-id> --file relationships.yaml --context-id <id>
 ```
 
 `record batch` przyjmuje tablicę JSON z operacjami tworzenia, aktualizacji i usuwania, podaną bezpośrednio lub w pliku, i zapisuje wszystkie albo żadną. Format operacji opisuje sekcja [Zmiany wsadowe](/pl/reference/api/#zmiany-wsadowe).
@@ -305,7 +303,7 @@ acli lexicon list [--language <znacznik>]
 acli lexicon set --key <tekst> --language <znacznik> --text <tekst> [--context <tekst>] [--plural-category <kategoria>]
 acli lexicon delete --key <tekst> --language <znacznik> [--context <tekst>] [--plural-category <kategoria>]
 acli lexicon export --language <znacznik>
-acli lexicon import --file <lexicon.json|lexicon.toml> [--replace]
+acli lexicon import --file <lexicon.json|lexicon.yaml> [--replace]
 acli lexicon report [--language <znacznik>]...
 ```
 
@@ -318,11 +316,11 @@ acli rule list [--blueprint-id <id>]
 acli rule get <rule-id>
 acli rule revisions <rule-id>
 acli rule revision <rule-id> <version>
-acli rule validate | create --blueprint-id <id> [--context-id <id>] --file rule.toml
-acli rule update <rule-id> [--accept-existing-violations] --file rule.toml
+acli rule validate | create --blueprint-id <id> [--context-id <id>] --file rule.yaml
+acli rule update <rule-id> [--accept-existing-violations] --file rule.yaml
 acli rule enable <rule-id> [--accept-existing-violations]
 acli rule disable <rule-id>
-acli rule run-now <rule-id> --idempotency-key <key> [--record-id <id>] [--dry-run [--definition-file rule.toml | --definition-stdin]]
+acli rule run-now <rule-id> --idempotency-key <key> [--record-id <id>] [--dry-run [--definition-file rule.yaml | --definition-stdin]]
 acli rule run-list [--rule-id <id>] [--record-id <id>] [--scope all-records|record] [--limit <n>] [--offset <n>]
 acli rule run-get <run-id>
 acli rule run-replay <run-id>
@@ -333,10 +331,10 @@ acli rule acknowledge <finding-id>
 acli rule acknowledge-many --finding-id <id> [--finding-id <id> ...]
 acli rule acknowledge-many --matching [--record-id <id>] [--rule-id <id>] [--blueprint-id <id>] [--context-id <id>] [--severity <severity>]
 
-acli workflow validate | create --file workflow.toml
+acli workflow validate | create --file workflow.yaml
 acli workflow list | get <workflow-id> | list-versions <workflow-id>
 acli workflow get-version <workflow-id> <version>
-acli workflow create-version <workflow-id> --file workflow.toml
+acli workflow create-version <workflow-id> --file workflow.yaml
 acli workflow publish | enable <workflow-id> <version>
 acli workflow disable <workflow-id>
 acli workflow run-now <workflow-id> --record-id <id> --idempotency-key <key>

@@ -308,4 +308,4 @@ A cell renderer can be referenced from a blueprint's table view. It needs `clien
 }]
 ```
 
-`primitive` is `string`, `number`, `integer`, `boolean`, `date`, `datetime`, `time`, or `json`. Blueprints reference the type as `extension_type = "acme.commerce:money@^1"`. Validation uses only the declared schemas; no extension code runs to validate a value. See [Extension attribute types](/reference/blueprint/#extension-attribute-types).
+`primitive` is `string`, `number`, `integer`, `boolean`, `date`, `datetime`, `time`, or `json`. Blueprints reference the type as `extension_type: acme.commerce:money@^1`. Validation uses only the declared schemas; no extension code runs to validate a value. See [Extension attribute types](/reference/blueprint/#extension-attribute-types).

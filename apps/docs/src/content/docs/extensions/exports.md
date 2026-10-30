@@ -43,15 +43,17 @@ Everything on this page needs host API 1.1 (`"host_api": "^1.1"`).
 
 A blueprint then runs the operation as a [connector job](/extensions/operations/#blueprint-connector-jobs) for one connection:
 
-```toml
-[[connector_jobs]]
-code = "shopify"
-direction = "export"
-extension_id = "acme.shopify"
-operation_id = "export"
-connection = "shop-eu"
-trigger = { events = ["record.updated.v1", "record.published.v1", "record.unpublished.v1"], debounce_seconds = 30 }
-input = {}
+```yaml
+connector_jobs:
+  - code: shopify
+    direction: export
+    extension_id: acme.shopify
+    operation_id: export
+    connection: shop-eu
+    trigger:
+      events: [record.updated.v1, record.published.v1, record.unpublished.v1]
+      debounce_seconds: 30
+    input: {}
 ```
 
 ## The push loop
@@ -173,15 +175,17 @@ To upload the bytes yourself instead, copy the file into the run with [`transfer
 
 An export job can also run when its records change:
 
-```toml
-[[connector_jobs]]
-code = "shopify"
-direction = "export"
-extension_id = "acme.shopify"
-operation_id = "export"
-connection = "shop-eu"
-trigger = { events = ["record.updated.v1", "attribute_value.changed.v1"], debounce_seconds = 30 }
-input = {}
+```yaml
+connector_jobs:
+  - code: shopify
+    direction: export
+    extension_id: acme.shopify
+    operation_id: export
+    connection: shop-eu
+    trigger:
+      events: [record.updated.v1, attribute_value.changed.v1]
+      debounce_seconds: 30
+    input: {}
 ```
 
 A run starts once the newest matching event of the blueprint's records is `debounce_seconds` old, so a burst of edits causes one run. Steady edits cannot hold it back forever: a run also starts once the oldest pending change is ten times `debounce_seconds` old. If the run cannot start, for example while the extension is disabled, the changes stay pending and are exported once it can. A matching event of a record that one of the blueprint's records links to through a relationship counts as a change of the linking record, because `page-v2` can embed it. The run only covers the changed records, up to 10,000; with more changes it runs the whole job. See [Connector jobs](/reference/blueprint/#connector-jobs) for the allowed events.

@@ -28,55 +28,51 @@ Układ jest drzewem. Kontenery zawierają inne bloki; liście pokazują pole lub
 | --- | --- |
 | `stack` (pionowo), `grid` (responsywne kolumny), `section`, `tabs`, `accordion` | `field`, `relationship_list`, `incoming_relationship_list`, `heading`, `text`, `divider` |
 
-TOML pozwala zapisać to samo drzewo na dwa sposoby. Zagnieżdżone tablice tabel są rozwlekłe, ale łatwo porównywać ich zmiany:
+YAML pozwala zapisać to samo drzewo na dwa sposoby. Styl blokowy, z jednym kluczem w wierszu, jest rozwlekły, ale łatwo porównywać jego zmiany:
 
-```toml
-[views.detail]
-type = "stack"
-
-[[views.detail.children]]
-type = "field"
-field = "title"
-
-[[views.detail.children]]
-type = "grid"
-
-[[views.detail.children.children]]
-type = "field"
-field = "price"
-
-[[views.detail.children.children]]
-type = "field"
-field = "stock_on_hand"
+```yaml
+views:
+  detail:
+    type: stack
+    children:
+      - type: field
+        field: title
+      - type: grid
+        children:
+          - type: field
+            field: price
+          - type: field
+            field: stock_on_hand
 ```
 
-Tabele wbudowane są zwięzłe:
+Styl przepływowy, z `{ }` i `[ ]`, jest zwięzły:
 
-```toml
-[views.detail]
-type = "stack"
-children = [
-  { type = "field", field = "title" },
-  { type = "grid", children = [
-    { type = "field", field = "price" },
-    { type = "field", field = "stock_on_hand" },
-  ] },
-]
+```yaml
+views:
+  detail:
+    type: stack
+    children:
+      - {type: field, field: title}
+      - {type: grid, children: [{type: field, field: price}, {type: field, field: stock_on_hand}]}
 ```
 
 Karty i akordeony przyjmują listę grup z etykietami:
 
-```toml
-[views.detail]
-type = "tabs"
-tabs = [
-  { label = "Overview", children = [{ type = "field", field = "title" }] },
-  { label = "Logistics", children = [
-    { type = "accordion", sections = [
-      { label = "Stock", children = [{ type = "field", field = "stock_on_hand" }] },
-    ] },
-  ] },
-]
+```yaml
+views:
+  detail:
+    type: tabs
+    tabs:
+      - label: Overview
+        children:
+          - {type: field, field: title}
+      - label: Logistics
+        children:
+          - type: accordion
+            sections:
+              - label: Stock
+                children:
+                  - {type: field, field: stock_on_hand}
 ```
 
 `field` przyjmuje atrybuty skalarne i plikowe. `relationship_list` przyjmuje atrybuty relacji. Odwołanie do atrybutu, którego schemat nie ma, lub do atrybutu niewłaściwego rodzaju kończy się błędem walidacji.
@@ -87,14 +83,15 @@ Układ szczegółów steruje zarówno wyświetlaniem, jak i edycją. Na stronie 
 
 Aby nadać stronie szczegółów właściwy tytuł, umieść pola w `stack` z komponentem `attricat.record_heading`. Jego pierwszy element podrzędny musi być polem skalarnym i staje się nagłówkiem strony. Kolejne elementy, tekst lub pola skalarne, tworzą podtytuł.
 
-```toml
-[[views.detail.children]]
-type = "stack"
-component = { id = "attricat.record_heading", version = 1 }
-children = [
-  { type = "field", field = "title" },
-  { type = "field", field = "sku" },
-]
+```yaml
+views:
+  detail:
+    children:
+      - type: stack
+        component: {id: attricat.record_heading, version: 1}
+        children:
+          - {type: field, field: title}
+          - {type: field, field: sku}
 ```
 
 Jeśli pole tytułu jest puste, wyświetlany jest identyfikator rekordu. Nagłówek jest usuwany z treści strony, aby nie pojawiał się dwa razy. Nagłówek tylko wyświetla wartości, dlatego jego edytowalne pola są dostępne do edycji jako pierwsze, nad resztą układu.
@@ -103,11 +100,12 @@ Jeśli pole tytułu jest puste, wyświetlany jest identyfikator rekordu. Nagłó
 
 `incoming_relationship_list` pokazuje rekordy wskazujące na bieżący, np. produkty w kategorii. To link otwierający Przeglądarkę rekordów w nowej karcie, przefiltrowaną do tych rekordów. Przeglądarka przeszukuje jeden schemat naraz, więc lista z kilkoma `relationships` pokazuje osobny link dla każdego wpisu, nazwany schematem źródłowym.
 
-```toml
-{ type = "incoming_relationship_list",
-  label = "Products in this category",
-  page_size = 10,
-  relationships = [{ source_blueprint = "product", field = "categories" }] }
+```yaml
+- type: incoming_relationship_list
+  label: Products in this category
+  page_size: 10
+  relationships:
+    - {source_blueprint: product, field: categories}
 ```
 
 Wymień kilka pozycji w `relationships`, aby połączyć źródła. Rekord pasujący do więcej niż jednego źródła pojawia się raz.
@@ -118,56 +116,64 @@ Wymień kilka pozycji w `relationships`, aby połączyć źródła. Rekord pasuj
 
 W relacji odwołującej się do własnego schematu, takiej jak `category.parent`, pokazuje przodków bieżącego rekordu:
 
-```toml
-{ type = "relationship_list", field = "parent",
-  component = { id = "attricat.relationship_hierarchy", version = 1 } }
+```yaml
+- type: relationship_list
+  field: parent
+  component: {id: attricat.relationship_hierarchy, version: 1}
 ```
 
 W relacji do innego schematu ustaw `parent_field` na pole celu odwołujące się do jego własnego schematu. Na produkcie pokazuje to pełną ścieżkę każdej powiązanej kategorii, np. *Apparel › Shirts › Linen*:
 
-```toml
-{ type = "relationship_list", field = "categories",
-  component = { id = "attricat.relationship_hierarchy", version = 1, props = { parent_field = "parent" } } }
+```yaml
+- type: relationship_list
+  field: categories
+  component:
+    id: attricat.relationship_hierarchy
+    version: 1
+    props: {parent_field: parent}
 ```
 
 ## Tabela Przeglądarki rekordów
 
-```toml
-[views.table]
-type = "table"
-
-[[views.table.columns]]
-field = "title"
-label = "Product"
-
-[[views.table.columns]]
-field = "family.product_type.name"
-label = "Product type"
+```yaml
+views:
+  table:
+    type: table
+    columns:
+      - {field: title, label: Product}
+      - {field: family.product_type.name, label: Product type}
 ```
 
 Kolumna to lokalny atrybut skalarny albo ścieżka przez maksymalnie trzy relacje, zakończona atrybutem skalarnym. Każdy krok jest rozstrzygany według wersji schematu powiązanego rekordu. Jeśli starszy powiązany rekord nie ma danego atrybutu, komórka jest pusta. Ścieżka o wielu wartościach może pokazać kilka wartości w jednej komórce.
 
-Kolumny można sortować, gdy prowadzą do wartości skalarnej, a każda relacja na ścieżce ma `cardinality = "one"`.
+Kolumny można sortować, gdy prowadzą do wartości skalarnej, a każda relacja na ścieżce ma `cardinality: one`.
 
 ### Miniatury obrazów
 
-`attricat.table_image` pokazuje miniaturę dla atrybutu z jednym obrazem. Atrybut musi mieć `value_type = "file"`, `cardinality = "one"` (domyślnie) i `image_only = true`.
+`attricat.table_image` pokazuje miniaturę dla atrybutu z jednym obrazem. Atrybut musi mieć `value_type: file`, `cardinality: one` (domyślnie) i `image_only: true`.
 
-```toml
-[[views.table.columns]]
-field = "main_photo"
-label = "Image"
-renderer = { id = "attricat.table_image", version = 1 }
+```yaml
+views:
+  table:
+    columns:
+      - field: main_photo
+        label: Image
+        renderer: {id: attricat.table_image, version: 1}
 ```
 
 ### Renderery komórek z rozszerzeń
 
 Włączone rozszerzenie może dostarczać renderery komórek, np. formatowanie walut. Odwołaj się do niego przez identyfikator i wersję, a jego opcje przekaż w `props`:
 
-```toml
-[[views.table.columns]]
-field = "price"
-renderer = { id = "example.currency", version = 1, props = { currency = "USD" } }
+```yaml
+views:
+  table:
+    columns:
+      - field: price
+        renderer:
+          id: example.currency
+          version: 1
+          props: {currency: USD}
 ```
 
 Renderer musi być zadeklarowany przez włączone rozszerzenie dla typu wartości kolumny. Działa w odizolowanej ramce; zobacz [Kontrybucje klienckie](/pl/extensions/client/).
@@ -176,39 +182,45 @@ Renderer musi być zadeklarowany przez włączone rozszerzenie dla typu wartośc
 
 Panel **Przeglądaj według** obok wyników **Przeglądarki rekordów** wyświetla cele jednej relacji. Schemat z własną [hierarchią](#hierarchie) wyświetla zamiast tego własne drzewo, pod nazwą schematu. Domyślnie panel otwiera się dla tego drzewa, a w przeciwnym razie dla pierwszej relacji, której schemat docelowy ma hierarchię. Aby wybrać atrybut, wskaż go w `views.explorer`:
 
-```toml
-[views.explorer]
-type = "explorer"
-browse_by = "brand"
+```yaml
+views:
+  explorer:
+    type: explorer
+    browse_by: brand
 ```
 
-Atrybut musi być relacją z jednym schematem docelowym. Jeśli schemat docelowy nie ma hierarchii, cele są wyświetlane jako płaska lista. Ustaw `browse_by = false`, aby panel pozostawał zamknięty, dopóki ktoś go nie otworzy. Użytkownicy nadal mogą wybrać inny atrybut lub ukryć panel; ich wybór ma pierwszeństwo w ich przeglądarce.
+Atrybut musi być relacją z jednym schematem docelowym. Jeśli schemat docelowy nie ma hierarchii, cele są wyświetlane jako płaska lista. Ustaw `browse_by: false`, aby panel pozostawał zamknięty, dopóki ktoś go nie otworzy. Użytkownicy nadal mogą wybrać inny atrybut lub ukryć panel; ich wybór ma pierwszeństwo w ich przeglądarce.
 
 Aby przeglądać według schematu oddalonego o kilka relacji, wskaż ścieżkę złożoną z maksymalnie trzech relacji rozdzielonych kropkami. W przypadku pojazdu powiązanego z modelem, który jest powiązany z marką, panel wyświetli marki i policzy pojazdy każdej z nich:
 
-```toml
-[views.explorer]
-type = "explorer"
-browse_by = "model.brand"
+```yaml
+views:
+  explorer:
+    type: explorer
+    browse_by: model.brand
 ```
 
-Każda relacja na ścieżce musi mieć jeden schemat docelowy i `cardinality = "one"`. Jeśli ostatni schemat docelowy ma hierarchię, panel wyświetla jego drzewo. Lista **Przeglądaj według** w panelu również proponuje takie ścieżki, po relacjach bezpośrednich, z etykietami w rodzaju „Model → Marka”.
+Każda relacja na ścieżce musi mieć jeden schemat docelowy i `cardinality: one`. Jeśli ostatni schemat docelowy ma hierarchię, panel wyświetla jego drzewo. Lista **Przeglądaj według** w panelu również proponuje takie ścieżki, po relacjach bezpośrednich, z etykietami w rodzaju „Model → Marka”.
 
 ## Kontrolki pól
 
 Atrybut `string` jest domyślnie zwykłym tekstem. Aby pokazać go jako kolor, adres e-mail, URL, numer telefonu lub Markdown, wskaż komponent wyświetlania w jego polu szczegółów (lub kolumnie tabeli). Tam, gdzie pole jest edytowalne, aplikacja internetowa używa sparowanego komponentu edycji, na przykład `attricat.url_edit` dla `attricat.url_display`:
 
-```toml
-[views.detail]
-type = "stack"
-children = [
-  { type = "field", field = "website", component = { id = "attricat.url_display", version = 1 } },
-  { type = "field", field = "description", component = { id = "attricat.markdown_display", version = 1 } },
-]
-
-[[views.table.columns]]
-field = "website"
-renderer = { id = "attricat.url_display", version = 1 }
+```yaml
+views:
+  detail:
+    type: stack
+    children:
+      - type: field
+        field: website
+        component: {id: attricat.url_display, version: 1}
+      - type: field
+        field: description
+        component: {id: attricat.markdown_display, version: 1}
+  table:
+    columns:
+      - field: website
+        renderer: {id: attricat.url_display, version: 1}
 ```
 
 | Kontrolka | Komponenty | Działanie |
@@ -231,14 +243,15 @@ Każdy blok może wskazać komponent przez `component = { id, version, props }`.
 
 Administratorzy obszaru roboczego ustawiają domyślną kolejność elementów rozszerzeń dla całego obszaru roboczego. Schemat może nadpisać trzy miejsca osadzenia na stronach własnych rekordów:
 
-```toml
-[views.extension_layout]
-type = "extension_layout"
-version = 1
-
-[views.extension_layout.outlets.record_preview_panel]
-order = ["acme.inventory:summary", "acme.pricing:margin"]
-hidden = ["acme.legacy:panel"]
+```yaml
+views:
+  extension_layout:
+    type: extension_layout
+    version: 1
+    outlets:
+      record_preview_panel:
+        order: ['acme.inventory:summary', 'acme.pricing:margin']
+        hidden: ['acme.legacy:panel']
 ```
 
 Miejsca osadzenia, które można tu ustawić, to `record_preview_panel` i `record_action`. Układ nigdy nie nadaje uprawnień ani nie włącza rozszerzenia. Wpisy dla brakujących lub wyłączonych rozszerzeń są zachowywane i ignorowane, więc układ przetrwa wyłączenie i ponowne włączenie rozszerzenia.

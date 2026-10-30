@@ -3,7 +3,7 @@ title: Author a blueprint
 description: Build a blueprint from an empty file to a published revision with relationships, views, validation, and a mixin.
 ---
 
-A blueprint is a TOML document that describes one kind of catalog record: its attributes, how they behave across contexts, how they are validated, and how the web app lays them out. This guide builds a small product catalog one step at a time. Every key used here is listed in the [Blueprint TOML reference](/reference/blueprint/).
+A blueprint is a YAML document that describes one kind of catalog record: its attributes, how they behave across contexts, how they are validated, and how the web app lays them out. This guide builds a small product catalog one step at a time. Every key used here is listed in the [Blueprint YAML reference](/reference/blueprint/).
 
 ## Where to write blueprints
 
@@ -13,13 +13,13 @@ You can write blueprints in two places:
 - Any text editor, then upload with the CLI:
 
   ```sh
-  acli blueprint validate --file product.toml
-  acli blueprint create --file product.toml
+  acli blueprint validate --file product.yaml
+  acli blueprint create --file product.yaml
   ```
 
   `validate` runs every check that saving runs without storing anything. Add `--blueprint-id <id>` to check a file as that blueprint's next revision.
 
-Both paths store the TOML exactly as written. Keeping blueprint files in version control alongside your integration code works well; the CLI sends them unchanged.
+Both paths store the YAML exactly as written. Keeping blueprint files in version control alongside your integration code works well; the CLI sends them unchanged.
 
 You need `blueprints.write` to create drafts and `blueprints.publish` to publish them.
 
@@ -36,23 +36,24 @@ The blueprint editor and the [reusable attribute](/builders/modeling/#reuse-attr
 
 ## Step 1: the smallest valid blueprint
 
-```toml
-format_version = 1
-code = "category"
-name = "Category"
-kind = "record"
+```yaml
+format_version: 1
+code: category
+name: Category
+kind: record
 
-[[attributes]]
-code = "name"
-value_type = "string"
+attributes:
+  - code: name
+    value_type: string
 
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
 ```
 
 - `code` identifies the blueprint for its whole life. Pick it carefully; it cannot change in later revisions.
-- `kind = "record"` means people can create records from it.
+- `kind: record` means people can create records from it.
 - Every record blueprint needs `views.dropdown_option`. It tells Attricat how to label a category wherever one is shown in a list: relationship pickers, filter pills, search results.
 
 Save this as a draft. A draft can be edited freely and cannot hold records yet.
@@ -71,53 +72,48 @@ To change a published blueprint, create a new revision. The next section explain
 
 ## Step 3: a product with typed attributes
 
-```toml
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
+```yaml
+format_version: 1
+code: product
+name: Product
+kind: record
 
-[[attributes]]
-code = "title"
-value_type = "string"
+attributes:
+  - code: title
+    value_type: string
 
-[[attributes]]
-code = "sku"
-value_type = "string"
-context_editable = "default"
+  - code: sku
+    value_type: string
+    context_editable: default
 
-[[attributes]]
-code = "price"
-value_type = "number"
-value_schema = '{"type":"number","minimum":0}'
+  - code: price
+    value_type: number
+    value_schema: '{"type":"number","minimum":0}'
 
-[[attributes]]
-code = "stock_on_hand"
-value_type = "integer"
-default_value = 0
+  - code: stock_on_hand
+    value_type: integer
+    default_value: 0
 
-[[attributes]]
-code = "available"
-value_type = "boolean"
+  - code: available
+    value_type: boolean
 
-[[attributes]]
-code = "available_on"
-value_type = "date"
+  - code: available_on
+    value_type: date
 
-[[attributes]]
-code = "order_cutoff"
-value_type = "time"
+  - code: order_cutoff
+    value_type: time
 
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title", "sku"]
-separator = " / "
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title, sku]
+    separator: ' / '
 ```
 
 A few choices in this file:
 
-- `sku` has `context_editable = "default"`. A SKU is the same everywhere, so it can only be edited in the default context. In any other context it shows as read-only.
-- `price` has a `value_schema` that rejects negative numbers. The schema is JSON inside a TOML string. See [Validation](/builders/validation/).
+- `sku` has `context_editable: default`. A SKU is the same everywhere, so it can only be edited in the default context. In any other context it shows as read-only.
+- `price` has a `value_schema` that rejects negative numbers. The schema is JSON inside a YAML string. See [Validation](/builders/validation/).
 - `stock_on_hand` starts at `0` on new records because of `default_value`.
 - `order_cutoff` is a `time`: a wall-clock time plus an IANA time zone, such as 09:30 in `Europe/Warsaw`.
 
@@ -125,20 +121,19 @@ A few choices in this file:
 
 Link each product to its categories and a single brand:
 
-```toml
-[[attributes]]
-code = "categories"
-value_type = "relationship"
-target_blueprint = "category"
+```yaml
+attributes:
+  - code: categories
+    value_type: relationship
+    target_blueprint: category
 
-[[attributes]]
-code = "brand"
-value_type = "relationship"
-target_blueprint = "brand"
-cardinality = "one"
+  - code: brand
+    value_type: relationship
+    target_blueprint: brand
+    cardinality: one
 ```
 
-`target_blueprint` makes Attricat reject a link to anything that is not a `category` (or `brand`). `categories` allows many targets; `brand` allows one per product. Many products can still share a brand. If a target must belong to exactly one source, also set `target_cardinality = "one"`.
+`target_blueprint` makes Attricat reject a link to anything that is not a `category` (or `brand`). `categories` allows many targets; `brand` allows one per product. Many products can still share a brand. If a target must belong to exactly one source, also set `target_cardinality: one`.
 
 The target blueprints must exist before you publish the product blueprint.
 
@@ -151,103 +146,75 @@ Relationships are how you model tags, labels, and taxonomies in Attricat. [Model
 - `context_fallback`: what a context without its own value shows. The default, `"default"`, inherits from the nearest parent context that has a value. `"none"` shows nothing.
 - `context_editable`: where the attribute can be written. The default, `"all"`, allows every context. `"default"` allows only the root.
 
-```toml
-[[attributes]]
-code = "description"
-value_type = "string"
-# Inherit from the parent market when a channel has no description.
-context_fallback = "default"
+```yaml
+attributes:
+  - code: description
+    value_type: string
+    # Inherit from the parent market when a channel has no description.
+    context_fallback: default
 
-[[attributes]]
-code = "promo_banner"
-value_type = "string"
-# A banner shown in one channel must not leak into its children.
-context_fallback = "none"
+  - code: promo_banner
+    value_type: string
+    # A banner shown in one channel must not leak into its children.
+    context_fallback: none
 ```
 
 ## Step 6: files
 
-```toml
-[[attributes]]
-code = "main_photo"
-value_type = "file"
-allowed_mime_groups = ["image"]
-image_only = true
-max_bytes = 10485760
+```yaml
+attributes:
+  - code: main_photo
+    value_type: file
+    allowed_mime_groups: [image]
+    image_only: true
+    max_bytes: 10485760
 
-[[attributes]]
-code = "manuals"
-value_type = "file"
-cardinality = "many"
-allowed_extensions = ["pdf"]
+  - code: manuals
+    value_type: file
+    cardinality: many
+    allowed_extensions: [pdf]
 ```
 
-A file attribute holds one file by default; `cardinality = "many"` makes it an ordered list. The policy is checked on every upload: the file's content signature, MIME type, extension, and size. Images get `thumbnail` and `display` WebP variants generated in the background.
+A file attribute holds one file by default; `cardinality: many` makes it an ordered list. The policy is checked on every upload: the file's content signature, MIME type, extension, and size. Images get `thumbnail` and `display` WebP variants generated in the background.
 
 ## Step 7: layout
 
 Without views, the web app lists attributes in the order you declared them. Add views when you want tabs, grids, or a curated Explorer table.
 
-```toml
-[views.detail]
-type = "stack"
-
-[[views.detail.children]]
-type = "stack"
-component = { id = "attricat.record_heading", version = 1 }
-
-[[views.detail.children.children]]
-type = "field"
-field = "title"
-
-[[views.detail.children.children]]
-type = "field"
-field = "sku"
-
-[[views.detail.children]]
-type = "tabs"
-
-[[views.detail.children.tabs]]
-label = "Overview"
-
-[[views.detail.children.tabs.children]]
-type = "grid"
-children = [
-  { type = "field", field = "price" },
-  { type = "field", field = "stock_on_hand" },
-]
-
-[[views.detail.children.tabs.children]]
-type = "relationship_list"
-field = "categories"
-
-[[views.detail.children.tabs]]
-label = "Media"
-
-[[views.detail.children.tabs.children]]
-type = "field"
-field = "main_photo"
-
-[views.table]
-type = "table"
-
-[[views.table.columns]]
-field = "main_photo"
-label = "Image"
-renderer = { id = "attricat.table_image", version = 1 }
-
-[[views.table.columns]]
-field = "title"
-
-[[views.table.columns]]
-field = "brand.name"
-label = "Brand"
-
-[[views.table.columns]]
-field = "price"
+```yaml
+views:
+  detail:
+    type: stack
+    children:
+      - type: stack
+        component: {id: attricat.record_heading, version: 1}
+        children:
+          - {type: field, field: title}
+          - {type: field, field: sku}
+      - type: tabs
+        tabs:
+          - label: Overview
+            children:
+              - type: grid
+                children:
+                  - {type: field, field: price}
+                  - {type: field, field: stock_on_hand}
+              - {type: relationship_list, field: categories}
+          - label: Media
+            children:
+              - {type: field, field: main_photo}
+  table:
+    type: table
+    columns:
+      - field: main_photo
+        label: Image
+        renderer: {id: attricat.table_image, version: 1}
+      - {field: title}
+      - {field: brand.name, label: Brand}
+      - {field: price}
 ```
 
-The `attricat.record_heading` stack turns its first field into the page title and the rest into a subtitle. The table column `brand.name` follows the `brand` relationship and shows the brand's `name`. Because `brand` has `cardinality = "one"`, that column can also be sorted.
+The `attricat.record_heading` stack turns its first field into the page title and the rest into a subtitle. The table column `brand.name` follows the `brand` relationship and shows the brand's `name`. Because `brand` has `cardinality: one`, that column can also be sorted.
 
 [Views and layouts](/builders/views/) covers every block and component.
 
@@ -255,34 +222,32 @@ The `attricat.record_heading` stack turns its first field into the page title an
 
 A `value_schema` checks one value. An `record_schema` checks the whole record, so it can express rules like "a product on sale needs a sale price". This example assumes the blueprint also has an `on_sale` boolean and a `sale_price` number:
 
-```toml
-record_schema = '''
-{
-  "type": "object",
-  "required": ["title", "sku"],
-  "if": { "properties": { "on_sale": { "const": true } }, "required": ["on_sale"] },
-  "then": { "required": ["sale_price"] }
-}
-'''
+```yaml
+record_schema: |
+  {
+    "type": "object",
+    "required": ["title", "sku"],
+    "if": { "properties": { "on_sale": { "const": true } }, "required": ["on_sale"] },
+    "then": { "required": ["sale_price"] }
+  }
 ```
 
-Put `record_schema` with the other top-level keys, before the first `[[attributes]]`. In TOML, a key written after a table header belongs to that table.
+Put `record_schema` with the other top-level keys, at the same indentation as `attributes`. Indented under an attribute, it would belong to that attribute instead.
 
 Attricat checks the schema in every context after every change. A write that would leave any context invalid is rejected with `422 record_schema_mismatch` and nothing is saved.
 
 JSON Schema cannot compare two attributes. For rules like "a sale price must be lower than the price", add a named check to the same schema under `x-attricat-checks`:
 
-```toml
-record_schema = '''
-{
-  "type": "object",
-  "required": ["title", "sku"],
-  "x-attricat-checks": [
-    { "code": "sale-below-price", "message": "The sale price must be lower than the price",
-      "predicate": { "type": "compare", "attribute_code": "sale_price", "op": "lt", "other_attribute_code": "price" } }
-  ]
-}
-'''
+```yaml
+record_schema: |
+  {
+    "type": "object",
+    "required": ["title", "sku"],
+    "x-attricat-checks": [
+      { "code": "sale-below-price", "message": "The sale price must be lower than the price",
+        "predicate": { "type": "compare", "attribute_code": "sale_price", "op": "lt", "other_attribute_code": "price" } }
+    ]
+  }
 ```
 
 A failing check is rejected with `422 record_check_failed`. Checks can also look at linked records. See [Validation](/builders/validation/#compare-attributes-with-checks).
@@ -291,36 +256,34 @@ A failing check is rejected with `422 record_check_failed`. Checks can also look
 
 When several blueprints need the same fields, such as SEO metadata, put them in a mixin:
 
-```toml
-format_version = 1
-code = "seo"
-name = "SEO fields"
-kind = "mixin"
+```yaml
+format_version: 1
+code: seo
+name: SEO fields
+kind: mixin
 
-[[attributes]]
-code = "meta_title"
-value_type = "string"
+attributes:
+  - code: meta_title
+    value_type: string
 
-[[attributes]]
-code = "meta_description"
-value_type = "string"
+  - code: meta_description
+    value_type: string
 ```
 
 Publish it, then include it in `product` and select the attributes you want:
 
-```toml
-[[includes]]
-alias = "seo"
-code = "seo"
-version = 1
+```yaml
+includes:
+  - alias: seo
+    code: seo
+    version: 1
 
-[[attributes]]
-code = "meta_title"
-from = "seo.meta_title"
+attributes:
+  - code: meta_title
+    from: seo.meta_title
 
-[[attributes]]
-code = "meta_description"
-from = "seo.meta_description"
+  - code: meta_description
+    from: seo.meta_description
 ```
 
 An include pins an exact mixin revision. Publishing `seo` version 2 does not change `product` until you publish a new `product` revision that includes version 2.
@@ -329,35 +292,36 @@ An include pins an exact mixin revision. Publishing `seo` version 2 does not cha
 
 A [status](/builders/validation/#statuses) can do more than restrict which transitions exist. For controlled documents, inspections, or assessments it can also decide who may make a transition, freeze the record once it is final, bind an approval to the exact content that was reviewed, and keep released files for a retention period:
 
-```toml
-[[attributes]]
-code = "status"
-value_type = "string"
-value_schema = '''{
-  "type": "string",
-  "enum": ["draft", "review", "approved", "released"],
-  "x-attricat-status": {
-    "version": 1,
-    "options": [
-      { "code": "draft", "label": "Draft" },
-      { "code": "review", "label": "In review" },
-      { "code": "approved", "label": "Approved",
-        "approval": { "covers": ["title", "procedure"], "void_to": "review" } },
-      { "code": "released", "label": "Released", "tone": "success",
-        "lock": "all", "retention_days": 3650 }
-    ],
-    "transitions": [
-      { "from": null, "to": "draft" },
-      { "from": "draft", "to": "review", "code": "submit" },
-      { "from": "review", "to": "approved", "code": "approve",
-        "roles": ["reviewer"], "separate_from": ["submit"] },
-      { "from": "approved", "to": "released", "code": "release",
-        "permission": "records.publish" },
-      { "from": "released", "to": "draft", "code": "correct",
-        "roles": ["owner", "admin"] }
-    ]
-  }
-}'''
+```yaml
+attributes:
+  - code: status
+    value_type: string
+    value_schema: |-
+      {
+        "type": "string",
+        "enum": ["draft", "review", "approved", "released"],
+        "x-attricat-status": {
+          "version": 1,
+          "options": [
+            { "code": "draft", "label": "Draft" },
+            { "code": "review", "label": "In review" },
+            { "code": "approved", "label": "Approved",
+              "approval": { "covers": ["title", "procedure"], "void_to": "review" } },
+            { "code": "released", "label": "Released", "tone": "success",
+              "lock": "all", "retention_days": 3650 }
+          ],
+          "transitions": [
+            { "from": null, "to": "draft" },
+            { "from": "draft", "to": "review", "code": "submit" },
+            { "from": "review", "to": "approved", "code": "approve",
+              "roles": ["reviewer"], "separate_from": ["submit"] },
+            { "from": "approved", "to": "released", "code": "release",
+              "permission": "records.publish" },
+            { "from": "released", "to": "draft", "code": "correct",
+              "roles": ["owner", "admin"] }
+          ]
+        }
+      }
 ```
 
 Here:

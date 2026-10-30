@@ -1,6 +1,6 @@
 # Workflows
 
-Workflows are workspace-scoped, versioned TOML definitions. Published revisions are immutable; enabling records an outbox-sequence high-water boundary, so only later events fan out. Each run snapshots its exact enabled compiled revision and never changes to a newer definition.
+Workflows are workspace-scoped, versioned YAML definitions. Published revisions are immutable; enabling records an outbox-sequence high-water boundary, so only later events fan out. Each run snapshots its exact enabled compiled revision and never changes to a newer definition.
 
 Local actions remain deliberately narrow: `system_tags_add`, `system_tags_remove`, `system_metadata_merge`, `system_metadata_delete`, and `attribute_write`. They only affect one existing record and run as an ordinary record update: schema, status-transition, check and annotation validation, audit, and publication reconciliation (a published record whose content changes is withdrawn unless a retained role applies). `readonly` is a web-form hint and does not restrict workflow writes, but an `attribute_write` to a [generated](blueprints.md#generated-values) attribute fails with `generated_attribute_readonly` when the action runs. The only cross-record action is the bounded `referencing_records_update` described below. There are no scripts, templates, loops, queries, SQL, or arbitrary target selectors.
 
@@ -8,31 +8,31 @@ Execution lives in `crates/repository/src/repository/workflow_actions.rs`. Every
 
 ## Changed-attribute filters
 
-An event trigger may declare `attributes = ["code", ...]` (1-100 unique codes). Fan-out then creates a run only if `attricat_workflow::changed_attributes_match` finds a payload fact whose `attribute_code` is listed; it is ANDed with `envelope` and `facts`. The field is optional and omitted from the compiled plan when absent, so stored revisions and their hashes are unchanged. It is rejected on `record.migrated.v1`, whose payload has no facts.
+An event trigger may declare `attributes: [code, ...]` (1-100 unique codes). Fan-out then creates a run only if `attricat_workflow::changed_attributes_match` finds a payload fact whose `attribute_code` is listed; it is ANDed with `envelope` and `facts`. The field is optional and omitted from the compiled plan when absent, so stored revisions and their hashes are unchanged. It is rejected on `record.migrated.v1`, whose payload has no facts.
 
 Verification for this contract: `record.created.v1`, `record.updated.v1`, `attribute_value.changed.v1`, `attribute_value.restored.v1` and `relationship.changed.v1` carry `facts[]` built from the audit before/after diff (`audit_changes`), so a fact exists only for a value that actually changed and always names its `attribute_code`. Relationship facts are one per added/removed target (`relationship_add`/`relationship_remove`). File attributes are excluded from the audit snapshot and the file-reference write paths (`files.rs`) enqueue no domain event, so a file attribute can never satisfy a filter. Emitting file-reference facts is a separate eventing contract change.
 
 ## Change-kind and tag filters
 
-An event trigger may declare `change_kinds` (unique values of `attricat_events::CHANGE_KINDS_V1`: `set`, `replace`, `remove`, `restore`, `relationship_add`, `relationship_remove`). `attricat_workflow::changed_facts_match` then requires one payload fact whose `change_kind` is listed and, when `attributes` is also set, whose `attribute_code` is listed too: both filters apply to the same fact, so `attributes = ["license"]` with `change_kinds = ["relationship_add"]` means "a license target was added". It is rejected on `record.migrated.v1`.
+An event trigger may declare `change_kinds` (unique values of `attricat_events::CHANGE_KINDS_V1`: `set`, `replace`, `remove`, `restore`, `relationship_add`, `relationship_remove`). `attricat_workflow::changed_facts_match` then requires one payload fact whose `change_kind` is listed and, when `attributes` is also set, whose `attribute_code` is listed too: both filters apply to the same fact, so `attributes: [license]` with `change_kinds: [relationship_add]` means "a license target was added". It is rejected on `record.migrated.v1`.
 
 `tags_added` and `tags_removed` (1-100 unique system tags each) match the `tags_added` / `tags_removed` lists of `RecordMutationV1`. `update_record_in_transaction_with` diffs the record's tags before and after the write, so every whole-field and patch tag write (API, agent tools, workflow actions) reports them; `record.created.v1` reports the initial tags as `tags_added`. Both lists are omitted from the payload when empty. `tags_added` is accepted on `record.created.v1` and `record.updated.v1`, `tags_removed` on `record.updated.v1` only. Extension namespace changes emit `record.annotations_changed.v1`, which is not a workflow trigger event, and are not matched. Like the other filters, all three are ANDed, omitted from the compiled plan when absent, and leave stored revision hashes unchanged.
 
 ## Blueprint filters
 
-An event trigger may declare `blueprints = ["code", ...]` (1-100 unique codes). Fan-out then creates a run only if the event's record belongs to a listed blueprint, ANDed with `attributes`, `envelope` and `facts`. Fan-out reads the record's blueprint code from `records`/`blueprints` once per event, and only when some matching trigger has the filter, because `attribute_value.*` and `relationship.changed.v1` payloads do not carry the blueprint. Saving a workflow (`create_workflow_in_transaction`, `create_workflow_revision`) rejects codes the workspace has no blueprint for with `invalid_workflow_definition`; the definition schema marks them `x-attricat-reference = "blueprint"`, so the editor completes and checks them. `POST /workflows/validate` (`validate_workflow`) runs the same checks, so the editor reports them live. When every trigger is a blueprint-filtered event trigger, saving also checks each top-level `attribute_write` code against the attributes of those blueprints' latest published revision (latest revision before the first publish) and the workspace's reusable attribute codes, since a record can carry an attached reusable attribute; writes nested in `referencing_records_update` are not checked, as their targets can be of any blueprint. Like `attributes`, the field is omitted from the compiled plan when absent. Solution-pack seeds require the codes to be pack blueprints and check trigger attributes and direct `attribute_write` actions against those blueprints only; referencing-record updates still resolve against every pack blueprint.
+An event trigger may declare `blueprints: [code, ...]` (1-100 unique codes). Fan-out then creates a run only if the event's record belongs to a listed blueprint, ANDed with `attributes`, `envelope` and `facts`. Fan-out reads the record's blueprint code from `records`/`blueprints` once per event, and only when some matching trigger has the filter, because `attribute_value.*` and `relationship.changed.v1` payloads do not carry the blueprint. Saving a workflow (`create_workflow_in_transaction`, `create_workflow_revision`) rejects codes the workspace has no blueprint for with `invalid_workflow_definition`; the definition schema marks them `x-attricat-reference: blueprint`, so the editor completes and checks them. `POST /workflows/validate` (`validate_workflow`) runs the same checks, so the editor reports them live. When every trigger is a blueprint-filtered event trigger, saving also checks each top-level `attribute_write` code against the attributes of those blueprints' latest published revision (latest revision before the first publish) and the workspace's reusable attribute codes, since a record can carry an attached reusable attribute; writes nested in `referencing_records_update` are not checked, as their targets can be of any blueprint. Like `attributes`, the field is omitted from the compiled plan when absent. Solution-pack seeds require the codes to be pack blueprints and check trigger attributes and direct `attribute_write` actions against those blueprints only; referencing-record updates still resolve against every pack blueprint.
 
 ## Referencing record updates
 
-```toml
-[[actions]]
-type = "referencing_records_update"
-relationship_attribute = "license"   # attribute on the referencing records
-max_targets = 100                    # default 100, hard maximum 500
-[[actions.actions]]
-type = "attribute_write"
-attribute_code = "status"
-fixed = "in_review"
+```yaml
+actions:
+  - type: referencing_records_update
+    relationship_attribute: license  # attribute on the referencing records
+    max_targets: 100  # default 100, hard maximum 500
+    actions:
+      - type: attribute_write
+        attribute_code: status
+        fixed: in_review
 ```
 
 Nested actions are 1-20 local actions with fixed values only (no `event_field`, no nesting). Targets are live records with an active relationship value, in any context, whose attribute with that code belongs to the record's current blueprint revision or the record itself, excluding the trigger record. They are selected in ID order with `LIMIT max_targets + 1`; exceeding the limit fails the attempt before any further target is written.
@@ -41,35 +41,39 @@ Each target is a separate transaction: lifecycle lock, run lock and task fence (
 
 ## Trigger contracts
 
-`format_version = 1` remains event-only and accepts only the documented catalog record event types. `format_version = 2` additionally has these closed trigger types:
+`format_version: 1` remains event-only and accepts only the documented catalog record event types. `format_version: 2` additionally has these closed trigger types:
 
-```toml
-format_version = 2
-code = "retag-product"
-name = "Retag product"
-[[triggers]]
-type = "manual"
-[[actions]]
-type = "system_tags_add"
-tags = ["reviewed"]
+```yaml
+format_version: 2
+code: retag-product
+name: Retag product
+
+triggers:
+  - type: manual
+
+actions:
+  - type: system_tags_add
+    tags: [reviewed]
 ```
 
 A manual run is available only to `workflows.manage`, only against the currently enabled published revision (otherwise `422 workflow_not_enabled`), and requires one existing `record_id`. It accepts no arbitrary payload. `POST /workflows/{workflow_id}/run-now` returns a durable run identifier; diagnostics show source and safe status, never its private trigger snapshot.
 
-Schedules are revisioned TOML, not mutable database jobs. They use a six-field cron and **must** explicitly declare `timezone = "UTC"`; local/DST time zones are rejected to eliminate DST duplicate/skipped ambiguity. `target_record_id` is the single existing record action target. Schedule actions require fixed attribute values (there are no event facts).
+Schedules are revisioned YAML, not mutable database jobs. They use a six-field cron and **must** explicitly declare `timezone: UTC`; local/DST time zones are rejected to eliminate DST duplicate/skipped ambiguity. `target_record_id` is the single existing record action target. Schedule actions require fixed attribute values (there are no event facts).
 
-```toml
-format_version = 2
-code = "hourly-retag"
-name = "Hourly retag"
-[[triggers]]
-type = "schedule"
-cron = "0 0 * * * *"
-timezone = "UTC"
-target_record_id = "00000000-0000-0000-0000-000000000001"
-[[actions]]
-type = "system_tags_add"
-tags = ["hourly"]
+```yaml
+format_version: 2
+code: hourly-retag
+name: Hourly retag
+
+triggers:
+  - type: schedule
+    cron: '0 0 * * * *'
+    timezone: UTC
+    target_record_id: '00000000-0000-0000-0000-000000000001'
+
+actions:
+  - type: system_tags_add
+    tags: [hourly]
 ```
 
 The Rust scheduler owns a durable cursor per revision/trigger. It skips downtime misfires older than five minutes, records them, and skips an occurrence while that workflow has a pending or leased run (no overlap). Occurrence keys are `(revision, trigger index, UTC due timestamp)`, so duplicate ticks/restarts cannot create duplicate runs. Disable cancels queued/leased runs and removes the lifecycle eligibility on the next scheduler transaction. Runs retain normal bounded exponential retry (five attempts) and dead-letter semantics.

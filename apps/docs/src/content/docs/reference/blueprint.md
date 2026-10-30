@@ -1,5 +1,5 @@
 ---
-title: Blueprint TOML reference
+title: Blueprint YAML reference
 description: Every key accepted in a blueprint definition, with types, defaults, and validation rules.
 ---
 
@@ -7,9 +7,13 @@ This page lists every key the blueprint compiler accepts. For a walkthrough that
 
 The compiler is strict. An unknown key, a value of the wrong type, or a reference to something that does not exist rejects the whole definition with `422 invalid_blueprint_definition` and a message naming the problem.
 
+## YAML syntax
+
+YAML is indentation-sensitive: indent with spaces, never tabs, and keep the items of a list at the same depth. Quote a string that contains `: ` or ` #`, or starts with `{`, `[`, `*`, `&`, `!`, `|`, `>`, `'`, `"`, `%`, or `@`. That includes every label that starts with a lexicon reference: write `name: '{{Product}}'`, not `name: {{Product}}`. Only `true` and `false` are booleans; `yes`, `no`, `on`, and `off` are strings.
+
 ## Codes
 
-Blueprint codes, attribute codes, include aliases, relationship targets, rule codes, connector job codes, and role codes in `[publication]` must be **codes**: non-empty strings of ASCII letters, digits, `-`, and `_`. `product`, `seo-fields`, and `stock_on_hand` are valid. `product type` and `prodükt` are not.
+Blueprint codes, attribute codes, include aliases, relationship targets, rule codes, connector job codes, and role codes in `publication` must be **codes**: non-empty strings of ASCII letters, digits, `-`, and `_`. `product`, `seo-fields`, and `stock_on_hand` are valid. `product type` and `prodükt` are not.
 
 ## Translated labels
 
@@ -17,15 +21,15 @@ The blueprint `name` and `description`, attribute `name` and `description`, tab 
 
 ## Top level
 
-```toml
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-record_schema = '''{ "type": "object", "required": ["title"] }'''
+```yaml
+format_version: 1
+code: product
+name: Product
+kind: record
+record_schema: '{ "type": "object", "required": ["title"] }'
 ```
 
-Record blueprints use `kind = "record"`.
+Record blueprints use `kind: record`.
 
 | Key | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -33,25 +37,25 @@ Record blueprints use `kind = "record"`.
 | `code` | code | Yes | Identifier of the blueprint family. It cannot change between revisions. |
 | `name` | string | Yes | Display name. Can change between revisions. |
 | `description` | string | No | What the blueprint's records are, up to 500 characters, such as "Product groupings, such as Basic tools". The agent reads it to match people's words to records; the web app does not show it yet. |
-| `kind` | `"record"` or `"mixin"` | Yes | An `record` blueprint can have records. A `mixin` only supplies attributes to other blueprints through `[[includes]]`. |
-| `attributes` | array of tables | Yes | At least one attribute. See [Attributes](#attributes). |
-| `includes` | array of tables | No | Mixins this blueprint pulls attributes from. See [Includes](#includes). |
-| `views` | table | For `record`: yes | Layouts for the web app. Record blueprints must define `views.dropdown_option`. See [Views](#views). |
+| `kind` | `"record"` or `"mixin"` | Yes | An `record` blueprint can have records. A `mixin` only supplies attributes to other blueprints through `includes`. |
+| `attributes` | list of mappings | Yes | At least one attribute. See [Attributes](#attributes). |
+| `includes` | list of mappings | No | Mixins this blueprint pulls attributes from. See [Includes](#includes). |
+| `views` | mapping | For `record`: yes | Layouts for the web app. Record blueprints must define `views.dropdown_option`. See [Views](#views). |
 | `record_schema` | string (JSON) | No | JSON Schema for the whole record, optionally with [`x-attricat-checks`](#record-checks). Record blueprints only. See [Validation](/builders/validation/). |
-| `publication` | table | No | Publication reapproval policy. See [Publication](#publication). |
-| `rules` | array of tables | No | Data-quality rules owned by this blueprint. See [Rules](/builders/rules/). |
-| `unique_keys` | array of tables | No | Business keys whose values must be unique. Record blueprints only. See [Unique keys](#unique-keys). |
-| `connector_jobs` | array of tables | No | Scheduled or manual import and export jobs run by a connector extension. Record blueprints only. See [Connector jobs](#connector-jobs). |
-| `extensions` | table | No | Free-form data for extensions, namespaced as `[extensions.<extension-id>]`. The core compiler ignores it; extensions read it from the stored definition. |
+| `publication` | mapping | No | Publication reapproval policy. See [Publication](#publication). |
+| `rules` | list of mappings | No | Data-quality rules owned by this blueprint. See [Rules](/builders/rules/). |
+| `unique_keys` | list of mappings | No | Business keys whose values must be unique. Record blueprints only. See [Unique keys](#unique-keys). |
+| `connector_jobs` | list of mappings | No | Scheduled or manual import and export jobs run by a connector extension. Record blueprints only. See [Connector jobs](#connector-jobs). |
+| `extensions` | mapping | No | Free-form data for extensions, namespaced under `extensions.<extension-id>`. The core compiler ignores it; extensions read it from the stored definition. |
 
 ## Attributes
 
-Each `[[attributes]]` table declares exactly one of `value_type`, `from`, or `extension_type`.
+Each entry in `attributes` declares exactly one of `value_type`, `from`, or `extension_type`.
 
-```toml
-[[attributes]]
-code = "title"
-value_type = "string"
+```yaml
+attributes:
+  - code: title
+    value_type: string
 ```
 
 ### Common keys
@@ -70,19 +74,19 @@ value_type = "string"
 | `tags` | array of strings | `[]` | Free-form metadata. Must be unique and non-empty. Some tags hide the attribute in the web app; see [Visibility tags](#visibility-tags). |
 | `default_value` | matches the type | Unset | Value stored in the default context when a record is created without one. Scalar types only. |
 | `value_schema` | string (JSON) | Unset | JSON Schema for one value. Scalar types only. A `string` attribute's schema can make it a [status](#statuses) or a [user or team assignment](#user-or-team-assignments). See [Validation](/builders/validation/). |
-| `generated` | table | Unset | Lets the server number new records, such as invoice or order numbers. `string` and `integer` attributes of record blueprints only. See [Generated values](#generated-values). |
+| `generated` | mapping | Unset | Lets the server number new records, such as invoice or order numbers. `string` and `integer` attributes of record blueprints only. See [Generated values](#generated-values). |
 
 ### Value types
 
-| `value_type` | Stored value | CLI/TOML example | Notes |
+| `value_type` | Stored value | CLI/YAML example | Notes |
 | --- | --- | --- | --- |
-| `string` | Text | `value = "Blue shirt"` | Clearing a string in a non-default context removes the override instead of storing `""`. Can also be a [status](#statuses) or a [user or team assignment](#user-or-team-assignments). |
-| `number` | Decimal | `value = 19.99` | |
-| `integer` | 64-bit integer | `value = 12` | |
-| `boolean` | `true` or `false` | `value = true` | |
-| `date` | Calendar date | `value = 2026-03-01` | |
-| `datetime` | Timestamp with offset | `value = 2026-03-01T09:30:00Z` | RFC 3339. |
-| `time` | Wall-clock time and IANA time zone | `value = { time = "09:30:00", time_zone = "Europe/Warsaw" }` | Both parts are required. |
+| `string` | Text | `value: Blue shirt` | Clearing a string in a non-default context removes the override instead of storing `""`. Can also be a [status](#statuses) or a [user or team assignment](#user-or-team-assignments). |
+| `number` | Decimal | `value: 19.99` | |
+| `integer` | 64-bit integer | `value: 12` | |
+| `boolean` | `true` or `false` | `value: true` | |
+| `date` | Calendar date | `value: 2026-03-01` | |
+| `datetime` | Timestamp with offset | `value: 2026-03-01T09:30:00Z` | RFC 3339. |
+| `time` | Wall-clock time and IANA time zone | `value: {time: '09:30:00', time_zone: Europe/Warsaw}` | Both parts are required. |
 | `json` | Any JSON value | | Cannot be sorted or used in Explorer filters. Prefer typed attributes or relationships. |
 | `relationship` | Links to other records | | See [Relationship keys](#relationship-keys). |
 | `file` | Uploaded files | | See [File keys](#file-keys). |
@@ -99,38 +103,39 @@ A `string` attribute whose `value_schema` has an `enum` is edited by choosing on
 
 A `string` attribute whose `value_schema` has an `enum` and an `x-attricat-status` annotation is a status. See [Statuses](/builders/validation/#statuses) for how they behave.
 
-```toml
-[[attributes]]
-code = "status"
-value_type = "string"
-value_schema = '''{
-  "type": "string",
-  "enum": ["draft", "review", "released"],
-  "x-attricat-status": {
-    "version": 1,
-    "options": [
-      { "code": "draft", "label": "Draft" },
-      { "code": "review", "label": "In review",
-        "approval": { "covers": "all", "void_to": "draft" } },
-      { "code": "released", "label": "Released", "tone": "success",
-        "lock": "all", "retention_days": 3650 }
-    ],
-    "transitions": [
-      { "from": null, "to": "draft" },
-      { "from": "draft", "to": "review", "code": "submit" },
-      { "from": "review", "to": "released", "code": "release",
-        "roles": ["reviewer"], "separate_from": ["submit"] },
-      { "from": "released", "to": "draft", "code": "correct", "permission": "records.publish" }
-    ]
-  }
-}'''
+```yaml
+attributes:
+  - code: status
+    value_type: string
+    value_schema: |-
+      {
+        "type": "string",
+        "enum": ["draft", "review", "released"],
+        "x-attricat-status": {
+          "version": 1,
+          "options": [
+            { "code": "draft", "label": "Draft" },
+            { "code": "review", "label": "In review",
+              "approval": { "covers": "all", "void_to": "draft" } },
+            { "code": "released", "label": "Released", "tone": "success",
+              "lock": "all", "retention_days": 3650 }
+          ],
+          "transitions": [
+            { "from": null, "to": "draft" },
+            { "from": "draft", "to": "review", "code": "submit" },
+            { "from": "review", "to": "released", "code": "release",
+              "roles": ["reviewer"], "separate_from": ["submit"] },
+            { "from": "released", "to": "draft", "code": "correct", "permission": "records.publish" }
+          ]
+        }
+      }
 ```
 
 | Key | Value | Description |
 | --- | --- | --- |
 | `version` | `1` | Required. |
-| `options` | array of 1 to 100 tables | Required. One option per `enum` code, in display order. |
-| `transitions` | array of up to 10,000 tables | Allowed changes. Omit it to allow any change; with it, only the listed changes are allowed, and an empty array allows none. |
+| `options` | list of 1 to 100 mappings | Required. One option per `enum` code, in display order. |
+| `transitions` | list of up to 10,000 mappings | Allowed changes. Omit it to allow any change; with it, only the listed changes are allowed, and an empty array allows none. |
 
 Each option:
 
@@ -140,7 +145,7 @@ Each option:
 | `label` | string, 1 to 200 characters | Required. Can contain [lexicon references](/builders/translations/#status-and-choice-labels). |
 | `tone` | `default`, `success`, `warning`, `error`, or `info` | Color of the status chip. |
 | `lock` | `"all"`, or 1 to 500 attribute codes | Makes the listed attributes read-only while the record has this status. `"all"` covers every attribute, relationship, and file except the status itself. A reusable attribute is written `namespace:code`. A record with a locking status cannot be deleted. Owners and admins can always unlock it to another status. Requires `transitions`. |
-| `approval` | table with `covers` and `void_to` | Records an approval when the record enters this status. `covers` is `"all"` or 1 to 500 attribute codes; `void_to` is another option the record moves to when covered content changes. |
+| `approval` | mapping with `covers` and `void_to` | Records an approval when the record enters this status. `covers` is `"all"` or 1 to 500 attribute codes; `void_to` is another option the record moves to when covered content changes. |
 | `retention_days` | integer, 1 to 36,600 | Places a retention hold on the locked attributes' files when the record enters this status. Requires `lock`. |
 
 Each transition:
@@ -161,11 +166,11 @@ Each `from`/`to` pair may appear only once. `permission`, `roles`, and `separate
 
 A `string` attribute whose `value_schema` has an `x-attricat-principal` annotation stores a reference to a workspace user or team:
 
-```toml
-[[attributes]]
-code = "assignee"
-value_type = "string"
-value_schema = '''{"type": "string", "x-attricat-principal": {"version": 1, "kinds": ["user", "team"]}}'''
+```yaml
+attributes:
+  - code: assignee
+    value_type: string
+    value_schema: '{"type": "string", "x-attricat-principal": {"version": 1, "kinds": ["user", "team"]}}'
 ```
 
 | Key | Value | Description |
@@ -181,36 +186,36 @@ value_schema = '''{"type": "string", "x-attricat-principal": {"version": 1, "kin
 
 ### Relationship keys
 
-```toml
-[[attributes]]
-code = "brand"
-value_type = "relationship"
-target_blueprint = "brand"
-cardinality = "one"
+```yaml
+attributes:
+  - code: brand
+    value_type: relationship
+    target_blueprint: brand
+    cardinality: one
 ```
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
 | `target_blueprint` | code | Any record blueprint | Restricts targets to records of this blueprint family. |
 | `target_blueprints` | array of codes | Any record blueprint | Restricts targets to records of any of these blueprint families. Cannot be combined with `target_blueprint`; a one-item list is the same as `target_blueprint`. |
-| `cardinality` | `"one"`, `"many"`, or `"one_to_one"` | `"many"` | How many targets one record may link to in one context. `one_to_one` is shorthand for `cardinality = "one"` plus `target_cardinality = "one"` and cannot be combined with `target_cardinality`. |
+| `cardinality` | `"one"`, `"many"`, or `"one_to_one"` | `"many"` | How many targets one record may link to in one context. `one_to_one` is shorthand for `cardinality: one` plus `target_cardinality: one` and cannot be combined with `target_cardinality`. |
 | `target_cardinality` | `"one"` or `"many"` | `"many"` | How many records may link to the same target through this attribute in one context. |
-| `acyclic` | boolean | `false` | Rejects links that would form a cycle through this attribute. Requires `context_editable = "default"`, and the targets must include the blueprint itself. See [Hierarchies](#hierarchies). |
-| `tree` | boolean | `false` | An acyclic hierarchy in which every record has at most one target (its parent). Implies `acyclic = true` and defaults `cardinality` to `"one"`; `cardinality = "many"` is rejected. |
+| `acyclic` | boolean | `false` | Rejects links that would form a cycle through this attribute. Requires `context_editable: default`, and the targets must include the blueprint itself. See [Hierarchies](#hierarchies). |
+| `tree` | boolean | `false` | An acyclic hierarchy in which every record has at most one target (its parent). Implies `acyclic: true` and defaults `cardinality` to `"one"`; `cardinality: many` is rejected. |
 
-`cardinality = "one"` gives a single-select field whose options can be shared, such as a brand. Add `target_cardinality = "one"` only for an exclusive pairing, where each target can be claimed once. A write that breaks either limit returns `409 relationship_cardinality_conflict`.
+`cardinality: one` gives a single-select field whose options can be shared, such as a brand. Add `target_cardinality: one` only for an exclusive pairing, where each target can be claimed once. A write that breaks either limit returns `409 relationship_cardinality_conflict`.
 
 A write that links a record of a blueprint not allowed by `target_blueprint` or `target_blueprints` returns `422 relationship_target_type_mismatch`. The record picker in the web app offers only the allowed blueprints; when there are several, the picker has a **Target blueprint** selector. An `incoming_relationship_list` on any of the allowed target blueprints can list the field.
 
 #### Hierarchies
 
-```toml
-[[attributes]]
-code = "parent"
-value_type = "relationship"
-target_blueprint = "location"
-tree = true
-context_editable = "default"
+```yaml
+attributes:
+  - code: parent
+    value_type: relationship
+    target_blueprint: location
+    tree: true
+    context_editable: default
 ```
 
 `acyclic` and `tree` protect self-referencing structures such as location or asset hierarchies, and predecessor chains such as revision → previous revision.
@@ -225,15 +230,15 @@ Relationships cannot have `value_schema` or `default_value`. Constrain them with
 
 ### File keys
 
-```toml
-[[attributes]]
-code = "gallery"
-value_type = "file"
-cardinality = "many"
-allowed_mime_groups = ["image"]
-allowed_extensions = ["jpg", "png", "webp"]
-max_bytes = 10485760
-image_only = true
+```yaml
+attributes:
+  - code: gallery
+    value_type: file
+    cardinality: many
+    allowed_mime_groups: [image]
+    allowed_extensions: [jpg, png, webp]
+    max_bytes: 10485760
+    image_only: true
 ```
 
 | Key | Type | Default | Description |
@@ -246,7 +251,7 @@ image_only = true
 | `purposes` | array of codes | `[]` | Labels describing what the files are for, such as `product_image`. |
 | `image_only` | boolean | `false` | Accept images only. Required for the `attricat.table_image` renderer. |
 
-These keys are rejected on any attribute that is not `value_type = "file"`. File attributes cannot have `value_schema`, `default_value`, or `target_blueprint`.
+These keys are rejected on any attribute that is not `value_type: file`. File attributes cannot have `value_schema`, `default_value`, or `target_blueprint`.
 
 Uploaded images get two generated variants, `thumbnail` and `display`, both WebP. Other files are stored as uploaded.
 
@@ -266,11 +271,15 @@ Some tags change where the web app shows an attribute when it builds a layout au
 
 `generated` makes the server give every new record the next number from a counter, such as an invoice, order, or document number:
 
-```toml
-[[attributes]]
-code = "invoice_number"
-value_type = "string"
-generated = { format = "INV-{yyyy}-{n:05}", start = 1, reset = "yearly", time_zone = "Europe/Warsaw" }
+```yaml
+attributes:
+  - code: invoice_number
+    value_type: string
+    generated:
+      format: 'INV-{yyyy}-{n:05}'
+      start: 1
+      reset: yearly
+      time_zone: Europe/Warsaw
 ```
 
 The first invoice created in 2026 gets `INV-2026-00001`, the next one `INV-2026-00002`, and the first one created in 2027 `INV-2027-00001`.
@@ -284,7 +293,7 @@ The first invoice created in 2026 gets `INV-2026-00001`, the next one `INV-2026-
 
 Only `string` and `integer` attributes can be generated. A `string` needs a `format`; an `integer` stores the number itself and takes only `start`.
 
-`generated` is allowed only on a local attribute of a record blueprint. It is rejected on a mixin, on an attribute selected with `from`, on an `extension_type`, together with `default_value`, and on a [status](#statuses) or a [user or team assignment](#user-or-team-assignments). A generated attribute is always read-only and default-context only (`context_editable = "default"`), whatever `readonly` and `context_editable` say.
+`generated` is allowed only on a local attribute of a record blueprint. It is rejected on a mixin, on an attribute selected with `from`, on an `extension_type`, together with `default_value`, and on a [status](#statuses) or a [user or team assignment](#user-or-team-assignments). A generated attribute is always read-only and default-context only (`context_editable: default`), whatever `readonly` and `context_editable` say.
 
 #### Format tokens
 
@@ -330,11 +339,11 @@ From the CLI, use `acli blueprint sequences <blueprint-id>` and `acli blueprint 
 
 An enabled extension can declare attribute types, for example a money type with a currency setting:
 
-```toml
-[[attributes]]
-code = "price"
-extension_type = "com.acme.commerce:money@^1"
-extension_configuration = '{"currency":"USD"}'
+```yaml
+attributes:
+  - code: price
+    extension_type: 'com.acme.commerce:money@^1'
+    extension_configuration: '{"currency":"USD"}'
 ```
 
 When the blueprint is saved, Attricat finds the enabled extension `com.acme.commerce`, picks the highest declared `money` version matching `^1`, validates `extension_configuration` against the type's configuration schema, and records the resolved type on the revision. The value is stored with the type's underlying primitive (`string`, `number`, `integer`, `boolean`, `date`, `datetime`, `time`, or `json`) and checked against the type's value schema. Values stay readable if the extension is later disabled.
@@ -345,15 +354,15 @@ When the blueprint is saved, Attricat finds the enabled extension `com.acme.comm
 
 Mixins share attribute definitions between blueprints. An include pins one exact published mixin revision. Each attribute you want must then be selected with `from`.
 
-```toml
-[[includes]]
-alias = "seo"
-code = "seo"
-version = 2
+```yaml
+includes:
+  - alias: seo
+    code: seo
+    version: 2
 
-[[attributes]]
-code = "meta_title"
-from = "seo.meta_title"
+attributes:
+  - code: meta_title
+    from: seo.meta_title
 ```
 
 | Key | Type | Description |
@@ -366,7 +375,7 @@ A selected attribute keeps all of the mixin's settings. To pick up changes in th
 
 ## Views
 
-`views` is a table keyed by view name. The web app uses these names:
+`views` is a mapping keyed by view name. The web app uses these names:
 
 | View | Purpose | Allowed `type` |
 | --- | --- | --- |
@@ -382,11 +391,12 @@ When `detail` or `table` is missing, the web app lists attributes in declaration
 
 ### `dropdown_option`
 
-```toml
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name", "sku"]
-separator = " / "
+```yaml
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name, sku]
+    separator: ' / '
 ```
 
 | Key | Type | Default | Description |
@@ -398,10 +408,11 @@ Labels are resolved per context and follow each attribute's `context_fallback`.
 
 ### `page_title`
 
-```toml
-[views.page_title]
-type = "page_title"
-fields = ["name"]
+```yaml
+views:
+  page_title:
+    type: page_title
+    fields: [name]
 ```
 
 | Key | Type | Default | Description |
@@ -413,63 +424,58 @@ Only a record blueprint can define it, and only under the name `page_title`. The
 
 ### `table`
 
-```toml
-[views.table]
-type = "table"
-
-[[views.table.columns]]
-field = "title"
-label = "Product"
-
-[[views.table.columns]]
-field = "category.name"
-label = "Category"
-
-[[views.table.columns]]
-field = "main_photo"
-label = "Image"
-renderer = { id = "attricat.table_image", version = 1 }
+```yaml
+views:
+  table:
+    type: table
+    columns:
+      - {field: title, label: Product}
+      - {field: category.name, label: Category}
+      - field: main_photo
+        label: Image
+        renderer: {id: attricat.table_image, version: 1}
 ```
 
 | Key | Type | Description |
 | --- | --- | --- |
-| `columns` | array of tables | Column definitions. Must be non-empty with unique `field` values. |
+| `columns` | list of mappings | Column definitions. Must be non-empty with unique `field` values. |
 | `columns[].field` | string | A local scalar attribute, a local file attribute with a compatible renderer, or a path of up to three relationship hops ending in a scalar attribute, such as `family.product_type.name`. |
 | `columns[].label` | string | Column header. Defaults to the attribute name. |
 | `columns[].renderer` | component reference | `attricat.table_image@1`, a string display component (`attricat.color_display@1`, `attricat.email_display@1`, `attricat.url_display@1`, or `attricat.phone_display@1`), or an extension cell renderer. |
 | `fields` | array of attribute codes | Older shorthand for local scalar columns. Cannot be combined with `columns`. |
 | `component` | component reference | Optional table component. |
 
-A column can be sorted in the Explorer only when it is scalar and every relationship hop in its path has `cardinality = "one"`.
+A column can be sorted in the Explorer only when it is scalar and every relationship hop in its path has `cardinality: one`.
 
 ### `explorer`
 
-```toml
-[views.explorer]
-type = "explorer"
-browse_by = "categories"
+```yaml
+views:
+  explorer:
+    type: explorer
+    browse_by: categories
 ```
 
 | Key | Type | Description |
 | --- | --- | --- |
-| `browse_by` | attribute code, relationship path, or `false` | Relationship attribute the **Browse by** panel lists until a person picks another. It must have a single target blueprint. A dotted path such as `model.brand` follows up to three relationships, each with a single target blueprint and `cardinality = "one"`, and lists the last one's targets. `false` keeps the panel closed until a person opens it. |
+| `browse_by` | attribute code, relationship path, or `false` | Relationship attribute the **Browse by** panel lists until a person picks another. It must have a single target blueprint. A dotted path such as `model.brand` follows up to three relationships, each with a single target blueprint and `cardinality: one`, and lists the last one's targets. `false` keeps the panel closed until a person opens it. |
 
 Only a record blueprint can define it, and only under the name `explorer`. Without `browse_by`, the panel opens for the first relationship whose target has a hierarchy. Relationships after the first on a path are checked against the published target blueprints when the blueprint is saved and published.
 
 ### Layout blocks
 
-`detail` and `edit` start with a container block and nest other blocks inside it. Blocks are TOML tables with a `type` key. You can write them as nested arrays of tables or as inline tables; both produce the same result.
+`detail` and `edit` start with a container block and nest other blocks inside it. Blocks are YAML mappings with a `type` key. You can write them in block style, one key per line, or in flow style as `{type: field, field: title}`; both produce the same result.
 
 | `type` | Keys | Description |
 | --- | --- | --- |
 | `stack` | `children` | Children stacked vertically. |
 | `grid` | `children` | Children in a responsive grid. |
 | `section` | `children` | A grouped region. |
-| `tabs` | `tabs` = array of `{ label, children }` | One tab per entry. |
-| `accordion` | `sections` = array of `{ label, children }` | Collapsible sections. |
+| `tabs` | `tabs`: list of `{label, children}` | One tab per entry. |
+| `accordion` | `sections`: list of `{label, children}` | Collapsible sections. |
 | `field` | `field` | One scalar or file attribute. |
 | `relationship_list` | `field` | One relationship attribute and its targets. |
-| `incoming_relationship_list` | `label`, `relationships`, `page_size` | A link that opens the Explorer in a new tab, filtered to records linking to this one; one link per relationship. `relationships` is an array of `{ source_blueprint, field }`. `page_size` is capped by the server's `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE`; the web app does not use it. |
+| `incoming_relationship_list` | `label`, `relationships`, `page_size` | A link that opens the Explorer in a new tab, filtered to records linking to this one; one link per relationship. `relationships` is a list of `{source_blueprint, field}`. `page_size` is capped by the server's `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE`; the web app does not use it. |
 | `heading` | `text` | Static heading. |
 | `text` | `text` | Static paragraph. |
 | `divider` | | Horizontal rule. |
@@ -478,16 +484,23 @@ Every block accepts an optional `component` reference. Every `field` and `relati
 
 ### Component references
 
-```toml
-component = { id = "attricat.url_display", version = 1 }
-renderer = { id = "example.currency", version = 1, props = { currency = "USD" } }
+```yaml
+component:
+  id: attricat.url_display
+  version: 1
+
+renderer:
+  id: example.currency
+  version: 1
+  props:
+    currency: USD
 ```
 
 | Key | Type | Description |
 | --- | --- | --- |
 | `id` | string | Registered component ID. |
 | `version` | integer | Component version. |
-| `props` | table | Component options. Only props the component declares are accepted. |
+| `props` | mapping | Component options. Only props the component declares are accepted. |
 
 Built-in components:
 
@@ -502,7 +515,7 @@ Built-in components:
 | `attricat.record_heading` | 1 | `stack` (detail) | | |
 | `attricat.table_display` | 1 | `table` | Scalars | |
 | `attricat.table_edit` | 1 | `table` | Scalars | |
-| `attricat.table_image` | 1 | table column `renderer` | `file` with `cardinality = "one"` and `image_only = true` | |
+| `attricat.table_image` | 1 | table column `renderer` | `file` with `cardinality: one` and `image_only: true` | |
 | `attricat.color_display` | 1 | `field` (detail), table column `renderer` | `string` | |
 | `attricat.color_edit` | 1 | `field` (edit) | `string` | |
 | `attricat.email_display` | 1 | `field` (detail), table column `renderer` | `string` | |
@@ -520,14 +533,15 @@ An extension cell renderer's ID and version must match a renderer declared by an
 
 ### `extension_layout`
 
-```toml
-[views.extension_layout]
-type = "extension_layout"
-version = 1
-
-[views.extension_layout.outlets.record_preview_panel]
-order = ["acme.inventory:summary"]
-hidden = ["acme.legacy:panel"]
+```yaml
+views:
+  extension_layout:
+    type: extension_layout
+    version: 1
+    outlets:
+      record_preview_panel:
+        order: ['acme.inventory:summary']
+        hidden: ['acme.legacy:panel']
 ```
 
 | Key | Description |
@@ -541,9 +555,9 @@ An outlet you list here replaces the workspace default for that outlet on this b
 
 ## Publication
 
-```toml
-[publication]
-retain_on_edit_roles = ["editor"]
+```yaml
+publication:
+  retain_on_edit_roles: [editor]
 ```
 
 | Key | Type | Default | Description |
@@ -554,11 +568,11 @@ This does not grant any permission. See [Publishing](/guides/publishing/).
 
 ## Rules
 
-Blueprints do not contain data quality rules. A rule is created separately and applies to the blueprint's records; see [Rules](/builders/rules/). A definition with `[[rules]]` tables is rejected.
+Blueprints do not contain data quality rules. A rule is created separately and applies to the blueprint's records; see [Rules](/builders/rules/). A definition with a `rules` list is rejected.
 
 ## Predicates
 
-Rules, record checks, transition conditions, and publication channel checks share one predicate language. A predicate is a table (in TOML) or object (in JSON) tagged by `type`. It **holds** when the data is acceptable. Unknown keys are rejected.
+Rules, record checks, transition conditions, and publication channel checks share one predicate language. A predicate is a mapping (in YAML) or object (in JSON) tagged by `type`. It **holds** when the data is acceptable. Unknown keys are rejected.
 
 | `type` | Keys | Holds when |
 | --- | --- | --- |
@@ -571,7 +585,7 @@ Rules, record checks, transition conditions, and publication channel checks shar
 | `relative_date` | `attribute_code`, `op` (`lt`, `lte`, `gt`, `gte`), `offset_days` (-36500 to 36500, default `0`) | The date or datetime compares true with the current time plus `offset_days`. |
 | `unique` | `attribute_codes` (1 to 4 string, number, integer, boolean, date, or datetime attributes) | No other live record of the blueprint family, on any revision, has the same values in the same context. Reporting rules only. |
 | `linked` | `relationship_code`, `quantifier` (`all`, `any`, `none`; default `all`), `predicate` | `all`: every linked record satisfies `predicate` (true with no links). `any`: at least one does. `none`: none does. |
-| `referenced_by` | `blueprint_code`, `relationship_code`, optional `predicate`, `min` and/or `max` (0 to 1000) | The number of `blueprint_code` records whose `relationship_code` targets this record, and that satisfy `predicate`, is between `min` and `max`. `max = 0` means "none". |
+| `referenced_by` | `blueprint_code`, `relationship_code`, optional `predicate`, `min` and/or `max` (0 to 1000) | The number of `blueprint_code` records whose `relationship_code` targets this record, and that satisfy `predicate`, is between `min` and `max`. `max: 0` means "none". |
 | `acyclic` | `relationship_code` | Following the relationship never returns to the record. Reporting rules only. |
 | `all_of` | `predicates` (1 to 16) | Every nested predicate holds. |
 | `any_of` | `predicates` (1 to 16) | At least one nested predicate holds. |
@@ -597,16 +611,15 @@ Rules, record checks, transition conditions, and publication channel checks shar
 
 `x-attricat-checks` is an array inside `record_schema`:
 
-```toml
-record_schema = '''
-{
-  "type": "object",
-  "x-attricat-checks": [
-    { "code": "valid-range", "message": "Valid until must not be before valid from",
-      "predicate": { "type": "compare", "attribute_code": "valid_until", "op": "gte", "other_attribute_code": "valid_from" } }
-  ]
-}
-'''
+```yaml
+record_schema: |
+  {
+    "type": "object",
+    "x-attricat-checks": [
+      { "code": "valid-range", "message": "Valid until must not be before valid from",
+        "predicate": { "type": "compare", "attribute_code": "valid_until", "op": "gte", "other_attribute_code": "valid_from" } }
+    ]
+  }
 ```
 
 | Key | Type | Required | Description |
@@ -634,28 +647,27 @@ Each `from`/`to` pair may appear only once. Unmet conditions return `422 transit
 
 A unique key declares a business identifier that two records of the blueprint family cannot share, such as a part number, a document number, or a combination such as manufacturer and part number.
 
-```toml
-[[unique_keys]]
-code = "manufacturer_part"
-attributes = ["manufacturer", "part_number"]
+```yaml
+unique_keys:
+  - code: manufacturer_part
+    attributes: [manufacturer, part_number]
 
-[[unique_keys]]
-code = "slug"
-attributes = ["slug"]
-scope = "context"
-case_sensitive = true
+  - code: slug
+    attributes: [slug]
+    scope: context
+    case_sensitive: true
 ```
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
 | `code` | code | Required | Unique within the blueprint. Reported in errors. |
-| `attributes` | array of attribute codes | Required | One to eight attributes whose combined values must be unique. Each must be a scalar other than `json`, or a relationship with `cardinality = "one"`. |
+| `attributes` | array of attribute codes | Required | One to eight attributes whose combined values must be unique. Each must be a scalar other than `json`, or a relationship with `cardinality: one`. |
 | `scope` | `"workspace"` or `"context"` | `"workspace"` | `workspace` compares values in the default context. `context` compares the values each context shows, including inherited ones, separately in every context. |
 | `case_sensitive` | boolean | `false` | Compare text exactly instead of case-insensitively. |
 
 How values are compared:
 
-- Text is trimmed and every run of whitespace becomes one space. Unless `case_sensitive = true`, text is also compared in lowercase, so `ABC-1  Rev` and ` abc-1 rev` are the same key.
+- Text is trimmed and every run of whitespace becomes one space. Unless `case_sensitive: true`, text is also compared in lowercase, so `ABC-1  Rev` and ` abc-1 rev` are the same key.
 - Numbers compare by value (`1.50` equals `1.5`), date-times by instant, and relationships by the linked record.
 - A record that has no value, or only blank text, for any of the key's attributes is not checked against that key. Make the attributes required in `record_schema` if every record must have the key.
 - The key covers the whole blueprint family as declared by its latest published revision, including records pinned to older revisions. Attributes are matched by code.
@@ -668,14 +680,18 @@ Publishing a revision that adds or changes unique keys checks existing records f
 
 Connector jobs run an operation of an installed connector extension, such as a CSV import or export, against this blueprint.
 
-```toml
-[[connector_jobs]]
-code = "csv_export"
-direction = "export"
-extension_id = "attricat-connector-csv"
-operation_id = "export"
-interval_seconds = 3600
-input = { profile = { version = 1, columns = [{ header = "ID", attribute = "external_id", kind = "string" }] } }
+```yaml
+connector_jobs:
+  - code: csv_export
+    direction: export
+    extension_id: attricat-connector-csv
+    operation_id: export
+    interval_seconds: 3600
+    input:
+      profile:
+        version: 1
+        columns:
+          - {header: ID, attribute: external_id, kind: string}
 ```
 
 | Key | Type | Default | Description |
@@ -684,25 +700,27 @@ input = { profile = { version = 1, columns = [{ header = "ID", attribute = "exte
 | `direction` | `"import"` or `"export"` | Required | |
 | `extension_id` | string | Required | Connector extension ID. |
 | `operation_id` | string | Required | Operation declared by the extension. |
-| `input` | table | Required | Operation input, validated against the operation's schema. |
+| `input` | mapping | Required | Operation input, validated against the operation's schema. |
 | `context` | context code | | Required for imports: imported values are written to this context. For exports, the publication channel to export (it must be one); without it the job runs once per enabled channel. A job of an extension that keeps export mappings must set it when several channels are enabled. |
 | `input_file_id` | UUID | | Imports only. A ready workspace file to import. |
 | `interval_seconds` | integer | Manual only | Run every N seconds, 60 to 2592000. |
 | `enabled` | boolean | `true` | Set `false` to pause the job. |
 | `connection` | string | Default destination | Exports only. The extension [connection](/builders/extensions/#connections) the job pushes to: 1 to 128 ASCII letters, digits, `.`, `_`, or `-`. |
-| `trigger` | table | | Exports only. Also run the job when records change: `{ events = [...], debounce_seconds = N }`. |
+| `trigger` | mapping | | Exports only. Also run the job when records change: `{events: [...], debounce_seconds: N}`. |
 
 `trigger.events` lists one or more of `record.created.v1`, `record.updated.v1`, `record.deleted.v1`, `record.migrated.v1`, `record.published.v1`, `record.unpublished.v1`, `attribute_value.changed.v1`, `attribute_value.restored.v1`, and `relationship.changed.v1`. `trigger.debounce_seconds` is 1 to 3600: a run starts once the newest matching event of the blueprint's records is that old, or once the oldest pending change is ten times that old, and covers only the changed records. An event of a record that the blueprint's records link to through a relationship counts as a change of the linking records.
 
-```toml
-[[connector_jobs]]
-code = "shopify"
-direction = "export"
-extension_id = "acme.shopify"
-operation_id = "export"
-connection = "shop-eu"
-trigger = { events = ["record.updated.v1", "record.published.v1"], debounce_seconds = 30 }
-input = {}
+```yaml
+connector_jobs:
+  - code: shopify
+    direction: export
+    extension_id: acme.shopify
+    operation_id: export
+    connection: shop-eu
+    trigger:
+      events: [record.updated.v1, record.published.v1]
+      debounce_seconds: 30
+    input: {}
 ```
 
 Jobs are checked against the enabled extension when the revision is published; an invalid job blocks publication. A job removed in a later revision is disabled and its run history is kept. An export job runs once per enabled publication channel and exports only records published to that channel. See [Operations and connectors](/extensions/operations/).

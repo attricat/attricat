@@ -159,38 +159,42 @@ A schedule runs an operation every 60 seconds to 30 days. Missed intervals and o
 
 ## Blueprint connector jobs
 
-A connector job ties an operation to a blueprint. It is declared in the blueprint's TOML, so it is versioned and reviewed with the data model:
+A connector job ties an operation to a blueprint. It is declared in the blueprint's YAML, so it is versioned and reviewed with the data model:
 
-```toml
-[[connector_jobs]]
-code = "csv_export"
-direction = "export"
-extension_id = "attricat-connector-csv"
-operation_id = "export"
-interval_seconds = 3600
-input = { profile = { version = 1, columns = [
-  { header = "SKU", attribute = "sku", kind = "string" },
-  { header = "Title", attribute = "title", kind = "string" },
-] } }
+```yaml
+connector_jobs:
+  - code: csv_export
+    direction: export
+    extension_id: attricat-connector-csv
+    operation_id: export
+    interval_seconds: 3600
+    input:
+      profile:
+        version: 1
+        columns:
+          - {header: SKU, attribute: sku, kind: string}
+          - {header: Title, attribute: title, kind: string}
 
-[[connector_jobs]]
-code = "csv_import"
-direction = "import"
-extension_id = "attricat-connector-csv"
-operation_id = "import"
-context = "default"
-input = { profile = { version = 1, business_key = "sku", columns = [
-  { header = "SKU", attribute = "sku", kind = "string" },
-] } }
+  - code: csv_import
+    direction: import
+    extension_id: attricat-connector-csv
+    operation_id: import
+    context: default
+    input:
+      profile:
+        version: 1
+        business_key: sku
+        columns:
+          - {header: SKU, attribute: sku, kind: string}
 ```
 
 - Jobs are validated against the enabled extension when the blueprint revision is published. An invalid job blocks publication.
 - An **export** job creates one run per enabled [publication channel](/guides/publishing/), or only for the channel it names as `context`. Each run reads values in that channel's context and includes only records published to it.
 - An **import** job creates one run that writes to its `context`.
 - A later revision matches jobs by `code`. A job left out of the new revision is disabled; its history stays.
-- Set `enabled = false` to pause a job.
+- Set `enabled: false` to pause a job.
 - An export job can name the `connection` it pushes to. Without one, it uses the extension's default destination.
-- For the CSV connector, Attricat fills the profile's blueprint ID, revision, and context in for each run, so the TOML only needs the columns (and `business_key` for imports).
+- For the CSV connector, Attricat fills the profile's blueprint ID, revision, and context in for each run, so the YAML only needs the columns (and `business_key` for imports).
 
 Run a job by hand:
 

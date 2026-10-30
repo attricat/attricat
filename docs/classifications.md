@@ -17,33 +17,33 @@ human-readable scalar attribute and configure that attribute as its dropdown
 option display. Use a stable code or external identifier when integrations need
 one; record UUIDs remain the relationship identity.
 
-```toml
-format_version = 1
-code = "label"
-name = "Label"
-kind = "record"
+```yaml
+format_version: 1
+code: label
+name: Label
+kind: record
 
-[[attributes]]
-code = "name"
-value_type = "string"
+attributes:
+  - code: name
+    value_type: string
 
-[[attributes]]
-code = "description"
-value_type = "string"
+  - code: description
+    value_type: string
 
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
 ```
 
 Then point a relationship attribute from the classified record to that blueprint:
 
-```toml
-# On product
-[[attributes]]
-code = "labels"
-value_type = "relationship"
-target_blueprint = "label"
+```yaml
+attributes:
+  # On product
+  - code: labels
+    value_type: relationship
+    target_blueprint: label
 ```
 
 The relationship is the assignment. A product can have multiple labels, and a
@@ -88,19 +88,19 @@ both can be selected on a product.
 
 ## Cardinality caveat
 
-Use `cardinality = "one"` when a source may select one classification while the
+Use `cardinality: one` when a source may select one classification while the
 classification remains reusable by many sources. Set `target_cardinality =
 "one"` as well only for genuinely exclusive pairing. Both directions default to
 `"many"`.
 
 For example, a product's brand can be single-select and shared:
 
-```toml
-[[attributes]]
-code = "brand"
-value_type = "relationship"
-target_blueprint = "brand"
-cardinality = "one"
+```yaml
+attributes:
+  - code: brand
+    value_type: relationship
+    target_blueprint: brand
+    cardinality: one
 ```
 
 ## When not to add a new type

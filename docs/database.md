@@ -147,19 +147,19 @@ Blueprints define record types and reusable mixins. A blueprint family is
 identified by `id`; every revision has a positive `version`, and `(id, version)`
 is the primary key.
 
-- `definition` stores the authored TOML definition and is the source of truth.
+- `definition` stores the authored YAML definition and is the source of truth.
 - `code`, `name`, `kind`, `includes`, `views`, `record_schema`, `definition_hash`, and generated attributes
-  are compiler output derived from TOML.
+  are compiler output derived from YAML.
 - `code` is repository-enforced as stable across revisions in one blueprint family.
 - `kind` is either `record` or `mixin`; only record blueprints can be instantiated.
-- `includes` is a generated direct-dependency JSONB cache, in TOML order.
+- `includes` is a generated direct-dependency JSONB cache, in definition order.
 - `views` is generated JSONB view metadata keyed by view name.
 - `record_schema` is an optional JSON Schema Draft 2020-12 contract for the
   fully resolved record document. It is versioned with the blueprint.
-- `definition_hash` is the SHA-256 hash of the exact raw TOML source. A new
+- `definition_hash` is the SHA-256 hash of the exact raw YAML source. A new
   revision must differ from the latest one, but may repeat an earlier revision.
 - `deleted_at` implements soft deletion.
-- `unique_keys` is the compiled JSONB array of `[[unique_keys]]`. The latest
+- `unique_keys` is the compiled JSONB array of `unique_keys`. The latest
   published revision's keys apply to the whole family.
 - `blueprints_active_version_idx` supports selecting the newest published version.
 
@@ -198,8 +198,8 @@ they are never independently authored or edited.
   `blueprints`.
 - `(blueprint_id, blueprint_version, code)` is unique.
 - `position` is the effective attribute position declared in the consuming
-  blueprint TOML.
-- `name` is the optional human-readable label from the attribute TOML, or from
+  blueprint YAML.
+- `name` is the optional human-readable label from the attribute YAML, or from
   the mixin attribute for `from` selections. It is presentation-only: a blank
   value is rejected, `NULL` means clients humanize `code`, and changing it does
   not affect record migration compatibility.
@@ -209,7 +209,7 @@ they are never independently authored or edited.
   semantics.
 - `value_schema` is an optional JSON Schema Draft 2020-12 contract for one
   normalized scalar value. It is versioned with the attribute definition.
-- Relationship attributes may declare `target_blueprint` in TOML. Its compiled
+- Relationship attributes may declare `target_blueprint` in YAML. Its compiled
   `target_blueprint_code` restricts targets to that record blueprint family.
   `target_blueprints` with more than one entry is stored in
   `target_blueprint_codes` (`'{}'` otherwise) and `target_blueprint_code` stays
@@ -220,7 +220,7 @@ they are never independently authored or edited.
 - `cardinality` and `target_cardinality` are directional blueprint metadata.
   Repository transactions enforce them; the database deliberately has no
   business-value check or uniqueness constraint for cardinality.
-- `tags` is a JSONB array compiled from the attribute TOML. Tags are unique,
+- `tags` is a JSONB array compiled from the attribute YAML. Tags are unique,
   non-empty metadata; `hidden` and `hidden:<surface>` are native UI omission
   hints, not access controls (see [attribute tags](blueprints.md#attribute-tags)).
 - `generated` is the compiled JSONB `generated` declaration
@@ -446,13 +446,13 @@ Repository code owns everything else, inside the write transaction:
   computes rows against the old tree, and no writer holding a family lock
   can wait on them. Creation
   indexes the new context from the family's values (as in the parent, except
-  that `context_fallback = "none"` attributes are missing there). Reparenting
+  that `context_fallback: none` attributes are missing there). Reparenting
   re-indexes those families as a whole, reporting real duplicates as
   `409 unique_key_duplicates`, then revalidates every record structurally
   (see [Status control](status-control.md)) and rechecks every hierarchy.
   Context deletion cascades.
 - Key values are the record's values resolved per context like every other
-  read (nearest context with a value; `context_fallback = "none"` stops
+  read (nearest context with a value; `context_fallback: none` stops
   inheritance) and normalized: strings trimmed, whitespace collapsed and
   lowercased unless `case_sensitive`, blank strings missing, numbers by value,
   relationships by target. The rules-only `unique` predicate uses the same
@@ -560,7 +560,7 @@ history, rebuild `preview`, and commit atomically.
 `preview` retains direct facts so it can be rebuilt from EAV history. Use the
 resolved preview endpoint when a consumer needs inheritance. It walks from the
 requested context toward `default`, uses the nearest value or relationship set
-for each attribute, observes an attribute's `context_fallback = "none"` policy,
+for each attribute, observes an attribute's `context_fallback: none` policy,
 and returns the context that supplied every attribute. Relationship values retain
 their enriched preview envelope:
 
@@ -687,7 +687,7 @@ filtering and roll-up counts.
 
 ## Blueprint Compiler
 
-The pure `attricat-blueprint` crate parses and compiles blueprint TOML without
+The pure `attricat-blueprint` crate parses and compiles blueprint YAML without
 SQLx, PostgreSQL, Axum, or Tokio dependencies. See [Blueprint
 Authoring](blueprints.md) for the definition grammar and attribute policies.
 

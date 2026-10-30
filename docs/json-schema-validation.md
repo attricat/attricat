@@ -7,14 +7,14 @@ frontend uses the returned schemas for early form feedback only.
 ## Attribute Schemas
 
 `value_schema` constrains one scalar attribute after its value has been parsed
-into the attribute's native type. Write it as a JSON string in the TOML
+into the attribute's native type. Write it as a JSON string in the YAML
 blueprint definition so every JSON Schema construct remains available.
 
-```toml
-[[attributes]]
-code = "price"
-value_type = "number"
-value_schema = '{"type":"number","minimum":0}'
+```yaml
+attributes:
+  - code: price
+    value_type: number
+    value_schema: '{"type":"number","minimum":0}'
 ```
 
 Attribute schemas apply to direct and computed writes. They currently apply to
@@ -26,20 +26,19 @@ scalar values only; relationship constraints belong in the record schema.
 cross-field JSON Schema rules such as `required`, `if`/`then`/`else`, and
 dependencies.
 
-```toml
-record_schema = '''
-{
-  "type": "object",
-  "required": ["title", "price"],
-  "allOf": [{
-    "if": {
-      "properties": { "on_sale": { "const": true } },
-      "required": ["on_sale"]
-    },
-    "then": { "required": ["sale_price"] }
-  }]
-}
-'''
+```yaml
+record_schema: |
+  {
+    "type": "object",
+    "required": ["title", "price"],
+    "allOf": [{
+      "if": {
+        "properties": { "on_sale": { "const": true } },
+        "required": ["on_sale"]
+      },
+      "then": { "required": ["sale_price"] }
+    }]
+  }
 ```
 
 The validation document contains scalar values in their native JSON form and
@@ -56,38 +55,37 @@ declarative [predicate](#predicates) engine shared with status transition
 conditions, rules and publication channel gates. A check *holds* when the
 data is acceptable; a write that leaves any check failing is rejected.
 
-```toml
-record_schema = '''
-{
-  "required": ["valid_from"],
-  "x-attricat-checks": [
-    {
-      "code": "valid-range",
-      "message": "Valid until must not be before valid from",
-      "predicate": {
-        "type": "compare",
-        "attribute_code": "valid_until",
-        "op": "gte",
-        "other_attribute_code": "valid_from"
-      }
-    },
-    {
-      "code": "facility-of-supplier",
-      "message": "The facility must belong to the selected supplier",
-      "predicate": {
-        "type": "linked",
-        "relationship_code": "facility",
+```yaml
+record_schema: |
+  {
+    "required": ["valid_from"],
+    "x-attricat-checks": [
+      {
+        "code": "valid-range",
+        "message": "Valid until must not be before valid from",
         "predicate": {
           "type": "compare",
-          "attribute_code": "supplier",
-          "op": "eq",
-          "subject_attribute_code": "supplier"
+          "attribute_code": "valid_until",
+          "op": "gte",
+          "other_attribute_code": "valid_from"
+        }
+      },
+      {
+        "code": "facility-of-supplier",
+        "message": "The facility must belong to the selected supplier",
+        "predicate": {
+          "type": "linked",
+          "relationship_code": "facility",
+          "predicate": {
+            "type": "compare",
+            "attribute_code": "supplier",
+            "op": "eq",
+            "subject_attribute_code": "supplier"
+          }
         }
       }
-    }
-  ]
-}
-'''
+    ]
+  }
 ```
 
 - Each check has a `code` (unique, ASCII letters, digits, `_`, `-`, at most
@@ -151,7 +149,7 @@ it, `attribute_code` names an attribute of the linked record and
 `referenced_by` counts live records of `blueprint_code` whose
 `relationship_code` targets the record in the same context and that match the
 optional nested `predicate`; set `min`, `max` or both (at most 1000), for
-example `max = 0` for "no open corrective actions".
+example `max: 0` for "no open corrective actions".
 
 - Links are followed one hop. Nested predicates cannot use `linked`,
   `referenced_by`, `unique`, `acyclic` or `stale`.
@@ -188,7 +186,7 @@ transaction's final state:
    of the same shape as `x-attricat-checks`
    ([status attributes](status-control.md#transition-conditions)):
    `422 transition_conditions_unmet`.
-4. Enforcing rules: enabled rules with `[enforcement]` (`on_save = true`
+4. Enforcing rules: enabled rules with `enforcement` (`on_save: true`
    and/or up to 16 guarded status `transitions`), severity `error` or
    `critical`, and a synchronous-safe predicate ([rules](rules.md#enforcement)):
    `422 rule_violation`.

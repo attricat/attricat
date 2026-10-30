@@ -18,32 +18,32 @@ Tags, labels, categories, colors, materials, and certifications should be record
 
 A classification usually needs things a string cannot give it: a stable identity when it is renamed, a translated name, a parent in a hierarchy, a description, an owner. A record has all of these, and a relationship stores which classifications apply.
 
-```toml
-format_version = 1
-code = "material"
-name = "Material"
-kind = "record"
+```yaml
+format_version: 1
+code: material
+name: Material
+kind: record
 
-[[attributes]]
-code = "name"
-value_type = "string"
+attributes:
+  - code: name
+    value_type: string
 
-[[attributes]]
-code = "code"
-value_type = "string"
-context_editable = "default"
+  - code: code
+    value_type: string
+    context_editable: default
 
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
 ```
 
-```toml
-# On product
-[[attributes]]
-code = "materials"
-value_type = "relationship"
-target_blueprint = "material"
+```yaml
+attributes:
+  # On product
+  - code: materials
+    value_type: relationship
+    target_blueprint: material
 ```
 
 Some guidelines:
@@ -55,27 +55,27 @@ Some guidelines:
 
 ### Single-select and exclusive links
 
-`cardinality = "one"` makes a relationship single-select. Many products can still share one brand:
+`cardinality: one` makes a relationship single-select. Many products can still share one brand:
 
-```toml
-[[attributes]]
-code = "brand"
-value_type = "relationship"
-target_blueprint = "brand"
-cardinality = "one"
+```yaml
+attributes:
+  - code: brand
+    value_type: relationship
+    target_blueprint: brand
+    cardinality: one
 ```
 
-Add `target_cardinality = "one"` only when each target may be claimed once, such as a product and its unique barcode record.
+Add `target_cardinality: one` only when each target may be claimed once, such as a product and its unique barcode record.
 
 ### Links to several kinds of record
 
 A relationship can target any blueprint, one blueprint, or a list of them. Use a list when a link has a clear meaning but more than one kind of target, such as the subject of a compliance assessment:
 
-```toml
-[[attributes]]
-code = "subject"
-value_type = "relationship"
-target_blueprints = ["product", "product_revision", "material", "part"]
+```yaml
+attributes:
+  - code: subject
+    value_type: relationship
+    target_blueprints: [product, product_revision, material, part]
 ```
 
 Links to other blueprints are rejected, the record picker lets editors choose which of the listed blueprints to search, and each listed blueprint can show the links with an `incoming_relationship_list`. Prefer one relationship per meaning over one unrestricted relationship.
@@ -88,17 +88,17 @@ Part numbers, document numbers, and accession numbers identify a record to peopl
 
 Give the classification blueprint a relationship to itself:
 
-```toml
-# On category
-[[attributes]]
-code = "parent"
-value_type = "relationship"
-target_blueprint = "category"
-tree = true
-context_editable = "default"
+```yaml
+attributes:
+  # On category
+  - code: parent
+    value_type: relationship
+    target_blueprint: category
+    tree: true
+    context_editable: default
 ```
 
-`tree = true` makes the relationship single-select and rejects any link that would make a category its own ancestor (`409 relationship_cycle`). Use `acyclic = true` instead for structures where a record may have several targets but must never loop back, such as dependencies or predecessor chains. Both require `context_editable = "default"`, so the hierarchy is the same in every context. Publishing either setting on existing data reports any cycles that already exist.
+`tree: true` makes the relationship single-select and rejects any link that would make a category its own ancestor (`409 relationship_cycle`). Use `acyclic: true` instead for structures where a record may have several targets but must never loop back, such as dependencies or predecessor chains. Both require `context_editable: default`, so the hierarchy is the same in every context. Publishing either setting on existing data reports any cycles that already exist.
 
 The Explorer detects self-referencing relationships and turns the facet for `product.categories` into a tree with roll-up counts. Selecting *Shirts* also matches products assigned to its children. See [Explore records](/guides/explore/#relationship-facets).
 
@@ -130,7 +130,7 @@ With this tree, a product description written in `PL` is used by `PL-web` and `P
 
 - **Contexts are not automatically languages.** If your tree represents locales, say so in the context `data` (for example `{"language": "pl"}`) and in your team's conventions.
 - **Mix dimensions carefully.** A single tree can combine market and channel, as above, but every combination you need must exist as a node.
-- **Decide per attribute.** `context_fallback = "none"` stops inheritance for values that must never leak into a child, such as a channel-specific promotion. `context_editable = "default"` locks values that are global, such as a SKU.
+- **Decide per attribute.** `context_fallback: none` stops inheritance for values that must never leak into a child, such as a channel-specific promotion. `context_editable: default` locks values that are global, such as a SKU.
 - **Translate classification names in place.** A material's `name` can have overrides in language contexts. Relationship pickers and table columns resolve the label in the selected context.
 - **Relationships are contextual too.** A product can have a different set of categories in one market.
 
@@ -140,15 +140,15 @@ Contexts also act as [publication channels](/guides/publishing/) when you enable
 
 There are two ways to share attribute definitions.
 
-**Mixins** share attributes between blueprints. A mixin is a blueprint with `kind = "mixin"`; other blueprints include one exact revision and select its attributes with `from`. Use it for groups of fields many blueprints need in the same shape, such as SEO or dimensions. See [Author a blueprint](/builders/blueprints/#step-9-share-attributes-with-a-mixin).
+**Mixins** share attributes between blueprints. A mixin is a blueprint with `kind: mixin`; other blueprints include one exact revision and select its attributes with `from`. Use it for groups of fields many blueprints need in the same shape, such as SEO or dimensions. See [Author a blueprint](/builders/blueprints/#step-9-share-attributes-with-a-mixin).
 
-**Reusable attributes** are a workspace registry of single attribute definitions, managed under **Manage → Reusable attributes**. Editors can attach a published reusable attribute, or a group of them, to an individual record. Use them for occasional fields that only some records need and that do not belong in the blueprint. A definition is TOML:
+**Reusable attributes** are a workspace registry of single attribute definitions, managed under **Manage → Reusable attributes**. Editors can attach a published reusable attribute, or a group of them, to an individual record. Use them for occasional fields that only some records need and that do not belong in the blueprint. A definition is YAML:
 
-```toml
-code = "country_of_origin"
-name = "Country of origin"
-value_type = "string"
-searchable = true
+```yaml
+code: country_of_origin
+name: Country of origin
+value_type: string
+searchable: true
 ```
 
 It accepts the same attribute keys as a blueprint (`value_type`, `value_schema`, `default_value`, `tags`, `context_fallback`, `context_editable`, `readonly`, and the relationship keys with `target_blueprint_code`), plus `searchable`, which includes its values in Explorer search and filters, and `facetable`, which together with `searchable` lists it under **Add filter** in the Explorer. Each change creates a new revision; publish a revision before it can be attached. The workspace supplies the namespace, so a reusable attribute's full code is `<namespace>:<code>`. The editor offers examples, ready-made pieces, save checks as you type, and a preview of the field; see [The web editor](/builders/blueprints/#the-web-editor).
@@ -159,15 +159,16 @@ Creating and publishing reusable attributes needs `blueprints.write`. Attaching 
 
 Store who is responsible for a record, such as an assignee, owner, or reviewer, in a **user or team attribute** rather than free text. Free text cannot check that the person exists or still works in the workspace, and it is not reliable for filtering. A user or team attribute is a `string` attribute with an `x-attricat-principal` annotation that lists what it accepts:
 
-```toml
-[[attributes]]
-code = "reviewer"
-name = "Reviewer"
-value_type = "string"
-value_schema = '''{
-  "type": "string",
-  "x-attricat-principal": { "version": 1, "kinds": ["user", "team"] }
-}'''
+```yaml
+attributes:
+  - code: reviewer
+    name: Reviewer
+    value_type: string
+    value_schema: |-
+      {
+        "type": "string",
+        "x-attricat-principal": { "version": 1, "kinds": ["user", "team"] }
+      }
 ```
 
 - The field offers a picker of active workspace members and teams, and the record shows the chosen name. Use `"kinds": ["user"]` when the responsibility must belong to one person.

@@ -15,30 +15,29 @@ Użytkownicy logują się do obszaru roboczego za pomocą jego **identyfikatora 
 
 Schemat opisuje jeden rodzaj rekordu. Sprzedawca ma schematy `product`, `category`, `brand` i `material`.
 
-Schemat jest zapisany w TOML i zawiera listę **atrybutów**, z których każdy ma typ:
+Schemat jest zapisany w YAML i zawiera listę **atrybutów**, z których każdy ma typ:
 
-```toml
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
+```yaml
+format_version: 1
+code: product
+name: Product
+kind: record
 
-[[attributes]]
-code = "title"
-value_type = "string"
+attributes:
+  - code: title
+    value_type: string
 
-[[attributes]]
-code = "price"
-value_type = "number"
+  - code: price
+    value_type: number
 
-[[attributes]]
-code = "categories"
-value_type = "relationship"
-target_blueprint = "category"
+  - code: categories
+    value_type: relationship
+    target_blueprint: category
 
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
 ```
 
 Schemat może też definiować schematy walidacji, układy stron, reguły jakości danych i zadania konektorów.
@@ -78,7 +77,7 @@ Każdy atrybut decyduje, czy dziedziczy wartości (`context_fallback`) i czy mo�
 
 Atrybut relacji łączy rekord z innymi. `product.categories` wskazuje na rekordy `category`, a `category.parent` łączy kategorię z kategorią nadrzędną, tworząc drzewo.
 
-Relacje mogą być jednokrotnego wyboru (`cardinality = "one"`) lub wielokrotnego wyboru i, jak każda inna wartość, mogą różnić się zależnie od kontekstu.
+Relacje mogą być jednokrotnego wyboru (`cardinality: one`) lub wielokrotnego wyboru i, jak każda inna wartość, mogą różnić się zależnie od kontekstu.
 
 Klasyfikacje takie jak kategorie, marki i materiały są rekordami, a nie łańcuchami znaków. Dzięki temu każda z nich ma tożsamość, nazwę, którą można przetłumaczyć, i miejsce w hierarchii.
 

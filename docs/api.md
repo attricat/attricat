@@ -93,7 +93,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `GET`, `POST` | `/rules` | List rules, one item per rule with its current revision, `enabled` and the blueprint revisions it does not fit (`not_applicable`), or create a disabled rule for a blueprint and optional context (`rules.read` / `rules.manage`). See [Rules](rules.md#blueprint-revisions). |
 | `GET`, `PUT` | `/rules/{rule_id}` | Read one rule like the list, or save a changed definition as its new current revision; body `{definition, accept_existing_violations?}` (`rules.read` / `rules.manage`). |
 | `GET` | `/rules/{rule_id}/revisions`, `/rules/{rule_id}/revisions/{version}` | The rule's changelog, newest first, or one revision, with `created_by_user_id` (`rules.read`). |
-| `POST` | `/rules/validate` | Run the save checks of `POST /rules` on a rule TOML definition, the blueprint's latest published revision and optional context, without storing it (`rules.manage`). |
+| `POST` | `/rules/validate` | Run the save checks of `POST /rules` on a rule YAML definition, the blueprint's latest published revision and optional context, without storing it (`rules.manage`). |
 | `POST` | `/rules/{rule_id}/run-now` | Enqueue an idempotent bounded manual or dry run of the current revision (`rules.manage`). A normal run needs the rule enabled; a dry run may send an unsaved `definition`. |
 | `POST` | `/rules/{rule_id}/enable`, `/rules/{rule_id}/disable` | Switch the rule (`rules.manage`). `/enable` takes an optional body `{ "accept_existing_violations": true }`; an enforcing rule first needs a completed full dry run of its definition. See [Rules](rules.md#dry-run-gate). |
 | `GET` | `/rule-runs`, `/rule-findings` | Read run diagnostics and active/resolved findings (`rules.read`). Both accept `record_id` to list one record's runs or findings, and `limit`/`offset` pages with an `x-next-offset` header. `/rule-findings` also accepts `unresolved=true` and narrows by `rule_id`, `blueprint_id`, `context_id`, `severity` (`info`, `warning`, `error`, `critical`) and `state` (`open`, `acknowledged`, `resolved`). A run's `truncated` is `true` when it stopped at its candidate cap with candidates left; `candidates_skipped` counts records on a blueprint revision the rule does not fit, and `definition_hash` names the definition it evaluated. |
@@ -158,14 +158,14 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `POST` | `/workspace/invitations/accept` | Accept `{ "secret": "cat_inv_..." }` as the verified intended account. |
 | `GET`, `POST` | `/personal-access-tokens` | List or issue a personal token; creation returns its secret exactly once. |
 | `DELETE` | `/personal-access-tokens/{token_id}` | Revoke a personal token. |
-| `POST` | `/workflows/validate` | Strictly validate and compile a workflow TOML definition without persisting it, running every save check including trigger blueprint scope (`workflows.manage`). |
+| `POST` | `/workflows/validate` | Strictly validate and compile a workflow YAML definition without persisting it, running every save check including trigger blueprint scope (`workflows.manage`). |
 | `GET`, `POST` | `/workflows` | List workflow families/revisions or create the first draft (`workflows.read` / `workflows.manage`). |
 | `GET`, `POST` | `/workflows/{id}/versions` | List immutable revisions or create the next draft. |
 | `GET` | `/workflows/{id}`, `/workflows/{id}/versions/{version}` | Read the latest or exact workflow revision. |
 | `POST` | `/workflows/{id}/versions/{version}/publish`, `/enable`; `/workflows/{id}/disable` | Publish, enable an exact published revision, or disable it. |
 | `GET` | `/blueprints` | List published record blueprints. |
 | `GET` | `/blueprints/catalogue` | List blueprint families and revisions. |
-| `POST` | `/blueprints` | Create the first draft revision from TOML. |
+| `POST` | `/blueprints` | Create the first draft revision from YAML. |
 | `GET`, `POST` | `/blueprints/{id}/versions` | List revisions or create the next draft. |
 | `POST` | `/blueprints/validate`, `/blueprints/{id}/versions/validate` | Run the create (or next-draft) path in a transaction that is rolled back, returning the would-be blueprint and attributes or the same error a save would return (`blueprints.write`). Nothing is stored, audited, or emitted. |
 | `POST` | `/reusable-attributes/validate`, `/reusable-attributes/{id}/versions/validate` | The same for a reusable attribute definition or its next revision (`blueprints.write`). |
@@ -273,7 +273,7 @@ is written once, so the copy starts with no value history.
 [Generated](blueprints.md#generated-values) values are not copied; the copy
 is numbered like any new record.
 
-Values of the family's enforced `[[unique_keys]]` attributes are left out,
+Values of the family's enforced `unique_keys` attributes are left out,
 because the copy could never share them with its source: the default-context
 value for a workspace-scoped key, and every context's values for a
 context-scoped key. A key attribute that `record_schema` requires therefore makes
@@ -412,7 +412,7 @@ saved searches keep it literally). Other values match the stored
 values. Scalar and relationship filters, relationship-path hops, column sorts,
 `table_values`, and `related` table previews use the nearest context on that
 context's ancestor path with an active value; an attribute with
-`context_fallback = "none"` reads only the requested context. An unknown code
+`context_fallback: none` reads only the requested context. An unknown code
 returns `422`. Free-text `query` terms match values in every context, and a
 relationship tree facet uses its own `context_id`. Sorted cursors bind to the
 context. The agent `search_records` tool accepts the same field.
@@ -460,7 +460,7 @@ within a version for stable keyset pagination. An explicit `blueprint.version`
 restricts results to that revision before sorting.
 
 The field may be local or a configured path with up to three relationship hops.
-Every relationship hop must declare `cardinality = "one"`. A relationship-path
+Every relationship hop must declare `cardinality: one`. A relationship-path
 sort normally names an explicit published source version. When `version` is
 omitted, it is accepted only if the complete matching result set contains one
 source blueprint version; otherwise the API returns

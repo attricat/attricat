@@ -159,38 +159,42 @@ Harmonogram uruchamia operację w odstępach od 60 sekund do 30 dni. Przegapione
 
 ## Zadania konektorów w Schematach
 
-Zadanie konektora wiąże operację ze Schematem. Deklaruje się je w TOML Schematu, więc jest wersjonowane i przeglądane razem z modelem danych:
+Zadanie konektora wiąże operację ze Schematem. Deklaruje się je w YAML Schematu, więc jest wersjonowane i przeglądane razem z modelem danych:
 
-```toml
-[[connector_jobs]]
-code = "csv_export"
-direction = "export"
-extension_id = "attricat-connector-csv"
-operation_id = "export"
-interval_seconds = 3600
-input = { profile = { version = 1, columns = [
-  { header = "SKU", attribute = "sku", kind = "string" },
-  { header = "Title", attribute = "title", kind = "string" },
-] } }
+```yaml
+connector_jobs:
+  - code: csv_export
+    direction: export
+    extension_id: attricat-connector-csv
+    operation_id: export
+    interval_seconds: 3600
+    input:
+      profile:
+        version: 1
+        columns:
+          - {header: SKU, attribute: sku, kind: string}
+          - {header: Title, attribute: title, kind: string}
 
-[[connector_jobs]]
-code = "csv_import"
-direction = "import"
-extension_id = "attricat-connector-csv"
-operation_id = "import"
-context = "default"
-input = { profile = { version = 1, business_key = "sku", columns = [
-  { header = "SKU", attribute = "sku", kind = "string" },
-] } }
+  - code: csv_import
+    direction: import
+    extension_id: attricat-connector-csv
+    operation_id: import
+    context: default
+    input:
+      profile:
+        version: 1
+        business_key: sku
+        columns:
+          - {header: SKU, attribute: sku, kind: string}
 ```
 
 - Zadania są walidowane względem włączonego rozszerzenia podczas publikowania wersji Schematu. Nieprawidłowe zadanie blokuje publikację.
 - Zadanie **eksportu** tworzy jedno wykonanie dla każdego włączonego [kanału eksportu](/pl/guides/publishing/) albo tylko dla kanału wskazanego jako `context`. Każde wykonanie odczytuje wartości w kontekście tego kanału i obejmuje tylko rekordy do niego opublikowane.
 - Zadanie **importu** tworzy jedno wykonanie, które zapisuje do swojego `context`.
 - Późniejsza wersja dopasowuje zadania po `code`. Zadanie pominięte w nowej wersji zostaje wyłączone; jego historia pozostaje.
-- Ustaw `enabled = false`, aby wstrzymać zadanie.
+- Ustaw `enabled: false`, aby wstrzymać zadanie.
 - Zadanie eksportu może wskazać `connection`, do którego wysyła dane. Bez niego używa domyślnego miejsca docelowego rozszerzenia.
-- W przypadku konektora CSV Attricat uzupełnia identyfikator Schematu, wersję i kontekst w profilu dla każdego wykonania, więc TOML potrzebuje tylko kolumn (oraz `business_key` przy importach).
+- W przypadku konektora CSV Attricat uzupełnia identyfikator Schematu, wersję i kontekst w profilu dla każdego wykonania, więc YAML potrzebuje tylko kolumn (oraz `business_key` przy importach).
 
 Uruchom zadanie ręcznie:
 

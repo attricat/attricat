@@ -15,7 +15,7 @@ that do not define them.
 - `table`: configured columns in the record explorer.
 - `explorer`: Explorer defaults. `browse_by` names the single-target
   relationship the browse rail lists first, a relationship path of up to three
-  hops with `cardinality = "one"` such as `model.brand`, or is `false` to keep
+  hops with `cardinality: one` such as `model.brand`, or is `false` to keep
   the rail closed (see [Relationship tree facets](search-facets.md)). The
   compiler checks the first hop; saving and publishing resolve the rest
   through the published target blueprints, as for table column paths.
@@ -45,14 +45,15 @@ published layout for restoration. Publication rejects a currently enabled
 contribution if its key is assigned to a different outlet; unknown keys remain
 valid so removed or disabled contributions can later be restored:
 
-```toml
-[views.extension_layout]
-type = "extension_layout"
-version = 1
-
-[views.extension_layout.outlets.record_preview_panel]
-order = ["acme.inventory:summary"]
-hidden = ["acme.legacy:panel"]
+```yaml
+views:
+  extension_layout:
+    type: extension_layout
+    version: 1
+    outlets:
+      record_preview_panel:
+        order: ['acme.inventory:summary']
+        hidden: ['acme.legacy:panel']
 ```
 
 Each declared record-owned outlet replaces only that outlet's workspace default;
@@ -60,17 +61,13 @@ unspecified record outlets and all global outlets continue to use the workspace
 layout. Global outlets, including navigation and explorer surfaces, are
 workspace-only.
 
-```toml
-[views.table]
-type = "table"
-
-[[views.table.columns]]
-field = "title"
-label = "Product"
-
-[[views.table.columns]]
-field = "family.product_type.name"
-label = "Product type"
+```yaml
+views:
+  table:
+    type: table
+    columns:
+      - {field: title, label: Product}
+      - {field: family.product_type.name, label: Product type}
 ```
 
 `columns` must be non-empty and have unique `field` paths. Every intermediate
@@ -84,19 +81,21 @@ humanized field path.
 Use `attricat.table_image@1` to render a direct, image-only single-file attribute
 as a thumbnail:
 
-```toml
-[[views.table.columns]]
-field = "main_photo"
-label = "Image"
-renderer = { id = "attricat.table_image", version = 1 }
+```yaml
+views:
+  table:
+    columns:
+      - field: main_photo
+        label: Image
+        renderer: {id: attricat.table_image, version: 1}
 ```
 
-The renderer is valid only when the attribute has `value_type = "file"`,
-`cardinality = "one"`, and `image_only = true`. It cannot be used on a
+The renderer is valid only when the attribute has `value_type: file`,
+`cardinality: one`, and `image_only: true`. It cannot be used on a
 relationship path or a multi-file/non-image attribute. Empty values display the
 normal unset state; files still processing or without a usable thumbnail show
 the thumbnail status UI.
-`fields = ["title", "price", "available"]` remains a legacy shorthand for
+`fields: [title, price, available]` remains a legacy shorthand for
 local scalar columns; do not combine it with `columns`.
 
 Explorer's version-scope selector defaults to the current published revision,
@@ -126,12 +125,12 @@ Explorer sends its selected context as the search `context_code` (default
 `default`). Table cells, relationship-path hops, scalar and relationship
 filters, and column sorts read the value of the nearest context on the selected
 context's ancestor path, so an untranslated value shows the inherited one. An
-attribute with `context_fallback = "none"` reads only the selected context. The
+attribute with `context_fallback: none` reads only the selected context. The
 **Display** column uses the nearest context's `display` label. Free-text query
 terms still match values in every context.
 
 The table uses the API's version-bound keyset cursor for the selected field.
-Relationship-path sorting requires `cardinality = "one"` on every hop and uses
+Relationship-path sorting requires `cardinality: one` on every hop and uses
 fixed-depth, leaf-first traversal for paths of up to three hops. Many-valued
 paths are displayable but are not sortable, and columns that resolve to
 non-scalar values are rejected.
@@ -143,26 +142,19 @@ Container blocks are `stack`, `grid`, `section`, `tabs`, and `accordion`.
 contain named `children` collections. Leaf blocks are `field`,
 `relationship_list`, `heading`, `text`, and `divider`.
 
-```toml
-[views.detail]
-type = "stack"
-
-[[views.detail.children]]
-type = "tabs"
-
-[[views.detail.children.tabs]]
-label = "Overview"
-
-[[views.detail.children.tabs.children]]
-type = "grid"
-
-[[views.detail.children.tabs.children.children]]
-type = "field"
-field = "title"
-
-[[views.detail.children.tabs.children.children]]
-type = "field"
-field = "price"
+```yaml
+views:
+  detail:
+    type: stack
+    children:
+      - type: tabs
+        tabs:
+          - label: Overview
+            children:
+              - type: grid
+                children:
+                  - {type: field, field: title}
+                  - {type: field, field: price}
 ```
 
 Every referenced field must be an effective attribute. `field` accepts scalar
@@ -185,18 +177,15 @@ The preview heading reuses a normal `stack` with the
 field rendered as the page `h1`; subsequent children are subtitle or metadata
 content.
 
-```toml
-[[views.detail.children]]
-type = "stack"
-component = { id = "attricat.record_heading", version = 1 }
-
-[[views.detail.children.children]]
-type = "field"
-field = "title"
-
-[[views.detail.children.children]]
-type = "text"
-text = "Current catalog entry"
+```yaml
+views:
+  detail:
+    children:
+      - type: stack
+        component: {id: attricat.record_heading, version: 1}
+        children:
+          - {type: field, field: title}
+          - {type: text, text: Current catalog entry}
 ```
 
 The record ID is the fallback when the first field is unset or its renderer
@@ -208,11 +197,13 @@ field and later children may be text or scalar fields.
 
 Data blocks select registered components with a versioned reference:
 
-```toml
-[[views.detail.children]]
-type = "field"
-field = "website"
-component = { id = "attricat.url_display", version = 1 }
+```yaml
+views:
+  detail:
+    children:
+      - type: field
+        field: website
+        component: {id: attricat.url_display, version: 1}
 ```
 
 Where a `detail` field is editable, `viewFieldEditComponents` resolves the
@@ -249,14 +240,19 @@ stored.
 | Phone | `attricat.phone_display@1` | `attricat.phone_edit@1` |
 | Markdown | `attricat.markdown_display@1` (detail field only) | `attricat.markdown_edit@1` |
 
-```toml
-[views.detail]
-type = "stack"
-children = [{ type = "field", field = "website", component = { id = "attricat.url_display", version = 1 } }]
-
-[views.table]
-type = "table"
-columns = [{ field = "website", renderer = { id = "attricat.url_display", version = 1 } }]
+```yaml
+views:
+  detail:
+    type: stack
+    children:
+      - type: field
+        field: website
+        component: {id: attricat.url_display, version: 1}
+  table:
+    type: table
+    columns:
+      - field: website
+        renderer: {id: attricat.url_display, version: 1}
 ```
 
 Shared behavior:
@@ -285,7 +281,7 @@ The editor accepts a single ASCII dot-atom address (plus tags allowed) and
 preserves case. Internationalized addresses, quoted local parts, display names
 and recipient lists are not supported. Valid values link to the user's mail
 client; nothing is sent or verified. Set
-`value_schema = '{"type":"string","format":"email"}'` to validate API writes
+`value_schema: '{"type":"string","format":"email"}'` to validate API writes
 too; the server's format check may accept a broader set of addresses.
 
 #### URL

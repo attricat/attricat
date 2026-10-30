@@ -5,17 +5,21 @@ description: Wyświetlaj nazwy schematów, nazwy atrybutów, etykiety statusów 
 
 Etykiety schematów są domyślnie zwykłym tekstem i wyświetlają się dokładnie tak, jak je zapisano. Aby przetłumaczyć etykietę, umieść ją w podwójnych nawiasach klamrowych. Tekst w nawiasach jest wyszukiwany w **leksykonie** obszaru roboczego, czyli zbiorze tłumaczeń przechowywanym poza schematami:
 
-```toml
-name = "{{Product}}"
+```yaml
+name: '{{Product}}'
 
-[[attributes]]
-code = "price"
-name = "{{Price}}"
-value_type = "number"
+attributes:
+  - code: price
+    name: '{{Price}}'
+    value_type: number
 
-[[views.detail.tabs]]
-label = "{{Overview}}"
+views:
+  detail:
+    tabs:
+      - {label: '{{Overview}}'}
 ```
+
+W YAML ujmij w cudzysłów etykietę zaczynającą się od `{{`, jak powyżej; bez cudzysłowu YAML odczyta nawiasy jako mapowanie.
 
 Użytkownik z interfejsem w języku polskim zobaczy polski wpis dla `Product`. Jeśli go nie ma, zobaczy wpis angielski, a gdy brakuje i jego, tekst z nawiasów. Nieprzetłumaczona etykieta nadal poprawnie wyświetla się po angielsku.
 
@@ -26,13 +30,13 @@ Ponieważ leksykon jest oddzielony od schematów, możesz poprawić tłumaczenie
 | Etykieta | Gdzie |
 | --- | --- |
 | Nazwa schematu | `name` |
-| Nazwa atrybutu | `[[attributes]] name` atrybutu zdefiniowanego w schemacie |
+| Nazwa atrybutu | `name` atrybutu zdefiniowanego w `attributes` schematu |
 | Nazwa atrybutu wielokrotnego użytku | `name` w jego definicji |
 | Etykieta opcji statusu | `label` każdej opcji w adnotacji `x-attricat-status`, w atrybutach zdefiniowanych w schemacie i wielokrotnego użytku |
 | Etykieta listy wyboru | Każda etykieta w mapie `x-attricat-enum-labels`, w atrybutach zdefiniowanych w schemacie i wielokrotnego użytku |
 | Wskazówka wzorca | `x-attricat-pattern-hint` w schemacie wartości, w atrybutach zdefiniowanych w schemacie i wielokrotnego użytku |
 | Etykieta karty i sekcji akordeonu | `label` w blokach `tabs` i `accordion` |
-| Nagłówek kolumny tabeli | `label` w `[views.table] columns` |
+| Nagłówek kolumny tabeli | `label` w `views.table.columns` |
 | Przycisk i tytuł okna relacji przychodzących | `label` w `incoming_relationship_list` |
 
 Pozostały tekst, na przykład bloki `heading` i `text`, separatory wyświetlania i wartości katalogu, zawsze wyświetla się tak, jak go zapisano.
@@ -41,7 +45,7 @@ Pozostały tekst, na przykład bloki `heading` i `text`, separatory wyświetlani
 
 [Status](/pl/builders/validation/#statusy) lub [lista wyboru](/pl/builders/validation/#listy-wyboru) przechowuje stały kod, na przykład `live`, i wyświetla etykietę jego opcji. Etykietę tłumaczy się tak jak każdą inną:
 
-```toml
+```json
 "options": [
   { "code": "draft", "label": "{{Draft|status}}" },
   { "code": "live", "label": "{{Live}}", "tone": "success" }
@@ -98,20 +102,19 @@ acli lexicon import --file pl.json            # dodaje i aktualizuje wpisy
 acli lexicon import --file pl.json --replace  # usuwa też wpisy, których nie ma w pliku
 ```
 
-Pliki importu można też zapisać w formacie TOML (z rozszerzeniem `.toml`):
+Pliki importu można też zapisać w formacie YAML (z rozszerzeniem `.yaml` lub `.yml`):
 
-```toml
-format_version = 1
-language = "pl"
+```yaml
+format_version: 1
+language: pl
 
-[[entries]]
-key = "Product"
-text = "Produkt"
+entries:
+  - key: Product
+    text: Produkt
 
-[[entries]]
-key = "Order"
-context = "purchase"
-text = "Zamówienie"
+  - key: Order
+    context: purchase
+    text: Zamówienie
 ```
 
 Języki to znaczniki BCP 47, na przykład `pl`, `de` lub `pt-BR`. Wszystkie opcje opisuje [dokumentacja CLI](/pl/reference/cli/#tłumaczenia). Aplikacja internetowa udostępnia obecnie interfejs po angielsku i po polsku.

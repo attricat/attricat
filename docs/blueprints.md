@@ -1,20 +1,20 @@
 # Blueprint Authoring
 
-Blueprints are versioned TOML definitions. Records remain pinned to the exact
+Blueprints are versioned YAML definitions. Records remain pinned to the exact
 blueprint version used to create them.
 
-```toml
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
+```yaml
+format_version: 1
+code: product
+name: Product
+kind: record
 ```
 
 `kind` is either `record` or `mixin`. Mixins can be included but cannot create
 records.
 
 An optional `description`, up to 500 characters, says what the blueprint's
-records are, such as `description = "Product groupings, such as Basic tools"`.
+records are, such as `description: Product groupings, such as Basic tools`.
 Inline attributes accept the same `description` for what they hold; an
 attribute selected with `from` uses the mixin's. Record forms show an inline
 attribute's description below its field, and the agent reads descriptions in
@@ -24,6 +24,14 @@ it.
 Blueprint codes, attribute codes, include codes, and relationship target
 blueprint codes contain only ASCII letters, numbers, hyphens, and underscores.
 
+YAML is indentation-sensitive: indent with spaces, never tabs, and keep list
+items at the same depth. Quote strings that contain `: ` or ` #`, or start with
+`{`, `[`, `*`, `&`, `!`, `|`, `>`, `'`, `"`, `%`, or `@`. That includes labels
+that start with a lexicon reference: `name: '{{Product}}'`. Only `true` and
+`false` are booleans; `yes`, `no`, `on`, and `off` are strings. JSON Schema
+values (`value_schema`, `record_schema`) are JSON strings: a single-quoted
+one-liner or a `|` block with the JSON indented under the key.
+
 ## Attributes
 
 Every attribute declares exactly one of `value_type` or `from`. Supported value
@@ -32,12 +40,12 @@ types are `string`, `number`, `integer`, `boolean`, `date`, `datetime`, `time`,
 `value_schema` add [statuses](#status-attributes) and
 [user or team assignments](#user-or-team-assignments).
 
-```toml
-[[attributes]]
-code = "stock"
-value_type = "integer"
-context_fallback = "default"
-context_editable = "default"
+```yaml
+attributes:
+  - code: stock
+    value_type: integer
+    context_fallback: default
+    context_editable: default
 ```
 
 `context_fallback` controls missing values in a non-default context:
@@ -52,18 +60,18 @@ context_editable = "default"
 - `default` permits writes only in the default context. Other contexts render it
   read-only, and the API rejects writes.
 
-Set `readonly = true` to make an attribute preview-only in the Attricat web app.
+Set `readonly: true` to make an attribute preview-only in the Attricat web app.
 It is intended for values managed through authorized API or CLI operations,
 including agent and extension actions; `readonly` does not restrict those
 server-side writes. Rules evaluate findings and do not write attribute values.
 The default is `false`. Read-only attributes remain visible on the record page and in record forms but
 cannot be changed, cleared, linked, or uploaded through the web UI.
 
-```toml
-[[attributes]]
-code = "external_id"
-value_type = "string"
-readonly = true
+```yaml
+attributes:
+  - code: external_id
+    value_type: string
+    readonly: true
 ```
 
 `readonly` is a UI hint only. To have Attricat assign a value that nobody can
@@ -74,11 +82,11 @@ forms, previews, Explorer filters and facets, and as the default table column
 heading. Without it, the app humanizes the code (`product_family` becomes
 "product family"). Blank names are rejected.
 
-```toml
-[[attributes]]
-code = "product_family"
-name = "Family"
-value_type = "string"
+```yaml
+attributes:
+  - code: product_family
+    name: Family
+    value_type: string
 ```
 
 Blank contextual string fields remove their override instead of storing an empty
@@ -94,20 +102,22 @@ form leaves the field empty with an "assigned when saved" hint and never marks
 it required, since the user has nothing to fill; the server enforces the
 requirement.
 
-```toml
-[[attributes]]
-code = "invoice_number"
-value_type = "string"
-generated = { format = "INV-{yyyy}-{n:05}", reset = "yearly", time_zone = "Europe/Warsaw" }
+```yaml
+attributes:
+  - code: invoice_number
+    value_type: string
+    generated:
+      format: 'INV-{yyyy}-{n:05}'
+      reset: yearly
+      time_zone: Europe/Warsaw
 
-[[attributes]]
-code = "sequence"
-value_type = "integer"
-generated = { start = 1000 }
+  - code: sequence
+    value_type: integer
+    generated: {start: 1000}
 
-[[unique_keys]]
-code = "invoice_number"
-attributes = ["invoice_number"]
+unique_keys:
+  - code: invoice_number
+    attributes: [invoice_number]
 ```
 
 - Only `string` and `integer` attributes of record blueprints can be generated.
@@ -186,13 +196,13 @@ to its named surface. They affect automatic/fallback discovery only; an
 explicit blueprint view may deliberately render a tagged attribute. Tags are
 not access control: attribute metadata and values remain available through the
 API, CLI, agents, and extensions according to their existing permissions. Raw
-blueprint TOML remains available to blueprint administrators.
+blueprint YAML remains available to blueprint administrators.
 
-```toml
-[[attributes]]
-code = "price_amount"
-value_type = "integer"
-tags = ["hidden:form", "hidden:detail"]
+```yaml
+attributes:
+  - code: price_amount
+    value_type: integer
+    tags: ['hidden:form', 'hidden:detail']
 ```
 
 Scalar attributes may set `default_value`. The value is stored in the default
@@ -201,15 +211,15 @@ for that attribute in the default context. Defaults support `string`, `number`,
 `integer`, `boolean`, `date`, `datetime`, and `time`; relationships and files do
 not support defaults.
 
-```toml
-[[attributes]]
-code = "status"
-value_type = "string"
-default_value = "draft"
+```yaml
+attributes:
+  - code: status
+    value_type: string
+    default_value: draft
 ```
 
 A string attribute becomes a status when its `value_schema` has an `enum` and an
-`x-attricat-status` annotation with `version = 1`, one `options` entry
+`x-attricat-status` annotation with `version: 1`, one `options` entry
 (`code`, `label`, optional `tone`) per enum code, and optional `transitions`
 (`from`/`to` codes or `null`). Controlled records add optional keys:
 
@@ -230,29 +240,30 @@ the locked status that changes nothing else. Owners and administrators can also
 unlock any locking status outside the declared transitions and are exempt from
 separation of duties (`records.unlock`).
 
-```toml
-[[attributes]]
-code = "status"
-value_type = "string"
-value_schema = '''{"type":"string","enum":["draft","released"],"x-attricat-status":{"version":1,
-  "options":[{"code":"draft","label":"Draft"},{"code":"released","label":"Released","lock":"all"}],
-  "transitions":[{"from":null,"to":"draft"},
-    {"from":"draft","to":"released","code":"release","permission":"records.publish"},
-    {"from":"released","to":"draft","code":"correct","roles":["owner","admin"]}]}}'''
+```yaml
+attributes:
+  - code: status
+    value_type: string
+    value_schema: |-
+      {"type":"string","enum":["draft","released"],"x-attricat-status":{"version":1,
+        "options":[{"code":"draft","label":"Draft"},{"code":"released","label":"Released","lock":"all"}],
+        "transitions":[{"from":null,"to":"draft"},
+          {"from":"draft","to":"released","code":"release","permission":"records.publish"},
+          {"from":"released","to":"draft","code":"correct","roles":["owner","admin"]}]}}
 ```
 
 A relationship may restrict its target type and directional cardinality.
-`cardinality = "one"` allows at most one active target per source and context;
-`target_cardinality = "one"` allows at most one source to claim a target for the
-versioned field and context. Each defaults to `"many"`, so `cardinality = "one"`
+`cardinality: one` allows at most one active target per source and context;
+`target_cardinality: one` allows at most one source to claim a target for the
+versioned field and context. Each defaults to `"many"`, so `cardinality: one`
 alone models a reusable single-select relationship.
 
-```toml
-[[attributes]]
-code = "category"
-value_type = "relationship"
-target_blueprint = "category"
-cardinality = "one"
+```yaml
+attributes:
+  - code: category
+    value_type: relationship
+    target_blueprint: category
+    cardinality: one
 ```
 
 A relationship write that would violate this invariant returns
@@ -267,11 +278,11 @@ model for controlled classifications.
 `target_blueprints` lists every blueprint a relationship may target. It cannot
 be combined with `target_blueprint`; a one-item list is the single-target form.
 
-```toml
-[[attributes]]
-code = "subject"
-value_type = "relationship"
-target_blueprints = ["product", "product_revision", "material", "part"]
+```yaml
+attributes:
+  - code: subject
+    value_type: relationship
+    target_blueprints: [product, product_revision, material, part]
 ```
 
 A write linking a record of any other blueprint returns
@@ -288,21 +299,21 @@ allowed target can list the field. A migration preview reports
 
 ### Hierarchies
 
-`acyclic = true` rejects relationship writes that would close a cycle through
-the attribute. `tree = true` is an acyclic hierarchy where every record has at
+`acyclic: true` rejects relationship writes that would close a cycle through
+the attribute. `tree: true` is an acyclic hierarchy where every record has at
 most one target (its parent): it implies `acyclic` and defaults `cardinality`
-to `"one"` (`"many"` is rejected). Both require `context_editable = "default"`,
+to `"one"` (`"many"` is rejected). Both require `context_editable: default`,
 because cycle checks follow direct default-context edges, and the targets must
 include the blueprint itself (any target set is allowed for mixins; a consuming
 record blueprint must then be among the selected attribute's targets).
 
-```toml
-[[attributes]]
-code = "parent"
-value_type = "relationship"
-target_blueprint = "location"
-tree = true
-context_editable = "default"
+```yaml
+attributes:
+  - code: parent
+    value_type: relationship
+    target_blueprint: location
+    tree: true
+    context_editable: default
 ```
 
 - A write closing a cycle returns `409 relationship_cycle` with
@@ -329,19 +340,19 @@ context_editable = "default"
   `error.details = { attribute, cycles, multiple_parents }` (up to 20 each).
 
 File attributes declare their cardinality and upload policy. `many` values are
-ordered by default; set `ordered = false` when callers must not rely on their
-order. File policy fields are valid only with `value_type = "file"`.
+ordered by default; set `ordered: false` when callers must not rely on their
+order. File policy fields are valid only with `value_type: file`.
 
-```toml
-[[attributes]]
-code = "product_images"
-value_type = "file"
-cardinality = "many"
-allowed_mime_groups = ["image"]
-allowed_extensions = ["jpg", "png", "webp"]
-max_bytes = 10485760
-purposes = ["product_image"]
-image_only = true
+```yaml
+attributes:
+  - code: product_images
+    value_type: file
+    cardinality: many
+    allowed_mime_groups: [image]
+    allowed_extensions: [jpg, png, webp]
+    max_bytes: 10485760
+    purposes: [product_image]
+    image_only: true
 ```
 
 `cardinality` is `one` by default. The compiler rejects a file value schema or
@@ -354,34 +365,35 @@ part of the pinned blueprint revision.
 A status is a `string` attribute whose `value_schema` has an `enum` of option
 codes and the versioned `x-attricat-status` annotation:
 
-```toml
-[[attributes]]
-code = "status"
-value_type = "string"
-value_schema = '''{
-  "type": "string",
-  "enum": ["draft", "review", "released"],
-  "x-attricat-status": {
-    "version": 1,
-    "options": [
-      { "code": "draft", "label": "Draft" },
-      { "code": "review", "label": "In review",
-        "approval": { "covers": "all", "void_to": "draft" } },
-      { "code": "released", "label": "Released", "tone": "success",
-        "lock": "all", "retention_days": 3650 }
-    ],
-    "transitions": [
-      { "from": null, "to": "draft" },
-      { "from": "draft", "to": "review", "code": "submit" },
-      { "from": "review", "to": "released", "code": "release",
-        "roles": ["reviewer"], "separate_from": ["submit"],
-        "conditions": [{ "code": "has-approver",
-          "predicate": { "type": "required", "attribute_code": "approver" } }] },
-      { "from": "released", "to": "draft", "code": "correct",
-        "permission": "records.publish" }
-    ]
-  }
-}'''
+```yaml
+attributes:
+  - code: status
+    value_type: string
+    value_schema: |-
+      {
+        "type": "string",
+        "enum": ["draft", "review", "released"],
+        "x-attricat-status": {
+          "version": 1,
+          "options": [
+            { "code": "draft", "label": "Draft" },
+            { "code": "review", "label": "In review",
+              "approval": { "covers": "all", "void_to": "draft" } },
+            { "code": "released", "label": "Released", "tone": "success",
+              "lock": "all", "retention_days": 3650 }
+          ],
+          "transitions": [
+            { "from": null, "to": "draft" },
+            { "from": "draft", "to": "review", "code": "submit" },
+            { "from": "review", "to": "released", "code": "release",
+              "roles": ["reviewer"], "separate_from": ["submit"],
+              "conditions": [{ "code": "has-approver",
+                "predicate": { "type": "required", "attribute_code": "approver" } }] },
+            { "from": "released", "to": "draft", "code": "correct",
+              "permission": "records.publish" }
+          ]
+        }
+      }
 ```
 
 - `options` (1–100, required): one per `enum` code, in display order. `code`
@@ -420,15 +432,16 @@ To store who is responsible for a record (assignee, owner, reviewer), use a
 of free text. `kinds` lists what it accepts: `user`, `team`, or both. The
 contract is [`principal-attribute-v1.schema.json`](../contracts/principal-attribute-v1.schema.json).
 
-```toml
-[[attributes]]
-code = "assignee"
-name = "Assignee"
-value_type = "string"
-value_schema = '''{
-  "type": "string",
-  "x-attricat-principal": { "version": 1, "kinds": ["user", "team"] }
-}'''
+```yaml
+attributes:
+  - code: assignee
+    name: Assignee
+    value_type: string
+    value_schema: |-
+      {
+        "type": "string",
+        "x-attricat-principal": { "version": 1, "kinds": ["user", "team"] }
+      }
 ```
 
 - A value is the canonical text `user:<uuid>` (a user ID) or `team:<uuid>` (a
@@ -466,27 +479,26 @@ value_schema = '''{
 Record blueprints may declare business keys that no two records of the
 blueprint family can share:
 
-```toml
-[[unique_keys]]
-code = "manufacturer_part"
-attributes = ["manufacturer", "part_number"]
+```yaml
+unique_keys:
+  - code: manufacturer_part
+    attributes: [manufacturer, part_number]
 
-[[unique_keys]]
-code = "slug"
-attributes = ["slug"]
-scope = "context"
-case_sensitive = true
+  - code: slug
+    attributes: [slug]
+    scope: context
+    case_sensitive: true
 ```
 
 - `code` is unique within the blueprint. `attributes` lists one to eight
   distinct attribute codes (including `from` selections). Each must be a scalar
-  other than `json`, or a relationship with `cardinality = "one"`; files and
+  other than `json`, or a relationship with `cardinality: one`; files and
   many-target relationships are rejected. Mixins cannot declare keys.
-- `scope = "workspace"` (default) compares default-context values. `scope =
+- `scope: workspace` (default) compares default-context values. `scope =
   "context"` compares resolved values, including inherited ones and respecting
   `context_fallback`, separately in every context.
 - Normalization: text is trimmed, whitespace runs collapse to one space, and
-  unless `case_sensitive = true` text is lowercased. Numbers compare by value
+  unless `case_sensitive: true` text is lowercased. Numbers compare by value
   (`1.50` = `1.5`), datetimes by instant, relationships by target record ID.
 - A record missing any key attribute in a context (blank text counts as
   missing) does not participate in that key there. Require the attributes in
@@ -526,15 +538,15 @@ treated as blueprint attribute codes.
 Includes are exact version-pinned dependencies. Select each mixin attribute that
 the consuming blueprint should materialize:
 
-```toml
-[[includes]]
-alias = "seo"
-code = "seo"
-version = 2
+```yaml
+includes:
+  - alias: seo
+    code: seo
+    version: 2
 
-[[attributes]]
-code = "meta_title"
-from = "seo.meta_title"
+attributes:
+  - code: meta_title
+    from: seo.meta_title
 ```
 
 A selected attribute keeps the mixin attribute's `name` and cannot declare its
@@ -544,11 +556,12 @@ own.
 
 Record blueprints must define how they appear in relationship dropdowns:
 
-```toml
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name", "sku"]
-separator = " / "
+```yaml
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name, sku]
+    separator: ' / '
 ```
 
 `separator` defaults to `·`. Server-rendered dropdown labels respect each attribute's
@@ -559,50 +572,35 @@ separator = " / "
 Record blueprints can optionally define app views. Existing blueprints without
 views use the platform's schema-order fallback.
 
-```toml
-[views.detail]
-type = "stack"
-
-[[views.detail.children]]
-type = "tabs"
-
-[[views.detail.children.tabs]]
-label = "Overview"
-
-[[views.detail.children.tabs.children]]
-type = "field"
-field = "title"
-
-[[views.detail.children.tabs]]
-label = "Operations"
-
-[[views.detail.children.tabs.children]]
-type = "accordion"
-
-[[views.detail.children.tabs.children.sections]]
-label = "Stock"
-
-[[views.detail.children.tabs.children.sections.children]]
-type = "field"
-field = "stock_on_hand"
-
-[views.table]
-type = "table"
-
-[[views.table.columns]]
-field = "title"
-label = "Product"
-
-[[views.table.columns]]
-field = "category.name"
-label = "Category"
+```yaml
+views:
+  detail:
+    type: stack
+    children:
+      - type: tabs
+        tabs:
+          - label: Overview
+            children:
+              - {type: field, field: title}
+          - label: Operations
+            children:
+              - type: accordion
+                sections:
+                  - label: Stock
+                    children:
+                      - {type: field, field: stock_on_hand}
+  table:
+    type: table
+    columns:
+      - {field: title, label: Product}
+      - {field: category.name, label: Category}
 ```
 
 `columns` is the current table syntax. Each column names either a local scalar
 field, a renderer-compatible direct file field, or a scalar field through at
 most three relationship hops. Column paths
 must be unique; each relationship and the scalar leaf must exist.
-`label` is optional. The legacy `fields = ["title", "stock_on_hand"]`
+`label` is optional. The legacy `fields: [title, stock_on_hand]`
 shorthand remains supported for local scalar fields, but cannot be combined
 with `columns`.
 
@@ -610,24 +608,31 @@ A column can use a built-in `attricat.*` renderer or an installed extension cell
 renderer. Built-in `attricat.table_image@1` renders a direct image-only,
 single-file attribute as a thumbnail:
 
-```toml
-[[views.table.columns]]
-field = "main_photo"
-label = "Image"
-renderer = { id = "attricat.table_image", version = 1 }
+```yaml
+views:
+  table:
+    columns:
+      - field: main_photo
+        label: Image
+        renderer: {id: attricat.table_image, version: 1}
 ```
 
 It is not valid for relationship paths, multi-file attributes, or file
-attributes that are not `image_only = true`.
+attributes that are not `image_only: true`.
 
 An extension renderer ID and positive version must match an enabled extension
 declaration for the resolved scalar value type, and `props` must be an object:
 
-```toml
-[[views.table.columns]]
-field = "price"
-label = "Price"
-renderer = { id = "example.currency", version = 1, props = { currency = "USD" } }
+```yaml
+views:
+  table:
+    columns:
+      - field: price
+        label: Price
+        renderer:
+          id: example.currency
+          version: 1
+          props: {currency: USD}
 ```
 
 See [Extensions](extensions.md#client-extension-runtime-v1) for the renderer
@@ -647,21 +652,18 @@ request linked records until the user opens it. Results are cursor-paginated;
 `page_size` controls each requested page and is bounded by the API's
 `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE` setting.
 
-```toml
-[views.detail]
-type = "stack"
-children = [
-  { type = "field", field = "name" },
-  {
-    type = "incoming_relationship_list",
-    label = "Products in this category",
-    page_size = 10,
-    relationships = [
-      { source_blueprint = "product", field = "categories" },
-    ],
-    component = { id = "attricat.incoming_relationship_list_display", version = 1 },
-  },
-]
+```yaml
+views:
+  detail:
+    type: stack
+    children:
+      - {type: field, field: name}
+      - type: incoming_relationship_list
+        label: Products in this category
+        page_size: 10
+        relationships:
+          - {source_blueprint: product, field: categories}
+        component: {id: attricat.incoming_relationship_list_display, version: 1}
 ```
 
 Each selector names a source blueprint and one of its relationship fields. A
@@ -676,11 +678,13 @@ migration forms use the same layout. The compiler rejects a `views.edit`.
 Field, relationship-list, and table blocks may optionally reference a
 platform-registered component:
 
-```toml
-[[views.detail.children]]
-type = "field"
-field = "website"
-component = { id = "attricat.url_display", version = 1 }
+```yaml
+views:
+  detail:
+    children:
+      - type: field
+        field: website
+        component: {id: attricat.url_display, version: 1}
 ```
 
 Component IDs use lowercase, underscore-separated dotted namespaces. React
@@ -701,15 +705,16 @@ Attricat labels are literal text unless they reference the workspace lexicon
 with double braces. The text inside the braces is both the lexicon key and the
 English default:
 
-```toml
-name = "{{Product}}"
+```yaml
+name: '{{Product}}'
 
-[[views.detail.tabs]]
-label = "{{Overview}}"
-
-[[views.detail.tabs.children]]
-type = "incoming_relationship_list"
-label = "{{Products in this category}}"
+views:
+  detail:
+    tabs:
+      - label: '{{Overview}}'
+        children:
+          - type: incoming_relationship_list
+            label: '{{Products in this category}}'
 ```
 
 These fields resolve references: the blueprint `name` and `description`,
@@ -782,16 +787,17 @@ blueprint's attributes when it is saved.
 Record checks reject saves. Put them in `record_schema` under
 `x-attricat-checks` (at most 32; `code`, optional `message`, `predicate`):
 
-```toml
-record_schema = '''{
-  "x-attricat-checks": [
-    {"code": "valid-range", "message": "Valid until must not be before valid from",
-     "predicate": {"type": "compare", "attribute_code": "valid_until", "op": "gte", "other_attribute_code": "valid_from"}},
-    {"code": "facility-of-supplier",
-     "predicate": {"type": "linked", "relationship_code": "facility",
-       "predicate": {"type": "compare", "attribute_code": "supplier", "op": "eq", "subject_attribute_code": "supplier"}}}
-  ]
-}'''
+```yaml
+record_schema: |-
+  {
+    "x-attricat-checks": [
+      {"code": "valid-range", "message": "Valid until must not be before valid from",
+       "predicate": {"type": "compare", "attribute_code": "valid_until", "op": "gte", "other_attribute_code": "valid_from"}},
+      {"code": "facility-of-supplier",
+       "predicate": {"type": "linked", "relationship_code": "facility",
+         "predicate": {"type": "compare", "attribute_code": "supplier", "op": "eq", "subject_attribute_code": "supplier"}}}
+    ]
+  }
 ```
 
 Inside `linked`, `attribute_code` refers to the linked record and
@@ -801,18 +807,19 @@ are not rejected; event-triggered rules report affected records as findings.
 Transition conditions guard status edges. Add `conditions` (at most 16, same
 shape) to an edge in `x-attricat-status.transitions`:
 
-```toml
-value_schema = '''{"type": "string", "enum": ["open", "closed"],
-  "x-attricat-status": {"version": 1,
-    "options": [{"code": "open", "label": "Open"}, {"code": "closed", "label": "Closed"}],
-    "transitions": [{"from": null, "to": "open"},
-      {"from": "open", "to": "closed", "conditions": [
-        {"code": "has-root-cause", "predicate": {"type": "required", "attribute_code": "root_cause"}}]}]}}'''
+```yaml
+value_schema: |-
+  {"type": "string", "enum": ["open", "closed"],
+    "x-attricat-status": {"version": 1,
+      "options": [{"code": "open", "label": "Open"}, {"code": "closed", "label": "Closed"}],
+      "transitions": [{"from": null, "to": "open"},
+        {"from": "open", "to": "closed", "conditions": [
+          {"code": "has-root-cause", "predicate": {"type": "required", "attribute_code": "root_cause"}}]}]}}
 ```
 
 Data quality rules use the same predicates but are not part of the blueprint:
 they are created separately through `/rules`, report findings, and can also
-enforce (`[enforcement]`). A blueprint definition with `[[rules]]` tables is
+enforce (`enforcement`). A blueprint definition with a `rules` list is
 rejected. A rule checks every revision of its blueprint that it fits, so
 publishing a revision never waits for rules: the publish response lists the
 enabled rules the revision does not fit as `rule_warnings`, and those rules
@@ -864,9 +871,8 @@ definitions return `422 invalid_blueprint_definition`.
 
 ## Definition schema and editor assistance
 
-The blueprint and reusable attribute editors complete keys, table headers, view
-blocks, and values; show each key's documentation on hover; and flag TOML
-syntax errors, unknown keys, and invalid values while you type. Value
+The blueprint and reusable attribute editors complete keys, view blocks, and
+values; show each key's documentation on hover; and flag YAML syntax errors, unknown keys, and invalid values while you type. Value
 suggestions include workspace blueprints and mixins, attributes declared in the
 definition, relationship hops in table column paths, included mixin attributes
 for `from`, roles, contexts, and view components that fit the block.
@@ -877,7 +883,7 @@ The editors read JSON Schemas generated from the Rust parser types:
 become descriptions, and `x-attricat-*` extensions carry editor hints such as
 the kind of value a field references. The schema describes structure and
 allowed values only; cross-field rules, such as file policy keys requiring
-`value_type = "file"`, remain enforced by the API. A test checks that the schema
+`value_type: file`, remain enforced by the API. A test checks that the schema
 accepts every definition in the repository that the parser accepts.
 
 After changing a definition type, regenerate both contracts with

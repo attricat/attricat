@@ -66,9 +66,9 @@ Deleting a record withdraws all of its publications.
 
 A blueprint can name roles whose edits keep existing publications:
 
-```toml
-[publication]
-retain_on_edit_roles = ["admin", "product_owner"]
+```yaml
+publication:
+  retain_on_edit_roles: [admin, product_owner]
 ```
 
 The roles must exist when the blueprint revision is published. This setting does not let anyone edit or publish; they still need those permissions. It does not apply to context changes or deletions, which always withdraw.

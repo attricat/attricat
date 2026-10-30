@@ -16,23 +16,21 @@ Both schemas use JSON Schema Draft 2020-12. The web app uses the same schemas to
 
 ## Constrain one value
 
-Write the schema as JSON inside a TOML string. Single quotes avoid escaping.
+Write the schema as JSON inside a YAML string. Single quotes avoid escaping; for a longer schema, use a `|` block and indent the JSON under the key.
 
-```toml
-[[attributes]]
-code = "price"
-value_type = "number"
-value_schema = '{"type":"number","minimum":0}'
+```yaml
+attributes:
+  - code: price
+    value_type: number
+    value_schema: '{"type":"number","minimum":0}'
 
-[[attributes]]
-code = "sku"
-value_type = "string"
-value_schema = '{"type":"string","pattern":"^[A-Z]{3}-[0-9]{4}$"}'
+  - code: sku
+    value_type: string
+    value_schema: '{"type":"string","pattern":"^[A-Z]{3}-[0-9]{4}$"}'
 
-[[attributes]]
-code = "size"
-value_type = "string"
-value_schema = '{"enum":["XS","S","M","L","XL"]}'
+  - code: size
+    value_type: string
+    value_schema: '{"enum":["XS","S","M","L","XL"]}'
 ```
 
 `value_schema` works on scalar attributes: strings, numbers, integers, booleans, dates, datetimes, and times. Relationships and files cannot have one. Constrain relationships with `record_schema`.
@@ -45,15 +43,16 @@ Record forms describe a field's limits under it, after its description: text len
 
 A `pattern` is never shown as a regular expression. To tell people what it expects, add an optional `x-attricat-pattern-hint` beside it:
 
-```toml
-[[attributes]]
-code = "sku"
-value_type = "string"
-value_schema = '''{
-  "type": "string",
-  "pattern": "^[A-Z]{3}-[0-9]{4}$",
-  "x-attricat-pattern-hint": "Three capital letters, a hyphen and four digits, such as ABC-1234"
-}'''
+```yaml
+attributes:
+  - code: sku
+    value_type: string
+    value_schema: |-
+      {
+        "type": "string",
+        "pattern": "^[A-Z]{3}-[0-9]{4}$",
+        "x-attricat-pattern-hint": "Three capital letters, a hyphen and four digits, such as ABC-1234"
+      }
 ```
 
 The hint is shown under the field and in the error for a value that does not match. It needs a `pattern` in the same schema, is 1 to 200 characters, and can be [translated](/builders/translations/).
@@ -62,14 +61,15 @@ The hint is shown under the field and in the error for a value that does not mat
 
 A `string` attribute whose `value_schema` has an `enum` is edited by choosing one of its values: radio buttons for up to five values, and a list you can search for more. The Explorer filters it by choosing one value, or by whether it is set. To show something friendlier than the stored value, add an optional `x-attricat-enum-labels` map:
 
-```toml
-[[attributes]]
-code = "size"
-value_type = "string"
-value_schema = '''{
-  "enum": ["s", "m", "l"],
-  "x-attricat-enum-labels": { "s": "Small", "m": "Medium", "l": "{{Large}}" }
-}'''
+```yaml
+attributes:
+  - code: size
+    value_type: string
+    value_schema: |-
+      {
+        "enum": ["s", "m", "l"],
+        "x-attricat-enum-labels": { "s": "Small", "m": "Medium", "l": "{{Large}}" }
+      }
 ```
 
 - Label some values or all of them. A value without a label shows as itself.
@@ -83,27 +83,28 @@ If the values are stages a record moves through, use a [status](#statuses) inste
 
 A status is a `string` attribute whose `value_schema` has an `enum` of stable codes plus an `x-attricat-status` annotation. The annotation gives each code a label, an optional color tone, and optionally the transitions allowed between them:
 
-```toml
-[[attributes]]
-code = "status"
-value_type = "string"
-value_schema = '''{
-  "type": "string",
-  "enum": ["draft", "live", "retired"],
-  "x-attricat-status": {
-    "version": 1,
-    "options": [
-      { "code": "draft", "label": "Draft" },
-      { "code": "live", "label": "Live", "tone": "success" },
-      { "code": "retired", "label": "Retired" }
-    ],
-    "transitions": [
-      { "from": null, "to": "draft" },
-      { "from": "draft", "to": "live" },
-      { "from": "live", "to": "retired" }
-    ]
-  }
-}'''
+```yaml
+attributes:
+  - code: status
+    value_type: string
+    value_schema: |-
+      {
+        "type": "string",
+        "enum": ["draft", "live", "retired"],
+        "x-attricat-status": {
+          "version": 1,
+          "options": [
+            { "code": "draft", "label": "Draft" },
+            { "code": "live", "label": "Live", "tone": "success" },
+            { "code": "retired", "label": "Retired" }
+          ],
+          "transitions": [
+            { "from": null, "to": "draft" },
+            { "from": "draft", "to": "live" },
+            { "from": "live", "to": "retired" }
+          ]
+        }
+      }
 ```
 
 - Every `enum` code needs exactly one option, listed in display order. Codes use letters, digits, `_`, and `-`. Labels are text, and can be [translated](/builders/translations/#status-and-choice-labels) with `{{…}}` lexicon references.
@@ -116,33 +117,34 @@ The web app shows a status as a labeled chip and edits it with a select that dis
 
 An allowed transition can still depend on the data. Add `conditions` to an edge to require something before the change is made, such as a recorded root cause before a nonconformance is closed:
 
-```toml
-[[attributes]]
-code = "status"
-value_type = "string"
-value_schema = '''{
-  "type": "string",
-  "enum": ["open", "closed"],
-  "x-attricat-status": {
-    "version": 1,
-    "options": [
-      { "code": "open", "label": "Open" },
-      { "code": "closed", "label": "Closed", "tone": "success" }
-    ],
-    "transitions": [
-      { "from": null, "to": "open" },
-      { "from": "closed", "to": "open" },
-      { "from": "open", "to": "closed", "conditions": [
-        { "code": "root-cause", "message": "Record the root cause before closing",
-          "predicate": { "type": "required", "attribute_code": "root_cause" } },
-        { "code": "actions-closed", "message": "Close every corrective action first",
-          "predicate": { "type": "referenced_by", "blueprint_code": "corrective_action",
-            "relationship_code": "nonconformance", "max": 0,
-            "predicate": { "type": "one_of", "attribute_code": "state", "values": ["open"] } } }
-      ] }
-    ]
-  }
-}'''
+```yaml
+attributes:
+  - code: status
+    value_type: string
+    value_schema: |-
+      {
+        "type": "string",
+        "enum": ["open", "closed"],
+        "x-attricat-status": {
+          "version": 1,
+          "options": [
+            { "code": "open", "label": "Open" },
+            { "code": "closed", "label": "Closed", "tone": "success" }
+          ],
+          "transitions": [
+            { "from": null, "to": "open" },
+            { "from": "closed", "to": "open" },
+            { "from": "open", "to": "closed", "conditions": [
+              { "code": "root-cause", "message": "Record the root cause before closing",
+                "predicate": { "type": "required", "attribute_code": "root_cause" } },
+              { "code": "actions-closed", "message": "Close every corrective action first",
+                "predicate": { "type": "referenced_by", "blueprint_code": "corrective_action",
+                  "relationship_code": "nonconformance", "max": 0,
+                  "predicate": { "type": "one_of", "attribute_code": "state", "values": ["open"] } } }
+            ] }
+          ]
+        }
+      }
 ```
 
 - A condition has a `code`, an optional `message` (1 to 500 characters), and a `predicate`. Predicates are the same as in [rules](/reference/blueprint/#predicates), except `stale`, `unique`, and `acyclic`. An edge has at most 16 conditions.
@@ -205,20 +207,19 @@ Approvals and voids appear in the audit log (`record.approval.record`, `record.a
 
 `record_schema` sees the record as one JSON object. Use it for rules that involve more than one attribute:
 
-```toml
-record_schema = '''
-{
-  "type": "object",
-  "required": ["title", "price"],
-  "allOf": [
-    {
-      "if": { "properties": { "on_sale": { "const": true } }, "required": ["on_sale"] },
-      "then": { "required": ["sale_price"] }
-    }
-  ],
-  "dependentRequired": { "discontinued_on": ["replacement"] }
-}
-'''
+```yaml
+record_schema: |
+  {
+    "type": "object",
+    "required": ["title", "price"],
+    "allOf": [
+      {
+        "if": { "properties": { "on_sale": { "const": true } }, "required": ["on_sale"] },
+        "then": { "required": ["sale_price"] }
+      }
+    ],
+    "dependentRequired": { "discontinued_on": ["replacement"] }
+  }
 ```
 
 The object Attricat validates looks like this:
@@ -245,21 +246,20 @@ The top-level `required`, `properties`, `dependentRequired`, and `dependentSchem
 
 JSON Schema cannot say "valid until must not be before valid from". Add named checks to the record schema under `x-attricat-checks` instead:
 
-```toml
-record_schema = '''
-{
-  "type": "object",
-  "required": ["title"],
-  "x-attricat-checks": [
-    { "code": "valid-range", "message": "Valid until must not be before valid from",
-      "predicate": { "type": "compare", "attribute_code": "valid_until", "op": "gte", "other_attribute_code": "valid_from" } },
-    { "code": "tolerance", "message": "The lower limit must not exceed the upper limit",
-      "predicate": { "type": "compare", "attribute_code": "lower_limit", "op": "lte", "other_attribute_code": "upper_limit" } },
-    { "code": "not-self-superseding",
-      "predicate": { "type": "compare", "attribute_code": "supersedes", "op": "disjoint", "other_attribute_code": "superseded_by" } }
-  ]
-}
-'''
+```yaml
+record_schema: |
+  {
+    "type": "object",
+    "required": ["title"],
+    "x-attricat-checks": [
+      { "code": "valid-range", "message": "Valid until must not be before valid from",
+        "predicate": { "type": "compare", "attribute_code": "valid_until", "op": "gte", "other_attribute_code": "valid_from" } },
+      { "code": "tolerance", "message": "The lower limit must not exceed the upper limit",
+        "predicate": { "type": "compare", "attribute_code": "lower_limit", "op": "lte", "other_attribute_code": "upper_limit" } },
+      { "code": "not-self-superseding",
+        "predicate": { "type": "compare", "attribute_code": "supersedes", "op": "disjoint", "other_attribute_code": "superseded_by" } }
+    ]
+  }
 ```
 
 Each check has:
@@ -280,22 +280,21 @@ Checks run after the JSON Schema, on every write path: the API, the CLI, the web
 
 A check can look one relationship hop away. `linked` checks the records the saved record links to, and `referenced_by` counts the records that link to it.
 
-```toml
-record_schema = '''
-{
-  "type": "object",
-  "x-attricat-checks": [
-    { "code": "facility-of-supplier",
-      "message": "Every facility must belong to the certificate's supplier",
-      "predicate": { "type": "linked", "relationship_code": "facilities",
-        "predicate": { "type": "compare", "attribute_code": "supplier", "op": "eq", "subject_attribute_code": "supplier" } } },
-    { "code": "approved-facilities",
-      "message": "Only approved facilities can be certified",
-      "predicate": { "type": "linked", "relationship_code": "facilities",
-        "predicate": { "type": "one_of", "attribute_code": "approval_status", "values": ["approved"] } } }
-  ]
-}
-'''
+```yaml
+record_schema: |
+  {
+    "type": "object",
+    "x-attricat-checks": [
+      { "code": "facility-of-supplier",
+        "message": "Every facility must belong to the certificate's supplier",
+        "predicate": { "type": "linked", "relationship_code": "facilities",
+          "predicate": { "type": "compare", "attribute_code": "supplier", "op": "eq", "subject_attribute_code": "supplier" } } },
+      { "code": "approved-facilities",
+        "message": "Only approved facilities can be certified",
+        "predicate": { "type": "linked", "relationship_code": "facilities",
+          "predicate": { "type": "one_of", "attribute_code": "approval_status", "values": ["approved"] } } }
+    ]
+  }
 ```
 
 - Inside `linked` and `referenced_by`, `attribute_code` names an attribute of the other record. `subject_attribute_code` names an attribute of the record being saved.
@@ -333,14 +332,13 @@ In the web app, the record page lists the failed checks with the contexts they f
 
 A schema checks one record at a time, so it cannot stop two records from getting the same part number. Declare a unique key instead:
 
-```toml
-[[unique_keys]]
-code = "part_number"
-attributes = ["part_number"]
+```yaml
+unique_keys:
+  - code: part_number
+    attributes: [part_number]
 
-[[unique_keys]]
-code = "document_revision"
-attributes = ["document", "revision_label"]
+  - code: document_revision
+    attributes: [document, revision_label]
 ```
 
 The second key is composite: a document can have only one revision `B`, but every document can have its own. Text is compared without case or extra whitespace by default, and a record missing one of the key's values is not checked against that key. A conflicting save returns `409 unique_key_conflict` with the record that already holds the value.
@@ -351,22 +349,24 @@ See [Unique keys](/reference/blueprint/#unique-keys) for comparison rules, per-c
 
 A [generated attribute](/reference/blueprint/#generated-values) gives every new record the next number from a counter, such as `INV-2026-00042`. To make sure every record has one and no two records share it, make the attribute required in `record_schema` and declare a unique key on it:
 
-```toml
-record_schema = '''{ "type": "object", "required": ["invoice_number"] }'''
+```yaml
+record_schema: '{ "type": "object", "required": ["invoice_number"] }'
 
-[[attributes]]
-code = "invoice_number"
-value_type = "string"
-generated = { format = "INV-{yyyy}-{n:05}", reset = "yearly", time_zone = "Europe/Warsaw" }
+attributes:
+  - code: invoice_number
+    value_type: string
+    generated:
+      format: 'INV-{yyyy}-{n:05}'
+      reset: yearly
+      time_zone: Europe/Warsaw
 
-[[attributes]]
-code = "legacy_number"
-name = "Number in the previous system"
-value_type = "string"
+  - code: legacy_number
+    name: Number in the previous system
+    value_type: string
 
-[[unique_keys]]
-code = "invoice_number"
-attributes = ["invoice_number"]
+unique_keys:
+  - code: invoice_number
+    attributes: [invoice_number]
 ```
 
 The server assigns the value before the record is validated, so `required` is met on every create. The counter never gives out the same number twice; the unique key makes the number a declared business identifier and has the database reject a duplicate, for example if a later `format` change makes new values look like old ones. Nobody can write a generated attribute, so a save that tries returns `422 generated_attribute_readonly`.

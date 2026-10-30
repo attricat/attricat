@@ -8,7 +8,7 @@ description: How blueprint revisions work, why records stay pinned to one, and h
 Each blueprint has a sequence of revisions: 1, 2, 3, and so on.
 
 - A **draft** revision can be edited and deleted. No record can use it.
-- A **published** revision is frozen. Its TOML, attributes, views, and schemas never change again.
+- A **published** revision is frozen. Its YAML, attributes, views, and schemas never change again.
 - The **current** revision is the highest published one. New records use it.
 
 Every record is pinned to the revision it was created with, or last migrated to. Its values are validated by that revision's rules and shown with that revision's layout. Publishing revision 3 changes nothing for a record on revision 2 until someone migrates it.
@@ -20,7 +20,7 @@ As a result, a value keeps the meaning it had when it was written, even after th
 In the web app, open the blueprint under **Manage → Blueprints** and create a new revision from the current one. With the CLI:
 
 ```sh
-acli blueprint create-version <blueprint-id> --file product-v2.toml
+acli blueprint create-version <blueprint-id> --file product-v2.yaml
 acli blueprint publish <blueprint-id> 2
 ```
 

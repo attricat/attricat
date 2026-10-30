@@ -308,4 +308,4 @@ Do renderera komórek można odwołać się z widoku tabeli Schematu. Wymaga on 
 }]
 ```
 
-`primitive` ma wartość `string`, `number`, `integer`, `boolean`, `date`, `datetime`, `time` lub `json`. Schematy odwołują się do typu jako `extension_type = "acme.commerce:money@^1"`. Walidacja używa wyłącznie zadeklarowanych schematów; żaden kod rozszerzenia nie jest uruchamiany w celu walidacji wartości. Zobacz [Typy atrybutów z rozszerzeń](/pl/reference/blueprint/#typy-atrybutów-z-rozszerzeń).
+`primitive` ma wartość `string`, `number`, `integer`, `boolean`, `date`, `datetime`, `time` lub `json`. Schematy odwołują się do typu jako `extension_type: acme.commerce:money@^1`. Walidacja używa wyłącznie zadeklarowanych schematów; żaden kod rozszerzenia nie jest uruchamiany w celu walidacji wartości. Zobacz [Typy atrybutów z rozszerzeń](/pl/reference/blueprint/#typy-atrybutów-z-rozszerzeń).

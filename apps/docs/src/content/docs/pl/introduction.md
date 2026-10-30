@@ -20,7 +20,7 @@ Każda zmiana jest walidowana na serwerze, zapisywana w dzienniku audytu i zacho
 | Element | Czym jest |
 | --- | --- |
 | **Obszar roboczy** | Jeden katalog z własnymi członkami, danymi i ustawieniami. |
-| **Schemat** | Wersjonowana definicja typu rekordu w TOML: atrybuty, walidacja i układ. |
+| **Schemat** | Wersjonowana definicja typu rekordu w YAML: atrybuty, walidacja i układ. |
 | **Rekord** | Jeden element katalogu, na przykład produkt lub kategoria, przypięty do wersji schematu. |
 | **Atrybut** | Pole rekordu: tekst, liczba, data, relacja, plik i inne. |
 | **Kontekst** | Miejsce, w którym wartości mogą się różnić, ułożone w drzewo pod `default`. |

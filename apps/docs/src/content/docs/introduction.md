@@ -20,7 +20,7 @@ Every change is validated on the server, recorded in the audit log, and kept in 
 | Part | What it is |
 | --- | --- |
 | **Workspace** | One catalog with its own members, data, and settings. |
-| **Blueprint** | A versioned TOML definition of a record type: attributes, validation, and layout. |
+| **Blueprint** | A versioned YAML definition of a record type: attributes, validation, and layout. |
 | **Record** | One catalog item, such as a product or a category, pinned to a blueprint revision. |
 | **Attribute** | A field of a record: text, number, date, relationship, file, and more. |
 | **Context** | A place where values can differ, arranged in a tree under `default`. |

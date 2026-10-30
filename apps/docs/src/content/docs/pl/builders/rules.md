@@ -11,28 +11,26 @@ Używaj reguł do pytań w rodzaju „które opublikowane produkty nie mają tyt
 
 Reguła ma kod, nazwę, wagę, od jednego do ośmiu wyzwalaczy i dokładnie jeden predykat.
 
-```toml
-format_version = 1
-code = "title-required"
-name = "Products have a title"
-description = "Shoppers search by title, so every product needs one before it goes live."
-severity = "error"
+```yaml
+format_version: 1
+code: title-required
+name: Products have a title
+description: 'Shoppers search by title, so every product needs one before it goes live.'
+severity: error
 
-[[triggers]]
-type = "schedule"
-cron = "0 0 6 * * *"
-timezone = "UTC"
+triggers:
+  - type: schedule
+    cron: '0 0 6 * * *'
+    timezone: UTC
 
-[[triggers]]
-type = "event"
-event_type = "record.updated.v1"
+  - type: event
+    event_type: record.updated.v1
 
-[[triggers]]
-type = "manual"
+  - type: manual
 
-[predicate]
-type = "required"
-attribute_code = "title"
+predicate:
+  type: required
+  attribute_code: title
 ```
 
 | Klucz | Opis |
@@ -50,7 +48,7 @@ attribute_code = "title"
 | `type` | Klucze | Uruchamia się |
 | --- | --- | --- |
 | `manual` | | Gdy ktoś wybierze **Uruchom teraz**. |
-| `schedule` | `cron`, `timezone = "UTC"` | Według sześciopolowego harmonogramu cron (sekundy na początku), w UTC. `0 0 6 * * *` oznacza codziennie o 06:00. |
+| `schedule` | `cron`, `timezone: UTC` | Według sześciopolowego harmonogramu cron (sekundy na początku), w UTC. `0 0 6 * * *` oznacza codziennie o 06:00. |
 | `event` | `event_type` | Dla zmienionego rekordu, po jednym z: `record.created.v1`, `record.updated.v1`, `record.migrated.v1`, `attribute_value.changed.v1`, `attribute_value.restored.v1`, `relationship.changed.v1`. |
 | `post_import` | | Zarezerwowany dla przyszłej integracji z importem. |
 
@@ -70,58 +68,67 @@ Dla atrybutu ze stałą listą wartości, takiego jak status lub wybór, każda 
 
 Porównanie z brakującą wartością jest spełnione; to samo dotyczy `one_of` i `relative_date`, gdy atrybut jest pusty. Połącz je z `required`, jeśli wartość musi istnieć:
 
-```toml
-[predicate]
-type = "all_of"
-predicates = [
-  { type = "required", attribute_code = "valid_until" },
-  { type = "relative_date", attribute_code = "valid_until", op = "gt", offset_days = 30 },
-]
+```yaml
+predicate:
+  type: all_of
+  predicates:
+    - {type: required, attribute_code: valid_until}
+    - type: relative_date
+      attribute_code: valid_until
+      op: gt
+      offset_days: 30
 ```
 
 `linked` i `referenced_by` przechodzą o jeden krok wzdłuż relacji. Ich zagnieżdżony predykat odczytuje drugi rekord i może porównywać go ze sprawdzanym rekordem przez `subject_attribute_code`:
 
-```toml
+```yaml
 # Każdy zakład na certyfikacie dostawcy należy do tego dostawcy.
-[predicate]
-type = "linked"
-relationship_code = "facilities"
-predicate = { type = "compare", attribute_code = "supplier", op = "eq", subject_attribute_code = "supplier" }
+predicate:
+  type: linked
+  relationship_code: facilities
+  predicate:
+    type: compare
+    attribute_code: supplier
+    op: eq
+    subject_attribute_code: supplier
 ```
 
-```toml
+```yaml
 # Niezgodność nie ma otwartych działań korygujących.
-[predicate]
-type = "referenced_by"
-blueprint_code = "corrective_action"
-relationship_code = "nonconformance"
-max = 0
-predicate = { type = "one_of", attribute_code = "state", values = ["open"] }
+predicate:
+  type: referenced_by
+  blueprint_code: corrective_action
+  relationship_code: nonconformance
+  max: 0
+  predicate:
+    type: one_of
+    attribute_code: state
+    values: [open]
 ```
 
 ### Wygasanie i inne kontrole zależne od czasu
 
 `relative_date` porównuje datę z chwilą uruchomienia reguły. Nadaj takiej regule wyzwalacz `schedule`: rekord, którego nikt nie edytuje, może wygasnąć w nocy, a zauważy to tylko wykonanie według harmonogramu.
 
-```toml
-format_version = 1
-code = "certificate-valid-30-days"
-name = "Supplier certificates are valid for at least 30 more days"
-severity = "warning"
+```yaml
+format_version: 1
+code: certificate-valid-30-days
+name: Supplier certificates are valid for at least 30 more days
+severity: warning
 
-[[triggers]]
-type = "schedule"
-cron = "0 0 5 * * *"
-timezone = "UTC"
+triggers:
+  - type: schedule
+    cron: '0 0 5 * * *'
+    timezone: UTC
 
-[predicate]
-type = "relative_date"
-attribute_code = "valid_until"
-op = "gt"
-offset_days = 30
+predicate:
+  type: relative_date
+  attribute_code: valid_until
+  op: gt
+  offset_days: 30
 ```
 
-Ujemne `offset_days` patrzy wstecz: `op = "gte"` z `offset_days = -365` oznacza „w ciągu ostatniego roku”.
+Ujemne `offset_days` patrzy wstecz: `op: gte` z `offset_days: -365` oznacza „w ciągu ostatniego roku”.
 
 ### Konteksty
 
@@ -135,14 +142,14 @@ Zasady porównywania dla każdego typu oraz limity zagnieżdżania i powiązanyc
 
 ## Gdzie przechowywane są reguły
 
-Reguły tworzy się w **Zarządzanie → Reguły jakości danych**, niezależnie od Schematów. Reguła należy do jednego Schematu i opcjonalnie do jednego kontekstu, a nie do rewizji Schematu. Wybierz **Nowa reguła**, wskaż Schemat i w razie potrzeby kontekst, a następnie napisz TOML w tym samym edytorze co Schematy: podpowiada klucze i kody atrybutów Schematu, oferuje gotowe wyzwalacze i warunki w menu **Wstaw** i na bieżąco sprawdza regułę względem najnowszej opublikowanej rewizji Schematu. Schemat musi mieć opublikowaną rewizję. Po jego wybraniu **Przykłady** proponują reguły na start: wymaganą wartość, dozwolone wartości, datę przeglądu, unikalną wartość, datę ważności i powiązane rekordy. **Zapisz** tworzy regułę jako wyłączoną.
+Reguły tworzy się w **Zarządzanie → Reguły jakości danych**, niezależnie od Schematów. Reguła należy do jednego Schematu i opcjonalnie do jednego kontekstu, a nie do rewizji Schematu. Wybierz **Nowa reguła**, wskaż Schemat i w razie potrzeby kontekst, a następnie napisz YAML w tym samym edytorze co Schematy: podpowiada klucze i kody atrybutów Schematu, oferuje gotowe wyzwalacze i warunki w menu **Wstaw** i na bieżąco sprawdza regułę względem najnowszej opublikowanej rewizji Schematu. Schemat musi mieć opublikowaną rewizję. Po jego wybraniu **Przykłady** proponują reguły na start: wymaganą wartość, dozwolone wartości, datę przeglądu, unikalną wartość, datę ważności i powiązane rekordy. **Zapisz** tworzy regułę jako wyłączoną.
 
 Lista ma jeden wiersz na regułę z jej Schematem, ważnością, liczbą otwartych i potwierdzonych ustaleń (każda liczba prowadzi do tych ustaleń), bieżącą rewizją i czasem jej zmiany, przełącznikiem **Włączona** oraz przyciskami **Próbne wykonanie** i **Uruchom teraz**. Każda reguła ma własną stronę z kartą **Definicja**, która pokazuje, co reguła sprawdza, opisane część po części z etykietami atrybutów i wartości, jak w podglądzie edytora, jej ważność, liczby ustaleń, bieżącą rewizję, definicję i ostatnie wykonania z odnośnikiem do wszystkich w **Historii wykonań**, oraz kartą **Historia zmian**. Na stronie reguły są też przyciski **Próbne wykonanie**, **Uruchom teraz**, **Włącz** i **Wyłącz**. **Historię wykonań** można zawęzić do jednej reguły.
 
 To samo można zrobić w CLI:
 
 ```sh
-acli rule create --blueprint-id <uuid> --file title-required.toml
+acli rule create --blueprint-id <uuid> --file title-required.yaml
 acli rule enable <rule-id>
 ```
 
@@ -153,7 +160,7 @@ Nowa reguła jest wyłączona i zaczyna działać dopiero po włączeniu przeł�
 Reguła ma jedną bieżącą definicję. **Edytuj** na stronie reguły otwiera edytor. Dopóki masz niezapisane zmiany, edytor pokazuje je w porównaniu z bieżącą rewizją i oferuje **Uruchom zmianę próbnie**. Zapisanie zmienionej definicji dodaje nową rewizję, która od razu staje się bieżąca; nie ma szkiców ani publikowania. Kodu reguły nie można zmienić.
 
 ```sh
-acli rule update <rule-id> --file title-required.toml
+acli rule update <rule-id> --file title-required.yaml
 ```
 
 Po zapisaniu nowej rewizji ustalenia wcześniejszych definicji zostają rozwiązane. Jeśli reguła jest włączona, jej harmonogramy przechodzą na nową rewizję, a reguła od razu ponownie sprawdza wszystkie rekordy swojego Schematu. Zapisanie definicji identycznej z bieżącą kończy się błędem `409 rule_revision_unchanged`.
@@ -184,39 +191,36 @@ Każde wykonanie przetwarza kandydatów stronami po 500 i zatrzymuje się po 10 
 
 ## Egzekwowanie reguły
 
-Domyślnie reguła tylko zgłasza ustalenia. Reguła **egzekwowana** dodatkowo blokuje zapisy, po których rekord naruszałby regułę. Dodaj tabelę `enforcement`:
+Domyślnie reguła tylko zgłasza ustalenia. Reguła **egzekwowana** dodatkowo blokuje zapisy, po których rekord naruszałby regułę. Dodaj mapowanie `enforcement`:
 
-```toml
-format_version = 1
-code = "released-documents-approved"
-name = "Released documents have an approver"
-severity = "error"
+```yaml
+format_version: 1
+code: released-documents-approved
+name: Released documents have an approver
+severity: error
 
-[[triggers]]
-type = "event"
-event_type = "record.updated.v1"
+triggers:
+  - type: event
+    event_type: record.updated.v1
 
-[predicate]
-type = "required"
-attribute_code = "approved_by"
+predicate:
+  type: required
+  attribute_code: approved_by
 
-[enforcement]
-on_save = false
-
-[[enforcement.transitions]]
-attribute_code = "status"
-from = "review"
-to = "released"
+enforcement:
+  on_save: false
+  transitions:
+    - {attribute_code: status, from: review, to: released}
 ```
 
-`on_save = true` odrzuca każdy zapis, po którym rekord narusza regułę. Każdy element `transitions` chroni zmianę atrybutu [statusu](/pl/builders/validation/#statusy) na `to`, opcjonalnie tylko z `from`. Chronione przejścia są sprawdzane na stanie, który powstaje po zmianie, więc wartość zapisana w tym samym zapisie się liczy.
+`on_save: true` odrzuca każdy zapis, po którym rekord narusza regułę. Każdy element `transitions` chroni zmianę atrybutu [statusu](/pl/builders/validation/#statusy) na `to`, opcjonalnie tylko z `from`. Chronione przejścia są sprawdzane na stanie, który powstaje po zmianie, więc wartość zapisana w tym samym zapisie się liczy.
 
 | Klucz | Typ | Domyślnie | Opis |
 | --- | --- | --- | --- |
 | `enforcement.on_save` | wartość logiczna | `false` | Odrzuca każdy zapis, po którym rekord narusza regułę. |
-| `enforcement.transitions` | tablica tabel | `[]` | Do 16 chronionych zmian statusu, każda z `attribute_code`, opcjonalnym `from` i `to`. Bez `from` chroniona jest każda zmiana na `to`. |
+| `enforcement.transitions` | lista mapowań | `[]` | Do 16 chronionych zmian statusu, każda z `attribute_code`, opcjonalnym `from` i `to`. Bez `from` chroniona jest każda zmiana na `to`. |
 
-Tabela `enforcement` wymaga `on_save = true` lub co najmniej jednego przejścia, wagi `error` lub `critical` oraz [predykatu](/pl/reference/blueprint/#predykaty) bez `stale`, `unique` i `acyclic`, których nie da się sprawdzić podczas zapisu. `attribute_code` każdego przejścia musi być atrybutem statusu, a `from` i `to` muszą być kodami z jego `enum`.
+Mapowanie `enforcement` wymaga `on_save: true` lub co najmniej jednego przejścia, wagi `error` lub `critical` oraz [predykatu](/pl/reference/blueprint/#predykaty) bez `stale`, `unique` i `acyclic`, których nie da się sprawdzić podczas zapisu. `attribute_code` każdego przejścia musi być atrybutem statusu, a `from` i `to` muszą być kodami z jego `enum`.
 
 Reguła powiązana z kontekstem jest egzekwowana tylko w tym kontekście. Reguła bez kontekstu jest egzekwowana w każdym kontekście.
 
@@ -248,11 +252,11 @@ Próbne wykonanie zatrzymuje się po 10 000 rekordów. Gdy Schemat ma ich więce
 Zmiana włączonej egzekwowanej reguły przechodzi tę samą kontrolę dla nowej definicji. Próbne wykonanie może sprawdzić definicję jeszcze przed zapisaniem: w edytorze wybierz **Uruchom zmianę próbnie**, a jeśli znajdzie naruszenia, **Zapisz mimo to** je akceptuje. W CLI przekaż plik do próbnego wykonania, a przy zapisie zaakceptuj naruszenia:
 
 ```sh
-acli rule run-now <rule-id> --idempotency-key change-preview --dry-run --definition-file rule.toml
-acli rule update <rule-id> --accept-existing-violations --file rule.toml
+acli rule run-now <rule-id> --idempotency-key change-preview --dry-run --definition-file rule.yaml
+acli rule update <rule-id> --accept-existing-violations --file rule.yaml
 ```
 
-W API `POST /rules/{id}/run-now` przyjmuje `"definition"` z kodem TOML tylko przy próbnym wykonaniu.
+W API `POST /rules/{id}/run-now` przyjmuje `"definition"` z kodem YAML tylko przy próbnym wykonaniu.
 
 Rekordu, który już narusza egzekwowaną regułę, nie można zapisać, dopóki zapis nie usunie naruszenia.
 

@@ -11,78 +11,74 @@ Potrzebujesz obszaru roboczego, w którym masz rolę właściciela lub administr
 
 Otwórz **Zarządzanie → Schematy → Nowy schemat** i wklej:
 
-```toml
-format_version = 1
-code = "category"
-name = "Category"
-kind = "record"
+```yaml
+format_version: 1
+code: category
+name: Category
+kind: record
 
-[[attributes]]
-code = "name"
-value_type = "string"
+attributes:
+  - code: name
+    value_type: string
 
-[[attributes]]
-code = "parent"
-value_type = "relationship"
-target_blueprint = "category"
-cardinality = "one"
+  - code: parent
+    value_type: relationship
+    target_blueprint: category
+    cardinality: one
 
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
 ```
 
 Zapisz go, a następnie **Opublikuj** wersję 1.
 
-`parent` wskazuje na inną kategorię, więc kategorie mogą tworzyć drzewo. `kind = "record"` oznacza schemat rekordu.
+`parent` wskazuje na inną kategorię, więc kategorie mogą tworzyć drzewo. `kind: record` oznacza schemat rekordu.
 
 ## 2. Utwórz schemat produktu
 
 Utwórz drugi schemat:
 
-```toml
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
-record_schema = '{"type":"object","required":["sku","title"]}'
+```yaml
+format_version: 1
+code: product
+name: Product
+kind: record
+record_schema: '{"type":"object","required":["sku","title"]}'
 
-[[attributes]]
-code = "sku"
-value_type = "string"
-context_editable = "default"
+attributes:
+  - code: sku
+    value_type: string
+    context_editable: default
 
-[[attributes]]
-code = "title"
-value_type = "string"
+  - code: title
+    value_type: string
 
-[[attributes]]
-code = "price"
-value_type = "number"
-value_schema = '{"type":"number","minimum":0}'
+  - code: price
+    value_type: number
+    value_schema: '{"type":"number","minimum":0}'
 
-[[attributes]]
-code = "categories"
-value_type = "relationship"
-target_blueprint = "category"
+  - code: categories
+    value_type: relationship
+    target_blueprint: category
 
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title", "sku"]
-separator = " / "
-
-[views.table]
-type = "table"
-columns = [
-  { field = "sku", label = "SKU" },
-  { field = "title" },
-  { field = "price" },
-]
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title, sku]
+    separator: ' / '
+  table:
+    type: table
+    columns:
+      - {field: sku, label: SKU}
+      - {field: title}
+      - {field: price}
 ```
 
 Opublikuj go.
 
-`record_schema` zawiera schemat rekordu. Celowo znajduje się nad pierwszym `[[attributes]]`. W TOML każdy klucz po nagłówku `[table]` należy do tej tabeli, więc klucz najwyższego poziomu umieszczony niżej stałby się częścią ostatniego atrybutu.
+`record_schema` zawiera schemat rekordu. To klucz najwyższego poziomu, więc ma to samo wcięcie co `attributes`, a nie wcięcie atrybutu. Klucz wcięty pod ostatnim atrybutem stałby się częścią tego atrybutu.
 
 ## 3. Dodaj kategorie
 

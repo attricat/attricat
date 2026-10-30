@@ -16,23 +16,21 @@ Oba schematy walidacji używają JSON Schema Draft 2020-12. Aplikacja internetow
 
 ## Ogranicz jedną wartość
 
-Zapisz schemat jako JSON w łańcuchu znaków TOML. Apostrofy pozwalają uniknąć escapowania.
+Zapisz schemat jako JSON w łańcuchu znaków YAML. Apostrofy pozwalają uniknąć escapowania; dłuższy schemat zapisz w bloku `|`, z JSON wciętym pod kluczem.
 
-```toml
-[[attributes]]
-code = "price"
-value_type = "number"
-value_schema = '{"type":"number","minimum":0}'
+```yaml
+attributes:
+  - code: price
+    value_type: number
+    value_schema: '{"type":"number","minimum":0}'
 
-[[attributes]]
-code = "sku"
-value_type = "string"
-value_schema = '{"type":"string","pattern":"^[A-Z]{3}-[0-9]{4}$"}'
+  - code: sku
+    value_type: string
+    value_schema: '{"type":"string","pattern":"^[A-Z]{3}-[0-9]{4}$"}'
 
-[[attributes]]
-code = "size"
-value_type = "string"
-value_schema = '{"enum":["XS","S","M","L","XL"]}'
+  - code: size
+    value_type: string
+    value_schema: '{"enum":["XS","S","M","L","XL"]}'
 ```
 
 `value_schema` działa na atrybutach skalarnych: łańcuchach znaków, liczbach, liczbach całkowitych, wartościach logicznych, datach, datach z godziną i godzinach. Relacje i pliki nie mogą go mieć. Relacje ograniczaj przez `record_schema`.
@@ -45,15 +43,16 @@ Formularze rekordów opisują ograniczenia pola pod nim, po jego opisie: długo�
 
 `pattern` nigdy nie jest pokazywany jako wyrażenie regularne. Aby wyjaśnić, czego oczekuje, dodaj obok niego opcjonalny `x-attricat-pattern-hint`:
 
-```toml
-[[attributes]]
-code = "sku"
-value_type = "string"
-value_schema = '''{
-  "type": "string",
-  "pattern": "^[A-Z]{3}-[0-9]{4}$",
-  "x-attricat-pattern-hint": "Trzy wielkie litery, łącznik i cztery cyfry, np. ABC-1234"
-}'''
+```yaml
+attributes:
+  - code: sku
+    value_type: string
+    value_schema: |-
+      {
+        "type": "string",
+        "pattern": "^[A-Z]{3}-[0-9]{4}$",
+        "x-attricat-pattern-hint": "Trzy wielkie litery, łącznik i cztery cyfry, np. ABC-1234"
+      }
 ```
 
 Wskazówka jest wyświetlana pod polem oraz w błędzie wartości, która nie pasuje. Wymaga `pattern` w tym samym schemacie, ma od 1 do 200 znaków i można ją [przetłumaczyć](/pl/builders/translations/).
@@ -62,14 +61,15 @@ Wskazówka jest wyświetlana pod polem oraz w błędzie wartości, która nie pa
 
 Atrybut `string`, którego `value_schema` ma `enum`, edytuje się przez wybór jednej z jego wartości: przyciski opcji dla najwyżej pięciu wartości, a dla większej liczby lista z wyszukiwaniem. Przeglądarka rekordów filtruje go przez wybór jednej wartości albo według tego, czy jest ustawiony. Aby pokazać coś czytelniejszego niż zapisana wartość, dodaj opcjonalną mapę `x-attricat-enum-labels`:
 
-```toml
-[[attributes]]
-code = "size"
-value_type = "string"
-value_schema = '''{
-  "enum": ["s", "m", "l"],
-  "x-attricat-enum-labels": { "s": "Small", "m": "Medium", "l": "{{Large}}" }
-}'''
+```yaml
+attributes:
+  - code: size
+    value_type: string
+    value_schema: |-
+      {
+        "enum": ["s", "m", "l"],
+        "x-attricat-enum-labels": { "s": "Small", "m": "Medium", "l": "{{Large}}" }
+      }
 ```
 
 - Możesz nadać etykiety części wartości albo wszystkim. Wartość bez etykiety wyświetla się bez zmian.
@@ -83,27 +83,28 @@ Jeśli wartości to etapy, przez które przechodzi rekord, użyj [statusu](#stat
 
 Status to atrybut `string`, którego `value_schema` ma `enum` ze stałymi kodami oraz adnotację `x-attricat-status`. Adnotacja nadaje każdemu kodowi etykietę, opcjonalny odcień koloru i opcjonalnie dozwolone przejścia między kodami:
 
-```toml
-[[attributes]]
-code = "status"
-value_type = "string"
-value_schema = '''{
-  "type": "string",
-  "enum": ["draft", "live", "retired"],
-  "x-attricat-status": {
-    "version": 1,
-    "options": [
-      { "code": "draft", "label": "Draft" },
-      { "code": "live", "label": "Live", "tone": "success" },
-      { "code": "retired", "label": "Retired" }
-    ],
-    "transitions": [
-      { "from": null, "to": "draft" },
-      { "from": "draft", "to": "live" },
-      { "from": "live", "to": "retired" }
-    ]
-  }
-}'''
+```yaml
+attributes:
+  - code: status
+    value_type: string
+    value_schema: |-
+      {
+        "type": "string",
+        "enum": ["draft", "live", "retired"],
+        "x-attricat-status": {
+          "version": 1,
+          "options": [
+            { "code": "draft", "label": "Draft" },
+            { "code": "live", "label": "Live", "tone": "success" },
+            { "code": "retired", "label": "Retired" }
+          ],
+          "transitions": [
+            { "from": null, "to": "draft" },
+            { "from": "draft", "to": "live" },
+            { "from": "live", "to": "retired" }
+          ]
+        }
+      }
 ```
 
 - Każdy kod z `enum` musi mieć dokładnie jedną opcję, podaną w kolejności wyświetlania. Kody składają się z liter, cyfr, `_` i `-`. Etykiety to tekst, który można [przetłumaczyć](/pl/builders/translations/#etykiety-statusów-i-list-wyboru) odwołaniami do leksykonu `{{…}}`.
@@ -116,33 +117,34 @@ Aplikacja internetowa pokazuje status jako etykietę i edytuje go listą wyboru,
 
 Dozwolone przejście może nadal zależeć od danych. Dodaj `conditions` do krawędzi, aby czegoś wymagać przed zmianą, na przykład zapisania przyczyny źródłowej przed zamknięciem niezgodności:
 
-```toml
-[[attributes]]
-code = "status"
-value_type = "string"
-value_schema = '''{
-  "type": "string",
-  "enum": ["open", "closed"],
-  "x-attricat-status": {
-    "version": 1,
-    "options": [
-      { "code": "open", "label": "Open" },
-      { "code": "closed", "label": "Closed", "tone": "success" }
-    ],
-    "transitions": [
-      { "from": null, "to": "open" },
-      { "from": "closed", "to": "open" },
-      { "from": "open", "to": "closed", "conditions": [
-        { "code": "root-cause", "message": "Record the root cause before closing",
-          "predicate": { "type": "required", "attribute_code": "root_cause" } },
-        { "code": "actions-closed", "message": "Close every corrective action first",
-          "predicate": { "type": "referenced_by", "blueprint_code": "corrective_action",
-            "relationship_code": "nonconformance", "max": 0,
-            "predicate": { "type": "one_of", "attribute_code": "state", "values": ["open"] } } }
-      ] }
-    ]
-  }
-}'''
+```yaml
+attributes:
+  - code: status
+    value_type: string
+    value_schema: |-
+      {
+        "type": "string",
+        "enum": ["open", "closed"],
+        "x-attricat-status": {
+          "version": 1,
+          "options": [
+            { "code": "open", "label": "Open" },
+            { "code": "closed", "label": "Closed", "tone": "success" }
+          ],
+          "transitions": [
+            { "from": null, "to": "open" },
+            { "from": "closed", "to": "open" },
+            { "from": "open", "to": "closed", "conditions": [
+              { "code": "root-cause", "message": "Record the root cause before closing",
+                "predicate": { "type": "required", "attribute_code": "root_cause" } },
+              { "code": "actions-closed", "message": "Close every corrective action first",
+                "predicate": { "type": "referenced_by", "blueprint_code": "corrective_action",
+                  "relationship_code": "nonconformance", "max": 0,
+                  "predicate": { "type": "one_of", "attribute_code": "state", "values": ["open"] } } }
+            ] }
+          ]
+        }
+      }
 ```
 
 - Warunek ma `code`, opcjonalny `message` (od 1 do 500 znaków) i `predicate`. Predykaty są takie same jak w [regułach](/pl/reference/blueprint/#predykaty), z wyjątkiem `stale`, `unique` i `acyclic`. Krawędź może mieć najwyżej 16 warunków.
@@ -204,20 +206,19 @@ Zatwierdzenia i unieważnienia pojawiają się w dzienniku audytu (`record.appro
 
 `record_schema` widzi rekord jako jeden obiekt JSON. Używaj go dla reguł obejmujących więcej niż jeden atrybut:
 
-```toml
-record_schema = '''
-{
-  "type": "object",
-  "required": ["title", "price"],
-  "allOf": [
-    {
-      "if": { "properties": { "on_sale": { "const": true } }, "required": ["on_sale"] },
-      "then": { "required": ["sale_price"] }
-    }
-  ],
-  "dependentRequired": { "discontinued_on": ["replacement"] }
-}
-'''
+```yaml
+record_schema: |
+  {
+    "type": "object",
+    "required": ["title", "price"],
+    "allOf": [
+      {
+        "if": { "properties": { "on_sale": { "const": true } }, "required": ["on_sale"] },
+        "then": { "required": ["sale_price"] }
+      }
+    ],
+    "dependentRequired": { "discontinued_on": ["replacement"] }
+  }
 ```
 
 Obiekt walidowany przez Attricat wygląda tak:
@@ -244,21 +245,20 @@ Najwyższego poziomu `required`, `properties`, `dependentRequired` i `dependentS
 
 JSON Schema nie wyrazi warunku „data ważności nie może być wcześniejsza niż data rozpoczęcia”. Zamiast tego dodaj do schematu walidacji rekordu nazwane kontrole w `x-attricat-checks`:
 
-```toml
-record_schema = '''
-{
-  "type": "object",
-  "required": ["title"],
-  "x-attricat-checks": [
-    { "code": "valid-range", "message": "Valid until must not be before valid from",
-      "predicate": { "type": "compare", "attribute_code": "valid_until", "op": "gte", "other_attribute_code": "valid_from" } },
-    { "code": "tolerance", "message": "The lower limit must not exceed the upper limit",
-      "predicate": { "type": "compare", "attribute_code": "lower_limit", "op": "lte", "other_attribute_code": "upper_limit" } },
-    { "code": "not-self-superseding",
-      "predicate": { "type": "compare", "attribute_code": "supersedes", "op": "disjoint", "other_attribute_code": "superseded_by" } }
-  ]
-}
-'''
+```yaml
+record_schema: |
+  {
+    "type": "object",
+    "required": ["title"],
+    "x-attricat-checks": [
+      { "code": "valid-range", "message": "Valid until must not be before valid from",
+        "predicate": { "type": "compare", "attribute_code": "valid_until", "op": "gte", "other_attribute_code": "valid_from" } },
+      { "code": "tolerance", "message": "The lower limit must not exceed the upper limit",
+        "predicate": { "type": "compare", "attribute_code": "lower_limit", "op": "lte", "other_attribute_code": "upper_limit" } },
+      { "code": "not-self-superseding",
+        "predicate": { "type": "compare", "attribute_code": "supersedes", "op": "disjoint", "other_attribute_code": "superseded_by" } }
+    ]
+  }
 ```
 
 Każda kontrola ma:
@@ -279,22 +279,21 @@ Kontrole działają po JSON Schema, na każdej ścieżce zapisu: w API, CLI, apl
 
 Kontrola może sięgnąć o jeden krok wzdłuż relacji. `linked` sprawdza rekordy, które wskazuje zapisywany rekord, a `referenced_by` liczy rekordy, które go wskazują.
 
-```toml
-record_schema = '''
-{
-  "type": "object",
-  "x-attricat-checks": [
-    { "code": "facility-of-supplier",
-      "message": "Every facility must belong to the certificate's supplier",
-      "predicate": { "type": "linked", "relationship_code": "facilities",
-        "predicate": { "type": "compare", "attribute_code": "supplier", "op": "eq", "subject_attribute_code": "supplier" } } },
-    { "code": "approved-facilities",
-      "message": "Only approved facilities can be certified",
-      "predicate": { "type": "linked", "relationship_code": "facilities",
-        "predicate": { "type": "one_of", "attribute_code": "approval_status", "values": ["approved"] } } }
-  ]
-}
-'''
+```yaml
+record_schema: |
+  {
+    "type": "object",
+    "x-attricat-checks": [
+      { "code": "facility-of-supplier",
+        "message": "Every facility must belong to the certificate's supplier",
+        "predicate": { "type": "linked", "relationship_code": "facilities",
+          "predicate": { "type": "compare", "attribute_code": "supplier", "op": "eq", "subject_attribute_code": "supplier" } } },
+      { "code": "approved-facilities",
+        "message": "Only approved facilities can be certified",
+        "predicate": { "type": "linked", "relationship_code": "facilities",
+          "predicate": { "type": "one_of", "attribute_code": "approval_status", "values": ["approved"] } } }
+    ]
+  }
 ```
 
 - Wewnątrz `linked` i `referenced_by` klucz `attribute_code` wskazuje atrybut drugiego rekordu. `subject_attribute_code` wskazuje atrybut zapisywanego rekordu.
@@ -332,14 +331,13 @@ W aplikacji internetowej strona rekordu wymienia kontrole, które nie przeszły,
 
 Schemat walidacji sprawdza jeden rekord naraz, więc nie powstrzyma dwóch rekordów przed otrzymaniem tego samego numeru części. Zadeklaruj zamiast tego klucz unikalny:
 
-```toml
-[[unique_keys]]
-code = "part_number"
-attributes = ["part_number"]
+```yaml
+unique_keys:
+  - code: part_number
+    attributes: [part_number]
 
-[[unique_keys]]
-code = "document_revision"
-attributes = ["document", "revision_label"]
+  - code: document_revision
+    attributes: [document, revision_label]
 ```
 
 Drugi klucz jest złożony: dokument może mieć tylko jedną wersję `B`, ale każdy dokument może mieć własną. Domyślnie tekst jest porównywany bez względu na wielkość liter i nadmiarowe białe znaki, a rekord bez którejś wartości klucza nie jest względem niego sprawdzany. Zapis powodujący konflikt zwraca `409 unique_key_conflict` z rekordem, który już ma tę wartość.
@@ -350,22 +348,24 @@ Zasady porównywania, klucze w poszczególnych kontekstach i to, co się dzieje 
 
 [Atrybut generowany](/pl/reference/blueprint/#wartości-generowane) nadaje każdemu nowemu rekordowi kolejny numer z licznika, np. `INV-2026-00042`. Aby każdy rekord miał taki numer i żadne dwa rekordy go nie współdzieliły, oznacz atrybut jako wymagany w `record_schema` i zadeklaruj dla niego klucz unikalny:
 
-```toml
-record_schema = '''{ "type": "object", "required": ["invoice_number"] }'''
+```yaml
+record_schema: '{ "type": "object", "required": ["invoice_number"] }'
 
-[[attributes]]
-code = "invoice_number"
-value_type = "string"
-generated = { format = "INV-{yyyy}-{n:05}", reset = "yearly", time_zone = "Europe/Warsaw" }
+attributes:
+  - code: invoice_number
+    value_type: string
+    generated:
+      format: 'INV-{yyyy}-{n:05}'
+      reset: yearly
+      time_zone: Europe/Warsaw
 
-[[attributes]]
-code = "legacy_number"
-name = "Number in the previous system"
-value_type = "string"
+  - code: legacy_number
+    name: Number in the previous system
+    value_type: string
 
-[[unique_keys]]
-code = "invoice_number"
-attributes = ["invoice_number"]
+unique_keys:
+  - code: invoice_number
+    attributes: [invoice_number]
 ```
 
 Serwer przypisuje wartość, zanim rekord zostanie zwalidowany, więc `required` jest spełnione przy każdym utworzeniu. Licznik nigdy nie wydaje tego samego numeru dwa razy; klucz unikalny czyni z numeru zadeklarowany identyfikator biznesowy i sprawia, że baza danych odrzuca duplikat, np. gdy późniejsza zmiana `format` sprawi, że nowe wartości będą wyglądać jak stare. Nikt nie może zapisać atrybutu generowanego, więc zapis, który tego próbuje, zwraca `422 generated_attribute_readonly`.

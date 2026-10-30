@@ -4,25 +4,24 @@ Rules are Attricat-owned, versioned blueprint checks. They are deliberately sepa
 
 ## Definition contract
 
-A rule is a standalone TOML document (`contracts/rule-definition-v1.schema.json`), created through `/rules` for a blueprint and optionally a context. Blueprints do not contain rules: a blueprint definition with `[[rules]]` tables is rejected when saved, and revisions stored before that still parse, with their tables ignored. A rule has `format_version = 1`, a severity, one to eight triggers, and exactly one predicate. Unknown fields and arbitrary code/selectors are rejected.
+A rule is a standalone YAML document (`contracts/rule-definition-v1.schema.json`), created through `/rules` for a blueprint and optionally a context. Blueprints do not contain rules: a blueprint definition with a `rules` list is rejected when saved, and revisions stored before that still parse, with their rules ignored. A rule has `format_version: 1`, a severity, one to eight triggers, and exactly one predicate. Unknown fields and arbitrary code/selectors are rejected.
 
-```toml
-format_version = 1
-code = "product-title-required"
-name = "Published products have a title"
-severity = "error"
+```yaml
+format_version: 1
+code: product-title-required
+name: Published products have a title
+severity: error
 
-[[triggers]]
-type = "schedule"
-cron = "0 0 * * * *"
-timezone = "UTC"
+triggers:
+  - type: schedule
+    cron: '0 0 * * * *'
+    timezone: UTC
 
-[[triggers]]
-type = "manual"
+  - type: manual
 
-[predicate]
-type = "required"
-attribute_code = "title"
+predicate:
+  type: required
+  attribute_code: title
 ```
 
 Schedules are six-field UTC cron expressions. Event triggers accept only catalog record and value event types; post-import is a reserved declarative trigger shape.
@@ -105,23 +104,26 @@ records in the same context.
 
 Expiry, with a schedule trigger so findings open as dates pass:
 
-```toml
-[predicate]
-type = "relative_date"
-attribute_code = "certificate_expires_on"
-op = "gt"
-offset_days = 30
+```yaml
+predicate:
+  type: relative_date
+  attribute_code: certificate_expires_on
+  op: gt
+  offset_days: 30
 ```
 
 No open corrective actions reference this nonconformance:
 
-```toml
-[predicate]
-type = "referenced_by"
-blueprint_code = "corrective_action"
-relationship_code = "nonconformance"
-max = 0
-predicate = { type = "one_of", attribute_code = "status", values = ["open", "in_progress"] }
+```yaml
+predicate:
+  type: referenced_by
+  blueprint_code: corrective_action
+  relationship_code: nonconformance
+  max: 0
+  predicate:
+    type: one_of
+    attribute_code: status
+    values: [open, in_progress]
 ```
 
 ## Contexts
@@ -149,17 +151,16 @@ record check or enforcing rule blocks the dependent's next save.
 
 ## Enforcement
 
-By default a rule only reports findings. `[enforcement]` also rejects
+By default a rule only reports findings. `enforcement` also rejects
 writes while the rule is violated:
 
-```toml
-[enforcement]
-on_save = true                       # reject any write that leaves the record violating the rule
-
-[[enforcement.transitions]]          # and/or guard status transitions
-attribute_code = "status"
-from = "review"                      # optional; omit to guard every change into `to`
-to = "released"
+```yaml
+enforcement:
+  on_save: true  # reject any write that leaves the record violating the rule
+  transitions:  # and/or guard status transitions
+    - attribute_code: status
+      from: review  # optional; omit to guard every change into `to`
+      to: released
 ```
 
 - Enforcement requires `error` or `critical` severity, `on_save` or at least one
@@ -187,7 +188,7 @@ rule's blueprint has live records:
 
 Runs record the `definition_hash` they evaluated. A dry run may check an
 unsaved definition: `POST /rules/{rule_id}/run-now` with
-`{"dry_run": true, "idempotency_key": "...", "definition": "<TOML>"}` compiles
+`{"dry_run": true, "idempotency_key": "...", "definition": "<YAML>"}` compiles
 it, checks that its code is the rule's and that it fits the latest published
 revision, and stores the compiled plan on the run (only dry runs may carry
 one). The gate reads the latest completed full dry run with the definition's
@@ -241,7 +242,7 @@ context when publishing and fail with `422 publication_checks_failed`. See
 - `PUT /rules/{rule_id}` with `{ "definition": "...", "accept_existing_violations": false }` saves a new current revision.
 - `GET /rules/{rule_id}/revisions` returns the changelog, newest first; `GET /rules/{rule_id}/revisions/{version}` returns one revision.
 - `POST /rules/{rule_id}/enable`, with an optional body `{ "accept_existing_violations": true }` for enforcing rules, and `POST /rules/{rule_id}/disable`.
-- `POST /rules/{rule_id}/run-now` with `{ "record_id": "optional UUID", "dry_run": false, "idempotency_key": "...", "definition": "optional TOML" }` runs the current revision; a normal run needs the rule enabled, and only a dry run may send `definition`.
+- `POST /rules/{rule_id}/run-now` with `{ "record_id": "optional UUID", "dry_run": false, "idempotency_key": "...", "definition": "optional YAML" }` runs the current revision; a normal run needs the rule enabled, and only a dry run may send `definition`.
 - `GET /rule-runs?record_id=...` (runs include `definition_hash` and `candidates_skipped`), `POST /rule-runs/{run_id}/replay`, `GET /rule-findings?record_id=...` (add `unresolved=true` to skip resolved findings; also narrows by `rule_id`, `blueprint_id`, `context_id`, `severity` and `state`), `GET /rule-findings/count?record_id=...`
 - `POST /rule-findings/recheck` with `{ "record_id": "UUID", "idempotency_key": "..." }` re-checks one record against every enabled rule of its blueprint and returns `202 { "run_ids": [...] }`, one record-scoped manual run per rule. Repeating the key returns the same runs.
 - `POST /rule-findings/{finding_id}/acknowledge`
@@ -270,5 +271,5 @@ and schedule cursors in the same transaction. Other rules stay disabled.
 
 The pack's rule code becomes `<prefix>_<code>`, so a plan reports an existing
 rule code as a conflict instead of creating a second rule. A pack blueprint
-with `[[rules]]` tables is invalid. After installation, seeded rules are
+with a `rules` list is invalid. After installation, seeded rules are
 ordinary rules; a pack never updates, re-enables, or removes them.

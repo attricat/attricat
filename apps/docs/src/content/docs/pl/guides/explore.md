@@ -71,7 +71,7 @@ Każdy aktywny filtr jest widoczny jako etykieta pod polem wyszukiwania. Wszystk
 
 Na szerokich ekranach panel **Przeglądaj według** obok wyników wyświetla cele jednego atrybutu relacji wraz z licznikami. Kliknij cel, aby zachować tylko powiązane z nim rekordy. Kliknij go ponownie lub wybierz **Wszystkie**, aby wyczyścić wybór. Wybór pojawia się jako pigułka filtra, tak jak inne filtry.
 
-Gdy schemat docelowy ma hierarchię, na przykład pole `category.parent` z `tree = true`, panel wyświetla drzewo:
+Gdy schemat docelowy ma hierarchię, na przykład pole `category.parent` z `tree: true`, panel wyświetla drzewo:
 
 - Rozwiń węzeł, aby wczytać jego elementy podrzędne.
 - Liczniki przy każdym węźle obejmują wszystko, co znajduje się pod nim. Rekord przypisany do dwóch podkategorii jest liczony raz.

@@ -149,8 +149,8 @@ A record can have any number of conversations. The **Conversations** tab lists t
 Everything on this page is also available through the [CLI](/reference/cli/) and [API](/reference/api/). For example:
 
 ```sh
-acli record create --blueprint product --values product.toml
-acli record update <record-id> --values changes.toml --context-id <context-id>
+acli record create --blueprint product --values product.yaml
+acli record update <record-id> --values changes.yaml --context-id <context-id>
 acli record value-history <record-id>
 acli record restore-value <record-id> <history-id>
 acli file upload <record-id> main_photo --file photo.jpg

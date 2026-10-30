@@ -40,7 +40,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `default_context_only` | 422 | Atrybut można zapisywać tylko w kontekście domyślnym. |
 | `context_cycle` | 422 | Kontekst nie może stać się własnym potomkiem. |
 | `context_in_use` | 422 | Nie można usunąć kontekstu, który ma potomków, wartości lub wykonania rozszerzeń. |
-| `invalid_blueprint_definition` | 422 | TOML schematu się nie kompiluje. Komunikat podaje przyczynę. |
+| `invalid_blueprint_definition` | 422 | YAML schematu się nie kompiluje. Komunikat podaje przyczynę. |
 | `attribute_value_schema_mismatch` | 422 | Wartość nie spełnia `value_schema` swojego atrybutu. |
 | `record_schema_mismatch` | 422 | Rekord nie spełnia swojego `record_schema` w którymś kontekście. |
 | `relationship_cardinality_conflict` | 409 | Zapis relacji przekracza `cardinality` lub `target_cardinality` albo nadaje rekordowi w drzewie (`tree`) drugiego rodzica. |
@@ -67,7 +67,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `transition_conditions_unmet` | 422 | Warunki przejścia statusu nie są spełnione. |
 | `rule_violation` | 422 | Po zapisie rekord naruszałby egzekwowaną regułę. |
 | `publication_checks_failed` | 422 | Kontrole wymagane przez kanał nie przechodzą. `details.context` to kod kanału. |
-| `invalid_rule_definition` | 422 | TOML reguły jest nieprawidłowy lub nie pasuje do najnowszej opublikowanej rewizji jej schematu. |
+| `invalid_rule_definition` | 422 | YAML reguły jest nieprawidłowy lub nie pasuje do najnowszej opublikowanej rewizji jej schematu. |
 | `blueprint_not_published` | 422 | Schemat nie ma jeszcze opublikowanej rewizji, na przykład przy tworzeniu dla niego reguły. |
 | `rule_revision_unchanged` | 409 | Zapisywana definicja jest identyczna z bieżącą rewizją reguły, więc nic nie zapisano. `details.version` wskazuje tę rewizję. Definicję wcześniejszej rewizji można zapisać ponownie. |
 | `rule_not_enabled` | 422 | Zwykłe ręczne uruchomienie wymaga włączonej reguły. Najpierw włącz regułę albo uruchom próbne wykonanie. |
@@ -109,7 +109,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | --- | --- | --- |
 | `GET` | `/blueprints` | Opublikowane schematy rekordów. |
 | `GET` | `/blueprints/catalogue` | Wszystkie rodziny schematów i wersje. |
-| `POST` | `/blueprints` | Tworzy schemat (pierwszy szkic) z `{"definition": "<toml>"}`. |
+| `POST` | `/blueprints` | Tworzy schemat (pierwszy szkic) z `{"definition": "<yaml>"}`. |
 | `GET`, `POST` | `/blueprints/{id}/versions` | Wyświetla wersje lub tworzy kolejny szkic. |
 | `POST` | `/blueprints/validate`, `/blueprints/{id}/versions/validate` | Uruchamia wszystkie kontrole, które wykonałoby utworzenie schematu lub jego kolejnego szkicu, niczego nie zapisując. Zwraca powstały schemat i atrybuty albo ten sam błąd, który zwróciłby zapis. |
 | `GET` | `/blueprints/{id}` | Bieżąca opublikowana wersja. |
@@ -224,7 +224,7 @@ POST /api/v1/records/search
 
 - Pomiń `blueprint.version`, aby przeszukać wszystkie opublikowane wersje.
 - `query` używa [składni wyszukiwania](/pl/guides/search-syntax/).
-- `source_relationship_field` może być ścieżką relacji o maksymalnie trzech krokach, na przykład `model.brand`. Każdy krok musi mieć jeden schemat docelowy i `cardinality = "one"` i jest rozstrzygany w kontekście fasety z własnym dziedziczeniem kontekstu. Punkt końcowy elementów podrzędnych przyjmuje te same ścieżki.
+- `source_relationship_field` może być ścieżką relacji o maksymalnie trzech krokach, na przykład `model.brand`. Każdy krok musi mieć jeden schemat docelowy i `cardinality: one` i jest rozstrzygany w kontekście fasety z własnym dziedziczeniem kontekstu. Punkt końcowy elementów podrzędnych przyjmuje te same ścieżki.
 - Element `relationship_tree_facets` bez `source_relationship_field` filtruje przeszukiwany schemat według jego własnego `hierarchy_field`: rekord pasuje, gdy jest wybranym węzłem lub jednym z jego potomków. Punkt końcowy elementów podrzędnych przyjmuje to samo pominięcie, aby wyświetlić własne drzewo schematu, licząc każdy węzeł wraz ze wszystkim, co znajduje się pod nim.
 - `export_status` zostawia rekordy z danym stanem eksportu w połączeniu jednego rozszerzenia albo w jego domyślnym miejscu docelowym, gdy pominięto `connection`. `status` to `pending`, `synced`, `rejected`, `retrying`, `uncertain` lub `withdrawn`. Łączy się z pozostałymi filtrami jak każdy z nich i nie ma limitu liczby rekordów w danym stanie.
 - `data_quality` zostawia rekordy według ich nierozwiązanych ustaleń reguł: `open` (co najmniej jedno otwarte ustalenie), `acknowledged` (nierozwiązane ustalenia, wszystkie potwierdzone) lub `clean` (brak). Wymaga `rules.read`; bez niego żądanie zwraca `403 data_quality_filter_forbidden`.
@@ -366,13 +366,13 @@ Trasy `GET` reguł, wykonań i ustaleń wymagają `rules.read`; pozostałe trasy
 | --- | --- | --- |
 | `GET` | `/rules` | Jeden element na regułę; listę można zawęzić przez `blueprint_id`. Każdy element ma pola bieżącej rewizji: `id`, `blueprint_id`, `context_id`, `code`, `name`, `version`, `definition`, `definition_hash`, `compiled_plan`, `enabled`, `created_at` i `updated_at`, oraz `not_applicable`: `[{blueprint_version, reason, message}]`, czyli rewizje pomijane przez regułę spośród najnowszej opublikowanej rewizji i rewizji, które mają aktywne rekordy. |
 | `GET` | `/rules/{id}` | Jedna reguła w tym samym kształcie. |
-| `POST` | `/rules` | `{"blueprint_id": "…", "context_id": null, "definition": "<toml>"}`. Tworzy wyłączoną regułę w rewizji 1. Definicja jest sprawdzana względem najnowszej opublikowanej rewizji schematu. |
+| `POST` | `/rules` | `{"blueprint_id": "…", "context_id": null, "definition": "<yaml>"}`. Tworzy wyłączoną regułę w rewizji 1. Definicja jest sprawdzana względem najnowszej opublikowanej rewizji schematu. |
 | `POST` | `/rules/validate` | Ta sama treść; sprawdza regułę bez zapisywania. |
-| `PUT` | `/rules/{id}` | `{"definition": "<toml>", "accept_existing_violations": false}`. Zapisuje nową bieżącą rewizję. |
+| `PUT` | `/rules/{id}` | `{"definition": "<yaml>", "accept_existing_violations": false}`. Zapisuje nową bieżącą rewizję. |
 | `GET` | `/rules/{id}/revisions` | Historia zmian, od najnowszej: `{rule_id, version, name, definition, definition_hash, created_by_user_id, created_at}`. |
 | `GET` | `/rules/{id}/revisions/{version}` | Jedna rewizja. |
 | `POST` | `/rules/{id}/enable`, `/rules/{id}/disable` | Włącza lub wyłącza regułę. `/enable` przyjmuje opcjonalne `{"accept_existing_violations": true}` dla egzekwowanej reguły, której próbne wykonanie znalazło naruszenia. |
-| `POST` | `/rules/{id}/run-now` | `{"record_id": null, "dry_run": false, "idempotency_key": "…"}`. Zwykłe uruchomienie wymaga włączonej reguły. Próbne wykonanie może dodać `"definition": "<toml>"`, aby sprawdzić jeszcze niezapisaną definicję; w przeciwnym razie sprawdza bieżącą rewizję. |
+| `POST` | `/rules/{id}/run-now` | `{"record_id": null, "dry_run": false, "idempotency_key": "…"}`. Zwykłe uruchomienie wymaga włączonej reguły. Próbne wykonanie może dodać `"definition": "<yaml>"`, aby sprawdzić jeszcze niezapisaną definicję; w przeciwnym razie sprawdza bieżącą rewizję. |
 | `GET` | `/rule-runs`, `/rule-findings` | Uruchomienia i ustalenia. Uruchomienie podaje sprawdzony `definition_hash` i `candidates_skipped`, czyli liczbę rekordów pominiętych, bo reguła nie pasuje do ich rewizji schematu. Jego pole `truncated` ma wartość `true`, gdy zatrzymało się ono na limicie rekordów, zanim sprawdziło wszystkie. Strony wybierasz przez `limit` i `offset`; nagłówek `x-next-offset` podaje przesunięcie następnej strony. `unresolved=true` pomija rozwiązane ustalenia. Ustalenia można też zawęzić przez `record_id`, `rule_id`, `blueprint_id`, `context_id`, `severity` (`info`, `warning`, `error`, `critical`) i `state` (`open`, `acknowledged`, `resolved`). Reguły w `GET /rules` i `GET /rules/{id}` mają pola `open_findings` i `acknowledged_findings`. `GET /rule-runs` można zawęzić przez `rule_id` i `record_id`. `scope=all_records` zostawia wykonania obejmujące wszystkie rekordy, a `scope=record` wykonania sprawdzające jeden rekord. |
 | `GET` | `/rule-runs/{id}` | Jedno wykonanie. Próbne wykonanie dodaje `dry_run_failures`: pierwsze 50 rekordów, które by oznaczyło, każdy z `record_id`, `message` i `evidence`. |
 | `GET` | `/rule-findings/count` | `{count}` ustaleń pasujących do filtrów listy: `record_id`, `rule_id`, `blueprint_id`, `context_id`, `severity` i `state`. Bez `state` liczy otwarte i potwierdzone ustalenia; `unresolved=false` liczy wszystkie stany. |
@@ -380,7 +380,7 @@ Trasy `GET` reguł, wykonań i ustaleń wymagają `rules.read`; pozostałe trasy
 | `POST` | `/rule-findings/acknowledge` | Potwierdza wiele otwartych ustaleń. Treść `{finding_ids}` (od 1 do 5000) albo `{matching: {record_id, rule_id, blueprint_id, context_id, severity}}`, które potwierdza do 5000 pasujących otwartych ustaleń. Zwraca `{acknowledged}`. |
 | `POST` | `/rule-findings/recheck` | Ponownie sprawdza jeden rekord względem każdej włączonej reguły jego schematu. Treść `{record_id, idempotency_key}`; zwraca `202 {run_ids}`. Przekaż `record_id` do `GET /rule-runs` lub `/rule-findings`, aby śledzić jeden rekord. |
 | `GET` | `/v1/records/{id}/rule-findings`, `/v1/records/{id}/rule-findings/count`, `/v1/records/{id}/rule-runs`, `/v1/records/{id}/rules` | Otwarte i potwierdzone ustalenia jednego rekordu (z `limit` i `offset`), ich `{count}`, wykonania, które go sprawdziły, oraz reguły jego schematu. Wymagają `records.read` dla rekordu, a nie `rules.read`. |
-| `POST` | `/workflows/validate` | Weryfikuje TOML przepływu pracy. |
+| `POST` | `/workflows/validate` | Weryfikuje YAML przepływu pracy. |
 | `GET`, `POST` | `/workflows`, `/workflows/{id}/versions` | Wyświetla lub tworzy przepływy pracy i ich wersje. |
 | `POST` | `/workflows/{id}/versions/{version}/publish`, `/enable`; `/workflows/{id}/disable` | Cykl życia. |
 | `POST` | `/workflows/{id}/run-now` | Uruchomienie ręczne. |

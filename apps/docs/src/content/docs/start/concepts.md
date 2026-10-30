@@ -15,30 +15,29 @@ People sign in to a workspace with its **sign-in identifier**, such as `retailer
 
 A blueprint describes one kind of record. The retailer has blueprints for `product`, `category`, `brand`, and `material`.
 
-A blueprint is written in TOML and lists **attributes**, each with a type:
+A blueprint is written in YAML and lists **attributes**, each with a type:
 
-```toml
-format_version = 1
-code = "product"
-name = "Product"
-kind = "record"
+```yaml
+format_version: 1
+code: product
+name: Product
+kind: record
 
-[[attributes]]
-code = "title"
-value_type = "string"
+attributes:
+  - code: title
+    value_type: string
 
-[[attributes]]
-code = "price"
-value_type = "number"
+  - code: price
+    value_type: number
 
-[[attributes]]
-code = "categories"
-value_type = "relationship"
-target_blueprint = "category"
+  - code: categories
+    value_type: relationship
+    target_blueprint: category
 
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["title"]
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
 ```
 
 A blueprint can also define validation schemas, page layouts, data-quality rules, and connector jobs.
@@ -78,7 +77,7 @@ Each attribute decides whether it inherits (`context_fallback`) and whether it c
 
 A relationship attribute links a record to others. `product.categories` links to `category` records; `category.parent` links a category to its parent, forming a tree.
 
-Relationships can be single-select (`cardinality = "one"`) or multi-select, and can differ by context like any other value.
+Relationships can be single-select (`cardinality: one`) or multi-select, and can differ by context like any other value.
 
 Classifications such as categories, brands, and materials are records, not strings. That gives each one an identity, a translatable name, and a place in a hierarchy.
 

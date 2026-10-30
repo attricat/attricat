@@ -18,8 +18,8 @@ default            description = "Linen shirt"
 
 Each attribute can change this:
 
-- `context_fallback = "none"` turns inheritance off. A context without its own value shows nothing. Use it for values that must not spread to children, such as a promotion for one channel.
-- `context_editable = "default"` allows the value to be written only in `default`. Other contexts show it read-only. Use it for global facts, such as a SKU.
+- `context_fallback: none` turns inheritance off. A context without its own value shows nothing. Use it for values that must not spread to children, such as a promotion for one channel.
+- `context_editable: default` allows the value to be written only in `default`. Other contexts show it read-only. Use it for global facts, such as a SKU.
 
 Relationship values inherit in the same way.
 

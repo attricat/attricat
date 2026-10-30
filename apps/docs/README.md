@@ -31,7 +31,7 @@ The site is organized into sections, each a directory under `src/content/docs`:
 | `builders/` | Attricat design: modeling, blueprints, views, validation, revisions, rules, workflows, solution packs, extension management. |
 | `extensions/` | Building extensions: packaging, manifest, server runtime, client contributions, operations. |
 | `operate/` | Workspace administration, deployment, monitoring, backup. |
-| `reference/` | Configuration, blueprint TOML, permissions, CLI, API, events. |
+| `reference/` | Configuration, blueprint YAML, permissions, CLI, API, events. |
 
 `apps/web/src/app/documentation.ts` links to `builders/blueprints/`, `guides/contexts/`, `builders/extensions/`, and `operate/workspaces/`. Keep those slugs, or update that file when moving them. Reference pages describe what the code accepts; when a blueprint key, environment variable, permission, or CLI command changes, update the matching reference page in the same change.
 

@@ -71,7 +71,7 @@ Every active filter shows as a pill under the search box. All filters, facets, a
 
 On wide screens, the **Browse by** panel next to the results lists the targets of one relationship attribute, with a count beside each. Click a target to keep only records linked to it, click it again or choose **All** to clear it. The choice shows as a filter pill, like any other filter.
 
-When the target blueprint has a hierarchy, such as a `category.parent` field with `tree = true`, the panel shows a tree:
+When the target blueprint has a hierarchy, such as a `category.parent` field with `tree: true`, the panel shows a tree:
 
 - Expand a node to load its children.
 - Counts next to each node include everything below it. A record assigned to two subcategories is counted once.

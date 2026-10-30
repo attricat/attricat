@@ -5,17 +5,21 @@ description: Show blueprint names, attribute names, status labels, and view labe
 
 Blueprint labels are plain text by default and display exactly as written. To translate a label, wrap it in double braces. The text inside the braces is looked up in the workspace **lexicon**, a set of translations that lives outside blueprints:
 
-```toml
-name = "{{Product}}"
+```yaml
+name: '{{Product}}'
 
-[[attributes]]
-code = "price"
-name = "{{Price}}"
-value_type = "number"
+attributes:
+  - code: price
+    name: '{{Price}}'
+    value_type: number
 
-[[views.detail.tabs]]
-label = "{{Overview}}"
+views:
+  detail:
+    tabs:
+      - {label: '{{Overview}}'}
 ```
+
+In YAML, quote a label that starts with `{{`, as above; unquoted, YAML reads the braces as a mapping.
 
 A user whose interface is set to Polish sees the Polish entry for `Product`. If there is none, they see the English entry, and if that is missing too, the text inside the braces. An untranslated label therefore still reads correctly in English.
 
@@ -26,13 +30,13 @@ Because the lexicon is separate from blueprints, you can fix a translation or ad
 | Label | Where |
 | --- | --- |
 | Blueprint name | `name` |
-| Attribute name | `[[attributes]] name` on an inline attribute |
+| Attribute name | `name` of an inline attribute in `attributes` |
 | Reusable attribute name | `name` in its definition |
 | Status option label | `label` of each option in an `x-attricat-status` annotation, on inline and reusable attributes |
 | Choice label | Each label in an `x-attricat-enum-labels` map, on inline and reusable attributes |
 | Pattern hint | `x-attricat-pattern-hint` in a value schema, on inline and reusable attributes |
 | Tab and accordion section label | `label` in `tabs` and `accordion` blocks |
-| Table column heading | `label` in `[views.table] columns` |
+| Table column heading | `label` in `views.table.columns` |
 | Incoming relationship button and dialog title | `label` in `incoming_relationship_list` |
 
 Other text, such as `heading` and `text` blocks, display separators, and catalog values, is always shown as written.
@@ -41,7 +45,7 @@ Other text, such as `heading` and `text` blocks, display separators, and catalog
 
 A [status](/builders/validation/#statuses) or a [choice list](/builders/validation/#choice-lists) stores a stable code, such as `live`, and shows its option label. Translate the label like any other:
 
-```toml
+```json
 "options": [
   { "code": "draft", "label": "{{Draft|status}}" },
   { "code": "live", "label": "{{Live}}", "tone": "success" }
@@ -98,20 +102,19 @@ acli lexicon import --file pl.json            # add and update entries
 acli lexicon import --file pl.json --replace  # also delete entries missing from the file
 ```
 
-Import files can also be written in TOML (use a `.toml` extension):
+Import files can also be written in YAML (use a `.yaml` or `.yml` extension):
 
-```toml
-format_version = 1
-language = "pl"
+```yaml
+format_version: 1
+language: pl
 
-[[entries]]
-key = "Product"
-text = "Produkt"
+entries:
+  - key: Product
+    text: Produkt
 
-[[entries]]
-key = "Order"
-context = "purchase"
-text = "Zamówienie"
+  - key: Order
+    context: purchase
+    text: Zamówienie
 ```
 
 Languages are BCP 47 tags such as `pl`, `de`, or `pt-BR`. See the [CLI reference](/reference/cli/#translations) for every option. The web app currently offers English and Polish as interface languages.

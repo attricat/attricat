@@ -63,7 +63,7 @@ Attricat stores client secrets and tokens encrypted, obtains and refreshes acces
 To add one, choose **Add connection** and fill in:
 
 - **Kind**, from the kinds the extension declares;
-- **Name**, a short identifier that [connector jobs](/reference/blueprint/#connector-jobs) use with `connection = "…"`, and a **Display name**;
+- **Name**, a short identifier that [connector jobs](/reference/blueprint/#connector-jobs) use with `connection: …`, and a **Display name**;
 - **Client ID**, and the **Client secret** if the destination requires one;
 - **Authorization**, the OAuth grant the destination uses:
   - **Client credentials** needs the client secret. The connection works at once.

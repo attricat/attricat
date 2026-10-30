@@ -43,15 +43,17 @@ Wszystko na tej stronie wymaga API hosta 1.1 (`"host_api": "^1.1"`).
 
 Schemat uruchamia następnie operację jako [zadanie konektora](/pl/extensions/operations/#zadania-konektorów-w-schematach) dla jednego połączenia:
 
-```toml
-[[connector_jobs]]
-code = "shopify"
-direction = "export"
-extension_id = "acme.shopify"
-operation_id = "export"
-connection = "shop-eu"
-trigger = { events = ["record.updated.v1", "record.published.v1", "record.unpublished.v1"], debounce_seconds = 30 }
-input = {}
+```yaml
+connector_jobs:
+  - code: shopify
+    direction: export
+    extension_id: acme.shopify
+    operation_id: export
+    connection: shop-eu
+    trigger:
+      events: [record.updated.v1, record.published.v1, record.unpublished.v1]
+      debounce_seconds: 30
+    input: {}
 ```
 
 ## Pętla wysyłania
@@ -173,15 +175,17 @@ Aby zamiast tego samodzielnie przesłać bajty, skopiuj plik do wykonania przez 
 
 Zadanie eksportu może też uruchamiać się, gdy jego rekordy się zmieniają:
 
-```toml
-[[connector_jobs]]
-code = "shopify"
-direction = "export"
-extension_id = "acme.shopify"
-operation_id = "export"
-connection = "shop-eu"
-trigger = { events = ["record.updated.v1", "attribute_value.changed.v1"], debounce_seconds = 30 }
-input = {}
+```yaml
+connector_jobs:
+  - code: shopify
+    direction: export
+    extension_id: acme.shopify
+    operation_id: export
+    connection: shop-eu
+    trigger:
+      events: [record.updated.v1, attribute_value.changed.v1]
+      debounce_seconds: 30
+    input: {}
 ```
 
 Wykonanie rusza, gdy od najnowszego pasującego zdarzenia rekordów Schematu minie `debounce_seconds` sekund, więc seria edycji daje jedno wykonanie. Ciągłe edycje nie mogą go wstrzymywać w nieskończoność: wykonanie rusza także wtedy, gdy najstarsza oczekująca zmiana ma dziesięciokrotność `debounce_seconds`. Jeśli wykonanie nie może wystartować, np. gdy rozszerzenie jest wyłączone, zmiany czekają i zostaną wyeksportowane, gdy będzie to możliwe. Pasujące zdarzenie rekordu, do którego rekord Schematu odwołuje się przez relację, liczy się jako zmiana rekordu odwołującego się, bo `page-v2` może go osadzić. Wykonanie obejmuje tylko zmienione rekordy, do 10 000; przy większej liczbie zmian wykonuje całe zadanie. Dozwolone zdarzenia wymienia sekcja [Zadania konektorów](/pl/reference/blueprint/#zadania-konektorów).

@@ -3,7 +3,7 @@ title: Przepływy pracy
 description: Automatyzuj małe, audytowalne zmiany rekordu lub rekordów, które się do niego odwołują, w odpowiedzi na zdarzenia katalogu, harmonogram lub ręczne wywołanie.
 ---
 
-Przepływ pracy reaguje na wyzwalacz, stosując krótką listę akcji do jednego rekordu: dodaje lub usuwa tagi systemowe, aktualizuje metadane systemowe albo zapisuje wartość atrybutu. Przepływy pracy to wersjonowany TOML, podobnie jak Schematy, a każda wprowadzana przez nie zmiana przechodzi zwykłą walidację i trafia do dziennika audytu.
+Przepływ pracy reaguje na wyzwalacz, stosując krótką listę akcji do jednego rekordu: dodaje lub usuwa tagi systemowe, aktualizuje metadane systemowe albo zapisuje wartość atrybutu. Przepływy pracy to wersjonowany YAML, podobnie jak Schematy, a każda wprowadzana przez nie zmiana przechodzi zwykłą walidację i trafia do dziennika audytu.
 
 Przepływy pracy nie mają skryptów, pętli, zapytań ani wywołań sieciowych. Zmieniają rekord, który je wyzwolił, a jedną ograniczoną akcją także rekordy, które łączą się z nim przez wskazaną relację. Do większych zadań napisz [rozszerzenie](/pl/extensions/build/).
 
@@ -11,25 +11,25 @@ Przepływy pracy nie mają skryptów, pętli, zapytań ani wywołań sieciowych.
 
 Oznacz produkt do przeglądu przy każdej zmianie jego tytułu:
 
-```toml
-format_version = 1
-code = "review-title-change"
-name = "Review title changes"
+```yaml
+format_version: 1
+code: review-title-change
+name: Review title changes
 
-[[triggers]]
-event_type = "attribute_value.changed.v1"
-attributes = ["title"]
+triggers:
+  - event_type: attribute_value.changed.v1
+    attributes: [title]
 
-[[actions]]
-type = "system_tags_add"
-tags = ["needs-review"]
+actions:
+  - type: system_tags_add
+    tags: [needs-review]
 ```
 
 Utwórz go, opublikuj i włącz w **Zarządzanie → Przepływy pracy** albo za pomocą CLI:
 
 ```sh
-acli workflow validate --file review-title-change.toml
-acli workflow create --file review-title-change.toml
+acli workflow validate --file review-title-change.yaml
+acli workflow create --file review-title-change.yaml
 acli workflow publish <workflow-id> 1
 acli workflow enable <workflow-id> 1
 ```
@@ -50,16 +50,13 @@ Włączenie zapisuje bieżący punkt w strumieniu zdarzeń. Wykonania uruchamiaj
 
 Wyzwalacz zdarzenia wskazuje jedno zdarzenie rekordu i opcjonalnie je zawęża:
 
-```toml
-[[triggers]]
-event_type = "record.updated.v1"
-
-[triggers.envelope]
-source_kind = "api"
-
-[triggers.facts]
-"facts.0.attribute_code" = "price"
-"facts.0.context_code" = "PL"
+```yaml
+triggers:
+  - event_type: record.updated.v1
+    envelope: {source_kind: api}
+    facts:
+      "facts.0.attribute_code": price
+      "facts.0.context_code": PL
 ```
 
 `event_type` to jedno z: `record.created.v1`, `record.updated.v1`, `record.migrated.v1`, `attribute_value.changed.v1`, `attribute_value.restored.v1` lub `relationship.changed.v1`.
@@ -74,10 +71,10 @@ Akcje przepływu pracy wyzwolonego zdarzeniem dotyczą rekordu, którego dotyczy
 
 Przepływ pracy należy do całej przestrzeni roboczej. `blueprints` zawiera od 1 do 100 kodów schematów i wtedy wyzwalacz uruchamia przepływ tylko dla rekordów tych schematów:
 
-```toml
-[[triggers]]
-event_type = "record.updated.v1"
-blueprints = ["product", "service"]
+```yaml
+triggers:
+  - event_type: record.updated.v1
+    blueprints: [product, service]
 ```
 
 - Każdy kod musi wskazywać schemat istniejący w przestrzeni roboczej w chwili zapisu przepływu, więc literówka jest odrzucana z `422 invalid_workflow_definition`, zamiast po cichu wyłączać przepływ.
@@ -90,14 +87,13 @@ blueprints = ["product", "service"]
 
 `attributes` to lista od 1 do 100 kodów atrybutów. Wyzwalacz uruchamia wykonanie tylko wtedy, gdy w zdarzeniu zmienił się co najmniej jeden z tych atrybutów, niezależnie od jego miejsca wśród faktów zdarzenia:
 
-```toml
-[[triggers]]
-event_type = "attribute_value.changed.v1"
-attributes = ["body", "revision_notes", "license"]
+```yaml
+triggers:
+  - event_type: attribute_value.changed.v1
+    attributes: [body, revision_notes, license]
 
-[[triggers]]
-event_type = "relationship.changed.v1"
-attributes = ["license"]
+  - event_type: relationship.changed.v1
+    attributes: [license]
 ```
 
 - Zmiana to fakt w zdarzeniu. Zapisanie wartości identycznej z bieżącą nie tworzy faktu, więc nie uruchamia wykonania.
@@ -111,18 +107,17 @@ attributes = ["license"]
 
 `change_kinds` to lista rodzajów zmian, na które reaguje wyzwalacz. Wyzwalacz uruchamia wykonanie tylko wtedy, gdy zdarzenie zawiera fakt jednego z tych rodzajów. Razem z `attributes` ten sam fakt musi też dotyczyć jednego z tych atrybutów:
 
-```toml
-# Do rekordu podłączono licencję
-[[triggers]]
-event_type = "relationship.changed.v1"
-attributes = ["license"]
-change_kinds = ["relationship_add"]
+```yaml
+triggers:
+  # Do rekordu podłączono licencję
+  - event_type: relationship.changed.v1
+    attributes: [license]
+    change_kinds: [relationship_add]
 
-# Od rekordu odłączono licencję
-[[triggers]]
-event_type = "relationship.changed.v1"
-attributes = ["license"]
-change_kinds = ["relationship_remove"]
+  # Od rekordu odłączono licencję
+  - event_type: relationship.changed.v1
+    attributes: [license]
+    change_kinds: [relationship_remove]
 ```
 
 - Rodzaje to `set`, `replace`, `remove`, `restore`, `relationship_add` i `relationship_remove`. Zobacz, [które zmiany tworzą fakty](/pl/reference/events/#które-zmiany-tworzą-fakty).
@@ -133,14 +128,13 @@ change_kinds = ["relationship_remove"]
 
 `tags_added` i `tags_removed` to listy od 1 do 100 tagów systemowych. Wyzwalacz uruchamia wykonanie tylko wtedy, gdy zapis dodał lub usunął co najmniej jeden z nich:
 
-```toml
-[[triggers]]
-event_type = "record.updated.v1"
-tags_added = ["approved"]
+```yaml
+triggers:
+  - event_type: record.updated.v1
+    tags_added: [approved]
 
-[[triggers]]
-event_type = "record.updated.v1"
-tags_removed = ["approved"]
+  - event_type: record.updated.v1
+    tags_removed: [approved]
 ```
 
 - Liczą się tylko tagi, które faktycznie się zmieniły. Zapisanie rekordu z tagami, które już ma, nie uruchamia wykonania.
@@ -150,25 +144,24 @@ tags_removed = ["approved"]
 
 ## Wyzwalacze ręczne i harmonogramowe
 
-Przy `format_version = 2` przepływ pracy można też uruchomić ręcznie lub według harmonogramu.
+Przy `format_version: 2` przepływ pracy można też uruchomić ręcznie lub według harmonogramu.
 
-```toml
-format_version = 2
-code = "nightly-flag"
-name = "Nightly flag"
+```yaml
+format_version: 2
+code: nightly-flag
+name: Nightly flag
 
-[[triggers]]
-type = "manual"
+triggers:
+  - type: manual
 
-[[triggers]]
-type = "schedule"
-cron = "0 0 2 * * *"
-timezone = "UTC"
-target_record_id = "00000000-0000-0000-0000-000000000001"
+  - type: schedule
+    cron: '0 0 2 * * *'
+    timezone: UTC
+    target_record_id: '00000000-0000-0000-0000-000000000001'
 
-[[actions]]
-type = "system_metadata_merge"
-values = { last_nightly_check = "done" }
+actions:
+  - type: system_metadata_merge
+    values: {last_nightly_check: done}
 ```
 
 - **Ręczny**: uruchom wykonanie dla jednego rekordu ze strony przepływu pracy albo poleceniem `acli workflow run-now <workflow-id> --record-id <uuid> --idempotency-key <key>`. Zawsze używa włączonej wersji.
@@ -182,7 +175,7 @@ Wykonania ręczne i harmonogramowe nie mają zdarzenia, więc ich akcje muszą u
 | --- | --- | --- |
 | `system_tags_add` | `tags` (od 1 do 100, każdy do 128 bajtów) | Dodaje tagi systemowe. |
 | `system_tags_remove` | `tags` | Usuwa tagi systemowe. |
-| `system_metadata_merge` | `values` (tabela wartości skalarnych) | Ustawia klucze w metadanych systemowych. Klucze mogą być ścieżkami z kropkami. |
+| `system_metadata_merge` | `values` (mapowanie wartości skalarnych) | Ustawia klucze w metadanych systemowych. Klucze mogą być ścieżkami z kropkami. |
 | `system_metadata_delete` | `keys` | Usuwa klucze z metadanych systemowych. |
 | `attribute_write` | `attribute_code` i dokładnie jeden z `fixed` lub `event_field` | Zapisuje skalarną wartość atrybutu. `fixed` to literał; `event_field` kopiuje wartość ze zdarzenia, np. `facts.0.after_value`. |
 | `referencing_records_update` | `relationship_attribute`, opcjonalnie `max_targets` i zagnieżdżone `actions` | Stosuje zagnieżdżone akcje do każdego rekordu, który łączy się z rekordem wyzwalającym. Zobacz niżej. |
@@ -193,28 +186,25 @@ Wykonania ręczne i harmonogramowe nie mają zdarzenia, więc ich akcje muszą u
 
 Gdy zmienia się licencja, specyfikacja lub skład, zależne od nich rekordy często muszą wrócić do przeglądu. `referencing_records_update` znajduje każdy istniejący rekord, którego `relationship_attribute` łączy się obecnie z rekordem wyzwalającym, w dowolnym kontekście, i stosuje do niego zagnieżdżone akcje:
 
-```toml
-format_version = 2
-code = "license-changed"
-name = "Send licensed products back to review"
+```yaml
+format_version: 2
+code: license-changed
+name: Send licensed products back to review
 
-[[triggers]]
-event_type = "attribute_value.changed.v1"
-attributes = ["terms"]
+triggers:
+  - event_type: attribute_value.changed.v1
+    attributes: [terms]
 
-[[actions]]
-type = "referencing_records_update"
-relationship_attribute = "license"
-max_targets = 200
-
-[[actions.actions]]
-type = "attribute_write"
-attribute_code = "status"
-fixed = "in_review"
-
-[[actions.actions]]
-type = "system_tags_add"
-tags = ["needs-review"]
+actions:
+  - type: referencing_records_update
+    relationship_attribute: license
+    max_targets: 200
+    actions:
+      - type: attribute_write
+        attribute_code: status
+        fixed: in_review
+      - type: system_tags_add
+        tags: [needs-review]
 ```
 
 - `relationship_attribute` to kod atrybutu relacji w rekordach **odwołujących się**, a nie w rekordzie wyzwalającym.
@@ -235,7 +225,7 @@ tags = ["needs-review"]
 
 ## Jeszcze niedostępne
 
-- Wyzwalacze `extension_event` są akceptowane w definicjach z `format_version = 2`, ale żadne zdarzenie rozszerzenia nie jest jeszcze dostarczane do przepływów pracy.
+- Wyzwalacze `extension_event` są akceptowane w definicjach z `format_version: 2`, ale żadne zdarzenie rozszerzenia nie jest jeszcze dostarczane do przepływów pracy.
 - Przepływy pracy nie mogą wywoływać webhooków, wysyłać e-maili ani odczytywać sekretów.
 
 ## Uprawnienia

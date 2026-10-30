@@ -9,27 +9,28 @@ validate this annotation. The metadata contract is
 
 For example, this is a Core blueprint attribute (not a new value type):
 
-```toml
-[[attributes]]
-code = "status"
-value_type = "string"
-value_schema = '''{
-  "type": "string",
-  "enum": ["draft", "live", "retired"],
-  "x-attricat-status": {
-    "version": 1,
-    "options": [
-      { "code": "draft", "label": "Draft" },
-      { "code": "live", "label": "Live", "tone": "success" },
-      { "code": "retired", "label": "Retired" }
-    ],
-    "transitions": [
-      { "from": null, "to": "draft" },
-      { "from": "draft", "to": "live" },
-      { "from": "live", "to": "retired" }
-    ]
-  }
-}'''
+```yaml
+attributes:
+  - code: status
+    value_type: string
+    value_schema: |-
+      {
+        "type": "string",
+        "enum": ["draft", "live", "retired"],
+        "x-attricat-status": {
+          "version": 1,
+          "options": [
+            { "code": "draft", "label": "Draft" },
+            { "code": "live", "label": "Live", "tone": "success" },
+            { "code": "retired", "label": "Retired" }
+          ],
+          "transitions": [
+            { "from": null, "to": "draft" },
+            { "from": "draft", "to": "live" },
+            { "from": "live", "to": "retired" }
+          ]
+        }
+      }
 ```
 
 ## Configuration
@@ -129,7 +130,7 @@ planning transitions and migrations rather than deleting a live option first.
 ## Contexts, atomicity and concurrency
 
 Transitions compare effective values resolved through the context's parent
-chain, unless `context_fallback = "none"`. Removing a local override is a
+chain, unless `context_fallback: none`. Removing a local override is a
 transition to the newly inherited value, which may differ from absence.
 Changes to a parent context are also checked for affected descendants.
 Reparenting a context is not a record edit: records are revalidated

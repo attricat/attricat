@@ -40,7 +40,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `default_context_only` | 422 | The attribute can only be written in the default context. |
 | `context_cycle` | 422 | A context cannot become its own descendant. |
 | `context_in_use` | 422 | A context with descendants, values, or extension runs cannot be deleted. |
-| `invalid_blueprint_definition` | 422 | The blueprint TOML does not compile. The message says why. |
+| `invalid_blueprint_definition` | 422 | The blueprint YAML does not compile. The message says why. |
 | `attribute_value_schema_mismatch` | 422 | A value fails its attribute's `value_schema`. |
 | `record_schema_mismatch` | 422 | The record fails its `record_schema` in some context. |
 | `relationship_cardinality_conflict` | 409 | A relationship write exceeds `cardinality` or `target_cardinality`, or gives a record in a `tree` a second parent. |
@@ -67,7 +67,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `transition_conditions_unmet` | 422 | A status transition's conditions are not met. |
 | `rule_violation` | 422 | The write leaves the record violating an enforcing rule. |
 | `publication_checks_failed` | 422 | A channel's required checks fail. `details.context` is the channel code. |
-| `invalid_rule_definition` | 422 | The rule TOML is invalid or does not fit the latest published revision of its blueprint. |
+| `invalid_rule_definition` | 422 | The rule YAML is invalid or does not fit the latest published revision of its blueprint. |
 | `blueprint_not_published` | 422 | The blueprint has no published revision yet, for example when creating a rule for it. |
 | `rule_revision_unchanged` | 409 | The saved definition is identical to the rule's current revision, so nothing was saved. `details.version` is that revision. An earlier revision's definition can be saved again. |
 | `rule_not_enabled` | 422 | A normal manual run needs an enabled rule. Enable the rule first, or start a dry run. |
@@ -109,7 +109,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | --- | --- | --- |
 | `GET` | `/blueprints` | Published record blueprints. |
 | `GET` | `/blueprints/catalogue` | All blueprint families and revisions. |
-| `POST` | `/blueprints` | Create a blueprint (first draft) from `{"definition": "<toml>"}`. |
+| `POST` | `/blueprints` | Create a blueprint (first draft) from `{"definition": "<yaml>"}`. |
 | `GET`, `POST` | `/blueprints/{id}/versions` | List revisions, or create the next draft. |
 | `POST` | `/blueprints/validate`, `/blueprints/{id}/versions/validate` | Run every check that creating the blueprint, or its next draft, would run, without storing it. Returns the resulting blueprint and attributes, or the same error the save would. |
 | `GET` | `/blueprints/{id}` | Current published revision. |
@@ -224,7 +224,7 @@ POST /api/v1/records/search
 
 - Omit `blueprint.version` to search all published revisions.
 - `query` uses the [search syntax](/guides/search-syntax/).
-- `source_relationship_field` can be a relationship path of up to three hops, such as `model.brand`. Each hop needs a single target blueprint and `cardinality = "one"`, and resolves in the facet's context with its own context fallback. The children endpoint accepts the same paths.
+- `source_relationship_field` can be a relationship path of up to three hops, such as `model.brand`. Each hop needs a single target blueprint and `cardinality: one`, and resolves in the facet's context with its own context fallback. The children endpoint accepts the same paths.
 - A `relationship_tree_facets` item without `source_relationship_field` filters the searched blueprint by its own `hierarchy_field`: a record matches when it is a selected node or one of its descendants. The children endpoint accepts the same omission to list the blueprint's own tree, counting each node and everything below it.
 - `export_status` keeps records with that export status at one extension's connection, or its default destination when `connection` is omitted. `status` is `pending`, `synced`, `rejected`, `retrying`, `uncertain`, or `withdrawn`. It combines with the other filters like any of them, with no limit on how many records have the status.
 - `data_quality` keeps records by their unresolved rule findings: `open` (at least one open finding), `acknowledged` (unresolved findings, all acknowledged), or `clean` (none). It requires `rules.read`; without it the request returns `403 data_quality_filter_forbidden`.
@@ -366,13 +366,13 @@ See [Translate labels](/builders/translations/).
 | --- | --- | --- |
 | `GET` | `/rules` | One item per rule, optionally narrowed by `blueprint_id`. Each item has the current revision's `id`, `blueprint_id`, `context_id`, `code`, `name`, `version`, `definition`, `definition_hash`, `compiled_plan`, `enabled`, `created_at` and `updated_at`, and `not_applicable`: `[{blueprint_version, reason, message}]`, the revisions the rule skips among the latest published revision and the revisions that have live records. |
 | `GET` | `/rules/{id}` | One rule, in the same shape. |
-| `POST` | `/rules` | `{"blueprint_id": "…", "context_id": null, "definition": "<toml>"}`. Creates a disabled rule at revision 1. The definition is checked against the blueprint's latest published revision. |
+| `POST` | `/rules` | `{"blueprint_id": "…", "context_id": null, "definition": "<yaml>"}`. Creates a disabled rule at revision 1. The definition is checked against the blueprint's latest published revision. |
 | `POST` | `/rules/validate` | The same body; checks the rule without saving it. |
-| `PUT` | `/rules/{id}` | `{"definition": "<toml>", "accept_existing_violations": false}`. Saves a new current revision. |
+| `PUT` | `/rules/{id}` | `{"definition": "<yaml>", "accept_existing_violations": false}`. Saves a new current revision. |
 | `GET` | `/rules/{id}/revisions` | The changelog, newest first: `{rule_id, version, name, definition, definition_hash, created_by_user_id, created_at}`. |
 | `GET` | `/rules/{id}/revisions/{version}` | One revision. |
 | `POST` | `/rules/{id}/enable`, `/rules/{id}/disable` | Enable or disable the rule. `/enable` accepts an optional `{"accept_existing_violations": true}` for an enforcing rule whose dry run found violations. |
-| `POST` | `/rules/{id}/run-now` | `{"record_id": null, "dry_run": false, "idempotency_key": "…"}`. A normal run needs the rule enabled. A dry run may add `"definition": "<toml>"` to check a definition that is not saved yet; otherwise it checks the current revision. |
+| `POST` | `/rules/{id}/run-now` | `{"record_id": null, "dry_run": false, "idempotency_key": "…"}`. A normal run needs the rule enabled. A dry run may add `"definition": "<yaml>"` to check a definition that is not saved yet; otherwise it checks the current revision. |
 | `GET` | `/rule-runs`, `/rule-findings` | Runs and findings. A run has the `definition_hash` it checked and `candidates_skipped`, the records it skipped because the rule does not fit their blueprint revision. Its `truncated` is `true` when it stopped at its record limit before checking every record. Add `limit` and `offset` for pages; the `x-next-offset` header gives the next page's offset. `unresolved=true` leaves out resolved findings. Findings also narrow by `record_id`, `rule_id`, `blueprint_id`, `context_id`, `severity` (`info`, `warning`, `error`, `critical`) and `state` (`open`, `acknowledged`, `resolved`). Rules in `GET /rules` and `GET /rules/{id}` carry `open_findings` and `acknowledged_findings`. `GET /rule-runs` narrows by `rule_id` and `record_id`. `scope=all_records` keeps runs over every record and `scope=record` runs that checked one record. |
 | `GET` | `/rule-runs/{id}` | One run. A dry run adds `dry_run_failures`: the first 50 records it would flag, each with `record_id`, `message` and `evidence`. |
 | `GET` | `/rule-findings/count` | `{count}` of the findings the list's filters match: `record_id`, `rule_id`, `blueprint_id`, `context_id`, `severity`, and `state`. Without `state` it counts open and acknowledged findings; `unresolved=false` counts every state. |
@@ -380,7 +380,7 @@ See [Translate labels](/builders/translations/).
 | `POST` | `/rule-findings/acknowledge` | Acknowledge many open findings. Body `{finding_ids}` (1 to 5,000) or `{matching: {record_id, rule_id, blueprint_id, context_id, severity}}`, which acknowledges up to 5,000 open findings that match. Returns `{acknowledged}`. |
 | `POST` | `/rule-findings/recheck` | Re-check one record against every enabled rule of its blueprint. Body `{record_id, idempotency_key}`; returns `202 {run_ids}`. Pass `record_id` to `GET /rule-runs` or `/rule-findings` to follow one record. |
 | `GET` | `/v1/records/{id}/rule-findings`, `/v1/records/{id}/rule-findings/count`, `/v1/records/{id}/rule-runs`, `/v1/records/{id}/rules` | One record's open and acknowledged findings (with `limit` and `offset`), their `{count}`, the runs that checked it, and the rules of its blueprint. They need `records.read` on the record, not `rules.read`. |
-| `POST` | `/workflows/validate` | Validate workflow TOML. |
+| `POST` | `/workflows/validate` | Validate workflow YAML. |
 | `GET`, `POST` | `/workflows`, `/workflows/{id}/versions` | List or create workflows and revisions. |
 | `POST` | `/workflows/{id}/versions/{version}/publish`, `/enable`; `/workflows/{id}/disable` | Lifecycle. |
 | `POST` | `/workflows/{id}/run-now` | Manual run. |

@@ -3,7 +3,7 @@ title: Workflows
 description: Automate small, auditable changes to a record, or to the records that reference it, in response to catalog events, a schedule, or a manual trigger.
 ---
 
-A workflow reacts to a trigger by applying a short list of actions to one record: add or remove system tags, update system metadata, or write an attribute value. Workflows are versioned TOML, like blueprints, and every change they make goes through normal validation and appears in the audit log.
+A workflow reacts to a trigger by applying a short list of actions to one record: add or remove system tags, update system metadata, or write an attribute value. Workflows are versioned YAML, like blueprints, and every change they make goes through normal validation and appears in the audit log.
 
 Workflows have no scripts, loops, queries, or network calls. They change the record that triggered them and, with one bounded action, the records that link to it through a named relationship. For anything bigger, write an [extension](/extensions/build/).
 
@@ -11,25 +11,25 @@ Workflows have no scripts, loops, queries, or network calls. They change the rec
 
 Tag a product for review whenever its title changes:
 
-```toml
-format_version = 1
-code = "review-title-change"
-name = "Review title changes"
+```yaml
+format_version: 1
+code: review-title-change
+name: Review title changes
 
-[[triggers]]
-event_type = "attribute_value.changed.v1"
-attributes = ["title"]
+triggers:
+  - event_type: attribute_value.changed.v1
+    attributes: [title]
 
-[[actions]]
-type = "system_tags_add"
-tags = ["needs-review"]
+actions:
+  - type: system_tags_add
+    tags: [needs-review]
 ```
 
 Create, publish, and enable it under **Manage → Workflows**, or with the CLI:
 
 ```sh
-acli workflow validate --file review-title-change.toml
-acli workflow create --file review-title-change.toml
+acli workflow validate --file review-title-change.yaml
+acli workflow create --file review-title-change.yaml
 acli workflow publish <workflow-id> 1
 acli workflow enable <workflow-id> 1
 ```
@@ -50,16 +50,13 @@ Enabling records the current point in the event stream. Only events after that p
 
 An event trigger names one record event and optionally narrows it:
 
-```toml
-[[triggers]]
-event_type = "record.updated.v1"
-
-[triggers.envelope]
-source_kind = "api"
-
-[triggers.facts]
-"facts.0.attribute_code" = "price"
-"facts.0.context_code" = "PL"
+```yaml
+triggers:
+  - event_type: record.updated.v1
+    envelope: {source_kind: api}
+    facts:
+      "facts.0.attribute_code": price
+      "facts.0.context_code": PL
 ```
 
 `event_type` is one of `record.created.v1`, `record.updated.v1`, `record.migrated.v1`, `attribute_value.changed.v1`, `attribute_value.restored.v1`, or `relationship.changed.v1`.
@@ -74,10 +71,10 @@ The actions of an event-triggered workflow apply to the record the event is abou
 
 A workflow belongs to the whole workspace. `blueprints` lists 1 to 100 blueprint codes, and the trigger then starts a run only for records of those blueprints:
 
-```toml
-[[triggers]]
-event_type = "record.updated.v1"
-blueprints = ["product", "service"]
+```yaml
+triggers:
+  - event_type: record.updated.v1
+    blueprints: [product, service]
 ```
 
 - Every code must name a blueprint in the workspace when the workflow is saved, so a typo is rejected with `422 invalid_workflow_definition` instead of silently stopping the workflow.
@@ -90,14 +87,13 @@ blueprints = ["product", "service"]
 
 `attributes` lists 1 to 100 attribute codes. The trigger then starts a run only when at least one of those attributes changed in the event, wherever it appears among the event's facts:
 
-```toml
-[[triggers]]
-event_type = "attribute_value.changed.v1"
-attributes = ["body", "revision_notes", "license"]
+```yaml
+triggers:
+  - event_type: attribute_value.changed.v1
+    attributes: [body, revision_notes, license]
 
-[[triggers]]
-event_type = "relationship.changed.v1"
-attributes = ["license"]
+  - event_type: relationship.changed.v1
+    attributes: [license]
 ```
 
 - A change is a fact in the event. Saving a value that is identical to the current one records no fact, so it does not start a run.
@@ -111,18 +107,17 @@ attributes = ["license"]
 
 `change_kinds` lists the kinds of change the trigger reacts to. The trigger then starts a run only when the event has a fact of one of those kinds. With `attributes`, the same fact must also be for one of those attributes:
 
-```toml
-# A license was linked to the record
-[[triggers]]
-event_type = "relationship.changed.v1"
-attributes = ["license"]
-change_kinds = ["relationship_add"]
+```yaml
+triggers:
+  # A license was linked to the record
+  - event_type: relationship.changed.v1
+    attributes: [license]
+    change_kinds: [relationship_add]
 
-# A license was unlinked from the record
-[[triggers]]
-event_type = "relationship.changed.v1"
-attributes = ["license"]
-change_kinds = ["relationship_remove"]
+  # A license was unlinked from the record
+  - event_type: relationship.changed.v1
+    attributes: [license]
+    change_kinds: [relationship_remove]
 ```
 
 - The kinds are `set`, `replace`, `remove`, `restore`, `relationship_add`, and `relationship_remove`. See [which changes produce facts](/reference/events/#which-changes-produce-facts).
@@ -133,14 +128,13 @@ change_kinds = ["relationship_remove"]
 
 `tags_added` and `tags_removed` each list 1 to 100 system tags. The trigger then starts a run only when the save added, or removed, at least one of them:
 
-```toml
-[[triggers]]
-event_type = "record.updated.v1"
-tags_added = ["approved"]
+```yaml
+triggers:
+  - event_type: record.updated.v1
+    tags_added: [approved]
 
-[[triggers]]
-event_type = "record.updated.v1"
-tags_removed = ["approved"]
+  - event_type: record.updated.v1
+    tags_removed: [approved]
 ```
 
 - Tags count only when they actually change. Saving a record with the tags it already has starts no run.
@@ -150,25 +144,24 @@ tags_removed = ["approved"]
 
 ## Manual and schedule triggers
 
-With `format_version = 2`, a workflow can also be started by hand or on a schedule.
+With `format_version: 2`, a workflow can also be started by hand or on a schedule.
 
-```toml
-format_version = 2
-code = "nightly-flag"
-name = "Nightly flag"
+```yaml
+format_version: 2
+code: nightly-flag
+name: Nightly flag
 
-[[triggers]]
-type = "manual"
+triggers:
+  - type: manual
 
-[[triggers]]
-type = "schedule"
-cron = "0 0 2 * * *"
-timezone = "UTC"
-target_record_id = "00000000-0000-0000-0000-000000000001"
+  - type: schedule
+    cron: '0 0 2 * * *'
+    timezone: UTC
+    target_record_id: '00000000-0000-0000-0000-000000000001'
 
-[[actions]]
-type = "system_metadata_merge"
-values = { last_nightly_check = "done" }
+actions:
+  - type: system_metadata_merge
+    values: {last_nightly_check: done}
 ```
 
 - **Manual**: start a run against one record from the workflow page, or with `acli workflow run-now <workflow-id> --record-id <uuid> --idempotency-key <key>`. It always uses the enabled revision.
@@ -182,7 +175,7 @@ Manual and scheduled runs have no event, so their actions must use fixed values.
 | --- | --- | --- |
 | `system_tags_add` | `tags` (1 to 100, each up to 128 bytes) | Adds system tags. |
 | `system_tags_remove` | `tags` | Removes system tags. |
-| `system_metadata_merge` | `values` (table of scalar values) | Sets keys in system metadata. Keys may be dotted paths. |
+| `system_metadata_merge` | `values` (mapping of scalar values) | Sets keys in system metadata. Keys may be dotted paths. |
 | `system_metadata_delete` | `keys` | Removes keys from system metadata. |
 | `attribute_write` | `attribute_code` and exactly one of `fixed` or `event_field` | Writes a scalar attribute value. `fixed` is a literal; `event_field` copies a value from the event, such as `facts.0.after_value`. |
 | `referencing_records_update` | `relationship_attribute`, optional `max_targets`, and nested `actions` | Applies the nested actions to every record that links to the trigger record. See below. |
@@ -193,28 +186,25 @@ Manual and scheduled runs have no event, so their actions must use fixed values.
 
 When a license, specification, or composition changes, the records that depend on it often need to go back to review. `referencing_records_update` finds every live record whose `relationship_attribute` currently links to the trigger record, in any context, and applies its nested actions to each of them:
 
-```toml
-format_version = 2
-code = "license-changed"
-name = "Send licensed products back to review"
+```yaml
+format_version: 2
+code: license-changed
+name: Send licensed products back to review
 
-[[triggers]]
-event_type = "attribute_value.changed.v1"
-attributes = ["terms"]
+triggers:
+  - event_type: attribute_value.changed.v1
+    attributes: [terms]
 
-[[actions]]
-type = "referencing_records_update"
-relationship_attribute = "license"
-max_targets = 200
-
-[[actions.actions]]
-type = "attribute_write"
-attribute_code = "status"
-fixed = "in_review"
-
-[[actions.actions]]
-type = "system_tags_add"
-tags = ["needs-review"]
+actions:
+  - type: referencing_records_update
+    relationship_attribute: license
+    max_targets: 200
+    actions:
+      - type: attribute_write
+        attribute_code: status
+        fixed: in_review
+      - type: system_tags_add
+        tags: [needs-review]
 ```
 
 - `relationship_attribute` is the code of the relationship attribute on the **referencing** records, not on the trigger record.
@@ -235,7 +225,7 @@ tags = ["needs-review"]
 
 ## Not available yet
 
-- `extension_event` triggers are accepted in `format_version = 2` definitions but no extension event is delivered to workflows yet.
+- `extension_event` triggers are accepted in `format_version: 2` definitions but no extension event is delivered to workflows yet.
 - Workflows cannot call webhooks, send email, or read secrets.
 
 ## Permissions

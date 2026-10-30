@@ -8,7 +8,7 @@ description: Jak działają wersje schematów, dlaczego rekordy są przypięte d
 Każdy schemat ma ciąg wersji: 1, 2, 3 i tak dalej.
 
 - Wersję w stanie **szkicu** można edytować i usuwać. Żaden rekord nie może z niej korzystać.
-- Wersja **opublikowana** jest zamrożona. Jej TOML, atrybuty, widoki i schematy walidacji nigdy się już nie zmieniają.
+- Wersja **opublikowana** jest zamrożona. Jej YAML, atrybuty, widoki i schematy walidacji nigdy się już nie zmieniają.
 - Wersja **bieżąca** to najwyższa opublikowana wersja. Korzystają z niej nowe rekordy.
 
 Każdy rekord jest przypięty do wersji, z którą został utworzony lub do której został ostatnio zmigrowany. Jej wartości są walidowane według reguł tej wersji i wyświetlane w jej układzie. Opublikowanie wersji 3 niczego nie zmienia dla rekordu w wersji 2, dopóki ktoś go nie zmigruje.
@@ -20,7 +20,7 @@ Dzięki temu wartość zachowuje znaczenie, jakie miała w chwili zapisu, nawet 
 W aplikacji internetowej otwórz schemat w **Zarządzanie → Schematy** i utwórz nową wersję na podstawie bieżącej. Za pomocą CLI:
 
 ```sh
-acli blueprint create-version <blueprint-id> --file product-v2.toml
+acli blueprint create-version <blueprint-id> --file product-v2.yaml
 acli blueprint publish <blueprint-id> 2
 ```
 

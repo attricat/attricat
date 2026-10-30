@@ -189,7 +189,7 @@ Files of 8 MiB or more upload as multipart uploads, which are aborted when any p
 | Variable | Default | Used by | Description |
 | --- | --- | --- | --- |
 | `FILE_UPLOAD_MAX_BYTES` | `52428800` (50 MiB) | API | Largest single uploaded file. A file attribute's `max_bytes` can set a lower limit. |
-| `FILE_UPLOAD_MAX_FILES` | `10` | API | Most files in one upload request. An attribute with `cardinality = "one"` accepts exactly one. |
+| `FILE_UPLOAD_MAX_FILES` | `10` | API | Most files in one upload request. An attribute with `cardinality: one` accepts exactly one. |
 | `FILE_WORKER_ID` | Random per process | File worker | Stable identifier written on jobs this worker claims. |
 | `FILE_WORKER_POLL_MILLISECONDS` | `500` | File worker | Delay between job polls. |
 | `FILE_WORKER_OPERATIONS_BIND_ADDR` | `127.0.0.1:3001` | File worker | Private listener for `/health/live`, `/health/ready`, and `/metrics`. Outside loopback, `/metrics` requires the `file_worker_metrics_token` [secret](#secrets). |

@@ -100,7 +100,7 @@ or inaccessible configured bucket.
 | `S3_UPLOAD_TIMEOUT_SECONDS` | Required | API, file worker, migrate | Positive timeout for object uploads and deletes. A multipart upload applies it to each request: initiation, every part, and completion. |
 | `S3_DOWNLOAD_TIMEOUT_SECONDS` | Required | API, file worker, migrate | Positive timeout for object downloads and bucket readiness. |
 | `FILE_UPLOAD_MAX_BYTES` | `52428800` | API | Positive request-level byte limit for each streamed upload. A file attribute may set a lower `max_bytes` policy. |
-| `FILE_UPLOAD_MAX_FILES` | `10` | API | Positive request-level number of file parts. A `cardinality = "one"` attribute accepts exactly one. |
+| `FILE_UPLOAD_MAX_FILES` | `10` | API | Positive request-level number of file parts. A `cardinality: one` attribute accepts exactly one. |
 | `FILE_WORKER_ID` | Random process UUID | File worker | Stable identifier written with claimed jobs. |
 | `FILE_WORKER_POLL_MILLISECONDS` | `500` | File worker | Delay before polling an empty durable-job queue again. A free slot is refilled as soon as a job finishes. Queue metrics are refreshed during idle polls. |
 | `FILE_WORKER_CONCURRENCY` | `4` | File worker | Jobs one process runs at once, from 1 to 32. The worker's database pool holds two connections per job plus two. Each running image job keeps up to `FILE_WORKER_MAX_PIXELS` decoded pixels in memory, so size this to the host. Add processes to scale further; claims never contend. |

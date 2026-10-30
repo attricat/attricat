@@ -18,8 +18,8 @@ default            description = "Linen shirt"
 
 Każdy atrybut może zmienić to zachowanie:
 
-- `context_fallback = "none"` wyłącza dziedziczenie. Kontekst bez własnej wartości nie pokazuje niczego. Używaj tego dla wartości, które nie mogą przechodzić do kontekstów podrzędnych, na przykład promocji dla jednego kanału.
-- `context_editable = "default"` pozwala zapisywać wartość tylko w `default`. Inne konteksty pokazują ją tylko do odczytu. Używaj tego dla faktów globalnych, takich jak SKU.
+- `context_fallback: none` wyłącza dziedziczenie. Kontekst bez własnej wartości nie pokazuje niczego. Używaj tego dla wartości, które nie mogą przechodzić do kontekstów podrzędnych, na przykład promocji dla jednego kanału.
+- `context_editable: default` pozwala zapisywać wartość tylko w `default`. Inne konteksty pokazują ją tylko do odczytu. Używaj tego dla faktów globalnych, takich jak SKU.
 
 Wartości relacji są dziedziczone w ten sam sposób.
 

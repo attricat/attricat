@@ -11,28 +11,26 @@ Use rules for questions like "which published products have no title?" or "which
 
 A rule has a code, a name, a severity, one to eight triggers, and exactly one predicate.
 
-```toml
-format_version = 1
-code = "title-required"
-name = "Products have a title"
-description = "Shoppers search by title, so every product needs one before it goes live."
-severity = "error"
+```yaml
+format_version: 1
+code: title-required
+name: Products have a title
+description: 'Shoppers search by title, so every product needs one before it goes live.'
+severity: error
 
-[[triggers]]
-type = "schedule"
-cron = "0 0 6 * * *"
-timezone = "UTC"
+triggers:
+  - type: schedule
+    cron: '0 0 6 * * *'
+    timezone: UTC
 
-[[triggers]]
-type = "event"
-event_type = "record.updated.v1"
+  - type: event
+    event_type: record.updated.v1
 
-[[triggers]]
-type = "manual"
+  - type: manual
 
-[predicate]
-type = "required"
-attribute_code = "title"
+predicate:
+  type: required
+  attribute_code: title
 ```
 
 | Key | Description |
@@ -50,7 +48,7 @@ attribute_code = "title"
 | `type` | Keys | Runs |
 | --- | --- | --- |
 | `manual` | | When someone chooses **Run now**. |
-| `schedule` | `cron`, `timezone = "UTC"` | On a six-field cron schedule (seconds first), in UTC. `0 0 6 * * *` is 06:00 every day. |
+| `schedule` | `cron`, `timezone: UTC` | On a six-field cron schedule (seconds first), in UTC. `0 0 6 * * *` is 06:00 every day. |
 | `event` | `event_type` | For the changed record, after one of: `record.created.v1`, `record.updated.v1`, `record.migrated.v1`, `attribute_value.changed.v1`, `attribute_value.restored.v1`, `relationship.changed.v1`. |
 | `post_import` | | Reserved for future import integration. |
 
@@ -70,58 +68,67 @@ For an attribute with a fixed list of values, such as a status or a choice, ever
 
 A comparison whose value is missing is satisfied, and so are `one_of` and `relative_date` when the attribute is empty. Combine them with `required` when the value must exist:
 
-```toml
-[predicate]
-type = "all_of"
-predicates = [
-  { type = "required", attribute_code = "valid_until" },
-  { type = "relative_date", attribute_code = "valid_until", op = "gt", offset_days = 30 },
-]
+```yaml
+predicate:
+  type: all_of
+  predicates:
+    - {type: required, attribute_code: valid_until}
+    - type: relative_date
+      attribute_code: valid_until
+      op: gt
+      offset_days: 30
 ```
 
 `linked` and `referenced_by` follow one relationship hop. Their nested predicate reads the other record and can compare with the record being checked through `subject_attribute_code`:
 
-```toml
+```yaml
 # Every facility on a supplier certificate belongs to that supplier.
-[predicate]
-type = "linked"
-relationship_code = "facilities"
-predicate = { type = "compare", attribute_code = "supplier", op = "eq", subject_attribute_code = "supplier" }
+predicate:
+  type: linked
+  relationship_code: facilities
+  predicate:
+    type: compare
+    attribute_code: supplier
+    op: eq
+    subject_attribute_code: supplier
 ```
 
-```toml
+```yaml
 # A nonconformance has no open corrective actions.
-[predicate]
-type = "referenced_by"
-blueprint_code = "corrective_action"
-relationship_code = "nonconformance"
-max = 0
-predicate = { type = "one_of", attribute_code = "state", values = ["open"] }
+predicate:
+  type: referenced_by
+  blueprint_code: corrective_action
+  relationship_code: nonconformance
+  max: 0
+  predicate:
+    type: one_of
+    attribute_code: state
+    values: [open]
 ```
 
 ### Expiry and other time-based checks
 
 `relative_date` compares with the time the rule runs. Give such a rule a `schedule` trigger: a record that nobody edits can still expire overnight, and only a scheduled run notices.
 
-```toml
-format_version = 1
-code = "certificate-valid-30-days"
-name = "Supplier certificates are valid for at least 30 more days"
-severity = "warning"
+```yaml
+format_version: 1
+code: certificate-valid-30-days
+name: Supplier certificates are valid for at least 30 more days
+severity: warning
 
-[[triggers]]
-type = "schedule"
-cron = "0 0 5 * * *"
-timezone = "UTC"
+triggers:
+  - type: schedule
+    cron: '0 0 5 * * *'
+    timezone: UTC
 
-[predicate]
-type = "relative_date"
-attribute_code = "valid_until"
-op = "gt"
-offset_days = 30
+predicate:
+  type: relative_date
+  attribute_code: valid_until
+  op: gt
+  offset_days: 30
 ```
 
-A negative `offset_days` looks back: `op = "gte"` with `offset_days = -365` means "within the last year".
+A negative `offset_days` looks back: `op: gte` with `offset_days: -365` means "within the last year".
 
 ### Contexts
 
@@ -135,14 +142,14 @@ The [blueprint reference](/reference/blueprint/#predicates) has the comparison r
 
 ## Where rules live
 
-Rules are created under **Manage → Data quality rules**, separately from blueprints. A rule belongs to one blueprint and optionally to one context, not to a blueprint revision. Choose **New rule**, pick the blueprint and, if needed, a context, and write the TOML in the same editor as blueprints: it completes keys and the blueprint's attribute codes, offers ready-made triggers and predicates under **Insert**, and checks the rule against the blueprint's latest published revision as you type. The blueprint needs a published revision. Once you pick it, **Examples** offers rules to start from: a required value, allowed values, a review date, a unique value, an expiry date and linked records. **Save** creates the rule, disabled.
+Rules are created under **Manage → Data quality rules**, separately from blueprints. A rule belongs to one blueprint and optionally to one context, not to a blueprint revision. Choose **New rule**, pick the blueprint and, if needed, a context, and write the YAML in the same editor as blueprints: it completes keys and the blueprint's attribute codes, offers ready-made triggers and predicates under **Insert**, and checks the rule against the blueprint's latest published revision as you type. The blueprint needs a published revision. Once you pick it, **Examples** offers rules to start from: a required value, allowed values, a review date, a unique value, an expiry date and linked records. **Save** creates the rule, disabled.
 
 The list shows one row per rule with its blueprint, its severity, how many of its findings are open and acknowledged (each count links to those findings), its current revision and when it changed, an **Enabled** switch, and **Dry run** and **Run now**. Each rule has its own page with a **Definition** tab, showing what it checks, spelled out part by part with attribute and value labels as in the editor's preview, its severity, its finding counts, its current revision, the definition, and its recent runs with a link to all of them in **Run history**, and a **Changelog** tab. **Dry run**, **Run now**, **Enable** and **Disable** are on the rule's page too. **Run history** can be narrowed to one rule.
 
 The CLI does the same:
 
 ```sh
-acli rule create --blueprint-id <uuid> --file title-required.toml
+acli rule create --blueprint-id <uuid> --file title-required.yaml
 acli rule enable <rule-id>
 ```
 
@@ -153,7 +160,7 @@ A new rule starts disabled and runs only once enabled, with the switch or the CL
 A rule has one current definition. **Edit** on the rule's page opens the editor. While you have unsaved changes, it shows them compared with the current revision and offers **Dry run this change**. Saving a changed definition adds a new revision that becomes current at once; there are no drafts and nothing to publish. The rule's code cannot change.
 
 ```sh
-acli rule update <rule-id> --file title-required.toml
+acli rule update <rule-id> --file title-required.yaml
 ```
 
 When a new revision is saved, the findings of earlier definitions are resolved. If the rule is enabled, its schedules move to the new revision and it re-checks every record of its blueprint straight away. Saving a definition identical to the current one fails with `409 rule_revision_unchanged`.
@@ -184,39 +191,36 @@ Each run processes candidates in pages of 500 and stops after 10,000. A schedule
 
 ## Enforce a rule
 
-By default a rule only reports findings. An **enforcing** rule also stops writes that would leave a record violating it. Add an `enforcement` table:
+By default a rule only reports findings. An **enforcing** rule also stops writes that would leave a record violating it. Add an `enforcement` mapping:
 
-```toml
-format_version = 1
-code = "released-documents-approved"
-name = "Released documents have an approver"
-severity = "error"
+```yaml
+format_version: 1
+code: released-documents-approved
+name: Released documents have an approver
+severity: error
 
-[[triggers]]
-type = "event"
-event_type = "record.updated.v1"
+triggers:
+  - type: event
+    event_type: record.updated.v1
 
-[predicate]
-type = "required"
-attribute_code = "approved_by"
+predicate:
+  type: required
+  attribute_code: approved_by
 
-[enforcement]
-on_save = false
-
-[[enforcement.transitions]]
-attribute_code = "status"
-from = "review"
-to = "released"
+enforcement:
+  on_save: false
+  transitions:
+    - {attribute_code: status, from: review, to: released}
 ```
 
-`on_save = true` rejects any write that leaves the record violating the rule. Each entry in `transitions` guards a change of a [status](/builders/validation/#statuses) attribute into `to`, optionally only from `from`. Guarded transitions are checked on the state the change produces, so a value saved in the same write counts.
+`on_save: true` rejects any write that leaves the record violating the rule. Each entry in `transitions` guards a change of a [status](/builders/validation/#statuses) attribute into `to`, optionally only from `from`. Guarded transitions are checked on the state the change produces, so a value saved in the same write counts.
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
 | `enforcement.on_save` | boolean | `false` | Reject every write that leaves the record violating the rule. |
-| `enforcement.transitions` | array of tables | `[]` | Up to 16 guarded status changes, each with `attribute_code`, optional `from`, and `to`. Without `from`, every change into `to` is guarded. |
+| `enforcement.transitions` | list of mappings | `[]` | Up to 16 guarded status changes, each with `attribute_code`, optional `from`, and `to`. Without `from`, every change into `to` is guarded. |
 
-An `enforcement` table needs `on_save = true` or at least one transition, a severity of `error` or `critical`, and a [predicate](/reference/blueprint/#predicates) without `stale`, `unique`, or `acyclic`, which cannot be checked during a save. Each transition's `attribute_code` must be a status attribute, and `from` and `to` must be codes of its `enum`.
+An `enforcement` mapping needs `on_save: true` or at least one transition, a severity of `error` or `critical`, and a [predicate](/reference/blueprint/#predicates) without `stale`, `unique`, or `acyclic`, which cannot be checked during a save. Each transition's `attribute_code` must be a status attribute, and `from` and `to` must be codes of its `enum`.
 
 A rule attached to a context enforces in that context only. A rule without a context enforces in every context.
 
@@ -248,11 +252,11 @@ A dry run stops after 10,000 records. When the blueprint has more, the dry run c
 Changing an enabled enforcing rule passes the same check for the new definition. A dry run can check a definition before it is saved: in the editor, choose **Dry run this change**, and if it finds violations, **Save anyway** accepts them. From the CLI, pass the file to the dry run and then accept the violations when you save:
 
 ```sh
-acli rule run-now <rule-id> --idempotency-key change-preview --dry-run --definition-file rule.toml
-acli rule update <rule-id> --accept-existing-violations --file rule.toml
+acli rule run-now <rule-id> --idempotency-key change-preview --dry-run --definition-file rule.yaml
+acli rule update <rule-id> --accept-existing-violations --file rule.yaml
 ```
 
-Through the API, `POST /rules/{id}/run-now` accepts `"definition"` with the TOML on a dry run only.
+Through the API, `POST /rules/{id}/run-now` accepts `"definition"` with the YAML on a dry run only.
 
 A record that already violates an enforcing rule cannot be saved until a save fixes the violation.
 
