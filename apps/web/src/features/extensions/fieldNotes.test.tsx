@@ -19,7 +19,7 @@ vi.mock('./constants', async (importOriginal) => ({
   fieldNotesRetryInterval: 10,
 }));
 vi.mock('./useExtensionRuntime', () => ({
-  useExtensionRuntime: () => ({ data: [explain] }),
+  useExtensionRuntime: () => ({ data: [explain, recalculate] }),
 }));
 
 import { FieldNotesProvider } from './fieldNotes';
@@ -48,13 +48,23 @@ const explain: ExtensionContribution = {
   icon: null,
   translations: {},
 };
+const recalculate: ExtensionContribution = {
+  ...explain,
+  contribution_key: 'acme.tools:recalculate',
+  id: 'recalculate',
+  title: 'Recalculate',
+  when: { requires_write: true },
+};
 const attributes = [
   { id: 'a1', code: 'price', name: 'Price', value_type: 'number' },
   { id: 'a2', code: 'sku', name: 'SKU', value_type: 'string' },
   { id: 'a3', code: 'attachments', name: 'Attachments', value_type: 'file' },
 ] as unknown as Attribute[];
 
-const notes = (incomplete = false) => ({
+const notes = (
+  incomplete = false,
+  actions: Record<string, { disabled: string } | { hidden: true }> = {},
+) => ({
   records: {
     [recordId]: [
       {
@@ -66,9 +76,12 @@ const notes = (incomplete = false) => ({
             note: 'price = net * 1.23',
           },
           sku: { badge: { label: 'Checked', tone: 'success', action: 'gone' } },
+          attachments: {
+            badge: { label: 'Stale', tone: 'warning', action: 'recalculate' },
+          },
         },
         files: { [fileId]: { note: 'Last document: summary' } },
-        actions: {},
+        actions,
       },
     ],
   },
@@ -76,7 +89,7 @@ const notes = (incomplete = false) => ({
   client_sources: [],
 });
 
-const renderRecord = () =>
+const renderRecord = (canWrite = true) =>
   render(
     <QueryClientProvider
       client={
@@ -84,6 +97,7 @@ const renderRecord = () =>
       }
     >
       <FieldNotesProvider
+        conditions={{ canWrite }}
         contextId={null}
         recordId={recordId}
         runtimeScope={{ blueprintId, blueprintVersion: 2 }}
@@ -144,6 +158,20 @@ describe('field notes', () => {
     // A badge naming no enabled action is not a button.
     expect(screen.queryByRole('button', { name: 'Checked' })).toBeNull();
     expect(screen.getByText('Checked')).toBeTruthy();
+  });
+
+  it("offers a badge's action only where the action itself is offered", async () => {
+    request.mockResolvedValue(
+      notes(false, { explain: { disabled: 'Nothing to explain' } }),
+    );
+    renderRecord(false);
+
+    expect(await screen.findByText('Computed')).toBeTruthy();
+    // Its extension disabled it for the record.
+    expect(screen.queryByRole('button', { name: 'Computed' })).toBeNull();
+    // It requires write access the viewer lacks.
+    expect(screen.getByText('Stale')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Stale' })).toBeNull();
   });
 
   it('asks again while a provider is still starting', async () => {

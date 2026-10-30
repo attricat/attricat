@@ -147,6 +147,7 @@ export const buildExplorerColumnDefinitions = ({
             <ExplorerCellNotes
               attributeCode={column.field}
               recordId={info.row.original.id}
+              recordTags={info.row.original.system_tags}
             >
               <ConfiguredColumnCell
                 attribute={attribute}

@@ -4,13 +4,14 @@ import { useContext, useMemo, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { recordQueryKeys } from '../records/queryKeys';
 import type { ExtensionRuntimeScope } from './api';
+import type { ActionTarget } from './actions';
 import {
-  contributionKinds,
   explorerFieldNotesChunkSize,
   extensionOutlets,
   fieldNotesRetryInterval,
   maximumFieldNotesAttempts,
 } from './constants';
+import { offeredBadgeAction } from './actionAvailability';
 import { NoteBadge } from './fieldNotes';
 import {
   actionStates,
@@ -41,11 +42,13 @@ const chunks = (ids: readonly string[]) =>
  * live under the search keys, so edits that refresh results refresh them.
  */
 export const ExplorerFieldNotesProvider = ({
+  blueprintCode,
   children,
   contextId,
   recordIds,
   runtimeScope,
 }: {
+  blueprintCode: string;
   children: ReactNode;
   contextId: string | null;
   recordIds: readonly string[];
@@ -90,9 +93,10 @@ export const ExplorerFieldNotesProvider = ({
       notes: (recordId) => records[recordId] ?? [],
       states: (recordId) => actionStates(merged, recordId),
       runtimeScope: { blueprintId, blueprintVersion },
+      blueprintCode,
       contextId,
     };
-  }, [blueprintId, blueprintVersion, contextId, records]);
+  }, [blueprintCode, blueprintId, blueprintVersion, contextId, records]);
   return (
     <ExplorerFieldNotesContext value={value}>
       {children}
@@ -108,10 +112,12 @@ export const ExplorerCellNotes = ({
   attributeCode,
   children,
   recordId,
+  recordTags,
 }: {
   attributeCode: string;
   children: ReactNode;
   recordId: string;
+  recordTags: readonly string[];
 }) => {
   const notes = useContext(ExplorerFieldNotesContext);
   const runtime = useExtensionRuntime(notes?.runtimeScope);
@@ -121,20 +127,27 @@ export const ExplorerCellNotes = ({
     : [];
   const badges = entries.flatMap((entry) => (entry.badge ? [entry] : []));
   if (!notes || !badges.length) return children;
+  const target: ActionTarget = {
+    blueprintId: notes.runtimeScope.blueprintId,
+    blueprintVersion: notes.runtimeScope.blueprintVersion,
+    blueprintCode: notes.blueprintCode,
+    contextId: notes.contextId,
+    recordIds: [recordId],
+    recordTags: [recordTags],
+  };
+  const states = notes.states(recordId);
   return (
     <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
       {children}
       {badges.map((entry) => {
         const badge = entry.badge!;
-        const action = badge.action
-          ? runtime.data?.find(
-              (item) =>
-                item.extension_id === entry.extensionId &&
-                item.id === badge.action &&
-                item.kind === contributionKinds.action &&
-                item.outlet === extensionOutlets.recordAttributeAction,
-            )
-          : undefined;
+        const action = offeredBadgeAction(
+          runtime.data,
+          entry.extensionId,
+          badge.action,
+          target,
+          states,
+        );
         return (
           <NoteBadge
             badge={{
@@ -153,13 +166,7 @@ export const ExplorerCellNotes = ({
                     void invoke(
                       action,
                       extensionOutlets.recordAttributeAction,
-                      {
-                        blueprintId: notes.runtimeScope.blueprintId,
-                        blueprintVersion: notes.runtimeScope.blueprintVersion,
-                        contextId: notes.contextId,
-                        recordIds: [recordId],
-                        attributeCode,
-                      },
+                      { ...target, attributeCode },
                     );
                   }
                 : undefined

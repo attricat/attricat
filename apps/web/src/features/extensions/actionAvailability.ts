@@ -1,5 +1,6 @@
 import type { ActionTarget } from './actions';
 import type { ExtensionContribution } from './api';
+import { contributionKinds, extensionOutlets } from './constants';
 import { actionStateKey, type ActionState } from './fieldNotesData';
 
 export type ActionAvailability =
@@ -39,4 +40,30 @@ export const actionAvailability = (
   return state
     ? { offered: true, disabledReason: state.disabled }
     : { offered: true };
+};
+
+/**
+ * The badge-only action a badge names, when the host would offer it for the
+ * target and its extension has not hidden or disabled it for the record.
+ */
+export const offeredBadgeAction = (
+  contributions: readonly ExtensionContribution[] | undefined,
+  extensionId: string,
+  actionId: string | undefined,
+  target: ActionTarget,
+  states: ReadonlyMap<string, ActionState>,
+) => {
+  if (actionId === undefined) return undefined;
+  const action = contributions?.find(
+    (item) =>
+      item.extension_id === extensionId &&
+      item.id === actionId &&
+      item.kind === contributionKinds.action &&
+      item.outlet === extensionOutlets.recordAttributeAction,
+  );
+  if (!action) return undefined;
+  const availability = actionAvailability(action, target, states);
+  return availability.offered && !availability.disabledReason
+    ? action
+    : undefined;
 };

@@ -6,6 +6,7 @@ export type ExplorerFieldNotes = {
   notes: (recordId: string) => readonly ExtensionNotes[];
   states: (recordId: string) => ReadonlyMap<string, ActionState>;
   runtimeScope: ExtensionRuntimeScope;
+  blueprintCode: string;
   contextId: string | null;
 };
 

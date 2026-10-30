@@ -52,7 +52,7 @@ describe('extension outlet coverage', () => {
       for (const item of readdirSync(directory, { withFileTypes: true })) {
         const path = `${directory}/${item.name}`;
         if (item.isDirectory()) visit(path);
-        else if (item.name.endsWith('.tsx') && !item.name.endsWith('.test.tsx'))
+        else if (/\.tsx?$/.test(item.name) && !/\.test\.tsx?$/.test(item.name))
           sources.push(readFileSync(path, 'utf8'));
       }
     };

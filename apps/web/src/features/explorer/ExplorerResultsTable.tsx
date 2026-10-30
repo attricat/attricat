@@ -379,6 +379,7 @@ export const ExplorerResultsTable = ({
   );
   return (
     <ExplorerFieldNotesProvider
+      blueprintCode={blueprint.blueprint.code}
       contextId={publicationContextId ?? null}
       recordIds={itemIds}
       runtimeScope={{

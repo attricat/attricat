@@ -48,6 +48,7 @@ describe('Explorer field notes', () => {
     render(
       <QueryClientProvider client={new QueryClient()}>
         <ExplorerFieldNotesProvider
+          blueprintCode="product"
           contextId={null}
           recordIds={[first, second]}
           runtimeScope={{
@@ -60,6 +61,7 @@ describe('Explorer field notes', () => {
               attributeCode="price"
               key={recordId}
               recordId={recordId}
+              recordTags={[]}
             >
               <span>value {recordId.slice(0, 2)}</span>
             </ExplorerCellNotes>

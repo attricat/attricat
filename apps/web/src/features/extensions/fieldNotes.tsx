@@ -7,14 +7,12 @@ import {
   type ReactNode,
 } from 'react';
 import { compactIconSize } from '../../components/iconSizes';
+import { offeredBadgeAction } from './actionAvailability';
 import type { ActionTarget } from './actions';
 import type { ExtensionContribution, ExtensionRuntimeScope } from './api';
+import { extensionOutlets, type FieldNoteTone } from './constants';
 import {
-  contributionKinds,
-  extensionOutlets,
-  type FieldNoteTone,
-} from './constants';
-import {
+  actionStates,
   fieldNoteLookups,
   useRecordFieldNotes,
   type AttributeFieldNote,
@@ -27,7 +25,7 @@ import { useInvokeExtensionAction } from './useInvokeExtensionAction';
 type FieldNotes = {
   attribute: ReturnType<typeof fieldNoteLookups>['attribute'];
   file: ReturnType<typeof fieldNoteLookups>['file'];
-  /** The badge-only action a badge names, when it is enabled. */
+  /** The badge-only action a badge names, when it is offered and enabled. */
   badgeAction: (
     extensionId: string,
     actionId: string | undefined,
@@ -43,39 +41,48 @@ const FieldNotesContext = createContext<FieldNotes | null>(null);
  */
 export const FieldNotesProvider = ({
   children,
+  conditions,
   contextId,
   recordId,
   runtimeScope,
 }: {
   children: ReactNode;
+  /** What the page knows for badge actions' `when` conditions. */
+  conditions: Pick<ActionTarget, 'blueprintCode' | 'canWrite' | 'recordTags'>;
   contextId: string | null;
   recordId: string;
   runtimeScope: ExtensionRuntimeScope;
 }) => {
   const notes = useRecordFieldNotes(recordId, contextId);
   const runtime = useExtensionRuntime(runtimeScope);
-  const value = useMemo<FieldNotes>(
-    () => ({
+  const { blueprintCode, canWrite, recordTags } = conditions;
+  const value = useMemo<FieldNotes>(() => {
+    const target: ActionTarget = {
+      blueprintId: runtimeScope.blueprintId,
+      blueprintVersion: runtimeScope.blueprintVersion,
+      blueprintCode,
+      canWrite,
+      contextId,
+      recordIds: [recordId],
+      recordTags,
+    };
+    const states = actionStates(notes.data, recordId);
+    return {
       ...fieldNoteLookups(notes.data?.records[recordId] ?? []),
       badgeAction: (extensionId, actionId) =>
-        actionId === undefined
-          ? undefined
-          : runtime.data?.find(
-              (item) =>
-                item.extension_id === extensionId &&
-                item.id === actionId &&
-                item.kind === contributionKinds.action &&
-                item.outlet === extensionOutlets.recordAttributeAction,
-            ),
-      target: {
-        blueprintId: runtimeScope.blueprintId,
-        blueprintVersion: runtimeScope.blueprintVersion,
-        contextId,
-        recordIds: [recordId],
-      },
-    }),
-    [contextId, notes.data, recordId, runtime.data, runtimeScope],
-  );
+        offeredBadgeAction(runtime.data, extensionId, actionId, target, states),
+      target,
+    };
+  }, [
+    blueprintCode,
+    canWrite,
+    contextId,
+    notes.data,
+    recordId,
+    recordTags,
+    runtime.data,
+    runtimeScope,
+  ]);
   return <FieldNotesContext value={value}>{children}</FieldNotesContext>;
 };
 

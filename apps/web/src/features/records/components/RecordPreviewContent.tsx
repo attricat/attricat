@@ -98,6 +98,7 @@ export const RecordPreviewContent = ({
     <>
       <FieldDiagnosticsContext value={diagnostics}>
         <FieldNotesProvider
+          conditions={recordActionTarget}
           contextId={contextId ?? null}
           recordId={recordId}
           runtimeScope={runtimeScope}

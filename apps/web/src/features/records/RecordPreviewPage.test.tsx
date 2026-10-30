@@ -215,6 +215,7 @@ describe('RecordPreviewPage', () => {
     // Field notes are asked for once, for this record in its context.
     await waitFor(() =>
       expect(fieldNotesRender).toHaveBeenCalledWith({
+        conditions: expect.objectContaining({ blueprintCode: 'product' }),
         contextId: '33333333-3333-4333-8333-333333333333',
         recordId: '00000000-0000-4000-8000-000000000001',
         runtimeScope: {
