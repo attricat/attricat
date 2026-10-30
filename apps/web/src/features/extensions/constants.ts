@@ -215,6 +215,20 @@ export const controlCharacterRanges = {
 
 export const extensionCardMinWidth = 190;
 
+/** What a frame shows in its place until its artifact has rendered. */
+export const extensionFramePlaceholders = {
+  /** A skeleton in a reserved area, for surfaces set apart from other content. */
+  skeleton: 'skeleton',
+  /**
+   * Nothing: the frame takes no space until it measures content, then reveals
+   * once. Slots repeated beside other content use it so nothing moves for a
+   * frame that is still loading or renders nothing.
+   */
+  none: 'none',
+} as const;
+export type ExtensionFramePlaceholder =
+  (typeof extensionFramePlaceholders)[keyof typeof extensionFramePlaceholders];
+
 export const extensionFrameSkeletonLines = [
   { height: 20, width: '45%' },
   { height: 16, width: '75%' },

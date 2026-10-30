@@ -78,6 +78,9 @@ export const useExtensionFrame = ({
   const [errorKey, setErrorKey] = useState<FrameErrorKey>();
   const [ready, setReady] = useState(false);
   const [height, setHeight] = useState(defaultExtensionFrameHeight);
+  // The frame reports readiness just before its first size, so `ready` alone
+  // still carries the default height.
+  const [measured, setMeasured] = useState(false);
   const [loadedFrame, setLoadedFrame] = useState<string>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -138,6 +141,7 @@ export const useExtensionFrame = ({
           ) {
             const nextHeight = clampFrameHeight(data.height);
             setHeight(nextHeight);
+            setMeasured(true);
             callbacksRef.current.onContentHeight?.(nextHeight);
             return;
           }
@@ -217,6 +221,7 @@ export const useExtensionFrame = ({
   const handleFrameLoad = () => {
     setErrorKey(undefined);
     setHeight(defaultExtensionFrameHeight);
+    setMeasured(false);
     setReady(false);
     setLoadedFrame(frameKey);
   };
@@ -227,6 +232,7 @@ export const useExtensionFrame = ({
     handleFrameLoad,
     height,
     iframeRef,
+    measured,
     ready,
   };
 };

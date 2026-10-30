@@ -11,6 +11,7 @@ import {
   type OutletContext,
   type OutletName,
 } from './outletContributions';
+import { extensionFramePlaceholders } from './constants';
 import { useExtensionRuntime } from './useExtensionRuntime';
 import { progressSizes } from '../../components/iconSizes';
 
@@ -46,6 +47,13 @@ export const ExtensionOutlet = ({
 }: Props) => {
   const { t } = useTranslation();
   const runtime = useExtensionRuntime(runtimeScope);
+  const policy = outletPolicies[outlet];
+  if (
+    runtime.isPending &&
+    'placeholder' in policy &&
+    policy.placeholder === extensionFramePlaceholders.none
+  )
+    return null;
   if (runtime.isPending)
     return (
       <Box
@@ -74,7 +82,6 @@ export const ExtensionOutlet = ({
     (contribution) =>
       extensionId === undefined || contribution.extension_id === extensionId,
   );
-  const policy = outletPolicies[outlet];
   switch (policy.kind) {
     case 'card':
       return (

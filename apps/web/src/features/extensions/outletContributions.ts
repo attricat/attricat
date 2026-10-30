@@ -3,6 +3,7 @@ import type { ExtensionContribution } from './api';
 import {
   outletCapacities,
   contributionKinds,
+  extensionFramePlaceholders,
   extensionOutlets,
   type ActionOutlet,
 } from './constants';
@@ -30,14 +31,21 @@ const navigationPolicy = {
 } as const;
 const panelPolicy = {
   kind: 'panel',
+  placeholder: extensionFramePlaceholders.skeleton,
   visibleCapacity: outletCapacities.visibleContent,
+} as const;
+// Repeated once per item beside other content: it takes no space until an
+// extension renders something, so a page of empty slots never moves.
+const inlinePanelPolicy = {
+  ...panelPolicy,
+  placeholder: extensionFramePlaceholders.none,
 } as const;
 const cardPolicy = {
   kind: 'card',
   visibleCapacity: outletCapacities.visibleContent,
 } as const;
 
-export type PanelPolicy = typeof panelPolicy;
+export type PanelPolicy = typeof panelPolicy | typeof inlinePanelPolicy;
 export type ContentPolicy = PanelPolicy | typeof cardPolicy;
 export type NavigationPolicy = typeof navigationPolicy;
 
@@ -46,7 +54,7 @@ export type NavigationPolicy = typeof navigationPolicy;
 export const outletPolicies = {
   navigation: navigationPolicy,
   record_preview_panel: panelPolicy,
-  blueprint_attribute_configuration: panelPolicy,
+  blueprint_attribute_configuration: inlinePanelPolicy,
   blueprint_detail_panel: panelPolicy,
   blueprint_panel: panelPolicy,
   audit_event_panel: panelPolicy,

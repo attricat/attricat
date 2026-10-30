@@ -30,6 +30,7 @@ export const ExtensionPanelOutlet = ({
           contribution={item}
           context={context}
           key={contributionKey(item)}
+          placeholder={policy.placeholder}
         />
       ))}
       {overflow.length > 0 && (
