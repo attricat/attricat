@@ -17,6 +17,29 @@ const insert = async (page: Page, group: string, label: string) => {
 // even when the tests run on macOS.
 const saveShortcut = (page: Page) => page.keyboard.press('Control+s');
 
+// Embedded JSON is one token, so find a place in it on screen by its text.
+const textPosition = (page: Page, text: string, offset: number) =>
+  page.evaluate(
+    ({ offset, text }) => {
+      const walker = document.createTreeWalker(
+        document.querySelector('.monaco-editor .view-lines')!,
+        NodeFilter.SHOW_TEXT,
+      );
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const shown = node.textContent?.replaceAll('\u00a0', ' ') ?? '';
+        const start = shown.indexOf(text);
+        if (start < 0) continue;
+        const range = document.createRange();
+        range.setStart(node, start + offset);
+        range.setEnd(node, start + offset + 1);
+        const { height, x, y } = range.getBoundingClientRect();
+        return { x, y: y + height / 2 };
+      }
+      throw new Error(`${text} is not shown`);
+    },
+    { offset, text },
+  );
+
 const preview = (page: Page) => page.getByRole('region', { name: 'Preview' });
 
 test('checks, previews and inserts into a blueprint definition', async ({
@@ -267,25 +290,11 @@ test('hovers and follows attributes named in the record schema', async ({
     preview(page).getByRole('tab', { name: 'dropdown_option' }),
   ).toHaveAttribute('aria-selected', 'true');
 
-  // The whole JSON is one token, so find the reference's place on screen.
-  const reference = await page.evaluate(() => {
-    const walker = document.createTreeWalker(
-      document.querySelector('.monaco-editor .view-lines')!,
-      NodeFilter.SHOW_TEXT,
-    );
-    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      const text = node.textContent?.replaceAll('\u00a0', ' ') ?? '';
-      const start = text.indexOf('"attribute_code": "title"');
-      if (start < 0) continue;
-      const range = document.createRange();
-      const offset = start + '"attribute_code": "t'.length;
-      range.setStart(node, offset);
-      range.setEnd(node, offset + 1);
-      const { x, y, height } = range.getBoundingClientRect();
-      return { x, y: y + height / 2 };
-    }
-    throw new Error('The record schema reference is not shown');
-  });
+  const reference = await textPosition(
+    page,
+    '"attribute_code": "title"',
+    '"attribute_code": "t'.length,
+  );
   await page.mouse.move(reference.x, reference.y);
   await expect(
     page.locator('.monaco-hover').filter({ hasText: 'title — string' }),
@@ -297,6 +306,14 @@ test('hovers and follows attributes named in the record schema', async ({
   await expect(
     preview(page).getByRole('tab', { name: 'Edit' }),
   ).toHaveAttribute('aria-selected', 'true');
+
+  const checks = await textPosition(page, '"x-attricat-checks"', 3);
+  await page.mouse.move(checks.x, checks.y);
+  await expect(
+    page
+      .locator('.monaco-hover')
+      .filter({ hasText: 'Named checks that reject' }),
+  ).toBeVisible();
 });
 
 test('checks, previews and inserts into a reusable attribute definition', async ({

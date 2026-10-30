@@ -29,7 +29,7 @@ Edytor schematów i edytor [atrybutów wielokrotnego użytku](/pl/builders/model
 
 - **Przykłady** rozpoczyna nową definicję od poprawnego szablonu.
 - **Wstaw** dodaje gotowy fragment, na przykład atrybut statusu, widok tabeli lub klucz unikalny, z polami do uzupełnienia. Klawisz Tab przechodzi między nimi. Fragmenty, które powieliłyby coś już zdefiniowanego, są wyszarzone.
-- Podczas pisania edytor podpowiada klucze i wartości, a po najechaniu na klucz wyjaśnia go. Błędy względem formatu są podkreślane na bieżąco.
+- Podczas pisania edytor podpowiada klucze i wartości. Po najechaniu na klucz lub wartość wyjaśnia je, także wewnątrz JSON-a w `record_schema` i `value_schema`: słowa kluczowe JSON Schema, kontrole rekordu i ich predykaty, opcje i przejścia statusu. Błędy względem formatu są podkreślane na bieżąco.
 - Chwilę po tym, jak przestaniesz pisać, edytor uruchamia wszystkie kontrole wykonywane przy zapisie, niczego nie zapisując. Status nad edytorem pokazuje **Gotowe do zapisu** albo numer wiersza z problemem, który jest też podkreślony.
 - **Podgląd** pokazuje ostatnią wersję, która przeszła kontrole. Dla schematu pokazuje każdy widok i edytowalny przykładowy rekord, a dla atrybutu wielokrotnego użytku jego pole. Przykładowe wartości są sprawdzane względem `value_schema` atrybutu i `record_schema` schematu i nigdy nie są zapisywane.
 - W podglądzie schematu szczegóły pola (przycisk ⓘ obok niego) zawierają **Pokaż w definicji**, co zaznacza kod atrybutu w edytorze; przycisk obok kart widoków robi to samo dla pokazanego widoku. W drugą stronę: gdy kursor trafi do atrybutu lub widoku, podgląd go pokazuje i wyróżnia.

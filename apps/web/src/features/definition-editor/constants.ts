@@ -15,6 +15,15 @@ export const schemaExtensions = {
   valueTypes: 'x-attricat-value-types',
 } as const;
 
+/** Attricat keywords inside the JSON Schemas a definition embeds. */
+export const schemaAnnotations = {
+  checks: 'x-attricat-checks',
+  enumLabels: 'x-attricat-enum-labels',
+  patternHint: 'x-attricat-pattern-hint',
+  principal: 'x-attricat-principal',
+  status: 'x-attricat-status',
+} as const;
+
 /** Tag field of the contracts' internally tagged unions. */
 export const discriminatorKey = 'type';
 export const attributesKey = 'attributes';

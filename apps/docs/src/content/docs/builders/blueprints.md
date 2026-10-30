@@ -29,7 +29,7 @@ The blueprint editor and the [reusable attribute](/builders/modeling/#reuse-attr
 
 - **Examples** starts a new definition from a valid template.
 - **Insert** adds a ready-made piece, such as a status attribute, a table view, or a unique key, with placeholders to fill in. Press Tab to move between them. Pieces that would duplicate something already defined are greyed out.
-- Typing suggests keys and values, and hovering a key explains it. Mistakes against the format are underlined as you type.
+- Typing suggests keys and values. Hovering a key or a value explains it, including inside the JSON of `record_schema` and `value_schema`: JSON Schema keywords, record checks and their predicates, status options and transitions. Mistakes against the format are underlined as you type.
 - A moment after you stop typing, the editor runs every check that saving runs, without saving. The status above the editor says **Ready to save**, or names the line with the problem, which is also underlined.
 - **Preview** shows the last version that passed the checks. For a blueprint it shows each view and an editable sample record; for a reusable attribute, its field. Sample values are checked against the attribute's `value_schema` and the blueprint's `record_schema`, and are never saved.
 - In a blueprint's preview, a field's details (the ⓘ button beside it) offer **Show in definition**, which selects the attribute's code in the editor; the button beside the view tabs does the same for the view shown. Moving the cursor the other way, into an attribute or a view, makes the preview show and highlight it.

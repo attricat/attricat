@@ -872,7 +872,9 @@ definitions return `422 invalid_blueprint_definition`.
 ## Definition schema and editor assistance
 
 The blueprint and reusable attribute editors complete keys, view blocks, and
-values; show each key's documentation on hover; and flag YAML syntax errors, unknown keys, and invalid values while you type. Value
+values; show the documentation of each key and chosen value on hover, including
+JSON Schema keywords, record checks, predicates and status control inside
+`record_schema` and `value_schema`; and flag YAML syntax errors, unknown keys, and invalid values while you type. Value
 suggestions include workspace blueprints and mixins, attributes declared in the
 definition, relationship hops in table column paths, included mixin attributes
 for `from`, roles, contexts, and view components that fit the block.

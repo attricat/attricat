@@ -1,6 +1,6 @@
 import { parseTree, type Node as JsonNode } from 'jsonc-parser';
 import type { TextRange, YamlEntry } from '../../components/yamlOutline';
-import { attributesKey } from './constants';
+import { attributesKey, schemaAnnotations } from './constants';
 import {
   definitionReferenceKinds,
   type DefinitionReferenceKind,
@@ -14,10 +14,6 @@ export type EmbeddedReference = {
   value: string;
 };
 
-/** Blueprint keys whose string values are JSON Schemas naming attributes. */
-const recordSchemaKey = 'record_schema';
-const valueSchemaKey = 'value_schema';
-
 /** JSON Schema keywords at a record schema's root that name attributes. */
 const schemaKeywords = {
   dependentRequired: 'dependentRequired',
@@ -26,8 +22,6 @@ const schemaKeywords = {
   required: 'required',
 } as const;
 
-const checksKey = 'x-attricat-checks';
-const statusKey = 'x-attricat-status';
 const transitionsKey = 'transitions';
 const conditionsKey = 'conditions';
 
@@ -118,54 +112,81 @@ const recordSchemaAttributes = (root: JsonNode) => [
       (property) => items(property.children?.[1]),
     ),
   ]).map((node) => ({ node, reference: definitionReferenceKinds.attribute })),
-  ...items(member(root, checksKey)).flatMap((check) =>
+  ...items(member(root, schemaAnnotations.checks)).flatMap((check) =>
     predicateAttributes(member(check, predicateKeys.predicate), true),
   ),
 ];
 
 /** Status transition conditions are about the record that holds the value. */
 const valueSchemaAttributes = (root: JsonNode) =>
-  items(member(member(root, statusKey), transitionsKey)).flatMap((transition) =>
-    items(member(transition, conditionsKey)).flatMap((condition) =>
-      predicateAttributes(member(condition, predicateKeys.predicate), true),
-    ),
+  items(member(member(root, schemaAnnotations.status), transitionsKey)).flatMap(
+    (transition) =>
+      items(member(transition, conditionsKey)).flatMap((condition) =>
+        predicateAttributes(member(condition, predicateKeys.predicate), true),
+      ),
   );
 
-const isRecordSchema = ({ path }: YamlEntry) =>
-  path.length === 1 && path[0] === recordSchemaKey;
-const isValueSchema = ({ path }: YamlEntry) =>
-  path.length === 3 && path[0] === attributesKey && path[2] === valueSchemaKey;
+/** Keys whose string values are JSON Schemas. */
+export const embeddedJsonKinds = {
+  recordSchema: 'record_schema',
+  valueSchema: 'value_schema',
+} as const;
+export type EmbeddedJsonKind =
+  (typeof embeddedJsonKinds)[keyof typeof embeddedJsonKinds];
+
+const embeddedJsonKind = ({
+  path,
+}: YamlEntry): EmbeddedJsonKind | undefined => {
+  if (path.length === 1 && path[0] === embeddedJsonKinds.recordSchema)
+    return embeddedJsonKinds.recordSchema;
+  // An attribute of a blueprint, or a reusable attribute itself.
+  const attribute =
+    path.length === 1 || (path.length === 3 && path[0] === attributesKey);
+  return attribute && path.at(-1) === embeddedJsonKinds.valueSchema
+    ? embeddedJsonKinds.valueSchema
+    : undefined;
+};
+
+/**
+ * The JSON that a `record_schema` or `value_schema` entry holds, parsed
+ * tolerantly so JSON being typed still yields what it can. Node offsets are
+ * relative to `start` in the definition text.
+ */
+export const embeddedJson = (text: string, entry: YamlEntry) => {
+  const { valueRange } = entry;
+  const kind = embeddedJsonKind(entry);
+  if (!kind || typeof entry.value !== 'string' || !valueRange) return undefined;
+  // A double-quoted scalar escapes the JSON's quotes, so its text is not the
+  // JSON the offsets would point into.
+  if (text[valueRange.start] === '"') return undefined;
+  // Block scalars start with their indicator; the JSON starts at its brace.
+  const start = text.indexOf('{', valueRange.start);
+  if (start < 0 || start >= valueRange.end) return undefined;
+  const root = parseTree(text.slice(start, valueRange.end), [], {
+    allowTrailingComma: true,
+  });
+  return root && { kind, root, start };
+};
 
 /**
  * Attributes that a blueprint's `record_schema` or an attribute's
  * `value_schema` names in its JSON: schema keywords, record checks and status
- * transition conditions. JSON that is still being typed yields what parses.
+ * transition conditions.
  */
 export const embeddedReferences = (
   text: string,
   entry: YamlEntry,
 ): EmbeddedReference[] => {
-  const { valueRange } = entry;
-  if (typeof entry.value !== 'string' || !valueRange) return [];
-  const walk = isRecordSchema(entry)
-    ? recordSchemaAttributes
-    : isValueSchema(entry)
-      ? valueSchemaAttributes
-      : undefined;
-  // A double-quoted scalar escapes the JSON's quotes, so its text is not the
-  // JSON the offsets would point into.
-  if (!walk || text[valueRange.start] === '"') return [];
-  // Block scalars start with their indicator; the JSON starts at its brace.
-  const start = text.indexOf('{', valueRange.start);
-  if (start < 0 || start >= valueRange.end) return [];
-  const root = parseTree(text.slice(start, valueRange.end), [], {
-    allowTrailingComma: true,
-  });
-  if (!root) return [];
-  return walk(root).map(({ node, reference }) => ({
+  const json = embeddedJson(text, entry);
+  if (!json) return [];
+  const walk =
+    json.kind === embeddedJsonKinds.recordSchema
+      ? recordSchemaAttributes
+      : valueSchemaAttributes;
+  return walk(json.root).map(({ node, reference }) => ({
     range: {
-      end: start + node.offset + node.length,
-      start: start + node.offset,
+      end: json.start + node.offset + node.length,
+      start: json.start + node.offset,
     },
     reference,
     value: String(node.value),

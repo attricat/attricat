@@ -77,6 +77,10 @@ const schemaNodeSchema: z.ZodType<SchemaNode> = z.lazy(() =>
   }),
 );
 
+/** Reads a JSON Schema contract for the editor. */
+export const parseSchemaNode = (contract: unknown) =>
+  schemaNodeSchema.parse(contract);
+
 export const definitionSchemas: Record<DefinitionKind, SchemaNode> = {
   [definitionKinds.blueprint]: schemaNodeSchema.parse(blueprintContract),
   [definitionKinds.reusableAttribute]: schemaNodeSchema.parse(
