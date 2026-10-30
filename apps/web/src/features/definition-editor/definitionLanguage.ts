@@ -5,9 +5,11 @@ import type {
   MarkerSeverity,
   Position,
 } from 'monaco-editor';
+import i18n from '../../i18n';
 import { yamlLanguageId } from '../../components/yamlLanguage';
 import { scanYaml } from '../../components/yamlOutline';
 import {
+  attributesKey,
   diagnosticsOwner,
   referenceDiagnosticsOwner,
   serverDiagnosticsOwner,
@@ -24,6 +26,7 @@ import {
   type DefinitionFix,
 } from './definitionDiagnostics';
 import { definitionHover } from './definitionHover';
+import { declaredNameAt, nameUsages, renameProblem } from './definitionNames';
 import type { DefinitionReferences } from './definitionReferences';
 import {
   definitionSymbolKinds,
@@ -44,6 +47,11 @@ import type { TextRange } from '../../components/yamlOutline';
 export type DefinitionModelConfig = {
   kind: DefinitionKind;
   references: DefinitionReferences;
+  /**
+   * Attribute codes of the revision being revised, which records store
+   * values under, so renaming them is refused.
+   */
+  savedAttributeCodes?: readonly string[];
 };
 
 /**
@@ -261,6 +269,84 @@ const registerProviders = (monaco: Monaco) => {
           uri: model.uri,
         }
       );
+    },
+  });
+  // The declared name at the cursor, where each use of it is, and which use
+  // the cursor is on.
+  const usagesAt = (model: editor.ITextModel, position: Position) => {
+    const config = modelConfigs.get(model)?.current;
+    if (!config) return undefined;
+    const text = model.getValue();
+    const outline = scanYaml(text);
+    const offset = model.getOffsetAt(position);
+    const declared = declaredNameAt(config.kind, text, outline, offset);
+    if (!declared) return undefined;
+    const usages = nameUsages(config.kind, text, outline, declared);
+    return {
+      config,
+      declared,
+      current:
+        usages.find(({ end, start }) => offset >= start && offset <= end) ??
+        declared.declaration,
+      ranges: usages.map((range) => toRange(monaco, model, range)),
+    };
+  };
+  monaco.languages.registerReferenceProvider(yamlLanguageId, {
+    provideReferences: (model: editor.ITextModel, position: Position) =>
+      usagesAt(model, position)?.ranges.map((range) => ({
+        range,
+        uri: model.uri,
+      })) ?? [],
+  });
+  monaco.languages.registerDocumentHighlightProvider(yamlLanguageId, {
+    // Elsewhere Monaco keeps highlighting the word under the cursor.
+    provideDocumentHighlights: (model: editor.ITextModel, position: Position) =>
+      usagesAt(model, position)?.ranges.map((range) => ({ range })),
+  });
+  monaco.languages.registerRenameProvider(yamlLanguageId, {
+    provideRenameEdits: (
+      model: editor.ITextModel,
+      position: Position,
+      newName: string,
+    ) => {
+      const usages = usagesAt(model, position);
+      if (!usages) return undefined;
+      const problem = renameProblem(newName);
+      if (problem) return { edits: [], rejectReason: problem };
+      return {
+        edits: usages.ranges.map((range) => ({
+          resource: model.uri,
+          textEdit: { range, text: newName },
+          versionId: model.getVersionId(),
+        })),
+      };
+    },
+    resolveRenameLocation: (model: editor.ITextModel, position: Position) => {
+      const usages = usagesAt(model, position);
+      if (!usages)
+        return {
+          range: new monaco.Range(
+            position.lineNumber,
+            position.column,
+            position.lineNumber,
+            position.column,
+          ),
+          rejectReason: i18n.t('definitionEditor.rename.nothingToRename'),
+          text: '',
+        };
+      const { config, current, declared } = usages;
+      const saved =
+        declared.table === attributesKey &&
+        config.savedAttributeCodes?.includes(declared.name);
+      return {
+        range: toRange(monaco, model, current),
+        rejectReason: saved
+          ? i18n.t('definitionEditor.rename.savedAttribute', {
+              code: declared.name,
+            })
+          : undefined,
+        text: declared.name,
+      };
     },
   });
   monaco.languages.registerDocumentSymbolProvider(yamlLanguageId, {

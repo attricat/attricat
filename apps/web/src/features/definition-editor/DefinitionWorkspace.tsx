@@ -142,6 +142,7 @@ export const DefinitionWorkspace = ({
   onSave,
   preview,
   readOnly,
+  savedAttributeCodes,
   scopeAttributes,
   toolbar,
   value,
@@ -154,6 +155,8 @@ export const DefinitionWorkspace = ({
   /** Renders the last valid definition; omitted until one exists. */
   preview: ReactNode;
   readOnly: boolean;
+  /** Attribute codes of the revision being revised, kept from renames. */
+  savedAttributeCodes?: readonly string[];
   /** Attributes the definition refers to without declaring them. */
   scopeAttributes?: readonly ReferenceAttribute[];
   /** Extra toolbar actions placed before the Insert menu. */
@@ -291,6 +294,7 @@ export const DefinitionWorkspace = ({
             setMounted({ editor: mountedEditor, monaco });
           }}
           readOnly={readOnly}
+          savedAttributeCodes={savedAttributeCodes}
           scopeAttributes={scopeAttributes}
           value={value}
         />

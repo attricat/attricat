@@ -3,7 +3,11 @@ import Ajv2020, {
   type ValidateFunction,
 } from 'ajv/dist/2020';
 import i18n from '../../i18n';
-import { discriminatorKey, type DefinitionKind } from './constants';
+import {
+  codePattern,
+  discriminatorKey,
+  type DefinitionKind,
+} from './constants';
 import {
   choicesOf,
   defaultedVariants,
@@ -37,9 +41,6 @@ export type DefinitionDiagnostic = {
   message: string;
   range: TextRange;
 };
-
-/** The contracts' pattern for codes, which has its own message. */
-const codePattern = '^[A-Za-z0-9_-]+$';
 
 /** Keys this far apart or closer are offered as likely typos. */
 const maxSuggestionDistance = 2;

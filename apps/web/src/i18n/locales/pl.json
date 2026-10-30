@@ -1134,6 +1134,10 @@
       "stale": "Pokazano ostatnią wersję, która przeszła kontrole zapisu.",
       "showView": "Pokaż widok {{view}} w definicji"
     },
+    "rename": {
+      "nothingToRename": "Tutaj nie ma kodu atrybutu ani aliasu mixinu do zmiany nazwy.",
+      "savedAttribute": "Rekordy przechowują wartości pod zapisanym kodem {{code}}, więc atrybut o zmienionej nazwie byłby pusty. Dodaj nowy atrybut albo zmień kod ręcznie."
+    },
     "snippetGroups": {
       "attributes": "Atrybuty",
       "views": "Widoki",

@@ -141,6 +141,51 @@ test('jumps to a blueprint attribute from the outline', async ({ page }) => {
   ).toHaveAttribute('aria-selected', 'true');
 });
 
+test('renames a new blueprint attribute everywhere it is used', async ({
+  page,
+}) => {
+  await page.goto('/manage/blueprints/new');
+  await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
+  await replaceDefinition(
+    page,
+    `format_version: 1\ncode: renamed_${suffix()}\nname: Renamed\nkind: record\n\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\n\nattributes:\n  - code: title\n    value_type: string\n`,
+  );
+  await expect(page.getByText('Ready to save')).toBeVisible();
+
+  await page
+    .locator('.monaco-editor .view-line', { hasText: 'code: title' })
+    .getByText('title', { exact: true })
+    .click();
+  await page.keyboard.press('F2');
+  const renameInput = page.locator('.monaco-editor .rename-input');
+  await expect(renameInput).toBeFocused();
+  await page.keyboard.press('ControlOrMeta+a');
+  await page.keyboard.type('headline');
+  await page.keyboard.press('Enter');
+
+  const editor = page.locator('.monaco-editor').first();
+  await expect(editor).toContainText('fields: [headline]');
+  await expect(editor).toContainText('code: headline');
+  await expect(page.getByText('Ready to save')).toBeVisible();
+  await expect(fieldByLabel(preview(page), 'headline')).toBeVisible();
+
+  // Records store values under a saved code, so a revision keeps it.
+  await page.keyboard.press('Control+s');
+  await expect(page).toHaveURL(/\/manage\/blueprints\/[0-9a-f-]{36}$/);
+  await page.goto(`${new URL(page.url()).pathname}/revisions/1/new`);
+  await expect(page.getByText('Ready to save')).toBeVisible();
+  await page
+    .locator('.monaco-editor .view-line', { hasText: 'code: headline' })
+    .getByText('headline', { exact: true })
+    .click();
+  await page.keyboard.press('F2');
+  await expect(
+    page
+      .getByText(/Records store values under the saved code headline/)
+      .first(),
+  ).toBeVisible();
+});
+
 test('checks, previews and inserts into a reusable attribute definition', async ({
   page,
 }) => {

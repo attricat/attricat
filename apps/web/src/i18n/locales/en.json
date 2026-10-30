@@ -1078,6 +1078,10 @@
       "stale": "Showing the last version that passed the save checks.",
       "showView": "Show the {{view}} view in the definition"
     },
+    "rename": {
+      "nothingToRename": "There is no attribute code or include alias here to rename.",
+      "savedAttribute": "Records store values under the saved code {{code}}, so a renamed attribute would start empty. Add a new attribute instead, or edit the code by hand."
+    },
     "snippetGroups": {
       "attributes": "Attributes",
       "views": "Views",

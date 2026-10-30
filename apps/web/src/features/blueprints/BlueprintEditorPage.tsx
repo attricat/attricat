@@ -2,6 +2,7 @@ import { blueprintRevisionOptions } from './queryOptions';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { Alert } from '@mui/material';
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
@@ -59,6 +60,10 @@ export const BlueprintEditorPage = ({
     templates: blueprintTemplates,
   });
   const { definition, isDirty } = editor;
+  const savedAttributeCodes = useMemo(
+    () => sourceRevision?.attributes.map(({ code }) => code),
+    [sourceRevision],
+  );
 
   const save = useMutation({
     mutationFn: ({ definition }: { definition: string }) =>
@@ -164,6 +169,7 @@ export const BlueprintEditorPage = ({
           )
         }
         readOnly={save.isPending}
+        savedAttributeCodes={savedAttributeCodes}
         toolbar={
           editor.creating && (
             <DefinitionTemplatesButton

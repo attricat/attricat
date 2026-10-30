@@ -30,11 +30,14 @@ type MountedEditor = { model: editor.ITextModel; monaco: Monaco };
 export const DefinitionEditor = ({
   kind,
   onMount,
+  savedAttributeCodes,
   scopeAttributes,
   value,
   ...props
 }: Omit<YamlEditorProps, 'options'> & {
   kind: DefinitionKind;
+  /** Attribute codes of the revision being revised, kept from renames. */
+  savedAttributeCodes?: readonly string[];
   /** Attributes the definition refers to without declaring them. */
   scopeAttributes?: readonly ReferenceAttribute[];
 }) => {
@@ -44,9 +47,13 @@ export const DefinitionEditor = ({
     [queryClient, scopeAttributes],
   );
   // Monaco providers outlive renders, so they read the latest config via a ref.
-  const config = useRef<DefinitionModelConfig>({ kind, references });
+  const config = useRef<DefinitionModelConfig>({
+    kind,
+    references,
+    savedAttributeCodes,
+  });
   useLayoutEffect(() => {
-    config.current = { kind, references };
+    config.current = { kind, references, savedAttributeCodes };
   });
   const [mounted, setMounted] = useState<MountedEditor>();
 

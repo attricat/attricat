@@ -32,6 +32,9 @@ export const targetBlueprintKey = 'target_blueprint';
 export const aliasKey = 'alias';
 export const versionKey = 'version';
 
+/** The contracts' pattern for codes, which has its own message. */
+export const codePattern = '^[A-Za-z0-9_-]+$';
+
 export const attributePathSeparator = '.';
 /** Completion sort prefixes: required keys and exact matches come first. */
 export const requiredSortPrefix = '0';
