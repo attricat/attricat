@@ -11,7 +11,6 @@ use super::record_commands::{ChosenIdRecordCreate, writes_relationship_values};
 use super::*;
 use crate::model::UpdateRecordFormRequest;
 use attricat_domain::permissions::Permission;
-use sha2::Digest;
 use sqlx::{Postgres, Transaction};
 use std::collections::BTreeSet;
 
@@ -93,8 +92,8 @@ impl AttricatRepository {
         intent: ExtensionAttricatIntent,
     ) -> Result<ExtensionAttricatIntentOutcome, RepositoryError> {
         let key = extension_intent_key(&intent).to_owned();
-        let serialized = serde_json::to_vec(&intent).expect("extension intent serializes");
-        let input_hash = format!("{:x}", sha2::Sha256::digest(serialized));
+        let input_hash = attricat_domain::canonical_json::canonical_json_sha256(&intent)
+            .expect("extension intent serializes");
         let ws = self.workspace_id.0;
         let mut transaction = self.pool.begin().await?;
         if !dry_run {

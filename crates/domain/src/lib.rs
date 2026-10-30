@@ -3,6 +3,7 @@
 pub mod account;
 pub mod agents;
 pub mod attribute_options;
+pub mod canonical_json;
 pub mod codes;
 pub mod constants;
 pub mod model;

@@ -183,7 +183,7 @@ mod tests {
         // A structured message keeps its fields; the code is the host's.
         assert_eq!(
             rejection("template_changed", r#"{"version":2,"rejection_code":"x"}"#).diagnostic(),
-            r#"{"rejection_code":"template_changed","version":2}"#
+            r#"{"version":2,"rejection_code":"template_changed"}"#
         );
         assert_eq!(rejection("token=secret value", "").diagnostic(), "{}");
     }

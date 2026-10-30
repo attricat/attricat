@@ -1,8 +1,8 @@
 use super::{AttricatRepository, RepositoryError};
+use attricat_domain::canonical_json::canonical_json_sha256;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 use sqlx::FromRow;
 use uuid::Uuid;
 
@@ -32,10 +32,7 @@ const FIELDS: &str =
     "id,owner_user_id,kind,name,description,visibility,state,created_at,updated_at";
 
 pub(super) fn state_hash(state: &Value) -> String {
-    format!(
-        "{:x}",
-        Sha256::digest(serde_json::to_vec(state).expect("JSON value serializes"))
-    )
+    canonical_json_sha256(state).expect("JSON value serializes")
 }
 
 impl AttricatRepository {

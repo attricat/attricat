@@ -1,80 +1,38 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Attricat status control v1",
+  "type": "object",
   "additionalProperties": false,
+  "required": [
+    "version",
+    "options"
+  ],
   "properties": {
+    "version": {
+      "const": 1
+    },
     "options": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
       "items": {
+        "type": "object",
         "additionalProperties": false,
+        "required": [
+          "code",
+          "label"
+        ],
         "properties": {
-          "approval": {
-            "additionalProperties": false,
-            "properties": {
-              "covers": {
-                "oneOf": [
-                  {
-                    "const": "all"
-                  },
-                  {
-                    "items": {
-                      "maxLength": 257,
-                      "minLength": 1,
-                      "pattern": "^[A-Za-z0-9_-]+(:[A-Za-z0-9_-]+)?$",
-                      "type": "string"
-                    },
-                    "maxItems": 500,
-                    "minItems": 1,
-                    "type": "array",
-                    "uniqueItems": true
-                  }
-                ]
-              },
-              "void_to": {
-                "maxLength": 128,
-                "minLength": 1,
-                "pattern": "^[A-Za-z0-9_-]+$",
-                "type": "string"
-              }
-            },
-            "required": [
-              "covers",
-              "void_to"
-            ],
-            "type": "object"
-          },
           "code": {
-            "maxLength": 128,
+            "type": "string",
             "minLength": 1,
-            "pattern": "^[A-Za-z0-9_-]+$",
-            "type": "string"
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9_-]+$"
           },
           "label": {
-            "maxLength": 200,
+            "type": "string",
             "minLength": 1,
-            "type": "string"
-          },
-          "lock": {
-            "oneOf": [
-              {
-                "const": "all"
-              },
-              {
-                "items": {
-                  "maxLength": 257,
-                  "minLength": 1,
-                  "pattern": "^[A-Za-z0-9_-]+(:[A-Za-z0-9_-]+)?$",
-                  "type": "string"
-                },
-                "maxItems": 500,
-                "minItems": 1,
-                "type": "array",
-                "uniqueItems": true
-              }
-            ]
-          },
-          "retention_days": {
-            "maximum": 36600,
-            "minimum": 1,
-            "type": "integer"
+            "maxLength": 200
           },
           "tone": {
             "enum": [
@@ -84,124 +42,166 @@
               "error",
               "info"
             ]
+          },
+          "lock": {
+            "oneOf": [
+              {
+                "const": "all"
+              },
+              {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 500,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 257,
+                  "pattern": "^[A-Za-z0-9_-]+(:[A-Za-z0-9_-]+)?$"
+                }
+              }
+            ]
+          },
+          "approval": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "covers",
+              "void_to"
+            ],
+            "properties": {
+              "covers": {
+                "oneOf": [
+                  {
+                    "const": "all"
+                  },
+                  {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 500,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 257,
+                      "pattern": "^[A-Za-z0-9_-]+(:[A-Za-z0-9_-]+)?$"
+                    }
+                  }
+                ]
+              },
+              "void_to": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9_-]+$"
+              }
+            }
+          },
+          "retention_days": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 36600
           }
-        },
-        "required": [
-          "code",
-          "label"
-        ],
-        "type": "object"
-      },
-      "maxItems": 100,
-      "minItems": 1,
-      "type": "array"
+        }
+      }
     },
     "transitions": {
+      "type": "array",
+      "maxItems": 10000,
+      "uniqueItems": true,
       "items": {
+        "type": "object",
         "additionalProperties": false,
+        "required": [
+          "from",
+          "to"
+        ],
         "properties": {
-          "code": {
-            "maxLength": 128,
-            "minLength": 1,
-            "pattern": "^[A-Za-z0-9_-]+$",
-            "type": "string"
-          },
-          "conditions": {
-            "items": {
-              "additionalProperties": false,
-              "properties": {
-                "code": {
-                  "maxLength": 128,
-                  "minLength": 1,
-                  "pattern": "^[A-Za-z0-9_-]+$",
-                  "type": "string"
-                },
-                "message": {
-                  "maxLength": 500,
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "predicate": {
-                  "properties": {
-                    "type": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "type"
-                  ],
-                  "type": "object"
-                }
-              },
-              "required": [
-                "code",
-                "predicate"
-              ],
-              "type": "object"
-            },
-            "maxItems": 16,
-            "type": "array"
-          },
           "from": {
             "type": [
               "string",
               "null"
             ]
           },
-          "permission": {
-            "maxLength": 128,
-            "pattern": "^[a-z_]+\\.[a-z_]+$",
-            "type": "string"
-          },
-          "roles": {
-            "items": {
-              "maxLength": 64,
-              "minLength": 1,
-              "pattern": "^[a-z][a-z0-9_-]*$",
-              "type": "string"
-            },
-            "maxItems": 20,
-            "minItems": 1,
-            "type": "array",
-            "uniqueItems": true
-          },
-          "separate_from": {
-            "items": {
-              "maxLength": 128,
-              "minLength": 1,
-              "pattern": "^[A-Za-z0-9_-]+$",
-              "type": "string"
-            },
-            "maxItems": 20,
-            "minItems": 1,
-            "type": "array",
-            "uniqueItems": true
-          },
           "to": {
             "type": [
               "string",
               "null"
             ]
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "permission": {
+            "type": "string",
+            "maxLength": 128,
+            "pattern": "^[a-z_]+\\.[a-z_]+$"
+          },
+          "roles": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_-]*$"
+            }
+          },
+          "separate_from": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9_-]+$"
+            }
+          },
+          "conditions": {
+            "type": "array",
+            "maxItems": 16,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "code",
+                "predicate"
+              ],
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9_-]+$"
+                },
+                "message": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                },
+                "predicate": {
+                  "type": "object",
+                  "required": [
+                    "type"
+                  ],
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           }
-        },
-        "required": [
-          "from",
-          "to"
-        ],
-        "type": "object"
-      },
-      "maxItems": 10000,
-      "type": "array",
-      "uniqueItems": true
-    },
-    "version": {
-      "const": 1
+        }
+      }
     }
-  },
-  "required": [
-    "version",
-    "options"
-  ],
-  "title": "Attricat status control v1",
-  "type": "object"
+  }
 }

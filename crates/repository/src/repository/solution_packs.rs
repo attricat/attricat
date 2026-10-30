@@ -1,3 +1,4 @@
+use attricat_domain::canonical_json::canonical_json_sha256;
 use attricat_domain::states::{
     RevisionStatus, SolutionPackApplicationState, SolutionPackStepState,
 };
@@ -453,10 +454,7 @@ fn canonical_sample_input(pack: &ValidatedSolutionPack, record: &SampleRecord) -
         .collect::<Vec<_>>();
     let canonical_input =
         serde_json::json!({"record":record,"effective_defaults":effective_defaults});
-    let digest = format!(
-        "{:x}",
-        Sha256::digest(serde_json::to_vec(&canonical_input).expect("sample record serializes"))
-    );
+    let digest = canonical_json_sha256(&canonical_input).expect("sample record serializes");
     (canonical_input, digest)
 }
 
@@ -2199,13 +2197,8 @@ async fn validate_sample_staging_integrity(
         ));
     }
     for (logical_key, expected, input) in stage_rows {
-        let actual = format!(
-            "{:x}",
-            Sha256::digest(
-                serde_json::to_vec(&input)
-                    .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?
-            )
-        );
+        let actual = canonical_json_sha256(&input)
+            .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?;
         if actual != expected {
             return Err(RepositoryError::InvalidSolutionPackPlan(format!(
                 "sample staging input for '{logical_key}' does not match its digest"
@@ -2298,7 +2291,7 @@ async fn plan_resource_evidence_sha256(
     .bind(plan_id)
     .fetch_one(&mut **tx)
     .await?;
-    let encoded = serde_json::to_vec(&(
+    canonical_json_sha256(&(
         header,
         mappings,
         actions,
@@ -2308,8 +2301,7 @@ async fn plan_resource_evidence_sha256(
         sample_records,
         sample_files,
     ))
-    .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?;
-    Ok(format!("{:x}", Sha256::digest(encoded)))
+    .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))
 }
 
 async fn insert_plan_checks(
@@ -5215,10 +5207,8 @@ fn merge_extension_layout(
 }
 
 fn json_sha256(value: &Value) -> Result<String, RepositoryError> {
-    let bytes = serde_json::to_vec(value)
-        .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?;
-    let digest = Sha256::digest(bytes);
-    Ok(digest.iter().map(|byte| format!("{byte:02x}")).collect())
+    canonical_json_sha256(value)
+        .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))
 }
 
 /// Re-validates persisted lexicon entries; plans are data, not trusted code.
@@ -6243,10 +6233,7 @@ attributes:
             },
             "effective_defaults": []
         });
-        let digest = format!(
-            "{:x}",
-            Sha256::digest(serde_json::to_vec(&canonical_input).unwrap())
-        );
+        let digest = canonical_json_sha256(&canonical_input).unwrap();
         let mut tx = pool.begin().await.unwrap();
         SampleRecordRows {
             positions: vec![0],

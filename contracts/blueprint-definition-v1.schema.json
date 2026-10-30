@@ -1,127 +1,1102 @@
 {
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "format_version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0,
+      "description": "Definition format version. Only `1` is supported.",
+      "const": 1
+    },
+    "code": {
+      "type": "string",
+      "description": "Stable blueprint identifier, using ASCII letters, numbers, hyphens, and underscores.",
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable blueprint name. `{{…}}` references resolve from the\nworkspace lexicon.",
+      "minLength": 1
+    },
+    "description": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "What the blueprint's records are, for people and agents, such as\n\"Product groupings, such as Basic tools\". `{{…}}` references resolve\nfrom the workspace lexicon.",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "kind": {
+      "$ref": "#/$defs/BlueprintKind"
+    },
+    "includes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/IncludeRef"
+      },
+      "description": "Exact, version-pinned mixins whose attributes can be selected with `from`.",
+      "default": []
+    },
+    "views": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/ViewDefinition"
+      },
+      "description": "Named views: `dropdown_option`, `page_title`, `table`, `detail`, and `extension_layout`.\nThe `detail` layout also drives editing.",
+      "default": {},
+      "x-attricat-key-suggestions": [
+        "dropdown_option",
+        "page_title",
+        "detail",
+        "table",
+        "explorer",
+        "extension_layout"
+      ]
+    },
+    "record_schema": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "JSON Schema (Draft 2020-12) source for cross-field record validation.\nRecord blueprints only."
+    },
+    "publication": {
+      "$ref": "#/$defs/PublicationPolicy",
+      "description": "Channel publication behavior when records are edited.",
+      "default": {
+        "retain_on_edit_roles": []
+      }
+    },
+    "connector_jobs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ConnectorJobDefinition"
+      },
+      "description": "Scheduled extension imports and exports. Record blueprints only.",
+      "default": []
+    },
+    "extensions": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Namespaced extension metadata is preserved in the immutable source\ndefinition and intentionally ignored by the core blueprint compiler.",
+      "default": {}
+    },
+    "unique_keys": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/UniqueKeyDefinition"
+      },
+      "description": "Business keys whose normalized values must be unique across the\nblueprint family. Record blueprints only.",
+      "default": []
+    },
+    "attributes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/RawAttributeDeclaration"
+      },
+      "description": "Attributes in display order. Each declares exactly one of `value_type`,\n`extension_type`, or `from`.",
+      "minItems": 1
+    }
+  },
+  "required": [
+    "format_version",
+    "code",
+    "name",
+    "kind",
+    "attributes"
+  ],
+  "title": "Attricat blueprint definition v1",
+  "description": "An Attricat blueprint: a versioned record type or an includable mixin.",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$defs": {
     "BlueprintKind": {
       "oneOf": [
         {
+          "type": "string",
           "const": "record",
-          "description": "Creates records.",
-          "type": "string"
+          "description": "Creates records."
         },
         {
+          "type": "string",
           "const": "mixin",
-          "description": "Provides attributes for other blueprints to include.",
-          "type": "string"
+          "description": "Provides attributes for other blueprints to include."
         }
       ]
     },
-    "BrowseBy": {
-      "anyOf": [
+    "IncludeRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "alias": {
+          "type": "string",
+          "description": "Local name used by `from: <alias>.<attribute>` selections.",
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "code": {
+          "type": "string",
+          "description": "Code of the included mixin blueprint.",
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "x-attricat-reference": "mixin"
+        },
+        "version": {
+          "type": "integer",
+          "format": "int64",
+          "description": "Exact mixin version to include.",
+          "minimum": 1,
+          "x-attricat-reference": "mixin_version"
+        }
+      },
+      "required": [
+        "alias",
+        "code",
+        "version"
+      ]
+    },
+    "ViewDefinition": {
+      "oneOf": [
         {
-          "description": "Relationship attribute code, or a dotted path of up to three\nrelationship hops.",
-          "type": "string"
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "fields": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Attributes joined into the label.",
+              "x-attricat-reference": "attribute"
+            },
+            "separator": {
+              "type": "string",
+              "description": "Text between label fields. Defaults to ` · `.",
+              "default": " · "
+            },
+            "type": {
+              "type": "string",
+              "const": "dropdown_option"
+            }
+          },
+          "required": [
+            "type",
+            "fields"
+          ],
+          "description": "Label shown for the record in relationship dropdowns."
         },
         {
-          "const": false,
-          "description": "`false` keeps the rail closed until a person opens it.",
-          "type": "boolean"
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "fields": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Attributes joined into the title.",
+              "x-attricat-reference": "attribute"
+            },
+            "separator": {
+              "type": "string",
+              "description": "Text between title fields. Defaults to ` · `.",
+              "default": " · "
+            },
+            "type": {
+              "type": "string",
+              "const": "page_title"
+            }
+          },
+          "required": [
+            "type",
+            "fields"
+          ],
+          "description": "Title of the record page and its browser tab."
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "columns": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "$ref": "#/$defs/TableColumn"
+              },
+              "description": "Table columns.",
+              "default": null
+            },
+            "component": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ComponentReference"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Registered component that renders this block.",
+              "default": null
+            },
+            "type": {
+              "type": "string",
+              "const": "table"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "description": "Explorer table columns."
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "browse_by": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/BrowseBy"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Relationship field the browse rail lists until a person picks\nanother, or `false` to keep the rail closed. The field must have\na single target blueprint. A dotted path such as `model.brand`\nfollows up to three such relationships, each with\n`cardinality: one`, and lists the last one's targets.",
+              "default": null
+            },
+            "type": {
+              "type": "string",
+              "const": "explorer"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "description": "Explorer defaults for this blueprint's results."
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "children": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewNode"
+              },
+              "description": "Nested blocks."
+            },
+            "component": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ComponentReference"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Registered component that renders this block.",
+              "default": null
+            },
+            "type": {
+              "type": "string",
+              "const": "stack"
+            }
+          },
+          "required": [
+            "type",
+            "children"
+          ],
+          "description": "Blocks stacked vertically."
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "children": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewNode"
+              },
+              "description": "Nested blocks."
+            },
+            "component": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ComponentReference"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Registered component that renders this block.",
+              "default": null
+            },
+            "type": {
+              "type": "string",
+              "const": "grid"
+            }
+          },
+          "required": [
+            "type",
+            "children"
+          ],
+          "description": "Blocks arranged in a responsive grid."
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "children": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewNode"
+              },
+              "description": "Nested blocks."
+            },
+            "component": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ComponentReference"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Registered component that renders this block.",
+              "default": null
+            },
+            "type": {
+              "type": "string",
+              "const": "section"
+            }
+          },
+          "required": [
+            "type",
+            "children"
+          ],
+          "description": "Blocks grouped in a section."
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tabs": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewTab"
+              },
+              "description": "Tabs, each with a label and its own blocks."
+            },
+            "component": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ComponentReference"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Registered component that renders this block.",
+              "default": null
+            },
+            "type": {
+              "type": "string",
+              "const": "tabs"
+            }
+          },
+          "required": [
+            "type",
+            "tabs"
+          ],
+          "description": "Blocks split into tabs."
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "sections": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewSection"
+              },
+              "description": "Collapsible sections, each with a label and its own blocks."
+            },
+            "component": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ComponentReference"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Registered component that renders this block.",
+              "default": null
+            },
+            "type": {
+              "type": "string",
+              "const": "accordion"
+            }
+          },
+          "required": [
+            "type",
+            "sections"
+          ],
+          "description": "Blocks split into collapsible sections."
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "version": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0,
+              "description": "Layout format version. Only `1` is supported.",
+              "const": 1
+            },
+            "outlets": {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/$defs/ExtensionOutletLayout"
+              },
+              "description": "Layouts keyed by record outlet: `record_preview_panel` or\n`record_action`.",
+              "x-attricat-key-suggestions": [
+                "record_preview_panel",
+                "record_action"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "extension_layout"
+            }
+          },
+          "required": [
+            "type",
+            "version",
+            "outlets"
+          ],
+          "description": "A versioned layout override for record-owned extension surfaces."
         }
       ],
-      "description": "The Explorer browse rail's default: a relationship field or path, or `false`.",
-      "x-attricat-reference": "relationship_path"
+      "description": "A named view. `dropdown_option` labels relationship choices, `page_title`\nnames the record page, `table` configures Explorer columns, `explorer`\nsets Explorer defaults, and layout roots arrange `detail` and `edit`."
+    },
+    "TableColumn": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "type": "string",
+          "description": "A local scalar field or up to three relationship hops ending in a scalar field.",
+          "x-attricat-reference": "attribute_path"
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Column heading. Defaults to the attribute name. `{{…}}` references\nresolve from the workspace lexicon.",
+          "default": null
+        },
+        "renderer": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ComponentReference"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Cell renderer, such as `attricat.table_image`.",
+          "default": null
+        }
+      },
+      "required": [
+        "field"
+      ]
     },
     "ComponentReference": {
+      "type": "object",
       "additionalProperties": false,
       "properties": {
         "id": {
-          "description": "Registered component ID, such as `attricat.field_edit`.",
           "type": "string",
+          "description": "Registered component ID, such as `attricat.field_edit`.",
           "x-attricat-reference": "view_component"
         },
-        "props": {
-          "additionalProperties": true,
-          "default": null,
-          "description": "Component-specific properties.",
-          "type": "object"
-        },
         "version": {
-          "description": "Component manifest versions are non-negative 32-bit protocol values.",
+          "type": "integer",
           "format": "uint32",
           "minimum": 0,
-          "type": "integer"
+          "description": "Component manifest versions are non-negative 32-bit protocol values."
+        },
+        "props": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Component-specific properties.",
+          "default": null
         }
       },
       "required": [
         "id",
         "version"
+      ]
+    },
+    "BrowseBy": {
+      "anyOf": [
+        {
+          "type": "string",
+          "description": "Relationship attribute code, or a dotted path of up to three\nrelationship hops."
+        },
+        {
+          "type": "boolean",
+          "description": "`false` keeps the rail closed until a person opens it.",
+          "const": false
+        }
       ],
-      "type": "object"
+      "description": "The Explorer browse rail's default: a relationship field or path, or `false`.",
+      "x-attricat-reference": "relationship_path"
+    },
+    "ViewNode": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "children": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewNode"
+              },
+              "description": "Nested blocks."
+            },
+            "component": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ComponentReference"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Registered component that renders this block.",
+              "default": null
+            },
+            "type": {
+              "type": "string",
+              "const": "stack"
+            }
+          },
+          "required": [
+            "type",
+            "children"
+          ],
+          "description": "Blocks stacked vertically."
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "children": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewNode"
+              },
+              "description": "Nested blocks."
+            },
+            "component": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ComponentReference"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Registered component that renders this block.",
+              "default": null
+            },
+            "type": {
+              "type": "string",
+              "const": "grid"
+            }
+          },
+          "required": [
+            "type",
+            "children"
+          ],
+          "description": "Blocks arranged in a responsive grid."
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "children": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewNode"
+              },
+              "description": "Nested blocks."
+            },
+            "component": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ComponentReference"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Registered component that renders this block.",
+              "default": null
+            },
+            "type": {
+              "type": "string",
+              "const": "section"
+            }
+          },
+          "required": [
+            "type",
+            "children"
+          ],
+          "description": "Blocks grouped in a section."
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tabs": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewTab"
+              },
+              "description": "Tabs, each with a label and its own blocks."
+            },
+            "component": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ComponentReference"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Registered component that renders this block.",
+              "default": null
+            },
+            "type": {
+              "type": "string",
+              "const": "tabs"
+            }
+          },
+          "required": [
+            "type",
+            "tabs"
+          ],
+          "description": "Blocks split into tabs."
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "sections": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ViewSection"
+              },
+              "description": "Collapsible sections, each with a label and its own blocks."
+            },
+            "component": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ComponentReference"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Registered component that renders this block.",
+              "default": null
+            },
+            "type": {
+              "type": "string",
+              "const": "accordion"
+            }
+          },
+          "required": [
+            "type",
+            "sections"
+          ],
+          "description": "Blocks split into collapsible sections."
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "text": {
+              "type": "string",
+              "description": "Heading text."
+            },
+            "component": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ComponentReference"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Registered component that renders this block.",
+              "default": null
+            },
+            "type": {
+              "type": "string",
+              "const": "heading"
+            }
+          },
+          "required": [
+            "type",
+            "text"
+          ],
+          "description": "A static heading."
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "text": {
+              "type": "string",
+              "description": "Text content."
+            },
+            "component": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ComponentReference"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Registered component that renders this block.",
+              "default": null
+            },
+            "type": {
+              "type": "string",
+              "const": "text"
+            }
+          },
+          "required": [
+            "type",
+            "text"
+          ],
+          "description": "Static text."
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "component": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ComponentReference"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Registered component that renders this block.",
+              "default": null
+            },
+            "type": {
+              "type": "string",
+              "const": "divider"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "description": "A horizontal divider."
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "field": {
+              "type": "string",
+              "description": "Scalar attribute to render.",
+              "x-attricat-reference": "attribute"
+            },
+            "component": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ComponentReference"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Registered component that renders this block.",
+              "default": null
+            },
+            "type": {
+              "type": "string",
+              "const": "field"
+            }
+          },
+          "required": [
+            "type",
+            "field"
+          ],
+          "description": "A scalar attribute's value or input."
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "field": {
+              "type": "string",
+              "description": "Relationship attribute to render.",
+              "x-attricat-reference": "relationship_attribute"
+            },
+            "component": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ComponentReference"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Registered component that renders this block.",
+              "default": null
+            },
+            "type": {
+              "type": "string",
+              "const": "relationship_list"
+            }
+          },
+          "required": [
+            "type",
+            "field"
+          ],
+          "description": "A relationship attribute's linked records."
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "label": {
+              "type": "string",
+              "description": "Button and dialog label. `{{…}}` references resolve from the\nworkspace lexicon."
+            },
+            "relationships": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/IncomingRelationship"
+              },
+              "description": "Source blueprint relationship fields that point at this record."
+            },
+            "page_size": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 1,
+              "description": "Records requested per page."
+            },
+            "component": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ComponentReference"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Registered component that renders this block.",
+              "default": null
+            },
+            "type": {
+              "type": "string",
+              "const": "incoming_relationship_list"
+            }
+          },
+          "required": [
+            "type",
+            "label",
+            "relationships",
+            "page_size"
+          ],
+          "description": "Records that reference this record, opened in a paginated dialog."
+        }
+      ],
+      "description": "A view block. Containers hold `children`, `tabs`, or `sections`; leaves\nrender attributes or static content."
+    },
+    "ViewTab": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "type": "string",
+          "description": "Tab label. `{{…}}` references resolve from the workspace lexicon."
+        },
+        "children": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ViewNode"
+          },
+          "description": "Blocks rendered in the tab."
+        }
+      },
+      "required": [
+        "label",
+        "children"
+      ]
+    },
+    "ViewSection": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "type": "string",
+          "description": "Section heading. `{{…}}` references resolve from the workspace lexicon."
+        },
+        "children": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ViewNode"
+          },
+          "description": "Blocks rendered in the section."
+        }
+      },
+      "required": [
+        "label",
+        "children"
+      ]
+    },
+    "IncomingRelationship": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source_blueprint": {
+          "type": "string",
+          "description": "Blueprint whose records reference this record.",
+          "x-attricat-reference": "blueprint"
+        },
+        "field": {
+          "type": "string",
+          "description": "Relationship attribute on the source blueprint."
+        }
+      },
+      "required": [
+        "source_blueprint",
+        "field"
+      ]
+    },
+    "ExtensionOutletLayout": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "order": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Contribution keys (`<extension-id>:<contribution-id>`) in display order.",
+          "default": []
+        },
+        "hidden": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Contribution keys hidden in this outlet.",
+          "default": []
+        }
+      },
+      "description": "Host-owned per-blueprint extension layout. It is declarative data only;\ncontribution keys cannot select DOM nodes or invoke extension code."
+    },
+    "PublicationPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "retain_on_edit_roles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Workspace roles whose edits keep records published on their channels.",
+          "default": [],
+          "x-attricat-reference": "role"
+        }
+      }
     },
     "ConnectorJobDefinition": {
+      "type": "object",
       "additionalProperties": false,
       "properties": {
         "code": {
+          "type": "string",
           "description": "Stable job identifier, unique within the blueprint.",
-          "pattern": "^[A-Za-z0-9_-]+$",
-          "type": "string"
-        },
-        "connection": {
-          "description": "The extension connection (destination account) an export pushes to.\nWithout it the extension's default destination is used.",
-          "pattern": "^[A-Za-z0-9._-]{1,128}$",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "context": {
-          "description": "Context code that receives imported values, required for imports; for\nan export, the publication channel it exports.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "x-attricat-reference": "context"
+          "pattern": "^[A-Za-z0-9_-]+$"
         },
         "direction": {
+          "type": "string",
           "description": "`import` requires `context`; `export` cannot set `input_file_id`.",
           "enum": [
             "import",
             "export"
-          ],
-          "type": "string"
-        },
-        "enabled": {
-          "default": true,
-          "description": "Whether the job is scheduled. Defaults to `true`.",
-          "type": "boolean"
+          ]
         },
         "extension_id": {
-          "description": "Installed extension that provides the connector operation.",
-          "type": "string"
+          "type": "string",
+          "description": "Installed extension that provides the connector operation."
+        },
+        "operation_id": {
+          "type": "string",
+          "description": "Connector operation declared by the extension."
         },
         "input": {
+          "type": "object",
           "additionalProperties": true,
-          "description": "Operation input table passed to the extension.",
-          "type": "object"
+          "description": "Operation input table passed to the extension."
         },
-        "input_file_id": {
-          "description": "Uploaded file supplied to an import.",
+        "context": {
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "description": "Context code that receives imported values, required for imports; for\nan export, the publication channel it exports.",
+          "x-attricat-reference": "context"
+        },
+        "input_file_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Uploaded file supplied to an import."
         },
         "interval_seconds": {
-          "description": "Run interval in seconds, from 60 to 2592000 (30 days).",
-          "format": "int32",
-          "maximum": 2592000,
-          "minimum": 60,
           "type": [
             "integer",
             "null"
-          ]
+          ],
+          "format": "int32",
+          "description": "Run interval in seconds, from 60 to 2592000 (30 days).",
+          "minimum": 60,
+          "maximum": 2592000
         },
-        "operation_id": {
-          "description": "Connector operation declared by the extension.",
-          "type": "string"
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether the job is scheduled. Defaults to `true`.",
+          "default": true
+        },
+        "connection": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The extension connection (destination account) an export pushes to.\nWithout it the extension's default destination is used.",
+          "pattern": "^[A-Za-z0-9._-]{1,128}$"
         },
         "trigger": {
           "anyOf": [
@@ -141,228 +1116,319 @@
         "extension_id",
         "operation_id",
         "input"
-      ],
-      "type": "object"
+      ]
     },
     "ConnectorJobTrigger": {
+      "type": "object",
       "additionalProperties": false,
-      "description": "A change trigger of an export connector job.",
       "properties": {
-        "debounce_seconds": {
-          "description": "Quiet period before a triggered run, from 1 to 3600 seconds.",
-          "format": "int32",
-          "maximum": 3600,
-          "minimum": 1,
-          "type": "integer"
-        },
         "events": {
-          "description": "Record event types that start a run, such as `record.updated.v1`.",
+          "type": "array",
           "items": {
             "type": "string"
           },
-          "type": "array"
+          "description": "Record event types that start a run, such as `record.updated.v1`."
+        },
+        "debounce_seconds": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Quiet period before a triggered run, from 1 to 3600 seconds.",
+          "minimum": 1,
+          "maximum": 3600
         }
       },
       "required": [
         "events",
         "debounce_seconds"
       ],
-      "type": "object"
+      "description": "A change trigger of an export connector job."
     },
-    "ExtensionOutletLayout": {
-      "additionalProperties": false,
-      "description": "Host-owned per-blueprint extension layout. It is declarative data only;\ncontribution keys cannot select DOM nodes or invoke extension code.",
-      "properties": {
-        "hidden": {
-          "default": [],
-          "description": "Contribution keys hidden in this outlet.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "order": {
-          "default": [],
-          "description": "Contribution keys (`<extension-id>:<contribution-id>`) in display order.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        }
-      },
-      "type": "object"
-    },
-    "IncludeRef": {
+    "UniqueKeyDefinition": {
+      "type": "object",
       "additionalProperties": false,
       "properties": {
-        "alias": {
-          "description": "Local name used by `from: <alias>.<attribute>` selections.",
-          "pattern": "^[A-Za-z0-9_-]+$",
-          "type": "string"
-        },
         "code": {
-          "description": "Code of the included mixin blueprint.",
-          "pattern": "^[A-Za-z0-9_-]+$",
           "type": "string",
-          "x-attricat-reference": "mixin"
+          "description": "Stable key identifier, unique within the blueprint.",
+          "pattern": "^[A-Za-z0-9_-]+$"
         },
-        "version": {
-          "description": "Exact mixin version to include.",
-          "format": "int64",
-          "minimum": 1,
-          "type": "integer",
-          "x-attricat-reference": "mixin_version"
-        }
-      },
-      "required": [
-        "alias",
-        "code",
-        "version"
-      ],
-      "type": "object"
-    },
-    "IncomingRelationship": {
-      "additionalProperties": false,
-      "properties": {
-        "field": {
-          "description": "Relationship attribute on the source blueprint.",
-          "type": "string"
-        },
-        "source_blueprint": {
-          "description": "Blueprint whose records reference this record.",
-          "type": "string",
-          "x-attricat-reference": "blueprint"
-        }
-      },
-      "required": [
-        "source_blueprint",
-        "field"
-      ],
-      "type": "object"
-    },
-    "PublicationPolicy": {
-      "additionalProperties": false,
-      "properties": {
-        "retain_on_edit_roles": {
-          "default": [],
-          "description": "Workspace roles whose edits keep records published on their channels.",
+        "attributes": {
+          "type": "array",
           "items": {
             "type": "string"
           },
-          "type": "array",
-          "x-attricat-reference": "role"
+          "description": "One to eight scalar attributes, or single-target relationships, whose\ncombined values must be unique.",
+          "minItems": 1,
+          "maxItems": 8,
+          "x-attricat-reference": "attribute"
+        },
+        "scope": {
+          "type": "string",
+          "description": "`workspace` (default) compares default-context values; `context`\ncompares resolved values separately in every context.",
+          "default": "workspace",
+          "enum": [
+            "workspace",
+            "context"
+          ]
+        },
+        "case_sensitive": {
+          "type": "boolean",
+          "description": "Compare strings exactly. By default strings are compared after\ntrimming, collapsing whitespace, and lowercasing.",
+          "default": false
         }
       },
-      "type": "object"
+      "required": [
+        "code",
+        "attributes"
+      ],
+      "description": "A business key: no two records of the blueprint family may share the\nnormalized values of these attributes."
     },
     "RawAttributeDeclaration": {
+      "type": "object",
       "additionalProperties": false,
-      "description": "An attribute declared by the blueprint or selected from an include.",
       "properties": {
-        "acyclic": {
-          "description": "Reject relationship writes that would form a cycle through this\nself-referencing attribute. Requires `context_editable: default`.",
+        "code": {
+          "type": "string",
+          "description": "Attribute identifier, unique within the blueprint.",
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "name": {
           "type": [
-            "boolean",
+            "string",
             "null"
           ],
-          "x-attricat-value-types": [
-            "relationship"
-          ]
+          "description": "Human-readable label shown in forms, filters, and table headers.\nDefaults to the humanized `code`. Attributes selected with `from` use\nthe mixin's name and cannot set their own. `{{…}}` references resolve\nfrom the workspace lexicon.",
+          "minLength": 1
         },
-        "allowed_extensions": {
-          "default": [],
-          "description": "Accepted file extensions without the leading dot.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array",
-          "x-attricat-value-types": [
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "What the attribute holds, for people and agents. Attributes selected\nwith `from` use the mixin's description and cannot set their own.\n`{{…}}` references resolve from the workspace lexicon.",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "value_type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Stored value type.",
+          "enum": [
+            "string",
+            "number",
+            "integer",
+            "boolean",
+            "date",
+            "datetime",
+            "time",
+            "json",
+            "relationship",
             "file"
           ]
         },
-        "allowed_mime_groups": {
-          "default": [],
-          "description": "Accepted MIME groups, such as `image`.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array",
-          "x-attricat-value-types": [
-            "file"
-          ]
+        "extension_type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "A `provider:type@semver-range` reference resolved by the host using an\nenabled workspace installation."
+        },
+        "value_schema": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "JSON Schema (Draft 2020-12) source for scalar values."
+        },
+        "extension_configuration": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "JSON configuration passed to the extension type."
+        },
+        "default_value": {
+          "description": "Value stored in the default context when a record is created.\nNot supported for relationships and files."
         },
         "cardinality": {
+          "type": [
+            "string",
+            "null"
+          ],
           "description": "Relationships: `one`, `many` (default), or `one_to_one`.\nFiles: `one` (default) or `many`.",
           "enum": [
             "one",
             "many",
             "one_to_one"
           ],
-          "type": [
-            "string",
-            "null"
-          ],
           "x-attricat-value-types": [
             "relationship",
             "file"
           ]
         },
-        "code": {
-          "description": "Attribute identifier, unique within the blueprint.",
-          "pattern": "^[A-Za-z0-9_-]+$",
-          "type": "string"
-        },
-        "context_editable": {
-          "default": "all",
-          "description": "Contexts that accept writes: `all`, or only the `default` context.",
-          "enum": [
-            "all",
-            "default"
+        "target_cardinality": {
+          "type": [
+            "string",
+            "null"
           ],
-          "type": "string"
+          "description": "How many sources may link to one target. Defaults to `many`.",
+          "enum": [
+            "one",
+            "many"
+          ],
+          "x-attricat-value-types": [
+            "relationship"
+          ]
+        },
+        "ordered": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "description": "Whether multiple files keep their order. Defaults to `true` for `many`.",
+          "x-attricat-value-types": [
+            "file"
+          ]
+        },
+        "allowed_mime_groups": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Accepted MIME groups, such as `image`.",
+          "default": [],
+          "x-attricat-value-types": [
+            "file"
+          ]
+        },
+        "allowed_extensions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Accepted file extensions without the leading dot.",
+          "default": [],
+          "x-attricat-value-types": [
+            "file"
+          ]
+        },
+        "max_bytes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 1,
+          "description": "Maximum upload size in bytes.",
+          "x-attricat-value-types": [
+            "file"
+          ]
+        },
+        "purposes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "File purpose codes, such as `product_image`.",
+          "default": [],
+          "x-attricat-value-types": [
+            "file"
+          ]
+        },
+        "image_only": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "description": "Accept only images and generate thumbnails.",
+          "x-attricat-value-types": [
+            "file"
+          ]
+        },
+        "target_blueprint": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Blueprint that relationship targets must use.",
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "x-attricat-reference": "blueprint",
+          "x-attricat-value-types": [
+            "relationship"
+          ]
+        },
+        "target_blueprints": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Several blueprints that relationship targets may use. Cannot be\ncombined with `target_blueprint`.",
+          "minItems": 1,
+          "default": [],
+          "x-attricat-reference": "blueprint",
+          "x-attricat-value-types": [
+            "relationship"
+          ]
+        },
+        "acyclic": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "description": "Reject relationship writes that would form a cycle through this\nself-referencing attribute. Requires `context_editable: default`.",
+          "x-attricat-value-types": [
+            "relationship"
+          ]
+        },
+        "tree": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "description": "An acyclic hierarchy in which every record has at most one target\n(parent). Implies `acyclic` and `cardinality: one`.",
+          "x-attricat-value-types": [
+            "relationship"
+          ]
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Free-form metadata. `hidden`, `hidden:form`, `hidden:detail`,\n`hidden:explorer`, and `hidden:metadata` hide the attribute from default UI.",
+          "default": [],
+          "x-attricat-suggestions": [
+            "hidden",
+            "hidden:form",
+            "hidden:detail",
+            "hidden:explorer",
+            "hidden:metadata"
+          ]
         },
         "context_fallback": {
-          "default": "default",
+          "type": "string",
           "description": "Missing values in a non-default context: `default` inherits from the\nnearest ancestor context; `none` leaves the attribute absent.",
+          "default": "default",
           "enum": [
             "default",
             "none"
-          ],
-          "type": "string"
-        },
-        "default_value": {
-          "description": "Value stored in the default context when a record is created.\nNot supported for relationships and files."
-        },
-        "description": {
-          "description": "What the attribute holds, for people and agents. Attributes selected\nwith `from` use the mixin's description and cannot set their own.\n`{{…}}` references resolve from the workspace lexicon.",
-          "maxLength": 500,
-          "minLength": 1,
-          "type": [
-            "string",
-            "null"
           ]
         },
-        "extension_configuration": {
-          "description": "JSON configuration passed to the extension type.",
-          "type": [
-            "string",
-            "null"
+        "context_editable": {
+          "type": "string",
+          "description": "Contexts that accept writes: `all`, or only the `default` context.",
+          "default": "all",
+          "enum": [
+            "all",
+            "default"
           ]
         },
-        "extension_type": {
-          "description": "A `provider:type@semver-range` reference resolved by the host using an\nenabled workspace installation.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "from": {
-          "description": "Selects `<include alias>.<attribute code>` from an include. The\nattribute code must match `code`.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "x-attricat-reference": "include_attribute"
+        "readonly": {
+          "type": "boolean",
+          "description": "Preview-only in the Attricat web app. API writes remain allowed.",
+          "default": false
         },
         "generated": {
           "anyOf": [
@@ -379,1131 +1445,65 @@
             "integer"
           ]
         },
-        "image_only": {
-          "description": "Accept only images and generate thumbnails.",
-          "type": [
-            "boolean",
-            "null"
-          ],
-          "x-attricat-value-types": [
-            "file"
-          ]
-        },
-        "max_bytes": {
-          "description": "Maximum upload size in bytes.",
-          "format": "uint64",
-          "minimum": 1,
-          "type": [
-            "integer",
-            "null"
-          ],
-          "x-attricat-value-types": [
-            "file"
-          ]
-        },
-        "name": {
-          "description": "Human-readable label shown in forms, filters, and table headers.\nDefaults to the humanized `code`. Attributes selected with `from` use\nthe mixin's name and cannot set their own. `{{…}}` references resolve\nfrom the workspace lexicon.",
-          "minLength": 1,
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "ordered": {
-          "description": "Whether multiple files keep their order. Defaults to `true` for `many`.",
-          "type": [
-            "boolean",
-            "null"
-          ],
-          "x-attricat-value-types": [
-            "file"
-          ]
-        },
-        "purposes": {
-          "default": [],
-          "description": "File purpose codes, such as `product_image`.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array",
-          "x-attricat-value-types": [
-            "file"
-          ]
-        },
-        "readonly": {
-          "default": false,
-          "description": "Preview-only in the Attricat web app. API writes remain allowed.",
-          "type": "boolean"
-        },
-        "tags": {
-          "default": [],
-          "description": "Free-form metadata. `hidden`, `hidden:form`, `hidden:detail`,\n`hidden:explorer`, and `hidden:metadata` hide the attribute from default UI.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array",
-          "x-attricat-suggestions": [
-            "hidden",
-            "hidden:form",
-            "hidden:detail",
-            "hidden:explorer",
-            "hidden:metadata"
-          ]
-        },
-        "target_blueprint": {
-          "description": "Blueprint that relationship targets must use.",
-          "pattern": "^[A-Za-z0-9_-]+$",
+        "from": {
           "type": [
             "string",
             "null"
           ],
-          "x-attricat-reference": "blueprint",
-          "x-attricat-value-types": [
-            "relationship"
-          ]
-        },
-        "target_blueprints": {
-          "default": [],
-          "description": "Several blueprints that relationship targets may use. Cannot be\ncombined with `target_blueprint`.",
-          "items": {
-            "type": "string"
-          },
-          "minItems": 1,
-          "type": "array",
-          "x-attricat-reference": "blueprint",
-          "x-attricat-value-types": [
-            "relationship"
-          ]
-        },
-        "target_cardinality": {
-          "description": "How many sources may link to one target. Defaults to `many`.",
-          "enum": [
-            "one",
-            "many"
-          ],
-          "type": [
-            "string",
-            "null"
-          ],
-          "x-attricat-value-types": [
-            "relationship"
-          ]
-        },
-        "tree": {
-          "description": "An acyclic hierarchy in which every record has at most one target\n(parent). Implies `acyclic` and `cardinality: one`.",
-          "type": [
-            "boolean",
-            "null"
-          ],
-          "x-attricat-value-types": [
-            "relationship"
-          ]
-        },
-        "value_schema": {
-          "description": "JSON Schema (Draft 2020-12) source for scalar values.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "value_type": {
-          "description": "Stored value type.",
-          "enum": [
-            "string",
-            "number",
-            "integer",
-            "boolean",
-            "date",
-            "datetime",
-            "time",
-            "json",
-            "relationship",
-            "file"
-          ],
-          "type": [
-            "string",
-            "null"
-          ]
+          "description": "Selects `<include alias>.<attribute code>` from an include. The\nattribute code must match `code`.",
+          "x-attricat-reference": "include_attribute"
         }
       },
       "required": [
         "code"
       ],
-      "type": "object"
+      "description": "An attribute declared by the blueprint or selected from an include."
     },
     "RawGeneratedValue": {
+      "type": "object",
       "additionalProperties": false,
-      "description": "`generated: { … }` on an attribute.",
       "properties": {
         "format": {
-          "description": "Required on string attributes: literal text with exactly one `{n}` or\n`{n:0W}` counter token (W from 1 to 18 zero-pads), plus optional\n`{yyyy}`, `{yy}`, `{mm}` and `{dd}` date tokens. `{{` and `}}` are\nliteral braces. Integer attributes take no format.",
-          "maxLength": 100,
-          "minLength": 1,
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "description": "Required on string attributes: literal text with exactly one `{n}` or\n`{n:0W}` counter token (W from 1 to 18 zero-pads), plus optional\n`{yyyy}`, `{yy}`, `{mm}` and `{dd}` date tokens. `{{` and `}}` are\nliteral braces. Integer attributes take no format.",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "start": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "description": "The first number of a new counter. Defaults to 1.",
+          "minimum": 0,
+          "maximum": 999999999999999999
         },
         "reset": {
+          "type": [
+            "string",
+            "null"
+          ],
           "description": "When numbering restarts at `start`. Defaults to `never`; other values\nneed date tokens that identify the period.",
           "enum": [
             "never",
             "yearly",
             "monthly",
             "daily"
-          ],
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "start": {
-          "description": "The first number of a new counter. Defaults to 1.",
-          "format": "int64",
-          "maximum": 999999999999999999,
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
           ]
         },
         "time_zone": {
-          "description": "IANA time zone for date tokens and periods. Defaults to `UTC`.",
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "description": "IANA time zone for date tokens and periods. Defaults to `UTC`."
         }
       },
-      "type": "object"
-    },
-    "TableColumn": {
-      "additionalProperties": false,
-      "properties": {
-        "field": {
-          "description": "A local scalar field or up to three relationship hops ending in a scalar field.",
-          "type": "string",
-          "x-attricat-reference": "attribute_path"
-        },
-        "label": {
-          "default": null,
-          "description": "Column heading. Defaults to the attribute name. `{{…}}` references\nresolve from the workspace lexicon.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "renderer": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/ComponentReference"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Cell renderer, such as `attricat.table_image`."
-        }
-      },
-      "required": [
-        "field"
-      ],
-      "type": "object"
-    },
-    "UniqueKeyDefinition": {
-      "additionalProperties": false,
-      "description": "A business key: no two records of the blueprint family may share the\nnormalized values of these attributes.",
-      "properties": {
-        "attributes": {
-          "description": "One to eight scalar attributes, or single-target relationships, whose\ncombined values must be unique.",
-          "items": {
-            "type": "string"
-          },
-          "maxItems": 8,
-          "minItems": 1,
-          "type": "array",
-          "x-attricat-reference": "attribute"
-        },
-        "case_sensitive": {
-          "default": false,
-          "description": "Compare strings exactly. By default strings are compared after\ntrimming, collapsing whitespace, and lowercasing.",
-          "type": "boolean"
-        },
-        "code": {
-          "description": "Stable key identifier, unique within the blueprint.",
-          "pattern": "^[A-Za-z0-9_-]+$",
-          "type": "string"
-        },
-        "scope": {
-          "default": "workspace",
-          "description": "`workspace` (default) compares default-context values; `context`\ncompares resolved values separately in every context.",
-          "enum": [
-            "workspace",
-            "context"
-          ],
-          "type": "string"
-        }
-      },
-      "required": [
-        "code",
-        "attributes"
-      ],
-      "type": "object"
-    },
-    "ViewDefinition": {
-      "description": "A named view. `dropdown_option` labels relationship choices, `page_title`\nnames the record page, `table` configures Explorer columns, `explorer`\nsets Explorer defaults, and layout roots arrange `detail` and `edit`.",
-      "oneOf": [
-        {
-          "additionalProperties": false,
-          "description": "Label shown for the record in relationship dropdowns.",
-          "properties": {
-            "fields": {
-              "description": "Attributes joined into the label.",
-              "items": {
-                "type": "string"
-              },
-              "type": "array",
-              "x-attricat-reference": "attribute"
-            },
-            "separator": {
-              "default": " · ",
-              "description": "Text between label fields. Defaults to ` · `.",
-              "type": "string"
-            },
-            "type": {
-              "const": "dropdown_option",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type",
-            "fields"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "description": "Title of the record page and its browser tab.",
-          "properties": {
-            "fields": {
-              "description": "Attributes joined into the title.",
-              "items": {
-                "type": "string"
-              },
-              "type": "array",
-              "x-attricat-reference": "attribute"
-            },
-            "separator": {
-              "default": " · ",
-              "description": "Text between title fields. Defaults to ` · `.",
-              "type": "string"
-            },
-            "type": {
-              "const": "page_title",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type",
-            "fields"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "description": "Explorer table columns.",
-          "properties": {
-            "columns": {
-              "default": null,
-              "description": "Table columns.",
-              "items": {
-                "$ref": "#/$defs/TableColumn"
-              },
-              "type": [
-                "array",
-                "null"
-              ]
-            },
-            "component": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/ComponentReference"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "description": "Registered component that renders this block."
-            },
-            "type": {
-              "const": "table",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "description": "Explorer defaults for this blueprint's results.",
-          "properties": {
-            "browse_by": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/BrowseBy"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "description": "Relationship field the browse rail lists until a person picks\nanother, or `false` to keep the rail closed. The field must have\na single target blueprint. A dotted path such as `model.brand`\nfollows up to three such relationships, each with\n`cardinality: one`, and lists the last one's targets."
-            },
-            "type": {
-              "const": "explorer",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "description": "Blocks stacked vertically.",
-          "properties": {
-            "children": {
-              "description": "Nested blocks.",
-              "items": {
-                "$ref": "#/$defs/ViewNode"
-              },
-              "type": "array"
-            },
-            "component": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/ComponentReference"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "description": "Registered component that renders this block."
-            },
-            "type": {
-              "const": "stack",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type",
-            "children"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "description": "Blocks arranged in a responsive grid.",
-          "properties": {
-            "children": {
-              "description": "Nested blocks.",
-              "items": {
-                "$ref": "#/$defs/ViewNode"
-              },
-              "type": "array"
-            },
-            "component": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/ComponentReference"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "description": "Registered component that renders this block."
-            },
-            "type": {
-              "const": "grid",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type",
-            "children"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "description": "Blocks grouped in a section.",
-          "properties": {
-            "children": {
-              "description": "Nested blocks.",
-              "items": {
-                "$ref": "#/$defs/ViewNode"
-              },
-              "type": "array"
-            },
-            "component": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/ComponentReference"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "description": "Registered component that renders this block."
-            },
-            "type": {
-              "const": "section",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type",
-            "children"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "description": "Blocks split into tabs.",
-          "properties": {
-            "component": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/ComponentReference"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "description": "Registered component that renders this block."
-            },
-            "tabs": {
-              "description": "Tabs, each with a label and its own blocks.",
-              "items": {
-                "$ref": "#/$defs/ViewTab"
-              },
-              "type": "array"
-            },
-            "type": {
-              "const": "tabs",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type",
-            "tabs"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "description": "Blocks split into collapsible sections.",
-          "properties": {
-            "component": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/ComponentReference"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "description": "Registered component that renders this block."
-            },
-            "sections": {
-              "description": "Collapsible sections, each with a label and its own blocks.",
-              "items": {
-                "$ref": "#/$defs/ViewSection"
-              },
-              "type": "array"
-            },
-            "type": {
-              "const": "accordion",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type",
-            "sections"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "description": "A versioned layout override for record-owned extension surfaces.",
-          "properties": {
-            "outlets": {
-              "additionalProperties": {
-                "$ref": "#/$defs/ExtensionOutletLayout"
-              },
-              "description": "Layouts keyed by record outlet: `record_preview_panel` or\n`record_action`.",
-              "type": "object",
-              "x-attricat-key-suggestions": [
-                "record_preview_panel",
-                "record_action"
-              ]
-            },
-            "type": {
-              "const": "extension_layout",
-              "type": "string"
-            },
-            "version": {
-              "const": 1,
-              "description": "Layout format version. Only `1` is supported.",
-              "format": "uint32",
-              "minimum": 0,
-              "type": "integer"
-            }
-          },
-          "required": [
-            "type",
-            "version",
-            "outlets"
-          ],
-          "type": "object"
-        }
-      ]
-    },
-    "ViewNode": {
-      "description": "A view block. Containers hold `children`, `tabs`, or `sections`; leaves\nrender attributes or static content.",
-      "oneOf": [
-        {
-          "additionalProperties": false,
-          "description": "Blocks stacked vertically.",
-          "properties": {
-            "children": {
-              "description": "Nested blocks.",
-              "items": {
-                "$ref": "#/$defs/ViewNode"
-              },
-              "type": "array"
-            },
-            "component": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/ComponentReference"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "description": "Registered component that renders this block."
-            },
-            "type": {
-              "const": "stack",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type",
-            "children"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "description": "Blocks arranged in a responsive grid.",
-          "properties": {
-            "children": {
-              "description": "Nested blocks.",
-              "items": {
-                "$ref": "#/$defs/ViewNode"
-              },
-              "type": "array"
-            },
-            "component": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/ComponentReference"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "description": "Registered component that renders this block."
-            },
-            "type": {
-              "const": "grid",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type",
-            "children"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "description": "Blocks grouped in a section.",
-          "properties": {
-            "children": {
-              "description": "Nested blocks.",
-              "items": {
-                "$ref": "#/$defs/ViewNode"
-              },
-              "type": "array"
-            },
-            "component": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/ComponentReference"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "description": "Registered component that renders this block."
-            },
-            "type": {
-              "const": "section",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type",
-            "children"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "description": "Blocks split into tabs.",
-          "properties": {
-            "component": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/ComponentReference"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "description": "Registered component that renders this block."
-            },
-            "tabs": {
-              "description": "Tabs, each with a label and its own blocks.",
-              "items": {
-                "$ref": "#/$defs/ViewTab"
-              },
-              "type": "array"
-            },
-            "type": {
-              "const": "tabs",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type",
-            "tabs"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "description": "Blocks split into collapsible sections.",
-          "properties": {
-            "component": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/ComponentReference"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "description": "Registered component that renders this block."
-            },
-            "sections": {
-              "description": "Collapsible sections, each with a label and its own blocks.",
-              "items": {
-                "$ref": "#/$defs/ViewSection"
-              },
-              "type": "array"
-            },
-            "type": {
-              "const": "accordion",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type",
-            "sections"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "description": "A static heading.",
-          "properties": {
-            "component": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/ComponentReference"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "description": "Registered component that renders this block."
-            },
-            "text": {
-              "description": "Heading text.",
-              "type": "string"
-            },
-            "type": {
-              "const": "heading",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type",
-            "text"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "description": "Static text.",
-          "properties": {
-            "component": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/ComponentReference"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "description": "Registered component that renders this block."
-            },
-            "text": {
-              "description": "Text content.",
-              "type": "string"
-            },
-            "type": {
-              "const": "text",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type",
-            "text"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "description": "A horizontal divider.",
-          "properties": {
-            "component": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/ComponentReference"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "description": "Registered component that renders this block."
-            },
-            "type": {
-              "const": "divider",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "description": "A scalar attribute's value or input.",
-          "properties": {
-            "component": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/ComponentReference"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "description": "Registered component that renders this block."
-            },
-            "field": {
-              "description": "Scalar attribute to render.",
-              "type": "string",
-              "x-attricat-reference": "attribute"
-            },
-            "type": {
-              "const": "field",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type",
-            "field"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "description": "A relationship attribute's linked records.",
-          "properties": {
-            "component": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/ComponentReference"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "description": "Registered component that renders this block."
-            },
-            "field": {
-              "description": "Relationship attribute to render.",
-              "type": "string",
-              "x-attricat-reference": "relationship_attribute"
-            },
-            "type": {
-              "const": "relationship_list",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type",
-            "field"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "description": "Records that reference this record, opened in a paginated dialog.",
-          "properties": {
-            "component": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/ComponentReference"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "description": "Registered component that renders this block."
-            },
-            "label": {
-              "description": "Button and dialog label. `{{…}}` references resolve from the\nworkspace lexicon.",
-              "type": "string"
-            },
-            "page_size": {
-              "description": "Records requested per page.",
-              "format": "uint32",
-              "minimum": 1,
-              "type": "integer"
-            },
-            "relationships": {
-              "description": "Source blueprint relationship fields that point at this record.",
-              "items": {
-                "$ref": "#/$defs/IncomingRelationship"
-              },
-              "type": "array"
-            },
-            "type": {
-              "const": "incoming_relationship_list",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type",
-            "label",
-            "relationships",
-            "page_size"
-          ],
-          "type": "object"
-        }
-      ]
-    },
-    "ViewSection": {
-      "additionalProperties": false,
-      "properties": {
-        "children": {
-          "description": "Blocks rendered in the section.",
-          "items": {
-            "$ref": "#/$defs/ViewNode"
-          },
-          "type": "array"
-        },
-        "label": {
-          "description": "Section heading. `{{…}}` references resolve from the workspace lexicon.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "label",
-        "children"
-      ],
-      "type": "object"
-    },
-    "ViewTab": {
-      "additionalProperties": false,
-      "properties": {
-        "children": {
-          "description": "Blocks rendered in the tab.",
-          "items": {
-            "$ref": "#/$defs/ViewNode"
-          },
-          "type": "array"
-        },
-        "label": {
-          "description": "Tab label. `{{…}}` references resolve from the workspace lexicon.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "label",
-        "children"
-      ],
-      "type": "object"
+      "description": "`generated: { … }` on an attribute."
     }
-  },
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": false,
-  "description": "An Attricat blueprint: a versioned record type or an includable mixin.",
-  "properties": {
-    "attributes": {
-      "description": "Attributes in display order. Each declares exactly one of `value_type`,\n`extension_type`, or `from`.",
-      "items": {
-        "$ref": "#/$defs/RawAttributeDeclaration"
-      },
-      "minItems": 1,
-      "type": "array"
-    },
-    "code": {
-      "description": "Stable blueprint identifier, using ASCII letters, numbers, hyphens, and underscores.",
-      "pattern": "^[A-Za-z0-9_-]+$",
-      "type": "string"
-    },
-    "connector_jobs": {
-      "default": [],
-      "description": "Scheduled extension imports and exports. Record blueprints only.",
-      "items": {
-        "$ref": "#/$defs/ConnectorJobDefinition"
-      },
-      "type": "array"
-    },
-    "description": {
-      "description": "What the blueprint's records are, for people and agents, such as\n\"Product groupings, such as Basic tools\". `{{…}}` references resolve\nfrom the workspace lexicon.",
-      "maxLength": 500,
-      "minLength": 1,
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "extensions": {
-      "additionalProperties": true,
-      "default": {},
-      "description": "Namespaced extension metadata is preserved in the immutable source\ndefinition and intentionally ignored by the core blueprint compiler.",
-      "type": "object"
-    },
-    "format_version": {
-      "const": 1,
-      "description": "Definition format version. Only `1` is supported.",
-      "format": "uint32",
-      "minimum": 0,
-      "type": "integer"
-    },
-    "includes": {
-      "default": [],
-      "description": "Exact, version-pinned mixins whose attributes can be selected with `from`.",
-      "items": {
-        "$ref": "#/$defs/IncludeRef"
-      },
-      "type": "array"
-    },
-    "kind": {
-      "$ref": "#/$defs/BlueprintKind"
-    },
-    "name": {
-      "description": "Human-readable blueprint name. `{{…}}` references resolve from the\nworkspace lexicon.",
-      "minLength": 1,
-      "type": "string"
-    },
-    "publication": {
-      "$ref": "#/$defs/PublicationPolicy",
-      "default": {
-        "retain_on_edit_roles": []
-      },
-      "description": "Channel publication behavior when records are edited."
-    },
-    "record_schema": {
-      "description": "JSON Schema (Draft 2020-12) source for cross-field record validation.\nRecord blueprints only.",
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "unique_keys": {
-      "default": [],
-      "description": "Business keys whose normalized values must be unique across the\nblueprint family. Record blueprints only.",
-      "items": {
-        "$ref": "#/$defs/UniqueKeyDefinition"
-      },
-      "type": "array"
-    },
-    "views": {
-      "additionalProperties": {
-        "$ref": "#/$defs/ViewDefinition"
-      },
-      "default": {},
-      "description": "Named views: `dropdown_option`, `page_title`, `table`, `detail`, and `extension_layout`.\nThe `detail` layout also drives editing.",
-      "type": "object",
-      "x-attricat-key-suggestions": [
-        "dropdown_option",
-        "page_title",
-        "detail",
-        "table",
-        "explorer",
-        "extension_layout"
-      ]
-    }
-  },
-  "required": [
-    "format_version",
-    "code",
-    "name",
-    "kind",
-    "attributes"
-  ],
-  "title": "Attricat blueprint definition v1",
-  "type": "object"
+  }
 }

@@ -5,6 +5,7 @@
 //! authorization grant: the initiator's current access is checked again by
 //! every selection read, catalog write and artifact download.
 
+use attricat_domain::canonical_json::canonical_json_sha256;
 use attricat_domain::states::RunStatus;
 use std::collections::{HashMap, HashSet, hash_map::Entry};
 
@@ -12,7 +13,6 @@ use attricat_domain::model::{Attribute, Record};
 use chrono::{DateTime, Duration, Utc};
 use serde::Serialize;
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use sqlx::FromRow;
 use uuid::Uuid;
 
@@ -211,10 +211,7 @@ fn request_digest(input: &StartInteractiveOperation) -> String {
         "blueprint_version": input.blueprint_version,
         "context_id": input.context_id,
     });
-    format!(
-        "{:x}",
-        Sha256::digest(serde_json::to_vec(&canonical).expect("request digest serializes"))
-    )
+    canonical_json_sha256(&canonical).expect("request digest serializes")
 }
 
 impl AttricatRepository {

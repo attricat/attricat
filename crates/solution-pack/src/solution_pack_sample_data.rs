@@ -1,6 +1,7 @@
 //! Strict format-1 solution-pack sample declarations and the immutable
 //! `solution-pack-sample-prohibited-v1` lexical matcher.
 
+use attricat_domain::canonical_json::canonical_json_sha256;
 use attricat_domain::value_type::ValueType;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
@@ -13,7 +14,6 @@ use base64::{Engine as _, engine::general_purpose};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 use unicode_normalization::UnicodeNormalization;
 
 use crate::solution_packs::{MAX_ARCHIVE_PATH_BYTES, MAX_IDENTIFIER_BYTES};
@@ -405,11 +405,12 @@ pub fn validate_sample_data(
         target_first_order.push(next);
     }
 
-    let canonical = serde_json::to_vec(&declaration).expect("sample declaration serializes");
+    let canonical_sha256 =
+        canonical_json_sha256(&declaration).expect("sample declaration serializes");
     Ok(ValidatedSampleData {
         declaration,
         files,
-        canonical_sha256: format!("{:x}", Sha256::digest(canonical)),
+        canonical_sha256,
         target_first_order,
         scalar_fact_count,
         relationship_fact_count,

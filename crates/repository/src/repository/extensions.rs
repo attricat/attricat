@@ -7,7 +7,6 @@ use attricat_cache::{CacheKey, Policy};
 use chrono::{DateTime, Utc};
 use semver::{Version, VersionReq};
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use sqlx::{FromRow, Postgres, Transaction};
 use uuid::Uuid;
 
@@ -76,11 +75,8 @@ pub fn required_extension_grants(manifest: &Manifest) -> Vec<(&'static str, Stri
 
 /// Digest recorded as `installed_extension_releases.manifest_sha256`.
 pub fn extension_manifest_sha256(manifest: &Manifest) -> Result<String, RepositoryError> {
-    let serialized = serde_json::to_value(manifest)
-        .map_err(|error| RepositoryError::InvalidExtension(error.to_string()))?;
-    let bytes = serde_json::to_vec(&serialized)
-        .map_err(|error| RepositoryError::InvalidExtension(error.to_string()))?;
-    Ok(format!("{:x}", Sha256::digest(bytes)))
+    attricat_domain::canonical_json::canonical_json_sha256(manifest)
+        .map_err(|error| RepositoryError::InvalidExtension(error.to_string()))
 }
 
 /// Configuration is data only: outlet names and stable contribution keys. It
