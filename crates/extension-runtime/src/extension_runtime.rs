@@ -81,7 +81,7 @@ use outcomes::retry_backoff;
 pub use outcomes::{InvocationFailure, Rejection};
 
 const MAX_HOST_MESSAGE_BYTES: usize = 16 * 1024;
-const MAX_HOST_JSON_BYTES: usize = 64 * 1024;
+const MAX_HOST_JSON_BYTES: usize = 1024 * 1024;
 const MAX_CACHED_COMPONENTS: usize = 64;
 const MAX_WRITE_VALUES: usize = 100;
 /// Values one connector upsert row may write.
@@ -89,7 +89,7 @@ const MAX_CONNECTOR_UPSERT_VALUES: usize = 128;
 /// Rows one connector catalog page may return; keeps results within the WIT
 /// JSON bound even for wide blueprints.
 const MAX_CONNECTOR_PAGE_LIMIT: u32 = 16;
-const DEFAULT_FUEL: u64 = 10_000_000;
+const DEFAULT_FUEL: u64 = 100_000_000;
 const DEFAULT_MAX_MEMORY_BYTES: usize = 32 * 1024 * 1024;
 const DEFAULT_INVOCATION_TIMEOUT: Duration = Duration::from_secs(10);
 /// The event consumer that feeds enabled extension event handlers.

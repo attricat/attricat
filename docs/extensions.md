@@ -274,7 +274,7 @@ quarantine: the broker answers `503 extension command failed` without the
 component's message, and validates successful responses against
 `response_schema`.
 
-The component host ABI uses bounded JSON strings (64 KiB) and bounded log
+The component host ABI uses bounded JSON strings (1 MiB) and bounded log
 messages (16 KiB). Every operation is capability checked at the point of call.
 `configuration.get.v1` is available to components with
 `configuration.read`. `storage.get.v1`, `storage.set.v1` (also accepted as
@@ -343,7 +343,7 @@ sockets.
 The `api` interface in `crates/extension-runtime/wit-host/attricat-extension.wit`
 has typed `read`, `write`, `scoped-configuration-get`, and
 `scoped-configuration-set` functions. Dynamic attribute and configuration
-values are JSON strings bounded to 64 KiB; identifiers, scope kinds, response
+values are JSON strings bounded to 1 MiB; identifiers, scope kinds, response
 shapes, and write selectors are typed WIT records and variants. Components have
 no WASI, network, filesystem, database, browser credential, or ambient host
 access.
@@ -501,7 +501,7 @@ token-, key-, and authorization-named fields are replaced with `[redacted]`.
 In addition to artifacts, operations import `attricat-data.read` and
 `attricat-data.batch`. Both take/return the same JSON
 shapes as `attricat.read.v1` and `attricat.command.v1` respectively. Calls are
-limited to 64 KiB of JSON; page size is at most 100 and batches at most 100
+limited to 1 MiB of JSON; page size is at most 100 and batches at most 100
 intents. The host refreshes the release and grant before each call, requires
 `attricat.read` or `attricat.write`, and uses the workspace-scoped repository.
 Batch requests must carry the current operation request's `batch-key`; that
