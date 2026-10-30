@@ -10,7 +10,11 @@ import { compactIconSize } from '../../components/iconSizes';
 import { offeredBadgeAction } from './actionAvailability';
 import type { ActionTarget } from './actions';
 import type { ExtensionContribution, ExtensionRuntimeScope } from './api';
-import { extensionOutlets, type FieldNoteTone } from './constants';
+import {
+  defaultFieldNoteTone,
+  extensionOutlets,
+  type FieldNoteTone,
+} from './constants';
 import {
   actionStates,
   fieldNoteLookups,
@@ -87,7 +91,7 @@ export const FieldNotesProvider = ({
 };
 
 const chipColor = (tone: FieldNoteTone) =>
-  tone === 'neutral' ? 'default' : tone;
+  tone === defaultFieldNoteTone ? 'default' : tone;
 
 /**
  * A badge as a small chip whose tooltip also names its extension; a button

@@ -255,6 +255,15 @@ export const fieldNoteTones = [
   'error',
 ] as const;
 export type FieldNoteTone = (typeof fieldNoteTones)[number];
+export const defaultFieldNoteTone = 'neutral' satisfies FieldNoteTone;
+/** Bounds of `contracts/extension-field-notes-v1.schema.json`, in characters. */
+export const fieldNoteLimits = {
+  badgeLabel: 24,
+  badgeTooltip: 200,
+  badgeAction: 128,
+  note: 280,
+  disabledReason: 200,
+} as const;
 /** Explorer rows whose field notes are asked for in one request. */
 export const explorerFieldNotesChunkSize = 50;
 /** How soon to ask again while a provider is still starting. */

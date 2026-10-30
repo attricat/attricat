@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import contract from '../../../../../contracts/extension-field-notes-v1.schema.json';
 import { mergeClientAnswer } from './clientNotesSources';
+import { defaultFieldNoteTone, fieldNoteLimits } from './constants';
 import type { FieldNotesResponse } from './fieldNotesData';
 import { handlerFrameDocument } from './frameDocument';
 
@@ -12,6 +14,19 @@ const source = {
 const record = '33333333-3333-4333-8333-333333333333';
 
 describe('client field notes sources', () => {
+  it("checks a client answer against the shared contract's bounds", () => {
+    const { badge, attributeNote, fileNote, actionState } = contract.$defs;
+    expect(fieldNoteLimits).toEqual({
+      badgeLabel: badge.properties.label.maxLength,
+      badgeTooltip: badge.properties.tooltip.maxLength,
+      badgeAction: badge.properties.action.maxLength,
+      note: attributeNote.properties.note.maxLength,
+      disabledReason: actionState.oneOf[0].properties.disabled?.maxLength,
+    });
+    expect(fileNote.properties.note.maxLength).toBe(fieldNoteLimits.note);
+    expect(badge.properties.tone.default).toBe(defaultFieldNoteTone);
+  });
+
   it('adds a valid answer for readable records only, in extension order', () => {
     const records: FieldNotesResponse['records'] = {
       [record]: [

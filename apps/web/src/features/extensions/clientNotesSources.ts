@@ -5,8 +5,10 @@ import type { ExtensionContribution } from './api';
 import { extensionPath } from './apiPaths';
 import {
   contributionKinds,
+  defaultFieldNoteTone,
   extensionCapabilities,
   extensionMessageTypes,
+  fieldNoteLimits,
   fieldNoteTones,
   hostIcons,
 } from './constants';
@@ -25,11 +27,11 @@ export const clientNotesTimeout = 2_000;
 // against them here because no server sees it.
 const badgeSchema = z
   .object({
-    label: z.string().min(1).max(24),
-    tone: z.enum(fieldNoteTones).default('neutral'),
+    label: z.string().min(1).max(fieldNoteLimits.badgeLabel),
+    tone: z.enum(fieldNoteTones).default(defaultFieldNoteTone),
     icon: z.enum(hostIcons).optional(),
-    tooltip: z.string().min(1).max(200).optional(),
-    action: z.string().min(1).max(128).optional(),
+    tooltip: z.string().min(1).max(fieldNoteLimits.badgeTooltip).optional(),
+    action: z.string().min(1).max(fieldNoteLimits.badgeAction).optional(),
   })
   .strict();
 const clientAnswerSchema = z
@@ -44,7 +46,7 @@ const clientAnswerSchema = z
               z
                 .object({
                   badge: badgeSchema.optional(),
-                  note: z.string().min(1).max(280).optional(),
+                  note: z.string().min(1).max(fieldNoteLimits.note).optional(),
                 })
                 .strict(),
             )
@@ -52,14 +54,23 @@ const clientAnswerSchema = z
           files: z
             .record(
               z.string(),
-              z.object({ note: z.string().min(1).max(280) }).strict(),
+              z
+                .object({ note: z.string().min(1).max(fieldNoteLimits.note) })
+                .strict(),
             )
             .default({}),
           actions: z
             .record(
               z.string(),
               z.union([
-                z.object({ disabled: z.string().min(1).max(200) }).strict(),
+                z
+                  .object({
+                    disabled: z
+                      .string()
+                      .min(1)
+                      .max(fieldNoteLimits.disabledReason),
+                  })
+                  .strict(),
                 z.object({ hidden: z.literal(true) }).strict(),
               ]),
             )

@@ -164,7 +164,7 @@ pub const CAPABILITIES: &[&str] = &[
     "client.record_header_action",
     "client.blueprint_panel",
     "client.blueprint_publish_check",
-    "client.record_field_notes",
+    RECORD_FIELD_NOTES_CAPABILITY,
     "client.audit_event_panel",
     "client.data_health_card",
     "client.action_dialog",
@@ -252,6 +252,8 @@ pub enum FieldNotesSource {
 
 /// The only supported `record_field_notes` contract version.
 pub const RECORD_FIELD_NOTES_VERSION: u32 = 1;
+/// The capability a field-notes source and its badge actions need.
+pub const RECORD_FIELD_NOTES_CAPABILITY: &str = "client.record_field_notes";
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -878,11 +880,11 @@ impl Manifest {
             .permissions
             .iter()
             .chain(&self.optional_permissions)
-            .any(|item| item == "client.record_field_notes")
+            .any(|item| item == RECORD_FIELD_NOTES_CAPABILITY)
         {
-            return Err(ManifestError::Invalid(
-                "record_field_notes requires capability 'client.record_field_notes'".into(),
-            ));
+            return Err(ManifestError::Invalid(format!(
+                "record_field_notes requires capability '{RECORD_FIELD_NOTES_CAPABILITY}'"
+            )));
         }
         let declared = match &notes.source {
             FieldNotesSource::Command(command) => self
@@ -1368,7 +1370,7 @@ impl Manifest {
                     UiOutlet::ExplorerAction => Some("client.explorer_action"),
                     UiOutlet::ExplorerBulkAction => Some("client.explorer_bulk_action"),
                     UiOutlet::RecordHeaderAction => Some("client.record_header_action"),
-                    UiOutlet::RecordAttributeAction => Some("client.record_field_notes"),
+                    UiOutlet::RecordAttributeAction => Some(RECORD_FIELD_NOTES_CAPABILITY),
                     UiOutlet::BlueprintPanel => Some("client.blueprint_panel"),
                     UiOutlet::BlueprintPublishCheck => Some("client.blueprint_publish_check"),
                     UiOutlet::AuditEventPanel => Some("client.audit_event_panel"),

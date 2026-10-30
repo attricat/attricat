@@ -16,7 +16,8 @@ use crate::{
     extension_policy,
     extensions::{
         ActionCondition, ActionConfirmation, ActionInvocation, ContributionTranslation, Manifest,
-        SUPPORTED_HOST_API, UiContributionKind, UiOutlet, valid_contribution_key,
+        RECORD_FIELD_NOTES_CAPABILITY, SUPPORTED_HOST_API, UiContributionKind, UiOutlet,
+        valid_contribution_key,
     },
 };
 
@@ -976,7 +977,7 @@ impl AttricatRepository {
                 && installation.manifest.record_field_notes.is_some()
                 && installation
                     .capability_grants
-                    .contains("client.record_field_notes")
+                    .contains(RECORD_FIELD_NOTES_CAPABILITY)
             {
                 providers.push(installation);
             }
