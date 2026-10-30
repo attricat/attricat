@@ -1,5 +1,10 @@
 import { expect, test } from '@playwright/test';
-import { createRecordBlueprint, recordSave, suffix } from './helpers';
+import {
+  fieldByLabel,
+  createRecordBlueprint,
+  recordSave,
+  suffix,
+} from './helpers';
 
 const statusSchema = JSON.stringify({
   type: 'string',
@@ -35,7 +40,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
     await page.getByLabel('Blueprint').click();
     await page.getByRole('option', { name: `Status items (${code})` }).click();
     await page.getByRole('button', { name: 'Load blueprint' }).click();
-    await page.getByLabel('title').fill('Status test');
+    await fieldByLabel(page, 'title').fill('Status test');
     await page.getByRole('combobox', { name: 'status', exact: true }).click();
     await expect(
       page.getByRole('option', { name: 'Live', exact: true }),

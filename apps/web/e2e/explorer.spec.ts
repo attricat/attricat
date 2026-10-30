@@ -21,9 +21,7 @@ const addRelationshipFilter = async (
   await fieldDialog.getByRole('combobox', { name: 'Field' }).click();
   await page.locator(`[role="option"][data-value="${field}"]`).click();
   const relationshipDialog = page.getByRole('dialog', { name: /^Select / });
-  await relationshipDialog
-    .getByRole('button', { name: `Select ${option}` })
-    .click();
+  await relationshipDialog.getByRole('checkbox', { name: option }).check();
   await relationshipDialog.getByRole('button', { name: 'Done' }).click();
 };
 

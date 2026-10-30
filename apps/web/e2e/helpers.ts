@@ -249,6 +249,13 @@ export const createMember = async (roleCode: string) => {
 };
 
 /** Replaces the whole document in the page's first Monaco editor. */
+/**
+ * A record field's input by its label. Each field also has a "Details of …"
+ * button that a label lookup alone would match.
+ */
+export const fieldByLabel = (scope: Page | Locator, label: string) =>
+  scope.getByLabel(label).and(scope.locator('input, textarea'));
+
 export const replaceDefinition = async (page: Page, value: string) => {
   const editor = page.locator('.monaco-editor').first();
   await expect(editor.locator('.view-lines')).toContainText('code');

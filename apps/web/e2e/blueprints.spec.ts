@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import {
+  fieldByLabel,
   createBlueprint,
   createRecordBlueprint,
   createRevision,
@@ -29,7 +30,7 @@ test('previews blueprint views and inspects revision metadata', async ({
     page.getByText('Sandbox values stay in this page and are never saved.'),
   ).toBeVisible();
   await page.getByRole('tab', { name: 'Edit', exact: true }).click();
-  await page.getByLabel('title').fill('Sandbox title');
+  await fieldByLabel(page, 'title').fill('Sandbox title');
   await page.getByRole('tab', { name: 'detail', exact: true }).click();
   await expect(
     page.getByRole('heading', { name: 'Preview detail' }),

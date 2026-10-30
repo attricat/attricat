@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import {
+  fieldByLabel,
   commitField,
   createRecord,
   createRecordBlueprint,
@@ -42,10 +43,10 @@ test('searches a record and opens its preview', async ({ page }) => {
   // On desktop a result opens in the record panel beside the results.
   await page.getByRole('link', { name: title }).click();
   await expect(page).toHaveURL(new RegExp(`record=${record.id}`));
-  await expect(page.getByLabel('title')).toHaveValue(title);
+  await expect(fieldByLabel(page, 'title')).toHaveValue(title);
   await page.getByRole('link', { name: 'Open full page' }).click();
   await expect(page).toHaveURL(new RegExp(`/records/${record.id}$`));
-  await expect(page.getByLabel('title')).toHaveValue(title);
+  await expect(fieldByLabel(page, 'title')).toHaveValue(title);
 });
 
 test('closes the record panel on a click outside it', async ({ page }) => {
@@ -185,12 +186,12 @@ test('creates a record from a blueprint', async ({ page }) => {
   await page.getByLabel('Blueprint').click();
   await page.getByRole('option', { name: `Create products (${code})` }).click();
   await page.getByRole('button', { name: 'Load blueprint' }).click();
-  await page.getByLabel('title').fill(title);
+  await fieldByLabel(page, 'title').fill(title);
   await page.getByRole('button', { name: 'Create record' }).click();
 
   await expect(page).toHaveURL(/\/records\/[0-9a-f-]{36}$/);
   // The record page shows each saved value in its inline editor.
-  await expect(page.getByLabel('title')).toHaveValue(title);
+  await expect(fieldByLabel(page, 'title')).toHaveValue(title);
 });
 
 test('creates a record with typed scalar values', async ({ page }) => {
@@ -205,24 +206,24 @@ test('creates a record with typed scalar values', async ({ page }) => {
   await page.getByLabel('Blueprint').click();
   await page.getByRole('option', { name: `Typed products (${code})` }).click();
   await page.getByRole('button', { name: 'Load blueprint' }).click();
-  await page.getByLabel('title').fill('Typed product');
-  await page.getByLabel('price').fill('19.95');
-  await page.getByLabel('quantity').fill('4');
+  await fieldByLabel(page, 'title').fill('Typed product');
+  await fieldByLabel(page, 'price').fill('19.95');
+  await fieldByLabel(page, 'quantity').fill('4');
   // Yes and no are toggle buttons, shown together with not set.
   await page.getByRole('button', { name: 'True', exact: true }).click();
-  await page.getByLabel('Launch date').fill('2026-08-20');
-  await page.getByLabel('Opening time').fill('09:30:00 America/New_York');
+  await fieldByLabel(page, 'Launch date').fill('2026-08-20');
+  await fieldByLabel(page, 'Opening time').fill('09:30:00 America/New_York');
   await page.getByRole('button', { name: 'Create record' }).click();
 
   await expect(page).toHaveURL(/\/records\/[0-9a-f-]{36}$/);
   // The record page shows each saved value in its inline editor.
-  await expect(page.getByLabel('title')).toHaveValue('Typed product');
-  await expect(page.getByLabel('price')).toHaveValue('19.95');
-  await expect(page.getByLabel('quantity')).toHaveValue('4');
+  await expect(fieldByLabel(page, 'title')).toHaveValue('Typed product');
+  await expect(fieldByLabel(page, 'price')).toHaveValue('19.95');
+  await expect(fieldByLabel(page, 'quantity')).toHaveValue('4');
   await expect(
     page.getByRole('button', { name: 'True', exact: true }),
   ).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByLabel('Launch date')).toHaveValue('2026-08-20');
+  await expect(fieldByLabel(page, 'Launch date')).toHaveValue('2026-08-20');
 });
 
 test('renders a record heading component from its detail view', async ({
@@ -276,7 +277,7 @@ test('rejects a browser create that violates a blueprint schema', async ({
   await page.getByLabel('Blueprint').click();
   await page.getByRole('option', { name: `Schema products (${code})` }).click();
   await page.getByRole('button', { name: 'Load blueprint' }).click();
-  await page.getByLabel('title').fill('no');
+  await fieldByLabel(page, 'title').fill('no');
 
   // The field names the schema rule the value fails.
   await expect(page.getByText('Enter at least 3 characters.')).toBeVisible();
@@ -284,7 +285,7 @@ test('rejects a browser create that violates a blueprint schema', async ({
   await expect(page).toHaveURL(/\/records\/new(\?|$)/);
   expect(createRequests).toBe(0);
 
-  await page.getByLabel('title').fill('Valid title');
+  await fieldByLabel(page, 'title').fill('Valid title');
   await page.getByRole('button', { name: 'Create record' }).click();
   await expect(page).toHaveURL(/\/records\/[0-9a-f-]{36}$/);
 });
@@ -410,7 +411,7 @@ test('edits scalar values and replaces a typed relationship', async ({
     'aria-selected',
     'true',
   );
-  const title = page.getByLabel('title');
+  const title = fieldByLabel(page, 'title');
   await title.fill('After edit');
   await commitField(page, record.id, title, 'Enter');
   // A relationship choice saves as soon as it is applied.
@@ -421,6 +422,6 @@ test('edits scalar values and replaces a typed relationship', async ({
   expect((await relationshipSaved).ok()).toBe(true);
 
   await page.reload();
-  await expect(page.getByLabel('title')).toHaveValue('After edit');
+  await expect(fieldByLabel(page, 'title')).toHaveValue('After edit');
   await expect(page.getByText('Sale')).toBeVisible();
 });

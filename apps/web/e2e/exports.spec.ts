@@ -21,8 +21,12 @@ const openRecordInContext = async (
   await page.getByRole('tab', { name: contextCode }).click();
 };
 
+/** The record's publication status, shown as an icon named by the status. */
+const publicationStatus = (page: Page, status: string) =>
+  page.getByRole('button', { name: status, exact: true });
+
 const publishFromMenu = async (page: Page) => {
-  await page.getByRole('button', { name: 'Publication', exact: true }).click();
+  await page.getByRole('button', { name: 'Actions', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Publish', exact: true }).click();
 };
 
@@ -61,7 +65,7 @@ predicate:
   );
 
   await openRecordInContext(page, record.id, channel.code);
-  await expect(page.getByText('Not an export channel')).toBeVisible();
+  await expect(publicationStatus(page, 'Not an export channel')).toBeVisible();
 
   await page.goto('/manage/exports');
   const channelRow = page.getByRole('row').filter({ hasText: channel.code });
@@ -72,9 +76,9 @@ predicate:
   await expect(channelRow).toContainText('Enabled');
 
   await openRecordInContext(page, record.id, channel.code);
-  await expect(page.getByText('Not published', { exact: true })).toBeVisible();
+  await expect(publicationStatus(page, 'Not published')).toBeVisible();
   await publishFromMenu(page);
-  await expect(page.getByText('Published', { exact: true })).toBeVisible();
+  await expect(publicationStatus(page, 'Published')).toBeVisible();
 
   await page.goto('/manage/exports');
   await channelRow.getByLabel('Required rules').fill(ruleCode);
@@ -89,7 +93,7 @@ predicate:
 
   await openRecordInContext(page, record.id, channel.code);
   await expect(page.getByText('Not ready', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Publication', exact: true }).click();
+  await page.getByRole('button', { name: 'Actions', exact: true }).click();
   await expect(
     page.getByRole('menuitem', { name: /^Republish/ }),
   ).toBeDisabled();
@@ -107,14 +111,14 @@ predicate:
     { ...scalar('summary', 'Now complete'), context_id: root.id },
   ]);
   await openRecordInContext(page, record.id, channel.code);
-  await expect(page.getByText('Not published', { exact: true })).toBeVisible();
+  await expect(publicationStatus(page, 'Not published')).toBeVisible();
   await expect(page.getByText('Not ready', { exact: true })).toBeHidden();
   await publishFromMenu(page);
-  await expect(page.getByText('Published', { exact: true })).toBeVisible();
+  await expect(publicationStatus(page, 'Published')).toBeVisible();
 
   await page.goto('/manage/exports');
   await channelRow.getByRole('switch').first().click();
   await expect(channelRow).toContainText('Disabled');
   await openRecordInContext(page, record.id, channel.code);
-  await expect(page.getByText('Not an export channel')).toBeVisible();
+  await expect(publicationStatus(page, 'Not an export channel')).toBeVisible();
 });

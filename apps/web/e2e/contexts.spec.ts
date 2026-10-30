@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import {
+  fieldByLabel,
   commitField,
   createContext,
   createRecord,
@@ -42,13 +43,13 @@ test('resolves inherited values and saves a context-specific override', async ({
   );
   // Only the default context may change stock, so it is shown read-only.
   await expect(page.getByRole('textbox', { name: 'stock' })).toHaveCount(0);
-  const title = page.getByLabel('title');
+  const title = fieldByLabel(page, 'title');
   await title.fill('UK title');
   await commitField(page, record.id, title);
 
   await page.reload();
   await page.getByRole('tab', { name: context.code }).click();
-  await expect(page.getByLabel('title')).toHaveValue('UK title');
+  await expect(fieldByLabel(page, 'title')).toHaveValue('UK title');
   await page.getByRole('tab', { name: 'Default' }).click();
-  await expect(page.getByLabel('title')).toHaveValue('Default title');
+  await expect(fieldByLabel(page, 'title')).toHaveValue('Default title');
 });

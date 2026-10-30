@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import {
+  fieldByLabel,
   commitField,
   createRecord,
   createRecordBlueprint,
@@ -16,7 +17,7 @@ test('records a browser edit and filters the audit log', async ({ page }) => {
   const record = await createRecord(blueprint, [scalar('title', 'Before')]);
 
   await page.goto(`/records/${record.id}`);
-  const title = page.getByLabel('title');
+  const title = fieldByLabel(page, 'title');
   await title.fill('After audit');
   await commitField(page, record.id, title);
 

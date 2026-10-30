@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import {
+  fieldByLabel,
   createRecord,
   createRecordBlueprint,
   createRevision,
@@ -44,8 +45,8 @@ attributes:
   await page.getByRole('button', { name: 'Actions' }).click();
   await page.getByRole('menuitem', { name: 'Upgrade blueprint' }).click();
   await expect(page.getByText('From version 1 to version 2')).toBeVisible();
-  await expect(page.getByLabel('description')).toBeVisible();
-  await page.getByLabel('description').fill('Added during migration');
+  await expect(fieldByLabel(page, 'description')).toBeVisible();
+  await fieldByLabel(page, 'description').fill('Added during migration');
   await page.getByRole('button', { name: 'Upgrade record' }).click();
   await expect(page).toHaveURL(new RegExp(`/records/${record.id}$`));
   await expect(page.getByLabel('Matches current schema')).toBeVisible();

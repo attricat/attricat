@@ -1,5 +1,10 @@
 import { expect, test } from '@playwright/test';
-import { commitField, createRecordBlueprint, suffix } from './helpers';
+import {
+  fieldByLabel,
+  commitField,
+  createRecordBlueprint,
+  suffix,
+} from './helpers';
 
 for (const colorScheme of ['light', 'dark'] as const) {
   test(`creates, displays and edits phone values (${colorScheme})`, async ({
@@ -47,7 +52,7 @@ views:
       .getByRole('option', { name: `Phone contacts (${code})` })
       .click();
     await page.getByRole('button', { name: 'Load blueprint' }).click();
-    await page.getByLabel('title', { exact: true }).fill('Phone contact');
+    await fieldByLabel(page, 'title').fill('Phone contact');
     const input = page.getByLabel('phone', { exact: true });
     await expect(input).toHaveAttribute('type', 'tel');
     await expect(input).toHaveAttribute('inputmode', 'tel');

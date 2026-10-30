@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import {
+  fieldByLabel,
   createRecord,
   createRecordBlueprint,
   recordSave,
@@ -42,7 +43,7 @@ attributes:
       scalar('title', 'Gallery test'),
     ]);
     await page.goto(`/records/${record.id}`);
-    const title = page.getByLabel('title', { exact: true });
+    const title = fieldByLabel(page, 'title');
     // Leaving the edited title for the upload saves it without losing the click.
     await title.fill('Edited title');
     const titleSaved = recordSave(page, record.id);

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { replaceDefinition, suffix } from './helpers';
+import { fieldByLabel, replaceDefinition, suffix } from './helpers';
 
 const openInsertGroup = async (page: Page, group: string) => {
   await page.getByRole('button', { name: 'Insert' }).click();
@@ -27,7 +27,7 @@ test('checks, previews and inserts into a blueprint definition', async ({
   await expect(page.getByText('Ready to save')).toBeVisible();
   await expect(preview(page).getByRole('tab', { name: 'table' })).toBeVisible();
 
-  const name = preview(page).getByLabel('Name');
+  const name = fieldByLabel(preview(page), 'Name');
   await name.fill('x'.repeat(201));
   await expect(name).toHaveAttribute('aria-invalid', 'true');
 
@@ -52,7 +52,7 @@ test('checks, previews and inserts into a blueprint definition', async ({
     `format_version: 1\ncode: ${code}\nname: Checked\nkind: record\n\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\n\nattributes:\n  - code: title\n    value_type: string\n`,
   );
   await expect(page.getByText('Ready to save')).toBeVisible();
-  await expect(preview(page).getByLabel('title')).toBeVisible();
+  await expect(fieldByLabel(preview(page), 'title')).toBeVisible();
   await saveShortcut(page);
   await expect(page).toHaveURL(/\/manage\/blueprints\/[0-9a-f-]{36}$/);
 });
@@ -77,9 +77,15 @@ test('checks, previews and inserts into a reusable attribute definition', async 
   ).toBeDisabled();
   await page.keyboard.press('Escape');
 
-  await insert(page, 'Behavior', 'Include in search');
+  // The Choice template is already searchable, so its snippet is unavailable.
+  await openInsertGroup(page, 'Behavior');
+  await expect(
+    page.getByRole('menuitem', { name: /Include in search/ }),
+  ).toBeDisabled();
+  await page.keyboard.press('Escape');
+  await insert(page, 'Behavior', 'Edit in the default context only');
   await expect(page.getByText('Ready to save')).toBeVisible();
-  await expect(preview(page).getByText('Searchable')).toBeVisible();
+  await expect(preview(page).getByText('Default context only')).toBeVisible();
 
   const code = `checked_${suffix()}`;
   await replaceDefinition(

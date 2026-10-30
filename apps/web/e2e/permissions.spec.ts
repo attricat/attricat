@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import {
+  fieldByLabel,
   commitField,
   createBlueprint,
   createRecord,
@@ -149,11 +150,11 @@ test('an editor saves blueprint drafts and records but cannot publish', async ({
   const page = await signInAsMember(browser, 'editor');
 
   await page.goto(`/records/${record.id}`);
-  const title = page.getByLabel('title');
+  const title = fieldByLabel(page, 'title');
   await title.fill('Edited by editor');
   await commitField(page, record.id, title);
   await page.reload();
-  await expect(page.getByLabel('title')).toHaveValue('Edited by editor');
+  await expect(fieldByLabel(page, 'title')).toHaveValue('Edited by editor');
 
   await page.goto('/manage/blueprints/new');
   await page.getByRole('button', { name: 'Dismiss', exact: true }).click();

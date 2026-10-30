@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import {
+  fieldByLabel,
   commitField,
   createRecord,
   createRecordBlueprint,
@@ -47,7 +48,8 @@ test('dry-runs and runs a rule, then acknowledges and resolves its finding', asy
   const code = `ruled_${suffix()}`;
   const attribute = `summary_${suffix()}`;
   const ruleName = `Summary required ${code}`;
-  const finding = `'${attribute}' is required`;
+  // Findings name attributes as fields label them, with spaces for underscores.
+  const finding = `${attribute.replace('_', ' ')} is required`;
   const blueprint = await createRecordBlueprint(
     code,
     'Ruled product',
@@ -75,14 +77,12 @@ predicate:
   const missing = await createRecord(blueprint, [
     scalar('title', 'Incomplete product'),
   ]);
-  // New rules start disabled, so a normal run is refused.
+  // New rules start disabled, so only a dry run is offered.
   await page.goto('/manage/rules');
   const ruleRow = page.getByRole('row').filter({ hasText: ruleName });
   await expect(ruleRow).toContainText('Disabled');
-  await ruleRow.getByRole('button', { name: 'Run now' }).click();
-  await expect(page.getByRole('alert')).toContainText(
-    'The rule is not enabled.',
-  );
+  await expect(ruleRow.getByRole('button', { name: 'Dry run' })).toBeVisible();
+  await expect(ruleRow.getByRole('button', { name: 'Run now' })).toHaveCount(0);
 
   const toggle = ruleRow.getByRole('switch', {
     name: `Enable ${ruleName}`,
@@ -91,14 +91,13 @@ predicate:
   await toggle.click();
   await expect(toggle).toBeChecked();
   await expect(ruleRow).toContainText('Enabled');
-  await expect(page.getByText('The rule is not enabled.')).toBeHidden();
   await page.reload();
   await expect(toggle).toBeChecked();
   await ruleRow.getByRole('button', { name: 'Dry run' }).click();
   await expectLatestRun(
     page,
     ruleName,
-    'manual (dry run) Completed 2 1 would fail',
+    'Manual (dry run) Completed 2 1 would fail',
   );
   await openFindings(page);
   await expect(page.getByRole('cell', { name: finding })).toBeHidden();
@@ -108,7 +107,7 @@ predicate:
   await expectLatestRun(
     page,
     ruleName,
-    'manual Completed 2 1 new · 0 resolved',
+    'Manual Completed 2 1 new · 0 resolved',
   );
 
   await openFindings(page);
@@ -128,21 +127,23 @@ predicate:
   await page.goto(`/records/${missing.id}`);
   await expect(page.getByText('1 data quality finding')).toBeVisible();
   // Field labels show attribute codes with spaces in place of underscores.
-  const summary = page.getByLabel(attribute.replace('_', ' '));
+  const summary = fieldByLabel(page, attribute.replace('_', ' '));
   await summary.fill('Fixed summary');
   await commitField(page, missing.id, summary);
 
+  // Saving the record re-checks it alone, which resolves its finding, so the
+  // next run over every record has nothing left to resolve.
   await page.goto('/manage/rules');
   await ruleRow.getByRole('button', { name: 'Run now' }).click();
   await expectLatestRun(
     page,
     ruleName,
-    'manual Completed 2 0 new · 1 resolved',
+    'Manual Completed 2 0 new · 0 resolved',
   );
   await openFindings(page);
   await expect(findingRow).toBeHidden();
   await page.goto(`/records/${missing.id}`);
-  await expect(page.getByLabel(attribute.replace('_', ' '))).toHaveValue(
+  await expect(fieldByLabel(page, attribute.replace('_', ' '))).toHaveValue(
     'Fixed summary',
   );
   await expect(page.getByText('1 data quality finding')).toBeHidden();

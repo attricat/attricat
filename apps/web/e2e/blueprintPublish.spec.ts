@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { replaceDefinition, suffix } from './helpers';
+import { fieldByLabel, replaceDefinition, suffix } from './helpers';
 
 /** `extraAttributes` are further items of the `attributes` list. */
 const definition = (code: string, extraAttributes = '') => `format_version: 1
@@ -53,7 +53,7 @@ test('authors, publishes, revises and migrates a blueprint in the browser', asyn
     .getByRole('option', { name: `Authored product (${code})` })
     .click();
   await page.getByRole('button', { name: 'Load blueprint' }).click();
-  await page.getByLabel('title').fill('Authored record');
+  await fieldByLabel(page, 'title').fill('Authored record');
   await page.getByRole('button', { name: 'Create record' }).click();
   await expect(page).toHaveURL(/\/records\/[0-9a-f-]{36}$/);
   const recordUrl = page.url();
