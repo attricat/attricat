@@ -175,11 +175,18 @@ export const DefinitionWorkspace = ({
         end.column,
       ),
     );
+    // The snippet is already indented for where it goes; Monaco would
+    // otherwise indent its lines again like the line it is inserted on.
     mounted.editor
       .getContribution<
-        { insert: (template: string) => void } & editor.IEditorContribution
+        {
+          insert: (
+            template: string,
+            options: { adjustWhitespace: boolean },
+          ) => void;
+        } & editor.IEditorContribution
       >('snippetController2')
-      ?.insert(edit.insertText);
+      ?.insert(edit.insertText, { adjustWhitespace: false });
     mounted.editor.revealLineInCenter(
       mounted.editor.getPosition()?.lineNumber ?? start.lineNumber,
     );
