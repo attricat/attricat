@@ -214,8 +214,9 @@ export const BlueprintViewsPreview = ({
             [`& [data-field-code=${JSON.stringify(followedCode)}]`]: {
               bgcolor: 'action.selected',
               borderRadius: 1,
-              boxShadow: (theme) =>
-                `0 0 0 ${theme.spacing(0.5)} ${theme.palette.action.selected}`,
+              // A tinted margin inside a primary ring, so the field stands out.
+              boxShadow: ({ palette, spacing }) =>
+                `0 0 0 ${spacing(1)} ${palette.action.selected}, 0 0 0 calc(${spacing(1)} + 2px) ${palette.primary.main}`,
             },
           }),
         }}
