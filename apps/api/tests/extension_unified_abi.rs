@@ -178,6 +178,14 @@ async fn one_unified_component_serves_commands_and_interactive_operations(pool: 
         probe_write(json!({})).await.unwrap().status(),
         StatusCode::FORBIDDEN
     );
+    // An entry that is not a record id is refused, not skipped by the check.
+    assert_eq!(
+        probe_write(json!({"record_ids": [records[0], {"id": records[0]}]}))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
     let response = authenticated_client()
         .post(format!("{base}/extensions/{EXTENSION}/bulk/operations"))
         .json(&json!({

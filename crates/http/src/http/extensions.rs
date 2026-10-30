@@ -916,12 +916,7 @@ pub(super) async fn command(
         principal.0,
         workspace.0,
         contribution.when.as_ref(),
-        &input.payload["record_ids"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(|id| id.as_str()?.parse().ok())
-            .collect::<Vec<_>>(),
+        &command_record_ids(&input.payload)?,
     )
     .await?;
     if mapping_editor
@@ -977,6 +972,26 @@ pub(super) async fn command(
     validate_schema(&command.response_schema, &response)
         .map_err(|_| ApiError::service_unavailable("extension command returned invalid data"))?;
     Ok(Json(response))
+}
+
+/// The records a host-rendered action's command names. An entry that is not a
+/// record id is refused rather than skipped, so the write check covers every
+/// record the extension receives.
+fn command_record_ids(payload: &Value) -> Result<Vec<Uuid>, ApiError> {
+    let invalid = || ApiError::invalid_input("record_ids must be a list of record ids".into());
+    match payload.get("record_ids") {
+        None => Ok(Vec::new()),
+        Some(ids) => ids
+            .as_array()
+            .ok_or_else(invalid)?
+            .iter()
+            .map(|id| {
+                id.as_str()
+                    .and_then(|id| id.parse().ok())
+                    .ok_or_else(invalid)
+            })
+            .collect(),
+    }
 }
 
 /// An action whose `when.requires_write` is set runs only for records the
