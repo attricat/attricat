@@ -250,6 +250,55 @@ test('steps through problems and reviews a revision before saving', async ({
   await expect(page).toHaveURL(/\/manage\/blueprints\/[0-9a-f-]{36}$/);
 });
 
+test('hovers and follows attributes named in the record schema', async ({
+  page,
+}) => {
+  await page.goto('/manage/blueprints/new');
+  await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
+  await replaceDefinition(
+    page,
+    `format_version: 1\ncode: schema_${suffix()}\nname: Schema\nkind: record\n\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\n\nrecord_schema: |-\n  {"x-attricat-checks": [{"code": "titled", "predicate": {"type": "required", "attribute_code": "title"}}]}\n\nattributes:\n  - code: title\n    name: Headline\n    value_type: string\n`,
+  );
+  await expect(page.getByText('Ready to save')).toBeVisible();
+  await page
+    .locator('.monaco-editor .view-line', { hasText: 'type: dropdown_option' })
+    .click();
+  await expect(
+    preview(page).getByRole('tab', { name: 'dropdown_option' }),
+  ).toHaveAttribute('aria-selected', 'true');
+
+  // The whole JSON is one token, so find the reference's place on screen.
+  const reference = await page.evaluate(() => {
+    const walker = document.createTreeWalker(
+      document.querySelector('.monaco-editor .view-lines')!,
+      NodeFilter.SHOW_TEXT,
+    );
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const text = node.textContent?.replaceAll('\u00a0', ' ') ?? '';
+      const start = text.indexOf('"attribute_code": "title"');
+      if (start < 0) continue;
+      const range = document.createRange();
+      const offset = start + '"attribute_code": "t'.length;
+      range.setStart(node, offset);
+      range.setEnd(node, offset + 1);
+      const { x, y, height } = range.getBoundingClientRect();
+      return { x, y: y + height / 2 };
+    }
+    throw new Error('The record schema reference is not shown');
+  });
+  await page.mouse.move(reference.x, reference.y);
+  await expect(
+    page.locator('.monaco-hover').filter({ hasText: 'title — string' }),
+  ).toBeVisible();
+
+  await page.keyboard.down('Control');
+  await page.mouse.click(reference.x, reference.y);
+  await page.keyboard.up('Control');
+  await expect(
+    preview(page).getByRole('tab', { name: 'Edit' }),
+  ).toHaveAttribute('aria-selected', 'true');
+});
+
 test('checks, previews and inserts into a reusable attribute definition', async ({
   page,
 }) => {

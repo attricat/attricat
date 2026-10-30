@@ -9,6 +9,7 @@ import {
   attributePathSeparator,
   attributesKey,
   codeKey,
+  definitionKinds,
   includesKey,
   referencePages,
   schemaExtensions,
@@ -18,6 +19,7 @@ import {
   referenceCandidates,
   type Candidate,
 } from './definitionReferenceCandidates';
+import { embeddedReferences } from './definitionEmbeddedReferences';
 import type { DefinitionReferences } from './definitionReferences';
 import {
   definitionReferenceKinds,
@@ -78,7 +80,14 @@ export const referenceValues = (
         : undefined;
     const reference =
       node?.[schemaExtensions.reference] ?? array?.[schemaExtensions.reference];
-    return reference ? [{ entry, range: valueRange, reference, value }] : [];
+    return reference
+      ? [{ entry, range: valueRange, reference, value }]
+      : kind === definitionKinds.blueprint
+        ? embeddedReferences(outline.text, entry).map((embedded) => ({
+            ...embedded,
+            entry,
+          }))
+        : [];
   });
 };
 

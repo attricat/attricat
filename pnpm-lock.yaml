@@ -67,6 +67,9 @@ importers:
       i18next-browser-languagedetector:
         specifier: ^8.2.1
         version: 8.2.1
+      jsonc-parser:
+        specifier: 3.3.1
+        version: 3.3.1
       lucide-react:
         specifier: ^1.48.0
         version: 1.48.0(react@19.2.8)

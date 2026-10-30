@@ -57,6 +57,8 @@ export type YamlCursor =
 
 export type YamlOutline = {
   collections: YamlCollection[];
+  /** The text the outline was scanned from. */
+  text: string;
   cursor?: YamlCursor;
   entries: YamlEntry[];
   /** Direct child keys already present in a mapping. */
@@ -596,6 +598,7 @@ export const scanYaml = (text: string, cursor?: number): YamlOutline => {
       }
       return undefined;
     },
+    text,
     valueAt: (path) => byPath.get(pathKey(path))?.value,
   };
 };
