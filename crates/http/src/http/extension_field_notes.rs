@@ -6,7 +6,8 @@
 //! providers are listed for the web app, which runs them in sandboxed frames.
 
 use std::{
-    collections::{BTreeMap, HashMap, HashSet, hash_map::Entry},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet, hash_map::Entry},
+    hash::{DefaultHasher, Hash, Hasher},
     sync::{Arc, LazyLock, Mutex},
     time::{Duration, Instant},
 };
@@ -63,8 +64,10 @@ const MAX_CACHED_FIELD_NOTES: usize = 10_000;
 /// The longest locale tag forwarded to extensions.
 const MAX_LOCALE_BYTES: usize = 16;
 
-/// One provider's notes for one record version, context and locale.
-type CacheKey = (Uuid, Uuid, Uuid, String, Uuid, String);
+/// One provider's notes for one record, context and locale: the workspace,
+/// release, [`installation_fingerprint`], record, [`RecordScope::fingerprint`],
+/// context and locale.
+type CacheKey = (Uuid, Uuid, u64, Uuid, u64, Uuid, String);
 static CACHE: LazyLock<Mutex<HashMap<CacheKey, (Instant, RecordNotes)>>> =
     LazyLock::new(Default::default);
 
@@ -159,10 +162,25 @@ struct FileNote {
 struct RecordScope {
     blueprint_id: Uuid,
     blueprint_version: i64,
-    /// Changes with the record's values and annotations.
-    version: String,
     attribute_codes: HashSet<String>,
     file_ids: HashSet<String>,
+    /// Changes with anything answers are filtered against: the record's
+    /// version (its values and annotations), attribute codes and files. A
+    /// reusable attribute attached to the record does not change its version.
+    fingerprint: u64,
+}
+
+/// Changes with what a provider answers under: its configuration and grants.
+fn installation_fingerprint(installation: &ExtensionRuntimeInstallation) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    installation.configuration.to_string().hash(&mut hasher);
+    for grants in [
+        &installation.capability_grants,
+        &installation.host_permission_grants,
+    ] {
+        grants.iter().collect::<BTreeSet<_>>().hash(&mut hasher);
+    }
+    hasher.finish()
 }
 
 fn has_source(installation: &ExtensionRuntimeInstallation, client: bool) -> bool {
@@ -253,8 +271,9 @@ pub(super) async fn post(
         (
             workspace_id,
             installation.installed_release_id,
+            installation_fingerprint(installation),
             record_id,
-            scopes[&record_id].version.clone(),
+            scopes[&record_id].fingerprint,
             context_id,
             locale.clone(),
         )
@@ -404,19 +423,27 @@ async fn record_scopes(
         }
         let mut attribute_codes = revisions[&(blueprint_id, blueprint_version)].clone();
         attribute_codes.extend(reusable.remove(&record_id).unwrap_or_default());
+        let file_ids: HashSet<String> = files
+            .remove(&record_id)
+            .unwrap_or_default()
+            .iter()
+            .map(Uuid::to_string)
+            .collect();
+        let mut hasher = DefaultHasher::new();
+        version.hash(&mut hasher);
+        attribute_codes
+            .iter()
+            .collect::<BTreeSet<_>>()
+            .hash(&mut hasher);
+        file_ids.iter().collect::<BTreeSet<_>>().hash(&mut hasher);
         scopes.insert(
             record_id,
             RecordScope {
                 blueprint_id,
                 blueprint_version,
-                version,
                 attribute_codes,
-                file_ids: files
-                    .remove(&record_id)
-                    .unwrap_or_default()
-                    .iter()
-                    .map(Uuid::to_string)
-                    .collect(),
+                file_ids,
+                fingerprint: hasher.finish(),
             },
         );
     }
