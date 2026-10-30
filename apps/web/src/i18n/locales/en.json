@@ -1048,6 +1048,10 @@
     },
     "makeChangeBeforeSaving": "Make a change before saving a new revision.",
     "saveShortcut": "Press Ctrl+S (or Command+S) to save.",
+    "fold": {
+      "foldAll": "Fold all",
+      "unfoldAll": "Unfold all"
+    },
     "insert": {
       "button": "Insert",
       "alreadyDefined": "Already defined",

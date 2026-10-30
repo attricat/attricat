@@ -1104,6 +1104,10 @@
     },
     "makeChangeBeforeSaving": "Wprowadź zmianę przed zapisaniem nowej rewizji.",
     "saveShortcut": "Naciśnij Ctrl+S (lub Command+S), aby zapisać.",
+    "fold": {
+      "foldAll": "Zwiń wszystko",
+      "unfoldAll": "Rozwiń wszystko"
+    },
     "insert": {
       "button": "Wstaw",
       "alreadyDefined": "Już zdefiniowano",

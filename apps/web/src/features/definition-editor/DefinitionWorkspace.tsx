@@ -24,6 +24,7 @@ import { definitionEditorHeight, type DefinitionKind } from './constants';
 import { DefinitionEditor } from './DefinitionEditor';
 import type { ReferenceAttribute } from './definitionReferences';
 import { locateDefinitionError } from './definitionErrorLocation';
+import { DefinitionFoldControls } from './DefinitionFoldControls';
 import { DefinitionInsertMenu } from './DefinitionInsertMenu';
 import { updateServerDiagnostic } from './definitionLanguage';
 import { snippetEdit, type DefinitionSnippet } from './definitionSnippets';
@@ -87,8 +88,8 @@ const CheckStatusChip = ({
 
 /**
  * The shared editing surface for blueprint, reusable attribute and rule
- * definitions: an Insert menu, the server's save check, and a live preview of
- * the last definition that passed it.
+ * definitions: Insert and fold controls, the server's save check, and a live
+ * preview of the last definition that passed it.
  */
 export const DefinitionWorkspace = ({
   check,
@@ -206,6 +207,7 @@ export const DefinitionWorkspace = ({
           kind={kind}
           onInsert={insert}
         />
+        <DefinitionFoldControls editor={mounted?.editor} />
         <Box sx={{ flexGrow: 1 }} />
         <CheckStatusChip
           check={check}

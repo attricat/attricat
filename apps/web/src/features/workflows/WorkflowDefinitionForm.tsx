@@ -2,9 +2,12 @@ import { useForm, useStore } from '@tanstack/react-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { Alert, Button, Paper, Stack, Typography } from '@mui/material';
+import type { editor } from 'monaco-editor';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { definitionKinds } from '../definition-editor/constants';
 import { DefinitionEditor } from '../definition-editor/DefinitionEditor';
+import { DefinitionFoldControls } from '../definition-editor/DefinitionFoldControls';
 import { draftEditors } from '../drafts/constants';
 import { DraftRestoreDialog } from '../drafts/DraftRestoreDialog';
 import { definitionDraftSchema } from '../drafts/schemas';
@@ -40,6 +43,8 @@ export const WorkflowDefinitionForm = ({
   const initialDefinition = workflowId
     ? (sourceDefinition ?? '')
     : starterWorkflowDefinition;
+  const [mountedEditor, setMountedEditor] =
+    useState<editor.IStandaloneCodeEditor>();
   const validate = useMutation({ mutationFn: validateWorkflow });
   const save = useMutation({
     mutationFn: (definition: string) =>
@@ -101,6 +106,9 @@ export const WorkflowDefinitionForm = ({
         <Typography color="text.secondary">
           {t('workflows.validationHelp')}
         </Typography>
+        <Stack direction="row" spacing={1}>
+          <DefinitionFoldControls editor={mountedEditor} />
+        </Stack>
         <form.Field name="definition">
           {(field) => (
             <DefinitionEditor
@@ -112,6 +120,7 @@ export const WorkflowDefinitionForm = ({
                 validate.reset();
                 field.handleChange(value ?? '');
               }}
+              onMount={setMountedEditor}
               readOnly={readOnly || save.isPending}
               value={field.state.value}
             />
