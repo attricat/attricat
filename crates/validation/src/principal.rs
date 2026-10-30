@@ -72,10 +72,11 @@ pub(crate) fn principal_configuration_schema() -> Value {
         "type": "object", "additionalProperties": false,
         "required": ["version", "kinds"],
         "properties": {
-            "version": {"const": 1},
+            "version": {"const": 1, "description": "Version of the assignment annotation; always 1."},
             "kinds": {
                 "type": "array", "minItems": 1, "maxItems": 2, "uniqueItems": true,
-                "items": {"enum": ["user", "team"]}
+                "items": {"enum": ["user", "team"]},
+                "description": "Whether the attribute can be assigned to workspace users, teams, or both."
             }
         }
     })

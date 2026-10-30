@@ -9,7 +9,8 @@
   ],
   "properties": {
     "version": {
-      "const": 1
+      "const": 1,
+      "description": "Version of the assignment annotation; always 1."
     },
     "kinds": {
       "type": "array",
@@ -21,7 +22,8 @@
           "user",
           "team"
         ]
-      }
+      },
+      "description": "Whether the attribute can be assigned to workspace users, teams, or both."
     }
   }
 }

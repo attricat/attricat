@@ -122,18 +122,29 @@ pub fn transition_requirements(
 
 pub(crate) fn status_configuration_schema() -> Value {
     let code = serde_json::json!({"type": "string", "minLength": 1, "maxLength": 128, "pattern": super::CODE_PATTERN});
-    let coverage = serde_json::json!({"oneOf": [
-        {"const": "all"},
-        {"type": "array", "minItems": 1, "maxItems": 500, "uniqueItems": true, "items": {
-            "type": "string", "minLength": 1, "maxLength": 257, "pattern": ATTRIBUTE_SELECTOR_PATTERN
-        }}
-    ]});
-    let conditions = serde_json::json!({"type": "array", "maxItems": MAX_TRANSITION_CONDITIONS, "items": {
+    let coverage = |description: &str| {
+        serde_json::json!({"description": description, "oneOf": [
+            {"const": "all"},
+            {"type": "array", "minItems": 1, "maxItems": 500, "uniqueItems": true, "items": {
+                "type": "string", "minLength": 1, "maxLength": 257, "pattern": ATTRIBUTE_SELECTOR_PATTERN
+            }}
+        ]})
+    };
+    let described = |schema: &Value, description: &str| {
+        let mut schema = schema.clone();
+        schema["description"] = Value::from(description);
+        schema
+    };
+    let conditions = serde_json::json!({"type": "array", "maxItems": MAX_TRANSITION_CONDITIONS,
+        "description": "Checks that must hold for the record before the change is allowed, with the predicate shape of record checks. Synchronous-safe predicates only.",
+        "items": {
         "type": "object", "additionalProperties": false, "required": ["code", "predicate"],
         "properties": {
-            "code": code,
-            "message": {"type": "string", "minLength": 1, "maxLength": crate::predicate::MAX_MESSAGE_LENGTH},
-            "predicate": {"type": "object", "required": ["type"], "properties": {"type": {"type": "string"}}}
+            "code": described(&code, "Names the condition in errors."),
+            "message": {"type": "string", "minLength": 1, "maxLength": crate::predicate::MAX_MESSAGE_LENGTH,
+                "description": "Shown when the condition is not met, instead of the default message."},
+            "predicate": {"type": "object", "required": ["type"], "properties": {"type": {"type": "string"}},
+                "description": "What must hold for the record."}
         }
     }});
     serde_json::json!({
@@ -142,32 +153,45 @@ pub(crate) fn status_configuration_schema() -> Value {
         "type": "object", "additionalProperties": false,
         "required": ["version", "options"],
         "properties": {
-            "version": {"const": 1},
-            "options": {"type": "array", "minItems": 1, "maxItems": 100, "items": {
+            "version": {"const": 1, "description": "Version of the status annotation; always 1."},
+            "options": {"type": "array", "minItems": 1, "maxItems": 100,
+                "description": "One option per `enum` code, in display order.",
+                "items": {
                 "type": "object", "additionalProperties": false, "required": ["code", "label"],
                 "properties": {
-                    "code": code,
-                    "label": {"type": "string", "minLength": 1, "maxLength": 200},
-                    "tone": {"enum": ["default", "success", "warning", "error", "info"]},
-                    "lock": coverage,
+                    "code": described(&code, "The `enum` value this option describes."),
+                    "label": {"type": "string", "minLength": 1, "maxLength": 200,
+                        "description": "Name shown for the status. May use `{{key}}` lexicon references."},
+                    "tone": {"enum": ["default", "success", "warning", "error", "info"],
+                        "description": "Colour the status is shown in."},
+                    "lock": coverage("Makes the covered attributes read-only in this status and blocks deleting the record: `\"all\"` or attribute codes (`namespace:code` for reusable attributes). Requires `transitions`."),
                     "approval": {
                         "type": "object", "additionalProperties": false, "required": ["covers", "void_to"],
-                        "properties": {"covers": coverage, "void_to": code}
+                        "description": "Records an approval bound to the covered content; changing that content moves the record to `void_to`.",
+                        "properties": {
+                            "covers": coverage("The attributes the approval covers: `\"all\"` or attribute codes."),
+                            "void_to": described(&code, "The option a change to covered content moves the record to.")
+                        }
                     },
-                    "retention_days": {"type": "integer", "minimum": 1, "maximum": MAX_RETENTION_DAYS}
+                    "retention_days": {"type": "integer", "minimum": 1, "maximum": MAX_RETENTION_DAYS,
+                        "description": "Days the locked attributes' files are held. Requires `lock`."}
                 }
             }},
-            "transitions": {"type": "array", "maxItems": 10000, "uniqueItems": true, "items": {
+            "transitions": {"type": "array", "maxItems": 10000, "uniqueItems": true,
+                "description": "The allowed changes. Omit to allow any change; an empty list allows none. Keeping the same value is always allowed.",
+                "items": {
                 "type": "object", "additionalProperties": false, "required": ["from", "to"],
                 "properties": {
-                    "from": {"type": ["string", "null"]},
-                    "to": {"type": ["string", "null"]},
-                    "code": code,
-                    "permission": {"type": "string", "maxLength": 128, "pattern": "^[a-z_]+\\.[a-z_]+$"},
+                    "from": {"type": ["string", "null"], "description": "Option code before the change, or `null` when the value is first set."},
+                    "to": {"type": ["string", "null"], "description": "Option code after the change, or `null` when the value is cleared."},
+                    "code": described(&code, "Names the transition, for `separate_from` and the audit trail."),
+                    "permission": {"type": "string", "maxLength": 128, "pattern": "^[a-z_]+\\.[a-z_]+$",
+                        "description": "Permission (`area.action`) the user needs to make this change."},
                     "roles": {"type": "array", "minItems": 1, "maxItems": 20, "uniqueItems": true, "items": {
                         "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z][a-z0-9_-]*$"
-                    }},
-                    "separate_from": {"type": "array", "minItems": 1, "maxItems": 20, "uniqueItems": true, "items": code},
+                    }, "description": "Roles, held through a workspace, blueprint-family or record grant, that may make this change."},
+                    "separate_from": {"type": "array", "minItems": 1, "maxItems": 20, "uniqueItems": true, "items": code,
+                        "description": "Transition codes whose most recent actor on this record and context may not make this change."},
                     "conditions": conditions
                 }
             }}
