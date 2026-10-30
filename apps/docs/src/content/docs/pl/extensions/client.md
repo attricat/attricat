@@ -155,7 +155,7 @@ Akcja to pozycja menu lub przycisk, które Attricat rysuje sam. Deklarujesz jej 
 
 | Pole opcjonalne | Działanie |
 | --- | --- |
-| `when` | Oferuje akcję tylko tam, gdzie ma sens: `blueprints` (kody), `min_records`, `max_records` (najwyżej 50), `has_tags`, `missing_tags`, `requires_write`. Attricat odrzuca też polecenia i uruchomienia akcji z `requires_write` dla rekordów, których użytkownik nie może zmieniać. |
+| `when` | Oferuje akcję tylko tam, gdzie ma sens: `blueprints` (kody), `min_records`, `max_records` (najwyżej 50), `has_tags`, `missing_tags`, `requires_write`. Attricat odrzuca też polecenia i uruchomienia akcji z `requires_write` dla rekordów, których użytkownik nie może zmieniać. Akcja `explorer_action` nie wskazuje rekordów, więc nie może użyć `requires_write`. |
 | `confirm` | `{ "message", "destructive" }`: Attricat pyta przed uruchomieniem akcji. |
 | `icon` | Jedna z `alert`, `calculator`, `check`, `clock`, `download`, `file`, `info`, `link`, `refresh`, `search`, `send`, `settings`, `sparkles`, `tag`, `wand`. |
 | `translations` | Tytuły w innych językach, np. `{ "pl": { "title": "…" } }`. Może je mieć każda kontrybucja z tytułem. |

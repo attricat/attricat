@@ -947,6 +947,13 @@ impl Manifest {
                     "when.max_records must be 1-{MAX_INTERACTIVE_SELECTION} and not below min_records"
                 )));
             }
+            // A revision-wide toolbar action names no records whose write
+            // access the host could check, so it would always be refused.
+            if when.requires_write && contribution.outlet == Some(UiOutlet::ExplorerAction) {
+                return Err(invalid(
+                    "cannot require write access without records".into(),
+                ));
+            }
             for code in &when.blueprints {
                 valid_id(code, "when.blueprints entry")?;
             }
@@ -3183,6 +3190,13 @@ mod tests {
             translations: BTreeMap::new(),
         });
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
+        // A toolbar action names no records, so it cannot require write access.
+        value.ui[1].when = Some(ActionCondition {
+            requires_write: true,
+            ..ActionCondition::default()
+        });
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+        value.ui[1].when = None;
         value
             .permissions
             .retain(|permission| permission != "client.explorer_action");

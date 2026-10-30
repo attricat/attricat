@@ -691,7 +691,8 @@ Optional fields:
   may change the records. A condition a surface cannot judge, such as tags it
   does not know, does not hide the action, but the host also enforces
   `requires_write`: the action's command and operation runs refuse records the
-  user may not write.
+  user may not write. An `explorer_action` names no records, so it cannot
+  declare `requires_write`.
 - `confirm` (`message` of at most 280 characters, optional `destructive`) shows
   a host confirmation before the action runs.
 - `icon` names one of the host's icons: `alert`, `calculator`, `check`, `clock`,

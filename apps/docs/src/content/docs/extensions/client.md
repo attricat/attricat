@@ -155,7 +155,7 @@ An action is a menu item or button that Attricat draws itself. You declare its t
 
 | Optional field | Does |
 | --- | --- |
-| `when` | Offers the action only where it applies: `blueprints` (codes), `min_records`, `max_records` (at most 50), `has_tags`, `missing_tags`, `requires_write`. Attricat also refuses commands and runs of a `requires_write` action for records the user can't change. |
+| `when` | Offers the action only where it applies: `blueprints` (codes), `min_records`, `max_records` (at most 50), `has_tags`, `missing_tags`, `requires_write`. Attricat also refuses commands and runs of a `requires_write` action for records the user can't change. An `explorer_action` names no records, so it can't use `requires_write`. |
 | `confirm` | `{ "message", "destructive" }`: Attricat asks before running the action. |
 | `icon` | One of `alert`, `calculator`, `check`, `clock`, `download`, `file`, `info`, `link`, `refresh`, `search`, `send`, `settings`, `sparkles`, `tag`, `wand`. |
 | `translations` | Titles in other languages, such as `{ "pl": { "title": "…" } }`. Any contribution with a title can have them. |
