@@ -74,7 +74,9 @@ export const createRecordBlueprint = async (
   attributes: string,
   options: { recordSchema?: string; views?: string } = {},
 ) => {
-  // `attributes` and `views` are YAML documents with those top-level keys.
+  // `attributes` and `views` are YAML documents. `attributes` may declare
+  // other top-level keys too; views from both are added to the dropdown one.
+  const { views, ...rest } = parse(attributes) as Record<string, unknown>;
   const blueprint = await createBlueprint(
     stringify({
       format_version: 1,
@@ -82,11 +84,12 @@ export const createRecordBlueprint = async (
       name,
       kind: 'record',
       ...(options.recordSchema ? { record_schema: options.recordSchema } : {}),
+      ...rest,
       views: {
         dropdown_option: { type: 'dropdown_option', fields: ['title'] },
+        ...(views as object | undefined),
         ...(options.views ? parse(options.views).views : {}),
       },
-      attributes: parse(attributes).attributes,
     }),
   );
   return publishRevision(blueprint);
@@ -256,9 +259,7 @@ export const replaceDefinition = async (page: Page, value: string) => {
   await page.keyboard.press('Shift+Control+Home');
   await page.keyboard.press('Backspace');
   // Pasting keeps the YAML's indentation; typed newlines are auto-indented.
-  await page
-    .context()
-    .grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.evaluate((text) => navigator.clipboard.writeText(text), value);
   await page.keyboard.press('ControlOrMeta+v');
 };
