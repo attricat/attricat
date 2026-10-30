@@ -157,3 +157,26 @@ async fn field_notes_keep_what_belongs_to_the_record_from_each_provider(pool: sq
     assert_eq!(empty.status(), StatusCode::UNPROCESSABLE_ENTITY);
     server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn field_notes_answer_nothing_without_a_provider(pool: sqlx::PgPool) {
+    let repository =
+        AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
+    let blueprint = published_blueprint(&repository, BLUEPRINT).await;
+    let record = titled_record(&repository, blueprint, "Lamp").await;
+    let (base, server) =
+        start_server_with_object_store(pool, Arc::new(FakeObjectStore::available())).await;
+
+    let response = authenticated_client()
+        .post(format!("{base}/records/extension-field-notes"))
+        .json(&json!({"record_ids": [record]}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.json::<Value>().await.unwrap(),
+        json!({"records": {}, "incomplete": false, "client_sources": []})
+    );
+    server.abort();
+}

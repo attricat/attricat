@@ -85,7 +85,7 @@ pub(super) struct FieldNotesRequest {
 #[derive(Serialize)]
 pub(super) struct FieldNotesResponse {
     /// Each readable record's notes, one entry per extension that answered,
-    /// in extension ID order.
+    /// in extension ID order; empty when no extension provides notes.
     records: BTreeMap<Uuid, Vec<ExtensionRecordNotes>>,
     /// A provider is still starting, typically compiling its component on
     /// first use; asking again shortly may return its notes.
@@ -224,12 +224,20 @@ pub(super) async fn post(
     {
         return Err(ApiError::invalid_input("locale is invalid".into()));
     }
+    let providers = repository.enabled_field_note_providers().await?;
+    // Without providers there is nothing to say about any record.
+    if providers.is_empty() {
+        return Ok(Json(FieldNotesResponse {
+            records: BTreeMap::new(),
+            incomplete: false,
+            client_sources: Vec::new(),
+        }));
+    }
     let readable = repository
         .authorized_record_ids(caller, workspace, Permission::RecordsRead, &record_ids)
         .await?;
     record_ids.retain(|id| readable.contains(id));
 
-    let providers = repository.enabled_field_note_providers().await?;
     let client_sources = providers
         .iter()
         .filter(|installation| has_source(installation, true))
