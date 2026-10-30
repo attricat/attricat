@@ -70,6 +70,21 @@ const MAX_LOCALE_BYTES: usize = 16;
 type CacheKey = (Uuid, Uuid, u64, Uuid, u64, Uuid, String);
 static CACHE: LazyLock<Mutex<HashMap<CacheKey, (Instant, RecordNotes)>>> =
     LazyLock::new(Default::default);
+/// Answers a provider call is still working on, so a request made meanwhile,
+/// such as the web app asking again, waits for it instead of calling again.
+static ASKING: LazyLock<Mutex<HashSet<CacheKey>>> = LazyLock::new(Default::default);
+
+/// Holds a call's [`ASKING`] entries until the call ends, however it ends.
+struct Asking(Vec<CacheKey>);
+
+impl Drop for Asking {
+    fn drop(&mut self) {
+        let mut asking = ASKING.lock().expect("field notes calls");
+        for key in &self.0 {
+            asking.remove(key);
+        }
+    }
+}
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -159,6 +174,7 @@ struct FileNote {
 }
 
 /// What a record allows notes about.
+#[derive(Clone)]
 struct RecordScope {
     blueprint_id: Uuid,
     blueprint_version: i64,
@@ -199,8 +215,9 @@ fn has_source(installation: &ExtensionRuntimeInstallation, client: bool) -> bool
 /// Field notes for the readable records among `record_ids` from every
 /// enabled server-side provider. A provider that fails, answers late or
 /// breaks the contract is left out; it never fails the response. A late
-/// provider keeps running in its own task, so a first call that compiles its
-/// component completes for the next request.
+/// provider keeps running in its own task and caches its answer, so a first
+/// call that compiles its component completes for the next request, which
+/// does not call it again meanwhile.
 pub(super) async fn post(
     State(state): State<AppState>,
     ScopedRepository(repository): ScopedRepository,
@@ -288,14 +305,18 @@ pub(super) async fn post(
     };
 
     let mut asks = JoinSet::new();
+    let mut incomplete = false;
     for installation in servers {
         let installation = Arc::new(installation);
-        // Reuse what this provider answered for unchanged records.
+        // Reuse what this provider answered for unchanged records, and leave
+        // out records a call still running will answer.
         let mut missing = Vec::new();
         {
             let cache = CACHE.lock().expect("field notes cache");
+            let mut asking = ASKING.lock().expect("field notes calls");
             for record_id in scopes.keys() {
-                match cache.get(&cache_key(&installation, *record_id)) {
+                let key = cache_key(&installation, *record_id);
+                match cache.get(&key) {
                     Some((expires, notes)) if *expires > Instant::now() => {
                         records
                             .entry(*record_id)
@@ -306,13 +327,14 @@ pub(super) async fn post(
                                 notes: notes.clone(),
                             });
                     }
-                    _ => missing.push(*record_id),
+                    _ if !asking.insert(key.clone()) => incomplete = true,
+                    _ => missing.push((*record_id, key)),
                 }
             }
         }
         for batch in missing.chunks(FIELD_NOTES_PER_CALL) {
             let request = json!({
-                "records": batch.iter().map(|record_id| json!({
+                "records": batch.iter().map(|(record_id, _)| json!({
                     "record_id": record_id,
                     "blueprint_id": scopes[record_id].blueprint_id,
                     "blueprint_version": scopes[record_id].blueprint_version,
@@ -320,11 +342,18 @@ pub(super) async fn post(
                 "context_id": context_id,
                 "locale": locale,
             });
-            let call = tokio::spawn(ask(
+            let asking = Asking(batch.iter().map(|(_, key)| key.clone()).collect());
+            let batch = batch
+                .iter()
+                .map(|(record_id, key)| (*record_id, (key.clone(), scopes[record_id].clone())))
+                .collect();
+            let call = tokio::spawn(ask_and_remember(
                 state.clone(),
                 repository.for_extension(&installation.extension_id),
                 installation.clone(),
                 request,
+                batch,
+                asking,
             ));
             let installation = installation.clone();
             asks.spawn(async move {
@@ -336,13 +365,12 @@ pub(super) async fn post(
         }
     }
 
-    let mut incomplete = false;
     while let Some(joined) = asks.join_next().await {
         let Ok((installation, answer)) = joined else {
             continue;
         };
-        let answer = match answer {
-            Ok(Ok(Ok(answer))) => answer,
+        let answered = match answer {
+            Ok(Ok(Ok(answered))) => answered,
             Err(_) => {
                 incomplete = true;
                 continue;
@@ -363,21 +391,7 @@ pub(super) async fn post(
                 continue;
             }
         };
-        let ttl = if answer.cacheable {
-            CACHEABLE_FIELD_NOTES_TTL
-        } else {
-            FIELD_NOTES_CACHE_TTL
-        };
-        let mut fresh = Vec::new();
-        for (record_id, notes) in answer.records {
-            let Ok(record_id) = record_id.parse::<Uuid>() else {
-                continue;
-            };
-            let Some(scope) = scopes.get(&record_id) else {
-                continue;
-            };
-            let notes = belonging_to_record(&installation, notes, scope);
-            fresh.push((cache_key(&installation, record_id), notes.clone()));
+        for (record_id, notes) in answered {
             records
                 .entry(record_id)
                 .or_default()
@@ -387,7 +401,6 @@ pub(super) async fn post(
                     notes,
                 });
         }
-        remember(fresh, ttl);
     }
     for notes in records.values_mut() {
         notes.sort_by(|left, right| left.extension_id.cmp(&right.extension_id));
@@ -470,6 +483,39 @@ fn remember(entries: Vec<(CacheKey, RecordNotes)>, ttl: Duration) {
     for (key, notes) in entries {
         cache.insert(key, (now + ttl, notes));
     }
+}
+
+/// Asks a provider about a batch of records and caches what belongs to each,
+/// whether or not the request that started the call still waits for it.
+async fn ask_and_remember(
+    state: AppState,
+    repository: AttricatRepository,
+    installation: Arc<ExtensionRuntimeInstallation>,
+    request: Value,
+    batch: HashMap<Uuid, (CacheKey, RecordScope)>,
+    _asking: Asking,
+) -> Result<Vec<(Uuid, RecordNotes)>, String> {
+    let answer = ask(state, repository, installation.clone(), request).await?;
+    let ttl = if answer.cacheable {
+        CACHEABLE_FIELD_NOTES_TTL
+    } else {
+        FIELD_NOTES_CACHE_TTL
+    };
+    let mut fresh = Vec::new();
+    let mut answered = Vec::new();
+    for (record_id, notes) in answer.records {
+        let Ok(record_id) = record_id.parse::<Uuid>() else {
+            continue;
+        };
+        let Some((key, scope)) = batch.get(&record_id) else {
+            continue;
+        };
+        let notes = belonging_to_record(&installation, notes, scope);
+        fresh.push((key.clone(), notes.clone()));
+        answered.push((record_id, notes));
+    }
+    remember(fresh, ttl);
+    Ok(answered)
 }
 
 /// Calls the provider's declared command and checks its answer against the
