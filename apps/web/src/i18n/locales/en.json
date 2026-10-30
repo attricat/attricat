@@ -1067,6 +1067,10 @@
       "invalidAtLine": "Problem on line {{line}}",
       "goToLine": "Go to line {{line}}"
     },
+    "outline": {
+      "button": "Go to…",
+      "shortcut": "Ctrl+Shift+O (or Command+Shift+O)"
+    },
     "preview": {
       "title": "Preview",
       "checking": "Checking the definition…",

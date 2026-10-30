@@ -30,6 +30,7 @@ import type { ReferenceAttribute } from './definitionReferences';
 import { locateDefinitionError } from './definitionErrorLocation';
 import { DefinitionFoldControls } from './DefinitionFoldControls';
 import { DefinitionInsertMenu } from './DefinitionInsertMenu';
+import { DefinitionOutlineButton } from './DefinitionOutlineButton';
 import type { DefinitionTarget } from './definitionNavigation';
 import {
   DefinitionCursorContext,
@@ -256,6 +257,7 @@ export const DefinitionWorkspace = ({
           kind={kind}
           onInsert={insert}
         />
+        <DefinitionOutlineButton editor={mounted?.editor} />
         <DefinitionFoldControls editor={mounted?.editor} />
         <Box sx={{ flexGrow: 1 }} />
         <CheckStatusChip

@@ -20,6 +20,11 @@ export const discriminatorKey = 'type';
 export const attributesKey = 'attributes';
 export const includesKey = 'includes';
 export const viewsKey = 'views';
+/** Keys of view blocks and columns whose values name an attribute. */
+export const fieldKey = 'field';
+export const fieldsKey = 'fields';
+export const labelKey = 'label';
+export const nameKey = 'name';
 export const valueTypeKey = 'value_type';
 export const codeKey = 'code';
 export const fromKey = 'from';

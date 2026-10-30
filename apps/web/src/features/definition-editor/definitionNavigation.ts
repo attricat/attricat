@@ -7,6 +7,8 @@ import {
   attributePathSeparator,
   attributesKey,
   codeKey,
+  fieldKey,
+  fieldsKey,
   viewsKey,
 } from './constants';
 
@@ -75,10 +77,6 @@ export type DefinitionSection =
       kind: typeof definitionSectionKinds.view;
       name: string;
     };
-
-/** Keys of view blocks and columns whose values name an attribute. */
-const fieldKey = 'field';
-const fieldsKey = 'fields';
 
 const contains = (range: TextRange, offset: number) =>
   offset >= range.start && offset <= range.end;

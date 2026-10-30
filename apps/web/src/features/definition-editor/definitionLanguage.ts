@@ -26,6 +26,12 @@ import {
 import { definitionHover } from './definitionHover';
 import type { DefinitionReferences } from './definitionReferences';
 import {
+  definitionSymbolKinds,
+  definitionSymbols,
+  type DefinitionSymbol,
+  type DefinitionSymbolKind,
+} from './definitionSymbols';
+import {
   referenceAt,
   referenceDeclaration,
   referenceHover,
@@ -123,6 +129,39 @@ const toCompletionItem = (
   label: suggestion.label,
   range: toRange(monaco, model, suggestion.range),
   sortText: suggestion.sortText,
+});
+
+const symbolKind = (
+  monaco: Monaco,
+  kind: DefinitionSymbolKind,
+): languages.SymbolKind => {
+  const kinds = monaco.languages.SymbolKind;
+  switch (kind) {
+    case definitionSymbolKinds.array:
+      return kinds.Array;
+    case definitionSymbolKinds.item:
+      return kinds.Struct;
+    case definitionSymbolKinds.object:
+      return kinds.Module;
+    case definitionSymbolKinds.property:
+      return kinds.Property;
+  }
+};
+
+const toDocumentSymbol = (
+  monaco: Monaco,
+  model: editor.ITextModel,
+  symbol: DefinitionSymbol,
+): languages.DocumentSymbol => ({
+  children: symbol.children.map((child) =>
+    toDocumentSymbol(monaco, model, child),
+  ),
+  detail: symbol.detail ?? '',
+  kind: symbolKind(monaco, symbol.kind),
+  name: symbol.name,
+  range: toRange(monaco, model, symbol.range),
+  selectionRange: toRange(monaco, model, symbol.selectionRange),
+  tags: [],
 });
 
 const registerProviders = (monaco: Monaco) => {
@@ -223,6 +262,14 @@ const registerProviders = (monaco: Monaco) => {
         }
       );
     },
+  });
+  monaco.languages.registerDocumentSymbolProvider(yamlLanguageId, {
+    provideDocumentSymbols: (model: editor.ITextModel) =>
+      modelConfigs.has(model)
+        ? definitionSymbols(model.getValue()).map((symbol) =>
+            toDocumentSymbol(monaco, model, symbol),
+          )
+        : [],
   });
   monaco.languages.registerLinkProvider(yamlLanguageId, {
     provideLinks: async (model: editor.ITextModel) => {

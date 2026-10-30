@@ -118,6 +118,29 @@ test('follows the blueprint definition cursor in the preview', async ({
   await expect(page.locator('.monaco-editor').first()).toContainText('summary');
 });
 
+test('jumps to a blueprint attribute from the outline', async ({ page }) => {
+  await page.goto('/manage/blueprints/new');
+  await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
+  await replaceDefinition(
+    page,
+    `format_version: 1\ncode: outlined_${suffix()}\nname: Outlined\nkind: record\n\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\n\nattributes:\n  - code: title\n    value_type: string\n  - code: summary\n    value_type: string\n`,
+  );
+  await expect(page.getByText('Ready to save')).toBeVisible();
+  await page
+    .locator('.monaco-editor .view-line', { hasText: 'type: dropdown_option' })
+    .click();
+  await expect(
+    preview(page).getByRole('tab', { name: 'dropdown_option' }),
+  ).toHaveAttribute('aria-selected', 'true');
+
+  await page.getByRole('button', { name: 'Go to…' }).click();
+  await page.keyboard.type('summary');
+  await page.keyboard.press('Enter');
+  await expect(
+    preview(page).getByRole('tab', { name: 'Edit' }),
+  ).toHaveAttribute('aria-selected', 'true');
+});
+
 test('checks, previews and inserts into a reusable attribute definition', async ({
   page,
 }) => {

@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { definitionKinds } from '../definition-editor/constants';
 import { DefinitionEditor } from '../definition-editor/DefinitionEditor';
 import { DefinitionFoldControls } from '../definition-editor/DefinitionFoldControls';
+import { DefinitionOutlineButton } from '../definition-editor/DefinitionOutlineButton';
 import { draftEditors } from '../drafts/constants';
 import { DraftRestoreDialog } from '../drafts/DraftRestoreDialog';
 import { definitionDraftSchema } from '../drafts/schemas';
@@ -107,6 +108,7 @@ export const WorkflowDefinitionForm = ({
           {t('workflows.validationHelp')}
         </Typography>
         <Stack direction="row" spacing={1}>
+          <DefinitionOutlineButton editor={mountedEditor} />
           <DefinitionFoldControls editor={mountedEditor} />
         </Stack>
         <form.Field name="definition">

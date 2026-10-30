@@ -1123,6 +1123,10 @@
       "invalidAtLine": "Problem w wierszu {{line}}",
       "goToLine": "Przejdź do wiersza {{line}}"
     },
+    "outline": {
+      "button": "Przejdź do…",
+      "shortcut": "Ctrl+Shift+O (lub Command+Shift+O)"
+    },
     "preview": {
       "title": "Podgląd",
       "checking": "Sprawdzanie definicji…",
