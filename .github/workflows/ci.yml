@@ -102,6 +102,53 @@ jobs:
       - run: pnpm --dir apps/web inspect:bundle
       - run: pnpm --dir apps/docs build
 
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_DEV_DEBUG: 0
+      # Global setup side-loads the example extension, built from its own
+      # repository rather than a sibling checkout.
+      ATTRICAT_EXTENSION_EXAMPLE_DIR: ${{ github.workspace }}/.e2e/attricat-extension-example
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5
+        with:
+          repository: attricat/attricat-extension-example
+          path: .e2e/attricat-extension-example
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+            .e2e/attricat-extension-example -> target
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just,wasm-tools
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile
+        working-directory: .e2e/attricat-extension-example
+      - run: pnpm --dir apps/web exec playwright install --with-deps chromium
+      # Build the API before Playwright starts it, so the server start-up wait
+      # in global setup does not include compilation.
+      - run: cargo build --locked -p api --bins
+      - run: node scripts/test-e2e.mjs
+      - name: Upload Playwright results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: apps/web/test-results/
+          retention-days: 7
+
   release-path:
     runs-on: ubuntu-latest
     timeout-minutes: 60
