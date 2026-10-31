@@ -30,6 +30,7 @@ const LAST_EVENT_ID_HEADER: &str = "last-event-id";
 
 /// Media type of extension and solution-pack archives.
 pub(crate) const ZSTD_MEDIA_TYPE: &str = "application/zstd";
+pub(crate) const JAVASCRIPT_MEDIA_TYPE: &str = "text/javascript";
 
 /// The configured client and API base URL every command sends requests through.
 pub(crate) struct Api {
@@ -146,6 +147,22 @@ impl Api {
             .post(self.url(path)?)
             .header(reqwest::header::CONTENT_TYPE, content_type)
             .body(reqwest::Body::wrap_stream(stream))
+            .timeout(TRANSFER_TIMEOUT);
+        raw_response(send(request).await?).await
+    }
+
+    /// Replaces a resource with raw bytes, with the transfer timeout.
+    pub(crate) async fn put_bytes(
+        &self,
+        path: &str,
+        bytes: Vec<u8>,
+        content_type: &str,
+    ) -> Result<String, CliError> {
+        let request = self
+            .client
+            .put(self.url(path)?)
+            .header(reqwest::header::CONTENT_TYPE, content_type)
+            .body(bytes)
             .timeout(TRANSFER_TIMEOUT);
         raw_response(send(request).await?).await
     }
