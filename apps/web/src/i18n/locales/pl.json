@@ -691,7 +691,16 @@
       "findings": "Jakość danych",
       "noFindings": "Brak otwartych problemów w tym kontekście.",
       "loadingFindings": "Wczytywanie problemów...",
-      "couldNotLoadFindings": "Nie udało się wczytać problemów: {{message}}"
+      "couldNotLoadFindings": "Nie udało się wczytać problemów: {{message}}",
+      "input": "Kontrolka",
+      "editorName": "{{editor}} z rozszerzenia {{extension}} ({{id}} v{{version}})",
+      "editorReference": "Edytor z rozszerzenia {{id}} v{{version}}",
+      "editorActive": "Rysuje to pole.",
+      "editorStarting": "Uruchamia się; do tego czasu pole pokazuje domyślną kontrolkę.",
+      "editorFailed": "Zatrzymany: {{reason}} Pole używa domyślnej kontrolki.",
+      "editorUnavailable": "Niedostępny: rozszerzenie jest wyłączone, nie ma uprawnienia albo nie deklaruje już tego edytora. Pole używa domyślnej kontrolki.",
+      "editorUndeclared": "Ten edytor nie obsługuje wartości typu tego pola. Pole używa domyślnej kontrolki.",
+      "openExtension": "Otwórz rozszerzenie"
     },
     "loadingContexts": "Wczytywanie kontekstów...",
     "loadingFields": "Wczytywanie pól...",
@@ -2179,7 +2188,29 @@
     "open": "Otwórz Inspektor",
     "collapse": "Zwiń Inspektor",
     "tools": "Narzędzia Inspektora",
-    "status": "Inspektor · {{status}}"
+    "status": "Inspektor · {{status}}",
+    "extensions": {
+      "title": "Rozszerzenia",
+      "running": "Działający interfejs rozszerzeń",
+      "noneRunning": "W tej karcie nie uruchomiono jeszcze interfejsu rozszerzeń.",
+      "native": "natywny, zestaw UI {{uiKit}}",
+      "frame": "ramka {{contribution}}",
+      "devBuild": "wersja deweloperska",
+      "readyIn": "gotowy po {{ms}} ms",
+      "starting": "uruchamianie",
+      "failed": "zatrzymany: {{code}}",
+      "heartbeat": "sygnał życia {{ms}} ms",
+      "budgets": "{{nodes}}/{{maximumNodes}} elementów, szczyt {{updates}}/{{maximumUpdates}} zmian na sekundę, największa wiadomość {{message}}/{{maximumMessage}} KiB",
+      "requests": "Żądania do brokera",
+      "noRequests": "Brak żądań.",
+      "requestAllowed": "{{time}} {{extension}} › {{contribution}} {{method}} · {{ms}} ms",
+      "requestDenied": "{{time}} {{extension}} › {{contribution}} {{method}} · {{ms}} ms · odrzucone: {{reason}}",
+      "dropped": "Pominięte przy rysowaniu",
+      "nothingDropped": "Niczego nie pominięto.",
+      "drop": "{{extension}}: {{message}}",
+      "privacy": "Tylko nazwy, czasy i powody; treść żądań i odpowiedzi nigdy nie jest zapisywana. Kod rozszerzenia nigdy nie widzi powodów odrzucenia.",
+      "clear": "Wyczyść historię"
+    }
   },
   "backgroundProcessing": {
     "title": "Przetwarzanie w tle",

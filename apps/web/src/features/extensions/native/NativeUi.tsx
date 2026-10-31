@@ -48,7 +48,8 @@ import { ROOT_ID } from '@remote-dom/core';
 type Props = {
   contribution: ExtensionContribution;
   context?: Record<string, unknown>;
-  onFailure?: () => void;
+  /** Receives why the contribution failed. */
+  onFailure?: (code: NativeUiErrorCode) => void;
   onReady?: () => void;
   /** An attribute editor's value proposals. */
   onPropose?: (value: unknown) => void;
@@ -219,9 +220,14 @@ export const NativeUi = ({
     const outcome = failed ? 'failed' : ready ? 'ready' : undefined;
     if (!outcome || reported.current === outcome) return;
     reported.current = outcome;
-    if (failed) onFailure?.();
+    if (failed)
+      onFailure?.(
+        renderFailed
+          ? nativeUiErrorCodes.renderFailed
+          : errorCode || nativeUiErrorCodes.startFailed,
+      );
     else onReady?.();
-  }, [failed, ready, onFailure, onReady]);
+  }, [failed, ready, onFailure, onReady, renderFailed, errorCode]);
 
   if (failed)
     return (

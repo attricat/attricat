@@ -9,9 +9,15 @@ import {
   defaultExtensionFrameHeight,
   extensionMessageTypes,
   extensionStartTimeout,
+  renderingModes,
   maximumExtensionFrameHeight,
 } from './constants';
-import { handleBrokerRequest, postBrokerResponse } from './extensionBroker';
+import { postBrokerResponse } from './extensionBroker';
+import {
+  brokerRequest,
+  extensionRunStates,
+  recordRun,
+} from './diagnostics/extensionDiagnosticsStore';
 import { contributionKey } from './outletContributions';
 
 type FrameContext = Record<string, unknown>;
@@ -104,7 +110,22 @@ export const useExtensionFrame = ({
     const frameContext = readContext();
     let disposed = false;
     let port: MessagePort | undefined;
+    // The Inspector lists each frame with how long it took to start.
+    const runKey = contributionKey(contribution);
+    const identity = {
+      extensionId: contribution.extension_id,
+      extensionName: contribution.extension_name,
+      contributionId: contribution.id,
+      rendering: renderingModes.frame,
+    };
+    const startedAt = performance.now();
+    recordRun(runKey, { ...identity, state: extensionRunStates.starting });
     const fail = (key: FrameErrorKey) => {
+      recordRun(runKey, {
+        ...identity,
+        state: extensionRunStates.failed,
+        errorCode: key,
+      });
       callbacksRef.current.onFailure?.();
       setErrorKey(key);
     };
@@ -126,6 +147,11 @@ export const useExtensionFrame = ({
           if (!data || typeof data !== 'object') return;
           if (data.type === extensionMessageTypes.ready) {
             window.clearTimeout(timer);
+            recordRun(runKey, {
+              ...identity,
+              state: extensionRunStates.ready,
+              startMs: performance.now() - startedAt,
+            });
             callbacksRef.current.onReady?.();
             setReady(true);
             return;
@@ -151,7 +177,7 @@ export const useExtensionFrame = ({
           )
             return;
           try {
-            const result = await handleBrokerRequest(
+            const result = await brokerRequest(
               { method: data.method, payload: data.payload },
               {
                 contribution,

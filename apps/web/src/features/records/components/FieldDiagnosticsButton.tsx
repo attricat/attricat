@@ -35,6 +35,14 @@ import { useRevealField } from '../../views/fieldReveal';
 import { FieldConnectionList } from './FieldConnectionList';
 import { ValueTypeLabel } from './ValueTypeLabel';
 import type { ResolvedValue } from '../../views/components/ValueField';
+import type { EditorReference } from '../../views/schemas';
+import { RouterLink } from '../../../components/RouterLink';
+import {
+  attributeEditorStates,
+  fallbackEditorStates,
+  useAttributeEditorDiagnosis,
+  type AttributeEditorDiagnosis,
+} from '../../extensions/native/attributeEditorStatus';
 
 const diagnosticsPopoverMaxWidth = 360;
 
@@ -64,20 +72,118 @@ const DiagnosticSection = ({
   </Box>
 );
 
+/** Which extension editor a field names, and whether it draws the field. */
+const EditorDiagnosis = ({
+  diagnosis,
+}: {
+  diagnosis: AttributeEditorDiagnosis;
+}) => {
+  const { t } = useTranslation();
+  const { contribution, reference } = diagnosis;
+  const editorName = contribution
+    ? t('records.fieldDiagnostics.editorName', {
+        editor: contribution.title ?? contribution.id,
+        extension: contribution.extension_name,
+        id: reference.id,
+        version: reference.version,
+      })
+    : t('records.fieldDiagnostics.editorReference', {
+        id: reference.id,
+        version: reference.version,
+      });
+  const explanation = {
+    [attributeEditorStates.active]: t('records.fieldDiagnostics.editorActive'),
+    [attributeEditorStates.starting]: t(
+      'records.fieldDiagnostics.editorStarting',
+    ),
+    [attributeEditorStates.failed]: t('records.fieldDiagnostics.editorFailed', {
+      reason: diagnosis.errorCode
+        ? t(`extensions.native.errors.${diagnosis.errorCode}`, {
+            extension: contribution?.extension_name ?? reference.id,
+          })
+        : '',
+    }),
+    [attributeEditorStates.unavailable]: t(
+      'records.fieldDiagnostics.editorUnavailable',
+    ),
+    [attributeEditorStates.undeclared]: t(
+      'records.fieldDiagnostics.editorUndeclared',
+    ),
+  }[diagnosis.state];
+  return (
+    <Stack spacing={0.5}>
+      <Typography variant="body2">{editorName}</Typography>
+      <Typography
+        color={
+          fallbackEditorStates.has(diagnosis.state)
+            ? 'warning.main'
+            : 'text.secondary'
+        }
+        variant="body2"
+      >
+        {explanation}
+      </Typography>
+      {contribution && (
+        <RouterLink
+          params={{ extensionId: contribution.extension_id }}
+          to="/manage/extensions/$extensionId"
+          variant="body2"
+        >
+          {t('records.fieldDiagnostics.openExtension')}
+        </RouterLink>
+      )}
+    </Stack>
+  );
+};
+
 /**
  * A field's code, value type, value source and data quality findings, from
  * a small button beside the field. Renders nothing outside the record page.
  */
-export const FieldDiagnosticsButton = ({
-  attribute,
-  resolved,
-}: {
+type FieldDiagnosticsProps = {
   attribute: Attribute;
   resolved?: ResolvedValue;
+  /** An extension's attribute editor the view names for this field. */
+  editor?: EditorReference | null;
+  recordId?: string;
+};
+
+/** Reads the extension runtime only for a field that names an editor. */
+const FieldWithEditorDiagnostics = (
+  props: FieldDiagnosticsProps & { editor: EditorReference },
+) => (
+  <FieldDiagnostics
+    {...props}
+    editorDiagnosis={useAttributeEditorDiagnosis(
+      props.attribute,
+      props.editor,
+      props.recordId,
+    )}
+  />
+);
+
+export const FieldDiagnosticsButton = (props: FieldDiagnosticsProps) =>
+  props.editor ? (
+    <FieldWithEditorDiagnostics {...props} editor={props.editor} />
+  ) : (
+    <FieldDiagnostics {...props} />
+  );
+
+const FieldDiagnostics = ({
+  attribute,
+  resolved,
+  editorDiagnosis,
+}: FieldDiagnosticsProps & {
+  editorDiagnosis?: AttributeEditorDiagnosis;
 }) => {
   const { t } = useTranslation();
   const diagnostics = useFieldDiagnostics();
   const findings = useFieldFindings(attribute.code);
+  // A field that fell back from its extension editor reads as a warning, so
+  // the problem shows without opening the details.
+  const editorProblem =
+    editorDiagnosis !== undefined &&
+    fallbackEditorStates.has(editorDiagnosis.state);
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   // Set when the popover closes to lead to another field, which keeps focus.
   const [revealing, setRevealing] = useState(false);
@@ -94,7 +200,7 @@ export const FieldDiagnosticsButton = ({
       connection.attributeCodes.includes(attribute.code),
     ) ?? [];
   const severity = findings && worstSeverity(findings);
-  const Icon = severity ? CircleAlertIcon : InfoIcon;
+  const Icon = severity || editorProblem ? CircleAlertIcon : InfoIcon;
   const sourceContext = resolved?.source_context;
   const fallsBack =
     attribute.context_fallback !== attributeContextFallbacks.none;
@@ -120,7 +226,9 @@ export const FieldDiagnosticsButton = ({
           sx={{
             color: severity
               ? `${findingSeverityColor(severity)}.main`
-              : 'text.secondary',
+              : editorProblem
+                ? 'warning.main'
+                : 'text.secondary',
           }}
         >
           <Icon size={compactIconSize} />
@@ -254,6 +362,11 @@ export const FieldDiagnosticsButton = ({
                     : undefined
                 }
               />
+            </DiagnosticSection>
+          )}
+          {editorDiagnosis && (
+            <DiagnosticSection title={t('records.fieldDiagnostics.input')}>
+              <EditorDiagnosis diagnosis={editorDiagnosis} />
             </DiagnosticSection>
           )}
           {diagnostics.findingsStatus === fieldFindingsStatuses.loading && (

@@ -663,7 +663,16 @@
       "findings": "Data quality",
       "noFindings": "No open findings in this context.",
       "loadingFindings": "Loading findings...",
-      "couldNotLoadFindings": "Could not load findings: {{message}}"
+      "couldNotLoadFindings": "Could not load findings: {{message}}",
+      "input": "Input",
+      "editorName": "{{editor}} from {{extension}} ({{id}} v{{version}})",
+      "editorReference": "Extension editor {{id}} v{{version}}",
+      "editorActive": "Draws this field.",
+      "editorStarting": "Starting; the field shows its default control until it is ready.",
+      "editorFailed": "Stopped: {{reason}} The field uses its default control.",
+      "editorUnavailable": "Not available: its extension is disabled, lacks a permission, or no longer declares this editor. The field uses its default control.",
+      "editorUndeclared": "This editor does not edit values of this field's type. The field uses its default control.",
+      "openExtension": "Open the extension"
     },
     "loadingContexts": "Loading contexts...",
     "loadingFields": "Loading fields...",
@@ -2087,7 +2096,29 @@
     "open": "Open Inspector",
     "collapse": "Collapse Inspector",
     "tools": "Inspector tools",
-    "status": "Inspector · {{status}}"
+    "status": "Inspector · {{status}}",
+    "extensions": {
+      "title": "Extensions",
+      "running": "Running extension UI",
+      "noneRunning": "No extension UI has started in this tab.",
+      "native": "native, UI kit {{uiKit}}",
+      "frame": "frame {{contribution}}",
+      "devBuild": "development build",
+      "readyIn": "ready in {{ms}} ms",
+      "starting": "starting",
+      "failed": "stopped: {{code}}",
+      "heartbeat": "heartbeat {{ms}} ms",
+      "budgets": "{{nodes}}/{{maximumNodes}} elements, peak {{updates}}/{{maximumUpdates}} updates per second, largest message {{message}}/{{maximumMessage}} KiB",
+      "requests": "Broker requests",
+      "noRequests": "No requests yet.",
+      "requestAllowed": "{{time}} {{extension}} › {{contribution}} {{method}} · {{ms}} ms",
+      "requestDenied": "{{time}} {{extension}} › {{contribution}} {{method}} · {{ms}} ms · denied: {{reason}}",
+      "dropped": "Kept out of drawings",
+      "nothingDropped": "Nothing was dropped.",
+      "drop": "{{extension}}: {{message}}",
+      "privacy": "Names, durations and reasons only; request and answer contents are never recorded. Extension code never sees denial reasons.",
+      "clear": "Clear history"
+    }
   },
   "backgroundProcessing": {
     "title": "Background processing",

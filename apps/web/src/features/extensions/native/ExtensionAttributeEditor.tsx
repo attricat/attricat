@@ -1,5 +1,12 @@
 import { Box, FormHelperText, FormLabel } from '@mui/material';
-import { useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import type { Attribute } from '../../records/api';
 import { attributeLabel } from '../../records/recordDisplay';
 import type { ExtensionContribution } from '../api';
@@ -15,6 +22,12 @@ import {
   type EditorReference,
 } from './attributeEditors';
 import type { NativeFieldLabel } from './nativeContexts';
+import {
+  attributeEditorStates,
+  attributeEditorStatusKey,
+  reportAttributeEditorStatus,
+} from './attributeEditorStatus';
+import type { NativeUiErrorCode } from './constants';
 import { nativeHostFor } from './nativeRuntime';
 import { NativeUi } from './NativeUi';
 
@@ -78,6 +91,21 @@ export const ExtensionAttributeEditor = ({
   const box = useRef<HTMLDivElement>(null);
   const fallbackBox = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<EditorState>(editorStates.starting);
+  const [errorCode, setErrorCode] = useState<NativeUiErrorCode>();
+  // The field's details explain whether the editor draws it.
+  useEffect(() => {
+    const key = attributeEditorStatusKey(recordId, attribute.code);
+    reportAttributeEditorStatus(key, {
+      state:
+        state === editorStates.ready
+          ? attributeEditorStates.active
+          : state === editorStates.failed
+            ? attributeEditorStates.failed
+            : attributeEditorStates.starting,
+      errorCode,
+    });
+    return () => reportAttributeEditorStatus(key);
+  }, [attribute.code, errorCode, recordId, state]);
   // Readiness never takes the default control from under the user's typing.
   const [waitingForBlur, setWaitingForBlur] = useState(false);
   const commitNext = useRef(false);
@@ -198,7 +226,10 @@ export const ExtensionAttributeEditor = ({
           <NativeUi
             context={context}
             contribution={contribution}
-            onFailure={() => setState(editorStates.failed)}
+            onFailure={(code) => {
+              setErrorCode(code);
+              setState(editorStates.failed);
+            }}
             fieldLabel={fieldLabel}
             onPropose={propose}
             onReady={() => {
