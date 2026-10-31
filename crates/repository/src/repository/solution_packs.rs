@@ -494,10 +494,12 @@ async fn workspace_planning_state(
         .and_then(|settings| settings.get("explore_navigation"))
         .cloned()
         .unwrap_or_else(|| serde_json::json!([]));
-    let extension_layout = settings_object
-        .and_then(|settings| settings.get("extension_layout"))
-        .cloned()
-        .unwrap_or_else(empty_workspace_extension_layout);
+    let extension_layout = super::extensions::without_removed_outlets(
+        settings_object
+            .and_then(|settings| settings.get("extension_layout"))
+            .cloned()
+            .unwrap_or_else(empty_workspace_extension_layout),
+    );
     let extension_layout_valid = settings_object.is_some()
         && super::extensions::validate_workspace_extension_layout(&extension_layout).is_ok();
     let (explore_navigation, explore_navigation_valid) = match settings_object.and_then(|_| {
@@ -4998,10 +5000,12 @@ async fn evaluate_solution_pack_check(
             .bind(workspace_id)
             .fetch_one(&mut **tx)
             .await?;
-            let layout = settings
-                .get("extension_layout")
-                .cloned()
-                .unwrap_or_else(empty_workspace_extension_layout);
+            let layout = super::extensions::without_removed_outlets(
+                settings
+                    .get("extension_layout")
+                    .cloned()
+                    .unwrap_or_else(empty_workspace_extension_layout),
+            );
             let placement = classify_extension_layout_placement(
                 &layout,
                 contribution,

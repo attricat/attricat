@@ -79,6 +79,17 @@ pub fn extension_manifest_sha256(manifest: &Manifest) -> Result<String, Reposito
         .map_err(|error| RepositoryError::InvalidExtension(error.to_string()))
 }
 
+/// A stored layout without placements in outlets the host no longer has, so
+/// removing an outlet does not leave the layout unreadable or unsaveable.
+pub(crate) fn without_removed_outlets(mut layout: Value) -> Value {
+    if let Some(outlets) = layout.get_mut("outlets").and_then(Value::as_object_mut) {
+        outlets.retain(|outlet, _| {
+            serde_json::from_value::<UiOutlet>(Value::String(outlet.clone())).is_ok()
+        });
+    }
+    layout
+}
+
 /// Configuration is data only: outlet names and stable contribution keys. It
 /// deliberately cannot contain selectors, component names, or placement rules.
 pub(crate) fn validate_workspace_extension_layout(layout: &Value) -> Result<(), RepositoryError> {
@@ -778,13 +789,13 @@ impl AttricatRepository {
     }
 
     pub async fn workspace_extension_layout(&self) -> Result<Value, RepositoryError> {
-        Ok(sqlx::query_scalar(
+        Ok(without_removed_outlets(sqlx::query_scalar(
             "SELECT COALESCE(settings->'extension_layout', '{\"version\":1,\"outlets\":{}}'::jsonb) FROM workspaces WHERE id = $1",
         )
         .bind(self.workspace_id())
         .fetch_optional(&self.pool)
         .await?
-        .unwrap_or_else(empty_workspace_extension_layout))
+        .unwrap_or_else(empty_workspace_extension_layout)))
     }
 
     async fn lock_workspace_settings_in_transaction(
@@ -812,10 +823,12 @@ impl AttricatRepository {
         let settings = self
             .lock_workspace_settings_in_transaction(transaction, workspace_id)
             .await?;
-        let layout = settings
-            .get("extension_layout")
-            .cloned()
-            .unwrap_or_else(empty_workspace_extension_layout);
+        let layout = without_removed_outlets(
+            settings
+                .get("extension_layout")
+                .cloned()
+                .unwrap_or_else(empty_workspace_extension_layout),
+        );
         validate_workspace_extension_layout(&layout)?;
         Ok(layout)
     }
@@ -1921,5 +1934,26 @@ impl AttricatRepository {
         }
         visiting.remove(extension_id);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod layout_tests {
+    use super::*;
+
+    #[test]
+    fn stored_layouts_drop_placements_in_removed_outlets() {
+        let layout = without_removed_outlets(json!({
+            "version": 1,
+            "outlets": {
+                "record_preview_panel": {"order": ["acme.x:panel"], "hidden": []},
+                "record_tab": {"order": ["acme.x:tab"], "hidden": []},
+            },
+        }));
+        assert_eq!(
+            layout["outlets"],
+            json!({"record_tab": {"order": ["acme.x:tab"], "hidden": []}})
+        );
+        assert!(validate_workspace_extension_layout(&layout).is_ok());
     }
 }
