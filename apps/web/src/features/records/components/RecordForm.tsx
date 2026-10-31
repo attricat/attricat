@@ -346,6 +346,14 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
           ...(expectedUpdatedAt === undefined && {
             required: t('records.valueRequired'),
           }),
+          uneditableRequired: (attributeCode) =>
+            t('records.uneditableRequiredValue', {
+              attribute: attributeLabel(
+                blueprint.attributes.find(
+                  (attribute) => attribute.code === attributeCode,
+                ) ?? { code: attributeCode },
+              ),
+            }),
         },
         fieldEditors,
         fileCounts,

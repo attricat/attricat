@@ -95,6 +95,8 @@ type RecordFormValidationMessages = {
   invalidValue: string;
   required: string;
   schema: string;
+  /** A required attribute the form cannot set, such as a readonly one. */
+  uneditableRequired: (attributeCode: string) => string;
 };
 
 /** Resolves validation messages in the active language at validation time. */
@@ -104,6 +106,10 @@ export const recordFormValidationMessages =
     invalidValue: i18n.t('records.invalidAttributeValue'),
     required: i18n.t('records.requiredAttributeValue'),
     schema: i18n.t('records.schemaValidationFailed'),
+    uneditableRequired: (attributeCode) =>
+      i18n.t('records.uneditableRequiredValue', {
+        attribute: attributeCode.replaceAll('_', ' '),
+      }),
   });
 
 /**
@@ -253,6 +259,8 @@ export const validateRecordForm = (
             : (jsonSchemaErrorMessage([error]) ?? messages.schema);
         return undefined;
       }
+      if (attributeCode && error.keyword === 'required')
+        return messages.uneditableRequired(attributeCode);
       return messages.schema;
     })
     .find(Boolean);

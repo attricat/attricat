@@ -303,6 +303,19 @@ describe('record form values', () => {
     });
   });
 
+  it('names a required attribute the form cannot set', () => {
+    expect(
+      validateRecordForm([{ code: 'title', value_type: 'string' }], {}, [], {
+        type: 'object',
+        required: ['product_code'],
+      }),
+    ).toEqual({
+      fieldErrors: {},
+      formError:
+        "The required attribute “product code” can't be set in this form. Ask an administrator to give it a value or change the blueprint.",
+    });
+  });
+
   it('names the value schema rule a field fails', () => {
     const sku = {
       code: 'sku',

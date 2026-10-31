@@ -103,7 +103,7 @@ const ScopeTargetField = ({
         select
         value={scopeTargetId}
       >
-        {targets.data?.map((target) => (
+        {(targets.data ?? []).map((target) => (
           <MenuItem key={target.id} value={target.id}>
             {target.label}
           </MenuItem>

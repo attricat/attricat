@@ -1,5 +1,4 @@
 import { useResourcePageTitle } from '../../app/useResourcePageTitle';
-import { defaultQueryRetries } from '../../api/queryRetries';
 import { personName } from '../../components/personName';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -55,10 +54,6 @@ export const UserProfilePage = ({ userId }: { userId: string }) => {
   const profile = useQuery({
     queryKey: userQueryKeys.profile(userId),
     queryFn: ({ signal }) => getUserProfile(userId, signal),
-    retry: (count, error) =>
-      !(
-        error instanceof ApiRequestError && error.status === httpStatus.notFound
-      ) && count < defaultQueryRetries,
   });
   const session = useQuery(sessionOptions());
   const user = profile.data;

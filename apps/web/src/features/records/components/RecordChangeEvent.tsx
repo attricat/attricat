@@ -52,11 +52,12 @@ export const RecordChangeEvent = ({ changes }: Props) => {
   );
   return (
     <Paper component="section" sx={{ mb: 2, p: 2 }}>
-      <Typography sx={{ fontWeight: 'bold' }}>
+      {/* A user label is a block, so these lines are not paragraphs. */}
+      <Typography component="div" sx={{ fontWeight: 'bold' }}>
         {actor} ·{' '}
         <Timestamp style="dateTimeSeconds" value={event.occurred_at} />
       </Typography>
-      <Typography color="text.secondary" variant="body2">
+      <Typography color="text.secondary" component="div" variant="body2">
         {approval}
       </Typography>
       {changes.map((change) => (

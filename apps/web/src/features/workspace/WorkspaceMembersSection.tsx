@@ -216,8 +216,8 @@ export const WorkspaceMembersSection = ({
                   select
                   value={field.state.value}
                 >
-                  {members.data
-                    ?.filter((member) => member.state === activeMemberState)
+                  {(members.data ?? [])
+                    .filter((member) => member.state === activeMemberState)
                     .map((member) => (
                       <MenuItem key={member.id} value={member.id}>
                         {member.email}
@@ -235,7 +235,7 @@ export const WorkspaceMembersSection = ({
                   select
                   value={field.state.value}
                 >
-                  {roles.data?.map((role) => (
+                  {(roles.data ?? []).map((role) => (
                     <MenuItem key={role.id} value={role.id}>
                       {role.code}
                     </MenuItem>
