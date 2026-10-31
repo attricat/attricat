@@ -3,7 +3,9 @@ title: Client contributions
 description: Add pages, panels, and actions to the web app from sandboxed frames, declare table cells, and use the catalog client API.
 ---
 
-A client contribution is a JavaScript module that Attricat loads into a sandboxed frame at a fixed place in the web app. The host owns everything around the frame: layout, loading and error states, focus, and accessibility landmarks. Your module owns what is inside it.
+This page covers **Frame UI** (`client_frame` artifacts) and the outlets every client contribution can use. For components Attricat draws for you, see [Native UI](/extensions/native/).
+
+A Frame UI contribution is a JavaScript module that Attricat loads into a sandboxed frame at a fixed place in the web app. The host owns everything around the frame: layout, loading and error states, focus, and accessibility landmarks. Your module owns what is inside it.
 
 ## The sandbox
 
