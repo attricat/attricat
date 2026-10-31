@@ -7,7 +7,7 @@ Server-side extension code is a WebAssembly **component** declared as a `server_
 
 ## Host API version
 
-The host interface is the WIT package `attricat:host@1.1.0`, in `crates/extension-runtime/wit-host/attricat-extension.wit` in the Attricat repository. Set `attricat.host_api` in your manifest to a range that accepts it, such as `">=1.0.0, <2.0.0"` or `"^1.1"`. Every release with such a range can use every feature: event handlers, commands, typed reads and writes, scoped configuration, every kind of [operation](/extensions/operations/), and all client outlets. If your component uses anything added in 1.1, declare `"^1.1"`, so a host that only supports 1.0 refuses the package instead of failing at run time.
+The host interface is the WIT package `attricat:host@1.1.0`, published as `wit/attricat-host-1.1.0.wit` in the [attricat-extension-sdk](https://github.com/attricat/attricat-extension-sdk) repository with every other released version. Set `attricat.host_api` in your manifest to a range that accepts it, such as `">=1.0.0, <2.0.0"` or `"^1.1"`. Every release with such a range can use every feature: event handlers, commands, typed reads and writes, scoped configuration, every kind of [operation](/extensions/operations/), and all client outlets. If your component uses anything added in 1.1, declare `"^1.1"`, so a host that only supports 1.0 refuses the package instead of failing at run time.
 
 Build your component against one of these worlds:
 

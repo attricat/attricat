@@ -7,7 +7,7 @@ Serwerowy kod rozszerzenia to **komponent** WebAssembly zadeklarowany jako artef
 
 ## Wersja API hosta
 
-Interfejs hosta to pakiet WIT `attricat:host@1.1.0` w pliku `crates/extension-runtime/wit-host/attricat-extension.wit` w repozytorium Attricat. Ustaw `attricat.host_api` w manifeście na zakres, który go obejmuje, np. `">=1.0.0, <2.0.0"` lub `"^1.1"`. Każde wydanie z takim zakresem może używać wszystkich funkcji: procedur obsługi zdarzeń, poleceń, typowanego odczytu i zapisu, konfiguracji zakresowej, wszystkich rodzajów [operacji](/pl/extensions/operations/) i wszystkich miejsc osadzenia po stronie klienta. Jeśli komponent korzysta z czegokolwiek, co dodano w 1.1, zadeklaruj `"^1.1"`, aby host obsługujący tylko 1.0 odrzucił pakiet, zamiast zawieść w czasie działania.
+Interfejs hosta to pakiet WIT `attricat:host@1.1.0`, opublikowany jako `wit/attricat-host-1.1.0.wit` w repozytorium [attricat-extension-sdk](https://github.com/attricat/attricat-extension-sdk) razem z każdą inną wydaną wersją. Ustaw `attricat.host_api` w manifeście na zakres, który go obejmuje, np. `">=1.0.0, <2.0.0"` lub `"^1.1"`. Każde wydanie z takim zakresem może używać wszystkich funkcji: procedur obsługi zdarzeń, poleceń, typowanego odczytu i zapisu, konfiguracji zakresowej, wszystkich rodzajów [operacji](/pl/extensions/operations/) i wszystkich miejsc osadzenia po stronie klienta. Jeśli komponent korzysta z czegokolwiek, co dodano w 1.1, zadeklaruj `"^1.1"`, aby host obsługujący tylko 1.0 odrzucił pakiet, zamiast zawieść w czasie działania.
 
 Zbuduj komponent dla jednego z tych światów:
 
