@@ -81,7 +81,11 @@ use outcomes::retry_backoff;
 pub use outcomes::{InvocationFailure, Rejection};
 
 const MAX_HOST_MESSAGE_BYTES: usize = 16 * 1024;
-const MAX_HOST_JSON_BYTES: usize = 1024 * 1024;
+/// Bounds JSON an extension sends the host: requests, stored values, results.
+const MAX_HOST_JSON_BYTES: usize = 64 * 1024;
+/// Bounds JSON the host answers an extension with, which can carry a whole
+/// blueprint revision.
+const MAX_HOST_RESPONSE_JSON_BYTES: usize = 1024 * 1024;
 const MAX_CACHED_COMPONENTS: usize = 64;
 const MAX_WRITE_VALUES: usize = 100;
 /// Values one connector upsert row may write.
@@ -1237,7 +1241,7 @@ fn batch_capabilities(batch: &ExtensionAttricatBatch) -> Vec<&'static str> {
 fn bounded_serialize(value: &impl serde::Serialize) -> Result<String, String> {
     let serialized =
         serde_json::to_string(value).map_err(|_| "response serialization failed".to_owned())?;
-    if serialized.len() > MAX_HOST_JSON_BYTES {
+    if serialized.len() > MAX_HOST_RESPONSE_JSON_BYTES {
         Err("response exceeds host JSON limit".into())
     } else {
         Ok(serialized)

@@ -29,7 +29,8 @@ interface api {
   }
 
   /// Attricat values use JSON because their type is defined by the owning
-  /// blueprint. Every JSON field is bounded by the host to 1 MiB.
+  /// blueprint. The host bounds JSON an extension sends to 64 KiB and JSON it
+  /// answers with to 1 MiB.
   record record-reference { record-id: string }
   record resolved-read { record-id: string, context-id: string }
   variant read-request {
@@ -106,8 +107,8 @@ interface artifacts {
   finalize-output: func(name: string) -> result<string, string>;
 }
 
-// JSON payloads are bounded to 1 MiB. Page limits and intent limits are
-// enforced in the repository. Batch keys are scoped to the durable run.
+// Requests are bounded to 64 KiB and results to 1 MiB. Page limits and intent
+// limits are enforced in the repository. Batch keys are scoped to the durable run.
 interface attricat-data {
   read: func(request: string) -> result<string, string>;
   batch: func(request: string) -> result<string, string>;
