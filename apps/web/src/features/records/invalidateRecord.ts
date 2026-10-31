@@ -37,6 +37,17 @@ const recordProjections = (id: string) => [
 ];
 
 /**
+ * Whether cached data under the resolved previews is a preview. Other queries,
+ * such as extension field notes, live under a record's previews to refresh
+ * with them.
+ */
+const isResolvedPreview = (data: unknown): data is ResolvedRecordPreview =>
+  typeof data === 'object' &&
+  data !== null &&
+  'values' in data &&
+  'reusable_values' in data;
+
+/**
  * Every projection of a record must be refreshed after its values change.
  * Searches are only marked stale: results on screen, such as the Explorer
  * behind its record panel, keep their rows while the record is edited and
@@ -59,12 +70,9 @@ export const invalidateRecord = (client: QueryClient, id: string) => {
     // preview, so those previews show its old label until refreshed.
     client.invalidateQueries({
       queryKey: recordQueryKeys.allResolvedPreviews(),
-      predicate: (query) => {
-        const preview = query.state.data as ResolvedRecordPreview | undefined;
-        return Boolean(
-          preview && relationshipTargetLabels(preview, true).has(id),
-        );
-      },
+      predicate: (query) =>
+        isResolvedPreview(query.state.data) &&
+        relationshipTargetLabels(query.state.data, true).has(id),
     }),
     client.invalidateQueries({
       queryKey: recordQueryKeys.searches(),

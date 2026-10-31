@@ -621,7 +621,7 @@ async fn install_layout_extension(pool: &PgPool) -> Uuid {
         "icons": {"48": "icon.png"},
         "attricat": {"id": "acme.layout", "host_api": "^1.0"},
         "permissions": [],
-        "artifacts": [{"id":"client","kind":"client_component","path":"client.js"}],
+        "artifacts": [{"id":"client","kind":"client_frame","path":"client.js"}],
         "ui": [
             {
                 "id": "nav",
@@ -4990,7 +4990,7 @@ fn official_extension_archive(extension_id: &str, version: &str, description: &s
         }],
         "artifacts": [
             {"id": "server", "kind": "server_wasm", "path": "server.wasm"},
-            {"id": "client", "kind": "client_component", "path": "client.js"}
+            {"id": "client", "kind": "client_frame", "path": "client.js"}
         ],
         "configuration": {
             "version": 1,

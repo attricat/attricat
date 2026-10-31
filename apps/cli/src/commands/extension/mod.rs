@@ -1,9 +1,11 @@
 pub(crate) mod connection;
 pub(crate) mod connector_job;
+pub(crate) mod dev;
 pub(crate) mod export;
 pub(crate) mod operation;
 pub(crate) mod registry;
 pub(crate) mod run;
+pub(crate) mod scaffold;
 pub(crate) mod schedule;
 
 use std::path::PathBuf;
@@ -41,6 +43,37 @@ pub(crate) enum ExtensionCommand {
     Sideload {
         #[arg(long)]
         file: PathBuf,
+    },
+    /// Create a native UI extension (Preact and the Attricat UI kit) in a
+    /// new directory. Needs no server.
+    New {
+        directory: PathBuf,
+        /// The manifest's attricat.id.
+        #[arg(long)]
+        id: String,
+        #[arg(long, default_value = "My extension")]
+        name: String,
+        /// A local checkout of attricat-extension-sdk to link the packages to.
+        #[arg(long)]
+        sdk: Option<PathBuf>,
+    },
+    /// Rebuild a native extension's Worker bundle and hot-swap it in a
+    /// development server (ATTRICAT_DEVTOOLS=true), keeping the installed
+    /// release and its grants. Watches until interrupted.
+    Dev {
+        extension_id: String,
+        /// The built Worker bundle, as the manifest's client_native path.
+        #[arg(long, default_value = "dist/ui.js")]
+        bundle: PathBuf,
+        /// A shell command that rebuilds the bundle before each swap.
+        #[arg(long)]
+        build: Option<String>,
+        /// Files or directories whose changes trigger a rebuild.
+        #[arg(long, default_value = "src")]
+        watch: Vec<PathBuf>,
+        /// Swap once and exit.
+        #[arg(long)]
+        once: bool,
     },
     Upgrade {
         extension_id: String,
@@ -260,6 +293,31 @@ pub(crate) async fn extension_command(
         ExtensionCommand::Sideload { file } => {
             api.upload("/extensions/sideload", &file, ZSTD_MEDIA_TYPE)
                 .await
+        }
+        ExtensionCommand::New {
+            directory,
+            id,
+            name,
+            sdk,
+        } => scaffold::scaffold(&directory, &id, &name, sdk.as_deref()),
+        ExtensionCommand::Dev {
+            extension_id,
+            bundle,
+            build,
+            watch,
+            once,
+        } => {
+            dev::dev(
+                api,
+                dev::DevOptions {
+                    extension_id,
+                    bundle,
+                    build,
+                    watch,
+                    once,
+                },
+            )
+            .await
         }
         ExtensionCommand::Upgrade {
             extension_id,

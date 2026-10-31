@@ -21,11 +21,12 @@ use super::{
 };
 use crate::{
     constants::DEFAULT_LIST_PAGE_SIZE,
-    extension_installer::{ExtensionInstallError, ExtensionInstaller},
+    extension_installer::{ExtensionInstallError, ExtensionInstaller, dev_artifact_key},
     extension_registry::{DiscoveredRelease, GitHubRepository},
     extensions::{
         ActionCondition, ActionConfirmation, ActionInvocation, CellDeclaration,
-        ContributionTranslation, ExtensionPackage, MAX_EXTENSION_IDENTIFIER_BYTES,
+        ContributionTranslation, EditorDeclaration, ExtensionPackage,
+        MAX_EXTENSION_IDENTIFIER_BYTES, MAX_NATIVE_ARTIFACT_BYTES, RenderingMode,
         UiContributionKind, UiOutlet, validate_schema,
     },
     repository::{
@@ -35,10 +36,11 @@ use crate::{
         ExtensionStorageEntry, ExtensionStorageError, InstalledExtension, RepositoryError,
         StartExtensionOperation,
     },
-    storage::ObjectStoreError,
+    storage::{ObjectStoreError, StoredObject},
 };
 use attricat_domain::permissions::Permission;
 use attricat_domain::states::ExtensionState;
+use sha2::{Digest, Sha256};
 
 /// Extension-chosen media must never run as active content on the API origin.
 pub(super) const SANDBOXED_CONTENT_POLICY: &str = "sandbox; default-src 'none'";
@@ -87,6 +89,18 @@ pub(super) struct RuntimeContribution {
     /// How the host draws a table cell, e.g. `{"display": {"type": "number"}}`.
     #[serde(skip_serializing_if = "Option::is_none")]
     cell: Option<CellDeclaration>,
+    /// The value types and props of an attribute editor.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    editor: Option<EditorDeclaration>,
+    /// `frame` or `native` when the contribution runs extension code.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    rendering: Option<RenderingMode>,
+    /// The UI kit version native UI is drawn with, e.g. `1.0.0`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ui_kit: Option<String>,
+    /// Changes whenever a development build replaces the native artifact.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    artifact_revision: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -859,6 +873,10 @@ pub(super) async fn runtime(
                 icon: item.icon,
                 translations: item.translations,
                 cell: item.cell,
+                editor: item.editor,
+                rendering: item.rendering,
+                ui_kit: item.ui_kit,
+                artifact_revision: item.dev_revision,
             })
             .collect(),
     ))
@@ -1239,6 +1257,42 @@ pub(super) fn sandboxed_download(
     Ok(response)
 }
 
+/// Replaces an installed release's native Worker bundle with a development
+/// build, so `acli extension dev` can hot-swap it without a new upload or new
+/// grants. Only a server running with `ATTRICAT_DEVTOOLS` accepts it.
+pub(super) async fn dev_artifact(
+    State(state): State<AppState>,
+    ScopedRepository(repository): ScopedRepository,
+    ApiPath(extension_id): ApiPath<String>,
+    bundle: Bytes,
+) -> Result<StatusCode, ApiError> {
+    if !state.devtools_enabled {
+        return Err(ApiError::not_found("extension development build"));
+    }
+    if bundle.is_empty() || bundle.len() > MAX_NATIVE_ARTIFACT_BYTES {
+        return Err(ApiError::invalid_input(format!(
+            "a development build must have 1-{MAX_NATIVE_ARTIFACT_BYTES} bytes"
+        )));
+    }
+    let (release_id, _) = repository.extension_native_artifact(&extension_id).await?;
+    let revision = format!("{:x}", Sha256::digest(&bundle));
+    state
+        .object_store
+        .put(
+            &dev_artifact_key(release_id, &revision),
+            StoredObject {
+                bytes: bundle,
+                content_type: None,
+            },
+        )
+        .await
+        .map_err(|_| ApiError::service_unavailable("extension artifact storage is unavailable"))?;
+    repository
+        .record_extension_dev_artifact(release_id, &revision)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub(super) async fn artifact(
     State(state): State<AppState>,
     ScopedRepository(repository): ScopedRepository,
@@ -1254,11 +1308,16 @@ pub(super) async fn artifact(
         .ok_or_else(|| ApiError::not_found("extension artifact"))?;
     // An installed release is immutable, but this URL follows upgrades, so
     // clients revalidate against the release-scoped tag on every use.
-    let etag = conditional::entity_tag(&format!(
-        "{}/{}",
-        contribution.installed_release_id, contribution.id
-    ))
-    .ok_or_else(|| ApiError::internal("extension artifact tag is invalid"))?;
+    // A development build of the native Worker has its own revision.
+    let tag = match &contribution.dev_revision {
+        Some(revision) => format!(
+            "{}/{}/{revision}",
+            contribution.installed_release_id, contribution.id
+        ),
+        None => format!("{}/{}", contribution.installed_release_id, contribution.id),
+    };
+    let etag = conditional::entity_tag(&tag)
+        .ok_or_else(|| ApiError::internal("extension artifact tag is invalid"))?;
     if conditional::not_modified(&request_headers, &etag) {
         return Ok(conditional::not_modified_response(
             etag,

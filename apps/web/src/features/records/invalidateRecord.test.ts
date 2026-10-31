@@ -6,6 +6,7 @@ import {
   refreshStaleRecordSearches,
   removeRecord,
 } from './invalidateRecord';
+import { extensionQueryKeys } from '../extensions/queryKeys';
 import { recordQueryKeys } from './queryKeys';
 
 const projections = [
@@ -96,5 +97,12 @@ describe('record mutation cache policy', () => {
     await invalidateRecord(client, 'record');
     expect(client.getQueryState(referencing)?.isInvalidated).toBe(true);
     expect(client.getQueryState(unrelated)?.isInvalidated).toBe(false);
+  });
+  it('passes over extension field notes cached under a record preview', async () => {
+    const client = new QueryClient();
+    const notes = extensionQueryKeys.fieldNotes('other', 'context');
+    client.setQueryData(notes, { records: { other: [] } });
+    await expect(invalidateRecord(client, 'record')).resolves.toBeDefined();
+    expect(client.getQueryState(notes)?.isInvalidated).toBe(false);
   });
 });

@@ -193,6 +193,7 @@ pub const CAPABILITIES: &[&str] = &[
     "attricat.files.read",
     "attricat.files.public_links",
     "client.export_mapping",
+    "client.attribute_editor",
 ];
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -277,13 +278,59 @@ pub struct Artifact {
     pub id: String,
     pub kind: ArtifactKind,
     pub path: String,
+    /// The UI kit versions a `client_native` artifact works with, as a SemVer
+    /// range. Required on native artifacts and rejected on every other kind.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ui_kit: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ArtifactKind {
     ServerWasm,
-    ClientComponent,
+    /// Frame UI: an ES module that draws its own HTML in a sandboxed frame.
+    ClientFrame,
+    /// Native UI: a Worker module that composes UI kit components, which the
+    /// host validates and draws with its own components.
+    ClientNative,
+}
+
+/// Who draws a contribution that runs extension code in the browser.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RenderingMode {
+    /// The extension's own HTML in a sandboxed frame.
+    Frame,
+    /// UI kit components the host draws from the extension's Worker.
+    Native,
+}
+
+/// UI kit versions this host draws, oldest first. A released version is
+/// frozen; a later minor only adds elements, props or events.
+pub const SUPPORTED_UI_KIT_VERSIONS: &[&str] = &["1.0.0"];
+/// The largest native Worker bundle a release may carry; the SDK's build
+/// enforces the same budget.
+pub const MAX_NATIVE_ARTIFACT_BYTES: usize = 1024 * 1024;
+/// Appended to a native artifact's path to name the build record the SDK
+/// packs beside it: `{"ui_kit": "<lowest UI kit version it was built against>"}`.
+pub const NATIVE_BUILD_RECORD_SUFFIX: &str = ".build.json";
+
+/// What the SDK records about a native bundle at build time.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct NativeBuildRecord {
+    pub ui_kit: String,
+}
+
+/// The highest supported UI kit version in a range; the host draws an
+/// extension's native UI with it.
+pub fn negotiated_ui_kit(range: &str) -> Option<Version> {
+    let range = VersionReq::parse(range).ok()?;
+    SUPPORTED_UI_KIT_VERSIONS
+        .iter()
+        .filter_map(|version| Version::parse(version).ok())
+        .filter(|version| range.matches(version))
+        .max()
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -716,39 +763,79 @@ pub struct CellPropReference {
     pub prop: String,
 }
 
+/// Checks a cell's or editor's scalar value types and its declared props.
+fn validate_value_types_and_props(
+    value_types: &[String],
+    props: &BTreeMap<String, CellProp>,
+) -> Result<(), String> {
+    if value_types.is_empty() {
+        return Err("requires value types".into());
+    }
+    let mut seen = HashSet::new();
+    for value_type in value_types {
+        let parsed = ValueType::parse(value_type).filter(|parsed| parsed.is_scalar());
+        if parsed.is_none() || !seen.insert(value_type) {
+            return Err(format!(
+                "has an unsupported or repeated value type '{value_type}'"
+            ));
+        }
+    }
+    if props.len() > MAX_CELL_PROPS {
+        return Err(format!("declares more than {MAX_CELL_PROPS} props"));
+    }
+    for (name, prop) in props {
+        if !valid_cell_prop_name(name) {
+            return Err(format!("has an invalid prop name '{name}'"));
+        }
+        let valid = match prop {
+            CellProp::Integer { minimum, maximum } => minimum
+                .zip(*maximum)
+                .is_none_or(|(minimum, maximum)| minimum <= maximum),
+            CellProp::String { max_length } => {
+                (1..=MAX_CELL_STRING_PROP_CHARS).contains(max_length)
+            }
+        };
+        if !valid {
+            return Err(format!("has invalid bounds for prop '{name}'"));
+        }
+    }
+    Ok(())
+}
+
+/// Checks the props a blueprint passes to a cell or editor against the props
+/// it declares.
+fn validate_passed_props(
+    declared: &BTreeMap<String, CellProp>,
+    props: &Value,
+) -> Result<(), String> {
+    let props = match props {
+        Value::Null => return Ok(()),
+        Value::Object(props) => props,
+        _ => return Err("props must be an object".into()),
+    };
+    for (name, value) in props {
+        let valid = match declared.get(name) {
+            None => return Err(format!("prop '{name}' is not declared")),
+            Some(CellProp::Integer { minimum, maximum }) => value.as_i64().is_some_and(|value| {
+                minimum.is_none_or(|minimum| value >= minimum)
+                    && maximum.is_none_or(|maximum| value <= maximum)
+            }),
+            Some(CellProp::String { max_length }) => value.as_str().is_some_and(|value| {
+                !value.trim().is_empty() && value.chars().count() <= *max_length as usize
+            }),
+        };
+        if !valid {
+            return Err(format!(
+                "prop '{name}' is outside its declared type or bounds"
+            ));
+        }
+    }
+    Ok(())
+}
+
 impl CellDeclaration {
     fn validate(&self) -> Result<(), String> {
-        if self.value_types.is_empty() {
-            return Err("requires value types".into());
-        }
-        let mut value_types = HashSet::new();
-        for value_type in &self.value_types {
-            let parsed = ValueType::parse(value_type).filter(|parsed| parsed.is_scalar());
-            if parsed.is_none() || !value_types.insert(value_type) {
-                return Err(format!(
-                    "has an unsupported or repeated value type '{value_type}'"
-                ));
-            }
-        }
-        if self.props.len() > MAX_CELL_PROPS {
-            return Err(format!("declares more than {MAX_CELL_PROPS} props"));
-        }
-        for (name, prop) in &self.props {
-            if !valid_cell_prop_name(name) {
-                return Err(format!("has an invalid prop name '{name}'"));
-            }
-            let valid = match prop {
-                CellProp::Integer { minimum, maximum } => minimum
-                    .zip(*maximum)
-                    .is_none_or(|(minimum, maximum)| minimum <= maximum),
-                CellProp::String { max_length } => {
-                    (1..=MAX_CELL_STRING_PROP_CHARS).contains(max_length)
-                }
-            };
-            if !valid {
-                return Err(format!("has invalid bounds for prop '{name}'"));
-            }
-        }
+        validate_value_types_and_props(&self.value_types, &self.props)?;
         match &self.display {
             CellDisplay::Number { precision, unit } => {
                 if !self
@@ -805,31 +892,31 @@ impl CellDeclaration {
 
     /// Checks the props a table column passes against this declaration.
     pub fn validate_props(&self, props: &Value) -> Result<(), String> {
-        let props = match props {
-            Value::Null => return Ok(()),
-            Value::Object(props) => props,
-            _ => return Err("props must be an object".into()),
-        };
-        for (name, value) in props {
-            let valid = match self.props.get(name) {
-                None => return Err(format!("prop '{name}' is not declared")),
-                Some(CellProp::Integer { minimum, maximum }) => {
-                    value.as_i64().is_some_and(|value| {
-                        minimum.is_none_or(|minimum| value >= minimum)
-                            && maximum.is_none_or(|maximum| value <= maximum)
-                    })
-                }
-                Some(CellProp::String { max_length }) => value.as_str().is_some_and(|value| {
-                    !value.trim().is_empty() && value.chars().count() <= *max_length as usize
-                }),
-            };
-            if !valid {
-                return Err(format!(
-                    "prop '{name}' is outside its declared type or bounds"
-                ));
-            }
-        }
-        Ok(())
+        validate_passed_props(&self.props, props)
+    }
+}
+
+/// An input control a blueprint field may use in place of the default one
+/// for its value type. The extension's native UI draws it with UI kit
+/// components; the host owns the label, errors and saving.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct EditorDeclaration {
+    /// Scalar value types a field using this editor may have.
+    pub value_types: Vec<String>,
+    /// Props a blueprint field may pass, by name, typed like cell props.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub props: BTreeMap<String, CellProp>,
+}
+
+impl EditorDeclaration {
+    fn validate(&self) -> Result<(), String> {
+        validate_value_types_and_props(&self.value_types, &self.props)
+    }
+
+    /// Checks the props a blueprint field passes against this declaration.
+    pub fn validate_props(&self, props: &Value) -> Result<(), String> {
+        validate_passed_props(&self.props, props)
     }
 }
 
@@ -887,6 +974,10 @@ pub struct UiContribution {
     /// rejected on every other kind.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cell: Option<CellDeclaration>,
+    /// The value types and props of an attribute `editor`; required for
+    /// editors and rejected on every other kind.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub editor: Option<EditorDeclaration>,
 }
 
 /// Declarative conditions the host checks before offering an action. Every
@@ -1002,6 +1093,9 @@ pub enum UiContributionKind {
     /// A titled tab on the record page whose panel is the extension's frame.
     /// An extension may add up to [`MAX_RECORD_TABS_PER_EXTENSION`].
     Tab,
+    /// An input control blueprint fields may name under `editor`. It is
+    /// native UI; an extension may declare several.
+    Editor,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
@@ -1034,6 +1128,39 @@ pub enum UiOutlet {
     /// and value mappings per destination category), on the extension's
     /// export page.
     ExportMapping,
+    /// An input control for a record field whose blueprint names it.
+    AttributeEditor,
+}
+
+impl UiOutlet {
+    /// How an outlet's contributions may be drawn, when they run extension
+    /// code. Host-rendered outlets (actions and cells) have none; route and
+    /// embedded navigation stay frame-only.
+    pub fn rendering_modes(&self) -> &'static [RenderingMode] {
+        const FRAME: &[RenderingMode] = &[RenderingMode::Frame];
+        const NATIVE: &[RenderingMode] = &[RenderingMode::Native];
+        const BOTH: &[RenderingMode] = &[RenderingMode::Frame, RenderingMode::Native];
+        match self {
+            UiOutlet::RecordTab
+            | UiOutlet::BlueprintAttributeConfiguration
+            | UiOutlet::BlueprintDetailPanel
+            | UiOutlet::BlueprintPanel
+            | UiOutlet::DataHealthCard
+            | UiOutlet::ExportMapping
+            | UiOutlet::ActionDialog => BOTH,
+            UiOutlet::AttributeEditor => NATIVE,
+            UiOutlet::Navigation | UiOutlet::BlueprintPublishCheck | UiOutlet::AuditEventPanel => {
+                FRAME
+            }
+            UiOutlet::RecordAction
+            | UiOutlet::ExplorerRowAction
+            | UiOutlet::ExplorerTableCell
+            | UiOutlet::ExplorerAction
+            | UiOutlet::ExplorerBulkAction
+            | UiOutlet::RecordHeaderAction
+            | UiOutlet::RecordAttributeAction => &[],
+        }
+    }
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -1086,12 +1213,11 @@ impl Manifest {
             FieldNotesSource::Client(artifact) => self
                 .artifacts
                 .iter()
-                .any(|item| item.id == *artifact && item.kind == ArtifactKind::ClientComponent),
+                .any(|item| item.id == *artifact && item.kind == ArtifactKind::ClientFrame),
         };
         if !declared {
             return Err(ManifestError::Invalid(
-                "record_field_notes must use a declared command or client_component artifact"
-                    .into(),
+                "record_field_notes must use a declared command or client_frame artifact".into(),
             ));
         }
         Ok(())
@@ -1356,6 +1482,18 @@ impl Manifest {
         for artifact in &self.artifacts {
             artifact.validate()?;
         }
+        // Every native contribution runs in the extension's one Worker.
+        if self
+            .artifacts
+            .iter()
+            .filter(|artifact| artifact.kind == ArtifactKind::ClientNative)
+            .count()
+            > 1
+        {
+            return Err(ManifestError::Invalid(
+                "a release may declare at most one client_native artifact".into(),
+            ));
+        }
         unique(self.dependencies.iter().map(|d| &d.id), "dependency")?;
         for dependency in &self.dependencies {
             valid_id(&dependency.id, "dependency id")?;
@@ -1528,18 +1666,29 @@ impl Manifest {
                     | UiContributionKind::Action
                     | UiContributionKind::Cell
             );
-            if !host_rendered
-                && (contribution.version == 0
-                    || !contribution.artifact.as_ref().is_some_and(|artifact| {
-                        self.artifacts.iter().any(|item| {
-                            item.id == *artifact && item.kind == ArtifactKind::ClientComponent
-                        })
-                    }))
-            {
+            let rendering = self.rendering_mode(contribution);
+            if !host_rendered && (contribution.version == 0 || rendering.is_none()) {
                 return Err(ManifestError::Invalid(format!(
-                    "UI contribution '{}' must reference a client_component artifact",
+                    "UI contribution '{}' must reference a client_frame or client_native artifact",
                     contribution.id
                 )));
+            }
+            if let Some(mode) = rendering {
+                // Routes have no outlet: they are full pages, drawn in a frame.
+                let allowed = contribution
+                    .outlet
+                    .as_ref()
+                    .map_or(&[RenderingMode::Frame][..], UiOutlet::rendering_modes);
+                if !allowed.contains(&mode) {
+                    return Err(ManifestError::Invalid(format!(
+                        "UI contribution '{}' cannot use a {} artifact at this outlet",
+                        contribution.id,
+                        match mode {
+                            RenderingMode::Frame => "client_frame",
+                            RenderingMode::Native => "client_native",
+                        }
+                    )));
+                }
             }
             if matches!(contribution.kind, UiContributionKind::Navigation)
                 && (contribution.version == 0
@@ -1557,6 +1706,14 @@ impl Manifest {
             } else if contribution.cell.is_some() {
                 return Err(ManifestError::Invalid(format!(
                     "only cell UI contributions may declare cell ('{}')",
+                    contribution.id
+                )));
+            }
+            if matches!(contribution.kind, UiContributionKind::Editor) {
+                validate_editor(contribution)?;
+            } else if contribution.editor.is_some() {
+                return Err(ManifestError::Invalid(format!(
+                    "only editor UI contributions may declare editor ('{}')",
                     contribution.id
                 )));
             }
@@ -1608,6 +1765,7 @@ impl Manifest {
                     UiOutlet::DataHealthCard => Some("client.data_health_card"),
                     UiOutlet::ActionDialog => Some("client.action_dialog"),
                     UiOutlet::ExportMapping => Some("client.export_mapping"),
+                    UiOutlet::AttributeEditor => Some("client.attribute_editor"),
                 };
                 if required.is_some_and(|capability| {
                     !self
@@ -1629,17 +1787,21 @@ impl Manifest {
                 | (UiContributionKind::Panel, Some(outlet))
                 | (UiContributionKind::Dialog, Some(outlet))
                 | (UiContributionKind::Tab, Some(outlet))
-                | (UiContributionKind::Cell, Some(outlet)) => {
-                    // Extensions may each contribute once to a content outlet.
-                    // A single extension cannot rely on duplicate ordering;
-                    // actions and dialogs are distinct items, so they may.
+                | (UiContributionKind::Cell, Some(outlet))
+                | (UiContributionKind::Editor, Some(outlet)) => {
+                    // Extensions may each contribute one frame to a content
+                    // outlet. A single extension cannot rely on duplicate
+                    // ordering; actions, dialogs, tabs, cells and editors are
+                    // distinct items, and native contributions share one
+                    // Worker instead of each mounting a frame, so they may.
                     let repeatable = matches!(
                         contribution.kind,
                         UiContributionKind::Action
                             | UiContributionKind::Dialog
                             | UiContributionKind::Tab
                             | UiContributionKind::Cell
-                    );
+                            | UiContributionKind::Editor
+                    ) || rendering == Some(RenderingMode::Native);
                     if !repeatable && !outlets.insert(outlet) {
                         return Err(ManifestError::Invalid(
                             "only one contribution may target each UI outlet".into(),
@@ -1667,6 +1829,7 @@ impl Manifest {
                             | (UiContributionKind::Action, UiOutlet::RecordAttributeAction)
                             | (UiContributionKind::Dialog, UiOutlet::ActionDialog)
                             | (UiContributionKind::Panel, UiOutlet::ExportMapping)
+                            | (UiContributionKind::Editor, UiOutlet::AttributeEditor)
                     );
                     if !valid_kind {
                         return Err(ManifestError::Invalid(
@@ -1685,7 +1848,8 @@ impl Manifest {
                 | (UiContributionKind::Panel, None)
                 | (UiContributionKind::Dialog, None)
                 | (UiContributionKind::Tab, None)
-                | (UiContributionKind::Cell, None) => {
+                | (UiContributionKind::Cell, None)
+                | (UiContributionKind::Editor, None) => {
                     return Err(ManifestError::Invalid(
                         "embedded UI contributions require an outlet".into(),
                     ));
@@ -1806,6 +1970,36 @@ impl ExtensionAttributeType {
 impl Artifact {
     fn validate(&self) -> Result<(), ManifestError> {
         valid_id(&self.id, "artifact id")?;
+        match (&self.kind, &self.ui_kit) {
+            (ArtifactKind::ClientNative, None) => {
+                return Err(ManifestError::Invalid(format!(
+                    "client_native artifact '{}' requires a ui_kit range",
+                    self.id
+                )));
+            }
+            (ArtifactKind::ClientNative, Some(range)) => {
+                if VersionReq::parse(range).is_err() {
+                    return Err(ManifestError::Invalid(format!(
+                        "artifact '{}' ui_kit must be a SemVer range",
+                        self.id
+                    )));
+                }
+                if negotiated_ui_kit(range).is_none() {
+                    return Err(ManifestError::Invalid(format!(
+                        "artifact '{}' ui_kit '{range}' matches no UI kit version this host supports ({})",
+                        self.id,
+                        SUPPORTED_UI_KIT_VERSIONS.join(", ")
+                    )));
+                }
+            }
+            (_, Some(_)) => {
+                return Err(ManifestError::Invalid(format!(
+                    "artifact '{}' may declare ui_kit only as a client_native artifact",
+                    self.id
+                )));
+            }
+            (_, None) => {}
+        }
         if self.path.starts_with('/')
             || self
                 .path
@@ -1821,6 +2015,35 @@ impl Artifact {
     }
 }
 impl Manifest {
+    /// How a contribution's code is drawn: from the kind of the artifact it
+    /// names. `None` when it names no client artifact.
+    pub fn rendering_mode(&self, contribution: &UiContribution) -> Option<RenderingMode> {
+        let artifact = contribution.artifact.as_ref()?;
+        match self
+            .artifacts
+            .iter()
+            .find(|item| item.id == *artifact)?
+            .kind
+        {
+            ArtifactKind::ClientFrame => Some(RenderingMode::Frame),
+            ArtifactKind::ClientNative => Some(RenderingMode::Native),
+            ArtifactKind::ServerWasm => None,
+        }
+    }
+
+    /// The release's native artifact, run in one Worker for all its native
+    /// contributions.
+    pub fn native_artifact(&self) -> Option<&Artifact> {
+        self.artifacts
+            .iter()
+            .find(|artifact| artifact.kind == ArtifactKind::ClientNative)
+    }
+
+    /// The UI kit version the host draws this release's native UI with.
+    pub fn negotiated_ui_kit(&self) -> Option<Version> {
+        negotiated_ui_kit(self.native_artifact()?.ui_kit.as_deref()?)
+    }
+
     fn declares(&self, capability: &str) -> bool {
         self.permissions
             .iter()
@@ -2342,6 +2565,29 @@ fn validate_cell(contribution: &UiContribution) -> Result<(), ManifestError> {
         .map_err(invalid)
 }
 
+/// An editor is native UI with only its declaration: the host owns its label,
+/// so it has no route or action settings.
+fn validate_editor(contribution: &UiContribution) -> Result<(), ManifestError> {
+    let invalid =
+        |reason: String| ManifestError::Invalid(format!("editor '{}' {reason}", contribution.id));
+    if contribution.route.is_some()
+        || contribution.invoke.is_some()
+        || contribution.when.is_some()
+        || contribution.confirm.is_some()
+        || contribution.icon.is_some()
+    {
+        return Err(invalid(
+            "cannot declare a route, invoke, when, confirm or icon".into(),
+        ));
+    }
+    contribution
+        .editor
+        .as_ref()
+        .ok_or_else(|| invalid("requires an editor declaration".into()))?
+        .validate()
+        .map_err(invalid)
+}
+
 pub fn valid_id(value: &str, label: &str) -> Result<(), ManifestError> {
     if value.is_empty()
         || value.len() > MAX_EXTENSION_IDENTIFIER_BYTES
@@ -2552,6 +2798,18 @@ impl ExtensionPackage {
             ManifestError::Invalid("manifest.json is not a valid strict manifest".into())
         })?;
         manifest.validate(SUPPORTED_HOST_API)?;
+        if let Some(native) = manifest.native_artifact() {
+            validate_native_build_record(native, &files)?;
+            if files
+                .get(&native.path)
+                .is_some_and(|bytes| bytes.len() > MAX_NATIVE_ARTIFACT_BYTES)
+            {
+                return Err(ManifestError::Invalid(format!(
+                    "client_native artifact '{}' exceeds {MAX_NATIVE_ARTIFACT_BYTES} bytes",
+                    native.id
+                )));
+            }
+        }
         let artifacts = manifest
             .artifacts
             .iter()
@@ -2579,6 +2837,39 @@ impl ExtensionPackage {
             .iter()
             .map(|(path, bytes)| (path.as_str(), bytes.as_slice()))
     }
+}
+
+/// A native bundle must have been built against a UI kit version its range
+/// accepts and this host draws: no newer than the negotiated version.
+fn validate_native_build_record(
+    artifact: &Artifact,
+    files: &BTreeMap<String, Vec<u8>>,
+) -> Result<(), ManifestError> {
+    let path = format!("{}{NATIVE_BUILD_RECORD_SUFFIX}", artifact.path);
+    let record: NativeBuildRecord = files
+        .get(&path)
+        .and_then(|bytes| serde_json::from_slice(bytes).ok())
+        .ok_or_else(|| {
+            ManifestError::Invalid(format!(
+                "client_native artifact '{}' requires its build record '{path}'",
+                artifact.id
+            ))
+        })?;
+    let built = Version::parse(&record.ui_kit).map_err(|_| {
+        ManifestError::Invalid(format!(
+            "build record '{path}' ui_kit must be a SemVer version"
+        ))
+    })?;
+    let range = artifact.ui_kit.as_deref().unwrap_or_default();
+    let fits = VersionReq::parse(range).is_ok_and(|range| range.matches(&built))
+        && negotiated_ui_kit(range).is_some_and(|negotiated| built <= negotiated);
+    if !fits {
+        return Err(ManifestError::Invalid(format!(
+            "client_native artifact '{}' was built against UI kit {built}, which its ui_kit range or this host does not support",
+            artifact.id
+        )));
+    }
+    Ok(())
 }
 
 fn safe_archive_path(path: &Path) -> bool {
@@ -2832,6 +3123,246 @@ mod tests {
         assert!(ExtensionPackage::from_tar_zst_with_expanded_limit(&compressed, 4096).is_err());
     }
 
+    /// A manifest with one native artifact and the given contributions.
+    fn native_manifest(ui: serde_json::Value) -> Manifest {
+        serde_json::from_value(serde_json::json!({
+            "manifest_version": 1, "name": "Acme", "version": "1.0.0",
+            "description": "native UI", "icons": {"48": "icon.png"},
+            "attricat": {"id": "acme.native", "host_api": "^1.0"},
+            "permissions": ["client.blueprint_panel", "client.record_tab", "client.attribute_editor"],
+            "artifacts": [
+                {"id": "ui", "kind": "client_native", "path": "ui.js", "ui_kit": "^1.0"},
+                {"id": "page", "kind": "client_frame", "path": "page.js"}
+            ],
+            "ui": ui
+        }))
+        .unwrap()
+    }
+
+    fn package(manifest: &serde_json::Value, files: &[(&str, &[u8])]) -> Vec<u8> {
+        let mut builder = tar::Builder::new(Vec::new());
+        let manifest = serde_json::to_vec(manifest).unwrap();
+        for (path, bytes) in
+            std::iter::once(("manifest.json", manifest.as_slice())).chain(files.iter().copied())
+        {
+            let mut header = tar::Header::new_gnu();
+            header.set_size(bytes.len() as u64);
+            header.set_mode(0o644);
+            header.set_cksum();
+            builder.append_data(&mut header, path, bytes).unwrap();
+        }
+        zstd::stream::encode_all(Cursor::new(builder.into_inner().unwrap()), 1).unwrap()
+    }
+
+    #[test]
+    fn frame_artifacts_are_named_client_frame() {
+        let artifact = |kind: &str| {
+            serde_json::from_value::<Artifact>(
+                serde_json::json!({"id": "client", "kind": kind, "path": "client.js"}),
+            )
+        };
+        assert_eq!(
+            artifact("client_frame").unwrap().kind,
+            ArtifactKind::ClientFrame
+        );
+        assert!(artifact("client_component").is_err());
+    }
+
+    #[test]
+    fn native_artifacts_declare_a_supported_ui_kit_and_appear_once() {
+        let panel = serde_json::json!([{"id": "panel", "version": 1, "kind": "panel", "artifact": "ui", "outlet": "blueprint_panel"}]);
+        assert!(
+            native_manifest(panel.clone())
+                .validate(SUPPORTED_HOST_API)
+                .is_ok()
+        );
+        let mut value = native_manifest(panel.clone());
+        value.artifacts[0].ui_kit = None;
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+        value.artifacts[0].ui_kit = Some("^2.0".into());
+        assert!(
+            value
+                .validate(SUPPORTED_HOST_API)
+                .unwrap_err()
+                .to_string()
+                .contains("matches no UI kit")
+        );
+        let mut value = native_manifest(panel.clone());
+        value.artifacts[1].ui_kit = Some("^1.0".into());
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+        let mut value = native_manifest(panel);
+        let mut second = value.artifacts[0].clone();
+        second.id = "other".into();
+        second.path = "other.js".into();
+        value.artifacts.push(second);
+        assert!(
+            value
+                .validate(SUPPORTED_HOST_API)
+                .unwrap_err()
+                .to_string()
+                .contains("at most one client_native")
+        );
+        assert_eq!(negotiated_ui_kit("^1.0"), Some(Version::new(1, 0, 0)));
+        assert_eq!(negotiated_ui_kit(">=2"), None);
+    }
+
+    #[test]
+    fn native_mode_follows_the_artifact_and_the_outlet_allowlist() {
+        // Native contributions may share an outlet; frames keep one each.
+        let value = native_manifest(serde_json::json!([
+            {"id": "a", "version": 1, "kind": "panel", "artifact": "ui", "outlet": "blueprint_panel"},
+            {"id": "b", "version": 1, "kind": "panel", "artifact": "ui", "outlet": "blueprint_panel"},
+            {"id": "c", "version": 1, "kind": "panel", "artifact": "page", "outlet": "blueprint_panel"}
+        ]));
+        assert!(value.validate(SUPPORTED_HOST_API).is_ok());
+        assert_eq!(
+            value.rendering_mode(&value.ui[0]),
+            Some(RenderingMode::Native)
+        );
+        assert_eq!(
+            value.rendering_mode(&value.ui[2]),
+            Some(RenderingMode::Frame)
+        );
+        let two_frames = native_manifest(serde_json::json!([
+            {"id": "a", "version": 1, "kind": "panel", "artifact": "page", "outlet": "blueprint_panel"},
+            {"id": "b", "version": 1, "kind": "panel", "artifact": "page", "outlet": "blueprint_panel"}
+        ]));
+        assert!(two_frames.validate(SUPPORTED_HOST_API).is_err());
+        // Routes are frame-only.
+        let route = native_manifest(serde_json::json!([
+            {"id": "page", "version": 1, "kind": "route", "artifact": "ui", "title": "Page"}
+        ]));
+        assert!(
+            route
+                .validate(SUPPORTED_HOST_API)
+                .unwrap_err()
+                .to_string()
+                .contains("cannot use a client_native")
+        );
+        for outlet in [
+            UiOutlet::RecordTab,
+            UiOutlet::BlueprintAttributeConfiguration,
+            UiOutlet::BlueprintDetailPanel,
+            UiOutlet::BlueprintPanel,
+            UiOutlet::DataHealthCard,
+            UiOutlet::ExportMapping,
+            UiOutlet::ActionDialog,
+            UiOutlet::AttributeEditor,
+        ] {
+            assert!(
+                outlet.rendering_modes().contains(&RenderingMode::Native),
+                "{outlet:?}"
+            );
+        }
+        for outlet in [
+            UiOutlet::Navigation,
+            UiOutlet::BlueprintPublishCheck,
+            UiOutlet::AuditEventPanel,
+        ] {
+            assert_eq!(
+                outlet.rendering_modes(),
+                &[RenderingMode::Frame],
+                "{outlet:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn attribute_editors_are_native_declarations_with_typed_props() {
+        let editor = |artifact: &str, editor: serde_json::Value| {
+            native_manifest(serde_json::json!([{
+                "id": "formula", "version": 1, "kind": "editor", "artifact": artifact,
+                "outlet": "attribute_editor", "title": "Formula", "editor": editor
+            }]))
+        };
+        let declaration = serde_json::json!({"value_types": ["string"], "props": {"rows": {"type": "integer", "minimum": 1, "maximum": 8}}});
+        let value = editor("ui", declaration.clone());
+        assert!(value.validate(SUPPORTED_HOST_API).is_ok());
+        let declared = value.ui[0].editor.as_ref().unwrap();
+        assert!(
+            declared
+                .validate_props(&serde_json::json!({"rows": 3}))
+                .is_ok()
+        );
+        assert!(
+            declared
+                .validate_props(&serde_json::json!({"rows": 9}))
+                .is_err()
+        );
+        assert!(
+            declared
+                .validate_props(&serde_json::json!({"other": 1}))
+                .is_err()
+        );
+        // An editor is always native.
+        assert!(
+            editor("page", declaration)
+                .validate(SUPPORTED_HOST_API)
+                .is_err()
+        );
+        assert!(
+            editor("ui", serde_json::json!({"value_types": ["relationship"]}))
+                .validate(SUPPORTED_HOST_API)
+                .is_err()
+        );
+        let mut missing = editor("ui", serde_json::json!({"value_types": ["string"]}));
+        missing.ui[0].editor = None;
+        assert!(missing.validate(SUPPORTED_HOST_API).is_err());
+        let mut ungranted = editor("ui", serde_json::json!({"value_types": ["string"]}));
+        ungranted
+            .permissions
+            .retain(|item| item != "client.attribute_editor");
+        assert!(ungranted.validate(SUPPORTED_HOST_API).is_err());
+        // Other kinds cannot declare an editor.
+        let mut panel = native_manifest(serde_json::json!([
+            {"id": "a", "version": 1, "kind": "panel", "artifact": "ui", "outlet": "blueprint_panel"}
+        ]));
+        panel.ui[0].editor = value.ui[0].editor.clone();
+        assert!(panel.validate(SUPPORTED_HOST_API).is_err());
+    }
+
+    #[test]
+    fn native_archives_record_the_ui_kit_they_were_built_against() {
+        let manifest = serde_json::json!({
+            "manifest_version": 1, "name": "Acme", "version": "1.0.0",
+            "description": "native UI", "icons": {"48": "icon.png"},
+            "attricat": {"id": "acme.native", "host_api": "^1.0"},
+            "permissions": ["client.blueprint_panel"],
+            "artifacts": [{"id": "ui", "kind": "client_native", "path": "ui.js", "ui_kit": "^1.0"}],
+            "ui": [{"id": "panel", "version": 1, "kind": "panel", "artifact": "ui", "outlet": "blueprint_panel"}]
+        });
+        let ok = package(
+            &manifest,
+            &[
+                ("ui.js", b"export {}"),
+                ("ui.js.build.json", br#"{"ui_kit":"1.0.0"}"#),
+            ],
+        );
+        assert!(ExtensionPackage::from_tar_zst(&ok).is_ok());
+        let missing = package(&manifest, &[("ui.js", b"export {}")]);
+        assert!(
+            ExtensionPackage::from_tar_zst(&missing)
+                .err()
+                .unwrap()
+                .to_string()
+                .contains("build record")
+        );
+        let newer = package(
+            &manifest,
+            &[
+                ("ui.js", b"export {}"),
+                ("ui.js.build.json", br#"{"ui_kit":"1.4.0"}"#),
+            ],
+        );
+        assert!(
+            ExtensionPackage::from_tar_zst(&newer)
+                .err()
+                .unwrap()
+                .to_string()
+                .contains("built against UI kit 1.4.0")
+        );
+    }
+
     #[test]
     fn validates_contract_boundaries() {
         let value = manifest();
@@ -2855,8 +3386,9 @@ mod tests {
         let mut value = manifest();
         value.artifacts.push(Artifact {
             id: "client".into(),
-            kind: ArtifactKind::ClientComponent,
+            kind: ArtifactKind::ClientFrame,
             path: "client.js".into(),
+            ui_kit: None,
         });
         value.ui.push(UiContribution {
             id: "b".repeat(128),
@@ -2872,6 +3404,7 @@ mod tests {
             icon: None,
             translations: BTreeMap::new(),
             cell: None,
+            editor: None,
         });
         value.attricat.id = "a".repeat(127);
         assert_eq!(
@@ -3022,7 +3555,7 @@ mod tests {
             ],
             "artifacts": [
                 {"id": "server", "kind": "server_wasm", "path": "server.wasm"},
-                {"id": "client", "kind": "client_component", "path": "client.js"}
+                {"id": "client", "kind": "client_frame", "path": "client.js"}
             ],
             "server": {"operations": [{
                 "id": "generate",
@@ -3108,6 +3641,7 @@ mod tests {
             icon: None,
             translations: BTreeMap::new(),
             cell: None,
+            editor: None,
         });
         assert!(
             value.validate(SUPPORTED_HOST_API).is_ok(),
@@ -3268,6 +3802,7 @@ mod tests {
             icon: None,
             translations: BTreeMap::new(),
             cell: None,
+            editor: None,
         };
         // Several actions may share an outlet; each invokes one thing.
         value.ui.push(action(
@@ -3327,8 +3862,9 @@ mod tests {
         value.permissions.push("client.record_tab".into());
         value.artifacts.push(Artifact {
             id: "client".into(),
-            kind: ArtifactKind::ClientComponent,
+            kind: ArtifactKind::ClientFrame,
             path: "client.js".into(),
+            ui_kit: None,
         });
         let tab = |id: &str| UiContribution {
             id: id.into(),
@@ -3352,6 +3888,7 @@ mod tests {
                 },
             )]),
             cell: None,
+            editor: None,
         };
         // An extension may add several tabs, up to its limit.
         value.ui.push(tab("stock"));
@@ -3403,8 +3940,9 @@ mod tests {
         let mut value = manifest();
         value.artifacts.push(Artifact {
             id: "client".into(),
-            kind: ArtifactKind::ClientComponent,
+            kind: ArtifactKind::ClientFrame,
             path: "client.js".into(),
+            ui_kit: None,
         });
         value.ui = vec![
             UiContribution {
@@ -3421,6 +3959,7 @@ mod tests {
                 icon: None,
                 translations: BTreeMap::new(),
                 cell: None,
+                editor: None,
             },
             UiContribution {
                 id: "workbench-nav".into(),
@@ -3436,6 +3975,7 @@ mod tests {
                 icon: None,
                 translations: BTreeMap::new(),
                 cell: None,
+                editor: None,
             },
         ];
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
@@ -3471,8 +4011,9 @@ mod tests {
         value.permissions.push("client.explorer_action".into());
         value.artifacts.push(Artifact {
             id: "client".into(),
-            kind: ArtifactKind::ClientComponent,
+            kind: ArtifactKind::ClientFrame,
             path: "client.js".into(),
+            ui_kit: None,
         });
         value.ui.push(UiContribution {
             id: "explorer-dialog".into(),
@@ -3488,6 +4029,7 @@ mod tests {
             icon: None,
             translations: BTreeMap::new(),
             cell: None,
+            editor: None,
         });
         value.permissions.push("client.action_dialog".into());
         value.ui.push(UiContribution {
@@ -3504,6 +4046,7 @@ mod tests {
             icon: None,
             translations: BTreeMap::new(),
             cell: None,
+            editor: None,
         });
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
         // A toolbar action names no records, so it cannot require write access.
@@ -3548,6 +4091,7 @@ mod tests {
             icon: None,
             translations: BTreeMap::new(),
             cell: Some(cell()),
+            editor: None,
         });
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
         // Several cells may share the outlet.
@@ -3638,8 +4182,9 @@ mod tests {
         });
         value.artifacts.push(Artifact {
             id: "client".into(),
-            kind: ArtifactKind::ClientComponent,
+            kind: ArtifactKind::ClientFrame,
             path: "client.js".into(),
+            ui_kit: None,
         });
         value.server.as_mut().unwrap().commands.push(ServerCommand {
             id: "refresh".into(),
@@ -3663,6 +4208,7 @@ mod tests {
             icon: None,
             translations: BTreeMap::new(),
             cell: None,
+            editor: None,
         });
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
         value
@@ -3684,8 +4230,9 @@ mod tests {
         value.permissions.push("client.explorer_row_action".into());
         value.artifacts.push(Artifact {
             id: "client".into(),
-            kind: ArtifactKind::ClientComponent,
+            kind: ArtifactKind::ClientFrame,
             path: "client.js".into(),
+            ui_kit: None,
         });
         value.permissions.push("client.action_dialog".into());
         value.ui.push(UiContribution {
@@ -3702,6 +4249,7 @@ mod tests {
             icon: None,
             translations: BTreeMap::new(),
             cell: None,
+            editor: None,
         });
         value.ui.push(UiContribution {
             id: "explorer-action".into(),
@@ -3717,6 +4265,7 @@ mod tests {
             icon: None,
             translations: BTreeMap::new(),
             cell: None,
+            editor: None,
         });
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
         value.ui[1].kind = UiContributionKind::Panel;

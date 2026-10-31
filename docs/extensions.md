@@ -21,6 +21,10 @@ downgrades any of these contracts.
 | Persistence (installations, storage, operations, mappings, connections, annotations) | `crates/repository/src/repository/extension_*.rs`, `crates/repository/src/repository/extensions.rs` |
 | HTTP management and broker routes | `crates/http/src/http/extensions.rs`, `extension_exports.rs`, `extension_runs.rs`, `extension_registries.rs` |
 | Web host: frames, broker, outlets, management pages | `apps/web/src/features/extensions/` (frame bootstrap in `frameDocument.ts`, broker in `extensionBroker.ts`) |
+| Native UI: sandbox frame, Worker hosts, receiver, UI kit adapters, attribute editors, gallery | `apps/web/src/features/extensions/native/` |
+| UI kit definition and generator (contract, host validators, reference pages) | `scripts/ui-kit/`, `contracts/ui-kit-v1.schema.json`, `contracts/ui-kit-released/` |
+| Native UI SDK (`@attricat/ui-kit`, `@attricat/extension`, Vite preset, test harness) | the separate `attricat-extension-sdk` repository |
+| `acli extension new` and `acli extension dev` | `apps/cli/src/commands/extension/scaffold.rs`, `dev.rs` |
 | Test components packaged by the Rust suites | `crates/*-test-component` |
 | Integration suites | `apps/api/tests/extension*.rs` |
 
@@ -104,6 +108,25 @@ accepted only when the host API range matches the host's version, every
 declared artifact is present in the archive, configuration and dependencies
 validate, and every required capability is known and grantable.
 
+Artifacts have one of three kinds, and the kind decides who draws a client
+contribution:
+
+| Kind | What it is | Drawn by |
+|---|---|---|
+| `server_wasm` | The WASM component of the server runtime | — |
+| `client_frame` | An ES module exporting `mount(root, attricat)` | the extension, in a sandboxed frame (**Frame UI**) |
+| `client_native` | A classic Worker script built with the SDK | Attricat, from UI kit elements (**Native UI**) |
+
+`client_frame` was called `client_component` before native UI; the old name is
+no longer accepted. A `client_native` artifact must declare `ui_kit`, a SemVer
+range of UI kit versions (`SUPPORTED_UI_KIT_VERSIONS`); `ui_kit` is rejected on
+every other kind, and a release may have at most one `client_native` artifact
+(one Worker per extension). Its archive must also hold the SDK's build record
+`<path>.build.json` (`{"ui_kit": "1.0.0"}`, the UI kit version the bundle was
+built against): installation fails unless that version is in the artifact's
+range and no newer than the version the host negotiates. A native bundle may
+be at most `MAX_NATIVE_ARTIFACT_BYTES` (1 MiB).
+
 ## Capabilities and egress
 
 The v1 capability catalogue is: `attricat.read`, `attricat.write`,
@@ -124,7 +147,8 @@ The v1 capability catalogue is: `attricat.read`, `attricat.write`,
 `client.operations.cancel`, `attricat.annotations.write`, `network.request`,
 and `webhooks.receive`. Host ABI 1.1 adds `exports.mappings`,
 `connections.use`, `attricat.files.read`, `attricat.files.public_links` and
-`client.export_mapping` (see [Export platform](#export-platform-attricathost-11)).
+`client.export_mapping` (see [Export platform](#export-platform-attricathost-11)),
+and native UI adds `client.attribute_editor` (see [Attribute editors](#attribute-editors)).
 
 Required `permissions` and `host_permissions` must be granted before an
 extension can be enabled. Optional variants are independently grantable and
@@ -836,7 +860,7 @@ an answer for 30 seconds, or for an hour when the extension marks it
 `cacheable`, while the record, its annotations, the context and the language
 are unchanged.
 
-A **client** source names a `client_component` artifact that the web app runs
+A **client** source names a `client_frame` artifact that the web app runs
 headless, in one sandboxed frame per release started on first use. The module
 exports `handle(request, attricat)`, which receives
 `{"record_ids", "context_id", "locale"}` and returns the same contract. Its
@@ -1500,7 +1524,9 @@ mappings pointing at missing items.
 
 ## Client extension runtime (v1)
 
-Enabled `client_component` artifacts can expose a strict `ui` contribution:
+Enabled `client_frame` and `client_native` artifacts can expose a strict `ui`
+contribution (see [Native UI](#native-ui) for what changes when the artifact
+is native):
 
 ```json
 {
@@ -1530,8 +1556,8 @@ additional mediated placement capabilities reserve their matching fixed outlets
 for their explicit host-owned action or panel layouts. Routes are always
 namespaced at `/extensions/:extensionId/:contributionId`; manifests cannot
 provide a path, selector, or host component. Each extension can use a frame
-outlet once, but may add several actions and dialogs and up to two record
-tabs, and all
+outlet once, but may add several actions and dialogs, up to two record
+tabs, and any number of native contributions, and all
 contribution/artifact IDs remain stable across releases. Multiple enabled
 extensions may contribute to a surface. The host orders them deterministically
 by `extension_id`, then contribution `id`, unless a workspace administrator
@@ -1715,8 +1741,13 @@ dialog frame should call `attricat.dialog.close()` on Escape. Closing it
 - Fields and files on a record page carry no frames. Extensions describe
   them with [field notes](#field-notes) instead.
 
+- **`attribute_editor`** (`editor`, requiring `client.attribute_editor`) is
+  native only: an input control that a blueprint field in `views.detail` names
+  under `editor`. See [Attribute editors](#attribute-editors).
+
 Every manifest-declared outlet has a host-owned client mount path;
-`explorer_table_cell` is drawn by the Explorer table itself rather than
+`explorer_table_cell` is drawn by the Explorer table itself and
+`attribute_editor` by the record's inline fields, rather than
 `ExtensionOutlet`. The browser schema tests compare the declared Rust outlets
 with the client enum and check each outlet's mount path. A placement is still
 shown only when its page, scope, contribution kind, and required grants match.
@@ -1747,7 +1778,11 @@ frame port and removes the frame on unmount or load error.
 
 ### Client API
 
-A client artifact must export `mount(root, attricat)`. It runs only after the
+This section describes Frame UI; native UI reaches the same broker methods
+through the SDK's `useAttricat()` (see [Native UI](#native-ui)), plus
+`editor.propose` for attribute editors.
+
+A `client_frame` artifact must export `mount(root, attricat)`. It runs only after the
 artifact has been imported in its opaque frame; it may return a synchronous or
 asynchronous cleanup function. For example:
 
@@ -1873,6 +1908,180 @@ fetch failures render host-owned warning alerts while the affected outlet has no
 runtime descriptor. Extension UI must provide its own localized
 text and accessible labels; the host owns the surrounding landmarks, focus,
 loading state, and failure announcements.
+
+## Native UI
+
+Native UI is the second way for an extension to draw in the browser. Its code
+runs isolated in a Worker and composes elements of the **Attricat UI kit**;
+the host validates the tree and draws it with its own components, so the
+result looks and behaves like the rest of the app and no extension markup
+reaches the host DOM. Extensions therefore have three tiers:
+
+| Tier | Who draws | Where code runs | Typical uses |
+|---|---|---|---|
+| Declarative (`cell`, `action`, field notes) | Attricat | nowhere in the browser | table cells, menu actions, badges |
+| Native UI (`client_native`) | Attricat, from UI kit elements | the extension's Worker | tabs, panels, dialogs, settings, attribute editors |
+| Frame UI (`client_frame`) | the extension | a sandboxed frame | full pages and tools the UI kit cannot build |
+
+### Rendering modes
+
+A contribution is native when its `artifact` is the release's `client_native`
+artifact; kind, outlet, title, translations, `when`, capabilities, context
+version and layout rules do not change. `UiOutlet::rendering_modes` is the
+named per-outlet allowlist: native mode is allowed for `record_tab`,
+`blueprint_attribute_configuration`, `blueprint_detail_panel`,
+`blueprint_panel`, `data_health_card`, `export_mapping`, `action_dialog` and
+`attribute_editor` (native only); `route`, embedded `navigation`,
+`blueprint_publish_check` and `audit_event_panel` stay frame-only, and
+declarative kinds name no artifact. The one-frame-per-outlet rule applies
+only to frames. A contribution's `id` is the key the Worker registers its
+component under: the host ignores (and, in development, warns about)
+registrations of undeclared IDs, and a declared contribution that never
+registers shows the host failure state. Native rendering is a rendering mode,
+not a permission: there is no new capability, and broker calls are checked
+exactly as for frames.
+
+The runtime descriptor carries `rendering` (`frame` or `native`), `ui_kit` (the
+highest supported UI kit version in the artifact's range, which the host draws
+with), an editor's declaration, and `artifact_revision` (see
+[Development builds](#development-builds)).
+
+### UI kit
+
+`scripts/ui-kit/definition.ts` is the single source of truth. Per element it
+defines the custom-element tag, props (JSON Schema fragments with types,
+enums, bounds and required props), events with the payloads the host builds,
+allowed children (none, plain text or elements) and slots, the few host
+methods (`focus` on inputs) and the props that must hold an accessible name.
+There is no free-form styling: spacing, size, tone and emphasis are enums the
+adapters map to theme tokens, status tones are semantic, icons are
+`HOST_ICONS`, text is plain strings localized by the extension, and links are
+`https:` URLs or in-app paths. Large content is data (`Table` rows, `Select`
+options, `TextField` suggestions), so the host can sort and page it.
+
+`UPDATE_CONTRACTS=1 pnpm --dir apps/web vitest run uiKitContract` regenerates
+`contracts/ui-kit-v1.schema.json`, the host validators
+(`native/generated/uiKit.ts`) and the reference pages in both languages; the
+same test fails while any of them is stale. Every element, prop and event
+records the version that introduced it. A released version is frozen: its
+snapshot in `contracts/ui-kit-released/` is written once and the test fails if
+the current definition no longer projects to it, so later minors can only
+add. `nativeAdapters` (`native/adapterMap.ts`) draws each element with thin
+wrappers over Attricat components; a test fails for any element without an
+adapter. The SDK vendors the contract and generates its Preact components
+from it. The development-only **UI kit gallery**
+(`/manage/extensions/ui-kit`) draws every element through the real receiver
+and adapters in both color modes and the current language.
+
+### Runtime and isolation
+
+`NativeIsolation` is a host decision. Today one hidden
+`<iframe sandbox="allow-scripts">` per session (`nativeSandboxDocument`, an
+opaque-origin `srcdoc` like frame UI's documents, with
+`default-src 'none'; script-src 'nonce-…' blob:; worker-src blob:; connect-src 'none'`)
+starts one dedicated Worker per extension release from the artifact, so two
+extensions never share a realm, and an extension could later get its own frame
+without changing extensions or the host API. Workers are classic scripts:
+browsers refuse module Workers from `blob:` URLs in an opaque origin. A Worker
+created from a `blob:` URL inherits the frame's opaque origin and policy;
+`pnpm --dir apps/web verify:native-sandbox` (with `WEB_URL` set to a running dev
+server) checks in Chromium that such a Worker reports origin `null` and cannot
+`fetch` remote hosts or the Attricat API, `import()` remote code, open a
+WebSocket or use IndexedDB. No token or credential enters the frame or a
+Worker.
+
+Each Worker gets one `MessageChannel` port, and that port is the extension's
+identity: `NativeExtensionHost` speaks `@quilted/threads` over it, exporting
+`ready(ids)` and `request(mountId, method, payload)` and importing `mount`,
+`update`, `unmount` and `ping`. A request is attributed to the host that owns
+the port and to one of the mounts that host created; mount IDs are issued per
+port, so a Worker can neither name another extension's mount nor act with its
+grants. Frame UI is attributed the same way: each frame's handler is bound to
+its own contribution, and request payloads cannot carry identity
+(`extensionBroker.test.ts`).
+
+Runtime descriptors, containment (`EXTENSIONS_MODE`, `EXTENSION_DENYLIST`, the
+workspace gate, installation state and grants) and the 15-second runtime
+refresh apply to native contributions exactly as to frames:
+`containNativeHosts` terminates the Worker of any release the unscoped runtime
+no longer lists.
+
+### Rendering and safety rails
+
+Each mounted native contribution has its own `NativeReceiver`, which receives
+the Worker's Remote DOM mutations. It keeps every node the extension sent, so
+child indexes stay aligned, but validates each element, prop, listener, slot
+and text against the negotiated UI kit version: unknown elements and props,
+any attribute other than `slot`, undeclared events and over-long text are
+kept out of the drawing, with a development warning naming the element and
+extension. An element draws only once its required props and accessible names
+are present. `NativeTree` draws the result inside the outlet's box; extensions
+cannot open overlays — the host's own controls (a select's menu, a text
+field's suggestions) and host dialog chrome naming the extension are the only
+popups. Adapters build every event payload; inputs are host-owned and send
+debounced changes (flushed on blur and Enter). Context, locale and theme
+changes reach the Worker as `update`, so only the resulting diff is drawn and
+component state survives; unmount disposes the receiver and drops every
+function reference the extension handed over.
+
+Per extension, the host bounds the tree size, the mutation rate and the size
+of each message (`nativeUiBudgets`), and a heartbeat watchdog pings the
+Worker. Exceeding a budget, missing a heartbeat or failing to register within
+the start timeout terminates that extension's Worker and fails its mounts with
+a code from `nativeUiErrorCodes` (translated in both locales); other
+extensions and the page are untouched. Each mount also has an error boundary
+with the host failure treatment.
+
+### Attribute editors
+
+An `editor` contribution at `attribute_editor` (requiring
+`client.attribute_editor`, artifact always `client_native`) declares
+`value_types` and `props` exactly like a [cell](#fixed-contribution-outlets):
+
+```json
+{
+  "id": "formula",
+  "version": 1,
+  "kind": "editor",
+  "artifact": "ui",
+  "outlet": "attribute_editor",
+  "title": "Formula",
+  "editor": {
+    "value_types": ["string"],
+    "props": {"rows": {"type": "integer", "minimum": 1, "maximum": 8}}
+  }
+}
+```
+
+A field in `views.detail` names it (`editor: {id: formula, version: 1, props:
+{rows: 3}}`); the compiler rejects `editor` in any other view, and saving or
+publishing the blueprint checks the field's value type and the props against
+an enabled release's declaration, as table columns are checked against cells.
+The definition editor suggests editors whose value types fit the field.
+
+The strict v1 context (`attributeEditorContextSchema`) holds the value, the
+attribute's code, name, value type, constraints and options, read-only and
+required state, current validation errors, the record and value context and
+the field's props; locale and theme arrive with every update. The editor only
+proposes values (`editor.propose`, accepted only from attribute-editor
+mounts). The host converts a proposal to the field's type, validates it
+against the attribute and saves it through the inline-edit path — save on
+blur or Enter, Escape restores — with the user's permissions; label, help,
+errors, focus and keyboard stay host-drawn. When the extension is disabled,
+lacks the grant, fails or is not ready yet, the field keeps its default
+control, so a blueprint never depends on an extension being healthy. Editors
+are never used in Explorer table cells, which keep their `renderer` cells.
+
+### Development builds
+
+With `ATTRICAT_DEVTOOLS=true`, `PUT /extensions/{id}/dev-artifact` (requiring
+`extensions.manage`) stores a new Worker bundle for the installed release
+(`extension_dev_artifacts`), and the runtime descriptor's `artifact_revision`
+changes. Clients restart that extension's Worker on their next runtime read,
+without a new upload or new grants; frame artifacts are unaffected.
+`acli extension dev <id> --build "pnpm build" --watch src` rebuilds and
+swaps on every change, and `acli extension new <dir> --id <id>` scaffolds a
+native Preact extension whose manifest validates against the host.
 
 ## Webhooks
 

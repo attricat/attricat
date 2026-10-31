@@ -4,8 +4,8 @@ use std::collections::HashSet;
 
 use crate::extensions::{Manifest, UiContributionKind, UiOutlet};
 use attricat_blueprint::{
-    BlueprintKind, BrowseBy, CompiledBlueprint, ResolvedInclude, ViewDefinition, compile, parse,
-    validate_table_renderer,
+    BlueprintKind, BrowseBy, CompiledBlueprint, ResolvedInclude, ViewDefinition, ViewNode, compile,
+    parse, validate_table_renderer,
 };
 use attricat_validation::saved_search::browse_path_hop;
 use attricat_validation::validate_json_schema;
@@ -97,6 +97,7 @@ async fn compile_source(
         .map_err(RepositoryError::invalid_blueprint_definition)?;
     resolve_extension_attribute_types(transaction, workspace_id, &mut compiled).await?;
     validate_table_columns(transaction, workspace_id, &compiled).await?;
+    validate_field_editors(transaction, workspace_id, &compiled).await?;
     validate_browse_by(transaction, workspace_id, &compiled).await?;
     validate_status_coverage(&compiled)?;
     Ok(compiled)
@@ -455,6 +456,137 @@ async fn validate_table_columns(
     Ok(())
 }
 
+/// Collects the `views.detail` fields that name an extension editor.
+fn field_editors<'a>(
+    nodes: &'a [ViewNode],
+    found: &mut Vec<(&'a str, &'a attricat_blueprint::EditorReference)>,
+) {
+    for node in nodes {
+        match node {
+            ViewNode::Field {
+                field,
+                editor: Some(editor),
+                ..
+            } => found.push((field, editor)),
+            ViewNode::Stack { children, .. }
+            | ViewNode::Grid { children, .. }
+            | ViewNode::Section { children, .. } => field_editors(children, found),
+            ViewNode::Tabs { tabs, .. } => {
+                for tab in tabs {
+                    field_editors(&tab.children, found);
+                }
+            }
+            ViewNode::Accordion { sections, .. } => {
+                for section in sections {
+                    field_editors(&section.children, found);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// A detail field's editor must be an enabled extension's `editor` with that
+/// id and version that edits the field's value type, given props within their
+/// declared types, as a table column's renderer is checked against a cell.
+async fn validate_field_editors(
+    transaction: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+    compiled: &CompiledBlueprint,
+) -> Result<(), RepositoryError> {
+    let mut editors = Vec::new();
+    match compiled.views.get("detail") {
+        Some(
+            ViewDefinition::Stack { children, .. }
+            | ViewDefinition::Grid { children, .. }
+            | ViewDefinition::Section { children, .. },
+        ) => field_editors(children, &mut editors),
+        Some(ViewDefinition::Tabs { tabs, .. }) => {
+            for tab in tabs {
+                field_editors(&tab.children, &mut editors);
+            }
+        }
+        Some(ViewDefinition::Accordion { sections, .. }) => {
+            for section in sections {
+                field_editors(&section.children, &mut editors);
+            }
+        }
+        _ => {}
+    }
+    if editors.is_empty() {
+        return Ok(());
+    }
+    let declared = enabled_manifests(transaction, workspace_id)
+        .await?
+        .into_iter()
+        .flat_map(|manifest| manifest.ui)
+        .filter(|contribution| {
+            contribution.kind == UiContributionKind::Editor
+                && contribution.outlet == Some(UiOutlet::AttributeEditor)
+        })
+        .collect::<Vec<_>>();
+    for (field, editor) in editors {
+        let value_type = compiled
+            .attributes
+            .iter()
+            .find(|attribute| attribute.code == field)
+            .expect("compiler validated detail field")
+            .value_type;
+        let mut problem = None;
+        let valid = declared
+            .iter()
+            .filter(|contribution| {
+                contribution.id == editor.id && contribution.version == editor.version
+            })
+            .filter_map(|contribution| contribution.editor.as_ref())
+            .filter(|declaration| {
+                declaration
+                    .value_types
+                    .iter()
+                    .any(|item| item == value_type.as_str())
+            })
+            .any(
+                |declaration| match declaration.validate_props(&editor.props) {
+                    Ok(()) => true,
+                    Err(error) => {
+                        problem = Some(error);
+                        false
+                    }
+                },
+            );
+        if !valid {
+            return Err(RepositoryError::InvalidBlueprintDefinition(match problem {
+                Some(problem) => format!(
+                    "field '{field}' editor '{}@{}' {problem}",
+                    editor.id, editor.version
+                ),
+                None => format!(
+                    "field '{field}' editor '{}@{}' is not declared for {value_type} by an enabled extension",
+                    editor.id, editor.version
+                ),
+            }));
+        }
+    }
+    Ok(())
+}
+
+/// The manifests of the workspace's enabled extension releases.
+async fn enabled_manifests(
+    transaction: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+) -> Result<Vec<Manifest>, RepositoryError> {
+    let manifests = sqlx::query_scalar::<_, serde_json::Value>(
+        "SELECT r.manifest FROM extension_installations i JOIN installed_extension_releases r ON r.id = i.installed_release_id WHERE i.workspace_id = $1 AND i.state = 'enabled'",
+    )
+    .bind(workspace_id)
+    .fetch_all(&mut **transaction)
+    .await?;
+    Ok(manifests
+        .into_iter()
+        .filter_map(|raw| serde_json::from_value::<Manifest>(raw).ok())
+        .collect())
+}
+
 async fn validate_renderer(
     transaction: &mut Transaction<'_, Postgres>,
     workspace_id: Uuid,
@@ -465,18 +597,12 @@ async fn validate_renderer(
         return validate_table_renderer(renderer, value_type)
             .map_err(RepositoryError::invalid_blueprint_definition);
     }
-    let manifests = sqlx::query_scalar::<_, serde_json::Value>(
-        "SELECT r.manifest FROM extension_installations i JOIN installed_extension_releases r ON r.id = i.installed_release_id WHERE i.workspace_id = $1 AND i.state = 'enabled'",
-    )
-    .bind(workspace_id)
-    .fetch_all(&mut **transaction)
-    .await?;
     // An enabled extension's cell with this id and version that shows the
     // column's value type, given props within their declared types.
     let mut problem = None;
-    let valid = manifests
+    let valid = enabled_manifests(transaction, workspace_id)
+        .await?
         .into_iter()
-        .filter_map(|raw| serde_json::from_value::<Manifest>(raw).ok())
         .flat_map(|manifest| manifest.ui)
         .filter(|contribution| {
             contribution.kind == UiContributionKind::Cell

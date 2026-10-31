@@ -3,7 +3,9 @@ title: Kontrybucje klienckie
 description: Dodawaj strony, panele i akcje do aplikacji webowej z izolowanych ramek, deklaruj komórki tabeli i korzystaj z klienckiego API katalogu.
 ---
 
-Kontrybucja kliencka to moduł JavaScript, który Attricat ładuje do izolowanej ramki w stałym miejscu aplikacji webowej. Host odpowiada za wszystko wokół ramki: układ, stany ładowania i błędów, fokus i punkty orientacyjne dostępności. Twój moduł odpowiada za to, co jest wewnątrz.
+Ta strona opisuje **interfejs w ramce** (artefakty `client_frame`) i miejsca osadzenia dostępne dla każdej kontrybucji klienckiej. Komponenty, które rysuje za Ciebie Attricat, opisuje strona [Natywny interfejs](/pl/extensions/native/).
+
+Kontrybucja interfejsu w ramce to moduł JavaScript, który Attricat ładuje do izolowanej ramki w stałym miejscu aplikacji webowej. Host odpowiada za wszystko wokół ramki: układ, stany ładowania i błędów, fokus i punkty orientacyjne dostępności. Twój moduł odpowiada za to, co jest wewnątrz.
 
 ## Piaskownica
 

@@ -8,7 +8,10 @@ import {
   postBrokerResponse,
   validateStorageRequest,
 } from './extensionBroker';
-import { maximumExtensionResponseBytes } from './constants';
+import {
+  extensionCapabilities,
+  maximumExtensionResponseBytes,
+} from './constants';
 
 vi.mock('../../api/request', () => ({ requestText: vi.fn() }));
 vi.mock('../extension-runs/api', () => ({
@@ -45,6 +48,10 @@ const contribution: ExtensionContribution = {
   icon: null,
   translations: {},
   cell: null,
+  editor: null,
+  rendering: null,
+  ui_kit: null,
+  artifact_revision: null,
 };
 
 const dependencies = (capabilities: string[]) => ({
@@ -128,6 +135,53 @@ describe('extension broker', () => {
     expect(vi.mocked(requestText).mock.calls[0]?.[0]).toBe(
       '/api/extensions/example.extension/panel/command',
     );
+  });
+
+  it("acts as the port's contribution, never as identity in the payload", async () => {
+    vi.mocked(requestText).mockClear();
+    vi.mocked(requestText).mockResolvedValueOnce('{"saved":true}');
+    const deps = dependencies(['client.commands']);
+    deps.contribution = { ...deps.contribution, outlet: 'export_mapping' };
+    await handleBrokerRequest(
+      {
+        method: 'command',
+        payload: {
+          command_id: 'save',
+          payload: {},
+          release_id: '99999999-9999-4999-8999-999999999999',
+        },
+      },
+      deps,
+    );
+    const [path, init] = vi.mocked(requestText).mock.calls[0] ?? [];
+    expect(path).toBe('/api/extensions/example.extension/panel/command');
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      release_id: contribution.release_id,
+    });
+    for (const request of [
+      {
+        method: 'command',
+        payload: { command_id: 'save', extension_id: 'other.extension' },
+      },
+      {
+        method: 'storage.get',
+        payload: { key: 'notes', extension_id: 'other.extension' },
+      },
+    ]) {
+      await expect(
+        handleBrokerRequest(request, {
+          ...deps,
+          contribution: {
+            ...deps.contribution,
+            capabilities: [
+              extensionCapabilities.commands,
+              extensionCapabilities.storage,
+            ],
+          },
+        }),
+      ).rejects.toThrow();
+    }
+    expect(requestText).toHaveBeenCalledTimes(1);
   });
 
   it('denies blueprint reads outside the outlet revision', async () => {

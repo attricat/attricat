@@ -594,6 +594,12 @@ pub fn router(state: AppState) -> Router {
             axum::routing::patch(extensions::update_operation_schedule),
         )
         .route(
+            "/extensions/{extension_id}/dev-artifact",
+            axum::routing::put(extensions::dev_artifact).layer(
+                axum::extract::DefaultBodyLimit::max(crate::extensions::MAX_NATIVE_ARTIFACT_BYTES),
+            ),
+        )
+        .route(
             "/extensions/{extension_id}/{contribution_id}/command",
             post(extensions::command),
         )

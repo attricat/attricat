@@ -1068,7 +1068,8 @@
       "requiredType": "{{type}} · wymagane",
       "role": "Rola w przestrzeni roboczej",
       "section": "Sekcja",
-      "selectedAttribute": "Z {{from}}"
+      "selectedAttribute": "Z {{from}}",
+      "editor": "Edytor {{extension}} v{{version}}"
     },
     "diagnostics": {
       "expectedOneOf": "Oczekiwano jednej z wartości: {{values}}.",
@@ -1912,7 +1913,24 @@
     "noInstalled": "Brak zainstalowanych rozszerzeń",
     "noInstalledDescription": "Zainstaluj rozszerzenie z rynku lub prześlij archiwum, aby dodać strony, akcje i integracje.",
     "noMarketplaceExtensions": "Brak dostępnych rozszerzeń",
-    "loadingExtensions": "Wczytywanie rozszerzeń..."
+    "loadingExtensions": "Wczytywanie rozszerzeń...",
+    "native": {
+      "tableEmpty": "Brak danych do pokazania.",
+      "errors": {
+        "native_ui_start_failed": "Nie udało się uruchomić rozszerzenia {{extension}}.",
+        "native_ui_start_timed_out": "Przekroczono czas uruchamiania rozszerzenia {{extension}}.",
+        "native_ui_not_registered": "Rozszerzenie {{extension}} nie udostępnia tego widoku.",
+        "native_ui_unresponsive": "Rozszerzenie {{extension}} przestało odpowiadać i zostało zatrzymane.",
+        "native_ui_tree_too_large": "Rozszerzenie {{extension}} narysowało więcej, niż pozwala Attricat, i zostało zatrzymane.",
+        "native_ui_mutation_rate_exceeded": "Rozszerzenie {{extension}} zbyt często aktualizowało widok i zostało zatrzymane.",
+        "native_ui_message_too_large": "Rozszerzenie {{extension}} wysłało naraz zbyt dużo danych i zostało zatrzymane.",
+        "native_ui_render_failed": "Rozszerzenie {{extension}} nie może pokazać tego widoku."
+      },
+      "gallery": {
+        "title": "Zestaw UI {{version}}",
+        "eventsHint": "Tutaj pojawiają się zdarzenia wysyłane przez elementy."
+      }
+    }
   },
   "workspace": {
     "memberSummary": "{{email}} · {{state}}",

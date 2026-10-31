@@ -85,7 +85,7 @@ it('passes configured components to the form-owned editor', () => {
       }}
     />,
   );
-  expect(editor).toHaveBeenCalledWith(attribute, component);
+  expect(editor).toHaveBeenCalledWith(attribute, component, undefined);
 });
 
 it('uses telephone input without normalizing edits and respects disabled state', () => {

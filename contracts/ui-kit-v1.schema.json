@@ -1,0 +1,1534 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://attricat.org/contracts/ui-kit-v1.schema.json",
+  "title": "Attricat UI kit",
+  "version": "1.0.0",
+  "versions": [
+    "1.0.0"
+  ],
+  "icons": [
+    "alert",
+    "calculator",
+    "check",
+    "clock",
+    "download",
+    "file",
+    "info",
+    "link",
+    "refresh",
+    "search",
+    "send",
+    "settings",
+    "sparkles",
+    "tag",
+    "wand"
+  ],
+  "limits": {
+    "label": 200,
+    "text": 4000,
+    "helperText": 400,
+    "placeholder": 200,
+    "unit": 16,
+    "textFieldValue": 100000,
+    "suggestions": 20,
+    "suggestion": 400,
+    "selectOptions": 500,
+    "tableColumns": 20,
+    "tableRows": 1000,
+    "link": 2048,
+    "rows": 12,
+    "gridColumns": 6
+  },
+  "elements": {
+    "Stack": {
+      "tag": "attricat-stack",
+      "since": "1.0.0",
+      "description": {
+        "en": "Lays out its children in a row or a column with theme spacing.",
+        "pl": "Układa elementy podrzędne w wierszu lub kolumnie z odstępami motywu."
+      },
+      "props": {
+        "direction": {
+          "schema": {
+            "type": "string",
+            "enum": [
+              "vertical",
+              "horizontal"
+            ]
+          },
+          "description": {
+            "en": "The main axis.",
+            "pl": "Oś główna."
+          },
+          "default": "vertical",
+          "since": "1.0.0"
+        },
+        "gap": {
+          "schema": {
+            "type": "string",
+            "enum": [
+              "none",
+              "xs",
+              "sm",
+              "md",
+              "lg",
+              "xl"
+            ]
+          },
+          "description": {
+            "en": "Space between children.",
+            "pl": "Odstęp między elementami."
+          },
+          "default": "md",
+          "since": "1.0.0"
+        },
+        "align": {
+          "schema": {
+            "type": "string",
+            "enum": [
+              "start",
+              "center",
+              "end",
+              "stretch"
+            ]
+          },
+          "description": {
+            "en": "Alignment across the main axis.",
+            "pl": "Wyrównanie w poprzek osi głównej."
+          },
+          "default": "stretch",
+          "since": "1.0.0"
+        },
+        "justify": {
+          "schema": {
+            "type": "string",
+            "enum": [
+              "start",
+              "center",
+              "end",
+              "between"
+            ]
+          },
+          "description": {
+            "en": "Distribution along the main axis.",
+            "pl": "Rozkład wzdłuż osi głównej."
+          },
+          "default": "start",
+          "since": "1.0.0"
+        },
+        "wrap": {
+          "schema": {
+            "type": "boolean"
+          },
+          "description": {
+            "en": "Wraps a horizontal stack onto more lines.",
+            "pl": "Zawija poziomy stos do kolejnych linii."
+          },
+          "default": false,
+          "since": "1.0.0"
+        }
+      },
+      "events": {},
+      "children": {
+        "kind": "elements"
+      },
+      "slots": {},
+      "methods": [],
+      "accessibility": []
+    },
+    "Grid": {
+      "tag": "attricat-grid",
+      "since": "1.0.0",
+      "description": {
+        "en": "Places its children in equal columns that collapse to one on narrow screens.",
+        "pl": "Umieszcza elementy w równych kolumnach, które na wąskich ekranach łączą się w jedną."
+      },
+      "props": {
+        "columns": {
+          "schema": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 6
+          },
+          "description": {
+            "en": "Columns on wide screens.",
+            "pl": "Liczba kolumn na szerokich ekranach."
+          },
+          "default": 2,
+          "since": "1.0.0"
+        },
+        "gap": {
+          "schema": {
+            "type": "string",
+            "enum": [
+              "none",
+              "xs",
+              "sm",
+              "md",
+              "lg",
+              "xl"
+            ]
+          },
+          "description": {
+            "en": "Space between cells.",
+            "pl": "Odstęp między komórkami."
+          },
+          "default": "md",
+          "since": "1.0.0"
+        }
+      },
+      "events": {},
+      "children": {
+        "kind": "elements"
+      },
+      "slots": {},
+      "methods": [],
+      "accessibility": []
+    },
+    "Divider": {
+      "tag": "attricat-divider",
+      "since": "1.0.0",
+      "description": {
+        "en": "A horizontal rule.",
+        "pl": "Pozioma linia."
+      },
+      "props": {},
+      "events": {},
+      "children": {
+        "kind": "none"
+      },
+      "slots": {},
+      "methods": [],
+      "accessibility": []
+    },
+    "Text": {
+      "tag": "attricat-text",
+      "since": "1.0.0",
+      "description": {
+        "en": "A paragraph of plain text, already localized by the extension.",
+        "pl": "Akapit zwykłego tekstu, już przetłumaczony przez rozszerzenie."
+      },
+      "props": {
+        "tone": {
+          "schema": {
+            "type": "string",
+            "enum": [
+              "default",
+              "muted",
+              "info",
+              "success",
+              "warning",
+              "error"
+            ]
+          },
+          "description": {
+            "en": "Text colour, by meaning.",
+            "pl": "Kolor tekstu według znaczenia."
+          },
+          "default": "default",
+          "since": "1.0.0"
+        },
+        "size": {
+          "schema": {
+            "type": "string",
+            "enum": [
+              "sm",
+              "md"
+            ]
+          },
+          "description": {
+            "en": "Text size.",
+            "pl": "Rozmiar tekstu."
+          },
+          "default": "md",
+          "since": "1.0.0"
+        },
+        "emphasis": {
+          "schema": {
+            "type": "string",
+            "enum": [
+              "regular",
+              "strong"
+            ]
+          },
+          "description": {
+            "en": "Font weight.",
+            "pl": "Grubość czcionki."
+          },
+          "default": "regular",
+          "since": "1.0.0"
+        },
+        "monospace": {
+          "schema": {
+            "type": "boolean"
+          },
+          "description": {
+            "en": "Uses the code font, e.g. for formulas.",
+            "pl": "Używa czcionki kodu, np. dla formuł."
+          },
+          "default": false,
+          "since": "1.0.0"
+        }
+      },
+      "events": {},
+      "children": {
+        "kind": "text"
+      },
+      "slots": {},
+      "methods": [],
+      "accessibility": []
+    },
+    "Heading": {
+      "tag": "attricat-heading",
+      "since": "1.0.0",
+      "description": {
+        "en": "A heading inside the outlet; the host owns the outlet title.",
+        "pl": "Nagłówek wewnątrz miejsca osadzenia; tytuł miejsca należy do hosta."
+      },
+      "props": {
+        "level": {
+          "schema": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3
+          },
+          "description": {
+            "en": "Heading level within the outlet.",
+            "pl": "Poziom nagłówka w miejscu osadzenia."
+          },
+          "default": 1,
+          "since": "1.0.0"
+        }
+      },
+      "events": {},
+      "children": {
+        "kind": "text"
+      },
+      "slots": {},
+      "methods": [],
+      "accessibility": []
+    },
+    "Button": {
+      "tag": "attricat-button",
+      "since": "1.0.0",
+      "description": {
+        "en": "A button with a text label.",
+        "pl": "Przycisk z etykietą tekstową."
+      },
+      "props": {
+        "variant": {
+          "schema": {
+            "type": "string",
+            "enum": [
+              "primary",
+              "secondary",
+              "text"
+            ]
+          },
+          "description": {
+            "en": "Visual emphasis.",
+            "pl": "Wyróżnienie wizualne."
+          },
+          "default": "secondary",
+          "since": "1.0.0"
+        },
+        "tone": {
+          "schema": {
+            "type": "string",
+            "enum": [
+              "default",
+              "danger"
+            ]
+          },
+          "description": {
+            "en": "A danger button confirms a destructive step.",
+            "pl": "Przycisk niebezpieczny zatwierdza krok nieodwracalny."
+          },
+          "default": "default",
+          "since": "1.0.0"
+        },
+        "icon": {
+          "schema": {
+            "type": "string",
+            "enum": [
+              "alert",
+              "calculator",
+              "check",
+              "clock",
+              "download",
+              "file",
+              "info",
+              "link",
+              "refresh",
+              "search",
+              "send",
+              "settings",
+              "sparkles",
+              "tag",
+              "wand"
+            ]
+          },
+          "description": {
+            "en": "A host icon.",
+            "pl": "Ikona hosta."
+          },
+          "required": false,
+          "since": "1.0.0"
+        },
+        "disabled": {
+          "schema": {
+            "type": "boolean"
+          },
+          "description": {
+            "en": "Disables the button.",
+            "pl": "Wyłącza przycisk."
+          },
+          "default": false,
+          "since": "1.0.0"
+        },
+        "loading": {
+          "schema": {
+            "type": "boolean"
+          },
+          "description": {
+            "en": "Shows progress and disables the button.",
+            "pl": "Pokazuje postęp i wyłącza przycisk."
+          },
+          "default": false,
+          "since": "1.0.0"
+        }
+      },
+      "events": {
+        "press": {
+          "payload": {},
+          "description": {
+            "en": "The button was activated.",
+            "pl": "Przycisk został użyty."
+          },
+          "since": "1.0.0"
+        }
+      },
+      "children": {
+        "kind": "text"
+      },
+      "slots": {},
+      "methods": [
+        "focus"
+      ],
+      "accessibility": []
+    },
+    "IconButton": {
+      "tag": "attricat-icon-button",
+      "since": "1.0.0",
+      "description": {
+        "en": "A button showing only a host icon.",
+        "pl": "Przycisk z samą ikoną hosta."
+      },
+      "props": {
+        "icon": {
+          "schema": {
+            "type": "string",
+            "enum": [
+              "alert",
+              "calculator",
+              "check",
+              "clock",
+              "download",
+              "file",
+              "info",
+              "link",
+              "refresh",
+              "search",
+              "send",
+              "settings",
+              "sparkles",
+              "tag",
+              "wand"
+            ]
+          },
+          "description": {
+            "en": "A host icon.",
+            "pl": "Ikona hosta."
+          },
+          "required": true,
+          "since": "1.0.0"
+        },
+        "label": {
+          "schema": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "description": {
+            "en": "The accessible name and tooltip.",
+            "pl": "Nazwa dostępna i podpowiedź."
+          },
+          "required": true,
+          "since": "1.0.0"
+        },
+        "tone": {
+          "schema": {
+            "type": "string",
+            "enum": [
+              "default",
+              "danger"
+            ]
+          },
+          "description": {
+            "en": "Colour, by meaning.",
+            "pl": "Kolor według znaczenia."
+          },
+          "default": "default",
+          "since": "1.0.0"
+        },
+        "disabled": {
+          "schema": {
+            "type": "boolean"
+          },
+          "description": {
+            "en": "Disables the button.",
+            "pl": "Wyłącza przycisk."
+          },
+          "default": false,
+          "since": "1.0.0"
+        }
+      },
+      "events": {
+        "press": {
+          "payload": {},
+          "description": {
+            "en": "The button was activated.",
+            "pl": "Przycisk został użyty."
+          },
+          "since": "1.0.0"
+        }
+      },
+      "children": {
+        "kind": "none"
+      },
+      "slots": {},
+      "methods": [
+        "focus"
+      ],
+      "accessibility": [
+        "label"
+      ]
+    },
+    "TextField": {
+      "tag": "attricat-text-field",
+      "since": "1.0.0",
+      "description": {
+        "en": "A text input the host owns; it sends debounced changes.",
+        "pl": "Pole tekstowe należące do hosta; wysyła zmiany z opóźnieniem."
+      },
+      "props": {
+        "label": {
+          "schema": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "description": {
+            "en": "The visible label, also its accessible name.",
+            "pl": "Widoczna etykieta, a zarazem nazwa dostępna."
+          },
+          "required": true,
+          "since": "1.0.0"
+        },
+        "hideLabel": {
+          "schema": {
+            "type": "boolean"
+          },
+          "description": {
+            "en": "Hides the label visually; it stays the accessible name. Use it inside an attribute editor, whose field already shows one.",
+            "pl": "Ukrywa etykietę wizualnie; pozostaje nazwą dostępną. Używaj w edytorze atrybutu, którego pole już ją pokazuje."
+          },
+          "default": false,
+          "since": "1.0.0"
+        },
+        "helperText": {
+          "schema": {
+            "type": "string",
+            "maxLength": 400
+          },
+          "description": {
+            "en": "Help shown below the input.",
+            "pl": "Pomoc pod polem."
+          },
+          "since": "1.0.0"
+        },
+        "error": {
+          "schema": {
+            "type": "string",
+            "maxLength": 400
+          },
+          "description": {
+            "en": "An error message; the input is marked invalid while it is set.",
+            "pl": "Komunikat błędu; pole jest oznaczone jako niepoprawne, dopóki jest ustawiony."
+          },
+          "since": "1.0.0"
+        },
+        "disabled": {
+          "schema": {
+            "type": "boolean"
+          },
+          "description": {
+            "en": "Disables the input.",
+            "pl": "Wyłącza pole."
+          },
+          "default": false,
+          "since": "1.0.0"
+        },
+        "required": {
+          "schema": {
+            "type": "boolean"
+          },
+          "description": {
+            "en": "Marks the input as required.",
+            "pl": "Oznacza pole jako wymagane."
+          },
+          "default": false,
+          "since": "1.0.0"
+        },
+        "value": {
+          "schema": {
+            "type": "string",
+            "maxLength": 100000
+          },
+          "description": {
+            "en": "The current text.",
+            "pl": "Bieżący tekst."
+          },
+          "since": "1.0.0"
+        },
+        "placeholder": {
+          "schema": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "description": {
+            "en": "Shown while the input is empty.",
+            "pl": "Widoczny, gdy pole jest puste."
+          },
+          "since": "1.0.0"
+        },
+        "readOnly": {
+          "schema": {
+            "type": "boolean"
+          },
+          "description": {
+            "en": "Shows the value without allowing changes.",
+            "pl": "Pokazuje wartość bez możliwości zmiany."
+          },
+          "default": false,
+          "since": "1.0.0"
+        },
+        "multiline": {
+          "schema": {
+            "type": "boolean"
+          },
+          "description": {
+            "en": "Accepts several lines.",
+            "pl": "Przyjmuje wiele linii."
+          },
+          "default": false,
+          "since": "1.0.0"
+        },
+        "rows": {
+          "schema": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 12
+          },
+          "description": {
+            "en": "Visible lines of a multiline input.",
+            "pl": "Widoczne linie pola wielowierszowego."
+          },
+          "since": "1.0.0"
+        },
+        "monospace": {
+          "schema": {
+            "type": "boolean"
+          },
+          "description": {
+            "en": "Uses the code font.",
+            "pl": "Używa czcionki kodu."
+          },
+          "default": false,
+          "since": "1.0.0"
+        },
+        "maxLength": {
+          "schema": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000
+          },
+          "description": {
+            "en": "The longest text the input accepts.",
+            "pl": "Najdłuższy tekst przyjmowany przez pole."
+          },
+          "since": "1.0.0"
+        },
+        "suggestions": {
+          "schema": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "string",
+              "maxLength": 400
+            }
+          },
+          "description": {
+            "en": "Complete values the host offers below the input; choosing one replaces the text.",
+            "pl": "Pełne wartości, które host proponuje pod polem; wybór zastępuje tekst."
+          },
+          "since": "1.0.0"
+        }
+      },
+      "events": {
+        "change": {
+          "payload": {
+            "value": {
+              "type": "string",
+              "maxLength": 100000
+            }
+          },
+          "description": {
+            "en": "The text changed, debounced.",
+            "pl": "Tekst zmienił się (z opóźnieniem)."
+          },
+          "since": "1.0.0"
+        },
+        "submit": {
+          "payload": {
+            "value": {
+              "type": "string",
+              "maxLength": 100000
+            }
+          },
+          "description": {
+            "en": "Enter was pressed in a single-line input.",
+            "pl": "Naciśnięto Enter w polu jednowierszowym."
+          },
+          "since": "1.0.0"
+        }
+      },
+      "children": {
+        "kind": "none"
+      },
+      "slots": {},
+      "methods": [
+        "focus"
+      ],
+      "accessibility": [
+        "label"
+      ]
+    },
+    "NumberField": {
+      "tag": "attricat-number-field",
+      "since": "1.0.0",
+      "description": {
+        "en": "A numeric input the host owns and parses.",
+        "pl": "Pole liczbowe należące do hosta, który je parsuje."
+      },
+      "props": {
+        "label": {
+          "schema": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "description": {
+            "en": "The visible label, also its accessible name.",
+            "pl": "Widoczna etykieta, a zarazem nazwa dostępna."
+          },
+          "required": true,
+          "since": "1.0.0"
+        },
+        "hideLabel": {
+          "schema": {
+            "type": "boolean"
+          },
+          "description": {
+            "en": "Hides the label visually; it stays the accessible name. Use it inside an attribute editor, whose field already shows one.",
+            "pl": "Ukrywa etykietę wizualnie; pozostaje nazwą dostępną. Używaj w edytorze atrybutu, którego pole już ją pokazuje."
+          },
+          "default": false,
+          "since": "1.0.0"
+        },
+        "helperText": {
+          "schema": {
+            "type": "string",
+            "maxLength": 400
+          },
+          "description": {
+            "en": "Help shown below the input.",
+            "pl": "Pomoc pod polem."
+          },
+          "since": "1.0.0"
+        },
+        "error": {
+          "schema": {
+            "type": "string",
+            "maxLength": 400
+          },
+          "description": {
+            "en": "An error message; the input is marked invalid while it is set.",
+            "pl": "Komunikat błędu; pole jest oznaczone jako niepoprawne, dopóki jest ustawiony."
+          },
+          "since": "1.0.0"
+        },
+        "disabled": {
+          "schema": {
+            "type": "boolean"
+          },
+          "description": {
+            "en": "Disables the input.",
+            "pl": "Wyłącza pole."
+          },
+          "default": false,
+          "since": "1.0.0"
+        },
+        "required": {
+          "schema": {
+            "type": "boolean"
+          },
+          "description": {
+            "en": "Marks the input as required.",
+            "pl": "Oznacza pole jako wymagane."
+          },
+          "default": false,
+          "since": "1.0.0"
+        },
+        "value": {
+          "schema": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "description": {
+            "en": "The current number, or null when empty.",
+            "pl": "Bieżąca liczba lub null, gdy pole jest puste."
+          },
+          "since": "1.0.0"
+        },
+        "minimum": {
+          "schema": {
+            "type": "number"
+          },
+          "description": {
+            "en": "The smallest accepted value.",
+            "pl": "Najmniejsza dopuszczalna wartość."
+          },
+          "since": "1.0.0"
+        },
+        "maximum": {
+          "schema": {
+            "type": "number"
+          },
+          "description": {
+            "en": "The largest accepted value.",
+            "pl": "Największa dopuszczalna wartość."
+          },
+          "since": "1.0.0"
+        },
+        "step": {
+          "schema": {
+            "type": "number",
+            "minimum": 0
+          },
+          "description": {
+            "en": "The arrow-key step.",
+            "pl": "Krok klawiszy strzałek."
+          },
+          "since": "1.0.0"
+        },
+        "unit": {
+          "schema": {
+            "type": "string",
+            "maxLength": 16
+          },
+          "description": {
+            "en": "A unit shown after the input.",
+            "pl": "Jednostka pokazana za polem."
+          },
+          "since": "1.0.0"
+        },
+        "placeholder": {
+          "schema": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "description": {
+            "en": "Shown while the input is empty.",
+            "pl": "Widoczny, gdy pole jest puste."
+          },
+          "since": "1.0.0"
+        },
+        "readOnly": {
+          "schema": {
+            "type": "boolean"
+          },
+          "description": {
+            "en": "Shows the value without allowing changes.",
+            "pl": "Pokazuje wartość bez możliwości zmiany."
+          },
+          "default": false,
+          "since": "1.0.0"
+        }
+      },
+      "events": {
+        "change": {
+          "payload": {
+            "value": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          },
+          "description": {
+            "en": "The number changed, debounced; null when cleared.",
+            "pl": "Liczba zmieniła się (z opóźnieniem); null po wyczyszczeniu."
+          },
+          "since": "1.0.0"
+        }
+      },
+      "children": {
+        "kind": "none"
+      },
+      "slots": {},
+      "methods": [
+        "focus"
+      ],
+      "accessibility": [
+        "label"
+      ]
+    },
+    "Select": {
+      "tag": "attricat-select",
+      "since": "1.0.0",
+      "description": {
+        "en": "A choice from options given as data.",
+        "pl": "Wybór spośród opcji podanych jako dane."
+      },
+      "props": {
+        "label": {
+          "schema": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "description": {
+            "en": "The visible label, also its accessible name.",
+            "pl": "Widoczna etykieta, a zarazem nazwa dostępna."
+          },
+          "required": true,
+          "since": "1.0.0"
+        },
+        "hideLabel": {
+          "schema": {
+            "type": "boolean"
+          },
+          "description": {
+            "en": "Hides the label visually; it stays the accessible name. Use it inside an attribute editor, whose field already shows one.",
+            "pl": "Ukrywa etykietę wizualnie; pozostaje nazwą dostępną. Używaj w edytorze atrybutu, którego pole już ją pokazuje."
+          },
+          "default": false,
+          "since": "1.0.0"
+        },
+        "helperText": {
+          "schema": {
+            "type": "string",
+            "maxLength": 400
+          },
+          "description": {
+            "en": "Help shown below the input.",
+            "pl": "Pomoc pod polem."
+          },
+          "since": "1.0.0"
+        },
+        "error": {
+          "schema": {
+            "type": "string",
+            "maxLength": 400
+          },
+          "description": {
+            "en": "An error message; the input is marked invalid while it is set.",
+            "pl": "Komunikat błędu; pole jest oznaczone jako niepoprawne, dopóki jest ustawiony."
+          },
+          "since": "1.0.0"
+        },
+        "disabled": {
+          "schema": {
+            "type": "boolean"
+          },
+          "description": {
+            "en": "Disables the input.",
+            "pl": "Wyłącza pole."
+          },
+          "default": false,
+          "since": "1.0.0"
+        },
+        "required": {
+          "schema": {
+            "type": "boolean"
+          },
+          "description": {
+            "en": "Marks the input as required.",
+            "pl": "Oznacza pole jako wymagane."
+          },
+          "default": false,
+          "since": "1.0.0"
+        },
+        "value": {
+          "schema": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          },
+          "description": {
+            "en": "The chosen option value.",
+            "pl": "Wartość wybranej opcji."
+          },
+          "since": "1.0.0"
+        },
+        "options": {
+          "schema": {
+            "type": "array",
+            "maxItems": 500,
+            "items": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "label": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "disabled": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "value",
+                "label"
+              ]
+            }
+          },
+          "description": {
+            "en": "The options, in order.",
+            "pl": "Opcje w kolejności."
+          },
+          "required": true,
+          "since": "1.0.0"
+        },
+        "placeholder": {
+          "schema": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "description": {
+            "en": "Shown while nothing is chosen.",
+            "pl": "Widoczny, gdy nic nie wybrano."
+          },
+          "since": "1.0.0"
+        }
+      },
+      "events": {
+        "change": {
+          "payload": {
+            "value": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            }
+          },
+          "description": {
+            "en": "An option was chosen.",
+            "pl": "Wybrano opcję."
+          },
+          "since": "1.0.0"
+        }
+      },
+      "children": {
+        "kind": "none"
+      },
+      "slots": {},
+      "methods": [
+        "focus"
+      ],
+      "accessibility": [
+        "label"
+      ]
+    },
+    "Checkbox": {
+      "tag": "attricat-checkbox",
+      "since": "1.0.0",
+      "description": {
+        "en": "A labelled checkbox.",
+        "pl": "Pole wyboru z etykietą."
+      },
+      "props": {
+        "label": {
+          "schema": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "description": {
+            "en": "The visible label, also its accessible name.",
+            "pl": "Widoczna etykieta, a zarazem nazwa dostępna."
+          },
+          "required": true,
+          "since": "1.0.0"
+        },
+        "helperText": {
+          "schema": {
+            "type": "string",
+            "maxLength": 400
+          },
+          "description": {
+            "en": "Help shown below the input.",
+            "pl": "Pomoc pod polem."
+          },
+          "since": "1.0.0"
+        },
+        "disabled": {
+          "schema": {
+            "type": "boolean"
+          },
+          "description": {
+            "en": "Disables the input.",
+            "pl": "Wyłącza pole."
+          },
+          "default": false,
+          "since": "1.0.0"
+        },
+        "checked": {
+          "schema": {
+            "type": "boolean"
+          },
+          "description": {
+            "en": "Whether it is checked.",
+            "pl": "Czy jest zaznaczone."
+          },
+          "default": false,
+          "since": "1.0.0"
+        }
+      },
+      "events": {
+        "change": {
+          "payload": {
+            "checked": {
+              "type": "boolean"
+            }
+          },
+          "description": {
+            "en": "It was checked or cleared.",
+            "pl": "Zaznaczono lub odznaczono."
+          },
+          "since": "1.0.0"
+        }
+      },
+      "children": {
+        "kind": "none"
+      },
+      "slots": {},
+      "methods": [
+        "focus"
+      ],
+      "accessibility": [
+        "label"
+      ]
+    },
+    "Switch": {
+      "tag": "attricat-switch",
+      "since": "1.0.0",
+      "description": {
+        "en": "A labelled on/off switch that applies at once.",
+        "pl": "Przełącznik z etykietą, działający od razu."
+      },
+      "props": {
+        "label": {
+          "schema": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "description": {
+            "en": "The visible label, also its accessible name.",
+            "pl": "Widoczna etykieta, a zarazem nazwa dostępna."
+          },
+          "required": true,
+          "since": "1.0.0"
+        },
+        "helperText": {
+          "schema": {
+            "type": "string",
+            "maxLength": 400
+          },
+          "description": {
+            "en": "Help shown below the input.",
+            "pl": "Pomoc pod polem."
+          },
+          "since": "1.0.0"
+        },
+        "disabled": {
+          "schema": {
+            "type": "boolean"
+          },
+          "description": {
+            "en": "Disables the input.",
+            "pl": "Wyłącza pole."
+          },
+          "default": false,
+          "since": "1.0.0"
+        },
+        "checked": {
+          "schema": {
+            "type": "boolean"
+          },
+          "description": {
+            "en": "Whether it is on.",
+            "pl": "Czy jest włączony."
+          },
+          "default": false,
+          "since": "1.0.0"
+        }
+      },
+      "events": {
+        "change": {
+          "payload": {
+            "checked": {
+              "type": "boolean"
+            }
+          },
+          "description": {
+            "en": "It was switched.",
+            "pl": "Przełączono."
+          },
+          "since": "1.0.0"
+        }
+      },
+      "children": {
+        "kind": "none"
+      },
+      "slots": {},
+      "methods": [
+        "focus"
+      ],
+      "accessibility": [
+        "label"
+      ]
+    },
+    "Badge": {
+      "tag": "attricat-badge",
+      "since": "1.0.0",
+      "description": {
+        "en": "A short status label.",
+        "pl": "Krótka etykieta stanu."
+      },
+      "props": {
+        "tone": {
+          "schema": {
+            "type": "string",
+            "enum": [
+              "neutral",
+              "info",
+              "success",
+              "warning",
+              "error"
+            ]
+          },
+          "description": {
+            "en": "Colour, by meaning.",
+            "pl": "Kolor według znaczenia."
+          },
+          "default": "neutral",
+          "since": "1.0.0"
+        },
+        "icon": {
+          "schema": {
+            "type": "string",
+            "enum": [
+              "alert",
+              "calculator",
+              "check",
+              "clock",
+              "download",
+              "file",
+              "info",
+              "link",
+              "refresh",
+              "search",
+              "send",
+              "settings",
+              "sparkles",
+              "tag",
+              "wand"
+            ]
+          },
+          "description": {
+            "en": "A host icon.",
+            "pl": "Ikona hosta."
+          },
+          "required": false,
+          "since": "1.0.0"
+        }
+      },
+      "events": {},
+      "children": {
+        "kind": "text"
+      },
+      "slots": {},
+      "methods": [],
+      "accessibility": []
+    },
+    "Link": {
+      "tag": "attricat-link",
+      "since": "1.0.0",
+      "description": {
+        "en": "A link to an `https:` address, opened in a new tab, or to an Attricat page by its path.",
+        "pl": "Odnośnik do adresu `https:`, otwierany w nowej karcie, lub do strony Attricat według ścieżki."
+      },
+      "props": {
+        "href": {
+          "schema": {
+            "type": "string",
+            "maxLength": 2048,
+            "format": "link"
+          },
+          "description": {
+            "en": "An `https:` URL or an in-app path starting with `/`.",
+            "pl": "Adres `https:` lub ścieżka w aplikacji zaczynająca się od `/`."
+          },
+          "required": true,
+          "since": "1.0.0"
+        }
+      },
+      "events": {},
+      "children": {
+        "kind": "text"
+      },
+      "slots": {},
+      "methods": [
+        "focus"
+      ],
+      "accessibility": []
+    },
+    "Table": {
+      "tag": "attricat-table",
+      "since": "1.0.0",
+      "description": {
+        "en": "Rows given as data; the host sorts, pages and virtualizes them.",
+        "pl": "Wiersze podane jako dane; host je sortuje, stronicuje i wirtualizuje."
+      },
+      "props": {
+        "label": {
+          "schema": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "description": {
+            "en": "The table’s accessible name.",
+            "pl": "Nazwa dostępna tabeli."
+          },
+          "required": true,
+          "since": "1.0.0"
+        },
+        "columns": {
+          "schema": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "label": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "align": {
+                  "type": "string",
+                  "enum": [
+                    "start",
+                    "end"
+                  ]
+                },
+                "sortable": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "key",
+                "label"
+              ]
+            }
+          },
+          "description": {
+            "en": "The columns, in order.",
+            "pl": "Kolumny w kolejności."
+          },
+          "required": true,
+          "since": "1.0.0"
+        },
+        "rows": {
+          "schema": {
+            "type": "array",
+            "maxItems": 1000,
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "cells": {
+                  "type": "object",
+                  "maxProperties": 20,
+                  "additionalProperties": {
+                    "type": [
+                      "string",
+                      "number",
+                      "null"
+                    ],
+                    "maxLength": 4000
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "cells"
+              ]
+            }
+          },
+          "description": {
+            "en": "The rows: an ID and a value per column key.",
+            "pl": "Wiersze: identyfikator i wartość dla każdego klucza kolumny."
+          },
+          "required": true,
+          "since": "1.0.0"
+        },
+        "emptyText": {
+          "schema": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "description": {
+            "en": "Shown when there are no rows.",
+            "pl": "Widoczny, gdy nie ma wierszy."
+          },
+          "since": "1.0.0"
+        }
+      },
+      "events": {
+        "rowPress": {
+          "payload": {
+            "id": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          "description": {
+            "en": "A row was activated. Rows are interactive only while a listener is set.",
+            "pl": "Użyto wiersza. Wiersze są interaktywne tylko, gdy ustawiono słuchacza."
+          },
+          "since": "1.0.0"
+        }
+      },
+      "children": {
+        "kind": "none"
+      },
+      "slots": {},
+      "methods": [],
+      "accessibility": [
+        "label"
+      ]
+    },
+    "EmptyState": {
+      "tag": "attricat-empty-state",
+      "since": "1.0.0",
+      "description": {
+        "en": "Explains why there is nothing to show, with an optional action.",
+        "pl": "Wyjaśnia, dlaczego nie ma nic do pokazania, z opcjonalną akcją."
+      },
+      "props": {
+        "title": {
+          "schema": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "description": {
+            "en": "The message.",
+            "pl": "Komunikat."
+          },
+          "required": true,
+          "since": "1.0.0"
+        },
+        "description": {
+          "schema": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "description": {
+            "en": "More detail.",
+            "pl": "Więcej szczegółów."
+          },
+          "since": "1.0.0"
+        },
+        "icon": {
+          "schema": {
+            "type": "string",
+            "enum": [
+              "alert",
+              "calculator",
+              "check",
+              "clock",
+              "download",
+              "file",
+              "info",
+              "link",
+              "refresh",
+              "search",
+              "send",
+              "settings",
+              "sparkles",
+              "tag",
+              "wand"
+            ]
+          },
+          "description": {
+            "en": "A host icon.",
+            "pl": "Ikona hosta."
+          },
+          "required": false,
+          "since": "1.0.0"
+        }
+      },
+      "events": {},
+      "children": {
+        "kind": "none"
+      },
+      "slots": {
+        "action": {
+          "allowed": [
+            "Button"
+          ],
+          "description": {
+            "en": "A button that resolves the empty state.",
+            "pl": "Przycisk rozwiązujący pusty stan."
+          }
+        }
+      },
+      "methods": [],
+      "accessibility": [
+        "title"
+      ]
+    }
+  }
+}

@@ -25,6 +25,8 @@ export type ComponentReference = {
   version: number;
   props: Record<string, unknown>;
 };
+/** An extension's attribute editor a detail field names. */
+export type EditorReference = ComponentReference;
 export type ViewNode =
   | {
       type: 'stack' | 'grid' | 'section';
@@ -48,7 +50,13 @@ export type ViewNode =
     }
   | { type: 'divider'; component?: ComponentReference | null }
   | {
-      type: 'field' | 'relationship_list';
+      type: 'field';
+      field: string;
+      component?: ComponentReference | null;
+      editor?: EditorReference | null;
+    }
+  | {
+      type: 'relationship_list';
       field: string;
       component?: ComponentReference | null;
     }
@@ -105,6 +113,10 @@ const componentReferenceSchema = z.object({
   // otherwise overflow the API contract.
   version: z.number().int().positive().max(MAX_COMPONENT_PROTOCOL_VERSION),
   props: jsonObjectSchema.nullish().transform((props) => props ?? {}),
+});
+// Editor IDs are extension contribution IDs.
+const editorReferenceSchema = componentReferenceSchema.extend({
+  id: z.string().regex(/^[A-Za-z0-9._-]{1,128}$/),
 });
 /**
  * Blocks that lay out child nodes; they may appear nested in a view or as a
@@ -163,6 +175,7 @@ const viewNodeSchema: z.ZodType<ViewNode> = z.lazy(() =>
       type: z.literal(viewBlockTypes.field),
       field: z.string(),
       component: componentReferenceSchema.nullish(),
+      editor: editorReferenceSchema.nullish(),
     }),
     z.object({
       type: z.literal(viewBlockTypes.relationshipList),

@@ -37,11 +37,22 @@ Identyfikatory używane w manifeście (`attricat.id` oraz identyfikatory artefak
 ```json
 "artifacts": [
   { "id": "server", "kind": "server_wasm", "path": "dist/server.wasm" },
-  { "id": "panel", "kind": "client_component", "path": "dist/panel.js" }
+  { "id": "ui", "kind": "client_native", "path": "dist/ui.js", "ui_kit": "^1.0" },
+  { "id": "app", "kind": "client_frame", "path": "dist/app.js" }
 ]
 ```
 
-`kind` ma wartość `server_wasm` (komponent WebAssembly) lub `client_component` (moduł JavaScript). Ścieżki są względne wobec katalogu głównego archiwum. Z pakietu wypakowywane są tylko zadeklarowane artefakty.
+| `kind` | Czym jest |
+| --- | --- |
+| `server_wasm` | Komponent WebAssembly. Zobacz [Komponenty serwerowe](/pl/extensions/server/). |
+| `client_native` | Natywny interfejs: skrypt Workera zbudowany z SDK, którego komponenty rysuje Attricat. Najwyżej jeden w wydaniu. Wymaga `ui_kit`. Zobacz [Natywny interfejs](/pl/extensions/native/). |
+| `client_frame` | Interfejs w ramce: moduł JavaScript, który rysuje własny HTML w izolowanej ramce. Zobacz [Interfejs w ramce](/pl/extensions/client/). |
+
+We wcześniejszych wydaniach `client_frame` nazywał się `client_component`. Ta nazwa nie jest już akceptowana; zmień ją przy ponownym budowaniu rozszerzenia.
+
+`ui_kit` to zakres SemVer wersji zestawu UI, z którymi działa artefakt `client_native`, na przykład `^1.0`; inne rodzaje artefaktów nie mogą go mieć. Wydanie instaluje się tylko wtedy, gdy zakres obejmuje wersję zestawu UI obsługiwaną przez Attricat. Kompilacja SDK pakuje też plik `<ścieżka>.build.json` z wersją zestawu UI, z którą zbudowano pakiet; ta wersja musi mieścić się w zakresie. Natywny pakiet może mieć najwyżej 1 MiB.
+
+Ścieżki są względne wobec katalogu głównego archiwum. Z pakietu wypakowywane są tylko zadeklarowane artefakty.
 
 ## Uprawnienia
 
@@ -89,7 +100,7 @@ Manifest przyjmuje też `client.confirmation`, `client.download`, `client.extern
 
 Każde uprawnienie umiejscowienia zezwala na kontrybucję w jednym miejscu osadzenia. Zobacz [Kontrybucje klienckie](/pl/extensions/client/#miejsca-osadzenia).
 
-`client.blueprint_configuration`, `client.record_tab`, `client.record_action`, `client.record_header_action`, `client.record_field_notes`, `client.explorer_row_action`, `client.explorer_table_cell`, `client.explorer_action`, `client.explorer_bulk_action`, `client.blueprint_detail_panel`, `client.blueprint_panel`, `client.blueprint_publish_check`, `client.audit_event_panel`, `client.data_health_card`, `client.action_dialog`, `client.export_mapping`.
+`client.blueprint_configuration`, `client.record_tab`, `client.record_action`, `client.record_header_action`, `client.record_field_notes`, `client.explorer_row_action`, `client.explorer_table_cell`, `client.explorer_action`, `client.explorer_bulk_action`, `client.blueprint_detail_panel`, `client.blueprint_panel`, `client.blueprint_publish_check`, `client.audit_event_panel`, `client.data_health_card`, `client.action_dialog`, `client.export_mapping`, `client.attribute_editor`.
 
 ## Uprawnienia hosta
 
@@ -280,8 +291,11 @@ Miejsce docelowe eksportu nadaje ekranom stanu eksportu, podglądu, ponawiania i
 | `dialog` | `artifact`, `outlet`, `title` | Zarządzane przez host okno `action_dialog` otwierane przez akcje tego rozszerzenia. |
 | `tab` | `artifact`, `outlet`, `title` | Karta na stronie rekordu w miejscu `record_tab`, której panelem jest ramka; opcjonalnie `icon` oraz `when` ograniczone do `blueprints`. Zobacz [Strony rekordów](/pl/extensions/client/#strony-rekordów). |
 | `cell` | `outlet`, `cell` | Jak Attricat rysuje wartość w kolumnie `explorer_table_cell`. Bez artefaktu. Zobacz [Komórki tabeli](#komórki-tabeli). |
+| `editor` | `artifact`, `outlet`, `editor` | Kontrolka wprowadzania, której pole schematu może użyć w `attribute_editor`; jej artefakt musi być typu `client_native`. Zobacz [Edytory atrybutów](#edytory-atrybutów). |
 
-Każde rozszerzenie może użyć każdego miejsca osadzenia z ramką jeden raz, ale może dodać kilka akcji, okien i komórek tabeli oraz do dwóch kart rekordu. Akcje, okna i karty używają `version` 1. `title` akcji ma najwyżej 64 znaki; tytuł karty, w każdym języku, najwyżej 24.
+Kontrybucja, której `artifact` jest artefaktem `client_native`, jest rysowana natywnie; w przeciwnym razie jej artefakt musi być typu `client_frame`. Natywny interfejs jest dozwolony w `record_tab`, `blueprint_attribute_configuration`, `blueprint_detail_panel`, `blueprint_panel`, `data_health_card`, `export_mapping`, `action_dialog` i `attribute_editor`; trasy, osadzona `navigation`, `blueprint_publish_check` i `audit_event_panel` pozostają interfejsem w ramce.
+
+Każde rozszerzenie może użyć każdego miejsca osadzenia z ramką jeden raz, ale może dodać kilka natywnych kontrybucji, akcji, okien, komórek tabeli i edytorów oraz do dwóch kart rekordu. Akcje, okna i karty używają `version` 1. `title` akcji ma najwyżej 64 znaki; tytuł karty, w każdym języku, najwyżej 24.
 
 ## Komórki tabeli
 
@@ -329,6 +343,39 @@ Typy `display`:
 - `number` pokazuje każdą wartość w ustawieniach regionalnych oglądającego, wyrównaną do prawej. `precision` ustala liczbę miejsc po przecinku (0–20; wskazana właściwość musi być liczbą całkowitą ograniczoną do tego zakresu), a `unit` (1–16 znaków; wskazana właściwość musi być tekstem o długości najwyżej 16) stoi za wartością. Typy wartości muszą być `number` lub `integer`.
 
 Komórka wymaga `client.explorer_table_cell` i jest używana tylko, gdy jej rozszerzenie jest włączone, a ta możliwość przyznana; w przeciwnym razie, a także dla wartości, której jej sposób wyświetlania nie pokaże, kolumna pokazuje wartość jak zwykle. Rozszerzenie może zadeklarować kilka komórek.
+
+## Edytory atrybutów
+
+Kontrybucja `editor` to kontrolka wprowadzania, której pole schematu może użyć zamiast domyślnej kontrolki dla swojego typu wartości. Jej komponent działa w Twoim Workerze i jest rysowany z zestawu UI; Attricat rysuje wokół niego etykietę, pomoc i błędy pola oraz zapisuje proponowane przez niego wartości.
+
+```json
+{
+  "id": "formula",
+  "version": 1,
+  "kind": "editor",
+  "artifact": "ui",
+  "outlet": "attribute_editor",
+  "title": "Formula",
+  "editor": {
+    "value_types": ["string"],
+    "props": { "rows": { "type": "integer", "minimum": 1, "maximum": 8 } }
+  }
+}
+```
+
+`value_types` i `props` działają jak w [komórkach tabeli](#komórki-tabeli). Pole w widoku `detail` schematu wskazuje edytor przez `id` i `version`:
+
+```yaml
+views:
+  detail:
+    type: stack
+    children:
+      - type: field
+        field: discount_formula
+        editor: { id: formula, version: 1, props: { rows: 2 } }
+```
+
+Zapisanie i opublikowanie schematu sprawdza typ wartości pola i właściwości względem deklaracji włączonego rozszerzenia. Edytor wymaga `client.attribute_editor`. Gdy rozszerzenie jest wyłączone, nie ma tego uprawnienia, uległo awarii lub dopiero się uruchamia, pole używa domyślnej kontrolki. Zobacz [Edytory atrybutów](/pl/extensions/native/#edytory-atrybutów).
 
 ## Typy atrybutów
 

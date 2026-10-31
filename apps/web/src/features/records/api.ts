@@ -40,6 +40,7 @@ import { keysetQuery, type KeysetCursor } from '../../api/keysetCursor';
 export { viewBlockTypes } from '../views/schemas';
 export type {
   ComponentReference,
+  EditorReference,
   ViewDefinition,
   ViewNode,
 } from '../views/schemas';

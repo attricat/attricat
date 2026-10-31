@@ -3360,3 +3360,125 @@ async fn auth_health_and_link_commands_build_requests() {
         format!("/view-state-links/{id}")
     );
 }
+
+#[test]
+fn new_extensions_have_a_valid_native_manifest() {
+    use attricat_extension_manifest::extensions::{Manifest, RenderingMode, SUPPORTED_HOST_API};
+
+    let directory = tempfile::tempdir().unwrap();
+    let target = directory.path().join("native");
+    crate::commands::extension::scaffold::scaffold(&target, "acme.native", "Acme", None).unwrap();
+    let manifest: Manifest =
+        serde_json::from_slice(&fs::read(target.join("manifest.json")).unwrap()).unwrap();
+    manifest.validate(SUPPORTED_HOST_API).unwrap();
+    assert!(
+        manifest.ui.iter().all(
+            |contribution| manifest.rendering_mode(contribution) == Some(RenderingMode::Native)
+        )
+    );
+    for file in [
+        "package.json",
+        "vite.config.ts",
+        "src/main.tsx",
+        "src/Summary.test.tsx",
+    ] {
+        assert!(target.join(file).is_file(), "{file}");
+    }
+    // A local SDK checkout is linked, never published versions.
+    let linked = directory.path().join("linked");
+    crate::commands::extension::scaffold::scaffold(
+        &linked,
+        "acme.native",
+        "Acme",
+        Some(std::path::Path::new("/sdk")),
+    )
+    .unwrap();
+    let package: Value =
+        serde_json::from_slice(&fs::read(linked.join("package.json")).unwrap()).unwrap();
+    assert_eq!(
+        package["dependencies"]["@attricat/extension"],
+        "link:/sdk/packages/extension"
+    );
+    // Never into a directory that already holds files.
+    assert!(
+        crate::commands::extension::scaffold::scaffold(&target, "acme.native", "Acme", None)
+            .is_err()
+    );
+    assert!(
+        crate::commands::extension::scaffold::scaffold(
+            &directory.path().join("bad"),
+            "a b",
+            "Acme",
+            None
+        )
+        .is_err()
+    );
+}
+
+#[tokio::test]
+async fn extension_dev_swaps_the_built_bundle() {
+    use std::sync::{Arc, Mutex};
+
+    let received = Arc::new(Mutex::new(None));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn({
+        let received = received.clone();
+        async move {
+            let app = axum::Router::new().route(
+                "/extensions/{extension_id}/dev-artifact",
+                axum::routing::put(
+                    move |axum::extract::Path(extension_id): axum::extract::Path<String>,
+                          headers: axum::http::HeaderMap,
+                          body: axum::body::Bytes| {
+                        let received = received.clone();
+                        async move {
+                            *received.lock().unwrap() = Some((
+                                extension_id,
+                                headers[axum::http::header::CONTENT_TYPE]
+                                    .to_str()
+                                    .unwrap()
+                                    .to_owned(),
+                                body.to_vec(),
+                            ));
+                            axum::http::StatusCode::NO_CONTENT
+                        }
+                    },
+                ),
+            );
+            axum::serve(listener, app).await.unwrap();
+        }
+    });
+    let directory = tempfile::tempdir().unwrap();
+    let bundle = directory.path().join("ui.js");
+    run(Cli {
+        server: Url::parse(&format!("http://{address}")).unwrap(),
+        token: None,
+        token_stdin: false,
+        session_file: None,
+        no_env: false,
+        command: Command::Extension {
+            command: crate::commands::extension::ExtensionCommand::Dev {
+                extension_id: "acme.native".into(),
+                bundle: bundle.clone(),
+                build: Some(format!(
+                    "printf 'export const built = 1;' > '{}'",
+                    bundle.display()
+                )),
+                watch: vec![],
+                once: true,
+            },
+        },
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        received.lock().unwrap().take().unwrap(),
+        (
+            "acme.native".to_owned(),
+            "text/javascript".to_owned(),
+            b"export const built = 1;".to_vec()
+        )
+    );
+    server.abort();
+}

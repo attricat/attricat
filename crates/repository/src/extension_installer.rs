@@ -164,6 +164,12 @@ pub fn installed_artifact_key(installed_release_id: Uuid, artifact_id: &str) -> 
     format!("extensions/v1/{installed_release_id}/{artifact_id}")
 }
 
+/// Where a development build of a release's native artifact is stored; the
+/// revision is the build's SHA-256, so each build has its own object.
+pub fn dev_artifact_key(installed_release_id: Uuid, revision: &str) -> String {
+    format!("extensions/dev/v1/{installed_release_id}/{revision}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::installed_artifact_key;

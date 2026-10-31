@@ -40,6 +40,10 @@ const action = (id: string, title: string): ExtensionContribution => ({
   icon: 'file',
   translations: {},
   cell: null,
+  editor: null,
+  rendering: null,
+  ui_kit: null,
+  artifact_revision: null,
 });
 
 const Page = () => {

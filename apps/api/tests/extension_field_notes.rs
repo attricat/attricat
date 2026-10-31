@@ -51,7 +51,7 @@ fn archive(extension_id: &str, handler: &str) -> Vec<u8> {
         "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
         "artifacts": [
             {"id": "server", "kind": "server_wasm", "path": "server.wasm"},
-            {"id": "client", "kind": "client_component", "path": "client.js"}
+            {"id": "client", "kind": "client_frame", "path": "client.js"}
         ],
         "server": {"commands": [{
             "id": "describe-fields", "handler": handler,

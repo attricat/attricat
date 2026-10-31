@@ -170,6 +170,16 @@ export default defineConfig({
               translations: polish('Środowisko serwerowe'),
             },
             {
+              label: 'Native UI',
+              slug: 'extensions/native',
+              translations: polish('Natywny interfejs'),
+            },
+            {
+              label: 'UI kit reference',
+              slug: 'extensions/ui-kit',
+              translations: polish('Dokumentacja zestawu UI'),
+            },
+            {
               label: 'Client contributions',
               slug: 'extensions/client',
               translations: polish('Kontrybucje klienckie'),

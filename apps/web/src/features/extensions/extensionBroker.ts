@@ -115,7 +115,7 @@ export const validateStorageRequest = (payload: unknown) => {
 
 type BrokerRequest = { method: unknown; payload: unknown };
 
-type BrokerDependencies = {
+export type BrokerDependencies = {
   contribution: ExtensionContribution;
   /** The context the frame was started with; it scopes blueprint reads. */
   initialContext: FrameContext;

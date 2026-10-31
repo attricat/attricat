@@ -142,6 +142,21 @@ pub struct PublicationPolicy {
     pub retain_on_edit_roles: Vec<String>,
 }
 
+/// An extension's attribute editor that a detail field uses.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct EditorReference {
+    /// The editor contribution's ID in an enabled extension.
+    #[schemars(extend("x-attricat-reference" = "attribute_editor"))]
+    pub id: String,
+    /// The editor contribution's version.
+    pub version: u32,
+    /// Props the editor declares.
+    #[serde(default)]
+    #[schemars(with = "serde_json::Map<String, serde_json::Value>")]
+    pub props: serde_json::Value,
+}
+
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComponentReference {
@@ -395,6 +410,11 @@ pub enum ViewNode {
         /// Registered component that renders this block.
         #[serde(default)]
         component: Option<ComponentReference>,
+        /// An extension's attribute editor that edits this field in
+        /// `views.detail`, by `id`, `version` and `props`. The default
+        /// control is used whenever the editor is unavailable.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        editor: Option<EditorReference>,
     },
     /// A relationship attribute's linked records.
     RelationshipList {

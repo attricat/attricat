@@ -178,6 +178,22 @@ views:
 
 Komórka musi być zadeklarowana przez włączone rozszerzenie dla typu wartości kolumny, a każda właściwość musi pasować do zadeklarowanego typu i granic. Attricat rysuje komórkę sam; zobacz [Komórki tabeli](/pl/extensions/manifest/#komórki-tabeli).
 
+### Edytory atrybutów z rozszerzeń
+
+Na stronie rekordu pole w widoku `detail` może zamiast domyślnej kontrolki używać kontrolki z włączonego rozszerzenia, np. pola formuły podpowiadającego nazwy atrybutów. Wskaż edytor przez identyfikator i wersję, a jego opcje przekaż w `props`:
+
+```yaml
+views:
+  detail:
+    type: stack
+    children:
+      - type: field
+        field: discount_formula
+        editor: {id: formula, version: 1, props: {rows: 2}}
+```
+
+Edytor musi być zadeklarowany przez włączone rozszerzenie dla typu wartości pola, a każda właściwość musi pasować do zadeklarowanego typu i granic. Pole zachowuje swoją etykietę, pomoc, walidację i zapisywanie: nadal zapisuje się po opuszczeniu pola lub naciśnięciu Enter, a Escape przywraca zapisaną wartość. Gdy rozszerzenie jest wyłączone albo nie działa, pole pokazuje domyślną kontrolkę. Edytory działają tylko na stronie rekordu, nigdy w tabelach Przeglądarki rekordów.
+
 ## Panel przeglądania w Przeglądarce rekordów
 
 Panel **Przeglądaj według** obok wyników **Przeglądarki rekordów** wyświetla cele jednej relacji. Schemat z własną [hierarchią](#hierarchie) wyświetla zamiast tego własne drzewo, pod nazwą schematu. Domyślnie panel otwiera się dla tego drzewa, a w przeciwnym razie dla pierwszej relacji, której schemat docelowy ma hierarchię. Aby wybrać atrybut, wskaż go w `views.explorer`:

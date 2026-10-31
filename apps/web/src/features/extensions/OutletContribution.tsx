@@ -1,5 +1,5 @@
 import type { ExtensionContribution } from './api';
-import { ExtensionFrame } from './ExtensionFrame';
+import { ExtensionUi } from './ExtensionUi';
 import { ExtensionNavigationItem } from './ExtensionNavigationItem';
 import type { OutletContext } from './outletContributions';
 import { contributionKinds } from './constants';
@@ -22,5 +22,5 @@ export const OutletContribution = ({
       onNavigate={onNavigate}
     />
   ) : (
-    <ExtensionFrame contribution={contribution} context={context} />
+    <ExtensionUi contribution={contribution} context={context} />
   );

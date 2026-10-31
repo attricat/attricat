@@ -6,6 +6,7 @@ version = 4
 name = "acli"
 version = "0.1.0"
 dependencies = [
+ "attricat-extension-manifest",
  "attricat-yaml",
  "axum",
  "clap",

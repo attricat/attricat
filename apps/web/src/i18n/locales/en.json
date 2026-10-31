@@ -1008,7 +1008,8 @@
       "requiredType": "{{type}} · required",
       "role": "Workspace role",
       "section": "Section",
-      "selectedAttribute": "From {{from}}"
+      "selectedAttribute": "From {{from}}",
+      "editor": "{{extension}} editor v{{version}}"
     },
     "diagnostics": {
       "expectedOneOf": "Expected one of: {{values}}.",
@@ -1826,7 +1827,24 @@
     "noInstalled": "No extensions installed",
     "noInstalledDescription": "Install one from the marketplace or upload an archive to add pages, actions and integrations.",
     "noMarketplaceExtensions": "No extensions available",
-    "loadingExtensions": "Loading extensions..."
+    "loadingExtensions": "Loading extensions...",
+    "native": {
+      "tableEmpty": "Nothing to show.",
+      "errors": {
+        "native_ui_start_failed": "{{extension}} could not start.",
+        "native_ui_start_timed_out": "{{extension}} timed out while starting.",
+        "native_ui_not_registered": "{{extension}} does not provide this view.",
+        "native_ui_unresponsive": "{{extension}} stopped responding and was stopped.",
+        "native_ui_tree_too_large": "{{extension}} drew more than Attricat allows and was stopped.",
+        "native_ui_mutation_rate_exceeded": "{{extension}} updated its view too often and was stopped.",
+        "native_ui_message_too_large": "{{extension}} sent too much data at once and was stopped.",
+        "native_ui_render_failed": "{{extension}} could not show this view."
+      },
+      "gallery": {
+        "title": "UI kit {{version}}",
+        "eventsHint": "Events the elements send appear here."
+      }
+    }
   },
   "workspace": {
     "memberSummary": "{{email}} · {{state}}",

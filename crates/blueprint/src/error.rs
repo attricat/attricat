@@ -140,6 +140,10 @@ pub enum BlueprintError {
     TableColumnRelationshipRequired { field: String },
     #[error("table column renderer props must be an object")]
     InvalidTableColumnRendererProps,
+    #[error("view '{view}' field '{field}' may name an editor only in views.detail")]
+    FieldEditorOutsideDetail { view: String, field: String },
+    #[error("view '{view}' field '{field}' names an invalid editor")]
+    InvalidFieldEditor { view: String, field: String },
     #[error("view '{view}' relationship_list '{field}' must be a relationship")]
     NonRelationshipViewField { view: String, field: String },
     #[error("view '{view}' hierarchy field '{field}' must target its own blueprint")]

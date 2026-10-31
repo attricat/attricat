@@ -26,6 +26,22 @@ light and dark modes.
 - Define TanStack Query key factories in a feature-local `queryKeys.ts` file.
 - Use those factories for every `queryKey` and invalidation so equivalent requests share the same cache entry and invalidation can reuse the same key definitions. Define a root key when a feature needs to invalidate all variants of a resource.
 
+## Extension UI
+
+- Extension code never runs in Attricat's document. Frame UI runs in a
+  sandboxed frame (`ExtensionFrame`); native UI runs in a Worker and is drawn
+  by `NativeUi` from validated UI kit elements. Mount either through
+  `ExtensionUi`, which picks by the contribution's `rendering`.
+- Draw UI kit elements only through `native/adapterMap.ts`: each adapter is a
+  thin wrapper over existing Attricat components that maps the element's
+  enums to theme tokens. Never forward extension-supplied styles, HTML, URLs
+  other than `https:` or in-app paths, or props the UI kit does not declare.
+- Change the UI kit only in `scripts/ui-kit/definition.ts`, then run
+  `UPDATE_CONTRACTS=1 pnpm vitest run uiKitContract`; never edit the generated
+  files or a released snapshot. Check new or changed adapters in the UI kit
+  gallery (`/manage/extensions/ui-kit`, development builds) in both color
+  modes and both languages.
+
 ## Client State
 
 - Use Zustand for client-only state shared across independent components or updated outside React (for example, toast notifications and Inspector timings). Keep stores feature-local unless the state is truly app-wide, and subscribe to the smallest slice needed.

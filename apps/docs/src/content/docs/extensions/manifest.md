@@ -37,11 +37,22 @@ IDs used in the manifest (`attricat.id`, artifact, dependency, permission-rule, 
 ```json
 "artifacts": [
   { "id": "server", "kind": "server_wasm", "path": "dist/server.wasm" },
-  { "id": "panel", "kind": "client_component", "path": "dist/panel.js" }
+  { "id": "ui", "kind": "client_native", "path": "dist/ui.js", "ui_kit": "^1.0" },
+  { "id": "app", "kind": "client_frame", "path": "dist/app.js" }
 ]
 ```
 
-`kind` is `server_wasm` (a WebAssembly component) or `client_component` (a JavaScript module). Paths are relative to the archive root. Only declared artifacts are extracted from the package.
+| `kind` | What it is |
+| --- | --- |
+| `server_wasm` | A WebAssembly component. See [Server components](/extensions/server/). |
+| `client_native` | Native UI: a Worker script built with the SDK whose components Attricat draws. At most one per release. Requires `ui_kit`. See [Native UI](/extensions/native/). |
+| `client_frame` | Frame UI: a JavaScript module that draws its own HTML in a sandboxed frame. See [Frame UI](/extensions/client/). |
+
+`client_frame` was called `client_component` in earlier releases. That name is no longer accepted; rename it when you rebuild an extension.
+
+`ui_kit` is a SemVer range of the UI kit versions a `client_native` artifact works with, such as `^1.0`, and is not allowed on other kinds. A release installs only when the range matches a UI kit version Attricat supports. The SDK's build also packs `<path>.build.json`, which records the UI kit version the bundle was built against; that version must be in the range. A native bundle may be at most 1 MiB.
+
+Paths are relative to the archive root. Only declared artifacts are extracted from the package.
 
 ## Capabilities
 
@@ -89,7 +100,7 @@ The manifest also accepts `client.confirmation`, `client.download`, `client.exte
 
 Each placement capability allows a contribution at one outlet. See [Client contributions](/extensions/client/#outlets).
 
-`client.blueprint_configuration`, `client.record_tab`, `client.record_action`, `client.record_header_action`, `client.record_field_notes`, `client.explorer_row_action`, `client.explorer_table_cell`, `client.explorer_action`, `client.explorer_bulk_action`, `client.blueprint_detail_panel`, `client.blueprint_panel`, `client.blueprint_publish_check`, `client.audit_event_panel`, `client.data_health_card`, `client.action_dialog`, `client.export_mapping`.
+`client.blueprint_configuration`, `client.record_tab`, `client.record_action`, `client.record_header_action`, `client.record_field_notes`, `client.explorer_row_action`, `client.explorer_table_cell`, `client.explorer_action`, `client.explorer_bulk_action`, `client.blueprint_detail_panel`, `client.blueprint_panel`, `client.blueprint_publish_check`, `client.audit_event_panel`, `client.data_health_card`, `client.action_dialog`, `client.export_mapping`, `client.attribute_editor`.
 
 ## Host permissions
 
@@ -280,8 +291,11 @@ An export destination gives Attricat's export status, preview, retry, and resync
 | `dialog` | `artifact`, `outlet`, `title` | A host-managed `action_dialog` opened by this extension's actions. |
 | `tab` | `artifact`, `outlet`, `title` | A tab on the record page at `record_tab`, whose panel is the frame; optional `icon`, and `when` limited to `blueprints`. See [Record pages](/extensions/client/#record-pages). |
 | `cell` | `outlet`, `cell` | How Attricat draws a value in an `explorer_table_cell` column. No artifact. See [Table cells](#table-cells). |
+| `editor` | `artifact`, `outlet`, `editor` | An input control a blueprint field may use at `attribute_editor`; its artifact must be `client_native`. See [Attribute editors](#attribute-editors). |
 
-Each extension can use each frame outlet once, but may add several actions, dialogs and table cells, and up to two record tabs. Actions, dialogs and tabs use `version` 1. An action's `title` has at most 64 characters; a tab's, in every language, at most 24.
+A contribution whose `artifact` is the `client_native` artifact is drawn natively; otherwise its artifact must be `client_frame`. Native UI is allowed at `record_tab`, `blueprint_attribute_configuration`, `blueprint_detail_panel`, `blueprint_panel`, `data_health_card`, `export_mapping`, `action_dialog` and `attribute_editor`; routes, embedded `navigation`, `blueprint_publish_check` and `audit_event_panel` stay Frame UI.
+
+Each extension can use each frame outlet once, but may add several native contributions, actions, dialogs, table cells and editors, and up to two record tabs. Actions, dialogs and tabs use `version` 1. An action's `title` has at most 64 characters; a tab's, in every language, at most 24.
 
 ## Table cells
 
@@ -329,6 +343,39 @@ views:
 - `number` shows each value in the viewer's locale, right-aligned. `precision` fixes the decimal places (0–20; a prop it names must be an integer bounded to that range), and `unit` (1–16 characters; a prop it names must be a string of at most 16) follows the value. Its value types must be `number` or `integer`.
 
 A cell needs `client.explorer_table_cell`, and is used only while its extension is enabled and that capability granted; otherwise, and for a value its display cannot show, the column shows the value as usual. An extension may declare several cells.
+
+## Attribute editors
+
+An `editor` contribution is an input control that a blueprint field can use instead of the default control for its value type. Its component runs in your Worker and is drawn with the UI kit; Attricat draws the field's label, help and errors around it and saves what it proposes.
+
+```json
+{
+  "id": "formula",
+  "version": 1,
+  "kind": "editor",
+  "artifact": "ui",
+  "outlet": "attribute_editor",
+  "title": "Formula",
+  "editor": {
+    "value_types": ["string"],
+    "props": { "rows": { "type": "integer", "minimum": 1, "maximum": 8 } }
+  }
+}
+```
+
+`value_types` and `props` work as for [table cells](#table-cells). A field in a blueprint's `detail` view names the editor by `id` and `version`:
+
+```yaml
+views:
+  detail:
+    type: stack
+    children:
+      - type: field
+        field: discount_formula
+        editor: { id: formula, version: 1, props: { rows: 2 } }
+```
+
+Saving and publishing the blueprint check the field's value type and props against an enabled extension's declaration. An editor needs `client.attribute_editor`. While its extension is disabled, lacks that grant, fails or is still starting, the field uses its default control. See [Attribute editors](/extensions/native/#attribute-editors).
 
 ## Attribute types
 

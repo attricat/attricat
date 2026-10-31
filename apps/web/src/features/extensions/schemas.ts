@@ -16,6 +16,7 @@ import {
   hostIcons,
   maximumCellPrecision,
   maximumCellUnitLength,
+  renderingModes,
 } from './constants';
 
 export const extensionOutletSchema = z.enum(extensionOutlets);
@@ -84,6 +85,15 @@ const cellSchema = z
   .strict();
 export type CellDeclaration = z.infer<typeof cellSchema>;
 
+/** The value types and props of a native attribute editor. */
+const editorSchema = z
+  .object({
+    value_types: z.array(z.string()).min(1),
+    props: z.record(z.string(), z.unknown()).default({}),
+  })
+  .strict();
+export type EditorDeclaration = z.infer<typeof editorSchema>;
+
 const contributionSchema = z
   .object({
     contribution_key: contributionKeySchema,
@@ -118,6 +128,14 @@ const contributionSchema = z
       .default({}),
     /** How a host-rendered cell shows a value; absent on other kinds. */
     cell: cellSchema.nullable().default(null),
+    /** An attribute editor's value types and props; absent on other kinds. */
+    editor: editorSchema.nullable().default(null),
+    /** Who draws the contribution's code; absent when the host draws it. */
+    rendering: z.enum(renderingModes).nullable().default(null),
+    /** The UI kit version native UI is drawn with. */
+    ui_kit: z.string().nullable().default(null),
+    /** Changes when a development build replaces the native Worker. */
+    artifact_revision: z.string().nullable().default(null),
   })
   .strict();
 

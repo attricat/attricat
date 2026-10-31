@@ -38,6 +38,7 @@ export type SchemaNode = {
 /** What an `x-attricat-reference` value names. */
 export const definitionReferenceKinds = {
   attribute: 'attribute',
+  attributeEditor: 'attribute_editor',
   attributePath: 'attribute_path',
   blueprint: 'blueprint',
   context: 'context',

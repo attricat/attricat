@@ -414,6 +414,8 @@ acli extension runtime [--blueprint-id <id> --blueprint-version <n>]
 acli extension get | enable | disable | remove <extension-id>
 acli extension install --owner <o> --repository <r> --release-id <github-release-id>
 acli extension sideload --file extension.tar.zst
+acli extension new <directory> --id <extension-id> [--name <name>] [--sdk <path>]
+acli extension dev <extension-id> [--bundle dist/ui.js] [--build <command>] [--watch <path>]... [--once]
 acli extension upgrade <extension-id> --owner <o> --repository <r> --release-id <id>
 acli extension configure <extension-id> --configuration <json>
 acli extension grant <extension-id> --grant-kind capability|host_permission|event_publish|event_subscribe --grant-id <id>
@@ -454,6 +456,8 @@ acli extension secret delete <name>
 acli extension layout get
 acli extension layout set --layout <json-or-file>
 ```
+
+`extension new` writes a native UI extension into a new directory and needs no server; with `--sdk`, its packages link to a local SDK checkout. `extension dev` needs a development server with developer tools on: it uploads the built bundle, then rebuilds with `--build` and uploads again whenever a watched path changes, replacing the installed release's Worker without new grants. See [Native UI](/extensions/native/).
 
 Connection secrets and workspace secret values are read from standard input so they never appear in process arguments; with both `--client-secret-stdin` and `--refresh-token-stdin`, put the client secret on the first line. `connection authorize` needs a browser session (`--session-file`) and returns the provider's authorization URL, but the provider's callback completes only in the session that started it, which your browser does not carry; authorize from the web app instead, or use `connection exchange-code` with a code you obtained yourself.
 

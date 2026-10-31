@@ -6,7 +6,11 @@ import { IconLabel } from '../../../components/IconLabel';
 import { FieldNotesRow } from '../../extensions/fieldNotes';
 import { RelationshipIcon } from '../../../components/systemIcons';
 import { fileAttributeIcon } from '../../files/fileAttributeIcon';
-import type { Attribute, ComponentReference } from '../../records/api';
+import type {
+  Attribute,
+  ComponentReference,
+  EditorReference,
+} from '../../records/api';
 import { FieldDiagnosticsButton } from '../../records/components/FieldDiagnosticsButton';
 import {
   useFieldDiagnostics,
@@ -33,6 +37,7 @@ export const ValueField = ({
   resolved,
   renderEditor,
   component,
+  editor: editorReference,
   contextId,
   recordId,
 }: {
@@ -41,8 +46,11 @@ export const ValueField = ({
   renderEditor?: (
     attribute: Attribute,
     component?: ComponentReference | null,
+    editor?: EditorReference | null,
   ) => ReactNode;
   component?: ComponentReference | null;
+  /** An extension's attribute editor the view names for this field. */
+  editor?: EditorReference | null;
   contextId?: string;
   recordId?: string;
 }) => {
@@ -56,7 +64,7 @@ export const ValueField = ({
         ? RelationshipIcon
         : undefined;
   // An editor host returns nothing for a value it does not let the user edit.
-  const editor = renderEditor?.(attribute, component) ?? null;
+  const editor = renderEditor?.(attribute, component, editorReference) ?? null;
   const diagnostics = useFieldDiagnostics();
   const findings = useFieldFindings(attribute.code);
   const severity = findings && worstSeverity(findings);

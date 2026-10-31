@@ -32,6 +32,10 @@ const contribution: ExtensionContribution = {
   icon: null,
   translations: {},
   cell: null,
+  editor: null,
+  rendering: null,
+  ui_kit: null,
+  artifact_revision: null,
 };
 
 const Frame = ({ contribution }: { contribution: ExtensionContribution }) => {
