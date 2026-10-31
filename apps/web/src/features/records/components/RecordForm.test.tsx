@@ -733,6 +733,27 @@ describe('RecordForm', () => {
     await waitFor(() => expect(onSubmit).toHaveBeenCalledOnce());
   });
 
+  it('lets a new record give a required readonly attribute its first value', async () => {
+    const result = blueprint([
+      attribute('title'),
+      attribute('code', { readonly: true }),
+      attribute('internal_id', { readonly: true }),
+    ]);
+    result.blueprint.record_schema = {
+      type: 'object',
+      required: ['title', 'code'],
+    };
+    const { onSubmit } = renderForm({ blueprint: result });
+    const code = screen.getByRole('textbox', { name: 'code' });
+    expect((code as HTMLInputElement).disabled).toBe(false);
+    // An optional readonly attribute stays protected.
+    expect(screen.queryByRole('textbox', { name: 'internal_id' })).toBeNull();
+    fireEvent.change(titleBox(), { target: { value: 'Diesel' } });
+    fireEvent.change(code, { target: { value: 'diesel' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledOnce());
+  });
+
   it('names a cleared schema-required field as required', () => {
     const result = blueprint([attribute('title')]);
     result.blueprint.record_schema = { type: 'object', required: ['title'] };

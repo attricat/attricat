@@ -38,7 +38,10 @@ import {
   recordFormStatusKinds,
   type RecordFormStatusKind,
 } from '../recordForm';
-import { recordFormLayout } from '../recordFormAttributes';
+import {
+  recordFormLayout,
+  withFillableReadonlyAttributes,
+} from '../recordFormAttributes';
 import {
   viewFieldEditComponents,
   viewFieldEditors,
@@ -187,7 +190,7 @@ type RecordFormProps = {
 export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
   (
     {
-      blueprint,
+      blueprint: givenBlueprint,
       expectedUpdatedAt,
       draft: draftOptions,
       initialValues = {},
@@ -223,6 +226,12 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
       values: existingValues,
       version: expectedUpdatedAt,
     });
+    const blueprint = useMemo(
+      () =>
+        givenBlueprint &&
+        withFillableReadonlyAttributes(givenBlueprint, baseline.values),
+      [givenBlueprint, baseline.values],
+    );
     const initialFields =
       expectedUpdatedAt === undefined ? initialValues : baseline.fields;
     const savedValues = baseline.values;

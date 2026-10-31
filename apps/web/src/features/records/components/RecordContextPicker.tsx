@@ -51,21 +51,31 @@ export const RecordContextPicker = ({
       aria-label={t('records.context')}
       component="nav"
       sx={{
-        alignItems: 'center',
+        alignItems: { xs: 'stretch', sm: 'center' },
         borderBottom: 1,
         borderColor: 'divider',
         display: 'flex',
+        // Phones put the menu under the tabs so the tabs keep the full width.
+        flexDirection: { xs: 'column', sm: 'row' },
         gap: 1,
         mb: 2,
         mt: -1,
         width: '100%',
       }}
     >
+      {/* Scrolls rather than running under the menu. */}
       <Tabs
+        allowScrollButtonsMobile
         aria-label={t('records.context')}
         onChange={(_, contextId: string) => onChange(contextId)}
-        sx={{ minHeight: CONTEXT_TAB_MIN_HEIGHT }}
+        scrollButtons="auto"
+        sx={{
+          flex: '1 1 auto',
+          minHeight: CONTEXT_TAB_MIN_HEIGHT,
+          minWidth: 0,
+        }}
         value={tabValue}
+        variant="scrollable"
       >
         {tabContexts.map((context) => (
           <Tab
@@ -89,7 +99,7 @@ export const RecordContextPicker = ({
           disabled={disabled}
           label={t('records.moreContexts')}
           onChange={(event) => onChange(event.target.value)}
-          sx={{ maxWidth: '100%', width: CONTEXT_MENU_WIDTH }}
+          sx={{ flexShrink: 0, maxWidth: '100%', width: CONTEXT_MENU_WIDTH }}
           value={remainingValue}
         >
           {remainingContexts.map((context) => (
