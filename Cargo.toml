@@ -71,7 +71,7 @@ wasmtime = { version = "49", default-features = false, features = ["async", "com
 webp = { version = "0.3", default-features = false }
 wit-bindgen = "0.57"
 zip = { version = "9", default-features = false, features = ["deflate"] }
-zstd = "0.13"
+zstd = "0.14"
 
 # Dependencies keep only line tables, which still give panic and backtrace
 # locations, so every linked test binary stays small.
