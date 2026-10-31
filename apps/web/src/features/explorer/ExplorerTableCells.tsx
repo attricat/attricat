@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import type { RecordItem } from '../records/api';
 import { recordPublicationOptions } from '../records/queryOptions';
-import { contextDisplayLabel } from '../records/recordDisplay';
+import { contextDisplayLabel, displayLabel } from '../records/recordDisplay';
 import { recordPanelOpenerAttribute } from './constants';
 import { compactIconSize } from '../../components/iconSizes';
 import { emptyValuePlaceholder } from '../../components/placeholders';
@@ -136,19 +136,21 @@ export const SystemTagsCell = ({
 };
 
 export const RecordActionsCell = ({
-  recordId,
+  record,
   onOpenActions,
 }: {
-  recordId: string;
+  record: RecordItem;
   onOpenActions: (recordId: string, position: ActionMenuPosition) => void;
 }) => {
   const { t } = useTranslation();
   return (
     <IconButton
-      aria-label={t('explorer.recordActionsFor', { recordId })}
+      aria-label={t('explorer.recordActionsFor', {
+        record: displayLabel(record.display, record.id),
+      })}
       onClick={(event) => {
         const { left, top } = event.currentTarget.getBoundingClientRect();
-        onOpenActions(recordId, { left, top });
+        onOpenActions(record.id, { left, top });
       }}
       size="small"
     >

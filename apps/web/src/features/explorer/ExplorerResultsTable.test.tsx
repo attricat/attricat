@@ -226,9 +226,10 @@ describe('ExplorerResultsTable', () => {
     expect(requestedIds()).toEqual(items.slice(0, 5).map(({ id }) => id));
     await waitFor(() => expect(view.queryClient.isFetching()).toBe(0));
     await userEvent.setup().click(
-      screen.getByRole('button', {
-        name: `Record actions for ${items[0].id}`,
-      }),
+      // Every row shares one display label; the first row's button opens.
+      screen.getAllByRole('button', {
+        name: `Record actions for ${items[0].display.default}`,
+      })[0],
     );
     virtualWindow.start = 200;
     view.search(items, 'initial');
@@ -304,7 +305,9 @@ describe('ExplorerResultsTable', () => {
     const user = userEvent.setup();
     const { unmount } = renderTable([item]);
     await user.click(
-      screen.getByRole('button', { name: `Record actions for ${item.id}` }),
+      screen.getByRole('button', {
+        name: `Record actions for ${item.display.default}`,
+      }),
     );
     expect(
       screen.queryByRole('menuitem', { name: 'Delete record' }),
@@ -314,14 +317,18 @@ describe('ExplorerResultsTable', () => {
     vi.mocked(deleteRecord).mockResolvedValue(undefined);
     renderTable([item], true);
     await user.click(
-      screen.getByRole('button', { name: `Record actions for ${item.id}` }),
+      screen.getByRole('button', {
+        name: `Record actions for ${item.display.default}`,
+      }),
     );
     await user.click(screen.getByRole('menuitem', { name: 'Delete record' }));
     expect(deleteRecord).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(deleteRecord).not.toHaveBeenCalled();
     await user.click(
-      screen.getByRole('button', { name: `Record actions for ${item.id}` }),
+      screen.getByRole('button', {
+        name: `Record actions for ${item.display.default}`,
+      }),
     );
     await user.click(screen.getByRole('menuitem', { name: 'Delete record' }));
     await user.click(
@@ -339,7 +346,9 @@ describe('ExplorerResultsTable', () => {
     );
     renderTable([item], true);
     await user.click(
-      screen.getByRole('button', { name: `Record actions for ${item.id}` }),
+      screen.getByRole('button', {
+        name: `Record actions for ${item.display.default}`,
+      }),
     );
     await user.click(screen.getByRole('menuitem', { name: 'Delete record' }));
     await user.click(

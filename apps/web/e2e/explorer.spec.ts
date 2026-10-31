@@ -47,7 +47,7 @@ test('shows explorer empty states and configured table fields', async ({
   await expect(
     page
       .getByRole('region', { name: 'Explorer products' })
-      .getByRole('cell', { name: 'Table product' })
+      .getByRole('cell', { name: 'Table product', exact: true })
       .first(),
   ).toBeVisible();
   await page.getByLabel('Select a Blueprint').click();
@@ -63,7 +63,7 @@ test('shows explorer empty states and configured table fields', async ({
   await expect(page.getByRole('columnheader', { name: 'title' })).toBeVisible();
   await expect(page.getByRole('columnheader', { name: 'stock' })).toBeVisible();
   await expect(
-    page.getByRole('cell', { name: 'Table product' }).first(),
+    page.getByRole('cell', { name: 'Table product', exact: true }).first(),
   ).toBeVisible();
   await expect(page.getByText('12', { exact: true })).toBeVisible();
 
@@ -332,9 +332,11 @@ test('applies and removes an attribute filter on mobile', async ({ page }) => {
   await expect(filters.getByText('stock > "5"')).toBeVisible();
   await expect(page.getByText('1 result')).toBeVisible();
   await expect(
-    page.getByRole('cell', { name: 'In stock' }).first(),
+    page.getByRole('cell', { name: 'In stock', exact: true }).first(),
   ).toBeVisible();
-  await expect(page.getByRole('cell', { name: 'Low stock' })).toBeHidden();
+  await expect(
+    page.getByRole('cell', { name: 'Low stock', exact: true }),
+  ).toBeHidden();
   await expect
     .poll(() => new URL(page.url()).searchParams.get('attributeFilters'))
     .toContain('stock');
@@ -412,8 +414,12 @@ test('filters explorer results with a relationship hierarchy facet', async ({
     .filter({ hasText: /^category: / });
   await expect(categoryChip).toBeVisible();
   await expect(page.getByText('1 result')).toBeVisible();
-  await expect(page.getByRole('cell', { name: 'Running shoe' })).toBeVisible();
-  await expect(page.getByRole('cell', { name: 'Canvas bag' })).toBeHidden();
+  await expect(
+    page.getByRole('cell', { name: 'Running shoe', exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('cell', { name: 'Canvas bag', exact: true }),
+  ).toBeHidden();
 
   await categoryChip
     .getByLabel(/^Remove relationship filter category: /)
@@ -480,8 +486,12 @@ test('browses explorer results through a category tree rail', async ({
   // Choosing a parent also matches records assigned to its descendants.
   await rail.getByRole('button', { name: /^Departments/ }).click();
   await expect(page.getByText('1 result')).toBeVisible();
-  await expect(page.getByRole('cell', { name: 'Running shoe' })).toBeVisible();
-  await expect(page.getByRole('cell', { name: 'Canvas bag' })).toBeHidden();
+  await expect(
+    page.getByRole('cell', { name: 'Running shoe', exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('cell', { name: 'Canvas bag', exact: true }),
+  ).toBeHidden();
 
   // A selection loaded with the page opens the branches leading to it.
   await rail.getByRole('button', { name: /^Shoes/ }).click();
@@ -516,8 +526,12 @@ test('browses explorer results through a category tree rail', async ({
   await expect(page.getByText('3 results')).toBeVisible();
   await ownRail.getByRole('button', { name: /^Departments/ }).click();
   await expect(page.getByText('2 results')).toBeVisible();
-  await expect(page.getByRole('cell', { name: 'Departments' })).toBeVisible();
-  await expect(page.getByRole('cell', { name: 'Shoes' })).toBeVisible();
+  await expect(
+    page.getByRole('cell', { name: 'Departments', exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('cell', { name: 'Shoes', exact: true }),
+  ).toBeVisible();
   await expect(page.getByText('Rail categories: Departments')).toBeVisible();
 
   // A blueprint can keep the rail closed even for a tree field.
@@ -685,8 +699,12 @@ test('filters explorer results with a one-level relationship facet', async ({
     .poll(() => new URL(page.url()).searchParams.get('relationshipFacets'))
     .toContain(red.id);
   await expect(page.getByText('1 result')).toBeVisible();
-  await expect(page.getByRole('cell', { name: 'Red shirt' })).toBeVisible();
-  await expect(page.getByRole('cell', { name: 'Blue shirt' })).toBeHidden();
+  await expect(
+    page.getByRole('cell', { name: 'Red shirt', exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('cell', { name: 'Blue shirt', exact: true }),
+  ).toBeHidden();
 });
 
 test('intersects selections from multiple relationship facets', async ({
@@ -745,13 +763,13 @@ test('intersects selections from multiple relationship facets', async ({
 
   await expect(page.getByText('1 result')).toBeVisible();
   await expect(
-    page.getByRole('cell', { name: 'Red large shirt' }),
+    page.getByRole('cell', { name: 'Red large shirt', exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole('cell', { name: 'Red small shirt' }),
+    page.getByRole('cell', { name: 'Red small shirt', exact: true }),
   ).toBeHidden();
   await expect(
-    page.getByRole('cell', { name: 'Blue large shirt' }),
+    page.getByRole('cell', { name: 'Blue large shirt', exact: true }),
   ).toBeHidden();
   await expect
     .poll(() => new URL(page.url()).searchParams.get('relationshipFacets'))
@@ -855,5 +873,7 @@ attributes:
   await page.getByRole('option', { name: 'Version 1' }).click();
   await page.getByRole('button', { name: 'Search', exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`blueprint=${code}.*version=1`));
-  await expect(page.getByRole('cell', { name: 'v1 · Outdated' })).toBeVisible();
+  await expect(
+    page.getByRole('cell', { name: 'v1 · Outdated', exact: true }),
+  ).toBeVisible();
 });

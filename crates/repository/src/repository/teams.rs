@@ -166,7 +166,13 @@ impl AttricatRepository {
         .bind(code)
         .bind(name)
         .execute(&mut *transaction)
-        .await?;
+        .await
+        .map_err(|error| match error {
+            sqlx::Error::Database(database) if database.is_unique_violation() => {
+                RepositoryError::CodeTaken(super::CodedResource::Team)
+            }
+            error => error.into(),
+        })?;
         self.replace_team_members(&mut transaction, id, member_user_ids)
             .await?;
         let team = Self::team_on(&mut transaction, self.workspace_id.0, id).await?;

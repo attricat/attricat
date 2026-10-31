@@ -79,6 +79,9 @@ async fn assignment_attributes_reference_members_and_teams(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(duplicate.status(), StatusCode::CONFLICT);
+    let duplicate: Value = duplicate.json().await.unwrap();
+    assert_eq!(duplicate["error"]["code"], "code_taken");
+    assert_eq!(duplicate["error"]["details"]["resource"], "team");
     let empty: Value = client
         .post(&teams)
         .json(&json!({"code": "ops", "name": "Operations"}))

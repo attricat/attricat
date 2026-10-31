@@ -8,9 +8,13 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useExclusiveMutation } from '../../components/useExclusiveMutation';
-import { futureZonedInstant } from '../../time/instantFormat';
+import {
+  futureZonedInstant,
+  isoToZonedDateTime,
+} from '../../time/instantFormat';
 import { useTimeZone } from '../../time/useInstantFormat';
 import {
   createInvitation,
@@ -19,7 +23,7 @@ import {
   selectedScopeTarget,
   type ScopeType,
 } from './api';
-import { scopeTypes } from './constants';
+import { defaultInvitationLifetimeMilliseconds, scopeTypes } from './constants';
 import { ExpiryField, RoleSelectField } from './InvitationFormFields';
 import { workspaceQueryKeys } from './queryKeys';
 import { ScopeFields } from './ScopeFields';
@@ -54,6 +58,13 @@ export const InvitationForm = ({
   const { t } = useTranslation();
   const client = useQueryClient();
   const timeZone = useTimeZone();
+  // Read once, so the default does not change while the form is open.
+  const [defaultExpiry] = useState(() =>
+    isoToZonedDateTime(
+      Date.now() + defaultInvitationLifetimeMilliseconds,
+      timeZone,
+    ),
+  );
   const invite = useExclusiveMutation({
     mutationFn: async (value: InvitationValues) => {
       const expiresAt = futureZonedInstant(value.expires_at, timeZone);
@@ -98,7 +109,7 @@ export const InvitationForm = ({
       role_id: '',
       scope_type: scopeTypes.workspace,
       scope_target_id: workspaceId ?? '',
-      expires_at: '',
+      expires_at: defaultExpiry,
     } as InvitationValues,
     onSubmit: ({ value }) => invite.submit(value),
   });

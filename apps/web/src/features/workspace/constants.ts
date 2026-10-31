@@ -6,6 +6,8 @@ export const scopeTypes = {
   contextSubtree: 'context_subtree',
 } as const;
 export const ownerRoleCode = 'owner';
+/** How long a new invitation stays open unless the inviter changes it. */
+export const defaultInvitationLifetimeMilliseconds = 7 * 24 * 60 * 60 * 1000;
 /** A custom role code: lowercase, starting with a letter. */
 export const roleCodePattern = /^[a-z][a-z0-9_-]*$/;
 export const activeMemberState = 'active';

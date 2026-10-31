@@ -224,7 +224,7 @@ export const buildExplorerColumnDefinitions = ({
       header: '',
       cell: (info) => (
         <RecordActionsCell
-          recordId={info.row.original.id}
+          record={info.row.original}
           onOpenActions={onOpenActions}
         />
       ),

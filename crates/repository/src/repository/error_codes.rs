@@ -99,6 +99,7 @@ error_codes! {
     InvalidSystemTags = "invalid_system_tags",
     InvalidWorkflowDefinition = "invalid_workflow_definition",
     InvitationInvalid = "invitation_invalid",
+    LastWorkspaceOwner = "last_workspace_owner",
     MigrationNeedsResolution = "migration_needs_resolution",
     MigrationNotApplicable = "migration_not_applicable",
     MigrationTargetChanged = "migration_target_changed",
@@ -312,6 +313,7 @@ impl RepositoryError {
             Self::DefaultContextProtected => plain(Unprocessable, Code::DefaultContextProtected),
             Self::ContextCycle => plain(Unprocessable, Code::ContextCycle),
             Self::ContextInUse => plain(Unprocessable, Code::ContextInUse),
+            Self::LastWorkspaceOwner => plain(Conflict, Code::LastWorkspaceOwner),
             Self::DefaultContextOnly => plain(Unprocessable, Code::DefaultContextOnly),
             Self::RecordLocked {
                 attribute,

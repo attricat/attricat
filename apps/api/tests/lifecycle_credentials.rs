@@ -169,6 +169,44 @@ async fn a_second_onboarding_link_after_password_setup_is_an_invalid_invitation(
 }
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
+async fn reinviting_a_pending_user_revokes_the_replaced_invitation(pool: PgPool) {
+    let repository = AttricatRepository::system(pool.clone());
+    let email = "reinvited@example.test";
+    create_user(&pool, email, true).await;
+    let (owner, first, second) = two_owned_workspaces(&pool, "reinvited").await;
+    invite(&repository, owner, first, email, vec![11; 32], vec![12; 32]).await;
+    invite(
+        &repository,
+        owner,
+        second,
+        email,
+        vec![13; 32],
+        vec![14; 32],
+    )
+    .await;
+    invite(&repository, owner, first, email, vec![15; 32], vec![16; 32]).await;
+
+    let pending: Vec<Vec<u8>> = sqlx::query_scalar(
+        "SELECT token_digest FROM workspace_invitations WHERE invitee_email = $1 AND revoked_at IS NULL ORDER BY token_digest",
+    )
+    .bind(email)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(pending, vec![vec![13; 32], vec![15; 32]]);
+    assert!(matches!(
+        repository
+            .complete_workspace_onboarding(&[11; 32], &[12; 32], "hash")
+            .await,
+        Err(api::repository::RepositoryError::InvitationInvalid)
+    ));
+    repository
+        .complete_workspace_onboarding(&[15; 32], &[16; 32], "hash")
+        .await
+        .unwrap();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn an_invitation_to_another_workspace_keeps_a_pending_onboarding_link(pool: PgPool) {
     let repository = AttricatRepository::system(pool.clone());
     let email = "pending-elsewhere@example.test";

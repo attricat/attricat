@@ -37,7 +37,9 @@ test('previews blueprint views and inspects revision metadata', async ({
   ).toBeVisible();
   await expect(page.getByText('Sandbox title')).toBeVisible();
   await page.getByRole('tab', { name: 'table', exact: true }).click();
-  await expect(page.getByRole('cell', { name: 'Sandbox title' })).toBeVisible();
+  await expect(
+    page.getByRole('cell', { name: 'Sandbox title', exact: true }),
+  ).toBeVisible();
 
   await page.getByRole('tab', { name: 'View definition' }).click();
   await expect(page.getByText(/"detail"/)).toBeVisible();
@@ -88,7 +90,9 @@ attributes:
   await expect(
     page.getByRole('heading', { name: 'Revision history' }),
   ).toBeVisible();
-  await expect(page.getByRole('cell', { name: 'v2' })).toBeVisible();
+  await expect(
+    page.getByRole('cell', { name: 'v2', exact: true }),
+  ).toBeVisible();
   await page.getByRole('tab', { name: 'Compare definitions' }).click();
   await page.getByLabel('Left version').click();
   await page.getByRole('option', { name: 'v1 (published)' }).click();

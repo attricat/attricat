@@ -149,6 +149,10 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
             // onboarding link. Another workspace's pending onboarding stays
             // usable until a password is set, which invalidates it through
             // issued_credential_version; that invitation can still be accepted.
+            // The replaced link's invitation in this workspace can no longer
+            // be completed, so it is revoked rather than left listed as pending.
+            sqlx::query("UPDATE workspace_invitations i SET revoked_at = clock_timestamp() FROM workspace_invitation_onboarding o JOIN user_lifecycle_action_tokens a ON a.token_digest = o.action_token_digest AND a.user_id = o.user_id WHERE o.invitation_id = i.id AND o.workspace_id = $2 AND o.user_id = $1 AND a.purpose = 'password_setup' AND a.consumed_at IS NULL AND a.revoked_at IS NULL AND i.accepted_at IS NULL AND i.revoked_at IS NULL")
+                .bind(user_id).bind(workspace_id).execute(&mut *tx).await?;
             sqlx::query("UPDATE user_lifecycle_action_tokens a SET revoked_at = clock_timestamp() WHERE a.user_id = $1 AND a.purpose = 'password_setup' AND a.consumed_at IS NULL AND a.revoked_at IS NULL AND NOT EXISTS (SELECT 1 FROM workspace_invitation_onboarding o WHERE o.user_id = a.user_id AND o.action_token_digest = a.token_digest AND o.workspace_id <> $2)")
                 .bind(user_id).bind(workspace_id).execute(&mut *tx).await?;
             sqlx::query("INSERT INTO user_lifecycle_action_tokens (id, user_id, purpose, token_digest, issued_security_version, issued_credential_version, expires_at) VALUES ($1,$2,'password_setup',$3,$4,0,$5)")
@@ -371,7 +375,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
                 .fetch_one(&mut *tx)
                 .await?;
                 if active_owners <= 1 {
-                    return Err(RepositoryError::NotFound("last workspace owner"));
+                    return Err(RepositoryError::LastWorkspaceOwner);
                 }
             }
         }
@@ -469,7 +473,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         if role_id == OWNER_ROLE_ID {
             let owners: i64 = sqlx::query_scalar("SELECT count(*) FROM role_grants g JOIN workspace_memberships m ON m.id = g.membership_id WHERE g.workspace_id = $1 AND g.role_id = $2 AND g.scope_type = 'workspace' AND g.scope_target_id = $1 AND m.state = 'active'").bind(workspace_id).bind(OWNER_ROLE_ID).fetch_one(&mut *tx).await?;
             if owners <= 1 {
-                return Err(RepositoryError::NotFound("last workspace owner"));
+                return Err(RepositoryError::LastWorkspaceOwner);
             }
         }
         sqlx::query("DELETE FROM role_grants WHERE id = $1 AND workspace_id = $2")
