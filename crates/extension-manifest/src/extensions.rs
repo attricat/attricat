@@ -308,6 +308,9 @@ pub enum RenderingMode {
 /// UI kit versions this host draws, oldest first. A released version is
 /// frozen; a later minor only adds elements, props or events.
 pub const SUPPORTED_UI_KIT_VERSIONS: &[&str] = &["1.0.0"];
+/// The largest native Worker bundle a release may carry; the SDK's build
+/// enforces the same budget.
+pub const MAX_NATIVE_ARTIFACT_BYTES: usize = 1024 * 1024;
 /// Appended to a native artifact's path to name the build record the SDK
 /// packs beside it: `{"ui_kit": "<lowest UI kit version it was built against>"}`.
 pub const NATIVE_BUILD_RECORD_SUFFIX: &str = ".build.json";
@@ -2797,6 +2800,15 @@ impl ExtensionPackage {
         manifest.validate(SUPPORTED_HOST_API)?;
         if let Some(native) = manifest.native_artifact() {
             validate_native_build_record(native, &files)?;
+            if files
+                .get(&native.path)
+                .is_some_and(|bytes| bytes.len() > MAX_NATIVE_ARTIFACT_BYTES)
+            {
+                return Err(ManifestError::Invalid(format!(
+                    "client_native artifact '{}' exceeds {MAX_NATIVE_ARTIFACT_BYTES} bytes",
+                    native.id
+                )));
+            }
         }
         let artifacts = manifest
             .artifacts
@@ -3149,7 +3161,10 @@ mod tests {
                 serde_json::json!({"id": "client", "kind": kind, "path": "client.js"}),
             )
         };
-        assert_eq!(artifact("client_frame").unwrap().kind, ArtifactKind::ClientFrame);
+        assert_eq!(
+            artifact("client_frame").unwrap().kind,
+            ArtifactKind::ClientFrame
+        );
         assert!(artifact("client_component").is_err());
     }
 

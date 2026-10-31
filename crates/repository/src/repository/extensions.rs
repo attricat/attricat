@@ -11,12 +11,12 @@ use sqlx::{FromRow, Postgres, Transaction};
 use uuid::Uuid;
 
 use crate::{
-    extension_installer::installed_artifact_key,
+    extension_installer::{dev_artifact_key, installed_artifact_key},
     extension_policy,
     extensions::{
         ActionCondition, ActionConfirmation, ActionInvocation, CellDeclaration,
-        ContributionTranslation, Manifest, RECORD_FIELD_NOTES_CAPABILITY, SUPPORTED_HOST_API,
-        UiContributionKind, UiOutlet, valid_contribution_key,
+        ContributionTranslation, EditorDeclaration, Manifest, RECORD_FIELD_NOTES_CAPABILITY,
+        RenderingMode, SUPPORTED_HOST_API, UiContributionKind, UiOutlet, valid_contribution_key,
     },
 };
 
@@ -347,6 +347,14 @@ pub struct ClientExtensionContribution {
     pub translations: std::collections::BTreeMap<String, ContributionTranslation>,
     /// How the host draws a `cell` contribution.
     pub cell: Option<CellDeclaration>,
+    /// The value types and props of an `editor` contribution.
+    pub editor: Option<EditorDeclaration>,
+    /// Who draws the contribution's code; `None` when the host draws it alone.
+    pub rendering: Option<RenderingMode>,
+    /// The UI kit version the host draws a native contribution with.
+    pub ui_kit: Option<String>,
+    /// The development build that replaces the release's native artifact.
+    pub dev_revision: Option<String>,
     pub artifact_key: Option<String>,
 }
 
@@ -594,15 +602,16 @@ impl AttricatRepository {
         extension_id: Option<&str>,
     ) -> Result<Vec<ClientExtensionContribution>, RepositoryError> {
         // Capability grants are aggregated in the same statement.
-        let rows: Vec<(String, Uuid, Value, Vec<String>)> = sqlx::query_as(
-            "SELECT i.extension_id, i.installed_release_id, i.configuration, ARRAY(SELECT g.grant_id FROM extension_grants g WHERE g.installation_id = i.id AND g.grant_kind = 'capability' ORDER BY g.grant_id) FROM extension_installations i JOIN workspaces w ON w.id = i.workspace_id WHERE i.workspace_id = $1 AND i.state = 'enabled' AND w.extensions_enabled AND ($2::text IS NULL OR i.extension_id = $2) ORDER BY i.extension_id",
+        let rows: Vec<(String, Uuid, Value, Vec<String>, Option<String>)> = sqlx::query_as(
+            "SELECT i.extension_id, i.installed_release_id, i.configuration, ARRAY(SELECT g.grant_id FROM extension_grants g WHERE g.installation_id = i.id AND g.grant_kind = 'capability' ORDER BY g.grant_id), d.revision FROM extension_installations i JOIN workspaces w ON w.id = i.workspace_id LEFT JOIN extension_dev_artifacts d ON d.installed_release_id = i.installed_release_id WHERE i.workspace_id = $1 AND i.state = 'enabled' AND w.extensions_enabled AND ($2::text IS NULL OR i.extension_id = $2) ORDER BY i.extension_id",
         )
         .bind(self.workspace_id())
         .bind(extension_id)
         .fetch_all(&self.pool)
         .await?;
         let mut contributions = Vec::new();
-        for (extension_id, installed_release_id, configuration, capabilities) in rows {
+        for (extension_id, installed_release_id, configuration, capabilities, dev_revision) in rows
+        {
             let client_configuration = if capabilities
                 .iter()
                 .any(|capability| capability == "configuration.read")
@@ -623,15 +632,29 @@ impl AttricatRepository {
                 Err(error) => return Err(error),
             };
             let extension_name = manifest.name.clone();
+            let ui_kit = manifest
+                .negotiated_ui_kit()
+                .map(|version| version.to_string());
             for contribution in manifest.ui.iter().cloned() {
+                let rendering = manifest.rendering_mode(&contribution);
+                let native = rendering == Some(RenderingMode::Native);
+                // A development build replaces only the native Worker.
+                let dev_revision = dev_revision.clone().filter(|_| native);
                 contributions.push(ClientExtensionContribution {
                     contribution_key: format!("{}:{}", extension_id, contribution.id),
                     display_order: 0,
                     navigation_group: None,
-                    artifact_key: contribution
-                        .artifact
-                        .as_ref()
-                        .map(|artifact| installed_artifact_key(installed_release_id, artifact)),
+                    artifact_key: match &dev_revision {
+                        Some(revision) => Some(dev_artifact_key(installed_release_id, revision)),
+                        None => contribution
+                            .artifact
+                            .as_ref()
+                            .map(|artifact| installed_artifact_key(installed_release_id, artifact)),
+                    },
+                    rendering,
+                    ui_kit: ui_kit.clone().filter(|_| native),
+                    dev_revision,
+                    editor: contribution.editor,
                     extension_id: extension_id.clone(),
                     extension_name: extension_name.clone(),
                     installed_release_id,
@@ -895,6 +918,51 @@ impl AttricatRepository {
                     && extension_policy::allows(extension_id, contribution.installed_release_id)
             })
             .ok_or(RepositoryError::NotFound("enabled extension contribution"))
+    }
+
+    /// The installed release of an extension and its native artifact's ID,
+    /// for a development build to replace.
+    pub async fn extension_native_artifact(
+        &self,
+        extension_id: &str,
+    ) -> Result<(Uuid, String), RepositoryError> {
+        let release_id: Uuid = sqlx::query_scalar(
+            "SELECT installed_release_id FROM extension_installations WHERE workspace_id = $1 AND extension_id = $2",
+        )
+        .bind(self.workspace_id())
+        .bind(extension_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or(RepositoryError::NotFound("extension installation"))?;
+        let manifest = self.cached_release_manifest(release_id).await?;
+        let artifact = manifest.native_artifact().ok_or_else(|| {
+            RepositoryError::InvalidExtension(
+                "the installed release has no client_native artifact".into(),
+            )
+        })?;
+        Ok((release_id, artifact.id.clone()))
+    }
+
+    /// Serves a stored development build in place of the release's native
+    /// artifact. Advancing the extensions generation makes clients see the
+    /// new revision on their next runtime read and restart the Worker.
+    pub async fn record_extension_dev_artifact(
+        &self,
+        installed_release_id: Uuid,
+        revision: &str,
+    ) -> Result<(), RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
+        sqlx::query("INSERT INTO extension_dev_artifacts (installed_release_id, revision) VALUES ($1, $2) ON CONFLICT (installed_release_id) DO UPDATE SET revision = EXCLUDED.revision, updated_at = clock_timestamp()")
+            .bind(installed_release_id)
+            .bind(revision)
+            .execute(&mut *transaction)
+            .await?;
+        sqlx::query("UPDATE workspaces SET extensions_generation = extensions_generation + 1, updated_at = clock_timestamp() WHERE id = $1")
+            .bind(self.workspace_id())
+            .execute(&mut *transaction)
+            .await?;
+        transaction.commit().await?;
+        Ok(())
     }
 
     /// Persists an archive release whose extracted artifacts were already

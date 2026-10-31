@@ -5,7 +5,7 @@ use attricat_validation::saved_search::{MAX_RELATIONSHIP_HOPS, browse_path_hop};
 
 use crate::{
     BlueprintError, BlueprintKind, BrowseBy, ComponentReference, EXTENSION_LAYOUT_OUTLETS,
-    EffectiveAttribute, TableColumn, ViewDefinition, ViewNode,
+    EditorReference, EffectiveAttribute, TableColumn, ViewDefinition, ViewNode,
     component_manifest::validate_component, parser::validate_code,
 };
 
@@ -265,7 +265,7 @@ fn validate_view_nodes(
 fn validate_field_editor(
     view: &str,
     field: &str,
-    editor: &ComponentReference,
+    editor: &EditorReference,
 ) -> Result<(), BlueprintError> {
     if view != "detail" {
         return Err(BlueprintError::FieldEditorOutsideDetail {

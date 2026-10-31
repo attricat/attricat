@@ -7,6 +7,7 @@ use std::{io::Cursor, path::Path, sync::Arc};
 use api::{
     agent_tools::execute_read,
     extension_installer::{ExtensionInstaller, installed_artifact_key},
+    extensions::RenderingMode,
     model::{CreateBlueprint, NewAttributeValue},
     repository::{
         AttricatRepository, ExtensionAttricatBatch, ExtensionAttricatIntent,
@@ -17,7 +18,8 @@ use api::{
 use async_trait::async_trait;
 use support::{
     Value, append_file, authenticated_client, bootstrap_workspace_id, build_test_component,
-    is_published, json, publish_in_channel, start_server_with_object_store,
+    is_published, json, publish_in_channel, start_server_with_config,
+    start_server_with_object_store,
 };
 use uuid::Uuid;
 
@@ -3999,4 +4001,198 @@ attributes:
             .to_string();
         assert!(error.contains(problem), "{code}: {error}");
     }
+}
+
+/// A release with native UI: a blueprint panel and a string attribute editor,
+/// both drawn from one Worker bundle built against UI kit 1.0.0.
+fn native_release_archive(extension_id: &str) -> Vec<u8> {
+    let manifest = serde_json::to_vec(&json!({
+        "manifest_version": 1,
+        "name": "Native extension",
+        "version": "1.0.0",
+        "description": "native UI integration test",
+        "icons": {"48": "icon.png"},
+        "attricat": {"id": extension_id, "host_api": "^1.0"},
+        "permissions": ["client.blueprint_panel", "client.attribute_editor"],
+        "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
+        "artifacts": [
+            {"id": "ui", "kind": "client_native", "path": "ui.js", "ui_kit": "^1.0"},
+            {"id": "page", "kind": "client_frame", "path": "page.js"}
+        ],
+        "ui": [
+            {"id": "summary", "version": 1, "kind": "panel", "artifact": "ui", "outlet": "blueprint_panel"},
+            {"id": "page", "version": 1, "kind": "route", "artifact": "page", "title": "Page"},
+            {
+                "id": "formula",
+                "version": 1,
+                "kind": "editor",
+                "artifact": "ui",
+                "outlet": "attribute_editor",
+                "title": "Formula",
+                "editor": {
+                    "value_types": ["string"],
+                    "props": {"rows": {"type": "integer", "minimum": 1, "maximum": 8}}
+                }
+            }
+        ]
+    }))
+    .unwrap();
+    let mut tar_bytes = Vec::new();
+    {
+        let mut tar = tar::Builder::new(&mut tar_bytes);
+        append_file(&mut tar, "manifest.json", &manifest);
+        append_file(&mut tar, "ui.js", b"export {}");
+        append_file(&mut tar, "ui.js.build.json", br#"{"ui_kit":"1.0.0"}"#);
+        append_file(&mut tar, "page.js", b"export {}");
+        tar.finish().unwrap();
+    }
+    zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn native_contributions_reach_the_runtime_and_editors_are_checked_on_publish(
+    pool: sqlx::PgPool,
+) {
+    let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
+    let repository = AttricatRepository::system(pool.clone()).for_workspace(workspace);
+    let store = Arc::new(FakeObjectStore::available());
+    ExtensionInstaller::new(repository.clone(), store.clone())
+        .install("test", &native_release_archive("acme.native"))
+        .await
+        .unwrap();
+    for capability in ["client.blueprint_panel", "client.attribute_editor"] {
+        repository
+            .grant_extension("acme.native", "capability", capability)
+            .await
+            .unwrap();
+    }
+    repository.enable_extension("acme.native").await.unwrap();
+    let contributions = repository
+        .client_extension_contributions_for_blueprint(None)
+        .await
+        .unwrap();
+    let find = |id: &str| {
+        contributions
+            .iter()
+            .find(|item| item.contribution_key == format!("acme.native:{id}"))
+            .unwrap()
+            .clone()
+    };
+    let summary = find("summary");
+    assert_eq!(summary.rendering, Some(RenderingMode::Native));
+    assert_eq!(summary.ui_kit.as_deref(), Some("1.0.0"));
+    let page = find("page");
+    assert_eq!(page.rendering, Some(RenderingMode::Frame));
+    assert_eq!(page.ui_kit, None);
+    let editor = find("formula");
+    assert_eq!(editor.editor.as_ref().unwrap().value_types, vec!["string"]);
+
+    let definition = |code: &str, field: &str, props: &str| {
+        format!(
+            r#"
+format_version: 1
+code: {code}
+name: Editors
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+  detail:
+    type: stack
+    children:
+      - type: field
+        field: {field}
+        editor:
+          id: formula
+          version: 1
+          props: {props}
+attributes:
+  - code: title
+    value_type: string
+  - code: price
+    value_type: number
+"#
+        )
+    };
+    repository
+        .create_blueprint(CreateBlueprint {
+            definition: definition("editors_valid", "title", "{rows: 3}"),
+        })
+        .await
+        .unwrap();
+    for (code, field, props, problem) in [
+        ("editors_rows", "title", "{rows: 9}", "prop 'rows'"),
+        ("editors_unknown", "title", "{size: 1}", "prop 'size'"),
+        ("editors_number", "price", "{}", "not declared for number"),
+    ] {
+        let error = repository
+            .create_blueprint(CreateBlueprint {
+                definition: definition(code, field, props),
+            })
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains(problem), "{code}: {error}");
+    }
+
+    // A development build replaces only the native Worker, and only on a
+    // server with developer tools.
+    let (base, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
+    let client = authenticated_client();
+    let upload = client
+        .put(format!("{base}/extensions/acme.native/dev-artifact"))
+        .body("export const dev = 1;")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(upload.status(), reqwest::StatusCode::NOT_FOUND);
+    server.abort();
+    let (base, server) = start_server_with_config(pool, |state| {
+        state.devtools_enabled = true;
+        state.object_store = store.clone();
+    })
+    .await;
+    let upload = client
+        .put(format!("{base}/extensions/acme.native/dev-artifact"))
+        .body("export const dev = 1;")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(upload.status(), reqwest::StatusCode::NO_CONTENT);
+    let runtime: Value = client
+        .get(format!("{base}/extensions/runtime"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let revision_of = |id: &str| {
+        runtime
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item["id"] == id)
+            .unwrap()["artifact_revision"]
+            .clone()
+    };
+    assert!(revision_of("summary").is_string());
+    assert!(revision_of("page").is_null());
+    let served = client
+        .get(format!("{base}/extensions/acme.native/summary/artifact"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        served.bytes().await.unwrap().as_ref(),
+        b"export const dev = 1;"
+    );
+    let frame = client
+        .get(format!("{base}/extensions/acme.native/page/artifact"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(frame.bytes().await.unwrap().as_ref(), b"export {}");
+    server.abort();
 }

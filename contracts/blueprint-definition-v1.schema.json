@@ -839,6 +839,17 @@
               "description": "Registered component that renders this block.",
               "default": null
             },
+            "editor": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/EditorReference"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "An extension's attribute editor that edits this field in\n`views.detail`, by `id`, `version` and `props`. The default\ncontrol is used whenever the editor is unavailable."
+            },
             "type": {
               "type": "string",
               "const": "field"
@@ -972,6 +983,34 @@
         "label",
         "children"
       ]
+    },
+    "EditorReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The editor contribution's ID in an enabled extension.",
+          "x-attricat-reference": "attribute_editor"
+        },
+        "version": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0,
+          "description": "The editor contribution's version."
+        },
+        "props": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Props the editor declares.",
+          "default": null
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "description": "An extension's attribute editor that a detail field uses."
     },
     "IncomingRelationship": {
       "type": "object",

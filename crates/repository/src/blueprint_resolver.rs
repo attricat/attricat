@@ -459,7 +459,7 @@ async fn validate_table_columns(
 /// Collects the `views.detail` fields that name an extension editor.
 fn field_editors<'a>(
     nodes: &'a [ViewNode],
-    found: &mut Vec<(&'a str, &'a attricat_blueprint::ComponentReference)>,
+    found: &mut Vec<(&'a str, &'a attricat_blueprint::EditorReference)>,
 ) {
     for node in nodes {
         match node {
