@@ -4,10 +4,11 @@ import {
   Menu,
   MenuItem,
   Paper,
+  Stack,
   Tab,
   Tabs,
 } from '@mui/material';
-import { EllipsisIcon, type LucideIcon } from 'lucide-react';
+import { ChevronDownIcon, EllipsisIcon, type LucideIcon } from 'lucide-react';
 import { useId, useState, type ReactNode, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import { compactIconSize } from '../../../components/iconSizes';
@@ -88,7 +89,18 @@ export const RecordPreviewTabs = ({
             aria-haspopup="menu"
             icon={<MoreIcon aria-hidden size={compactIconSize} />}
             id={moreTabId}
-            label={openOverflow?.label ?? t('records.moreTabs')}
+            label={
+              // The chevron keeps the menu in sight while one of its tabs
+              // stands in for it.
+              <Stack
+                direction="row"
+                spacing={0.5}
+                sx={{ alignItems: 'center' }}
+              >
+                <span>{openOverflow?.label ?? t('records.moreTabs')}</span>
+                <ChevronDownIcon aria-hidden size={compactIconSize} />
+              </Stack>
+            }
             onClick={(event) => setMoreAnchor(event.currentTarget)}
             value={openOverflow?.key ?? recordPreviewMoreTab}
           />

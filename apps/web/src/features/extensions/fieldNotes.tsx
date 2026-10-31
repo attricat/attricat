@@ -60,10 +60,11 @@ export const FieldNotesProvider = ({
   const notes = useRecordFieldNotes(recordId, contextId);
   const runtime = useExtensionRuntime(runtimeScope);
   const { blueprintCode, canWrite, recordTags } = conditions;
+  const { blueprintId, blueprintVersion } = runtimeScope;
   const value = useMemo<FieldNotes>(() => {
     const target: ActionTarget = {
-      blueprintId: runtimeScope.blueprintId,
-      blueprintVersion: runtimeScope.blueprintVersion,
+      blueprintId,
+      blueprintVersion,
       blueprintCode,
       canWrite,
       contextId,
@@ -79,13 +80,14 @@ export const FieldNotesProvider = ({
     };
   }, [
     blueprintCode,
+    blueprintId,
+    blueprintVersion,
     canWrite,
     contextId,
     notes.data,
     recordId,
     recordTags,
     runtime.data,
-    runtimeScope,
   ]);
   return <FieldNotesContext value={value}>{children}</FieldNotesContext>;
 };

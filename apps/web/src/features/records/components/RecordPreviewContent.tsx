@@ -1,5 +1,5 @@
 import { Alert, Box, CircularProgress, Typography } from '@mui/material';
-import { useState, type Ref } from 'react';
+import { useMemo, useState, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AttributeContext } from '../../contexts/api';
 import { extensionOutlets } from '../../extensions/constants';
@@ -80,6 +80,11 @@ export const RecordPreviewContent = ({
     blueprintId: blueprint.blueprint.id,
     blueprintVersion: blueprint.blueprint.version,
   };
+  // Stable while the form is, so the field notes built on it are too.
+  const recordTags = useMemo(
+    () => (form ? [form.record.system_tags ?? []] : undefined),
+    [form],
+  );
   const recordActionTarget = {
     blueprintId: blueprint.blueprint.id,
     blueprintVersion: blueprint.blueprint.version,
@@ -87,7 +92,7 @@ export const RecordPreviewContent = ({
     contextId: contextId ?? null,
     recordIds: [recordId],
     canWrite: form?.can_write,
-    recordTags: form ? [form.record.system_tags ?? []] : undefined,
+    recordTags,
   };
   usePaletteSurface('record-action', {
     outlet: extensionOutlets.recordAction,
