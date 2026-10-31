@@ -5,6 +5,7 @@ import {
   viewBlockTypes,
   type Attribute,
   type ComponentReference,
+  type EditorReference,
   type ViewDefinition,
   type ViewNode,
 } from '../../records/api';
@@ -38,6 +39,7 @@ export type RecordViewProps = {
   renderEditor?: (
     attribute: Attribute,
     component?: ComponentReference | null,
+    editor?: EditorReference | null,
   ) => ReactNode;
   skipComponentId?: string;
   contextId?: string;
@@ -191,6 +193,7 @@ export const RecordView = ({
           attribute={attribute}
           component={node.component}
           contextId={contextId}
+          editor={node.type === viewBlockTypes.field ? node.editor : undefined}
           recordId={recordId}
           key={key}
           renderEditor={renderEditor}

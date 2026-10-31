@@ -1,0 +1,174 @@
+import { Box, FormHelperText, FormLabel } from '@mui/material';
+import { useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import type { Attribute } from '../../records/api';
+import { attributeLabel } from '../../records/recordDisplay';
+import type { ExtensionContribution } from '../api';
+import {
+  extensionFramePlaceholders,
+  supportedOutletContextVersion,
+} from '../constants';
+import type { AttributeEditorContext } from '../outletContextSchemas';
+import { useExtensionRuntime } from '../useExtensionRuntime';
+import {
+  editorValue,
+  proposedText,
+  type EditorReference,
+} from './attributeEditors';
+import { nativeHostFor } from './nativeRuntime';
+import { NativeUi } from './NativeUi';
+
+type Props = {
+  contribution: ExtensionContribution;
+  reference: EditorReference;
+  attribute: Attribute;
+  recordId: string;
+  contextId: string | null;
+  /** The field's inline-form text. */
+  value: string;
+  error?: string;
+  required: boolean;
+  /** Keeps a proposal as a local edit, as typing does. */
+  onChange: (text: string) => void;
+  /** Validates and saves a proposal through the inline-edit path. */
+  onCommit: (text: string) => void;
+  /** The field's default control, shown until the editor is ready. */
+  fallback: ReactNode;
+};
+
+const editorStates = {
+  starting: 'starting',
+  ready: 'ready',
+  failed: 'failed',
+} as const;
+type EditorState = (typeof editorStates)[keyof typeof editorStates];
+
+/**
+ * An extension's native editor in a host field: the host draws the label,
+ * help and errors and saves what the editor proposes through the inline-edit
+ * path, so blur and Enter save and Escape restores as in any field. Until the
+ * editor is ready, and whenever it fails, the field keeps its default
+ * control; a blueprint never depends on an extension being healthy.
+ */
+export const ExtensionAttributeEditor = ({
+  contribution,
+  reference,
+  attribute,
+  recordId,
+  contextId,
+  value,
+  error,
+  required,
+  onChange,
+  onCommit,
+  fallback,
+}: Props) => {
+  const runtime = useExtensionRuntime();
+  const labelId = useId();
+  const box = useRef<HTMLDivElement>(null);
+  const fallbackBox = useRef<HTMLDivElement>(null);
+  const [state, setState] = useState<EditorState>(editorStates.starting);
+  // Readiness never takes the default control from under the user's typing.
+  const [waitingForBlur, setWaitingForBlur] = useState(false);
+  const commitNext = useRef(false);
+  const constraints = attribute.value_schema ?? null;
+  const context = useMemo<AttributeEditorContext>(
+    () => ({
+      context_version: supportedOutletContextVersion,
+      record_id: recordId,
+      context_id: contextId,
+      value: editorValue(attribute, value),
+      attribute: {
+        code: attribute.code,
+        name: attributeLabel(attribute),
+        value_type: attribute.value_type,
+        constraints: constraints as Record<string, unknown> | null,
+        options: Array.isArray((constraints as { enum?: unknown } | null)?.enum)
+          ? (constraints as { enum: (string | number)[] }).enum
+          : null,
+      },
+      read_only: false,
+      required,
+      errors: error ? [error] : [],
+      props: reference.props,
+    }),
+    [
+      attribute,
+      constraints,
+      contextId,
+      error,
+      recordId,
+      reference.props,
+      required,
+      value,
+    ],
+  );
+
+  const propose = (proposed: unknown) => {
+    const text = proposedText(attribute, proposed);
+    if (text === undefined) return;
+    const focused = box.current?.contains(document.activeElement) ?? false;
+    if (!focused || commitNext.current) {
+      commitNext.current = false;
+      onCommit(text);
+    } else onChange(text);
+  };
+
+  const ready = state === editorStates.ready && !waitingForBlur;
+  return (
+    <>
+      {!ready && (
+        <Box
+          onBlur={(event) => {
+            if (
+              waitingForBlur &&
+              !event.currentTarget.contains(event.relatedTarget as Node | null)
+            )
+              setWaitingForBlur(false);
+          }}
+          ref={fallbackBox}
+        >
+          {fallback}
+        </Box>
+      )}
+      {state !== editorStates.failed && (
+        <Box
+          aria-labelledby={labelId}
+          hidden={!ready}
+          onKeyDown={(event) => {
+            if (
+              event.key !== 'Enter' ||
+              !(event.target instanceof HTMLInputElement)
+            )
+              return;
+            // The editor's answer to the input's last change saves too.
+            commitNext.current = true;
+            void nativeHostFor(contribution, runtime.data ?? [contribution])
+              .settle()
+              .then(() => {
+                commitNext.current = false;
+              });
+          }}
+          ref={box}
+          role="group"
+        >
+          <FormLabel error={Boolean(error)} id={labelId} required={required}>
+            {attributeLabel(attribute)}
+          </FormLabel>
+          <NativeUi
+            context={context}
+            contribution={contribution}
+            onFailure={() => setState(editorStates.failed)}
+            onPropose={propose}
+            onReady={() => {
+              setState(editorStates.ready);
+              if (fallbackBox.current?.contains(document.activeElement))
+                setWaitingForBlur(true);
+            }}
+            placeholder={extensionFramePlaceholders.none}
+          />
+          {error && <FormHelperText error>{error}</FormHelperText>}
+        </Box>
+      )}
+    </>
+  );
+};

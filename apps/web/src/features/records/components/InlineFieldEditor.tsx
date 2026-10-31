@@ -50,6 +50,8 @@ type Props = {
     value: string;
     error?: string;
     onChange: (value: string) => void;
+    /** Validates and saves a value at once, as leaving the field does. */
+    onCommit: (value: string) => void;
   }) => ReactNode;
 };
 
@@ -166,6 +168,7 @@ export const InlineFieldEditor = ({
                 setDraft(next);
               }
             },
+            onCommit: commit,
           })}
     </Box>
   );

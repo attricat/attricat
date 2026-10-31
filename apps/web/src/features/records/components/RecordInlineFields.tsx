@@ -27,6 +27,7 @@ import {
 import {
   type Attribute,
   type ComponentReference,
+  type EditorReference,
   type RecordFormResponse,
   type StatusTransitionAccess,
 } from '../api';
@@ -59,6 +60,10 @@ import { useLatestCallback } from '../../../components/useLatestCallback';
 import { InlineSaveStatus } from './InlineSaveStatus';
 import { SaveConflictAlert } from './SaveConflictAlert';
 import type { ConflictResolution } from '../constants';
+import { resolveAttributeEditor } from '../../extensions/native/attributeEditors';
+import { ExtensionAttributeEditor } from '../../extensions/native/ExtensionAttributeEditor';
+import { nativeHostKey } from '../../extensions/native/nativeRuntime';
+import { useExtensionRuntime } from '../../extensions/useExtensionRuntime';
 
 type Props = {
   recordId: string;
@@ -123,6 +128,7 @@ export const RecordInlineFields = ({
 }: Props & { ref?: Ref<RecordInlineFieldsHandle> }) => {
   const { t } = useTranslation();
   const client = useQueryClient();
+  const extensionRuntime = useExtensionRuntime();
   const violationText = useViolationText();
   const allAttributes = [...attributes, ...form.reusable_attributes];
   const existingValues = [...form.values, ...form.reusable_values];
@@ -239,11 +245,17 @@ export const RecordInlineFields = ({
   const renderEditor = (
     attribute: Attribute,
     component?: ComponentReference | null,
+    editorReference?: EditorReference | null,
   ) => {
     if (!changeableCodes.includes(attribute.code)) return null;
     const required = requiredAttributes.includes(attribute.code);
     const editComponent =
       resolveEditComponent(component) ?? editComponents.get(attribute.code);
+    const extensionEditor = resolveAttributeEditor(
+      extensionRuntime.data,
+      editorReference,
+      attribute,
+    );
     const rules = fieldRules.get(attribute.code);
     const display = resolveViewComponent(component);
     const KeptDisplay = display?.showsWhileEditing
@@ -294,25 +306,47 @@ export const RecordInlineFields = ({
         }
         value={saves.fields[attribute.code] ?? ''}
       >
-        {({ value, error, onChange }) => (
-          <RecordFormAttributeEditor
-            attribute={attribute}
-            component={editComponent}
-            contextId={contextId}
-            defaultContextId={defaultContextId}
-            recordId={recordId}
-            existingValues={existingValues}
-            fieldErrors={error ? { [attribute.code]: error } : fieldErrors}
-            lockedAttributes={locks}
-            onChange={onChange}
-            onRecordUpdated={saves.noteRecordUpdated}
-            required={required}
-            resolvedValues={resolvedValues}
-            statusParentContextIds={statusParentContextIds}
-            statusTransitions={statusTransitions}
-            value={value}
-          />
-        )}
+        {({ value, error, onChange, onCommit }) => {
+          const defaultControl = (
+            <RecordFormAttributeEditor
+              attribute={attribute}
+              component={editComponent}
+              contextId={contextId}
+              defaultContextId={defaultContextId}
+              recordId={recordId}
+              existingValues={existingValues}
+              fieldErrors={error ? { [attribute.code]: error } : fieldErrors}
+              lockedAttributes={locks}
+              onChange={onChange}
+              onRecordUpdated={saves.noteRecordUpdated}
+              required={required}
+              resolvedValues={resolvedValues}
+              statusParentContextIds={statusParentContextIds}
+              statusTransitions={statusTransitions}
+              value={value}
+            />
+          );
+          // An extension's editor replaces the default control only while
+          // it is enabled, granted and healthy.
+          return extensionEditor && editorReference ? (
+            <ExtensionAttributeEditor
+              attribute={attribute}
+              contextId={contextId}
+              contribution={extensionEditor}
+              error={error ?? fieldErrors[attribute.code]}
+              fallback={defaultControl}
+              key={nativeHostKey(extensionEditor)}
+              onChange={onChange}
+              onCommit={onCommit}
+              recordId={recordId}
+              reference={editorReference}
+              required={required}
+              value={value}
+            />
+          ) : (
+            defaultControl
+          );
+        }}
       </InlineFieldEditor>
     );
     const status = (

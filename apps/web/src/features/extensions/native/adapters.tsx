@@ -289,9 +289,10 @@ export const TextFieldAdapter = ({
       multiline={multiline}
       onBlur={() => flush(draft)}
       onKeyDown={(event) => {
-        if (event.key !== 'Enter' || multiline || !listens('submit')) return;
+        if (event.key !== 'Enter' || multiline) return;
+        // The last change goes first, so a host committing on Enter sees it.
         flush(draft);
-        emit('submit', { value: draft });
+        if (listens('submit')) emit('submit', { value: draft });
       }}
       placeholder={text(props.placeholder)}
       rows={multiline ? Number(props.rows ?? 3) : undefined}

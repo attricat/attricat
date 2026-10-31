@@ -3,6 +3,7 @@ import type { RemoteConnection } from '@remote-dom/core';
 import { getExtensionArtifact, type ExtensionContribution } from '../api';
 import {
   extensionBrokerMethods,
+  extensionOutlets,
   extensionProtocolErrors,
   maximumExtensionResponseBytes,
   renderingModes,
@@ -293,6 +294,14 @@ export class NativeExtensionHost {
     mount.receiver.dispose();
   }
 
+  /**
+   * Resolves once the Worker has handled everything sent to it before, so a
+   * value it proposes in answer to an input's last change has arrived.
+   */
+  async settle() {
+    await this.#thread?.imports.ping().catch(() => {});
+  }
+
   /** Stops the Worker; every mount shows the host failure state. */
   terminate(error: NativeUiErrorCode = nativeUiErrorCodes.unresponsive) {
     if (this.#error) return;
@@ -476,6 +485,7 @@ export class NativeExtensionHost {
     try {
       if (method === extensionBrokerMethods.editorPropose) {
         if (
+          mount.contribution.outlet !== extensionOutlets.attributeEditor ||
           !mount.onPropose ||
           !payload ||
           typeof payload !== 'object' ||
