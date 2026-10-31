@@ -39,12 +39,10 @@ const browser = await chromium.launch();
 const page = await browser.newPage();
 await page.goto(webUrl);
 const results = await page.evaluate(async (artifact) => {
-  const { nativeSandboxDocument } = await import(
-    '/src/features/extensions/native/sandboxDocument.ts'
-  );
-  const { nativeMessageTypes } = await import(
-    '/src/features/extensions/native/constants.ts'
-  );
+  const { nativeSandboxDocument } =
+    await import('/src/features/extensions/native/sandboxDocument.ts');
+  const { nativeMessageTypes } =
+    await import('/src/features/extensions/native/constants.ts');
   const frame = document.createElement('iframe');
   frame.sandbox.add('allow-scripts');
   frame.srcdoc = nativeSandboxDocument;
@@ -54,7 +52,11 @@ const results = await page.evaluate(async (artifact) => {
     document.body.append(frame);
   });
   const control = new MessageChannel();
-  frame.contentWindow.postMessage({ type: nativeMessageTypes.sandboxInit }, '*', [control.port2]);
+  frame.contentWindow.postMessage(
+    { type: nativeMessageTypes.sandboxInit },
+    '*',
+    [control.port2],
+  );
   const extension = new MessageChannel();
   const answer = new Promise((resolve) => {
     extension.port1.onmessage = ({ data }) => resolve(data);
@@ -65,7 +67,9 @@ const results = await page.evaluate(async (artifact) => {
   );
   return Promise.race([
     answer,
-    new Promise((resolve) => setTimeout(() => resolve({ timedOut: true }), 15000)),
+    new Promise((resolve) =>
+      setTimeout(() => resolve({ timedOut: true }), 15000),
+    ),
   ]);
 }, probe);
 await browser.close();
@@ -80,7 +84,9 @@ const expected = {
   indexedDb: 'blocked',
   parentAccess: 'none',
 };
-const failures = Object.entries(expected).filter(([key, value]) => results[key] !== value);
+const failures = Object.entries(expected).filter(
+  ([key, value]) => results[key] !== value,
+);
 if (failures.length) {
   console.error('Unexpected:', failures.map(([key]) => key).join(', '));
   process.exit(1);

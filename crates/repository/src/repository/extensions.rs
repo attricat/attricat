@@ -358,6 +358,17 @@ pub struct ClientExtensionContribution {
     pub artifact_key: Option<String>,
 }
 
+/// An enabled installation with its capability grants and any development
+/// build of its native artifact.
+#[derive(FromRow)]
+struct ClientInstallationRow {
+    extension_id: String,
+    installed_release_id: Uuid,
+    configuration: Value,
+    capabilities: Vec<String>,
+    dev_revision: Option<String>,
+}
+
 #[derive(FromRow)]
 struct RuntimeInstallationRow {
     extension_id: String,
@@ -602,15 +613,21 @@ impl AttricatRepository {
         extension_id: Option<&str>,
     ) -> Result<Vec<ClientExtensionContribution>, RepositoryError> {
         // Capability grants are aggregated in the same statement.
-        let rows: Vec<(String, Uuid, Value, Vec<String>, Option<String>)> = sqlx::query_as(
-            "SELECT i.extension_id, i.installed_release_id, i.configuration, ARRAY(SELECT g.grant_id FROM extension_grants g WHERE g.installation_id = i.id AND g.grant_kind = 'capability' ORDER BY g.grant_id), d.revision FROM extension_installations i JOIN workspaces w ON w.id = i.workspace_id LEFT JOIN extension_dev_artifacts d ON d.installed_release_id = i.installed_release_id WHERE i.workspace_id = $1 AND i.state = 'enabled' AND w.extensions_enabled AND ($2::text IS NULL OR i.extension_id = $2) ORDER BY i.extension_id",
+        let rows: Vec<ClientInstallationRow> = sqlx::query_as(
+            "SELECT i.extension_id, i.installed_release_id, i.configuration, ARRAY(SELECT g.grant_id FROM extension_grants g WHERE g.installation_id = i.id AND g.grant_kind = 'capability' ORDER BY g.grant_id) AS capabilities, d.revision AS dev_revision FROM extension_installations i JOIN workspaces w ON w.id = i.workspace_id LEFT JOIN extension_dev_artifacts d ON d.installed_release_id = i.installed_release_id WHERE i.workspace_id = $1 AND i.state = 'enabled' AND w.extensions_enabled AND ($2::text IS NULL OR i.extension_id = $2) ORDER BY i.extension_id",
         )
         .bind(self.workspace_id())
         .bind(extension_id)
         .fetch_all(&self.pool)
         .await?;
         let mut contributions = Vec::new();
-        for (extension_id, installed_release_id, configuration, capabilities, dev_revision) in rows
+        for ClientInstallationRow {
+            extension_id,
+            installed_release_id,
+            configuration,
+            capabilities,
+            dev_revision,
+        } in rows
         {
             let client_configuration = if capabilities
                 .iter()
