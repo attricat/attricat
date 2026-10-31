@@ -149,6 +149,36 @@ describe('scanYaml', () => {
     expect(scanAtCursor('# note |\n').outline.cursor).toBeUndefined();
   });
 
+  it('reads lines that end with CRLF', () => {
+    const crlf = (source: string) => source.replaceAll('\n', '\r\n');
+    expect(
+      scanAtCursor(crlf('attributes:\n  - code: a\n    |\n')).outline.cursor,
+    ).toMatchObject({ kind: 'key', mapping: ['attributes', 0] });
+    expect(
+      scanAtCursor(crlf('attributes:\n  - code: a\n    renderer:\n      |\n'))
+        .outline.cursor,
+    ).toMatchObject({ kind: 'key', mapping: ['attributes', 0, 'renderer'] });
+    expect(
+      scanAtCursor(crlf('kind: rec|\ncode: a\n')).outline.cursor,
+    ).toMatchObject({ kind: 'value', path: ['kind'], range: { end: 9 } });
+    const items = crlf('attributes:\n  - code: a\n');
+    const item = scanYaml(items).entryAt(['attributes', 0])!.range;
+    expect(items.slice(item.start, item.end)).toBe('code: a');
+  });
+
+  it('types scalars as the API does', () => {
+    const { valueAt } = scanYaml(
+      'a: True\nb: yes\nc: 0x1F\nd: 1_000\ne: 0127\nf: Null\ng: inf\n',
+    );
+    expect(valueAt(['a'])).toBe(true);
+    expect(valueAt(['b'])).toBe('yes');
+    expect(valueAt(['c'])).toBe(31);
+    expect(valueAt(['d'])).toBe(1000);
+    expect(valueAt(['e'])).toBe(127);
+    expect(valueAt(['f'])).toBeUndefined();
+    expect(valueAt(['g'])).toBe('inf');
+  });
+
   it('recovers when a flow sequence is left open while typing', () => {
     const { outline } = scanAtCursor(
       "fields: ['na|\n\nattributes:\n  - code: name\n",

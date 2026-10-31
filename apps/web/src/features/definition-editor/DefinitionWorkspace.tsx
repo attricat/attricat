@@ -58,6 +58,9 @@ const firstLineEnd = (text: string) => {
   return end < 0 ? text.length : end;
 };
 
+/** Names the cursor moves made by revealing a target for the preview. */
+const revealSelectionSource = 'definitionReveal';
+
 /** Monaco's class for briefly highlighting a range it navigated to. */
 const rangeHighlightClass = 'rangeHighlight';
 
@@ -79,7 +82,7 @@ const revealDefinitionTarget = (
   const selection = toRange(focus);
   // Below the large breakpoint the preview sits under the editor.
   editor.getDomNode()?.scrollIntoView({ block: 'nearest' });
-  editor.setSelection(selection);
+  editor.setSelection(selection, revealSelectionSource);
   editor.revealRangeInCenterIfOutsideViewport(selection);
   editor.focus();
   const highlight = editor.createDecorationsCollection([
@@ -323,9 +326,12 @@ export const DefinitionWorkspace = ({
               monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
               () => handlers.current.onSave(),
             );
-            mountedEditor.onDidChangeCursorPosition(({ position }) =>
-              setCursor(mountedEditor.getModel()?.getOffsetAt(position)),
-            );
+            // The preview follows the cursor, but not back to what it just
+            // revealed: that would undo the reveal and switch its tab.
+            mountedEditor.onDidChangeCursorPosition(({ position, source }) => {
+              if (source !== revealSelectionSource)
+                setCursor(mountedEditor.getModel()?.getOffsetAt(position));
+            });
             setMounted({ editor: mountedEditor, monaco });
           }}
           readOnly={readOnly}

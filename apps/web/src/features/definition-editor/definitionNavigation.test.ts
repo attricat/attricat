@@ -62,6 +62,19 @@ describe('definitionSectionAt', () => {
     });
   });
 
+  it('names the attribute of the line the cursor is on', () => {
+    const lineStart = (text: string) => offset(text) - '  '.length;
+    expect(definitionSectionAt(definition, lineStart('- code: make'))).toEqual({
+      code: 'make',
+      kind: 'attribute',
+    });
+    expect(definitionSectionAt(definition, offset('- code: vin'))).toEqual({
+      code: 'vin',
+      kind: 'attribute',
+    });
+    expect(definitionSectionAt(definition, offset('views:'))).toBeUndefined();
+  });
+
   it('names the view and the field reference under the cursor', () => {
     expect(definitionSectionAt(definition, offset('type: stack'))).toEqual({
       field: undefined,

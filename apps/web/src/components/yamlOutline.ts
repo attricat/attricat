@@ -12,6 +12,7 @@ import {
   type Node,
   type Pair,
 } from 'yaml';
+import { definitionYamlOptions } from './yamlSyntax';
 
 export type YamlPath = (string | number)[];
 export type TextRange = { start: number; end: number };
@@ -125,11 +126,11 @@ const collect = (
       if (itemRange) {
         const value = scalarValue(item);
         // A block item is located by its first line, as a key is by its name.
-        const firstLineEnd = text.indexOf('\n', itemRange.start);
+        const firstLineEnd = lineAt(text, itemRange.start).end;
         entries.push({
           path: childPath,
           range:
-            value === undefined && firstLineEnd >= 0
+            value === undefined
               ? { ...itemRange, end: Math.min(itemRange.end, firstLineEnd) }
               : itemRange,
           value,
@@ -143,10 +144,15 @@ const collect = (
 
 type Line = { start: number; end: number; text: string };
 
+/** The line around `offset`, without its line break, `\n` or `\r\n`. */
 const lineAt = (text: string, offset: number): Line => {
   const start = text.lastIndexOf('\n', offset - 1) + 1;
   const newline = text.indexOf('\n', offset);
-  const end = newline < 0 ? text.length : newline;
+  const lineBreak = newline < 0 ? text.length : newline;
+  const end =
+    lineBreak > start && text[lineBreak - 1] === '\r'
+      ? lineBreak - 1
+      : lineBreak;
   return { end, start, text: text.slice(start, end) };
 };
 
@@ -548,11 +554,10 @@ const withoutCursorValue = (text: string, cursor: number | undefined) => {
 
 /** The document, reparsed without the cursor's value when that helps. */
 const parseOutline = (text: string, cursor: number | undefined) => {
-  const document = parseDocument(text, { uniqueKeys: false });
+  const options = { ...definitionYamlOptions, uniqueKeys: false };
+  const document = parseDocument(text, options);
   if (!document.errors.length || cursor === undefined) return document;
-  const recovered = parseDocument(withoutCursorValue(text, cursor), {
-    uniqueKeys: false,
-  });
+  const recovered = parseDocument(withoutCursorValue(text, cursor), options);
   return recovered.errors.length < document.errors.length
     ? recovered
     : document;

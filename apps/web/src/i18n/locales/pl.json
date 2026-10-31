@@ -1074,11 +1074,14 @@
       "expectedOneOf": "Oczekiwano jednej z wartości: {{values}}.",
       "expectedType": "Oczekiwano typu {{type}}.",
       "expectedValue": "Oczekiwano {{value}}.",
+      "integerLeadingZero": "Liczba całkowita „{{value}}” zaczyna się od zera. Usuń je albo ujmij wartość w cudzysłów, aby zachować ją jako tekst.",
+      "integerOutOfRange": "Liczba całkowita „{{value}}” wykracza poza zakres 64 bitów. Ujmij wartość w cudzysłów, aby zachować ją jako tekst.",
       "invalidCode": "Używaj tylko liter ASCII, cyfr, łączników i podkreśleń.",
       "invalidFormat": "Nieprawidłowy format.",
       "keyNotAllowed": "„{{key}}” nie jest tu dozwolony.",
       "missingKey": "Brak wymaganego klucza „{{key}}”.",
       "nameTaken": "Nazwa „{{name}}” jest już zadeklarowana w tej definicji.",
+      "nonFiniteFloat": "„{{value}}” nie jest liczbą skończoną. Ujmij wartość w cudzysłów, aby zachować ją jako tekst.",
       "notEmpty": "Wartość nie może być pusta.",
       "notAllowed": "To nie jest tu dozwolone.",
       "syntax": "Nieprawidłowy YAML: {{message}}",
@@ -1088,7 +1091,8 @@
       "tooSmall": "Wartość musi wynosić co najmniej {{limit}}.",
       "unknownKey": "Nieznany klucz „{{key}}”.",
       "unknownKeySuggestion": "Nieznany klucz „{{key}}”. Czy chodziło o „{{suggestion}}”?",
-      "unknownReference": "„{{value}}” nie istnieje w tym obszarze roboczym."
+      "unknownReference": "„{{value}}” nie istnieje w tym obszarze roboczym.",
+      "unsupportedTag": "Znacznik „{{value}}” nie jest obsługiwany. Użyj !!str, !!int, !!float, !!bool, !!null, !!seq, !!map lub !."
     },
     "fixes": {
       "insertKey": "Dodaj „{{key}}”",

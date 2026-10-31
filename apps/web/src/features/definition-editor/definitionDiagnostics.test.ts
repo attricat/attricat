@@ -73,6 +73,21 @@ describe('definitionDiagnostics', () => {
     expect(duplicate.message).toMatch(/^Invalid YAML: Map keys must be unique/);
   });
 
+  it('reports values the API does not read exactly', () => {
+    expect(diagnose(`${header}size: 012\n`)).toEqual([
+      {
+        message:
+          'The integer “012” has a leading zero. Remove it, or quote the value to keep it as text.',
+        source: '012',
+      },
+    ]);
+    expect(diagnose(`${header}size: !foo x\n`)).toEqual([
+      expect.objectContaining({
+        message: expect.stringMatching(/^The tag “!foo” is not supported/),
+      }),
+    ]);
+  });
+
   it('flags unknown keys and suggests close matches', () => {
     expect(diagnose(`${header}${attribute}    valu_type: string\n`)).toEqual([
       {

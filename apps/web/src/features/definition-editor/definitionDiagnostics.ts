@@ -510,10 +510,14 @@ export const definitionDiagnostics = (
 ): DefinitionDiagnostic[] => {
   const parsed = parseStrictYaml(text);
   if ('error' in parsed) {
-    const { column, line, message } = parsed.error;
+    const { column, line, message, policy } = parsed.error;
     return [
       {
-        message: i18n.t('definitionEditor.diagnostics.syntax', { message }),
+        message: policy
+          ? i18n.t(`definitionEditor.diagnostics.${policy.code}`, {
+              value: policy.value,
+            })
+          : i18n.t('definitionEditor.diagnostics.syntax', { message }),
         range: lineRange(text, line, column),
       },
     ];

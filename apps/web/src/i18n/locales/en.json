@@ -1014,11 +1014,14 @@
       "expectedOneOf": "Expected one of: {{values}}.",
       "expectedType": "Expected a {{type}}.",
       "expectedValue": "Expected {{value}}.",
+      "integerLeadingZero": "The integer “{{value}}” has a leading zero. Remove it, or quote the value to keep it as text.",
+      "integerOutOfRange": "The integer “{{value}}” is outside the 64-bit range. Quote the value to keep it as text.",
       "invalidCode": "Use only ASCII letters, numbers, hyphens, and underscores.",
       "invalidFormat": "Invalid format.",
       "keyNotAllowed": "“{{key}}” is not allowed here.",
       "missingKey": "Missing required key “{{key}}”.",
       "nameTaken": "“{{name}}” is already declared in this definition.",
+      "nonFiniteFloat": "“{{value}}” is not a finite number. Quote the value to keep it as text.",
       "notEmpty": "Must not be empty.",
       "notAllowed": "This is not allowed here.",
       "syntax": "Invalid YAML: {{message}}",
@@ -1028,7 +1031,8 @@
       "tooSmall": "Must be at least {{limit}}.",
       "unknownKey": "Unknown key “{{key}}”.",
       "unknownKeySuggestion": "Unknown key “{{key}}”. Did you mean “{{suggestion}}”?",
-      "unknownReference": "“{{value}}” does not exist in this workspace."
+      "unknownReference": "“{{value}}” does not exist in this workspace.",
+      "unsupportedTag": "The tag “{{value}}” is not supported. Use !!str, !!int, !!float, !!bool, !!null, !!seq, !!map or !."
     },
     "fixes": {
       "insertKey": "Add “{{key}}”",

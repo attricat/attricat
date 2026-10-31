@@ -106,6 +106,16 @@ describe('definitionCompletions', () => {
     expect(text.labels).toContain('default_value');
   });
 
+  it('completes text with CRLF line breaks', async () => {
+    const { labels } = await complete(
+      `${header}attributes:\n  - code: name\n    value_type: string\n    |\n`.replaceAll(
+        '\n',
+        '\r\n',
+      ),
+    );
+    expect(labels).toContain('default_value');
+  });
+
   it('offers enum values with snippet choices and plain values', async () => {
     const key = await complete(`${header}attributes:\n  - code: a\n    value|`);
     expect(

@@ -84,6 +84,15 @@ export type DefinitionSection =
 const contains = (range: TextRange, offset: number) =>
   offset >= range.start && offset <= range.end;
 
+/**
+ * Whether `offset` is on one of the lines a block covers: from the start of
+ * its first line, so a `- ` item marker counts, to its end, which for a block
+ * that ends with a line break is where the next line starts.
+ */
+const blockContains = (text: string, range: TextRange, offset: number) =>
+  offset >= text.lastIndexOf('\n', range.start - 1) + 1 &&
+  (text[range.end - 1] === '\n' ? offset < range.end : offset <= range.end);
+
 /** The attribute or view declared around `offset`, if any. */
 export const definitionSectionAt = (
   text: string,
@@ -92,7 +101,9 @@ export const definitionSectionAt = (
   const outline = scanYaml(text);
   const attribute = outline.collections.find(
     ({ path, range }) =>
-      path.length === 2 && path[0] === attributesKey && contains(range, offset),
+      path.length === 2 &&
+      path[0] === attributesKey &&
+      blockContains(text, range, offset),
   );
   if (attribute) {
     const code = outline.valueAt([...attribute.path, codeKey]);
@@ -103,7 +114,7 @@ export const definitionSectionAt = (
   const view = outline.entries.find(({ path }) => {
     if (path.length !== 2 || path[0] !== viewsKey) return false;
     const target = viewTarget(outline, String(path[1]));
-    return target !== undefined && contains(target.block, offset);
+    return target !== undefined && blockContains(text, target.block, offset);
   });
   if (!view) return undefined;
   const reference = outline.entries.find(
