@@ -1,7 +1,8 @@
-import { AuditLogIcon } from '../../components/systemIcons';
+import { AuditLogIcon, RecordIcon } from '../../components/systemIcons';
 import { EmptyState } from '../../components/EmptyState';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { ArrowLeftIcon } from 'lucide-react';
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Box } from '@mui/material';
 import { PageContainer } from '../../components/PageContainer';
@@ -12,9 +13,10 @@ import { RecordSchemaSubheader } from './components/RecordSchemaSubheader';
 import { RecordChangeEvent } from './components/RecordChangeEvent';
 import { RecordToolbar } from './components/RecordToolbar';
 import { getRecordChanges } from './api';
-import { recordFormOptions } from './queryOptions';
+import { recordFormOptions, recordLabelOptions } from './queryOptions';
 import type { RecordAuditChange } from './api';
 import { recordQueryKeys } from './queryKeys';
+import { attributeLabel, displayLabel } from './recordDisplay';
 import { BlueprintLink } from '../blueprints/BlueprintLink';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { LoadingState } from '../../components/LoadingState';
@@ -42,9 +44,27 @@ export const RecordChangesPage = ({ recordId }: { recordId: string }) => {
   });
   const changeItems = changes.data?.pages.flatMap((page) => page.items) ?? [];
   const recordForm = useQuery(recordFormOptions(recordId));
+  const label = useQuery(recordLabelOptions(recordId));
+  const recordDisplay = label.data?.items.find(
+    (item) => item.id === recordId,
+  )?.display;
+  const attributeNames = useMemo(
+    () =>
+      new Map(
+        (recordForm.data?.blueprint.attributes ?? []).map((attribute) => [
+          attribute.code,
+          attributeLabel(attribute),
+        ]),
+      ),
+    [recordForm.data],
+  );
   return (
     <PageContainer maxWidth="lg">
-      <PageHeader eyebrow={t('records.recordChanges')} />
+      <PageHeader
+        eyebrow={t('records.recordChanges')}
+        icon={RecordIcon}
+        title={label.isPending ? '' : displayLabel(recordDisplay, recordId)}
+      />
       <RecordToolbar label={t('records.recordChanges')}>
         <RouterButton
           color="inherit"
@@ -72,7 +92,11 @@ export const RecordChangesPage = ({ recordId }: { recordId: string }) => {
       {changes.data && (
         <Box sx={{ mt: 3 }}>
           {groupChangesByEvent(changeItems).map(([eventId, eventChanges]) => (
-            <RecordChangeEvent changes={eventChanges} key={eventId} />
+            <RecordChangeEvent
+              attributeName={(code) => attributeNames.get(code) ?? code}
+              changes={eventChanges}
+              key={eventId}
+            />
           ))}
           {changeItems.length === 0 && (
             <EmptyState

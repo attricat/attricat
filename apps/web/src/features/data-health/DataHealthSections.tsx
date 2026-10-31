@@ -33,6 +33,9 @@ type SectionProps<T> = { query: UseQueryResult<T[]> };
 
 export const StorageSection = ({ query }: SectionProps<StorageHealth>) => {
   const { t } = useTranslation();
+  // The API reports no table sizes to a workspace, since PostgreSQL measures
+  // them across every workspace; an empty section would only show headers.
+  if (query.isSuccess && !query.data.length) return null;
 
   return (
     <Paper sx={{ mt: 4, p: 2 }}>

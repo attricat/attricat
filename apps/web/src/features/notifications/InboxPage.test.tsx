@@ -141,6 +141,26 @@ describe('InboxPage', () => {
     expect(markAllNotificationsRead).toHaveBeenCalledWith(assigned.created_at);
   });
 
+  it('opens the profile of someone who accepted an invitation', async () => {
+    vi.mocked(listNotifications).mockResolvedValue({
+      items: [
+        item('00000000-0000-4000-8000-000000000004', {
+          kind: 'workspace.invitation_accepted',
+          title: 'Ada accepted your invitation and joined the workspace',
+          subject: null,
+          data: {},
+        }),
+      ],
+      has_more: false,
+      unread_count: 1,
+    });
+    renderPage();
+    const link = await screen.findByRole('link', {
+      name: /accepted your invitation/,
+    });
+    expect(link.getAttribute('href')).toBe('#subject');
+  });
+
   it('switches filters through the URL and explains an empty inbox', async () => {
     vi.mocked(listNotifications).mockResolvedValue({
       items: [],

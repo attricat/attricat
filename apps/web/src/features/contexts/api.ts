@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { request, jsonRequest } from '../../api/request';
+import { request, jsonRequest, requestNoContent } from '../../api/request';
 import {
   attributeContextSchema,
   createAttributeContextSchema,
@@ -28,3 +28,8 @@ export const createContext = (
     jsonRequest('POST', payload),
   );
 };
+
+export const deleteContext = (id: string) =>
+  requestNoContent(`/api/contexts/id/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
