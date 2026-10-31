@@ -75,6 +75,34 @@ export const recordSchemaRequiredAttributes = (schema: unknown): string[] =>
     ? schema.required.filter((code): code is string => typeof code === 'string')
     : [];
 
+/**
+ * The blueprint as a create or migration form edits it. `readonly` keeps
+ * people from changing a value, not from giving its first one: a record
+ * schema can require a readonly attribute that nothing generates, so it stays
+ * editable until the record holds a value for it.
+ */
+export const withFillableReadonlyAttributes = (
+  blueprint: BlueprintWithAttributes,
+  savedValues: readonly FormAttributeValue[],
+): BlueprintWithAttributes => {
+  const required = new Set(
+    recordSchemaRequiredAttributes(blueprint.blueprint.record_schema),
+  );
+  const saved = new Set(savedValues.map((value) => value.attribute_code));
+  const fillable = (attribute: Attribute) =>
+    attribute.readonly === true &&
+    !attribute.generated &&
+    required.has(attribute.code) &&
+    !saved.has(attribute.code);
+  if (!blueprint.attributes.some(fillable)) return blueprint;
+  return {
+    ...blueprint,
+    attributes: blueprint.attributes.map((attribute) =>
+      fillable(attribute) ? { ...attribute, readonly: false } : attribute,
+    ),
+  };
+};
+
 /** Views that do not place fields and render the default layout instead. */
 const usesDefaultLayout = (view: ViewDefinition | undefined) =>
   !view ||

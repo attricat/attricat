@@ -11,14 +11,29 @@ import {
 } from './relationshipFilterTypes';
 import { blueprintByCodeOptions } from '../records/queryOptions';
 
-const targetBlueprintQueries = (
+/**
+ * Each relationship's target blueprint, in the relationships' order. Several
+ * relationships can share a target, which is read once.
+ */
+const useTargetBlueprints = (
   relationships: RelationshipFilterAttribute[],
   enabled: boolean,
-) =>
-  relationships.map((attribute) => ({
-    ...blueprintByCodeOptions(attribute.target_blueprint_code),
-    enabled,
-  }));
+) => {
+  const codes = [
+    ...new Set(
+      relationships.map((attribute) => attribute.target_blueprint_code),
+    ),
+  ];
+  const results = useQueries({
+    queries: codes.map((code) => ({
+      ...blueprintByCodeOptions(code),
+      enabled,
+    })),
+  });
+  return relationships.map(
+    (attribute) => results[codes.indexOf(attribute.target_blueprint_code)],
+  );
+};
 
 const nestedRelationships = (
   targets: UseQueryResult<BlueprintWithAttributes>[],
@@ -44,16 +59,12 @@ export const useRelationshipFilterPaths = (
   directRelationships: RelationshipFilterAttribute[],
   enabled: boolean,
 ) => {
-  const firstTargets = useQueries({
-    queries: targetBlueprintQueries(directRelationships, enabled),
-  });
+  const firstTargets = useTargetBlueprints(directRelationships, enabled);
   const secondRelationships = nestedRelationships(
     firstTargets,
     directRelationships,
   );
-  const secondTargets = useQueries({
-    queries: targetBlueprintQueries(secondRelationships, enabled),
-  });
+  const secondTargets = useTargetBlueprints(secondRelationships, enabled);
   const thirdRelationships = nestedRelationships(
     secondTargets,
     secondRelationships,
