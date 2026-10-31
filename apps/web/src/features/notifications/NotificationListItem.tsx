@@ -13,10 +13,20 @@ import { RouterListItemButton } from '../../components/RouterLink';
 import { Timestamp } from '../../time/Timestamp';
 import { agentRoutes } from '../agents/constants';
 import { ruleRoutes } from '../rules/constants';
-import { notificationSubjectKinds, recordRoute } from './constants';
+import { recordPreviewTabs } from '../records/constants';
+import {
+  notificationKinds,
+  notificationSubjectKinds,
+  recordRoute,
+} from './constants';
 import { NotificationKindIcon } from './NotificationKindIcon';
 import { notificationMessage } from './notificationMessage';
 import type { Notification } from './schemas';
+
+const commentNotificationKinds = new Set<string>([
+  notificationKinds.recordCommented,
+  notificationKinds.recordMentioned,
+]);
 
 type NotificationListItemProps = {
   busy: boolean;
@@ -118,6 +128,12 @@ export const NotificationListItem = ({
         <RouterListItemButton
           onClick={onOpen}
           params={{ recordId: subject.id }}
+          // A comment or mention opens on the comments it is about.
+          search={
+            commentNotificationKinds.has(notification.kind)
+              ? { tab: recordPreviewTabs.comments }
+              : undefined
+          }
           sx={contentSx}
           to={recordRoute}
         >
