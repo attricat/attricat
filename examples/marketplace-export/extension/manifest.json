@@ -151,7 +151,7 @@
     },
     {
       "id": "mapping",
-      "kind": "client_component",
+      "kind": "client_frame",
       "path": "mapping.js"
     }
   ],

@@ -304,7 +304,7 @@ fn storage_client_release_archive(version: &str) -> Vec<u8> {
         "permissions": ["storage.extension"],
         "optional_permissions": ["client.record_tab"],
         "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
-        "artifacts": [{"id": "client", "kind": "client_component", "path": "client.js"}],
+        "artifacts": [{"id": "client", "kind": "client_frame", "path": "client.js"}],
         "ui": [{"id": "panel", "version": 1, "kind": "tab", "artifact": "client", "outlet": "record_tab", "title": "Panel"}]
     }))
     .unwrap();
@@ -342,7 +342,7 @@ fn client_release_archive_for_outlet(
         }],
         "artifacts": [{
             "id": "client",
-            "kind": "client_component",
+            "kind": "client_frame",
             "path": "client.js"
         }],
         "ui": [{
@@ -377,7 +377,7 @@ fn cell_release_archive(extension_id: &str) -> Vec<u8> {
         "permissions": [],
         "optional_permissions": ["client.explorer_table_cell"],
         "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
-        "artifacts": [{"id": "client", "kind": "client_component", "path": "client.js"}],
+        "artifacts": [{"id": "client", "kind": "client_frame", "path": "client.js"}],
         "ui": [{
             "id": "amount",
             "version": 1,
@@ -417,7 +417,7 @@ fn client_release_archive_with_navigation(extension_id: &str) -> Vec<u8> {
         "icons": {"48": "icon.png"},
         "attricat": {"id": extension_id, "host_api": "^1.0"},
         "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
-        "artifacts": [{"id": "client", "kind": "client_component", "path": "client.js"}],
+        "artifacts": [{"id": "client", "kind": "client_frame", "path": "client.js"}],
         "ui": [
             {"id": "workbench", "version": 1, "kind": "route", "artifact": "client", "title": "Workbench"},
             {"id": "workbench-nav", "version": 1, "kind": "navigation", "route": "workbench", "title": "Workbench"}

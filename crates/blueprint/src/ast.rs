@@ -395,6 +395,12 @@ pub enum ViewNode {
         /// Registered component that renders this block.
         #[serde(default)]
         component: Option<ComponentReference>,
+        /// An extension's attribute editor that edits this field in
+        /// `views.detail`, by `id`, `version` and `props`. The default
+        /// control is used whenever the editor is unavailable.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schemars(extend("x-attricat-reference" = "attribute_editor"))]
+        editor: Option<ComponentReference>,
     },
     /// A relationship attribute's linked records.
     RelationshipList {

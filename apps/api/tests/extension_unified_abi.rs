@@ -59,7 +59,7 @@ fn manifest() -> Value {
         "scoped_configuration": {"version": 1, "schema": {"type": "object"}, "scopes": ["blueprint"]},
         "artifacts": [
             {"id": "server", "kind": "server_wasm", "path": "server.wasm"},
-            {"id": "client", "kind": "client_component", "path": "client.js"}
+            {"id": "client", "kind": "client_frame", "path": "client.js"}
         ],
         "server": {
             "event_handlers": [{"id": "on-update", "event_types": ["record.updated.v1"], "handler": "handle-event"}],

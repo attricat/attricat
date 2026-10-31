@@ -185,7 +185,11 @@ fn validate_view_nodes(
             | ViewNode::IncomingRelationshipList { .. } => {}
         }
         match node {
-            ViewNode::Field { field, component } => {
+            ViewNode::Field {
+                field,
+                component,
+                editor,
+            } => {
                 let attribute = validate_view_field(view, field, attributes, false)?;
                 validate_component(
                     component.as_ref(),
@@ -193,6 +197,9 @@ fn validate_view_nodes(
                     "field",
                     Some(attribute.value_type),
                 )?;
+                if let Some(editor) = editor {
+                    validate_field_editor(view, field, editor)?;
+                }
             }
             ViewNode::RelationshipList { field, component } => {
                 let attribute = validate_view_field(view, field, attributes, true)?;
@@ -249,6 +256,35 @@ fn validate_view_nodes(
             }
             _ => {}
         }
+    }
+    Ok(())
+}
+
+/// An editor is an enabled extension's contribution, resolved while saving and
+/// publishing; the compiler rejects only malformed references.
+fn validate_field_editor(
+    view: &str,
+    field: &str,
+    editor: &ComponentReference,
+) -> Result<(), BlueprintError> {
+    if view != "detail" {
+        return Err(BlueprintError::FieldEditorOutsideDetail {
+            view: view.to_owned(),
+            field: field.to_owned(),
+        });
+    }
+    if editor.id.is_empty()
+        || !editor
+            .id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+        || editor.version == 0
+        || (!editor.props.is_null() && !editor.props.is_object())
+    {
+        return Err(BlueprintError::InvalidFieldEditor {
+            view: view.to_owned(),
+            field: field.to_owned(),
+        });
     }
     Ok(())
 }
