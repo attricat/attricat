@@ -143,6 +143,12 @@ struct RecordNotes {
     actions: BTreeMap<String, Value>,
 }
 
+impl RecordNotes {
+    fn is_empty(&self) -> bool {
+        self.attributes.is_empty() && self.files.is_empty() && self.actions.is_empty()
+    }
+}
+
 #[derive(Clone, Deserialize, Serialize)]
 struct AttributeNote {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -318,6 +324,9 @@ pub(super) async fn post(
                 let key = cache_key(&installation, *record_id);
                 match cache.get(&key) {
                     Some((expires, notes)) if *expires > Instant::now() => {
+                        if notes.is_empty() {
+                            continue;
+                        }
                         records
                             .entry(*record_id)
                             .or_default()
@@ -513,6 +522,16 @@ async fn ask_and_remember(
         let notes = belonging_to_record(&installation, notes, scope);
         fresh.push((key.clone(), notes.clone()));
         answered.push((record_id, notes));
+    }
+    // A provider leaves out records it has nothing to say about; remember
+    // that too, so they are not asked about again until the answer expires.
+    for (record_id, (key, _)) in &batch {
+        if !answered
+            .iter()
+            .any(|(answered_id, _)| answered_id == record_id)
+        {
+            fresh.push((key.clone(), RecordNotes::default()));
+        }
     }
     remember(fresh, ttl);
     Ok(answered)
