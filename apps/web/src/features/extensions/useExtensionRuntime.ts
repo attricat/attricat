@@ -2,7 +2,6 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { getExtensionRuntime, type ExtensionRuntimeScope } from './api';
 import { extensionRuntimeRefetchInterval } from './constants';
-import { containNativeHosts, startNativeHosts } from './native/nativeRuntime';
 import { extensionQueryKeys } from './queryKeys';
 
 export const useExtensionRuntime = (runtimeScope?: ExtensionRuntimeScope) => {
@@ -17,11 +16,17 @@ export const useExtensionRuntime = (runtimeScope?: ExtensionRuntimeScope) => {
   });
   // Only the unscoped runtime lists every enabled release, so only it may
   // terminate native Workers whose release is gone or contained, and it
-  // starts the rest before any of their contributions mounts.
+  // starts the rest before any of their contributions mounts. The native
+  // runtime loads on demand, so it stays out of the app's initial JavaScript.
   useEffect(() => {
-    if (runtimeScope || !Array.isArray(query.data)) return;
-    containNativeHosts(query.data);
-    startNativeHosts(query.data);
+    const runtime = query.data;
+    if (runtimeScope || !Array.isArray(runtime)) return;
+    void import('./native/nativeRuntime').then(
+      ({ containNativeHosts, startNativeHosts }) => {
+        containNativeHosts(runtime);
+        startNativeHosts(runtime);
+      },
+    );
   }, [runtimeScope, query.data]);
   return query;
 };

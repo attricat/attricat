@@ -8,6 +8,8 @@ COPY apps/web/package.json apps/web/package.json
 COPY apps/docs/package.json apps/docs/package.json
 RUN pnpm install --filter web --frozen-lockfile
 COPY contracts contracts
+# The web type check covers the UI kit contract test, which imports its generator.
+COPY scripts/ui-kit scripts/ui-kit
 COPY apps/web apps/web
 RUN pnpm --dir apps/web build
 
