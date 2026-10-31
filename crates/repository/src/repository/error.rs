@@ -226,7 +226,9 @@ pub enum RepositoryError {
     UniqueKeyConflict {
         key: String,
         context: String,
-        values: Value,
+        /// Boxed: a `Value` keeps its key order, which would make every
+        /// `RepositoryError` this variant's size.
+        values: Box<Value>,
         conflicting_record_id: Uuid,
     },
     #[error(

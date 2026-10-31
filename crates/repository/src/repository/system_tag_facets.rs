@@ -16,7 +16,9 @@ impl AttricatRepository {
     /// out: records show it as the sample badge instead.
     ///
     /// Tag arrays are unnested per record, so this reads every record of the
-    /// blueprint; clients request it only when a tag filter is opened.
+    /// blueprint; clients request it only when a tag filter is opened. Equally
+    /// used tags sort by byte order so the result does not depend on the
+    /// database's collation.
     pub async fn system_tag_facet(
         &self,
         blueprint_id: Uuid,
@@ -35,7 +37,7 @@ impl AttricatRepository {
                  AND t.tag <> $4
                  AND ($5::text IS NULL OR starts_with(lower(t.tag), lower($5)))
                GROUP BY t.tag
-               ORDER BY count DESC, t.tag
+               ORDER BY count DESC, t.tag COLLATE "C"
                LIMIT $6"#,
         )
         .bind(self.workspace_id.0)

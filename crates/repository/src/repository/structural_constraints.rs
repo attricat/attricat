@@ -243,7 +243,7 @@ impl AttricatRepository {
             return Err(RepositoryError::UniqueKeyConflict {
                 key: row.key_code.clone(),
                 context: contexts.code(row.context_id),
-                values: row.key_values.clone(),
+                values: Box::new(row.key_values.clone()),
                 conflicting_record_id,
             });
         }

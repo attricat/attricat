@@ -3911,7 +3911,7 @@ mod tests {
             super::tool_error_payload(&ToolError::Repository(RepositoryError::UniqueKeyConflict {
                 key: "sku".into(),
                 context: "default".into(),
-                values: json!({"sku": "a-1"}),
+                values: Box::new(json!({"sku": "a-1"})),
                 conflicting_record_id: conflicting,
             }));
         assert_eq!(payload["code"], "unique_key_conflict");
