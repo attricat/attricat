@@ -1,4 +1,5 @@
 import i18n from 'i18next';
+import { z } from 'zod';
 import { ApiRequestError } from './request';
 
 /**
@@ -69,5 +70,8 @@ export function errorMessage(error: Error | null | undefined) {
       details: error.details,
       message: error.message,
     });
+  // A schema failure's own message is its issues as JSON; show their text.
+  if (error instanceof z.ZodError)
+    return [...new Set(error.issues.map((issue) => issue.message))].join(' ');
   return error.message;
 }

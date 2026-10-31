@@ -8,7 +8,11 @@ import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { createContext } from './api';
-import { contextMetadataMinRows, emptyContextMetadata } from './constants';
+import {
+  contextCodePattern,
+  contextMetadataMinRows,
+  emptyContextMetadata,
+} from './constants';
 import { parseContextMetadata } from './contextMetadata';
 import { contextQueryKeys } from './queryKeys';
 import { ContextIcon } from '../../components/systemIcons';
@@ -73,10 +77,24 @@ export const CreateContextPage = () => {
         sx={{ mt: 4, p: 3 }}
       >
         <Stack spacing={2}>
-          <form.Field name="code">
+          <form.Field
+            name="code"
+            validators={{
+              onSubmit: ({ value }) =>
+                contextCodePattern.test(value.trim())
+                  ? undefined
+                  : 'contexts.invalidCode',
+            }}
+          >
             {(field) => (
               <TextField
                 disabled={create.isPending}
+                error={field.state.meta.errors.length > 0}
+                helperText={
+                  field.state.meta.errors[0]
+                    ? t(field.state.meta.errors[0])
+                    : undefined
+                }
                 label={t('contexts.code')}
                 onChange={(event) => field.handleChange(event.target.value)}
                 required
