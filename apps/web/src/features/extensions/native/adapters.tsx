@@ -279,6 +279,7 @@ export const TextFieldAdapter = ({
     sameText,
   );
   const suggestions = (props.suggestions as string[] | undefined) ?? [];
+  const [listOpen, setListOpen] = useState(false);
   const multiline = flag(props.multiline);
   const chrome = inputChrome(props);
   // Autocomplete hands its input wiring over in `slotProps`; keep it.
@@ -318,7 +319,9 @@ export const TextFieldAdapter = ({
       }}
     />
   );
-  if (!suggestions.length || multiline)
+  // An input that takes suggestions stays one control while they come and
+  // go, so typing never loses focus to a remount.
+  if (props.suggestions === undefined || multiline)
     return field({
       value: draft,
       onChange: (event: React.ChangeEvent<HTMLInputElement>) =>
@@ -332,6 +335,11 @@ export const TextFieldAdapter = ({
       filterOptions={(options) => options}
       freeSolo
       inputValue={draft}
+      onClose={() => setListOpen(false)}
+      onOpen={() => setListOpen(true)}
+      // Open only with suggestions to show, so Escape reaches the field
+      // (an inline edit restores its value) instead of closing an empty list.
+      open={listOpen && suggestions.length > 0}
       onChange={(_, value) => {
         if (typeof value !== 'string') return;
         change(value);
