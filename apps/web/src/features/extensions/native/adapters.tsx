@@ -27,13 +27,27 @@ import {
   Typography,
 } from '@mui/material';
 import { Link as RouterLink } from '@tanstack/react-router';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  useContext,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import { EmptyState } from '../../../components/EmptyState';
 import { compactIconSize, smallIconSize } from '../../../components/iconSizes';
 import type { HostIcon } from '../constants';
 import { hostIconComponent, renderHostIcon } from '../hostIcons';
 import { nativeUiBudgets } from './constants';
+import {
+  NativeDirectionContext,
+  NativeFieldLabelContext,
+  nativeDirections,
+  type NativeFieldLabel,
+} from './nativeContexts';
 
 /** What the host gives every element adapter. */
 export type AdapterProps = {
@@ -78,6 +92,8 @@ const alignments = {
 const headingVariants = { 1: 'h6', 2: 'subtitle1', 3: 'subtitle2' } as const;
 const headingElements = { 1: 'h3', 2: 'h4', 3: 'h5' } as const;
 const tablePageSize = 50;
+/** The narrowest an input gets beside others in a row. */
+const inputMinimumWidth = '12rem';
 
 const text = (value: unknown) =>
   typeof value === 'string' ? value : undefined;
@@ -138,18 +154,46 @@ const useDebouncedInput = <T,>(
 
 const sameText = (value: string) => value;
 
-/** Label, help and error props every host input shares. */
-const inputChrome = (props: Record<string, unknown>) => {
-  const label = text(props.label) ?? '';
+/**
+ * The host field's label, when this input hides its own inside an attribute
+ * editor and is the first to do so; it then draws that label on its outline.
+ */
+const useFieldLabel = (props: Record<string, unknown>) => {
+  const field = useContext(NativeFieldLabelContext);
+  const id = useId();
+  const [owns, setOwns] = useState(false);
   const hidden = flag(props.hideLabel);
+  useEffect(() => {
+    if (!field || !hidden) return;
+    field.claim(id, setOwns);
+    return () => field.release(id);
+  }, [field, hidden, id]);
+  return owns ? field : undefined;
+};
+
+/**
+ * Label, help, error and width props every host input shares. An input fills
+ * a column but keeps its own width in a row, so a horizontal stack can lay
+ * out several side by side.
+ */
+const useInputChrome = (props: Record<string, unknown>) => {
+  const fieldLabel: NativeFieldLabel | undefined = useFieldLabel(props);
+  const inRow =
+    useContext(NativeDirectionContext) === nativeDirections.horizontal;
+  const label = text(props.label) ?? '';
+  const hidden = flag(props.hideLabel) && !fieldLabel;
   const error = text(props.error);
   return {
-    label: hidden ? undefined : label,
+    label: fieldLabel ? fieldLabel.text : hidden ? undefined : label,
     slotProps: { htmlInput: { 'aria-label': hidden ? label : undefined } },
-    error: Boolean(error),
+    error: Boolean(error) || Boolean(fieldLabel?.error),
     helperText: error ?? text(props.helperText),
     disabled: flag(props.disabled),
-    required: flag(props.required),
+    required: flag(props.required) || Boolean(fieldLabel?.required),
+    fullWidth: !inRow,
+    sx: inRow ? { minWidth: inputMinimumWidth } : undefined,
+    // Standing in for a record field, it takes that field's size.
+    size: fieldLabel ? ('medium' as const) : ('small' as const),
   };
 };
 
@@ -164,7 +208,15 @@ export const StackAdapter = ({ props, children }: AdapterProps) => (
     }}
     useFlexGap
   >
-    {children}
+    <NativeDirectionContext.Provider
+      value={
+        props.direction === 'horizontal'
+          ? nativeDirections.horizontal
+          : nativeDirections.vertical
+      }
+    >
+      {children}
+    </NativeDirectionContext.Provider>
   </Stack>
 );
 
@@ -281,7 +333,7 @@ export const TextFieldAdapter = ({
   const suggestions = (props.suggestions as string[] | undefined) ?? [];
   const [listOpen, setListOpen] = useState(false);
   const multiline = flag(props.multiline);
-  const chrome = inputChrome(props);
+  const chrome = useInputChrome(props);
   // Autocomplete hands its input wiring over in `slotProps`; keep it.
   const field = (
     params: Partial<AutocompleteRenderInputParams> & {
@@ -292,7 +344,6 @@ export const TextFieldAdapter = ({
     <TextField
       {...params}
       {...chrome}
-      fullWidth
       inputRef={ref}
       multiline={multiline}
       onBlur={() => flush(draft)}
@@ -304,7 +355,6 @@ export const TextFieldAdapter = ({
       }}
       placeholder={text(props.placeholder)}
       rows={multiline ? Number(props.rows ?? 3) : undefined}
-      size="small"
       slotProps={{
         ...params.slotProps,
         htmlInput: {
@@ -377,17 +427,15 @@ export const NumberFieldAdapter = ({
     formatNumber,
     parseNumber,
   );
-  const chrome = inputChrome(props);
+  const chrome = useInputChrome(props);
   const unit = text(props.unit);
   return (
     <TextField
       {...chrome}
-      fullWidth
       inputRef={ref}
       onBlur={() => flush(draft)}
       onChange={(event) => change(event.target.value)}
       placeholder={text(props.placeholder)}
-      size="small"
       slotProps={{
         htmlInput: {
           ...chrome.slotProps.htmlInput,
@@ -421,17 +469,15 @@ export const SelectAdapter = ({
   const ref = useFocusMethod(provideMethods);
   const options = (props.options as Option[] | undefined) ?? [];
   const value = text(props.value) ?? '';
-  const chrome = inputChrome(props);
+  const chrome = useInputChrome(props);
   return (
     <TextField
       {...chrome}
-      fullWidth
       inputRef={ref}
       onChange={(event) =>
         emit('change', { value: event.target.value || null })
       }
       select
-      size="small"
       slotProps={{
         ...chrome.slotProps,
         select: {

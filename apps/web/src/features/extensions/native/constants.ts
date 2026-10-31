@@ -16,7 +16,7 @@ export const nativeUiBudgets = {
   heartbeatInterval: 5_000,
   heartbeatTimeout: 4_000,
   /** Input changes are sent once typing pauses this long. */
-  inputDebounce: 250,
+  inputDebounce: 100,
 } as const;
 
 /** Why an extension's native UI stopped; each has a translated message. */

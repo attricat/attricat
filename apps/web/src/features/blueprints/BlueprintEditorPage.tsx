@@ -30,6 +30,7 @@ import {
   DefinitionTemplatesButton,
 } from '../definition-editor/DefinitionEditorControls';
 import { extensionOutlets } from '../extensions/constants';
+import { attributeLabel } from '../records/recordDisplay';
 import { invalidateBlueprintLists } from './invalidateBlueprints';
 import { LoadingState } from '../../components/LoadingState';
 
@@ -140,6 +141,7 @@ export const BlueprintEditorPage = ({
             blueprint_id: sourceRevision.blueprint.id,
             blueprint_version: sourceRevision.blueprint.version,
           }}
+          heading={attributeLabel(attribute)}
           key={attribute.id}
           outlet={extensionOutlets.blueprintAttributeConfiguration}
         />

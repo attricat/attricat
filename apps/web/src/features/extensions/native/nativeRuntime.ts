@@ -128,7 +128,7 @@ class NativeSandbox implements NativeIsolation {
   #frame() {
     this.#control ??= new Promise((resolve) => {
       const frame = document.createElement('iframe');
-      frame.sandbox.add('allow-scripts');
+      frame.setAttribute('sandbox', 'allow-scripts');
       frame.srcdoc = nativeSandboxDocument;
       frame.hidden = true;
       frame.tabIndex = -1;
@@ -549,4 +549,20 @@ export const containNativeHosts = (runtime: ExtensionContribution[]) => {
       host.terminate();
       hosts.delete(key);
     }
+};
+
+/**
+ * Starts the Worker of every enabled native release as soon as the app knows
+ * them, so the shared sandbox frame and each Worker load once per app start
+ * and a contribution mounted later waits only for its own data.
+ */
+export const startNativeHosts = (runtime: ExtensionContribution[]) => {
+  const started = new Set<string>();
+  for (const item of runtime) {
+    if (item.rendering !== renderingModes.native) continue;
+    const key = nativeHostKey(item);
+    if (started.has(key)) continue;
+    started.add(key);
+    nativeHostFor(item, runtime);
+  }
 };

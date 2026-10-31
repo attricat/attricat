@@ -153,6 +153,8 @@ const FormulaEditor = () => {
 register('formula', FormulaEditor);
 ```
 
+An input that sets `hideLabel` draws the field's label on its outline, at the size of the other fields, so the editor looks like any field on the page.
+
 Attricat checks each proposal against the attribute's type and constraints and saves it like any other field, with the person's own permissions: when they leave the field or press Enter. Escape restores the saved value. While your extension is disabled, lacks the grant, fails or is still starting, the field shows its default control, so a blueprint never depends on your extension being available. Editors are used only on the record page; Explorer tables keep using [table cells](/extensions/manifest/#table-cells).
 
 ## Limits

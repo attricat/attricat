@@ -21,7 +21,10 @@ import {
 } from './constants';
 import { uiKitElements } from './generated/uiKit';
 import {
+  containNativeHosts,
+  nativeHostFor,
   NativeExtensionHost,
+  startNativeHosts,
   type NativeIsolation,
   type NativeMountInit,
 } from './nativeRuntime';
@@ -267,6 +270,26 @@ describe('native extension host', () => {
       expect(calls).toEqual(['mount', 'update:dark', 'unmount']),
     );
     host.terminate();
+  });
+
+  it('starts each enabled native release once when the app learns of it', async () => {
+    const { getExtensionArtifact } = await import('../api');
+    vi.mocked(getExtensionArtifact).mockClear();
+    const runtime = [
+      contribution('acme.warm', 'panel'),
+      contribution('acme.warm', 'editor'),
+      { ...contribution('acme.frame', 'page'), rendering: 'frame' as const },
+    ];
+    startNativeHosts(runtime);
+    startNativeHosts(runtime);
+    await vi.waitFor(() =>
+      expect(getExtensionArtifact).toHaveBeenCalledTimes(1),
+    );
+    expect(getExtensionArtifact).toHaveBeenCalledWith('acme.warm', 'panel');
+    expect(nativeHostFor(runtime[1], runtime)).toBe(
+      nativeHostFor(runtime[0], runtime),
+    );
+    containNativeHosts([]);
   });
 
   it('rejects registrations of undeclared contributions', async () => {

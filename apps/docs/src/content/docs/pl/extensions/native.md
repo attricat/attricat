@@ -153,6 +153,8 @@ const FormulaEditor = () => {
 register('formula', FormulaEditor);
 ```
 
+Pole z `hideLabel` rysuje etykietę pola na swoim obramowaniu, w rozmiarze pozostałych pól, więc edytor wygląda jak każde pole na stronie.
+
 Attricat sprawdza każdą propozycję względem typu i ograniczeń atrybutu i zapisuje ją jak każde inne pole, z uprawnieniami tej osoby: po opuszczeniu pola lub naciśnięciu Enter. Escape przywraca zapisaną wartość. Gdy Twoje rozszerzenie jest wyłączone, nie ma uprawnienia, uległo awarii lub dopiero się uruchamia, pole pokazuje domyślną kontrolkę, więc schemat nigdy nie zależy od dostępności rozszerzenia. Edytory działają tylko na stronie rekordu; tabele Przeglądarki rekordów nadal używają [komórek tabeli](/pl/extensions/manifest/#komórki-tabeli).
 
 ## Ograniczenia

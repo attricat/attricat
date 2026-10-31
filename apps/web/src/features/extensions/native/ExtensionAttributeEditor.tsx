@@ -14,8 +14,19 @@ import {
   proposedText,
   type EditorReference,
 } from './attributeEditors';
+import type { NativeFieldLabel } from './nativeContexts';
 import { nativeHostFor } from './nativeRuntime';
 import { NativeUi } from './NativeUi';
+
+/** Keeps the label for assistive technology without drawing it. */
+const visuallyHidden = {
+  clip: 'rect(0 0 0 0)',
+  height: 1,
+  overflow: 'hidden',
+  position: 'absolute',
+  whiteSpace: 'nowrap',
+  width: 1,
+} as const;
 
 type Props = {
   contribution: ExtensionContribution;
@@ -70,6 +81,31 @@ export const ExtensionAttributeEditor = ({
   // Readiness never takes the default control from under the user's typing.
   const [waitingForBlur, setWaitingForBlur] = useState(false);
   const commitNext = useRef(false);
+  // The first input that hides its own label draws the field's label on its
+  // outline, like every other field; the host's label then only names the
+  // group for assistive technology.
+  const labelOwner = useRef<string>(undefined);
+  const [labelClaimed, setLabelClaimed] = useState(false);
+  const fieldLabel = useMemo<NativeFieldLabel>(
+    () => ({
+      text: attributeLabel(attribute),
+      required,
+      error: Boolean(error),
+      claim: (id, grant) => {
+        if (labelOwner.current !== undefined && labelOwner.current !== id)
+          return;
+        labelOwner.current = id;
+        grant(true);
+        setLabelClaimed(true);
+      },
+      release: (id) => {
+        if (labelOwner.current !== id) return;
+        labelOwner.current = undefined;
+        setLabelClaimed(false);
+      },
+    }),
+    [attribute, required, error],
+  );
   const constraints = attribute.value_schema ?? null;
   const context = useMemo<AttributeEditorContext>(
     () => ({
@@ -151,13 +187,19 @@ export const ExtensionAttributeEditor = ({
           ref={box}
           role="group"
         >
-          <FormLabel error={Boolean(error)} id={labelId} required={required}>
+          <FormLabel
+            error={Boolean(error)}
+            id={labelId}
+            required={required}
+            sx={labelClaimed ? visuallyHidden : undefined}
+          >
             {attributeLabel(attribute)}
           </FormLabel>
           <NativeUi
             context={context}
             contribution={contribution}
             onFailure={() => setState(editorStates.failed)}
+            fieldLabel={fieldLabel}
             onPropose={propose}
             onReady={() => {
               setState(editorStates.ready);

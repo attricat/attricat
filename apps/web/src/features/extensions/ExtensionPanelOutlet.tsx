@@ -1,4 +1,4 @@
-import { Stack } from '@mui/material';
+import { Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import type { ExtensionContribution } from './api';
 import { ExtensionActionOverflow } from './ExtensionActionOverflow';
@@ -13,12 +13,15 @@ type ExtensionPanelOutletProps = {
   context?: OutletContext;
   contributions: ExtensionContribution[];
   policy: PanelPolicy;
+  /** What the outlet's contributions belong to, such as an attribute. */
+  heading?: string;
 };
 
 export const ExtensionPanelOutlet = ({
   context,
   contributions,
   policy,
+  heading,
 }: ExtensionPanelOutletProps) => {
   const { t } = useTranslation();
   const visible = contributions.slice(0, policy.visibleCapacity);
@@ -29,6 +32,16 @@ export const ExtensionPanelOutlet = ({
         <ExtensionUi
           contribution={item}
           context={context}
+          heading={
+            heading && (
+              <Typography component="h3" sx={{ mb: 1 }} variant="subtitle2">
+                {t('extensions.contributionHeading', {
+                  subject: heading,
+                  extension: item.extension_name,
+                })}
+              </Typography>
+            )
+          }
           key={contributionKey(item)}
           placeholder={policy.placeholder}
         />

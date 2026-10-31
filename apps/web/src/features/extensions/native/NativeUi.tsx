@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import {
   Component,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -36,8 +37,13 @@ import {
   type NativeExtensionHost,
   type NativeMountInit,
 } from './nativeRuntime';
+import {
+  NativeFieldLabelContext,
+  type NativeFieldLabel,
+} from './nativeContexts';
 import { NativeTree } from './NativeTree';
-import type { NativeReceiver } from './receiver';
+import { drawnChildren, type NativeReceiver } from './receiver';
+import { ROOT_ID } from '@remote-dom/core';
 
 type Props = {
   contribution: ExtensionContribution;
@@ -47,7 +53,24 @@ type Props = {
   /** An attribute editor's value proposals. */
   onPropose?: (value: unknown) => void;
   placeholder?: ExtensionFramePlaceholder;
+  /** Names what the contribution belongs to; it collapses with the content. */
+  heading?: ReactNode;
+  /** The host field an attribute editor fills. */
+  fieldLabel?: NativeFieldLabel;
 };
+
+const unsubscribed = () => {};
+
+/** Whether a mounted tree draws anything at its root. */
+const useDrawsSomething = (receiver: NativeReceiver | undefined) =>
+  useSyncExternalStore(
+    useCallback(
+      (listener: () => void) =>
+        receiver ? receiver.subscribe(ROOT_ID, listener) : unsubscribed,
+      [receiver],
+    ),
+    () => (receiver ? drawnChildren(receiver.root).children.length > 0 : false),
+  );
 
 const emptyContext: Record<string, unknown> = {};
 
@@ -83,6 +106,8 @@ export const NativeUi = ({
   onReady,
   onPropose,
   placeholder = extensionFramePlaceholders.skeleton,
+  heading,
+  fieldLabel,
 }: Props) => {
   const { t, i18n } = useTranslation();
   const label = useContributionTitle()(contribution);
@@ -183,6 +208,9 @@ export const NativeUi = ({
     NativeUiErrorCode | '',
   ];
   const [renderFailed, setRenderFailed] = useState(false);
+  const drawsSomething = useDrawsSomething(
+    mount?.host === host ? mount.receiver : undefined,
+  );
   const failed = state === nativeMountStates.failed || renderFailed;
   const ready = state === nativeMountStates.ready && !failed;
 
@@ -213,13 +241,17 @@ export const NativeUi = ({
       // Native UI draws only inside the outlet's box.
       sx={{ contain: 'layout', minWidth: 0 }}
     >
+      {heading}
       <NativeErrorBoundary onError={() => setRenderFailed(true)}>
-        <NativeTree receiver={mount.receiver} />
+        <NativeFieldLabelContext.Provider value={fieldLabel}>
+          <NativeTree receiver={mount.receiver} />
+        </NativeFieldLabelContext.Provider>
       </NativeErrorBoundary>
     </Box>
   );
+  // An inline outlet takes no space until the extension draws something.
   if (placeholder === extensionFramePlaceholders.none)
-    return <Collapse in={ready}>{tree}</Collapse>;
+    return <Collapse in={ready && drawsSomething}>{tree}</Collapse>;
   return (
     <Box
       sx={{

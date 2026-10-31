@@ -28,6 +28,8 @@ type Props = {
   runtimeScope?: ExtensionRuntimeScope;
   /** Mounts only this extension's contributions, on its own page. */
   extensionId?: string;
+  /** What a panel outlet's contributions belong to, named above each. */
+  heading?: string;
 };
 
 /**
@@ -44,6 +46,7 @@ export const ExtensionOutlet = ({
   onNavigate,
   runtimeScope,
   extensionId,
+  heading,
 }: Props) => {
   const { t } = useTranslation();
   const runtime = useExtensionRuntime(runtimeScope);
@@ -113,6 +116,7 @@ export const ExtensionOutlet = ({
         <ExtensionPanelOutlet
           context={context}
           contributions={contributions}
+          heading={heading}
           policy={policy}
         />
       );
