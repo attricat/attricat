@@ -414,6 +414,8 @@ acli extension runtime [--blueprint-id <id> --blueprint-version <n>]
 acli extension get | enable | disable | remove <extension-id>
 acli extension install --owner <o> --repository <r> --release-id <github-release-id>
 acli extension sideload --file extension.tar.zst
+acli extension new <directory> --id <extension-id> [--name <name>] [--sdk <path>]
+acli extension dev <extension-id> [--bundle dist/ui.js] [--build <command>] [--watch <path>]... [--once]
 acli extension upgrade <extension-id> --owner <o> --repository <r> --release-id <id>
 acli extension configure <extension-id> --configuration <json>
 acli extension grant <extension-id> --grant-kind capability|host_permission|event_publish|event_subscribe --grant-id <id>
@@ -454,6 +456,8 @@ acli extension secret delete <name>
 acli extension layout get
 acli extension layout set --layout <json-or-file>
 ```
+
+`extension new` tworzy rozszerzenie z natywnym interfejsem w nowym katalogu i nie wymaga serwera; z `--sdk` jego pakiety są linkowane do lokalnej kopii SDK. `extension dev` wymaga serwera deweloperskiego z włączonymi narzędziami deweloperskimi: wgrywa zbudowany pakiet, a następnie przebudowuje go poleceniem `--build` i wgrywa ponownie po każdej zmianie obserwowanej ścieżki, podmieniając Workera zainstalowanego wydania bez ponownego przyznawania uprawnień. Zobacz [Natywny interfejs](/pl/extensions/native/).
 
 Sekrety połączeń i wartości sekretów obszaru roboczego są czytane ze standardowego wejścia, więc nigdy nie trafiają do argumentów procesu; z `--client-secret-stdin` i `--refresh-token-stdin` jednocześnie podaj sekret klienta w pierwszym wierszu. `connection authorize` wymaga sesji przeglądarki (`--session-file`) i zwraca adres autoryzacji u dostawcy, ale wywołanie zwrotne dostawcy kończy autoryzację tylko w sesji, która ją rozpoczęła, a Twoja przeglądarka jej nie ma; autoryzuj w aplikacji internetowej albo użyj `connection exchange-code` z kodem uzyskanym samodzielnie.
 
