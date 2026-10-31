@@ -78,8 +78,21 @@ describe('nameUsages', () => {
 });
 
 describe('renameProblem', () => {
+  const title = declaredNameAt(
+    kind,
+    definition,
+    outline,
+    definition.indexOf('"title"') + 1,
+  )!;
+
   it('accepts codes and rejects anything else', () => {
-    expect(renameProblem('new_code-2')).toBeUndefined();
-    expect(renameProblem('new code')).toBeDefined();
+    expect(renameProblem(outline, title, 'new_code-2')).toBeUndefined();
+    expect(renameProblem(outline, title, 'new code')).toBeDefined();
+  });
+
+  it('rejects a name another attribute or include declares', () => {
+    expect(renameProblem(outline, title, 'title')).toBeUndefined();
+    expect(renameProblem(outline, title, 'maker')).toBeDefined();
+    expect(renameProblem(outline, title, 'seo')).toBeDefined();
   });
 });

@@ -21,7 +21,11 @@ const definition = `attributes:
     value_type: string
     value_schema: |-
       {"type": "string", "enum": ["open", "closed"],
-        "x-attricat-status": {"version": 1, "transitions": [
+        "x-attricat-status": {"version": 1,
+          "options": [{"code": "open", "label": "Open"},
+            {"code": "closed", "label": "Closed", "lock": ["valid_from"],
+              "approval": {"covers": ["valid_from"], "void_to": "open"}}],
+          "transitions": [
           {"from": "open", "to": "closed", "conditions": [
             {"code": "dated", "predicate": {"type": "required", "attribute_code": "valid_from"}}]}]}}
 record_schema: |-
@@ -29,6 +33,7 @@ record_schema: |-
     "required": ["valid_from"],
     "properties": {"valid_until": {}},
     "dependentRequired": {"valid_until": ["valid_from"]},
+    "allOf": [{"if": {"required": ["valid_from"]}, "then": {"required": ["valid_until"]}}],
     "x-attricat-checks": [
       {"code": "range", "predicate": {"type": "compare",
         "attribute_code": "valid_until", "op": "gte", "other_attribute_code": "valid_from"}},
@@ -78,6 +83,20 @@ describe('embedded references', () => {
     expect(
       referenceAt(kind, outline, quoted('facility')[0] + 1)?.reference,
     ).toBe('relationship_attribute');
+  });
+
+  it('include conditional schemas and status locks and approvals', () => {
+    for (const code of ['valid_from', 'valid_until']) {
+      const nested = quoted(code).filter(
+        (offset) =>
+          offset > definition.indexOf('"allOf"') ||
+          (offset > definition.indexOf('"options"') &&
+            offset < definition.indexOf('"transitions"')),
+      );
+      expect(nested.length).toBeGreaterThan(0);
+      for (const offset of nested)
+        expect(referenceAt(kind, outline, offset + 1)?.value).toBe(code);
+    }
   });
 
   it('are renamed with the attribute', () => {

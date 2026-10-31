@@ -1018,6 +1018,7 @@
       "invalidFormat": "Invalid format.",
       "keyNotAllowed": "“{{key}}” is not allowed here.",
       "missingKey": "Missing required key “{{key}}”.",
+      "nameTaken": "“{{name}}” is already declared in this definition.",
       "notEmpty": "Must not be empty.",
       "notAllowed": "This is not allowed here.",
       "syntax": "Invalid YAML: {{message}}",

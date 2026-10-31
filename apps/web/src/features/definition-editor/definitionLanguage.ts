@@ -311,7 +311,11 @@ const registerProviders = (monaco: Monaco) => {
     ) => {
       const usages = usagesAt(model, position);
       if (!usages) return undefined;
-      const problem = renameProblem(newName);
+      const problem = renameProblem(
+        scanYaml(model.getValue()),
+        usages.declared,
+        newName,
+      );
       if (problem) return { edits: [], rejectReason: problem };
       return {
         edits: usages.ranges.map((range) => ({

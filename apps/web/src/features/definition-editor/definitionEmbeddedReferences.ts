@@ -22,8 +22,17 @@ const schemaKeywords = {
   required: 'required',
 } as const;
 
+/** Keywords holding subschemas that still describe the record itself. */
+const subschemaKeywords = ['if', 'then', 'else', 'not'] as const;
+const subschemaListKeywords = ['allOf', 'anyOf', 'oneOf'] as const;
+
 const transitionsKey = 'transitions';
 const conditionsKey = 'conditions';
+/** Status option fields listing attributes; either may also be `"all"`. */
+const optionsKey = 'options';
+const lockKey = 'lock';
+const approvalKey = 'approval';
+const coversKey = 'covers';
 
 /** Predicate fields; see `docs/json-schema-validation.md#predicates`. */
 const predicateKeys = {
@@ -102,7 +111,9 @@ const predicateAttributes = (
   ];
 };
 
-const recordSchemaAttributes = (root: JsonNode) => [
+const recordSchemaAttributes = (
+  root: JsonNode,
+): { node: JsonNode; reference: DefinitionReferenceKind }[] => [
   ...strings([
     ...items(member(root, schemaKeywords.required)),
     ...keys(member(root, schemaKeywords.properties)),
@@ -115,16 +126,37 @@ const recordSchemaAttributes = (root: JsonNode) => [
   ...items(member(root, schemaAnnotations.checks)).flatMap((check) =>
     predicateAttributes(member(check, predicateKeys.predicate), true),
   ),
+  ...[
+    ...subschemaKeywords.map((keyword) => member(root, keyword)),
+    ...subschemaListKeywords.flatMap((keyword) => items(member(root, keyword))),
+    ...(member(root, schemaKeywords.dependentSchemas)?.children ?? []).map(
+      (property) => property.children?.[1],
+    ),
+  ].flatMap((subschema) =>
+    subschema?.type === 'object' ? recordSchemaAttributes(subschema) : [],
+  ),
 ];
 
-/** Status transition conditions are about the record that holds the value. */
-const valueSchemaAttributes = (root: JsonNode) =>
-  items(member(member(root, schemaAnnotations.status), transitionsKey)).flatMap(
-    (transition) =>
+/**
+ * Status transition conditions, and the attributes a status locks or an
+ * approval covers, are about the record that holds the value.
+ */
+const valueSchemaAttributes = (root: JsonNode) => {
+  const status = member(root, schemaAnnotations.status);
+  return [
+    ...items(member(status, transitionsKey)).flatMap((transition) =>
       items(member(transition, conditionsKey)).flatMap((condition) =>
         predicateAttributes(member(condition, predicateKeys.predicate), true),
       ),
-  );
+    ),
+    ...strings(
+      items(member(status, optionsKey)).flatMap((option) => [
+        ...items(member(option, lockKey)),
+        ...items(member(member(option, approvalKey), coversKey)),
+      ]),
+    ).map((node) => ({ node, reference: definitionReferenceKinds.attribute })),
+  ];
+};
 
 /** Keys whose string values are JSON Schemas. */
 export const embeddedJsonKinds = {

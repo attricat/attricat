@@ -102,8 +102,26 @@ export const nameUsages = (
 
 const validCode = new RegExp(codePattern);
 
-/** Why `name` cannot replace a declared name, if it cannot. */
-export const renameProblem = (name: string) =>
-  validCode.test(name)
-    ? undefined
-    : i18n.t('definitionEditor.diagnostics.invalidCode');
+/**
+ * Why `name` cannot replace `declared`, if it cannot. Taking a name another
+ * attribute or include declares would merge their references.
+ */
+export const renameProblem = (
+  outline: YamlOutline,
+  declared: DeclaredName,
+  name: string,
+) => {
+  if (!validCode.test(name))
+    return i18n.t('definitionEditor.diagnostics.invalidCode');
+  const taken =
+    name !== declared.name &&
+    outline.entries.some(
+      ({ path, value }) =>
+        path.length === 3 &&
+        declaringKeys[String(path[0])] === path[2] &&
+        value === name,
+    );
+  return taken
+    ? i18n.t('definitionEditor.diagnostics.nameTaken', { name })
+    : undefined;
+};

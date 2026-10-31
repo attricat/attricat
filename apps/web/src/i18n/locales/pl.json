@@ -1078,6 +1078,7 @@
       "invalidFormat": "Nieprawidłowy format.",
       "keyNotAllowed": "„{{key}}” nie jest tu dozwolony.",
       "missingKey": "Brak wymaganego klucza „{{key}}”.",
+      "nameTaken": "Nazwa „{{name}}” jest już zadeklarowana w tej definicji.",
       "notEmpty": "Wartość nie może być pusta.",
       "notAllowed": "To nie jest tu dozwolone.",
       "syntax": "Nieprawidłowy YAML: {{message}}",
