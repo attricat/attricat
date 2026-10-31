@@ -1,5 +1,5 @@
 import { Alert, Box, CircularProgress, Typography } from '@mui/material';
-import { useMemo, useState, type Ref } from 'react';
+import { useMemo, useRef, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AttributeContext } from '../../contexts/api';
 import { extensionOutlets } from '../../extensions/constants';
@@ -61,8 +61,22 @@ export const RecordPreviewContent = ({
   singleColumn,
 }: Props) => {
   const { t } = useTranslation();
-  // Switching context would drop changes that are not saved yet.
-  const [hasPendingChanges, setHasPendingChanges] = useState(false);
+  // Switching context would drop changes that are not saved yet, and
+  // choosing another context is often what commits the last edit. The choice
+  // waits for those changes to save rather than being lost to a disabled tab.
+  const hasPendingChanges = useRef(false);
+  const queuedContextId = useRef<string>(undefined);
+  const changeContext = (nextContextId: string) => {
+    if (hasPendingChanges.current) queuedContextId.current = nextContextId;
+    else onContextChange(nextContextId);
+  };
+  const pendingChanged = (pending: boolean) => {
+    hasPendingChanges.current = pending;
+    const queued = queuedContextId.current;
+    if (pending || queued === undefined) return;
+    queuedContextId.current = undefined;
+    onContextChange(queued);
+  };
   const shownContextId = contextId ?? defaultContextId ?? undefined;
   const diagnostics = useBlueprintFieldDiagnostics({
     attributes: blueprint.attributes,
@@ -110,8 +124,7 @@ export const RecordPreviewContent = ({
         >
           <RecordContextPicker
             contexts={contexts}
-            disabled={hasPendingChanges}
-            onChange={onContextChange}
+            onChange={changeContext}
             value={contextId ?? ''}
           />
           {form && contextId && contextId !== defaultContextId && (
@@ -133,7 +146,7 @@ export const RecordPreviewContent = ({
               recordId={recordId}
               form={form}
               ref={inlineFieldsRef}
-              onPendingChange={setHasPendingChanges}
+              onPendingChange={pendingChanged}
               refreshing={formRefreshing}
               resolvedValues={resolved.values}
               reusableResolvedValues={resolved.reusable_values ?? {}}

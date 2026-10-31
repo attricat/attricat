@@ -6,6 +6,7 @@ import {
   createRecord,
   createRecordBlueprint,
   defaultContext,
+  recordSave,
   scalar,
   suffix,
 } from './helpers';
@@ -52,4 +53,35 @@ test('resolves inherited values and saves a context-specific override', async ({
   await expect(fieldByLabel(page, 'title')).toHaveValue('UK title');
   await page.getByRole('tab', { name: 'Default' }).click();
   await expect(fieldByLabel(page, 'title')).toHaveValue('Default title');
+});
+
+test('switches context with one click on a tab that saves the last edit', async ({
+  page,
+}) => {
+  const blueprint = await createRecordBlueprint(
+    `context_switch_${suffix()}`,
+    'Context switch product',
+    'attributes:\n  - code: title\n    value_type: string',
+  );
+  const record = await createRecord(blueprint, [scalar('title', 'Default')]);
+  const parentId = (await defaultContext()).id;
+  const first = await createContext(`first_${suffix()}`, parentId);
+  const second = await createContext(`second_${suffix()}`, parentId);
+
+  await page.goto(`/records/${record.id}`);
+  await page.getByRole('tab', { name: first.code }).click();
+  await fieldByLabel(page, 'title').fill('First title');
+  // Leaving the field for another context commits it; the tab waits for
+  // that save instead of ignoring the click.
+  const saved = recordSave(page, record.id);
+  await page.getByRole('tab', { name: second.code }).click();
+  expect((await saved).ok()).toBe(true);
+  await expect(page.getByRole('tab', { name: second.code })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+
+  await page.reload();
+  await page.getByRole('tab', { name: first.code }).click();
+  await expect(fieldByLabel(page, 'title')).toHaveValue('First title');
 });
