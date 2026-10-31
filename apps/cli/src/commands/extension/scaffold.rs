@@ -56,7 +56,7 @@ pub(crate) fn scaffold(
                 "scripts": {
                     "build": "vite build",
                     "test": "vitest run",
-                    "pack": "vite build && attricat-pack"
+                    "package": "vite build && attricat-pack"
                 },
                 "dependencies": {
                     "@attricat/extension": dependency("extension", EXTENSION_SDK_VERSION),
@@ -95,7 +95,7 @@ pub(crate) fn scaffold(
         "directory": directory.display().to_string(),
         "extension_id": extension_id,
         "files": files.iter().map(|(path, _)| path.display().to_string()).collect::<Vec<_>>(),
-        "next": ["pnpm install", "pnpm test", "pnpm pack", "acli extension sideload --file dist/<archive>.tar.zst"]
+        "next": ["pnpm install", "pnpm test", "pnpm package", "acli extension sideload --file dist/<archive>.tar.zst"]
     })))
 }
 
@@ -115,6 +115,12 @@ fn manifest(extension_id: &str, name: &str) -> String {
         "icons": {"48": "assets/icon-48.svg"},
         "attricat": {"id": extension_id, "host_api": HOST_API_RANGE},
         "permissions": ["client.blueprint_panel", "client.attribute_editor", "storage.extension"],
+        // Installations start with an empty configuration object, which the
+        // host accepts only against a declared schema.
+        "configuration": {
+            "version": 1,
+            "schema": {"type": "object", "properties": {}, "additionalProperties": false}
+        },
         "artifacts": [
             {"id": "ui", "kind": "client_native", "path": "dist/ui.js", "ui_kit": UI_KIT_RANGE}
         ],
@@ -151,7 +157,7 @@ fn readme(extension_id: &str, name: &str) -> String {
          Attricat UI kit components; Attricat draws them with its own components.\n\n\
          - `src/main.tsx` registers one component per contribution in `manifest.json`.\n\
          - `pnpm test` renders contributions with the SDK test harness.\n\
-         - `pnpm pack` builds `dist/ui.js` and packs the archive to side-load.\n\
+         - `pnpm package` builds `dist/ui.js` and packs the archive to side-load.\n\
          - `acli extension dev {extension_id} --build \"pnpm build\" --watch src` rebuilds and\n\
            hot-swaps the Worker in a development server without a new upload or grants.\n\n\
          A blueprint field uses the editor from `views.detail`:\n\n\
@@ -225,7 +231,7 @@ export const UnitEditor = () => {
     <Select
       hideLabel
       label={editor.attribute.name}
-      onChange={(event) => editor.propose(event.detail.value)}
+      onChange={({ value }) => editor.propose(value)}
       options={units.map((unit) => ({ value: unit, label: unit }))}
       value={typeof editor.value === 'string' ? editor.value : null}
     />
@@ -242,7 +248,7 @@ describe('Summary', () => {
     const view = await renderContribution(Summary, {
       context: { blueprint_id: '00000000-0000-4000-8000-000000000000', blueprint_version: 3 },
     });
-    expect(view.text()).toContain('3');
+    expect(view.text(view.root)).toContain('3');
   });
 });
 ";

@@ -16,7 +16,7 @@ acli extension new inventory --id acme.inventory --name "Inventory"
 cd inventory
 pnpm install
 pnpm test
-pnpm pack
+pnpm package
 ```
 
 It creates a manifest with one `client_native` artifact, a blueprint panel and an attribute editor, a Vite configuration, a component for each contribution, and a test. Side-load the archive from `dist/` through **Manage → Extensions → Upload archive**, grant its permissions and enable it.
@@ -144,7 +144,7 @@ const FormulaEditor = () => {
       hideLabel
       label={editor.attribute.name}
       monospace
-      onChange={(event) => editor.propose(event.detail.value)}
+      onChange={({ value }) => editor.propose(value)}
       value={typeof editor.value === 'string' ? editor.value : ''}
     />
   );
