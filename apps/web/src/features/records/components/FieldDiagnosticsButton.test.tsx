@@ -9,7 +9,49 @@ import {
   FieldDiagnosticsContext,
   fieldFindingsStatuses,
 } from '../fieldDiagnostics';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
+import type { ExtensionContribution } from '../../extensions/api';
+import {
+  attributeEditorStates,
+  attributeEditorStatusKey,
+  reportAttributeEditorStatus,
+} from '../../extensions/native/attributeEditorStatus';
+import { nativeUiErrorCodes } from '../../extensions/native/constants';
+import { extensionQueryKeys } from '../../extensions/queryKeys';
 import { FieldDiagnosticsButton } from './FieldDiagnosticsButton';
+
+vi.mock('../../../components/RouterLink', () => ({
+  RouterLink: ({ children }: { children: ReactNode }) => (
+    <a href="#extension">{children}</a>
+  ),
+}));
+
+const editorRecordId = crypto.randomUUID();
+const formulaEditor = { id: 'formula', version: 1, props: {} };
+
+/** The record page with the runtime the app loaded. */
+const withRuntime = (
+  runtime: Partial<ExtensionContribution>[],
+  children: ReactNode,
+) => {
+  const client = new QueryClient();
+  client.setQueryData(extensionQueryKeys.runtime(), runtime);
+  return (
+    <QueryClientProvider client={client}>
+      <FieldDiagnosticsContext
+        value={{
+          contextCode: 'default',
+          showsValues: true,
+          contextId: undefined,
+          findings: [],
+        }}
+      >
+        {children}
+      </FieldDiagnosticsContext>
+    </QueryClientProvider>
+  );
+};
 
 const polishContextId = crypto.randomUUID();
 const metaDescription = {
@@ -244,5 +286,71 @@ describe('FieldDiagnosticsButton', () => {
 
     expect(revealField).toHaveBeenCalledWith('sale_status');
     expect(screen.queryByRole('listitem')).toBeNull();
+  });
+
+  it('says when the field fell back from an editor whose extension is unavailable', async () => {
+    const user = userEvent.setup();
+    render(
+      withRuntime(
+        [],
+        <FieldDiagnosticsButton
+          attribute={metaDescription}
+          editor={formulaEditor}
+          recordId={editorRecordId}
+          resolved={{ value: null }}
+        />,
+      ),
+    );
+    await user.click(
+      screen.getByRole('button', { name: 'Details of Meta description' }),
+    );
+    expect(screen.getByText('Extension editor formula v1')).toBeTruthy();
+    expect(
+      screen.getByText(/Not available: its extension is disabled/),
+    ).toBeTruthy();
+  });
+
+  it('names a failed editor, its reason and its extension', async () => {
+    const user = userEvent.setup();
+    reportAttributeEditorStatus(
+      attributeEditorStatusKey(editorRecordId, metaDescription.code),
+      {
+        state: attributeEditorStates.failed,
+        errorCode: nativeUiErrorCodes.unresponsive,
+      },
+    );
+    render(
+      withRuntime(
+        [
+          {
+            id: 'formula',
+            version: 1,
+            kind: 'editor',
+            outlet: 'attribute_editor',
+            title: 'Formula',
+            extension_id: 'acme.formulas',
+            extension_name: 'Formulas',
+            editor: { value_types: ['string'], props: {} },
+          },
+        ],
+        <FieldDiagnosticsButton
+          attribute={metaDescription}
+          editor={formulaEditor}
+          recordId={editorRecordId}
+          resolved={{ value: null }}
+        />,
+      ),
+    );
+    await user.click(
+      screen.getByRole('button', { name: 'Details of Meta description' }),
+    );
+    expect(screen.getByText('Formula from Formulas (formula v1)')).toBeTruthy();
+    expect(
+      screen.getByText(/Formulas stopped responding and was stopped/),
+    ).toBeTruthy();
+    expect(screen.getByText('Open the extension')).toBeTruthy();
+    reportAttributeEditorStatus(
+      attributeEditorStatusKey(editorRecordId, metaDescription.code),
+    );
   });
 });

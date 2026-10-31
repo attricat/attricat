@@ -8,10 +8,13 @@ import {
   maximumExtensionResponseBytes,
   renderingModes,
 } from '../constants';
+import type { BrokerDependencies } from '../extensionBroker';
 import {
-  handleBrokerRequest,
-  type BrokerDependencies,
-} from '../extensionBroker';
+  brokerRequest,
+  extensionRunStates,
+  recordDrop,
+  recordRun,
+} from '../diagnostics/extensionDiagnosticsStore';
 import { jsonByteLength } from '../utf8';
 import {
   nativeMessageTypes,
@@ -205,6 +208,14 @@ export class NativeExtensionHost {
   #windowStart = 0;
   #windowMutations = 0;
   #warned = new Set<string>();
+  #startedAt = performance.now();
+  #peakMutations = 0;
+  #largestMessage = 0;
+  #identity: {
+    extensionId: string;
+    extensionName: string;
+    rendering: typeof renderingModes.native;
+  };
 
   constructor(
     contributions: ExtensionContribution[],
@@ -214,6 +225,16 @@ export class NativeExtensionHost {
     this.key = nativeHostKey(first);
     this.extensionName = first.extension_name;
     this.#declared = new Set(contributions.map((item) => item.id));
+    this.#identity = {
+      extensionId: first.extension_id,
+      extensionName: first.extension_name,
+      rendering: renderingModes.native,
+    };
+    recordRun(this.key, {
+      ...this.#identity,
+      uiKit: first.ui_kit ?? undefined,
+      devRevision: first.artifact_revision ?? undefined,
+    });
     void this.#start(first);
   }
 
@@ -306,6 +327,11 @@ export class NativeExtensionHost {
   terminate(error: NativeUiErrorCode = nativeUiErrorCodes.unresponsive) {
     if (this.#error) return;
     this.#error = error;
+    recordRun(this.key, {
+      ...this.#identity,
+      state: extensionRunStates.failed,
+      errorCode: error,
+    });
     this.#timers.forEach((timer) => window.clearTimeout(timer));
     this.#abort.abort();
     this.isolation.stop(this.key);
@@ -318,9 +344,21 @@ export class NativeExtensionHost {
   }
 
   #warn(message: string) {
-    if (!development || this.#warned.has(message)) return;
+    if (this.#warned.has(message)) return;
     this.#warned.add(message);
-    console.warn(`[${this.extensionName}] native UI: ${message}`);
+    recordDrop(this.extensionName, message);
+    if (development)
+      console.warn(`[${this.extensionName}] native UI: ${message}`);
+  }
+
+  /** Reports how close the extension is to its budgets. */
+  #recordBudgets() {
+    recordRun(this.key, {
+      ...this.#identity,
+      nodes: this.#nodes,
+      peakMutations: this.#peakMutations,
+      largestMessageBytes: this.#largestMessage,
+    });
   }
 
   #countNodes(delta: number) {
@@ -338,6 +376,7 @@ export class NativeExtensionHost {
       this.#windowMutations = 0;
     }
     this.#windowMutations += count;
+    this.#peakMutations = Math.max(this.#peakMutations, this.#windowMutations);
     if (this.#windowMutations > nativeUiBudgets.maximumMutationsPerWindow) {
       this.terminate(nativeUiErrorCodes.mutationRateExceeded);
       throw new Error(nativeUiErrorCodes.mutationRateExceeded);
@@ -353,14 +392,17 @@ export class NativeExtensionHost {
         port.addEventListener(
           'message',
           ({ data }) => {
-            if (
-              messageBytes(data, nativeUiBudgets.maximumMessageBytes) >
-              nativeUiBudgets.maximumMessageBytes
-            ) {
+            const bytes = messageBytes(
+              data,
+              nativeUiBudgets.maximumMessageBytes,
+            );
+            this.#largestMessage = Math.max(this.#largestMessage, bytes);
+            if (bytes > nativeUiBudgets.maximumMessageBytes) {
               this.terminate(nativeUiErrorCodes.messageTooLarge);
               return;
             }
             listener(data);
+            if (!this.#error) this.#recordBudgets();
           },
           { signal },
         );
@@ -421,6 +463,11 @@ export class NativeExtensionHost {
           `'${id}' is not a declared native contribution; its registration was rejected`,
         );
     this.#registered = new Set(ids.filter((id) => this.#declared.has(id)));
+    recordRun(this.key, {
+      ...this.#identity,
+      state: extensionRunStates.ready,
+      startMs: performance.now() - this.#startedAt,
+    });
     this.#heartbeat();
     this.#mounts.forEach((_, mountId) => this.#send(mountId));
     this.#notify();
@@ -428,9 +475,16 @@ export class NativeExtensionHost {
 
   #heartbeat() {
     const timer = window.setTimeout(async () => {
+      const pinged = performance.now();
       const answered = await Promise.race([
         this.#thread?.imports.ping().then(
-          () => true,
+          () => {
+            recordRun(this.key, {
+              ...this.#identity,
+              heartbeatMs: performance.now() - pinged,
+            });
+            return true;
+          },
           () => false,
         ),
         new Promise<false>((resolve) =>
@@ -495,10 +549,7 @@ export class NativeExtensionHost {
         mount.onPropose((payload as { value: unknown }).value);
         return null;
       }
-      const data = await handleBrokerRequest(
-        { method, payload },
-        mount.dependencies,
-      );
+      const data = await brokerRequest({ method, payload }, mount.dependencies);
       if (jsonByteLength(data) > maximumExtensionResponseBytes)
         throw new Error();
       return data;

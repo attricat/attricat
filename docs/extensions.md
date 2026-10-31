@@ -2040,6 +2040,27 @@ a code from `nativeUiErrorCodes` (translated in both locales); other
 extensions and the page are untouched. Each mount also has an error boundary
 with the host failure treatment.
 
+### Diagnostics
+
+With the Inspector enabled (development builds with `ATTRICAT_DEVTOOLS=true`,
+or any build after `localStorage.setItem('attricat.inspector-enabled', 'true')`
+and a reload), the host records extension UI in this tab and shows it in the
+Inspector's **Extensions** pane (`extensionDiagnosticsStore`):
+- each native Worker and frame: UI kit version, development build, start
+  time, failure code, heartbeat delay, and the native budgets in use;
+- broker requests: method, duration and outcome, with the reason for a
+  denial, which extension code never sees;
+- what the receiver kept out of a drawing, and why.
+
+Only names, durations and reasons are kept, in bounded histories; request
+and answer contents never are. Without the Inspector nothing is recorded.
+
+A record field that names an extension editor explains it in its details
+popover: which editor and extension it is, and whether it draws the field or
+why the field fell back to its default control (starting, failed with its
+code, unavailable, or not declared for the field's type). A field that fell
+back shows its details button as a warning.
+
 ### Attribute editors
 
 An `editor` contribution at `attribute_editor` (requiring

@@ -75,7 +75,12 @@ export const ValueField = ({
       <Box sx={{ alignItems: 'flex-start', display: 'flex', gap: 0.5 }}>
         <Box sx={{ flex: 1, minWidth: 0 }}>{editor}</Box>
         <Box sx={{ flexShrink: 0, pt: 0.25 }}>
-          <FieldDiagnosticsButton attribute={attribute} resolved={resolved} />
+          <FieldDiagnosticsButton
+            attribute={attribute}
+            editor={editorReference}
+            recordId={recordId}
+            resolved={resolved}
+          />
         </Box>
       </Box>
     ) : (
@@ -118,6 +123,8 @@ export const ValueField = ({
               </Typography>
               <FieldDiagnosticsButton
                 attribute={attribute}
+                editor={editorReference}
+                recordId={recordId}
                 resolved={resolved}
               />
             </Box>

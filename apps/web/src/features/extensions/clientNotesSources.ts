@@ -12,7 +12,8 @@ import {
   fieldNoteTones,
   hostIcons,
 } from './constants';
-import { handleBrokerRequest, postBrokerResponse } from './extensionBroker';
+import { postBrokerResponse } from './extensionBroker';
+import { brokerRequest } from './diagnostics/extensionDiagnosticsStore';
 import type {
   ClientNotesSource,
   FieldNotesResponse,
@@ -138,7 +139,7 @@ const handlerFor = (source: ClientNotesSource, queryClient: QueryClient) => {
                 typeof data.id === 'string'
               ) {
                 try {
-                  const result = await handleBrokerRequest(
+                  const result = await brokerRequest(
                     { method: data.method, payload: data.payload },
                     {
                       contribution,

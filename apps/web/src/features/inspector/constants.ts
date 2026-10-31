@@ -12,6 +12,7 @@ export const inspectorPaneIds = {
   server: 'server',
   performance: 'performance',
   session: 'session',
+  extensions: 'extensions',
 } as const;
 export type InspectorPaneId =
   (typeof inspectorPaneIds)[keyof typeof inspectorPaneIds];
@@ -19,6 +20,7 @@ export const inspectorPaneOrder: readonly InspectorPaneId[] = [
   inspectorPaneIds.server,
   inspectorPaneIds.performance,
   inspectorPaneIds.session,
+  inspectorPaneIds.extensions,
 ];
 
 /** Shown in place of a query count the API did not report. */

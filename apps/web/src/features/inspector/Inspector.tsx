@@ -17,6 +17,7 @@ import {
   type InspectorPaneId,
 } from './constants';
 import { InspectorLauncher } from './InspectorLauncher';
+import { InspectorExtensionsPane } from './InspectorExtensionsPane';
 import { InspectorPerformancePane } from './InspectorPerformancePane';
 import { InspectorServerPane } from './InspectorServerPane';
 import { InspectorSessionPane } from './InspectorSessionPane';
@@ -28,6 +29,7 @@ const paneLabelKeys = {
   performance: 'inspector.performance',
   server: 'inspector.server',
   session: 'inspector.session',
+  extensions: 'inspector.extensions.title',
 } as const satisfies Record<InspectorPaneId, string>;
 
 const InspectorPaneContent = ({
@@ -40,6 +42,7 @@ const InspectorPaneContent = ({
   if (pane === inspectorPaneIds.performance)
     return <InspectorPerformancePane />;
   if (pane === inspectorPaneIds.session) return <InspectorSessionPane />;
+  if (pane === inspectorPaneIds.extensions) return <InspectorExtensionsPane />;
   return <InspectorServerPane apiHealth={apiHealth} />;
 };
 
