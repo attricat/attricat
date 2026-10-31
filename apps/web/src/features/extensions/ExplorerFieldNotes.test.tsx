@@ -13,6 +13,9 @@ vi.mock('./useExtensionRuntime', () => ({
   useExtensionRuntime: () => ({ data: [] }),
 }));
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => vi.fn() }));
+vi.mock('../auth/useCan', () => ({
+  useAccess: () => ({ can: () => true, isPending: false }),
+}));
 
 import {
   ExplorerCellNotes,

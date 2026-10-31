@@ -20,6 +20,7 @@ beforeEach(() => {
 const access = vi.hoisted(() => ({ delete: false }));
 
 vi.mock('../auth/useCan', () => ({
+  useAccess: () => ({ can: () => true, isPending: false }),
   useCan: () => true,
   useCanOn: (capability: string) =>
     capability === 'records_delete'

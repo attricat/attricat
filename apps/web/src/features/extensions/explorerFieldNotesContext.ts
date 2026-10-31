@@ -5,6 +5,8 @@ import type { ActionState, ExtensionNotes } from './fieldNotesData';
 export type ExplorerFieldNotes = {
   notes: (recordId: string) => readonly ExtensionNotes[];
   states: (recordId: string) => ReadonlyMap<string, ActionState>;
+  /** Whether the viewer may write the record; `undefined` until known. */
+  canWrite: (recordId: string) => boolean | undefined;
   runtimeScope: ExtensionRuntimeScope;
   blueprintCode: string;
   contextId: string | null;

@@ -2,6 +2,8 @@ import { Stack } from '@mui/material';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { useContext, useMemo, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { accessTargetKinds, capabilities } from '../auth/capabilities';
+import { useAccess } from '../auth/useCan';
 import { recordQueryKeys } from '../records/queryKeys';
 import type { ExtensionRuntimeScope } from './api';
 import type { ActionTarget } from './actions';
@@ -83,7 +85,17 @@ export const ExplorerFieldNotesProvider = ({
         ...results.map((result) => result.data?.records ?? {}),
       ) as FieldNotesResponse['records'],
   });
+  // Badge actions that need write access are not offered to readers.
+  const writeAccess = useAccess(
+    capabilities.recordsWrite,
+    accessTargetKinds.record,
+    recordIds,
+  );
+  const writable = writeAccess.isPending
+    ? undefined
+    : recordIds.filter((id) => writeAccess.can(id)).join();
   const value = useMemo<ExplorerFieldNotes>(() => {
+    const writableIds = writable?.split(',');
     const merged: FieldNotesResponse = {
       records: records,
       incomplete: false,
@@ -92,11 +104,19 @@ export const ExplorerFieldNotesProvider = ({
     return {
       notes: (recordId) => records[recordId] ?? [],
       states: (recordId) => actionStates(merged, recordId),
+      canWrite: (recordId) => writableIds?.includes(recordId),
       runtimeScope: { blueprintId, blueprintVersion },
       blueprintCode,
       contextId,
     };
-  }, [blueprintCode, blueprintId, blueprintVersion, contextId, records]);
+  }, [
+    blueprintCode,
+    blueprintId,
+    blueprintVersion,
+    contextId,
+    records,
+    writable,
+  ]);
   return (
     <ExplorerFieldNotesContext value={value}>
       {children}
@@ -134,6 +154,7 @@ export const ExplorerCellNotes = ({
     contextId: notes.contextId,
     recordIds: [recordId],
     recordTags: [recordTags],
+    canWrite: notes.canWrite(recordId),
   };
   const states = notes.states(recordId);
   return (

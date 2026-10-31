@@ -14,6 +14,8 @@ import type {
   RecordPublicationReadiness,
   RecordPublicationStatus,
 } from '../records/api';
+import { accessTargetKinds, capabilities } from '../auth/capabilities';
+import { useAccess } from '../auth/useCan';
 import { publicationReadinessText } from '../records/checkViolations';
 import { useActionDialogStore } from '../extensions/actionDialogStore';
 import { ActionMenuCloseContext } from '../extensions/actions';
@@ -64,6 +66,11 @@ export const RecordActionsMenu = ({
 }: Props) => {
   const { t } = useTranslation();
   const actionStates = useExplorerActionStates(record.id);
+  const writeAccess = useAccess(
+    capabilities.recordsWrite,
+    accessTargetKinds.record,
+    [record.id],
+  );
   // A row action that opens the host dialog hands off to it; the dialog keeps
   // its captured selection after this menu and its frames unmount.
   const dialogKey = useActionDialogStore((state) => state.dialog?.key);
@@ -170,6 +177,9 @@ export const RecordActionsMenu = ({
             contextId: publicationContextId ?? null,
             recordIds: [record.id],
             recordTags: [record.system_tags],
+            canWrite: writeAccess.isPending
+              ? undefined
+              : writeAccess.can(record.id),
           }}
         />
       </ActionMenuCloseContext>
