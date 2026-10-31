@@ -21,11 +21,14 @@ export type DefinitionTarget = {
 };
 
 /** Where the definition declares the attribute with `code`. */
-export const attributeDefinition = (
-  text: string,
+export const attributeDefinition = (text: string, code: string) =>
+  attributeTarget(scanYaml(text), code);
+
+/** Like `attributeDefinition`, in an outline already scanned. */
+export const attributeTarget = (
+  outline: YamlOutline,
   code: string,
 ): DefinitionTarget | undefined => {
-  const outline = scanYaml(text);
   const declared = outline.entries.find(
     ({ path, value }) =>
       path.length === 3 &&

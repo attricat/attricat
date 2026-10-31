@@ -13,9 +13,10 @@ import { CodeXmlIcon } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { compactIconSize } from '../../components/iconSizes';
+import { scanYaml, type YamlOutline } from '../../components/yamlOutline';
 import { useTabAccessibility } from '../../components/useTabAccessibility';
 import {
-  attributeDefinition,
+  attributeTarget,
   definitionSectionAt,
   definitionSectionKinds,
   viewDefinition,
@@ -91,19 +92,19 @@ export const BlueprintViewsPreview = ({
     revision,
   });
   const revealDefinition = useRevealDefinition();
-  const fieldDiagnostics = useMemo(
-    () =>
-      revealDefinition && definition !== undefined
-        ? {
-            ...diagnostics,
-            showInDefinition: (code: string) => {
-              const target = attributeDefinition(definition, code);
-              return target && (() => revealDefinition(target));
-            },
-          }
-        : diagnostics,
-    [definition, diagnostics, revealDefinition],
-  );
+  const fieldDiagnostics = useMemo(() => {
+    if (!revealDefinition || definition === undefined) return diagnostics;
+    // Every field asks on each render, so the definition is scanned once.
+    let outline: YamlOutline | undefined;
+    return {
+      ...diagnostics,
+      showInDefinition: (code: string) => {
+        outline ??= scanYaml(definition);
+        const target = attributeTarget(outline, code);
+        return target && (() => revealDefinition(target));
+      },
+    };
+  }, [definition, diagnostics, revealDefinition]);
   // The sandbox editor lays fields out like the detail view.
   const viewName =
     activeViewName === sandboxEditTab ? sandboxEditView : activeViewName;

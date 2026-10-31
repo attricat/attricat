@@ -6,7 +6,10 @@ import type {
   Position,
 } from 'monaco-editor';
 import i18n from '../../i18n';
-import { yamlLanguageId } from '../../components/yamlLanguage';
+import {
+  claimYamlOutline,
+  yamlLanguageId,
+} from '../../components/yamlLanguage';
 import { scanYaml } from '../../components/yamlOutline';
 import {
   attributesKey,
@@ -395,7 +398,10 @@ export const attachDefinitionModel = (
 ) => {
   registerProviders(monaco);
   modelConfigs.set(model, config);
+  // Definitions are outlined by attribute and view, not by YAML structure.
+  const releaseOutline = claimYamlOutline(model);
   return () => {
+    releaseOutline();
     modelConfigs.delete(model);
     modelFixes.delete(model);
     if (!model.isDisposed()) {

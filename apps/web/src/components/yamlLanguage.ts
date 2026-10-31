@@ -85,6 +85,17 @@ export const yamlDocumentSymbols = (
 };
 
 const registeredInstances = new WeakSet<Monaco>();
+/** Models whose editor provides an outline of its own. */
+const modelsWithOwnOutline = new WeakSet<editor.ITextModel>();
+
+/**
+ * Leaves `model`'s outline to another symbol provider, since Monaco lists
+ * every provider's symbols. Returns the undo.
+ */
+export const claimYamlOutline = (model: editor.ITextModel) => {
+  modelsWithOwnOutline.add(model);
+  return () => modelsWithOwnOutline.delete(model);
+};
 
 /** Registers the YAML outline once per Monaco instance. */
 export const configureYaml = (monaco: Monaco) => {
@@ -92,6 +103,8 @@ export const configureYaml = (monaco: Monaco) => {
   registeredInstances.add(monaco);
   monaco.languages.registerDocumentSymbolProvider(yamlLanguageId, {
     provideDocumentSymbols: (model: editor.ITextModel) =>
-      yamlDocumentSymbols(monaco, model, scanYaml(model.getValue())),
+      modelsWithOwnOutline.has(model)
+        ? []
+        : yamlDocumentSymbols(monaco, model, scanYaml(model.getValue())),
   });
 };
