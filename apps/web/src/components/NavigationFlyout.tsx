@@ -37,6 +37,8 @@ export const NavigationFlyout = ({
       <Typography variant="h6">{title}</Typography>
     </Box>
     <Divider />
-    <List sx={{ px: 1, py: 1.5 }}>{children}</List>
+    <List component="div" sx={{ px: 1, py: 1.5 }}>
+      {children}
+    </List>
   </Box>
 );

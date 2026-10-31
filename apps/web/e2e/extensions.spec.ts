@@ -27,7 +27,9 @@ test('side-loads the example extension and recalculates a blueprint formula', as
   const fileInput = page.locator('input[type="file"]');
   await fileInput.setInputFiles(archive);
   await expect
-    .poll(() => fileInput.evaluate((input) => input.files?.length))
+    .poll(() =>
+      fileInput.evaluate((input: HTMLInputElement) => input.files?.length),
+    )
     .toBe(1);
   const install = page.getByRole('button', { name: 'Install archive' });
   await expect(install).toBeEnabled();
@@ -122,16 +124,14 @@ extensions:
     )
     .toContain(123);
 
-  const cellFrame = page.frameLocator(
-    'iframe[title="attricat-extension-example.computed-number"]',
-  );
-  // The Explorer shows its built-in cell when a renderer frame takes longer
-  // than 1.5 s to start, which a cold artifact load can miss; reload to retry.
+  // The host draws the extension's cell with its precision and unit; the
+  // built-in cell would show a bare number. A cold Worker start can miss the
+  // first render, so reload to retry.
   await expect(async () => {
     await page.goto(`/?blueprint=${code}`);
-    await expect(cellFrame.getByText(/100\.00\s*EUR/)).toBeVisible({
-      timeout: 10_000,
-    });
+    await expect(page.getByRole('cell', { name: /100\.00\s*EUR/ })).toBeVisible(
+      { timeout: 10_000 },
+    );
   }).toPass({ timeout: 60_000 });
 
   // A row action is an item of the row's menu; it opens the extension's

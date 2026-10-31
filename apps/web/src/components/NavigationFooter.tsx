@@ -42,6 +42,7 @@ export const NavigationFooter = ({
     <>
       <Divider />
       <List
+        component="div"
         sx={{
           display: compact ? 'flex' : 'block',
           flexDirection: compact ? 'column' : undefined,

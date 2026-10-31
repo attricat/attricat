@@ -381,6 +381,32 @@ impl AttricatRepository {
         let generated_codes = self
             .generated_attribute_codes(source.blueprint_id, source.blueprint_version)
             .await?;
+        // A copy without a value the record schema requires could never be
+        // saved, so name the attributes rather than fail the schema check.
+        let record_schema: Option<Value> = sqlx::query_scalar(
+            "SELECT record_schema FROM blueprints WHERE workspace_id = $1 AND id = $2 AND version = $3",
+        )
+        .bind(self.workspace_id.0)
+        .bind(source.blueprint_id)
+        .bind(source.blueprint_version)
+        .fetch_one(&self.pool)
+        .await?;
+        let mut required_keys = record_schema
+            .as_ref()
+            .and_then(|schema| schema.get("required"))
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .filter(|code| key_codes.contains_key(*code) && !generated_codes.contains(*code))
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
+        if !required_keys.is_empty() {
+            required_keys.sort_unstable();
+            return Err(RepositoryError::DuplicateNeedsUniqueValues {
+                attributes: required_keys,
+            });
+        }
         let copied = |attribute_code: &str, context_id: Option<Uuid>| {
             !generated_codes.contains(attribute_code)
                 && key_codes

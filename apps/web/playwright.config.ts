@@ -26,7 +26,6 @@ export default defineConfig({
       testMatch: 'navigation.spec.ts',
       use: {
         browserName: 'chromium',
-        channel: 'chrome',
         hasTouch: true,
         isMobile: true,
         viewport: { width: 390, height: 844 },

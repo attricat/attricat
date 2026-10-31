@@ -1,5 +1,5 @@
 import './monacoRuntime';
-import { DiffEditor } from '@monaco-editor/react';
+import { DiffEditor, type DiffOnMount } from '@monaco-editor/react';
 import { Box, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { useMonacoTheme } from './monacoTheme';
@@ -18,6 +18,19 @@ const diffEditorOptions = {
   scrollBeyondLastLine: false,
   wordWrap: 'off',
 } as const;
+
+/**
+ * The wrapper disposes the diff's models before the editor on unmount, which
+ * Monaco reports as an uncaught "TextModel got disposed" error. It keeps them
+ * instead, and they are disposed once the editor is.
+ */
+const disposeModelsWithEditor: DiffOnMount = (editor) => {
+  const { original, modified } = editor.getModel() ?? {};
+  editor.onDidDispose(() => {
+    original?.dispose();
+    modified?.dispose();
+  });
+};
 
 /** Two YAML definitions side by side, read-only, with their changes marked. */
 export const YamlDiffEditor = ({
@@ -51,8 +64,11 @@ export const YamlDiffEditor = ({
         <DiffEditor
           beforeMount={configureYaml}
           height="100%"
+          keepCurrentModifiedModel
+          keepCurrentOriginalModel
           language={yamlLanguageId}
           modified={modified}
+          onMount={disposeModelsWithEditor}
           options={diffEditorOptions}
           original={original}
           theme={theme}

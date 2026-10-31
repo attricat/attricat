@@ -276,9 +276,10 @@ is numbered like any new record.
 Values of the family's enforced `unique_keys` attributes are left out,
 because the copy could never share them with its source: the default-context
 value for a workspace-scoped key, and every context's values for a
-context-scoped key. A key attribute that `record_schema` requires therefore makes
-duplication fail with the usual validation error rather than
-`409 unique_key_conflict`.
+context-scoped key. A record whose `record_schema` requires a key attribute
+therefore cannot be duplicated: the request fails with
+`422 duplicate_needs_unique_values`, naming those attributes, and nothing is
+created.
 
 ### Record change and value-history pagination
 
@@ -693,6 +694,8 @@ results report the same `code`, `message` and `details`.
 | `422` | `publication_checks_failed` | `violations` and `context` (the channel's context code) |
 | `422` | `attribute_value_schema_mismatch` | `attribute`, `instance_path` (JSON Pointer of the failing value) |
 | `422` | `record_schema_mismatch` | `context`, `instance_path` |
+| `422` | `duplicate_needs_unique_values` | `attributes`: the required unique-key attribute codes a copy would leave out |
+| `422` | `invalid_blueprint_definition`, `invalid_rule_definition`, `invalid_workflow_definition` | `reason`: what is wrong with the definition, without the code's own prefix |
 | `422` | `relationship_target_type_mismatch` | none; the target's blueprint is not in the attribute's `target_blueprint_codes` |
 | `428` | `status_precondition_required` | none; resend with `expected_updated_at` |
 | `403` | `status_transition_forbidden` | `attribute`, `context`, `from`, `to`, `reason` |

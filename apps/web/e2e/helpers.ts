@@ -5,6 +5,7 @@ import {
   type Page,
 } from '@playwright/test';
 import { parse, stringify } from 'yaml';
+import { httpStatus } from '../src/api/httpStatus.ts';
 import { e2eApiUrl, e2eMailpitUrl } from './ports.ts';
 
 const fixtureEmail = 'fixture@example.test';
@@ -12,7 +13,7 @@ const fixturePassword = 'e2e-only-fixture-password';
 
 // Fixture setup uses a second seeded principal so login rotation never revokes
 // the browser owner's session saved by global setup.
-const authenticatedHeaders = async () => {
+const signInFixture = async () => {
   const login = await fetch(`${e2eApiUrl}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -31,6 +32,14 @@ const authenticatedHeaders = async () => {
   return { cookie: cookies.join('; '), csrf: csrf.split('=', 2)[1] };
 };
 
+// One fixture session serves every setup request; it signs in again only
+// when a spec revokes it, such as by signing in as the fixture user.
+let fixtureSession: ReturnType<typeof signInFixture> | undefined;
+const authenticatedHeaders = (renew = false) => {
+  if (renew || !fixtureSession) fixtureSession = signInFixture();
+  return fixtureSession;
+};
+
 export type Blueprint = {
   blueprint: { id: string; code: string; version: number };
 };
@@ -44,15 +53,21 @@ export const request = async <T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> => {
-  const headers = new Headers(init?.headers);
-  const auth = await authenticatedHeaders();
-  headers.set('Cookie', auth.cookie);
-  if (
-    !['GET', 'HEAD', 'OPTIONS'].includes((init?.method ?? 'GET').toUpperCase())
-  ) {
-    headers.set('X-Attricat-Csrf', auth.csrf);
-  }
-  const response = await fetch(`${e2eApiUrl}${path}`, { ...init, headers });
+  const send = async (renew: boolean) => {
+    const headers = new Headers(init?.headers);
+    const auth = await authenticatedHeaders(renew);
+    headers.set('Cookie', auth.cookie);
+    if (
+      !['GET', 'HEAD', 'OPTIONS'].includes(
+        (init?.method ?? 'GET').toUpperCase(),
+      )
+    ) {
+      headers.set('X-Attricat-Csrf', auth.csrf);
+    }
+    return fetch(`${e2eApiUrl}${path}`, { ...init, headers });
+  };
+  let response = await send(false);
+  if (response.status === httpStatus.unauthorized) response = await send(true);
   if (!response.ok) {
     throw new Error(
       `E2E setup request failed: ${response.status} ${await response.text()}`,

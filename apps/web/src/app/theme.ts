@@ -190,6 +190,12 @@ export const makeTheme = (mode: DesignMode) => {
             fontWeight: 600,
             minHeight: 36,
             paddingInline: 14,
+            // The focus ripple is too faint on text buttons, so outline them
+            // as IconButton does.
+            '&:focus-visible': {
+              outline: `2px solid ${c.action.focus}`,
+              outlineOffset: 2,
+            },
           },
           outlined: {
             borderColor: c.border.default,

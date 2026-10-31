@@ -46,7 +46,7 @@ export const ManagementNavigationLinks = ({
       {items.map((item, index) => (
         <Fragment key={item.to}>
           {item.group !== items[index - 1]?.group && (
-            <ListSubheader disableSticky>
+            <ListSubheader component="div" disableSticky>
               {t(`navigation.managementGroups.${item.group}`)}
             </ListSubheader>
           )}

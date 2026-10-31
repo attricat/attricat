@@ -62,6 +62,7 @@ error_codes! {
     DefaultContextOnly = "default_context_only",
     DefaultContextProtected = "default_context_protected",
     DisabledInDemo = "disabled_in_demo",
+    DuplicateNeedsUniqueValues = "duplicate_needs_unique_values",
     // Not an error response: a job a retry could not resync, listed in its
     // `job_errors`.
     ExportJobResyncFailed = "export_job_resync_failed",
@@ -459,6 +460,10 @@ impl RepositoryError {
                 inner.details = Some(Value::Object(details));
                 inner
             }
+            Self::DuplicateNeedsUniqueValues { attributes } => {
+                plain(Unprocessable, Code::DuplicateNeedsUniqueValues)
+                    .with_details(json!({ "attributes": attributes }))
+            }
             Self::RecordIdTaken(record_id) => {
                 plain(Conflict, Code::RecordIdTaken).with_details(json!({ "record_id": record_id }))
             }
@@ -507,13 +512,20 @@ impl RepositoryError {
                 plain(Unprocessable, Code::PublicationChannelDisabled)
             }
             Self::PublicationActorRequired => plain(Internal, Code::InternalError),
-            Self::InvalidBlueprintDefinition(_) => {
+            // `reason` is the message without its "invalid … definition"
+            // prefix, so a translation can supply its own.
+            Self::InvalidBlueprintDefinition(reason) => {
                 plain(Unprocessable, Code::InvalidBlueprintDefinition)
+                    .with_details(json!({ "reason": reason }))
             }
-            Self::InvalidWorkflowDefinition(_) => {
+            Self::InvalidWorkflowDefinition(reason) => {
                 plain(Unprocessable, Code::InvalidWorkflowDefinition)
+                    .with_details(json!({ "reason": reason }))
             }
-            Self::InvalidRuleDefinition(_) => plain(Unprocessable, Code::InvalidRuleDefinition),
+            Self::InvalidRuleDefinition(reason) => {
+                plain(Unprocessable, Code::InvalidRuleDefinition)
+                    .with_details(json!({ "reason": reason }))
+            }
             Self::ExtensionAlreadyInstalled => plain(Conflict, Code::ExtensionAlreadyInstalled),
             Self::ExportMappingConflict(_) => plain(Conflict, Code::Conflict),
             Self::CodeTaken(resource) => {
