@@ -695,6 +695,7 @@ results report the same `code`, `message` and `details`.
 | `422` | `attribute_value_schema_mismatch` | `attribute`, `instance_path` (JSON Pointer of the failing value) |
 | `422` | `record_schema_mismatch` | `context`, `instance_path` |
 | `422` | `duplicate_needs_unique_values` | `attributes`: the required unique-key attribute codes a copy would leave out |
+| `422` | `invalid_blueprint_definition`, `invalid_rule_definition`, `invalid_workflow_definition` | `reason`: what is wrong with the definition, without the code's own prefix |
 | `422` | `relationship_target_type_mismatch` | none; the target's blueprint is not in the attribute's `target_blueprint_codes` |
 | `428` | `status_precondition_required` | none; resend with `expected_updated_at` |
 | `403` | `status_transition_forbidden` | `attribute`, `context`, `from`, `to`, `reason` |

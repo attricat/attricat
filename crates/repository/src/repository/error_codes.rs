@@ -512,13 +512,20 @@ impl RepositoryError {
                 plain(Unprocessable, Code::PublicationChannelDisabled)
             }
             Self::PublicationActorRequired => plain(Internal, Code::InternalError),
-            Self::InvalidBlueprintDefinition(_) => {
+            // `reason` is the message without its "invalid … definition"
+            // prefix, so a translation can supply its own.
+            Self::InvalidBlueprintDefinition(reason) => {
                 plain(Unprocessable, Code::InvalidBlueprintDefinition)
+                    .with_details(json!({ "reason": reason }))
             }
-            Self::InvalidWorkflowDefinition(_) => {
+            Self::InvalidWorkflowDefinition(reason) => {
                 plain(Unprocessable, Code::InvalidWorkflowDefinition)
+                    .with_details(json!({ "reason": reason }))
             }
-            Self::InvalidRuleDefinition(_) => plain(Unprocessable, Code::InvalidRuleDefinition),
+            Self::InvalidRuleDefinition(reason) => {
+                plain(Unprocessable, Code::InvalidRuleDefinition)
+                    .with_details(json!({ "reason": reason }))
+            }
             Self::ExtensionAlreadyInstalled => plain(Conflict, Code::ExtensionAlreadyInstalled),
             Self::ExportMappingConflict(_) => plain(Conflict, Code::Conflict),
             Self::CodeTaken(resource) => {
