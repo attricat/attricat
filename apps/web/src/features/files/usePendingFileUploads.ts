@@ -5,7 +5,12 @@ import type { Attribute } from '../records/api';
 import { invalidateRecord } from '../records/invalidateRecord';
 import { uploadFiles, updateFileReferences } from './api';
 import { attributeCardinalities } from '../records/constants';
-import { acceptsFile, pendingFileId } from './fileAcceptance';
+import {
+  fileRejection,
+  pendingFileId,
+  permittedFileTypes,
+} from './fileAcceptance';
+import { formatBytes } from '../data-health/dataHealthFormat';
 import { useQueuedFileUploadsContext } from './queuedFileUploads';
 import type { FileMetadata } from './schemas';
 import { errorMessage } from '../../api/errors';
@@ -83,8 +88,20 @@ export const usePendingFileUploads = (options: Options) => {
     if (!canQueue || !canQueueFile || lock.current || !queuePermitted()) return;
     const rejected: string[] = [];
     const accepted = Array.from(candidates).filter((file) => {
-      if (acceptsFile(file, attribute)) return true;
-      rejected.push(t('files.fileRejected', { filename: file.name }));
+      const rejection = fileRejection(file, attribute);
+      if (!rejection) return true;
+      const policy = attribute.file_policy;
+      const types = policy && permittedFileTypes(policy);
+      rejected.push(
+        rejection === 'size' && policy?.max_bytes
+          ? t('files.fileTooLarge', {
+              filename: file.name,
+              size: formatBytes(policy.max_bytes),
+            })
+          : types
+            ? t('files.fileTypeNotPermitted', { filename: file.name, types })
+            : t('files.fileRejected', { filename: file.name }),
+      );
       return false;
     });
     if (singleFile && accepted.length > 1)
