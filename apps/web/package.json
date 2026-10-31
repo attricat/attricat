@@ -15,7 +15,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "tsc -b --noEmit"
+    "typecheck": "tsc -b --noEmit",
+    "verify:native-sandbox": "node scripts/verify-native-sandbox.mjs"
   },
   "dependencies": {
     "@dnd-kit/abstract": "0.5.0",

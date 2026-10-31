@@ -1,5 +1,6 @@
 import {
   Autocomplete,
+  type AutocompleteRenderInputParams,
   Box,
   Button,
   Checkbox,
@@ -280,7 +281,13 @@ export const TextFieldAdapter = ({
   const suggestions = (props.suggestions as string[] | undefined) ?? [];
   const multiline = flag(props.multiline);
   const chrome = inputChrome(props);
-  const field = (params: object = {}) => (
+  // Autocomplete hands its input wiring over in `slotProps`; keep it.
+  const field = (
+    params: Partial<AutocompleteRenderInputParams> & {
+      value?: string;
+      onChange?: (event: React.ChangeEvent<HTMLInputElement>) => void;
+    } = {},
+  ) => (
     <TextField
       {...params}
       {...chrome}
@@ -298,9 +305,9 @@ export const TextFieldAdapter = ({
       rows={multiline ? Number(props.rows ?? 3) : undefined}
       size="small"
       slotProps={{
-        ...chrome.slotProps,
+        ...params.slotProps,
         htmlInput: {
-          ...(params as { inputProps?: object }).inputProps,
+          ...params.slotProps?.htmlInput,
           ...chrome.slotProps.htmlInput,
           maxLength: props.maxLength as number | undefined,
           readOnly: flag(props.readOnly),

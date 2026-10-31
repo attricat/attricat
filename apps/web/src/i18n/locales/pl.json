@@ -1925,6 +1925,10 @@
         "native_ui_mutation_rate_exceeded": "Rozszerzenie {{extension}} zbyt często aktualizowało widok i zostało zatrzymane.",
         "native_ui_message_too_large": "Rozszerzenie {{extension}} wysłało naraz zbyt dużo danych i zostało zatrzymane.",
         "native_ui_render_failed": "Rozszerzenie {{extension}} nie może pokazać tego widoku."
+      },
+      "gallery": {
+        "title": "Zestaw UI {{version}}",
+        "eventsHint": "Tutaj pojawiają się zdarzenia wysyłane przez elementy."
       }
     }
   },

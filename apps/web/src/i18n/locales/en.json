@@ -1839,6 +1839,10 @@
         "native_ui_mutation_rate_exceeded": "{{extension}} updated its view too often and was stopped.",
         "native_ui_message_too_large": "{{extension}} sent too much data at once and was stopped.",
         "native_ui_render_failed": "{{extension}} could not show this view."
+      },
+      "gallery": {
+        "title": "UI kit {{version}}",
+        "eventsHint": "Events the elements send appear here."
       }
     }
   },
