@@ -145,6 +145,9 @@ return `422`. The name is stored on the user account, so it applies across
 workspaces, and the response is the updated session payload. Cookie-authenticated
 requests need the CSRF header like any other unsafe request.
 
+`DELETE /auth/display-name` removes the name, so the user is shown by their
+email again, and also returns the updated session payload.
+
 ## Avatars
 
 Each workspace membership can have an avatar, so a member who belongs to

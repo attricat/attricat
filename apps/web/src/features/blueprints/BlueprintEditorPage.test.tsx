@@ -46,6 +46,7 @@ vi.mock('@monaco-editor/react', () => ({
 vi.mock('./api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./api')>()),
   createBlueprint: vi.fn(),
+  listBlueprints: vi.fn(async () => []),
   validateBlueprint: vi.fn(),
 }));
 
@@ -144,7 +145,7 @@ describe('BlueprintEditorPage', () => {
   it('keeps the draft after a failed save and clears it after a successful one', async () => {
     vi.mocked(createBlueprint).mockRejectedValueOnce(new Error('Invalid'));
     renderWithSession();
-    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Dismiss' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     editDefinition('code = "edited"');
     await waitFor(() => expect(storedDraft()).toBe('code = "edited"'));
@@ -167,7 +168,7 @@ describe('BlueprintEditorPage', () => {
         <BlueprintEditorPage />
       </QueryClientProvider>,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Dismiss' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     fireEvent.change(screen.getByRole('textbox', { name: 'Definition' }), {
       target: { value: 'code = "saved"' },
@@ -188,7 +189,7 @@ describe('BlueprintEditorPage', () => {
 
   it('previews the checked views and checks sandbox values', async () => {
     renderWithSession();
-    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Dismiss' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(
       await screen.findByText('Ready to save', {}, { timeout: 2000 }),
@@ -206,7 +207,7 @@ describe('BlueprintEditorPage', () => {
 
   it('points at the line a failed check names', async () => {
     renderWithSession();
-    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Dismiss' }));
     await screen.findByText('Ready to save', {}, { timeout: 2000 });
     vi.mocked(validateBlueprint).mockRejectedValue(
       new ApiRequestError(

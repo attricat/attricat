@@ -124,6 +124,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `POST` | `/auth/password-reset/confirm` | Consume a password-reset secret and set a new password. |
 | `PATCH` | `/auth/preferences` | Replace the authenticated user's display preferences, `{ "time_zone": "Europe/Warsaw" \| null }`, and return the updated session payload. Unknown IANA zone names return `422`. Use `acli auth preferences`. |
 | `PUT` | `/auth/display-name` | Change the authenticated user's display name, `{ "display_name": "Ada Lovelace" }`, and return the updated session payload. Names are 2–64 letters, digits, and spaces with no leading or trailing space; others return `422`. Use `acli auth display-name`. |
+| `DELETE` | `/auth/display-name` | Remove the authenticated user's display name, so people see their email, and return the updated session payload. |
 | `PUT`, `DELETE` | `/auth/avatar` | Upload (multipart `file`, PNG or JPEG) or remove the caller's avatar in the active workspace. Upload returns `201` with `{ "file_id", "status" }`; the file worker produces the square `avatar` variant. See [Avatars](authentication.md#avatars). |
 | `POST` | `/onboarding/complete` | Complete the public onboarding flow with its verified invitation or lifecycle secret. |
 | `GET` | `/metrics` | Scrape Prometheus service metrics (`data_health.read`). |

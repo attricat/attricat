@@ -122,6 +122,8 @@ pub enum RepositoryError {
     ContextInUse,
     #[error("the workspace's last owner cannot be removed; transfer ownership first")]
     LastWorkspaceOwner,
+    #[error("a saved search with this name already exists")]
+    SavedSearchNameTaken,
     #[error("attribute can only be edited in the default context")]
     DefaultContextOnly,
     #[error("attribute does not belong to the record blueprint version")]

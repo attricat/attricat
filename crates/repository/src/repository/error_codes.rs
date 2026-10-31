@@ -134,6 +134,7 @@ error_codes! {
     RuleNotEnabled = "rule_not_enabled",
     RuleRevisionUnchanged = "rule_revision_unchanged",
     RuleViolation = "rule_violation",
+    SavedSearchNameTaken = "saved_search_name_taken",
     ServiceUnavailable = "service_unavailable",
     SolutionPackApplicationFailed = "solution_pack_application_failed",
     SolutionPackApplicationInvalid = "solution_pack_application_invalid",
@@ -314,6 +315,7 @@ impl RepositoryError {
             Self::ContextCycle => plain(Unprocessable, Code::ContextCycle),
             Self::ContextInUse => plain(Unprocessable, Code::ContextInUse),
             Self::LastWorkspaceOwner => plain(Conflict, Code::LastWorkspaceOwner),
+            Self::SavedSearchNameTaken => plain(Conflict, Code::SavedSearchNameTaken),
             Self::DefaultContextOnly => plain(Unprocessable, Code::DefaultContextOnly),
             Self::RecordLocked {
                 attribute,

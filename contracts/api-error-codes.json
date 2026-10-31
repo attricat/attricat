@@ -93,6 +93,7 @@
     "rule_not_enabled",
     "rule_revision_unchanged",
     "rule_violation",
+    "saved_search_name_taken",
     "service_unavailable",
     "solution_pack_application_failed",
     "solution_pack_application_invalid",
