@@ -23,26 +23,30 @@ vi.mock('./api', async (importOriginal) => ({
 }));
 
 describe('WorkspaceNavigationSection', () => {
-  it('allows typing multiple comma-separated roles without eating the delimiter', async () => {
+  it('picks visible roles from the workspace roles and keeps saved ones', async () => {
     vi.mocked(listExploreNavigation).mockResolvedValue([
-      { blueprint_code: 'product', visible_to_role_codes: [] },
+      { blueprint_code: 'product', visible_to_role_codes: ['retired'] },
     ]);
     vi.mocked(listRecordBlueprints).mockResolvedValue([
       { code: 'product', name: 'Product' },
     ] as never);
-    vi.mocked(listRoles).mockResolvedValue([]);
+    vi.mocked(listRoles).mockResolvedValue([
+      { code: 'reader' },
+      { code: 'editor' },
+    ] as never);
     render(
       <QueryClientProvider client={new QueryClient()}>
         <WorkspaceNavigationSection canManage />
       </QueryClientProvider>,
     );
-    const roles = await screen.findByRole('textbox', {
-      name: 'Visible roles (comma separated)',
+    const roles = await screen.findByRole('combobox', {
+      name: 'Visible to roles',
     });
-    fireEvent.change(roles, { target: { value: 'reader,' } });
-    expect(roles).toHaveProperty('value', 'reader,');
-    fireEvent.change(roles, { target: { value: 'reader, editor' } });
-    expect(roles).toHaveProperty('value', 'reader, editor');
+    expect(roles.textContent).toBe('retired');
+    fireEvent.mouseDown(roles);
+    fireEvent.click(await screen.findByRole('option', { name: 'reader' }));
+    fireEvent.click(screen.getByRole('option', { name: 'editor' }));
+    expect(roles.textContent).toBe('retired, reader, editor');
   });
 
   it('prevents assigning the same blueprint to two shortcuts', async () => {
@@ -102,12 +106,12 @@ describe('WorkspaceNavigationSection', () => {
     ).toBe(true);
     expect(
       screen
-        .getByRole('textbox', { name: 'Visible roles (comma separated)' })
-        .hasAttribute('disabled'),
-    ).toBe(true);
+        .getByRole('combobox', { name: 'Visible to roles' })
+        .getAttribute('aria-disabled'),
+    ).toBe('true');
   });
 
-  it('keeps typed roles and saves plain entries after changing a blueprint', async () => {
+  it('keeps chosen roles and saves plain entries after changing a blueprint', async () => {
     vi.mocked(listExploreNavigation).mockResolvedValue([
       { blueprint_code: 'product', visible_to_role_codes: [] },
     ]);
@@ -115,23 +119,25 @@ describe('WorkspaceNavigationSection', () => {
       { code: 'product', name: 'Product' },
       { code: 'other', name: 'Other' },
     ] as never);
-    vi.mocked(listRoles).mockResolvedValue([]);
+    vi.mocked(listRoles).mockResolvedValue([{ code: 'reader' }] as never);
     vi.mocked(updateExploreNavigation).mockResolvedValue(undefined as never);
     render(
       <QueryClientProvider client={new QueryClient()}>
         <WorkspaceNavigationSection canManage />
       </QueryClientProvider>,
     );
-    const roles = await screen.findByRole('textbox', {
-      name: 'Visible roles (comma separated)',
+    const roles = await screen.findByRole('combobox', {
+      name: 'Visible to roles',
     });
-    fireEvent.change(roles, { target: { value: 'reader,' } });
+    fireEvent.mouseDown(roles);
+    fireEvent.click(await screen.findByRole('option', { name: 'reader' }));
+    fireEvent.keyDown(screen.getByRole('listbox'), { key: 'Escape' });
     fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Blueprint' }));
     fireEvent.click(
       await screen.findByRole('option', { name: 'Other (other)' }),
     );
     expect(roles.isConnected).toBe(true);
-    expect(roles).toHaveProperty('value', 'reader,');
+    expect(roles.textContent).toBe('reader');
     expect(
       screen
         .getByRole('button', { name: 'Add shortcut' })

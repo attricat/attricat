@@ -100,6 +100,9 @@ export const updateDisplayName = (displayName: string) =>
     jsonRequest('PUT', { display_name: displayName }),
   );
 
+export const clearDisplayName = () =>
+  request('/api/auth/display-name', sessionSchema, { method: 'DELETE' });
+
 export const uploadAvatar = (
   file: File,
   onProgress?: (progress: number) => void,

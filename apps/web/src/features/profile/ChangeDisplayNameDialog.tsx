@@ -1,8 +1,8 @@
 import { useForm } from '@tanstack/react-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { TextField } from '@mui/material';
-import { updateDisplayName } from '../auth/api';
+import { Button, TextField } from '@mui/material';
+import { clearDisplayName, updateDisplayName } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
 import {
   displayNameCharacters,
@@ -20,8 +20,10 @@ export const ChangeDisplayNameDialog = ({
 }) => {
   const { t } = useTranslation();
   const client = useQueryClient();
+  // An empty name clears it, so the account is shown by its email.
   const save = useMutation({
-    mutationFn: (name: string) => updateDisplayName(name),
+    mutationFn: (name: string | null) =>
+      name === null ? clearDisplayName() : updateDisplayName(name),
     onSuccess: (session) => {
       client.setQueryData(authQueryKeys.session(), session);
       onClose();
@@ -81,6 +83,16 @@ export const ChangeDisplayNameDialog = ({
           />
         )}
       </form.Field>
+      {initialName && (
+        <Button
+          color="error"
+          disabled={save.isPending}
+          onClick={() => save.mutate(null)}
+          size="small"
+        >
+          {t('profile.removeDisplayName')}
+        </Button>
+      )}
     </FormDialog>
   );
 };

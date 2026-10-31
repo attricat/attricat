@@ -11,6 +11,8 @@ import { PageHeader } from '../../components/PageHeader';
 import { NextPageButton } from '../../components/LoadMoreButton';
 import { RecordSchemaSubheader } from './components/RecordSchemaSubheader';
 import { RecordChangeEvent } from './components/RecordChangeEvent';
+import { relationshipChangeRecordIds } from './recordChanges';
+import { useRecordLabels } from './useRecordLabels';
 import { RecordToolbar } from './components/RecordToolbar';
 import { getRecordChanges } from './api';
 import { recordFormOptions, recordLabelOptions } from './queryOptions';
@@ -43,6 +45,9 @@ export const RecordChangesPage = ({ recordId }: { recordId: string }) => {
     getNextPageParam: (page) => page.next_offset,
   });
   const changeItems = changes.data?.pages.flatMap((page) => page.items) ?? [];
+  const linkedLabels = useRecordLabels(
+    relationshipChangeRecordIds(changeItems),
+  );
   const recordForm = useQuery(recordFormOptions(recordId));
   const label = useQuery(recordLabelOptions(recordId));
   const recordDisplay = label.data?.items.find(
@@ -96,6 +101,7 @@ export const RecordChangesPage = ({ recordId }: { recordId: string }) => {
               attributeName={(code) => attributeNames.get(code) ?? code}
               changes={eventChanges}
               key={eventId}
+              recordLabels={linkedLabels}
             />
           ))}
           {changeItems.length === 0 && (

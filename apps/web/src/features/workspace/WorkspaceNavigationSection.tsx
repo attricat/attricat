@@ -56,8 +56,6 @@ export const WorkspaceNavigationSection = ({
     enabled: canManage,
   });
   const [entries, setEntries] = useState<NavigationRow[] | undefined>();
-  // Role text as typed, by row key, so separators survive until saved.
-  const [roleDrafts, setRoleDrafts] = useState<Record<string, string>>({});
   // Saved shortcuts are unique by blueprint, which keys them until edited.
   const displayed =
     entries ??
@@ -83,7 +81,6 @@ export const WorkspaceNavigationSection = ({
         queryKey: workspaceQueryKeys.sidebarExploreNavigation(),
       });
       setEntries(undefined);
-      setRoleDrafts({});
     },
   });
   if (!canManage)
@@ -145,44 +142,47 @@ export const WorkspaceNavigationSection = ({
             </TextField>
             <TextField
               disabled={save.isPending}
-              helperText={t('workspace.navigationAvailableRoles', {
-                roles: (roles.data ?? []).map((role) => role.code).join(', '),
-              })}
+              helperText={t('workspace.navigationEveryRole')}
               label={t('workspace.navigationVisibleRoles')}
               onChange={(event) => {
-                const draft = event.target.value;
-                setRoleDrafts((current) => ({
-                  ...current,
-                  [entry.rowKey]: draft,
-                }));
+                const { value } = event.target as { value: unknown };
+                const codes = Array.isArray(value)
+                  ? value.map(String)
+                  : String(value).split(',');
                 setEntries(
                   displayed.map((item, position) =>
                     position === index
-                      ? {
-                          ...item,
-                          visible_to_role_codes: draft
-                            .split(',')
-                            .map((code) => code.trim())
-                            .filter(Boolean),
-                        }
+                      ? { ...item, visible_to_role_codes: codes }
                       : item,
                   ),
                 );
               }}
-              value={
-                roleDrafts[entry.rowKey] ??
-                entry.visible_to_role_codes.join(', ')
-              }
+              select
+              slotProps={{
+                select: {
+                  multiple: true,
+                  renderValue: (selected) => (selected as string[]).join(', '),
+                },
+              }}
+              value={entry.visible_to_role_codes}
               sx={{ minWidth: navigationSelectMinWidth }}
-            />
+            >
+              {/* Saved codes stay selectable before roles load, or after a
+                  role is deleted. */}
+              {[
+                ...new Set([
+                  ...(roles.data ?? []).map((role) => role.code),
+                  ...entry.visible_to_role_codes,
+                ]),
+              ].map((code) => (
+                <MenuItem key={code} value={code}>
+                  {code}
+                </MenuItem>
+              ))}
+            </TextField>
             <Button
               disabled={save.isPending}
               onClick={() => {
-                setRoleDrafts((drafts) => {
-                  const next = { ...drafts };
-                  delete next[entry.rowKey];
-                  return next;
-                });
                 setEntries(
                   displayed.filter((_, position) => position !== index),
                 );

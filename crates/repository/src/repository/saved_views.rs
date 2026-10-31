@@ -97,6 +97,9 @@ impl AttricatRepository {
             }
         }
         let mut tx = self.pool.begin().await?;
+        if let Some(name) = name {
+            Self::ensure_saved_view_name_free(&mut tx, workspace, actor, name, None).await?;
+        }
         let view = self
             .create_saved_view_in_transaction(
                 &mut tx,
@@ -153,6 +156,8 @@ impl AttricatRepository {
             "UPDATE saved_views SET name=$4,description=$5,visibility=$6,state=$7,state_hash=$8,updated_at=now() WHERE workspace_id=$1 AND id=$2 AND owner_user_id=$3 AND visibility<>'link' AND deleted_at IS NULL RETURNING {FIELDS}"
         );
         let mut tx = self.pool.begin().await?;
+        Self::ensure_saved_view_name_free(&mut tx, self.workspace_id(), actor, name, Some(id))
+            .await?;
         let view = sqlx::query_as(&query)
             .bind(self.workspace_id())
             .bind(id)
@@ -168,6 +173,30 @@ impl AttricatRepository {
             self.commit_mutation(tx).await?;
         }
         Ok(view)
+    }
+
+    /// Refuses a name that another saved search the actor can see already
+    /// uses, ignoring case, so the list never shows two searches alike.
+    async fn ensure_saved_view_name_free(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        workspace: Uuid,
+        actor: Uuid,
+        name: &str,
+        except: Option<Uuid>,
+    ) -> Result<(), RepositoryError> {
+        let taken: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM saved_views WHERE workspace_id=$1 AND deleted_at IS NULL AND visibility<>'link' AND (owner_user_id=$2 OR visibility='workspace') AND lower(btrim(name))=lower(btrim($3)) AND id IS DISTINCT FROM $4)",
+        )
+        .bind(workspace)
+        .bind(actor)
+        .bind(name)
+        .bind(except)
+        .fetch_one(&mut **tx)
+        .await?;
+        if taken {
+            return Err(RepositoryError::SavedSearchNameTaken);
+        }
+        Ok(())
     }
 
     pub async fn delete_saved_view(&self, actor: Uuid, id: Uuid) -> Result<bool, RepositoryError> {

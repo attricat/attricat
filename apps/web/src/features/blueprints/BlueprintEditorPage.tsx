@@ -1,4 +1,7 @@
-import { blueprintRevisionOptions } from './queryOptions';
+import {
+  blueprintCatalogueOptions,
+  blueprintRevisionOptions,
+} from './queryOptions';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { Alert, Button } from '@mui/material';
@@ -18,12 +21,16 @@ import {
   createBlueprintRevision,
   validateBlueprint,
 } from './api';
-import { blueprintTemplates } from './blueprintEditorUtils';
+import {
+  blueprintTemplates,
+  withUnusedBlueprintCode,
+} from './blueprintEditorUtils';
 import { BlueprintChangesDialog } from './BlueprintChangesDialog';
 import { BlueprintViewsPreview } from './BlueprintViewsPreview';
 import { BlueprintIcon } from '../../components/systemIcons';
 import { errorMessage } from '../../api/errors';
 import { useDefinitionEditor } from '../definition-editor/useDefinitionEditor';
+import type { DefinitionTemplate } from '../definition-editor/DefinitionTemplateDialog';
 import {
   DefinitionEditorActions,
   DefinitionSaveHint,
@@ -40,6 +47,45 @@ export const BlueprintEditorPage = ({
 }: {
   blueprintId?: string;
   sourceVersion?: number;
+}) => {
+  const { t } = useTranslation();
+  // A new blueprint's template gets a code no blueprint uses yet, so the
+  // editor waits for the codes before it starts from a template.
+  const catalogue = useQuery({
+    ...blueprintCatalogueOptions(),
+    enabled: !blueprintId,
+  });
+  const takenCodes = catalogue.data;
+  const templates = useMemo(() => {
+    const taken = new Set(takenCodes?.map((blueprint) => blueprint.code));
+    return blueprintTemplates.map((template) => ({
+      ...template,
+      definition: withUnusedBlueprintCode(template.definition, taken),
+    }));
+  }, [takenCodes]);
+  if (!blueprintId && catalogue.isPending)
+    return (
+      <PageContainer>
+        <LoadingState>{t('blueprints.loadingBlueprints')}</LoadingState>
+      </PageContainer>
+    );
+  return (
+    <BlueprintEditor
+      blueprintId={blueprintId}
+      sourceVersion={sourceVersion}
+      templates={templates}
+    />
+  );
+};
+
+const BlueprintEditor = ({
+  blueprintId,
+  sourceVersion,
+  templates,
+}: {
+  blueprintId?: string;
+  sourceVersion?: number;
+  templates: readonly DefinitionTemplate[];
 }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -61,7 +107,7 @@ export const BlueprintEditorPage = ({
     onLeave: leaveEditor,
     ready: !blueprintId || Boolean(sourceRevision),
     source: sourceRevision?.blueprint.definition,
-    templates: blueprintTemplates,
+    templates,
   });
   const { definition, isDirty } = editor;
   const [reviewOpen, setReviewOpen] = useState(false);

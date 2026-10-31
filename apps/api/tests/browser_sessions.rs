@@ -502,6 +502,17 @@ async fn display_name_updates_the_account_and_rejects_invalid_names(pool: PgPool
         .await
         .unwrap();
     assert_eq!(stored.as_deref(), Some("Ada Lovelace"));
+
+    let cleared = client
+        .delete(format!("{base_url}/auth/display-name"))
+        .header("cookie", &cookie)
+        .header("x-attricat-csrf", csrf_value)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(cleared.status(), StatusCode::OK);
+    let cleared: Value = cleared.json().await.unwrap();
+    assert_eq!(cleared["display_name"], Value::Null);
     server.abort();
 }
 

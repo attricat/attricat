@@ -213,3 +213,39 @@ async fn saved_views_and_links_keep_the_browse_rail(pool: PgPool) {
         .unwrap();
     assert_eq!(invalid.status(), 422);
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn saved_search_names_are_unique_among_visible_searches(pool: PgPool) {
+    let (base_url, _server) = start_server(pool).await;
+    let client = authenticated_client();
+    let state = json!({"blueprint":"asset","query":"laptop"});
+    let create = |name: &str| {
+        client
+            .post(format!("{base_url}/saved-views"))
+            .json(
+                &json!({"kind":"explorer_search","name":name,"visibility":"private","state":state}),
+            )
+            .send()
+    };
+    assert_eq!(create("Laptops").await.unwrap().status(), 201);
+    let duplicate = create(" laptops ").await.unwrap();
+    assert_eq!(duplicate.status(), 409);
+    let duplicate: Value = duplicate.json().await.unwrap();
+    assert_eq!(duplicate["error"]["code"], "saved_search_name_taken");
+
+    let other: Value = create("Desktops").await.unwrap().json().await.unwrap();
+    let rename = |name: &str| {
+        client
+            .put(format!(
+                "{base_url}/saved-views/{}",
+                other["id"].as_str().unwrap()
+            ))
+            .json(
+                &json!({"kind":"explorer_search","name":name,"visibility":"private","state":state}),
+            )
+            .send()
+    };
+    assert_eq!(rename("LAPTOPS").await.unwrap().status(), 409);
+    // Saving a search under its own name is not a conflict.
+    assert_eq!(rename("Desktops").await.unwrap().status(), 200);
+}

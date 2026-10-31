@@ -1,5 +1,6 @@
 import {
   MutationCache,
+  QueryCache,
   QueryClient,
   QueryClientProvider,
 } from '@tanstack/react-query';
@@ -10,13 +11,18 @@ import { toast } from './components/toast';
 import i18n, { i18nReady } from './i18n';
 import { router } from './app/router';
 import { authQueryKeys } from './features/auth/queryKeys';
+import { recheckSessionWhenSignedOut } from './features/auth/sessionExpiry';
 import { contextQueryKeys } from './features/contexts/queryKeys';
 import { recordQueryKeys } from './features/records/queryKeys';
 import { reusableAttributeQueryKeys } from './features/reusable-attributes/queryKeys';
 
-const queryClient = new QueryClient({
+const queryClient: QueryClient = new QueryClient({
   defaultOptions: { queries: { retry: retryUnlessRefused } },
+  queryCache: new QueryCache({
+    onError: (error) => recheckSessionWhenSignedOut(queryClient)(error),
+  }),
   mutationCache: new MutationCache({
+    onError: (error) => recheckSessionWhenSignedOut(queryClient)(error),
     onSuccess: (_, __, ___, mutation) => {
       if (mutation.options.meta?.toast === false) return;
       toast.success(i18n.t('common.actionCompleted'));

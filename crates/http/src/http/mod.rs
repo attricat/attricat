@@ -726,7 +726,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route(
             "/auth/display-name",
-            axum::routing::put(sessions::update_display_name),
+            axum::routing::put(sessions::update_display_name).delete(sessions::clear_display_name),
         )
         .route(
             "/auth/avatar",

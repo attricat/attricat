@@ -79,6 +79,11 @@ impl AttricatRepository {
             .await
     }
 
+    /// Removes a user's display name, so they are shown by their email.
+    pub async fn clear_user_display_name(&self, user_id: Uuid) -> Result<(), RepositoryError> {
+        self.update_active_user(user_id, "display_name", None).await
+    }
+
     /// Sets one text `users` column for an active user, in an audited
     /// mutation.
     async fn update_active_user(

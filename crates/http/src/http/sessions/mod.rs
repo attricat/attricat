@@ -315,6 +315,21 @@ pub(super) async fn update_display_name(
     .await
 }
 
+pub(super) async fn clear_display_name(
+    State(state): State<AppState>,
+    AuthenticatedPrincipal(user_id, token_id): AuthenticatedPrincipal,
+    ActiveWorkspace(workspace_id): ActiveWorkspace,
+    ScopedRepository(repository): ScopedRepository,
+) -> Result<Json<SessionResponse>, ApiError> {
+    repository.clear_user_display_name(user_id).await?;
+    current_session(
+        State(state),
+        AuthenticatedPrincipal(user_id, token_id),
+        ActiveWorkspace(workspace_id),
+    )
+    .await
+}
+
 /// Display names are letters and digits in words separated by spaces, with no
 /// leading or trailing space. Input is never trimmed, so the stored value is
 /// exactly what the user submitted.
