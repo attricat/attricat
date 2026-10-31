@@ -32,6 +32,7 @@ const contribution = {
   confirm: null,
   icon: null,
   translations: {},
+  cell: null,
 };
 
 describe('extension runtime API', () => {
@@ -57,13 +58,31 @@ describe('extension runtime API', () => {
       ...contribution,
       capabilities: ['client.explorer_table_cell'],
       id: 'example.currency',
+      kind: 'cell',
       outlet: 'explorer_table_cell',
+      cell: {
+        value_types: ['number'],
+        props: { unit: { type: 'string', max_length: 3 } },
+        display: { type: 'number', precision: 2, unit: { prop: 'unit' } },
+      },
     };
     fetchMock.mockResolvedValue({
       ok: true,
       json: () => Promise.resolve([tableCell]),
     });
     await expect(getExtensionRuntime()).resolves.toEqual([tableCell]);
+    // A display the host does not draw is refused.
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve([
+          {
+            ...tableCell,
+            cell: { ...tableCell.cell, display: { type: 'html' } },
+          },
+        ]),
+    });
+    await expect(getExtensionRuntime()).rejects.toThrow();
     fetchMock.mockResolvedValue({
       ok: true,
       json: () => Promise.resolve([{ ...contribution, id: undefined }]),

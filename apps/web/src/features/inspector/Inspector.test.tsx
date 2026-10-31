@@ -4,7 +4,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { Inspector } from './Inspector';
-import { clearTimingsForTest, recordFrameTiming } from './timing';
+import { clearTimingsForTest, recordServerTiming } from './timing';
 
 vi.mock('../auth/api', () => ({
   currentSession: vi.fn(() => Promise.resolve(null)),
@@ -40,8 +40,8 @@ describe('Inspector', () => {
     expect(panel.id).toBe(tabs[1].getAttribute('aria-controls'));
     expect(panel.getAttribute('aria-labelledby')).toBe(tabs[1].id);
     expect(within(panel).getByText(/timing/i)).toBeTruthy();
-    act(() => recordFrameTiming('frame-load', 12));
-    expect(within(panel).getByText(/frame-load: 12.00 ms/)).toBeTruthy();
+    act(() => recordServerTiming('serialize;dur=12'));
+    expect(within(panel).getByText(/serialize: 12.00 ms/)).toBeTruthy();
     act(clearTimingsForTest);
   });
 

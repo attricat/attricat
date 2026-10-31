@@ -39,6 +39,7 @@ const action = (id: string, title: string): ExtensionContribution => ({
   confirm: null,
   icon: 'file',
   translations: {},
+  cell: null,
 });
 
 const Page = () => {

@@ -6,15 +6,11 @@ import type { ExtensionContribution } from '../extensions/api';
 import { resolveValueRenderer } from '../views/components/registry';
 import { AttributeValue } from '../views/components/values/AttributeValue';
 import { NotSetValue } from '../views/components/values/NotSetValue';
-import { relationshipPathSeparator } from './constants';
+import { DeclaredCell } from './DeclaredCell';
 import {
   isRelationshipPath,
-  usesExtensionRenderer,
   type ExplorerTableColumn,
 } from './explorerTableColumns';
-import { ExtensionTableCell } from './ExtensionTableCell';
-import { explorerTableCellContextSchema } from './schemas';
-import { supportedOutletContextVersion } from '../extensions/constants';
 
 /**
  * Search projections contain the related target's scalar but not its
@@ -37,8 +33,8 @@ type Props = {
   attribute: Attribute;
   column: ExplorerTableColumn;
   record: RecordItem;
+  /** The enabled extension cell the column's renderer names. */
   extension: ExtensionContribution | undefined;
-  frameAllowed: boolean;
 };
 
 export const ConfiguredColumnCell = ({
@@ -46,12 +42,9 @@ export const ConfiguredColumnCell = ({
   column,
   record,
   extension,
-  frameAllowed,
 }: Props) => {
-  const [relationship] = column.field.split(relationshipPathSeparator);
   const relatedPath = isRelationshipPath(column.field);
   const { renderer } = column;
-  const related = relatedPath ? record.related?.[relationship]?.[0] : undefined;
   const pathValues = record.table_values[column.field] ?? [];
   const primaryValue = pathValues.length > 1 ? pathValues : pathValues[0];
   const fallback = relatedPath ? (
@@ -66,38 +59,14 @@ export const ConfiguredColumnCell = ({
       component: renderer,
       value: primaryValue,
     });
-  if (!renderer || !usesExtensionRenderer(column)) return fallback;
-  const context = explorerTableCellContextSchema.parse({
-    context_version: supportedOutletContextVersion,
-    column: {
-      field: column.field,
-      label: column.label ?? null,
-      renderer,
-    },
-    primary_value: primaryValue ?? null,
-    related_record: related
-      ? {
-          id: related.id,
-          blueprint_id: related.blueprint_id,
-          blueprint_version: related.blueprint_version,
-          relationship_context_id: related.relationship_context_id,
-          relationship_context_code: related.relationship_context_code,
-        }
-      : null,
-    related_preview: related?.preview ?? null,
-    source_row: {
-      record_id: record.id,
-      blueprint_version: record.blueprint_version,
-      preview: record.preview,
-    },
-  });
+  // An extension's renderer that is unavailable shows the value as usual.
+  if (!renderer || !extension?.cell) return fallback;
   return (
-    <ExtensionTableCell
-      context={context}
-      contribution={extension}
-      key={extension?.release_id}
+    <DeclaredCell
+      cell={extension.cell}
       fallback={fallback}
-      frameAllowed={frameAllowed}
+      props={renderer.props}
+      value={primaryValue}
     />
   );
 };

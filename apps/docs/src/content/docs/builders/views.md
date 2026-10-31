@@ -163,7 +163,7 @@ views:
 
 ### Extension cell renderers
 
-An enabled extension can provide cell renderers, such as a currency formatter. Reference one by ID and version, and pass its options in `props`:
+An enabled extension can declare table cells, such as an amount with a fixed number of decimals and a unit. Reference one by ID and version, and pass its options in `props`:
 
 ```yaml
 views:
@@ -171,12 +171,12 @@ views:
     columns:
       - field: price
         renderer:
-          id: example.currency
+          id: example.amount
           version: 1
-          props: {currency: USD}
+          props: {precision: 2, unit: USD}
 ```
 
-The renderer must be declared by an enabled extension for the column's value type. It runs in a sandboxed frame; see [Client contributions](/extensions/client/).
+The cell must be declared by an enabled extension for the column's value type, and each prop must match the type and bounds it declares. Attricat draws the cell itself; see [Table cells](/extensions/manifest/#table-cells).
 
 ## Explorer browse panel
 

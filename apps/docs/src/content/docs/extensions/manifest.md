@@ -29,7 +29,6 @@ IDs used in the manifest (`attricat.id`, artifact, dependency, permission-rule, 
 | `event_contracts` | | Events this extension publishes or consumes. |
 | `server` | | Event handlers, commands, operations, webhooks, connection kinds, and export destinations. |
 | `ui` | | Client contributions. |
-| `cell_renderers` | | Explorer table cell renderers. |
 | `attribute_types` | | Attribute types for blueprints. |
 | `record_field_notes` | | The source that describes records' fields, files and actions: `{ "command": "<id>" }` or a client handler, `{ "client": "<artifact>" }`. See [Field notes](/extensions/client/#field-notes). |
 
@@ -275,23 +274,61 @@ An export destination gives Attricat's export status, preview, retry, and resync
 | --- | --- | --- |
 | `route` | `artifact`, `title` | A full page at `/extensions/<extension-id>/<contribution-id>`. |
 | `navigation` | `route`, `title` | A sidebar link to one of this extension's routes. |
-| `embedded` | `artifact`, `outlet` | A frame at `navigation`, `blueprint_attribute_configuration`, or `explorer_table_cell`. |
+| `embedded` | `artifact`, `outlet` | A frame at `navigation` or `blueprint_attribute_configuration`. |
 | `action` | `outlet`, `title`, `invoke` | A menu item or button the host draws at `record_action`, `record_header_action`, `explorer_row_action`, `explorer_action`, or `explorer_bulk_action`, or a field-note badge's action at `record_attribute_action`. `invoke` is `{ "command": "<id>" }`, `{ "dialog": "<id>" }` or `{ "operation": { "id", "input" } }`; optional `when`, `confirm`, `icon`. No artifact. See [Actions](/extensions/client/#actions). |
 | `panel` | `artifact`, `outlet` | A host-laid-out panel, read-only except `export_mapping`, at `blueprint_detail_panel`, `blueprint_panel`, `blueprint_publish_check`, `audit_event_panel`, `data_health_card`, or `export_mapping`. |
 | `dialog` | `artifact`, `outlet`, `title` | A host-managed `action_dialog` opened by this extension's actions. |
 | `tab` | `artifact`, `outlet`, `title` | A tab on the record page at `record_tab`, whose panel is the frame; optional `icon`, and `when` limited to `blueprints`. See [Record pages](/extensions/client/#record-pages). |
+| `cell` | `outlet`, `cell` | How Attricat draws a value in an `explorer_table_cell` column. No artifact. See [Table cells](#table-cells). |
 
-Each extension can use each frame outlet once, but may add several actions and dialogs and up to two record tabs. Actions, dialogs and tabs use `version` 1. An action's `title` has at most 64 characters; a tab's, in every language, at most 24.
+Each extension can use each frame outlet once, but may add several actions, dialogs and table cells, and up to two record tabs. Actions, dialogs and tabs use `version` 1. An action's `title` has at most 64 characters; a tab's, in every language, at most 24.
 
-## Cell renderers
+## Table cells
+
+A `cell` contribution tells Attricat how to show a value in an Explorer table column. Attricat draws the cell itself, so no frame or code of yours runs per cell.
 
 ```json
-"cell_renderers": [
-  { "id": "example.currency", "version": 1, "value_types": ["number", "integer"], "allowed_props": ["currency"] }
-]
+{
+  "id": "example.amount",
+  "version": 1,
+  "kind": "cell",
+  "outlet": "explorer_table_cell",
+  "cell": {
+    "value_types": ["number", "integer"],
+    "props": {
+      "precision": { "type": "integer", "minimum": 0, "maximum": 4 },
+      "unit": { "type": "string", "max_length": 8 }
+    },
+    "display": { "type": "number", "precision": { "prop": "precision" }, "unit": { "prop": "unit" } }
+  }
+}
 ```
 
-A cell renderer can be referenced from a blueprint's table view. It needs `client.explorer_table_cell` and a matching `explorer_table_cell` UI contribution.
+A blueprint's table view names the cell by `id` and `version`, and passes `props` within their declared types:
+
+```yaml
+views:
+  table:
+    type: table
+    columns:
+      - field: price
+        renderer:
+          id: example.amount
+          version: 1
+          props: { precision: 2, unit: EUR }
+```
+
+| Field | Description |
+| --- | --- |
+| `value_types` | Scalar value types a column using the cell may show. |
+| `props` | Up to 16 props a column may pass, by lowercase name: `{ "type": "integer", "minimum", "maximum" }` or `{ "type": "string", "max_length" }` (1–256). Publishing a blueprint checks each prop against its type and bounds. |
+| `display` | How Attricat shows the value; each setting is a literal or `{ "prop": "<name>" }`. |
+
+`display` types:
+
+- `number` shows each value in the viewer's locale, right-aligned. `precision` fixes the decimal places (0–20; a prop it names must be an integer bounded to that range), and `unit` (1–16 characters; a prop it names must be a string of at most 16) follows the value. Its value types must be `number` or `integer`.
+
+A cell needs `client.explorer_table_cell`, and is used only while its extension is enabled and that capability granted; otherwise, and for a value its display cannot show, the column shows the value as usual. An extension may declare several cells.
 
 ## Attribute types
 

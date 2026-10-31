@@ -441,7 +441,7 @@ views:
 | `columns` | list of mappings | Column definitions. Must be non-empty with unique `field` values. |
 | `columns[].field` | string | A local scalar attribute, a local file attribute with a compatible renderer, or a path of up to three relationship hops ending in a scalar attribute, such as `family.product_type.name`. |
 | `columns[].label` | string | Column header. Defaults to the attribute name. |
-| `columns[].renderer` | component reference | `attricat.table_image@1`, a string display component (`attricat.color_display@1`, `attricat.email_display@1`, `attricat.url_display@1`, or `attricat.phone_display@1`), or an extension cell renderer. |
+| `columns[].renderer` | component reference | `attricat.table_image@1`, a string display component (`attricat.color_display@1`, `attricat.email_display@1`, `attricat.url_display@1`, or `attricat.phone_display@1`), or an extension's table cell. |
 | `fields` | array of attribute codes | Older shorthand for local scalar columns. Cannot be combined with `columns`. |
 | `component` | component reference | Optional table component. |
 
@@ -529,7 +529,7 @@ Built-in components:
 
 Components marked *(edit)* are accepted only in the deprecated `edit` view. Where a `detail` field is editable, the web app uses the display component's paired edit component, or the standard editor for the value type. See [Field controls](/builders/views/#field-controls) for how these behave.
 
-An extension cell renderer's ID and version must match a renderer declared by an enabled extension for the column's value type.
+An extension cell's ID and version must match a [table cell](/extensions/manifest/#table-cells) declared by an enabled extension for the column's value type, and its `props` must match the cell's declared prop types.
 
 ### `extension_layout`
 

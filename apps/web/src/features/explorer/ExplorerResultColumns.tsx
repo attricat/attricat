@@ -38,7 +38,6 @@ import {
 } from './ExplorerTableCells';
 import {
   configuredColumnLabel,
-  usesExtensionRenderer,
   type ExplorerTableColumn,
 } from './explorerTableColumns';
 import type { ExplorerColumnPreferences } from './columnPreferences';
@@ -62,7 +61,6 @@ type ColumnOptions = {
   onOpenActions: (recordId: string, position: ActionMenuPosition) => void;
   onOpenPanel?: OpenRecordPanel;
   onPrefetchPanel?: (record: RecordItem) => void;
-  takeCellFrame: () => boolean;
   t: TFunction;
   /** The user's effective zone, used to edit datetime cell filters. */
   timeZone: string;
@@ -77,7 +75,7 @@ const findTableCellExtension = (
     : runtime?.find(
         (item) =>
           item.outlet === extensionOutlets.explorerTableCell &&
-          item.kind === contributionKinds.embedded &&
+          item.kind === contributionKinds.cell &&
           item.id === renderer.id &&
           item.version === renderer.version &&
           item.capabilities.includes(explorerTableCellCapability),
@@ -100,7 +98,6 @@ export const buildExplorerColumnDefinitions = ({
   onOpenActions,
   onOpenPanel,
   onPrefetchPanel,
-  takeCellFrame,
   t,
   timeZone,
 }: ColumnOptions): ExplorerColumnDef[] => {
@@ -137,7 +134,6 @@ export const buildExplorerColumnDefinitions = ({
         header: () => (
           <ConfiguredColumnHeader column={column} onSortChange={onSortChange} />
         ),
-        // Frames are allocated while rendering visible cells only.
         cell: (info) => (
           <FilterableCell
             fieldLabel={configuredColumnLabel(column)}
@@ -154,7 +150,6 @@ export const buildExplorerColumnDefinitions = ({
                 column={column}
                 record={info.row.original}
                 extension={extension}
-                frameAllowed={usesExtensionRenderer(column) && takeCellFrame()}
               />
             </ExplorerCellNotes>
           </FilterableCell>

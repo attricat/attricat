@@ -365,6 +365,45 @@ fn client_release_archive_for_outlet(
     zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
 }
 
+/// A release whose only UI is an Explorer table cell; the cell names no artifact.
+fn cell_release_archive(extension_id: &str) -> Vec<u8> {
+    let manifest = serde_json::to_vec(&json!({
+        "manifest_version": 1,
+        "name": "Cell extension",
+        "version": "1.0.0",
+        "description": "declarative table cell integration test",
+        "icons": {"48": "icon.png"},
+        "attricat": {"id": extension_id, "host_api": "^1.0"},
+        "permissions": [],
+        "optional_permissions": ["client.explorer_table_cell"],
+        "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
+        "artifacts": [{"id": "client", "kind": "client_component", "path": "client.js"}],
+        "ui": [{
+            "id": "amount",
+            "version": 1,
+            "kind": "cell",
+            "outlet": "explorer_table_cell",
+            "cell": {
+                "value_types": ["number"],
+                "props": {
+                    "precision": {"type": "integer", "minimum": 0, "maximum": 4},
+                    "unit": {"type": "string", "max_length": 8}
+                },
+                "display": {"type": "number", "precision": {"prop": "precision"}, "unit": {"prop": "unit"}}
+            }
+        }]
+    }))
+    .unwrap();
+    let mut tar_bytes = Vec::new();
+    {
+        let mut tar = tar::Builder::new(&mut tar_bytes);
+        append_file(&mut tar, "manifest.json", &manifest);
+        append_file(&mut tar, "client.js", b"export {}");
+        tar.finish().unwrap();
+    }
+    zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
+}
+
 fn client_release_archive(extension_id: &str) -> Vec<u8> {
     client_release_archive_for_outlet(extension_id, "panel", "record_tab")
 }
@@ -3872,4 +3911,92 @@ async fn an_installation_from_an_older_manifest_contract_can_be_disabled_and_rem
 
     repository.disable_extension("acme.client").await.unwrap();
     repository.remove_extension("acme.client").await.unwrap();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn declarative_cells_reach_the_runtime_and_check_column_props(pool: sqlx::PgPool) {
+    let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
+    let repository = AttricatRepository::system(pool).for_workspace(workspace);
+    let installer =
+        ExtensionInstaller::new(repository.clone(), Arc::new(FakeObjectStore::available()));
+    installer
+        .install("test", &cell_release_archive("acme.cells"))
+        .await
+        .unwrap();
+    repository
+        .grant_extension("acme.cells", "capability", "client.explorer_table_cell")
+        .await
+        .unwrap();
+    repository.enable_extension("acme.cells").await.unwrap();
+    let contributions = repository
+        .client_extension_contributions_for_blueprint(None)
+        .await
+        .unwrap();
+    let cell = contributions
+        .iter()
+        .find(|item| item.contribution_key == "acme.cells:amount")
+        .unwrap();
+    assert!(cell.artifact_key.is_none());
+    assert_eq!(
+        serde_json::to_value(cell.cell.as_ref().unwrap()).unwrap()["display"],
+        json!({"type": "number", "precision": {"prop": "precision"}, "unit": {"prop": "unit"}})
+    );
+
+    let definition = |code: &str, field: &str, props: &str| {
+        format!(
+            r#"
+format_version: 1
+code: {code}
+name: Cells
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+  table:
+    type: table
+    columns:
+      - field: {field}
+        renderer:
+          id: amount
+          version: 1
+          props: {props}
+attributes:
+  - code: title
+    value_type: string
+  - code: price
+    value_type: number
+"#
+        )
+    };
+    repository
+        .create_blueprint(CreateBlueprint {
+            definition: definition("cells_valid", "price", "{precision: 2, unit: EUR}"),
+        })
+        .await
+        .unwrap();
+    for (code, field, props, problem) in [
+        (
+            "cells_precision",
+            "price",
+            "{precision: 9}",
+            "prop 'precision'",
+        ),
+        (
+            "cells_unknown",
+            "price",
+            "{currency: EUR}",
+            "prop 'currency'",
+        ),
+        ("cells_string", "title", "{}", "not declared for string"),
+    ] {
+        let error = repository
+            .create_blueprint(CreateBlueprint {
+                definition: definition(code, field, props),
+            })
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains(problem), "{code}: {error}");
+    }
 }

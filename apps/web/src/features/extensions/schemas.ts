@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  cellDisplayTypes,
   contributionKinds,
   contributionKeyPattern,
   grantKinds,
@@ -13,6 +14,8 @@ import {
   supportedWorkspaceLayoutVersion,
   extensionOutlets,
   hostIcons,
+  maximumCellPrecision,
+  maximumCellUnitLength,
 } from './constants';
 
 export const extensionOutletSchema = z.enum(extensionOutlets);
@@ -55,6 +58,32 @@ const actionConditionSchema = z
 export type ActionCondition = z.infer<typeof actionConditionSchema>;
 export type ActionInvocation = z.infer<typeof actionInvocationSchema>;
 
+/** A display setting: a literal, or the value of a prop the column passes. */
+const cellSettingSchema = <T extends z.ZodType>(value: T) =>
+  z.union([z.object({ prop: z.string().min(1) }).strict(), value]);
+
+/** How the host draws a declared Explorer table cell. */
+const cellSchema = z
+  .object({
+    value_types: z.array(z.string()).min(1),
+    props: z.record(z.string(), z.unknown()).default({}),
+    display: z.discriminatedUnion('type', [
+      z
+        .object({
+          type: z.literal(cellDisplayTypes.number),
+          precision: cellSettingSchema(
+            z.number().int().min(0).max(maximumCellPrecision),
+          ).optional(),
+          unit: cellSettingSchema(
+            z.string().min(1).max(maximumCellUnitLength),
+          ).optional(),
+        })
+        .strict(),
+    ]),
+  })
+  .strict();
+export type CellDeclaration = z.infer<typeof cellSchema>;
+
 const contributionSchema = z
   .object({
     contribution_key: contributionKeySchema,
@@ -87,6 +116,8 @@ const contributionSchema = z
     translations: z
       .record(z.string(), z.object({ title: z.string().min(1) }).strict())
       .default({}),
+    /** How a host-rendered cell shows a value; absent on other kinds. */
+    cell: cellSchema.nullable().default(null),
   })
   .strict();
 

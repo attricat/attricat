@@ -31,6 +31,7 @@ const contribution: ExtensionContribution = {
   confirm: null,
   icon: null,
   translations: {},
+  cell: null,
 };
 
 const Frame = ({ contribution }: { contribution: ExtensionContribution }) => {

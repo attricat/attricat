@@ -1,6 +1,6 @@
 ---
 title: Kontrybucje klienckie
-description: Dodawaj strony, panele, akcje i komórki tabeli do aplikacji webowej z izolowanych ramek i korzystaj z klienckiego API katalogu.
+description: Dodawaj strony, panele i akcje do aplikacji webowej z izolowanych ramek, deklaruj komórki tabeli i korzystaj z klienckiego API katalogu.
 ---
 
 Kontrybucja kliencka to moduł JavaScript, który Attricat ładuje do izolowanej ramki w stałym miejscu aplikacji webowej. Host odpowiada za wszystko wokół ramki: układ, stany ładowania i błędów, fokus i punkty orientacyjne dostępności. Twój moduł odpowiada za to, co jest wewnątrz.
@@ -129,7 +129,7 @@ Procedura kliencka to komponent kliencki uruchamiany bez interfejsu w izolowanej
 | `explorer_row_action` | `action` | `client.explorer_row_action` | [Kontekst akcji](#akcje) z rekordem wiersza |
 | `explorer_action` | `action` | `client.explorer_action` | [Kontekst akcji](#akcje) bez rekordów |
 | `explorer_bulk_action` | `action` | `client.explorer_bulk_action` | [Kontekst akcji](#akcje) z zaznaczonymi rekordami (od 1 do 50) |
-| `explorer_table_cell` | `embedded` | `client.explorer_table_cell` | Wartość komórki, dla kolumny używającej Twojego [renderera komórek](/pl/extensions/manifest/#renderery-komórek). |
+| `explorer_table_cell` | `cell` | `client.explorer_table_cell` | Brak: Attricat rysuje bez ramki [komórkę tabeli](/pl/extensions/manifest/#komórki-tabeli) wskazaną przez kolumnę. |
 
 Akcje wiersza to pozycje menu akcji wiersza, akcje zbiorcze to pozycje menu **Akcje** zaznaczenia, a akcje paska narzędzi kryją się za jednym przyciskiem **Akcje rozszerzeń**. Konteksty przeglądarki rekordów nigdy nie zawierają zapytania wyszukiwania, filtrów ani wartości wierszy. Zaznaczenie to wskazówka, na co patrzy użytkownik, a nie autoryzacja: polecenia nadal sprawdzają uprawnienia na serwerze.
 

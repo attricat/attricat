@@ -14,9 +14,9 @@ use crate::{
     extension_installer::installed_artifact_key,
     extension_policy,
     extensions::{
-        ActionCondition, ActionConfirmation, ActionInvocation, ContributionTranslation, Manifest,
-        RECORD_FIELD_NOTES_CAPABILITY, SUPPORTED_HOST_API, UiContributionKind, UiOutlet,
-        valid_contribution_key,
+        ActionCondition, ActionConfirmation, ActionInvocation, CellDeclaration,
+        ContributionTranslation, Manifest, RECORD_FIELD_NOTES_CAPABILITY, SUPPORTED_HOST_API,
+        UiContributionKind, UiOutlet, valid_contribution_key,
     },
 };
 
@@ -345,6 +345,8 @@ pub struct ClientExtensionContribution {
     pub confirm: Option<ActionConfirmation>,
     pub icon: Option<String>,
     pub translations: std::collections::BTreeMap<String, ContributionTranslation>,
+    /// How the host draws a `cell` contribution.
+    pub cell: Option<CellDeclaration>,
     pub artifact_key: Option<String>,
 }
 
@@ -650,6 +652,7 @@ impl AttricatRepository {
                     confirm: contribution.confirm,
                     icon: contribution.icon,
                     translations: contribution.translations,
+                    cell: contribution.cell,
                 });
             }
         }

@@ -29,7 +29,6 @@ Identyfikatory używane w manifeście (`attricat.id` oraz identyfikatory artefak
 | `event_contracts` | | Zdarzenia publikowane lub konsumowane przez to rozszerzenie. |
 | `server` | | Procedury obsługi zdarzeń, polecenia, operacje, webhooki, rodzaje połączeń i miejsca docelowe eksportu. |
 | `ui` | | Kontrybucje klienckie. |
-| `cell_renderers` | | Renderery komórek tabeli przeglądarki rekordów. |
 | `attribute_types` | | Typy atrybutów dla Schematów. |
 | `record_field_notes` | | Źródło opisujące pola, pliki i akcje rekordów: `{ "command": "<id>" }` albo procedura kliencka, `{ "client": "<artefakt>" }`. Zobacz [Notatki pól](/pl/extensions/client/#notatki-pól). |
 
@@ -275,23 +274,61 @@ Miejsce docelowe eksportu nadaje ekranom stanu eksportu, podglądu, ponawiania i
 | --- | --- | --- |
 | `route` | `artifact`, `title` | Pełna strona pod adresem `/extensions/<extension-id>/<contribution-id>`. |
 | `navigation` | `route`, `title` | Link na pasku bocznym do jednej ze stron tego rozszerzenia. |
-| `embedded` | `artifact`, `outlet` | Ramka w miejscu `navigation`, `blueprint_attribute_configuration` lub `explorer_table_cell`. |
+| `embedded` | `artifact`, `outlet` | Ramka w miejscu `navigation` lub `blueprint_attribute_configuration`. |
 | `action` | `outlet`, `title`, `invoke` | Pozycja menu lub przycisk rysowane przez host w miejscu `record_action`, `record_header_action`, `explorer_row_action`, `explorer_action` lub `explorer_bulk_action` albo akcja odznaki notatki pola w miejscu `record_attribute_action`. `invoke` to `{ "command": "<id>" }`, `{ "dialog": "<id>" }` albo `{ "operation": { "id", "input" } }`; opcjonalnie `when`, `confirm`, `icon`. Bez artefaktu. Zobacz [Akcje](/pl/extensions/client/#akcje). |
 | `panel` | `artifact`, `outlet` | Panel rozmieszczany przez host, tylko do odczytu z wyjątkiem `export_mapping`, w miejscu `blueprint_detail_panel`, `blueprint_panel`, `blueprint_publish_check`, `audit_event_panel`, `data_health_card` lub `export_mapping`. |
 | `dialog` | `artifact`, `outlet`, `title` | Zarządzane przez host okno `action_dialog` otwierane przez akcje tego rozszerzenia. |
 | `tab` | `artifact`, `outlet`, `title` | Karta na stronie rekordu w miejscu `record_tab`, której panelem jest ramka; opcjonalnie `icon` oraz `when` ograniczone do `blueprints`. Zobacz [Strony rekordów](/pl/extensions/client/#strony-rekordów). |
+| `cell` | `outlet`, `cell` | Jak Attricat rysuje wartość w kolumnie `explorer_table_cell`. Bez artefaktu. Zobacz [Komórki tabeli](#komórki-tabeli). |
 
-Każde rozszerzenie może użyć każdego miejsca osadzenia z ramką jeden raz, ale może dodać kilka akcji i okien oraz do dwóch kart rekordu. Akcje, okna i karty używają `version` 1. `title` akcji ma najwyżej 64 znaki; tytuł karty, w każdym języku, najwyżej 24.
+Każde rozszerzenie może użyć każdego miejsca osadzenia z ramką jeden raz, ale może dodać kilka akcji, okien i komórek tabeli oraz do dwóch kart rekordu. Akcje, okna i karty używają `version` 1. `title` akcji ma najwyżej 64 znaki; tytuł karty, w każdym języku, najwyżej 24.
 
-## Renderery komórek
+## Komórki tabeli
+
+Kontrybucja `cell` mówi Attricat, jak pokazać wartość w kolumnie tabeli przeglądarki rekordów. Attricat rysuje komórkę sam, więc dla komórki nie działa żadna ramka ani Twój kod.
 
 ```json
-"cell_renderers": [
-  { "id": "example.currency", "version": 1, "value_types": ["number", "integer"], "allowed_props": ["currency"] }
-]
+{
+  "id": "example.amount",
+  "version": 1,
+  "kind": "cell",
+  "outlet": "explorer_table_cell",
+  "cell": {
+    "value_types": ["number", "integer"],
+    "props": {
+      "precision": { "type": "integer", "minimum": 0, "maximum": 4 },
+      "unit": { "type": "string", "max_length": 8 }
+    },
+    "display": { "type": "number", "precision": { "prop": "precision" }, "unit": { "prop": "unit" } }
+  }
+}
 ```
 
-Do renderera komórek można odwołać się z widoku tabeli Schematu. Wymaga on `client.explorer_table_cell` i pasującej kontrybucji interfejsu `explorer_table_cell`.
+Widok tabeli Schematu wskazuje komórkę przez `id` i `version` oraz przekazuje `props` zgodne z zadeklarowanymi typami:
+
+```yaml
+views:
+  table:
+    type: table
+    columns:
+      - field: price
+        renderer:
+          id: example.amount
+          version: 1
+          props: { precision: 2, unit: EUR }
+```
+
+| Pole | Opis |
+| --- | --- |
+| `value_types` | Skalarne typy wartości, które może pokazywać kolumna używająca komórki. |
+| `props` | Do 16 właściwości, które może przekazać kolumna, według nazwy pisanej małymi literami: `{ "type": "integer", "minimum", "maximum" }` albo `{ "type": "string", "max_length" }` (1–256). Publikacja Schematu sprawdza każdą właściwość względem jej typu i granic. |
+| `display` | Jak Attricat pokazuje wartość; każde ustawienie to literał albo `{ "prop": "<nazwa>" }`. |
+
+Typy `display`:
+
+- `number` pokazuje każdą wartość w ustawieniach regionalnych oglądającego, wyrównaną do prawej. `precision` ustala liczbę miejsc po przecinku (0–20; wskazana właściwość musi być liczbą całkowitą ograniczoną do tego zakresu), a `unit` (1–16 znaków; wskazana właściwość musi być tekstem o długości najwyżej 16) stoi za wartością. Typy wartości muszą być `number` lub `integer`.
+
+Komórka wymaga `client.explorer_table_cell` i jest używana tylko, gdy jej rozszerzenie jest włączone, a ta możliwość przyznana; w przeciwnym razie, a także dla wartości, której jej sposób wyświetlania nie pokaże, kolumna pokazuje wartość jak zwykle. Rozszerzenie może zadeklarować kilka komórek.
 
 ## Typy atrybutów
 

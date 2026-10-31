@@ -19,7 +19,6 @@ import { DeleteRecordDialog } from '../records/components/DeleteRecordDialog';
 import { DuplicateRecordDialog } from '../records/components/DuplicateRecordDialog';
 import {
   estimatedResultRowHeight,
-  maximumExplorerCellFrames,
   loadMoreRowKey,
   resultRowOverscan,
 } from './constants';
@@ -41,7 +40,6 @@ import {
   configurableColumnIds,
   explorerColumnLabel,
   explorerColumnValueType,
-  usesExtensionRenderer,
 } from './explorerTableColumns';
 import type { AttributeFilterDraft } from './attributeFilterValues';
 import type { ExplorerSort } from './search';
@@ -256,17 +254,6 @@ export const ExplorerResultsTable = ({
     onFilterSystemTag?.(tag),
   );
   const hasTagFilter = Boolean(onFilterSystemTag);
-  // Extension cell frames are allocated while visible rows render; see
-  // `maximumExplorerCellFrames`. Such tables re-render every row each time
-  // so the allocation stays bounded.
-  const extensionCells = tableColumns.some(usesExtensionRenderer);
-  const frameAllocation = extensionCells ? {} : undefined;
-  const takeCellFrame = useMemo(() => {
-    let cellFrames = 0;
-    return () => cellFrames++ < maximumExplorerCellFrames;
-    // A new allocation is the only input.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [frameAllocation]);
   const columnDefinitions = useMemo(
     () =>
       buildExplorerColumnDefinitions({
@@ -283,7 +270,6 @@ export const ExplorerResultsTable = ({
         onOpenActions: openActions,
         onOpenPanel: hasPanel ? openPanel : undefined,
         onPrefetchPanel: hasPanel ? prefetchPanel : undefined,
-        takeCellFrame,
         t,
         timeZone,
       }),
@@ -305,7 +291,6 @@ export const ExplorerResultsTable = ({
       sortChange,
       t,
       tableColumns,
-      takeCellFrame,
       timeZone,
     ],
   );
@@ -442,7 +427,6 @@ export const ExplorerResultsTable = ({
             isFetchingNextPage={isFetchingNextPage}
             onLoadMore={onLoadMore}
             highlightPanelRecord={hasPanel}
-            renderToken={frameAllocation}
             fitRows={fitRows}
           />
         </ExplorerSortContext>

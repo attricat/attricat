@@ -131,6 +131,14 @@ pub const MAX_ACTION_TITLE_CHARS: usize = 64;
 pub const MAX_RECORD_TAB_TITLE_CHARS: usize = 24;
 /// How many record tabs one extension may add.
 pub const MAX_RECORD_TABS_PER_EXTENSION: usize = 2;
+/// Most decimal places a declarative number cell shows.
+pub const MAX_CELL_PRECISION: u32 = 20;
+/// Longest unit a declarative number cell appends to its value.
+pub const MAX_CELL_UNIT_CHARS: usize = 16;
+/// Props one declarative cell may accept from a table column.
+pub const MAX_CELL_PROPS: usize = 16;
+/// Longest string a cell prop may declare as its `max_length`.
+pub const MAX_CELL_STRING_PROP_CHARS: u32 = 256;
 pub const CAPABILITIES: &[&str] = &[
     "attricat.read",
     "attricat.write",
@@ -221,10 +229,6 @@ pub struct Manifest {
     pub server: Option<Server>,
     #[serde(default)]
     pub ui: Vec<UiContribution>,
-    /// Declarative cell renderers available to Explorer table columns. Each
-    /// renderer is paired with a sandboxed `explorer_table_cell` contribution.
-    #[serde(default)]
-    pub cell_renderers: Vec<CellRenderer>,
     /// Versioned logical attribute types. These select host-owned storage and
     /// validation primitives; they never execute code while validating values.
     #[serde(default)]
@@ -655,14 +659,186 @@ pub enum WebhookAuthenticationKind {
 /// A client contribution is either a namespaced full page or an embedded view
 /// at a host-owned outlet. The host never accepts arbitrary route paths or DOM
 /// selectors from an extension.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+/// How the host shows an attribute value in an Explorer table column that
+/// names this cell. The host renders it; no extension code runs per cell.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
-pub struct CellRenderer {
-    pub id: String,
-    pub version: u32,
+pub struct CellDeclaration {
+    /// Scalar value types a column using this cell may show.
     pub value_types: Vec<String>,
-    #[serde(default)]
-    pub allowed_props: Vec<String>,
+    /// Props a table column may pass, by name.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub props: BTreeMap<String, CellProp>,
+    pub display: CellDisplay,
+}
+
+/// The type of a value a table column passes as a cell prop.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum CellProp {
+    Integer {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        minimum: Option<i64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        maximum: Option<i64>,
+    },
+    String {
+        max_length: u32,
+    },
+}
+
+/// A host-owned way to show a value. Each setting is a literal or names a
+/// prop the column passes.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum CellDisplay {
+    /// Each numeric value in the viewer's locale, right-aligned, with a fixed
+    /// number of decimal places and a unit when given.
+    Number {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        precision: Option<CellSetting<u32>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        unit: Option<CellSetting<String>>,
+    },
+}
+
+/// A display setting: a literal, or the value of a declared prop.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum CellSetting<T> {
+    Prop(CellPropReference),
+    Value(T),
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct CellPropReference {
+    pub prop: String,
+}
+
+impl CellDeclaration {
+    fn validate(&self) -> Result<(), String> {
+        if self.value_types.is_empty() {
+            return Err("requires value types".into());
+        }
+        let mut value_types = HashSet::new();
+        for value_type in &self.value_types {
+            let parsed = ValueType::parse(value_type).filter(|parsed| parsed.is_scalar());
+            if parsed.is_none() || !value_types.insert(value_type) {
+                return Err(format!(
+                    "has an unsupported or repeated value type '{value_type}'"
+                ));
+            }
+        }
+        if self.props.len() > MAX_CELL_PROPS {
+            return Err(format!("declares more than {MAX_CELL_PROPS} props"));
+        }
+        for (name, prop) in &self.props {
+            if !valid_cell_prop_name(name) {
+                return Err(format!("has an invalid prop name '{name}'"));
+            }
+            let valid = match prop {
+                CellProp::Integer { minimum, maximum } => minimum
+                    .zip(*maximum)
+                    .is_none_or(|(minimum, maximum)| minimum <= maximum),
+                CellProp::String { max_length } => {
+                    (1..=MAX_CELL_STRING_PROP_CHARS).contains(max_length)
+                }
+            };
+            if !valid {
+                return Err(format!("has invalid bounds for prop '{name}'"));
+            }
+        }
+        match &self.display {
+            CellDisplay::Number { precision, unit } => {
+                if !self
+                    .value_types
+                    .iter()
+                    .all(|value_type| matches!(value_type.as_str(), "number" | "integer"))
+                {
+                    return Err(
+                        "shows numbers, so its value types must be number or integer".into(),
+                    );
+                }
+                match precision {
+                    Some(CellSetting::Value(precision)) if *precision > MAX_CELL_PRECISION => {
+                        return Err(format!("precision exceeds {MAX_CELL_PRECISION}"));
+                    }
+                    Some(CellSetting::Prop(reference)) => {
+                        let bounded = matches!(
+                            self.props.get(&reference.prop),
+                            Some(CellProp::Integer { minimum: Some(minimum), maximum: Some(maximum) })
+                                if *minimum >= 0 && *maximum <= i64::from(MAX_CELL_PRECISION)
+                        );
+                        if !bounded {
+                            return Err(format!(
+                                "precision must name an integer prop bounded to 0-{MAX_CELL_PRECISION}"
+                            ));
+                        }
+                    }
+                    _ => {}
+                }
+                match unit {
+                    Some(CellSetting::Value(unit))
+                        if unit.trim().is_empty() || unit.chars().count() > MAX_CELL_UNIT_CHARS =>
+                    {
+                        return Err(format!("unit must have 1-{MAX_CELL_UNIT_CHARS} characters"));
+                    }
+                    Some(CellSetting::Prop(reference)) => {
+                        let bounded = matches!(
+                            self.props.get(&reference.prop),
+                            Some(CellProp::String { max_length })
+                                if *max_length as usize <= MAX_CELL_UNIT_CHARS
+                        );
+                        if !bounded {
+                            return Err(format!(
+                                "unit must name a string prop of at most {MAX_CELL_UNIT_CHARS} characters"
+                            ));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Checks the props a table column passes against this declaration.
+    pub fn validate_props(&self, props: &Value) -> Result<(), String> {
+        let props = match props {
+            Value::Null => return Ok(()),
+            Value::Object(props) => props,
+            _ => return Err("props must be an object".into()),
+        };
+        for (name, value) in props {
+            let valid = match self.props.get(name) {
+                None => return Err(format!("prop '{name}' is not declared")),
+                Some(CellProp::Integer { minimum, maximum }) => {
+                    value.as_i64().is_some_and(|value| {
+                        minimum.is_none_or(|minimum| value >= minimum)
+                            && maximum.is_none_or(|maximum| value <= maximum)
+                    })
+                }
+                Some(CellProp::String { max_length }) => value.as_str().is_some_and(|value| {
+                    !value.trim().is_empty() && value.chars().count() <= *max_length as usize
+                }),
+            };
+            if !valid {
+                return Err(format!(
+                    "prop '{name}' is outside its declared type or bounds"
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Cell prop names follow attribute codes: lowercase snake case.
+fn valid_cell_prop_name(name: &str) -> bool {
+    let mut bytes = name.bytes();
+    name.len() <= MAX_EXTENSION_IDENTIFIER_BYTES
+        && bytes.next().is_some_and(|byte| byte.is_ascii_lowercase())
+        && bytes.all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -707,6 +883,10 @@ pub struct UiContribution {
     /// The title in other languages, keyed by language code (`pl`, `pt-BR`).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub translations: BTreeMap<String, ContributionTranslation>,
+    /// How a host-rendered `cell` shows a value; required for cells and
+    /// rejected on every other kind.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cell: Option<CellDeclaration>,
 }
 
 /// Declarative conditions the host checks before offering an action. Every
@@ -816,6 +996,9 @@ pub enum UiContributionKind {
     /// Host-managed dialog opened by the same extension's actions. It outlives
     /// the source outlet and receives the action's captured context.
     Dialog,
+    /// A host-rendered Explorer table cell: a declared display a table column
+    /// names. It has no artifact; an extension may declare several.
+    Cell,
     /// A titled tab on the record page whose panel is the extension's frame.
     /// An extension may add up to [`MAX_RECORD_TABS_PER_EXTENSION`].
     Tab,
@@ -1330,39 +1513,6 @@ impl Manifest {
             "UI contribution",
         )?;
         let mut outlets = HashSet::new();
-        unique(
-            self.cell_renderers.iter().map(|renderer| &renderer.id),
-            "cell renderer",
-        )?;
-        if !self.cell_renderers.is_empty()
-            && !self
-                .permissions
-                .iter()
-                .chain(&self.optional_permissions)
-                .any(|item| item == "client.explorer_table_cell")
-        {
-            return Err(ManifestError::Invalid(
-                "cell renderers require client.explorer_table_cell".into(),
-            ));
-        }
-        for renderer in &self.cell_renderers {
-            valid_id(&renderer.id, "cell renderer")?;
-            if renderer.version == 0 || renderer.value_types.is_empty() {
-                return Err(ManifestError::Invalid(format!(
-                    "cell renderer '{}' requires a positive version and value types",
-                    renderer.id
-                )));
-            }
-            for value_type in &renderer.value_types {
-                if !ValueType::parse(value_type).is_some_and(ValueType::is_scalar) {
-                    return Err(ManifestError::Invalid(format!(
-                        "cell renderer '{}' has unsupported value type '{value_type}'",
-                        renderer.id
-                    )));
-                }
-            }
-            unique(renderer.allowed_props.iter(), "cell renderer prop")?;
-        }
         for contribution in &self.ui {
             valid_id(&contribution.id, "UI contribution id")?;
             let contribution_key = format!("{}:{}", self.attricat.id, contribution.id);
@@ -1374,7 +1524,9 @@ impl Manifest {
             }
             let host_rendered = matches!(
                 contribution.kind,
-                UiContributionKind::Navigation | UiContributionKind::Action
+                UiContributionKind::Navigation
+                    | UiContributionKind::Action
+                    | UiContributionKind::Cell
             );
             if !host_rendered
                 && (contribution.version == 0
@@ -1397,6 +1549,14 @@ impl Manifest {
             {
                 return Err(ManifestError::Invalid(format!(
                     "navigation UI contribution '{}' requires a route and cannot declare an artifact or outlet",
+                    contribution.id
+                )));
+            }
+            if matches!(contribution.kind, UiContributionKind::Cell) {
+                validate_cell(contribution)?;
+            } else if contribution.cell.is_some() {
+                return Err(ManifestError::Invalid(format!(
+                    "only cell UI contributions may declare cell ('{}')",
                     contribution.id
                 )));
             }
@@ -1468,7 +1628,8 @@ impl Manifest {
                 | (UiContributionKind::Action, Some(outlet))
                 | (UiContributionKind::Panel, Some(outlet))
                 | (UiContributionKind::Dialog, Some(outlet))
-                | (UiContributionKind::Tab, Some(outlet)) => {
+                | (UiContributionKind::Tab, Some(outlet))
+                | (UiContributionKind::Cell, Some(outlet)) => {
                     // Extensions may each contribute once to a content outlet.
                     // A single extension cannot rely on duplicate ordering;
                     // actions and dialogs are distinct items, so they may.
@@ -1477,6 +1638,7 @@ impl Manifest {
                         UiContributionKind::Action
                             | UiContributionKind::Dialog
                             | UiContributionKind::Tab
+                            | UiContributionKind::Cell
                     );
                     if !repeatable && !outlets.insert(outlet) {
                         return Err(ManifestError::Invalid(
@@ -1486,7 +1648,7 @@ impl Manifest {
                     let valid_kind = matches!(
                         (&contribution.kind, outlet),
                         (UiContributionKind::Action, UiOutlet::ExplorerRowAction)
-                            | (UiContributionKind::Embedded, UiOutlet::ExplorerTableCell)
+                            | (UiContributionKind::Cell, UiOutlet::ExplorerTableCell)
                             | (UiContributionKind::Action, UiOutlet::ExplorerAction)
                             | (UiContributionKind::Action, UiOutlet::ExplorerBulkAction)
                             | (UiContributionKind::Action, UiOutlet::RecordHeaderAction)
@@ -1522,7 +1684,8 @@ impl Manifest {
                 | (UiContributionKind::Action, None)
                 | (UiContributionKind::Panel, None)
                 | (UiContributionKind::Dialog, None)
-                | (UiContributionKind::Tab, None) => {
+                | (UiContributionKind::Tab, None)
+                | (UiContributionKind::Cell, None) => {
                     return Err(ManifestError::Invalid(
                         "embedded UI contributions require an outlet".into(),
                     ));
@@ -1574,18 +1737,6 @@ impl Manifest {
             }
         }
         self.validate_record_field_notes()?;
-        for renderer in &self.cell_renderers {
-            if !self.ui.iter().any(|contribution| {
-                contribution.outlet == Some(UiOutlet::ExplorerTableCell)
-                    && contribution.id == renderer.id
-                    && contribution.version == renderer.version
-            }) {
-                return Err(ManifestError::Invalid(format!(
-                    "cell renderer '{}@{}' requires a matching explorer_table_cell contribution",
-                    renderer.id, renderer.version
-                )));
-            }
-        }
         Ok(())
     }
 
@@ -2163,6 +2314,34 @@ fn unique<'a>(values: impl Iterator<Item = &'a String>, label: &str) -> Result<(
     }
     Ok(())
 }
+/// A cell is only its declaration: the host draws it, so it has no artifact,
+/// title or action settings.
+fn validate_cell(contribution: &UiContribution) -> Result<(), ManifestError> {
+    let invalid =
+        |reason: String| ManifestError::Invalid(format!("cell '{}' {reason}", contribution.id));
+    if contribution.version == 0 {
+        return Err(invalid("requires a positive version".into()));
+    }
+    if contribution.artifact.is_some()
+        || contribution.route.is_some()
+        || contribution.title.is_some()
+        || contribution.invoke.is_some()
+        || contribution.when.is_some()
+        || contribution.confirm.is_some()
+        || contribution.icon.is_some()
+    {
+        return Err(invalid(
+            "cannot declare an artifact, route, title, invoke, when, confirm or icon".into(),
+        ));
+    }
+    contribution
+        .cell
+        .as_ref()
+        .ok_or_else(|| invalid("requires a cell declaration".into()))?
+        .validate()
+        .map_err(invalid)
+}
+
 pub fn valid_id(value: &str, label: &str) -> Result<(), ManifestError> {
     if value.is_empty()
         || value.len() > MAX_EXTENSION_IDENTIFIER_BYTES
@@ -2692,6 +2871,7 @@ mod tests {
             confirm: None,
             icon: None,
             translations: BTreeMap::new(),
+            cell: None,
         });
         value.attricat.id = "a".repeat(127);
         assert_eq!(
@@ -2927,6 +3107,7 @@ mod tests {
             confirm: None,
             icon: None,
             translations: BTreeMap::new(),
+            cell: None,
         });
         assert!(
             value.validate(SUPPORTED_HOST_API).is_ok(),
@@ -3086,6 +3267,7 @@ mod tests {
             confirm: None,
             icon: None,
             translations: BTreeMap::new(),
+            cell: None,
         };
         // Several actions may share an outlet; each invokes one thing.
         value.ui.push(action(
@@ -3169,6 +3351,7 @@ mod tests {
                     title: "Stany".into(),
                 },
             )]),
+            cell: None,
         };
         // An extension may add several tabs, up to its limit.
         value.ui.push(tab("stock"));
@@ -3237,6 +3420,7 @@ mod tests {
                 confirm: None,
                 icon: None,
                 translations: BTreeMap::new(),
+                cell: None,
             },
             UiContribution {
                 id: "workbench-nav".into(),
@@ -3251,6 +3435,7 @@ mod tests {
                 confirm: None,
                 icon: None,
                 translations: BTreeMap::new(),
+                cell: None,
             },
         ];
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
@@ -3302,6 +3487,7 @@ mod tests {
             confirm: None,
             icon: None,
             translations: BTreeMap::new(),
+            cell: None,
         });
         value.permissions.push("client.action_dialog".into());
         value.ui.push(UiContribution {
@@ -3317,6 +3503,7 @@ mod tests {
             confirm: None,
             icon: None,
             translations: BTreeMap::new(),
+            cell: None,
         });
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
         // A toolbar action names no records, so it cannot require write access.
@@ -3333,25 +3520,25 @@ mod tests {
     }
 
     #[test]
-    fn validates_explorer_table_cell_renderer_contract() {
+    fn validates_declarative_cells() {
         let mut value = manifest();
         value.permissions.push("client.explorer_table_cell".into());
-        value.artifacts.push(Artifact {
-            id: "client".into(),
-            kind: ArtifactKind::ClientComponent,
-            path: "client.js".into(),
-        });
-        value.cell_renderers.push(CellRenderer {
-            id: "example.currency".into(),
-            version: 1,
-            value_types: vec!["number".into()],
-            allowed_props: vec!["currency".into()],
-        });
+        let cell = || -> CellDeclaration {
+            serde_json::from_value(serde_json::json!({
+                "value_types": ["number", "integer"],
+                "props": {
+                    "precision": {"type": "integer", "minimum": 0, "maximum": 4},
+                    "unit": {"type": "string", "max_length": 8}
+                },
+                "display": {"type": "number", "precision": {"prop": "precision"}, "unit": {"prop": "unit"}}
+            }))
+            .unwrap()
+        };
         value.ui.push(UiContribution {
-            id: "example.currency".into(),
+            id: "example.amount".into(),
             version: 1,
-            kind: UiContributionKind::Embedded,
-            artifact: Some("client".into()),
+            kind: UiContributionKind::Cell,
+            artifact: None,
             outlet: Some(UiOutlet::ExplorerTableCell),
             route: None,
             title: None,
@@ -3360,13 +3547,80 @@ mod tests {
             confirm: None,
             icon: None,
             translations: BTreeMap::new(),
+            cell: Some(cell()),
         });
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
-        value.permissions.clear();
-        assert!(value.validate(SUPPORTED_HOST_API).is_err());
-        value.permissions.push("client.explorer_table_cell".into());
-        value.ui[0].version = 2;
-        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+        // Several cells may share the outlet.
+        let mut second = value.ui[0].clone();
+        second.id = "example.fixed".into();
+        second.cell = Some(
+            serde_json::from_value(serde_json::json!({
+                "value_types": ["number"],
+                "display": {"type": "number", "precision": 2, "unit": "EUR"}
+            }))
+            .unwrap(),
+        );
+        value.ui.push(second);
+        assert!(value.validate(SUPPORTED_HOST_API).is_ok());
+
+        let rejects = |change: &dyn Fn(&mut UiContribution)| {
+            let mut changed = value.clone();
+            change(&mut changed.ui[0]);
+            assert!(changed.validate(SUPPORTED_HOST_API).is_err());
+        };
+        rejects(&|cell| cell.cell = None);
+        rejects(&|cell| cell.artifact = Some("client".into()));
+        rejects(&|cell| cell.title = Some("Amount".into()));
+        rejects(&|cell| cell.cell.as_mut().unwrap().value_types = vec!["string".into()]);
+        rejects(&|cell| {
+            cell.cell.as_mut().unwrap().props.insert(
+                "precision".into(),
+                CellProp::Integer {
+                    minimum: Some(0),
+                    maximum: Some(99),
+                },
+            );
+        });
+        rejects(&|cell| {
+            cell.cell.as_mut().unwrap().display = CellDisplay::Number {
+                precision: Some(CellSetting::Prop(CellPropReference {
+                    prop: "missing".into(),
+                })),
+                unit: None,
+            };
+        });
+        rejects(&|cell| {
+            cell.cell.as_mut().unwrap().display = CellDisplay::Number {
+                precision: None,
+                unit: Some(CellSetting::Value("a unit far too long".into())),
+            };
+        });
+        let mut without_permission = value.clone();
+        without_permission.permissions.clear();
+        assert!(without_permission.validate(SUPPORTED_HOST_API).is_err());
+
+        let cell = cell();
+        assert!(
+            cell.validate_props(&serde_json::json!({"precision": 2, "unit": "EUR"}))
+                .is_ok()
+        );
+        assert!(cell.validate_props(&Value::Null).is_ok());
+        assert!(
+            cell.validate_props(&serde_json::json!({"precision": 5}))
+                .is_err()
+        );
+        assert!(
+            cell.validate_props(&serde_json::json!({"precision": "2"}))
+                .is_err()
+        );
+        assert!(
+            cell.validate_props(&serde_json::json!({"unit": "too long unit"}))
+                .is_err()
+        );
+        assert!(
+            cell.validate_props(&serde_json::json!({"currency": "EUR"}))
+                .is_err()
+        );
     }
 
     #[test]
@@ -3408,6 +3662,7 @@ mod tests {
             confirm: None,
             icon: None,
             translations: BTreeMap::new(),
+            cell: None,
         });
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
         value
@@ -3446,6 +3701,7 @@ mod tests {
             confirm: None,
             icon: None,
             translations: BTreeMap::new(),
+            cell: None,
         });
         value.ui.push(UiContribution {
             id: "explorer-action".into(),
@@ -3460,6 +3716,7 @@ mod tests {
             confirm: None,
             icon: None,
             translations: BTreeMap::new(),
+            cell: None,
         });
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
         value.ui[1].kind = UiContributionKind::Panel;

@@ -441,7 +441,7 @@ views:
 | `columns` | lista mapowań | Definicje kolumn. Musi być niepusta, z unikalnymi wartościami `field`. |
 | `columns[].field` | ciąg znaków | Lokalny atrybut skalarny, lokalny atrybut plikowy ze zgodnym rendererem lub ścieżka o maksymalnie trzech krokach relacji zakończona atrybutem skalarnym, np. `family.product_type.name`. |
 | `columns[].label` | ciąg znaków | Nagłówek kolumny. Domyślnie nazwa atrybutu. |
-| `columns[].renderer` | odwołanie do komponentu | `attricat.table_image@1`, komponent wyświetlania tekstu (`attricat.color_display@1`, `attricat.email_display@1`, `attricat.url_display@1` lub `attricat.phone_display@1`) albo renderer komórek z rozszerzenia. |
+| `columns[].renderer` | odwołanie do komponentu | `attricat.table_image@1`, komponent wyświetlania tekstu (`attricat.color_display@1`, `attricat.email_display@1`, `attricat.url_display@1` lub `attricat.phone_display@1`) albo komórka tabeli z rozszerzenia. |
 | `fields` | tablica kodów atrybutów | Starszy skrót dla lokalnych kolumn skalarnych. Nie można go łączyć z `columns`. |
 | `component` | odwołanie do komponentu | Opcjonalny komponent tabeli. |
 
@@ -529,7 +529,7 @@ Wbudowane komponenty:
 
 Komponenty oznaczone *(edit)* są akceptowane tylko w przestarzałym widoku `edit`. Tam, gdzie pole w `detail` jest edytowalne, aplikacja internetowa używa komponentu edycji sparowanego z komponentem wyświetlania albo standardowego edytora dla typu wartości. Działanie tych komponentów opisano w sekcji [Kontrolki pól](/pl/builders/views/#kontrolki-pól).
 
-Identyfikator i wersja renderera komórek z rozszerzenia muszą odpowiadać rendererowi zadeklarowanemu przez włączone rozszerzenie dla typu wartości kolumny.
+Identyfikator i wersja komórki z rozszerzenia muszą odpowiadać [komórce tabeli](/pl/extensions/manifest/#komórki-tabeli) zadeklarowanej przez włączone rozszerzenie dla typu wartości kolumny, a jej `props` muszą pasować do zadeklarowanych typów właściwości.
 
 ### `extension_layout`
 

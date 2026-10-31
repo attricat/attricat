@@ -83,11 +83,6 @@ export const defaultHiddenColumnIds: readonly string[] = [
 // Extension integration literals.
 export const explorerTableCellCapability = 'client.explorer_table_cell';
 export const attricatRendererPrefix = 'attricat.';
-export const extensionCellStartTimeout = 1_500;
-// `flexRender` is only called for virtual rows. This bounded allocator keeps a
-// pathological blueprint from turning one Explorer viewport into hundreds of
-// opaque-origin frames.
-export const maximumExplorerCellFrames = 32;
 
 // Result table virtualization.
 export const estimatedResultRowHeight = 53;

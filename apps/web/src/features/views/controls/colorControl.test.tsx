@@ -174,7 +174,6 @@ describe('color components', () => {
           } as unknown as RecordItem
         }
         extension={undefined}
-        frameAllowed={false}
       />,
     );
     expect(container.querySelectorAll('[aria-hidden="true"]')).toHaveLength(2);

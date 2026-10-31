@@ -1633,10 +1633,12 @@ contextual actions—not an application-wide navigation tree.
 - **`record_header_action`** (`action`, requiring
   `client.record_header_action`) adds items to the record page's **Actions**
   menu, acting on that record.
-- **`explorer_table_cell`** (`embedded`, requiring
-  `client.explorer_table_cell`) mounts a sandboxed renderer for a configured
-  scalar Explorer table column when the enabled release declares a matching
-  cell-renderer contribution.
+- **`explorer_table_cell`** (`cell`, requiring `client.explorer_table_cell`)
+  is declarative: a table column names the cell, and the host draws the value
+  with the cell's `display` and the column's `props`. No frame mounts, so a
+  viewport of cells costs nothing extra. The blueprint compiler checks the
+  column's value type and props against the enabled release's declaration;
+  an unavailable cell shows the value as usual.
 - **`blueprint_detail_panel`** (`panel`, requiring
   `client.blueprint_detail_panel`) is a read-only region on a blueprint detail
   page. Its strict context is `blueprint_id`, `blueprint_version`, and
@@ -1714,7 +1716,7 @@ dialog frame should call `attricat.dialog.close()` on Escape. Closing it
   them with [field notes](#field-notes) instead.
 
 Every manifest-declared outlet has a host-owned client mount path;
-`explorer_table_cell` uses the Explorer table renderer rather than
+`explorer_table_cell` is drawn by the Explorer table itself rather than
 `ExtensionOutlet`. The browser schema tests compare the declared Rust outlets
 with the client enum and check each outlet's mount path. A placement is still
 shown only when its page, scope, contribution kind, and required grants match.

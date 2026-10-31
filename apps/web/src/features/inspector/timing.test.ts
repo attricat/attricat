@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   clearTimingsForTest,
   recentTimings,
-  recordFrameTiming,
   recordServerTiming,
   useTimingStore,
 } from './timing';
@@ -37,20 +36,20 @@ describe('development timing buffer', () => {
       lengths.push(state.entries.length);
     });
 
-    recordFrameTiming('frame-load', 12);
+    recordServerTiming('serialize;dur=12');
     clearTimingsForTest();
     unsubscribe();
 
     expect(lengths).toEqual([1, 0]);
   });
 
-  it('bounds entries and records frame outcomes without contribution data', () => {
+  it('bounds entries', () => {
     for (let index = 0; index < 55; index += 1)
-      recordFrameTiming('frame-load', index);
+      recordServerTiming(`serialize;dur=${index}`);
 
     expect(recentTimings()).toHaveLength(50);
     expect(recentTimings()[0]?.phases).toEqual([
-      { name: 'frame-load', duration: 54 },
+      { name: 'serialize', duration: 54 },
     ]);
   });
 });

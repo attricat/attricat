@@ -2,7 +2,7 @@ use attricat_domain::attribute_options::Cardinality;
 use attricat_domain::value_type::ValueType;
 use std::collections::HashSet;
 
-use crate::extensions::Manifest;
+use crate::extensions::{Manifest, UiContributionKind, UiOutlet};
 use attricat_blueprint::{
     BlueprintKind, BrowseBy, CompiledBlueprint, ResolvedInclude, ViewDefinition, compile, parse,
     validate_table_renderer,
@@ -471,26 +471,39 @@ async fn validate_renderer(
     .bind(workspace_id)
     .fetch_all(&mut **transaction)
     .await?;
+    // An enabled extension's cell with this id and version that shows the
+    // column's value type, given props within their declared types.
+    let mut problem = None;
     let valid = manifests
         .into_iter()
         .filter_map(|raw| serde_json::from_value::<Manifest>(raw).ok())
-        .flat_map(|manifest| manifest.cell_renderers)
-        .any(|candidate| {
-            candidate.id == renderer.id
-                && candidate.version == renderer.version
-                && candidate
-                    .value_types
-                    .iter()
-                    .any(|item| item == value_type.as_str())
-                && (renderer.props.is_null()
-                    || renderer.props.as_object().is_some_and(|props| {
-                        props
-                            .keys()
-                            .all(|key| candidate.allowed_props.iter().any(|prop| prop == key))
-                    }))
+        .flat_map(|manifest| manifest.ui)
+        .filter(|contribution| {
+            contribution.kind == UiContributionKind::Cell
+                && contribution.outlet == Some(UiOutlet::ExplorerTableCell)
+                && contribution.id == renderer.id
+                && contribution.version == renderer.version
+        })
+        .filter_map(|contribution| contribution.cell)
+        .filter(|cell| {
+            cell.value_types
+                .iter()
+                .any(|item| item == value_type.as_str())
+        })
+        .any(|cell| match cell.validate_props(&renderer.props) {
+            Ok(()) => true,
+            Err(error) => {
+                problem = Some(error);
+                false
+            }
         });
     if valid {
         Ok(())
+    } else if let Some(problem) = problem {
+        Err(RepositoryError::InvalidBlueprintDefinition(format!(
+            "table column renderer '{}@{}' {problem}",
+            renderer.id, renderer.version
+        )))
     } else {
         Err(RepositoryError::InvalidBlueprintDefinition(format!(
             "table column renderer '{}@{}' is not declared for {value_type}",

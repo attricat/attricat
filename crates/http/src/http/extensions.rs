@@ -24,9 +24,9 @@ use crate::{
     extension_installer::{ExtensionInstallError, ExtensionInstaller},
     extension_registry::{DiscoveredRelease, GitHubRepository},
     extensions::{
-        ActionCondition, ActionConfirmation, ActionInvocation, ContributionTranslation,
-        ExtensionPackage, MAX_EXTENSION_IDENTIFIER_BYTES, UiContributionKind, UiOutlet,
-        validate_schema,
+        ActionCondition, ActionConfirmation, ActionInvocation, CellDeclaration,
+        ContributionTranslation, ExtensionPackage, MAX_EXTENSION_IDENTIFIER_BYTES,
+        UiContributionKind, UiOutlet, validate_schema,
     },
     repository::{
         BlueprintConnectorJob, CreateExtensionOperationSchedule, ExtensionGrant,
@@ -84,6 +84,9 @@ pub(super) struct RuntimeContribution {
     icon: Option<String>,
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     translations: BTreeMap<String, ContributionTranslation>,
+    /// How the host draws a table cell, e.g. `{"display": {"type": "number"}}`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cell: Option<CellDeclaration>,
 }
 
 #[derive(Serialize)]
@@ -855,6 +858,7 @@ pub(super) async fn runtime(
                 confirm: item.confirm,
                 icon: item.icon,
                 translations: item.translations,
+                cell: item.cell,
             })
             .collect(),
     ))

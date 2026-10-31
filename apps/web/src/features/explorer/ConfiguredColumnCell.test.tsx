@@ -2,6 +2,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import '../../i18n';
+import type { ExtensionContribution } from '../extensions/api';
 import type { RecordItem } from '../records/api';
 import { ConfiguredColumnCell } from './ConfiguredColumnCell';
 
@@ -29,7 +30,6 @@ const renderCell = (field: string, values: unknown[], version = 1) =>
       }}
       record={{ ...record, table_values: { [field]: values } }}
       extension={undefined}
-      frameAllowed={false}
     />,
   );
 
@@ -58,5 +58,67 @@ describe('configured email columns', () => {
     renderCell('email', ['a@example.test'], 2);
     expect(screen.queryByRole('link')).toBeNull();
     expect(screen.getByText('a@example.test')).toBeTruthy();
+  });
+});
+
+describe('declared extension cells', () => {
+  const extension: ExtensionContribution = {
+    contribution_key: 'acme.money:amount',
+    display_order: 0,
+    navigation_group: null,
+    extension_id: 'acme.money',
+    extension_name: 'Acme Money',
+    release_id: '123e4567-e89b-12d3-a456-426614174000',
+    configuration: {},
+    capabilities: ['client.explorer_table_cell'],
+    id: 'acme.money.amount',
+    version: 1,
+    kind: 'cell',
+    outlet: 'explorer_table_cell',
+    route: null,
+    title: null,
+    invoke: null,
+    when: null,
+    confirm: null,
+    icon: null,
+    translations: {},
+    cell: {
+      value_types: ['number'],
+      props: {},
+      display: {
+        type: 'number',
+        precision: { prop: 'precision' },
+        unit: { prop: 'unit' },
+      },
+    },
+  };
+  const renderAmount = (values: unknown[], props: Record<string, unknown>) =>
+    render(
+      <ConfiguredColumnCell
+        attribute={{ code: 'price', value_type: 'number' }}
+        column={{
+          field: 'price',
+          renderer: { id: 'acme.money.amount', version: 1, props },
+          relationshipSortBlocked: false,
+          sortable: false,
+        }}
+        record={{ ...record, table_values: { price: values } }}
+        extension={extension}
+      />,
+    );
+
+  it('draws each value as the cell declares, with the column props', () => {
+    renderAmount([55], { precision: 2, unit: 'EUR' });
+    expect(screen.getByText('55.00 EUR')).toBeTruthy();
+  });
+
+  it('ignores a precision outside the bounds and shows several values', () => {
+    renderAmount([1.5, 2], { precision: 99 });
+    expect(screen.getByText('1.5, 2')).toBeTruthy();
+  });
+
+  it('keeps the host rendering for a value it cannot show', () => {
+    renderAmount(['n/a'], { precision: 2 });
+    expect(screen.getByText('n/a')).toBeTruthy();
   });
 });

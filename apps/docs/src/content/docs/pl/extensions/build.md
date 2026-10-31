@@ -7,7 +7,7 @@ Rozszerzenie to archiwum `.tar.zst` z plikiem `manifest.json` w katalogu główn
 
 - **Komponenty serwerowe**: komponenty WebAssembly, które obsługują zdarzenia katalogu, odpowiadają na polecenia z interfejsu rozszerzenia i wykonują długie operacje, takie jak importy i eksporty. Zobacz [Środowisko wykonawcze serwera](/pl/extensions/server/).
 - **Komponenty klienckie**: moduły JavaScript renderowane w izolowanych ramkach w stałych miejscach aplikacji webowej albo jako pełne strony. Zobacz [Kontrybucje klienckie](/pl/extensions/client/).
-- **Deklaracje**, na podstawie których działa host bez uruchamiania Twojego kodu: typy atrybutów, renderery komórek tabeli, schematy konfiguracji i kontrakty zdarzeń.
+- **Deklaracje**, na podstawie których działa host bez uruchamiania Twojego kodu: typy atrybutów, komórki tabeli, schematy konfiguracji i kontrakty zdarzeń.
 
 Rozszerzenie referencyjne `attricat-extension-example` pokazuje, jak wszystkie te elementy działają razem: oblicza numeryczne atrybuty z formuł i ma stronę warsztatu, akcję rekordu, komórkę tabeli oraz serwerową obsługę zdarzeń.
 

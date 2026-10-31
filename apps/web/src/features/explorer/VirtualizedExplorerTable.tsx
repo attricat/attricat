@@ -67,8 +67,6 @@ type Props = {
   onLoadMore: () => void;
   /** Mark the row whose record is open in the panel. */
   highlightPanelRecord?: boolean;
-  /** A new token re-renders every row, as extension cells require. */
-  renderToken?: object;
   /** Size the table to its rows instead of filling the viewport. */
   fitRows?: boolean;
 };
@@ -87,7 +85,6 @@ export const VirtualizedExplorerTable = ({
   isFetchingNextPage,
   onLoadMore,
   highlightPanelRecord = false,
-  renderToken,
   fitRows = false,
 }: Props) => {
   const { t } = useTranslation();
@@ -187,7 +184,6 @@ export const VirtualizedExplorerTable = ({
                 key={row.id}
                 measureElement={measureElement}
                 onToggleRecord={toggleRecord}
-                renderToken={renderToken}
                 row={row}
                 selected={selection.isSelected(row.id)}
                 selectionDisabled={
@@ -229,8 +225,6 @@ const ExplorerResultRow = memo(function ExplorerResultRow({
   index: number;
   measureElement: (element: HTMLTableRowElement | null) => void;
   onToggleRecord: (record: RecordItem) => void;
-  /** Only compared, to re-render the row. */
-  renderToken: object | undefined;
   row: LegacyRow<RecordItem>;
   selected: boolean;
   selectionDisabled: boolean;

@@ -5,7 +5,6 @@ import { attributeLabel } from '../records/recordDisplay';
 import type { AttributeValueType } from '../records/valueTypeIcons';
 import {
   builtInConfigurableColumnIds,
-  attricatRendererPrefix,
   explorerColumnIds,
   relationshipPathSeparator,
 } from './constants';
@@ -25,11 +24,6 @@ export type ExplorerTableColumn = {
 
 export const isRelationshipPath = (field: string) =>
   field.includes(relationshipPathSeparator);
-
-export const usesExtensionRenderer = (column: ExplorerTableColumn) =>
-  Boolean(
-    column.renderer && !column.renderer.id.startsWith(attricatRendererPrefix),
-  );
 
 const humanizeField = (field: string) => field.replaceAll('_', ' ');
 

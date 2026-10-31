@@ -31,9 +31,6 @@ const serverPhases = new Set([
   'sql-records-page',
   'sql-related-hydrate',
 ]);
-const framePhaseNames = ['frame-load', 'frame-fallback'] as const;
-type FramePhaseName = (typeof framePhaseNames)[number];
-const framePhases = new Set<string>(framePhaseNames);
 let nextEntryId = 0;
 
 type TimingStore = {
@@ -88,13 +85,6 @@ export const recordServerTiming = (header: string | null) => {
     ];
   });
   addEntry(phases);
-};
-
-/** Frame timings intentionally carry no contribution, record, or artifact data. */
-export const recordFrameTiming = (name: FramePhaseName, duration: number) => {
-  if (!framePhases.has(name) || !Number.isFinite(duration) || duration < 0)
-    return;
-  addEntry([{ name, duration }]);
 };
 
 export const recentTimings = () => [...useTimingStore.getState().entries];

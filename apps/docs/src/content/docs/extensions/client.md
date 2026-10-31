@@ -1,6 +1,6 @@
 ---
 title: Client contributions
-description: Add pages, panels, actions, and table cells to the web app from sandboxed frames, and use the catalog client API.
+description: Add pages, panels, and actions to the web app from sandboxed frames, declare table cells, and use the catalog client API.
 ---
 
 A client contribution is a JavaScript module that Attricat loads into a sandboxed frame at a fixed place in the web app. The host owns everything around the frame: layout, loading and error states, focus, and accessibility landmarks. Your module owns what is inside it.
@@ -129,7 +129,7 @@ A client handler is a client component run headless in a sandboxed frame. It exp
 | `explorer_row_action` | `action` | `client.explorer_row_action` | The [action context](#actions), with the row's record |
 | `explorer_action` | `action` | `client.explorer_action` | The [action context](#actions), with no records |
 | `explorer_bulk_action` | `action` | `client.explorer_bulk_action` | The [action context](#actions), with the selected records (1 to 50) |
-| `explorer_table_cell` | `embedded` | `client.explorer_table_cell` | The cell value, for a column using your [cell renderer](/extensions/manifest/#cell-renderers). |
+| `explorer_table_cell` | `cell` | `client.explorer_table_cell` | None: Attricat draws the [table cell](/extensions/manifest/#table-cells) a column names, without a frame. |
 
 Row actions are items of a row's actions menu, bulk actions items of the selection's **Actions** menu, and toolbar actions sit behind one **Extension actions** button. Explorer contexts never include the search query, filters, or row values. A selection is a hint about what the user is looking at, not an authorization: commands still check permissions on the server.
 

@@ -163,7 +163,7 @@ views:
 
 ### Renderery komórek z rozszerzeń
 
-Włączone rozszerzenie może dostarczać renderery komórek, np. formatowanie walut. Odwołaj się do niego przez identyfikator i wersję, a jego opcje przekaż w `props`:
+Włączone rozszerzenie może deklarować komórki tabeli, np. kwotę ze stałą liczbą miejsc po przecinku i jednostką. Odwołaj się do komórki przez identyfikator i wersję, a jej opcje przekaż w `props`:
 
 ```yaml
 views:
@@ -171,12 +171,12 @@ views:
     columns:
       - field: price
         renderer:
-          id: example.currency
+          id: example.amount
           version: 1
-          props: {currency: USD}
+          props: {precision: 2, unit: USD}
 ```
 
-Renderer musi być zadeklarowany przez włączone rozszerzenie dla typu wartości kolumny. Działa w odizolowanej ramce; zobacz [Kontrybucje klienckie](/pl/extensions/client/).
+Komórka musi być zadeklarowana przez włączone rozszerzenie dla typu wartości kolumny, a każda właściwość musi pasować do zadeklarowanego typu i granic. Attricat rysuje komórkę sam; zobacz [Komórki tabeli](/pl/extensions/manifest/#komórki-tabeli).
 
 ## Panel przeglądania w Przeglądarce rekordów
 

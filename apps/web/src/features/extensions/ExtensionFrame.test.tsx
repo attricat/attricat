@@ -44,6 +44,7 @@ const contribution: ExtensionContribution = {
   confirm: null,
   icon: null,
   translations: {},
+  cell: null,
 };
 
 beforeEach(() =>

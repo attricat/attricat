@@ -47,6 +47,7 @@ const explain: ExtensionContribution = {
   confirm: null,
   icon: null,
   translations: {},
+  cell: null,
 };
 const recalculate: ExtensionContribution = {
   ...explain,

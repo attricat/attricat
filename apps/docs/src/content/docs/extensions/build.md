@@ -7,7 +7,7 @@ An extension is a `.tar.zst` archive with a `manifest.json` at its root and the 
 
 - **Server components**: WebAssembly components that handle catalog events, answer commands from the extension's UI, and run long operations such as imports and exports. See [Server runtime](/extensions/server/).
 - **Client components**: JavaScript modules that render inside sandboxed frames at fixed places in the web app, or as full pages. See [Client contributions](/extensions/client/).
-- **Declarations** the host acts on without running your code: attribute types, table cell renderers, configuration schemas, and event contracts.
+- **Declarations** the host acts on without running your code: attribute types, table cells, configuration schemas, and event contracts.
 
 A reference extension, `attricat-extension-example`, shows all of these working together: it computes numeric attributes from formulas, with a workbench page, a record action, a table cell, and a server event handler.
 

@@ -72,7 +72,13 @@ export const contributionKinds = {
   panel: 'panel',
   dialog: 'dialog',
   tab: 'tab',
+  cell: 'cell',
 } as const;
+/** Host-owned ways a declared Explorer table cell shows its value. */
+export const cellDisplayTypes = { number: 'number' } as const;
+/** Mirror the manifest's bounds on a number cell's settings. */
+export const maximumCellPrecision = 20;
+export const maximumCellUnitLength = 16;
 export const navigationGroups = ['promoted', 'grouped'] as const;
 export const promotedNavigationGroup = 'promoted';
 

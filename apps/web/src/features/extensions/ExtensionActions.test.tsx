@@ -72,6 +72,7 @@ const action = (
   confirm: null,
   icon: null,
   translations: {},
+  cell: null,
   ...overrides,
 });
 
