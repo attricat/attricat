@@ -24,7 +24,7 @@ import { QueryErrorNotice } from '../../../components/QueryErrorNotice';
 import { ApiErrorAlert } from '../../../components/ApiErrorAlert';
 import { BlueprintLink } from '../../blueprints/BlueprintLink';
 import { ExtensionActionMenuItems } from '../../extensions/ExtensionActions';
-import { ExtensionFrame } from '../../extensions/ExtensionFrame';
+import { ExtensionUi } from '../../extensions/ExtensionUi';
 import { hostIconComponent } from '../../extensions/hostIcons';
 import {
   isExtensionRecordTabKey,
@@ -308,10 +308,10 @@ export const RecordPreview = ({
           label: contributionTitle(contribution),
           overflow: index >= outletCapacities.recordTabs,
           content: openedExtensionTabs.has(key) && (
-            <ExtensionFrame
+            <ExtensionUi
               contribution={contribution}
               context={extensionTabContext}
-              // A new release is a new frame.
+              // A new release is a new frame or Worker mount.
               key={contribution.release_id}
             />
           ),

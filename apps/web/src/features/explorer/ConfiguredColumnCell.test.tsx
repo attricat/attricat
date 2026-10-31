@@ -82,6 +82,10 @@ describe('declared extension cells', () => {
     confirm: null,
     icon: null,
     translations: {},
+    editor: null,
+    rendering: null,
+    ui_kit: null,
+    artifact_revision: null,
     cell: {
       value_types: ['number'],
       props: {},

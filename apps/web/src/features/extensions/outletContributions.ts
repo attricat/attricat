@@ -10,14 +10,16 @@ import {
 import { outletContextSchemas } from './outletContextSchemas';
 import { extensionOutletSchema } from './schemas';
 
-// Outlets that mount extension frames. The Explorer table-cell renderer, the
-// action dialog and record tabs have their own host-controlled mount paths,
-// and action outlets render host-owned items (see ExtensionActions).
+// Outlets that mount extension UI. The Explorer table-cell renderer, the
+// action dialog, record tabs and attribute editors have their own
+// host-controlled mount paths, and action outlets render host-owned items
+// (see ExtensionActions).
 export type OutletName = Exclude<
   z.infer<typeof extensionOutletSchema>,
   | typeof extensionOutlets.explorerTableCell
   | typeof extensionOutlets.actionDialog
   | typeof extensionOutlets.recordTab
+  | typeof extensionOutlets.attributeEditor
   | ActionOutlet
 >;
 

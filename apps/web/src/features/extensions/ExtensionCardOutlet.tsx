@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { ExtensionContribution } from './api';
 import { extensionCardMinWidth } from './constants';
 import { ExtensionActionOverflow } from './ExtensionActionOverflow';
-import { ExtensionFrame } from './ExtensionFrame';
+import { ExtensionUi } from './ExtensionUi';
 import {
   contributionKey,
   type ContentPolicy,
@@ -35,7 +35,7 @@ export const ExtensionCardOutlet = ({
           key={contributionKey(item)}
           sx={{ minWidth: extensionCardMinWidth, p: 2 }}
         >
-          <ExtensionFrame contribution={item} context={context} />
+          <ExtensionUi contribution={item} context={context} />
         </Paper>
       ))}
       {overflow.length > 0 && (

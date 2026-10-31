@@ -240,6 +240,16 @@ export const referenceCandidates = async (
         detail: i18n.t('definitionEditor.details.context'),
         value: context,
       }));
+    case definitionReferenceKinds.attributeEditor:
+      return (
+        await editorCandidates(outline, references, path.slice(0, -1))
+      ).map((editor) => ({
+        detail: i18n.t('definitionEditor.details.editor', {
+          extension: editor.extensionName,
+          version: editor.version,
+        }),
+        value: editor.id,
+      }));
     case definitionReferenceKinds.viewComponent:
       return componentCandidates(outline, path.slice(0, -1)).map(
         (component) => ({
@@ -250,6 +260,25 @@ export const referenceCandidates = async (
         }),
       );
   }
+};
+
+/**
+ * Attribute editors that fit the detail field holding `editorPath`: an
+ * editor applies only to the value types it declares.
+ */
+export const editorCandidates = async (
+  outline: YamlOutline,
+  references: DefinitionReferences,
+  editorPath: YamlPath,
+) => {
+  const field = outline.valueAt([...editorPath.slice(0, -1), 'field']);
+  const valueType = documentAttributes(outline).find(
+    (attribute) => attribute.code === field,
+  )?.valueType;
+  return ((await references.attributeEditors?.()) ?? []).filter(
+    (editor) =>
+      valueType === undefined || editor.valueTypes.includes(valueType),
+  );
 };
 
 export const componentCandidates = (

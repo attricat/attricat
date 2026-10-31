@@ -7,3 +7,7 @@ allowBuilds:
   esbuild: true
   protobufjs: true
   ssh2: true
+
+minimumReleaseAgeExclude:
+  - '@remote-dom/core@1.12.1'
+  - '@remote-dom/polyfill@1.7.0'

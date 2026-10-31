@@ -43,6 +43,12 @@ importers:
       '@mui/material':
         specifier: ^9.3.1
         version: 9.4.0(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.8))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.18)(react@19.2.8))(@types/react@19.2.18)(react@19.2.8))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@quilted/threads':
+        specifier: 4.1.0
+        version: 4.1.0(@preact/signals-core@1.14.4)
+      '@remote-dom/core':
+        specifier: 1.12.1
+        version: 1.12.1(@preact/signals-core@1.14.4)
       '@tanstack/react-form':
         specifier: ^1.33.4
         version: 1.33.5(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -1351,6 +1357,35 @@ packages:
 
   '@protobufjs/utf8@1.1.2':
     resolution: {integrity: sha512-b1UQwcEZ4yCnMCD8DAL1VlbvBJE9/IX4FTIp7BG1xYpf29SLazLSrqUkj4w7Y5y7cCVP6E5tcqqcI0xemPkHug==}
+
+  '@quilted/events@2.1.5':
+    resolution: {integrity: sha512-WUsJtSI2npAVo1WZNl60dagmC7JxBbMqTikvGuAMzGP9ZKPBpLw0AnhaBoX6mmCfvUTylMLDYbMW8zHqSinUfw==}
+    engines: {node: '>=14.0.0'}
+
+  '@quilted/threads@4.1.0':
+    resolution: {integrity: sha512-jBt1tVPoo6rznPHel0xLkmcmp/IFYyDkGHCfgkdcQnk/kHyh63XlYSGpjxZQcm/As0NMOjj7AJ8ry/T7tSGNhQ==}
+    engines: {node: '>=14.0.0'}
+    peerDependencies:
+      '@preact/signals-core': ^1.14.2
+    peerDependenciesMeta:
+      '@preact/signals-core':
+        optional: true
+
+  '@remote-dom/core@1.12.1':
+    resolution: {integrity: sha512-gCQoxwVMFNIZfcm3RixYqmlSY08Yxn06zL3n+ZnrV139REswNmmNe/7VEjvT4ETZKw219YWZrO/1amI7dzgzNw==}
+    engines: {node: '>=14.0.0'}
+    peerDependencies:
+      '@preact/signals-core': ^1.3.0
+      preact: '*'
+    peerDependenciesMeta:
+      '@preact/signals-core':
+        optional: true
+      preact:
+        optional: true
+
+  '@remote-dom/polyfill@1.7.0':
+    resolution: {integrity: sha512-Ei18AW6IFLp+eOIshrOBO+ZO6ttnOHnG7U0gghz4MdOqoSFu1kDc3iVMFUK2+vfkrgUiBxK7WED+q4C728zQxw==}
+    engines: {node: '>=14.0.0'}
 
   '@rolldown/binding-android-arm-eabi@1.2.7':
     resolution: {integrity: sha512-EypzgnYCwyVY4NDHKzGmNJT5b+XaQEBniHxsMdeIQLB/tcCzZnhqrzHpZFbX9iaxx+5RiB8caATBtfvZP7zVxQ==}
@@ -3065,6 +3100,9 @@ packages:
 
   hoist-non-react-statics@3.3.2:
     resolution: {integrity: sha512-/gGivxi8JPKWNm/W0jSmzcMPpfpPLc3dY/6GxhX2hQ9iGj3aDfklV4ET7NjKpSinLpJ5vafa9iiGIEZg10SfBw==}
+
+  htm@3.1.1:
+    resolution: {integrity: sha512-983Vyg8NwUE7JkZ6NmOqpCZ+sh1bKv2iYTlUkzlWmA5JD2acKoxd4KVxbMmxX/85mtfdnDmTFoNKcg5DGAvxNQ==}
 
   html-encoding-sniffer@6.0.0:
     resolution: {integrity: sha512-CV9TW3Y3f8/wT0BRFc1/KAVQ3TUHiXmaAb6VW9vtiMFf7SLoMd1PdAc4W3KFOFETBJUb90KatHqlsZMWV+R9Gg==}
@@ -5885,6 +5923,25 @@ snapshots:
 
   '@protobufjs/utf8@1.1.2': {}
 
+  '@quilted/events@2.1.5':
+    dependencies:
+      '@preact/signals-core': 1.14.4
+
+  '@quilted/threads@4.1.0(@preact/signals-core@1.14.4)':
+    dependencies:
+      '@quilted/events': 2.1.5
+    optionalDependencies:
+      '@preact/signals-core': 1.14.4
+
+  '@remote-dom/core@1.12.1(@preact/signals-core@1.14.4)':
+    dependencies:
+      '@remote-dom/polyfill': 1.7.0
+      htm: 3.1.1
+    optionalDependencies:
+      '@preact/signals-core': 1.14.4
+
+  '@remote-dom/polyfill@1.7.0': {}
+
   '@rolldown/binding-android-arm-eabi@1.2.7':
     optional: true
 
@@ -7833,6 +7890,8 @@ snapshots:
   hoist-non-react-statics@3.3.2:
     dependencies:
       react-is: 16.13.1
+
+  htm@3.1.1: {}
 
   html-encoding-sniffer@6.0.0:
     dependencies:

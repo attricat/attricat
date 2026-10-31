@@ -19,7 +19,7 @@ import {
 } from './actionDialogStore';
 import { contributionKinds, extensionOutlets } from './constants';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
-import { ExtensionFrame } from './ExtensionFrame';
+import { ExtensionUi } from './ExtensionUi';
 import { useExtensionRuntime } from './useExtensionRuntime';
 import { progressSizes } from '../../components/iconSizes';
 import { useContributionTitle } from './contributionTitle';
@@ -112,7 +112,7 @@ const ActionDialog = ({
               />
             </Box>
           ) : contribution ? (
-            <ExtensionFrame context={context} contribution={contribution} />
+            <ExtensionUi context={context} contribution={contribution} />
           ) : runtime.data ? (
             <Alert role="status" severity="warning">
               {t('extensions.contentLoadFailed')}

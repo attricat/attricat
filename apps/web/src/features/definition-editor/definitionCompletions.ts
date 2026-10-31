@@ -36,6 +36,7 @@ import {
 } from '../../components/yamlSyntax';
 import {
   componentCandidates,
+  editorCandidates,
   referenceCandidates,
   type Candidate,
 } from './definitionReferenceCandidates';
@@ -449,6 +450,27 @@ async function valueSuggestions(
       range: cursor.range,
       snippet: false,
     }));
+  }
+
+  if (
+    !cursor.quoted &&
+    node.properties?.id?.[schemaExtensions.reference] ===
+      definitionReferenceKinds.attributeEditor
+  ) {
+    return (await editorCandidates(outline, context.references, path)).map(
+      (editor) => ({
+        detail: i18n.t('definitionEditor.details.editor', {
+          extension: editor.extensionName,
+          version: editor.version,
+        }),
+        filterText: editor.id,
+        insertText: yamlValue({ id: editor.id, version: editor.version }),
+        kind: suggestionKinds.reference,
+        label: editor.id,
+        range: cursor.range,
+        snippet: false,
+      }),
+    );
   }
 
   const reference =

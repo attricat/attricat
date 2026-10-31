@@ -48,6 +48,7 @@ export const extensionOutlets = {
   dataHealthCard: 'data_health_card',
   actionDialog: 'action_dialog',
   exportMapping: 'export_mapping',
+  attributeEditor: 'attribute_editor',
 } as const;
 /**
  * Outlets that render an extension's actions as host-owned menu items or
@@ -73,7 +74,10 @@ export const contributionKinds = {
   dialog: 'dialog',
   tab: 'tab',
   cell: 'cell',
+  editor: 'editor',
 } as const;
+/** Who draws a contribution that runs extension code. */
+export const renderingModes = { frame: 'frame', native: 'native' } as const;
 /** Host-owned ways a declared Explorer table cell shows its value. */
 export const cellDisplayTypes = { number: 'number' } as const;
 /** Mirror the manifest's bounds on a number cell's settings. */
@@ -162,6 +166,8 @@ export const extensionBrokerMethods = {
   navigate: 'navigate',
   notify: 'notify',
   refresh: 'refresh',
+  /** Native attribute editors only: proposes the field's next value. */
+  editorPropose: 'editor.propose',
 } as const;
 export const extensionStorageMethodPrefix = 'storage.';
 export const operationMethodPrefix = 'operations.';

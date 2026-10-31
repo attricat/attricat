@@ -2,7 +2,7 @@ import { Stack } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import type { ExtensionContribution } from './api';
 import { ExtensionActionOverflow } from './ExtensionActionOverflow';
-import { ExtensionFrame } from './ExtensionFrame';
+import { ExtensionUi } from './ExtensionUi';
 import {
   contributionKey,
   type OutletContext,
@@ -26,7 +26,7 @@ export const ExtensionPanelOutlet = ({
   return (
     <Stack spacing={1}>
       {visible.map((item) => (
-        <ExtensionFrame
+        <ExtensionUi
           contribution={item}
           context={context}
           key={contributionKey(item)}

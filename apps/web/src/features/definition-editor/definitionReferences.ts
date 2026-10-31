@@ -4,6 +4,9 @@ import { blueprintByCodeOptions } from '../records/queryOptions';
 import { contextListOptions } from '../contexts/queryOptions';
 import { blueprintCatalogueOptions } from '../blueprints/queryOptions';
 import { roleListOptions } from '../workspace/queryOptions';
+import { getExtensionRuntime } from '../extensions/api';
+import { contributionKinds } from '../extensions/constants';
+import { extensionQueryKeys } from '../extensions/queryKeys';
 
 type ReferenceBlueprint = {
   code: string;
@@ -11,6 +14,15 @@ type ReferenceBlueprint = {
   kind: string;
   name: string;
   version: number;
+};
+
+/** An enabled extension's attribute editor a detail field may name. */
+export type ReferenceEditor = {
+  id: string;
+  version: number;
+  extensionName: string;
+  title: string | null;
+  valueTypes: string[];
 };
 
 export type ReferenceAttribute = {
@@ -31,6 +43,8 @@ export type DefinitionReferences = {
   blueprints: () => Promise<ReferenceBlueprint[]>;
   contexts: () => Promise<string[]>;
   roles: () => Promise<string[]>;
+  /** Attribute editors of enabled extensions. */
+  attributeEditors?: () => Promise<ReferenceEditor[]>;
   /**
    * Attributes the definition refers to without declaring them, such as the
    * blueprint revision a rule checks.
@@ -85,5 +99,27 @@ export const createDefinitionReferences = (
           staleTime: referenceStaleTimeMs,
         })
       ).map((role) => role.code),
+    ),
+  attributeEditors: () =>
+    orEmpty(async () =>
+      (
+        await queryClient.fetchQuery({
+          queryKey: extensionQueryKeys.runtime(),
+          queryFn: () => getExtensionRuntime(),
+          staleTime: referenceStaleTimeMs,
+        })
+      ).flatMap((contribution) =>
+        contribution.kind === contributionKinds.editor && contribution.editor
+          ? [
+              {
+                id: contribution.id,
+                version: contribution.version,
+                extensionName: contribution.extension_name,
+                title: contribution.title,
+                valueTypes: contribution.editor.value_types,
+              },
+            ]
+          : [],
+      ),
     ),
 });
