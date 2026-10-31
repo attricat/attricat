@@ -247,6 +247,11 @@ and to the code that binds it:
    parallel world family. Bump the `wit-host` package version and
    `SUPPORTED_HOST_API` together, and copy the released file to
    `wit-released/attricat-host-<version>.wit`. Snapshots are never edited.
+   Then publish the snapshot verbatim to the `wit/` directory of the
+   [attricat-extension-sdk](https://github.com/attricat/attricat-extension-sdk) repository, which is where extension authors get the WIT,
+   under the SDK's MIT license; `pnpm check-wit` there compares its copies
+   with `wit-released/`. Never publish `wit-host/`: it may hold additions
+   that are not released yet.
 4. **Behavior is versioned with the ABI.** A released function keeps its
    semantics. Stricter behavior needs a new function or an opt-in field on a
    new type.

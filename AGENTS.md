@@ -106,6 +106,9 @@ The server extension ABI evolves additively. `crates/extension-runtime/wit-host/
 - When releasing a version, bump the `wit-host` package and
   `SUPPORTED_HOST_API` together, then add the frozen copy at
   `wit-released/attricat-host-<version>.wit`. Do not edit existing snapshots.
+  Publish the new snapshot verbatim to the SDK's `wit/` directory
+  (`attricat/attricat-extension-sdk`), where extension authors get the WIT;
+  its `pnpm check-wit` compares the two.
 - `cargo test -p attricat-extension-runtime released_host_abis_are_preserved`
   must pass. Do not weaken that test to land a change; design an additive
   alternative instead.

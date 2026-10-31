@@ -101,7 +101,7 @@ Attricat never installs a release whose `host_api` range does not include the ru
 
 A server artifact is a WebAssembly component that imports only the `attricat:host` interfaces. Any language that produces components works; the examples here use Rust and [`wit-bindgen`](https://github.com/bytecodealliance/wit-bindgen).
 
-1. Copy `crates/extension-runtime/wit-host/attricat-extension.wit` from the Attricat repository into your crate's `wit/` directory.
+1. Copy `wit/attricat-host-1.1.0.wit` from the [attricat-extension-sdk](https://github.com/attricat/attricat-extension-sdk) repository into your crate's `wit/` directory. It holds every released ABI version; never use an unreleased copy.
 2. Generate bindings for a [world](/extensions/server/#host-api-version) and implement its exports:
 
    ```rust
