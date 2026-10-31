@@ -41,6 +41,11 @@ fn map_search_error(error: RepositoryError) -> ApiError {
         | RepositoryError::RelationshipSearchTimedOut
         | RepositoryError::Database(_)
         | RepositoryError::Task(_)) => error.into(),
+        // The query parser reports its problems as this variant; its
+        // "invalid blueprint definition" prefix would misdescribe a query.
+        RepositoryError::InvalidBlueprintDefinition(reason) => {
+            ApiError::invalid_search_query(reason)
+        }
         error => ApiError::invalid_search_query(error.to_string()),
     }
 }

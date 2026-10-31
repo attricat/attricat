@@ -10,10 +10,15 @@ import { Timestamp } from '../../../time/Timestamp';
 type Props = {
   /** Changes recorded by one audit event; the first describes the event. */
   changes: readonly [RecordAuditChange, ...RecordAuditChange[]];
+  /** The attribute's name, or its code when the revision does not name it. */
+  attributeName?: (code: string) => string;
 };
 
 /** One audit event with the attribute changes it recorded. */
-export const RecordChangeEvent = ({ changes }: Props) => {
+export const RecordChangeEvent = ({
+  attributeName = (code) => code,
+  changes,
+}: Props) => {
   const { t } = useTranslation();
   const [event] = changes;
   const actorName = personName(event.actor_display_name, event.actor_email);
@@ -47,9 +52,7 @@ export const RecordChangeEvent = ({ changes }: Props) => {
     ) : (
       t('records.approval', { decision: event.approval_decision })
     )
-  ) : (
-    t('records.noApproval')
-  );
+  ) : undefined;
   return (
     <Paper component="section" sx={{ mb: 2, p: 2 }}>
       {/* A user label is a block, so these lines are not paragraphs. */}
@@ -57,16 +60,18 @@ export const RecordChangeEvent = ({ changes }: Props) => {
         {actor} ·{' '}
         <Timestamp style="dateTimeSeconds" value={event.occurred_at} />
       </Typography>
-      <Typography color="text.secondary" component="div" variant="body2">
-        {approval}
-      </Typography>
+      {approval && (
+        <Typography color="text.secondary" component="div" variant="body2">
+          {approval}
+        </Typography>
+      )}
       {changes.map((change) => (
         <Box
           key={`${change.attribute_id}-${change.context_id}-${change.change_kind}`}
           sx={{ mt: 1 }}
         >
           <Typography variant="body2">
-            <strong>{change.attribute_code}</strong>
+            <strong>{attributeName(change.attribute_code)}</strong>
             {change.context_code ? ` (${change.context_code})` : ''}:{' '}
             {t(`records.changeKind.${change.change_kind}`)}
           </Typography>

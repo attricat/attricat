@@ -432,11 +432,14 @@
     "invalidMetadataJson": "Metadane muszą być poprawnym JSON-em.",
     "metadataMustBeObject": "Metadane muszą być obiektem JSON.",
     "invalidCode": "Używaj tylko liter, cyfr, łączników i podkreśleń",
-    "defaultContext": "Domyślny"
+    "defaultContext": "Domyślny",
+    "deleteContext": "Usuń kontekst",
+    "deleteNamedContext": "Usuń kontekst {{context}}",
+    "deleteContextConfirm": "Usunąć {{context}}? Nie można usunąć kontekstu, który ma konteksty podrzędne, wartości lub uruchomienia rozszerzeń."
   },
   "dataHealth": {
     "title": "Stan danych",
-    "description": "Monitoruj aktualność, świeżość, poprawność i wzrost zajętości danych katalogu.",
+    "description": "Monitoruj aktualność, świeżość i poprawność danych katalogu.",
     "staleAfter": "Nieaktualne po",
     "days": "Dni",
     "daysCount": "{{count}} dni",
@@ -719,7 +722,6 @@
     "unknownActor": "Nieznany wykonawca",
     "approval": "Zatwierdzenie: {{decision}}",
     "approvalBy": "Zatwierdzenie: {{decision}} przez <actor/>",
-    "noApproval": "Brak informacji o zatwierdzeniu",
     "noRecordedChanges": "Brak zapisanych zmian.",
     "chooseBeforeCreate": "Wybierz schemat przed utworzeniem rekordu",
     "defaultContextUnavailable": "Domyślny kontekst jest niedostępny",
@@ -1675,7 +1677,7 @@
     "governanceDescription": "Przeglądaj aktywność i historię audytu.",
     "extensionsDescription": "Zarządzaj zainstalowanymi integracjami i ich uprawnieniami.",
     "workflowsDescription": "Twórz i bezpiecznie obsługuj wersjonowane definicje przepływów pracy.",
-    "rulesDescription": "Twórz i obsługuj katalogowe reguły jakości danych.",
+    "rulesDescription": "Sprawdzaj rekordy regułami jakości danych i przeglądaj ich wyniki.",
     "reusableAttributesDescription": "Twórz definicje, wersje i grupy atrybutów wielokrotnego użytku.",
     "lexiconDescription": "Tłumacz nazwy schematów, nazwy atrybutów i etykiety widoków na język każdego użytkownika.",
     "backgroundProcessingDescription": "Monitoruj oczekujące, uruchomione i nieudane zadania API w tle.",
@@ -2451,6 +2453,14 @@
         "gt": "ma wartość późniejszą lub większą niż",
         "gte": "ma wartość co najmniej",
         "disjoint": "nie ma wspólnych wartości z"
+      },
+      "dateOps": {
+        "eq": "przypada na",
+        "ne": "nie przypada na",
+        "lt": "przypada przed",
+        "lte": "przypada najpóźniej na",
+        "gt": "przypada po",
+        "gte": "przypada najwcześniej na"
       },
       "events": {
         "recordCreated": "Po utworzeniu rekordu",

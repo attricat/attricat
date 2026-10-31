@@ -32,7 +32,8 @@ test('shows health sections, custom stale threshold, and refreshes data', async 
   await expect(
     page.getByRole('heading', { name: 'Freshness distribution' }),
   ).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Storage' })).toBeVisible();
+  // Table sizes are database-wide, so a workspace gets none and no section.
+  await expect(page.getByRole('heading', { name: 'Storage' })).toBeHidden();
 
   await page.getByLabel('Stale after').click();
   await page.getByRole('option', { name: 'Custom' }).click();

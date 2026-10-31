@@ -43,6 +43,9 @@ export const PredicateSummary = ({
   };
   const op = (raw: unknown) =>
     t(`rules.preview.ops.${text(raw)}`, { defaultValue: text(raw) });
+  // Dates read as before or after rather than less or greater.
+  const dateOp = (raw: unknown) =>
+    t(`rules.preview.dateOps.${text(raw)}`, { defaultValue: op(raw) });
   const nested = (
     predicates: unknown,
     partAttributes: readonly FindingAttribute[] = attributes,
@@ -101,7 +104,7 @@ export const PredicateSummary = ({
       return line(
         t('rules.preview.says.relativeDate', {
           attribute: attribute(p.attribute_code),
-          op: op(p.op),
+          op: dateOp(p.op),
           when:
             days === 0
               ? t('rules.preview.says.today')

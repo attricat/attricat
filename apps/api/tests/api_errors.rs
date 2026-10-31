@@ -54,6 +54,21 @@ attributes:
         .unwrap();
     assert_eq!(invalid_search.status(), StatusCode::UNPROCESSABLE_ENTITY);
 
+    // A query naming an unknown field is a query problem, not a blueprint one.
+    let unknown_selector = client
+        .post(format!("{base_url}/v1/records/search"))
+        .json(&json!({ "blueprint": { "code": "product-type" }, "query": "missing:value" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(unknown_selector.status(), StatusCode::BAD_REQUEST);
+    let unknown_selector: Value = unknown_selector.json().await.unwrap();
+    assert_eq!(unknown_selector["error"]["code"], "invalid_input");
+    assert_eq!(
+        unknown_selector["error"]["message"],
+        "unknown search selector 'missing'"
+    );
+
     let invalid_preview_list = client
         .get(format!(
             "{base_url}/records?blueprint=product-type&related_from={}&relationship=related.products",

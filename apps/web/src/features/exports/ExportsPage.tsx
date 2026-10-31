@@ -8,6 +8,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   Typography,
@@ -92,7 +93,7 @@ export const ExportsPage = () => {
         <LoadingState sx={{ mt: 3 }}>{t('exports.loading')}</LoadingState>
       )}
       {contexts.data && channels.data && (
-        <Paper sx={{ mt: 3 }}>
+        <TableContainer component={Paper} sx={{ mt: 3 }}>
           <Table>
             <TableHead>
               <TableRow>
@@ -174,7 +175,7 @@ export const ExportsPage = () => {
               )}
             </TableBody>
           </Table>
-        </Paper>
+        </TableContainer>
       )}
     </PageContainer>
   );

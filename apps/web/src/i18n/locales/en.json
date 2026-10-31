@@ -414,11 +414,14 @@
     "invalidMetadataJson": "Metadata must be valid JSON.",
     "metadataMustBeObject": "Metadata must be a JSON object.",
     "invalidCode": "Use only letters, numbers, hyphens, and underscores",
-    "defaultContext": "Default"
+    "defaultContext": "Default",
+    "deleteContext": "Delete context",
+    "deleteNamedContext": "Delete context {{context}}",
+    "deleteContextConfirm": "Delete {{context}}? A context that still has child contexts, values or extension runs can't be deleted."
   },
   "dataHealth": {
     "title": "Data health",
-    "description": "Monitor catalog currency, freshness, correctness, and storage growth.",
+    "description": "Monitor catalog currency, freshness, and correctness.",
     "staleAfter": "Stale after",
     "days": "Days",
     "daysCount": "{{count}} days",
@@ -691,7 +694,6 @@
     "unknownActor": "Unknown actor",
     "approval": "Approval: {{decision}}",
     "approvalBy": "Approval: {{decision}} by <actor/>",
-    "noApproval": "No approval attribution",
     "noRecordedChanges": "No recorded changes.",
     "chooseBeforeCreate": "Choose a blueprint before creating a record",
     "defaultContextUnavailable": "The default context is not available",
@@ -1599,7 +1601,7 @@
     "governanceDescription": "Review activity and audit history.",
     "extensionsDescription": "Manage installed integrations and their permissions.",
     "workflowsDescription": "Create and safely operate versioned workflow definitions.",
-    "rulesDescription": "Author and operate attricat-owned data quality rules.",
+    "rulesDescription": "Check records against data quality rules and review their findings.",
     "reusableAttributesDescription": "Create reusable attribute definitions, revisions, and groups.",
     "lexiconDescription": "Translate blueprint names, attribute names, and view labels into each user's language.",
     "backgroundProcessingDescription": "Monitor queued, running, and failed API background tasks.",
@@ -2353,6 +2355,14 @@
         "gt": "is after or greater than",
         "gte": "is at least",
         "disjoint": "shares no value with"
+      },
+      "dateOps": {
+        "eq": "is",
+        "ne": "is not",
+        "lt": "is before",
+        "lte": "is on or before",
+        "gt": "is after",
+        "gte": "is on or after"
       },
       "events": {
         "recordCreated": "When a record is created",

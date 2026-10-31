@@ -157,6 +157,17 @@ export const NotificationListItem = ({
         >
           {content}
         </RouterListItemButton>
+      ) : notification.kind === notificationKinds.invitationAccepted &&
+        notification.actor_user_id ? (
+        // Opens the profile of the person who joined.
+        <RouterListItemButton
+          onClick={onOpen}
+          params={{ userId: notification.actor_user_id }}
+          sx={contentSx}
+          to="/users/$userId"
+        >
+          {content}
+        </RouterListItemButton>
       ) : (
         <Box sx={contentSx}>{content}</Box>
       )}

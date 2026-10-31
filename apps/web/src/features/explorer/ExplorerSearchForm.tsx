@@ -259,6 +259,16 @@ export const ExplorerSearchForm = ({
                 value={field.state.value}
               >
                 <MenuItem value="">{t('explorer.allBlueprints')}</MenuItem>
+                {/* Keeps a saved or linked blueprint selectable while the
+                    list loads, or after it was unpublished. */}
+                {field.state.value &&
+                  !blueprints.some(
+                    (blueprint) => blueprint.code === field.state.value,
+                  ) && (
+                    <MenuItem value={field.state.value}>
+                      {field.state.value}
+                    </MenuItem>
+                  )}
                 {blueprints.map((blueprint) => (
                   <MenuItem key={blueprint.code} value={blueprint.code}>
                     {t('explorer.blueprintOption', {

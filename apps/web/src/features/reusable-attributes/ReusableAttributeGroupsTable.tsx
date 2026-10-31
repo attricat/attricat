@@ -3,6 +3,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   Typography,
@@ -20,7 +21,7 @@ export const ReusableAttributeGroupsTable = ({
 }) => {
   const { t } = useTranslation();
   return (
-    <Paper sx={{ mt: 2 }}>
+    <TableContainer component={Paper} sx={{ mt: 2 }}>
       <Table size="small">
         <TableHead>
           <TableRow>
@@ -58,6 +59,6 @@ export const ReusableAttributeGroupsTable = ({
           )}
         </TableBody>
       </Table>
-    </Paper>
+    </TableContainer>
   );
 };
