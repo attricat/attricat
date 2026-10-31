@@ -212,6 +212,32 @@ TypeScript definition, for example `attricat.url_display` →
 `attricat.url_edit`). Fields without a paired editor use the built-in editor
 for their value type.
 
+### Extension attribute editors
+
+A `field` in `views.detail` may also name an extension's attribute editor
+under `editor`, by its contribution `id`, `version` and `props`:
+
+```yaml
+views:
+  detail:
+    type: stack
+    children:
+      - type: field
+        field: price_gross
+        editor: {id: formula, version: 1, props: {rows: 2}}
+```
+
+The compiler rejects `editor` in other views and malformed references; saving
+and publishing check that an enabled extension declares that editor for the
+field's value type and that the props fit its declaration
+(`validate_field_editors` in `crates/repository/src/blueprint_resolver.rs`).
+On the record page, `RecordView` passes the reference to `renderEditor`, and
+`RecordInlineFields` draws `ExtensionAttributeEditor` when
+`resolveAttributeEditor` finds the editor in the runtime; otherwise — and
+until the editor is ready, or after it fails — the field keeps its default
+control. Saving, validation, Escape and focus follow the inline-edit path.
+See [Attribute editors](extensions.md#attribute-editors).
+
 Component IDs use dot-delimited lowercase, underscore-separated segments. The frontend registry lives at
 `apps/web/src/features/views/components/registry.ts`. Layout and
 relationship components have their own modules in that directory; the string
