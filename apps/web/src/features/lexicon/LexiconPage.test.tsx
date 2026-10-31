@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../i18n';
@@ -147,8 +153,12 @@ describe('LexiconPage', () => {
       await screen.findByRole('button', { name: 'Add translation' }),
     );
     const dialog = await screen.findByRole('dialog');
-    await userEvent.type(within(dialog).getByLabelText(/^Key/), 'Name');
-    await userEvent.type(within(dialog).getByLabelText(/^Translation/), 'Imię');
+    fireEvent.change(within(dialog).getByLabelText(/^Key/), {
+      target: { value: 'Name' },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/^Translation/), {
+      target: { value: 'Imię' },
+    });
     await userEvent.click(
       within(dialog).getByRole('button', { name: 'Save translation' }),
     );

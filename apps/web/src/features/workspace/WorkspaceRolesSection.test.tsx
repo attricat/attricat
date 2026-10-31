@@ -59,15 +59,18 @@ describe('WorkspaceRolesSection', () => {
   });
 
   it.each([
-    ['Rename role', 'Role code'],
-    ['Duplicate role', 'New role code'],
-    ['Retire role', 'Replacement role ID'],
-  ])('focuses the %s dialog field when it opens', async (action, label) => {
-    renderRoles();
+    ['Edit role', 'textbox', 'Role code'],
+    ['Duplicate role', 'textbox', 'New role code'],
+    ['Retire role', 'combobox', 'Replacement role'],
+  ] as const)(
+    'focuses the %s dialog field when it opens',
+    async (action, role, label) => {
+      renderRoles();
 
-    fireEvent.click(await screen.findByRole('button', { name: action }));
-    const input = await screen.findByRole('textbox', { name: label });
+      fireEvent.click(await screen.findByRole('button', { name: action }));
+      const input = await screen.findByRole(role, { name: label });
 
-    await waitFor(() => expect(document.activeElement).toBe(input));
-  });
+      await waitFor(() => expect(document.activeElement).toBe(input));
+    },
+  );
 });

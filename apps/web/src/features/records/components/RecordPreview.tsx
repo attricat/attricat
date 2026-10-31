@@ -126,7 +126,7 @@ type Props = {
   requestedTab?: RecordPreviewTabKey;
   /** Called when the viewer opens another tab. */
   onTabChange?: (key: RecordPreviewTabKey) => void;
-  onDeleted: () => void;
+  onDeleted: () => unknown;
   onDuplicated: (copy: AttricatRecord) => void;
   /** Places the preview in its page or panel. */
   renderFrame: (frame: RecordPreviewFrame) => ReactNode;
@@ -692,7 +692,7 @@ export const RecordPreview = ({
           onClose={() => setDeleteOpen(false)}
           onDeleted={() => {
             setDeleteOpen(false);
-            onDeleted();
+            return onDeleted();
           }}
         />
       )}

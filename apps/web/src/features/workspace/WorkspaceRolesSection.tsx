@@ -5,6 +5,7 @@ import {
   Button,
   Checkbox,
   FormControlLabel,
+  FormGroup,
   List,
   ListItem,
   ListItemText,
@@ -103,7 +104,11 @@ export const WorkspaceRolesSection = ({
               }
             >
               <ListItemText
-                primary={`${role.code}${role.is_system ? t('workspace.fixed') : ''}`}
+                primary={
+                  role.is_system
+                    ? `${role.code} ${t('workspace.fixed')}`
+                    : role.code
+                }
                 secondary={role.permissions.join(', ')}
               />
             </ListItem>
@@ -114,6 +119,8 @@ export const WorkspaceRolesSection = ({
         <WorkspaceRoleActionDialog
           action={dialogAction}
           onClose={() => setDialogAction(undefined)}
+          permissions={permissions.data}
+          roles={roles.data}
           onSuccess={() => {
             void refresh();
             setDialogAction(undefined);
@@ -128,7 +135,7 @@ export const WorkspaceRolesSection = ({
         }}
         sx={{ p: 2 }}
       >
-        <Stack>
+        <Stack spacing={2}>
           <Typography component="h2" variant="h6">
             {t('workspace.createCustomRole')}
           </Typography>
@@ -154,7 +161,7 @@ export const WorkspaceRolesSection = ({
           </form.Field>
           <form.Field name="permissions">
             {(field) => (
-              <>
+              <FormGroup>
                 {permissions.data?.map((permission) => (
                   <FormControlLabel
                     control={
@@ -175,7 +182,7 @@ export const WorkspaceRolesSection = ({
                     label={`${permission.code} — ${permission.description}`}
                   />
                 ))}
-              </>
+              </FormGroup>
             )}
           </form.Field>
           <Button disabled={create.isPending} type="submit" variant="contained">

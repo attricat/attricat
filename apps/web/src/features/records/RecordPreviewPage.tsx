@@ -49,7 +49,7 @@ export const RecordPreviewPage = ({
       recordId={recordId}
       // Context, dialogs and unsaved edits belong to one record.
       key={recordId}
-      onDeleted={() => void navigate({ to: '/' })}
+      onDeleted={() => navigate({ to: '/' })}
       onDuplicated={(copy) =>
         void navigate({
           params: { recordId: copy.id },
