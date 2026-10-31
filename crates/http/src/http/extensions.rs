@@ -911,14 +911,22 @@ pub(super) async fn command(
     {
         return Err(ApiError::forbidden());
     }
-    ensure_action_may_write(
-        &repository,
-        principal.0,
-        workspace.0,
-        contribution.when.as_ref(),
-        &command_record_ids(&input.payload)?,
-    )
-    .await?;
+    // Only a write-gated action's payload must name records; other commands
+    // keep `record_ids` to their own request schema.
+    let requires_write = contribution
+        .when
+        .as_ref()
+        .is_some_and(|when| when.requires_write);
+    if requires_write {
+        ensure_action_may_write(
+            &repository,
+            principal.0,
+            workspace.0,
+            contribution.when.as_ref(),
+            &command_record_ids(&input.payload)?,
+        )
+        .await?;
+    }
     if mapping_editor
         && !state
             .repository
