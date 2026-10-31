@@ -10,7 +10,7 @@ import {
   MAX_LEXICON_TEXT_LENGTH,
   LEXICON_MANAGEMENT_NAMESPACES,
 } from './constants';
-import type { LexiconEntryDraft } from './entries';
+import { lexiconEntryId, type LexiconEntryDraft } from './entries';
 import {
   languageLabel,
   pluralCategories,
@@ -26,11 +26,14 @@ import { FormDialog } from '../../components/FormDialog';
  * plural form) is fixed; only the text changes.
  */
 export const LexiconEntryDialog = ({
+  existingIds,
   initial,
   language,
   mode,
   onClose,
 }: {
+  /** Entries this language already has; adding one again would replace it. */
+  existingIds?: ReadonlySet<string>;
   initial: LexiconEntryDraft;
   language: string;
   mode: 'add' | 'edit';
@@ -106,8 +109,22 @@ export const LexiconEntryDialog = ({
           validators={{
             onChange: ({ value }) =>
               validateTerm(value, MAX_LEXICON_KEY_LENGTH, true),
-            onSubmit: ({ value }) =>
-              validateTerm(value, MAX_LEXICON_KEY_LENGTH, true),
+            onSubmit: ({ value, fieldApi }) =>
+              validateTerm(value, MAX_LEXICON_KEY_LENGTH, true) ??
+              (!editing &&
+              existingIds?.has(
+                lexiconEntryId({
+                  key: normalizeLexiconTerm(value),
+                  context:
+                    normalizeLexiconTerm(
+                      fieldApi.form.getFieldValue('context'),
+                    ) || null,
+                  plural_category:
+                    fieldApi.form.getFieldValue('plural_category'),
+                }),
+              )
+                ? t('lexicon.translationExists')
+                : undefined),
           }}
         >
           {(field) => (

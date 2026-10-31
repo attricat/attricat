@@ -139,10 +139,16 @@ export const BlueprintVersionMetadata = ({
                       {attribute.hierarchy && ` (${attribute.hierarchy})`}
                     </TableCell>
                     <TableCell>
-                      <JsonInline value={attribute.tags} />
+                      {attribute.tags?.length
+                        ? attribute.tags.join(', ')
+                        : emptyValuePlaceholder}
                     </TableCell>
                     <TableCell>
-                      <JsonInline value={attribute.value_schema} />
+                      {attribute.value_schema ? (
+                        <JsonInline value={attribute.value_schema} />
+                      ) : (
+                        emptyValuePlaceholder
+                      )}
                     </TableCell>
                     <TableCell>
                       {attribute.context_fallback} /{' '}

@@ -30,6 +30,7 @@ import { LexiconEntriesTable } from './LexiconEntriesTable';
 import { LexiconEntryDialog } from './LexiconEntryDialog';
 import {
   emptyLexiconEntryDraft,
+  lexiconEntryId,
   lexiconReferenceId,
   type LexiconEntryDraft,
 } from './entries';
@@ -222,6 +223,9 @@ export const LexiconPage = ({
       )}
       {dialog?.kind === 'add' && (
         <LexiconEntryDialog
+          existingIds={
+            new Set(languageEntries.map((entry) => lexiconEntryId(entry)))
+          }
           initial={dialog.draft}
           language={language}
           mode="add"
