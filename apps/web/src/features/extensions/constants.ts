@@ -121,6 +121,7 @@ export const extensionCapabilities = {
   events: 'client.events',
   navigation: 'client.navigation',
   notification: 'client.notification',
+  recordTab: 'client.record_tab',
   refresh: 'client.refresh',
   storage: 'storage.extension',
 } as const;

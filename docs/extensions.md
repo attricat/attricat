@@ -1775,9 +1775,9 @@ passes that same object to `mount`. It may use only granted operations:
   invokes a declared, bounded server command. The host validates the caller,
   contribution, release, installation state, configuration, and grants.
 - `attricat.refresh({ target: 'current_record' })` requires `client.refresh`
-  and a record action, preview panel, or attribute decoration outlet with a
-  current record. It invalidates the host's record-scoped views and awaits
-  active refetches; it cannot select another record or mutate server data.
+  and a record tab or action dialog with a current record. It invalidates the
+  host's record-scoped views and awaits active refetches; it cannot select
+  another record or mutate server data.
   Call it after a successful command that changes the current record.
 - `attricat.dialog.close()` is available only inside an `action_dialog`
   frame. Dialogs are opened by the host when the user chooses an action.

@@ -439,6 +439,7 @@ describe('RecordPreviewPage', () => {
       translations: {},
       icon: null,
       when: null,
+      capabilities: ['client.record_tab'],
     });
     vi.mocked(getExtensionRuntime).mockResolvedValue([
       tab('acme.inventory', 'stock', 'Stock'),
@@ -452,6 +453,7 @@ describe('RecordPreviewPage', () => {
       },
       tab('acme.reviews', 'reviews', 'Reviews'),
       tab('acme.shipping', 'rates', 'Rates'),
+      { ...tab('acme.notes', 'notes', 'Notes'), capabilities: [] },
     ] as never);
     const blueprintId = '22222222-2222-4222-8222-222222222222';
     const contextId = '33333333-3333-4333-8333-333333333333';
@@ -487,8 +489,10 @@ describe('RecordPreviewPage', () => {
     renderPage();
 
     await screen.findByRole('tab', { name: 'Stock' });
-    // A tab for another blueprint is left out; the fourth waits in More.
+    // A tab for another blueprint, or whose capability is not granted, is
+    // left out; the fourth waits in More.
     expect(screen.queryByRole('tab', { name: 'Variants' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Notes' })).toBeNull();
     expect(screen.getByRole('tab', { name: 'Prices' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'Reviews' })).toBeTruthy();
     expect(screen.queryByRole('tab', { name: 'Rates' })).toBeNull();
@@ -541,6 +545,7 @@ describe('RecordPreviewPage', () => {
         translations: { pl: { title: 'Stany' } },
         icon: 'tag',
         when: null,
+        capabilities: ['client.record_tab'],
       },
     ] as never);
     vi.mocked(listContexts).mockResolvedValue([

@@ -173,7 +173,7 @@ export const RecordPreview = ({
   const [shownRequest, setShownRequest] = useState(requestedTab);
   if (requestedTab !== shownRequest) {
     setShownRequest(requestedTab);
-    if (requestedTab) setTab(requestedTab);
+    setTab(requestedTab ?? recordPreviewTabs.data);
   }
   // Extension tabs mount their frame once first opened, then stay mounted
   // like every other tab.
@@ -190,6 +190,16 @@ export const RecordPreview = ({
     },
     [revealFieldInForm],
   );
+  // Revealing a field, which can happen while rendering, opens Data without
+  // going through openTab, so the address catches up here.
+  useEffect(() => {
+    if (
+      tab === recordPreviewTabs.data &&
+      requestedTab !== undefined &&
+      requestedTab !== recordPreviewTabs.data
+    )
+      onTabChange?.(tab);
+  }, [onTabChange, requestedTab, tab]);
   const tabPanelRef = useRef<HTMLDivElement>(null);
   // Counts requests to bring the selected tab into view once it renders.
   const [tabReveal, setTabReveal] = useState(0);

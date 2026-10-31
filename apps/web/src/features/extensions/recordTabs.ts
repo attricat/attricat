@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { ExtensionContribution } from './api';
 import {
   contributionKinds,
+  extensionCapabilities,
   extensionOutlets,
   supportedOutletContextVersion,
 } from './constants';
@@ -35,7 +36,7 @@ export type RecordTabContext = z.infer<typeof recordTabContextSchema>;
 
 /**
  * Tabs extensions add to a record of `blueprintCode`, in host-computed
- * display order.
+ * display order. A tab shows only once its capability is granted.
  */
 export const recordTabContributions = (
   runtime: ExtensionContribution[] | undefined,
@@ -45,6 +46,7 @@ export const recordTabContributions = (
     (item) =>
       item.outlet === extensionOutlets.recordTab &&
       item.kind === contributionKinds.tab &&
+      item.capabilities.includes(extensionCapabilities.recordTab) &&
       blueprintCode !== undefined &&
       (!item.when?.blueprints?.length ||
         item.when.blueprints.includes(blueprintCode)),
