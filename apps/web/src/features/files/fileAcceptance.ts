@@ -21,10 +21,34 @@ export const acceptedFileTypes = (policy: FilePolicy) =>
     .join(',') ||
   (policy.image_only ? [...SUPPORTED_IMAGE_MIME_TYPES].join(',') : undefined);
 
-/** Whether a file satisfies the attribute's file policy. */
-export const acceptsFile = (file: File, attribute: Attribute) => {
+/** Why a file breaks the attribute's file policy: too large, or not a permitted type. */
+export const fileRejection = (
+  file: File,
+  attribute: Attribute,
+): 'size' | 'type' | undefined => {
   const policy = attribute.file_policy;
-  if (!policy) return false;
+  if (!policy) return 'type';
+  if (policy.max_bytes && file.size > policy.max_bytes) return 'size';
+  return acceptsFileType(file, policy) ? undefined : 'type';
+};
+
+/** The types a policy permits, as people name them: `PDF`, `PNG, JPEG`. */
+export const permittedFileTypes = (policy: FilePolicy) =>
+  policy.allowed_extensions.length
+    ? policy.allowed_extensions
+        .map((extension) => normalizedExtension(extension).toUpperCase())
+        .join(', ')
+    : policy.image_only
+      ? [...SUPPORTED_IMAGE_MIME_TYPES]
+          .map((type) => type.slice(IMAGE_MIME_PREFIX.length).toUpperCase())
+          .join(', ')
+      : undefined;
+
+/** Whether a file satisfies the attribute's file policy. */
+export const acceptsFile = (file: File, attribute: Attribute) =>
+  fileRejection(file, attribute) === undefined;
+
+const acceptsFileType = (file: File, policy: FilePolicy) => {
   const extension = file.name.split('.').pop()?.toLowerCase();
   const mimeAllowed = policy.allowed_mime_groups.some((group) =>
     group.endsWith(MIME_GROUP_WILDCARD_SUFFIX)
@@ -32,7 +56,6 @@ export const acceptsFile = (file: File, attribute: Attribute) => {
       : file.type === group || file.type.startsWith(`${group}/`),
   );
   return (
-    (!policy.max_bytes || file.size <= policy.max_bytes) &&
     (!policy.image_only ||
       (file.type.startsWith(IMAGE_MIME_PREFIX) &&
         SUPPORTED_IMAGE_MIME_TYPES.has(file.type))) &&

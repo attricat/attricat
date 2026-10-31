@@ -72,6 +72,8 @@ import {
 import { useStatusTransitionDenialText } from '../useStatusTransitionDenialText';
 import { useServerFieldErrors } from './useServerFieldErrors';
 import { ApiErrorAlert } from '../../../components/ApiErrorAlert';
+import { RouterLink } from '../../../components/RouterLink';
+import { conflictingRecordId } from '../uniqueKeyConflict';
 import { RecordFormAttributeEditor } from './RecordFormAttributeEditor';
 import { useQueuedFileUploadsContext } from '../../files/queuedFileUploads';
 import { useInitialFocus } from '../../../components/initialFocus';
@@ -669,6 +671,17 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
               )}
               {error && (
                 <ApiErrorAlert error={error} violations={unplacedViolations} />
+              )}
+              {conflictingRecordId(error) && (
+                // A new tab keeps this form and its values.
+                <RouterLink
+                  params={{ recordId: conflictingRecordId(error) ?? '' }}
+                  rel="noopener"
+                  target="_blank"
+                  to="/records/$recordId"
+                >
+                  {t('records.openConflictingRecord')}
+                </RouterLink>
               )}
               {formError && <Alert severity="error">{formError}</Alert>}
             </Stack>
