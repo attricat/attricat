@@ -21,10 +21,8 @@ import {
   createBlueprintRevision,
   validateBlueprint,
 } from './api';
-import {
-  blueprintTemplates,
-  withUnusedBlueprintCode,
-} from './blueprintEditorUtils';
+import { blueprintTemplates } from './blueprintEditorUtils';
+import { withUnusedCode } from '../definition-editor/unusedCode';
 import { BlueprintChangesDialog } from './BlueprintChangesDialog';
 import { BlueprintViewsPreview } from './BlueprintViewsPreview';
 import { BlueprintIcon } from '../../components/systemIcons';
@@ -60,7 +58,7 @@ export const BlueprintEditorPage = ({
     const taken = new Set(takenCodes?.map((blueprint) => blueprint.code));
     return blueprintTemplates.map((template) => ({
       ...template,
-      definition: withUnusedBlueprintCode(template.definition, taken),
+      definition: withUnusedCode(template.definition, taken),
     }));
   }, [takenCodes]);
   if (!blueprintId && catalogue.isPending)

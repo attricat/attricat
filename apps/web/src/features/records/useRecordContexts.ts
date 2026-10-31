@@ -12,8 +12,15 @@ export const useRecordContextSelection = (initialContextId?: string) => {
   const [selectedContext, setSelectedContext] = useState('');
   const contexts = useQuery(contextListOptions());
   const defaultContextId = findDefaultContextId(contexts.data);
+  // A linked context that no longer exists falls back to the default one.
+  // Like the default context, it is known once the contexts load.
+  const initial = contexts.data?.some(
+    (context) => context.id === initialContextId,
+  )
+    ? initialContextId
+    : undefined;
   return {
-    contextId: selectedContext || initialContextId || defaultContextId,
+    contextId: selectedContext || initial || defaultContextId,
     contexts,
     defaultContextId,
     setSelectedContext,

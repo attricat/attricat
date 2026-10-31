@@ -1,4 +1,12 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type UseQueryResult,
+} from '@tanstack/react-query';
+import { useMemo } from 'react';
+import { withUnusedCode } from '../definition-editor/unusedCode';
+import type { DefinitionTemplate } from '../definition-editor/DefinitionTemplateDialog';
 import { useNavigate } from '@tanstack/react-router';
 import { Alert } from '@mui/material';
 import { useTranslation } from 'react-i18next';
@@ -27,6 +35,7 @@ import {
   DefinitionTemplatesButton,
 } from '../definition-editor/DefinitionEditorControls';
 import { reusableAttributeListOptions } from './queryOptions';
+import type { ReusableAttribute } from './schemas';
 import { LoadingState } from '../../components/LoadingState';
 
 export const ReusableAttributeEditorPage = ({
@@ -35,9 +44,43 @@ export const ReusableAttributeEditorPage = ({
   definitionId?: string;
 }) => {
   const { t } = useTranslation();
+  const attributes = useQuery(reusableAttributeListOptions(true));
+  // A new attribute's template gets a code no attribute uses yet, so the
+  // editor waits for the codes before it starts from a template.
+  const templates = useMemo(() => {
+    const taken = new Set(attributes.data?.map((item) => item.code));
+    return reusableAttributeTemplates.map((template) => ({
+      ...template,
+      definition: withUnusedCode(template.definition, taken),
+    }));
+  }, [attributes.data]);
+  if (attributes.isPending)
+    return (
+      <PageContainer>
+        <LoadingState>{t('reusableAttributes.editor.loading')}</LoadingState>
+      </PageContainer>
+    );
+  return (
+    <ReusableAttributeEditor
+      attributes={attributes}
+      definitionId={definitionId}
+      templates={templates}
+    />
+  );
+};
+
+const ReusableAttributeEditor = ({
+  attributes,
+  definitionId,
+  templates,
+}: {
+  attributes: UseQueryResult<ReusableAttribute[]>;
+  definitionId?: string;
+  templates: readonly DefinitionTemplate[];
+}) => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const attributes = useQuery(reusableAttributeListOptions(true));
   const attribute = latestReusableAttributeRevisions(
     attributes.data ?? [],
   ).find((item) => item.definition_id === definitionId);
@@ -50,7 +93,7 @@ export const ReusableAttributeEditorPage = ({
     onLeave: leaveEditor,
     ready: !definitionId || Boolean(attribute),
     source: attribute?.definition,
-    templates: reusableAttributeTemplates,
+    templates,
   });
   const { definition, isDirty } = editor;
   const save = useMutation({
@@ -79,14 +122,6 @@ export const ReusableAttributeEditorPage = ({
     validate: (value, id, signal) =>
       validateReusableAttribute({ definition: value }, id, signal),
   });
-
-  if (definitionId && attributes.isPending) {
-    return (
-      <PageContainer>
-        <LoadingState>{t('reusableAttributes.editor.loading')}</LoadingState>
-      </PageContainer>
-    );
-  }
 
   if (definitionId && !attribute) {
     return (

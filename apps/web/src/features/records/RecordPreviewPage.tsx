@@ -33,10 +33,13 @@ const RecordDocumentTitle = ({
 };
 
 export const RecordPreviewPage = ({
+  context,
   recordId,
   relationshipPickerToken,
   tab,
 }: {
+  /** The context shown, from the address so a link can lead to it. */
+  context?: string;
   recordId: string;
   relationshipPickerToken?: string;
   /** The open tab, from the address so a link can lead to it. */
@@ -49,6 +52,14 @@ export const RecordPreviewPage = ({
       recordId={recordId}
       // Context, dialogs and unsaved edits belong to one record.
       key={recordId}
+      initialContextId={context}
+      onContextChange={(next) =>
+        void navigate({
+          to: '.',
+          search: (previous) => ({ ...previous, context: next }),
+          replace: true,
+        })
+      }
       onDeleted={() => navigate({ to: '/' })}
       onDuplicated={(copy) =>
         void navigate({
