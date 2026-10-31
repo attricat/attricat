@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import i18n from 'i18next';
 import contract from '../../../../contracts/api-error-codes.json';
 import en from '../i18n/locales/en.json';
@@ -7,6 +8,13 @@ import { ApiRequestError } from './request';
 import '../i18n';
 
 describe('API error messages', () => {
+  it('shows a schema failure as its issue messages, not as JSON', () => {
+    const result = z
+      .object({ code: z.string().regex(/^[a-z]+$/, 'Use lowercase letters') })
+      .safeParse({ code: 'Bad Code!' });
+    expect(errorMessage(result.error as Error)).toBe('Use lowercase letters');
+  });
+
   it('translates every code in the API error contract', () => {
     const translated = new Set(Object.keys(en.apiErrors));
     expect(contract.codes.filter((code) => !translated.has(code))).toEqual([]);

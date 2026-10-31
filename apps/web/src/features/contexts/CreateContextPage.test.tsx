@@ -122,4 +122,25 @@ describe('CreateContextPage', () => {
     ).toBeTruthy();
     expect(createContext).not.toHaveBeenCalled();
   });
+
+  it('reports an invalid code beside the field without creating the context', async () => {
+    vi.mocked(createContext).mockClear();
+    vi.mocked(listContexts).mockResolvedValue([
+      { id: 'parent-id', code: 'default', data: {}, parent_id: null },
+    ]);
+    renderPage();
+    const user = userEvent.setup();
+    await user.type(screen.getByRole('textbox', { name: 'Code' }), 'Bad Code!');
+    await user.click(
+      await screen.findByRole('combobox', { name: 'Parent context' }),
+    );
+    await user.click(screen.getByRole('option', { name: 'default' }));
+    await user.click(screen.getByRole('button', { name: 'Create context' }));
+    expect(
+      await screen.findByText(
+        'Use only letters, numbers, hyphens, and underscores',
+      ),
+    ).toBeTruthy();
+    expect(createContext).not.toHaveBeenCalled();
+  });
 });
