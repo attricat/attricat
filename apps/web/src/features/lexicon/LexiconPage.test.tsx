@@ -141,6 +141,25 @@ describe('LexiconPage', () => {
     );
   });
 
+  it('refuses to add a translation the language already has', async () => {
+    renderPage();
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Add translation' }),
+    );
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.type(within(dialog).getByLabelText(/^Key/), 'Name');
+    await userEvent.type(within(dialog).getByLabelText(/^Translation/), 'Imię');
+    await userEvent.click(
+      within(dialog).getByRole('button', { name: 'Save translation' }),
+    );
+    expect(
+      await within(dialog).findByText(
+        'This label already has a translation. Edit it in the list instead.',
+      ),
+    ).toBeTruthy();
+    expect(saveLexiconEntry).not.toHaveBeenCalled();
+  });
+
   it('adds a missing plural form with the category preselected', async () => {
     renderPage();
     await userEvent.click(

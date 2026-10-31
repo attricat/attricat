@@ -24,6 +24,7 @@
     "keyWithContext": "{{key}} · context: {{context}}",
     "key": "Key",
     "keyHelp": "The English text inside the braces, matched exactly.",
+    "translationExists": "This label already has a translation. Edit it in the list instead.",
     "keyRequired": "Enter the key.",
     "termTooLong": "Use at most {{count}} characters.",
     "reservedCharacters": "Braces and | are not allowed.",

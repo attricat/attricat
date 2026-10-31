@@ -28,6 +28,7 @@
     "keyWithContext": "{{key}} · kontekst: {{context}}",
     "key": "Klucz",
     "keyHelp": "Tekst angielski z nawiasów, porównywany dokładnie.",
+    "translationExists": "Ta etykieta ma już tłumaczenie. Zamiast tego edytuj je na liście.",
     "keyRequired": "Wpisz klucz.",
     "termTooLong": "Użyj najwyżej {{count}} znaków.",
     "reservedCharacters": "Nawiasy klamrowe i | są niedozwolone.",
