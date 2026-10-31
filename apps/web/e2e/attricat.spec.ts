@@ -32,9 +32,7 @@ test('searches a record and opens its preview', async ({ page }) => {
   await expect(
     page.getByRole('button', { name: `View record ID ${record.id}` }),
   ).toBeVisible();
-  await page
-    .getByRole('button', { name: `Record actions for ${record.id}` })
-    .click();
+  await page.getByRole('button', { name: /^Record actions for / }).click();
   await page.getByRole('menuitem', { name: 'Search info' }).click();
   await expect(page.getByRole('dialog', { name: 'Search info' })).toContainText(
     'red in title',

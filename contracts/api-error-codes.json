@@ -58,6 +58,7 @@
     "invalid_system_tags",
     "invalid_workflow_definition",
     "invitation_invalid",
+    "last_workspace_owner",
     "migration_needs_resolution",
     "migration_not_applicable",
     "migration_target_changed",

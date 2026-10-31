@@ -1,6 +1,7 @@
 import { personName } from '../../components/personName';
 import { useForm } from '@tanstack/react-form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import {
   Alert,
   Button,
@@ -33,6 +34,7 @@ import { activeMemberState, ownerRoleCode, scopeTypes } from './constants';
 import { workspaceQueryKeys } from './queryKeys';
 import { ScopeFields } from './ScopeFields';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { useExclusiveMutation } from '../../components/useExclusiveMutation';
 import { assignableRolesOptions } from './queryOptions';
 import { Trash2Icon, ArrowRightLeftIcon } from 'lucide-react';
@@ -110,9 +112,18 @@ export const WorkspaceMembersSection = ({
     }) => revokeMemberRole(memberId, grantId),
     onSuccess: refresh,
   });
+  // Transferring ownership also removes the caller's own owner role, so it
+  // is confirmed first.
+  const [transferTarget, setTransferTarget] = useState<{
+    id: string;
+    name: string;
+  }>();
   const transfer = useMutation({
     mutationFn: transferOwnership,
-    onSuccess: refresh,
+    onSuccess: async () => {
+      setTransferTarget(undefined);
+      await refresh();
+    },
   });
   const isOwner = members.data?.some(
     (member) =>
@@ -133,7 +144,6 @@ export const WorkspaceMembersSection = ({
     <Stack spacing={2} sx={{ mt: 3 }}>
       <ApiErrorAlert error={grantRole.error} />
       <ApiErrorAlert error={revoke.error} />
-      <ApiErrorAlert error={transfer.error} />
       <ApiErrorAlert error={members.error} />
       <ApiErrorAlert error={roles.error} />
       <Paper>
@@ -180,20 +190,43 @@ export const WorkspaceMembersSection = ({
                   </Button>
                 ))}
               <Stack direction="row" sx={{ gap: 1 }}>
-                {isOwner && (
-                  <Button
-                    disabled={transfer.isPending}
-                    onClick={() => transfer.mutate(member.id)}
-                    startIcon={<ArrowRightLeftIcon />}
-                  >
-                    {t('workspace.transferOwnership')}
-                  </Button>
-                )}
+                {isOwner &&
+                  member.user_id !== currentUserId &&
+                  member.state === activeMemberState && (
+                    <Button
+                      disabled={transfer.isPending}
+                      onClick={() => {
+                        transfer.reset();
+                        setTransferTarget({
+                          id: member.id,
+                          name: personName(member.display_name, member.email),
+                        });
+                      }}
+                      startIcon={<ArrowRightLeftIcon />}
+                    >
+                      {t('workspace.transferOwnership')}
+                    </Button>
+                  )}
               </Stack>
             </ListItem>
           ))}
         </List>
       </Paper>
+      {transferTarget && (
+        <ConfirmDialog
+          confirmLabel={t('workspace.transferOwnership')}
+          destructive
+          error={transfer.error}
+          isPending={transfer.isPending}
+          onClose={() => setTransferTarget(undefined)}
+          onConfirm={() => transfer.mutate(transferTarget.id)}
+          title={t('workspace.transferOwnershipTitle')}
+        >
+          {t('workspace.transferOwnershipConfirm', {
+            name: transferTarget.name,
+          })}
+        </ConfirmDialog>
+      )}
       {canGrantRoles && (
         <Paper
           component="form"

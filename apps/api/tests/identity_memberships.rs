@@ -253,3 +253,27 @@ async fn bootstrap_owner_record_is_normalized_and_unique(pool: PgPool) {
     .unwrap();
     assert_eq!(owners, 1);
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn the_last_owner_grant_cannot_be_revoked(pool: PgPool) {
+    let (base, _server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let (membership, grant): (Uuid, Uuid) = sqlx::query_as(
+        "SELECT g.membership_id, g.id FROM role_grants g JOIN workspace_memberships m ON m.id = g.membership_id WHERE m.user_id = $1 AND g.role_id = $2",
+    )
+    .bind(BOOTSTRAP_OWNER_ID.parse::<Uuid>().unwrap())
+    .bind(OWNER_ROLE_ID.parse::<Uuid>().unwrap())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let response = client
+        .delete(format!(
+            "{base}/workspace/members/{membership}/grants/{grant}"
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let body: Value = response.json().await.unwrap();
+    assert_eq!(body["error"]["code"], "last_workspace_owner");
+}

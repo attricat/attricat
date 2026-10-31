@@ -1,10 +1,11 @@
 import { Button, TextField, Typography } from '@mui/material';
 import { useForm } from '@tanstack/react-form';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { AuthFormShell } from '../auth/AuthFormShell';
+import { authQueryKeys } from '../auth/queryKeys';
 import { completeOnboarding } from './api';
 
 const minimumPasswordLength = 5;
@@ -25,6 +26,7 @@ export const PasswordSetupPage = ({
 }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const setup = useMutation({
     meta: { toast: false },
     mutationFn: async (value: PasswordSetupValues) => {
@@ -38,7 +40,12 @@ export const PasswordSetupPage = ({
         password: value.password,
       });
     },
-    onSuccess: () => navigate({ to: '/' }),
+    onSuccess: async () => {
+      // Completing onboarding signs the user in, but this page already cached
+      // the signed-out session, which would send them to sign in again.
+      await queryClient.refetchQueries({ queryKey: authQueryKeys.session() });
+      await navigate({ to: '/' });
+    },
   });
   const form = useForm({
     defaultValues: {

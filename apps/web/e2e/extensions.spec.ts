@@ -136,7 +136,7 @@ extensions:
 
   // A row action is an item of the row's menu; it opens the extension's
   // dialog with that one record.
-  await page.getByLabel(`Record actions for ${record.id}`).click();
+  await page.getByRole('button', { name: /^Record actions for / }).click();
   await page.getByRole('menuitem', { name: 'Recalculate formulas…' }).click();
   const dialog = page.frameLocator('iframe[title="Recalculate formulas"]');
   await expect(dialog.getByText(/1 selected record/)).toBeVisible({

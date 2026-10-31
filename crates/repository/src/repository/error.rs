@@ -9,6 +9,7 @@ attricat_domain::code_enum! {
         Context => "context",
         Workflow => "workflow",
         Rule => "rule",
+        Team => "team",
         /// An extension connection, named by its connection key.
         Connection => "connection",
     }
@@ -119,6 +120,8 @@ pub enum RepositoryError {
     ContextCycle,
     #[error("a context with descendants, active values or active extension runs cannot be deleted")]
     ContextInUse,
+    #[error("the workspace's last owner cannot be removed; transfer ownership first")]
+    LastWorkspaceOwner,
     #[error("attribute can only be edited in the default context")]
     DefaultContextOnly,
     #[error("attribute does not belong to the record blueprint version")]
