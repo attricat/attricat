@@ -120,6 +120,15 @@ export const WorkspaceNavigationSection = ({
               value={entry.blueprint_code}
               sx={{ minWidth: navigationSelectMinWidth }}
             >
+              {/* Until blueprints load, or once this one is unpublished,
+                  the saved code is still an option the field can show. */}
+              {!blueprints.data?.some(
+                (blueprint) => blueprint.code === entry.blueprint_code,
+              ) && (
+                <MenuItem value={entry.blueprint_code}>
+                  {entry.blueprint_code}
+                </MenuItem>
+              )}
               {(blueprints.data ?? []).map((blueprint) => (
                 <MenuItem
                   disabled={displayed.some(

@@ -10,6 +10,7 @@ use std::{
 use serde_json::json;
 
 use crate::error::CliError;
+use crate::output::print_line;
 use crate::transport::{Api, JAVASCRIPT_MEDIA_TYPE};
 
 /// How often watched paths are checked for changes.
@@ -78,10 +79,7 @@ async fn swap(api: &Api, options: &DevOptions) -> Result<(), CliError> {
         JAVASCRIPT_MEDIA_TYPE,
     )
     .await?;
-    println!(
-        "{}",
-        json!({"extension_id": options.extension_id, "swapped_bytes": size})
-    );
+    print_line(&json!({"extension_id": options.extension_id, "swapped_bytes": size}).to_string())?;
     Ok(())
 }
 

@@ -4,6 +4,7 @@ import {
   QueryClientProvider,
 } from '@tanstack/react-query';
 import { createRoot } from 'react-dom/client';
+import { retryUnlessRefused } from './api/queryRetries';
 import { AppProviders } from './app/AppProviders';
 import { toast } from './components/toast';
 import i18n, { i18nReady } from './i18n';
@@ -14,6 +15,7 @@ import { recordQueryKeys } from './features/records/queryKeys';
 import { reusableAttributeQueryKeys } from './features/reusable-attributes/queryKeys';
 
 const queryClient = new QueryClient({
+  defaultOptions: { queries: { retry: retryUnlessRefused } },
   mutationCache: new MutationCache({
     onSuccess: (_, __, ___, mutation) => {
       if (mutation.options.meta?.toast === false) return;

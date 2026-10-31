@@ -29,6 +29,7 @@ use crate::commands::workflow::workflow_command;
 use crate::commands::workspace::workspace_command;
 use crate::error::CliError;
 use crate::input::read_secret_stdin;
+use crate::output::print_line;
 use crate::session::{CSRF_COOKIE, CSRF_HEADER, SESSION_COOKIE, SessionFile};
 use crate::transport::{Api, CONNECT_TIMEOUT, is_secure_credential_transport};
 
@@ -37,6 +38,7 @@ mod commands;
 mod error;
 mod events;
 mod input;
+mod output;
 mod session;
 #[cfg(test)]
 mod tests;
@@ -64,19 +66,23 @@ async fn main() -> ExitCode {
             eprintln!("{}", error.json());
             return ExitCode::from(error.exit_code());
         }
-        Err(error) => {
-            print!("{error}");
-            return ExitCode::SUCCESS;
-        }
+        Err(error) => return print_output(error.to_string().trim_end()),
     };
     match run(cli).await {
-        Ok(body) => {
-            // Streaming commands print as they go and return nothing more.
-            if !body.is_empty() {
-                println!("{body}");
-            }
-            ExitCode::SUCCESS
+        // Streaming commands print as they go and return nothing more.
+        Ok(body) if body.is_empty() => ExitCode::SUCCESS,
+        Ok(body) => print_output(&body),
+        Err(error) => {
+            eprintln!("{}", error.json());
+            ExitCode::from(error.exit_code())
         }
+    }
+}
+
+/// Prints a command's output; a reader that stopped early is not a failure.
+fn print_output(text: &str) -> ExitCode {
+    match print_line(text) {
+        Ok(_) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("{}", error.json());
             ExitCode::from(error.exit_code())

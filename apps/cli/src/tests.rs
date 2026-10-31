@@ -7,7 +7,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::cli::{Cli, Command, PageArgs, SourceInput, reject_shared_stdin};
-use crate::commands::agent::{Output, follow_run, write_line};
+use crate::commands::agent::follow_run;
 use crate::commands::data_health::data_health_path;
 use crate::commands::extension::connector_job::{ConnectorJobCommand, connector_job_command};
 use crate::commands::extension::operation::{
@@ -36,6 +36,7 @@ use crate::input::{
     json_object_input, json_string_array_input, parse_stdin_lines, read_source, relationships_body,
     values_body,
 };
+use crate::output::{Output, write_line};
 use crate::run;
 use crate::session::SessionFile;
 use crate::transport::{

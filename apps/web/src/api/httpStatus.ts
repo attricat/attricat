@@ -5,6 +5,7 @@ export const httpStatus = {
   forbidden: 403,
   notFound: 404,
   conflict: 409,
+  tooManyRequests: 429,
 } as const;
 
 export const isSuccessStatus = (status: number) =>
