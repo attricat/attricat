@@ -635,3 +635,35 @@ async fn editor_templates_pass_validation(pool: PgPool) {
 
     server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_taken_reusable_attribute_code_is_reported_as_code_taken(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    let definition =
+        reusable_definition(&json!({ "code": "weight", "name": "Weight", "value_type": "number" }));
+    client
+        .post(format!("{base_url}/reusable-attributes"))
+        .json(&json!({ "definition": definition }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    for path in ["reusable-attributes/validate", "reusable-attributes"] {
+        let duplicate = client
+            .post(format!("{base_url}/{path}"))
+            .json(&json!({ "definition": definition }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(duplicate.status(), reqwest::StatusCode::CONFLICT, "{path}");
+        let duplicate: Value = duplicate.json().await.unwrap();
+        assert_eq!(duplicate["error"]["code"], "code_taken", "{path}");
+        assert_eq!(
+            duplicate["error"]["details"]["resource"],
+            "reusable_attribute"
+        );
+    }
+    server.abort();
+}

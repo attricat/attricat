@@ -288,7 +288,13 @@ impl AttricatRepository {
                 .await?;
         sqlx::query("INSERT INTO reusable_attribute_definitions (id, workspace_id, namespace, code, name) VALUES ($1, $2, $3, $4, $5)")
             .bind(definition_id).bind(ws).bind(&namespace).bind(&definition.code).bind(&definition.name)
-            .execute(&mut **transaction).await?;
+            .execute(&mut **transaction).await
+            .map_err(|error| match error {
+                sqlx::Error::Database(database) if database.is_unique_violation() => {
+                    RepositoryError::CodeTaken(super::CodedResource::ReusableAttribute)
+                }
+                error => error.into(),
+            })?;
         self.insert_reusable_revision(
             transaction,
             revision_id,

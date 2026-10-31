@@ -715,7 +715,7 @@ results report the same `code`, `message` and `details`.
 | `409` | `annotation_revision_conflict` | `expected`, `actual` revisions |
 | `409` | `rule_dry_run_required` | none when no completed full dry run of the definition exists; run `run-now` with `"dry_run": true` first, and the unsaved `definition` when saving a change. When the latest one was truncated: `truncated: true` and `existing_violations` (found among the candidates it checked), with a distinct message; pass `accept_existing_violations` |
 | `409` | `rule_has_existing_violations` | `existing_violations` (a count); fix the records or pass `accept_existing_violations` |
-| `409` | `code_taken` | `resource`: `blueprint`, `context`, `workflow`, `rule`, `team` or `connection`, whose code or name is already in use |
+| `409` | `code_taken` | `resource`: `blueprint`, `context`, `workflow`, `rule`, `team`, `reusable_attribute` or `connection`, whose code or name is already in use |
 | `409` | `blueprint_revision_unchanged` | `version`: the latest revision, which the definition is identical to; an earlier revision's definition can be saved again |
 | `409` | `rule_revision_unchanged` | `version`: the rule's current revision, which the definition is identical to; an earlier revision's definition can be saved again |
 | `422` | `invalid_comment` | `max` characters |

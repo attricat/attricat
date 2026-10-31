@@ -10,6 +10,7 @@ attricat_domain::code_enum! {
         Workflow => "workflow",
         Rule => "rule",
         Team => "team",
+        ReusableAttribute => "reusable_attribute",
         /// An extension connection, named by its connection key.
         Connection => "connection",
     }

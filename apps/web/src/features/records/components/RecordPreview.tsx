@@ -126,6 +126,8 @@ type Props = {
   requestedTab?: RecordPreviewTabKey;
   /** Called when the viewer opens another tab. */
   onTabChange?: (key: RecordPreviewTabKey) => void;
+  /** Called with the chosen context, or `undefined` for the default one. */
+  onContextChange?: (contextId: string | undefined) => void;
   onDeleted: () => unknown;
   onDuplicated: (copy: AttricatRecord) => void;
   /** Places the preview in its page or panel. */
@@ -145,6 +147,7 @@ export const RecordPreview = ({
   showComments = false,
   requestedTab,
   onTabChange,
+  onContextChange,
   onDeleted,
   onDuplicated,
   renderFrame,
@@ -211,6 +214,10 @@ export const RecordPreview = ({
   }, [tabReveal]);
   const { contextId, contexts, defaultContextId, setSelectedContext } =
     useRecordContextSelection(initialContextId);
+  const selectContext = (id: string) => {
+    setSelectedContext(id);
+    onContextChange?.(id === defaultContextId ? undefined : id);
+  };
   const selectedContextId = contextId ?? undefined;
   const canPublish = useCanOn(
     capabilities.recordsPublish,
@@ -261,7 +268,7 @@ export const RecordPreview = ({
       revealField(code);
       return;
     }
-    setSelectedContext(target.id);
+    selectContext(target.id);
     setPendingReveal({ code, contextId: target.id });
   };
   // The reveal is dropped when another context is chosen first or its values
@@ -566,7 +573,7 @@ export const RecordPreview = ({
                                   )}
                                   statusTransitions={statusTransitions.data}
                                   inlineFieldsRef={inlineFieldsRef}
-                                  onContextChange={setSelectedContext}
+                                  onContextChange={selectContext}
                                   resolved={resolved.data}
                                   singleColumn={compact}
                                 />
