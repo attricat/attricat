@@ -27,7 +27,9 @@ test('side-loads the example extension and recalculates a blueprint formula', as
   const fileInput = page.locator('input[type="file"]');
   await fileInput.setInputFiles(archive);
   await expect
-    .poll(() => fileInput.evaluate((input) => input.files?.length))
+    .poll(() =>
+      fileInput.evaluate((input: HTMLInputElement) => input.files?.length),
+    )
     .toBe(1);
   const install = page.getByRole('button', { name: 'Install archive' });
   await expect(install).toBeEnabled();
