@@ -573,6 +573,58 @@ attributes:
     server.abort();
 }
 
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn duplicating_names_required_key_attributes_it_cannot_copy(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    create_blueprint(
+        &client,
+        &base_url,
+        r#"
+format_version: 1
+code: uk_required
+name: Required key
+kind: record
+record_schema: '{"type": "object", "required": ["code"]}'
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [code]
+unique_keys:
+  - code: code
+    attributes: [code]
+attributes:
+  - code: code
+    value_type: string
+  - code: title
+    value_type: string
+"#,
+    )
+    .await;
+    let source: Value = create_record_with(
+        &client,
+        &base_url,
+        "uk_required",
+        json!([scalar("code", json!("a")), scalar("title", json!("A"))]),
+    )
+    .await;
+
+    let response = client
+        .post(format!(
+            "{base_url}/v1/records/{}/duplicate",
+            source["id"].as_str().unwrap()
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let body: Value = response.json().await.unwrap();
+    assert_eq!(body["error"]["code"], "duplicate_needs_unique_values");
+    assert_eq!(body["error"]["details"]["attributes"], json!(["code"]));
+
+    server.abort();
+}
+
 const DEFAULT_CONTEXT: &str = "00000000-0000-4000-8000-000000000001";
 
 async fn create_context(client: &Client, base_url: &str, code: &str, parent: &str) -> Value {

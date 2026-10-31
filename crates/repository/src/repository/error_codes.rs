@@ -62,6 +62,7 @@ error_codes! {
     DefaultContextOnly = "default_context_only",
     DefaultContextProtected = "default_context_protected",
     DisabledInDemo = "disabled_in_demo",
+    DuplicateNeedsUniqueValues = "duplicate_needs_unique_values",
     // Not an error response: a job a retry could not resync, listed in its
     // `job_errors`.
     ExportJobResyncFailed = "export_job_resync_failed",
@@ -458,6 +459,10 @@ impl RepositoryError {
                 details.insert("record_id".to_owned(), json!(record_id));
                 inner.details = Some(Value::Object(details));
                 inner
+            }
+            Self::DuplicateNeedsUniqueValues { attributes } => {
+                plain(Unprocessable, Code::DuplicateNeedsUniqueValues)
+                    .with_details(json!({ "attributes": attributes }))
             }
             Self::RecordIdTaken(record_id) => {
                 plain(Conflict, Code::RecordIdTaken).with_details(json!({ "record_id": record_id }))

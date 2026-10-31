@@ -259,6 +259,11 @@ pub enum RepositoryError {
     InvalidRecordBatch(String),
     #[error("record {0} already exists")]
     RecordIdTaken(Uuid),
+    #[error(
+        "a copy leaves out unique key values that the record schema requires: {}; create the record instead",
+        .attributes.join(", ")
+    )]
+    DuplicateNeedsUniqueValues { attributes: Vec<String> },
     #[error("batch operation {index} failed; no changes were applied: {source}")]
     RecordBatchOperationFailed {
         index: usize,
