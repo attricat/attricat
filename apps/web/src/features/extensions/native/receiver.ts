@@ -122,23 +122,30 @@ export class NativeReceiver {
 
   mutate(records: readonly RemoteMutationRecord[]) {
     if (this.#disposed || !Array.isArray(records)) return;
-    this.budget.countMutations(records.length);
-    for (const record of records) {
-      if (!Array.isArray(record)) continue;
-      switch (record[0]) {
-        case MUTATION_TYPE_INSERT_CHILD:
-          this.#insert(record[1], record[2], record[3]);
-          break;
-        case MUTATION_TYPE_REMOVE_CHILD:
-          this.#remove(record[1], record[2]);
-          break;
-        case MUTATION_TYPE_UPDATE_TEXT:
-          this.#updateText(record[1], record[2]);
-          break;
-        case MUTATION_TYPE_UPDATE_PROPERTY:
-          this.#updateProperty(record[1], record[2], record[3], record[4]);
-          break;
-      }
+    try {
+      this.budget.countMutations(records.length);
+      for (const record of records) this.#apply(record);
+    } catch {
+      // A budget was exceeded: the host has already stopped the extension's
+      // Worker and disposed this tree, so the rest is dropped.
+    }
+  }
+
+  #apply(record: RemoteMutationRecord) {
+    if (!Array.isArray(record) || this.#disposed) return;
+    switch (record[0]) {
+      case MUTATION_TYPE_INSERT_CHILD:
+        this.#insert(record[1], record[2], record[3]);
+        break;
+      case MUTATION_TYPE_REMOVE_CHILD:
+        this.#remove(record[1], record[2]);
+        break;
+      case MUTATION_TYPE_UPDATE_TEXT:
+        this.#updateText(record[1], record[2]);
+        break;
+      case MUTATION_TYPE_UPDATE_PROPERTY:
+        this.#updateProperty(record[1], record[2], record[3], record[4]);
+        break;
     }
   }
 

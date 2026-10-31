@@ -2009,7 +2009,10 @@ Runtime descriptors, containment (`EXTENSIONS_MODE`, `EXTENSION_DENYLIST`, the
 workspace gate, installation state and grants) and the 15-second runtime
 refresh apply to native contributions exactly as to frames:
 `containNativeHosts` terminates the Worker of any release the unscoped runtime
-no longer lists.
+no longer lists. The app shell (`NativeWarmup`) reads the runtime once at app
+start and starts every enabled native release's Worker, so the sandbox frame
+and each Worker load once per app start and survive in-app navigation; a
+contribution mounted later waits only for its own data.
 
 ### Rendering and safety rails
 
@@ -2069,7 +2072,9 @@ attribute's code, name, value type, constraints and options, read-only and
 required state, current validation errors, the record and value context and
 the field's props; locale and theme arrive with every update. The editor only
 proposes values (`editor.propose`, accepted only from attribute-editor
-mounts). The host converts a proposal to the field's type, validates it
+mounts). The first UI kit input that sets `hideLabel` draws the field's label
+on its outline, at the field's size, as every other field does; the host's own
+label then names the field for assistive technology only. The host converts a proposal to the field's type, validates it
 against the attribute and saves it through the inline-edit path — save on
 blur or Enter, Escape restores — with the user's permissions; label, help,
 errors, focus and keyboard stay host-drawn. When the extension is disabled,

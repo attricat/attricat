@@ -15,6 +15,7 @@ export const ExtensionUi = (props: ComponentProps<typeof ExtensionFrame>) =>
       onFailure={props.onFailure}
       onReady={props.onReady}
       placeholder={props.placeholder}
+      heading={props.heading}
     />
   ) : (
     <ExtensionFrame {...props} />

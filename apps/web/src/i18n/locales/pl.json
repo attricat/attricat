@@ -1930,7 +1930,8 @@
         "title": "Zestaw UI {{version}}",
         "eventsHint": "Tutaj pojawiają się zdarzenia wysyłane przez elementy."
       }
-    }
+    },
+    "contributionHeading": "{{subject}} · {{extension}}"
   },
   "workspace": {
     "memberSummary": "{{email}} · {{state}}",

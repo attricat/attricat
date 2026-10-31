@@ -1,4 +1,5 @@
 import { Alert, Box, Collapse } from '@mui/material';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ExtensionContribution } from './api';
 import {
@@ -21,6 +22,8 @@ type Props = {
   onReady?: () => void;
   /** What shows until the artifact renders; a skeleton by default. */
   placeholder?: ExtensionFramePlaceholder;
+  /** Names what the contribution belongs to; it collapses with the frame. */
+  heading?: ReactNode;
 };
 
 /** Executes one contribution in an opaque-origin document, never in Attricat's DOM. */
@@ -31,6 +34,7 @@ export const ExtensionFrame = ({
   onFailure,
   onReady,
   placeholder = extensionFramePlaceholders.skeleton,
+  heading,
 }: Props) => {
   const { t } = useTranslation();
   const {
@@ -73,7 +77,12 @@ export const ExtensionFrame = ({
   // The collapsed frame stays mounted: its content is measured inside its own
   // document, so it can size itself before taking any space.
   if (placeholder === extensionFramePlaceholders.none)
-    return <Collapse in={ready && measured && height > 0}>{frame}</Collapse>;
+    return (
+      <Collapse in={ready && measured && height > 0}>
+        {heading}
+        {frame}
+      </Collapse>
+    );
   return (
     <Box
       sx={{
@@ -81,6 +90,7 @@ export const ExtensionFrame = ({
         position: 'relative',
       }}
     >
+      {heading}
       {frame}
       {!ready && <ExtensionFrameLoading />}
     </Box>

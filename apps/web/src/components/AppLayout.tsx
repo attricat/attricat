@@ -21,6 +21,7 @@ import { authQueryKeys } from '../features/auth/queryKeys';
 import { ExtensionRunWatcher } from '../features/extension-runs/ExtensionRunWatcher';
 import { ExtensionActionDialogHost } from '../features/extensions/ExtensionActionDialogHost';
 import { ExtensionActionConfirmHost } from '../features/extensions/ExtensionActionConfirmHost';
+import { NativeWarmup } from '../features/extensions/native/NativeWarmup';
 import { useWorkspaceLexicon } from '../features/lexicon/lexicon';
 import { useSessionCacheBoundary } from '../features/auth/useSessionCacheBoundary';
 import { DesktopNavigation } from './DesktopNavigation';
@@ -156,6 +157,7 @@ export const AppLayout = () => {
       <ExtensionActionConfirmHost />
       <ActionPalette />
       <ExtensionRunWatcher />
+      <NativeWarmup />
     </Fragment>
   );
 };
