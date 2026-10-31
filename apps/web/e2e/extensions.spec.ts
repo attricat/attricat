@@ -122,16 +122,14 @@ extensions:
     )
     .toContain(123);
 
-  const cellFrame = page.frameLocator(
-    'iframe[title="attricat-extension-example.computed-number"]',
-  );
-  // The Explorer shows its built-in cell when a renderer frame takes longer
-  // than 1.5 s to start, which a cold artifact load can miss; reload to retry.
+  // The host draws the extension's cell with its precision and unit; the
+  // built-in cell would show a bare number. A cold Worker start can miss the
+  // first render, so reload to retry.
   await expect(async () => {
     await page.goto(`/?blueprint=${code}`);
-    await expect(cellFrame.getByText(/100\.00\s*EUR/)).toBeVisible({
-      timeout: 10_000,
-    });
+    await expect(page.getByRole('cell', { name: /100\.00\s*EUR/ })).toBeVisible(
+      { timeout: 10_000 },
+    );
   }).toPass({ timeout: 60_000 });
 
   // A row action is an item of the row's menu; it opens the extension's
