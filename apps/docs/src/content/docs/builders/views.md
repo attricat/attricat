@@ -178,6 +178,22 @@ views:
 
 The cell must be declared by an enabled extension for the column's value type, and each prop must match the type and bounds it declares. Attricat draws the cell itself; see [Table cells](/extensions/manifest/#table-cells).
 
+### Extension attribute editors
+
+On the record page, a field in the `detail` view can use an input control from an enabled extension instead of the default one, such as a formula input that suggests attribute names. Name the editor by ID and version, and pass its options in `props`:
+
+```yaml
+views:
+  detail:
+    type: stack
+    children:
+      - type: field
+        field: discount_formula
+        editor: {id: formula, version: 1, props: {rows: 2}}
+```
+
+The editor must be declared by an enabled extension for the field's value type, and each prop must match the type and bounds it declares. The field keeps its label, help, validation and saving: it still saves when you leave it or press Enter, and Escape restores the saved value. While the extension is disabled or not working, the field shows its default control. Editors apply only on the record page, never in Explorer tables.
+
 ## Explorer browse panel
 
 The **Browse by** panel beside the Explorer results lists the targets of one relationship. A blueprint with its own [hierarchy](#hierarchies) lists its own tree instead, under the blueprint's name. By default the panel opens for that tree, or else for the first relationship whose target blueprint has a hierarchy. To choose the field, name it in `views.explorer`:

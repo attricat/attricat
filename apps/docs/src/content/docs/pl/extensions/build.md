@@ -6,8 +6,19 @@ description: Z czego składa się rozszerzenie Attricat, jak je spakować i jak 
 Rozszerzenie to archiwum `.tar.zst` z plikiem `manifest.json` w katalogu głównym i plikami zadeklarowanymi w manifeście. Może zawierać:
 
 - **Komponenty serwerowe**: komponenty WebAssembly, które obsługują zdarzenia katalogu, odpowiadają na polecenia z interfejsu rozszerzenia i wykonują długie operacje, takie jak importy i eksporty. Zobacz [Środowisko wykonawcze serwera](/pl/extensions/server/).
-- **Komponenty klienckie**: moduły JavaScript renderowane w izolowanych ramkach w stałych miejscach aplikacji webowej albo jako pełne strony. Zobacz [Kontrybucje klienckie](/pl/extensions/client/).
+- **Interfejs kliencki** w stałych miejscach aplikacji webowej albo jako pełne strony, na jednym z trzech poziomów opisanych niżej.
 - **Deklaracje**, na podstawie których działa host bez uruchamiania Twojego kodu: typy atrybutów, komórki tabeli, schematy konfiguracji i kontrakty zdarzeń.
+
+## Trzy sposoby rysowania interfejsu
+
+| | Deklaratywny | Natywny interfejs | Interfejs w ramce |
+| --- | --- | --- | --- |
+| Kto rysuje | Attricat | Attricat, z komponentów zestawu UI składanych przez Twój kod | Twój kod, własnym HTML |
+| Gdzie działa Twój kod | Nigdzie w przeglądarce | W izolowanym Workerze | W izolowanej ramce |
+| Manifest | `cell`, `action`, notatki pól | Artefakt `client_native` | Artefakt `client_frame` |
+| Typowe zastosowania | Komórki tabeli, akcje w menu, odznaki przy polach | Karty rekordu, panele, okna, ustawienia, edytory atrybutów | Pełne strony i narzędzia, których nie da się zbudować z zestawu UI |
+
+Wybieraj je w tej kolejności. Kontrybucje **deklaratywne** tylko opisują, co pokazać, więc nic nie kosztują na rekord i zawsze wyglądają jak Attricat. **Natywny interfejs** pozwala Twojej logice sterować ekranem, a Attricat rysuje go własnymi komponentami: interfejs podąża za motywem, językiem i obsługą klawiatury reszty aplikacji i zachowuje swój stan przy zmianie kontekstu lub motywu. Zobacz [Natywny interfejs](/pl/extensions/native/). **Interfejs w ramce** daje Ci całą stronę do narysowania po swojemu, dla warsztatów i edytorów, których nie da się wyrazić zestawem UI. Zobacz [Kontrybucje klienckie](/pl/extensions/client/).
 
 Rozszerzenie referencyjne `attricat-extension-example` pokazuje, jak wszystkie te elementy działają razem: oblicza numeryczne atrybuty z formuł i ma stronę warsztatu, akcję rekordu, komórkę tabeli oraz serwerową obsługę zdarzeń.
 
@@ -15,7 +26,8 @@ Rozszerzenie referencyjne `attricat-extension-example` pokazuje, jak wszystkie t
 
 | Chcesz | Przeczytaj |
 | --- | --- |
-| Pokazać coś na stronie rekordu lub w przeglądarce rekordów | [Minimalny manifest](#minimalny-manifest), a potem [Kontrybucje klienckie](/pl/extensions/client/) |
+| Pokazać coś na stronie rekordu lub w przeglądarce rekordów | [Minimalny manifest](#minimalny-manifest), a potem [Natywny interfejs](/pl/extensions/native/) lub [Kontrybucje klienckie](/pl/extensions/client/) |
+| Dać polom schematu własną kontrolkę | [Edytory atrybutów](/pl/extensions/native/#edytory-atrybutów) |
 | Reagować na zmiany w katalogu albo obsłużyć swój interfejs logiką serwerową | [Zbuduj komponent serwerowy](#zbuduj-komponent-serwerowy), a potem [Środowisko wykonawcze serwera](/pl/extensions/server/) |
 | Importować lub eksportować pliki albo przetwarzać zaznaczone rekordy | [Operacje](/pl/extensions/operations/) |
 | Synchronizować katalog z marketplace'em lub sklepem internetowym | [Konektory eksportu](/pl/extensions/exports/) |
@@ -25,7 +37,9 @@ Rozszerzenie referencyjne `attricat-extension-example` pokazuje, jak wszystkie t
 Kod rozszerzenia nigdy nie działa we własnym procesie ani na stronie Attricat.
 
 - Komponenty serwerowe działają w piaskownicy WebAssembly bez systemu plików, środowiska, gniazd i zegara systemowego. Wszystko, co robią, przechodzi przez wywołania hosta, a każde wywołanie jest sprawdzane pod kątem uprawnień przyznanych przez administratora.
-- Komponenty klienckie działają w ramkach `<iframe sandbox="allow-scripts">` z nieprzezroczystym pochodzeniem (opaque origin) i zasadami Content Security Policy blokującymi dostęp do sieci. Komunikują się z Attricat przez kanał wiadomości, który udostępnia tylko przyznane im operacje.
+- Natywny interfejs działa w osobnym Workerze dla każdego rozszerzenia, wewnątrz ukrytej izolowanej ramki z nieprzezroczystym pochodzeniem (opaque origin) i bez dostępu do sieci. Attricat sprawdza każdy element, który ma narysować, względem zestawu UI i rysuje go własnymi komponentami; żaden kod HTML rozszerzenia nie trafia na stronę Attricat.
+- Interfejs w ramce działa w ramkach `<iframe sandbox="allow-scripts">` z nieprzezroczystym pochodzeniem i zasadami Content Security Policy blokującymi dostęp do sieci.
+- Oba komunikują się z Attricat przez kanał wiadomości, który udostępnia tylko przyznane im operacje i identyfikuje swoje rozszerzenie.
 - Zmiany w katalogu wprowadzone przez rozszerzenie przechodzą przez tę samą walidację, dziennik audytu i strumień zdarzeń co edycje wykonane przez osobę.
 
 Projektuj z myślą o tym: Twoje rozszerzenie prosi o uprawnienia, a administrator decyduje, które przyznać.
@@ -45,7 +59,7 @@ Projektuj z myślą o tym: Twoje rozszerzenie prosi o uprawnienia, a administrat
   },
   "permissions": ["attricat.read", "client.record_tab"],
   "artifacts": [
-    { "id": "panel", "kind": "client_component", "path": "dist/panel.js" }
+    { "id": "panel", "kind": "client_frame", "path": "dist/panel.js" }
   ],
   "ui": [
     {

@@ -473,7 +473,7 @@ Only a record blueprint can define it, and only under the name `explorer`. Witho
 | `section` | `children` | A grouped region. |
 | `tabs` | `tabs`: list of `{label, children}` | One tab per entry. |
 | `accordion` | `sections`: list of `{label, children}` | Collapsible sections. |
-| `field` | `field` | One scalar or file attribute. |
+| `field` | `field`; optional `editor` | One scalar or file attribute. In `detail`, `editor` names an extension's attribute editor by `id`, `version` and `props`; see [Attribute editors](/extensions/manifest/#attribute-editors). |
 | `relationship_list` | `field` | One relationship attribute and its targets. |
 | `incoming_relationship_list` | `label`, `relationships`, `page_size` | A link that opens the Explorer in a new tab, filtered to records linking to this one; one link per relationship. `relationships` is a list of `{source_blueprint, field}`. `page_size` is capped by the server's `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE`; the web app does not use it. |
 | `heading` | `text` | Static heading. |

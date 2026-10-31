@@ -6,8 +6,19 @@ description: The parts of an Attricat extension, how they are packaged, and how 
 An extension is a `.tar.zst` archive with a `manifest.json` at its root and the files the manifest declares. It can contain:
 
 - **Server components**: WebAssembly components that handle catalog events, answer commands from the extension's UI, and run long operations such as imports and exports. See [Server runtime](/extensions/server/).
-- **Client components**: JavaScript modules that render inside sandboxed frames at fixed places in the web app, or as full pages. See [Client contributions](/extensions/client/).
+- **Client UI** at fixed places in the web app, or as full pages, in one of three tiers described below.
 - **Declarations** the host acts on without running your code: attribute types, table cells, configuration schemas, and event contracts.
+
+## Three ways to draw UI
+
+| | Declarative | Native UI | Frame UI |
+| --- | --- | --- | --- |
+| Who draws | Attricat | Attricat, from UI kit components your code composes | Your code, with its own HTML |
+| Where your code runs | Nowhere in the browser | An isolated Worker | A sandboxed frame |
+| Manifest | `cell`, `action`, field notes | A `client_native` artifact | A `client_frame` artifact |
+| Typical uses | Table cells, menu actions, badges beside fields | Record tabs, panels, dialogs, settings, attribute editors | Full pages and tools the UI kit cannot build |
+
+Prefer them in that order. **Declarative** contributions only describe what to show, so they cost nothing per record and always look like Attricat. **Native UI** lets your logic drive the screen while Attricat draws it with its own components: it follows the theme, the language and keyboard behavior of the rest of the app, and keeps its state when the context or theme changes. See [Native UI](/extensions/native/). **Frame UI** gives you a whole page to draw as you like, for workbenches and editors the UI kit cannot express. See [Client contributions](/extensions/client/).
 
 A reference extension, `attricat-extension-example`, shows all of these working together: it computes numeric attributes from formulas, with a workbench page, a record action, a table cell, and a server event handler.
 
@@ -15,7 +26,8 @@ A reference extension, `attricat-extension-example`, shows all of these working 
 
 | You want to | Read |
 | --- | --- |
-| Show something on a record or in the Explorer | [A minimal manifest](#a-minimal-manifest), then [Client contributions](/extensions/client/) |
+| Show something on a record or in the Explorer | [A minimal manifest](#a-minimal-manifest), then [Native UI](/extensions/native/) or [Client contributions](/extensions/client/) |
+| Give blueprint fields a custom input | [Attribute editors](/extensions/native/#attribute-editors) |
 | React to catalog changes or back your UI with server logic | [Build a server component](#build-a-server-component), then [Server runtime](/extensions/server/) |
 | Import or export files, or process a selection of records | [Operations](/extensions/operations/) |
 | Keep a marketplace or storefront in sync | [Export connectors](/extensions/exports/) |
@@ -25,7 +37,9 @@ A reference extension, `attricat-extension-example`, shows all of these working 
 Extension code never runs in Attricat's own process or page.
 
 - Server components run in a WebAssembly sandbox with no file system, environment, sockets, or system clock. Everything they do goes through host calls, and each call is checked against the permissions the administrator granted.
-- Client components run in `<iframe sandbox="allow-scripts">` frames with an opaque origin and a Content Security Policy that blocks network access. They talk to Attricat through a message channel that exposes only the operations they were granted.
+- Native UI runs in a dedicated Worker per extension, inside a hidden sandboxed frame with an opaque origin and no network access. Attricat checks every element it is asked to draw against the UI kit and draws it with its own components; no extension markup reaches Attricat's page.
+- Frame UI runs in `<iframe sandbox="allow-scripts">` frames with an opaque origin and a Content Security Policy that blocks network access.
+- Both talk to Attricat through a message channel that exposes only the operations they were granted, and each channel identifies its extension.
 - Attricat changes made by an extension go through the same validation, audit log, and event stream as a person's edits.
 
 Design with that in mind: your extension asks for capabilities; an administrator decides which to grant.
@@ -45,7 +59,7 @@ Design with that in mind: your extension asks for capabilities; an administrator
   },
   "permissions": ["attricat.read", "client.record_tab"],
   "artifacts": [
-    { "id": "panel", "kind": "client_component", "path": "dist/panel.js" }
+    { "id": "panel", "kind": "client_frame", "path": "dist/panel.js" }
   ],
   "ui": [
     {

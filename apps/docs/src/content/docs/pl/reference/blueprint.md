@@ -473,7 +473,7 @@ Może go zdefiniować tylko schemat rekordów i tylko pod nazwą `explorer`. Bez
 | `section` | `children` | Zgrupowany obszar. |
 | `tabs` | `tabs`: lista `{label, children}` | Jedna karta na wpis. |
 | `accordion` | `sections`: lista `{label, children}` | Zwijane sekcje. |
-| `field` | `field` | Jeden atrybut skalarny lub plikowy. |
+| `field` | `field`; opcjonalnie `editor` | Jeden atrybut skalarny lub plikowy. W `detail` klucz `editor` wskazuje edytor atrybutu z rozszerzenia przez `id`, `version` i `props`; zobacz [Edytory atrybutów](/pl/extensions/manifest/#edytory-atrybutów). |
 | `relationship_list` | `field` | Jeden atrybut relacji i jego cele. |
 | `incoming_relationship_list` | `label`, `relationships`, `page_size` | Link otwierający Przeglądarkę rekordów w nowej karcie, przefiltrowaną do rekordów wskazujących na ten rekord; osobny link dla każdej relacji. `relationships` to lista `{source_blueprint, field}`. `page_size` jest ograniczane przez `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE` serwera; aplikacja webowa go nie używa. |
 | `heading` | `text` | Statyczny nagłówek. |
