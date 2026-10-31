@@ -6,6 +6,7 @@ use super::record_values::{
 use super::write_context::WriteContext;
 use super::*;
 use attricat_domain::attribute_options::ContextFallback;
+use attricat_domain::canonical_json::canonical_json_sha256;
 use attricat_domain::permissions::Permission;
 use attricat_validation::status::{
     STATUS_KEY, StatusCoverage, TransitionRequirements, has_record_controls, status_approval,
@@ -13,7 +14,6 @@ use attricat_validation::status::{
     transition_requirements, validate_status_transition,
 };
 use chrono::Utc;
-use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 
 /// A live status attribute of a record's blueprint revision or one of its
@@ -348,10 +348,7 @@ fn content_digest(
         .filter(|code| coverage.covers(code, status_code))
         .filter_map(|code| Some((code.to_owned(), effective(record, path, code)?.clone())))
         .collect();
-    format!(
-        "{:x}",
-        Sha256::digest(Value::Object(document).to_string().as_bytes())
-    )
+    canonical_json_sha256(&Value::Object(document)).expect("JSON value serializes")
 }
 
 /// An unlock may leave a locking status for any declared option, but never
