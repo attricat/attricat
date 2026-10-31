@@ -45,7 +45,9 @@ export const ExploreNavigationLinks = ({
         <ListItemText primary={t('navigation.allRecords')} />
       </ListItemButton>
       {shortcuts?.length ? (
-        <ListSubheader disableSticky>{t('navigation.shortcuts')}</ListSubheader>
+        <ListSubheader component="div" disableSticky>
+          {t('navigation.shortcuts')}
+        </ListSubheader>
       ) : null}
       {shortcuts?.map((item) => (
         <RouterListItemButton

@@ -44,6 +44,7 @@ const Brand = ({ variant }: { variant: BrandVariant }) => {
     <Box
       aria-label={t('app.attricat')}
       data-navigation-icon-trigger
+      role="img"
       sx={{ alignItems: 'center', display: 'flex', gap: 1.5 }}
     >
       <NavigationBrandIcon variant={variant} />
@@ -104,6 +105,7 @@ export const CompactSideNavigation = ({
       </Box>
       <Divider />
       <List
+        component="div"
         sx={{
           display: 'flex',
           flexDirection: 'column',
@@ -255,6 +257,7 @@ export const MobileSideNavigation = ({
       </Box>
       <Divider />
       <List
+        component="div"
         sx={{
           flexGrow: 1,
           minHeight: 0,
@@ -321,7 +324,7 @@ export const MobileSideNavigation = ({
               component="nav"
               id={mobileExplorePanelId}
             >
-              <List disablePadding>
+              <List component="div" disablePadding>
                 <ExploreNavigationLinks
                   {...exploreLinkProps}
                   onNavigate={onNavigate}
