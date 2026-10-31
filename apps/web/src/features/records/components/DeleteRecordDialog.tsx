@@ -11,15 +11,18 @@ export const DeleteRecordDialog = ({
 }: {
   recordId: string;
   onClose: () => void;
-  onDeleted: () => void;
+  /** Leaves the deleted record; may return a promise that settles once it has. */
+  onDeleted: () => unknown;
 }) => {
   const { t } = useTranslation();
   const client = useQueryClient();
   const deletion = useMutation({
     mutationFn: () => deleteRecord(recordId),
-    onSuccess: () => {
+    onSuccess: async () => {
+      // Leave first: views of the record still mounted would refetch it,
+      // and every read of a deleted record fails.
+      await onDeleted();
       void removeRecord(client, recordId);
-      onDeleted();
     },
   });
 
