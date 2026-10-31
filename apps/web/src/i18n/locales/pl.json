@@ -235,6 +235,7 @@
   },
   "auth": {
     "notAuthorized": {
+      "audit_read": "Nie masz uprawnień do przeglądania dziennika audytu w tym obszarze roboczym.",
       "data_health_read": "Nie masz uprawnień do wyświetlania stanu danych w tym obszarze roboczym.",
       "agents_run": "Nie masz uprawnień do korzystania z agentów w tym obszarze roboczym.",
       "blueprints_write": "Nie masz uprawnień do edytowania schematów w tym obszarze roboczym.",

@@ -231,6 +231,7 @@
   },
   "auth": {
     "notAuthorized": {
+      "audit_read": "You are not authorized to view the audit log in this workspace.",
       "data_health_read": "You are not authorized to view data health in this workspace.",
       "agents_run": "You are not authorized to use agents in this workspace.",
       "blueprints_write": "You are not authorized to edit blueprints in this workspace.",

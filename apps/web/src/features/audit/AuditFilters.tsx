@@ -4,7 +4,7 @@ import { AuditExecutorType } from './AuditExecutorType';
 import type { AuditEventFilters } from './api';
 import { zonedDateTimeToIso } from '../../time/instantFormat';
 import { useTimeZone } from '../../time/useInstantFormat';
-import { executorTypes } from './constants';
+import { auditExecutorSelectMinWidth, executorTypes } from './constants';
 
 export const AuditFilters = ({
   draft,
@@ -59,6 +59,12 @@ export const AuditFilters = ({
         label={t('audit.executor')}
         onChange={(event) => onChange('executor_type', event.target.value)}
         select
+        // Shows "All" rather than an empty field while no executor is chosen.
+        slotProps={{
+          inputLabel: { shrink: true },
+          select: { displayEmpty: true },
+        }}
+        sx={{ minWidth: auditExecutorSelectMinWidth }}
         value={draft.executor_type ?? ''}
       >
         <MenuItem value="">{t('audit.all')}</MenuItem>

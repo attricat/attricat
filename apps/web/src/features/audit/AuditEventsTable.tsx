@@ -5,6 +5,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
 } from '@mui/material';
@@ -33,7 +34,8 @@ export const AuditEventsTable = ({
 }) => {
   const { t } = useTranslation();
   return (
-    <Paper variant="outlined">
+    // Long action names and targets scroll here instead of widening the page.
+    <TableContainer component={Paper} variant="outlined">
       <Table size="small">
         <TableHead>
           <TableRow>
@@ -95,6 +97,6 @@ export const AuditEventsTable = ({
           )}
         </TableBody>
       </Table>
-    </Paper>
+    </TableContainer>
   );
 };
