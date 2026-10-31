@@ -102,6 +102,8 @@ const element = (
 });
 
 type FakeWorker = {
+  /** Records the SDK calls the host makes. */
+  calls?: string[];
   /** Registers these contribution IDs; all of them by default. */
   registered?: string[];
   /** Draws into each mount's connection. */
@@ -131,9 +133,16 @@ const isolation = (
           _mountId: string,
           _id: string,
           connection: RemoteConnection,
-        ) => worker.draw?.(connection),
-        update: async () => {},
-        unmount: async () => {},
+        ) => {
+          worker.calls?.push('mount');
+          worker.draw?.(connection);
+        },
+        update: async (_mountId: string, next: NativeMountInit) => {
+          worker.calls?.push(`update:${next.theme.color_mode}`);
+        },
+        unmount: async () => {
+          worker.calls?.push('unmount');
+        },
         ping: () => (worker.hung ? new Promise(() => {}) : Promise.resolve()),
       },
     });
@@ -243,6 +252,21 @@ describe('native extension host', () => {
     expect(handleBrokerRequest).toHaveBeenCalledTimes(1);
     hostOne.terminate();
     hostTwo.terminate();
+  });
+
+  it('sends context and theme changes as updates, never as a remount', async () => {
+    const item = contribution('acme.one');
+    const calls: string[] = [];
+    const host = new NativeExtensionHost([item], isolation({ calls }));
+    const { mountId } = host.mount(item, init, dependencies(item));
+    await vi.waitFor(() => expect(calls).toEqual(['mount']));
+    host.update(mountId, { ...init, theme: { color_mode: 'dark' } });
+    await vi.waitFor(() => expect(calls).toEqual(['mount', 'update:dark']));
+    host.unmount(mountId);
+    await vi.waitFor(() =>
+      expect(calls).toEqual(['mount', 'update:dark', 'unmount']),
+    );
+    host.terminate();
   });
 
   it('rejects registrations of undeclared contributions', async () => {
