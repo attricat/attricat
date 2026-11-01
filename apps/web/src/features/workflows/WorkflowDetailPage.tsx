@@ -31,6 +31,7 @@ import { WorkflowSourcePanel } from './WorkflowSourcePanel';
 import { WorkflowIcon } from '../../components/systemIcons';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { notFoundError } from '../../api/errors';
 import { randomUuid } from '../../components/randomUuid';
 import {
   workflowRevisionListOptions,
@@ -97,10 +98,11 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
         <ApiErrorAlert error={revisions.error} />
       </PageContainer>
     );
+  // Every workflow has a revision, so an empty list means none has this ID.
   if (!current)
     return (
       <PageContainer>
-        <Alert severity="info">{t('workflows.empty')}</Alert>
+        <ApiErrorAlert error={notFoundError()} />
       </PageContainer>
     );
 

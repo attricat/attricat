@@ -69,10 +69,14 @@ export const ConversationDetailPage = ({
             onClose={() => setRenameOpen(false)}
           />
         )}
-        <ConversationPanel
-          key={conversationId}
-          conversationId={conversationId}
-        />
+        {/* The panel would repeat the failure of a conversation that cannot
+            be read. */}
+        {!conversation.isError && (
+          <ConversationPanel
+            key={conversationId}
+            conversationId={conversationId}
+          />
+        )}
       </Box>
     </PageContainer>
   );

@@ -130,6 +130,38 @@ describe('AuditLogPage', () => {
     );
   });
 
+  it('applies filters on Enter and holds back IDs the API cannot parse', async () => {
+    await i18n.changeLanguage('en');
+    vi.mocked(listAuditEvents).mockResolvedValue({
+      events: [],
+      limit: 50,
+      offset: 0,
+      total: 0,
+    });
+    const user = userEvent.setup();
+
+    renderPage();
+
+    await waitFor(() => expect(listAuditEvents).toHaveBeenCalledTimes(1));
+    const actor = screen.getByRole('textbox', { name: 'Actor ID' });
+    await user.type(actor, 'not-an-id{Enter}');
+    expect(screen.getByText(/Enter a full ID/)).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: 'Apply filters' }),
+    ).toHaveProperty('disabled', true);
+    expect(listAuditEvents).toHaveBeenCalledTimes(1);
+
+    await user.clear(actor);
+    await user.type(actor, `${event.actor_user_id}{Enter}`);
+    await waitFor(() =>
+      expect(listAuditEvents).toHaveBeenLastCalledWith({
+        actor_user_id: event.actor_user_id,
+        limit: 50,
+        offset: 0,
+      }),
+    );
+  });
+
   it('adds the next page below the events already shown', async () => {
     await i18n.changeLanguage('en');
     const second = { ...event, id: `${event.id.slice(0, -1)}9` };

@@ -79,7 +79,9 @@ export const InstalledExtensionPage = ({
                 version: installation.version,
                 source: installation.source,
               })
-            : t('extensions.loadingInstallation')
+            : detail.isPending
+              ? t('extensions.loadingInstallation')
+              : undefined
         }
         actions={<Link to="/manage/extensions">{t('extensions.back')}</Link>}
       />

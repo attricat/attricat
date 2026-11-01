@@ -1,10 +1,31 @@
 import { Box, Button, MenuItem, TextField } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { z } from 'zod';
 import { AuditExecutorType } from './AuditExecutorType';
 import type { AuditEventFilters } from './api';
 import { zonedDateTimeToIso } from '../../time/instantFormat';
 import { useTimeZone } from '../../time/useInstantFormat';
 import { auditExecutorSelectMinWidth, executorTypes } from './constants';
+
+/** Filters that name an event's actor, run or tool call by ID. */
+const idFilterKeys = [
+  'actor_user_id',
+  'agent_run_id',
+  'agent_tool_call_id',
+] as const satisfies readonly (keyof AuditEventFilters)[];
+type IdFilterKey = (typeof idFilterKeys)[number];
+
+const isInvalidId = (value: string | undefined) =>
+  value !== undefined && !z.uuid().safeParse(value).success;
+
+/** Whether `To` comes before `From`, which no event can match. */
+const isReversedRange = ({
+  occurred_after,
+  occurred_before,
+}: AuditEventFilters) =>
+  occurred_after !== undefined &&
+  occurred_before !== undefined &&
+  Date.parse(occurred_after) > Date.parse(occurred_before);
 
 export const AuditFilters = ({
   draft,
@@ -18,8 +39,26 @@ export const AuditFilters = ({
   const { t } = useTranslation();
   // `datetime-local` values are wall-clock times in the user's zone.
   const timeZone = useTimeZone();
+  const reversedRange = isReversedRange(draft);
+  const invalid =
+    reversedRange || idFilterKeys.some((key) => isInvalidId(draft[key]));
+  // An ID the API cannot parse is reported here instead of sending it.
+  const idFieldProps = (key: IdFilterKey) => ({
+    error: isInvalidId(draft[key]),
+    helperText: isInvalidId(draft[key]) ? t('audit.idInvalid') : undefined,
+    onChange: (event: { target: { value: string } }) =>
+      onChange(key, event.target.value.trim()),
+  });
   return (
-    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, my: 3 }}>
+    <Box
+      component="form"
+      noValidate
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!invalid) onApply();
+      }}
+      sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, my: 3 }}
+    >
       <TextField
         label={t('audit.from')}
         onChange={(event) =>
@@ -32,6 +71,8 @@ export const AuditFilters = ({
         type="datetime-local"
       />
       <TextField
+        error={reversedRange}
+        helperText={reversedRange ? t('audit.rangeReversed') : undefined}
         label={t('audit.to')}
         onChange={(event) =>
           onChange(
@@ -49,7 +90,7 @@ export const AuditFilters = ({
       />
       <TextField
         label={t('audit.actorId')}
-        onChange={(event) => onChange('actor_user_id', event.target.value)}
+        {...idFieldProps('actor_user_id')}
       />
       <TextField
         label={t('audit.targetType')}
@@ -77,13 +118,13 @@ export const AuditFilters = ({
       </TextField>
       <TextField
         label={t('audit.agentRunId')}
-        onChange={(event) => onChange('agent_run_id', event.target.value)}
+        {...idFieldProps('agent_run_id')}
       />
       <TextField
         label={t('audit.toolCallId')}
-        onChange={(event) => onChange('agent_tool_call_id', event.target.value)}
+        {...idFieldProps('agent_tool_call_id')}
       />
-      <Button onClick={onApply} variant="contained">
+      <Button disabled={invalid} type="submit" variant="contained">
         {t('audit.applyFilters')}
       </Button>
     </Box>

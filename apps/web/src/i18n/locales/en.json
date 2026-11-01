@@ -1534,7 +1534,9 @@
     "agentToolCall": "Agent tool call",
     "system": "System",
     "workspace": "Workspace",
-    "actionCategoryPlaceholder": "attricat"
+    "actionCategoryPlaceholder": "attricat",
+    "idInvalid": "Enter a full ID, such as 0f8e4c2a-5b1d-4e7a-9c3f-2d6b8a1e4f70.",
+    "rangeReversed": "Choose a time after From."
   },
   "workflows": {
     "runNow": "Run now",
