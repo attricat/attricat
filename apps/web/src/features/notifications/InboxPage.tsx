@@ -2,6 +2,7 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { Box, Button, List, ListItem, Paper, Tab, Tabs } from '@mui/material';
 import { CheckCheckIcon } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { NextPageButton } from '../../components/LoadMoreButton';
 import { PageContainer } from '../../components/PageContainer';
@@ -59,6 +60,27 @@ export const InboxPage = ({ filter }: { filter: InboxFilter }) => {
     ),
   );
   const error = notifications.error ?? session.error;
+  // Marking all read disables the button, which drops keyboard focus. While
+  // the button keeps focus it holds it; once the refreshed count disables it,
+  // focus moves to the selected tab.
+  const markAllButton = useRef<HTMLButtonElement>(null);
+  const restoreMarkAllFocus = useRef(false);
+  useEffect(() => {
+    if (markAllRead.isPending || !restoreMarkAllFocus.current) return;
+    const button = markAllButton.current;
+    const focused = document.activeElement;
+    // Focus that moved elsewhere meanwhile stays where it is.
+    if (focused && focused !== document.body && focused !== button) {
+      restoreMarkAllFocus.current = false;
+      return;
+    }
+    if (button && !button.disabled) {
+      button.focus();
+      return;
+    }
+    restoreMarkAllFocus.current = false;
+    document.getElementById(tabId(filter))?.focus();
+  }, [filter, markAllRead.isPending, unreadCount]);
 
   return (
     <PageContainer>
@@ -66,11 +88,14 @@ export const InboxPage = ({ filter }: { filter: InboxFilter }) => {
         actions={
           <Button
             disabled={unreadCount === 0 || markAllRead.isPending}
-            onClick={() =>
+            onClick={(event) => {
+              restoreMarkAllFocus.current =
+                document.activeElement === event.currentTarget;
               // Notifications that arrive after the newest one shown stay
               // unread.
-              markAllRead.mutate(items[0]?.created_at)
-            }
+              markAllRead.mutate(items[0]?.created_at);
+            }}
+            ref={markAllButton}
             startIcon={<CheckCheckIcon />}
             variant="outlined"
           >

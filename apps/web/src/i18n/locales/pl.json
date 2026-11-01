@@ -43,6 +43,7 @@
   },
   "app": {
     "attricat": "Attricat",
+    "skipToContent": "Przejdź do głównej treści",
     "loading": "Ładowanie",
     "findings": "Ustalenia",
     "runs": "Uruchomienia"
