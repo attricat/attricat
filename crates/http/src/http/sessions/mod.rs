@@ -394,7 +394,13 @@ pub(super) async fn renew(
             workspace_id,
             expires_at,
         )
-        .await?;
+        .await
+        // The session passed authorization, so it reached its maximum age:
+        // the client must sign in again, as for an expired session.
+        .map_err(|error| match error {
+            RepositoryError::NotFound(_) => ApiError::unauthenticated(),
+            error => error.into(),
+        })?;
     session_response(
         &state,
         user_id,

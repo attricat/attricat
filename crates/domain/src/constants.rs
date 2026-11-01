@@ -22,6 +22,10 @@ pub const DEFAULT_CONTEXT_CODE: &str = "default";
 pub const SESSION_COOKIE: &str = "attricat_session";
 pub const CSRF_COOKIE: &str = "attricat_csrf";
 pub const SESSION_LIFETIME_HOURS: i64 = 8;
+/// How long renewal can keep a session alive after its user last signed in.
+/// It bounds how long access outlives an account disabled at an external
+/// identity provider, which Attricat is not told about.
+pub const SESSION_MAX_AGE_HOURS: i64 = 24;
 /// Conversation attachments are reclaimed unless a message claims them promptly.
 pub const CONVERSATION_ATTACHMENT_LIFETIME_SECONDS: i64 = 15 * 60;
 /// How long a file chosen for an extension action waits for a run to claim it.

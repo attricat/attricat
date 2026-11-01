@@ -11,7 +11,7 @@ Most administration happens under **Manage → Workspace management**, which has
 
 Every workspace has a **sign-in identifier** that looks like a domain name, such as `acme.example` or `default.local`. People enter it on the sign-in page, then their email and password. The identifier only routes sign-in; Attricat does not look it up in DNS.
 
-Sessions last eight hours. Five failed sign-ins for the same workspace and email within fifteen minutes block further attempts for a while. **Forgot password** sends a reset link that works once, for 30 minutes. For security, the reset form never says whether an address has an account.
+Sessions last eight hours, and renewing one through the API or `acli auth renew` cannot keep it alive more than 24 hours after signing in. Five failed sign-ins for the same email within fifteen minutes block further attempts for a while, in every workspace. **Forgot password** sends a reset link that works once, for 30 minutes. For security, the reset form never says whether an address has an account.
 
 Password sign-in is the only method today. Single sign-on, multi-factor authentication, and passkeys are not available yet.
 

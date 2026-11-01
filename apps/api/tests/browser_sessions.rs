@@ -1,9 +1,10 @@
 use crate::support;
 
 use api::{
-    account::{Password, SessionDigest, hash_password},
+    account::{Password, SessionDigest, SessionSecret, hash_password},
     repository::AttricatRepository,
 };
+use chrono::{DateTime, Duration, Utc};
 use reqwest::header::SET_COOKIE;
 use support::*;
 
@@ -618,5 +619,244 @@ async fn demo_mode_refuses_changes_that_could_lock_visitors_out(pool: PgPool) {
         let error: serde_json::Value = response.json().await.unwrap();
         assert_eq!(error["error"]["code"], "disabled_in_demo", "{path}");
     }
+    server.abort();
+}
+
+/// An account with an active membership and no local credential, as a person
+/// who only ever signs in through an identity provider would have.
+async fn passwordless_member(pool: &PgPool) -> Uuid {
+    let user = Uuid::new_v4();
+    sqlx::query("INSERT INTO users (id, email, email_verified_at) VALUES ($1, 'sso-only@example.test', now())")
+        .bind(user)
+        .execute(pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO workspace_memberships (id, workspace_id, user_id) VALUES ($1, $2, $3)",
+    )
+    .bind(Uuid::new_v4())
+    .bind(bootstrap_workspace_id())
+    .bind(user)
+    .execute(pool)
+    .await
+    .unwrap();
+    user
+}
+
+async fn issue_passwordless_session(pool: &PgPool, user: Uuid) -> (String, String) {
+    let session = SessionSecret::generate();
+    let csrf = SessionSecret::generate();
+    AttricatRepository::system(pool.clone())
+        .issue_oidc_session(
+            Uuid::new_v4(),
+            user,
+            bootstrap_workspace_id(),
+            &session.digest(),
+            &csrf.digest(),
+            Utc::now() + Duration::hours(8),
+        )
+        .await
+        .unwrap();
+    (
+        format!(
+            "attricat_session={}; attricat_csrf={}",
+            session.expose_for_delivery(),
+            csrf.expose_for_delivery()
+        ),
+        csrf.expose_for_delivery().to_owned(),
+    )
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_session_needs_no_local_credential_and_renewal_keeps_its_method(pool: PgPool) {
+    let (base_url, server) = start_session_server(pool.clone()).await;
+    let user = passwordless_member(&pool).await;
+    let (cookie, csrf) = issue_passwordless_session(&pool, user).await;
+    let client = Client::new();
+    let session = client
+        .get(format!("{base_url}/auth/session"))
+        .header("cookie", &cookie)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(session.status(), StatusCode::OK);
+    let signed_in_at: DateTime<Utc> =
+        sqlx::query_scalar("SELECT authenticated_at FROM browser_sessions WHERE user_id = $1")
+            .bind(user)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+    let renewed = client
+        .post(format!("{base_url}/auth/renew"))
+        .header("cookie", &cookie)
+        .header("x-attricat-csrf", &csrf)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(renewed.status(), StatusCode::OK);
+    let (renewed_session, renewed_csrf) = cookie_pair(&renewed);
+    let renewed_cookie = format!("{renewed_session}; {renewed_csrf}");
+    assert_eq!(
+        client
+            .get(format!("{base_url}/auth/session"))
+            .header("cookie", &renewed_cookie)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+    let (method, version, authenticated_at): (String, Option<i32>, DateTime<Utc>) = sqlx::query_as(
+        "SELECT auth_method, issued_credential_version, authenticated_at FROM browser_sessions WHERE user_id = $1 AND revoked_at IS NULL",
+    )
+    .bind(user)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(method, "oidc");
+    assert_eq!(version, None);
+    assert_eq!(authenticated_at, signed_in_at);
+
+    // A security-version change still ends it, with no credential involved.
+    sqlx::query("UPDATE users SET security_version = security_version + 1 WHERE id = $1")
+        .bind(user)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        client
+            .get(format!("{base_url}/auth/session"))
+            .header("cookie", &renewed_cookie)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::UNAUTHORIZED
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_session_without_a_credential_requires_an_active_membership(pool: PgPool) {
+    let user = passwordless_member(&pool).await;
+    sqlx::query("UPDATE workspace_memberships SET state = 'inactive' WHERE user_id = $1")
+        .bind(user)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let session = SessionSecret::generate();
+    let csrf = SessionSecret::generate();
+    let issued = AttricatRepository::system(pool.clone())
+        .issue_oidc_session(
+            Uuid::new_v4(),
+            user,
+            bootstrap_workspace_id(),
+            &session.digest(),
+            &csrf.digest(),
+            Utc::now() + Duration::hours(8),
+        )
+        .await;
+    assert!(issued.is_err());
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn renewal_stops_at_the_maximum_session_age(pool: PgPool) {
+    let (base_url, server) = start_session_server(pool.clone()).await;
+    let user = passwordless_member(&pool).await;
+    let (cookie, csrf) = issue_passwordless_session(&pool, user).await;
+    let client = Client::new();
+
+    // Close to the limit, a renewal only reaches the limit.
+    sqlx::query("UPDATE browser_sessions SET authenticated_at = now() - interval '23 hours' WHERE user_id = $1")
+        .bind(user)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let renewed = client
+        .post(format!("{base_url}/auth/renew"))
+        .header("cookie", &cookie)
+        .header("x-attricat-csrf", &csrf)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(renewed.status(), StatusCode::OK);
+    let (renewed_session, renewed_csrf) = cookie_pair(&renewed);
+    let remaining: f64 = sqlx::query_scalar(
+        "SELECT extract(epoch FROM expires_at - now())::float8 FROM browser_sessions WHERE user_id = $1 AND revoked_at IS NULL",
+    )
+    .bind(user)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(remaining < 3_700.0, "{remaining}");
+
+    // Past it, the session still reads but cannot renew.
+    sqlx::query("UPDATE browser_sessions SET authenticated_at = now() - interval '25 hours' WHERE user_id = $1 AND revoked_at IS NULL")
+        .bind(user)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let refused = client
+        .post(format!("{base_url}/auth/renew"))
+        .header("cookie", format!("{renewed_session}; {renewed_csrf}"))
+        .header(
+            "x-attricat-csrf",
+            renewed_csrf.strip_prefix("attricat_csrf=").unwrap(),
+        )
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(refused.status(), StatusCode::UNAUTHORIZED);
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_password_session_still_follows_its_credential_version(pool: PgPool) {
+    let (base_url, server) = start_session_server(pool.clone()).await;
+    let owner = OWNER_ID.parse::<Uuid>().unwrap();
+    let password = "correct horse battery staple";
+    let hash = hash_password(&Password::new(password)).unwrap();
+    sqlx::query("INSERT INTO local_password_credentials (user_id, password_hash) VALUES ($1, $2)")
+        .bind(owner)
+        .bind(hash.as_phc())
+        .execute(&pool)
+        .await
+        .unwrap();
+    let client = Client::new();
+    let login = client
+        .post(format!("{base_url}/auth/login"))
+        .json(&json!({
+            "login_identifier": "default.local",
+            "email": "api-test-owner@example.test",
+            "password": password,
+        }))
+        .send()
+        .await
+        .unwrap();
+    let (session, csrf) = cookie_pair(&login);
+    let cookie = format!("{session}; {csrf}");
+    let method: String =
+        sqlx::query_scalar("SELECT auth_method FROM browser_sessions WHERE user_id = $1")
+            .bind(owner)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(method, "local_password");
+    sqlx::query("UPDATE local_password_credentials SET credential_version = credential_version + 1 WHERE user_id = $1")
+        .bind(owner)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        client
+            .get(format!("{base_url}/auth/session"))
+            .header("cookie", &cookie)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::UNAUTHORIZED
+    );
     server.abort();
 }

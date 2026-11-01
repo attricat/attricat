@@ -2,6 +2,14 @@
 //! constraint allows.
 
 crate::code_enum! {
+    /// How a browser session's user proved who they are.
+    pub enum SessionAuthMethod (UnknownSessionAuthMethod: "session auth method") {
+        LocalPassword => "local_password",
+        Oidc => "oidc",
+    }
+}
+
+crate::code_enum! {
     /// Whether an installed extension runs in its workspace.
     pub enum ExtensionState (UnknownExtensionState: "extension state") {
         Disabled => "disabled",

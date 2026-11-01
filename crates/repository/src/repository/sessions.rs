@@ -2,6 +2,8 @@ use chrono::{DateTime, Utc};
 use sqlx::Row;
 use uuid::Uuid;
 
+use attricat_domain::{constants::SESSION_MAX_AGE_HOURS, states::SessionAuthMethod};
+
 use crate::account::{ActionTokenDigest, PasswordHash, SessionDigest};
 
 use super::{AttricatRepository, RepositoryError};
@@ -234,14 +236,38 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         Ok(())
     }
 
+    /// Issues a session for a user an external identity provider verified.
+    /// It depends on the account and membership but on no local credential.
+    pub async fn issue_oidc_session(
+        &self,
+        id: Uuid,
+        user_id: Uuid,
+        workspace_id: Uuid,
+        session: &SessionDigest,
+        csrf: &SessionDigest,
+        expires_at: DateTime<Utc>,
+    ) -> Result<(), RepositoryError> {
+        let mut tx = self.pool.begin().await?;
+        let result = sqlx::query("INSERT INTO browser_sessions (id, user_id, workspace_id, auth_method, issued_security_version, session_digest, csrf_digest, expires_at) SELECT $1, u.id, m.workspace_id, $2, u.security_version, $3, $4, $5 FROM users u JOIN workspace_memberships m ON m.user_id = u.id WHERE u.id = $6 AND u.kind = 'person' AND u.state = 'active' AND m.workspace_id = $7 AND m.state = 'active'")
+            .bind(id).bind(SessionAuthMethod::Oidc.as_str()).bind(session.as_ref()).bind(csrf.as_ref()).bind(expires_at).bind(user_id).bind(workspace_id)
+            .execute(&mut *tx)
+            .await?;
+        if result.rows_affected() != 1 {
+            return Err(RepositoryError::NotFound("active user or membership"));
+        }
+        self.commit_mutation(tx).await?;
+        Ok(())
+    }
+
     pub async fn validate_browser_session(
         &self,
         session: &SessionDigest,
     ) -> Result<Option<ValidBrowserSession>, RepositoryError> {
         let row = sqlx::query(
-            "SELECT s.user_id, s.workspace_id, s.csrf_digest, (w.deleted_at IS NULL) AS workspace_active, w.attricat_generation, w.contexts_generation, w.extensions_generation, w.access_generation FROM browser_sessions s JOIN users u ON u.id = s.user_id JOIN local_password_credentials c ON c.user_id = u.id JOIN workspace_memberships m ON m.user_id = u.id AND m.workspace_id = s.workspace_id JOIN workspaces w ON w.id = s.workspace_id WHERE s.session_digest = $1 AND s.revoked_at IS NULL AND s.expires_at > clock_timestamp() AND u.kind = 'person' AND u.state = 'active' AND u.security_version = s.issued_security_version AND c.credential_version = s.issued_credential_version AND m.state = 'active'",
+            "SELECT s.user_id, s.workspace_id, s.csrf_digest, (w.deleted_at IS NULL) AS workspace_active, w.attricat_generation, w.contexts_generation, w.extensions_generation, w.access_generation FROM browser_sessions s JOIN users u ON u.id = s.user_id LEFT JOIN local_password_credentials c ON c.user_id = u.id JOIN workspace_memberships m ON m.user_id = u.id AND m.workspace_id = s.workspace_id JOIN workspaces w ON w.id = s.workspace_id WHERE s.session_digest = $1 AND s.revoked_at IS NULL AND s.expires_at > clock_timestamp() AND u.kind = 'person' AND u.state = 'active' AND u.security_version = s.issued_security_version AND (s.auth_method <> $2 OR c.credential_version = s.issued_credential_version) AND m.state = 'active'",
         )
         .bind(session.as_ref())
+        .bind(SessionAuthMethod::LocalPassword.as_str())
         .fetch_optional(&self.pool)
         .await?;
         row.map(|row| {
@@ -263,6 +289,9 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         .map_err(RepositoryError::from)
     }
 
+    /// Replaces a session, keeping how and when its user signed in. Renewal
+    /// never extends past [`SESSION_MAX_AGE_HOURS`] from that sign-in, and a
+    /// session that reached it can only be replaced by signing in again.
     pub async fn rotate_browser_session(
         &self,
         previous: &SessionDigest,
@@ -283,16 +312,22 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         .fetch_optional(&mut *tx)
         .await?
         .ok_or(RepositoryError::NotFound("browser session"))?;
-        let previous_row = sqlx::query("SELECT user_id, issued_security_version, issued_credential_version FROM browser_sessions WHERE session_digest = $1 AND workspace_id = $2 AND revoked_at IS NULL AND expires_at > clock_timestamp() FOR UPDATE")
-            .bind(previous.as_ref()).bind(workspace_id).fetch_optional(&mut *tx).await?;
+        let previous_row = sqlx::query("SELECT user_id, auth_method, authenticated_at, issued_security_version, issued_credential_version FROM browser_sessions WHERE session_digest = $1 AND workspace_id = $2 AND revoked_at IS NULL AND expires_at > clock_timestamp() AND authenticated_at > clock_timestamp() - ($3 * interval '1 hour') FOR UPDATE")
+            .bind(previous.as_ref()).bind(workspace_id).bind(SESSION_MAX_AGE_HOURS as f64).fetch_optional(&mut *tx).await?;
         let Some(previous_row) = previous_row else {
             return Err(RepositoryError::NotFound("browser session"));
         };
         let user_id: Uuid = previous_row.try_get("user_id")?;
         sqlx::query("UPDATE browser_sessions SET revoked_at = clock_timestamp(), rotated_at = clock_timestamp() WHERE session_digest = $1")
             .bind(previous.as_ref()).execute(&mut *tx).await?;
-        sqlx::query("INSERT INTO browser_sessions (id, user_id, workspace_id, issued_security_version, issued_credential_version, session_digest, csrf_digest, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)")
-            .bind(id).bind(user_id).bind(workspace_id).bind(previous_row.try_get::<i32, _>("issued_security_version")?).bind(previous_row.try_get::<i32, _>("issued_credential_version")?).bind(session.as_ref()).bind(csrf.as_ref()).bind(expires_at).execute(&mut *tx).await?;
+        sqlx::query("INSERT INTO browser_sessions (id, user_id, workspace_id, auth_method, authenticated_at, issued_security_version, issued_credential_version, session_digest, csrf_digest, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, LEAST($10, $5 + ($11 * interval '1 hour')))")
+            .bind(id).bind(user_id).bind(workspace_id)
+            .bind(previous_row.try_get::<String, _>("auth_method")?)
+            .bind(previous_row.try_get::<DateTime<Utc>, _>("authenticated_at")?)
+            .bind(previous_row.try_get::<i32, _>("issued_security_version")?)
+            .bind(previous_row.try_get::<Option<i32>, _>("issued_credential_version")?)
+            .bind(session.as_ref()).bind(csrf.as_ref()).bind(expires_at).bind(SESSION_MAX_AGE_HOURS as f64)
+            .execute(&mut *tx).await?;
         self.commit_mutation(tx).await?;
         Ok(())
     }
