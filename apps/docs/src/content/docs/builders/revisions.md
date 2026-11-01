@@ -57,7 +57,7 @@ acli record migrate <record-id>
 
 ### From the web app
 
-When a new revision can store everything the previous revision could, the blueprint page offers **Migrate compatible records**. It starts a background batch that looks at every record pinned to any older revision of the blueprint. Each record whose migration is `ready` is migrated. The rest are left for review.
+When a new revision only adds optional attributes or removes attributes, and leaves `record_schema` and every kept attribute unchanged, the blueprint page offers **Migrate compatible records**. It starts a background batch that looks at every record pinned to any older revision of the blueprint. Starting it archives the values of removed attributes; they stay in value history. Each record whose migration is `ready` is migrated. The rest are left for review.
 
 The blueprint's **Migrations** tab lists every batch with its target revision, progress, and counts of migrated, needs-review, and failed records. While a batch for the current revision is queued or running, the action is disabled.
 
@@ -66,6 +66,7 @@ The blueprint's **Migrations** tab lists every batch with its target revision, p
 | `queued` | Waiting for a worker. |
 | `running` | Being processed. |
 | `completed` | Every eligible record was examined. Some may still need review. |
+| `failed` | Stopped after repeated errors. Records it already migrated stay migrated. |
 | `superseded` | Replaced by a newer batch. |
 
 Two server settings tune batches: `BLUEPRINT_MIGRATION_PAGE_SIZE` and `BLUEPRINT_MIGRATION_CONCURRENCY`. See the [configuration reference](/reference/configuration/#attricat-behavior-and-limits).

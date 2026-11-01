@@ -1,9 +1,9 @@
 ---
 title: Agenci i zatwierdzenia
-description: Poproś agenta AI o sprawdzenie i zmianę katalogu. Każda zmiana czeka na Twoje zatwierdzenie.
+description: Poproś agenta AI o sprawdzenie i zmianę katalogu i zatwierdzaj proponowane przez niego zmiany.
 ---
 
-Agent Attricat to asystent konwersacyjny, który może odczytywać katalog i proponować w nim zmiany. Bez pytania może wyszukiwać rekordy, sprawdzać schematy, przeszukiwać katalog i przeglądać stan danych. Każda zmiana, którą chce wprowadzić, zatrzymuje się i czeka na zatwierdzenie przez człowieka.
+Agent Attricat to asystent konwersacyjny, który może odczytywać katalog i proponować w nim zmiany. Bez pytania może wyszukiwać rekordy, sprawdzać schematy, przeszukiwać katalog i przeglądać stan danych. Każda zmiana, którą chce wprowadzić, zatrzymuje się i czeka na zatwierdzenie przez człowieka, chyba że pozwolisz mu [zmieniać rekord bez pytania](#automatyczne-zatwierdzanie-zmian-rekordu).
 
 Agenci są opcjonalni. Zanim się pojawią, administrator musi [skonfigurować dostawcę AI](/pl/reference/configuration/#agenci).
 
@@ -11,11 +11,11 @@ W publicznym demo agent działa tylko w trybie odczytu. Może robić wszystko, c
 
 ## Rozpocznij rozmowę
 
-Otwórz **Agenci** na pasku bocznym i wybierz **Nowa rozmowa**. Nadaj wątkowi tytuł opisujący zadanie, na przykład *Clean up inactive suppliers*, i opisz, czego potrzebujesz.
+Otwórz **Agenci** na pasku bocznym, wybierz **Nowa rozmowa** i opisz, czego potrzebujesz. Rozmowa otrzymuje nazwę od Twojej pierwszej wiadomości, a wkrótce potem Attricat może zastąpić ją wygenerowanym tytułem. Aby go zmienić, wybierz **Zmień tytuł rozmowy**.
 
 Rozmowę możesz też rozpocząć:
 
-- przyciskiem **Zapytaj o ten rekord** na stronie rekordu. Takie rozmowy są wyświetlane na karcie **Rozmowy** rekordu; włącz **Pokaż rozmowy o rekordach**, aby uwzględnić je na liście **Agenci**;
+- przyciskiem **Zapytaj o ten rekord** na stronie rekordu. Takie rozmowy są wyświetlane na karcie **Agenci** rekordu; włącz **Pokaż rozmowy o rekordach**, aby uwzględnić je na liście **Agenci**;
 - przyciskiem **Wyślij do rozmowy z agentem** po zaznaczeniu rekordów w **Przeglądarce rekordów**.
 
 Dołącz pliki przyciskiem **Dodaj pliki**, maksymalnie 16 na wiadomość. Obrazy do 5 MiB są wysyłane do dostawcy, aby agent mógł je zobaczyć. Agent odczytuje też tekst plików PDF, Word (`.docx`) i Excel (`.xlsx`): krótki dokument trafia do agenta razem z wiadomością, a dłuższy agent czyta strona po stronie lub arkusz po arkuszu. Pozostałe pliki są opisywane nazwą i typem, a agent może je otworzyć swoimi narzędziami do plików.
@@ -36,6 +36,7 @@ Agent działa w Twoim imieniu. Widzi i zmienia tylko to, na co pozwala Twoja rol
 - oglądać obrazy i odczytywać pliki tekstowe, PDF, Word i Excel w obszarze roboczym;
 - odczytywać uruchomienia operacji rozszerzeń i zadania konektorów (z uprawnieniem `extensions.manage`);
 - wyjaśniać przejścia statusów encji, jej zatwierdzenia i blokady retencji;
+- odczytywać komentarze rekordu;
 - odczytywać Twoje [powiadomienia](/pl/guides/inbox/).
 
 **Po Twoim zatwierdzeniu** może:
@@ -47,10 +48,13 @@ Agent działa w Twoim imieniu. Widzi i zmienia tylko to, na co pozwala Twoja rol
 - aktualizować tagi systemowe i metadane;
 - publikować rekordy i cofać ich publikację;
 - tworzyć, aktualizować i usuwać konteksty;
+- duplikować rekordy;
+- dodawać komentarze do rekordów i wspominać w nich osoby, co je powiadamia;
+- potwierdzać ustalenia reguł (z uprawnieniem `rules.manage`);
 - tworzyć i aktualizować zapisane wyszukiwania;
 - oznaczać Twoje powiadomienia jako przeczytane lub nieprzeczytane i je usuwać.
 
-Nie może zarządzać regułami, przepływami pracy, rozszerzeniami, członkami ani rolami.
+Nie może tworzyć ani zmieniać reguł. Nie zarządza też przepływami pracy, rozszerzeniami, członkami ani rolami.
 
 ## Zatwierdź lub odrzuć
 
@@ -62,6 +66,12 @@ Gdy agent chce coś zmienić, rozmowa pokazuje **Wymagane zatwierdzenie** wraz z
 Decyzja jest ostateczna. Dwukrotne zatwierdzenie nigdy nie uruchamia zmiany dwa razy.
 
 Czytaj propozycje uważnie. Zastąpienie relacji ustawia pełną listę dla danego atrybutu i kontekstu; pusta lista usuwa każde powiązanie.
+
+### Automatyczne zatwierdzanie zmian rekordu
+
+W rozmowie o rekordzie możesz włączyć **Automatycznie zatwierdzaj zmiany w tej rozmowie**. W wiadomościach, które wysyłasz, agent zmienia wtedy pola, relacje, tagi, pliki i komentarze tego rekordu bez pytania. Usunięcie lub publikacja rekordu oraz zmiany innych rekordów nadal wymagają Twojego zatwierdzenia.
+
+Włączenie wymaga uprawnienia do edycji rekordu. Ustawienie obejmuje wiadomości jednej osoby naraz: jeśli włączył je ktoś inny, włączenie przenosi je na Twoje wiadomości. Każdy, kto może odczytać rozmowę, może je wyłączyć.
 
 ### Zmiany w kilku rekordach
 

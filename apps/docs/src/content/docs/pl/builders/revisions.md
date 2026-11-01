@@ -57,7 +57,7 @@ acli record migrate <record-id>
 
 ### Z aplikacji internetowej
 
-Gdy nowa wersja może przechować wszystko, co mogła poprzednia, strona schematu udostępnia akcję **Migruj zgodne rekordy**. Uruchamia ona w tle partię, która sprawdza każdy rekord przypięty do dowolnej starszej wersji schematu. Każdy rekord, którego migracja ma wynik `ready`, zostaje zmigrowany. Pozostałe czekają na przegląd.
+Gdy nowa wersja tylko dodaje opcjonalne atrybuty lub usuwa atrybuty, a `record_schema` i wszystkie pozostałe atrybuty się nie zmieniają, strona schematu udostępnia akcję **Migruj zgodne rekordy**. Uruchamia ona w tle partię, która sprawdza każdy rekord przypięty do dowolnej starszej wersji schematu. Uruchomienie partii archiwizuje wartości usuniętych atrybutów; pozostają one w historii wartości. Każdy rekord, którego migracja ma wynik `ready`, zostaje zmigrowany. Pozostałe czekają na przegląd.
 
 Karta **Migracje** schematu pokazuje każdą partię z wersją docelową, postępem i liczbą rekordów zmigrowanych, wymagających przeglądu i zakończonych błędem. Gdy partia dla bieżącej wersji czeka w kolejce lub jest przetwarzana, akcja jest niedostępna.
 
@@ -66,6 +66,7 @@ Karta **Migracje** schematu pokazuje każdą partię z wersją docelową, postę
 | `queued` | Czeka na proces roboczy. |
 | `running` | Jest przetwarzana. |
 | `completed` | Sprawdzono każdy kwalifikujący się rekord. Niektóre mogą nadal wymagać przeglądu. |
+| `failed` | Zatrzymana po powtarzających się błędach. Rekordy, które już zmigrowała, pozostają zmigrowane. |
 | `superseded` | Zastąpiona przez nowszą partię. |
 
 Partie konfigurują dwa ustawienia serwera: `BLUEPRINT_MIGRATION_PAGE_SIZE` i `BLUEPRINT_MIGRATION_CONCURRENCY`. Zobacz [dokumentację konfiguracji](/pl/reference/configuration/#zachowanie-i-limity-katalogu).

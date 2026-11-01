@@ -12,7 +12,8 @@ Events drive [workflows](/builders/workflows/), [rules](/builders/rules/), and [
 | Type | Recorded when |
 | --- | --- |
 | `record.created.v1` | A record is created. |
-| `record.updated.v1` | A record's values, relationships, or annotations change. |
+| `record.updated.v1` | A record's values, relationships, system tags, or system metadata change in a save. |
+| `record.annotations_changed.v1` | An extension changes the record tags or metadata in its own namespace. |
 | `record.deleted.v1` | A record is deleted. |
 | `record.migrated.v1` | A record moves to a newer blueprint revision. |
 | `record.published.v1` | A record is published to a channel. |
@@ -77,6 +78,26 @@ To act on the record's current state, read it; the payload is only a description
 - **File attributes:** uploading, linking, reordering, or removing files is recorded in the audit log but records no event and no fact.
 - System tag and system metadata changes are not attribute values and add no fact. Instead, `record.created.v1` and `record.updated.v1` list the system tags the save added in `tags_added` and the ones it removed in `tags_removed`. Each is left out when empty. [Workflow triggers](/builders/workflows/#react-only-to-added-or-removed-tags) can filter on them.
 - **Migrations:** `record.migrated.v1` has no `facts`. Its payload names the record, its blueprint, `source_version`, `target_version`, and `migration_id`. When the migration dropped or re-pointed a relationship, `released_relationships` lists the targets the record no longer points to, as `attribute_code` and `target_record_ids` (at most 100 per relationship and 1,000 per event).
+
+## Extension annotation changes
+
+`record.annotations_changed.v1` is recorded when an extension, or an operator repairing its namespace, changes the system tags or metadata the extension owns on a record. Its aggregate is the record, and its payload is:
+
+```json
+{
+  "record_id": "7f1c…",
+  "blueprint_id": "a2d4…",
+  "blueprint_version": 3,
+  "extension_id": "acme.enrich",
+  "revision": 4,
+  "tags_added": ["reviewed"],
+  "tags_removed": [],
+  "metadata_keys_set": ["score"],
+  "metadata_keys_removed": []
+}
+```
+
+Tags and keys are the extension's local names, without the `<extension-id>:` prefix. `revision` counts the namespace's changes on that record. An operator repair that replaces a malformed namespace value also adds `replaced_namespace_value`. These changes do not record `record.updated.v1`.
 
 ## Export retry requests
 

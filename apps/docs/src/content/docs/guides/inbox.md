@@ -27,7 +27,7 @@ Choose **Inbox** in the sidebar. The badge on the icon shows how many notificati
 
 The inbox lists notifications newest first. Unread notifications are bold and marked with a dot. Use the **Unread** tab to see only those.
 
-Select a notification about a record, an agent conversation, or a rule to open it. Opening a notification marks it as read. Notifications such as *Added to a team* are messages only and do not open anything.
+Select a notification about a record, an agent conversation, or a rule to open it. Comment and mention notifications open the record's **Comments** tab. Opening a notification marks it as read. Notifications such as *Added to a team* are messages only and do not open anything.
 
 ## Mark as read or unread
 

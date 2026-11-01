@@ -110,9 +110,9 @@ Switch the Explorer's **Context** selector between `default` and `PL` to see the
 
 Open **Manage → Exports** and turn on **Export channel** for `PL`.
 
-Back on the product, the **Publication** section shows `PL` as *Not published*. Choose **Publish**.
+Back on the product, select the `PL` context. The globe icon in the record toolbar shows *Not published*. Choose **Actions → Publish**.
 
-Now change the product's price and leave the field. The publication is withdrawn: it shows *Not published* again, because the approved state is no longer the current one. **Republish** to approve the change.
+Now change the product's price and leave the field. The publication is withdrawn: the icon shows *Not published* again, because the approved state is no longer the current one. Choose **Actions → Publish** again to approve the change.
 
 ## 7. Try the Explorer
 

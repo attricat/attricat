@@ -253,11 +253,11 @@ The edit controls validate only in the web app. To reject bad values from the AP
 
 ## Components
 
-Every block can name a component with `component = { id, version, props }`. The ID and version must match a registered component, the component must support the block and value type, and `props` may contain only the options it declares. The built-in components are listed in the [blueprint reference](/reference/blueprint/#component-references).
+Every block can name a component with `component: {id, version, props}`. The ID and version must match a registered component, the component must support the block and value type, and `props` may contain only the options it declares. The built-in components are listed in the [blueprint reference](/reference/blueprint/#component-references).
 
 ## Extension panels on record pages
 
-Workspace administrators set the default order of extension contributions for the whole workspace. A blueprint can override three record page outlets for its own records:
+Workspace administrators set the default order of extension contributions for the whole workspace. A blueprint can override two record page outlets for its own records:
 
 ```yaml
 views:

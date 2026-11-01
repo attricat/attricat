@@ -194,6 +194,7 @@ Files of 8 MiB or more upload as multipart uploads, which are aborted when any p
 | `FILE_WORKER_POLL_MILLISECONDS` | `500` | File worker | Delay between job polls. |
 | `FILE_WORKER_OPERATIONS_BIND_ADDR` | `127.0.0.1:3001` | File worker | Private listener for `/health/live`, `/health/ready`, and `/metrics`. Outside loopback, `/metrics` requires the `file_worker_metrics_token` [secret](#secrets). |
 | `FILE_WORKER_MAX_PIXELS` | `40000000` | File worker | Largest decoded image, in pixels, the worker will process. |
+| `FILE_WORKER_CONCURRENCY` | `4` | File worker | Jobs processed at the same time, 1 to 32. |
 | `FILE_WORKER_MAX_ATTEMPTS` | `5` | File worker | Attempts before a processing job fails permanently. |
 | `FILE_DELETE_GRACE_SECONDS` | `86400` (one day) | File worker | Time between an unreferenced file being marked deleted and its object being purged. |
 
@@ -231,7 +232,7 @@ Agents are off until the `llm_api_key` [secret](#secrets) is provided. The rest 
 | `LLM_RUN_TIMEOUT_SECONDS` | `300` | Timeout for a whole agent run, 1 to 3600. |
 | `LLM_MAX_TOOL_ROUNDS` | `25` | How many times an agent may call tools and continue before it stops, counted again after each approval, 1 to 100. |
 
-These agent limits are fixed: 32 KiB per user message, 16 attachments per message, 5 MiB per inline image, eight tool-call rounds per run, 64 KiB per serialized tool result, and 32 tool calls per provider response.
+These agent limits are fixed: 32 KiB per user message, 16 attachments per message, 5 MiB per inline image, 64 KiB per serialized tool result, and 32 tool calls per provider response.
 
 ## Extensions
 

@@ -253,11 +253,11 @@ Kontrolki edycji walidują wartości tylko w aplikacji internetowej. Aby odrzuca
 
 ## Komponenty
 
-Każdy blok może wskazać komponent przez `component = { id, version, props }`. Identyfikator i wersja muszą odpowiadać zarejestrowanemu komponentowi, komponent musi obsługiwać dany blok i typ wartości, a `props` może zawierać tylko zadeklarowane przez niego opcje. Wbudowane komponenty są wymienione w [dokumentacji schematu](/pl/reference/blueprint/#odwołania-do-komponentów).
+Każdy blok może wskazać komponent przez `component: {id, version, props}`. Identyfikator i wersja muszą odpowiadać zarejestrowanemu komponentowi, komponent musi obsługiwać dany blok i typ wartości, a `props` może zawierać tylko zadeklarowane przez niego opcje. Wbudowane komponenty są wymienione w [dokumentacji schematu](/pl/reference/blueprint/#odwołania-do-komponentów).
 
 ## Panele rozszerzeń na stronach rekordów
 
-Administratorzy obszaru roboczego ustawiają domyślną kolejność elementów rozszerzeń dla całego obszaru roboczego. Schemat może nadpisać trzy miejsca osadzenia na stronach własnych rekordów:
+Administratorzy obszaru roboczego ustawiają domyślną kolejność elementów rozszerzeń dla całego obszaru roboczego. Schemat może nadpisać dwa miejsca osadzenia na stronach własnych rekordów:
 
 ```yaml
 views:

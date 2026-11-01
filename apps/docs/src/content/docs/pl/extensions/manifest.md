@@ -30,7 +30,7 @@ Identyfikatory używane w manifeście (`attricat.id` oraz identyfikatory artefak
 | `server` | | Procedury obsługi zdarzeń, polecenia, operacje, webhooki, rodzaje połączeń i miejsca docelowe eksportu. |
 | `ui` | | Kontrybucje klienckie. |
 | `attribute_types` | | Typy atrybutów dla Schematów. |
-| `record_field_notes` | | Źródło opisujące pola, pliki i akcje rekordów: `{ "command": "<id>" }` albo procedura kliencka, `{ "client": "<artefakt>" }`. Zobacz [Notatki pól](/pl/extensions/client/#notatki-pól). |
+| `record_field_notes` | | Źródło opisujące pola, pliki i akcje rekordów: `{ "version": 1, "source": { "command": "<id>" } }` albo procedura kliencka, `{ "version": 1, "source": { "client": "<artefakt>" } }`. Zobacz [Notatki pól](/pl/extensions/client/#notatki-pól). |
 
 ## Artefakty
 

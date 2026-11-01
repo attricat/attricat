@@ -27,7 +27,7 @@ Wybierz **Powiadomienia** na pasku bocznym. Liczba na ikonie pokazuje liczbę ni
 
 Powiadomienia są posortowane od najnowszych. Nieprzeczytane są pogrubione i oznaczone kropką. Karta **Nieprzeczytane** pokazuje tylko je.
 
-Wybierz powiadomienie o rekordzie, rozmowie z agentem lub regule, aby je otworzyć. Otwarcie oznacza powiadomienie jako przeczytane. Powiadomienia takie jak *Dodanie do zespołu* są tylko wiadomościami i niczego nie otwierają.
+Wybierz powiadomienie o rekordzie, rozmowie z agentem lub regule, aby je otworzyć. Powiadomienia o komentarzach i wzmiankach otwierają kartę **Komentarze** rekordu. Otwarcie oznacza powiadomienie jako przeczytane. Powiadomienia takie jak *Dodanie do zespołu* są tylko wiadomościami i niczego nie otwierają.
 
 ## Oznacz jako przeczytane lub nieprzeczytane
 

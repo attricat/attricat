@@ -5,7 +5,7 @@ description: Zarządzaj członkami, zespołami, rolami, zaproszeniami, nawigacj�
 
 Obszar roboczy to jeden katalog z własnymi członkami, schematami, rekordami, kontekstami i rozszerzeniami. Obszary robocze są całkowicie odseparowane: nic nie jest między nimi współdzielone.
 
-Większość zadań administracyjnych wykonasz w **Zarządzanie → Zarządzanie obszarem roboczym**, gdzie jest pięć kart: **Członkowie**, **Zespoły**, **Role**, **Zaproszenia** i **Nawigacja**.
+Większość zadań administracyjnych wykonasz w **Zarządzanie → Zarządzanie obszarem roboczym**, gdzie jest do siedmiu kart, zależnie od Twoich uprawnień: **Członkowie**, **Zespoły**, **Role**, **Zaproszenia**, **Nawigacja**, **Kolory znaczników** i **Agent**.
 
 ## Logowanie
 
@@ -21,9 +21,9 @@ Karta **Członkowie** wyświetla wszystkie osoby w obszarze roboczym wraz z przy
 
 - przydzielać i odbierać role;
 - ustawić członka jako **nieaktywnego**, co wylogowuje go i blokuje dostęp bez usuwania jego historii;
-- przenieść własność na innego aktywnego członka (tylko właściciele).
+- przenieść własność na innego aktywnego członka (tylko właściciele). Tracisz wtedy własną rolę właściciela, więc Attricat prosi o potwierdzenie.
 
-Obszar roboczy zawsze ma co najmniej jednego aktywnego właściciela. Zmiany członkostwa i ról wylogowują osobę, której dotyczą, z istniejących sesji.
+Obszar roboczy zawsze ma co najmniej jednego aktywnego właściciela. Odebranie roli ostatniemu właścicielowi lub ustawienie go jako nieaktywnego kończy się błędem `409 last_workspace_owner`. Zmiany członkostwa i ról wylogowują osobę, której dotyczą, z istniejących sesji.
 
 ## Zespoły
 
@@ -63,9 +63,9 @@ Rolę właściciela można przydzielić tylko w całym obszarze roboczym.
 
 ## Zaproszenia
 
-Na karcie **Zaproszenia** zaproś osobę przez e-mail, podając rolę, zakres i datę wygaśnięcia. Otrzyma ona jednorazowy link. Osoba, która ma już konto, akceptuje zaproszenie i dołącza; nowa osoba najpierw ustawia hasło.
+Na karcie **Zaproszenia** zaproś osobę przez e-mail, podając rolę, zakres i datę wygaśnięcia, domyślnie za tydzień. Otrzyma ona jednorazowy link. Osoba, która ma już konto, akceptuje zaproszenie i dołącza; nowa osoba najpierw ustawia hasło.
 
-Możesz też utworzyć użytkownika bezpośrednio i wysłać mu link wdrożeniowy. Oczekujące zaproszenie możesz w każdej chwili odwołać.
+Możesz też utworzyć użytkownika bezpośrednio i wysłać mu link wdrożeniowy. Ponowne zaproszenie osoby, zanim ustawi hasło, odwołuje jej wcześniejsze oczekujące zaproszenie. Oczekujące zaproszenie możesz w każdej chwili odwołać.
 
 Wiadomości z zaproszeniami i linkami wdrożeniowymi wymagają [skonfigurowanego SMTP](/pl/reference/configuration/#e-mail).
 

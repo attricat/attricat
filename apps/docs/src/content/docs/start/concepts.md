@@ -40,7 +40,7 @@ views:
     fields: [title]
 ```
 
-A blueprint can also define validation schemas, page layouts, data-quality rules, and connector jobs.
+A blueprint can also define validation schemas, page layouts, and connector jobs. Data-quality rules are created separately and check the blueprint's records.
 
 **Mixins** are blueprints that only exist to be included in others. The retailer keeps SEO fields in an `seo` mixin used by both `product` and `category`.
 

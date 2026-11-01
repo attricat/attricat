@@ -342,7 +342,7 @@ See [Control a record's lifecycle](/builders/validation/#control-a-records-lifec
 
 Every record remembers the exact blueprint revision it was created with. When you publish revision 2 of `product`, existing products stay on revision 1: their values and validation keep meaning what they meant when they were written.
 
-Attricat then marks them as outdated and offers to migrate them. Revisions that only add optional attributes can be migrated in bulk. Changes that remove or retype attributes, or add required ones, need a decision per record. See [Revisions and migration](/builders/revisions/).
+Attricat then marks them as outdated and offers to migrate them. Revisions that only add optional attributes or remove attributes can be migrated in bulk; values of removed attributes are archived. Changes that retype or otherwise change an existing attribute, change `record_schema`, or add required attributes need a decision per record. See [Revisions and migration](/builders/revisions/).
 
 Two practices save trouble later:
 
@@ -353,9 +353,10 @@ Two practices save trouble later:
 
 A blueprint can also carry:
 
-- [Rules](/builders/rules/) that flag data-quality problems, such as a missing title, and can [enforce](/builders/rules/#enforce-a-rule) them on save or on status changes.
 - [Status attributes](/builders/validation/#statuses) with allowed transitions and [translated labels](/builders/translations/#status-and-choice-labels).
 - A [publication policy](/guides/publishing/#keep-publication-after-trusted-edits) that lets trusted roles edit without withdrawing channel approvals.
 - [Connector jobs](/reference/blueprint/#connector-jobs) that import or export records through a connector extension.
 - Attributes whose type comes from an [extension](/reference/blueprint/#extension-attribute-types).
+
+[Data quality rules](/builders/rules/) are created separately, not in the blueprint. A rule flags problems in the blueprint's records, such as a missing title, and can [reject](/builders/rules/#enforce-a-rule) saves or status changes that break it.
 - A [layout for extension panels and actions](/reference/blueprint/#extension_layout) on its record pages.
