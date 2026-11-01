@@ -667,3 +667,30 @@ async fn a_taken_reusable_attribute_code_is_reported_as_code_taken(pool: PgPool)
     }
     server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn reusable_attribute_group_codes_report_why_they_are_refused(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    let create = |code: &str| {
+        client
+            .post(format!("{base_url}/reusable-attribute-groups"))
+            .json(&json!({ "code": code, "name": "Specs", "reusable_attribute_revision_ids": [] }))
+            .send()
+    };
+    create("specs").await.unwrap().error_for_status().unwrap();
+    for (code, status, error_code) in [
+        (
+            "Bad code!",
+            reqwest::StatusCode::UNPROCESSABLE_ENTITY,
+            "invalid_code",
+        ),
+        ("specs", reqwest::StatusCode::CONFLICT, "code_taken"),
+    ] {
+        let response = create(code).await.unwrap();
+        assert_eq!(response.status(), status, "{code}");
+        let body: Value = response.json().await.unwrap();
+        assert_eq!(body["error"]["code"], error_code, "{code}");
+    }
+    server.abort();
+}

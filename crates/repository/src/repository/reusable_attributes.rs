@@ -452,9 +452,10 @@ impl AttricatRepository {
         &self,
         input: CreateReusableAttributeGroup,
     ) -> Result<ReusableAttributeGroup, RepositoryError> {
-        if !is_valid_code(&input.code) || input.name.trim().is_empty() {
+        validate_code(&input.code)?;
+        if input.name.trim().is_empty() {
             return Err(RepositoryError::InvalidReusableAttributeDefinition(
-                "invalid reusable attribute group".to_owned(),
+                "reusable attribute group name is required".to_owned(),
             ));
         }
         let mut transaction = self.pool.begin().await?;
@@ -471,7 +472,13 @@ impl AttricatRepository {
         }
         let id = Uuid::new_v4();
         sqlx::query("INSERT INTO reusable_attribute_groups (id, workspace_id, code, name, position) VALUES ($1,$2,$3,$4,$5)")
-            .bind(id).bind(ws).bind(&input.code).bind(&input.name).bind(input.position).execute(&mut *transaction).await?;
+            .bind(id).bind(ws).bind(&input.code).bind(&input.name).bind(input.position).execute(&mut *transaction).await
+            .map_err(|error| match error {
+                sqlx::Error::Database(database) if database.is_unique_violation() => {
+                    RepositoryError::CodeTaken(super::CodedResource::ReusableAttributeGroup)
+                }
+                error => error.into(),
+            })?;
         for (position, revision_id) in input.reusable_attribute_revision_ids.iter().enumerate() {
             sqlx::query("INSERT INTO reusable_attribute_group_members (group_id, reusable_attribute_revision_id, position) VALUES ($1,$2,$3)")
                 .bind(id).bind(revision_id).bind(position as i64).execute(&mut *transaction).await?;
