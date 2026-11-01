@@ -32,7 +32,9 @@ export const ChangeDisplayNameDialog = ({
   const validateName = (value: string) => {
     // Code points, matching the API's character count.
     const length = [...value].length;
-    if (length < displayNameMinLength)
+    // Spaces alone are no name, so they count as too short rather than as
+    // spaces to remove.
+    if ([...value.trim()].length < displayNameMinLength)
       return t('profile.displayNameTooShort', { min: displayNameMinLength });
     if (length > displayNameMaxLength)
       return t('profile.displayNameTooLong', { max: displayNameMaxLength });

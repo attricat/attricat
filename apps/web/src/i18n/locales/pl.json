@@ -1713,6 +1713,7 @@
     "userId": "Identyfikator użytkownika",
     "activeWorkspace": "Identyfikator aktywnego obszaru roboczego",
     "tokenExpiry": "Data wygaśnięcia tokenu musi przypadać w przyszłości.",
+    "tokenPermissionsRequired": "Wybierz co najmniej jedno uprawnienie.",
     "catalogGenerator": "Generator katalogu",
     "catalogGeneratorDescription": "Utwórz schematy, konteksty, produkty i relacje.",
     "readOnlyCatalog": "Katalog tylko do odczytu",

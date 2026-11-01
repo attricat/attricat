@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import i18n from 'i18next';
+import { tokenLabelMaxLength } from './constants';
 
 const uuid = z.uuid();
 export const tokenSchema = z.object({
@@ -21,9 +22,9 @@ const permissionCodesSchema = z
   .refine((permissions) => new Set(permissions).size === permissions.length, {
     error: () => i18n.t('errors.permissionsUnique'),
   })
-  .min(1);
+  .min(1, { error: () => i18n.t('profile.tokenPermissionsRequired') });
 export const tokenInputSchema = z.object({
-  label: z.string().trim().min(1).max(120),
+  label: z.string().trim().min(1).max(tokenLabelMaxLength),
   permissions: permissionCodesSchema,
   expires_at: z.string().datetime({ offset: true }).optional(),
 });

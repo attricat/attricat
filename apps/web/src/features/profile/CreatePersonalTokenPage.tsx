@@ -15,7 +15,11 @@ import { futureZonedInstant } from '../../time/instantFormat';
 import { useTimeZone } from '../../time/useInstantFormat';
 import { useToast } from '../../components/useToast';
 import { useCan } from '../auth/useCan';
-import { tokenFormMaxWidth, tokensPath } from './constants';
+import {
+  tokenFormMaxWidth,
+  tokenLabelMaxLength,
+  tokensPath,
+} from './constants';
 import { ProfileSection } from './ProfileSection';
 import { SecretDialog } from './SecretDialog';
 import { createToken, listTokenPermissions } from './api';
@@ -138,6 +142,7 @@ export const CreatePersonalTokenPage = () => {
                   label={t('profile.label')}
                   onChange={(event) => field.handleChange(event.target.value)}
                   placeholder={t('profile.labelPlaceholder')}
+                  slotProps={{ htmlInput: { maxLength: tokenLabelMaxLength } }}
                   value={field.state.value}
                 />
               )}
