@@ -75,3 +75,38 @@ it('loads successive pages of record changes without discarding prior changes', 
   expect(screen.getByText('title', { selector: 'strong' })).toBeTruthy();
   expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull();
 });
+
+it('shows changed values as the record does, and removed attributes as JSON', async () => {
+  vi.mocked(getRecordForm).mockResolvedValue({
+    blueprint: {
+      blueprint: { name: 'Product' },
+      attributes: [
+        {
+          code: 'size',
+          name: 'Size',
+          value_schema: {
+            enum: ['s', 'l'],
+            type: 'string',
+            'x-attricat-enum-labels': { s: 'Small', l: 'Large' },
+          },
+          value_type: 'string',
+        },
+      ],
+    },
+  } as unknown as Awaited<ReturnType<typeof getRecordForm>>);
+  vi.mocked(getRecordChanges).mockResolvedValue({
+    items: [
+      { ...change('size'), before_value: 's', after_value: 'l' },
+      { ...change('legacy'), audit_event_id: 'size', after_value: 'old' },
+    ],
+    next_offset: null,
+  });
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <RecordChangesPage recordId="00000000-0000-4000-8000-000000000001" />
+    </QueryClientProvider>,
+  );
+  const size = await screen.findByText('Size', { selector: 'strong' });
+  expect(size.closest('div')?.textContent).toContain('Small→Large');
+  expect(screen.getByText('"old"')).toBeTruthy();
+});

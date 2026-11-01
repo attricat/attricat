@@ -3,22 +3,54 @@ import { Box, Paper, Typography } from '@mui/material';
 import { Trans, useTranslation } from 'react-i18next';
 import { JsonInline } from '../../../components/JsonValue';
 import { UserLabel } from '../../../components/UserLabel';
-import type { RecordAuditChange } from '../api';
+import type { Attribute, RecordAuditChange } from '../api';
+import { AttributeValueText } from '../../views/components/values/AttributeValueText';
+import { attributeValueTypes } from '../valueTypes';
 import { relationshipChangeKinds } from '../recordChanges';
 import { executorTypes } from '../../audit/constants';
 import { Timestamp } from '../../../time/Timestamp';
+
+// Value types whose values are objects that the attribute formats itself.
+const objectValueTypes: ReadonlySet<string> = new Set([
+  attributeValueTypes.json,
+  attributeValueTypes.time,
+]);
+
+/**
+ * A changed value as the record shows it, such as a choice's label. Values
+ * the attribute cannot format, because it was removed or changed type since,
+ * show as JSON.
+ */
+const ChangeValue = ({
+  attribute,
+  value,
+}: {
+  attribute?: Attribute;
+  value: unknown;
+}) =>
+  attribute &&
+  (value === null ||
+    typeof value !== 'object' ||
+    objectValueTypes.has(attribute.value_type)) ? (
+    <AttributeValueText attribute={attribute} value={value} />
+  ) : (
+    <JsonInline value={value} />
+  );
 
 type Props = {
   /** Changes recorded by one audit event; the first describes the event. */
   changes: readonly [RecordAuditChange, ...RecordAuditChange[]];
   /** The attribute's name, or its code when the revision does not name it. */
   attributeName?: (code: string) => string;
+  /** The attribute in the record's revision, which formats its values. */
+  attribute?: (code: string) => Attribute | undefined;
   /** Labels of the records that relationship changes link or unlink. */
   recordLabels?: ReadonlyMap<string, string>;
 };
 
 /** One audit event with the attribute changes it recorded. */
 export const RecordChangeEvent = ({
+  attribute,
   attributeName = (code) => code,
   changes,
   recordLabels,
@@ -92,11 +124,17 @@ export const RecordChangeEvent = ({
                 .join(', ')
             ) : (
               <>
-                <JsonInline value={change.before_value} />
+                <ChangeValue
+                  attribute={attribute?.(change.attribute_code)}
+                  value={change.before_value}
+                />
                 <Box component="span" sx={{ color: 'text.secondary', mx: 1 }}>
                   →
                 </Box>
-                <JsonInline value={change.after_value} />
+                <ChangeValue
+                  attribute={attribute?.(change.attribute_code)}
+                  value={change.after_value}
+                />
               </>
             )}
           </Typography>

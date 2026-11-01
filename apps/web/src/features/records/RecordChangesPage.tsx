@@ -53,12 +53,12 @@ export const RecordChangesPage = ({ recordId }: { recordId: string }) => {
   const recordDisplay = label.data?.items.find(
     (item) => item.id === recordId,
   )?.display;
-  const attributeNames = useMemo(
+  const attributes = useMemo(
     () =>
       new Map(
         (recordForm.data?.blueprint.attributes ?? []).map((attribute) => [
           attribute.code,
-          attributeLabel(attribute),
+          attribute,
         ]),
       ),
     [recordForm.data],
@@ -98,7 +98,11 @@ export const RecordChangesPage = ({ recordId }: { recordId: string }) => {
         <Box sx={{ mt: 3 }}>
           {groupChangesByEvent(changeItems).map(([eventId, eventChanges]) => (
             <RecordChangeEvent
-              attributeName={(code) => attributeNames.get(code) ?? code}
+              attribute={(code) => attributes.get(code)}
+              attributeName={(code) => {
+                const attribute = attributes.get(code);
+                return attribute ? attributeLabel(attribute) : code;
+              }}
               changes={eventChanges}
               key={eventId}
               recordLabels={linkedLabels}
