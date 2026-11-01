@@ -75,8 +75,9 @@ verification, or host routing. Existing bootstrap workspaces receive
 Unauthenticated clients first call `POST /auth/discover` with
 `{"login_identifier":"example.local"}`. On success it returns only the
 normalized identifier and `sign_in_methods` (currently `["local_password"]`),
-which is the compatibility seam for OIDC, SAML, and passkeys. Discovery is
-rate-limited and unknown workspaces get a generic not-found response.
+which is the compatibility seam for OIDC, SAML, and passkeys. Lookups of unknown
+identifiers are rate-limited and get a generic not-found response. A known
+identifier is never limited, because everyone in a workspace shares it.
 `POST /auth/login` then requires `login_identifier`, `email`, and `password`.
 The server resolves the identifier and issues a session for that workspace;
 clients never select a workspace ID. The web UI uses `/login` then the stable

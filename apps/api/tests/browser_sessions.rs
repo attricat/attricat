@@ -860,3 +860,36 @@ async fn a_password_session_still_follows_its_credential_version(pool: PgPool) {
     );
     server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn discovery_limits_unknown_identifiers_but_never_a_real_workspace(pool: PgPool) {
+    let (base_url, server) = start_session_server(pool).await;
+    let client = Client::new();
+    let discover = |identifier: &'static str| {
+        client
+            .post(format!("{base_url}/auth/discover"))
+            .json(&json!({ "login_identifier": identifier }))
+            .send()
+    };
+    for _ in 0..30 {
+        assert_eq!(
+            discover("default.local").await.unwrap().status(),
+            StatusCode::OK
+        );
+    }
+    for _ in 0..20 {
+        assert_eq!(
+            discover("missing.example").await.unwrap().status(),
+            StatusCode::NOT_FOUND
+        );
+    }
+    assert_eq!(
+        discover("missing.example").await.unwrap().status(),
+        StatusCode::TOO_MANY_REQUESTS
+    );
+    assert_eq!(
+        discover("default.local").await.unwrap().status(),
+        StatusCode::OK
+    );
+    server.abort();
+}
