@@ -43,45 +43,56 @@ export const ExtensionPermissionsSection = ({
       <Typography variant="h6">{t('extensions.permissions')}</Typography>
       <Stack spacing={1} sx={{ mt: 1 }}>
         <ApiErrorAlert error={grant.error ?? revoke.error} sx={{ mb: 2 }} />
-        {grants.map((item) => (
-          <Stack
-            direction="row"
-            key={grantKey(item.grant_kind, item.grant_id)}
-            spacing={1}
-            sx={{ alignItems: 'center' }}
-          >
-            <Chip
-              label={t('extensions.grantedPermission', {
-                kind: t(grantKindLabelKey(item.grant_kind)),
-                id: item.grant_id,
-              })}
-            />
-            <Button
-              disabled={!enabled || revoke.isPending}
-              onClick={() =>
-                revoke.mutate({ kind: item.grant_kind, id: item.grant_id })
-              }
+        {grants.map((item) => {
+          const permission = t('extensions.grantedPermission', {
+            kind: t(grantKindLabelKey(item.grant_kind)),
+            id: item.grant_id,
+          });
+          return (
+            <Stack
+              direction="row"
+              key={grantKey(item.grant_kind, item.grant_id)}
+              spacing={1}
+              sx={{ alignItems: 'center' }}
             >
-              {t('extensions.revoke')}
-            </Button>
-          </Stack>
-        ))}
-        {pendingGrants(manifest, grants).map((item) => (
-          <Stack direction="row" key={grantKey(item.kind, item.id)} spacing={1}>
-            <Chip
-              label={t('extensions.requestedGrant', {
-                kind: t(grantKindLabelKey(item.kind)),
-                id: item.id,
-              })}
-            />
-            <Button
-              disabled={!enabled || grant.isPending}
-              onClick={() => grant.mutate(item)}
+              <Chip label={permission} />
+              <Button
+                aria-label={t('extensions.revokeNamed', { permission })}
+                disabled={!enabled || revoke.isPending}
+                onClick={() =>
+                  revoke.mutate({ kind: item.grant_kind, id: item.grant_id })
+                }
+              >
+                {t('extensions.revoke')}
+              </Button>
+            </Stack>
+          );
+        })}
+        {pendingGrants(manifest, grants).map((item) => {
+          const kind = t(grantKindLabelKey(item.kind));
+          const permission = t('extensions.grantedPermission', {
+            kind,
+            id: item.id,
+          });
+          return (
+            <Stack
+              direction="row"
+              key={grantKey(item.kind, item.id)}
+              spacing={1}
             >
-              {t('extensions.grant')}
-            </Button>
-          </Stack>
-        ))}
+              <Chip
+                label={t('extensions.requestedGrant', { kind, id: item.id })}
+              />
+              <Button
+                aria-label={t('extensions.grantNamed', { permission })}
+                disabled={!enabled || grant.isPending}
+                onClick={() => grant.mutate(item)}
+              >
+                {t('extensions.grant')}
+              </Button>
+            </Stack>
+          );
+        })}
       </Stack>
     </Paper>
   );

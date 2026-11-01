@@ -1,4 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
+import { z } from 'zod';
 import {
   githubRepositoryPrefix,
   installationStates,
@@ -21,6 +22,17 @@ export const sourceRepository = (source: string) =>
 /** Returns the release tag that follows the last `@` in an installation source. */
 export const sourceReleaseTag = (source: string) =>
   source.split(releaseTagSeparator).at(-1);
+
+const manifestNameSchema = z.looseObject({ name: z.string().trim().min(1) });
+
+/** An installed extension's name from its manifest, or its ID without one. */
+export const installedExtensionName = (installation: {
+  extension_id: string;
+  manifest: unknown;
+}) => {
+  const parsed = manifestNameSchema.safeParse(installation.manifest);
+  return parsed.success ? parsed.data.name : installation.extension_id;
+};
 
 export const installationStateColor = (state: InstallationState) =>
   state === installationStates.enabled
