@@ -37,6 +37,8 @@ url.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+openidconnect.workspace = true
+serde.workspace = true
 async-stream.workspace = true
 hyper-util = { version = "0.1", features = ["server-auto", "service", "tokio"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }

@@ -111,6 +111,45 @@ impl ApiError {
     pub(super) fn bad_gateway(message: &'static str) -> Self {
         Self::new(StatusCode::BAD_GATEWAY, ErrorCode::BadGateway, message)
     }
+    pub(super) fn code(&self) -> ErrorCode {
+        self.code
+    }
+    /// The workspace's identity provider could not be reached or described.
+    pub(super) fn oidc_provider_unavailable() -> Self {
+        Self::new(
+            StatusCode::BAD_GATEWAY,
+            ErrorCode::OidcProviderUnavailable,
+            "the identity provider could not be reached",
+        )
+    }
+    pub(super) fn oidc_sign_in_failed() -> Self {
+        Self::new(
+            StatusCode::UNAUTHORIZED,
+            ErrorCode::OidcSignInFailed,
+            "the identity provider's response could not be verified",
+        )
+    }
+    pub(super) fn oidc_request_expired() -> Self {
+        Self::new(
+            StatusCode::BAD_REQUEST,
+            ErrorCode::OidcRequestExpired,
+            "this sign-in expired or was started in another browser",
+        )
+    }
+    pub(super) fn oidc_email_missing() -> Self {
+        Self::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            ErrorCode::OidcEmailMissing,
+            "the identity provider did not supply a verified email address",
+        )
+    }
+    pub(super) fn oidc_identity_not_linked() -> Self {
+        Self::new(
+            StatusCode::FORBIDDEN,
+            ErrorCode::OidcIdentityNotLinked,
+            "this identity has no access to the workspace",
+        )
+    }
     /// An invitation was withdrawn because its email could not be sent; the
     /// mail service failed, not the request, so the client may retry.
     pub(super) fn invitation_delivery_failed() -> Self {

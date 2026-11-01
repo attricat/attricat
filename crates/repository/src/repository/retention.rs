@@ -437,6 +437,14 @@ impl<S: RepositoryScope> AttricatRepository<S> {
                 )
                 .await?;
         }
+        // Sign-ins abandoned at an identity provider are as short-lived.
+        deleted += self
+            .purge_with(
+                "WITH expired AS (SELECT state_digest FROM oidc_login_requests WHERE expires_at <= clock_timestamp() LIMIT $1 FOR UPDATE SKIP LOCKED) DELETE FROM oidc_login_requests WHERE state_digest IN (SELECT state_digest FROM expired)",
+                None,
+                limit,
+            )
+            .await?;
         Ok(deleted)
     }
 

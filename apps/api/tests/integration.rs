@@ -58,6 +58,7 @@ mod lexicon;
 mod lifecycle_credentials;
 mod membership_revocation;
 mod notifications;
+mod oidc_sign_in;
 mod operator_workspaces;
 mod personal_api_tokens;
 mod presentation_asset_migrations;

@@ -1,5 +1,5 @@
 use crate::repository::ErrorCode;
-use attricat_domain::states::SessionAuthMethod;
+use attricat_domain::states::{PasswordSignIn, SessionAuthMethod};
 use axum::{Json, extract::State, response::Response};
 use chrono::{Duration, Utc};
 use serde::Deserialize;
@@ -25,10 +25,10 @@ mod password;
 mod responses;
 pub(super) use access::check_access;
 pub(super) use password::hash_password;
-pub(super) use responses::onboarding_session_response;
 use responses::{
     SessionResponse, clear_session_response, session_response, session_response_payload,
 };
+pub(super) use responses::{onboarding_session_response, session_redirect};
 
 const PASSWORD_RESET_LIFETIME_MINUTES: i64 = 30;
 
@@ -73,9 +73,18 @@ const DISPLAY_NAME_MIN_CHARS: usize = 2;
 const DISPLAY_NAME_MAX_CHARS: usize = 64;
 
 #[derive(serde::Serialize)]
+pub(super) struct DiscoveryOidc {
+    display_name: String,
+}
+
+#[derive(serde::Serialize)]
 pub(super) struct DiscoveryResponse {
     login_identifier: String,
     sign_in_methods: Vec<&'static str>,
+    /// The workspace's enabled identity provider.
+    oidc: Option<DiscoveryOidc>,
+    /// Only owners may sign in with a password.
+    password_restricted: bool,
 }
 
 /// Seeded accounts of a demo or development deployment, one per built-in
@@ -122,9 +131,18 @@ pub(super) async fn discover(
             },
         );
     };
+    let options = state.repository.sign_in_options(workspace.id).await?;
+    // A provider is unusable on a deployment without a callback.
+    let provider = options.provider.filter(|_| state.oidc.is_some());
+    let mut sign_in_methods = vec![SessionAuthMethod::LocalPassword.as_str()];
+    if provider.is_some() {
+        sign_in_methods.push(SessionAuthMethod::Oidc.as_str());
+    }
     Ok(Json(DiscoveryResponse {
         login_identifier: workspace.login_identifier,
-        sign_in_methods: vec![SessionAuthMethod::LocalPassword.as_str()],
+        sign_in_methods,
+        oidc: provider.map(|display_name| DiscoveryOidc { display_name }),
+        password_restricted: options.password_sign_in == PasswordSignIn::Owners,
     }))
 }
 
@@ -239,6 +257,11 @@ pub(super) async fn login(
     let (session, csrf, expires_at) = issue_session();
     state
         .repository
+        .for_workspace(workspace.id)
+        .audited_as_sign_in(
+            credential.user_id,
+            SessionAuthMethod::LocalPassword.as_str(),
+        )
         .issue_login_session(
             Uuid::new_v4(),
             &credential,
@@ -370,11 +393,14 @@ fn validate_time_zone(zone: &str) -> Result<String, ApiError> {
 
 pub(super) async fn logout(
     State(state): State<AppState>,
+    AuthenticatedPrincipal(user_id, _): AuthenticatedPrincipal,
     AuthenticatedSession(session): AuthenticatedSession,
     ActiveWorkspace(workspace_id): ActiveWorkspace,
 ) -> Result<Response, ApiError> {
     state
         .repository
+        .for_workspace(workspace_id)
+        .audited_as_sign_out(user_id)
         .revoke_browser_session(&session, workspace_id)
         .await?;
     Ok(clear_session_response(state.session_cookie_secure))

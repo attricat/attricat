@@ -6,6 +6,8 @@ mod members;
 mod mock_tls;
 mod requests;
 
+pub mod fake_oidc;
+
 pub use database::*;
 pub use extension_fixtures::*;
 pub use members::*;

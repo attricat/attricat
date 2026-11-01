@@ -7,7 +7,7 @@ use serde::Serialize;
 use uuid::Uuid;
 
 use super::{ApiError, AppState, SessionSecret};
-use crate::constants::{CSRF_COOKIE, SECONDS_PER_HOUR, SESSION_COOKIE};
+use crate::constants::{CSRF_COOKIE, SECONDS_PER_HOUR, SESSION_COOKIE, SESSION_LIFETIME_HOURS};
 use attricat_domain::permissions::Permission;
 
 #[derive(Serialize)]
@@ -257,6 +257,25 @@ async fn session_capabilities(
         contexts_write: has(Permission::ContextsWrite),
         agents_run: has(Permission::AgentsRun),
     })
+}
+
+/// Sends the browser to `location` with a new session's cookies, for a sign-in
+/// that finishes in a redirect.
+pub(in crate::http) fn session_redirect(
+    location: &str,
+    session: &SessionSecret,
+    csrf: &SessionSecret,
+    secure: bool,
+) -> Result<Response, ApiError> {
+    let mut response = Response::builder()
+        .status(axum::http::StatusCode::SEE_OTHER)
+        .header(axum::http::header::LOCATION, location)
+        .header(axum::http::header::CACHE_CONTROL, "no-store")
+        .header("referrer-policy", "no-referrer")
+        .body(axum::body::Body::empty())
+        .map_err(|_| ApiError::internal("single sign-on redirect"))?;
+    append_session_cookies(&mut response, session, csrf, secure, SESSION_LIFETIME_HOURS);
+    Ok(response)
 }
 
 pub(super) fn clear_session_response(secure: bool) -> Response {

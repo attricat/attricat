@@ -20,6 +20,7 @@ mod identity_providers;
 mod lexicon;
 mod members;
 mod notifications;
+mod oidc;
 mod operator;
 mod pagination;
 mod presentation_assets;
@@ -788,6 +789,13 @@ pub fn router(state: AppState) -> Router {
             get(notifications::get)
                 .patch(notifications::update)
                 .delete(notifications::delete),
+        )
+        .route("/auth/oidc/start", post(oidc::start))
+        .route("/auth/oidc/callback", get(oidc::callback))
+        .route("/auth/oidc/link", get(oidc::link_status).post(oidc::link))
+        .route(
+            "/workspace/members/{member_id}/identity",
+            axum::routing::delete(oidc::unlink_member),
         )
         .route("/auth/logout", post(sessions::logout))
         .route("/auth/renew", post(sessions::renew))
