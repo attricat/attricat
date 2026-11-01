@@ -31,6 +31,18 @@ describe('actionAvailability', () => {
     ).toEqual({ offered: true });
   });
 
+  it('offers commands only to callers who may run them', () => {
+    const command = {
+      ...action(undefined),
+      invoke: { command: 'check' },
+    };
+    const dialog = { ...action(undefined), invoke: { dialog: 'details' } };
+    const reader = { ...target, canRunCommands: false };
+    expect(actionAvailability(command, reader).offered).toBe(false);
+    expect(actionAvailability(dialog, reader).offered).toBe(true);
+    expect(actionAvailability(command, target).offered).toBe(true);
+  });
+
   it('hides an action whose conditions fail', () => {
     for (const when of [
       { blueprints: ['vehicle'] },

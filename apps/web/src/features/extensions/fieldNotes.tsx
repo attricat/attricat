@@ -7,6 +7,8 @@ import {
   type ReactNode,
 } from 'react';
 import { compactIconSize } from '../../components/iconSizes';
+import { capabilities } from '../auth/capabilities';
+import { useCan } from '../auth/useCan';
 import { offeredBadgeAction } from './actionAvailability';
 import type { ActionTarget } from './actions';
 import type { ExtensionContribution, ExtensionRuntimeScope } from './api';
@@ -59,6 +61,7 @@ export const FieldNotesProvider = ({
 }) => {
   const notes = useRecordFieldNotes(recordId, contextId);
   const runtime = useExtensionRuntime(runtimeScope);
+  const canRunCommands = useCan(capabilities.recordsWrite);
   const { blueprintCode, canWrite, recordTags } = conditions;
   const { blueprintId, blueprintVersion } = runtimeScope;
   const value = useMemo<FieldNotes>(() => {
@@ -66,6 +69,7 @@ export const FieldNotesProvider = ({
       blueprintId,
       blueprintVersion,
       blueprintCode,
+      canRunCommands,
       canWrite,
       contextId,
       recordIds: [recordId],
@@ -82,6 +86,7 @@ export const FieldNotesProvider = ({
     blueprintCode,
     blueprintId,
     blueprintVersion,
+    canRunCommands,
     canWrite,
     contextId,
     notes.data,

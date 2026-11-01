@@ -10,10 +10,12 @@ export type ActionAvailability =
  * Whether the host offers an action for a target: its declarative `when`,
  * then the state its extension gave for the record. A condition the target
  * cannot tell (such as tags the surface does not know) does not hide the
- * action; the server still enforces `requires_write`.
+ * action; the server still enforces `requires_write`. A command runs only for
+ * callers who may write records, so it is not offered to the others.
  */
 export const actionAvailability = (
-  action: Pick<ExtensionContribution, 'extension_id' | 'id' | 'when'>,
+  action: Pick<ExtensionContribution, 'extension_id' | 'id' | 'when'> &
+    Partial<Pick<ExtensionContribution, 'invoke'>>,
   target: ActionTarget,
   states?: ReadonlyMap<string, ActionState>,
 ): ActionAvailability => {
@@ -21,6 +23,9 @@ export const actionAvailability = (
   const count = target.recordIds.length;
   const tags = target.recordTags;
   const hidden =
+    (target.canRunCommands === false &&
+      action.invoke &&
+      'command' in action.invoke) ||
     (when?.blueprints?.length &&
       target.blueprintCode !== undefined &&
       !when.blueprints.includes(target.blueprintCode)) ||
