@@ -51,6 +51,8 @@ export const SavedSearchesDialog = ({
   const [filter, setFilter] = useState('');
   // The saved search the user asked to delete, until they confirm or cancel.
   const [deletingId, setDeletingId] = useState<string>();
+  // Kept after the deletion so the dialog still names it while closing.
+  const [deletingName, setDeletingName] = useState('');
   const searchText = useDebouncedValue(
     filter.trim(),
     SAVED_VIEW_SEARCH_DEBOUNCE_MS,
@@ -119,7 +121,10 @@ export const SavedSearchesDialog = ({
                             color="error"
                             disabled={busy}
                             edge="end"
-                            onClick={() => setDeletingId(view.id)}
+                            onClick={() => {
+                              setDeletingId(view.id);
+                              setDeletingName(name);
+                            }}
                             size="small"
                           >
                             <Trash2Icon size={smallIconSize} />
@@ -222,7 +227,7 @@ export const SavedSearchesDialog = ({
         open={deletingId !== undefined}
         title={t('explorer.deleteSavedSearch')}
       >
-        {t('explorer.deleteSavedSearchConfirm')}
+        {t('explorer.deleteSavedSearchConfirm', { name: deletingName })}
       </ConfirmDialog>
     </Dialog>
   );

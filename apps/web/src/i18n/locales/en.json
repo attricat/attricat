@@ -1281,7 +1281,7 @@
     "saveChanges": "Save changes",
     "discardSearchChanges": "Discard changes",
     "deleteSavedSearch": "Delete saved search",
-    "deleteSavedSearchConfirm": "Delete this saved search?",
+    "deleteSavedSearchConfirm": "Delete the saved search “{{name}}”?",
     "confirmDeleteSavedSearch": "Delete",
     "linkCopied": "Link copied",
     "savedSearches": "Saved searches",
