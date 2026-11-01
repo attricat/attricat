@@ -890,7 +890,8 @@
     "requireValidRecord": "Require a valid record",
     "requiredRules": "Required rules",
     "requiredRulesHelp": "Codes of enabled rules that must pass before publishing (at most {{max}}).",
-    "requiredRulesLimit": "A channel can require at most {{max}} rules. Remove one before adding another."
+    "requiredRulesLimit": "A channel can require at most {{max}} rules. Remove one before adding another.",
+    "readOnly": "You can view export channels but not change them. Changing them needs permission to edit contexts."
   },
   "blueprints": {
     "review": {

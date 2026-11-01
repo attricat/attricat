@@ -944,7 +944,8 @@
     "requireValidRecord": "Wymagaj poprawnego rekordu",
     "requiredRules": "Wymagane reguły",
     "requiredRulesHelp": "Kody włączonych reguł, które muszą być spełnione przed publikacją (najwyżej {{max}}).",
-    "requiredRulesLimit": "Kanał może wymagać najwyżej {{max}} reguł. Usuń jedną, zanim dodasz kolejną."
+    "requiredRulesLimit": "Kanał może wymagać najwyżej {{max}} reguł. Usuń jedną, zanim dodasz kolejną.",
+    "readOnly": "Możesz przeglądać kanały eksportu, ale nie możesz ich zmieniać. Zmiana wymaga uprawnienia do edycji kontekstów."
   },
   "blueprints": {
     "review": {

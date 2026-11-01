@@ -85,6 +85,14 @@ export const ExportsPage = () => {
       <Typography color="text.secondary" sx={{ mt: 1 }}>
         {t('exports.description')}
       </Typography>
+      {contexts.data &&
+        !channelAccess.isPending &&
+        !contexts.data.some((context) => channelAccess.can(context.id)) && (
+          // Without context write access every control below is disabled.
+          <Typography color="text.secondary" sx={{ mt: 2 }} variant="body2">
+            {t('exports.readOnly')}
+          </Typography>
+        )}
       <ApiErrorAlert
         error={contexts.error ?? channels.error ?? updateChannel.error}
         sx={{ mt: 3 }}
