@@ -25,6 +25,9 @@ export const workflowRoutes = {
 /** Longest idempotency key the run-now endpoint accepts. */
 export const maximumRunIdempotencyKeyLength = 128;
 
+/** How often the run list refreshes while a run has not finished. */
+export const workflowRunPollMs = 1_000;
+
 export const compareSelectMinWidth = 220;
 export const runTableEmptyColSpan = 6;
 export const editorHeight = 'calc(100vh - 380px)';

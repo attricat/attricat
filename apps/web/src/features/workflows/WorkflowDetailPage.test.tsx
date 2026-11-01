@@ -53,6 +53,8 @@ vi.mock('./api', () => ({
   runWorkflowNow: vi.fn(),
 }));
 
+const manualRunRecordId = 'a9175ad1-e2b8-4eb8-9796-643f27f59fcf';
+
 const workflow = {
   code: 'example-workflow',
   compiled_plan: {},
@@ -171,11 +173,11 @@ describe('WorkflowDetailPage', () => {
     const recordId = await screen.findByRole('textbox', {
       name: 'Manual run record ID',
     });
-    await user.type(recordId, '  record-1  ');
+    await user.type(recordId, `  ${manualRunRecordId}  `);
     await user.click(screen.getByRole('button', { name: 'Run now' }));
     expect(runWorkflowNow).toHaveBeenCalledWith(
       workflow.id,
-      'record-1',
+      manualRunRecordId,
       expect.any(String),
     );
     expect((recordId as HTMLInputElement).disabled).toBe(true);
@@ -183,6 +185,62 @@ describe('WorkflowDetailPage', () => {
       (screen.getByRole('button', { name: 'Run now' }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
+  });
+
+  it('refreshes run diagnostics until a run finishes', async () => {
+    vi.mocked(currentSession).mockResolvedValue({
+      capabilities: { workflows_read: true },
+    } as Awaited<ReturnType<typeof currentSession>>);
+    vi.mocked(listWorkflowRevisions).mockResolvedValue([workflow]);
+    vi.mocked(listWorkflowRuns)
+      .mockResolvedValueOnce([
+        { ...run, attempts: 0, failed_at: null, status: 'pending' },
+      ])
+      .mockResolvedValue([
+        {
+          ...run,
+          attempts: 1,
+          completed_at: '2026-01-01T00:00:01Z',
+          failed_at: null,
+          status: 'completed',
+        },
+      ]);
+    renderPage();
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole('tab', { name: 'Run diagnostics' }),
+    );
+    expect(await screen.findByText('Pending')).toBeTruthy();
+    expect(
+      await screen.findByText('Completed', {}, { timeout: 3_000 }),
+    ).toBeTruthy();
+    expect(screen.queryByText('Pending')).toBeNull();
+  });
+
+  it('explains a mistyped manual record ID instead of sending it', async () => {
+    vi.mocked(currentSession).mockResolvedValue({
+      capabilities: { workflows_manage: true, workflows_read: true },
+    } as Awaited<ReturnType<typeof currentSession>>);
+    vi.mocked(listWorkflowRevisions).mockResolvedValue([
+      {
+        ...workflow,
+        status: 'published',
+        enabled_version: 1,
+        manual_enabled: true,
+      },
+    ]);
+    vi.mocked(listWorkflowRuns).mockResolvedValue([]);
+    renderPage();
+    const user = userEvent.setup();
+    const recordId = await screen.findByRole('textbox', {
+      name: 'Manual run record ID',
+    });
+    await user.type(recordId, 'abc');
+    await user.click(screen.getByRole('button', { name: 'Run now' }));
+    expect(runWorkflowNow).not.toHaveBeenCalled();
+    expect(screen.getByText('Enter a valid record ID.')).toBeTruthy();
+    await user.type(recordId, 'd');
+    expect(screen.queryByText('Enter a valid record ID.')).toBeNull();
   });
 
   it('invalidates lifecycle and replay diagnostics after management actions', async () => {
