@@ -197,6 +197,7 @@
     "discardAndLeave": "Discard and leave"
   },
   "navigation": {
+    "main": "Main navigation",
     "open": "Open navigation",
     "collapsePanel": "Collapse navigation panel",
     "expandPanel": "Expand navigation panel",

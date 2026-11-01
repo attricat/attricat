@@ -199,6 +199,7 @@
     "discardAndLeave": "Odrzuć i wyjdź"
   },
   "navigation": {
+    "main": "Nawigacja główna",
     "open": "Otwórz nawigację",
     "collapsePanel": "Zwiń panel nawigacji",
     "expandPanel": "Rozwiń panel nawigacji",
