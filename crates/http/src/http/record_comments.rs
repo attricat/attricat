@@ -40,6 +40,12 @@ pub(super) struct UpdateComment {
     revision: i64,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct DeleteCommentQuery {
+    revision: i64,
+}
+
 pub(super) async fn list(
     ScopedRepository(repository): ScopedRepository,
     ApiPath(record): ApiPath<Uuid>,
@@ -88,6 +94,18 @@ pub(super) async fn update(
 ) -> Result<StatusCode, ApiError> {
     repository
         .update_record_comment(record, comment, actor, input.revision, &input.body)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub(super) async fn delete(
+    ScopedRepository(repository): ScopedRepository,
+    AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
+    ApiPath((record, comment)): ApiPath<(Uuid, Uuid)>,
+    ApiQuery(query): ApiQuery<DeleteCommentQuery>,
+) -> Result<StatusCode, ApiError> {
+    repository
+        .delete_record_comment(record, comment, actor, query.revision)
         .await?;
     Ok(StatusCode::NO_CONTENT)
 }

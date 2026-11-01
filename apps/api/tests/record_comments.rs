@@ -149,6 +149,32 @@ async fn readers_can_comment_but_only_authors_can_edit(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(audits, 2);
+    // Only the author deletes a comment, and only at its current revision.
+    for (client, revision, status) in [
+        (&owner, 2, StatusCode::NOT_FOUND),
+        (&viewer, 1, StatusCode::CONFLICT),
+        (&viewer, 2, StatusCode::NO_CONTENT),
+        (&viewer, 2, StatusCode::NOT_FOUND),
+    ] {
+        assert_eq!(
+            client
+                .delete(format!("{edit}?revision={revision}"))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            status
+        );
+    }
+    let count: Value = viewer
+        .get(format!("{path}/count"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(count["count"], 0);
     // Revoking membership removes both read and comment access.
     assert!(
         owner

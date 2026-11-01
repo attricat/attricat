@@ -20,7 +20,11 @@
     "conflict": "This comment changed elsewhere. Reload comments, then choose Edit and Restore draft to reconcile your text with the latest version.",
     "count_one": "{{count}} comment",
     "count_other": "{{count}} comments",
-    "systemAuthor": "System"
+    "systemAuthor": "System",
+    "delete": "Delete",
+    "deleteTitle": "Delete comment?",
+    "deleteConfirm": "The comment is removed for everyone. This can't be undone.",
+    "deleted": "Comment deleted."
   },
   "markdown": {
     "write": "Write",

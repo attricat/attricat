@@ -22,7 +22,11 @@
     "count_few": "{{count}} komentarze",
     "count_many": "{{count}} komentarzy",
     "count_other": "{{count}} komentarza",
-    "systemAuthor": "System"
+    "systemAuthor": "System",
+    "delete": "Usuń",
+    "deleteTitle": "Usunąć komentarz?",
+    "deleteConfirm": "Komentarz zniknie dla wszystkich. Tej operacji nie można cofnąć.",
+    "deleted": "Komentarz usunięty."
   },
   "markdown": {
     "write": "Edytuj",

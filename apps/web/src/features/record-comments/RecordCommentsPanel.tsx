@@ -2,6 +2,7 @@ import { personName } from '../../components/personName';
 import { NextPageButton } from '../../components/LoadMoreButton';
 import {
   useInfiniteQuery,
+  useMutation,
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
@@ -29,7 +30,9 @@ import { EmptyState } from '../../components/EmptyState';
 import { CommentIcon } from '../../components/systemIcons';
 import { sessionOptions } from '../auth/queryOptions';
 import { userAvatarSizes } from '../../components/userAvatars';
-import { PencilIcon } from 'lucide-react';
+import { PencilIcon, Trash2Icon } from 'lucide-react';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { deleteComment } from './api';
 
 const CommentItem = ({
   recordId,
@@ -38,6 +41,7 @@ const CommentItem = ({
   disabled,
   onSaved,
   onReload,
+  onDeleted,
 }: {
   recordId: string;
   comment: RecordComment;
@@ -45,9 +49,18 @@ const CommentItem = ({
   disabled: boolean;
   onSaved: () => void;
   onReload: () => Promise<unknown>;
+  onDeleted: () => void;
 }) => {
   const { t } = useTranslation();
   const [editing, setEditing] = useState<RecordComment | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const remove = useMutation({
+    mutationFn: () => deleteComment(recordId, comment.id, comment.revision),
+    onSuccess: () => {
+      setConfirmingDelete(false);
+      onDeleted();
+    },
+  });
   const editButton = useRef<HTMLButtonElement>(null);
   const restoreFocus = useRef(false);
   // Closing can follow an async save, when the Edit button may not be
@@ -110,7 +123,33 @@ const CommentItem = ({
             {t('comments.edit')}
           </Button>
         )}
+        {comment.author_user_id === userId && !editing && (
+          <Button
+            color="error"
+            disabled={disabled}
+            onClick={() => {
+              remove.reset();
+              setConfirmingDelete(true);
+            }}
+            startIcon={<Trash2Icon />}
+          >
+            {t('comments.delete')}
+          </Button>
+        )}
       </Stack>
+      {confirmingDelete && (
+        <ConfirmDialog
+          confirmLabel={t('comments.delete')}
+          destructive
+          error={remove.error}
+          isPending={remove.isPending}
+          onClose={() => setConfirmingDelete(false)}
+          onConfirm={() => remove.mutate()}
+          title={t('comments.deleteTitle')}
+        >
+          {t('comments.deleteConfirm')}
+        </ConfirmDialog>
+      )}
       {editing ? (
         <CommentComposer
           recordId={recordId}
@@ -195,6 +234,10 @@ export const RecordCommentsPanel = ({ recordId }: { recordId: string }) => {
             disabled={comments.isError}
             onSaved={saved}
             onReload={() => comments.refetch()}
+            onDeleted={() => {
+              setNotice(t('comments.deleted'));
+              void client.invalidateQueries({ queryKey: key });
+            }}
           />
         ))}
       </Box>

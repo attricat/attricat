@@ -1179,7 +1179,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route(
             "/v1/records/{record_id}/comments/{comment_id}",
-            axum::routing::patch(record_comments::update),
+            axum::routing::patch(record_comments::update).delete(record_comments::delete),
         )
         .route(
             "/v1/records/{record_id}/rule-findings",

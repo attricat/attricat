@@ -31,3 +31,13 @@ export const updateComment = (
     `${commentsPath(recordId)}/${encodeURIComponent(commentId)}`,
     jsonRequest('PATCH', { ...commentInputSchema.parse({ body }), revision }),
   );
+
+export const deleteComment = (
+  recordId: string,
+  commentId: string,
+  revision: number,
+) =>
+  requestNoContent(
+    `${commentsPath(recordId)}/${encodeURIComponent(commentId)}?${new URLSearchParams({ revision: String(revision) })}`,
+    { method: 'DELETE' },
+  );
