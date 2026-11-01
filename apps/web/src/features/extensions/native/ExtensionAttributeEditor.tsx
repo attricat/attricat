@@ -1,4 +1,5 @@
 import { Box, FormHelperText, FormLabel } from '@mui/material';
+import { visuallyHiddenSx } from '../../../components/VisuallyHidden';
 import {
   useEffect,
   useId,
@@ -30,16 +31,6 @@ import {
 import type { NativeUiErrorCode } from './constants';
 import { nativeHostFor } from './nativeRuntime';
 import { NativeUi } from './NativeUi';
-
-/** Keeps the label for assistive technology without drawing it. */
-const visuallyHidden = {
-  clip: 'rect(0 0 0 0)',
-  height: 1,
-  overflow: 'hidden',
-  position: 'absolute',
-  whiteSpace: 'nowrap',
-  width: 1,
-} as const;
 
 type Props = {
   contribution: ExtensionContribution;
@@ -219,7 +210,7 @@ export const ExtensionAttributeEditor = ({
             error={Boolean(error)}
             id={labelId}
             required={required}
-            sx={labelClaimed ? visuallyHidden : undefined}
+            sx={labelClaimed ? visuallyHiddenSx : undefined}
           >
             {attributeLabel(attribute)}
           </FormLabel>

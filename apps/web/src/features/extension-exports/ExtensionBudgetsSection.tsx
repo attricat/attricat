@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next';
 import { clearBudget, listBudgets, setBudget } from './api';
 import { extensionExportQueryKeys } from './queryKeys';
 import type { HostPermissionBudget } from './schemas';
+import { ActionsHeaderCell } from '../../components/ActionsHeaderCell';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { emptyValuePlaceholder } from '../../components/placeholders';
 
@@ -138,7 +139,7 @@ export const ExtensionBudgetsSection = ({
             <TableCell>{t('extensionExports.hostPermission')}</TableCell>
             <TableCell>{t('extensionExports.declaredBudget')}</TableCell>
             <TableCell>{t('extensionExports.loweredBudget')}</TableCell>
-            <TableCell />
+            <ActionsHeaderCell />
           </TableRow>
         </TableHead>
         <TableBody>

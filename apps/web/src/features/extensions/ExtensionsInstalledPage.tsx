@@ -50,7 +50,7 @@ export const ExtensionsInstalledPage = () => {
               sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}
             >
               <Box>
-                <Typography variant="h6">
+                <Typography component="h3" variant="h6">
                   {installedExtensionName(extension)}{' '}
                   <Chip
                     color={installationStateColor(extension.state)}

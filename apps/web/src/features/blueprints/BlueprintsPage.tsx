@@ -16,6 +16,7 @@ import {
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PencilIcon, PlusIcon } from 'lucide-react';
+import { ActionsHeaderCell } from '../../components/ActionsHeaderCell';
 import { PageContainer } from '../../components/PageContainer';
 import { RouterButton } from '../../components/RouterLink';
 import { PageHeader } from '../../components/PageHeader';
@@ -103,7 +104,7 @@ export const BlueprintsPage = () => {
                   <TableCell>{t('blueprints.status')}</TableCell>
                   <TableCell>{t('blueprints.published')}</TableCell>
                   <TableCell>{t('blueprints.updated')}</TableCell>
-                  <TableCell />
+                  <ActionsHeaderCell />
                 </TableRow>
               </TableHead>
               <TableBody>

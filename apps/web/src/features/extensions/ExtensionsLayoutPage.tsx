@@ -82,7 +82,9 @@ export const ExtensionsLayoutPage = () => {
         }}
         sx={{ p: 2 }}
       >
-        <Typography variant="h5">{t('extensions.layout')}</Typography>
+        <Typography component="h2" variant="h5">
+          {t('extensions.layout')}
+        </Typography>
         <Typography color="text.secondary" sx={{ mb: 2 }}>
           {t('extensions.layoutDescription')}
         </Typography>

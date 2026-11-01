@@ -17,6 +17,7 @@ import {
 import { CheckCheckIcon, CheckIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ActionsHeaderCell } from '../../components/ActionsHeaderCell';
 import { LoadingState } from '../../components/LoadingState';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
@@ -363,7 +364,7 @@ export const FindingsSection = ({
                 <TableCell>{t('rules.columns.rule')}</TableCell>
                 <TableCell>{t('rules.columns.record')}</TableCell>
                 <TableCell>{t('rules.columns.state')}</TableCell>
-                <TableCell />
+                <ActionsHeaderCell />
               </TableRow>
             </TableHead>
             <TableBody>

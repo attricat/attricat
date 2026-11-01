@@ -12,6 +12,7 @@ import {
   Typography,
 } from '@mui/material';
 import type { Blueprint } from './api';
+import { ActionsHeaderCell } from '../../components/ActionsHeaderCell';
 import { RevisionStatusChip } from '../../components/RevisionStatusChip';
 import { Timestamp } from '../../time/Timestamp';
 import { useCanOn } from '../auth/useCan';
@@ -45,7 +46,7 @@ export const RevisionHistory = ({
               <TableCell>{t('blueprints.created')}</TableCell>
               <TableCell>{t('blueprints.published')}</TableCell>
               <TableCell>{t('blueprints.definitionHash')}</TableCell>
-              <TableCell />
+              <ActionsHeaderCell />
             </TableRow>
           </TableHead>
           <TableBody>

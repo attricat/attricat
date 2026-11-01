@@ -54,7 +54,9 @@ export const ExtensionsMarketplacePage = () => {
                 }}
               >
                 <Box>
-                  <Typography variant="h6">{extension.name}</Typography>
+                  <Typography component="h3" variant="h6">
+                    {extension.name}
+                  </Typography>
                   <Typography color="text.secondary">
                     {extension.description}
                   </Typography>
