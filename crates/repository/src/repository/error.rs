@@ -105,6 +105,12 @@ pub enum RepositoryError {
     WorkspaceConflict,
     #[error("the workspace already has an active owner")]
     WorkspaceOwnerExists,
+    #[error("this workspace signs in through its identity provider")]
+    PasswordSignInDisabled,
+    #[error("this identity is already linked to another account")]
+    IdentityLinkedElsewhere,
+    #[error("the signed-in identity's email does not match the invitation")]
+    InvitationEmailMismatch,
     #[error("a new identity provider needs a client secret")]
     IdentityProviderSecretRequired,
     #[error("complete a test sign-in before enabling the identity provider")]

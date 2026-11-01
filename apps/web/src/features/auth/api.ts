@@ -12,6 +12,9 @@ import {
   sessionSchema,
   discoverySchema,
   sampleLoginsSchema,
+  singleSignOnStartSchema,
+  invitationOptionsSchema,
+  identityLinkStatusSchema,
   type UserPreferences,
 } from './schemas';
 import { accessSchema } from './schemas';
@@ -42,6 +45,59 @@ export const login = async (
       password,
     }),
   );
+};
+
+export const startSingleSignOn = (
+  loginIdentifier: string,
+  invitationSecret?: string,
+) =>
+  request(
+    '/api/auth/oidc/start',
+    singleSignOnStartSchema,
+    jsonRequest('POST', {
+      login_identifier: loginIdentifier,
+      ...(invitationSecret ? { invitation_secret: invitationSecret } : {}),
+    }),
+  );
+
+/** How an invitation can be accepted, or `null` for an unusable secret. */
+export const getInvitationOptions = async (secret: string) => {
+  try {
+    return await request(
+      '/api/auth/oidc/invitation',
+      invitationOptionsSchema,
+      jsonRequest('POST', { secret }),
+    );
+  } catch (error) {
+    if (
+      error instanceof ApiRequestError &&
+      error.status === httpStatus.unprocessableEntity
+    )
+      return null;
+    throw error;
+  }
+};
+
+/** Starts linking the signed-in account to the workspace's provider. */
+export const startIdentityLink = () =>
+  request(
+    '/api/auth/oidc/link',
+    singleSignOnStartSchema,
+    jsonRequest('POST', {}),
+  );
+
+/** The caller's link to the workspace's provider, or `null` without one. */
+export const getIdentityLinkStatus = async () => {
+  try {
+    return await request('/api/auth/oidc/link', identityLinkStatusSchema);
+  } catch (error) {
+    if (
+      error instanceof ApiRequestError &&
+      error.status === httpStatus.notFound
+    )
+      return null;
+    throw error;
+  }
 };
 
 export const requestPasswordReset = async (email: string) => {

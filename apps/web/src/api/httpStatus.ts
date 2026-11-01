@@ -4,6 +4,7 @@ export const httpStatus = {
   unauthorized: 401,
   forbidden: 403,
   notFound: 404,
+  unprocessableEntity: 422,
   conflict: 409,
   tooManyRequests: 429,
 } as const;

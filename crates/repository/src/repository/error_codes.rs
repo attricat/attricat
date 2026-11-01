@@ -111,10 +111,18 @@ error_codes! {
     MigrationNotApplicable = "migration_not_applicable",
     MigrationTargetChanged = "migration_target_changed",
     NotFound = "not_found",
+    OidcEmailMismatch = "oidc_email_mismatch",
+    OidcEmailMissing = "oidc_email_missing",
+    OidcIdentityLinkedElsewhere = "oidc_identity_linked_elsewhere",
+    OidcIdentityNotLinked = "oidc_identity_not_linked",
+    OidcProviderUnavailable = "oidc_provider_unavailable",
+    OidcRequestExpired = "oidc_request_expired",
+    OidcSignInFailed = "oidc_sign_in_failed",
     PasswordMissingLetter = "password_missing_letter",
     PasswordMissingNumber = "password_missing_number",
     PasswordMissingSymbol = "password_missing_symbol",
     PasswordResetInvalid = "password_reset_invalid",
+    PasswordSignInDisabled = "password_sign_in_disabled",
     PasswordTooLong = "password_too_long",
     PasswordTooShort = "password_too_short",
     PayloadTooLarge = "payload_too_large",
@@ -384,6 +392,9 @@ impl RepositoryError {
             Self::LoginIdentifierTaken => plain(Conflict, Code::LoginIdentifierTaken),
             Self::WorkspaceConflict => plain(Conflict, Code::WorkspaceConflict),
             Self::WorkspaceOwnerExists => plain(Conflict, Code::WorkspaceOwnerExists),
+            Self::PasswordSignInDisabled => plain(Forbidden, Code::PasswordSignInDisabled),
+            Self::IdentityLinkedElsewhere => plain(Conflict, Code::OidcIdentityLinkedElsewhere),
+            Self::InvitationEmailMismatch => plain(Unprocessable, Code::OidcEmailMismatch),
             Self::IdentityProviderSecretRequired => {
                 plain(Unprocessable, Code::InvalidIdentityProvider)
             }

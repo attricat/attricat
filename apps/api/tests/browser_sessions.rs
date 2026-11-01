@@ -2,7 +2,7 @@ use crate::support;
 
 use api::{
     account::{Password, SessionDigest, SessionSecret, hash_password},
-    repository::AttricatRepository,
+    repository::{AttricatRepository, NewOidcSession},
 };
 use chrono::{DateTime, Duration, Utc};
 use reqwest::header::SET_COOKIE;
@@ -648,12 +648,14 @@ async fn issue_passwordless_session(pool: &PgPool, user: Uuid) -> (String, Strin
     let csrf = SessionSecret::generate();
     AttricatRepository::system(pool.clone())
         .issue_oidc_session(
-            Uuid::new_v4(),
             user,
             bootstrap_workspace_id(),
-            &session.digest(),
-            &csrf.digest(),
-            Utc::now() + Duration::hours(8),
+            NewOidcSession {
+                id: Uuid::new_v4(),
+                session: &session.digest(),
+                csrf: &csrf.digest(),
+                expires_at: Utc::now() + Duration::hours(8),
+            },
         )
         .await
         .unwrap();
@@ -749,12 +751,14 @@ async fn a_session_without_a_credential_requires_an_active_membership(pool: PgPo
     let csrf = SessionSecret::generate();
     let issued = AttricatRepository::system(pool.clone())
         .issue_oidc_session(
-            Uuid::new_v4(),
             user,
             bootstrap_workspace_id(),
-            &session.digest(),
-            &csrf.digest(),
-            Utc::now() + Duration::hours(8),
+            NewOidcSession {
+                id: Uuid::new_v4(),
+                session: &session.digest(),
+                csrf: &csrf.digest(),
+                expires_at: Utc::now() + Duration::hours(8),
+            },
         )
         .await;
     assert!(issued.is_err());

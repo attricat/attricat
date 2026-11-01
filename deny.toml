@@ -2,6 +2,13 @@
 [advisories]
 version = 2
 yanked = "deny"
+ignore = [
+  # Marvin: timing can recover an RSA private key during private-key operations.
+  # rsa has no fixed release. It comes in through openidconnect, which production
+  # uses only to verify provider signatures with public keys; Attricat holds no
+  # RSA private key. Only the test provider signs with rsa, using a throwaway key.
+  { id = "RUSTSEC-2023-0071", reason = "only public-key verification in production" },
+]
 
 [bans]
 multiple-versions = "warn"

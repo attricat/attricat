@@ -118,6 +118,7 @@ mod leadership;
 mod lexicon;
 mod members;
 mod notifications;
+mod oidc_sign_in;
 mod operator_workspaces;
 mod presentation_assets;
 mod record_batches;
@@ -190,6 +191,7 @@ pub use notifications::{
     NewNotification, Notification, NotificationCursor, NotificationSubject,
     NotificationSubjectKind, kinds as notification_kinds, notification_excerpt,
 };
+pub use oidc_sign_in::{NewOidcLoginRequest, NewOidcSession, OidcIntent, OidcLoginRequest};
 pub use operator_workspaces::{
     NewOperatorWorkspace, OperatorWorkspace, OwnerInvitation, OwnerInvitationPolicy,
 };

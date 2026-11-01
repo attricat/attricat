@@ -7,7 +7,7 @@ use serde::Serialize;
 use uuid::Uuid;
 
 use super::{ApiError, AppState, SessionSecret};
-use crate::constants::{CSRF_COOKIE, SECONDS_PER_HOUR, SESSION_COOKIE};
+use crate::constants::{CSRF_COOKIE, SECONDS_PER_HOUR, SESSION_COOKIE, SESSION_LIFETIME_HOURS};
 use attricat_domain::permissions::Permission;
 
 #[derive(Serialize)]
@@ -45,6 +45,7 @@ pub(super) struct SessionCapabilities {
     workspace_navigation_manage: bool,
     tag_colors_manage: bool,
     agents_manage: bool,
+    workspace_manage: bool,
     extensions_read: bool,
     extensions_manage: bool,
     workflows_read: bool,
@@ -77,6 +78,7 @@ impl SessionResponse {
         c.workspace_navigation_manage &= permits(Permission::WorkspaceNavigationManage);
         c.tag_colors_manage &= permits(Permission::TagColorsManage);
         c.agents_manage &= permits(Permission::AgentsManage);
+        c.workspace_manage &= permits(Permission::WorkspaceManage);
         c.extensions_read &= permits(Permission::ExtensionsRead);
         c.extensions_manage &= permits(Permission::ExtensionsManage);
         c.workflows_read &= permits(Permission::WorkflowsRead);
@@ -192,7 +194,7 @@ async fn session_response_payload_with_identifier(
 }
 
 /// Workspace-wide permissions reported as session capability flags.
-const CAPABILITY_PERMISSIONS: [Permission; 24] = [
+const CAPABILITY_PERMISSIONS: [Permission; 25] = [
     Permission::AuditRead,
     Permission::DataHealthRead,
     Permission::MembersManage,
@@ -202,6 +204,7 @@ const CAPABILITY_PERMISSIONS: [Permission; 24] = [
     Permission::WorkspaceNavigationManage,
     Permission::TagColorsManage,
     Permission::AgentsManage,
+    Permission::WorkspaceManage,
     Permission::ExtensionsRead,
     Permission::ExtensionsManage,
     Permission::WorkflowsRead,
@@ -241,6 +244,7 @@ async fn session_capabilities(
         workspace_navigation_manage: has(Permission::WorkspaceNavigationManage),
         tag_colors_manage: has(Permission::TagColorsManage),
         agents_manage: has(Permission::AgentsManage),
+        workspace_manage: has(Permission::WorkspaceManage),
         extensions_read: has(Permission::ExtensionsRead),
         extensions_manage: has(Permission::ExtensionsManage),
         workflows_read: has(Permission::WorkflowsRead),
@@ -257,6 +261,25 @@ async fn session_capabilities(
         contexts_write: has(Permission::ContextsWrite),
         agents_run: has(Permission::AgentsRun),
     })
+}
+
+/// Sends the browser to `location` with a new session's cookies, for a sign-in
+/// that finishes in a redirect.
+pub(in crate::http) fn session_redirect(
+    location: &str,
+    session: &SessionSecret,
+    csrf: &SessionSecret,
+    secure: bool,
+) -> Result<Response, ApiError> {
+    let mut response = Response::builder()
+        .status(axum::http::StatusCode::SEE_OTHER)
+        .header(axum::http::header::LOCATION, location)
+        .header(axum::http::header::CACHE_CONTROL, "no-store")
+        .header("referrer-policy", "no-referrer")
+        .body(axum::body::Body::empty())
+        .map_err(|_| ApiError::internal("single sign-on redirect"))?;
+    append_session_cookies(&mut response, session, csrf, secure, SESSION_LIFETIME_HOURS);
+    Ok(response)
 }
 
 pub(super) fn clear_session_response(secure: bool) -> Response {

@@ -3,7 +3,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
-import { discoverWorkspace, fetchSampleLogins, login } from './api';
+import {
+  discoverWorkspace,
+  fetchSampleLogins,
+  login,
+  startSingleSignOn,
+} from './api';
 import { PasswordLoginPage, WorkspaceLoginPage } from './LoginPage';
 import { authQueryKeys } from './queryKeys';
 
@@ -28,6 +33,7 @@ vi.mock('./api', () => ({
   discoverWorkspace: vi.fn(),
   fetchSampleLogins: vi.fn(),
   login: vi.fn(),
+  startSingleSignOn: vi.fn(),
 }));
 
 const sampleLogins = (demo: boolean) => ({
@@ -50,6 +56,72 @@ const submitTwice = async (name: string) => {
   fireEvent.submit(form);
   fireEvent.submit(form);
 };
+
+const discovered = (overrides: object = {}) => ({
+  login_identifier: 'acme.example',
+  sign_in_methods: ['local_password'],
+  oidc: null,
+  password_restricted: false,
+  ...overrides,
+});
+
+describe('single sign-on on the workspace sign-in page', () => {
+  beforeEach(() => vi.mocked(fetchSampleLogins).mockResolvedValue(null));
+  afterEach(() => vi.clearAllMocks());
+
+  it('offers only a password without a provider', async () => {
+    vi.mocked(discoverWorkspace).mockResolvedValue(discovered());
+    renderWithClient(<PasswordLoginPage identifier="acme.example" />);
+    expect(await screen.findByLabelText('Password')).toBeTruthy();
+    await waitFor(() => expect(discoverWorkspace).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: /Continue with/ })).toBeNull();
+  });
+
+  it('keeps the password form when discovery fails', async () => {
+    vi.mocked(discoverWorkspace).mockRejectedValue(new Error('offline'));
+    renderWithClient(<PasswordLoginPage identifier="acme.example" />);
+    expect(await screen.findByLabelText('Password')).toBeTruthy();
+  });
+
+  it('offers the provider beside a password and starts there', async () => {
+    vi.mocked(discoverWorkspace).mockResolvedValue(
+      discovered({ oidc: { display_name: 'Acme SSO' } }),
+    );
+    const assign = vi.fn();
+    vi.stubGlobal('location', { ...window.location, assign });
+    vi.mocked(startSingleSignOn).mockResolvedValue({
+      authorization_url: 'https://idp.example/authorize',
+    });
+    renderWithClient(<PasswordLoginPage identifier="acme.example" />);
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Continue with Acme SSO' }),
+    );
+    expect(screen.getByLabelText('Password')).toBeTruthy();
+    await waitFor(() =>
+      expect(assign).toHaveBeenCalledWith('https://idp.example/authorize'),
+    );
+    expect(vi.mocked(startSingleSignOn).mock.calls[0]?.[0]).toBe(
+      'acme.example',
+    );
+    vi.unstubAllGlobals();
+  });
+
+  it('tucks the password away when only owners keep one', async () => {
+    vi.mocked(discoverWorkspace).mockResolvedValue(
+      discovered({
+        oidc: { display_name: 'Acme SSO' },
+        password_restricted: true,
+      }),
+    );
+    renderWithClient(<PasswordLoginPage identifier="acme.example" />);
+    const usePassword = await screen.findByRole('button', {
+      name: 'Use a password',
+    });
+    expect(screen.queryByLabelText('Password')).toBeNull();
+    fireEvent.click(usePassword);
+    expect(await screen.findByLabelText('Password')).toBeTruthy();
+  });
+});
 
 describe('login forms', () => {
   beforeEach(() => vi.mocked(fetchSampleLogins).mockResolvedValue(null));

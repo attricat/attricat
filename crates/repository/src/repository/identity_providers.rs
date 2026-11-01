@@ -86,8 +86,8 @@ pub struct SignInOptions {
 pub struct IdentityProviderInput<'a> {
     pub issuer: &'a str,
     pub client_id: &'a str,
-    /// Required when the workspace has no provider yet; otherwise `None`
-    /// keeps the stored secret.
+    /// Required for a new provider, issuer or client; otherwise `None` keeps
+    /// the stored secret.
     pub client_secret: Option<&'a str>,
     pub display_name: &'a str,
 }
@@ -134,14 +134,18 @@ impl AttricatRepository {
             })
             .transpose()?;
         let mut tx = self.pool.begin().await?;
-        let exists = sqlx::query_scalar::<_, Uuid>(
-            "SELECT workspace_id FROM workspace_identity_providers WHERE workspace_id = $1 FOR UPDATE",
+        let current: Option<(String, String)> = sqlx::query_as(
+            "SELECT issuer, client_id FROM workspace_identity_providers WHERE workspace_id = $1 FOR UPDATE",
         )
         .bind(workspace_id)
         .fetch_optional(&mut *tx)
-        .await?
-        .is_some();
-        if !exists && sealed.is_none() {
+        .await?;
+        // The token request sends the secret to the issuer, so keeping it for a
+        // different issuer or client would hand it to whoever runs that one.
+        let same_client = current.as_ref().is_some_and(|(issuer, client_id)| {
+            issuer == input.issuer && client_id == input.client_id
+        });
+        if !same_client && sealed.is_none() {
             return Err(RepositoryError::IdentityProviderSecretRequired);
         }
         let provider: IdentityProvider = sqlx::query_as(
@@ -213,7 +217,7 @@ impl AttricatRepository {
     }
 
     /// Removes the provider. Linked identities stay, and sign-in ignores them
-    /// unless the workspace configures that issuer again.
+    /// unless this workspace configures that issuer again.
     pub async fn delete_identity_provider(&self) -> Result<bool, RepositoryError> {
         let mut tx = self.pool.begin().await?;
         let deleted =
@@ -231,6 +235,31 @@ impl AttricatRepository {
 }
 
 impl<S: super::RepositoryScope> AttricatRepository<S> {
+    /// Whether only owners may use a password in this workspace.
+    pub(super) async fn passwords_restricted_on(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        workspace_id: Uuid,
+    ) -> Result<bool, RepositoryError> {
+        Ok(sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM workspace_identity_providers WHERE workspace_id = $1 AND enabled AND password_sign_in = $2)",
+        )
+        .bind(workspace_id)
+        .bind(PasswordSignIn::Owners.as_str())
+        .fetch_one(&mut **tx)
+        .await?)
+    }
+
+    /// Whether this user is an active owner of the workspace, who keeps a
+    /// password as the way back in if the provider fails.
+    pub async fn is_active_workspace_owner(
+        &self,
+        user_id: Uuid,
+        workspace_id: Uuid,
+    ) -> Result<bool, RepositoryError> {
+        let mut connection = self.pool.acquire().await?;
+        Self::active_owner_on(&mut connection, user_id, workspace_id).await
+    }
+
     /// The workspace's provider with its secret decrypted, for a sign-in.
     pub async fn identity_provider_for_sign_in(
         &self,

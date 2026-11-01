@@ -416,6 +416,10 @@ See [Translate labels](/builders/translations/).
 | Method | Path | Description |
 | --- | --- | --- |
 | `POST` | `/auth/discover`, `/auth/login`, `/auth/renew`, `/auth/logout` | Sessions. |
+| `POST`, `GET` | `/auth/oidc/start`, `/auth/oidc/callback/{workspace_id}` | Sign in through the workspace's identity provider. `start` returns `authorization_url`, and takes `invitation_secret` to accept an invitation. |
+| `POST` | `/auth/oidc/invitation` | From an invitation's `secret`, its `login_identifier` and provider `display_name`. |
+| `GET`, `POST` | `/auth/oidc/link` | Whether the caller's account is linked to the provider; start linking it. |
+| `DELETE` | `/workspace/members/{id}/identity` | Remove a member's link to the provider (`workspace.manage`). |
 | `GET` | `/auth/session` | Current identity and capabilities. |
 | `PATCH` | `/auth/preferences` | Your preferences: `{"time_zone": "Europe/Warsaw"}`, an IANA name, or `null` to clear it. Returns the session. |
 | `PUT`, `DELETE` | `/auth/display-name` | Set your display name, `{"display_name"}` with 2 to 64 letters, digits, and spaces, or clear it. Returns the session. |
@@ -495,7 +499,7 @@ See [Translate labels](/builders/translations/).
 
 `GET`, `PUT`, `PATCH`, and `DELETE /workspace/identity-provider` manage the workspace's OpenID Connect provider and require `workspace.manage`. The operator API has the same operations at `/operator/workspaces/{id}/identity-provider`.
 
-`PUT` takes `issuer`, `client_id`, `display_name`, and `client_secret`. The secret is required for a new provider, and no response includes it. `redirect_uri` in each response is the address to register with the provider.
+`PUT` takes `issuer`, `client_id`, `display_name`, and `client_secret`. The secret is required for a new provider, issuer, or client ID, and no response includes it. `redirect_uri` in each response is the address to register with the provider.
 
 A new provider is unverified and off. It can be enabled with `PATCH { "enabled": true }` only after a test sign-in, and `PATCH { "password_sign_in": "owners" }` needs an enabled provider. Changing the issuer or client ID makes it unverified and off again and restores password sign-in for everyone.
 

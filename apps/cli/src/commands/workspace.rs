@@ -229,6 +229,11 @@ pub(crate) enum MemberCommand {
         #[arg(long, value_enum)]
         state: MemberState,
     },
+    /// Remove a member's link to the workspace's identity provider and end the
+    /// sessions it gave them here (requires `workspace.manage`).
+    UnlinkIdentity {
+        member_id: Uuid,
+    },
     Grant {
         member_id: Uuid,
         #[arg(long)]
@@ -503,6 +508,13 @@ async fn navigation_command(api: &Api, command: NavigationCommand) -> Result<Str
 async fn member_command(api: &Api, command: MemberCommand) -> Result<String, CliError> {
     match command {
         MemberCommand::List => api.get("/workspace/members").await,
+        MemberCommand::UnlinkIdentity { member_id } => {
+            api.delete(&format!(
+                "/workspace/members/{}/identity",
+                segment(member_id)
+            ))
+            .await
+        }
         MemberCommand::SetState { member_id, state } => {
             api.put_json(
                 &format!("/workspace/members/{}", segment(member_id)),

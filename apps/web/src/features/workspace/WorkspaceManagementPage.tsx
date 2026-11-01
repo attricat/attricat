@@ -10,6 +10,7 @@ import { WorkspaceInvitationsSection } from './WorkspaceInvitationsSection';
 import { WorkspaceMembersSection } from './WorkspaceMembersSection';
 import { WorkspaceNavigationSection } from './WorkspaceNavigationSection';
 import { WorkspaceRolesSection } from './WorkspaceRolesSection';
+import { WorkspaceSignInSection } from './WorkspaceSignInSection';
 import { WorkspaceTagColorsSection } from './WorkspaceTagColorsSection';
 import { WorkspaceTeamsSection } from './WorkspaceTeamsSection';
 import { sessionOptions } from '../auth/queryOptions';
@@ -25,7 +26,8 @@ type WorkspaceManagementSection =
   | 'invitations'
   | 'navigation'
   | 'tag-colors'
-  | 'agent';
+  | 'agent'
+  | 'sign-in';
 
 const sections = [
   {
@@ -69,6 +71,12 @@ const sections = [
     section: 'agent',
     to: '/manage/workspace/agent',
     capability: capabilityCodes.agentsManage,
+  },
+  {
+    labelKey: 'workspace.signIn',
+    section: 'sign-in',
+    to: '/manage/workspace/sign-in',
+    capability: capabilityCodes.workspaceManage,
   },
 ] as const satisfies readonly {
   labelKey: string;
@@ -150,6 +158,11 @@ export const WorkspaceManagementPage = ({
           {section === 'agent' && (
             <WorkspaceAgentSection
               canManage={can(capabilityCodes.agentsManage)}
+            />
+          )}
+          {section === 'sign-in' && (
+            <WorkspaceSignInSection
+              canManage={can(capabilityCodes.workspaceManage)}
             />
           )}
           {section === 'invitations' && (

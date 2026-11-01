@@ -487,7 +487,9 @@ acli workspace identity-provider update [--enabled true|false] [--password-sign-
 acli workspace identity-provider delete
 ```
 
-`acli operator workspace identity-provider <id> …` takes the same subcommands for any workspace.
+`acli operator workspace identity-provider <id> …` takes the same subcommands for any workspace. `acli workspace member unlink-identity <member-id>` removes a member's link to the provider.
+
+`acli` cannot sign in through a provider. If you use single sign-on, create a personal API token in the web app.
 
 ### Operator
 

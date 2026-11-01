@@ -27,6 +27,7 @@ export const sessionSchema = z.object({
       workspace_navigation_manage: z.boolean(),
       tag_colors_manage: z.boolean().default(false),
       agents_manage: z.boolean().default(false),
+      workspace_manage: z.boolean().default(false),
       extensions_read: z.boolean(),
       extensions_manage: z.boolean(),
       workflows_read: z.boolean().default(false),
@@ -53,6 +54,24 @@ export type UserPreferences = Pick<Session, 'time_zone'>;
 export const discoverySchema = z.object({
   login_identifier: z.string(),
   sign_in_methods: z.array(z.string()),
+  oidc: z.object({ display_name: z.string() }).nullable().default(null),
+  password_restricted: z.boolean().default(false),
+});
+
+/** Where to send the browser to sign in at the identity provider. */
+export const singleSignOnStartSchema = z.object({
+  authorization_url: z.string(),
+});
+
+/** How someone holding an invitation's secret can accept it. */
+export const invitationOptionsSchema = z.object({
+  login_identifier: z.string(),
+  display_name: z.string().nullable(),
+});
+
+export const identityLinkStatusSchema = z.object({
+  display_name: z.string(),
+  linked: z.boolean(),
 });
 
 /** Seeded per-role accounts sharing one password; `null` unless configured. */

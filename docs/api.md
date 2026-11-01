@@ -669,6 +669,18 @@ that operation's status and error code. The message starts with
 targets its record and records `metadata.batch` with `operation_index` and
 `operation_count`; all share the request and correlation IDs.
 
+## Single sign-on
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/auth/oidc/start` | Public. Start signing in from `login_identifier` and an optional `invitation_secret`. Returns `authorization_url` and sets a cookie. |
+| `GET` | `/auth/oidc/callback/{workspace_id}` | Public. The provider's redirect target. Redirects to `/oidc/complete`, with `?error=<code>` on failure or `?linked=true` after linking. |
+| `POST` | `/auth/oidc/invitation` | Public. From an invitation's `secret`, returns its `login_identifier` and the provider's `display_name`, or `null`. |
+| `GET`, `POST` | `/auth/oidc/link` | The caller's link status; start linking the signed-in account. `POST` needs a browser session. |
+| `DELETE` | `/workspace/members/{member_id}/identity` | Remove a member's links in this workspace (`workspace.manage`). |
+
+See [OpenID Connect sign-in](authentication.md#openid-connect-sign-in).
+
 ## Identity provider
 
 `GET`, `PUT`, `PATCH` and `DELETE /workspace/identity-provider` manage the
@@ -676,10 +688,10 @@ workspace's OpenID Connect provider and require `workspace.manage`; a workspace
 has at most one. The operator API has the same operations for any workspace.
 
 `PUT` takes `issuer`, `client_id`, `display_name` and `client_secret`. The secret
-is required for a new provider, otherwise leaving it out keeps the stored one,
-and no response ever includes it. The issuer is an HTTPS URL compared exactly, so
-keep any trailing slash the provider uses. Each response adds `redirect_uri`, the
-deployment's callback address to register with the provider, which is `null` when
+is required for a new provider, issuer or client ID, otherwise leaving it out keeps
+the stored one, and no response ever includes it. The issuer is an HTTPS URL compared exactly, so
+keep any trailing slash the provider uses. Each response adds `redirect_uri`, this
+workspace's address to register with the provider, which is `null` when
 `OIDC_CALLBACK_URL` is unset.
 
 A new provider is unverified and off. A test sign-in sets `verified_at`, and only

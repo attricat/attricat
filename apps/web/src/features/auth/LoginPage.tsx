@@ -5,11 +5,12 @@ import {
   Stack,
   TextField,
   Typography,
+  Divider,
 } from '@mui/material';
 import { useForm } from '@tanstack/react-form';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Navigate, useNavigate } from '@tanstack/react-router';
-import type { ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { useExclusiveMutation } from '../../components/useExclusiveMutation';
@@ -23,6 +24,7 @@ import {
 } from './api';
 import { authQueryKeys } from './queryKeys';
 import { takeReturnLocation } from './returnLocation';
+import { SingleSignOnButton } from './SingleSignOnButton';
 import { RouterButton } from '../../components/RouterLink';
 
 const devLoginDefaults = import.meta.env.DEV
@@ -142,6 +144,19 @@ const PasswordLoginForm = ({
   const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  // The password form works without this, so a failed lookup hides nothing.
+  const discovery = useQuery({
+    queryKey: authQueryKeys.discovery(identifier),
+    queryFn: () => discoverWorkspace(identifier),
+    enabled: !samples?.demo,
+    meta: { toast: false },
+    retry: false,
+    staleTime: Infinity,
+  });
+  const provider = discovery.data?.oidc;
+  const [passwordRequested, setPasswordRequested] = useState(false);
+  const passwordHidden =
+    discovery.data?.password_restricted === true && !passwordRequested;
   const signIn = useExclusiveMutation({
     meta: { toast: false },
     mutationFn: async ({
@@ -181,67 +196,84 @@ const PasswordLoginForm = ({
           {t('auth.changeWorkspace')}
         </RouterButton>
       )}
-      {samples && (
-        <form.Subscribe selector={(state) => state.values.email}>
-          {(email) => (
-            // Follows the email field, so typing another address clears it.
-            <TextField
-              disabled={submitting}
-              label={t('auth.sampleAccount')}
-              onChange={(event) => {
-                form.setFieldValue('email', event.target.value);
-                form.setFieldValue('password', samples.password);
-              }}
-              select
-              value={
-                samples.accounts.find(
-                  (account) => account.email === email.trim().toLowerCase(),
-                )?.email ?? ''
-              }
-            >
-              {samples.accounts.map(({ email, role }) => (
-                <MenuItem key={email} value={email}>
-                  {t(`auth.sampleRoles.${role}`, { defaultValue: role })} ·{' '}
-                  {email}
-                </MenuItem>
-              ))}
-            </TextField>
+      {provider && (
+        <>
+          <SingleSignOnButton
+            displayName={provider.display_name}
+            loginIdentifier={identifier}
+          />
+          {!passwordHidden && <Divider>{t('auth.or')}</Divider>}
+        </>
+      )}
+      {passwordHidden ? (
+        <Button onClick={() => setPasswordRequested(true)} variant="text">
+          {t('auth.usePassword')}
+        </Button>
+      ) : (
+        <>
+          {samples && (
+            <form.Subscribe selector={(state) => state.values.email}>
+              {(email) => (
+                // Follows the email field, so typing another address clears it.
+                <TextField
+                  disabled={submitting}
+                  label={t('auth.sampleAccount')}
+                  onChange={(event) => {
+                    form.setFieldValue('email', event.target.value);
+                    form.setFieldValue('password', samples.password);
+                  }}
+                  select
+                  value={
+                    samples.accounts.find(
+                      (account) => account.email === email.trim().toLowerCase(),
+                    )?.email ?? ''
+                  }
+                >
+                  {samples.accounts.map(({ email, role }) => (
+                    <MenuItem key={email} value={email}>
+                      {t(`auth.sampleRoles.${role}`, { defaultValue: role })} ·{' '}
+                      {email}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              )}
+            </form.Subscribe>
           )}
-        </form.Subscribe>
+          <form.Field name="email">
+            {(field) => (
+              <TextField
+                autoComplete="username"
+                disabled={submitting}
+                label={t('auth.email')}
+                onChange={(event) => field.handleChange(event.target.value)}
+                type="email"
+                value={field.state.value}
+              />
+            )}
+          </form.Field>
+          <form.Field name="password">
+            {(field) => (
+              <TextField
+                autoComplete="current-password"
+                disabled={submitting}
+                label={t('auth.password')}
+                onChange={(event) => field.handleChange(event.target.value)}
+                type="password"
+                value={field.state.value}
+              />
+            )}
+          </form.Field>
+          <ApiErrorAlert error={signIn.error} />
+          {!samples?.demo && (
+            <RouterButton to="/password-reset" variant="text">
+              {t('auth.forgotPassword')}
+            </RouterButton>
+          )}
+          <Button disabled={submitting} type="submit" variant="contained">
+            {t('auth.signIn')}
+          </Button>
+        </>
       )}
-      <form.Field name="email">
-        {(field) => (
-          <TextField
-            autoComplete="username"
-            disabled={submitting}
-            label={t('auth.email')}
-            onChange={(event) => field.handleChange(event.target.value)}
-            type="email"
-            value={field.state.value}
-          />
-        )}
-      </form.Field>
-      <form.Field name="password">
-        {(field) => (
-          <TextField
-            autoComplete="current-password"
-            disabled={submitting}
-            label={t('auth.password')}
-            onChange={(event) => field.handleChange(event.target.value)}
-            type="password"
-            value={field.state.value}
-          />
-        )}
-      </form.Field>
-      <ApiErrorAlert error={signIn.error} />
-      {!samples?.demo && (
-        <RouterButton to="/password-reset" variant="text">
-          {t('auth.forgotPassword')}
-        </RouterButton>
-      )}
-      <Button disabled={submitting} type="submit" variant="contained">
-        {t('auth.signIn')}
-      </Button>
     </LoginShell>
   );
 };

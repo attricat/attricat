@@ -82,7 +82,10 @@ async fn the_secret_is_stored_encrypted_and_never_returned(pool: PgPool) {
     assert_eq!(body["enabled"], false);
     assert_eq!(body["password_sign_in"], "all");
     assert!(body["verified_at"].is_null());
-    assert_eq!(body["redirect_uri"], CALLBACK);
+    assert_eq!(
+        body["redirect_uri"],
+        format!("{CALLBACK}/{}", bootstrap_workspace_id())
+    );
     assert!(!body.to_string().contains("first-secret"));
     assert!(body.get("client_secret_ciphertext").is_none());
 

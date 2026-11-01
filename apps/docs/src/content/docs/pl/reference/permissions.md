@@ -11,7 +11,7 @@ Brak zalogowania lub wygasła sesja zwraca `401`. Zalogowana osoba bez uprawnien
 
 | Uprawnienie | Zakres | owner | admin | editor | viewer |
 | --- | --- | :-: | :-: | :-: | :-: |
-| `workspace.manage` | Cykl życia obszaru roboczego i przeniesienie własności. | ✓ | | | |
+| `workspace.manage` | Cykl życia obszaru roboczego i przeniesienie własności oraz logowanie jednokrotne. | ✓ | | | |
 | `members.manage` | Członkowie, zaproszenia, tworzenie użytkowników i zespoły (`/workspace/teams`, `acli team`). | ✓ | ✓ | | |
 | `roles.grant` | Przydzielanie i odbieranie ról. Wymagane razem z `members.manage`. | ✓ | ✓ | | |
 | `roles.manage` | Role niestandardowe; ponawianie dostarczeń zdarzeń, które stały się martwymi wiadomościami. | ✓ | ✓ | | |

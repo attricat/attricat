@@ -11,7 +11,7 @@ A missing or expired sign-in returns `401`. A signed-in person without the permi
 
 | Permission | Allows | owner | admin | editor | viewer |
 | --- | --- | :-: | :-: | :-: | :-: |
-| `workspace.manage` | Workspace lifecycle and ownership transfer. | ✓ | | | |
+| `workspace.manage` | Workspace lifecycle, ownership transfer, and single sign-on. | ✓ | | | |
 | `members.manage` | Members, invitations, user creation, and teams (`/workspace/teams`, `acli team`). | ✓ | ✓ | | |
 | `roles.grant` | Granting and revoking roles. Needed together with `members.manage`. | ✓ | ✓ | | |
 | `roles.manage` | Custom roles; replaying dead-letter event deliveries. | ✓ | ✓ | | |

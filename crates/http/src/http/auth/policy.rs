@@ -322,7 +322,7 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
             target: TargetKind::None,
         });
     }
-    if path == "/workspace/identity-provider" {
+    if path == "/workspace/identity-provider" || path == "/workspace/members/{member_id}/identity" {
         return Some(Policy {
             permission: Permission::WorkspaceManage,
             target: TargetKind::None,

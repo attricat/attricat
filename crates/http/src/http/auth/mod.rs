@@ -336,6 +336,7 @@ fn is_self_service_route(route: &str) -> bool {
             | "/auth/avatar"
             | "/auth/logout"
             | "/auth/renew"
+            | "/auth/oidc/link"
             // Each member's own inbox: handlers only ever read and change
             // the caller's notifications, so no catalog permission applies.
             | "/notifications"
@@ -353,12 +354,21 @@ fn is_public_route(path: &str) -> bool {
     {
         return true;
     }
+    // Provider redirects carry a single-use state and a browser-bound secret.
+    if path
+        .strip_prefix("/auth/oidc/callback/")
+        .is_some_and(|workspace| !workspace.is_empty() && !workspace.contains('/'))
+    {
+        return true;
+    }
     matches!(
         path,
         // The OAuth callback carries a single-use, unguessable state.
         "/public/extension-oauth/callback"
             | "/auth/login"
             | "/auth/discover"
+            | "/auth/oidc/start"
+            | "/auth/oidc/invitation"
             | "/auth/sample-logins"
             | "/auth/password-reset"
             | "/auth/password-reset/confirm"
@@ -379,7 +389,7 @@ pub(super) fn session_cookie_digest(headers: &axum::http::HeaderMap) -> Option<S
         .map(|secret| secret.digest())
 }
 
-fn cookie_value(header: Option<&str>, name: &str) -> Option<String> {
+pub(super) fn cookie_value(header: Option<&str>, name: &str) -> Option<String> {
     header?
         .split(';')
         .filter_map(|part| part.trim().split_once('='))

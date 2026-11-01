@@ -1,23 +1,106 @@
 # Browser Authentication
 
 Attricat keeps account identity separate from authentication providers. The `users` and
-`workspace_memberships` tables contain no provider-specific identifier. Local
-password credentials, email actions, and browser sessions are implemented;
-external identity providers are not.
+`workspace_memberships` tables contain no provider-specific identifier. People
+sign in with a local password, or through their workspace's OpenID Connect
+provider.
 
-## External-provider identity adapter seam
+## OpenID Connect sign-in
 
-External providers (including future OIDC and SAML adapters) are isolated from
-Attricat accounts by `external_identities`. The stable provider key is the exact
-verified `(issuer, subject)` pair, which is globally unique and links to one
-ordinary internal `users.id`. Provider-specific identifiers and claims never
-appear on `users` or `workspace_memberships`.
+A workspace has at most one provider, in `workspace_identity_providers`, managed
+through [`/workspace/identity-provider`](api.md#identity-provider) or the operator
+API. Attricat is a relying party using the authorization code flow with PKCE and a
+confidential client. It validates the ID token (signature, issuer, audience,
+expiry and nonce, accepting RS256 and ES256) and any `iss` on the callback, then
+discards every provider token. The result is an ordinary browser session with
+`auth_method = 'oidc'`, so session handling, CSRF, permissions and revocation work
+as they do for a password. Client secrets are sealed with
+`identity_provider_credential_key`.
 
-A future adapter would need to validate its protocol callback before
-resolving the verified pair through the Rust account repository. It must not
-merge identities by email; linking a new provider identity would require an
-explicit authenticated account-linking action. No OIDC/SAML callback or
-account-linking flow is available today.
+`POST /auth/oidc/start` returns the provider URL and sets the `attricat_oidc`
+cookie, which holds the PKCE verifier, nonce and a binding secret. Only digests of
+those and of the state are stored in `oidc_login_requests`, for ten minutes.
+`GET /auth/oidc/callback/{workspace_id}` takes the request once, and only if every
+value matches, so a code or link sent to another browser does nothing and values from
+another sign-in cannot be swapped in. It always redirects to `/oidc/complete`, naming
+only an error code if it failed.
+
+Workspace administrators may be strangers to each other, and one can run a malicious
+provider. Three rules contain that:
+
+- **A redirect URI per workspace.** A provider returns a code only to a URI registered
+  for that client. With a shared URI, a malicious provider could relay a browser to
+  another workspace's client and receive that code at its own token endpoint. This
+  depends on the provider matching redirect URIs exactly, so a client must belong to
+  one workspace and list only its URI, with no wildcards. The realms from
+  `just keycloak` allow any URI and are for local use only.
+- **Links per workspace.** The identity is the exact verified `(issuer, subject)` pair
+  in `external_identities`, for one workspace and one `users.id`. It signs in only
+  there, while that issuer is the workspace's enabled provider and the person is an
+  active member. A person who uses the same provider in two workspaces links twice.
+- **A secret stays with its client.** Changing the issuer or client ID requires a new
+  client secret, because the token request sends the secret to the issuer.
+
+The authorization URL must be HTTPS, like every other provider address.
+
+An identity is never linked by email alone. It is linked in one of two ways:
+
+- **An invitation.** `POST /auth/oidc/start` with `invitation_secret` accepts the
+  invitation by signing in. Holding the secret authorizes the link. The provider's
+  address, unless it says the address is unverified, must also match the invitee,
+  which guards against a forwarded invitation. It creates the account if needed and
+  retires any password onboarding link.
+- **The signed-in account.** `POST /auth/oidc/link` needs a browser session, and the
+  callback must arrive with that same session. When the account has
+  `workspace.manage` this is also the test sign-in that sets `verified_at`, without
+  which a provider cannot be enabled.
+
+An identity linked to another account in the workspace is refused, never moved.
+`DELETE /workspace/members/{id}/identity` (`workspace.manage`) removes a member's
+links in this workspace and ends their OIDC sessions here.
+
+Anyone can start a sign-in and the app sees no client address, so a workspace keeps
+at most 10,000 pending requests and drops the oldest. Each start also fetches the
+provider's metadata, so rate-limit `/api/auth/oidc/start` at your proxy.
+
+Workspace administrators choose the issuer and the provider's metadata chooses the
+other endpoints, so each provider request is checked: HTTPS only (HTTP also under
+`ATTRICAT_DEVTOOLS`), no redirects or proxies, a bounded response, and only public
+addresses unless the deployment lists the host in `OIDC_ALLOWED_PRIVATE_HOSTS`. The
+connection is pinned to the addresses that passed the check.
+
+### Trying it locally
+
+`just keycloak` starts Keycloak in the worktree's stack with two realms, so two
+workspaces can have different issuers. Both have the client `attricat` with the
+secret `attricat-dev-secret`. Sign in as `ada@acme.example` or
+`grace@globex.example`, with the password `dev-password`. Use the issuer
+`http://127.0.0.1:$KEYCLOAK_PORT/realms/acme` under **Manage → Workspace management
+→ Sign-in**; plain HTTP is accepted only with `ATTRICAT_DEVTOOLS`. `just setup`
+writes the local callback for `127.0.0.1`, so a browser on another address needs
+`OIDC_CALLBACK_URL` set to match it.
+
+### Restricting passwords
+
+`password_sign_in = 'owners'` leaves a password only to active owners, as the way
+back in if the provider fails. Anyone else gets `403 password_sign_in_disabled`, but
+only after giving the correct password, so it reveals nothing to a stranger. New
+non-owner invitees receive an acceptance link rather than a password setup link, and
+an onboarding link issued earlier stops working. Passwords belong to the account, so
+this applies only to signing in to that workspace.
+
+### Offboarding
+
+Attricat is not told when a provider disables someone. New sign-ins stop at once,
+but an existing session lasts until it expires, and renewal cannot keep it past 24
+hours. Deactivate the member in Attricat to end access immediately: that revokes their
+sessions and their personal API tokens in the workspace, and reactivating them does
+not restore those tokens. Disabling someone only at the provider leaves their
+personal API tokens working.
+
+Sign-ins and sign-outs are audited as `auth.sign_in` and `auth.sign_out`, with
+`metadata.method` on a sign-in, for both passwords and providers. Failed sign-ins go
+to logs rather than the audit log.
 
 ## Local credentials
 
@@ -73,9 +156,9 @@ verification, or host routing. Existing bootstrap workspaces receive
 `<slug>.local` during migration.
 
 Unauthenticated clients first call `POST /auth/discover` with
-`{"login_identifier":"example.local"}`. On success it returns only the
-normalized identifier and `sign_in_methods` (currently `["local_password"]`),
-which is the compatibility seam for OIDC, SAML, and passkeys. Lookups of unknown
+`{"login_identifier":"example.local"}`. On success it returns the normalized
+identifier, `sign_in_methods`, `oidc` (the enabled provider's `display_name`, or
+`null`) and `password_restricted`. Lookups of unknown
 identifiers are rate-limited and get a generic not-found response. A known
 identifier is never limited, because everyone in a workspace shares it.
 `POST /auth/login` then requires `login_identifier`, `email`, and `password`.
@@ -96,8 +179,8 @@ validation error. Reset never creates a browser session; users sign in normally
 afterward. The credential/security version changes revoke existing sessions and
 outstanding lifecycle links.
 
-Custom domains, SSO enforcement/configuration, SCIM/JIT provisioning, MFA,
-passkeys, and switching workspaces after login are explicitly deferred.
+Custom domains, SAML, SCIM/JIT provisioning, MFA, passkeys, provider-initiated
+sign-in and logout, and switching workspaces after login are explicitly deferred.
 
 ## Browser sessions
 

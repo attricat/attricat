@@ -23,6 +23,7 @@ export const memberSchema = z.object({
   /** The member's ready avatar in this workspace. */
   avatar_file_id: uuid.nullable().default(null),
   state: z.enum(['active', 'inactive']),
+  identity_linked: z.boolean().default(false),
   created_at: z.string(),
   updated_at: z.string(),
   grants: z.array(grantSchema),
@@ -101,6 +102,17 @@ export const createUserInputSchema = invitationInputSchema.extend({
   display_name: z.string().min(1).optional(),
 });
 
+export const identityProviderSchema = z.object({
+  issuer: z.string(),
+  client_id: z.string(),
+  display_name: z.string(),
+  verified_at: z.string().nullable(),
+  enabled: z.boolean(),
+  password_sign_in: z.string(),
+  redirect_uri: z.string().nullable(),
+  updated_at: z.string(),
+});
+export type IdentityProvider = z.infer<typeof identityProviderSchema>;
 export const agentSettingsSchema = z.object({
   bulk_edits: z.enum(bulkEditPolicies),
   bulk_edit_max_records: z.number().int().min(1).max(maxBulkEditMaxRecords),

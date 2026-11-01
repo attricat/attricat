@@ -25,3 +25,9 @@ export const bulkEditLimitFieldWidth = 220;
 export const teamNameMaxLength = 200;
 /** The longest team code the API accepts; codes are ASCII, so bytes. */
 export const teamCodeMaxLength = 128;
+
+/** Who may sign in with a password once a workspace has a provider. */
+export const passwordSignInPolicies = {
+  all: 'all',
+  owners: 'owners',
+} as const;

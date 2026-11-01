@@ -1,6 +1,12 @@
 import { z } from 'zod';
 import i18n from 'i18next';
-import { request, requestNoContent, jsonRequest } from '../../api/request';
+import {
+  ApiRequestError,
+  request,
+  requestNoContent,
+  jsonRequest,
+} from '../../api/request';
+import { httpStatus } from '../../api/httpStatus';
 import { uuidSegment } from '../../api/pathSegments';
 import { scopeTypes } from './constants';
 import {
@@ -19,6 +25,7 @@ import {
   createdUserSchema,
   createUserInputSchema,
   agentSettingsSchema,
+  identityProviderSchema,
   roleCodeSchema,
   type GrantTarget,
   type GrantInput,
@@ -64,6 +71,10 @@ export const grantMemberRole = (memberId: string, input: GrantInput) =>
     z.object({ id: uuid }),
     jsonRequest('POST', grantInputSchema.parse(input)),
   );
+export const unlinkMemberIdentity = (memberId: string) =>
+  requestNoContent(`/api/workspace/members/${uuidSegment(memberId)}/identity`, {
+    method: 'DELETE',
+  });
 export const revokeMemberRole = (memberId: string, grantId: string) =>
   requestNoContent(
     `/api/workspace/members/${uuidSegment(memberId)}/grants/${uuidSegment(grantId)}`,
@@ -145,6 +156,44 @@ export const updateAgentSettings = (settings: AgentSettings) =>
     agentSettingsSchema,
     jsonRequest('PUT', agentSettingsSchema.parse(settings)),
   );
+/** The workspace's identity provider, or `null` without one. */
+export const getIdentityProvider = async () => {
+  try {
+    return await request(
+      '/api/workspace/identity-provider',
+      identityProviderSchema,
+    );
+  } catch (error) {
+    if (
+      error instanceof ApiRequestError &&
+      error.status === httpStatus.notFound
+    )
+      return null;
+    throw error;
+  }
+};
+export const putIdentityProvider = (input: {
+  issuer: string;
+  client_id: string;
+  client_secret?: string;
+  display_name: string;
+}) =>
+  request(
+    '/api/workspace/identity-provider',
+    identityProviderSchema,
+    jsonRequest('PUT', input),
+  );
+export const updateIdentityProviderState = (input: {
+  enabled?: boolean;
+  password_sign_in?: string;
+}) =>
+  request(
+    '/api/workspace/identity-provider',
+    identityProviderSchema,
+    jsonRequest('PATCH', input),
+  );
+export const deleteIdentityProvider = () =>
+  requestNoContent('/api/workspace/identity-provider', { method: 'DELETE' });
 export const listAssignableRoles = () =>
   request('/api/workspace/assignable-roles', z.array(roleSchema));
 export const listPermissions = () =>

@@ -2983,7 +2983,8 @@ fn safe_archive_path(path: &Path) -> bool {
 /// Rejects loopback, private, link-local, multicast, documentation, and other
 /// non-public addresses after DNS resolution as an SSRF boundary.
 pub fn is_public_destination(ip: IpAddr) -> bool {
-    match ip {
+    // An IPv4 address written in IPv6 form reaches the same host.
+    match ip.to_canonical() {
         IpAddr::V4(ip) => {
             let octets = ip.octets();
             !(ip.is_loopback()
@@ -3006,6 +3007,9 @@ pub fn is_public_destination(ip: IpAddr) -> bool {
                 || ip.is_unique_local()
                 || ip.is_unicast_link_local()
                 || ip.is_multicast()
+                // NAT64 and 6to4 embed an IPv4 address this check cannot see.
+                || (segments[0] == 0x0064 && segments[1] == 0xff9b)
+                || segments[0] == 0x2002
                 || (segments[0] == 0x2001 && segments[1] == 0x0db8))
         }
     }
@@ -4444,6 +4448,11 @@ mod tests {
             "192.0.2.1",
             "::1",
             "fc00::1",
+            "::ffff:127.0.0.1",
+            "::ffff:169.254.169.254",
+            "::ffff:10.0.0.1",
+            "64:ff9b::7f00:1",
+            "2002:7f00:1::",
         ] {
             assert!(!is_public_destination(value.parse().unwrap()), "{value}");
         }
