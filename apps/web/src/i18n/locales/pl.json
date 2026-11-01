@@ -1807,6 +1807,7 @@
     "removeQueuedFile": "Usuń {{filename}} z kolejki przesyłania",
     "savedImmediately": "Przesyłanie i zmiany załączników są zapisywane od razu, niezależnie od formularza rekordu.",
     "savingHelp": "Jak zapisywane są pliki",
+    "fileEmpty": "Nie dodano {{filename}}: plik jest pusty.",
     "fileTooLarge": "Nie dodano {{filename}}: pliki mogą mieć maksymalnie {{size}}.",
     "fileTypeNotPermitted": "Nie dodano {{filename}}: to pole przyjmuje pliki {{types}}.",
     "fileRejected": "Nie dodano {{filename}}. Sprawdź dozwolony typ, rozszerzenie i rozmiar pliku; obrazy muszą być w formacie PNG, JPEG, GIF lub WebP.",

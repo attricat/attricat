@@ -21,13 +21,14 @@ export const acceptedFileTypes = (policy: FilePolicy) =>
     .join(',') ||
   (policy.image_only ? [...SUPPORTED_IMAGE_MIME_TYPES].join(',') : undefined);
 
-/** Why a file breaks the attribute's file policy: too large, or not a permitted type. */
+/** Why a file cannot be added: it is empty, too large, or not a permitted type. */
 export const fileRejection = (
   file: File,
   attribute: Attribute,
-): 'size' | 'type' | undefined => {
+): 'empty' | 'size' | 'type' | undefined => {
   const policy = attribute.file_policy;
   if (!policy) return 'type';
+  if (file.size === 0) return 'empty';
   if (policy.max_bytes && file.size > policy.max_bytes) return 'size';
   return acceptsFileType(file, policy) ? undefined : 'type';
 };

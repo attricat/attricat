@@ -22,6 +22,12 @@ describe('fileRejection', () => {
     );
   });
 
+  it('names an empty file, which the server would refuse', () => {
+    expect(
+      fileRejection(file('form.pdf', 0, 'application/pdf'), attribute),
+    ).toBe('empty');
+  });
+
   it('refuses a type the field does not permit', () => {
     expect(fileRejection(file('red.png', 3, 'image/png'), attribute)).toBe(
       'type',

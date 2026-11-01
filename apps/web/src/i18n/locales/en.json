@@ -1727,6 +1727,7 @@
     "removeQueuedFile": "Remove {{filename}} from upload queue",
     "savedImmediately": "Uploads and attachment changes save immediately, separately from the record form.",
     "savingHelp": "About saving files",
+    "fileEmpty": "{{filename}} was not added: the file is empty.",
     "fileTooLarge": "{{filename}} was not added: files can be up to {{size}}.",
     "fileTypeNotPermitted": "{{filename}} was not added: this field accepts {{types}} files.",
     "fileRejected": "{{filename}} was not added. Check the permitted file type, extension and size; images must be PNG, JPEG, GIF or WebP.",
