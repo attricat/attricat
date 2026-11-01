@@ -3,6 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { startSingleSignOn } from './api';
+import { leaveForProvider } from './returnLocation';
 
 /** Leaves the app for the workspace's identity provider. */
 export const SingleSignOnButton = ({
@@ -20,8 +21,7 @@ export const SingleSignOnButton = ({
   const start = useMutation({
     meta: { toast: false },
     mutationFn: () => startSingleSignOn(loginIdentifier, invitationSecret),
-    onSuccess: ({ authorization_url }) =>
-      window.location.assign(authorization_url),
+    onSuccess: ({ authorization_url }) => leaveForProvider(authorization_url),
   });
   return (
     <>

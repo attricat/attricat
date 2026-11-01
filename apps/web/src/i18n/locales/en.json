@@ -2113,7 +2113,7 @@
     "signInIssuerHelp": "The exact issuer your provider publishes, including any trailing slash.",
     "signInClientId": "Client ID",
     "signInClientSecret": "Client secret",
-    "signInClientSecretKeep": "Leave blank to keep the current secret.",
+    "signInClientSecretKeep": "Leave blank to keep the current secret. A new issuer or client ID needs a new one.",
     "signInSave": "Save provider",
     "signInSaved": "Provider saved.",
     "signInRedirectUri": "Register this redirect URI with your provider:",

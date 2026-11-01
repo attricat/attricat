@@ -354,6 +354,13 @@ fn is_public_route(path: &str) -> bool {
     {
         return true;
     }
+    // Provider redirects carry a single-use state and a browser-bound secret.
+    if path
+        .strip_prefix("/auth/oidc/callback/")
+        .is_some_and(|workspace| !workspace.is_empty() && !workspace.contains('/'))
+    {
+        return true;
+    }
     matches!(
         path,
         // The OAuth callback carries a single-use, unguessable state.
@@ -361,7 +368,6 @@ fn is_public_route(path: &str) -> bool {
             | "/auth/login"
             | "/auth/discover"
             | "/auth/oidc/start"
-            | "/auth/oidc/callback"
             | "/auth/oidc/invitation"
             | "/auth/sample-logins"
             | "/auth/password-reset"

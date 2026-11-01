@@ -6,7 +6,7 @@ use attricat_domain::{constants::SESSION_MAX_AGE_HOURS, states::SessionAuthMetho
 
 use crate::account::{ActionTokenDigest, PasswordHash, SessionDigest};
 
-use super::{AttricatRepository, RepositoryError};
+use super::{AttricatRepository, RepositoryError, oidc_sign_in::NewOidcSession};
 
 pub struct LocalLoginCredential {
     pub user_id: Uuid,
@@ -225,6 +225,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         expires_at: DateTime<Utc>,
     ) -> Result<(), RepositoryError> {
         let mut tx = self.pool.begin().await?;
+        Self::lock_workspace_for_session_on(&mut tx, workspace_id).await?;
         let result = sqlx::query("INSERT INTO browser_sessions (id, user_id, workspace_id, issued_security_version, issued_credential_version, session_digest, csrf_digest, expires_at) SELECT $1, $2, $3, $4, $5, $6, $7, $8 WHERE EXISTS (SELECT 1 FROM users u JOIN local_password_credentials c ON c.user_id = u.id JOIN workspace_memberships m ON m.user_id = u.id WHERE u.id = $2 AND u.kind = 'person' AND u.state = 'active' AND u.security_version = $4 AND c.credential_version = $5 AND m.workspace_id = $3 AND m.state = 'active')")
             .bind(id).bind(credential.user_id).bind(workspace_id).bind(credential.security_version).bind(credential.credential_version).bind(session.as_ref()).bind(csrf.as_ref()).bind(expires_at)
             .execute(&mut *tx)
@@ -240,22 +241,47 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
     /// It depends on the account and membership but on no local credential.
     pub async fn issue_oidc_session(
         &self,
-        id: Uuid,
         user_id: Uuid,
         workspace_id: Uuid,
-        session: &SessionDigest,
-        csrf: &SessionDigest,
-        expires_at: DateTime<Utc>,
+        session: NewOidcSession<'_>,
     ) -> Result<(), RepositoryError> {
         let mut tx = self.pool.begin().await?;
-        let result = sqlx::query("INSERT INTO browser_sessions (id, user_id, workspace_id, auth_method, issued_security_version, session_digest, csrf_digest, expires_at) SELECT $1, u.id, m.workspace_id, $2, u.security_version, $3, $4, $5 FROM users u JOIN workspace_memberships m ON m.user_id = u.id WHERE u.id = $6 AND u.kind = 'person' AND u.state = 'active' AND m.workspace_id = $7 AND m.state = 'active'")
-            .bind(id).bind(SessionAuthMethod::Oidc.as_str()).bind(session.as_ref()).bind(csrf.as_ref()).bind(expires_at).bind(user_id).bind(workspace_id)
-            .execute(&mut *tx)
-            .await?;
-        if result.rows_affected() != 1 {
+        Self::lock_workspace_for_session_on(&mut tx, workspace_id).await?;
+        if !Self::insert_oidc_session_on(&mut tx, user_id, workspace_id, &session).await? {
             return Err(RepositoryError::NotFound("active user or membership"));
         }
         self.commit_mutation(tx).await?;
+        Ok(())
+    }
+
+    /// Inserts the session if the account and membership are active.
+    pub(super) async fn insert_oidc_session_on(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        user_id: Uuid,
+        workspace_id: Uuid,
+        session: &NewOidcSession<'_>,
+    ) -> Result<bool, RepositoryError> {
+        let result = sqlx::query("INSERT INTO browser_sessions (id, user_id, workspace_id, auth_method, issued_security_version, session_digest, csrf_digest, expires_at) SELECT $1, u.id, m.workspace_id, $2, u.security_version, $3, $4, $5 FROM users u JOIN workspace_memberships m ON m.user_id = u.id WHERE u.id = $6 AND u.kind = 'person' AND u.state = 'active' AND m.workspace_id = $7 AND m.state = 'active'")
+            .bind(session.id).bind(SessionAuthMethod::Oidc.as_str()).bind(session.session.as_ref()).bind(session.csrf.as_ref()).bind(session.expires_at).bind(user_id).bind(workspace_id)
+            .execute(&mut **tx)
+            .await?;
+        Ok(result.rows_affected() == 1)
+    }
+
+    /// Serializes issuing a session with membership and role revocation, so a
+    /// revocation cannot miss a session that appears just after it. Otherwise
+    /// that session would come back if the member were reactivated.
+    async fn lock_workspace_for_session_on(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        workspace_id: Uuid,
+    ) -> Result<(), RepositoryError> {
+        sqlx::query(
+            "SELECT id FROM workspaces WHERE id = $1 AND deleted_at IS NULL FOR NO KEY UPDATE",
+        )
+        .bind(workspace_id)
+        .fetch_optional(&mut **tx)
+        .await?
+        .ok_or(RepositoryError::NotFound("active credential or membership"))?;
         Ok(())
     }
 
@@ -345,46 +371,6 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
             .await?;
         self.commit_mutation(tx).await?;
         Ok(())
-    }
-
-    pub async fn link_external_identity(
-        &self,
-        user_id: Uuid,
-        issuer: &str,
-        subject: &str,
-    ) -> Result<(), RepositoryError> {
-        if issuer.trim() != issuer
-            || issuer.is_empty()
-            || subject.trim() != subject
-            || subject.is_empty()
-        {
-            return Err(RepositoryError::NotFound("external identity"));
-        }
-        let mut tx = self.pool.begin().await?;
-        sqlx::query(
-            "INSERT INTO external_identities (issuer, subject, user_id) VALUES ($1, $2, $3)",
-        )
-        .bind(issuer)
-        .bind(subject)
-        .bind(user_id)
-        .execute(&mut *tx)
-        .await?;
-        self.commit_mutation(tx).await?;
-        Ok(())
-    }
-
-    pub async fn external_identity_user(
-        &self,
-        issuer: &str,
-        subject: &str,
-    ) -> Result<Option<Uuid>, RepositoryError> {
-        Ok(sqlx::query_scalar(
-            "SELECT i.user_id FROM external_identities i JOIN users u ON u.id = i.user_id WHERE i.issuer = $1 AND i.subject = $2 AND u.kind = 'person'",
-        )
-        .bind(issuer)
-        .bind(subject)
-        .fetch_optional(&self.pool)
-        .await?)
     }
 
     pub async fn issue_lifecycle_token(

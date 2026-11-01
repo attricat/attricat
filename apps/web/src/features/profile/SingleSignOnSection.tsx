@@ -5,7 +5,10 @@ import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { SingleSignOnIcon } from '../../components/systemIcons';
 import { getIdentityLinkStatus, startIdentityLink } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
-import { rememberReturnLocation } from '../auth/returnLocation';
+import {
+  leaveForProvider,
+  rememberReturnLocation,
+} from '../auth/returnLocation';
 import { ProfileSection } from './ProfileSection';
 
 /** Shown only where the workspace has a provider to connect to. */
@@ -20,7 +23,7 @@ export const SingleSignOnSection = () => {
     mutationFn: startIdentityLink,
     onSuccess: ({ authorization_url }) => {
       rememberReturnLocation();
-      window.location.assign(authorization_url);
+      leaveForProvider(authorization_url);
     },
   });
   if (!status.data) return null;

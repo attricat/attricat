@@ -25,7 +25,7 @@ A workspace can let people sign in through one OpenID Connect identity provider,
 4. Turn on **Offer this provider on the sign-in page**.
 5. Optionally, let only owners use a password, so they have a way back in if the provider fails.
 
-Changing the issuer or client ID turns the provider off again and restores password sign-in for everyone until a new test sign-in succeeds. Each sign-in is checked against the workspace's own provider, so a provider set up for one workspace gives no access to another.
+Changing the issuer or client ID turns the provider off again and restores password sign-in for everyone until a new test sign-in succeeds. A link to a provider holds only in the workspace that made it, so someone who uses the same provider in two workspaces connects in each, and a provider set up for one workspace gives no access to another.
 
 ### Who can sign in
 

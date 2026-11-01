@@ -191,7 +191,7 @@ pub use notifications::{
     NewNotification, Notification, NotificationCursor, NotificationSubject,
     NotificationSubjectKind, kinds as notification_kinds, notification_excerpt,
 };
-pub use oidc_sign_in::{NewOidcLoginRequest, OidcIntent, OidcLoginRequest};
+pub use oidc_sign_in::{NewOidcLoginRequest, NewOidcSession, OidcIntent, OidcLoginRequest};
 pub use operator_workspaces::{
     NewOperatorWorkspace, OperatorWorkspace, OwnerInvitation, OwnerInvitationPolicy,
 };

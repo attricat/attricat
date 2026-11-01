@@ -2,13 +2,13 @@
 //! party using the authorization code flow with PKCE. Tokens are validated and
 //! discarded: the result is an ordinary browser session.
 //!
-//! Three things keep one browser's sign-in from being used by another: the
-//! single-use `state`, a cookie holding the secrets, and a stored digest of a
-//! secret in that cookie.
+//! A single-use `state`, a cookie holding the secrets, and stored digests of
+//! those secrets keep one browser's sign-in from being used by another. A
+//! redirect URI per workspace keeps one workspace's provider from receiving a
+//! code meant for another's.
 
 use std::{future::Future, net::SocketAddr, pin::Pin, time::Duration};
 
-use attricat_domain::states::SessionAuthMethod;
 use attricat_extension_manifest::extensions::is_public_destination;
 use axum::{
     Json,
@@ -44,7 +44,8 @@ use super::{
     sessions::{issue_session, session_redirect},
 };
 use crate::repository::{
-    IdentityProviderSignIn, NewOidcLoginRequest, OidcIntent, OidcLoginRequest, RepositoryError,
+    IdentityProviderSignIn, NewOidcLoginRequest, NewOidcSession, OidcIntent, OidcLoginRequest,
+    RepositoryError,
 };
 
 const LOGIN_COOKIE: &str = "attricat_oidc";
@@ -246,6 +247,7 @@ type ProviderOidcClient = CoreClient<
 /// Reads the provider's current metadata and signing keys.
 async fn provider_oidc_client(
     settings: &OidcSettings,
+    workspace_id: Uuid,
     provider: &IdentityProviderSignIn,
     http: &(impl Fn(HttpRequest) -> ProviderFuture + Sync),
 ) -> Result<ProviderOidcClient, ApiError> {
@@ -263,7 +265,7 @@ async fn provider_oidc_client(
         Some(ClientSecret::new(provider.client_secret.clone())),
     )
     .set_redirect_uri(
-        RedirectUrl::new(settings.callback_url.to_string())
+        RedirectUrl::new(settings.redirect_uri(workspace_id))
             .map_err(|_| ApiError::internal("OIDC_CALLBACK_URL is invalid"))?,
     ))
 }
@@ -277,7 +279,7 @@ async fn begin(
 ) -> Result<Response, ApiError> {
     let settings = settings(state)?;
     let http = provider_client(settings, state.devtools_enabled);
-    let client = provider_oidc_client(settings, provider, &http).await?;
+    let client = provider_oidc_client(settings, workspace_id, provider, &http).await?;
     let (challenge, verifier) = PkceCodeChallenge::new_random_sha256();
     let (authorization_url, csrf, nonce) = client
         .authorize_url(
@@ -289,25 +291,32 @@ async fn begin(
         .add_scope(Scope::new(SCOPE_PROFILE.to_owned()))
         .set_pkce_challenge(challenge)
         .url();
+    // The provider's metadata chose this address and the browser is about to
+    // be sent there, so a `javascript:` URL here would run on our origin.
+    let scheme_allowed = authorization_url.scheme() == "https"
+        || (state.devtools_enabled && authorization_url.scheme() == "http");
+    if !scheme_allowed {
+        tracing::warn!("identity provider authorization endpoint has an unsafe scheme");
+        return Err(ApiError::oidc_provider_unavailable());
+    }
     let cookie = LoginCookie {
         binding: opaque_secret(SECRET_PREFIX_NONE),
         pkce_verifier: verifier.secret().clone(),
         nonce: nonce.secret().clone(),
     };
-    let stored = state
+    state
         .repository
         .insert_oidc_login_request(&NewOidcLoginRequest {
             state_digest: &digest(csrf.secret()),
             binding_digest: &digest(&cookie.binding),
+            pkce_verifier_digest: &digest(&cookie.pkce_verifier),
+            nonce_digest: &digest(&cookie.nonce),
             workspace_id,
             issuer: &provider.issuer,
             intent,
             expires_at: Utc::now() + chrono::Duration::minutes(LOGIN_REQUEST_LIFETIME_MINUTES),
         })
         .await?;
-    if !stored {
-        return Err(ApiError::rate_limited());
-    }
     let mut response = Json(StartResponse {
         authorization_url: authorization_url.to_string(),
     })
@@ -435,7 +444,7 @@ pub(super) async fn link_status(
     Ok(Json(LinkStatus {
         linked: state
             .repository
-            .has_external_identity(user_id, &provider.issuer)
+            .has_external_identity(workspace_id, user_id, &provider.issuer)
             .await?,
         display_name: provider.display_name,
     }))
@@ -461,13 +470,14 @@ struct VerifiedIdentity {
 
 async fn verify_identity(
     state: &AppState,
+    workspace_id: Uuid,
     provider: &IdentityProviderSignIn,
     code: String,
     cookie: &LoginCookie,
 ) -> Result<VerifiedIdentity, ApiError> {
     let settings = settings(state)?;
     let http = provider_client(settings, state.devtools_enabled);
-    let client = provider_oidc_client(settings, provider, &http).await?;
+    let client = provider_oidc_client(settings, workspace_id, provider, &http).await?;
     let token: CoreTokenResponse = client
         .exchange_code(AuthorizationCode::new(code))
         .map_err(|_| ApiError::oidc_sign_in_failed())?
@@ -555,6 +565,7 @@ enum CallbackOutcome {
 
 async fn complete(
     state: &AppState,
+    path_workspace: Uuid,
     query: CallbackQuery,
     headers: &HeaderMap,
 ) -> Result<CallbackOutcome, ApiError> {
@@ -578,7 +589,13 @@ async fn complete(
         intent,
     } = state
         .repository
-        .take_oidc_login_request(&digest(oidc_state), &digest(&cookie.binding))
+        .take_oidc_login_request(
+            path_workspace,
+            &digest(oidc_state),
+            &digest(&cookie.binding),
+            &digest(&cookie.pkce_verifier),
+            &digest(&cookie.nonce),
+        )
         .await?
         .ok_or_else(ApiError::oidc_request_expired)?;
     // RFC 9207: a response naming an issuer must name the one we asked.
@@ -597,9 +614,13 @@ async fn complete(
         .await?
         .filter(|provider| provider.issuer == issuer)
         .ok_or_else(ApiError::oidc_request_expired)?;
-    let identity = verify_identity(state, &provider, code, &cookie).await?;
+    // Only linking may use a provider that is not on yet: it is how one gets proven.
+    if !provider.enabled && !matches!(intent, OidcIntent::Link { .. }) {
+        return Err(ApiError::oidc_request_expired());
+    }
+    let identity = verify_identity(state, workspace_id, &provider, code, &cookie).await?;
     let subject = identity.subject.as_str();
-    let user_id = match intent {
+    match intent {
         OidcIntent::Link { session_digest } => {
             let current = session_cookie_digest(headers)
                 .filter(|current| *current == session_digest)
@@ -617,9 +638,6 @@ async fn complete(
             return Ok(CallbackOutcome::Linked);
         }
         OidcIntent::Invitation { invitation_digest } => {
-            if !provider.enabled {
-                return Err(ApiError::oidc_request_expired());
-            }
             let email = identity
                 .email
                 .as_ref()
@@ -633,38 +651,27 @@ async fn complete(
                     subject,
                     email.as_str(),
                 )
-                .await?
+                .await?;
         }
-        OidcIntent::SignIn => {
-            if !provider.enabled {
-                return Err(ApiError::oidc_request_expired());
-            }
-            state
-                .repository
-                .external_identity_user(&issuer, subject)
-                .await?
-                .ok_or_else(ApiError::oidc_identity_not_linked)?
-        }
-    };
+        OidcIntent::SignIn => {}
+    }
     let (session, csrf, expires_at) = issue_session();
+    // This rechecks the link, the membership and that the provider is still on.
     state
         .repository
-        .for_workspace(workspace_id)
-        .audited_as_sign_in(user_id, SessionAuthMethod::Oidc.as_str())
-        .issue_oidc_session(
-            Uuid::new_v4(),
-            user_id,
+        .issue_session_for_identity(
             workspace_id,
-            &session.digest(),
-            &csrf.digest(),
-            expires_at,
+            &issuer,
+            subject,
+            NewOidcSession {
+                id: Uuid::new_v4(),
+                session: &session.digest(),
+                csrf: &csrf.digest(),
+                expires_at,
+            },
         )
-        .await
-        // A linked identity without a membership here gets no session.
-        .map_err(|error| match error {
-            RepositoryError::NotFound(_) => ApiError::oidc_identity_not_linked(),
-            error => error.into(),
-        })?;
+        .await?
+        .ok_or_else(ApiError::oidc_identity_not_linked)?;
     let location = completion(settings(state)?, None)?;
     Ok(CallbackOutcome::SignedIn(session_redirect(
         &location,
@@ -674,15 +681,16 @@ async fn complete(
     )?))
 }
 
-/// `GET /auth/oidc/callback`, public. Always answers with a redirect to the web
+/// `GET /auth/oidc/callback/{workspace_id}`, public. Always answers with a redirect to the web
 /// app; a failure names only its error code.
 pub(super) async fn callback(
     State(state): State<AppState>,
+    ApiPath(workspace_id): ApiPath<Uuid>,
     ApiQuery(query): ApiQuery<CallbackQuery>,
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
     let settings = settings(&state)?.clone();
-    let mut response = match complete(&state, query, &headers).await {
+    let mut response = match complete(&state, workspace_id, query, &headers).await {
         Ok(CallbackOutcome::SignedIn(response)) => response,
         Ok(CallbackOutcome::Linked) => redirect_response(&completion(
             &settings,

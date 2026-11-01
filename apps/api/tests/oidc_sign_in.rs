@@ -130,9 +130,14 @@ impl Harness {
 
     /// Links an identity directly, for tests about what comes after linking.
     async fn link(&self, user: Uuid, subject: &str) {
+        self.link_in(bootstrap_workspace_id(), user, subject).await;
+    }
+
+    async fn link_in(&self, workspace: Uuid, user: Uuid, subject: &str) {
         sqlx::query(
-            "INSERT INTO external_identities (issuer, subject, user_id) VALUES ($1, $2, $3)",
+            "INSERT INTO external_identities (workspace_id, issuer, subject, user_id) VALUES ($1, $2, $3, $4)",
         )
+        .bind(workspace)
         .bind(&self.provider.issuer)
         .bind(subject)
         .bind(user)
@@ -152,7 +157,8 @@ impl Harness {
         response
     }
 
-    /// Follows the provider's redirect and returns the callback's query.
+    /// Follows the provider's redirect and returns the workspace's callback
+    /// path and query, below the deployment's callback URL.
     async fn visit_provider(&self, authorization_url: &str) -> String {
         let response = client().get(authorization_url).send().await.unwrap();
         assert_eq!(
@@ -162,12 +168,12 @@ impl Harness {
         );
         let location = response.headers()["location"].to_str().unwrap();
         assert!(location.starts_with(CALLBACK), "{location}");
-        Url::parse(location).unwrap().query().unwrap().to_owned()
+        location.strip_prefix(CALLBACK).unwrap().to_owned()
     }
 
-    async fn call_back(&self, browser: &mut Browser, query: &str) -> Url {
+    async fn call_back(&self, browser: &mut Browser, redirect: &str) -> Url {
         let response = client()
-            .get(format!("{}/auth/oidc/callback?{query}", self.base_url))
+            .get(format!("{}/auth/oidc/callback{redirect}", self.base_url))
             .header("cookie", browser.cookie_header())
             .send()
             .await
@@ -495,7 +501,10 @@ async fn provider_errors_and_a_mismatched_issuer_end_the_sign_in(pool: PgPool) {
     let location = harness
         .call_back(
             &mut browser.clone(),
-            &format!("state={state}&error=access_denied"),
+            &format!(
+                "/{}?state={state}&error=access_denied",
+                bootstrap_workspace_id()
+            ),
         )
         .await;
     assert_eq!(error_of(&location).as_deref(), Some("oidc_sign_in_failed"));
@@ -551,6 +560,38 @@ async fn an_identity_signs_in_only_where_its_issuer_is_the_provider_and_it_is_a_
         Some("oidc_identity_not_linked")
     );
     assert!(browser.session.is_none());
+
+    // Now a member there, same issuer: a link made elsewhere still proves nothing.
+    sqlx::query(
+        "INSERT INTO workspace_memberships (id, workspace_id, user_id) VALUES ($1, $2, $3)",
+    )
+    .bind(Uuid::new_v4())
+    .bind(other)
+    .bind(user)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let mut browser = Browser::default();
+    let location = harness
+        .sign_in(
+            &mut browser,
+            &json!({ "login_identifier": "other.example" }),
+        )
+        .await;
+    assert_eq!(
+        error_of(&location).as_deref(),
+        Some("oidc_identity_not_linked")
+    );
+    assert!(browser.session.is_none());
+    harness.link_in(other, user, "subject-1").await;
+    let mut browser = Browser::default();
+    let location = harness
+        .sign_in(
+            &mut browser,
+            &json!({ "login_identifier": "other.example" }),
+        )
+        .await;
+    assert_eq!(error_of(&location), None);
 
     // A member of a workspace that trusts a different issuer: the identity
     // above proves nothing there.
@@ -1362,6 +1403,267 @@ async fn only_workspace_managers_are_told_they_can_manage_sign_in(pool: PgPool) 
     let browser = harness.sign_in_with_password("default.local", &email).await;
     let session: Value = harness.session_of(&browser).await.json().await.unwrap();
     assert_eq!(session["capabilities"]["workspace_manage"], false);
+    harness.server.abort();
+    harness.provider.server.abort();
+}
+
+/// The redirect URI an authorization URL names.
+fn redirect_of(authorization_url: &str) -> String {
+    Url::parse(authorization_url)
+        .unwrap()
+        .query_pairs()
+        .find_map(|(name, value)| (name == "redirect_uri").then(|| value.into_owned()))
+        .unwrap()
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn each_workspace_has_its_own_redirect_uri(pool: PgPool) {
+    let harness = ready(&pool).await;
+    let other = Uuid::new_v4();
+    sqlx::query("INSERT INTO workspaces (id, slug, name, login_identifier) VALUES ($1, 'other', 'Other', 'other.example')")
+        .bind(other)
+        .execute(&pool)
+        .await
+        .unwrap();
+    harness.configure(other).await;
+    harness.enable(other).await;
+    let mut browser = Browser::default();
+    let started: Value = harness
+        .begin(&mut browser, &sign_in_body())
+        .await
+        .json()
+        .await
+        .unwrap();
+    let url = started["authorization_url"].as_str().unwrap();
+    assert_eq!(
+        redirect_of(url),
+        format!("{CALLBACK}/{}", bootstrap_workspace_id())
+    );
+    let other_started: Value = harness
+        .begin(
+            &mut Browser::default(),
+            &json!({ "login_identifier": "other.example" }),
+        )
+        .await
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        redirect_of(other_started["authorization_url"].as_str().unwrap()),
+        format!("{CALLBACK}/{other}")
+    );
+
+    // A response at another workspace's address does nothing, and leaves the
+    // request usable where it belongs.
+    let redirect = harness.visit_provider(url).await;
+    let query = redirect.split_once('?').unwrap().1;
+    let location = harness
+        .call_back(&mut browser.clone(), &format!("/{other}?{query}"))
+        .await;
+    assert_eq!(error_of(&location).as_deref(), Some("oidc_request_expired"));
+    let remaining: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM oidc_login_requests WHERE workspace_id = $1")
+            .bind(bootstrap_workspace_id())
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(remaining, 1);
+    harness.server.abort();
+    harness.provider.server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn secrets_from_another_sign_in_cannot_be_swapped_into_the_cookie(pool: PgPool) {
+    let harness = ready(&pool).await;
+    let (user, _) = harness.sso_member("sso@example.test").await;
+    harness.link(user, "subject-1").await;
+    harness
+        .provider
+        .sign_in_as(FakeLogin::new("subject-1", "sso@example.test"))
+        .await;
+    let mut victim = Browser::default();
+    harness.begin(&mut victim, &sign_in_body()).await;
+    let victim_cookie = victim.login_cookie.clone().unwrap();
+    let victim_parts: Vec<&str> = victim_cookie
+        .strip_prefix("attricat_oidc=")
+        .unwrap()
+        .split('.')
+        .collect();
+
+    let mut attacker = Browser::default();
+    let started: Value = harness
+        .begin(&mut attacker, &sign_in_body())
+        .await
+        .json()
+        .await
+        .unwrap();
+    let redirect = harness
+        .visit_provider(started["authorization_url"].as_str().unwrap())
+        .await;
+    let own_cookie = attacker.login_cookie.clone().unwrap();
+    let own_parts: Vec<&str> = own_cookie
+        .strip_prefix("attricat_oidc=")
+        .unwrap()
+        .split('.')
+        .collect();
+    for forged in [
+        format!("{}.{}.{}", own_parts[0], victim_parts[1], own_parts[2]),
+        format!("{}.{}.{}", own_parts[0], own_parts[1], victim_parts[2]),
+    ] {
+        let mut browser = Browser {
+            login_cookie: Some(format!("attricat_oidc={forged}")),
+            ..Browser::default()
+        };
+        let location = harness.call_back(&mut browser, &redirect).await;
+        assert_eq!(error_of(&location).as_deref(), Some("oidc_request_expired"));
+        assert!(browser.session.is_none());
+    }
+    // The honest cookie still works, so forgeries did not use the request up.
+    let location = harness.call_back(&mut attacker, &redirect).await;
+    assert_eq!(error_of(&location), None);
+    harness.server.abort();
+    harness.provider.server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_provider_cannot_send_the_browser_to_a_script_url(pool: PgPool) {
+    let harness = ready(&pool).await;
+    harness
+        .provider
+        .publish_authorization_endpoint("javascript:alert(document.domain)//")
+        .await;
+    let mut browser = Browser::default();
+    let response = harness.begin(&mut browser, &sign_in_body()).await;
+    assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+    assert!(browser.login_cookie.is_none());
+    harness.server.abort();
+    harness.provider.server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_stored_secret_is_never_sent_to_a_new_issuer_or_client(pool: PgPool) {
+    let harness = ready(&pool).await;
+    let url = format!(
+        "{}/operator/workspaces/{}/identity-provider",
+        harness.base_url,
+        bootstrap_workspace_id()
+    );
+    let put = |issuer: String, client: &'static str| client_put(&url, issuer, client);
+    let moved = put("https://attacker.example".to_owned(), FAKE_CLIENT_ID).await;
+    assert_eq!(moved.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let body: Value = moved.json().await.unwrap();
+    assert_eq!(body["error"]["code"], "invalid_identity_provider");
+    let other_client = put(harness.provider.issuer.clone(), "another-client").await;
+    assert_eq!(other_client.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    // Renaming the same client keeps the secret.
+    let same = put(harness.provider.issuer.clone(), FAKE_CLIENT_ID).await;
+    assert_eq!(same.status(), StatusCode::OK);
+    harness.server.abort();
+    harness.provider.server.abort();
+}
+
+async fn client_put(url: &str, issuer: String, client_id: &str) -> Response {
+    client()
+        .put(url)
+        .bearer_auth(OPERATOR_SECRET)
+        .json(&json!({
+            "issuer": issuer,
+            "client_id": client_id,
+            "display_name": "Fake SSO",
+        }))
+        .send()
+        .await
+        .unwrap()
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn another_workspace_cannot_see_or_remove_a_link(pool: PgPool) {
+    let harness = ready(&pool).await;
+    let (member, _) = harness.sso_member("shared@example.test").await;
+    harness.link(member, "shared-subject").await;
+
+    // A second workspace claims the same issuer, and its owner shares a member.
+    let other = Uuid::new_v4();
+    sqlx::query("INSERT INTO workspaces (id, slug, name, login_identifier) VALUES ($1, 'other', 'Other', 'other.example')")
+        .bind(other)
+        .execute(&pool)
+        .await
+        .unwrap();
+    harness.configure(other).await;
+    let membership = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO workspace_memberships (id, workspace_id, user_id) VALUES ($1, $2, $3)",
+    )
+    .bind(membership)
+    .bind(other)
+    .bind(member)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let repository = api::repository::AttricatRepository::new(pool.clone(), other);
+    assert!(!repository.unlink_member_identity(membership).await.unwrap());
+    let links: i64 = sqlx::query_scalar("SELECT count(*) FROM external_identities")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(links, 1);
+    assert!(
+        !repository
+            .has_external_identity(other, member, &harness.provider.issuer)
+            .await
+            .unwrap()
+    );
+    harness.server.abort();
+    harness.provider.server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn flooding_sign_in_starts_drops_the_oldest_instead_of_refusing(pool: PgPool) {
+    let harness = ready(&pool).await;
+    sqlx::query("INSERT INTO oidc_login_requests (state_digest, binding_digest, pkce_verifier_digest, nonce_digest, workspace_id, issuer, intent, expires_at) SELECT sha256(n::text::bytea), sha256(n::text::bytea), sha256(n::text::bytea), sha256(n::text::bytea), $1, 'x', 'sign_in', now() + interval '5 minutes' FROM generate_series(1, 10000) n")
+        .bind(bootstrap_workspace_id())
+        .execute(&pool)
+        .await
+        .unwrap();
+    let response = harness
+        .begin(&mut Browser::default(), &sign_in_body())
+        .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM oidc_login_requests")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 10_000);
+    harness.server.abort();
+    harness.provider.server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_provider_turned_off_during_a_sign_in_gives_no_session_or_acceptance(pool: PgPool) {
+    let harness = ready(&pool).await;
+    let (user, _) = harness.sso_member("sso@example.test").await;
+    harness.link(user, "subject-1").await;
+    harness
+        .provider
+        .sign_in_as(FakeLogin::new("subject-1", "sso@example.test"))
+        .await;
+    let mut browser = Browser::default();
+    let started: Value = harness
+        .begin(&mut browser, &sign_in_body())
+        .await
+        .json()
+        .await
+        .unwrap();
+    let redirect = harness
+        .visit_provider(started["authorization_url"].as_str().unwrap())
+        .await;
+    sqlx::query("UPDATE workspace_identity_providers SET enabled = false")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let location = harness.call_back(&mut browser, &redirect).await;
+    assert_eq!(error_of(&location).as_deref(), Some("oidc_request_expired"));
+    assert!(browser.session.is_none());
     harness.server.abort();
     harness.provider.server.abort();
 }

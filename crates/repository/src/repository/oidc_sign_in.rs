@@ -8,13 +8,14 @@ use serde_json::{Value, json};
 use sqlx::{Postgres, Row, Transaction};
 use uuid::Uuid;
 
-use attricat_domain::permissions::Permission;
+use attricat_domain::{permissions::Permission, states::SessionAuthMethod};
 
 use super::{AttricatRepository, AuditContext, RepositoryError};
 use crate::account::SessionDigest;
 
-/// Outstanding requests a workspace may have. Without a client address there
-/// is no per-caller limit, so this only bounds what anonymous callers can store.
+/// Outstanding requests a workspace keeps. Anonymous callers can start sign-ins
+/// and the app sees no client address to limit them by, so past this the oldest
+/// are dropped. Refusing new ones instead would let anyone block sign-in.
 const MAX_PENDING_REQUESTS_PER_WORKSPACE: i64 = 10_000;
 
 const SIGNED_IN_ACTION: &str = "auth.sign_in";
@@ -46,9 +47,19 @@ impl OidcIntent {
 pub struct NewOidcLoginRequest<'a> {
     pub state_digest: &'a [u8],
     pub binding_digest: &'a [u8],
+    pub pkce_verifier_digest: &'a [u8],
+    pub nonce_digest: &'a [u8],
     pub workspace_id: Uuid,
     pub issuer: &'a str,
     pub intent: OidcIntent,
+    pub expires_at: DateTime<Utc>,
+}
+
+/// A new session's secrets and lifetime.
+pub struct NewOidcSession<'a> {
+    pub id: Uuid,
+    pub session: &'a SessionDigest,
+    pub csrf: &'a SessionDigest,
     pub expires_at: DateTime<Utc>,
 }
 
@@ -91,11 +102,11 @@ impl AttricatRepository {
 }
 
 impl<S: super::RepositoryScope> AttricatRepository<S> {
-    /// Stores a request, or returns `false` if the workspace has too many.
+    /// Stores a request, dropping the workspace's oldest beyond the limit.
     pub async fn insert_oidc_login_request(
         &self,
         request: &NewOidcLoginRequest<'_>,
-    ) -> Result<bool, RepositoryError> {
+    ) -> Result<(), RepositoryError> {
         let (invitation_digest, session_digest): (Option<&[u8]>, Option<&[u8]>) =
             match &request.intent {
                 OidcIntent::SignIn => (None, None),
@@ -104,32 +115,47 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
                 }
                 OidcIntent::Link { session_digest } => (None, Some(session_digest.as_ref())),
             };
-        let inserted = sqlx::query("INSERT INTO oidc_login_requests (state_digest, binding_digest, workspace_id, issuer, intent, invitation_digest, link_session_digest, expires_at) SELECT $1, $2, $3, $4, $5, $6, $7, $8 WHERE (SELECT count(*) FROM oidc_login_requests WHERE workspace_id = $3 AND expires_at > clock_timestamp()) < $9")
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("INSERT INTO oidc_login_requests (state_digest, binding_digest, pkce_verifier_digest, nonce_digest, workspace_id, issuer, intent, invitation_digest, link_session_digest, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)")
             .bind(request.state_digest)
             .bind(request.binding_digest)
+            .bind(request.pkce_verifier_digest)
+            .bind(request.nonce_digest)
             .bind(request.workspace_id)
             .bind(request.issuer)
             .bind(request.intent.code())
             .bind(invitation_digest)
             .bind(session_digest)
             .bind(request.expires_at)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM oidc_login_requests WHERE state_digest IN (SELECT state_digest FROM oidc_login_requests WHERE workspace_id = $1 ORDER BY expires_at DESC OFFSET $2)")
+            .bind(request.workspace_id)
             .bind(MAX_PENDING_REQUESTS_PER_WORKSPACE)
-            .execute(&self.pool)
-            .await?
-            .rows_affected();
-        Ok(inserted == 1)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        Ok(())
     }
 
-    /// Takes a live request, once, for the browser that started it. A request
-    /// presented by another browser stays usable by its own.
+    /// Takes a live request of this workspace, once, for the browser that
+    /// started it. Every secret in the browser's cookie must be the one stored
+    /// with the request, so values taken from another sign-in cannot be swapped
+    /// in. A request presented wrongly stays usable by its own browser.
     pub async fn take_oidc_login_request(
         &self,
+        workspace_id: Uuid,
         state_digest: &[u8],
         binding_digest: &[u8],
+        pkce_verifier_digest: &[u8],
+        nonce_digest: &[u8],
     ) -> Result<Option<OidcLoginRequest>, RepositoryError> {
-        let row = sqlx::query("DELETE FROM oidc_login_requests WHERE state_digest = $1 AND binding_digest = $2 AND expires_at > clock_timestamp() RETURNING workspace_id, issuer, intent, invitation_digest, link_session_digest")
+        let row = sqlx::query("DELETE FROM oidc_login_requests WHERE state_digest = $1 AND binding_digest = $2 AND pkce_verifier_digest = $3 AND nonce_digest = $4 AND workspace_id = $5 AND expires_at > clock_timestamp() RETURNING workspace_id, issuer, intent, invitation_digest, link_session_digest")
             .bind(state_digest)
             .bind(binding_digest)
+            .bind(pkce_verifier_digest)
+            .bind(nonce_digest)
+            .bind(workspace_id)
             .fetch_optional(&self.pool)
             .await?;
         let Some(row) = row else {
@@ -158,19 +184,22 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
     /// harmless; an identity linked to someone else is refused, never moved.
     async fn link_identity_on(
         tx: &mut Transaction<'_, Postgres>,
+        workspace_id: Uuid,
         user_id: Uuid,
         issuer: &str,
         subject: &str,
     ) -> Result<(), RepositoryError> {
-        sqlx::query("INSERT INTO external_identities (issuer, subject, user_id) VALUES ($1, $2, $3) ON CONFLICT (issuer, subject) DO NOTHING")
+        sqlx::query("INSERT INTO external_identities (workspace_id, issuer, subject, user_id) VALUES ($1, $2, $3, $4) ON CONFLICT (workspace_id, issuer, subject) DO NOTHING")
+            .bind(workspace_id)
             .bind(issuer)
             .bind(subject)
             .bind(user_id)
             .execute(&mut **tx)
             .await?;
         let owner: Uuid = sqlx::query_scalar(
-            "SELECT user_id FROM external_identities WHERE issuer = $1 AND subject = $2",
+            "SELECT user_id FROM external_identities WHERE workspace_id = $1 AND issuer = $2 AND subject = $3",
         )
+        .bind(workspace_id)
         .bind(issuer)
         .bind(subject)
         .fetch_one(&mut **tx)
@@ -204,7 +233,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         if current.as_deref() != Some(issuer) {
             return Err(RepositoryError::NotFound("identity provider"));
         }
-        Self::link_identity_on(&mut tx, user_id, issuer, subject).await?;
+        Self::link_identity_on(&mut tx, workspace_id, user_id, issuer, subject).await?;
         if Self::is_authorized_on(
             &mut tx,
             user_id,
@@ -259,7 +288,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         let user_id = Self::upsert_invited_user_on(&mut tx, &invitee_email, None)
             .await?
             .user_id;
-        Self::link_identity_on(&mut tx, user_id, issuer, subject).await?;
+        Self::link_identity_on(&mut tx, workspace_id, user_id, issuer, subject).await?;
         // The onboarding link would set a password this person does not need.
         sqlx::query("UPDATE user_lifecycle_action_tokens a SET revoked_at = clock_timestamp() FROM workspace_invitation_onboarding o WHERE o.invitation_id = $1 AND a.token_digest = o.action_token_digest AND a.consumed_at IS NULL AND a.revoked_at IS NULL")
             .bind(invitation_id)
@@ -292,15 +321,62 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         .await?)
     }
 
-    /// Whether an account has an identity at `issuer`.
+    /// Issues a session for a verified identity in one transaction under the
+    /// workspace lock, which membership revocation and unlinking also take, so
+    /// neither can slip between the checks and the session. The identity must
+    /// be linked here and its issuer must still be this workspace's enabled
+    /// provider. Returns the user, or `None` if any of that fails.
+    pub async fn issue_session_for_identity(
+        &self,
+        workspace_id: Uuid,
+        issuer: &str,
+        subject: &str,
+        session: NewOidcSession<'_>,
+    ) -> Result<Option<Uuid>, RepositoryError> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query(
+            "SELECT id FROM workspaces WHERE id = $1 AND deleted_at IS NULL FOR NO KEY UPDATE",
+        )
+        .bind(workspace_id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or(RepositoryError::NotFound("workspace"))?;
+        let user_id: Option<Uuid> = sqlx::query_scalar(
+            "SELECT i.user_id FROM external_identities i JOIN workspace_identity_providers p ON p.workspace_id = i.workspace_id AND p.issuer = i.issuer AND p.enabled WHERE i.workspace_id = $1 AND i.issuer = $2 AND i.subject = $3 FOR SHARE OF p",
+        )
+        .bind(workspace_id)
+        .bind(issuer)
+        .bind(subject)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let Some(user_id) = user_id else {
+            return Ok(None);
+        };
+        if !Self::insert_oidc_session_on(&mut tx, user_id, workspace_id, &session).await? {
+            return Ok(None);
+        }
+        self.for_workspace(workspace_id)
+            .with_audit_context(user_audit_context(
+                SIGNED_IN_ACTION,
+                user_id,
+                json!({ "method": SessionAuthMethod::Oidc.as_str() }),
+            ))
+            .commit_mutation(tx)
+            .await?;
+        Ok(Some(user_id))
+    }
+
+    /// Whether an account has a link to `issuer` in this workspace.
     pub async fn has_external_identity(
         &self,
+        workspace_id: Uuid,
         user_id: Uuid,
         issuer: &str,
     ) -> Result<bool, RepositoryError> {
         Ok(sqlx::query_scalar(
-            "SELECT EXISTS (SELECT 1 FROM external_identities WHERE user_id = $1 AND issuer = $2)",
+            "SELECT EXISTS (SELECT 1 FROM external_identities WHERE workspace_id = $1 AND user_id = $2 AND issuer = $3)",
         )
+        .bind(workspace_id)
         .bind(user_id)
         .bind(issuer)
         .fetch_one(&self.pool)
@@ -309,9 +385,9 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
 }
 
 impl AttricatRepository {
-    /// Removes a member's link to this workspace's provider and ends the
-    /// sessions it gave them here. Their sessions in other workspaces are
-    /// separate and stay. Returns `false` if there was no link.
+    /// Removes a member's links made in this workspace and ends the sessions
+    /// they gave them here. Links and sessions in other workspaces are separate
+    /// and stay. Returns `false` if there was no link.
     pub async fn unlink_member_identity(
         &self,
         membership_id: Uuid,
@@ -327,12 +403,13 @@ impl AttricatRepository {
         .fetch_optional(&mut *tx)
         .await?
         .ok_or(RepositoryError::NotFound("workspace member"))?;
-        let removed = sqlx::query("DELETE FROM external_identities e USING workspace_identity_providers p WHERE p.workspace_id = $1 AND e.issuer = p.issuer AND e.user_id = $2")
-            .bind(workspace_id)
-            .bind(user_id)
-            .execute(&mut *tx)
-            .await?
-            .rows_affected();
+        let removed =
+            sqlx::query("DELETE FROM external_identities WHERE workspace_id = $1 AND user_id = $2")
+                .bind(workspace_id)
+                .bind(user_id)
+                .execute(&mut *tx)
+                .await?
+                .rows_affected();
         if removed == 0 {
             return Ok(false);
         }

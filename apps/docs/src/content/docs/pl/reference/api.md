@@ -416,7 +416,7 @@ Trasy `GET` reguł, wykonań i ustaleń wymagają `rules.read`; pozostałe trasy
 | Metoda | Ścieżka | Opis |
 | --- | --- | --- |
 | `POST` | `/auth/discover`, `/auth/login`, `/auth/renew`, `/auth/logout` | Sesje. |
-| `POST`, `GET` | `/auth/oidc/start`, `/auth/oidc/callback` | Logowanie przez dostawcę tożsamości obszaru roboczego. `start` zwraca `authorization_url` i przyjmuje `invitation_secret`, aby przyjąć zaproszenie. |
+| `POST`, `GET` | `/auth/oidc/start`, `/auth/oidc/callback/{workspace_id}` | Logowanie przez dostawcę tożsamości obszaru roboczego. `start` zwraca `authorization_url` i przyjmuje `invitation_secret`, aby przyjąć zaproszenie. |
 | `POST` | `/auth/oidc/invitation` | Na podstawie `secret` zaproszenia zwraca jego `login_identifier` i `display_name` dostawcy. |
 | `GET`, `POST` | `/auth/oidc/link` | Czy konto wywołującego jest połączone z dostawcą; rozpoczęcie łączenia. |
 | `DELETE` | `/workspace/members/{id}/identity` | Usunięcie połączenia członka z dostawcą (`workspace.manage`). |
@@ -499,7 +499,7 @@ Trasy `GET` reguł, wykonań i ustaleń wymagają `rules.read`; pozostałe trasy
 
 `GET`, `PUT`, `PATCH` i `DELETE /workspace/identity-provider` zarządzają dostawcą OpenID Connect obszaru roboczego i wymagają `workspace.manage`. API operatora udostępnia te same operacje pod `/operator/workspaces/{id}/identity-provider`.
 
-`PUT` przyjmuje `issuer`, `client_id`, `display_name` i `client_secret`. Sekret jest wymagany dla nowego dostawcy i nie pojawia się w żadnej odpowiedzi. Pole `redirect_uri` w każdej odpowiedzi to adres do zarejestrowania u dostawcy.
+`PUT` przyjmuje `issuer`, `client_id`, `display_name` i `client_secret`. Sekret jest wymagany dla nowego dostawcy, wydawcy lub identyfikatora klienta i nie pojawia się w żadnej odpowiedzi. Pole `redirect_uri` w każdej odpowiedzi to adres do zarejestrowania u dostawcy.
 
 Nowy dostawca jest niezweryfikowany i wyłączony. Można go włączyć przez `PATCH { "enabled": true }` dopiero po logowaniu testowym, a `PATCH { "password_sign_in": "owners" }` wymaga włączonego dostawcy. Zmiana adresu wydawcy lub identyfikatora klienta przywraca stan niezweryfikowany i wyłączony oraz logowanie hasłem dla wszystkich.
 

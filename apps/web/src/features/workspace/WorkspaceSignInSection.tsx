@@ -20,7 +20,10 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
-import { rememberReturnLocation } from '../auth/returnLocation';
+import {
+  leaveForProvider,
+  rememberReturnLocation,
+} from '../auth/returnLocation';
 import { startIdentityLink } from '../auth/api';
 import {
   deleteIdentityProvider,
@@ -149,7 +152,7 @@ const ProviderState = ({ provider }: { provider: IdentityProvider }) => {
     mutationFn: startIdentityLink,
     onSuccess: ({ authorization_url }) => {
       rememberReturnLocation();
-      window.location.assign(authorization_url);
+      leaveForProvider(authorization_url);
     },
   });
   const remove = useMutation({

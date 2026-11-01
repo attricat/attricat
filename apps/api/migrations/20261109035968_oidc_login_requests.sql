@@ -4,6 +4,8 @@
 CREATE TABLE oidc_login_requests (
     state_digest BYTEA PRIMARY KEY CHECK (octet_length(state_digest) = 32),
     binding_digest BYTEA NOT NULL CHECK (octet_length(binding_digest) = 32),
+    pkce_verifier_digest BYTEA NOT NULL CHECK (octet_length(pkce_verifier_digest) = 32),
+    nonce_digest BYTEA NOT NULL CHECK (octet_length(nonce_digest) = 32),
     workspace_id UUID NOT NULL REFERENCES workspaces (id) ON DELETE CASCADE,
     issuer TEXT NOT NULL,
     intent TEXT NOT NULL CHECK (intent IN ('sign_in', 'invitation', 'link')),

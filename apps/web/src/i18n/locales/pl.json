@@ -2201,7 +2201,7 @@
     "signInIssuerHelp": "Dokładny adres wydawcy publikowany przez dostawcę, łącznie z ewentualnym końcowym ukośnikiem.",
     "signInClientId": "Identyfikator klienta",
     "signInClientSecret": "Sekret klienta",
-    "signInClientSecretKeep": "Pozostaw puste, aby zachować obecny sekret.",
+    "signInClientSecretKeep": "Pozostaw puste, aby zachować obecny sekret. Nowy wydawca lub identyfikator klienta wymaga nowego sekretu.",
     "signInSave": "Zapisz dostawcę",
     "signInSaved": "Dostawca został zapisany.",
     "signInRedirectUri": "Zarejestruj u dostawcy ten adres przekierowania:",

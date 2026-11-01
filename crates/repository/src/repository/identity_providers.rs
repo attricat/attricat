@@ -86,8 +86,8 @@ pub struct SignInOptions {
 pub struct IdentityProviderInput<'a> {
     pub issuer: &'a str,
     pub client_id: &'a str,
-    /// Required when the workspace has no provider yet; otherwise `None`
-    /// keeps the stored secret.
+    /// Required for a new provider, issuer or client; otherwise `None` keeps
+    /// the stored secret.
     pub client_secret: Option<&'a str>,
     pub display_name: &'a str,
 }
@@ -134,14 +134,18 @@ impl AttricatRepository {
             })
             .transpose()?;
         let mut tx = self.pool.begin().await?;
-        let exists = sqlx::query_scalar::<_, Uuid>(
-            "SELECT workspace_id FROM workspace_identity_providers WHERE workspace_id = $1 FOR UPDATE",
+        let current: Option<(String, String)> = sqlx::query_as(
+            "SELECT issuer, client_id FROM workspace_identity_providers WHERE workspace_id = $1 FOR UPDATE",
         )
         .bind(workspace_id)
         .fetch_optional(&mut *tx)
-        .await?
-        .is_some();
-        if !exists && sealed.is_none() {
+        .await?;
+        // The token request sends the secret to the issuer, so keeping it for a
+        // different issuer or client would hand it to whoever runs that one.
+        let same_client = current.as_ref().is_some_and(|(issuer, client_id)| {
+            issuer == input.issuer && client_id == input.client_id
+        });
+        if !same_client && sealed.is_none() {
             return Err(RepositoryError::IdentityProviderSecretRequired);
         }
         let provider: IdentityProvider = sqlx::query_as(
@@ -213,7 +217,7 @@ impl AttricatRepository {
     }
 
     /// Removes the provider. Linked identities stay, and sign-in ignores them
-    /// unless the workspace configures that issuer again.
+    /// unless this workspace configures that issuer again.
     pub async fn delete_identity_provider(&self) -> Result<bool, RepositoryError> {
         let mut tx = self.pool.begin().await?;
         let deleted =

@@ -63,13 +63,17 @@ fn validate_issuer(issuer: &str, allow_http: bool) -> Result<(), ApiError> {
     Ok(())
 }
 
-fn response(state: &AppState, provider: IdentityProvider) -> ProviderResponse {
+fn response(
+    state: &AppState,
+    repository: &AttricatRepository,
+    provider: IdentityProvider,
+) -> ProviderResponse {
     ProviderResponse {
         provider,
         redirect_uri: state
             .oidc
             .as_ref()
-            .map(|oidc| oidc.callback_url.to_string()),
+            .map(|oidc| oidc.redirect_uri(repository.workspace_id())),
     }
 }
 
@@ -81,7 +85,7 @@ pub(super) async fn read_provider(
         .identity_provider()
         .await?
         .ok_or_else(|| ApiError::not_found("identity provider"))?;
-    Ok(Json(response(state, provider)))
+    Ok(Json(response(state, repository, provider)))
 }
 
 pub(super) async fn put_provider(
@@ -113,7 +117,7 @@ pub(super) async fn put_provider(
             display_name,
         })
         .await?;
-    Ok(Json(response(state, provider)))
+    Ok(Json(response(state, repository, provider)))
 }
 
 pub(super) async fn update_provider_state(
@@ -132,7 +136,7 @@ pub(super) async fn update_provider_state(
     let provider = repository
         .update_identity_provider_state(input.enabled, password_sign_in)
         .await?;
-    Ok(Json(response(state, provider)))
+    Ok(Json(response(state, repository, provider)))
 }
 
 pub(super) async fn delete_provider(

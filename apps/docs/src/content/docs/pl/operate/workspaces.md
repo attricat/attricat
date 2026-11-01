@@ -25,7 +25,7 @@ Obszar roboczy może pozwalać na logowanie przez jednego dostawcę tożsamości
 4. Włącz **Pokazuj tego dostawcę na stronie logowania**.
 5. Opcjonalnie pozwól logować się hasłem tylko właścicielom, aby mieli dostęp w razie awarii dostawcy.
 
-Zmiana adresu wydawcy lub identyfikatora klienta wyłącza dostawcę i przywraca logowanie hasłem dla wszystkich, dopóki nowe logowanie testowe się nie powiedzie. Każde logowanie jest sprawdzane względem dostawcy danego obszaru roboczego, więc dostawca skonfigurowany dla jednego obszaru nie daje dostępu do innego.
+Zmiana adresu wydawcy lub identyfikatora klienta wyłącza dostawcę i przywraca logowanie hasłem dla wszystkich, dopóki nowe logowanie testowe się nie powiedzie. Połączenie z dostawcą obowiązuje tylko w obszarze roboczym, w którym je utworzono, więc osoba korzystająca z tego samego dostawcy w dwóch obszarach łączy konto w każdym z nich, a dostawca skonfigurowany dla jednego obszaru nie daje dostępu do innego.
 
 ### Kto może się zalogować
 

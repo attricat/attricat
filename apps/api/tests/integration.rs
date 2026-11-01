@@ -44,7 +44,6 @@ mod extension_interactive_operations;
 mod extension_registries;
 mod extension_unified_abi;
 mod extensions;
-mod external_identities;
 mod facet_latency;
 mod file_uploads;
 mod file_worker;

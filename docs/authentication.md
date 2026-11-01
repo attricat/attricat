@@ -19,16 +19,26 @@ as they do for a password. Client secrets are sealed with
 
 `POST /auth/oidc/start` returns the provider URL and sets the `attricat_oidc`
 cookie, which holds the PKCE verifier, nonce and a binding secret. Only digests of
-the state and binding secret are stored in `oidc_login_requests`, for ten minutes.
-`GET /auth/oidc/callback` takes the request once, for the browser holding that
-secret, so a code or link sent to another browser does nothing. It always redirects
-to `/oidc/complete`, naming only an error code if it failed.
+those and of the state are stored in `oidc_login_requests`, for ten minutes.
+`GET /auth/oidc/callback/{workspace_id}` takes the request once, and only if every
+value matches, so a code or link sent to another browser does nothing and values from
+another sign-in cannot be swapped in. It always redirects to `/oidc/complete`, naming
+only an error code if it failed.
 
-The stable identity is the exact verified `(issuer, subject)` pair in
-`external_identities`, linked to one ordinary `users.id`. Accounts are global but
-identities are not trusted globally: a pair signs in only to a workspace whose
-provider is that issuer, and only for an active member. So a provider controlled by
-one workspace's administrator cannot sign anyone in to another workspace.
+Workspace administrators may be strangers to each other, and one can run a malicious
+provider. Three rules contain that:
+
+- **A redirect URI per workspace.** A provider returns a code only to a URI registered
+  for that client. With a shared URI, a malicious provider could relay a browser to
+  another workspace's client and receive that code at its own token endpoint.
+- **Links per workspace.** The identity is the exact verified `(issuer, subject)` pair
+  in `external_identities`, for one workspace and one `users.id`. It signs in only
+  there, while that issuer is the workspace's enabled provider and the person is an
+  active member. A person who uses the same provider in two workspaces links twice.
+- **A secret stays with its client.** Changing the issuer or client ID requires a new
+  client secret, because the token request sends the secret to the issuer.
+
+The authorization URL must be HTTPS, like every other provider address.
 
 An identity is never linked by email alone. It is linked in one of two ways:
 
@@ -42,9 +52,13 @@ An identity is never linked by email alone. It is linked in one of two ways:
   `workspace.manage` this is also the test sign-in that sets `verified_at`, without
   which a provider cannot be enabled.
 
-An identity linked to another account is refused, never moved.
+An identity linked to another account in the workspace is refused, never moved.
 `DELETE /workspace/members/{id}/identity` (`workspace.manage`) removes a member's
-link to the workspace's provider and ends their OIDC sessions in this workspace.
+links in this workspace and ends their OIDC sessions here.
+
+Anyone can start a sign-in and the app sees no client address, so a workspace keeps
+at most 10,000 pending requests and drops the oldest. Each start also fetches the
+provider's metadata, so rate-limit `/api/auth/oidc/start` at your proxy.
 
 Workspace administrators choose the issuer and the provider's metadata chooses the
 other endpoints, so each provider request is checked: HTTPS only (HTTP also under

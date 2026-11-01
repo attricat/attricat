@@ -139,11 +139,25 @@ pub struct AppState {
 pub use self::data_health::DataHealthCache;
 pub use self::operator::OperatorToken;
 
+impl OidcSettings {
+    /// The redirect URI a workspace registers with its provider. Each has its
+    /// own, so a provider only ever returns a code to the workspace whose client
+    /// it belongs to. With a shared one, a workspace administrator's provider
+    /// could relay a browser to another workspace's client and receive that
+    /// code at its own token endpoint.
+    pub fn redirect_uri(&self, workspace_id: Uuid) -> String {
+        format!(
+            "{}/{workspace_id}",
+            self.callback_url.as_str().trim_end_matches('/')
+        )
+    }
+}
+
 /// Deployment-wide OpenID Connect settings.
 #[derive(Clone)]
 pub struct OidcSettings {
-    /// The externally reachable `/api/auth/oidc/callback`, which every
-    /// workspace registers with its provider as the redirect URI.
+    /// The externally reachable `/api/auth/oidc/callback`, below which each
+    /// workspace has its own redirect URI.
     pub callback_url: url::Url,
     /// Hosts of internal providers, exempt from the outbound check that
     /// otherwise refuses non-public addresses. Workspace administrators
@@ -791,7 +805,7 @@ pub fn router(state: AppState) -> Router {
                 .delete(notifications::delete),
         )
         .route("/auth/oidc/start", post(oidc::start))
-        .route("/auth/oidc/callback", get(oidc::callback))
+        .route("/auth/oidc/callback/{workspace_id}", get(oidc::callback))
         .route("/auth/oidc/invitation", post(oidc::invitation_options))
         .route("/auth/oidc/link", get(oidc::link_status).post(oidc::link))
         .route(

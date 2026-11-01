@@ -76,6 +76,7 @@ struct ProviderState {
     login: Mutex<FakeLogin>,
     codes: Mutex<HashMap<String, PendingCode>>,
     userinfo: Mutex<Option<FakeLogin>>,
+    authorization_endpoint: Mutex<Option<String>>,
 }
 
 pub struct FakeOidcProvider {
@@ -93,6 +94,7 @@ impl FakeOidcProvider {
             login: Mutex::new(FakeLogin::new("subject-1", "person@example.test")),
             codes: Mutex::default(),
             userinfo: Mutex::default(),
+            authorization_endpoint: Mutex::default(),
         });
         let router = Router::new()
             .route("/.well-known/openid-configuration", get(configuration))
@@ -111,6 +113,11 @@ impl FakeOidcProvider {
         }
     }
 
+    /// Publishes a different authorization endpoint in the metadata.
+    pub async fn publish_authorization_endpoint(&self, endpoint: &str) {
+        *self.state.authorization_endpoint.lock().await = Some(endpoint.to_owned());
+    }
+
     /// Sets who the next browser visit signs in as.
     pub async fn sign_in_as(&self, login: FakeLogin) {
         *self.state.login.lock().await = login;
@@ -119,9 +126,15 @@ impl FakeOidcProvider {
 
 async fn configuration(State(state): State<Arc<ProviderState>>) -> Json<Value> {
     let issuer = &state.issuer;
+    let authorization_endpoint = state
+        .authorization_endpoint
+        .lock()
+        .await
+        .clone()
+        .unwrap_or_else(|| format!("{issuer}/authorize"));
     Json(json!({
         "issuer": issuer,
-        "authorization_endpoint": format!("{issuer}/authorize"),
+        "authorization_endpoint": authorization_endpoint,
         "token_endpoint": format!("{issuer}/token"),
         "userinfo_endpoint": format!("{issuer}/userinfo"),
         "jwks_uri": format!("{issuer}/jwks"),

@@ -15,7 +15,7 @@ For local setup, migrations, and E2E testing, see [Getting Started](index.md#get
 | `Workspace`        | `workspaces`         | Tenant ownership boundary for all catalog aggregates.       |
 | `User`             | `users`              | Provider-neutral account identity and lifecycle state.      |
 | `LocalPasswordCredential` | `local_password_credentials` | Optional Argon2id credential, one per user.          |
-| `ExternalIdentity` | `external_identities` | Explicit external provider issuer/subject link to a user. |
+| `ExternalIdentity` | `external_identities` | A user's link to an external provider issuer and subject, in one workspace. |
 | `UserLifecycleActionToken` | `user_lifecycle_action_tokens` | Hash-only, expiring, one-time email action.          |
 | `WorkspaceMembership` | `workspace_memberships` | A user's single membership in a workspace.              |
 | `RoleGrant`        | `role_grants`        | Additive role assignment at one authorization scope.        |
