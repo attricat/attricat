@@ -63,6 +63,9 @@ export const ExplorerResultsToolbar = ({
         borderBottom: 1,
         borderColor: 'divider',
         display: 'flex',
+        // On narrow screens the actions wrap below the count and selection.
+        flexWrap: 'wrap',
+        gap: 1,
         justifyContent: 'space-between',
         p: 1,
         pl: 2,
@@ -94,7 +97,15 @@ export const ExplorerResultsToolbar = ({
           </Typography>
         )}
       </Box>
-      <Box sx={{ alignItems: 'center', display: 'flex', gap: 1 }}>
+      <Box
+        sx={{
+          alignItems: 'center',
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 1,
+          ml: 'auto',
+        }}
+      >
         {selectionMode && (
           <ExplorerSelectionActionsMenu
             disabled={selectedItems.length === 0}
