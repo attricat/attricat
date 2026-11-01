@@ -20,3 +20,8 @@ export const bulkEditPolicies = ['per_proposal', 'per_record'] as const;
 export const maxBulkEditMaxRecords = 5_000;
 /** Width of the bulk edit limit field. */
 export const bulkEditLimitFieldWidth = 220;
+
+/** The longest team name the API accepts, in characters. */
+export const teamNameMaxLength = 200;
+/** The longest team code the API accepts; codes are ASCII, so bytes. */
+export const teamCodeMaxLength = 128;

@@ -113,6 +113,24 @@ describe('WorkspaceTeamsSection', () => {
     );
   });
 
+  it('asks for a name instead of sending one made of spaces', async () => {
+    renderSection();
+    await screen.findByText('Quality · qa');
+    fireEvent.click(screen.getByRole('button', { name: 'Create team' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByRole('textbox', { name: /name/i }), {
+      target: { value: '   ' },
+    });
+    fireEvent.change(within(dialog).getByRole('textbox', { name: /code/i }), {
+      target: { value: 'ops' },
+    });
+    fireEvent.submit(dialog.querySelector('form')!);
+    expect(
+      await within(dialog).findByText('This field is required.'),
+    ).toBeTruthy();
+    expect(createTeam).not.toHaveBeenCalled();
+  });
+
   it('edits a team without changing its code', async () => {
     vi.mocked(updateTeam).mockResolvedValue({ ...quality, name: 'QA' });
     const { invalidate } = renderSection();

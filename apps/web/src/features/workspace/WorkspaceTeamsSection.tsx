@@ -32,6 +32,7 @@ import { TeamIcon } from '../../components/systemIcons';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { FormDialog } from '../../components/FormDialog';
+import { teamCodeMaxLength, teamNameMaxLength } from './constants';
 
 type Editing = { team: Team | null } | null;
 /** The team keeps its name in the dialog while it fades out after closing. */
@@ -82,12 +83,22 @@ const TeamDialog = ({
       title={t(team ? 'workspace.editTeamTitle' : 'workspace.createTeam')}
     >
       <Stack spacing={2} sx={{ pt: 1 }}>
-        <form.Field name="name">
+        <form.Field
+          name="name"
+          validators={{
+            // Spaces alone are no name; the API would refuse it.
+            onSubmit: ({ value }) =>
+              value.trim() ? undefined : t('validation.required'),
+          }}
+        >
           {(field) => (
             <TextField
+              error={field.state.meta.errors.length > 0}
+              helperText={field.state.meta.errors[0]}
               label={t('workspace.teamName')}
               onChange={(event) => field.handleChange(event.target.value)}
               required
+              slotProps={{ htmlInput: { maxLength: teamNameMaxLength } }}
               value={field.state.value}
             />
           )}
@@ -95,6 +106,7 @@ const TeamDialog = ({
         <form.Field name="code">
           {(field) => (
             <TextField
+              slotProps={{ htmlInput: { maxLength: teamCodeMaxLength } }}
               disabled={Boolean(team)}
               helperText={t('workspace.teamCodeHelp')}
               label={t('workspace.teamCode')}
