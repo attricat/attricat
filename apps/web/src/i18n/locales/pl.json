@@ -1070,7 +1070,11 @@
     "revisionHistory": "Historia wersji",
     "version": "Wersja",
     "definitionHash": "Skrót definicji",
-    "versionOption": "v{{version}} ({{status}})"
+    "versionOption": "v{{version}} ({{status}})",
+    "blueprintKinds": {
+      "record": "Rekord",
+      "mixin": "Mixin"
+    }
   },
   "definitionEditor": {
     "details": {

@@ -12,6 +12,7 @@ import { lexiconText } from '../lexicon/lexicon';
 import { useCanOn } from '../auth/useCan';
 import { capabilities, accessTargetKinds } from '../auth/capabilities';
 import { monoFontFamily } from '../../app/theme';
+import { blueprintKindLabel } from './constants';
 
 export const BlueprintDetailHeader = ({
   blueprint,
@@ -104,7 +105,10 @@ export const BlueprintDetailHeader = ({
       />
       <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', mt: 1 }}>
         <Chip label={blueprint.code} variant="outlined" />
-        <Chip label={blueprint.kind} variant="outlined" />
+        <Chip
+          label={blueprintKindLabel(t, blueprint.kind)}
+          variant="outlined"
+        />
         <RevisionStatusChip status={blueprint.status} />
         <Chip
           label={t('blueprints.latestVersion', { version: blueprint.version })}
