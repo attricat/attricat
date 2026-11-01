@@ -254,6 +254,16 @@ pub(super) async fn login(
         return Err(ApiError::invalid_credentials());
     };
     state.repository.clear_login_failures(&rate_key).await?;
+    // Checked only after the password, so this reveals nothing to a stranger.
+    let options = state.repository.sign_in_options(workspace.id).await?;
+    if options.password_sign_in == PasswordSignIn::Owners
+        && !state
+            .repository
+            .is_active_workspace_owner(credential.user_id, workspace.id)
+            .await?
+    {
+        return Err(RepositoryError::PasswordSignInDisabled.into());
+    }
     let (session, csrf, expires_at) = issue_session();
     state
         .repository

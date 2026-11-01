@@ -1028,3 +1028,316 @@ async fn abandoned_requests_are_swept(pool: PgPool) {
     harness.server.abort();
     harness.provider.server.abort();
 }
+
+async fn restrict_passwords(pool: &PgPool, workspace: Uuid) {
+    sqlx::query("UPDATE workspace_identity_providers SET password_sign_in = 'owners' WHERE workspace_id = $1")
+        .bind(workspace)
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+async fn password_attempt(harness: &Harness, email: &str, password: &str) -> Response {
+    client()
+        .post(format!("{}/auth/login", harness.base_url))
+        .json(&json!({
+            "login_identifier": "default.local",
+            "email": email,
+            "password": password,
+        }))
+        .send()
+        .await
+        .unwrap()
+}
+
+async fn set_password(pool: &PgPool, user: Uuid) {
+    let hash = hash_password(&Password::new(PASSWORD)).unwrap();
+    sqlx::query("INSERT INTO local_password_credentials (user_id, password_hash) VALUES ($1, $2)")
+        .bind(user)
+        .bind(hash.as_phc())
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn restricting_passwords_leaves_only_owners_and_reveals_nothing(pool: PgPool) {
+    let harness = ready(&pool).await;
+    harness.set_owner_password().await;
+    let (member, _) = harness.sso_member("member@example.test").await;
+    set_password(&pool, member).await;
+    assert_eq!(
+        password_attempt(&harness, "member@example.test", PASSWORD)
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    restrict_passwords(&pool, bootstrap_workspace_id()).await;
+
+    let refused = password_attempt(&harness, "member@example.test", PASSWORD).await;
+    assert_eq!(refused.status(), StatusCode::FORBIDDEN);
+    let body: Value = refused.json().await.unwrap();
+    assert_eq!(body["error"]["code"], "password_sign_in_disabled");
+    // Only someone who already knows the password learns about the restriction.
+    let wrong = password_attempt(&harness, "member@example.test", "Wrong-password-1!").await;
+    assert_eq!(wrong.status(), StatusCode::UNAUTHORIZED);
+
+    // An owner keeps the way back in if the provider fails.
+    assert_eq!(
+        password_attempt(&harness, OWNER_EMAIL, PASSWORD)
+            .await
+            .status(),
+        StatusCode::OK
+    );
+
+    // Other workspaces decide for themselves.
+    let other = Uuid::new_v4();
+    sqlx::query("INSERT INTO workspaces (id, slug, name, login_identifier) VALUES ($1, 'other', 'Other', 'other.example')")
+        .bind(other)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO workspace_memberships (id, workspace_id, user_id) VALUES ($1, $2, $3)",
+    )
+    .bind(Uuid::new_v4())
+    .bind(other)
+    .bind(member)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let elsewhere = client()
+        .post(format!("{}/auth/login", harness.base_url))
+        .json(&json!({
+            "login_identifier": "other.example",
+            "email": "member@example.test",
+            "password": PASSWORD,
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(elsewhere.status(), StatusCode::OK);
+
+    let discovered: Value = client()
+        .post(format!("{}/auth/discover", harness.base_url))
+        .json(&sign_in_body())
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(discovered["password_restricted"], true);
+    harness.server.abort();
+    harness.provider.server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn invitees_need_no_password_where_only_owners_keep_one(pool: PgPool) {
+    let harness = ready(&pool).await;
+    harness.set_owner_password().await;
+    let admin = harness
+        .sign_in_with_password("default.local", OWNER_EMAIL)
+        .await;
+    let invite = |email: &'static str, role: Uuid| {
+        client()
+            .post(format!("{}/workspace/users", harness.base_url))
+            .header("cookie", admin.cookie_header())
+            .header("x-attricat-csrf", admin.csrf_value())
+            .json(&json!({
+                "email": email,
+                "role_id": role,
+                "scope_type": "workspace",
+                "scope_target_id": bootstrap_workspace_id(),
+                "expires_at": chrono::Utc::now() + chrono::Duration::days(3),
+            }))
+            .send()
+    };
+    // Before restricting, a new person gets a password link. It stops working
+    // once only owners may hold one.
+    let early = "early@example.test";
+    assert_eq!(
+        invite(early, VIEWER_ROLE_ID).await.unwrap().status(),
+        StatusCode::CREATED
+    );
+    let early_url = harness.mail.workspace_onboarding_url(early).await.unwrap();
+    restrict_passwords(&pool, bootstrap_workspace_id()).await;
+    let query = |url: &str, name: &str| {
+        Url::parse(url)
+            .unwrap()
+            .query_pairs()
+            .find_map(|(key, value)| (key == name).then(|| value.into_owned()))
+            .unwrap()
+    };
+    let refused = client()
+        .post(format!("{}/onboarding/complete", harness.base_url))
+        .json(&json!({
+            "invitation_secret": query(&early_url, "invitation_secret"),
+            "onboarding_secret": query(&early_url, "onboarding_secret"),
+            "password": PASSWORD,
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(refused.status(), StatusCode::FORBIDDEN);
+
+    // Now a new person gets an acceptance link, and can use it through the provider.
+    let late = "late@example.test";
+    assert_eq!(
+        invite(late, VIEWER_ROLE_ID).await.unwrap().status(),
+        StatusCode::CREATED
+    );
+    assert!(harness.mail.workspace_onboarding_url(late).await.is_none());
+    let url = harness.mail.workspace_invitation_url(late).await.unwrap();
+    let secret = query(&url, "secret");
+    let options: Value = client()
+        .post(format!("{}/auth/oidc/invitation", harness.base_url))
+        .json(&json!({ "secret": secret }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(options["login_identifier"], "default.local");
+    assert_eq!(options["display_name"], "Fake SSO");
+    let unknown = client()
+        .post(format!("{}/auth/oidc/invitation", harness.base_url))
+        .json(&json!({ "secret": "not-a-real-secret" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(unknown.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+    harness
+        .provider
+        .sign_in_as(FakeLogin::new("late-subject", late))
+        .await;
+    let mut browser = Browser::default();
+    let location = harness
+        .sign_in(
+            &mut browser,
+            &json!({ "login_identifier": "default.local", "invitation_secret": secret }),
+        )
+        .await;
+    assert_eq!(error_of(&location), None);
+    let session: Value = harness.session_of(&browser).await.json().await.unwrap();
+    assert_eq!(session["email"], late);
+
+    // A new owner still gets a password, as the way back in.
+    let owner = "new-owner@example.test";
+    assert_eq!(
+        invite(
+            owner,
+            "00000000-0000-4000-8000-000000000101".parse().unwrap()
+        )
+        .await
+        .unwrap()
+        .status(),
+        StatusCode::CREATED
+    );
+    assert!(harness.mail.workspace_onboarding_url(owner).await.is_some());
+    harness.server.abort();
+    harness.provider.server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn an_invitation_can_create_the_account_it_addresses(pool: PgPool) {
+    let harness = ready(&pool).await;
+    harness.set_owner_password().await;
+    let admin = harness
+        .sign_in_with_password("default.local", OWNER_EMAIL)
+        .await;
+    let email = "brand-new@example.test";
+    let created = client()
+        .post(format!("{}/workspace/invitations", harness.base_url))
+        .header("cookie", admin.cookie_header())
+        .header("x-attricat-csrf", admin.csrf_value())
+        .json(&json!({
+            "email": email,
+            "role_id": VIEWER_ROLE_ID,
+            "scope_type": "workspace",
+            "scope_target_id": bootstrap_workspace_id(),
+            "expires_at": chrono::Utc::now() + chrono::Duration::days(3),
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let url = harness.mail.workspace_invitation_url(email).await.unwrap();
+    let secret = Url::parse(&url)
+        .unwrap()
+        .query_pairs()
+        .find_map(|(key, value)| (key == "secret").then(|| value.into_owned()))
+        .unwrap();
+    harness
+        .provider
+        .sign_in_as(FakeLogin::new("brand-new-subject", email))
+        .await;
+    let mut browser = Browser::default();
+    let location = harness
+        .sign_in(
+            &mut browser,
+            &json!({ "login_identifier": "default.local", "invitation_secret": secret }),
+        )
+        .await;
+    assert_eq!(error_of(&location), None);
+    assert_eq!(harness.session_of(&browser).await.status(), StatusCode::OK);
+    harness.server.abort();
+    harness.provider.server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn deactivating_a_member_revokes_their_tokens_for_good(pool: PgPool) {
+    let harness = ready(&pool).await;
+    harness.set_owner_password().await;
+    let (member, membership) = harness.sso_member("member@example.test").await;
+    grant_role(&pool, membership, VIEWER_ROLE_ID, GrantScope::Workspace).await;
+    let secret = "cat_pat_offboarding_test";
+    let digest = {
+        use sha2::{Digest, Sha256};
+        Sha256::digest(secret.as_bytes()).to_vec()
+    };
+    let token = Uuid::new_v4();
+    sqlx::query("INSERT INTO personal_api_tokens (id, user_id, workspace_id, label, token_digest) VALUES ($1, $2, $3, 'cli', $4)")
+        .bind(token)
+        .bind(member)
+        .bind(bootstrap_workspace_id())
+        .bind(&digest)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let session_with_token = || {
+        client()
+            .get(format!("{}/auth/session", harness.base_url))
+            .bearer_auth(secret)
+            .send()
+    };
+    assert_eq!(session_with_token().await.unwrap().status(), StatusCode::OK);
+    let admin = harness
+        .sign_in_with_password("default.local", OWNER_EMAIL)
+        .await;
+    let set_state = |state: &'static str| {
+        client()
+            .put(format!(
+                "{}/workspace/members/{membership}",
+                harness.base_url
+            ))
+            .header("cookie", admin.cookie_header())
+            .header("x-attricat-csrf", admin.csrf_value())
+            .json(&json!({ "state": state }))
+            .send()
+    };
+    assert!(set_state("inactive").await.unwrap().status().is_success());
+    assert_eq!(
+        session_with_token().await.unwrap().status(),
+        StatusCode::UNAUTHORIZED
+    );
+    assert!(set_state("active").await.unwrap().status().is_success());
+    assert_eq!(
+        session_with_token().await.unwrap().status(),
+        StatusCode::UNAUTHORIZED
+    );
+    harness.server.abort();
+    harness.provider.server.abort();
+}

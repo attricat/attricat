@@ -64,6 +64,37 @@ async fn token_client(user: Uuid, base: &str) -> Client {
     Client::builder().default_headers(headers).build().unwrap()
 }
 
+/// A credential that outlives losing this workspace: a token issued in another.
+async fn token_in_another_workspace(pool: &PgPool, user: Uuid) -> Client {
+    let workspace = Uuid::new_v4();
+    sqlx::query("INSERT INTO workspaces (id, slug, name, login_identifier) VALUES ($1, 'elsewhere', 'Elsewhere', 'elsewhere.example')")
+        .bind(workspace)
+        .execute(pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO workspace_memberships (id, workspace_id, user_id) VALUES ($1, $2, $3)",
+    )
+    .bind(Uuid::new_v4())
+    .bind(workspace)
+    .bind(user)
+    .execute(pool)
+    .await
+    .unwrap();
+    let secret = format!("cat_pat_{}", Uuid::new_v4());
+    sqlx::query("INSERT INTO personal_api_tokens (id, user_id, workspace_id, label, token_digest) VALUES ($1, $2, $3, 'elsewhere', $4)")
+        .bind(Uuid::new_v4())
+        .bind(user)
+        .bind(workspace)
+        .bind(Sha256::digest(secret.as_bytes()).as_slice())
+        .execute(pool)
+        .await
+        .unwrap();
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert("authorization", format!("Bearer {secret}").parse().unwrap());
+    Client::builder().default_headers(headers).build().unwrap()
+}
+
 async fn accept(client: &Client, base: &str, secret: &str) -> reqwest::Response {
     client
         .post(format!("{base}/workspace/invitations/accept"))
@@ -79,6 +110,7 @@ async fn old_invitation_cannot_reactivate_a_disabled_member_but_a_new_one_can(po
     let repository = AttricatRepository::new(pool.clone(), bootstrap_workspace_id());
     let (user, membership, _) = member(&pool).await;
     let client = token_client(user, &base).await;
+    let elsewhere = token_in_another_workspace(&pool, user).await;
     let old = invitation(&repository, user).await;
     authenticated_client()
         .put(format!("{base}/workspace/members/{membership}"))
@@ -88,6 +120,7 @@ async fn old_invitation_cannot_reactivate_a_disabled_member_but_a_new_one_can(po
         .unwrap()
         .error_for_status()
         .unwrap();
+    // Deactivation revoked the token issued in this workspace.
     assert_eq!(
         client
             .get(format!("{base}/auth/session"))
@@ -95,16 +128,16 @@ async fn old_invitation_cannot_reactivate_a_disabled_member_but_a_new_one_can(po
             .await
             .unwrap()
             .status(),
-        StatusCode::FORBIDDEN
+        StatusCode::UNAUTHORIZED
     );
-    let response = accept(&client, &base, &old).await;
+    let response = accept(&elsewhere, &base, &old).await;
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
     assert_eq!(
         response.json::<Value>().await.unwrap()["error"]["code"],
         "invitation_invalid"
     );
     assert_eq!(
-        client
+        client_for(user)
             .get(format!("{base}/auth/session"))
             .send()
             .await
@@ -115,7 +148,7 @@ async fn old_invitation_cannot_reactivate_a_disabled_member_but_a_new_one_can(po
     // A new invitation is an explicit new authorization by an administrator.
     let fresh = invitation(&repository, user).await;
     assert_eq!(
-        accept(&client, &base, &fresh).await.status(),
+        accept(&elsewhere, &base, &fresh).await.status(),
         StatusCode::OK
     );
     // The inviter learns that the invitation was accepted.
@@ -128,7 +161,7 @@ async fn old_invitation_cannot_reactivate_a_disabled_member_but_a_new_one_can(po
     assert_eq!(inviter_inbox[0].actor_user_id, Some(user));
     assert_eq!(inviter_inbox[0].subject, None);
     assert_eq!(
-        client
+        client_for(user)
             .get(format!("{base}/auth/session"))
             .send()
             .await

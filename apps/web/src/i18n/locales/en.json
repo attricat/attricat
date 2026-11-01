@@ -150,6 +150,7 @@
     "password_missing_number": "The password must include a number.",
     "password_missing_symbol": "The password must include a symbol.",
     "password_reset_invalid": "This password reset link is invalid or expired.",
+    "password_sign_in_disabled": "This workspace signs in through its identity provider.",
     "password_too_long": "The password is too long.",
     "password_too_short": "The password must be at least {{min}} characters.",
     "payload_too_large": "The request is larger than the size limit.",

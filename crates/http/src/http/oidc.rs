@@ -121,10 +121,7 @@ async fn provider_request(
     .map_err(|_| ProviderHttpError("provider DNS lookup timed out"))?
     .map_err(|_| ProviderHttpError("provider DNS lookup failed"))?
     .collect();
-    let allowed = settings
-        .allowed_private_hosts
-        .iter()
-        .any(|allowed| *allowed == host);
+    let allowed = settings.allowed_private_hosts.contains(&host);
     if addresses.is_empty()
         || (!allowed
             && addresses
@@ -355,6 +352,43 @@ pub(super) async fn start(
         None => OidcIntent::SignIn,
     };
     begin(&state, workspace.id, &provider, intent).await
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct InvitationOptionsRequest {
+    secret: String,
+}
+
+#[derive(Serialize)]
+pub(super) struct InvitationOptions {
+    login_identifier: String,
+    /// The workspace's provider, when an invitee can accept by signing in.
+    display_name: Option<String>,
+}
+
+/// `POST /auth/oidc/invitation`, public. Tells someone holding an invitation's
+/// secret, and not yet signed in, how they can accept it. The secret is what
+/// entitles them to learn which workspace it is for.
+pub(super) async fn invitation_options(
+    State(state): State<AppState>,
+    ApiJson(input): ApiJson<InvitationOptionsRequest>,
+) -> Result<Json<InvitationOptions>, ApiError> {
+    let (workspace_id, login_identifier) = state
+        .repository
+        .invitation_login_identifier(&digest(&input.secret))
+        .await?
+        .ok_or(RepositoryError::InvitationInvalid)?;
+    let display_name = state
+        .repository
+        .sign_in_options(workspace_id)
+        .await?
+        .provider
+        .filter(|_| state.oidc.is_some() && !state.demo_mode);
+    Ok(Json(InvitationOptions {
+        login_identifier,
+        display_name,
+    }))
 }
 
 /// `POST /auth/oidc/link`: links the signed-in account to its identity at the

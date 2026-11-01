@@ -792,6 +792,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/auth/oidc/start", post(oidc::start))
         .route("/auth/oidc/callback", get(oidc::callback))
+        .route("/auth/oidc/invitation", post(oidc::invitation_options))
         .route("/auth/oidc/link", get(oidc::link_status).post(oidc::link))
         .route(
             "/workspace/members/{member_id}/identity",

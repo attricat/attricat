@@ -669,6 +669,18 @@ that operation's status and error code. The message starts with
 targets its record and records `metadata.batch` with `operation_index` and
 `operation_count`; all share the request and correlation IDs.
 
+## Single sign-on
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/auth/oidc/start` | Public. Start signing in from `login_identifier` and an optional `invitation_secret`. Returns `authorization_url` and sets a cookie. |
+| `GET` | `/auth/oidc/callback` | Public. The provider's redirect target. Redirects to `/oidc/complete`, with `?error=<code>` on failure or `?linked=true` after linking. |
+| `POST` | `/auth/oidc/invitation` | Public. From an invitation's `secret`, returns its `login_identifier` and the provider's `display_name`, or `null`. |
+| `GET`, `POST` | `/auth/oidc/link` | The caller's link status; start linking the signed-in account. `POST` needs a browser session. |
+| `DELETE` | `/workspace/members/{member_id}/identity` | Remove a member's link to the workspace's provider (`workspace.manage`). |
+
+See [OpenID Connect sign-in](authentication.md#openid-connect-sign-in).
+
 ## Identity provider
 
 `GET`, `PUT`, `PATCH` and `DELETE /workspace/identity-provider` manage the

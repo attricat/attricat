@@ -362,6 +362,7 @@ fn is_public_route(path: &str) -> bool {
             | "/auth/discover"
             | "/auth/oidc/start"
             | "/auth/oidc/callback"
+            | "/auth/oidc/invitation"
             | "/auth/sample-logins"
             | "/auth/password-reset"
             | "/auth/password-reset/confirm"

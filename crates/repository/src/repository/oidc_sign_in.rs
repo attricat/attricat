@@ -244,18 +244,21 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
     ) -> Result<Uuid, RepositoryError> {
         let mut tx = self.pool.begin().await?;
         Self::lock_invitation_acceptance_on(&mut tx, invitation_digest).await?;
-        let invitee: Option<(Uuid, Uuid, String)> = sqlx::query_as(
-            "SELECT i.id, u.id, i.invitee_email FROM workspace_invitations i JOIN users u ON u.email = i.invitee_email WHERE i.token_digest = $1 AND i.workspace_id = $2 AND i.accepted_at IS NULL AND i.revoked_at IS NULL AND i.expires_at > clock_timestamp()",
+        let invitation: Option<(Uuid, String)> = sqlx::query_as(
+            "SELECT id, invitee_email FROM workspace_invitations WHERE token_digest = $1 AND workspace_id = $2 AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > clock_timestamp()",
         )
         .bind(invitation_digest)
         .bind(workspace_id)
         .fetch_optional(&mut *tx)
         .await?;
-        let (invitation_id, user_id, invitee_email) =
-            invitee.ok_or(RepositoryError::InvitationInvalid)?;
+        let (invitation_id, invitee_email) =
+            invitation.ok_or(RepositoryError::InvitationInvalid)?;
         if email.trim().to_lowercase() != invitee_email {
             return Err(RepositoryError::InvitationEmailMismatch);
         }
+        let user_id = Self::upsert_invited_user_on(&mut tx, &invitee_email, None)
+            .await?
+            .user_id;
         Self::link_identity_on(&mut tx, user_id, issuer, subject).await?;
         // The onboarding link would set a password this person does not need.
         sqlx::query("UPDATE user_lifecycle_action_tokens a SET revoked_at = clock_timestamp() FROM workspace_invitation_onboarding o WHERE o.invitation_id = $1 AND a.token_digest = o.action_token_digest AND a.consumed_at IS NULL AND a.revoked_at IS NULL")
@@ -273,6 +276,20 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
             .commit_mutation(tx)
             .await?;
         Ok(user_id)
+    }
+
+    /// The identifier of the workspace a pending invitation belongs to, for
+    /// someone holding its secret and not yet signed in.
+    pub async fn invitation_login_identifier(
+        &self,
+        invitation_digest: &[u8],
+    ) -> Result<Option<(Uuid, String)>, RepositoryError> {
+        Ok(sqlx::query_as(
+            "SELECT w.id, w.login_identifier FROM workspace_invitations i JOIN workspaces w ON w.id = i.workspace_id WHERE i.token_digest = $1 AND i.accepted_at IS NULL AND i.revoked_at IS NULL AND i.expires_at > clock_timestamp() AND w.deleted_at IS NULL",
+        )
+        .bind(invitation_digest)
+        .fetch_optional(&self.pool)
+        .await?)
     }
 
     /// Whether an account has an identity at `issuer`.

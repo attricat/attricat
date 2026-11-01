@@ -132,6 +132,11 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         {
             return Err(RepositoryError::InvitationInvalid);
         }
+        // Where only owners keep a password, anyone else signs in through the
+        // provider and has no password to set.
+        let needs_password_setup = !user.credential_exists
+            && (role_id == OWNER_ROLE_ID
+                || !Self::passwords_restricted_on(&mut tx, workspace_id).await?);
         Self::insert_invitation_on(
             &mut tx,
             &user,
@@ -146,14 +151,14 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
                 invitation_digest,
                 expires_at,
             ),
-            action_digest,
+            action_digest.filter(|_| needs_password_setup),
         )
         .await?;
         self.commit_mutation(tx).await?;
         Ok(CreatedWorkspaceUser {
             user_id: user.user_id,
             invitation_id: Some(invitation_id),
-            needs_password_setup: !user.credential_exists,
+            needs_password_setup,
         })
     }
 
@@ -198,10 +203,12 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         let user_id = user.user_id;
         sqlx::query("INSERT INTO workspace_invitations (id, workspace_id, invitee_email, inviter_user_id, role_id, scope_type, scope_target_id, token_digest, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)")
             .bind(invitation_id).bind(workspace_id).bind(email).bind(inviter_id).bind(role_id).bind(&scope_type).bind(scope_target_id).bind(invitation_digest).bind(expires_at).execute(&mut **tx).await?;
-        if !user.credential_exists {
-            let action_digest = action_digest
-                .filter(|digest| digest.len() == TOKEN_DIGEST_BYTES)
-                .ok_or(RepositoryError::InvitationInvalid)?;
+        if !user.credential_exists
+            && let Some(action_digest) = action_digest
+        {
+            if action_digest.len() != TOKEN_DIGEST_BYTES {
+                return Err(RepositoryError::InvitationInvalid);
+            }
             if !user.active || !user.verified {
                 return Err(RepositoryError::InvitationInvalid);
             }
@@ -240,6 +247,11 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
             .bind(invitation_digest).bind(action_digest).fetch_optional(&mut *tx).await?.ok_or(RepositoryError::InvitationInvalid)?;
         let user_id: Uuid = row.try_get("user_id")?;
         let workspace_id: Uuid = row.try_get("workspace_id")?;
+        if row.try_get::<Uuid, _>("role_id")? != OWNER_ROLE_ID
+            && Self::passwords_restricted_on(&mut tx, workspace_id).await?
+        {
+            return Err(RepositoryError::PasswordSignInDisabled);
+        }
         let action_consumed = sqlx::query("UPDATE user_lifecycle_action_tokens SET consumed_at = clock_timestamp() WHERE token_digest = $1 AND consumed_at IS NULL AND revoked_at IS NULL")
             .bind(action_digest).execute(&mut *tx).await?.rows_affected() == 1;
         if !action_consumed {
@@ -437,7 +449,15 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         let user = sqlx::query("UPDATE workspace_memberships SET state = $1, updated_at = clock_timestamp() WHERE id = $2 AND workspace_id = $3 RETURNING user_id").bind(state.as_str()).bind(id).bind(workspace_id).fetch_optional(&mut *tx).await?;
         if let Some(user) = user {
             if state == MembershipState::Inactive {
-                self.revoke_user_access(&mut tx, user.try_get("user_id")?, workspace_id)
+                let user_id: Uuid = user.try_get("user_id")?;
+                self.revoke_user_access(&mut tx, user_id, workspace_id)
+                    .await?;
+                // Offboarding must not depend on someone finding these later,
+                // and reactivating a member must not bring them back.
+                sqlx::query("UPDATE personal_api_tokens SET revoked_at = clock_timestamp() WHERE user_id = $1 AND workspace_id = $2 AND revoked_at IS NULL")
+                    .bind(user_id)
+                    .bind(workspace_id)
+                    .execute(&mut *tx)
                     .await?;
             }
             self.commit_mutation(tx).await?;

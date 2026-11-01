@@ -81,6 +81,7 @@
     "password_missing_number",
     "password_missing_symbol",
     "password_reset_invalid",
+    "password_sign_in_disabled",
     "password_too_long",
     "password_too_short",
     "payload_too_large",

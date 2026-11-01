@@ -231,6 +231,31 @@ impl AttricatRepository {
 }
 
 impl<S: super::RepositoryScope> AttricatRepository<S> {
+    /// Whether only owners may use a password in this workspace.
+    pub(super) async fn passwords_restricted_on(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        workspace_id: Uuid,
+    ) -> Result<bool, RepositoryError> {
+        Ok(sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM workspace_identity_providers WHERE workspace_id = $1 AND enabled AND password_sign_in = $2)",
+        )
+        .bind(workspace_id)
+        .bind(PasswordSignIn::Owners.as_str())
+        .fetch_one(&mut **tx)
+        .await?)
+    }
+
+    /// Whether this user is an active owner of the workspace, who keeps a
+    /// password as the way back in if the provider fails.
+    pub async fn is_active_workspace_owner(
+        &self,
+        user_id: Uuid,
+        workspace_id: Uuid,
+    ) -> Result<bool, RepositoryError> {
+        let mut connection = self.pool.acquire().await?;
+        Self::active_owner_on(&mut connection, user_id, workspace_id).await
+    }
+
     /// The workspace's provider with its secret decrypted, for a sign-in.
     pub async fn identity_provider_for_sign_in(
         &self,

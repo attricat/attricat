@@ -122,6 +122,7 @@ error_codes! {
     PasswordMissingNumber = "password_missing_number",
     PasswordMissingSymbol = "password_missing_symbol",
     PasswordResetInvalid = "password_reset_invalid",
+    PasswordSignInDisabled = "password_sign_in_disabled",
     PasswordTooLong = "password_too_long",
     PasswordTooShort = "password_too_short",
     PayloadTooLarge = "payload_too_large",
@@ -391,6 +392,7 @@ impl RepositoryError {
             Self::LoginIdentifierTaken => plain(Conflict, Code::LoginIdentifierTaken),
             Self::WorkspaceConflict => plain(Conflict, Code::WorkspaceConflict),
             Self::WorkspaceOwnerExists => plain(Conflict, Code::WorkspaceOwnerExists),
+            Self::PasswordSignInDisabled => plain(Forbidden, Code::PasswordSignInDisabled),
             Self::IdentityLinkedElsewhere => plain(Conflict, Code::OidcIdentityLinkedElsewhere),
             Self::InvitationEmailMismatch => plain(Unprocessable, Code::OidcEmailMismatch),
             Self::IdentityProviderSecretRequired => {
