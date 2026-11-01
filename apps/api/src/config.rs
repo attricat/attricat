@@ -77,6 +77,7 @@ pub mod secret {
     pub const FILE_WORKER_METRICS_TOKEN: &str = "file_worker_metrics_token";
     pub const EXTENSION_CREDENTIAL_KEY: &str = "extension_credential_key";
     pub const OPERATOR_API_TOKEN: &str = "operator_api_token";
+    pub const IDENTITY_PROVIDER_CREDENTIAL_KEY: &str = "identity_provider_credential_key";
 }
 
 /// Environment variables that used to carry a secret. Startup refuses them
@@ -136,12 +137,26 @@ pub struct DatabaseConfig {
     pub auto_migrate: bool,
 }
 
+/// Deployment settings for signing in through workspaces' identity providers.
+/// Without them, workspaces can store a provider but cannot use it.
+pub struct OidcConfig {
+    /// `OIDC_CALLBACK_URL`, ending in `/api/auth/oidc/callback`.
+    pub callback_url: url::Url,
+    /// `OIDC_ALLOWED_PRIVATE_HOSTS`, comma-separated.
+    pub allowed_private_hosts: Vec<String>,
+    /// The contents of the PEM file named by `OIDC_CA_FILE`.
+    pub extra_root_certificates_pem: Option<Vec<u8>>,
+    /// The `identity_provider_credential_key` secret.
+    pub credential_key: [u8; 32],
+}
+
 pub struct HttpConfig {
     pub bind_addr: SocketAddr,
     pub web_dist_dir: Option<String>,
     pub session_cookie_secure: bool,
     pub devtools_enabled: bool,
     pub operator_api_token: Option<SecretString>,
+    pub oidc: Option<OidcConfig>,
     pub request_timeout: Duration,
     pub max_concurrent_requests: usize,
     pub default_body_limit: usize,
@@ -318,6 +333,7 @@ impl Config {
                 session_cookie_secure: source.boolean("SESSION_COOKIE_SECURE", true)?,
                 devtools_enabled,
                 operator_api_token: operator_api_token(source)?,
+                oidc: oidc_config(source)?,
                 request_timeout: Duration::from_secs(source.positive(
                     "HTTP_REQUEST_TIMEOUT_SECONDS",
                     DEFAULT_HTTP_REQUEST_TIMEOUT_SECONDS as u64,
@@ -536,6 +552,46 @@ fn oauth_return_url(source: &Source) -> Result<Option<url::Url>, ConfigError> {
         .transpose()
 }
 
+fn oidc_config(source: &Source) -> Result<Option<OidcConfig>, ConfigError> {
+    let Some(callback) = source.var("OIDC_CALLBACK_URL") else {
+        return Ok(None);
+    };
+    let callback_url = plain_http_url(callback)
+        .filter(|url| url.path().ends_with("/api/auth/oidc/callback"))
+        .ok_or("OIDC_CALLBACK_URL must be an HTTP(S) URL ending in /api/auth/oidc/callback")?;
+    let credential_key = source
+        .secret(secret::IDENTITY_PROVIDER_CREDENTIAL_KEY)?
+        .ok_or("OIDC_CALLBACK_URL requires the identity_provider_credential_key secret")?;
+    let credential_key = base64_key(&credential_key)
+        .ok_or("the identity_provider_credential_key secret must be 32 base64-encoded bytes")?;
+    let extra_root_certificates_pem = source
+        .var("OIDC_CA_FILE")
+        .map(|path| {
+            fs::read(path).map_err(|error| format!("cannot read OIDC_CA_FILE {path}: {error}"))
+        })
+        .transpose()?;
+    Ok(Some(OidcConfig {
+        callback_url,
+        allowed_private_hosts: source
+            .var("OIDC_ALLOWED_PRIVATE_HOSTS")
+            .unwrap_or_default()
+            .split(',')
+            .map(|host| host.trim().to_lowercase())
+            .filter(|host| !host.is_empty())
+            .collect(),
+        extra_root_certificates_pem,
+        credential_key,
+    }))
+}
+
+fn base64_key(secret: &SecretString) -> Option<[u8; 32]> {
+    use base64::Engine as _;
+    base64::engine::general_purpose::STANDARD
+        .decode(secrecy::ExposeSecret::expose_secret(secret).trim())
+        .ok()
+        .and_then(|bytes| <[u8; 32]>::try_from(bytes).ok())
+}
+
 fn operator_api_token(source: &Source) -> Result<Option<SecretString>, ConfigError> {
     let token = source.secret(secret::OPERATOR_API_TOKEN)?;
     if token.as_ref().is_some_and(|token| {
@@ -550,14 +606,10 @@ fn operator_api_token(source: &Source) -> Result<Option<SecretString>, ConfigErr
 }
 
 fn credential_key(source: &Source) -> Result<Option<[u8; 32]>, ConfigError> {
-    use base64::Engine as _;
     let Some(secret) = source.secret(secret::EXTENSION_CREDENTIAL_KEY)? else {
         return Ok(None);
     };
-    base64::engine::general_purpose::STANDARD
-        .decode(secrecy::ExposeSecret::expose_secret(&secret).trim())
-        .ok()
-        .and_then(|bytes| <[u8; 32]>::try_from(bytes).ok())
+    base64_key(&secret)
         .map(Some)
         .ok_or_else(|| "the extension_credential_key secret must be 32 base64-encoded bytes".into())
 }
@@ -821,6 +873,53 @@ mod tests {
         assert!(!config.bootstrap.sample_accounts);
         assert_eq!(config.file_worker.poll_interval, Duration::from_millis(500));
         assert_eq!(config.file_worker.concurrency, 4);
+    }
+
+    #[test]
+    fn oidc_needs_a_callback_route_and_a_credential_key() {
+        let config = load(&required_secrets(), &[]).unwrap();
+        assert!(config.http.oidc.is_none());
+        const CALLBACK: &str = "https://attricat.test/api/auth/oidc/callback";
+        let error = load(&required_secrets(), &[("OIDC_CALLBACK_URL", CALLBACK)])
+            .err()
+            .unwrap();
+        assert!(
+            error
+                .to_string()
+                .contains(secret::IDENTITY_PROVIDER_CREDENTIAL_KEY)
+        );
+        let with_key = |key: &str| {
+            Secrets::new(&[
+                (secret::DATABASE_URL, "postgres://db"),
+                (secret::S3_SECRET_ACCESS_KEY, "s3-secret"),
+                (secret::IDENTITY_PROVIDER_CREDENTIAL_KEY, key),
+            ])
+        };
+        assert!(load(&with_key("c2hvcnQ="), &[("OIDC_CALLBACK_URL", CALLBACK)]).is_err());
+        let key = "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=";
+        assert!(
+            load(
+                &with_key(key),
+                &[("OIDC_CALLBACK_URL", "https://attricat.test/x")]
+            )
+            .is_err()
+        );
+        let oidc = load(
+            &with_key(key),
+            &[
+                ("OIDC_CALLBACK_URL", CALLBACK),
+                (
+                    "OIDC_ALLOWED_PRIVATE_HOSTS",
+                    " IdP.corp.example , ,keycloak",
+                ),
+            ],
+        )
+        .unwrap()
+        .http
+        .oidc
+        .unwrap();
+        assert_eq!(oidc.credential_key, [1; 32]);
+        assert_eq!(oidc.allowed_private_hosts, ["idp.corp.example", "keycloak"]);
     }
 
     #[test]

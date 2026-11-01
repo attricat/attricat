@@ -113,6 +113,7 @@ mod files;
 mod generated_sequences;
 mod generations;
 mod health;
+mod identity_providers;
 mod leadership;
 mod lexicon;
 mod members;
@@ -135,6 +136,7 @@ mod roles;
 mod rules;
 mod saved_views;
 mod scope;
+mod sealing;
 mod search_page;
 mod search_scope;
 mod sessions;
@@ -178,6 +180,10 @@ pub use checks::{
     CheckSource, CheckTransition, CheckViolation, MAX_REPORTED_VIOLATIONS, PublicationReadiness,
 };
 pub use error_codes::{ErrorClass, ErrorCode, ErrorDescription};
+pub use identity_providers::{
+    IdentityProvider, IdentityProviderInput, IdentityProviderSignIn, SignInOptions,
+    use_identity_provider_credential_key,
+};
 pub use lexicon::{LexiconEntry, LexiconImportMode, LexiconImportSummary};
 pub use notifications::{
     MAX_NOTIFICATION_BODY_LENGTH, MAX_NOTIFICATION_TITLE_LENGTH, NOTIFICATION_PAGE_SIZE,

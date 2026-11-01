@@ -669,6 +669,29 @@ that operation's status and error code. The message starts with
 targets its record and records `metadata.batch` with `operation_index` and
 `operation_count`; all share the request and correlation IDs.
 
+## Identity provider
+
+`GET`, `PUT`, `PATCH` and `DELETE /workspace/identity-provider` manage the
+workspace's OpenID Connect provider and require `workspace.manage`; a workspace
+has at most one. The operator API has the same operations for any workspace.
+
+`PUT` takes `issuer`, `client_id`, `display_name` and `client_secret`. The secret
+is required for a new provider, otherwise leaving it out keeps the stored one,
+and no response ever includes it. The issuer is an HTTPS URL compared exactly, so
+keep any trailing slash the provider uses. Each response adds `redirect_uri`, the
+deployment's callback address to register with the provider, which is `null` when
+`OIDC_CALLBACK_URL` is unset.
+
+A new provider is unverified and off. A test sign-in sets `verified_at`, and only
+then does `PATCH { "enabled": true }` succeed, or the call fails with
+`409 identity_provider_not_verified`. `PATCH { "password_sign_in": "owners" }`
+needs an enabled provider, or fails with `409 identity_provider_not_enabled`.
+Changing the issuer or client ID discards verification, turns the provider off
+and restores password sign-in for everyone, because the new settings are
+unproven. Changing the name or the secret does not. Turning it off also restores
+password sign-in. These changes are audited as `workspace.identity_provider.update`
+and `workspace.identity_provider.delete`.
+
 ## Operator API
 
 Below `/api/operator`, for whoever runs the deployment rather than a member of
@@ -685,6 +708,7 @@ at the proxy so that only trusted networks reach it.
 | `GET` | `/operator/workspaces` | Workspaces, oldest first, with `limit`, `offset` and `x-next-offset`. |
 | `GET` | `/operator/workspaces/{id}` | One workspace. |
 | `POST` | `/operator/workspaces/{id}/owner-invitation` | Replace the owner invitation. |
+| `GET`, `PUT`, `PATCH`, `DELETE` | `/operator/workspaces/{id}/identity-provider` | Manage a workspace's [identity provider](#identity-provider). |
 
 `PUT` takes `name`, `login_identifier`, `owner_email` and an optional
 `owner_display_name`. The caller generates the UUID, which makes a retry safe:

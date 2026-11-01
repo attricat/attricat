@@ -9,7 +9,8 @@ use api::{
     extension_runtime::{self, ExtensionRuntime, ExtensionRuntimeConfig},
     file_access::AllowFileAccess,
     http::{
-        AppState, BuildInfo, OperatorToken, SampleAccount, SampleLogins, StreamControl, router,
+        AppState, BuildInfo, OidcSettings, OperatorToken, SampleAccount, SampleLogins,
+        StreamControl, router,
     },
     mail::SmtpMailDelivery,
     maintenance,
@@ -36,7 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         telemetry,
         database,
         storage,
-        http,
+        mut http,
         bootstrap,
         mail,
         cache,
@@ -189,6 +190,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .max_connections(task_pool_connections)
         .connect(database_url)
         .await?;
+
+    let oidc_settings = http.oidc.take().map(|oidc| {
+        api::repository::use_identity_provider_credential_key(oidc.credential_key);
+        OidcSettings {
+            callback_url: oidc.callback_url,
+            allowed_private_hosts: oidc.allowed_private_hosts.into(),
+            extra_root_certificates_pem: oidc.extra_root_certificates_pem.map(Into::into),
+        }
+    });
 
     let mail_delivery = Arc::new(SmtpMailDelivery::new(
         &mail.smtp_host,
@@ -372,6 +382,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             default_body_limit: http.default_body_limit,
             devtools_enabled: http.devtools_enabled,
             demo_mode,
+            oidc: oidc_settings,
             operator_token: http
                 .operator_api_token
                 .as_ref()

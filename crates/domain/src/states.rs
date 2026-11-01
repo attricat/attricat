@@ -10,6 +10,15 @@ crate::code_enum! {
 }
 
 crate::code_enum! {
+    /// Who may sign in to a workspace with a password once it has a provider.
+    pub enum PasswordSignIn (UnknownPasswordSignIn: "password sign-in") {
+        All => "all",
+        /// Owners keep a password as the way back in if the provider fails.
+        Owners => "owners",
+    }
+}
+
+crate::code_enum! {
     /// Whether an installed extension runs in its workspace.
     pub enum ExtensionState (UnknownExtensionState: "extension state") {
         Disabled => "disabled",

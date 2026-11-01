@@ -15,7 +15,7 @@ const LOGIN_IDENTIFIER_BYTES: std::ops::RangeInclusive<usize> = 3..=253;
 const DOMAIN_LABEL_MAX_BYTES: usize = 63;
 const TOP_LEVEL_LABEL_MIN_BYTES: usize = 2;
 const WORKSPACE_GRANT_SCOPE: &str = "workspace";
-const OPERATOR_ACTOR: &str = "operator";
+pub(super) const OPERATOR_ACTOR: &str = "operator";
 const WORKSPACE_CREATED_ACTION: &str = "workspace.create";
 const OWNER_INVITED_ACTION: &str = "workspace.owner_invitation.create";
 

@@ -3,6 +3,7 @@ use serde_json::{Map, Value, json};
 use uuid::Uuid;
 
 use crate::cli::PageArgs;
+use crate::commands::identity_provider::{IdentityProviderCommand, identity_provider_command};
 use crate::error::CliError;
 use crate::transport::{Api, segment, with_query};
 
@@ -39,6 +40,12 @@ pub(crate) enum OperatorWorkspaceCommand {
     List {
         #[command(flatten)]
         page: PageArgs,
+    },
+    /// The workspace's single sign-on provider.
+    IdentityProvider {
+        id: Uuid,
+        #[command(subcommand)]
+        command: IdentityProviderCommand,
     },
     /// Replace the owner invitation of a workspace that has no owner yet.
     InviteOwner {
@@ -82,6 +89,14 @@ pub(crate) async fn operator_command(
             .await
         }
         OperatorWorkspaceCommand::Get { id } => api.get(&workspace_path(id)).await,
+        OperatorWorkspaceCommand::IdentityProvider { id, command } => {
+            identity_provider_command(
+                api,
+                &format!("{}/identity-provider", workspace_path(id)),
+                command,
+            )
+            .await
+        }
         OperatorWorkspaceCommand::List { page } => {
             api.get(&with_query(WORKSPACES_PATH, page.query())).await
         }

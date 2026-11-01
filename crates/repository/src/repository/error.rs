@@ -105,6 +105,14 @@ pub enum RepositoryError {
     WorkspaceConflict,
     #[error("the workspace already has an active owner")]
     WorkspaceOwnerExists,
+    #[error("a new identity provider needs a client secret")]
+    IdentityProviderSecretRequired,
+    #[error("complete a test sign-in before enabling the identity provider")]
+    IdentityProviderNotVerified,
+    #[error("enable the identity provider before restricting password sign-in")]
+    IdentityProviderNotEnabled,
+    #[error("identity providers need identity_provider_credential_key to be configured correctly")]
+    IdentityProviderKeyMissing,
     #[error("the context code 'default' is reserved")]
     ReservedContextCode,
     #[error("code must contain only ASCII letters, numbers, hyphens, and underscores")]

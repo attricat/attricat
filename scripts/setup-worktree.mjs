@@ -144,6 +144,12 @@ if (!existsSync(secretPath("bootstrap_owner_password"))) {
   writeSecret("bootstrap_owner_password", "test");
 }
 // Encrypts extension connection credentials; a local key per worktree.
+if (!existsSync(secretPath("identity_provider_credential_key"))) {
+  writeSecret(
+    "identity_provider_credential_key",
+    randomBytes(32).toString("base64"),
+  );
+}
 if (!existsSync(secretPath("extension_credential_key"))) {
   writeSecret("extension_credential_key", randomBytes(32).toString("base64"));
 }
@@ -194,6 +200,11 @@ env = setEnvValue(
   env,
   "WORKSPACE_INVITATION_URL",
   `http://127.0.0.1:${ports.WEB_PORT}/invitations/accept`,
+);
+env = setEnvValue(
+  env,
+  "OIDC_CALLBACK_URL",
+  `http://127.0.0.1:${ports.WEB_PORT}/api/auth/oidc/callback`,
 );
 env = setEnvValue(
   env,

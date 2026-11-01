@@ -2,6 +2,7 @@ use clap::{Subcommand, ValueEnum};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
+use crate::commands::identity_provider::{IdentityProviderCommand, identity_provider_command};
 use crate::error::CliError;
 use crate::input::{
     json_array_input, json_string_array_input, read_secret_stdin, read_stdin_lines,
@@ -21,6 +22,11 @@ pub(crate) enum WorkspaceCommand {
     Agent {
         #[command(subcommand)]
         command: AgentSettingsCommand,
+    },
+    /// The workspace's single sign-on provider (requires `workspace.manage`).
+    IdentityProvider {
+        #[command(subcommand)]
+        command: IdentityProviderCommand,
     },
     /// Read or change the colors of record system tags (changes require
     /// `tag_colors.manage`).
@@ -343,6 +349,9 @@ pub(crate) async fn workspace_command(
 ) -> Result<String, CliError> {
     match command {
         WorkspaceCommand::Navigation { command } => navigation_command(api, command).await,
+        WorkspaceCommand::IdentityProvider { command } => {
+            identity_provider_command(api, IDENTITY_PROVIDER_PATH, command).await
+        }
         WorkspaceCommand::Agent { command } => match command {
             AgentSettingsCommand::Get => api.get(AGENT_SETTINGS_PATH).await,
             AgentSettingsCommand::Set {
@@ -473,6 +482,7 @@ pub(crate) async fn workspace_command(
 }
 
 const AGENT_SETTINGS_PATH: &str = "/workspace/agent-settings";
+const IDENTITY_PROVIDER_PATH: &str = "/workspace/identity-provider";
 const TAG_COLORS_PATH: &str = "/workspace/tag-colors";
 
 async fn navigation_command(api: &Api, command: NavigationCommand) -> Result<String, CliError> {

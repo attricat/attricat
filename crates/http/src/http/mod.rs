@@ -16,6 +16,7 @@ mod extension_runs;
 mod extensions;
 mod extractors;
 mod files;
+mod identity_providers;
 mod lexicon;
 mod members;
 mod notifications;
@@ -121,6 +122,9 @@ pub struct AppState {
     pub devtools_enabled: bool,
     /// A public demo: actions that could lock visitors out are refused.
     pub demo_mode: bool,
+    /// Single sign-on settings; workspaces cannot sign in through a provider
+    /// without them.
+    pub oidc: Option<OidcSettings>,
     /// Enables the operator API when set.
     pub operator_token: Option<OperatorToken>,
     /// Seeded per-role accounts that the web sign-in offers to pre-fill.
@@ -133,6 +137,21 @@ pub struct AppState {
 
 pub use self::data_health::DataHealthCache;
 pub use self::operator::OperatorToken;
+
+/// Deployment-wide OpenID Connect settings.
+#[derive(Clone)]
+pub struct OidcSettings {
+    /// The externally reachable `/api/auth/oidc/callback`, which every
+    /// workspace registers with its provider as the redirect URI.
+    pub callback_url: url::Url,
+    /// Hosts of internal providers, exempt from the outbound check that
+    /// otherwise refuses non-public addresses. Workspace administrators
+    /// supply issuers, so only the operator can widen this.
+    pub allowed_private_hosts: Arc<[String]>,
+    /// PEM certificates trusted for provider connections beyond the system
+    /// roots, for a provider behind a corporate CA.
+    pub extra_root_certificates_pem: Option<Arc<[u8]>>,
+}
 pub use self::sessions::{SampleAccount, SampleLogins};
 pub use self::streams::StreamControl;
 pub use self::system::BuildInfo;
@@ -842,6 +861,13 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/event-deliveries/{consumer_id}/{event_id}/replay",
             post(event_deliveries::replay),
+        )
+        .route(
+            "/workspace/identity-provider",
+            get(identity_providers::get)
+                .put(identity_providers::put)
+                .patch(identity_providers::patch)
+                .delete(identity_providers::delete),
         )
         .route("/workspace/roles", get(roles::list).post(roles::create))
         .route(
