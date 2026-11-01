@@ -1,6 +1,8 @@
 import { Box, Checkbox, FormControlLabel, Typography } from '@mui/material';
 import { useId } from 'react';
+import { useTranslation } from 'react-i18next';
 import { monoFontFamily } from '../../app/theme';
+import { permissionDescription } from '../workspace/permissionDescription';
 
 const permissionGroup = (code: string) => code.split('.')[0] ?? code;
 
@@ -21,6 +23,7 @@ export const PermissionChecklist = ({
   permissions: { code: string; description: string }[];
   selected: readonly string[];
 }) => {
+  const { t } = useTranslation();
   const permissionIdPrefix = useId();
   return (
     <Box
@@ -83,7 +86,7 @@ export const PermissionChecklist = ({
                       sx={{ display: 'block' }}
                       variant="caption"
                     >
-                      {permission.description}
+                      {permissionDescription(t, permission)}
                     </Typography>
                   </Box>
                 }

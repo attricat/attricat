@@ -18,6 +18,7 @@ import {
 } from './api';
 import { FormDialog } from '../../components/FormDialog';
 import type { permissionSchema } from './schemas';
+import { permissionDescription } from './permissionDescription';
 
 export type RoleDialogAction =
   | { role: WorkspaceRole; type: 'rename' }
@@ -180,7 +181,7 @@ export const WorkspaceRoleActionDialog = ({
                     />
                   }
                   key={permission.code}
-                  label={`${permission.code} — ${permission.description}`}
+                  label={`${permission.code} — ${permissionDescription(t, permission)}`}
                 />
               ))}
             </FormGroup>
