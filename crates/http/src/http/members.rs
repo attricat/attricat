@@ -104,6 +104,11 @@ pub(super) async fn create_workspace_user(
 ) -> Result<(StatusCode, Json<CreatedWorkspaceUser>), ApiError> {
     reject_in_demo(&state)?;
     let email = deliverable_email(&input.email)?;
+    if let Some(name) = input.display_name.as_deref().map(str::trim)
+        && !name.is_empty()
+    {
+        super::sessions::validate_display_name(name)?;
+    }
     let invite_fields = (
         input.role_id,
         input.scope_type,

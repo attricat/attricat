@@ -311,7 +311,9 @@ The component host ABI uses bounded JSON strings (64 KiB from a component,
 `configuration.get.v1` is available to components with
 `configuration.read`. `storage.get.v1`, `storage.set.v1` (also accepted as
 `storage.put.v1`), `storage.delete.v1`, and `storage.list.v1` are available to
-components with `storage.extension`. The JSON
+components with `storage.extension`. From the browser, reading storage needs
+`records.read` and changing it needs `records.write` across the workspace,
+because server components act on what they find there. The JSON
 `attricat.read.v1` surface additionally provides bounded `page`, `changes`, and
 single-attribute `lookup` requests; `page` cursors pin a database-clock snapshot
 and `changes` cursors pin a domain-event sequence high-water mark. Cursors are

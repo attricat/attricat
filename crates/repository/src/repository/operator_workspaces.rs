@@ -189,6 +189,22 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         Ok((workspaces, has_more))
     }
 
+    /// Whether no owner can get in: none has a password and no provider is
+    /// enabled to sign them in. Only then may the operator invite another
+    /// owner into a workspace that has one.
+    async fn owners_are_locked_out_on(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        workspace_id: Uuid,
+    ) -> Result<bool, RepositoryError> {
+        Ok(sqlx::query_scalar(
+            "SELECT NOT EXISTS (SELECT 1 FROM role_grants g JOIN workspace_memberships m ON m.id = g.membership_id JOIN local_password_credentials c ON c.user_id = m.user_id WHERE g.workspace_id = $1 AND g.role_id = $2 AND m.state = 'active') AND NOT EXISTS (SELECT 1 FROM workspace_identity_providers WHERE workspace_id = $1 AND enabled)",
+        )
+        .bind(workspace_id)
+        .bind(OWNER_ROLE_ID)
+        .fetch_one(&mut **tx)
+        .await?)
+    }
+
     /// Issues the invitation that makes someone the workspace's first owner,
     /// authored by its system user because no person is acting. Returns
     /// whether the invitee must set a password, or `None` when the policy
@@ -213,7 +229,9 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         .await?;
         match policy {
             OwnerInvitationPolicy::KeepPending if has_owner || has_pending => return Ok(None),
-            OwnerInvitationPolicy::ReplacePending if has_owner => {
+            OwnerInvitationPolicy::ReplacePending
+                if has_owner && !Self::owners_are_locked_out_on(&mut tx, workspace_id).await? =>
+            {
                 return Err(RepositoryError::WorkspaceOwnerExists);
             }
             OwnerInvitationPolicy::KeepPending => {}

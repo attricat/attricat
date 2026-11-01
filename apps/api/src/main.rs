@@ -136,7 +136,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             &bootstrap_owner_email,
         )
         .await?;
-    if let Some(password) = &bootstrap_owner_password {
+    if demo_mode {
+        // Visitors share one published password, which must not open the owner.
+        bootstrap_repository
+            .revoke_bootstrap_owner_access(workspace_id, &bootstrap_owner_email)
+            .await?;
+    } else if let Some(password) = &bootstrap_owner_password {
         bootstrap_repository
             .ensure_bootstrap_local_password(
                 &bootstrap_owner_email,
@@ -455,10 +460,12 @@ async fn seed_sample_accounts(
             email,
         });
     }
-    accounts.push(SampleAccount {
-        role: "owner".to_owned(),
-        email: owner_email.to_owned(),
-    });
+    if !demo {
+        accounts.push(SampleAccount {
+            role: "owner".to_owned(),
+            email: owner_email.to_owned(),
+        });
+    }
     Ok(SampleLogins {
         demo,
         login_identifier: repository.workspace_login_identifier(workspace_id).await?,

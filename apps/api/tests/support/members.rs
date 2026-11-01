@@ -11,6 +11,7 @@ use uuid::Uuid;
 use super::{BOOTSTRAP_WORKSPACE_ID, bootstrap_workspace_id};
 
 pub const OWNER_ROLE_ID: Uuid = Uuid::from_u128(0x00000000_0000_4000_8000_000000000101);
+pub const ADMIN_ROLE_ID: Uuid = Uuid::from_u128(0x00000000_0000_4000_8000_000000000102);
 pub const EDITOR_ROLE_ID: Uuid = Uuid::from_u128(0x00000000_0000_4000_8000_000000000103);
 pub const VIEWER_ROLE_ID: Uuid = Uuid::from_u128(0x00000000_0000_4000_8000_000000000104);
 

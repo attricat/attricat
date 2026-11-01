@@ -73,13 +73,13 @@ printf '%s\n' '…' > s3_secret_access_key
 printf '%s\n' '…' > smtp_password
 printf '%s\n' '…' > file_worker_metrics_token
 printf '%s\n' '…' > bootstrap_owner_password
-touch llm_api_key redis_url
+touch llm_api_key redis_url extension_credential_key identity_provider_credential_key operator_api_token
 sudo chown 10001:10001 * && sudo chmod 400 *
 cd ../..
 docker compose --env-file deploy/.env.production -f deploy/compose.yml up -d
 ```
 
-Every setting is described in the [configuration reference](/reference/configuration/).
+Leave a file empty to turn its feature off. Single sign-on needs `identity_provider_credential_key`, extension connections need `extension_credential_key`, and the operator API needs `operator_api_token`. Every setting is described in the [configuration reference](/reference/configuration/).
 
 ## First start
 
@@ -129,6 +129,10 @@ curl --fail --silent --retry 60 --retry-delay 2 --retry-all-errors \
   https://attricat.example.com/health/ready
 ./platform smoke catalog
 ```
+
+### Upgrade from an image older than 2026-10-30
+
+Definitions are YAML since then, and definitions stored as TOML are not converted. Reads keep working, but creating or changing a record on such a blueprint revision fails with `422 invalid_blueprint_definition`. For each affected blueprint, publish a new revision written in YAML, then move its records with `acli record migrate`.
 
 ## Roll back
 

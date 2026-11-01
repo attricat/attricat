@@ -15,6 +15,9 @@ x-app: &app
     - redis_url
     - bootstrap_owner_password
     - file_worker_metrics_token
+    - extension_credential_key
+    - identity_provider_credential_key
+    - operator_api_token
   restart: unless-stopped
   read_only: true
   tmpfs:
@@ -77,3 +80,9 @@ secrets:
     file: ${ATTRICAT_SECRETS_HOST_DIR:-./secrets}/bootstrap_owner_password
   file_worker_metrics_token:
     file: ${ATTRICAT_SECRETS_HOST_DIR:-./secrets}/file_worker_metrics_token
+  extension_credential_key:
+    file: ${ATTRICAT_SECRETS_HOST_DIR:-./secrets}/extension_credential_key
+  identity_provider_credential_key:
+    file: ${ATTRICAT_SECRETS_HOST_DIR:-./secrets}/identity_provider_credential_key
+  operator_api_token:
+    file: ${ATTRICAT_SECRETS_HOST_DIR:-./secrets}/operator_api_token

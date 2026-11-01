@@ -657,3 +657,68 @@ async fn created_workspaces_are_isolated_and_reach_background_work(pool: PgPool)
     assert_eq!(claimed.workspace_id, second);
     server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn operator_can_invite_an_owner_only_when_no_owner_can_get_in(pool: PgPool) {
+    let (base_url, server, mail) = start(&pool).await;
+    let id = Uuid::new_v4();
+    let created = put_workspace(&base_url, id, &workspace_body("acme.example", OWNER_EMAIL)).await;
+    assert_eq!(created.status(), StatusCode::CREATED);
+    complete_onboarding(&base_url, &mail, OWNER_EMAIL).await;
+
+    // An owner with a password can still get in, so ownership stays theirs.
+    let refused = replace_invitation(&base_url, id, &json!({})).await;
+    assert_eq!(refused.status(), StatusCode::CONFLICT);
+    assert_eq!(error_code(refused).await, "workspace_owner_exists");
+
+    // As it is for an owner who only ever signed in through the provider.
+    sqlx::query("DELETE FROM local_password_credentials c USING users u WHERE c.user_id = u.id AND u.email = $1")
+        .bind(OWNER_EMAIL)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let recovered = replace_invitation(&base_url, id, &json!({})).await;
+    assert_eq!(recovered.status(), StatusCode::OK);
+    let (cookie, _) = complete_onboarding(&base_url, &mail, OWNER_EMAIL).await;
+    let session = get_json(&base_url, "/auth/session", &cookie).await;
+    assert_eq!(session["workspace_id"], id.to_string());
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn another_workspace_cannot_name_an_existing_account(pool: PgPool) {
+    let (user, _) = add_workspace_user(&pool).await;
+    let email: String = sqlx::query_scalar("SELECT email FROM users WHERE id = $1")
+        .bind(user)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE users SET display_name = NULL WHERE id = $1")
+        .bind(user)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (base_url, server) = start_server_with_config(pool.clone(), |_| {}).await;
+    let response = authenticated_client()
+        .post(format!("{base_url}/workspace/users"))
+        .json(&json!({ "email": email, "display_name": "Set Elsewhere" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let name: Option<String> = sqlx::query_scalar("SELECT display_name FROM users WHERE id = $1")
+        .bind(user)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(name, None);
+
+    let invalid = authenticated_client()
+        .post(format!("{base_url}/workspace/users"))
+        .json(&json!({ "email": "new@example.test", "display_name": "x".repeat(65) }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    server.abort();
+}

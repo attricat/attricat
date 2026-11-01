@@ -369,7 +369,7 @@ pub(super) async fn clear_display_name(
 /// Display names are letters and digits in words separated by spaces, with no
 /// leading or trailing space. Input is never trimmed, so the stored value is
 /// exactly what the user submitted.
-fn validate_display_name(name: &str) -> Result<(), ApiError> {
+pub(super) fn validate_display_name(name: &str) -> Result<(), ApiError> {
     let length = name.chars().count();
     // One code covers every rule, since the UI states them together.
     let invalid = |message: &str| {

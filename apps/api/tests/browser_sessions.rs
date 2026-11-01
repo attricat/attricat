@@ -611,6 +611,11 @@ async fn demo_mode_refuses_changes_that_could_lock_visitors_out(pool: PgPool) {
         owner
             .post(format!("{base_url}/workspace/users"))
             .json(&serde_json::json!({ "email": "someone@example.test", "role_id": role, "scope_type": "workspace", "scope_target_id": BOOTSTRAP_WORKSPACE_ID })),
+        owner.post(format!("{base_url}/extensions/sideload")),
+        owner.post(format!("{base_url}/extensions")).json(&serde_json::json!({ "owner": "acme", "repository": "extension", "release_id": 1 })),
+        owner
+            .post(format!("{base_url}/extension-registries"))
+            .json(&serde_json::json!({ "source": "acme/extensions" })),
     ];
     for request in requests {
         let response = request.send().await.unwrap();
@@ -895,5 +900,45 @@ async fn discovery_limits_unknown_identifiers_but_never_a_real_workspace(pool: P
         discover("default.local").await.unwrap().status(),
         StatusCode::OK
     );
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_demo_owner_keeps_no_way_to_sign_in(pool: PgPool) {
+    let (_, server) = start_server(pool.clone()).await;
+    let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
+    let repository = api::repository::AttricatRepository::system(pool.clone());
+    let (owner_id, _) = add_workspace_user(&pool).await;
+    let owner: (Uuid, String) = sqlx::query_as("SELECT id, email FROM users WHERE id = $1")
+        .bind(owner_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    repository
+        .ensure_bootstrap_local_password(&owner.1, "published demo password".to_owned())
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO personal_api_tokens (id, user_id, workspace_id, label, token_digest) VALUES ($1, $2, $3, 'left behind', $4)")
+        .bind(Uuid::new_v4())
+        .bind(owner.0)
+        .bind(workspace)
+        .bind(Uuid::new_v4().as_bytes().repeat(2))
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    repository
+        .revoke_bootstrap_owner_access(workspace, &owner.1)
+        .await
+        .unwrap();
+
+    let (credentials, tokens): (i64, i64) = sqlx::query_as(
+        "SELECT (SELECT count(*) FROM local_password_credentials WHERE user_id = $1), (SELECT count(*) FROM personal_api_tokens WHERE user_id = $1 AND revoked_at IS NULL)",
+    )
+    .bind(owner.0)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!((credentials, tokens), (0, 0));
     server.abort();
 }

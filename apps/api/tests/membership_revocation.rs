@@ -275,3 +275,35 @@ async fn acceptance_waiting_behind_deactivation_cannot_restore_membership(pool: 
     );
     server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn inviting_a_deactivated_member_back_grants_only_the_invited_role(pool: PgPool) {
+    let (_, server) = start_server(pool.clone()).await;
+    let repository = AttricatRepository::new(pool.clone(), bootstrap_workspace_id());
+    let (user, membership, _) = member(&pool).await;
+    grant_role(&pool, membership, ADMIN_ROLE_ID, GrantScope::Workspace).await;
+    repository
+        .set_workspace_membership_state(
+            membership,
+            BOOTSTRAP_OWNER_ID.parse().unwrap(),
+            bootstrap_workspace_id(),
+            MembershipState::Inactive,
+        )
+        .await
+        .unwrap();
+
+    let secret = invitation(&repository, user).await;
+    repository
+        .accept_workspace_invitation(&Sha256::digest(secret.as_bytes()), user)
+        .await
+        .unwrap();
+
+    let roles: Vec<Uuid> =
+        sqlx::query_scalar("SELECT role_id FROM role_grants WHERE membership_id = $1")
+            .bind(membership)
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(roles, [VIEWER_ROLE_ID]);
+    server.abort();
+}
