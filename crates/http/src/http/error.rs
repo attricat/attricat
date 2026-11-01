@@ -111,6 +111,15 @@ impl ApiError {
     pub(super) fn bad_gateway(message: &'static str) -> Self {
         Self::new(StatusCode::BAD_GATEWAY, ErrorCode::BadGateway, message)
     }
+    /// An invitation was withdrawn because its email could not be sent; the
+    /// mail service failed, not the request, so the client may retry.
+    pub(super) fn invitation_delivery_failed() -> Self {
+        Self::new(
+            StatusCode::BAD_GATEWAY,
+            ErrorCode::InvitationDeliveryFailed,
+            "the invitation email could not be sent; try again",
+        )
+    }
     pub(super) fn internal(message: &'static str) -> Self {
         Self::new(
             StatusCode::INTERNAL_SERVER_ERROR,

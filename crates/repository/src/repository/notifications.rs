@@ -708,6 +708,17 @@ impl AttricatRepository {
         inviter: Uuid,
         member: Uuid,
     ) -> Result<(), RepositoryError> {
+        // An operator-issued invitation names the workspace's system user,
+        // which has no inbox.
+        let inviter_is_person: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM users WHERE id = $1 AND kind = 'person')",
+        )
+        .bind(inviter)
+        .fetch_one(&mut **transaction)
+        .await?;
+        if !inviter_is_person {
+            return Ok(());
+        }
         let actor = self
             .notification_actor_on(transaction, Some(member))
             .await?;

@@ -123,13 +123,16 @@
     "invalid_file_policy": "Zasady atrybutu plikowego są nieprawidłowe.",
     "invalid_file_references": "Pliki muszą być unikalnymi, istniejącymi załącznikami w dozwolonej kolejności.",
     "invalid_input": "Żądanie zostało odrzucone: {{message}}",
+    "invalid_login_identifier": "Identyfikator logowania wygląda jak nazwa domeny, na przykład acme.example.",
     "invalid_range": "Żądany fragment pliku jest niedostępny.",
     "invalid_rule_definition": "Definicja reguły jest nieprawidłowa: {{reason}}",
     "invalid_system_metadata": "Metadane systemowe muszą być obiektem JSON w granicach limitu rozmiaru.",
     "invalid_system_tags": "Znaczniki systemowe muszą być unikalne i niepuste.",
     "invalid_workflow_definition": "Definicja przepływu pracy jest nieprawidłowa: {{reason}}",
+    "invitation_delivery_failed": "Nie udało się wysłać zaproszenia e-mailem. Spróbuj ponownie.",
     "invitation_invalid": "To zaproszenie jest nieprawidłowe, wygasło, zostało cofnięte, już przyjęte lub dotyczy innego adresu e-mail.",
     "last_workspace_owner": "Nie można usunąć ostatniego właściciela obszaru roboczego. Najpierw przekaż własność innemu członkowi.",
+    "login_identifier_taken": "Ten identyfikator logowania jest już używany.",
     "migration_needs_resolution": "Migracja najpierw wymaga decyzji: {{message}}",
     "migration_not_applicable": "Ta migracja nie dotyczy rekordu.",
     "migration_target_changed": "Najnowsza rewizja schematu się zmieniła. Odśwież podgląd migracji.",
@@ -187,7 +190,9 @@
     "unique_key_duplicates": "Istniejące rekordy mają wspólne wartości klucza unikalnego.",
     "unsupported_media_type": "Ten typ pliku jest niedozwolony.",
     "workflow_not_enabled": "Przepływ pracy nie ma włączonej rewizji. Najpierw go włącz.",
-    "workflow_not_published": "Opublikuj rewizję przepływu pracy przed jej włączeniem."
+    "workflow_not_published": "Opublikuj rewizję przepływu pracy przed jej włączeniem.",
+    "workspace_conflict": "Ten obszar roboczy już istnieje z innymi wartościami.",
+    "workspace_owner_exists": "Ten obszar roboczy ma już właściciela."
   },
   "drafts": {
     "restoreTitle": "Przywrócić niezapisany szkic?",

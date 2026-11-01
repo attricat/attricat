@@ -117,6 +117,7 @@ mod leadership;
 mod lexicon;
 mod members;
 mod notifications;
+mod operator_workspaces;
 mod presentation_assets;
 mod record_batches;
 mod record_commands;
@@ -182,6 +183,9 @@ pub use notifications::{
     MAX_NOTIFICATION_BODY_LENGTH, MAX_NOTIFICATION_TITLE_LENGTH, NOTIFICATION_PAGE_SIZE,
     NewNotification, Notification, NotificationCursor, NotificationSubject,
     NotificationSubjectKind, kinds as notification_kinds, notification_excerpt,
+};
+pub use operator_workspaces::{
+    NewOperatorWorkspace, OperatorWorkspace, OwnerInvitation, OwnerInvitationPolicy,
 };
 pub use record_comments::{COMMENT_PAGE_SIZE, RecordComment};
 pub use rules::{FindingSelection, MAX_BULK_ACKNOWLEDGE, RuleFindingFilter, RuleRunFilter};

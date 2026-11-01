@@ -121,13 +121,16 @@
     "invalid_file_policy": "The file attribute's policy is invalid.",
     "invalid_file_references": "Files must be unique, existing attachments in an allowed order.",
     "invalid_input": "The request was rejected: {{message}}",
+    "invalid_login_identifier": "Sign-in identifiers look like a domain name, such as acme.example.",
     "invalid_range": "The requested part of the file isn't available.",
     "invalid_rule_definition": "The rule definition is invalid: {{reason}}",
     "invalid_system_metadata": "System metadata must be a JSON object within the size limit.",
     "invalid_system_tags": "System tags must be unique and not empty.",
     "invalid_workflow_definition": "The workflow definition is invalid: {{reason}}",
+    "invitation_delivery_failed": "The invitation email could not be sent. Try again.",
     "invitation_invalid": "This invitation is invalid, expired, revoked, already accepted, or for another email.",
     "last_workspace_owner": "The workspace's last owner can't be removed. Transfer ownership to another member first.",
+    "login_identifier_taken": "This sign-in identifier is already in use.",
     "migration_needs_resolution": "The migration needs decisions first: {{message}}",
     "migration_not_applicable": "This migration doesn't apply to the record.",
     "migration_target_changed": "The latest blueprint revision changed. Refresh the migration preview.",
@@ -185,7 +188,9 @@
     "unique_key_duplicates": "Existing records share values of a unique key.",
     "unsupported_media_type": "This file type isn't allowed.",
     "workflow_not_enabled": "The workflow has no enabled revision. Enable it first.",
-    "workflow_not_published": "Publish the workflow revision before enabling it."
+    "workflow_not_published": "Publish the workflow revision before enabling it.",
+    "workspace_conflict": "This workspace already exists with different values.",
+    "workspace_owner_exists": "This workspace already has an owner."
   },
   "drafts": {
     "restoreTitle": "Restore unsaved draft?",

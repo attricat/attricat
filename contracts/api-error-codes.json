@@ -52,13 +52,16 @@
     "invalid_file_policy",
     "invalid_file_references",
     "invalid_input",
+    "invalid_login_identifier",
     "invalid_range",
     "invalid_rule_definition",
     "invalid_system_metadata",
     "invalid_system_tags",
     "invalid_workflow_definition",
+    "invitation_delivery_failed",
     "invitation_invalid",
     "last_workspace_owner",
+    "login_identifier_taken",
     "migration_needs_resolution",
     "migration_not_applicable",
     "migration_target_changed",
@@ -116,6 +119,8 @@
     "unique_key_duplicates",
     "unsupported_media_type",
     "workflow_not_enabled",
-    "workflow_not_published"
+    "workflow_not_published",
+    "workspace_conflict",
+    "workspace_owner_exists"
   ]
 }

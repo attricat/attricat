@@ -10,6 +10,7 @@ pub(crate) mod extension;
 pub(crate) mod file;
 pub(crate) mod lexicon;
 pub(crate) mod notification;
+pub(crate) mod operator;
 pub(crate) mod presentation_asset;
 pub(crate) mod record;
 pub(crate) mod reusable_attribute;

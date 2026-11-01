@@ -83,9 +83,9 @@ Every setting is described in the [configuration reference](/reference/configura
 
 ## First start
 
-On first start the API creates the workspace named by `ATTRICAT_BOOTSTRAP_WORKSPACE_NAME` and an owner account for `ATTRICAT_BOOTSTRAP_OWNER_EMAIL`. Provide the `bootstrap_owner_password` secret for that first start so the owner can sign in, then empty it. It never changes an existing password.
+On first start the API names the bootstrap workspace from `ATTRICAT_BOOTSTRAP_WORKSPACE_NAME` and creates an owner account for `ATTRICAT_BOOTSTRAP_OWNER_EMAIL`. Provide the `bootstrap_owner_password` secret for that first start so the owner can sign in, then empty it. It never changes an existing password.
 
-The owner signs in with the workspace identifier, normally `default.local`, then invites everyone else.
+The owner signs in with the workspace identifier, normally `default.local`, then invites everyone else. To add more workspaces, set the `operator_api_token` secret and use the [operator API](/reference/api/#operator-api).
 
 ## Health checks
 

@@ -669,6 +669,51 @@ that operation's status and error code. The message starts with
 targets its record and records `metadata.batch` with `operation_index` and
 `operation_count`; all share the request and correlation IDs.
 
+## Operator API
+
+Below `/api/operator`, for whoever runs the deployment rather than a member of
+a workspace: a control plane or an administrator's `acli`. These routes exist
+only when the `operator_api_token` secret is set, otherwise they return `404`,
+and demo deployments refuse them. They accept only
+`Authorization: Bearer <operator token>`: personal tokens and browser sessions
+get `401`, and the operator token authenticates nothing else. Block the prefix
+at the proxy so that only trusted networks reach it.
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `PUT` | `/operator/workspaces/{id}` | Create a workspace and invite its owner. |
+| `GET` | `/operator/workspaces` | Workspaces, oldest first, with `limit`, `offset` and `x-next-offset`. |
+| `GET` | `/operator/workspaces/{id}` | One workspace. |
+| `POST` | `/operator/workspaces/{id}/owner-invitation` | Replace the owner invitation. |
+
+`PUT` takes `name`, `login_identifier`, `owner_email` and an optional
+`owner_display_name`. The caller generates the UUID, which makes a retry safe:
+`201` created it, `200` means an identical earlier request stands (any step it
+did not finish is finished, and no second email goes out while an invitation is
+pending), and `409 workspace_conflict` means the ID exists with other values.
+`409 login_identifier_taken` means another workspace holds the identifier.
+Attricat does not verify that a caller owns an identifier's domain, and an
+identifier cannot change, so a control plane must check ownership first.
+
+Each response is `{ "id", "name", "login_identifier", "owner_email",
+"has_active_owner", "owner_invitation_expires_at", "created_at", "updated_at" }`.
+A new workspace has no owner until someone accepts the invitation, which lasts
+seven days. Being named grants nothing before that. Attricat emails the owner:
+an onboarding link for a new address, an acceptance link for an existing
+account. When that email fails the invitation is withdrawn and the response is
+`502 invitation_delivery_failed`, so repeat the request.
+
+`POST .../owner-invitation` takes an optional `owner_email` and
+`owner_display_name`, retires the previous link and sends a new one. Use it when
+an invitation expired or went to the wrong address. Once the address changes,
+repeat `PUT` requests must name the new one. It returns
+`409 workspace_owner_exists` when the workspace has an active owner.
+
+The operator's actions appear in the workspace's audit log as
+`workspace.create` and `workspace.owner_invitation.create`, with no actor user
+and `metadata.actor` set to `operator`. The bootstrap workspace is listed like
+any other. Workspaces cannot yet be suspended or deleted through this API.
+
 ## Errors
 
 Every failure returns `{ "error": { "code", "message", "details"? } }` with the

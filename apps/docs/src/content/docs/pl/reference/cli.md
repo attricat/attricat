@@ -476,6 +476,19 @@ acli presentation-asset list | get <id>
 acli presentation-asset download <id> --output <path>
 ```
 
+### Operator
+
+Te polecenia obsługują całe wdrożenie, a nie jeden obszar roboczy. Token operatora odczytują z `ATTRICAT_OPERATOR_TOKEN` lub `--token-stdin` i nigdy nie wysyłają `ATTRICAT_TOKEN`.
+
+```sh
+acli operator workspace create --id <uuid> --name <nazwa> --login-identifier <identyfikator> --owner-email <email> [--owner-display-name <nazwa>]
+acli operator workspace get <id>
+acli operator workspace list [--limit <n>] [--offset <n>]
+acli operator workspace invite-owner <id> [--owner-email <email>] [--owner-display-name <nazwa>]
+```
+
+Powtórz `create` z tymi samymi wartościami, aby dokończyć żądanie przerwane w połowie.
+
 ### Operacje
 
 ```sh
