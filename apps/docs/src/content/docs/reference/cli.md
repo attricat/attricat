@@ -478,6 +478,17 @@ acli presentation-asset list | get <id>
 acli presentation-asset download <id> --output <path>
 ```
 
+### Single sign-on
+
+```sh
+printf '%s' "$CLIENT_SECRET" | acli workspace identity-provider set --issuer <url> --client-id <id> --display-name <name> --client-secret-stdin
+acli workspace identity-provider get
+acli workspace identity-provider update [--enabled true|false] [--password-sign-in all|owners]
+acli workspace identity-provider delete
+```
+
+`acli operator workspace identity-provider <id> …` takes the same subcommands for any workspace.
+
 ### Operator
 
 These commands run the deployment rather than one workspace. They read the operator token from `ATTRICAT_OPERATOR_TOKEN` or `--token-stdin` and never send `ATTRICAT_TOKEN`.

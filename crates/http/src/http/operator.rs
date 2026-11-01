@@ -21,11 +21,16 @@ use super::{
     auth::bearer_credentials,
     error::ApiError,
     extractors::{ApiJson, ApiPath, ApiQuery},
+    identity_providers::{
+        ProviderResponse, PutProviderRequest, UpdateProviderStateRequest, delete_provider,
+        put_provider, read_provider, update_provider_state,
+    },
     members::{deliver_invitation, deliverable_email, new_invitation_secrets},
     pagination::{ArrayPage, array_response},
 };
 use crate::repository::{
-    NewOperatorWorkspace, OperatorWorkspace, OwnerInvitation, OwnerInvitationPolicy,
+    AttricatRepository, NewOperatorWorkspace, OperatorWorkspace, OwnerInvitation,
+    OwnerInvitationPolicy,
 };
 
 const OWNER_INVITATION_LIFETIME_DAYS: i64 = 7;
@@ -59,6 +64,13 @@ pub(super) fn routes(state: AppState) -> Router<AppState> {
         .route(
             "/operator/workspaces/{workspace_id}/owner-invitation",
             post(replace_owner_invitation),
+        )
+        .route(
+            "/operator/workspaces/{workspace_id}/identity-provider",
+            get(get_identity_provider)
+                .put(put_identity_provider)
+                .patch(patch_identity_provider)
+                .delete(delete_identity_provider),
         )
         .route_layer(middleware::from_fn_with_state(state, require_operator))
 }
@@ -179,6 +191,50 @@ async fn replace_owner_invitation(
     )
     .await?;
     Ok(Json(load_workspace(&state, workspace_id).await?))
+}
+
+/// A repository for a workspace that exists, because the operator's path is
+/// not checked against a session the way a member's is.
+async fn workspace_repository(
+    state: &AppState,
+    workspace_id: Uuid,
+) -> Result<AttricatRepository, ApiError> {
+    load_workspace(state, workspace_id).await?;
+    Ok(state.repository.for_workspace(workspace_id))
+}
+
+async fn get_identity_provider(
+    State(state): State<AppState>,
+    ApiPath(workspace_id): ApiPath<Uuid>,
+) -> Result<Json<ProviderResponse>, ApiError> {
+    let repository = workspace_repository(&state, workspace_id).await?;
+    read_provider(&state, &repository).await
+}
+
+async fn put_identity_provider(
+    State(state): State<AppState>,
+    ApiPath(workspace_id): ApiPath<Uuid>,
+    ApiJson(input): ApiJson<PutProviderRequest>,
+) -> Result<Json<ProviderResponse>, ApiError> {
+    let repository = workspace_repository(&state, workspace_id).await?;
+    put_provider(&state, &repository, input).await
+}
+
+async fn patch_identity_provider(
+    State(state): State<AppState>,
+    ApiPath(workspace_id): ApiPath<Uuid>,
+    ApiJson(input): ApiJson<UpdateProviderStateRequest>,
+) -> Result<Json<ProviderResponse>, ApiError> {
+    let repository = workspace_repository(&state, workspace_id).await?;
+    update_provider_state(&state, &repository, input).await
+}
+
+async fn delete_identity_provider(
+    State(state): State<AppState>,
+    ApiPath(workspace_id): ApiPath<Uuid>,
+) -> Result<StatusCode, ApiError> {
+    let repository = workspace_repository(&state, workspace_id).await?;
+    delete_provider(&repository).await
 }
 
 async fn load_workspace(

@@ -156,6 +156,37 @@ fn operator_workspace_commands_parse() {
     assert!(Cli::try_parse_from(["acli", "operator", "workspace", "get", &id]).is_ok());
     assert!(Cli::try_parse_from(["acli", "operator", "workspace", "list", "--limit", "5"]).is_ok());
     assert!(Cli::try_parse_from(["acli", "operator", "workspace", "invite-owner", &id]).is_ok());
+    assert!(
+        Cli::try_parse_from([
+            "acli",
+            "operator",
+            "workspace",
+            "identity-provider",
+            &id,
+            "update",
+            "--enabled",
+            "true",
+            "--password-sign-in",
+            "owners",
+        ])
+        .is_ok()
+    );
+    assert!(
+        Cli::try_parse_from([
+            "acli",
+            "workspace",
+            "identity-provider",
+            "set",
+            "--issuer",
+            "https://idp.example.com",
+            "--client-id",
+            "attricat",
+            "--display-name",
+            "Acme",
+            "--client-secret-stdin",
+        ])
+        .is_ok()
+    );
     // The caller supplies the ID, because a retry depends on it.
     assert!(
         Cli::try_parse_from([

@@ -288,6 +288,24 @@ pub async fn start_configured_session_server(
     .await
 }
 
+/// A server with trusted test headers whose state `configure` adjusts.
+pub async fn start_configured_trusted_server(
+    pool: PgPool,
+    configure: impl FnOnce(&mut AppState),
+) -> (String, JoinHandle<()>) {
+    start_configured_server(
+        pool,
+        0,
+        true,
+        Arc::new(FakeObjectStore::available()),
+        Arc::new(AllowFileAccess),
+        Arc::new(TestMailDelivery::default()),
+        false,
+        configure,
+    )
+    .await
+}
+
 pub async fn start_session_server(pool: PgPool) -> (String, JoinHandle<()>) {
     start_server_with_auth_mode(pool, 0, false).await
 }
@@ -470,6 +488,7 @@ async fn start_configured_server(
         default_body_limit: 2 * 1024 * 1024,
         devtools_enabled,
         demo_mode: false,
+        oidc: None,
         operator_token: None,
         sample_logins: None,
         build_info: BuildInfo {

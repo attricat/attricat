@@ -491,6 +491,14 @@ Trasy `GET` reguł, wykonań i ustaleń wymagają `rules.read`; pozostałe trasy
 | `GET`, `POST` | `/solution-packs/applications/{id}/checks` | Uruchomienia kontroli. |
 | `GET` | `/presentation-assets[/{id}[/content]]` | Zasoby prezentacyjne. |
 
+### Dostawca tożsamości
+
+`GET`, `PUT`, `PATCH` i `DELETE /workspace/identity-provider` zarządzają dostawcą OpenID Connect obszaru roboczego i wymagają `workspace.manage`. API operatora udostępnia te same operacje pod `/operator/workspaces/{id}/identity-provider`.
+
+`PUT` przyjmuje `issuer`, `client_id`, `display_name` i `client_secret`. Sekret jest wymagany dla nowego dostawcy i nie pojawia się w żadnej odpowiedzi. Pole `redirect_uri` w każdej odpowiedzi to adres do zarejestrowania u dostawcy.
+
+Nowy dostawca jest niezweryfikowany i wyłączony. Można go włączyć przez `PATCH { "enabled": true }` dopiero po logowaniu testowym, a `PATCH { "password_sign_in": "owners" }` wymaga włączonego dostawcy. Zmiana adresu wydawcy lub identyfikatora klienta przywraca stan niezweryfikowany i wyłączony oraz logowanie hasłem dla wszystkich.
+
 ### API operatora
 
 Te trasy obsługują całe wdrożenie, a nie jeden obszar roboczy, i istnieją tylko wtedy, gdy ustawiono sekret `operator_api_token`. Akceptują wyłącznie `Authorization: Bearer <token operatora>`: tokeny osobiste i sesje przeglądarki są odrzucane, a token operatora nie działa nigdzie indziej. Zablokuj `/api/operator` na serwerze proxy, tak aby dostęp miały tylko zaufane sieci. Wdrożenia demonstracyjne odrzucają te trasy.

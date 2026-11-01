@@ -12,10 +12,6 @@ use attricat_domain::states::ConnectionStatus;
 use std::sync::OnceLock;
 
 use chrono::{DateTime, Utc};
-use ring::{
-    aead::{AES_256_GCM, Aad, LessSafeKey, NONCE_LEN, Nonce, UnboundKey},
-    rand::{SecureRandom, SystemRandom},
-};
 use serde::Serialize;
 use serde_json::Value;
 use sqlx::{FromRow, Postgres};
@@ -31,15 +27,12 @@ pub fn use_extension_credential_key(key: [u8; 32]) {
     let _ = CREDENTIAL_KEY.set(key);
 }
 
-fn sealing_key() -> Result<LessSafeKey, RepositoryError> {
-    let key = CREDENTIAL_KEY.get().ok_or_else(|| {
+fn credential_key() -> Result<&'static [u8; 32], RepositoryError> {
+    CREDENTIAL_KEY.get().ok_or_else(|| {
         RepositoryError::InvalidExtension(
             "extension connections need EXTENSION_CREDENTIAL_KEY to be configured".into(),
         )
-    })?;
-    Ok(LessSafeKey::new(
-        UnboundKey::new(&AES_256_GCM, key).expect("a 32-byte AES-256-GCM key"),
-    ))
+    })
 }
 
 /// The additional data that binds a ciphertext to its connection and field.
@@ -48,40 +41,23 @@ fn associated_data(connection_id: Uuid, field: &str) -> String {
 }
 
 fn seal(connection_id: Uuid, field: &str, plaintext: &str) -> Result<Vec<u8>, RepositoryError> {
-    let key = sealing_key()?;
-    let mut nonce = [0u8; NONCE_LEN];
-    SystemRandom::new()
-        .fill(&mut nonce)
-        .map_err(|_| RepositoryError::InvalidExtension("random source unavailable".into()))?;
-    let mut sealed = plaintext.as_bytes().to_vec();
-    key.seal_in_place_append_tag(
-        Nonce::assume_unique_for_key(nonce),
-        Aad::from(associated_data(connection_id, field).as_bytes()),
-        &mut sealed,
+    super::sealing::seal(
+        credential_key()?,
+        &associated_data(connection_id, field),
+        plaintext,
     )
-    .map_err(|_| RepositoryError::InvalidExtension("credential encryption failed".into()))?;
-    let mut ciphertext = nonce.to_vec();
-    ciphertext.extend_from_slice(&sealed);
-    Ok(ciphertext)
+    .ok_or_else(|| RepositoryError::InvalidExtension("credential encryption failed".into()))
 }
 
 fn open(connection_id: Uuid, field: &str, ciphertext: &[u8]) -> Result<String, RepositoryError> {
-    let unreadable =
-        || RepositoryError::InvalidExtension("stored credential cannot be decrypted".into());
-    if ciphertext.len() < NONCE_LEN {
-        return Err(unreadable());
-    }
-    let key = sealing_key()?;
-    let (nonce, sealed) = ciphertext.split_at(NONCE_LEN);
-    let mut sealed = sealed.to_vec();
-    let plaintext = key
-        .open_in_place(
-            Nonce::try_assume_unique_for_key(nonce).map_err(|_| unreadable())?,
-            Aad::from(associated_data(connection_id, field).as_bytes()),
-            &mut sealed,
-        )
-        .map_err(|_| unreadable())?;
-    String::from_utf8(plaintext.to_vec()).map_err(|_| unreadable())
+    super::sealing::open(
+        credential_key()?,
+        &associated_data(connection_id, field),
+        ciphertext,
+    )
+    .ok_or_else(|| {
+        RepositoryError::InvalidExtension("stored credential cannot be decrypted".into())
+    })
 }
 
 fn open_optional(

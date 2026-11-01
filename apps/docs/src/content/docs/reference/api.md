@@ -491,6 +491,14 @@ See [Translate labels](/builders/translations/).
 | `GET`, `POST` | `/solution-packs/applications/{id}/checks` | Check runs. |
 | `GET` | `/presentation-assets[/{id}[/content]]` | Presentation assets. |
 
+### Identity provider
+
+`GET`, `PUT`, `PATCH`, and `DELETE /workspace/identity-provider` manage the workspace's OpenID Connect provider and require `workspace.manage`. The operator API has the same operations at `/operator/workspaces/{id}/identity-provider`.
+
+`PUT` takes `issuer`, `client_id`, `display_name`, and `client_secret`. The secret is required for a new provider, and no response includes it. `redirect_uri` in each response is the address to register with the provider.
+
+A new provider is unverified and off. It can be enabled with `PATCH { "enabled": true }` only after a test sign-in, and `PATCH { "password_sign_in": "owners" }` needs an enabled provider. Changing the issuer or client ID makes it unverified and off again and restores password sign-in for everyone.
+
 ### Operator API
 
 These routes run the deployment rather than one workspace, and exist only when the `operator_api_token` secret is set. They accept only `Authorization: Bearer <operator token>`: personal tokens and browser sessions are refused, and the operator token works nowhere else. Block `/api/operator` at your proxy so that only trusted networks reach it. Demo deployments refuse these routes.

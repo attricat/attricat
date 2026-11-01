@@ -120,6 +120,8 @@ fn audit_permission(method: &Method, route: &str) -> Permission {
         Permission::RolesManage
     } else if route.starts_with("/workspace/navigation") {
         Permission::WorkspaceNavigationManage
+    } else if route == "/workspace/identity-provider" {
+        Permission::WorkspaceManage
     } else if route.starts_with("/workspace/agent-settings") {
         Permission::AgentsManage
     } else if route == "/workspace/tag-colors" {

@@ -82,6 +82,8 @@ error_codes! {
     GlobalRelationshipSearchTimedOut = "global_relationship_search_timed_out",
     HttpsRequired = "https_required",
     IdempotencyKeyReused = "idempotency_key_reused",
+    IdentityProviderNotEnabled = "identity_provider_not_enabled",
+    IdentityProviderNotVerified = "identity_provider_not_verified",
     InternalError = "internal_error",
     InvalidAnnotationPatch = "invalid_annotation_patch",
     InvalidBlueprintDefinition = "invalid_blueprint_definition",
@@ -93,6 +95,7 @@ error_codes! {
     InvalidFile = "invalid_file",
     InvalidFilePolicy = "invalid_file_policy",
     InvalidFileReferences = "invalid_file_references",
+    InvalidIdentityProvider = "invalid_identity_provider",
     InvalidInput = "invalid_input",
     InvalidLoginIdentifier = "invalid_login_identifier",
     InvalidRange = "invalid_range",
@@ -381,6 +384,16 @@ impl RepositoryError {
             Self::LoginIdentifierTaken => plain(Conflict, Code::LoginIdentifierTaken),
             Self::WorkspaceConflict => plain(Conflict, Code::WorkspaceConflict),
             Self::WorkspaceOwnerExists => plain(Conflict, Code::WorkspaceOwnerExists),
+            Self::IdentityProviderSecretRequired => {
+                plain(Unprocessable, Code::InvalidIdentityProvider)
+            }
+            Self::IdentityProviderNotVerified => plain(Conflict, Code::IdentityProviderNotVerified),
+            Self::IdentityProviderNotEnabled => plain(Conflict, Code::IdentityProviderNotEnabled),
+            Self::IdentityProviderKeyMissing => ErrorDescription::new(
+                Unavailable,
+                Code::ServiceUnavailable,
+                "identity providers are not available on this deployment",
+            ),
             Self::AttributeNotApplicable => plain(Unprocessable, Code::AttributeNotApplicable),
             Self::InvalidFilePolicy => plain(Unprocessable, Code::InvalidFilePolicy),
             Self::InvalidSystemMetadata => plain(Unprocessable, Code::InvalidSystemMetadata),

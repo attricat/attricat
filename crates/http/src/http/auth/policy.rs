@@ -322,6 +322,12 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
             target: TargetKind::None,
         });
     }
+    if path == "/workspace/identity-provider" {
+        return Some(Policy {
+            permission: Permission::WorkspaceManage,
+            target: TargetKind::None,
+        });
+    }
     if path == "/workspace/agent-settings" {
         return Some(Policy {
             permission: Permission::AgentsManage,
@@ -600,6 +606,16 @@ mod tests {
                 Permission::MembersManage
             );
             assert_eq!(additional_permission(path), Some(Permission::RolesGrant));
+        }
+    }
+
+    #[test]
+    fn identity_provider_needs_workspace_management() {
+        for method in [Method::GET, Method::PUT, Method::PATCH, Method::DELETE] {
+            assert_eq!(
+                policy(&method, "/workspace/identity-provider").map(|policy| policy.permission),
+                Some(Permission::WorkspaceManage)
+            );
         }
     }
 

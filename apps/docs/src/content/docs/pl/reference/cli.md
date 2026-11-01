@@ -478,6 +478,17 @@ acli presentation-asset list | get <id>
 acli presentation-asset download <id> --output <path>
 ```
 
+### Logowanie jednokrotne
+
+```sh
+printf '%s' "$CLIENT_SECRET" | acli workspace identity-provider set --issuer <url> --client-id <id> --display-name <nazwa> --client-secret-stdin
+acli workspace identity-provider get
+acli workspace identity-provider update [--enabled true|false] [--password-sign-in all|owners]
+acli workspace identity-provider delete
+```
+
+`acli operator workspace identity-provider <id> …` przyjmuje te same podpolecenia dla dowolnego obszaru roboczego.
+
 ### Operator
 
 Te polecenia obsługują całe wdrożenie, a nie jeden obszar roboczy. Token operatora odczytują z `ATTRICAT_OPERATOR_TOKEN` lub `--token-stdin` i nigdy nie wysyłają `ATTRICAT_TOKEN`.

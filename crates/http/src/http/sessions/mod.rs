@@ -1,4 +1,5 @@
 use crate::repository::ErrorCode;
+use attricat_domain::states::SessionAuthMethod;
 use axum::{Json, extract::State, response::Response};
 use chrono::{Duration, Utc};
 use serde::Deserialize;
@@ -105,23 +106,25 @@ pub(super) async fn discover(
     ApiJson(request): ApiJson<DiscoveryRequest>,
 ) -> Result<Json<DiscoveryResponse>, ApiError> {
     let identifier = request.login_identifier.trim().to_lowercase();
-    let rate_key = digest_login_key(&identifier);
-    if !state
-        .repository
-        .reserve_workspace_discovery_attempt(&rate_key)
-        .await?
-    {
-        return Err(ApiError::rate_limited());
-    }
-    let workspace = state
-        .repository
-        .discover_workspace(&identifier)
-        .await?
-        .ok_or_else(|| ApiError::not_found("workspace"))?;
+    // Only misses count: everyone in a workspace shares its identifier, so
+    // counting hits would let a busy morning, or anyone at all, block sign-in.
+    let Some(workspace) = state.repository.discover_workspace(&identifier).await? else {
+        let rate_key = digest_login_key(&identifier);
+        return Err(
+            if state
+                .repository
+                .reserve_workspace_discovery_attempt(&rate_key)
+                .await?
+            {
+                ApiError::not_found("workspace")
+            } else {
+                ApiError::rate_limited()
+            },
+        );
+    };
     Ok(Json(DiscoveryResponse {
         login_identifier: workspace.login_identifier,
-        // This is deliberately extensible for OIDC, SAML, and passkeys.
-        sign_in_methods: vec!["local_password"],
+        sign_in_methods: vec![SessionAuthMethod::LocalPassword.as_str()],
     }))
 }
 

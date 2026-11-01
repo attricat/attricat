@@ -8,6 +8,7 @@ pub(crate) mod directory;
 pub(crate) mod event;
 pub(crate) mod extension;
 pub(crate) mod file;
+pub(crate) mod identity_provider;
 pub(crate) mod lexicon;
 pub(crate) mod notification;
 pub(crate) mod operator;

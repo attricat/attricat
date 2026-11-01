@@ -52,6 +52,7 @@ mod generated_sequences;
 mod generation_caches;
 mod global_relationship_search_budgets;
 mod identity_memberships;
+mod identity_providers;
 mod image_gallery;
 mod lexicon;
 mod lifecycle_credentials;

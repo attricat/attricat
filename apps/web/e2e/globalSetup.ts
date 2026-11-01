@@ -1,6 +1,7 @@
 import { PostgreSqlContainer } from '@testcontainers/postgresql';
 import { chromium, type BrowserContext } from '@playwright/test';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import {
   mkdtempSync,
   readFileSync,
@@ -285,6 +286,8 @@ export default async () => {
     database_url: database.getConnectionUri(),
     s3_secret_access_key: 'attricat-e2e-secret',
     bootstrap_owner_password: bootstrapOwnerPassword,
+    // .env can set OIDC_CALLBACK_URL, which needs this key.
+    identity_provider_credential_key: randomBytes(32).toString('base64'),
   });
   const apiEnv: NodeJS.ProcessEnv = {
     ...process.env,
@@ -312,6 +315,7 @@ export default async () => {
     HTTP_REQUEST_TIMEOUT_SECONDS: '120',
     PASSWORD_RESET_URL: `${e2eWebUrl}/password-reset/confirm`,
     WORKSPACE_ONBOARDING_URL: `${e2eWebUrl}/onboarding`,
+    OIDC_CALLBACK_URL: `${e2eWebUrl}/api/auth/oidc/callback`,
   };
   const api = start('cargo', ['run', '-p', 'api', '--bin', 'api'], apiEnv);
   let fileWorker: ChildProcess | undefined;
