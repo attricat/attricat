@@ -106,7 +106,11 @@ stores SHA-256 digests only. `POST /auth/renew` atomically revokes the old ident
 and replaces both values; login issues fresh session and CSRF credentials. `POST
 /auth/logout` revokes the current session and clears both cookies. Sessions expire
 after eight hours and are revoked on account/password changes, membership changes,
-and role-grant changes. Renewal shares the workspace lock used by membership
+and role-grant changes. Each session records how and when its user signed in
+(`auth_method`, `authenticated_at`), and renewal keeps both. Renewal cannot extend
+a session past 24 hours from that sign-in; after that the API answers
+`401 unauthenticated` and the user signs in again. Only a `local_password` session
+depends on a credential version. Renewal shares the workspace lock used by membership
 and role revocation, so a replacement session cannot escape a concurrent
 revocation or become valid again when a disabled member is reactivated.
 
