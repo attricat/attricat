@@ -19,6 +19,7 @@ use crate::commands::extension::ExtensionCommand;
 use crate::commands::file::FileCommand;
 use crate::commands::lexicon::LexiconCommand;
 use crate::commands::notification::NotificationCommand;
+use crate::commands::operator::OperatorCommand;
 use crate::commands::presentation_asset::PresentationAssetCommand;
 use crate::commands::record::RecordCommand;
 use crate::commands::reusable_attribute::ReusableAttributeCommand;
@@ -256,6 +257,12 @@ pub(crate) enum Command {
     Metrics {
         #[command(subcommand)]
         command: MetricsCommand,
+    },
+    /// Deployment-level administration with the operator token, read from
+    /// ATTRICAT_OPERATOR_TOKEN or --token-stdin.
+    Operator {
+        #[command(subcommand)]
+        command: OperatorCommand,
     },
     /// Administration for the workspace selected by the bearer credential.
     Workspace {

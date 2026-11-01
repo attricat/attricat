@@ -50,7 +50,7 @@ A context that is in use cannot be deleted.
 
 - In the **Explorer**, the **Context** selector shows, filters, and sorts values as they resolve in that context.
 - On a record, the **Context** selector switches the values you see and edit.
-- In relationship facets, **Tree options** chooses the context used to resolve links.
+- In the Explorer's **Browse by** panel, relationship links resolve in the context selected in the Explorer.
 
 ## Plan the tree first
 

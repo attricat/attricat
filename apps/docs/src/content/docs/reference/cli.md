@@ -155,6 +155,7 @@ acli auth access --permission <code> --kind record|blueprint|context --id <id> [
 acli auth sample-logins
 acli token list
 acli token create --label <label> --permissions <json> [--expires-at <rfc3339>]
+acli token create --generator [--expires-at <rfc3339>]
 acli token revoke <token-id>
 ```
 
@@ -210,19 +211,19 @@ acli context delete <context-id>
 acli record create --blueprint <code> [--values values.yaml] [--files <json-or-file>] [--context-id <id>] [--system-tags <json>] [--system-metadata <json>]
 acli record get | form | delete | duplicate | export-status <record-id>
 acli record labels --record-id <id> [--record-id <id> ...]
-acli record update <record-id> [--values f.yaml] [--relationships f.yaml] [--remove-values f.yaml] [--context-id <id>] [--expected-updated-at <t>]
+acli record update <record-id> [--values f.yaml] [--relationships f.yaml] [--remove-values f.yaml] [--context-id <id>] [--system-tags <json>] [--system-metadata <json>] [--expected-updated-at <t>]
 acli record batch --operations <json-or-file>
 acli record preview <record-id> [--relationship-depth <n>] [--relationship-limit <n>]
 acli record resolved-preview <record-id> --context-id <id>
 acli record search --blueprint <code> [--query <text>] [--filters <json>] [--version <n>] [--sort-field <f> [--sort-direction asc|desc] [--sort-context-code <code>]] [--size <n>] [--cursor <c>] [--include-total] [--outdated] [--system-tags <json>] [--relationship-tree-facets <json>] [--relationship-filters <json>] [--export-extension-id <id> [--export-connection <name>] --export-status <state>] [--data-quality open|acknowledged|clean] [--context-code <code>] [--omit-blueprint] [--omit-previews]
 acli record system-tags --blueprint <code> [--version <n>] [--prefix <text>] [--limit <n>]
-acli record facet-children --blueprint <code> --source-relationship-field <f> --context-id <id> [--hierarchy-field <f>] [--parent-id <id>]
-acli record list --blueprint <code> --related-from <record-id> --relationship <attribute>
-acli record incoming-relationships <record-id> --relationships <json>
+acli record facet-children --blueprint <code> --context-id <id> [--version <n>] [--query <text>] [--source-relationship-field <f>] [--hierarchy-field <f>] [--parent-id <id>] [--cursor <c>] [--selected-target-ids <json>] [--include-ids <json>]
+acli record list --blueprint <code> --related-from <record-id> --relationship <attribute> [--limit <n>] [--cursor <c>]
+acli record incoming-relationships <record-id> --relationships <json> [--size <n>] [--cursor <c>]
 acli record hierarchy <record-id> --context-id <id> --field <relationship>
 acli record changes | value-history <record-id> [--limit <n>] [--offset <n>]
 acli record restore-value <record-id> <history-id> [--expected-updated-at <t>]
-acli record migrate <record-id> [--expected-updated-at <t>]
+acli record migrate <record-id> [--values <json-or-file>] [--relationships <json-or-file>] [--discard-attributes <json-or-file>] [--expected-updated-at <t>]
 acli record transitions <record-id> [--context-id <id>]
 acli record transition <record-id> --attribute <status> --to <option> [--context-id <id>] [--expected-updated-at <t>]
 acli record unlock <record-id> --attribute <status> --to <option> --expected-updated-at <t> [--context-id <id>]
@@ -233,7 +234,7 @@ acli record comment count <record-id>
 acli record comment edit <record-id> <comment-id> --body <text> --revision <n>
 acli record rule list | finding-count <record-id>
 acli record rule findings | runs <record-id> [--limit <n>] [--offset <n>]
-acli record migrate-bulk --blueprint <code> --from-version <n> [--dry-run]
+acli record migrate-bulk --blueprint <code> --from-version <n> [--size <n>] [--dry-run]
 acli record publication list <record-id>
 acli record publication publish | unpublish <record-id> --context-id <channel>
 acli record publication publish-all | readiness <record-id>
@@ -261,7 +262,7 @@ acli file retention-hold list <file-id>
 acli file retention-hold create <file-id> --days <n> --reason <text>
 acli file retention-hold release <file-id> <hold-id>
 acli file download-original <file-id> --output original.bin [--range 'bytes=0-1023']
-acli file download-variant <file-id> thumbnail|display --output preview.webp
+acli file download-variant <file-id> thumbnail|display --output preview.webp [--range 'bytes=0-1023']
 ```
 
 `stage-upload` uploads files before the record exists; pass the returned file IDs to `record create --files`, for example `[{"attribute_code":"manual","file_ids":["<file-id>"]}]`. `set-references` replaces the files an attribute references, in order, and fails if `--expected-file-id` does not list exactly the current ones. Retention holds need the `files.hold` permission.
@@ -380,7 +381,7 @@ acli workspace invitation list
 acli workspace invitation create --email <email> --role-id <id> --scope-type workspace|blueprint-family|record|context-subtree --scope-target-id <id> --expires-at <rfc3339>
 acli workspace invitation revoke <invitation-id>
 acli workspace invitation accept --secret-stdin
-acli workspace user create --email <email> [--display-name <name>]
+acli workspace user create --email <email> [--display-name <name>] [--invite-role-id <id> --scope-type workspace|blueprint-family|record|context-subtree --scope-target-id <id> --expires-at <rfc3339>]
 acli workspace user set-password --onboarding-secret-stdin --invitation-secret-stdin --password-stdin
 acli workspace navigation get | sidebar
 acli workspace navigation set --entries <json>
@@ -399,7 +400,7 @@ acli team list
 acli team create --code <code> --name <name> [--member <user-id> …]
 acli team update <team-id> [--name <name>] [--member <user-id> … | --clear-members]
 acli team delete <team-id>
-acli audit list [--occurred-after <t>] [--occurred-before <t>] [--actor-user-id <id>] [--action-category <c>] [--target-type <t>] [--executor-type human|agent]
+acli audit list [--limit <n>] [--offset <n>] [--occurred-after <t>] [--occurred-before <t>] [--actor-user-id <id>] [--action-category <c>] [--target-type <t>] [--executor-type human|agent] [--agent-run-id <id>] [--agent-tool-call-id <id>]
 ```
 
 ### Extensions
@@ -430,11 +431,11 @@ acli extension operation get | artifacts | deliveries | cancel | replay <run-id>
 acli extension operation download <run-id> <artifact-id> --output <path>
 acli extension run list [--extension-id <id>]
 acli extension run get | cancel <run-id> [--own]
-acli extension run download <run-id> <artifact-id> --output <path>
+acli extension run download <run-id> <artifact-id> --output <path> [--own]
 acli extension annotations namespace|adopt <extension-id>
 acli extension annotations repair <extension-id> <record-id> --patch <json>
 acli extension schedule list
-acli extension schedule create <extension-id> --operation-id <id> --input <json> --interval-seconds <60-2592000>
+acli extension schedule create <extension-id> --operation-id <id> --input <json> [--input-file-id <id>] [--destination <json>] --interval-seconds <60-2592000>
 acli extension schedule update <schedule-id> --enabled true|false --interval-seconds <n>
 acli extension connector-job list <blueprint-id>
 acli extension connector-job run <job-id> --idempotency-key <key>
@@ -476,6 +477,19 @@ acli solution-pack checks get <application-id> <run-id>
 acli presentation-asset list | get <id>
 acli presentation-asset download <id> --output <path>
 ```
+
+### Operator
+
+These commands run the deployment rather than one workspace. They read the operator token from `ATTRICAT_OPERATOR_TOKEN` or `--token-stdin` and never send `ATTRICAT_TOKEN`.
+
+```sh
+acli operator workspace create --id <uuid> --name <name> --login-identifier <identifier> --owner-email <email> [--owner-display-name <name>]
+acli operator workspace get <id>
+acli operator workspace list [--limit <n>] [--offset <n>]
+acli operator workspace invite-owner <id> [--owner-email <email>] [--owner-display-name <name>]
+```
+
+Repeat `create` with the same values to finish a request that failed part way.
 
 ### Operations
 

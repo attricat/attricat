@@ -3,7 +3,7 @@ import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { useContext, useMemo, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { accessTargetKinds, capabilities } from '../auth/capabilities';
-import { useAccess } from '../auth/useCan';
+import { useAccess, useCan } from '../auth/useCan';
 import { recordQueryKeys } from '../records/queryKeys';
 import type { ExtensionRuntimeScope } from './api';
 import type { ActionTarget } from './actions';
@@ -142,12 +142,14 @@ export const ExplorerCellNotes = ({
   const notes = useContext(ExplorerFieldNotesContext);
   const runtime = useExtensionRuntime(notes?.runtimeScope);
   const invoke = useInvokeExtensionAction();
+  const canRunCommands = useCan(capabilities.recordsWrite);
   const entries = notes
     ? fieldNoteLookups(notes.notes(recordId)).attribute(attributeCode)
     : [];
   const badges = entries.flatMap((entry) => (entry.badge ? [entry] : []));
   if (!notes || !badges.length) return children;
   const target: ActionTarget = {
+    canRunCommands,
     blueprintId: notes.runtimeScope.blueprintId,
     blueprintVersion: notes.runtimeScope.blueprintVersion,
     blueprintCode: notes.blueprintCode,

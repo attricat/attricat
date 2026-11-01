@@ -309,7 +309,7 @@ Aby wychwycić takie przypadki, dodaj [regułę](/pl/builders/rules/) z tym samy
 
 ## Egzekwowane reguły
 
-[Reguła jakości danych](/pl/builders/rules/#egzekwowanie-reguły) z tabelą `enforcement` działa jak kontrola, którą można włączać i wyłączać bez publikowania nowej wersji schematu. Odrzuca zapisy naruszające regułę lub chronione przejścia statusu z `422 rule_violation`. Kontroli używaj dla ograniczeń, które są częścią modelu, a egzekwowanych reguł dla zasad, które zespół włącza po [próbnym wykonaniu](/pl/builders/rules/#próbne-wykonanie-przed-włączeniem).
+[Reguła jakości danych](/pl/builders/rules/#egzekwowanie-reguły) z mapowaniem `enforcement` działa jak kontrola, którą można włączać i wyłączać bez publikowania nowej wersji schematu. Odrzuca zapisy naruszające regułę lub chronione przejścia statusu z `422 rule_violation`. Kontroli używaj dla ograniczeń, które są częścią modelu, a egzekwowanych reguł dla zasad, które zespół włącza po [próbnym wykonaniu](/pl/builders/rules/#próbne-wykonanie-przed-włączeniem).
 
 ## Błędy i ich naprawa
 

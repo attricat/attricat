@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import '../../i18n';
+import { afterEach, describe, expect, it } from 'vitest';
+import i18n from '../../i18n';
 import { findingMessage, type FindingAttribute } from './findingMessage';
 
 const attributes: FindingAttribute[] = [
@@ -34,6 +34,32 @@ const attributes: FindingAttribute[] = [
 ];
 
 describe('findingMessage', () => {
+  afterEach(() => i18n.changeLanguage('en'));
+
+  it('words the messages the server sends in the user language', async () => {
+    await i18n.changeLanguage('pl');
+    expect(
+      findingMessage(
+        `None of the alternatives hold: 'condition' must be one of "new"; or 'reserved_until' is required`,
+        attributes,
+      ),
+    ).toBe(
+      'Żaden z wariantów nie jest spełniony: Pole Condition musi mieć jedną z wartości: "New"; lub Pole Reserved until jest wymagane',
+    );
+    expect(
+      findingMessage(`Another record has the same 'condition'`, attributes),
+    ).toBe('Inny rekord ma taką samą wartość: Condition');
+    expect(
+      findingMessage(
+        `'reserved_until' must be greater than 30 days from now`,
+        attributes,
+      ),
+    ).toBe('Pole Reserved until musi być większe niż za 30 dni');
+    expect(findingMessage(`'x' was seen by a future server`, [])).toBe(
+      `'x' was seen by a future server`,
+    );
+  });
+
   it('names attributes and their options by their labels', () => {
     expect(
       findingMessage(`'listing_status' must be one of "approved"`, attributes),

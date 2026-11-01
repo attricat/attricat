@@ -342,7 +342,7 @@ Działanie każdej z tych kontroli opisuje sekcja [Kontroluj cykl życia rekordu
 
 Każdy rekord pamięta dokładną wersję schematu, z którą został utworzony. Gdy opublikujesz wersję 2 schematu `product`, istniejące produkty pozostają przy wersji 1: ich wartości i walidacja zachowują znaczenie z chwili zapisu.
 
-Attricat oznacza je wtedy jako nieaktualne i proponuje migrację. Wersje, które tylko dodają opcjonalne atrybuty, można migrować zbiorczo. Zmiany, które usuwają atrybuty lub zmieniają ich typ albo dodają atrybuty wymagane, wymagają decyzji dla każdego rekordu. Zobacz [Wersje i migracja](/pl/builders/revisions/).
+Attricat oznacza je wtedy jako nieaktualne i proponuje migrację. Wersje, które tylko dodają opcjonalne atrybuty lub usuwają atrybuty, można migrować zbiorczo; wartości usuniętych atrybutów są archiwizowane. Zmiany, które zmieniają typ lub inne ustawienia istniejącego atrybutu, zmieniają `record_schema` albo dodają atrybuty wymagane, wymagają decyzji dla każdego rekordu. Zobacz [Wersje i migracja](/pl/builders/revisions/).
 
 Dwie praktyki oszczędzają później kłopotów:
 
@@ -353,9 +353,10 @@ Dwie praktyki oszczędzają później kłopotów:
 
 Schemat może też zawierać:
 
-- [Reguły](/pl/builders/rules/), które oznaczają problemy z jakością danych, np. brak tytułu, i mogą je [egzekwować](/pl/builders/rules/#egzekwowanie-reguły) przy zapisie lub zmianie statusu.
 - [Atrybuty statusu](/pl/builders/validation/#statusy) z dozwolonymi przejściami i [przetłumaczonymi etykietami](/pl/builders/translations/#etykiety-statusów-i-list-wyboru).
 - [Politykę publikacji](/pl/guides/publishing/#zachowaj-publikację-po-zaufanych-edycjach), która pozwala zaufanym rolom edytować bez cofania zatwierdzeń w kanałach.
 - [Zadania konektorów](/pl/reference/blueprint/#zadania-konektorów), które importują lub eksportują rekordy przez rozszerzenie konektora.
 - Atrybuty, których typ pochodzi z [rozszerzenia](/pl/reference/blueprint/#typy-atrybutów-z-rozszerzeń).
 - [Układ paneli i akcji rozszerzeń](/pl/reference/blueprint/#extension_layout) na stronach rekordów.
+
+[Reguły jakości danych](/pl/builders/rules/) tworzy się osobno, poza schematem. Reguła oznacza problemy w rekordach schematu, np. brak tytułu, i może [odrzucać](/pl/builders/rules/#egzekwowanie-reguły) zapisy lub zmiany statusu, które ją naruszają.

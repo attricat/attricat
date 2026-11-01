@@ -12,8 +12,8 @@ Zdarzenia napędzają [przepływy pracy](/pl/builders/workflows/), [reguły](/pl
 | Typ | Rejestrowane, gdy |
 | --- | --- |
 | `record.created.v1` | Rekord zostaje utworzony. |
-| `record.updated.v1` | Zmieniają się wartości, relacje lub adnotacje rekordu. |
-| `record.annotations_changed.v1` | Rozszerzenie lub naprawa wykonana przez operatora zmienia adnotacje jednego rozszerzenia na rekordzie. Dane zdarzenia wskazują rekord, jego wersję schematu, `extension_id`, nową wartość `revision` oraz zmienione tagi i klucze metadanych, nigdy ich wartości. |
+| `record.updated.v1` | Zapis zmienia wartości, relacje, tagi systemowe lub metadane systemowe rekordu. |
+| `record.annotations_changed.v1` | Rozszerzenie zmienia tagi lub metadane rekordu we własnej przestrzeni nazw. |
 | `record.deleted.v1` | Rekord zostaje usunięty. |
 | `record.migrated.v1` | Rekord przechodzi na nowszą wersję schematu. |
 | `record.published.v1` | Rekord zostaje opublikowany w kanale. |
@@ -78,6 +78,26 @@ Aby działać na bieżącym stanie rekordu, odczytaj go; ładunek jest wyłączn
 - **Atrybuty plikowe:** przesłanie, podłączenie, zmiana kolejności lub usunięcie plików trafia do dziennika audytu, ale nie tworzy zdarzenia ani faktu.
 - Zmiany tagów i metadanych systemowych nie są wartościami atrybutów i nie dodają faktów. Zamiast tego `record.created.v1` i `record.updated.v1` wymieniają tagi systemowe dodane przez zapis w `tags_added`, a usunięte w `tags_removed`. Puste listy są pomijane. [Wyzwalacze przepływów pracy](/pl/builders/workflows/#reaguj-tylko-na-dodane-lub-usunięte-tagi) mogą po nich filtrować.
 - **Migracje:** `record.migrated.v1` nie zawiera `facts`. Jego ładunek wskazuje rekord, jego schemat, `source_version`, `target_version` i `migration_id`. Jeśli migracja usunęła relację lub zmieniła jej cele, `released_relationships` wymienia cele, których rekord już nie wskazuje, jako `attribute_code` i `target_record_ids` (najwyżej 100 na relację i 1000 na zdarzenie).
+
+## Zmiany adnotacji rozszerzeń
+
+`record.annotations_changed.v1` jest zapisywane, gdy rozszerzenie albo operator naprawiający jego przestrzeń nazw zmienia tagi lub metadane systemowe rekordu należące do tego rozszerzenia. Jego agregatem jest rekord, a ładunek wygląda tak:
+
+```json
+{
+  "record_id": "7f1c…",
+  "blueprint_id": "a2d4…",
+  "blueprint_version": 3,
+  "extension_id": "acme.enrich",
+  "revision": 4,
+  "tags_added": ["reviewed"],
+  "tags_removed": [],
+  "metadata_keys_set": ["score"],
+  "metadata_keys_removed": []
+}
+```
+
+Tagi i klucze to lokalne nazwy rozszerzenia, bez prefiksu `<extension-id>:`. `revision` liczy zmiany tej przestrzeni nazw w danym rekordzie. Naprawa przez operatora, która zastępuje nieprawidłową wartość przestrzeni nazw, dodaje też `replaced_namespace_value`. Te zmiany nie zapisują `record.updated.v1`.
 
 ## Prośby o ponowienie eksportu
 

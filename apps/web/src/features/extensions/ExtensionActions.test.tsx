@@ -34,6 +34,7 @@ vi.mock('../extension-runs/runNotifications', () => ({
   notifyRunStarted: vi.fn(),
 }));
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => vi.fn() }));
+vi.mock('../auth/useCan', () => ({ useCan: () => true }));
 vi.mock('../../components/toast', () => ({
   toast: { show: vi.fn(() => 1), error: vi.fn(), dismiss: vi.fn() },
 }));

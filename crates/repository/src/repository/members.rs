@@ -14,7 +14,7 @@ use super::roles::OWNER_ROLE_ID;
 use super::tokens::TOKEN_DIGEST_BYTES;
 use attricat_domain::permissions::Permission;
 
-type WorkspaceUserInvitation = (Uuid, Uuid, String, Uuid, Vec<u8>, DateTime<Utc>);
+pub(super) type WorkspaceUserInvitation = (Uuid, Uuid, String, Uuid, Vec<u8>, DateTime<Utc>);
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct WorkspaceMember {
@@ -53,6 +53,15 @@ pub struct CreatedWorkspaceUser {
     pub needs_password_setup: bool,
 }
 
+/// The account an invitation addresses, as it stands in the transaction.
+pub(super) struct InvitedUser {
+    pub(super) user_id: Uuid,
+    pub(super) active: bool,
+    pub(super) verified: bool,
+    pub(super) security_version: i32,
+    pub(super) credential_exists: bool,
+}
+
 pub struct CompletedWorkspaceOnboarding {
     pub membership_id: Uuid,
     pub user_id: Uuid,
@@ -88,20 +97,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
             Permission::MembersManage,
         )
         .await?;
-        let user = sqlx::query("INSERT INTO users (id, email, display_name, email_verified_at) VALUES ($1, $2, NULLIF(btrim($3), ''), clock_timestamp()) ON CONFLICT (email) DO UPDATE SET display_name = COALESCE(users.display_name, EXCLUDED.display_name) RETURNING id, state, email_verified_at, security_version")
-            .bind(Uuid::new_v4()).bind(email).bind(display_name).fetch_one(&mut *tx).await?;
-        let user_id: Uuid = user.try_get("id")?;
-        let active = user.try_get::<String, _>("state")? == "active";
-        let verified = user
-            .try_get::<Option<DateTime<Utc>>, _>("email_verified_at")?
-            .is_some();
-        let security_version: i32 = user.try_get("security_version")?;
-        let credential_exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS (SELECT 1 FROM local_password_credentials WHERE user_id = $1)",
-        )
-        .bind(user_id)
-        .fetch_one(&mut *tx)
-        .await?;
+        let user = Self::upsert_invited_user_on(&mut tx, email, display_name).await?;
         let Some((
             invitation_id,
             role_id,
@@ -113,9 +109,9 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         else {
             self.commit_mutation(tx).await?;
             return Ok(CreatedWorkspaceUser {
-                user_id,
+                user_id: user.user_id,
                 invitation_id: None,
-                needs_password_setup: !credential_exists,
+                needs_password_setup: !user.credential_exists,
             });
         };
         self.ensure_token_can_delegate_role_on(&mut tx, actor_id, workspace_id, role_id)
@@ -136,13 +132,77 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         {
             return Err(RepositoryError::InvitationInvalid);
         }
+        Self::insert_invitation_on(
+            &mut tx,
+            &user,
+            actor_id,
+            workspace_id,
+            email,
+            (
+                invitation_id,
+                role_id,
+                scope_type,
+                scope_target_id,
+                invitation_digest,
+                expires_at,
+            ),
+            action_digest,
+        )
+        .await?;
+        self.commit_mutation(tx).await?;
+        Ok(CreatedWorkspaceUser {
+            user_id: user.user_id,
+            invitation_id: Some(invitation_id),
+            needs_password_setup: !user.credential_exists,
+        })
+    }
+
+    /// Finds or creates the account an invitation addresses. Accounts are
+    /// global, so an existing address keeps its user and credential.
+    pub(super) async fn upsert_invited_user_on(
+        tx: &mut Transaction<'_, Postgres>,
+        email: &str,
+        display_name: Option<&str>,
+    ) -> Result<InvitedUser, RepositoryError> {
+        let user = sqlx::query("INSERT INTO users (id, email, display_name, email_verified_at) VALUES ($1, $2, NULLIF(btrim($3), ''), clock_timestamp()) ON CONFLICT (email) DO UPDATE SET display_name = COALESCE(users.display_name, EXCLUDED.display_name) RETURNING id, state, email_verified_at, security_version")
+            .bind(Uuid::new_v4()).bind(email).bind(display_name).fetch_one(&mut **tx).await?;
+        let user_id: Uuid = user.try_get("id")?;
+        let credential_exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM local_password_credentials WHERE user_id = $1)",
+        )
+        .bind(user_id)
+        .fetch_one(&mut **tx)
+        .await?;
+        Ok(InvitedUser {
+            user_id,
+            active: user.try_get::<String, _>("state")? == "active",
+            verified: user
+                .try_get::<Option<DateTime<Utc>>, _>("email_verified_at")?
+                .is_some(),
+            security_version: user.try_get("security_version")?,
+            credential_exists,
+        })
+    }
+
+    /// Stores an invitation and, for an account without a credential, the
+    /// password setup action that its onboarding link completes.
+    pub(super) async fn insert_invitation_on(
+        tx: &mut Transaction<'_, Postgres>,
+        user: &InvitedUser,
+        inviter_id: Uuid,
+        workspace_id: Uuid,
+        email: &str,
+        (invitation_id, role_id, scope_type, scope_target_id, invitation_digest, expires_at): WorkspaceUserInvitation,
+        action_digest: Option<Vec<u8>>,
+    ) -> Result<(), RepositoryError> {
+        let user_id = user.user_id;
         sqlx::query("INSERT INTO workspace_invitations (id, workspace_id, invitee_email, inviter_user_id, role_id, scope_type, scope_target_id, token_digest, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)")
-            .bind(invitation_id).bind(workspace_id).bind(email).bind(actor_id).bind(role_id).bind(&scope_type).bind(scope_target_id).bind(invitation_digest).bind(expires_at).execute(&mut *tx).await?;
-        if !credential_exists {
+            .bind(invitation_id).bind(workspace_id).bind(email).bind(inviter_id).bind(role_id).bind(&scope_type).bind(scope_target_id).bind(invitation_digest).bind(expires_at).execute(&mut **tx).await?;
+        if !user.credential_exists {
             let action_digest = action_digest
                 .filter(|digest| digest.len() == TOKEN_DIGEST_BYTES)
                 .ok_or(RepositoryError::InvitationInvalid)?;
-            if !active || !verified {
+            if !user.active || !user.verified {
                 return Err(RepositoryError::InvitationInvalid);
             }
             // Replace standalone setup links and this workspace's earlier
@@ -152,20 +212,15 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
             // The replaced link's invitation in this workspace can no longer
             // be completed, so it is revoked rather than left listed as pending.
             sqlx::query("UPDATE workspace_invitations i SET revoked_at = clock_timestamp() FROM workspace_invitation_onboarding o JOIN user_lifecycle_action_tokens a ON a.token_digest = o.action_token_digest AND a.user_id = o.user_id WHERE o.invitation_id = i.id AND o.workspace_id = $2 AND o.user_id = $1 AND a.purpose = 'password_setup' AND a.consumed_at IS NULL AND a.revoked_at IS NULL AND i.accepted_at IS NULL AND i.revoked_at IS NULL")
-                .bind(user_id).bind(workspace_id).execute(&mut *tx).await?;
+                .bind(user_id).bind(workspace_id).execute(&mut **tx).await?;
             sqlx::query("UPDATE user_lifecycle_action_tokens a SET revoked_at = clock_timestamp() WHERE a.user_id = $1 AND a.purpose = 'password_setup' AND a.consumed_at IS NULL AND a.revoked_at IS NULL AND NOT EXISTS (SELECT 1 FROM workspace_invitation_onboarding o WHERE o.user_id = a.user_id AND o.action_token_digest = a.token_digest AND o.workspace_id <> $2)")
-                .bind(user_id).bind(workspace_id).execute(&mut *tx).await?;
+                .bind(user_id).bind(workspace_id).execute(&mut **tx).await?;
             sqlx::query("INSERT INTO user_lifecycle_action_tokens (id, user_id, purpose, token_digest, issued_security_version, issued_credential_version, expires_at) VALUES ($1,$2,'password_setup',$3,$4,0,$5)")
-                .bind(Uuid::new_v4()).bind(user_id).bind(&action_digest).bind(security_version).bind(expires_at).execute(&mut *tx).await?;
+                .bind(Uuid::new_v4()).bind(user_id).bind(&action_digest).bind(user.security_version).bind(expires_at).execute(&mut **tx).await?;
             sqlx::query("INSERT INTO workspace_invitation_onboarding (invitation_id, workspace_id, user_id, action_token_digest) VALUES ($1,$2,$3,$4)")
-                .bind(invitation_id).bind(workspace_id).bind(user_id).bind(action_digest).execute(&mut *tx).await?;
+                .bind(invitation_id).bind(workspace_id).bind(user_id).bind(action_digest).execute(&mut **tx).await?;
         }
-        self.commit_mutation(tx).await?;
-        Ok(CreatedWorkspaceUser {
-            user_id,
-            invitation_id: Some(invitation_id),
-            needs_password_setup: !credential_exists,
-        })
+        Ok(())
     }
 
     pub async fn complete_workspace_onboarding(
@@ -222,7 +277,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
     // user, token or invitation row, to avoid restoring access or inverting
     // the membership/invitation lock order. NO KEY UPDATE still permits FK
     // checks from unrelated workspace writes.
-    async fn lock_invitation_changes_on(
+    pub(super) async fn lock_invitation_changes_on(
         tx: &mut Transaction<'_, Postgres>,
         workspace_id: Uuid,
     ) -> Result<(), RepositoryError> {

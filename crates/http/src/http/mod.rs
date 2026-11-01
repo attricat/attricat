@@ -19,6 +19,7 @@ mod files;
 mod lexicon;
 mod members;
 mod notifications;
+mod operator;
 mod pagination;
 mod presentation_assets;
 mod record_comments;
@@ -120,6 +121,8 @@ pub struct AppState {
     pub devtools_enabled: bool,
     /// A public demo: actions that could lock visitors out are refused.
     pub demo_mode: bool,
+    /// Enables the operator API when set.
+    pub operator_token: Option<OperatorToken>,
     /// Seeded per-role accounts that the web sign-in offers to pre-fill.
     pub sample_logins: Option<SampleLogins>,
     pub build_info: BuildInfo,
@@ -129,6 +132,7 @@ pub struct AppState {
 }
 
 pub use self::data_health::DataHealthCache;
+pub use self::operator::OperatorToken;
 pub use self::sessions::{SampleAccount, SampleLogins};
 pub use self::streams::StreamControl;
 pub use self::system::BuildInfo;
@@ -1258,6 +1262,9 @@ pub fn router(state: AppState) -> Router {
             state.clone(),
             auth::authorize,
         ))
+        // Added after the layer above, so member authorization does not wrap
+        // these routes; they carry their own operator check.
+        .merge(operator::routes(state.clone()))
         .with_state(state.clone())
         .layer(axum::extract::DefaultBodyLimit::max(
             state.default_body_limit,

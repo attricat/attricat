@@ -93,14 +93,16 @@ export const usePendingFileUploads = (options: Options) => {
       const policy = attribute.file_policy;
       const types = policy && permittedFileTypes(policy);
       rejected.push(
-        rejection === 'size' && policy?.max_bytes
-          ? t('files.fileTooLarge', {
-              filename: file.name,
-              size: formatBytes(policy.max_bytes),
-            })
-          : types
-            ? t('files.fileTypeNotPermitted', { filename: file.name, types })
-            : t('files.fileRejected', { filename: file.name }),
+        rejection === 'empty'
+          ? t('files.fileEmpty', { filename: file.name })
+          : rejection === 'size' && policy?.max_bytes
+            ? t('files.fileTooLarge', {
+                filename: file.name,
+                size: formatBytes(policy.max_bytes),
+              })
+            : types
+              ? t('files.fileTypeNotPermitted', { filename: file.name, types })
+              : t('files.fileRejected', { filename: file.name }),
       );
       return false;
     });

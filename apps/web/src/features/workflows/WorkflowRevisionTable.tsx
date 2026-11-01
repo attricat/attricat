@@ -25,7 +25,7 @@ export const WorkflowRevisionTable = ({
         <Table size="small">
           <TableHead>
             <TableRow>
-              <TableCell>{t('workflows.currentRevision')}</TableCell>
+              <TableCell>{t('workflows.revision')}</TableCell>
               <TableCell>{t('workflows.status')}</TableCell>
               <TableCell>{t('workflows.created')}</TableCell>
               <TableCell>{t('workflows.published')}</TableCell>
@@ -39,19 +39,21 @@ export const WorkflowRevisionTable = ({
                 <TableCell>
                   <RevisionStatusChip size="small" status={revision.status} />
                 </TableCell>
-                <TableCell>
+                <TableCell sx={{ whiteSpace: 'nowrap' }}>
                   <Timestamp
                     fallback={t('workflows.notAvailable')}
                     value={revision.created_at}
                   />
                 </TableCell>
-                <TableCell>
+                <TableCell sx={{ whiteSpace: 'nowrap' }}>
                   <Timestamp
                     fallback={t('workflows.notAvailable')}
                     value={revision.published_at}
                   />
                 </TableCell>
-                <TableCell sx={{ fontFamily: monoFontFamily }}>
+                <TableCell
+                  sx={{ fontFamily: monoFontFamily, overflowWrap: 'anywhere' }}
+                >
                   {revision.definition_hash}
                 </TableCell>
               </TableRow>

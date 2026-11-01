@@ -199,6 +199,13 @@ export const makeTheme = (mode: DesignMode) => {
               outline: `2px solid ${c.action.focus}`,
               outlineOffset: 2,
             },
+            // The warning color is a fill: as text it is too faint to read.
+            variants: [
+              {
+                props: { color: 'warning', variant: 'text' },
+                style: { color: c.semantic.warning.foreground },
+              },
+            ],
           },
           outlined: {
             borderColor: c.border.default,

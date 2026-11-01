@@ -30,6 +30,7 @@ A missing or expired sign-in returns `401`. A signed-in person without the permi
 | `contexts.write` | Creating, changing, and deleting contexts; enabling publication channels. | ✓ | ✓ | ✓ | |
 | `data_health.read` | Data health, background processing, metrics, and dead-letter event lists; export status counts and the Explorer's **Export status** filter. | ✓ | ✓ | ✓ | ✓ |
 | `agents.run` | Agent conversations and approvals. | ✓ | ✓ | | |
+| `agents.manage` | How the agent proposes and applies changes, such as how its bulk edits are approved (`GET`/`PUT /workspace/agent-settings`, `acli workspace agent set`). | ✓ | ✓ | | |
 | `rules.read` | Rules, runs, and findings. | ✓ | ✓ | | |
 | `rules.manage` | Creating, changing, enabling, and running rules; acknowledging findings. | ✓ | ✓ | | |
 | `workflows.read` | Workflows and run history. | ✓ | ✓ | | |

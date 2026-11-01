@@ -134,6 +134,47 @@ fn auth_preferences_require_exactly_one_time_zone_choice() {
 }
 
 #[test]
+fn operator_workspace_commands_parse() {
+    let id = Uuid::nil().to_string();
+    assert!(
+        Cli::try_parse_from([
+            "acli",
+            "operator",
+            "workspace",
+            "create",
+            "--id",
+            &id,
+            "--name",
+            "Acme",
+            "--login-identifier",
+            "acme.example",
+            "--owner-email",
+            "owner@acme.example",
+        ])
+        .is_ok()
+    );
+    assert!(Cli::try_parse_from(["acli", "operator", "workspace", "get", &id]).is_ok());
+    assert!(Cli::try_parse_from(["acli", "operator", "workspace", "list", "--limit", "5"]).is_ok());
+    assert!(Cli::try_parse_from(["acli", "operator", "workspace", "invite-owner", &id]).is_ok());
+    // The caller supplies the ID, because a retry depends on it.
+    assert!(
+        Cli::try_parse_from([
+            "acli",
+            "operator",
+            "workspace",
+            "create",
+            "--name",
+            "Acme",
+            "--login-identifier",
+            "acme.example",
+            "--owner-email",
+            "owner@acme.example",
+        ])
+        .is_err()
+    );
+}
+
+#[test]
 fn notification_commands_build_requests() {
     let parse = |args: &[&str]| match Cli::try_parse_from(args).unwrap().command {
         Command::Notification { command } => notification_request(command),

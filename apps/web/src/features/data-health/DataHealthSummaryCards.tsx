@@ -35,7 +35,9 @@ export const DataHealthSummaryCards = ({
           <Typography color="text.secondary" variant="body2">
             {label}
           </Typography>
-          <Typography variant="h4">{value}</Typography>
+          <Typography component="p" variant="h4">
+            {value}
+          </Typography>
         </Paper>
       ))}
     </Stack>

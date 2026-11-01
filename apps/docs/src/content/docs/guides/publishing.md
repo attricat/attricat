@@ -15,12 +15,15 @@ Enabling a channel needs `contexts.write`.
 
 ## Publish a record
 
-On the record page, the **Publication** section lists each enabled channel with **Published** or **Not published**, and who published it and when.
+On the record page, a globe icon in the toolbar shows the record's publication status in the selected context. Its tooltip says **Published** or **Not published**, and who published the record and when. If the selected context is not a channel, it says **Not an export channel**. Switch the **Context** selector to see another channel.
 
-- **Publish** approves the record for the selected channel.
+Publish from the record's **Actions** menu:
+
+- **Publish** approves the record for the selected channel. When the record is already published there, the item reads **Republish**.
 - **Publish to all channels** approves it for every enabled channel at once.
-- **Unpublish** withdraws the approval for a channel.
-- **Republish** approves again after an edit withdrew it.
+- **Unpublish** withdraws the approval for the selected channel. It appears only when the record is published there.
+
+After an edit withdraws the approval, the status is **Not published** again, so the menu offers **Publish**.
 
 In the Explorer, select a channel as the context to get a **Publication** column. Sort it to bring unpublished records to the top.
 
@@ -52,7 +55,7 @@ Checks are evaluated live, in the channel context, when someone publishes. They 
 
 If a check fails, nothing is published and the request returns `422 publication_checks_failed`. `error.details.context` is the channel code, and `error.details.violations` lists the failing rules and checks in the same shape as [validation errors](/builders/validation/#errors-and-how-to-fix-them). This applies to **Publish**, **Publish to all channels**, and publishing all records of a blueprint. In the bulk case, one failing record rejects the whole request, and each violation's `evidence.record_id` names the record.
 
-The record page's **Publication** section marks channels the record is **Not ready** for. To check readiness from the API without publishing, call `GET /v1/records/{id}/publications/readiness`. It returns each enabled channel with `ready` and its `violations`. Fix the listed attributes, or the linked records the messages name, then publish again.
+When the record is not ready for the selected channel, a **Not ready** chip appears next to the publication icon, with the reasons in its tooltip. **Publish** is then disabled in the **Actions** menu. **Publish to all channels** is disabled while any channel is not ready, and lists those channels. To check readiness from the API without publishing, call `GET /v1/records/{id}/publications/readiness`. It returns each enabled channel with `ready` and its `violations`. Fix the listed attributes, or the linked records the messages name, then publish again.
 
 ## What withdraws a publication
 

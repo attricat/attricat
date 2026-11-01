@@ -40,7 +40,7 @@ views:
     fields: [title]
 ```
 
-Schemat może też definiować schematy walidacji, układy stron, reguły jakości danych i zadania konektorów.
+Schemat może też definiować schematy walidacji, układy stron i zadania konektorów. Reguły jakości danych tworzy się osobno i sprawdzają one rekordy schematu.
 
 **Mixiny** to schematy, które istnieją tylko po to, by inne schematy pobierały z nich atrybuty przez include. Sprzedawca trzyma pola SEO w mixinie `seo`, używanej zarówno przez `product`, jak i `category`.
 

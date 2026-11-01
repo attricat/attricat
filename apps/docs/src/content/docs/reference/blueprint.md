@@ -13,7 +13,7 @@ YAML is indentation-sensitive: indent with spaces, never tabs, and keep the item
 
 ## Codes
 
-Blueprint codes, attribute codes, include aliases, relationship targets, rule codes, connector job codes, and role codes in `publication` must be **codes**: non-empty strings of ASCII letters, digits, `-`, and `_`. `product`, `seo-fields`, and `stock_on_hand` are valid. `product type` and `prodükt` are not.
+Blueprint codes, attribute codes, include aliases, relationship targets, connector job codes, and role codes in `publication` must be **codes**: non-empty strings of ASCII letters, digits, `-`, and `_`. `product`, `seo-fields`, and `stock_on_hand` are valid. `product type` and `prodükt` are not.
 
 ## Translated labels
 
@@ -43,7 +43,6 @@ Record blueprints use `kind: record`.
 | `views` | mapping | For `record`: yes | Layouts for the web app. Record blueprints must define `views.dropdown_option`. See [Views](#views). |
 | `record_schema` | string (JSON) | No | JSON Schema for the whole record, optionally with [`x-attricat-checks`](#record-checks). Record blueprints only. See [Validation](/builders/validation/). |
 | `publication` | mapping | No | Publication reapproval policy. See [Publication](#publication). |
-| `rules` | list of mappings | No | Data-quality rules owned by this blueprint. See [Rules](/builders/rules/). |
 | `unique_keys` | list of mappings | No | Business keys whose values must be unique. Record blueprints only. See [Unique keys](#unique-keys). |
 | `connector_jobs` | list of mappings | No | Scheduled or manual import and export jobs run by a connector extension. Record blueprints only. See [Connector jobs](#connector-jobs). |
 | `extensions` | mapping | No | Free-form data for extensions, namespaced under `extensions.<extension-id>`. The core compiler ignores it; extensions read it from the stored definition. |

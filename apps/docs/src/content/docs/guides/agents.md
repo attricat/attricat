@@ -1,9 +1,9 @@
 ---
 title: Agents and approvals
-description: Ask an AI agent to inspect and change your catalog, with every change stopped for your approval.
+description: Ask an AI agent to inspect and change your catalog, and approve the changes it proposes.
 ---
 
-The Attricat agent is a conversational assistant that can read your catalog and propose changes to it. It can look up records, check blueprints, search, and review data health without asking. Any change it wants to make stops and waits for a person to approve it.
+The Attricat agent is a conversational assistant that can read your catalog and propose changes to it. It can look up records, check blueprints, search, and review data health without asking. Any change it wants to make stops and waits for a person to approve it, unless you let it [change a record without asking](#auto-approve-changes-to-a-record).
 
 Agents are optional. An administrator has to [configure an AI provider](/reference/configuration/#agents) before they appear.
 
@@ -11,11 +11,11 @@ In the public demo the agent is read-only. It can do everything listed under *Wi
 
 ## Start a conversation
 
-Open **Agents** in the sidebar and choose **New conversation**. Give the thread a title that describes the task, such as *Clean up inactive suppliers*, and describe what you want.
+Open **Agents** in the sidebar, choose **New conversation**, and describe what you want. The conversation is named after your first message, and Attricat may replace that name with a generated title shortly after. To change it, choose **Change conversation title**.
 
 You can also start a conversation from:
 
-- **Ask about this record** on a record page. These conversations are listed on the record's **Conversations** tab; turn on **Show record conversations** to include them in the **Agents** list;
+- **Ask about this record** on a record page. These conversations are listed on the record's **Agents** tab; turn on **Show record conversations** to include them in the **Agents** list;
 - **Send to agent conversation** after selecting records in the Explorer.
 
 Attach files with **Add files**, up to 16 per message. Images up to 5 MiB are sent to the provider so the agent can see them. The agent also reads the text of PDF, Word (`.docx`) and Excel (`.xlsx`) files: a short document is included with your message, and the agent reads a longer one page by page or sheet by sheet. Other files are described by name and type, and the agent can open them with its file tools.
@@ -36,6 +36,7 @@ The agent acts as you. It can only see and change what your role allows.
 - view images and read text, PDF, Word and Excel files in the workspace;
 - read extension operation runs and connector jobs (with `extensions.manage`);
 - explain a record's status transitions, approvals, and retention holds;
+- read a record's comments;
 - read your [inbox](/guides/inbox/).
 
 **With your approval** it can:
@@ -47,10 +48,13 @@ The agent acts as you. It can only see and change what your role allows.
 - update system tags and metadata;
 - publish and unpublish records;
 - create, update, and delete contexts;
+- duplicate records;
+- add comments to records, and mention people in them, which notifies them;
+- acknowledge rule findings (with `rules.manage`);
 - create and update saved searches;
 - mark notifications in your inbox as read or unread, or delete them.
 
-It cannot manage rules, workflows, extensions, members, or roles.
+It cannot create or change rules, and cannot manage workflows, extensions, members, or roles.
 
 ## Approve or reject
 
@@ -62,6 +66,12 @@ When the agent wants to change something, the conversation shows **Approval need
 A decision is final. Approving twice never runs a change twice.
 
 Read proposals carefully. Replacing relationships sets the complete list for that attribute and context; an empty list removes every link.
+
+### Auto-approve changes to a record
+
+In a conversation about a record, you can switch on **Auto-approve changes within this conversation**. For the messages you send, the agent then changes that record's fields, relationships, tags, files and comments without asking. Deleting or publishing the record, and changes to other records, still need your approval.
+
+Switching it on needs permission to edit the record. It covers the messages of one person at a time: if someone else has it on, switching it on moves it to your messages. Anyone who can read the conversation can switch it off.
 
 ### Changes to several records
 

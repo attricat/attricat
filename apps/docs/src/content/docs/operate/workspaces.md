@@ -5,7 +5,7 @@ description: Manage members, teams, roles, invitations, sidebar navigation, API 
 
 A workspace is one catalog with its own members, blueprints, records, contexts, and extensions. Workspaces are fully separated: nothing is shared between them.
 
-Most administration happens under **Manage → Workspace management**, which has five tabs: **Members**, **Teams**, **Roles**, **Invitations**, and **Navigation**.
+Most administration happens under **Manage → Workspace management**, which has up to seven tabs, depending on your permissions: **Members**, **Teams**, **Roles**, **Invitations**, **Navigation**, **Tag colors**, and **Agent**.
 
 ## Signing in
 
@@ -21,9 +21,9 @@ Password sign-in is the only method today. Single sign-on, multi-factor authenti
 
 - grant or revoke roles;
 - set a member **inactive**, which signs them out and blocks access without deleting their history;
-- transfer ownership to another active member (owners only).
+- transfer ownership to another active member (owners only). This removes your own owner role, so Attricat asks you to confirm.
 
-A workspace always has at least one active owner. Membership and role changes sign the affected person out of existing sessions.
+A workspace always has at least one active owner. Revoking the last owner's role or setting them inactive fails with `409 last_workspace_owner`. Membership and role changes sign the affected person out of existing sessions.
 
 ## Teams
 
@@ -42,7 +42,7 @@ A role is a named set of permissions. Four built-in roles cannot be changed:
 | `editor` | Read and write blueprints, records, and contexts; delete records; read data health. Cannot publish blueprints or records, or administer the workspace. |
 | `viewer` | Read blueprints, records, contexts, and data health. |
 
-Create **custom roles** under **Roles** to give a narrower or different set. You can only put permissions into a role that you have yourself. Duplicate a built-in role to start from its permissions. Retiring a custom role can move its grants to a replacement role.
+Create **custom roles** under **Roles** to give a narrower or different set. You can only put permissions into a role that you have yourself. Duplicate a built-in role to start from its permissions. You can change a custom role's permissions later. A role needs at least one permission; saving one without any fails with `422 role_permissions_required`. Retiring a custom role can move its grants to a replacement role.
 
 The full permission list is in the [permissions reference](/reference/permissions/).
 
@@ -63,9 +63,9 @@ The owner role can only be granted on the whole workspace.
 
 ## Invitations
 
-Under **Invitations**, invite someone by email with a role, a scope, and an expiry date. They receive a one-time link. Someone who already has an account accepts and joins; someone new sets their password first.
+Under **Invitations**, invite someone by email with a role, a scope, and an expiry date, which defaults to one week. They receive a one-time link. Someone who already has an account accepts and joins; someone new sets their password first.
 
-You can also create a user directly and send them an onboarding link. Revoke a pending invitation at any time.
+You can also create a user directly and send them an onboarding link. Inviting someone again before they set their password revokes their earlier pending invitation. Revoke a pending invitation at any time.
 
 Invitation and onboarding emails need [SMTP configured](/reference/configuration/#email).
 

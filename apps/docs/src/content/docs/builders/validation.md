@@ -310,7 +310,7 @@ To catch these cases, add a [rule](/builders/rules/) with the same predicate and
 
 ## Enforcing rules
 
-A [data quality rule](/builders/rules/#enforce-a-rule) with an `enforcement` table works like a check that can be switched on and off without publishing a new blueprint revision. It rejects violating saves or guarded status transitions with `422 rule_violation`. Use checks for constraints that are part of the model, and enforcing rules for policies a team turns on after a [dry run](/builders/rules/#dry-run-before-enabling).
+A [data quality rule](/builders/rules/#enforce-a-rule) with an `enforcement` mapping works like a check that can be switched on and off without publishing a new blueprint revision. It rejects violating saves or guarded status transitions with `422 rule_violation`. Use checks for constraints that are part of the model, and enforcing rules for policies a team turns on after a [dry run](/builders/rules/#dry-run-before-enabling).
 
 ## Errors and how to fix them
 

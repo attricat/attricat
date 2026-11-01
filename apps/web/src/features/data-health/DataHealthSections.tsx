@@ -128,7 +128,9 @@ export const FreshnessSection = ({ query }: SectionProps<FreshnessBand>) => {
       <Stack direction="row" spacing={3} sx={{ mt: 2 }}>
         {(query.data ?? []).map((band) => (
           <Box key={band.label}>
-            <Typography variant="h5">{band.records}</Typography>
+            <Typography component="p" variant="h5">
+              {band.records}
+            </Typography>
             <Typography color="text.secondary" variant="body2">
               {band.label}
             </Typography>

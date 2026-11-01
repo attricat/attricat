@@ -5,6 +5,8 @@ description: Create, edit, and delete records, work with contextual values, file
 
 A record is one catalog item, such as a product or a category. Its blueprint decides which attributes it has, how they are validated, and how its page is laid out.
 
+The record page has one row of tabs under its toolbar. The **Data** tab, selected first, holds the **Context** selector and the record's fields. The other tabs are **Data quality**, **Comments**, **Agents**, **Record control**, **Tags and metadata**, and **Exports**; some appear only when they apply.
+
 ## Create a record
 
 In the Explorer, choose **Create record** (or **Create *Blueprint*** when a blueprint is selected). Fill in the form and save. New records always use the blueprint's current published revision.
@@ -40,7 +42,7 @@ Each field tells you where its value comes from:
 
 Every save validates the whole record in every context. If a change would make any context invalid, it is not saved: it stays in the field with the error, and the page shows how many changes are not saved yet. Rejected changes are sent again with the next field you save, so you can fill several missing required values one after another. Escape in a field drops its rejected change. See [Validation](/builders/validation/).
 
-While changes are not saved, the **Context** selector is disabled.
+If you choose another context while changes are not saved yet, Attricat opens it once they are saved.
 
 The blueprint can also have checks, such as "valid until must not be before valid from" or "every facility belongs to this supplier", and your workspace can enforce data quality rules. When one fails, the message names the check or rule and says what is wrong. Change the fields it mentions, in the contexts it lists. If it points to a linked record, such as a facility that is not approved, fix or replace that record first.
 
@@ -83,11 +85,11 @@ Some blueprints use statuses to control a record's lifecycle. Then:
 - When a record is approved, the approval is tied to the exact content that was reviewed. Editing that content voids the approval, and the record returns to an earlier status in the same save.
 - Files of finalized records can be kept under a retention hold until a set date.
 
-The **Record control** tab below the record's values lists approvals, newest first, with who approved, when, and whether they are still valid, and the retention holds on the record's files.
+The **Record control** tab lists approvals, newest first, with who approved, when, and whether they are still valid, and the retention holds on the record's files.
 
 ## Comments
 
-The record page has a **Comments** tab below the record's values, with the newest comments first and **Load more comments** for older ones. Anyone who can read the record can add a comment, written in Markdown; **Preview Markdown** shows how it will look. To mention someone, type `@` and part of their name or email, then choose them from the list with the arrow keys and **Enter** or **Tab**, or with the mouse. A mention links to the person's profile and notifies them in their [inbox](/guides/inbox/), as long as they can open the record. Editing a comment notifies only the people it newly mentions. You can edit only your own comments. If someone else's change reaches a comment before your edit is saved, the edit is rejected; reload the comments and restore your draft to reconcile it.
+The record page has a **Comments** tab. Comments are listed oldest first, with the form for a new comment below them; **Show earlier comments** loads older ones. Anyone who can read the record can add a comment, written in Markdown; **Preview Markdown** shows how it will look. To mention someone, type `@` and part of their name or email, then choose them from the list with the arrow keys and **Enter** or **Tab**, or with the mouse. A mention links to the person's profile and notifies them in their [inbox](/guides/inbox/), as long as they can open the record. Editing a comment notifies only the people it newly mentions. You can edit or delete only your own comments. If someone else's change reaches a comment before your edit is saved, the edit is rejected; reload the comments and restore your draft to reconcile it.
 
 ## Additional attributes
 
@@ -105,7 +107,7 @@ Previous attribute values are kept for 90 days by default. From the value histor
 
 ## Data quality findings
 
-If [data quality rules](/builders/rules/) flag the record, its page shows the number of open findings. Select it to open the **Data quality** tab, which lists them below the record's values. The most severe findings come first. Each one shows the rule's name, what is wrong with which field, the contexts it fails in, and when it was first found.
+If [data quality rules](/builders/rules/) flag the record, its page shows the number of open findings. Select it to open the **Data quality** tab, which lists them. The most severe findings come first. Each one shows the rule's name, what is wrong with which field, the contexts it fails in, and when it was first found.
 
 ## Upgrade to a newer revision
 
@@ -113,7 +115,7 @@ When the blueprint has a newer published revision, a warning icon next to the bl
 
 ## Publish
 
-If your workspace uses publication channels, the record page shows its status per channel and **Publish** / **Unpublish** actions. See [Publishing](/guides/publishing/).
+If your workspace uses publication channels, the record toolbar shows the record's publication status in the selected context, and the **Actions** menu publishes or unpublishes it. See [Publishing](/guides/publishing/).
 
 ## Exports
 
@@ -138,7 +140,7 @@ Workflows, agents, extensions and API clients can mark a record with [system tag
 
 **Ask about this record** opens a panel where you can start a new [agent conversation](/guides/agents/) about the record you are looking at. Type your question; the conversation is created when you send it.
 
-A record can have any number of conversations. The **Conversations** tab lists them, newest first, for everyone who can read the record. Select one to continue it in the panel, or open it on the **Agents** page. Conversations about a record do not appear in the main **Agents** list unless you turn on **Show record conversations**.
+A record can have any number of conversations. The **Agents** tab lists them, newest first, for everyone who can read the record. Select one to continue it in the panel, or open it on the **Agents** page. Conversations about a record do not appear in the main **Agents** list unless you turn on **Show record conversations**.
 
 ## Delete a record
 

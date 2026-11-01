@@ -121,7 +121,7 @@ triggers:
 ```
 
 - The kinds are `set`, `replace`, `remove`, `restore`, `relationship_add`, and `relationship_remove`. See [which changes produce facts](/reference/events/#which-changes-produce-facts).
-- A save that changes relationships together with other values records `record.updated.v1`, not `relationship.changed.v1`. Add a second trigger with `event_type = "record.updated.v1"` and the same filters to catch those saves too.
+- A save that changes relationships together with other values records `record.updated.v1`, not `relationship.changed.v1`. Add a second trigger with `event_type: record.updated.v1` and the same filters to catch those saves too.
 - `change_kinds` can't be used with `record.migrated.v1`. It combines with the other filters: all of them must match.
 
 ### React only to added or removed tags

@@ -9,6 +9,7 @@ import {
   PowerOffIcon,
   SendIcon,
 } from 'lucide-react';
+import { z } from 'zod';
 import { RouterButton } from '../../components/RouterLink';
 import { workflowRoutes } from './constants';
 import { revisionStatuses } from '../../api/revisionStatus';
@@ -33,9 +34,14 @@ export const WorkflowActions = ({
 }) => {
   const { t } = useTranslation();
   const [manualRecordId, setManualRecordId] = useState('');
+  const [recordIdInvalid, setRecordIdInvalid] = useState(false);
   const isEnabledRevision = current.enabled_version === current.version;
   return (
-    <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
+    <Stack
+      direction="row"
+      spacing={1}
+      sx={{ alignItems: 'flex-start', flexWrap: 'wrap' }}
+    >
       <RouterButton
         params={{ workflowId, version: String(current.version) }}
         startIcon={<PencilIcon />}
@@ -65,20 +71,35 @@ export const WorkflowActions = ({
         </Button>
       )}
       {isEnabledRevision && current.manual_enabled && (
-        <Stack direction="row" spacing={1}>
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
           <TextField
             disabled={runNow.isPending}
+            error={recordIdInvalid}
+            helperText={
+              recordIdInvalid ? t('workflows.invalidRecordId') : undefined
+            }
             label={t('workflows.recordId')}
             required
+            size="small"
             slotProps={{
               htmlInput: { 'aria-label': t('workflows.manualRunRecordId') },
             }}
-            onChange={(event) => setManualRecordId(event.target.value)}
+            onChange={(event) => {
+              setManualRecordId(event.target.value);
+              setRecordIdInvalid(false);
+            }}
             value={manualRecordId}
           />
           <Button
             disabled={runNow.isPending || !manualRecordId.trim()}
-            onClick={() => runNow.mutate(manualRecordId.trim())}
+            onClick={() => {
+              const recordId = manualRecordId.trim();
+              if (z.uuid().safeParse(recordId).success) runNow.mutate(recordId);
+              else {
+                runNow.reset();
+                setRecordIdInvalid(true);
+              }
+            }}
             startIcon={<PlayIcon />}
             variant="outlined"
           >

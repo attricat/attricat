@@ -1,3 +1,4 @@
+import { ActionsHeaderCell } from '../../components/ActionsHeaderCell';
 import { latestRevisions } from '../../api/revisionStatus';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
@@ -92,7 +93,7 @@ export const WorkflowsPage = () => {
                   <TableCell>{t('workflows.lifecycle')}</TableCell>
                   <TableCell>{t('workflows.currentRevision')}</TableCell>
                   <TableCell>{t('workflows.latestRun')}</TableCell>
-                  <TableCell />
+                  <ActionsHeaderCell />
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -148,7 +149,10 @@ export const WorkflowsPage = () => {
                             size="small"
                           />
                         ) : summary ? (
-                          <Stack spacing={0.25}>
+                          <Stack
+                            spacing={0.25}
+                            sx={{ alignItems: 'flex-start' }}
+                          >
                             <RunStatusChip status={summary.latest.status} />
                             <Typography
                               color="text.secondary"

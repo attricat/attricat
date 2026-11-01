@@ -22,6 +22,7 @@ Attricat never reads a password, key or token from an environment variable. Each
 | `redis_url` | Unset | Redis connection URL. Required when `CACHE_BACKEND` is `redis`. Use `rediss://` (or `valkeys://`) for TLS. |
 | `bootstrap_owner_password` | Unset | Optional first password for a newly created owner. It is hashed before storage and never changes an existing password. Supply it for the first start only, then empty the file. |
 | `file_worker_metrics_token` | Unset | Bearer token required on the file worker's `/metrics`. The file worker refuses a non-loopback operations listener without it. |
+| `operator_api_token` | Unset | Bearer token, at least 32 bytes, of the [operator API](/reference/api/#operator-api), which creates workspaces. The API stays off without it, and startup stops on a shorter value. |
 | `extension_credential_key` | Unset | 32 random bytes, base64-encoded, that encrypt extension [connection](/builders/extensions/#connections) credentials (client secrets, refresh and access tokens, device codes) with AES-256-GCM. Without it, connections cannot be created or used. Any other length stops startup. Keep it stable: a new key makes stored credentials unreadable, and every connection must be set up again. Generate one with `openssl rand -base64 32`. |
 
 Startup stops if one of these is set as an environment variable, such as `LLM_API_KEY` or `SMTP_PASSWORD`, so a credential is never silently ignored. A `DATABASE_URL` variable is ignored. `ATTRICAT_SECRETS_DIR` reads the files from another directory instead of `/run/secrets`.
@@ -194,6 +195,7 @@ Files of 8 MiB or more upload as multipart uploads, which are aborted when any p
 | `FILE_WORKER_POLL_MILLISECONDS` | `500` | File worker | Delay between job polls. |
 | `FILE_WORKER_OPERATIONS_BIND_ADDR` | `127.0.0.1:3001` | File worker | Private listener for `/health/live`, `/health/ready`, and `/metrics`. Outside loopback, `/metrics` requires the `file_worker_metrics_token` [secret](#secrets). |
 | `FILE_WORKER_MAX_PIXELS` | `40000000` | File worker | Largest decoded image, in pixels, the worker will process. |
+| `FILE_WORKER_CONCURRENCY` | `4` | File worker | Jobs processed at the same time, 1 to 32. |
 | `FILE_WORKER_MAX_ATTEMPTS` | `5` | File worker | Attempts before a processing job fails permanently. |
 | `FILE_DELETE_GRACE_SECONDS` | `86400` (one day) | File worker | Time between an unreferenced file being marked deleted and its object being purged. |
 
@@ -231,7 +233,7 @@ Agents are off until the `llm_api_key` [secret](#secrets) is provided. The rest 
 | `LLM_RUN_TIMEOUT_SECONDS` | `300` | Timeout for a whole agent run, 1 to 3600. |
 | `LLM_MAX_TOOL_ROUNDS` | `25` | How many times an agent may call tools and continue before it stops, counted again after each approval, 1 to 100. |
 
-These agent limits are fixed: 32 KiB per user message, 16 attachments per message, 5 MiB per inline image, eight tool-call rounds per run, 64 KiB per serialized tool result, and 32 tool calls per provider response.
+These agent limits are fixed: 32 KiB per user message, 16 attachments per message, 5 MiB per inline image, 64 KiB per serialized tool result, and 32 tool calls per provider response.
 
 ## Extensions
 

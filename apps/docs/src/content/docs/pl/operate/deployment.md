@@ -83,9 +83,9 @@ Każde ustawienie jest opisane w [dokumentacji konfiguracji](/pl/reference/confi
 
 ## Pierwsze uruchomienie
 
-Przy pierwszym uruchomieniu API tworzy obszar roboczy o nazwie z `ATTRICAT_BOOTSTRAP_WORKSPACE_NAME` i konto właściciela dla `ATTRICAT_BOOTSTRAP_OWNER_EMAIL`. Podaj sekret `bootstrap_owner_password` na czas pierwszego uruchomienia, aby właściciel mógł się zalogować, a potem opróżnij jego plik. Nigdy nie zmienia on istniejącego hasła.
+Przy pierwszym uruchomieniu API nadaje startowemu obszarowi roboczemu nazwę z `ATTRICAT_BOOTSTRAP_WORKSPACE_NAME` i tworzy konto właściciela dla `ATTRICAT_BOOTSTRAP_OWNER_EMAIL`. Podaj sekret `bootstrap_owner_password` na czas pierwszego uruchomienia, aby właściciel mógł się zalogować, a potem opróżnij jego plik. Nigdy nie zmienia on istniejącego hasła.
 
-Właściciel loguje się identyfikatorem obszaru roboczego, zwykle `default.local`, a następnie zaprasza pozostałe osoby.
+Właściciel loguje się identyfikatorem obszaru roboczego, zwykle `default.local`, a następnie zaprasza pozostałe osoby. Aby dodać kolejne obszary robocze, ustaw sekret `operator_api_token` i użyj [API operatora](/pl/reference/api/#api-operatora).
 
 ## Kontrole stanu
 

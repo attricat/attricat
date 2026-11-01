@@ -15,12 +15,15 @@ Włączenie kanału wymaga uprawnienia `contexts.write`.
 
 ## Opublikuj rekord
 
-Na stronie rekordu sekcja **Publikacja** pokazuje każdy włączony kanał ze stanem **Opublikowano** lub **Nieopublikowano** oraz informacją, kto i kiedy opublikował rekord.
+Na stronie rekordu ikona globu na pasku narzędzi pokazuje stan publikacji rekordu w wybranym kontekście. Jej podpowiedź mówi **Opublikowano** lub **Nieopublikowano** oraz kto i kiedy opublikował rekord. Jeśli wybrany kontekst nie jest kanałem, podpowiedź mówi **To nie jest kanał eksportu**. Przełącz selektor **Kontekst**, aby zobaczyć inny kanał.
 
-- **Opublikuj** zatwierdza rekord dla wybranego kanału.
-- **Opublikuj we wszystkich kanałach** zatwierdza ją jednocześnie dla każdego włączonego kanału.
-- **Cofnij publikację** wycofuje zatwierdzenie dla kanału.
-- **Opublikuj ponownie** zatwierdza rekord jeszcze raz, gdy edycja cofnęła zatwierdzenie.
+Publikuj z menu **Akcje** rekordu:
+
+- **Opublikuj** zatwierdza rekord dla wybranego kanału. Gdy rekord jest już w nim opublikowany, pozycja nazywa się **Opublikuj ponownie**.
+- **Opublikuj we wszystkich kanałach** zatwierdza go jednocześnie dla każdego włączonego kanału.
+- **Cofnij publikację** wycofuje zatwierdzenie dla wybranego kanału. Pojawia się tylko wtedy, gdy rekord jest w nim opublikowany.
+
+Gdy edycja wycofa zatwierdzenie, stan znów to **Nieopublikowano**, więc menu oferuje **Opublikuj**.
 
 W **Przeglądarce rekordów** wybierz kanał jako kontekst, aby zobaczyć kolumnę **Publikacja**. Posortuj ją, aby przenieść nieopublikowane rekordy na górę.
 
@@ -52,7 +55,7 @@ Kontrole są oceniane na bieżąco, w kontekście kanału, w chwili publikacji. 
 
 Jeśli kontrola nie przejdzie, nic nie zostaje opublikowane, a żądanie zwraca `422 publication_checks_failed`. `error.details.context` to kod kanału, a `error.details.violations` wymienia reguły i kontrole, które nie przeszły, w tym samym formacie co [błędy walidacji](/pl/builders/validation/#błędy-i-ich-naprawa). Dotyczy to działań **Opublikuj**, **Opublikuj we wszystkich kanałach** oraz publikowania wszystkich rekordów schematu. Przy publikacji zbiorczej jeden rekord, który nie przejdzie kontroli, powoduje odrzucenie całego żądania, a `evidence.record_id` każdego naruszenia wskazuje ten rekord.
 
-Sekcja **Publikacja** na stronie rekordu oznacza etykietą **Niegotowe** kanały, w których rekordu nie można jeszcze opublikować. Aby sprawdzić gotowość przez API bez publikowania, wywołaj `GET /v1/records/{id}/publications/readiness`. Zwraca każdy włączony kanał z polami `ready` i `violations`. Popraw wskazane atrybuty lub powiązane rekordy, o których mówią komunikaty, i opublikuj ponownie.
+Gdy rekord nie jest gotowy do publikacji w wybranym kanale, obok ikony publikacji pojawia się etykieta **Niegotowe**, a jej podpowiedź podaje powody. Pozycja **Opublikuj** w menu **Akcje** jest wtedy wyłączona. **Opublikuj we wszystkich kanałach** jest wyłączona, dopóki którykolwiek kanał nie jest gotowy, i wymienia te kanały. Aby sprawdzić gotowość przez API bez publikowania, wywołaj `GET /v1/records/{id}/publications/readiness`. Zwraca każdy włączony kanał z polami `ready` i `violations`. Popraw wskazane atrybuty lub powiązane rekordy, o których mówią komunikaty, i opublikuj ponownie.
 
 ## Co cofa publikację
 

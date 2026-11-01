@@ -121,7 +121,7 @@ triggers:
 ```
 
 - Rodzaje to `set`, `replace`, `remove`, `restore`, `relationship_add` i `relationship_remove`. Zobacz, [które zmiany tworzą fakty](/pl/reference/events/#które-zmiany-tworzą-fakty).
-- Zapis zmieniający relacje razem z innymi wartościami tworzy `record.updated.v1`, a nie `relationship.changed.v1`. Dodaj drugi wyzwalacz z `event_type = "record.updated.v1"` i tymi samymi filtrami, aby wychwycić też takie zapisy.
+- Zapis zmieniający relacje razem z innymi wartościami tworzy `record.updated.v1`, a nie `relationship.changed.v1`. Dodaj drugi wyzwalacz z `event_type: record.updated.v1` i tymi samymi filtrami, aby wychwycić też takie zapisy.
 - `change_kinds` nie działa z `record.migrated.v1`. Łączy się z pozostałymi filtrami: wszystkie muszą pasować.
 
 ### Reaguj tylko na dodane lub usunięte tagi
