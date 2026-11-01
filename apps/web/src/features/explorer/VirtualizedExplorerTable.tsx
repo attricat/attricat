@@ -112,8 +112,9 @@ export const VirtualizedExplorerTable = ({
       ref={tableContainerRef}
       sx={{
         // On desktop this leaves room for the sticky search form and result
-        // summary while using the rest of the viewport for rows.
-        height: fitRows ? 'auto' : resultsTableHeight,
+        // summary while using the rest of the viewport for rows. Without rows
+        // it stays short, so the empty message below it is in view.
+        height: fitRows || items.length === 0 ? 'auto' : resultsTableHeight,
         overflowY: 'auto',
       }}
     >
