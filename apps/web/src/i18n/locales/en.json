@@ -2816,5 +2816,19 @@
     "filterByExport": "Export status",
     "filterChip": "{{destination}}: {{status}}",
     "removeFilter": "Remove filter {{filter}}"
+  },
+  "validation": {
+    "required": "This field is required.",
+    "tooShort_one": "Use at least {{count}} character.",
+    "tooShort_other": "Use at least {{count}} characters.",
+    "tooLong_one": "Use at most {{count}} character.",
+    "tooLong_other": "Use at most {{count}} characters.",
+    "chooseAtLeast_one": "Choose at least {{count}} item.",
+    "chooseAtLeast_other": "Choose at least {{count}} items.",
+    "chooseAtMost_one": "Choose at most {{count}} item.",
+    "chooseAtMost_other": "Choose at most {{count}} items.",
+    "atLeast": "Enter {{min}} or more.",
+    "atMost": "Enter {{max}} or less.",
+    "email": "Enter a valid email address."
   }
 }

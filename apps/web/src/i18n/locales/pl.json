@@ -2956,5 +2956,27 @@
     "filterByExport": "Stan eksportu",
     "filterChip": "{{destination}}: {{status}}",
     "removeFilter": "Usuń filtr {{filter}}"
+  },
+  "validation": {
+    "required": "To pole jest wymagane.",
+    "tooShort_one": "Użyj co najmniej {{count}} znaku.",
+    "tooShort_few": "Użyj co najmniej {{count}} znaków.",
+    "tooShort_many": "Użyj co najmniej {{count}} znaków.",
+    "tooShort_other": "Użyj co najmniej {{count}} znaku.",
+    "tooLong_one": "Użyj najwyżej {{count}} znaku.",
+    "tooLong_few": "Użyj najwyżej {{count}} znaków.",
+    "tooLong_many": "Użyj najwyżej {{count}} znaków.",
+    "tooLong_other": "Użyj najwyżej {{count}} znaku.",
+    "chooseAtLeast_one": "Wybierz co najmniej {{count}} element.",
+    "chooseAtLeast_few": "Wybierz co najmniej {{count}} elementy.",
+    "chooseAtLeast_many": "Wybierz co najmniej {{count}} elementów.",
+    "chooseAtLeast_other": "Wybierz co najmniej {{count}} elementu.",
+    "chooseAtMost_one": "Wybierz najwyżej {{count}} element.",
+    "chooseAtMost_few": "Wybierz najwyżej {{count}} elementy.",
+    "chooseAtMost_many": "Wybierz najwyżej {{count}} elementów.",
+    "chooseAtMost_other": "Wybierz najwyżej {{count}} elementu.",
+    "atLeast": "Wpisz {{min}} lub więcej.",
+    "atMost": "Wpisz {{max}} lub mniej.",
+    "email": "Wpisz prawidłowy adres e-mail."
   }
 }
