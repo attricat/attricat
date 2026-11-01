@@ -1,6 +1,9 @@
 import { QueryClient } from '@tanstack/react-query';
 import { expect, it } from 'vitest';
-import { invalidateExtensions } from './extensionPageUtils';
+import {
+  installedExtensionName,
+  invalidateExtensions,
+} from './extensionPageUtils';
 import { extensionQueryKeys } from './queryKeys';
 
 it('invalidates every scoped and unscoped runtime descriptor', async () => {
@@ -21,4 +24,18 @@ it('invalidates every scoped and unscoped runtime descriptor', async () => {
   expect(
     client.getQueryState(extensionQueryKeys.runtime(scoped))?.isInvalidated,
   ).toBe(true);
+});
+
+it('names an installed extension by its manifest, or by its ID', () => {
+  const extension_id = 'attricat-extension-example';
+  expect(
+    installedExtensionName({
+      extension_id,
+      manifest: { name: 'Attricat Example Extension' },
+    }),
+  ).toBe('Attricat Example Extension');
+  for (const manifest of [{}, { name: ' ' }, null])
+    expect(installedExtensionName({ extension_id, manifest })).toBe(
+      extension_id,
+    );
 });

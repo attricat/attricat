@@ -6,6 +6,7 @@ import { useCan } from '../auth/useCan';
 import {
   installationStateColor,
   installationStateLabelKey,
+  installedExtensionName,
 } from './extensionPageUtils';
 import { installedExtensions } from './managementApi';
 import { extensionManagementQueryKeys } from './managementQueryKeys';
@@ -50,7 +51,7 @@ export const ExtensionsInstalledPage = () => {
             >
               <Box>
                 <Typography variant="h6">
-                  {extension.extension_id}{' '}
+                  {installedExtensionName(extension)}{' '}
                   <Chip
                     color={installationStateColor(extension.state)}
                     label={t(installationStateLabelKey(extension.state))}
@@ -58,7 +59,8 @@ export const ExtensionsInstalledPage = () => {
                   />
                 </Typography>
                 <Typography color="text.secondary">
-                  {t('extensions.versionSource', {
+                  {t('extensions.idVersionSource', {
+                    id: extension.extension_id,
                     version: extension.version,
                     source: extension.source,
                   })}

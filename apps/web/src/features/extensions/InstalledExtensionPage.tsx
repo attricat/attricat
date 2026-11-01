@@ -14,7 +14,10 @@ import {
   type ExtensionReleaseReference,
 } from './managementApi';
 import { extensionManagementQueryKeys } from './managementQueryKeys';
-import { invalidateExtensions } from './extensionPageUtils';
+import {
+  installedExtensionName,
+  invalidateExtensions,
+} from './extensionPageUtils';
 import { ExtensionConfigurationSection } from './ExtensionConfigurationSection';
 import { ExtensionInstallationStatusSection } from './ExtensionInstallationStatusSection';
 import { ExtensionLifecycleSection } from './ExtensionLifecycleSection';
@@ -72,10 +75,15 @@ export const InstalledExtensionPage = ({
     <PageContainer>
       <PageHeader
         icon={ExtensionIcon}
-        title={installation?.extension_id ?? t('extensions.extensionFallback')}
+        title={
+          installation
+            ? installedExtensionName(installation)
+            : t('extensions.extensionFallback')
+        }
         description={
           installation
             ? t('extensions.installationVersion', {
+                id: installation.extension_id,
                 version: installation.version,
                 source: installation.source,
               })
