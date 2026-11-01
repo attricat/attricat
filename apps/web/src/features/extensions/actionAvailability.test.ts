@@ -33,10 +33,10 @@ describe('actionAvailability', () => {
 
   it('offers commands only to callers who may run them', () => {
     const command = {
-      ...action(undefined),
+      ...action({}),
       invoke: { command: 'check' },
     };
-    const dialog = { ...action(undefined), invoke: { dialog: 'details' } };
+    const dialog = { ...action({}), invoke: { dialog: 'details' } };
     const reader = { ...target, canRunCommands: false };
     expect(actionAvailability(command, reader).offered).toBe(false);
     expect(actionAvailability(dialog, reader).offered).toBe(true);
