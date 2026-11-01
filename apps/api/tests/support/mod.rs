@@ -122,6 +122,8 @@ impl OfficialExtensionReleases for FakeOfficialExtensions {
 #[derive(Default)]
 pub struct TestMailDelivery {
     workspace_invitation_urls: Mutex<Vec<(String, String)>>,
+    workspace_onboarding_urls: Mutex<Vec<(String, String)>>,
+    fail_next_delivery: std::sync::atomic::AtomicBool,
 }
 
 impl TestMailDelivery {
@@ -132,6 +134,36 @@ impl TestMailDelivery {
             .iter()
             .rev()
             .find_map(|(delivered_to, url)| (delivered_to == recipient).then(|| url.clone()))
+    }
+
+    pub async fn workspace_onboarding_url(&self, recipient: &str) -> Option<String> {
+        self.workspace_onboarding_urls
+            .lock()
+            .await
+            .iter()
+            .rev()
+            .find_map(|(delivered_to, url)| (delivered_to == recipient).then(|| url.clone()))
+    }
+
+    pub async fn delivered_count(&self) -> usize {
+        self.workspace_invitation_urls.lock().await.len()
+            + self.workspace_onboarding_urls.lock().await.len()
+    }
+
+    /// Makes the next invitation or onboarding email fail.
+    pub fn fail_next_delivery(&self) {
+        self.fail_next_delivery
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    fn take_failure(&self) -> Result<(), MailError> {
+        if self
+            .fail_next_delivery
+            .swap(false, std::sync::atomic::Ordering::SeqCst)
+        {
+            return Err(MailError::Delivery);
+        }
+        Ok(())
     }
 }
 
@@ -145,13 +177,23 @@ impl MailDelivery for TestMailDelivery {
         recipient: &str,
         invitation_url: &str,
     ) -> Result<(), MailError> {
+        self.take_failure()?;
         self.workspace_invitation_urls
             .lock()
             .await
             .push((recipient.to_owned(), invitation_url.to_owned()));
         Ok(())
     }
-    async fn deliver_workspace_onboarding(&self, _: &str, _: &str) -> Result<(), MailError> {
+    async fn deliver_workspace_onboarding(
+        &self,
+        recipient: &str,
+        onboarding_url: &str,
+    ) -> Result<(), MailError> {
+        self.take_failure()?;
+        self.workspace_onboarding_urls
+            .lock()
+            .await
+            .push((recipient.to_owned(), onboarding_url.to_owned()));
         Ok(())
     }
 }
@@ -222,6 +264,26 @@ pub async fn start_server_with_file_access_policy(
         object_store,
         file_access_policy,
         Arc::new(TestMailDelivery::default()),
+    )
+    .await
+}
+
+/// A cookie-authenticated server whose state `configure` adjusts, for tests of
+/// deployment-level settings such as the operator token.
+pub async fn start_configured_session_server(
+    pool: PgPool,
+    mail_delivery: Arc<TestMailDelivery>,
+    configure: impl FnOnce(&mut AppState),
+) -> (String, JoinHandle<()>) {
+    start_configured_server(
+        pool,
+        0,
+        false,
+        Arc::new(FakeObjectStore::available()),
+        Arc::new(AllowFileAccess),
+        mail_delivery,
+        false,
+        configure,
     )
     .await
 }
@@ -408,6 +470,7 @@ async fn start_configured_server(
         default_body_limit: 2 * 1024 * 1024,
         devtools_enabled,
         demo_mode: false,
+        operator_token: None,
         sample_logins: None,
         build_info: BuildInfo {
             version: env!("CARGO_PKG_VERSION"),

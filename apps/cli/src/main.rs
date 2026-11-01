@@ -16,6 +16,7 @@ use crate::commands::extension::extension_command;
 use crate::commands::file::file_command;
 use crate::commands::lexicon::lexicon_command;
 use crate::commands::notification::notification_command;
+use crate::commands::operator::{OPERATOR_TOKEN_VARIABLE, operator_command};
 use crate::commands::presentation_asset::presentation_asset_command;
 use crate::commands::record::record_command;
 use crate::commands::reusable_attribute::reusable_attribute_command;
@@ -116,8 +117,17 @@ async fn run(cli: Cli) -> Result<String, CliError> {
     // A personal token is the explicit automation credential. Do not even
     // read a saved browser session when one is supplied: it takes precedence
     // and avoids accidentally combining two identities on a request.
+    // The operator token has its own variable, so everyday commands never send
+    // it and operator commands never send a personal token by accident.
+    let is_operator_command = matches!(cli.command, Command::Operator { .. });
     let token = if cli.token_stdin {
-        Some(read_secret_stdin("personal API token")?)
+        Some(read_secret_stdin("API token")?)
+    } else if is_operator_command {
+        Some(std::env::var(OPERATOR_TOKEN_VARIABLE).map_err(|_| {
+            CliError::Input(format!(
+                "operator commands need {OPERATOR_TOKEN_VARIABLE} or --token-stdin"
+            ))
+        })?)
     } else {
         cli.token
     };
@@ -180,6 +190,7 @@ async fn run(cli: Cli) -> Result<String, CliError> {
         Command::ReusableAttribute { command } => reusable_attribute_command(&api, command).await,
         Command::Record { command } => record_command(&api, command).await,
         Command::Value { command } => value_command(&api, command).await,
+        Command::Operator { command } => operator_command(&api, command).await,
         Command::Workspace { command } => workspace_command(&api, command).await,
         Command::Token { command } => token_command(&api, command).await,
         Command::Agent { command } => agent_command(&api, command).await,

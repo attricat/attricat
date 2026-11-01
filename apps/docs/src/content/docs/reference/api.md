@@ -489,6 +489,21 @@ See [Translate labels](/builders/translations/).
 | `GET`, `POST` | `/solution-packs/applications/{id}/checks` | Check runs. |
 | `GET` | `/presentation-assets[/{id}[/content]]` | Presentation assets. |
 
+### Operator API
+
+These routes run the deployment rather than one workspace, and exist only when the `operator_api_token` secret is set. They accept only `Authorization: Bearer <operator token>`: personal tokens and browser sessions are refused, and the operator token works nowhere else. Block `/api/operator` at your proxy so that only trusted networks reach it. Demo deployments refuse these routes.
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `PUT` | `/operator/workspaces/{id}` | Create a workspace from `name`, `login_identifier`, `owner_email`, and optional `owner_display_name`, and invite its owner. |
+| `GET` | `/operator/workspaces` | Workspaces, oldest first. |
+| `GET` | `/operator/workspaces/{id}` | One workspace, with `has_active_owner` and `owner_invitation_expires_at`. |
+| `POST` | `/operator/workspaces/{id}/owner-invitation` | Replace the owner invitation, optionally with a new `owner_email`, while the workspace has no active owner. |
+
+You generate the workspace UUID, so a retry is safe: `201` means it was created, `200` means an identical earlier request stands and any unfinished step was completed, and `409 workspace_conflict` means the ID exists with other values. `409 login_identifier_taken` means another workspace holds the identifier. Attricat does not check that you own an identifier's domain, and an identifier cannot change, so check ownership first.
+
+A new workspace has no owner until someone accepts the seven-day invitation, and being named grants nothing before that. If the email fails, the invitation is withdrawn and the response is `502 invitation_delivery_failed`, so repeat the request.
+
 ### Health and operations
 
 | Method | Path | Description |

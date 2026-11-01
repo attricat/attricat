@@ -8,7 +8,9 @@ use api::{
     extension_registry::GitHubRegistry,
     extension_runtime::{self, ExtensionRuntime, ExtensionRuntimeConfig},
     file_access::AllowFileAccess,
-    http::{AppState, BuildInfo, SampleAccount, SampleLogins, StreamControl, router},
+    http::{
+        AppState, BuildInfo, OperatorToken, SampleAccount, SampleLogins, StreamControl, router,
+    },
     mail::SmtpMailDelivery,
     maintenance,
     repository::{AttricatRepository, SystemRepository},
@@ -370,6 +372,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             default_body_limit: http.default_body_limit,
             devtools_enabled: http.devtools_enabled,
             demo_mode,
+            operator_token: http
+                .operator_api_token
+                .as_ref()
+                .map(|token| OperatorToken::new(token.expose_secret())),
             sample_logins,
             build_info: BuildInfo {
                 version: env!("CARGO_PKG_VERSION"),

@@ -140,8 +140,7 @@ pub(super) async fn create_workspace_user(
             ));
         }
     };
-    let invitation_secret = opaque_secret(INVITATION_SECRET_PREFIX);
-    let onboarding_secret = opaque_secret(ONBOARDING_SECRET_PREFIX);
+    let secrets = new_invitation_secrets();
     let user = repository
         .create_workspace_user(
             actor,
@@ -153,10 +152,10 @@ pub(super) async fn create_workspace_user(
                 role_id,
                 scope_type,
                 scope_target_id,
-                Sha256::digest(invitation_secret.as_bytes()).to_vec(),
+                secrets.invitation_digest(),
                 expires_at,
             )),
-            Some(Sha256::digest(onboarding_secret.as_bytes()).to_vec()),
+            Some(secrets.onboarding_digest()),
         )
         .await?;
     let invitation_id = user
@@ -165,35 +164,7 @@ pub(super) async fn create_workspace_user(
     let invitation = repository
         .workspace_invitation(actor, workspace, invitation_id)
         .await?;
-    let delivery_url = if user.needs_password_setup {
-        action_url(
-            &state.workspace_onboarding_url,
-            &[
-                ("onboarding_secret", &onboarding_secret),
-                ("invitation_secret", &invitation_secret),
-            ],
-        )?
-    } else {
-        action_url(
-            &state.workspace_invitation_url,
-            &[("secret", &invitation_secret)],
-        )?
-    };
-    if user.needs_password_setup {
-        state
-            .mail_delivery
-            .deliver_workspace_onboarding(&email, &delivery_url)
-            .await
-    } else {
-        state
-            .mail_delivery
-            .deliver_workspace_invitation(&email, &delivery_url)
-            .await
-    }
-    .map_err(|error| {
-        tracing::error!(%error, "workspace invitation email delivery failed");
-        ApiError::internal("workspace invitation email could not be delivered")
-    })?;
+    deliver_invitation(&state, &email, user.needs_password_setup, &secrets).await?;
     Ok((
         StatusCode::CREATED,
         Json(CreatedWorkspaceUser {
@@ -250,7 +221,7 @@ pub(super) async fn complete_onboarding(
 
 /// Normalizes an invitee address and rejects any the mail transport could not
 /// deliver to, before an invitation is committed that could never be sent.
-fn deliverable_email(raw: &str) -> Result<String, ApiError> {
+pub(super) fn deliverable_email(raw: &str) -> Result<String, ApiError> {
     let email = raw.trim().to_lowercase();
     email.parse::<lettre::Address>().map_err(|_| {
         ApiError::unprocessable(ErrorCode::InvalidEmail, "email must be a valid address")
@@ -264,6 +235,65 @@ pub(super) fn action_url(base: &str, parameters: &[(&str, &str)]) -> Result<Stri
     url.query_pairs_mut()
         .extend_pairs(parameters.iter().copied());
     Ok(url.into())
+}
+
+/// The secrets of one invitation, delivered by email and stored as digests.
+pub(super) struct InvitationSecrets {
+    invitation: String,
+    onboarding: String,
+}
+
+impl InvitationSecrets {
+    pub(super) fn invitation_digest(&self) -> Vec<u8> {
+        Sha256::digest(self.invitation.as_bytes()).to_vec()
+    }
+
+    pub(super) fn onboarding_digest(&self) -> Vec<u8> {
+        Sha256::digest(self.onboarding.as_bytes()).to_vec()
+    }
+}
+
+pub(super) fn new_invitation_secrets() -> InvitationSecrets {
+    InvitationSecrets {
+        invitation: opaque_secret(INVITATION_SECRET_PREFIX),
+        onboarding: opaque_secret(ONBOARDING_SECRET_PREFIX),
+    }
+}
+
+/// Emails an invitation: the onboarding link to an invitee who must set a
+/// password, otherwise the acceptance link.
+pub(super) async fn deliver_invitation(
+    state: &AppState,
+    email: &str,
+    needs_password_setup: bool,
+    secrets: &InvitationSecrets,
+) -> Result<(), ApiError> {
+    if needs_password_setup {
+        let url = action_url(
+            &state.workspace_onboarding_url,
+            &[
+                ("onboarding_secret", &secrets.onboarding),
+                ("invitation_secret", &secrets.invitation),
+            ],
+        )?;
+        state
+            .mail_delivery
+            .deliver_workspace_onboarding(email, &url)
+            .await
+    } else {
+        let url = action_url(
+            &state.workspace_invitation_url,
+            &[("secret", &secrets.invitation)],
+        )?;
+        state
+            .mail_delivery
+            .deliver_workspace_invitation(email, &url)
+            .await
+    }
+    .map_err(|error| {
+        tracing::error!(%error, "workspace invitation email delivery failed");
+        ApiError::internal("workspace invitation email could not be delivered")
+    })
 }
 
 const OPAQUE_SECRET_BYTES: usize = 32;

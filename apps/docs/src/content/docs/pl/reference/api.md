@@ -489,6 +489,21 @@ Trasy `GET` reguł, wykonań i ustaleń wymagają `rules.read`; pozostałe trasy
 | `GET`, `POST` | `/solution-packs/applications/{id}/checks` | Uruchomienia kontroli. |
 | `GET` | `/presentation-assets[/{id}[/content]]` | Zasoby prezentacyjne. |
 
+### API operatora
+
+Te trasy obsługują całe wdrożenie, a nie jeden obszar roboczy, i istnieją tylko wtedy, gdy ustawiono sekret `operator_api_token`. Akceptują wyłącznie `Authorization: Bearer <token operatora>`: tokeny osobiste i sesje przeglądarki są odrzucane, a token operatora nie działa nigdzie indziej. Zablokuj `/api/operator` na serwerze proxy, tak aby dostęp miały tylko zaufane sieci. Wdrożenia demonstracyjne odrzucają te trasy.
+
+| Metoda | Ścieżka | Opis |
+| --- | --- | --- |
+| `PUT` | `/operator/workspaces/{id}` | Utwórz obszar roboczy z `name`, `login_identifier`, `owner_email` i opcjonalnego `owner_display_name` oraz zaproś jego właściciela. |
+| `GET` | `/operator/workspaces` | Obszary robocze, od najstarszego. |
+| `GET` | `/operator/workspaces/{id}` | Jeden obszar roboczy z `has_active_owner` i `owner_invitation_expires_at`. |
+| `POST` | `/operator/workspaces/{id}/owner-invitation` | Zastąp zaproszenie właściciela, opcjonalnie nowym `owner_email`, dopóki obszar roboczy nie ma aktywnego właściciela. |
+
+UUID obszaru roboczego generujesz samodzielnie, dzięki czemu ponowienie jest bezpieczne: `201` oznacza utworzenie, `200` oznacza, że identyczne wcześniejsze żądanie obowiązuje, a niedokończone kroki zostały dokończone, a `409 workspace_conflict` oznacza, że identyfikator istnieje z innymi wartościami. `409 login_identifier_taken` oznacza, że identyfikator logowania należy do innego obszaru roboczego. Attricat nie sprawdza, czy domena identyfikatora należy do Ciebie, a identyfikatora nie można zmienić, więc najpierw zweryfikuj własność domeny.
+
+Nowy obszar roboczy nie ma właściciela, dopóki ktoś nie przyjmie zaproszenia ważnego przez siedem dni, a samo wskazanie niczego wcześniej nie przyznaje. Jeśli wysłanie wiadomości się nie powiedzie, zaproszenie zostaje wycofane, a odpowiedź to `502 invitation_delivery_failed`, więc powtórz żądanie.
+
 ### Stan i operacje
 
 | Metoda | Ścieżka | Opis |

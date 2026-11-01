@@ -476,6 +476,19 @@ acli presentation-asset list | get <id>
 acli presentation-asset download <id> --output <path>
 ```
 
+### Operator
+
+These commands run the deployment rather than one workspace. They read the operator token from `ATTRICAT_OPERATOR_TOKEN` or `--token-stdin` and never send `ATTRICAT_TOKEN`.
+
+```sh
+acli operator workspace create --id <uuid> --name <name> --login-identifier <identifier> --owner-email <email> [--owner-display-name <name>]
+acli operator workspace get <id>
+acli operator workspace list [--limit <n>] [--offset <n>]
+acli operator workspace invite-owner <id> [--owner-email <email>] [--owner-display-name <name>]
+```
+
+Repeat `create` with the same values to finish a request that failed part way.
+
 ### Operations
 
 ```sh

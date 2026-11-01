@@ -62,6 +62,8 @@ const DEFAULT_MAIL_FROM: &str = "Attricat <no-reply@attricat.local>";
 const DEFAULT_PASSWORD_RESET_URL: &str = "http://127.0.0.1:5173/password-reset/confirm";
 const DEFAULT_WORKSPACE_INVITATION_URL: &str = "http://127.0.0.1:5173/invitations/accept";
 const DEFAULT_WORKSPACE_ONBOARDING_URL: &str = "http://127.0.0.1:5173/onboarding";
+/// The operator token can create workspaces, so a short one is refused.
+const OPERATOR_API_TOKEN_MIN_BYTES: usize = 32;
 
 /// Names of the files the secrets directory may hold.
 pub mod secret {
@@ -74,6 +76,7 @@ pub mod secret {
     pub const E2E_FIXTURE_PASSWORD: &str = "e2e_fixture_password";
     pub const FILE_WORKER_METRICS_TOKEN: &str = "file_worker_metrics_token";
     pub const EXTENSION_CREDENTIAL_KEY: &str = "extension_credential_key";
+    pub const OPERATOR_API_TOKEN: &str = "operator_api_token";
 }
 
 /// Environment variables that used to carry a secret. Startup refuses them
@@ -138,6 +141,7 @@ pub struct HttpConfig {
     pub web_dist_dir: Option<String>,
     pub session_cookie_secure: bool,
     pub devtools_enabled: bool,
+    pub operator_api_token: Option<SecretString>,
     pub request_timeout: Duration,
     pub max_concurrent_requests: usize,
     pub default_body_limit: usize,
@@ -313,6 +317,7 @@ impl Config {
                 web_dist_dir: source.owned("WEB_DIST_DIR"),
                 session_cookie_secure: source.boolean("SESSION_COOKIE_SECURE", true)?,
                 devtools_enabled,
+                operator_api_token: operator_api_token(source)?,
                 request_timeout: Duration::from_secs(source.positive(
                     "HTTP_REQUEST_TIMEOUT_SECONDS",
                     DEFAULT_HTTP_REQUEST_TIMEOUT_SECONDS as u64,
@@ -529,6 +534,19 @@ fn oauth_return_url(source: &Source) -> Result<Option<url::Url>, ConfigError> {
                 })
         })
         .transpose()
+}
+
+fn operator_api_token(source: &Source) -> Result<Option<SecretString>, ConfigError> {
+    let token = source.secret(secret::OPERATOR_API_TOKEN)?;
+    if token.as_ref().is_some_and(|token| {
+        secrecy::ExposeSecret::expose_secret(token).len() < OPERATOR_API_TOKEN_MIN_BYTES
+    }) {
+        return Err(format!(
+            "the operator_api_token secret must be at least {OPERATOR_API_TOKEN_MIN_BYTES} bytes"
+        )
+        .into());
+    }
+    Ok(token)
 }
 
 fn credential_key(source: &Source) -> Result<Option<[u8; 32]>, ConfigError> {
@@ -803,6 +821,24 @@ mod tests {
         assert!(!config.bootstrap.sample_accounts);
         assert_eq!(config.file_worker.poll_interval, Duration::from_millis(500));
         assert_eq!(config.file_worker.concurrency, 4);
+    }
+
+    #[test]
+    fn the_operator_token_is_optional_but_must_be_long() {
+        let config = load(&required_secrets(), &[]).unwrap();
+        assert!(config.http.operator_api_token.is_none());
+        let with_token = |token: &str| {
+            Secrets::new(&[
+                (secret::DATABASE_URL, "postgres://db"),
+                (secret::S3_SECRET_ACCESS_KEY, "s3-secret"),
+                (secret::OPERATOR_API_TOKEN, token),
+            ])
+        };
+        let error = load(&with_token("short"), &[]).err().unwrap();
+        assert!(error.to_string().contains(secret::OPERATOR_API_TOKEN));
+        let long = "a".repeat(OPERATOR_API_TOKEN_MIN_BYTES);
+        let config = load(&with_token(&long), &[]).unwrap();
+        assert!(config.http.operator_api_token.is_some());
     }
 
     #[test]

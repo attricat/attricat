@@ -110,14 +110,7 @@ pub(super) async fn authorize(
         return Ok(next.run(request).await);
     }
 
-    let bearer = request
-        .headers()
-        .get(AUTHORIZATION_HEADER)
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.split_once(' '))
-        // The authentication scheme is case-insensitive (RFC 9110 §11.1).
-        .filter(|(scheme, _)| scheme.eq_ignore_ascii_case("bearer"))
-        .map(|(_, credentials)| credentials);
+    let bearer = bearer_credentials(request.headers());
     // `token_permissions` is the authenticated token's permission set (None
     // for sessions); `active_principal` is already known for browser sessions,
     // whose validation covers the same user, membership and workspace state.
@@ -317,6 +310,17 @@ pub(super) async fn authorize(
             .insert(AuthenticatedSession(session_digest));
     }
     Ok(next.run(request).await)
+}
+
+/// The credentials of an `Authorization: Bearer` header, if the request has one.
+pub(super) fn bearer_credentials(headers: &axum::http::HeaderMap) -> Option<&str> {
+    headers
+        .get(AUTHORIZATION_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split_once(' '))
+        // The authentication scheme is case-insensitive (RFC 9110 §11.1).
+        .filter(|(scheme, _)| scheme.eq_ignore_ascii_case("bearer"))
+        .map(|(_, credentials)| credentials)
 }
 
 /// Routes that read or change only the caller's own session, account or

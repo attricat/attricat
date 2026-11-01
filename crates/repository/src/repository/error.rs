@@ -97,6 +97,14 @@ pub enum RepositoryError {
     InvalidBootstrapPassword(String),
     #[error("the invitation is invalid, expired, revoked, already accepted, or for another email")]
     InvitationInvalid,
+    #[error("the login identifier must be a lowercase domain-like name of 3 to 253 characters")]
+    InvalidLoginIdentifier,
+    #[error("the login identifier is already in use")]
+    LoginIdentifierTaken,
+    #[error("the workspace already exists with different values")]
+    WorkspaceConflict,
+    #[error("the workspace already has an active owner")]
+    WorkspaceOwnerExists,
     #[error("the context code 'default' is reserved")]
     ReservedContextCode,
     #[error("code must contain only ASCII letters, numbers, hyphens, and underscores")]

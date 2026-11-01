@@ -22,6 +22,7 @@ Attricat never reads a password, key or token from an environment variable. Each
 | `redis_url` | Unset | Redis connection URL. Required when `CACHE_BACKEND` is `redis`. Use `rediss://` (or `valkeys://`) for TLS. |
 | `bootstrap_owner_password` | Unset | Optional first password for a newly created owner. It is hashed before storage and never changes an existing password. Supply it for the first start only, then empty the file. |
 | `file_worker_metrics_token` | Unset | Bearer token required on the file worker's `/metrics`. The file worker refuses a non-loopback operations listener without it. |
+| `operator_api_token` | Unset | Bearer token, at least 32 bytes, of the [operator API](/reference/api/#operator-api), which creates workspaces. The API stays off without it, and startup stops on a shorter value. |
 | `extension_credential_key` | Unset | 32 random bytes, base64-encoded, that encrypt extension [connection](/builders/extensions/#connections) credentials (client secrets, refresh and access tokens, device codes) with AES-256-GCM. Without it, connections cannot be created or used. Any other length stops startup. Keep it stable: a new key makes stored credentials unreadable, and every connection must be set up again. Generate one with `openssl rand -base64 32`. |
 
 Startup stops if one of these is set as an environment variable, such as `LLM_API_KEY` or `SMTP_PASSWORD`, so a credential is never silently ignored. A `DATABASE_URL` variable is ignored. `ATTRICAT_SECRETS_DIR` reads the files from another directory instead of `/run/secrets`.
