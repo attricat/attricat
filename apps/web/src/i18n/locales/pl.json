@@ -2204,7 +2204,7 @@
     "signInClientSecretKeep": "Pozostaw puste, aby zachować obecny sekret. Nowy wydawca lub identyfikator klienta wymaga nowego sekretu.",
     "signInSave": "Zapisz dostawcę",
     "signInSaved": "Dostawca został zapisany.",
-    "signInRedirectUri": "Zarejestruj u dostawcy ten adres przekierowania:",
+    "signInRedirectUri": "Zarejestruj dokładnie ten adres przekierowania, bez symboli wieloznacznych, dla klienta używanego tylko przez ten obszar roboczy:",
     "signInUnavailable": "To wdrożenie nie ma ustawienia OIDC_CALLBACK_URL, więc logowanie jednokrotne jest niedostępne.",
     "signInTestTitle": "Logowanie testowe",
     "signInTestDescription": "Zaloguj się raz, aby potwierdzić, że ustawienia działają. Połączy to też Twoje konto z dostawcą.",

@@ -620,23 +620,31 @@ async fn complete(
     }
     let identity = verify_identity(state, workspace_id, &provider, code, &cookie).await?;
     let subject = identity.subject.as_str();
+    if let OidcIntent::Link { session_digest } = &intent {
+        let current = session_cookie_digest(headers)
+            .filter(|current| current == session_digest)
+            .ok_or_else(ApiError::unauthenticated)?;
+        let session = state
+            .repository
+            .validate_browser_session(&current)
+            .await?
+            .filter(|session| session.workspace_id == workspace_id)
+            .ok_or_else(ApiError::unauthenticated)?;
+        state
+            .repository
+            .link_identity_to_session_user(workspace_id, session.user_id, &issuer, subject)
+            .await?;
+        return Ok(CallbackOutcome::Linked);
+    }
+    let (session, csrf, expires_at) = issue_session();
+    let new_session = NewOidcSession {
+        id: Uuid::new_v4(),
+        session: &session.digest(),
+        csrf: &csrf.digest(),
+        expires_at,
+    };
+    // Each path rechecks the provider and membership as it issues the session.
     match intent {
-        OidcIntent::Link { session_digest } => {
-            let current = session_cookie_digest(headers)
-                .filter(|current| *current == session_digest)
-                .ok_or_else(ApiError::unauthenticated)?;
-            let session = state
-                .repository
-                .validate_browser_session(&current)
-                .await?
-                .filter(|session| session.workspace_id == workspace_id)
-                .ok_or_else(ApiError::unauthenticated)?;
-            state
-                .repository
-                .link_identity_to_session_user(workspace_id, session.user_id, &issuer, subject)
-                .await?;
-            return Ok(CallbackOutcome::Linked);
-        }
         OidcIntent::Invitation { invitation_digest } => {
             let email = identity
                 .email
@@ -650,28 +658,22 @@ async fn complete(
                     &issuer,
                     subject,
                     email.as_str(),
+                    new_session,
                 )
-                .await?;
+                .await
+                .map_err(|error| match error {
+                    RepositoryError::NotFound(_) => ApiError::oidc_request_expired(),
+                    error => error.into(),
+                })?;
         }
-        OidcIntent::SignIn => {}
+        _ => {
+            state
+                .repository
+                .issue_session_for_identity(workspace_id, &issuer, subject, new_session)
+                .await?
+                .ok_or_else(ApiError::oidc_identity_not_linked)?;
+        }
     }
-    let (session, csrf, expires_at) = issue_session();
-    // This rechecks the link, the membership and that the provider is still on.
-    state
-        .repository
-        .issue_session_for_identity(
-            workspace_id,
-            &issuer,
-            subject,
-            NewOidcSession {
-                id: Uuid::new_v4(),
-                session: &session.digest(),
-                csrf: &csrf.digest(),
-                expires_at,
-            },
-        )
-        .await?
-        .ok_or_else(ApiError::oidc_identity_not_linked)?;
     let location = completion(settings(state)?, None)?;
     Ok(CallbackOutcome::SignedIn(session_redirect(
         &location,

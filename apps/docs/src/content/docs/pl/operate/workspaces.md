@@ -19,7 +19,7 @@ Logować się można hasłem lub przez [logowanie jednokrotne](#logowanie-jednok
 
 Obszar roboczy może pozwalać na logowanie przez jednego dostawcę tożsamości OpenID Connect, takiego jak Microsoft Entra ID, Okta, Google Workspace lub Keycloak. Wdrożenie wymaga ustawienia `OIDC_CALLBACK_URL` i sekretu `identity_provider_credential_key`; zobacz [opis konfiguracji](/pl/reference/configuration/). Skonfiguruj je w **Zarządzanie → Zarządzanie obszarem roboczym → Logowanie**, co wymaga uprawnienia `workspace.manage`:
 
-1. Zarejestruj aplikację u dostawcy, podając adres przekierowania widoczny w sekcji **Logowanie**. Upewnij się, że dostawca udostępnia atrybut `email`.
+1. Zarejestruj u dostawcy aplikację używaną tylko przez ten obszar roboczy, podając dokładnie adres przekierowania widoczny w sekcji **Logowanie**, bez symboli wieloznacznych. To ważne dla bezpieczeństwa: współdzielona aplikacja lub symbol wieloznaczny mogą pozwolić innemu obszarowi roboczemu w tym samym wdrożeniu przejąć logowania Twoich członków. Upewnij się, że dostawca udostępnia atrybut `email`.
 2. Wpisz adres URL wydawcy, identyfikator klienta, sekret klienta i nazwę przycisku logowania, a następnie zapisz.
 3. Wybierz **Uruchom logowanie testowe**. Potwierdza to, że ustawienia działają, i łączy Twoje konto.
 4. Włącz **Pokazuj tego dostawcę na stronie logowania**.

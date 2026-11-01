@@ -262,7 +262,8 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
     /// Accepts an invitation with a verified identity, linking it to the
     /// invited account. Holding the invitation is what authorizes the link;
     /// the matching address only guards against a forwarded invitation being
-    /// used by a different person. Returns the invited user.
+    /// used by a different person. The acceptance and the session it gives
+    /// succeed or fail together. Returns the invited user.
     pub async fn accept_invitation_with_identity(
         &self,
         workspace_id: Uuid,
@@ -270,9 +271,22 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         issuer: &str,
         subject: &str,
         email: &str,
+        session: NewOidcSession<'_>,
     ) -> Result<Uuid, RepositoryError> {
         let mut tx = self.pool.begin().await?;
         Self::lock_invitation_acceptance_on(&mut tx, invitation_digest).await?;
+        // Checked here so a provider changed during the token exchange cannot
+        // spend the invitation and leave the invitee with no way in.
+        let provider_current: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM workspace_identity_providers WHERE workspace_id = $1 AND issuer = $2 AND enabled FOR SHARE)",
+        )
+        .bind(workspace_id)
+        .bind(issuer)
+        .fetch_one(&mut *tx)
+        .await?;
+        if !provider_current {
+            return Err(RepositoryError::NotFound("identity provider"));
+        }
         let invitation: Option<(Uuid, String)> = sqlx::query_as(
             "SELECT id, invitee_email FROM workspace_invitations WHERE token_digest = $1 AND workspace_id = $2 AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > clock_timestamp()",
         )
@@ -295,6 +309,17 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
             .execute(&mut *tx)
             .await?;
         self.accept_invitation_on(&mut tx, invitation_digest, user_id)
+            .await?;
+        if !Self::insert_oidc_session_on(&mut tx, user_id, workspace_id, &session).await? {
+            return Err(RepositoryError::InvitationInvalid);
+        }
+        self.for_workspace(workspace_id)
+            .with_audit_context(user_audit_context(
+                SIGNED_IN_ACTION,
+                user_id,
+                json!({ "method": SessionAuthMethod::Oidc.as_str() }),
+            ))
+            .write_audit_event(&mut tx)
             .await?;
         self.for_workspace(workspace_id)
             .with_audit_context(user_audit_context(

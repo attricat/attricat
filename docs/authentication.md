@@ -30,7 +30,10 @@ provider. Three rules contain that:
 
 - **A redirect URI per workspace.** A provider returns a code only to a URI registered
   for that client. With a shared URI, a malicious provider could relay a browser to
-  another workspace's client and receive that code at its own token endpoint.
+  another workspace's client and receive that code at its own token endpoint. This
+  depends on the provider matching redirect URIs exactly, so a client must belong to
+  one workspace and list only its URI, with no wildcards. The realms from
+  `just keycloak` allow any URI and are for local use only.
 - **Links per workspace.** The identity is the exact verified `(issuer, subject)` pair
   in `external_identities`, for one workspace and one `users.id`. It signs in only
   there, while that issuer is the workspace's enabled provider and the person is an

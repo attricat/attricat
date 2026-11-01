@@ -2116,7 +2116,7 @@
     "signInClientSecretKeep": "Leave blank to keep the current secret. A new issuer or client ID needs a new one.",
     "signInSave": "Save provider",
     "signInSaved": "Provider saved.",
-    "signInRedirectUri": "Register this redirect URI with your provider:",
+    "signInRedirectUri": "Register this exact redirect URI, with no wildcards, on a client that only this workspace uses:",
     "signInUnavailable": "This deployment has no OIDC_CALLBACK_URL, so single sign-on is unavailable.",
     "signInTestTitle": "Test sign-in",
     "signInTestDescription": "Sign in once to prove the settings work. It also connects your account to the provider.",

@@ -19,7 +19,7 @@ Sign-in is a password or [single sign-on](#single-sign-on). Multi-factor authent
 
 A workspace can let people sign in through one OpenID Connect identity provider, such as Microsoft Entra ID, Okta, Google Workspace, or Keycloak. Your deployment needs `OIDC_CALLBACK_URL` and the `identity_provider_credential_key` secret; see the [configuration reference](/reference/configuration/). Set it up under **Manage → Workspace management → Sign-in**, which requires `workspace.manage`:
 
-1. Register an application with your provider, using the redirect URI that **Sign-in** shows. Make sure the provider shares the `email` claim.
+1. Register an application with your provider, used only by this workspace, with exactly the redirect URI that **Sign-in** shows and no wildcards. This matters for security: a shared application or a wildcard could let another workspace on the same deployment obtain your members' sign-ins. Make sure the provider shares the `email` claim.
 2. Enter the issuer URL, client ID, client secret, and the name for the sign-in button, and save.
 3. Select **Run test sign-in**. This proves the settings work and connects your account.
 4. Turn on **Offer this provider on the sign-in page**.

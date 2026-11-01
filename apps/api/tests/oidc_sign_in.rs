@@ -1667,3 +1667,72 @@ async fn a_provider_turned_off_during_a_sign_in_gives_no_session_or_acceptance(p
     harness.server.abort();
     harness.provider.server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn an_invitation_survives_a_provider_changing_during_its_acceptance(pool: PgPool) {
+    let harness = start(&pool).await;
+    let email = "new-owner@corp.example";
+    let (workspace, secret) = invited_workspace(&harness, email).await;
+    let digest = {
+        use sha2::{Digest, Sha256};
+        Sha256::digest(secret.as_bytes()).to_vec()
+    };
+    let session = api::account::SessionSecret::generate();
+    let csrf = api::account::SessionSecret::generate();
+    let accept = |issuer: String| {
+        let digest = digest.clone();
+        let session = session.digest();
+        let csrf = csrf.digest();
+        let pool = pool.clone();
+        async move {
+            api::repository::AttricatRepository::system(pool)
+                .accept_invitation_with_identity(
+                    workspace,
+                    &digest,
+                    &issuer,
+                    "subject",
+                    email,
+                    api::repository::NewOidcSession {
+                        id: Uuid::new_v4(),
+                        session: &session,
+                        csrf: &csrf,
+                        expires_at: chrono::Utc::now() + chrono::Duration::hours(8),
+                    },
+                )
+                .await
+        }
+    };
+    // The provider moved to another issuer while the browser was away.
+    assert!(
+        accept("https://old-issuer.example".to_owned())
+            .await
+            .is_err()
+    );
+    let pending: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM workspace_invitations WHERE workspace_id = $1 AND accepted_at IS NULL",
+    )
+    .bind(workspace)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(pending, 1);
+    let links: i64 = sqlx::query_scalar("SELECT count(*) FROM external_identities")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(links, 0);
+
+    // Acceptance and its session then land together.
+    let user = accept(harness.provider.issuer.clone()).await.unwrap();
+    let sessions: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM browser_sessions WHERE user_id = $1 AND workspace_id = $2",
+    )
+    .bind(user)
+    .bind(workspace)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(sessions, 1);
+    harness.server.abort();
+    harness.provider.server.abort();
+}
