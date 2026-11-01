@@ -8,6 +8,7 @@ import {
   type ElementType,
 } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ApiRequestError } from '../../api/request';
 import '../../i18n';
 import { currentSession } from '../auth/api';
 import {
@@ -215,6 +216,37 @@ describe('WorkflowDetailPage', () => {
       await screen.findByText('Completed', {}, { timeout: 3_000 }),
     ).toBeTruthy();
     expect(screen.queryByText('Pending')).toBeNull();
+  });
+
+  it('names the record when a manual run cannot find it', async () => {
+    vi.mocked(currentSession).mockResolvedValue({
+      capabilities: { workflows_manage: true, workflows_read: true },
+    } as Awaited<ReturnType<typeof currentSession>>);
+    vi.mocked(listWorkflowRevisions).mockResolvedValue([
+      {
+        ...workflow,
+        status: 'published',
+        enabled_version: 1,
+        manual_enabled: true,
+      },
+    ]);
+    vi.mocked(listWorkflowRuns).mockResolvedValue([]);
+    vi.mocked(runWorkflowNow).mockRejectedValue(
+      new ApiRequestError(404, 'record not found', 'not_found'),
+    );
+    renderPage();
+    const user = userEvent.setup();
+    await user.type(
+      await screen.findByRole('textbox', { name: 'Manual run record ID' }),
+      manualRunRecordId,
+    );
+    await user.click(screen.getByRole('button', { name: 'Run now' }));
+    expect(
+      await screen.findByText("No record has this ID, or you can't access it."),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText("It doesn't exist, or you can't access it."),
+    ).toBeNull();
   });
 
   it('explains a mistyped manual record ID instead of sending it', async () => {

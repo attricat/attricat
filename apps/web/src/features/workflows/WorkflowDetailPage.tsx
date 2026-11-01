@@ -30,6 +30,8 @@ import { WorkflowRunTable } from './WorkflowRunTable';
 import { WorkflowSourcePanel } from './WorkflowSourcePanel';
 import { WorkflowIcon } from '../../components/systemIcons';
 import { capabilities } from '../auth/capabilities';
+import { httpStatus } from '../../api/httpStatus';
+import { ApiRequestError } from '../../api/request';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { notFoundError } from '../../api/errors';
 import { randomUuid } from '../../components/randomUuid';
@@ -85,6 +87,11 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
   );
   const mutationError =
     publish.error ?? enable.error ?? runNow.error ?? disable.error;
+  // This page's workflow exists, so a refused run names a missing record.
+  const runRecordMissing =
+    mutationError === runNow.error &&
+    runNow.error instanceof ApiRequestError &&
+    runNow.error.status === httpStatus.notFound;
 
   if (revisions.isPending)
     return (
@@ -144,7 +151,13 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
           {t('workflows.readOnly')}
         </Alert>
       )}
-      <ApiErrorAlert error={mutationError} sx={{ mt: 2 }} />
+      {runRecordMissing ? (
+        <Alert severity="error" sx={{ mt: 2 }}>
+          {t('workflows.runRecordNotFound')}
+        </Alert>
+      ) : (
+        <ApiErrorAlert error={mutationError} sx={{ mt: 2 }} />
+      )}
       <RunsUnavailableAlert error={runs.error} sx={{ mt: 2 }} />
       <Tabs
         allowScrollButtonsMobile
