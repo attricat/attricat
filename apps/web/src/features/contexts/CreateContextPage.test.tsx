@@ -123,6 +123,23 @@ describe('CreateContextPage', () => {
     expect(createContext).not.toHaveBeenCalled();
   });
 
+  it('asks for the code and parent when they are missing', async () => {
+    vi.mocked(listContexts).mockResolvedValue([
+      { id: 'parent-id', code: 'default', data: {}, parent_id: null },
+    ]);
+    renderPage();
+    const user = userEvent.setup();
+    await screen.findByRole('combobox', { name: 'Parent context' });
+    await user.click(screen.getByRole('button', { name: 'Create context' }));
+    expect(
+      await screen.findByText('Choose the context this one inherits from.'),
+    ).toBeTruthy();
+    expect(
+      screen.getByText('Use only letters, numbers, hyphens, and underscores'),
+    ).toBeTruthy();
+    expect(createContext).not.toHaveBeenCalled();
+  });
+
   it('reports an invalid code beside the field without creating the context', async () => {
     vi.mocked(createContext).mockClear();
     vi.mocked(listContexts).mockResolvedValue([

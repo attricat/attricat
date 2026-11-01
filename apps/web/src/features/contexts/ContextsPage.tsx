@@ -93,6 +93,10 @@ export const ContextsPage = () => {
               >
                 <ListItemText
                   primary={context.code}
+                  slotProps={{
+                    primary: { sx: { overflowWrap: 'anywhere' } },
+                    secondary: { sx: { overflowWrap: 'anywhere' } },
+                  }}
                   secondary={
                     <>
                       {context.parent_id

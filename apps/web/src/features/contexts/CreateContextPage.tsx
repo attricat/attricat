@@ -70,6 +70,7 @@ export const CreateContextPage = () => {
       <Paper
         ref={formRef}
         component="form"
+        noValidate
         onSubmit={(event) => {
           event.preventDefault();
           void form.handleSubmit();
@@ -107,14 +108,25 @@ export const CreateContextPage = () => {
             isRetrying={contexts.isFetching}
             onRetry={() => void contexts.refetch()}
           />
-          <form.Field name="parentId">
+          <form.Field
+            name="parentId"
+            validators={{
+              onSubmit: ({ value }) =>
+                value ? undefined : 'contexts.parentRequired',
+            }}
+          >
             {(field) => (
               <TextField
                 disabled={
                   create.isPending || contexts.isPending || contexts.isError
                 }
+                error={field.state.meta.errors.length > 0}
                 helperText={
-                  contexts.isPending ? t('contexts.loadingContexts') : undefined
+                  contexts.isPending
+                    ? t('contexts.loadingContexts')
+                    : field.state.meta.errors[0]
+                      ? t(field.state.meta.errors[0])
+                      : undefined
                 }
                 select
                 label={t('contexts.parentContext')}

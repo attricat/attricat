@@ -437,6 +437,7 @@
     "backToContexts": "Wróć do kontekstów",
     "code": "Kod",
     "parentContext": "Kontekst nadrzędny",
+    "parentRequired": "Wybierz kontekst, po którym dziedziczy ten kontekst.",
     "selectParent": "Wybierz kontekst nadrzędny",
     "metadata": "Metadane",
     "invalidMetadataJson": "Metadane muszą być poprawnym JSON-em.",
