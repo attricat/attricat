@@ -1637,6 +1637,7 @@
     "userId": "User ID",
     "activeWorkspace": "Active workspace ID",
     "tokenExpiry": "Token expiry must be in the future.",
+    "tokenPermissionsRequired": "Choose at least one permission.",
     "catalogGenerator": "Catalog generator",
     "catalogGeneratorDescription": "Seed blueprints, contexts, products, and relationships.",
     "readOnlyCatalog": "Read-only catalog",

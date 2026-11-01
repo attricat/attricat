@@ -49,6 +49,7 @@ describe('ChangeDisplayNameDialog', () => {
 
   it.each([
     ['A', 'Use at least 2 characters.'],
+    ['   ', 'Use at least 2 characters.'],
     ['a'.repeat(65), 'Use at most 64 characters.'],
     ['Ada-Lovelace', 'Use only letters, digits, and spaces.'],
     [' Ada', 'Remove spaces from the start and end.'],
