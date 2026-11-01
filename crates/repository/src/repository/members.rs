@@ -165,13 +165,14 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
     }
 
     /// Finds or creates the account an invitation addresses. Accounts are
-    /// global, so an existing address keeps its user and credential.
+    /// global, so an existing address keeps its user, credential and name;
+    /// `display_name` only names an account created here.
     pub(super) async fn upsert_invited_user_on(
         tx: &mut Transaction<'_, Postgres>,
         email: &str,
         display_name: Option<&str>,
     ) -> Result<InvitedUser, RepositoryError> {
-        let user = sqlx::query("INSERT INTO users (id, email, display_name, email_verified_at) VALUES ($1, $2, NULLIF(btrim($3), ''), clock_timestamp()) ON CONFLICT (email) DO UPDATE SET display_name = COALESCE(users.display_name, EXCLUDED.display_name) RETURNING id, state, email_verified_at, security_version")
+        let user = sqlx::query("INSERT INTO users (id, email, display_name, email_verified_at) VALUES ($1, $2, NULLIF(btrim($3), ''), clock_timestamp()) ON CONFLICT (email) DO UPDATE SET email = users.email RETURNING id, state, email_verified_at, security_version")
             .bind(Uuid::new_v4()).bind(email).bind(display_name).fetch_one(&mut **tx).await?;
         let user_id: Uuid = user.try_get("id")?;
         let credential_exists: bool = sqlx::query_scalar(
@@ -266,6 +267,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         if !credential_created {
             return Err(RepositoryError::InvitationInvalid);
         }
+        Self::clear_inactive_membership_grants_on(&mut tx, workspace_id, user_id).await?;
         let membership_id: Uuid = sqlx::query_scalar("INSERT INTO workspace_memberships (id, workspace_id, user_id, state) VALUES ($1,$2,$3,'active') ON CONFLICT (workspace_id,user_id) DO UPDATE SET state = 'active', updated_at = clock_timestamp() RETURNING id")
             .bind(Uuid::new_v4()).bind(workspace_id).bind(user_id).fetch_one(&mut *tx).await?;
         sqlx::query("INSERT INTO role_grants (id, workspace_id, membership_id, role_id, scope_type, scope_target_id) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (workspace_id,membership_id,role_id,scope_type,scope_target_id) DO NOTHING")
@@ -711,6 +713,21 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         Ok(membership_id)
     }
 
+    /// A person invited back into a workspace gets the role they were invited
+    /// to, not whatever they held before being deactivated.
+    async fn clear_inactive_membership_grants_on(
+        tx: &mut Transaction<'_, Postgres>,
+        workspace_id: Uuid,
+        user_id: Uuid,
+    ) -> Result<(), RepositoryError> {
+        sqlx::query("DELETE FROM role_grants g USING workspace_memberships m WHERE g.membership_id = m.id AND m.workspace_id = $1 AND m.user_id = $2 AND m.state <> 'active'")
+            .bind(workspace_id)
+            .bind(user_id)
+            .execute(&mut **tx)
+            .await?;
+        Ok(())
+    }
+
     /// Grants the invited membership and roles in the caller's transaction,
     /// which holds the invitation lock.
     pub(super) async fn accept_invitation_on(
@@ -726,6 +743,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
             return Err(RepositoryError::InvitationInvalid);
         }
         let workspace_id: Uuid = invitation.try_get("workspace_id")?;
+        Self::clear_inactive_membership_grants_on(tx, workspace_id, user_id).await?;
         let membership_id: Uuid = sqlx::query_scalar("INSERT INTO workspace_memberships (id, workspace_id, user_id, state) VALUES ($1,$2,$3,'active') ON CONFLICT (workspace_id,user_id) DO UPDATE SET state = 'active', updated_at = clock_timestamp() RETURNING id").bind(Uuid::new_v4()).bind(workspace_id).bind(user_id).fetch_one(&mut **tx).await?;
         sqlx::query("INSERT INTO role_grants (id, workspace_id, membership_id, role_id, scope_type, scope_target_id) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (workspace_id,membership_id,role_id,scope_type,scope_target_id) DO NOTHING").bind(Uuid::new_v4()).bind(workspace_id).bind(membership_id).bind(invitation.try_get::<Uuid,_>("role_id")?).bind(invitation.try_get::<String,_>("scope_type")?).bind(invitation.try_get::<Uuid,_>("scope_target_id")?).execute(&mut **tx).await?;
         let inviter: Uuid = sqlx::query_scalar("UPDATE workspace_invitations SET accepted_at = clock_timestamp(), accepted_by_user_id = $1 WHERE id = $2 RETURNING inviter_user_id").bind(user_id).bind(invitation.try_get::<Uuid,_>("id")?).fetch_one(&mut **tx).await?;

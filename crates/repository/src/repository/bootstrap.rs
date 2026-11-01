@@ -167,6 +167,32 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
     }
 
     /// Adds a configured local credential without replacing an existing password.
+    /// Leaves the bootstrap owner without a password, session or token. A demo
+    /// runs this at every start, which also ends access a visitor already has.
+    pub async fn revoke_bootstrap_owner_access(
+        &self,
+        workspace_id: Uuid,
+        email: &str,
+    ) -> Result<(), RepositoryError> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("DELETE FROM local_password_credentials c USING users u WHERE c.user_id = u.id AND u.email = $1")
+            .bind(email)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("UPDATE browser_sessions s SET revoked_at = clock_timestamp() FROM users u WHERE s.user_id = u.id AND u.email = $1 AND s.workspace_id = $2 AND s.revoked_at IS NULL")
+            .bind(email)
+            .bind(workspace_id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("UPDATE personal_api_tokens t SET revoked_at = clock_timestamp() FROM users u WHERE t.user_id = u.id AND u.email = $1 AND t.workspace_id = $2 AND t.revoked_at IS NULL")
+            .bind(email)
+            .bind(workspace_id)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
     pub async fn ensure_bootstrap_local_password(
         &self,
         email: &str,

@@ -4,11 +4,11 @@ import type { ReactNode } from 'react';
 /** Keeps text for assistive technology without drawing it. */
 export const visuallyHiddenSx = {
   clip: 'rect(0 0 0 0)',
-  height: 1,
+  height: '1px',
   overflow: 'hidden',
   position: 'absolute',
   whiteSpace: 'nowrap',
-  width: 1,
+  width: '1px',
 } as const;
 
 export const VisuallyHidden = ({ children }: { children: ReactNode }) => (

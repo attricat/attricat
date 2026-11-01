@@ -83,7 +83,8 @@ writes the local callback for `127.0.0.1`, so a browser on another address needs
 ### Restricting passwords
 
 `password_sign_in = 'owners'` leaves a password only to active owners, as the way
-back in if the provider fails. Anyone else gets `403 password_sign_in_disabled`, but
+back in if the provider fails. An owner who only signs in through the provider has
+no such password; the operator's owner invitation is then the way back in. Anyone else gets `403 password_sign_in_disabled`, but
 only after giving the correct password, so it reveals nothing to a stranger. New
 non-owner invitees receive an acceptance link rather than a password setup link, and
 an onboarding link issued earlier stops working. Passwords belong to the account, so

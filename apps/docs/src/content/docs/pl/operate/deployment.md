@@ -73,13 +73,13 @@ printf '%s\n' '…' > s3_secret_access_key
 printf '%s\n' '…' > smtp_password
 printf '%s\n' '…' > file_worker_metrics_token
 printf '%s\n' '…' > bootstrap_owner_password
-touch llm_api_key redis_url
+touch llm_api_key redis_url extension_credential_key identity_provider_credential_key operator_api_token
 sudo chown 10001:10001 * && sudo chmod 400 *
 cd ../..
 docker compose --env-file deploy/.env.production -f deploy/compose.yml up -d
 ```
 
-Każde ustawienie jest opisane w [dokumentacji konfiguracji](/pl/reference/configuration/).
+Pozostaw plik pusty, aby wyłączyć daną funkcję. Logowanie jednokrotne wymaga `identity_provider_credential_key`, połączenia rozszerzeń wymagają `extension_credential_key`, a API operatora wymaga `operator_api_token`. Każde ustawienie jest opisane w [dokumentacji konfiguracji](/pl/reference/configuration/).
 
 ## Pierwsze uruchomienie
 
@@ -130,6 +130,10 @@ curl --fail --silent --retry 60 --retry-delay 2 --retry-all-errors \
 ./platform smoke catalog
 ```
 
+### Aktualizacja z obrazu starszego niż 2026-10-30
+
+Od tej daty definicje są zapisywane w YAML, a definicje zapisane w TOML nie są konwertowane. Odczyt nadal działa, ale tworzenie lub zmiana rekordu w takiej rewizji schematu kończy się błędem `422 invalid_blueprint_definition`. Dla każdego takiego schematu opublikuj nową rewizję w YAML, a następnie przenieś jego rekordy poleceniem `acli record migrate`.
+
 ## Wycofaj wdrożenie
 
 Migracje działają tylko do przodu. Wycofanie oznacza ponowne wdrożenie poprzedniego skrótu:
@@ -159,5 +163,7 @@ Sekrety są odczytywane przy starcie. Aby przeprowadzić rotację: utwórz nowe 
 - Ustawiony sekret `file_worker_metrics_token`, a `/metrics` osiągalne tylko z sieci monitoringu.
 - Prywatny zasobnik z danymi uwierzytelniającymi ograniczonymi do `PutObject`, `GetObject`, `DeleteObject`, `AbortMultipartUpload` i `ListBucket`.
 - Nieustawione `ATTRICAT_E2E_FIXTURE_EMAIL`.
+- Proxy, które ustawia `Strict-Transport-Security` i ogranicza liczbę żądań do `/api/auth/` dla każdego adresu klienta. Attricat ogranicza próby dla konta i obszaru roboczego, co nie powstrzyma jednego klienta próbującego wielu z nich.
+- Co najmniej 2 GiB pamięci dla każdego procesu API. Haszowanie haseł celowo zużywa dużo pamięci, więc przy mniejszym limicie seria logowań może zakończyć proces.
 - Przetestowana procedura tworzenia kopii zapasowej i przywracania.
 - Przy kilku replikach API: `max_connections` w PostgreSQL z zapasem do trzech dodatkowych połączeń na proces API, brak poolera w trybie transakcyjnym i opcjonalnie `CACHE_BACKEND=redis`.

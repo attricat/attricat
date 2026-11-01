@@ -61,9 +61,13 @@ pub(super) async fn list(
     Ok(Json(sources))
 }
 pub(super) async fn create(
+    State(state): State<AppState>,
     ScopedRepository(repository): ScopedRepository,
     ApiJson(input): ApiJson<CreateSourceRequest>,
 ) -> Result<(StatusCode, Json<SourceResponse>), ApiError> {
+    if state.demo_mode {
+        return Err(ApiError::disabled_in_demo());
+    }
     let source = GitHubRepository::from_str(&input.source)
         .map_err(|error| ApiError::invalid_input(error.to_string()))?;
     Ok((

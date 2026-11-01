@@ -1345,11 +1345,44 @@ pub fn router(state: AppState) -> Router {
 /// the root for load balancers and container checks, and every other path
 /// belongs to the web app when one is served.
 fn mount(api: Router, probes: Router, web_dist: Option<&str>) -> Router {
-    let app = Router::new().nest("/api", api).merge(probes);
+    let app = Router::new()
+        .nest("/api", api.fallback(api_route_not_found))
+        .merge(probes)
+        .layer(middleware::from_fn(security_headers));
     match web_dist {
         Some(web_dist) => app.fallback_service(web_app(web_dist)),
         None => app,
     }
+}
+
+/// An unknown API path must not fall through to the web app's `200 OK`.
+async fn api_route_not_found() -> ApiError {
+    ApiError::not_found("route")
+}
+
+/// Headers that hold for every response, whatever a proxy adds. HTTPS, and so
+/// HSTS, ends at the proxy.
+async fn security_headers(
+    request: axum::extract::Request,
+    next: middleware::Next,
+) -> axum::response::Response {
+    let mut response = next.run(request).await;
+    let headers = response.headers_mut();
+    headers.insert(
+        axum::http::header::X_CONTENT_TYPE_OPTIONS,
+        axum::http::HeaderValue::from_static("nosniff"),
+    );
+    headers.insert(
+        axum::http::header::REFERRER_POLICY,
+        axum::http::HeaderValue::from_static("same-origin"),
+    );
+    // File and extension responses set a stricter policy of their own.
+    headers
+        .entry(axum::http::header::CONTENT_SECURITY_POLICY)
+        .or_insert(axum::http::HeaderValue::from_static(
+            "frame-ancestors 'none'",
+        ));
+    response
 }
 
 /// Serves the compiled web app. Paths without a file are client-side routes,

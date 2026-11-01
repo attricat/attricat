@@ -4196,3 +4196,59 @@ attributes:
     assert_eq!(frame.bytes().await.unwrap().as_ref(), b"export {}");
     server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn changing_extension_storage_takes_record_write_authority(pool: sqlx::PgPool) {
+    let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
+    let repository = AttricatRepository::system(pool.clone()).for_workspace(workspace);
+    let installer =
+        ExtensionInstaller::new(repository.clone(), Arc::new(FakeObjectStore::available()));
+    let installed = installer
+        .install("test", &storage_client_release_archive("1.0.0"))
+        .await
+        .unwrap();
+    for capability in ["storage.extension", "client.record_tab"] {
+        repository
+            .grant_extension("acme.storage", "capability", capability)
+            .await
+            .unwrap();
+    }
+    repository.enable_extension("acme.storage").await.unwrap();
+    let (viewer, viewer_membership) = support::add_workspace_user(&pool).await;
+    support::grant_role(
+        &pool,
+        viewer_membership,
+        support::VIEWER_ROLE_ID,
+        support::GrantScope::Workspace,
+    )
+    .await;
+    let (base_url, server) = start_server_with_config(pool.clone(), |_| {}).await;
+    let path = format!(
+        "{base_url}/extensions/acme.storage/panel/storage/{}",
+        installed.installed_release_id
+    );
+    let set = json!({"operation": "set", "key": "state", "value": {"enabled": true}});
+    let viewer = support::client_for(viewer);
+
+    let owner_set = authenticated_client()
+        .post(&path)
+        .json(&set)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(owner_set.status(), reqwest::StatusCode::OK);
+    for write in [set.clone(), json!({"operation": "delete", "key": "state"})] {
+        let refused = viewer.post(&path).json(&write).send().await.unwrap();
+        assert_eq!(refused.status(), reqwest::StatusCode::FORBIDDEN);
+    }
+    let read = viewer
+        .post(&path)
+        .json(&json!({"operation": "get", "key": "state"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(read.status(), reqwest::StatusCode::OK);
+    let entry: Value = read.json().await.unwrap();
+    assert_eq!(entry["value"], json!({"enabled": true}));
+    server.abort();
+}

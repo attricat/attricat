@@ -502,6 +502,15 @@ async fn selected_release(
         .ok_or_else(|| ApiError::not_found("trusted extension release"))
 }
 
+/// Demo visitors share an administrator account, so they cannot run their own
+/// code on the host.
+fn reject_in_demo(state: &AppState) -> Result<(), ApiError> {
+    if state.demo_mode {
+        return Err(ApiError::disabled_in_demo());
+    }
+    Ok(())
+}
+
 /// Installs a locally supplied archive. The archive goes through the exact
 /// same manifest validation, bounded unpacking, artifact staging, and
 /// lifecycle recording as a registry release.
@@ -511,6 +520,7 @@ pub(super) async fn sideload(
     headers: HeaderMap,
     archive: Bytes,
 ) -> Result<(StatusCode, Json<InstallationResponse>), ApiError> {
+    reject_in_demo(&state)?;
     require_zstd_archive(&headers)?;
     let package = unpack_extension(archive).await?;
     let installation = ExtensionInstaller::new(repository, state.object_store.clone())
@@ -539,6 +549,7 @@ pub(super) async fn install(
     ScopedRepository(repository): ScopedRepository,
     ApiJson(input): ApiJson<ReleaseRequest>,
 ) -> Result<(StatusCode, Json<InstallationResponse>), ApiError> {
+    reject_in_demo(&state)?;
     let release = selected_release(&state, &repository, &input).await?;
     let archive = state
         .registry
@@ -559,6 +570,7 @@ pub(super) async fn upgrade(
     ApiPath(extension_id): ApiPath<String>,
     ApiJson(input): ApiJson<ReleaseRequest>,
 ) -> Result<Json<InstallationResponse>, ApiError> {
+    reject_in_demo(&state)?;
     let release = selected_release(&state, &repository, &input).await?;
     let archive = state
         .registry
@@ -590,6 +602,7 @@ pub(super) async fn upgrade_archive(
     headers: HeaderMap,
     archive: Bytes,
 ) -> Result<Json<InstallationResponse>, ApiError> {
+    reject_in_demo(&state)?;
     require_zstd_archive(&headers)?;
     let package = unpack_extension(archive).await?;
     if package.manifest().attricat.id != extension_id {
@@ -1077,9 +1090,21 @@ pub(super) async fn ensure_action_may_write(
 
 pub(super) async fn storage(
     ScopedRepository(repository): ScopedRepository,
+    principal: AuthenticatedPrincipal,
+    ActiveWorkspace(workspace): ActiveWorkspace,
     ApiPath((extension_id, contribution_id, release_id)): ApiPath<(String, String, Uuid)>,
     ApiJson(input): ApiJson<StorageRequest>,
 ) -> Result<Json<StorageResponse>, ApiError> {
+    // Server components read this store when they write records, so changing
+    // it takes the same authority as changing records directly.
+    if matches!(
+        input,
+        StorageRequest::Set { .. } | StorageRequest::Delete { .. }
+    ) {
+        principal
+            .require_workspace_permission(&repository, workspace, Permission::RecordsWrite)
+            .await?;
+    }
     let contribution = repository
         .client_extension_contribution(&extension_id, &contribution_id)
         .await?;

@@ -27,6 +27,8 @@ Obszar roboczy może pozwalać na logowanie przez jednego dostawcę tożsamości
 
 Zmiana adresu wydawcy lub identyfikatora klienta wyłącza dostawcę i przywraca logowanie hasłem dla wszystkich, dopóki nowe logowanie testowe się nie powiedzie. Połączenie z dostawcą obowiązuje tylko w obszarze roboczym, w którym je utworzono, więc osoba korzystająca z tego samego dostawcy w dwóch obszarach łączy konto w każdym z nich, a dostawca skonfigurowany dla jednego obszaru nie daje dostępu do innego.
 
+Jeśli dostawca przestanie działać, a żaden właściciel nie ma hasła, operator może przywrócić dostęp. Wyłącz dostawcę przez `PATCH /operator/workspaces/{id}/identity-provider`, a następnie poproś o nowy link przez `POST /operator/workspaces/{id}/owner-invitation`. Dopóki właściciel ma hasło lub dostawca jest włączony, to żądanie zwraca `409 workspace_owner_exists`.
+
 ### Kto może się zalogować
 
 Logowanie jednokrotne nie tworzy kont samodzielnie. Dostęp uzyskuje się, przyjmując [zaproszenie](#zaproszenia) przez dostawcę, przy czym adres u dostawcy musi być zgodny z zaproszeniem, albo łącząc konto w sekcji **Profil** po zalogowaniu. Sam adres e-mail nigdy nie łączy konta.

@@ -87,7 +87,7 @@ test('authors, publishes, revises and migrates a blueprint in the browser', asyn
     await page.getByRole('button', { name: 'Refresh', exact: true }).click();
     // The status chip, not the column of the same name.
     await expect(batches.locator('tbody').getByText('Completed')).toBeVisible({
-      timeout: 1_000,
+      timeout: 10_000,
     });
   }).toPass();
   await expect(batches.getByText('1 of 1')).toBeVisible();

@@ -71,7 +71,7 @@ actions:
     await page.getByRole('tab', { name: 'Run diagnostics' }).click();
     await expect(
       page.getByRole('row').filter({ hasText: 'Completed' }),
-    ).toBeVisible({ timeout: 1_000 });
+    ).toBeVisible({ timeout: 10_000 });
   }).toPass();
 
   await page.goto(`/records/${record.id}`);

@@ -187,15 +187,17 @@ pub(super) async fn request_password_reset(
         &state.password_reset_url,
         &[("token", secret.expose_for_delivery())],
     )?;
-    // Delivery failure must not change the response: a 500 only for real,
-    // verified accounts would disclose which addresses exist.
-    if let Err(error) = state
-        .mail_delivery
-        .deliver_password_reset(&email, &reset_url)
-        .await
-    {
-        tracing::error!(%error, "password reset email delivery failed");
-    }
+    // Neither a delivery failure nor the time delivery takes may change the
+    // response, since only real, verified accounts get this far.
+    let mail_delivery = state.mail_delivery.clone();
+    tokio::spawn(async move {
+        if let Err(error) = mail_delivery
+            .deliver_password_reset(&email, &reset_url)
+            .await
+        {
+            tracing::error!(%error, "password reset email delivery failed");
+        }
+    });
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
@@ -369,7 +371,7 @@ pub(super) async fn clear_display_name(
 /// Display names are letters and digits in words separated by spaces, with no
 /// leading or trailing space. Input is never trimmed, so the stored value is
 /// exactly what the user submitted.
-fn validate_display_name(name: &str) -> Result<(), ApiError> {
+pub(super) fn validate_display_name(name: &str) -> Result<(), ApiError> {
     let length = name.chars().count();
     // One code covers every rule, since the UI states them together.
     let invalid = |message: &str| {

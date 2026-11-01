@@ -11,3 +11,7 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - '@remote-dom/core@1.12.1'
   - '@remote-dom/polyfill@1.7.0'
+
+overrides:
+  # monaco-editor pins a release with known sanitizer bypasses.
+  dompurify: '>=3.4.17'

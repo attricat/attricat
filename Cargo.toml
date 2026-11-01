@@ -79,6 +79,26 @@ zstd = "0.14"
 [profile.dev.package."*"]
 debug = "line-tables-only"
 
+# An unoptimized Cranelift takes minutes to compile an extension component on
+# a busy machine, which outlasts request and test deadlines.
+[profile.dev.package.cranelift-codegen]
+opt-level = 2
+
+[profile.dev.package.regalloc2]
+opt-level = 2
+
+[profile.dev.package.cranelift-frontend]
+opt-level = 2
+
+[profile.dev.package.cranelift-entity]
+opt-level = 2
+
+[profile.dev.package.wasmtime-internal-cranelift]
+opt-level = 2
+
+[profile.dev.package.wasmparser]
+opt-level = 2
+
 # The profile that 'dist' will build with
 [profile.dist]
 inherits = "release"

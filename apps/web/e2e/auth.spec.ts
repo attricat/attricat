@@ -48,17 +48,21 @@ test('resets a password using a Mailpit-delivered one-time link', async ({
   await page.getByRole('button', { name: 'Send reset link' }).click();
   await expect(page.getByText(/If an eligible account/)).toBeVisible();
 
-  const messages = await fetch(`${e2eMailpitUrl}/api/v1/messages`).then(
-    (response) => response.json(),
-  );
-  const message = messages.messages.find(
-    (candidate: { Subject: string; To: Array<{ Address: string }> }) =>
-      candidate.Subject === 'Reset your Attricat password' &&
-      candidate.To.some(
-        (recipient) => recipient.Address === 'reset@example.test',
-      ),
-  );
-  expect(message).toBeTruthy();
+  // The response does not wait for delivery, so its timing reveals nothing.
+  const findMessage = async () => {
+    const messages = await fetch(`${e2eMailpitUrl}/api/v1/messages`).then(
+      (response) => response.json(),
+    );
+    return messages.messages.find(
+      (candidate: { Subject: string; To: Array<{ Address: string }> }) =>
+        candidate.Subject === 'Reset your Attricat password' &&
+        candidate.To.some(
+          (recipient) => recipient.Address === 'reset@example.test',
+        ),
+    );
+  };
+  await expect.poll(findMessage).toBeTruthy();
+  const message = await findMessage();
   const delivered = await fetch(
     `${e2eMailpitUrl}/api/v1/message/${message.ID}`,
   ).then((response) => response.json());

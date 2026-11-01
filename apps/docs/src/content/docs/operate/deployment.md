@@ -73,13 +73,13 @@ printf '%s\n' '…' > s3_secret_access_key
 printf '%s\n' '…' > smtp_password
 printf '%s\n' '…' > file_worker_metrics_token
 printf '%s\n' '…' > bootstrap_owner_password
-touch llm_api_key redis_url
+touch llm_api_key redis_url extension_credential_key identity_provider_credential_key operator_api_token
 sudo chown 10001:10001 * && sudo chmod 400 *
 cd ../..
 docker compose --env-file deploy/.env.production -f deploy/compose.yml up -d
 ```
 
-Every setting is described in the [configuration reference](/reference/configuration/).
+Leave a file empty to turn its feature off. Single sign-on needs `identity_provider_credential_key`, extension connections need `extension_credential_key`, and the operator API needs `operator_api_token`. Every setting is described in the [configuration reference](/reference/configuration/).
 
 ## First start
 
@@ -130,6 +130,10 @@ curl --fail --silent --retry 60 --retry-delay 2 --retry-all-errors \
 ./platform smoke catalog
 ```
 
+### Upgrade from an image older than 2026-10-30
+
+Definitions are YAML since then, and definitions stored as TOML are not converted. Reads keep working, but creating or changing a record on such a blueprint revision fails with `422 invalid_blueprint_definition`. For each affected blueprint, publish a new revision written in YAML, then move its records with `acli record migrate`.
+
 ## Roll back
 
 Migrations only go forward. Rolling back means redeploying the previous digest:
@@ -159,5 +163,7 @@ Secrets are read at startup. To rotate: create the new credential, replace its s
 - The `file_worker_metrics_token` secret set, and `/metrics` reachable only from your monitoring network.
 - A private bucket, with credentials limited to `PutObject`, `GetObject`, `DeleteObject`, `AbortMultipartUpload`, and `ListBucket`.
 - `ATTRICAT_E2E_FIXTURE_EMAIL` unset.
+- A proxy that sets `Strict-Transport-Security` and rate-limits `/api/auth/` per client address. Attricat limits guesses per account and workspace, which does not stop one client trying many of them.
+- At least 2 GiB of memory for each API process. Password hashing is deliberately memory-hard, so a smaller limit can end the process under a burst of sign-ins.
 - A tested backup and restore procedure.
 - With several API replicas: PostgreSQL `max_connections` sized for up to three extra connections per API process, no transaction-mode pooler, and optionally `CACHE_BACKEND=redis`.

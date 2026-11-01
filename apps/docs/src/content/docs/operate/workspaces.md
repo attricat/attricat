@@ -27,6 +27,8 @@ A workspace can let people sign in through one OpenID Connect identity provider,
 
 Changing the issuer or client ID turns the provider off again and restores password sign-in for everyone until a new test sign-in succeeds. A link to a provider holds only in the workspace that made it, so someone who uses the same provider in two workspaces connects in each, and a provider set up for one workspace gives no access to another.
 
+If the provider fails and no owner has a password, the operator can restore access. Disable the provider with `PATCH /operator/workspaces/{id}/identity-provider`, then request a new link with `POST /operator/workspaces/{id}/owner-invitation`. While an owner has a password or a provider is on, that request returns `409 workspace_owner_exists`.
+
 ### Who can sign in
 
 Single sign-on does not create accounts on its own. Someone gets access by accepting an [invitation](#invitations) through the provider, which requires the provider's address to match the invitation, or by connecting their account under **Profile** while signed in. An email address alone never links an account.

@@ -18,8 +18,8 @@ From an up-to-date, clean `main`:
 just release minor   # or major, patch, or an exact version such as 1.0.0-rc.1
 ```
 
-`scripts/release.sh` shows the commits since the last tag, asks for
-confirmation, then bumps the workspace version, commits `Cargo.toml` and
+`scripts/release.sh` refuses a commit whose CI run has not succeeded, shows the
+commits since the last tag, asks for confirmation, then bumps the workspace version, commits `Cargo.toml` and
 `Cargo.lock` as `Release vX.Y.Z`, creates an annotated `vX.Y.Z` tag, and pushes
 `main` and the tag together.
 
