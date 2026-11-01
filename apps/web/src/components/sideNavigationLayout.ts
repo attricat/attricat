@@ -12,9 +12,11 @@ export const compactNavigationLabelSx = {
 } as const;
 
 export const compactNavigationItemSx = {
+  // The small label keeps the text color: primary on the selected
+  // background is below the contrast that text this size needs.
   '&.Mui-selected': {
-    '& .MuiListItemIcon-root': { color: 'inherit' },
-    color: 'primary.main',
+    '& .MuiListItemIcon-root': { color: 'primary.main' },
+    color: 'text.primary',
   },
   borderRadius: 1.5,
   flexDirection: 'column',

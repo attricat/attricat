@@ -11,6 +11,7 @@ import {
   monacoBaseThemes,
   monacoThemeColors,
   monacoThemeNames,
+  monacoThemeRules,
 } from './monacoTheme';
 
 self.MonacoEnvironment = { getWorker: () => new EditorWorker() };
@@ -20,6 +21,6 @@ for (const mode of ['light', 'dark'] as const)
   monaco.editor.defineTheme(monacoThemeNames[mode], {
     base: monacoBaseThemes[mode],
     inherit: true,
-    rules: [],
+    rules: monacoThemeRules(mode),
     colors: monacoThemeColors(mode),
   });
