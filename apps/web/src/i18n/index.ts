@@ -6,6 +6,8 @@ import {
   lexiconBackend,
 } from '../features/lexicon/lexicon';
 import { localeBackend } from './localeBackend';
+// Schema failures read as translated sentences once the app loads strings.
+import './zodErrors';
 
 export const supportedLanguages = ['en', 'pl'] as const;
 export type SupportedLanguage = (typeof supportedLanguages)[number];
