@@ -94,10 +94,10 @@ export const BooleanEditor = ({
         >
           <ToggleButton value="">{t('records.notSet')}</ToggleButton>
           <ToggleButton value={booleanFieldValues.true}>
-            {t('records.true')}
+            {t('views.yes')}
           </ToggleButton>
           <ToggleButton value={booleanFieldValues.false}>
-            {t('records.false')}
+            {t('views.no')}
           </ToggleButton>
         </ToggleButtonGroup>
       )}

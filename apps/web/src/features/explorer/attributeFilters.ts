@@ -103,7 +103,7 @@ export const attributeFilterValueLabel = (
   directory?: Directory,
 ) =>
   typeof filter.value === 'boolean'
-    ? t(filter.value ? 'explorer.true' : 'explorer.false')
+    ? t(filter.value ? 'views.yes' : 'views.no')
     : ((attribute &&
         (statusLabel(attribute, filter.value) ??
           choiceValueLabel(attribute, filter.value) ??

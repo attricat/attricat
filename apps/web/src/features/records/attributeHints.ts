@@ -1,11 +1,11 @@
 import type { TFunction } from 'i18next';
-import i18n from '../../i18n';
 import { formatBytes } from '../data-health/dataHealthFormat';
 import { lexiconText } from '../lexicon/lexicon';
 import type { Attribute } from './api';
 import { attributeCardinalities } from './constants';
 import { patternHint } from './jsonSchema';
 import { attributeValueTypes } from './valueTypes';
+import { limitNumberFormat } from './limitNumberFormat';
 
 const schemaNumber = (attribute: Attribute, key: string) => {
   const schema = attribute.value_schema;
@@ -71,7 +71,7 @@ const bound = (
 };
 
 const rangeHint = (attribute: Attribute, t: TFunction) => {
-  const number = new Intl.NumberFormat(i18n.language);
+  const number = limitNumberFormat();
   const lower = bound(
     attribute,
     'minimum',
