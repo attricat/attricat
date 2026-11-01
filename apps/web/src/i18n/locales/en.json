@@ -419,6 +419,7 @@
     "backToContexts": "Back to contexts",
     "code": "Code",
     "parentContext": "Parent context",
+    "parentRequired": "Choose the context this one inherits from.",
     "selectParent": "Select a parent",
     "metadata": "Metadata",
     "invalidMetadataJson": "Metadata must be valid JSON.",
