@@ -199,7 +199,11 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
             target: TargetKind::ExtensionRun,
         });
     }
-    if path == "/extensions/{extension_id}/{contribution_id}/command" {
+    // Starting from a file means importing it, so it needs the same grant as an
+    // extension command. The handler also checks the action accepts a file.
+    if path == "/extensions/{extension_id}/{contribution_id}/command"
+        || path == "/extensions/{extension_id}/{contribution_id}/input-uploads"
+    {
         return Some(Policy {
             permission: Permission::RecordsWrite,
             target: TargetKind::None,
@@ -881,6 +885,21 @@ mod tests {
                 .unwrap()
                 .permission,
             Permission::ExtensionsManage
+        );
+        assert_eq!(
+            policy(&Method::POST, "/extensions/{extension_id}/upgrade-archive")
+                .unwrap()
+                .permission,
+            Permission::ExtensionsManage
+        );
+        assert_eq!(
+            policy(
+                &Method::POST,
+                "/extensions/{extension_id}/{contribution_id}/input-uploads"
+            )
+            .unwrap()
+            .permission,
+            Permission::RecordsWrite
         );
         for method in [Method::GET, Method::PUT] {
             assert_eq!(

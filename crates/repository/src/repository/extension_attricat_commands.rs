@@ -190,9 +190,11 @@ impl AttricatRepository {
         transaction: &mut Transaction<'_, Postgres>,
         intent: ExtensionAttricatIntent,
     ) -> Result<Uuid, RepositoryError> {
-        // An interactive run is bounded by its frozen selection; it cannot
-        // create catalog records outside that selection.
+        // A selection run is bounded by its frozen selection and cannot create
+        // catalog records outside it. A blueprint run was checked against its
+        // revision before this repository was allowed to create.
         if self.authorization_actor().is_some()
+            && !self.actor_may_create_records
             && matches!(
                 intent,
                 ExtensionAttricatIntent::Create { .. } | ExtensionAttricatIntent::Upsert { .. }
@@ -440,11 +442,30 @@ impl AttricatRepository {
         system_tags: Vec<String>,
         system_metadata: Value,
     ) -> Result<Uuid, RepositoryError> {
+        // A run bound to a user creates only what that user could. Only a
+        // workspace grant covers an ID that does not exist yet, so checking the
+        // new ID requires one. Links reach only records the user can read.
+        let record_id = Uuid::new_v4();
+        self.ensure_actor_may(transaction, Permission::RecordsWrite, &[record_id])
+            .await?;
+        let targets: Vec<Uuid> = values
+            .iter()
+            .filter_map(|value| match value {
+                NewAttributeValue::Relationship {
+                    target_record_id, ..
+                } => Some(*target_record_id),
+                NewAttributeValue::Scalar { .. } => None,
+            })
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        self.ensure_actor_may(transaction, Permission::RecordsRead, &targets)
+            .await?;
         let (record, changes, event) = self
             .create_record_in_transaction(
                 transaction,
                 ChosenIdRecordCreate {
-                    record_id: Uuid::new_v4(),
+                    record_id,
                     blueprint_id,
                     blueprint_version,
                     values,

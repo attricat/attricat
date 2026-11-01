@@ -672,7 +672,41 @@ pub struct ServerOperation {
 #[serde(deny_unknown_fields)]
 pub struct InteractiveOperation {
     pub version: u32,
+    /// How many records a run may select; required for the `selection` scope
+    /// and rejected on the `blueprint` scope, which selects none.
+    #[serde(default, skip_serializing_if = "is_zero")]
     pub max_selection: u32,
+    #[serde(default, skip_serializing_if = "InteractiveScope::is_selection")]
+    pub scope: InteractiveScope,
+}
+
+fn is_zero(value: &u32) -> bool {
+    *value == 0
+}
+
+/// What an interactive run may reach, besides what its initiator may do.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum InteractiveScope {
+    /// The records selected when the run starts.
+    #[default]
+    Selection,
+    /// One blueprint revision: the run selects nothing, cannot read records,
+    /// and may only create or upsert records of that revision.
+    Blueprint,
+}
+
+impl InteractiveScope {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Selection => "selection",
+            Self::Blueprint => "blueprint",
+        }
+    }
+
+    fn is_selection(&self) -> bool {
+        *self == Self::Selection
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -964,6 +998,10 @@ pub struct UiContribution {
     /// A host-owned confirmation shown before an action runs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub confirm: Option<ActionConfirmation>,
+    /// Media types of the file an operation action asks for before it starts;
+    /// the file becomes the run's `source` input.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub accepts: Vec<String>,
     /// One of [`HOST_ICONS`], drawn by the host beside an action's title.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
@@ -1031,6 +1069,27 @@ pub struct OperationInvocation {
 
 fn empty_object() -> Value {
     Value::Object(serde_json::Map::new())
+}
+
+/// The longest media type an action may accept.
+const MAX_MEDIA_TYPE_BYTES: usize = 255;
+/// The capability that lets an action ask its user for a file.
+pub const CLIENT_FILES_UPLOAD_CAPABILITY: &str = "client.files.upload";
+/// The most media types one action may accept.
+pub const MAX_ACTION_ACCEPTED_MEDIA_TYPES: usize = 16;
+
+/// A complete lowercase `type/subtype`, with no wildcard or parameters.
+fn valid_media_type(value: &str) -> bool {
+    let token = |part: &str| {
+        !part.is_empty()
+            && part.bytes().all(|byte| {
+                byte.is_ascii_lowercase() || byte.is_ascii_digit() || b".+-_".contains(&byte)
+            })
+    };
+    value.len() <= MAX_MEDIA_TYPE_BYTES
+        && value
+            .split_once('/')
+            .is_some_and(|(kind, subtype)| token(kind) && token(subtype))
 }
 
 /// Icons the host draws for actions and field-note badges. Extensions name
@@ -1256,8 +1315,11 @@ impl Manifest {
                 "requires titles of 1-{MAX_RECORD_TAB_TITLE_CHARS} characters"
             )));
         }
-        if contribution.invoke.is_some() || contribution.confirm.is_some() {
-            return Err(invalid("cannot declare invoke or confirm".into()));
+        if contribution.invoke.is_some()
+            || contribution.confirm.is_some()
+            || !contribution.accepts.is_empty()
+        {
+            return Err(invalid("cannot declare invoke, confirm or accepts".into()));
         }
         if let Some(when) = &contribution.when {
             // A tab belongs to one record the viewer already opened; only the
@@ -1355,6 +1417,33 @@ impl Manifest {
         {
             return Err(invalid(format!("names unknown icon '{icon}'")));
         }
+        if !contribution.accepts.is_empty() {
+            if !matches!(contribution.invoke, Some(ActionInvocation::Operation(_))) {
+                return Err(invalid(
+                    "may accept a file only to start an operation".into(),
+                ));
+            }
+            if !declares(CLIENT_FILES_UPLOAD_CAPABILITY) {
+                return Err(invalid(format!(
+                    "needs capability '{CLIENT_FILES_UPLOAD_CAPABILITY}' to accept a file"
+                )));
+            }
+            if !declares("artifacts.read") {
+                return Err(invalid(
+                    "needs capability 'artifacts.read' to read the file it accepts".into(),
+                ));
+            }
+            if contribution.accepts.len() > MAX_ACTION_ACCEPTED_MEDIA_TYPES
+                || !contribution
+                    .accepts
+                    .iter()
+                    .all(|item| valid_media_type(item))
+            {
+                return Err(invalid(format!(
+                    "accepts must list 1-{MAX_ACTION_ACCEPTED_MEDIA_TYPES} lowercase media types"
+                )));
+            }
+        }
         match &contribution.invoke {
             None => Err(invalid("must declare what it invokes".into())),
             Some(ActionInvocation::Operation(operation)) => {
@@ -1362,10 +1451,6 @@ impl Manifest {
                     return Err(invalid(
                         "needs capability 'client.operations.start' to start an operation".into(),
                     ));
-                }
-                // A revision-wide toolbar action names no records to run on.
-                if contribution.outlet == Some(UiOutlet::ExplorerAction) {
-                    return Err(invalid("cannot start an operation without records".into()));
                 }
                 let declared = self.server.as_ref().and_then(|server| {
                     server
@@ -1379,6 +1464,17 @@ impl Manifest {
                         operation.id
                     )));
                 };
+                // A revision-wide toolbar action names no records to run on,
+                // and every other action surface names some.
+                let scope = declared.interactive.as_ref().map(|item| item.scope);
+                let toolbar = contribution.outlet == Some(UiOutlet::ExplorerAction);
+                if toolbar != (scope == Some(InteractiveScope::Blueprint)) {
+                    return Err(invalid(if toolbar {
+                        "cannot start a selection operation without records".into()
+                    } else {
+                        "cannot start a blueprint operation for records".into()
+                    }));
+                }
                 validate_schema(&declared.request_schema, &operation.input)
                     .map_err(|error| invalid(format!("has invalid operation input: {error}")))
             }
@@ -2452,11 +2548,16 @@ impl ServerOperation {
         }
         if let Some(interactive) = &self.interactive
             && (interactive.version != 1
-                || interactive.max_selection == 0
-                || interactive.max_selection > MAX_INTERACTIVE_SELECTION)
+                || match interactive.scope {
+                    InteractiveScope::Selection => {
+                        interactive.max_selection == 0
+                            || interactive.max_selection > MAX_INTERACTIVE_SELECTION
+                    }
+                    InteractiveScope::Blueprint => interactive.max_selection != 0,
+                })
         {
             return Err(ManifestError::Invalid(format!(
-                "interactive operation '{}' requires version 1 and max_selection 1-{MAX_INTERACTIVE_SELECTION}",
+                "interactive operation '{}' requires version 1 and max_selection 1-{MAX_INTERACTIVE_SELECTION}, or scope 'blueprint' without max_selection",
                 self.id
             )));
         }
@@ -3401,6 +3502,7 @@ mod tests {
             invoke: None,
             when: None,
             confirm: None,
+            accepts: Vec::new(),
             icon: None,
             translations: BTreeMap::new(),
             cell: None,
@@ -3638,6 +3740,7 @@ mod tests {
             invoke: Some(ActionInvocation::Dialog("dialog".into())),
             when: None,
             confirm: None,
+            accepts: Vec::new(),
             icon: None,
             translations: BTreeMap::new(),
             cell: None,
@@ -3799,6 +3902,7 @@ mod tests {
             invoke: Some(invoke),
             when: None,
             confirm: None,
+            accepts: Vec::new(),
             icon: None,
             translations: BTreeMap::new(),
             cell: None,
@@ -3880,6 +3984,7 @@ mod tests {
                 ..ActionCondition::default()
             }),
             confirm: None,
+            accepts: Vec::new(),
             icon: Some("tag".into()),
             translations: BTreeMap::from([(
                 "pl".into(),
@@ -3956,6 +4061,7 @@ mod tests {
                 invoke: None,
                 when: None,
                 confirm: None,
+                accepts: Vec::new(),
                 icon: None,
                 translations: BTreeMap::new(),
                 cell: None,
@@ -3972,6 +4078,7 @@ mod tests {
                 invoke: None,
                 when: None,
                 confirm: None,
+                accepts: Vec::new(),
                 icon: None,
                 translations: BTreeMap::new(),
                 cell: None,
@@ -4026,6 +4133,7 @@ mod tests {
             invoke: None,
             when: None,
             confirm: None,
+            accepts: Vec::new(),
             icon: None,
             translations: BTreeMap::new(),
             cell: None,
@@ -4043,6 +4151,7 @@ mod tests {
             invoke: Some(ActionInvocation::Dialog("explorer-dialog".into())),
             when: None,
             confirm: None,
+            accepts: Vec::new(),
             icon: None,
             translations: BTreeMap::new(),
             cell: None,
@@ -4088,6 +4197,7 @@ mod tests {
             invoke: None,
             when: None,
             confirm: None,
+            accepts: Vec::new(),
             icon: None,
             translations: BTreeMap::new(),
             cell: Some(cell()),
@@ -4205,6 +4315,7 @@ mod tests {
             invoke: Some(ActionInvocation::Command("refresh".into())),
             when: None,
             confirm: None,
+            accepts: Vec::new(),
             icon: None,
             translations: BTreeMap::new(),
             cell: None,
@@ -4246,6 +4357,7 @@ mod tests {
             invoke: None,
             when: None,
             confirm: None,
+            accepts: Vec::new(),
             icon: None,
             translations: BTreeMap::new(),
             cell: None,
@@ -4262,6 +4374,7 @@ mod tests {
             invoke: Some(ActionInvocation::Dialog("row-dialog".into())),
             when: None,
             confirm: None,
+            accepts: Vec::new(),
             icon: None,
             translations: BTreeMap::new(),
             cell: None,

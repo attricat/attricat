@@ -35,6 +35,8 @@ Włączenie się nie powiedzie, jeśli wymagane uprawnienie nie zostało przyzna
 
 Uaktualnienie przełącza instalację na nowsze wydanie. Ponieważ nowe wydanie może żądać innych uprawnień, uaktualnienie usuwa wszystkie przyznane uprawnienia i konfigurację oraz pozostawia rozszerzenie wyłączone. Ponownie je sprawdź, skonfiguruj, przyznaj uprawnienia i włącz.
 
+Strona rozszerzenia proponuje nowsze wydania z jego rejestru. Opcja **Uaktualnij z archiwum** na tej stronie albo `acli extension upgrade <id> --file` uaktualnia z przesłanego archiwum, z takim samym skutkiem. W obu przypadkach wersja musi być wyższa od zainstalowanej.
+
 Trwające operacje pozostają przy wydaniu, na którym się rozpoczęły. Są wstrzymywane, dopóki to dokładnie wydanie nie zostanie ponownie autoryzowane.
 
 ## Rozmieść interfejs rozszerzeń
@@ -104,6 +106,7 @@ acli extension registry add --source acme/attricat-extensions
 acli extension list
 acli extension install --owner acme --repository attricat-inventory --release-id <github-release-id>
 acli extension sideload --file inventory-1.2.0.tar.zst
+acli extension upgrade acme.inventory --file inventory-1.3.0.tar.zst
 acli extension configure acme.inventory --configuration config.json
 acli extension grant acme.inventory --grant-kind capability --grant-id attricat.read
 acli extension grant acme.inventory --grant-kind host_permission --grant-id inventory-api

@@ -30,7 +30,7 @@ IDs used in the manifest (`attricat.id`, artifact, dependency, permission-rule, 
 | `server` | | Event handlers, commands, operations, webhooks, connection kinds, and export destinations. |
 | `ui` | | Client contributions. |
 | `attribute_types` | | Attribute types for blueprints. |
-| `record_field_notes` | | The source that describes records' fields, files and actions: `{ "command": "<id>" }` or a client handler, `{ "client": "<artifact>" }`. See [Field notes](/extensions/client/#field-notes). |
+| `record_field_notes` | | The source that describes records' fields, files and actions: `{ "version": 1, "source": { "command": "<id>" } }` or a client handler, `{ "version": 1, "source": { "client": "<artifact>" } }`. See [Field notes](/extensions/client/#field-notes). |
 
 ## Artifacts
 
@@ -93,8 +93,9 @@ List capabilities in `permissions` or `optional_permissions`. Each one allows a 
 | `client.operations.start` | Starting the extension's interactive operations for the frame's selection. |
 | `client.operations.read` | Listing the user's runs of this extension, reading them, and downloading their outputs. |
 | `client.operations.cancel` | Cancelling the user's runs of this extension. |
+| `client.files.upload` | Asking the user for a file when they choose an [action that accepts one](/extensions/client/#actions). |
 
-The manifest also accepts `client.confirmation`, `client.download`, `client.external_navigation`, `client.files.read`, `client.files.upload`, `client.search`, `client.live_updates`, `client.clipboard`, and `client.locale.read`. These are reserved for frame APIs that don't exist yet: granting them gives a frame nothing, so don't request them.
+The manifest also accepts `client.confirmation`, `client.download`, `client.external_navigation`, `client.files.read`, `client.search`, `client.live_updates`, `client.clipboard`, and `client.locale.read`. These are reserved for frame APIs that don't exist yet: granting them gives a frame nothing, so don't request them.
 
 ### Client placement
 
@@ -209,9 +210,9 @@ Exported event types must start with `plugin.<extension-id>.` and end in `.vN`. 
 
 | Section | Fields | Needs |
 | --- | --- | --- |
-| `event_handlers` | `id`, `event_types` (exact versioned types), `handler`, optional `debounce_ms` (1 to 3,600,000) and `max_wait_ms` (at least `debounce_ms`, at most 86,400,000; default ten times `debounce_ms`). See [Debounce](/extensions/server/#debounce). | `events.subscribe` and a `server_wasm` artifact |
+| `event_handlers` | `id`, `event_types` (exact versioned types), `handler` (always `handle-event`), optional `debounce_ms` (1 to 3,600,000) and `max_wait_ms` (at least `debounce_ms`, at most 86,400,000; default ten times `debounce_ms`). See [Debounce](/extensions/server/#debounce). | `events.subscribe` and a `server_wasm` artifact |
 | `commands` | `id`, `handler`, `request_schema`, `response_schema`, `max_request_bytes`, `max_response_bytes` (default 64 KiB) | `client.commands` |
-| `operations` | `id`, `handler`, `request_schema`, `max_request_bytes`, `max_checkpoint_bytes` (default and maximum 64 KiB), optional `interactive: {"version": 1, "max_selection": 1–50}` | `interactive` needs `client.operations.start` |
+| `operations` | `id`, `handler`, `request_schema`, `max_request_bytes`, `max_checkpoint_bytes` (default and maximum 64 KiB), optional `interactive`: `{"version": 1, "max_selection": 1–50}` for a selection, or `{"version": 1, "scope": "blueprint"}` for a [blueprint operation](/extensions/operations/#blueprint-operations) | `interactive` needs `client.operations.start` |
 | `webhooks` | `id`, `event_type`, `handler`, `methods` (`["POST"]`), `authentication`, `max_body_bytes` | `webhooks.receive`. Declared but not delivered yet. |
 | `connections` | See [Connections](#connections). | `connections.use` |
 | `exports` | See [Export destinations](#export-destinations). | `exports.mappings` |
@@ -286,7 +287,7 @@ An export destination gives Attricat's export status, preview, retry, and resync
 | `route` | `artifact`, `title` | A full page at `/extensions/<extension-id>/<contribution-id>`. |
 | `navigation` | `route`, `title` | A sidebar link to one of this extension's routes. |
 | `embedded` | `artifact`, `outlet` | A frame at `navigation` or `blueprint_attribute_configuration`. |
-| `action` | `outlet`, `title`, `invoke` | A menu item or button the host draws at `record_action`, `record_header_action`, `explorer_row_action`, `explorer_action`, or `explorer_bulk_action`, or a field-note badge's action at `record_attribute_action`. `invoke` is `{ "command": "<id>" }`, `{ "dialog": "<id>" }` or `{ "operation": { "id", "input" } }`; optional `when`, `confirm`, `icon`. No artifact. See [Actions](/extensions/client/#actions). |
+| `action` | `outlet`, `title`, `invoke` | A menu item or button the host draws at `record_action`, `record_header_action`, `explorer_row_action`, `explorer_action`, or `explorer_bulk_action`, or a field-note badge's action at `record_attribute_action`. `invoke` is `{ "command": "<id>" }`, `{ "dialog": "<id>" }` or `{ "operation": { "id", "input" } }`; optional `when`, `confirm`, `accepts`, `icon`. No artifact. See [Actions](/extensions/client/#actions). |
 | `panel` | `artifact`, `outlet` | A host-laid-out panel, read-only except `export_mapping`, at `blueprint_detail_panel`, `blueprint_panel`, `blueprint_publish_check`, `audit_event_panel`, `data_health_card`, or `export_mapping`. |
 | `dialog` | `artifact`, `outlet`, `title` | A host-managed `action_dialog` opened by this extension's actions. |
 | `tab` | `artifact`, `outlet`, `title` | A tab on the record page at `record_tab`, whose panel is the frame; optional `icon`, and `when` limited to `blueprints`. See [Record pages](/extensions/client/#record-pages). |

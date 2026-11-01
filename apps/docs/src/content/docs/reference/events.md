@@ -13,6 +13,7 @@ Events drive [workflows](/builders/workflows/), [rules](/builders/rules/), and [
 | --- | --- |
 | `record.created.v1` | A record is created. |
 | `record.updated.v1` | A record's values, relationships, or annotations change. |
+| `record.annotations_changed.v1` | An extension, or an operator repair, changes one extension's annotations on a record. The payload names the record, its blueprint revision, `extension_id`, the new `revision`, and the tags and metadata keys that changed, never their values. |
 | `record.deleted.v1` | A record is deleted. |
 | `record.migrated.v1` | A record moves to a newer blueprint revision. |
 | `record.published.v1` | A record is published to a channel. |

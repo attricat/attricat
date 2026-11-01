@@ -30,7 +30,7 @@ Identyfikatory używane w manifeście (`attricat.id` oraz identyfikatory artefak
 | `server` | | Procedury obsługi zdarzeń, polecenia, operacje, webhooki, rodzaje połączeń i miejsca docelowe eksportu. |
 | `ui` | | Kontrybucje klienckie. |
 | `attribute_types` | | Typy atrybutów dla Schematów. |
-| `record_field_notes` | | Źródło opisujące pola, pliki i akcje rekordów: `{ "command": "<id>" }` albo procedura kliencka, `{ "client": "<artefakt>" }`. Zobacz [Notatki pól](/pl/extensions/client/#notatki-pól). |
+| `record_field_notes` | | Źródło opisujące pola, pliki i akcje rekordów: `{ "version": 1, "source": { "command": "<id>" } }` albo procedura kliencka, `{ "version": 1, "source": { "client": "<artefakt>" } }`. Zobacz [Notatki pól](/pl/extensions/client/#notatki-pól). |
 
 ## Artefakty
 
@@ -93,8 +93,9 @@ Wymień uprawnienia w `permissions` lub `optional_permissions`. Każde z nich ze
 | `client.operations.start` | Uruchamianie operacji interaktywnych rozszerzenia dla zaznaczenia ramki. |
 | `client.operations.read` | Wyświetlanie, odczyt i pobieranie wyników uruchomień tego rozszerzenia należących do użytkownika. |
 | `client.operations.cancel` | Anulowanie uruchomień tego rozszerzenia należących do użytkownika. |
+| `client.files.upload` | Proszenie użytkownika o plik, gdy wybierze [akcję, która go przyjmuje](/pl/extensions/client/#akcje). |
 
-Manifest przyjmuje też `client.confirmation`, `client.download`, `client.external_navigation`, `client.files.read`, `client.files.upload`, `client.search`, `client.live_updates`, `client.clipboard` i `client.locale.read`. Są one zarezerwowane dla API ramki, które jeszcze nie istnieją: ich przyznanie nic ramce nie daje, więc nie proś o nie.
+Manifest przyjmuje też `client.confirmation`, `client.download`, `client.external_navigation`, `client.files.read`, `client.search`, `client.live_updates`, `client.clipboard` i `client.locale.read`. Są one zarezerwowane dla API ramki, które jeszcze nie istnieją: ich przyznanie nic ramce nie daje, więc nie proś o nie.
 
 ### Umiejscowienie w kliencie
 
@@ -209,9 +210,9 @@ Eksportowane typy zdarzeń muszą zaczynać się od `plugin.<extension-id>.` i k
 
 | Sekcja | Pola | Wymaga |
 | --- | --- | --- |
-| `event_handlers` | `id`, `event_types` (dokładne wersjonowane typy), `handler`, opcjonalnie `debounce_ms` (od 1 do 3 600 000) i `max_wait_ms` (co najmniej `debounce_ms`, najwyżej 86 400 000; domyślnie dziesięciokrotność `debounce_ms`). Zobacz [Łączenie serii zdarzeń](/pl/extensions/server/#łączenie-serii-zdarzeń). | `events.subscribe` i artefaktu `server_wasm` |
+| `event_handlers` | `id`, `event_types` (dokładne wersjonowane typy), `handler` (zawsze `handle-event`), opcjonalnie `debounce_ms` (od 1 do 3 600 000) i `max_wait_ms` (co najmniej `debounce_ms`, najwyżej 86 400 000; domyślnie dziesięciokrotność `debounce_ms`). Zobacz [Łączenie serii zdarzeń](/pl/extensions/server/#łączenie-serii-zdarzeń). | `events.subscribe` i artefaktu `server_wasm` |
 | `commands` | `id`, `handler`, `request_schema`, `response_schema`, `max_request_bytes`, `max_response_bytes` (domyślnie 64 KiB) | `client.commands` |
-| `operations` | `id`, `handler`, `request_schema`, `max_request_bytes`, `max_checkpoint_bytes` (domyślnie i maksymalnie 64 KiB), opcjonalnie `interactive: {"version": 1, "max_selection": 1–50}` | `interactive` wymaga `client.operations.start` |
+| `operations` | `id`, `handler`, `request_schema`, `max_request_bytes`, `max_checkpoint_bytes` (domyślnie i maksymalnie 64 KiB), opcjonalnie `interactive`: `{"version": 1, "max_selection": 1–50}` dla zaznaczenia albo `{"version": 1, "scope": "blueprint"}` dla [operacji na schemacie](/pl/extensions/operations/#operacje-na-schemacie) | `interactive` wymaga `client.operations.start` |
 | `webhooks` | `id`, `event_type`, `handler`, `methods` (`["POST"]`), `authentication`, `max_body_bytes` | `webhooks.receive`. Zadeklarowane, ale jeszcze niedostarczane. |
 | `connections` | Zobacz [Połączenia](#połączenia). | `connections.use` |
 | `exports` | Zobacz [Miejsca docelowe eksportu](#miejsca-docelowe-eksportu). | `exports.mappings` |
@@ -286,7 +287,7 @@ Miejsce docelowe eksportu nadaje ekranom stanu eksportu, podglądu, ponawiania i
 | `route` | `artifact`, `title` | Pełna strona pod adresem `/extensions/<extension-id>/<contribution-id>`. |
 | `navigation` | `route`, `title` | Link na pasku bocznym do jednej ze stron tego rozszerzenia. |
 | `embedded` | `artifact`, `outlet` | Ramka w miejscu `navigation` lub `blueprint_attribute_configuration`. |
-| `action` | `outlet`, `title`, `invoke` | Pozycja menu lub przycisk rysowane przez host w miejscu `record_action`, `record_header_action`, `explorer_row_action`, `explorer_action` lub `explorer_bulk_action` albo akcja odznaki notatki pola w miejscu `record_attribute_action`. `invoke` to `{ "command": "<id>" }`, `{ "dialog": "<id>" }` albo `{ "operation": { "id", "input" } }`; opcjonalnie `when`, `confirm`, `icon`. Bez artefaktu. Zobacz [Akcje](/pl/extensions/client/#akcje). |
+| `action` | `outlet`, `title`, `invoke` | Pozycja menu lub przycisk rysowane przez host w miejscu `record_action`, `record_header_action`, `explorer_row_action`, `explorer_action` lub `explorer_bulk_action` albo akcja odznaki notatki pola w miejscu `record_attribute_action`. `invoke` to `{ "command": "<id>" }`, `{ "dialog": "<id>" }` albo `{ "operation": { "id", "input" } }`; opcjonalnie `when`, `confirm`, `accepts`, `icon`. Bez artefaktu. Zobacz [Akcje](/pl/extensions/client/#akcje). |
 | `panel` | `artifact`, `outlet` | Panel rozmieszczany przez host, tylko do odczytu z wyjątkiem `export_mapping`, w miejscu `blueprint_detail_panel`, `blueprint_panel`, `blueprint_publish_check`, `audit_event_panel`, `data_health_card` lub `export_mapping`. |
 | `dialog` | `artifact`, `outlet`, `title` | Zarządzane przez host okno `action_dialog` otwierane przez akcje tego rozszerzenia. |
 | `tab` | `artifact`, `outlet`, `title` | Karta na stronie rekordu w miejscu `record_tab`, której panelem jest ramka; opcjonalnie `icon` oraz `when` ograniczone do `blueprints`. Zobacz [Strony rekordów](/pl/extensions/client/#strony-rekordów). |

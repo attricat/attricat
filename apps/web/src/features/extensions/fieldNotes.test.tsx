@@ -45,6 +45,7 @@ const explain: ExtensionContribution = {
   invoke: { dialog: 'explain-dialog' },
   when: null,
   confirm: null,
+  accepts: [],
   icon: null,
   translations: {},
   cell: null,

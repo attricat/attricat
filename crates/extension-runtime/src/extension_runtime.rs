@@ -41,7 +41,7 @@ use crate::{
     attricat_service::AttricatMutationService,
     constants::DEFAULT_LIST_PAGE_SIZE,
     domain_events::DomainEvent,
-    extension_installer::installed_artifact_key,
+    extension_installer::{dev_artifact_key, installed_artifact_key},
     extensions::{
         ArtifactKind, EventHandler as ManifestEventHandler, MAX_EXTENSION_IDENTIFIER_BYTES,
     },
@@ -177,7 +177,13 @@ pub enum ExtensionRuntimeError {
 struct ComponentCacheKey {
     installed_release_id: Uuid,
     artifact_id: String,
+    /// The development build this key's component was compiled from.
+    dev_revision: Option<String>,
 }
+
+/// An installed release and the development build replacing its component.
+type UnifiedInstanceKey = (Uuid, Option<String>);
+type UnifiedInstancePre = wasmtime::component::InstancePre<unified::UnifiedState>;
 
 #[derive(Default)]
 struct ComponentCache {
@@ -242,10 +248,9 @@ pub struct ExtensionRuntime {
     _epoch_ticker: Arc<ExtensionEpochTicker>,
     components: Arc<Mutex<ComponentCache>>,
     linkers: Arc<Linkers>,
-    /// Pre-instantiated unified components by installed release; linking and
-    /// type-checking imports is done once per release.
-    unified_instances:
-        Arc<Mutex<HashMap<Uuid, wasmtime::component::InstancePre<unified::UnifiedState>>>>,
+    /// Pre-instantiated unified components by installed release and development
+    /// build; linking and type-checking imports is done once for each.
+    unified_instances: Arc<Mutex<HashMap<UnifiedInstanceKey, UnifiedInstancePre>>>,
 }
 
 impl ExtensionRuntime {
@@ -297,16 +302,14 @@ impl ExtensionRuntime {
         let key = ComponentCacheKey {
             installed_release_id: installation.installed_release_id,
             artifact_id: artifact.id.clone(),
+            dev_revision: installation.dev_server_revision.clone(),
+        };
+        let object_key = match &installation.dev_server_revision {
+            Some(revision) => dev_artifact_key(installation.installed_release_id, revision),
+            None => installed_artifact_key(installation.installed_release_id, &artifact.id),
         };
         self.cached_component(key, || async {
-            Ok(self
-                .object_store
-                .get(&installed_artifact_key(
-                    installation.installed_release_id,
-                    &artifact.id,
-                ))
-                .await?
-                .bytes)
+            Ok(self.object_store.get(&object_key).await?.bytes)
         })
         .await
     }
@@ -2466,6 +2469,7 @@ mod tests {
         super::ComponentCacheKey {
             installed_release_id: Uuid::new_v4(),
             artifact_id: "server".into(),
+            dev_revision: None,
         }
     }
 

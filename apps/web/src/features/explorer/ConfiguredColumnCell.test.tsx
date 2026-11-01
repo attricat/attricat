@@ -80,6 +80,7 @@ describe('declared extension cells', () => {
     invoke: null,
     when: null,
     confirm: null,
+    accepts: [],
     icon: null,
     translations: {},
     editor: null,

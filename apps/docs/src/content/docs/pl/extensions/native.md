@@ -19,7 +19,7 @@ pnpm test
 pnpm package
 ```
 
-Polecenie tworzy manifest z jednym artefaktem `client_native`, panelem schematu i edytorem atrybutu, konfigurację Vite, komponent dla każdej kontrybucji oraz test. Wgraj archiwum z katalogu `dist/` przez **Zarządzanie → Rozszerzenia → Wgraj archiwum**, przyznaj uprawnienia i włącz rozszerzenie.
+Polecenie tworzy manifest z jednym artefaktem `client_native`, panelem schematu i edytorem atrybutu, konfigurację Vite, komponent dla każdej kontrybucji oraz test. Dodaj `--with-server`, aby utworzyć też [komponent serwerowy](/pl/extensions/server/). Pakiety SDK pochodzą z jego [wydań na GitHubie](https://github.com/attricat/attricat-extension-sdk/releases), a nie z npm, i projekt już na nie wskazuje. Wgraj archiwum z katalogu `dist/` przez **Zarządzanie → Rozszerzenia → Wgraj archiwum**, przyznaj uprawnienia i włącz rozszerzenie.
 
 ### Manifest
 
@@ -84,7 +84,8 @@ Hooki dają każdej zamontowanej kontrybucji to, czego potrzebuje:
 | `useConfiguration()` | Konfigurację instalacji, gdy rozszerzenie ma `configuration.read`. |
 | `useCapabilities()` | Uprawnienia przyznane rozszerzeniu. |
 | `useAttricat()` | Te same wywołania co [API `attricat` interfejsu w ramce](/pl/extensions/client/): `request`, `command`, `storage`, `operations`, `navigate`, `notify`, `refresh` i `dialog.close`, każde sprawdzane względem Twoich uprawnień. |
-| `useEditor()` | W edytorze atrybutu: wartość pola, atrybut, właściwości, wymagalność, błędy oraz `propose(value)`. |
+| `useUiKitVersion()` | Wersję zestawu UI wynegocjowaną przez Attricat. |
+| `useEditor()` | W edytorze atrybutu: wartość pola, atrybut, właściwości, wymagalność i tryb tylko do odczytu, błędy, `recordId`, `contextId` oraz `propose(value)`. |
 
 Gdy zmienia się kontekst, język lub tryb kolorów, Attricat przekazuje nowe wartości zamontowanemu komponentowi zamiast uruchamiać go od nowa, więc jego stan się zachowuje.
 
@@ -113,7 +114,7 @@ const view = await renderContribution(Stock, {
 });
 ```
 
-Podczas pracy z lokalnym Attricat uruchomionym z narzędziami deweloperskimi polecenie `acli extension dev acme.inventory --build "pnpm build" --watch src` przebudowuje rozszerzenie po każdej zmianie i podmienia Workera na działającym serwerze, bez wgrywania nowego wydania i ponownego przyznawania uprawnień. Otwarte strony pobierają nową wersję w ciągu 15 sekund.
+Podczas pracy z lokalnym Attricat uruchomionym z `ATTRICAT_DEVTOOLS=true` polecenie `acli extension dev acme.inventory --build "pnpm build" --watch src` przebudowuje rozszerzenie po każdej zmianie i podmienia Workera na działającym serwerze, bez wgrywania nowego wydania i ponownego przyznawania uprawnień. Otwarte strony pobierają nową wersję w ciągu 15 sekund.
 
 ## Zestaw UI
 

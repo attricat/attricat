@@ -398,7 +398,10 @@ impl ExtensionRuntime {
         installation: &ExtensionRuntimeInstallation,
         component: &Component,
     ) -> Result<wasmtime::component::InstancePre<UnifiedState>, ExtensionRuntimeError> {
-        let release = installation.installed_release_id;
+        let release = (
+            installation.installed_release_id,
+            installation.dev_server_revision.clone(),
+        );
         if let Some(pre) = self
             .unified_instances
             .lock()

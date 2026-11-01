@@ -17,6 +17,7 @@ use sqlx::FromRow;
 use uuid::Uuid;
 
 use crate::{
+    extensions::InteractiveScope,
     persistence_rows::{Db, IntoDomain},
     task_queue::{TaskInsert, TaskKind},
 };
@@ -51,12 +52,18 @@ pub struct StartInteractiveOperation {
     pub blueprint_version: i64,
     pub context_id: Option<Uuid>,
     pub actor: AuthorizationActor,
+    /// The media types the starting action accepts; a file is required when
+    /// there are any and refused otherwise.
+    pub accepts: Vec<String>,
+    /// A file the actor uploaded for this extension, to become the run's input.
+    pub input_file_id: Option<Uuid>,
 }
 
 /// The run scope enforced by host calls for an interactive run.
 #[derive(Clone, Debug)]
 pub struct InteractiveRunScope {
     pub actor: AuthorizationActor,
+    pub scope: InteractiveScope,
     pub record_ids: Vec<Uuid>,
     pub blueprint_id: Uuid,
     pub blueprint_version: i64,
@@ -81,6 +88,7 @@ struct InteractiveRunRow {
     selection_blueprint_id: Option<Uuid>,
     selection_blueprint_version: Option<i64>,
     selection_context_id: Option<Uuid>,
+    selection_scope: String,
     selection_count: i64,
     created_at: DateTime<Utc>,
     completed_at: Option<DateTime<Utc>>,
@@ -123,6 +131,7 @@ pub struct InteractiveRun {
     pub progress: Value,
     pub failure: Option<InteractiveRunFailure>,
     pub can_cancel: bool,
+    pub scope: InteractiveScope,
     pub selection_count: i64,
     pub blueprint_id: Option<Uuid>,
     pub blueprint_version: Option<i64>,
@@ -174,6 +183,7 @@ impl From<InteractiveRunRow> for InteractiveRun {
             status,
             progress: row.progress,
             failure,
+            scope: stored_scope(&row.selection_scope),
             selection_count: row.selection_count,
             blueprint_id: row.selection_blueprint_id,
             blueprint_version: row.selection_blueprint_version,
@@ -190,7 +200,18 @@ impl From<InteractiveRunRow> for InteractiveRun {
     }
 }
 
+/// A run's stored scope. Anything but the widening value reads as the narrower
+/// selection scope.
+fn stored_scope(value: &str) -> InteractiveScope {
+    if value == InteractiveScope::Blueprint.as_str() {
+        InteractiveScope::Blueprint
+    } else {
+        InteractiveScope::Selection
+    }
+}
+
 type RunScopeRow = (
+    String,
     String,
     Option<Uuid>,
     Option<Uuid>,
@@ -199,10 +220,10 @@ type RunScopeRow = (
     Option<Uuid>,
 );
 
-const RUN_COLUMNS: &str = "r.id,r.extension_id,r.contribution_id,r.operation_id,r.actor_user_id,r.status,r.cancellation_requested,r.lifecycle_started,r.attempts,r.progress,r.last_error_code,r.outputs_expired,r.selection_blueprint_id,r.selection_blueprint_version,r.selection_context_id,(SELECT COUNT(*) FROM extension_operation_run_records m WHERE m.operation_run_id=r.id) AS selection_count,r.created_at,r.completed_at,r.cancelled_at";
+const RUN_COLUMNS: &str = "r.id,r.extension_id,r.contribution_id,r.operation_id,r.actor_user_id,r.status,r.cancellation_requested,r.lifecycle_started,r.attempts,r.progress,r.last_error_code,r.outputs_expired,r.selection_blueprint_id,r.selection_blueprint_version,r.selection_context_id,r.selection_scope,(SELECT COUNT(*) FROM extension_operation_run_records m WHERE m.operation_run_id=r.id) AS selection_count,r.created_at,r.completed_at,r.cancelled_at";
 
 fn request_digest(input: &StartInteractiveOperation) -> String {
-    let canonical = json!({
+    let mut canonical = json!({
         "contribution_id": input.contribution_id,
         "operation_id": input.operation_id,
         "input": input.input,
@@ -211,6 +232,9 @@ fn request_digest(input: &StartInteractiveOperation) -> String {
         "blueprint_version": input.blueprint_version,
         "context_id": input.context_id,
     });
+    if let Some(file_id) = input.input_file_id {
+        canonical["input_file_id"] = json!(file_id);
+    }
     canonical_json_sha256(&canonical).expect("request digest serializes")
 }
 
@@ -224,6 +248,7 @@ impl AttricatRepository {
         scope: &InteractiveRunScope,
     ) -> Self {
         let mut repository = self.clone().with_authorization_actor(scope.actor);
+        repository.actor_may_create_records = scope.scope == InteractiveScope::Blueprint;
         repository.audit_context = Some(super::AuditContext {
             actor_user_id: Some(scope.actor.user_id),
             actor_token_id: scope.actor.token_id,
@@ -322,15 +347,30 @@ impl AttricatRepository {
         let interactive = operation.interactive.as_ref().ok_or_else(|| {
             RepositoryError::InvalidExtension("operation is not exposed for interactive use".into())
         })?;
-        let unique = input.record_ids.iter().collect::<HashSet<_>>().len();
-        if input.record_ids.is_empty()
-            || input.record_ids.len() > interactive.max_selection as usize
-            || unique != input.record_ids.len()
-        {
-            return Err(RepositoryError::InvalidExtension(format!(
-                "selection must contain 1-{} unique records",
-                interactive.max_selection
-            )));
+        match interactive.scope {
+            InteractiveScope::Selection => {
+                let unique = input.record_ids.iter().collect::<HashSet<_>>().len();
+                if input.record_ids.is_empty()
+                    || input.record_ids.len() > interactive.max_selection as usize
+                    || unique != input.record_ids.len()
+                {
+                    return Err(RepositoryError::InvalidExtension(format!(
+                        "selection must contain 1-{} unique records",
+                        interactive.max_selection
+                    )));
+                }
+            }
+            InteractiveScope::Blueprint if !input.record_ids.is_empty() => {
+                return Err(RepositoryError::InvalidExtension(
+                    "a blueprint operation selects no records".into(),
+                ));
+            }
+            InteractiveScope::Blueprint => {}
+        }
+        if input.accepts.is_empty() == input.input_file_id.is_some() {
+            return Err(RepositoryError::InvalidExtension(
+                "an action sends a file exactly when it accepts one".into(),
+            ));
         }
         if serde_json::to_vec(&input.input).map_or(true, |bytes| {
             bytes.len() > operation.max_request_bytes as usize
@@ -354,32 +394,75 @@ impl AttricatRepository {
                 return Err(RepositoryError::InvalidContext);
             }
         }
-        let members: Vec<(Uuid, Uuid, i64)> = sqlx::query_as(
-            "SELECT id, blueprint_id, blueprint_version FROM records WHERE workspace_id=$1 AND id = ANY($2) AND deleted_at IS NULL",
-        )
-        .bind(self.workspace_id.0)
-        .bind(&input.record_ids)
-        .fetch_all(&mut *transaction)
-        .await?;
-        if members.len() != input.record_ids.len()
-            || members.iter().any(|(_, blueprint_id, version)| {
-                *blueprint_id != input.blueprint_id || *version != input.blueprint_version
-            })
-        {
-            return Err(RepositoryError::InvalidExtension(
-                "selection must contain saved records from one blueprint revision".into(),
-            ));
+        match interactive.scope {
+            InteractiveScope::Selection => {
+                let members: Vec<(Uuid, Uuid, i64)> = sqlx::query_as(
+                    "SELECT id, blueprint_id, blueprint_version FROM records WHERE workspace_id=$1 AND id = ANY($2) AND deleted_at IS NULL",
+                )
+                .bind(self.workspace_id.0)
+                .bind(&input.record_ids)
+                .fetch_all(&mut *transaction)
+                .await?;
+                if members.len() != input.record_ids.len()
+                    || members.iter().any(|(_, blueprint_id, version)| {
+                        *blueprint_id != input.blueprint_id || *version != input.blueprint_version
+                    })
+                {
+                    return Err(RepositoryError::InvalidExtension(
+                        "selection must contain saved records from one blueprint revision".into(),
+                    ));
+                }
+                self.ensure_principal_may(
+                    &mut transaction,
+                    input.actor,
+                    Permission::RecordsRead,
+                    &input.record_ids,
+                )
+                .await?;
+            }
+            InteractiveScope::Blueprint => {
+                let published: bool = sqlx::query_scalar(
+                    "SELECT EXISTS(SELECT 1 FROM blueprints WHERE id=$1 AND version=$2 AND workspace_id=$3 AND status='published' AND kind='record' AND deleted_at IS NULL)",
+                )
+                .bind(input.blueprint_id)
+                .bind(input.blueprint_version)
+                .bind(self.workspace_id.0)
+                .fetch_one(&mut *transaction)
+                .await?;
+                if !published {
+                    return Err(RepositoryError::InvalidExtension(
+                        "a blueprint operation needs a published blueprint revision".into(),
+                    ));
+                }
+                // The run may create records, so only someone who could create
+                // them may start it. Only a workspace grant covers an ID that
+                // does not exist, and this one never will.
+                self.ensure_principal_may(
+                    &mut transaction,
+                    input.actor,
+                    Permission::RecordsWrite,
+                    &[Uuid::new_v4()],
+                )
+                .await?;
+            }
         }
-        self.ensure_principal_may(
-            &mut transaction,
-            input.actor,
-            Permission::RecordsRead,
-            &input.record_ids,
-        )
-        .await?;
+        if let Some(file_id) = input.input_file_id {
+            let media_type: Option<String> = sqlx::query_scalar(
+                "SELECT mime_type FROM files WHERE id=$1 AND workspace_id=$2 AND extension_input_user_id=$3 AND extension_input_extension_id=$4 AND status='ready' AND deleted_at IS NULL AND attachment_expires_at > now() FOR SHARE",
+            )
+            .bind(file_id)
+            .bind(self.workspace_id.0)
+            .bind(input.actor.user_id)
+            .bind(&input.extension_id)
+            .fetch_optional(&mut *transaction)
+            .await?;
+            if !media_type.is_some_and(|media_type| input.accepts.contains(&media_type)) {
+                return Err(RepositoryError::ExtensionInputFileUnavailable);
+            }
+        }
         let id = Uuid::new_v4();
         let inserted: Option<Uuid> = sqlx::query_scalar(
-            "INSERT INTO extension_operation_runs(id,workspace_id,extension_id,installed_release_id,abi_version,operation_id,actor_user_id,actor_token_id,configuration_snapshot,input,idempotency_key,invocation,contribution_id,selection_blueprint_id,selection_blueprint_version,selection_context_id,request_digest) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'interactive',$12,$13,$14,$15,$16) ON CONFLICT DO NOTHING RETURNING id",
+            "INSERT INTO extension_operation_runs(id,workspace_id,extension_id,installed_release_id,abi_version,operation_id,actor_user_id,actor_token_id,configuration_snapshot,input,idempotency_key,invocation,contribution_id,selection_blueprint_id,selection_blueprint_version,selection_context_id,request_digest,selection_scope) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'interactive',$12,$13,$14,$15,$16,$17) ON CONFLICT DO NOTHING RETURNING id",
         )
         .bind(id)
         .bind(self.workspace_id.0)
@@ -397,6 +480,7 @@ impl AttricatRepository {
         .bind(input.blueprint_version)
         .bind(input.context_id)
         .bind(&digest)
+        .bind(interactive.scope.as_str())
         .fetch_optional(&mut *transaction)
         .await?;
         let Some(run_id) = inserted else {
@@ -410,6 +494,16 @@ impl AttricatRepository {
             }
             return Box::pin(self.start_interactive_operation_attempt(input, true)).await;
         };
+        if let Some(file_id) = input.input_file_id {
+            self.attach_extension_operation_input_file(
+                &mut transaction,
+                run_id,
+                &input.extension_id,
+                release,
+                &json!({ "input_file_id": file_id }),
+            )
+            .await?;
+        }
         // Positions are zero-based, in request order.
         sqlx::query(
             "INSERT INTO extension_operation_run_records(operation_run_id,workspace_id,position,record_id) SELECT $1,$2,(selection.ordinality-1)::int,selection.record_id FROM unnest($3::uuid[]) WITH ORDINALITY AS selection(record_id,ordinality)",
@@ -549,7 +643,7 @@ impl AttricatRepository {
         run_id: Uuid,
     ) -> Result<Option<InteractiveRunScope>, RepositoryError> {
         let row: Option<RunScopeRow> = sqlx::query_as(
-                "SELECT invocation,actor_user_id,actor_token_id,selection_blueprint_id,selection_blueprint_version,selection_context_id FROM extension_operation_runs WHERE id=$1 AND workspace_id=$2",
+                "SELECT invocation,selection_scope,actor_user_id,actor_token_id,selection_blueprint_id,selection_blueprint_version,selection_context_id FROM extension_operation_runs WHERE id=$1 AND workspace_id=$2",
             )
             .bind(run_id)
             .bind(self.workspace_id.0)
@@ -557,6 +651,7 @@ impl AttricatRepository {
             .await?;
         let Some((
             invocation,
+            selection_scope,
             Some(user_id),
             token_id,
             Some(blueprint_id),
@@ -578,11 +673,22 @@ impl AttricatRepository {
         .await?;
         Ok(Some(InteractiveRunScope {
             actor: AuthorizationActor { user_id, token_id },
+            scope: stored_scope(&selection_scope),
             record_ids,
             blueprint_id,
             blueprint_version,
             context_id,
         }))
+    }
+
+    /// The workspace's default attribute context.
+    pub async fn default_attribute_context_id(&self) -> Result<Uuid, RepositoryError> {
+        Ok(sqlx::query_scalar(
+            "SELECT id FROM attribute_contexts WHERE workspace_id = $1 AND code = 'default'",
+        )
+        .bind(self.workspace_id.0)
+        .fetch_one(&self.pool)
+        .await?)
     }
 
     /// Whether the initiator is still an active workspace member and, for a
@@ -839,6 +945,7 @@ mod tests {
             selection_blueprint_id: None,
             selection_blueprint_version: None,
             selection_context_id: None,
+            selection_scope: InteractiveScope::Selection.as_str().to_owned(),
             selection_count: 1,
             created_at: Utc::now(),
             completed_at: Some(Utc::now()),

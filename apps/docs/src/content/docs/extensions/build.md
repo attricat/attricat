@@ -20,7 +20,24 @@ An extension is a `.tar.zst` archive with a `manifest.json` at its root and the 
 
 Prefer them in that order. **Declarative** contributions only describe what to show, so they cost nothing per record and always look like Attricat. **Native UI** lets your logic drive the screen while Attricat draws it with its own components: it follows the theme, the language and keyboard behavior of the rest of the app, and keeps its state when the context or theme changes. See [Native UI](/extensions/native/). **Frame UI** gives you a whole page to draw as you like, for workbenches and editors the UI kit cannot express. See [Client contributions](/extensions/client/).
 
-A reference extension, `attricat-extension-example`, shows all of these working together: it computes numeric attributes from formulas, with a workbench page, a record action, a table cell, and a server event handler.
+A reference extension, [`attricat-extension-example`](https://github.com/attricat/attricat-extension-example), shows all of these working together: it computes numeric attributes from formulas and generates PDF documents, with a workbench page, a record action, a table cell, a server event handler, and interactive operations. Its code is the best place to see a call used for real.
+
+## Start a project
+
+The quickest way to a working extension is to generate one:
+
+```sh
+acli extension new inventory --id acme.inventory --name "Inventory" --with-server
+cd inventory
+pnpm install
+pnpm test
+pnpm package
+acli extension validate dist/acme.inventory-0.1.0.tar.zst
+```
+
+This creates a [native UI](/extensions/native/) with a panel, an attribute editor, and a test, and with `--with-server` also a Rust [server component](/extensions/server/) that answers one command. Leave out `--with-server` for a UI-only extension. Building the server component needs the `wasm32-unknown-unknown` Rust target and `wasm-tools`.
+
+`acli extension validate` runs the checks an upload runs, without a server. Point it at a directory after building, or at an archive.
 
 ## Where to start
 
@@ -168,7 +185,7 @@ Packages are limited to 32 MiB compressed. Paths must be relative, without `..`,
 3. Grant every permission you need and enable the extension.
 4. Exercise each contribution: open the pages where your UI appears, trigger the events your handlers listen to, run your commands and operations.
 
-Every upload is a new release, so grants and enablement must be repeated after each one.
+While you work, don't upload again. On a local server with `ATTRICAT_DEVTOOLS=true`, [`acli extension dev`](#iterate-without-uploading) swaps your built code into the installed release and keeps its grants. Uploading the same extension a second time fails with `extension_already_installed`.
 
 Check that your code handles:
 
@@ -178,6 +195,25 @@ Check that your code handles:
 - **Missing permissions.** Optional permissions may not be granted; degrade gracefully.
 - **Light and dark mode.** Read `attricat.theme` in client components.
 
+### Iterate without uploading
+
+```sh
+acli extension dev acme.inventory --build "pnpm build" --watch src
+acli extension dev acme.inventory --component dist/server.wasm --build "pnpm build:server" --watch server/src
+```
+
+Each change rebuilds and swaps the Worker bundle or the server component. Pass both `--bundle` and `--component` to swap both. The manifest stays as installed, so a change to `manifest.json` needs an upgrade.
+
+### Upgrade to a new version
+
+When the manifest changes, raise `version`, package again, and upgrade:
+
+```sh
+acli extension upgrade acme.inventory --file dist/acme.inventory-1.0.1.tar.zst
+```
+
+The version must be greater than the installed one. An upgrade clears grants and configuration and leaves the extension disabled, so grant and enable it again. Extension storage, connections, and export mappings stay.
+
 ### Debug
 
 - `api.log(level, message)` with `logging.write` writes to the Attricat server log, tagged with your extension ID. Levels are `trace`, `debug`, `info`, `warn`, and `error`. Messages are limited to 16 KiB.
@@ -185,6 +221,19 @@ Check that your code handles:
 - A quarantined installation shows its state on its page under **Manage → Extensions**. Fix the cause, uploading a corrected release if your code was at fault, and enable it again.
 - For operations, `acli extension operation get <run-id>` shows a run's status, progress, and error.
 - In a client frame, the browser developer tools show your console output and errors. Select the extension's frame in the console's context menu.
+
+### Common problems
+
+| What you see | Why | What to do |
+| --- | --- | --- |
+| `unknown field` from `validate` or an upload | Manifests are strict, so a misspelled or misplaced field is refused. | Compare it with the [manifest reference](/extensions/manifest/). |
+| `extension_already_installed` | The extension ID is already installed. | Use `acli extension dev` or `acli extension upgrade --file`. |
+| `upgrade version must be greater than the installed release` | Upgrades only go forward. | Raise `version` in the manifest. |
+| `missing capability '…'` from a host call | The capability isn't declared or wasn't granted. | Declare it, grant it, and enable the extension again. |
+| The installation is quarantined | The component trapped, returned a fault, or hit a [limit](/extensions/server/#limits). | Check the server log, do less per call, and enable it again. |
+| The component fails to instantiate | It was built for a WASI target. | Build for `wasm32-unknown-unknown`, and check with `wasm-tools component wit`. |
+| `forbidden` when a panel calls a command | Panels are read-only, except `export_mapping`. | Call it from an action, a record tab, a dialog, or a page. |
+| `extension command failed` in your UI | The command returned an error, which doesn't reach the client. | Report what the user should see inside the response, and log the rest. |
 
 ## Publish
 
@@ -203,4 +252,12 @@ To distribute through a registry, publish the archive as an asset of a GitHub Re
 }
 ```
 
-Workspace administrators add your registry with `acli extension registry add --source acme/attricat-extensions`. The official registry is `attricat/attricat-extensions`.
+Workspace administrators add your registry with `acli extension registry add --source acme/attricat-extensions`. The official registry is [`attricat/attricat-extensions`](https://github.com/attricat/attricat-extensions); to propose a listing there, open a pull request that adds your entry to its `registry.json`.
+
+### Release a new version
+
+- Use SemVer for `version`, and never reuse a released version.
+- Keep contribution, handler, and permission-rule IDs stable, because layouts and grants refer to them.
+- Upgrades clear grants and configuration, so say in your release notes which permissions or settings changed.
+- Extension storage carries over and there is no upgrade hook. Keep a format version in what you store, and have your code read older formats.
+- In CI, run your tests, package, and `acli extension validate` on the archive before you attach it to a release.

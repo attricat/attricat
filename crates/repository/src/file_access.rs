@@ -26,6 +26,8 @@ pub enum FileAccessOperation {
     ConversationUpload {
         conversation_id: Uuid,
     },
+    /// Uploading a file for an action of an extension to run on.
+    ExtensionInputUpload,
     /// The authenticated member replacing their own avatar.
     AvatarUpload {
         user_id: Uuid,

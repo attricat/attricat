@@ -18,7 +18,10 @@ use super::{
     extractors::{ApiJson, ApiPath, ApiQuery},
 };
 use crate::{
-    extensions::{ActionInvocation, MAX_EXTENSION_IDENTIFIER_BYTES, UiOutlet, validate_schema},
+    extensions::{
+        ActionInvocation, CLIENT_FILES_UPLOAD_CAPABILITY, MAX_EXTENSION_IDENTIFIER_BYTES, UiOutlet,
+        validate_schema,
+    },
     repository::{
         AttricatRepository, ExtensionAnnotationNamespace, ExtensionAnnotationPatch,
         ExtensionAnnotations, InteractiveRun, InteractiveRunArtifact, RepositoryError,
@@ -38,6 +41,9 @@ pub(super) struct StartInteractiveRequest {
     input: Value,
     idempotency_key: String,
     selection: SelectionRequest,
+    /// A file the caller uploaded for this action, when the action accepts one.
+    #[serde(default)]
+    input_file_id: Option<Uuid>,
 }
 
 #[derive(Deserialize)]
@@ -218,6 +224,21 @@ pub(super) async fn start(
         })
         .filter(|operation| operation.interactive.is_some())
         .ok_or_else(|| ApiError::not_found("interactive extension operation"))?;
+    // Only the action itself may take a file; the upload route has already
+    // bound the file to this user and extension.
+    let accepts = if operation_action {
+        contribution.accepts.clone()
+    } else {
+        Vec::new()
+    };
+    if !accepts.is_empty()
+        && !contribution
+            .capabilities
+            .iter()
+            .any(|capability| capability == CLIENT_FILES_UPLOAD_CAPABILITY)
+    {
+        return Err(ApiError::forbidden());
+    }
     let operation_input = action_input.unwrap_or(input.input);
     validate_schema(&operation.request_schema, &operation_input)
         .map_err(|error| ApiError::invalid_input(error.to_string()))?;
@@ -234,6 +255,8 @@ pub(super) async fn start(
             blueprint_version: input.selection.blueprint_version,
             context_id: input.selection.context_id,
             actor: principal.actor(),
+            accepts,
+            input_file_id: input.input_file_id,
         })
         .await
         .map_err(|error| match error {

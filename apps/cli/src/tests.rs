@@ -3368,7 +3368,8 @@ fn new_extensions_have_a_valid_native_manifest() {
 
     let directory = tempfile::tempdir().unwrap();
     let target = directory.path().join("native");
-    crate::commands::extension::scaffold::scaffold(&target, "acme.native", "Acme", None).unwrap();
+    crate::commands::extension::scaffold::scaffold(&target, "acme.native", "Acme", None, false)
+        .unwrap();
     let manifest: Manifest =
         serde_json::from_slice(&fs::read(target.join("manifest.json")).unwrap()).unwrap();
     manifest.validate(SUPPORTED_HOST_API).unwrap();
@@ -3392,6 +3393,7 @@ fn new_extensions_have_a_valid_native_manifest() {
         "acme.native",
         "Acme",
         Some(std::path::Path::new("/sdk")),
+        false,
     )
     .unwrap();
     let package: Value =
@@ -3402,7 +3404,7 @@ fn new_extensions_have_a_valid_native_manifest() {
     );
     // Never into a directory that already holds files.
     assert!(
-        crate::commands::extension::scaffold::scaffold(&target, "acme.native", "Acme", None)
+        crate::commands::extension::scaffold::scaffold(&target, "acme.native", "Acme", None, false)
             .is_err()
     );
     assert!(
@@ -3410,10 +3412,95 @@ fn new_extensions_have_a_valid_native_manifest() {
             &directory.path().join("bad"),
             "a b",
             "Acme",
-            None
+            None,
+            false
         )
         .is_err()
     );
+    // The npm registry has no SDK, so new extensions pin its release tarballs.
+    let package: Value =
+        serde_json::from_slice(&fs::read(target.join("package.json")).unwrap()).unwrap();
+    assert!(
+        package["dependencies"]["@attricat/extension"]
+            .as_str()
+            .unwrap()
+            .starts_with("https://github.com/attricat/attricat-extension-sdk/releases/download/")
+    );
+}
+
+#[test]
+fn the_command_line_definition_is_consistent() {
+    // Clap reports a subcommand argument that clashes with a global one only
+    // at run time, when the command is used.
+    use clap::CommandFactory;
+    crate::cli::Cli::command().debug_assert();
+}
+
+#[test]
+fn new_extensions_with_a_server_have_a_valid_manifest() {
+    use attricat_extension_manifest::extensions::{
+        ActionInvocation, ArtifactKind, Manifest, SUPPORTED_HOST_API,
+    };
+
+    let directory = tempfile::tempdir().unwrap();
+    let target = directory.path().join("full");
+    crate::commands::extension::scaffold::scaffold(&target, "acme.full", "Acme", None, true)
+        .unwrap();
+    let manifest: Manifest =
+        serde_json::from_slice(&fs::read(target.join("manifest.json")).unwrap()).unwrap();
+    manifest.validate(SUPPORTED_HOST_API).unwrap();
+    assert!(
+        manifest
+            .artifacts
+            .iter()
+            .any(|artifact| artifact.kind == ArtifactKind::ServerWasm)
+    );
+    // Panels cannot call commands, so an action must reach the template's own.
+    assert!(manifest.ui.iter().any(|contribution| {
+        contribution.invoke == Some(ActionInvocation::Command("ping".into()))
+    }));
+    for file in [
+        "server/Cargo.toml",
+        "server/src/lib.rs",
+        "server/wit/attricat-host-1.1.0.wit",
+    ] {
+        assert!(target.join(file).is_file(), "{file}");
+    }
+}
+
+#[test]
+fn validate_reports_manifest_and_missing_file_problems() {
+    use crate::commands::extension::validate::validate;
+
+    let directory = tempfile::tempdir().unwrap();
+    let target = directory.path().join("native");
+    crate::commands::extension::scaffold::scaffold(&target, "acme.native", "Acme", None, false)
+        .unwrap();
+    // Declared build outputs do not exist yet.
+    assert!(
+        validate(&target)
+            .unwrap_err()
+            .to_string()
+            .contains("dist/ui.js")
+    );
+    fs::create_dir_all(target.join("dist")).unwrap();
+    fs::write(target.join("dist/ui.js"), "// built").unwrap();
+    fs::write(
+        target.join("dist/ui.js.build.json"),
+        r#"{"ui_kit":"1.0.0"}"#,
+    )
+    .unwrap();
+    let report: Value = serde_json::from_str(&validate(&target).unwrap()).unwrap();
+    assert_eq!(report["extension_id"], "acme.native");
+    // The manifest goes through the host's own parser, so a typo is caught.
+    let manifest = fs::read_to_string(target.join("manifest.json")).unwrap();
+    fs::write(
+        target.join("manifest.json"),
+        manifest.replace("\"permissions\"", "\"permission\""),
+    )
+    .unwrap();
+    assert!(validate(&target).is_err());
+    assert!(validate(&directory.path().join("notes.txt")).is_err());
 }
 
 #[tokio::test]
@@ -3461,7 +3548,8 @@ async fn extension_dev_swaps_the_built_bundle() {
         command: Command::Extension {
             command: crate::commands::extension::ExtensionCommand::Dev {
                 extension_id: "acme.native".into(),
-                bundle: bundle.clone(),
+                bundle: Some(bundle.clone()),
+                component: None,
                 build: Some(format!(
                     "printf 'export const built = 1;' > '{}'",
                     bundle.display()

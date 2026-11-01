@@ -46,7 +46,9 @@ let response = api::call("storage.get.v1", r#"{"key":"last-sync"}"#)?;
 | `files.link.v1` | `attricat.files.public_links` | [Konektory eksportu](/pl/extensions/exports/#publiczne-linki-do-plików) |
 | `connector.scope.v1` | | [Konektory eksportu](/pl/extensions/exports/#zakres-wykonania) |
 
-Host sprawdza uprawnienie przy każdym wywołaniu, więc uprawnienie cofnięte w trakcie działania Twojego kodu obowiązuje od jego następnego wywołania. Odrzucone wywołanie zwraca błąd, np. `missing capability 'storage.extension'`, a nieznana nazwa zwraca `unknown host operation`. Żądania i odpowiedzi są ograniczone do 64 KiB JSON.
+Host sprawdza uprawnienie przy każdym wywołaniu, więc uprawnienie cofnięte w trakcie działania Twojego kodu obowiązuje od jego następnego wywołania. Odrzucone wywołanie zwraca błąd, np. `missing capability 'storage.extension'`, a nieznana nazwa zwraca `unknown host operation`. JSON wysyłany przez Ciebie jest ograniczony do 64 KiB, a JSON w odpowiedzi hosta do 1 MiB.
+
+Crate Rust [`attricat-extension`](https://github.com/attricat/attricat-extension-sdk/tree/main/crates/attricat-extension) w repozytorium SDK typuje te wywołania JSON, w tym pamięć, partie zmian w katalogu, żądania sieciowe i mapowania eksportu.
 
 ### Która procedura obsługi została wywołana
 
@@ -286,7 +288,15 @@ Między rozszerzeniami nie ma wywołań typu żądanie-odpowiedź ani współdzi
 
 ## Limity
 
-- JSON przekazywany przez granicę hosta: 64 KiB na wywołanie.
+Każde wywołanie Twojego komponentu, np. jedno polecenie, dostarczenie zdarzenia lub partia operacji, dostaje:
+
+- 100 milionów jednostek paliwa, co z grubsza odpowiada liczbie instrukcji WebAssembly;
+- 32 MiB pamięci;
+- 10 sekund.
+
+Przekroczenie któregokolwiek z tych limitów liczy się jako błąd krytyczny i powoduje kwarantannę instalacji, więc utrzymuj wywołania małe. Długotrwała praca należy do [operacji](/pl/extensions/operations/), która w każdej partii wykonuje ograniczoną ilość pracy.
+
+- JSON wysyłany do hosta: 64 KiB na wywołanie. JSON w odpowiedzi hosta: 1 MiB.
 - Komunikaty dziennika: 16 KiB.
 - Żądania i odpowiedzi poleceń: domyślnie 64 KiB.
 - Żądania i punkty kontrolne operacji: 64 KiB.

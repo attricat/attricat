@@ -13,6 +13,7 @@ Zdarzenia napędzają [przepływy pracy](/pl/builders/workflows/), [reguły](/pl
 | --- | --- |
 | `record.created.v1` | Rekord zostaje utworzony. |
 | `record.updated.v1` | Zmieniają się wartości, relacje lub adnotacje rekordu. |
+| `record.annotations_changed.v1` | Rozszerzenie lub naprawa wykonana przez operatora zmienia adnotacje jednego rozszerzenia na rekordzie. Dane zdarzenia wskazują rekord, jego wersję schematu, `extension_id`, nową wartość `revision` oraz zmienione tagi i klucze metadanych, nigdy ich wartości. |
 | `record.deleted.v1` | Rekord zostaje usunięty. |
 | `record.migrated.v1` | Rekord przechodzi na nowszą wersję schematu. |
 | `record.published.v1` | Rekord zostaje opublikowany w kanale. |

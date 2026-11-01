@@ -46,7 +46,9 @@ let response = api::call("storage.get.v1", r#"{"key":"last-sync"}"#)?;
 | `files.link.v1` | `attricat.files.public_links` | [Export connectors](/extensions/exports/#public-file-links) |
 | `connector.scope.v1` | | [Export connectors](/extensions/exports/#run-scope) |
 
-The host checks the grant on every call, so a grant revoked while your code runs takes effect at its next call. A refused call returns an error such as `missing capability 'storage.extension'`, and an unknown name returns `unknown host operation`. Requests and responses are limited to 64 KiB of JSON.
+The host checks the grant on every call, so a grant revoked while your code runs takes effect at its next call. A refused call returns an error such as `missing capability 'storage.extension'`, and an unknown name returns `unknown host operation`. JSON you send is limited to 64 KiB, and JSON the host answers with to 1 MiB.
+
+The Rust crate [`attricat-extension`](https://github.com/attricat/attricat-extension-sdk/tree/main/crates/attricat-extension) in the SDK repository types these JSON calls, including storage, catalog batches, network requests, and export mappings.
 
 ### Which handler was called
 
@@ -286,7 +288,15 @@ There are no request-response calls or shared state between extensions.
 
 ## Limits
 
-- JSON passed across the host boundary: 64 KiB per call.
+Each call into your component, such as one command, event delivery, or operation batch, gets:
+
+- 100 million units of fuel, which roughly counts WebAssembly instructions;
+- 32 MiB of memory;
+- 10 seconds.
+
+Going over any of them counts as a fault and quarantines the installation, so keep each call small. Long work belongs in an [operation](/extensions/operations/), which does a bounded amount per batch.
+
+- JSON you send to the host: 64 KiB per call. JSON the host answers with: 1 MiB.
 - Log messages: 16 KiB.
 - Command requests and responses: 64 KiB by default.
 - Operation requests and checkpoints: 64 KiB.

@@ -67,6 +67,7 @@ error_codes! {
     // `job_errors`.
     ExportJobResyncFailed = "export_job_resync_failed",
     ExtensionAlreadyInstalled = "extension_already_installed",
+    ExtensionInputFileUnavailable = "extension_input_file_unavailable",
     FileAttributeReadonly = "file_attribute_readonly",
     FileCardinalityExceeded = "file_cardinality_exceeded",
     FileCountExceeded = "file_count_exceeded",
@@ -533,6 +534,9 @@ impl RepositoryError {
                     .with_details(json!({ "reason": reason }))
             }
             Self::ExtensionAlreadyInstalled => plain(Conflict, Code::ExtensionAlreadyInstalled),
+            Self::ExtensionInputFileUnavailable => {
+                plain(Conflict, Code::ExtensionInputFileUnavailable)
+            }
             Self::ExportMappingConflict(_) => plain(Conflict, Code::Conflict),
             Self::CodeTaken(resource) => {
                 plain(Conflict, Code::CodeTaken).with_details(json!({ "resource": resource }))

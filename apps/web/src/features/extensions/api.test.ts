@@ -30,6 +30,7 @@ const contribution = {
   invoke: null,
   when: null,
   confirm: null,
+  accepts: [],
   icon: null,
   translations: {},
   cell: null,

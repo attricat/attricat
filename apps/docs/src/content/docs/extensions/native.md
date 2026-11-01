@@ -19,7 +19,7 @@ pnpm test
 pnpm package
 ```
 
-It creates a manifest with one `client_native` artifact, a blueprint panel and an attribute editor, a Vite configuration, a component for each contribution, and a test. Side-load the archive from `dist/` through **Manage → Extensions → Upload archive**, grant its permissions and enable it.
+It creates a manifest with one `client_native` artifact, a blueprint panel and an attribute editor, a Vite configuration, a component for each contribution, and a test. Add `--with-server` for a [server component](/extensions/server/) too. The SDK packages come from its [GitHub releases](https://github.com/attricat/attricat-extension-sdk/releases), not from npm, and the project already points at them. Side-load the archive from `dist/` through **Manage → Extensions → Upload archive**, grant its permissions and enable it.
 
 ### The manifest
 
@@ -84,7 +84,8 @@ The hooks give each mounted contribution what it needs:
 | `useConfiguration()` | The installation's configuration, when the extension has `configuration.read`. |
 | `useCapabilities()` | The capabilities granted to the extension. |
 | `useAttricat()` | The same calls as the [Frame UI `attricat` API](/extensions/client/#the-attricat-api): `request`, `command`, `storage`, `operations`, `navigate`, `notify`, `refresh` and `dialog.close`, each checked against your grants. |
-| `useEditor()` | In an attribute editor: the field's value, attribute, props, required state, errors, and `propose(value)`. |
+| `useUiKitVersion()` | The UI kit version Attricat negotiated. |
+| `useEditor()` | In an attribute editor: the field's value, attribute, props, required and read-only state, errors, `recordId`, `contextId`, and `propose(value)`. |
 
 When the context, language or color mode changes, Attricat sends the new values to your mounted component instead of starting it again, so its state survives.
 
@@ -113,7 +114,7 @@ const view = await renderContribution(Stock, {
 });
 ```
 
-While you develop against a local Attricat started with developer tools, `acli extension dev acme.inventory --build "pnpm build" --watch src` rebuilds on every change and swaps your Worker in the running server, without uploading a new release or granting permissions again. Open pages pick up the new build within 15 seconds.
+While you develop against a local Attricat started with `ATTRICAT_DEVTOOLS=true`, `acli extension dev acme.inventory --build "pnpm build" --watch src` rebuilds on every change and swaps your Worker in the running server, without uploading a new release or granting permissions again. Open pages pick up the new build within 15 seconds.
 
 ## The UI kit
 

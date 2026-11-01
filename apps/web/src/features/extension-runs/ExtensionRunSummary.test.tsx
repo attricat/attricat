@@ -17,6 +17,7 @@ const run = (overrides: Partial<ExtensionRun>): ExtensionRun => ({
   progress: {},
   failure: null,
   can_cancel: false,
+  scope: 'selection',
   selection_count: 4,
   blueprint_id: null,
   blueprint_version: null,

@@ -414,9 +414,11 @@ acli extension runtime [--blueprint-id <id> --blueprint-version <n>]
 acli extension get | enable | disable | remove <extension-id>
 acli extension install --owner <o> --repository <r> --release-id <github-release-id>
 acli extension sideload --file extension.tar.zst
-acli extension new <directory> --id <extension-id> [--name <name>] [--sdk <path>]
-acli extension dev <extension-id> [--bundle dist/ui.js] [--build <command>] [--watch <path>]... [--once]
+acli extension new <directory> --id <extension-id> [--name <name>] [--sdk <path>] [--with-server]
+acli extension validate [<directory-or-archive>]
+acli extension dev <extension-id> [--bundle dist/ui.js] [--component dist/server.wasm] [--build <command>] [--watch <path>]... [--once]
 acli extension upgrade <extension-id> --owner <o> --repository <r> --release-id <id>
+acli extension upgrade <extension-id> --file extension.tar.zst
 acli extension configure <extension-id> --configuration <json>
 acli extension grant <extension-id> --grant-kind capability|host_permission|event_publish|event_subscribe --grant-id <id>
 acli extension revoke <extension-id> --grant-kind <grant-kind> --grant-id <grant-id>

@@ -104,6 +104,35 @@ Capture what you need from each record once and keep it in the checkpoint, so a 
 
 Users see their runs under **Profile → Extension runs**. Only the user who started a run and people with `extensions.manage` can see it. The user who started it can always cancel it, but can open it and download its results only while they can still read every selected record. People with `extensions.manage` can open, cancel, and download any run.
 
+## Blueprint operations
+
+An import starts from a blueprint, not from records. Set `scope` to `blueprint` to let a toolbar action start the operation for one blueprint revision:
+
+```json
+{"id": "import", "handler": "import", "request_schema": {"type": "object"}, "interactive": {"version": 1, "scope": "blueprint"}}
+```
+
+Starting one needs a workspace-wide `records.write` grant, because the run can create records. The run has no selection, and is limited to less than a person filling in the same values:
+
+- `attricat-data.batch` accepts only `create` and `upsert` intents for the run's blueprint revision, without system tags or metadata, checked against the initiator's current permissions. Other intents make the call fail.
+- Record reads are refused. `attricat.schema` works for the run's own revision, so you can map codes to attribute IDs.
+- `selection.describe()` returns `scope: "blueprint"`, a `count` of 0, the blueprint revision and `context_id`, and `default_context_id` for when the action was started in the default context. Name a context on each value you write.
+
+## File input
+
+Add `accepts` to an operation [action](/extensions/client/#actions) to make Attricat ask for a file when the user chooses it:
+
+```json
+{ "id": "import-csv", "version": 1, "kind": "action", "outlet": "explorer_action", "title": "Import CSV…",
+  "accepts": ["text/csv"], "invoke": { "operation": { "id": "import", "input": {} } } }
+```
+
+It needs `client.files.upload` and `artifacts.read`, and the person needs `records.write`. Attricat uploads the file and starts the run. Your component opens it with `artifacts.open-input("source")`, and `describe-input` gives its size, media type, and checksum. Parse it in batches and keep your position in the checkpoint.
+
+Attricat decides the media type from the file itself, and refuses a file `accepts` doesn't list. It recognizes PNG, JPEG, GIF, WebP, PDF, DOCX, XLSX, and PPTX by their contents. Text is named by its file extension: `text/csv`, `text/tab-separated-values`, `application/json`, `application/xml`, or `text/plain` for any other. Text must be valid UTF-8. The usual upload size limit applies.
+
+A file can only be used by the person who uploaded it, for your extension, within an hour of uploading it. Attricat deletes it some time after the run ends, so copy what you need to keep. It isn't shown anywhere in Attricat and isn't searchable.
+
 ## Record annotations
 
 With `attricat.annotations.write`, add `annotate` intents to a batch to store facts on a record in your own namespace: tags `<extension-id>:<tag>` and the object at `system_metadata[<extension-id>]`. Intents identify the record by `record_id`.

@@ -58,6 +58,12 @@ export const upgradeExtension = (
     installationSchema,
     jsonRequest('POST', input),
   );
+export const upgradeExtensionFromArchive = (id: string, archive: File) =>
+  request(`${extensionPath(id)}/upgrade-archive`, installationSchema, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/zstd' },
+    body: archive,
+  });
 export const configureExtension = (id: string, configuration: unknown) =>
   request(
     `${extensionPath(id)}/configure`,

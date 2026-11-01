@@ -112,6 +112,8 @@ const contributionSchema = z
     title: z.string().nullable(),
     /** What a host-rendered action opens or calls; absent on other kinds. */
     invoke: actionInvocationSchema.nullable().default(null),
+    /** Media types of the file an operation action asks for before it runs. */
+    accepts: z.array(z.string().min(1)).default([]),
     when: actionConditionSchema.nullable().default(null),
     confirm: z
       .object({

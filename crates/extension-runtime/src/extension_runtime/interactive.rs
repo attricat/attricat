@@ -6,7 +6,8 @@
 //! write is checked against the selection and the initiator's live grants.
 
 use super::*;
-use crate::repository::{ExtensionAttricatBatch, InteractiveRunScope};
+use crate::extensions::InteractiveScope;
+use crate::repository::{ExtensionAttricatBatch, ExtensionAttricatIntent, InteractiveRunScope};
 
 const SELECTION_SCOPE_ERROR: &str =
     "interactive runs read catalog data through their run-bound selection";
@@ -23,21 +24,66 @@ async fn load_scope(
         .map_err(|_| "operation scope could not be loaded".to_owned())
 }
 
+/// Confines a batch to what its run's scope reaches. A blueprint run only adds
+/// or matches records of its revision, with no system tags or metadata, so it
+/// reaches nothing a person filling in the same values could not.
+fn check_batch_scope(
+    scope: &InteractiveRunScope,
+    batch: &ExtensionAttricatBatch,
+) -> Result<(), String> {
+    for intent in &batch.intents {
+        match scope.scope {
+            InteractiveScope::Selection => match intent.target_record_id() {
+                Some(record_id) if scope.record_ids.contains(&record_id) => {}
+                Some(_) => return Err("intent targets a record outside the run selection".into()),
+                None => return Err("interactive runs cannot create or upsert records".into()),
+            },
+            InteractiveScope::Blueprint => match intent {
+                ExtensionAttricatIntent::Create {
+                    blueprint_id,
+                    blueprint_version,
+                    system_tags,
+                    system_metadata,
+                    ..
+                }
+                | ExtensionAttricatIntent::Upsert {
+                    blueprint_id,
+                    blueprint_version,
+                    system_tags,
+                    system_metadata,
+                    ..
+                } => {
+                    if *blueprint_id != scope.blueprint_id
+                        || *blueprint_version != scope.blueprint_version
+                    {
+                        return Err("intent targets another blueprint than the run's".into());
+                    }
+                    if !system_tags.is_empty()
+                        || system_metadata
+                            .as_object()
+                            .is_none_or(|item| !item.is_empty())
+                    {
+                        return Err(
+                            "blueprint runs cannot set system tags or system metadata".into()
+                        );
+                    }
+                }
+                _ => return Err("blueprint runs can only create or upsert records".into()),
+            },
+        }
+    }
+    Ok(())
+}
+
 impl OperationState {
-    /// Validates a batch against an interactive run's selection, then applies
-    /// it with the initiator as the authorization actor.
+    /// Validates a batch against an interactive run's scope, then applies it
+    /// with the initiator as the authorization actor.
     async fn interactive_batch(
         &mut self,
         scope: InteractiveRunScope,
         batch: ExtensionAttricatBatch,
     ) -> Result<String, String> {
-        for intent in &batch.intents {
-            match intent.target_record_id() {
-                Some(record_id) if scope.record_ids.contains(&record_id) => {}
-                Some(_) => return Err("intent targets a record outside the run selection".into()),
-                None => return Err("interactive runs cannot create or upsert records".into()),
-            }
-        }
+        check_batch_scope(&scope, &batch)?;
         let mut host = HostState::new(self.installation.clone(), self.repository.clone(), 0);
         host.require_all_active(batch_capabilities(&batch)).await?;
         let repository = self.repository.for_interactive_run(
@@ -61,7 +107,16 @@ impl wit::selection::Host for OperationState {
         let scope = load_scope(&self.repository, self.run_id)
             .await?
             .ok_or_else(|| "this run has no interactive selection".to_owned())?;
+        // A toolbar with the default context selected names no context, but
+        // catalog calls need one.
+        let default_context_id = self
+            .repository
+            .default_attribute_context_id()
+            .await
+            .map_err(|error| error.to_string())?;
         bounded_serialize(&json!({
+            "scope": scope.scope.as_str(),
+            "default_context_id": default_context_id,
             "count": scope.record_ids.len(),
             "blueprint_id": scope.blueprint_id,
             "blueprint_version": scope.blueprint_version,
@@ -116,7 +171,13 @@ impl wit::attricat::Host for OperationState {
         blueprint_version: u64,
         context_id: String,
     ) -> Result<String, String> {
-        if load_scope(&self.repository, self.run_id).await?.is_some() {
+        // A blueprint run needs its revision's shape to build intents; the
+        // shape is not record data.
+        if let Some(scope) = load_scope(&self.repository, self.run_id).await?
+            && (scope.scope != InteractiveScope::Blueprint
+                || scope.blueprint_id.to_string() != blueprint_id
+                || scope.blueprint_version as u64 != blueprint_version)
+        {
             return Err(SELECTION_SCOPE_ERROR.into());
         }
         self.attricat_schema(blueprint_id, blueprint_version, context_id)

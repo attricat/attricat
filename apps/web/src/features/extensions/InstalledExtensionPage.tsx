@@ -10,6 +10,7 @@ import {
   lifecycleExtension,
   removeExtension,
   upgradeExtension,
+  upgradeExtensionFromArchive,
   type ExtensionLifecycleAction,
   type ExtensionReleaseReference,
 } from './managementApi';
@@ -34,7 +35,8 @@ import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 type InstallationAction =
   | { action: ExtensionLifecycleAction }
   | { action: 'remove' }
-  | { action: 'upgrade'; release: ExtensionReleaseReference };
+  | { action: 'upgrade'; release: ExtensionReleaseReference }
+  | { action: 'upgradeArchive'; archive: File };
 
 const runInstallationAction = (
   extensionId: string,
@@ -45,6 +47,8 @@ const runInstallationAction = (
       return removeExtension(extensionId);
     case 'upgrade':
       return upgradeExtension(extensionId, input.release);
+    case 'upgradeArchive':
+      return upgradeExtensionFromArchive(extensionId, input.archive);
     default:
       return lifecycleExtension(extensionId, input.action);
   }
@@ -112,6 +116,9 @@ export const InstalledExtensionPage = ({
             installation={installation}
             onUpgrade={(release) =>
               action.mutate({ action: 'upgrade', release })
+            }
+            onUpgradeArchive={(archive) =>
+              action.mutate({ action: 'upgradeArchive', archive })
             }
           />
           <ExtensionConfigurationSection

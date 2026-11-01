@@ -1,4 +1,5 @@
-//! `acli extension new`: a native UI extension, ready to build and pack.
+//! `acli extension new`: a native UI extension, optionally with a server
+//! component, ready to build and pack.
 
 use std::path::{Path, PathBuf};
 
@@ -6,9 +7,16 @@ use serde_json::json;
 
 use crate::error::CliError;
 
-/// The SDK versions a new extension depends on when no local SDK is given.
-const EXTENSION_SDK_VERSION: &str = "^0.1.0";
-const UI_KIT_PACKAGE_VERSION: &str = "^1.0.0";
+/// The SDK release a new extension depends on when no local SDK is given. The
+/// packages are published only as tarballs of the SDK's GitHub releases.
+const SDK_RELEASE_URL: &str =
+    "https://github.com/attricat/attricat-extension-sdk/releases/download/v0.1.2";
+const EXTENSION_SDK_TARBALL: &str = "attricat-extension-0.1.2.tgz";
+const UI_KIT_TARBALL: &str = "attricat-ui-kit-1.0.0.tgz";
+/// The released host ABI a new server component is built against.
+const HOST_WIT_FILE: &str = "attricat-host-1.1.0.wit";
+const HOST_WIT: &str =
+    include_str!("../../../../../crates/extension-runtime/wit-released/attricat-host-1.1.0.wit");
 /// The UI kit versions the new extension declares it works with.
 const UI_KIT_RANGE: &str = "^1.0";
 /// The host API range of the new manifest.
@@ -21,6 +29,7 @@ pub(crate) fn scaffold(
     extension_id: &str,
     name: &str,
     sdk: Option<&Path>,
+    server: bool,
 ) -> Result<String, CliError> {
     if !extension_id
         .bytes()
@@ -41,26 +50,32 @@ pub(crate) fn scaffold(
             directory.display()
         )));
     }
-    let dependency = |package: &str, version: &str| match sdk {
+    let dependency = |package: &str, tarball: &str| match sdk {
         Some(sdk) => format!("link:{}", sdk.join("packages").join(package).display()),
-        None => version.to_owned(),
+        None => format!("{SDK_RELEASE_URL}/{tarball}"),
     };
-    let files: Vec<(PathBuf, String)> = vec![
-        ("manifest.json".into(), manifest(extension_id, name)),
+    let mut scripts = json!({
+        "build": "vite build",
+        "test": "vitest run",
+        "package": "vite build && attricat-pack"
+    });
+    if server {
+        // After the Vite build, which empties dist/.
+        scripts["build:server"] = BUILD_SERVER_SCRIPT.into();
+        scripts["package"] = "vite build && pnpm build:server && attricat-pack".into();
+    }
+    let mut files: Vec<(PathBuf, String)> = vec![
+        ("manifest.json".into(), manifest(extension_id, name, server)),
         (
             "package.json".into(),
             pretty(json!({
                 "name": extension_id,
                 "private": true,
                 "type": "module",
-                "scripts": {
-                    "build": "vite build",
-                    "test": "vitest run",
-                    "package": "vite build && attricat-pack"
-                },
+                "scripts": scripts,
                 "dependencies": {
-                    "@attricat/extension": dependency("extension", EXTENSION_SDK_VERSION),
-                    "@attricat/ui-kit": dependency("ui-kit", UI_KIT_PACKAGE_VERSION),
+                    "@attricat/extension": dependency("extension", EXTENSION_SDK_TARBALL),
+                    "@attricat/ui-kit": dependency("ui-kit", UI_KIT_TARBALL),
                     "preact": "^10.26.4"
                 },
                 "devDependencies": {
@@ -77,9 +92,19 @@ pub(crate) fn scaffold(
         ("src/UnitEditor.tsx".into(), UNIT_EDITOR.into()),
         ("src/Summary.test.tsx".into(), SUMMARY_TEST.into()),
         ("assets/icon-48.svg".into(), ICON.into()),
-        ("README.md".into(), readme(extension_id, name)),
-        (".gitignore".into(), "node_modules\ndist\n".into()),
+        ("README.md".into(), readme(extension_id, name, server)),
+        (".gitignore".into(), "node_modules\ndist\ntarget\n".into()),
     ];
+    if server {
+        files.extend([
+            ("server/Cargo.toml".into(), SERVER_CARGO_TOML.into()),
+            ("server/src/lib.rs".into(), SERVER_LIB.into()),
+            (
+                format!("server/wit/{HOST_WIT_FILE}").into(),
+                HOST_WIT.into(),
+            ),
+        ]);
+    }
     for (path, content) in &files {
         let path = directory.join(path);
         if let Some(parent) = path.parent() {
@@ -106,8 +131,8 @@ fn pretty(value: serde_json::Value) -> String {
     )
 }
 
-fn manifest(extension_id: &str, name: &str) -> String {
-    pretty(json!({
+fn manifest(extension_id: &str, name: &str, server: bool) -> String {
+    let mut manifest = json!({
         "manifest_version": 1,
         "name": name,
         "version": "0.1.0",
@@ -147,10 +172,56 @@ fn manifest(extension_id: &str, name: &str) -> String {
                 }
             }
         ]
-    }))
+    });
+    if server {
+        manifest["permissions"]
+            .as_array_mut()
+            .expect("permissions are a list")
+            .extend([
+                "client.commands".into(),
+                "client.record_header_action".into(),
+                "logging.write".into(),
+            ]);
+        // Panels are read-only, so an action is what reaches the command.
+        manifest["ui"]
+            .as_array_mut()
+            .expect("contributions are a list")
+            .push(json!({
+                "id": "ping-action",
+                "version": 1,
+                "kind": "action",
+                "outlet": "record_header_action",
+                "title": "Ping",
+                "icon": "send",
+                "invoke": {"command": "ping"}
+            }));
+        manifest["artifacts"]
+            .as_array_mut()
+            .expect("artifacts are a list")
+            .push(json!({"id": "server", "kind": "server_wasm", "path": SERVER_ARTIFACT_PATH}));
+        manifest["server"] = json!({
+            "commands": [{
+                "id": "ping",
+                "handler": "ping",
+                "request_schema": {"type": "object"},
+                "response_schema": {"type": "object"}
+            }]
+        });
+    }
+    pretty(manifest)
 }
 
-fn readme(extension_id: &str, name: &str) -> String {
+fn readme(extension_id: &str, name: &str, server: bool) -> String {
+    let server_notes = if server {
+        format!(
+            "\n`server/` is a WebAssembly component built with `pnpm build:server`, which needs\n\
+             the `wasm32-unknown-unknown` Rust target and `wasm-tools`. It answers the `ping`\n\
+             command, which the **Ping** action in a record's Actions menu calls. `acli extension dev {extension_id} --component {SERVER_ARTIFACT_PATH} --build\n\
+             \"pnpm build:server\" --watch server/src` hot-swaps it the same way.\n"
+        )
+    } else {
+        String::new()
+    };
     format!(
         "# {name}\n\n\
          A native UI extension (`{extension_id}`). Its code runs in a Worker and composes\n\
@@ -161,9 +232,96 @@ fn readme(extension_id: &str, name: &str) -> String {
          - `acli extension dev {extension_id} --build \"pnpm build\" --watch src` rebuilds and\n\
            hot-swaps the Worker in a development server without a new upload or grants.\n\n\
          A blueprint field uses the editor from `views.detail`:\n\n\
-         ```yaml\n- type: field\n  field: size\n  editor: {{id: unit, version: 1, props: {{units: \"S,M,L\"}}}}\n```\n"
+         ```yaml\n- type: field\n  field: size\n  editor: {{id: unit, version: 1, props: {{units: \"S,M,L\"}}}}\n```\n{server_notes}"
     )
 }
+
+/// Where the server component is built, as the manifest declares it.
+const SERVER_ARTIFACT_PATH: &str = "dist/server.wasm";
+const BUILD_SERVER_SCRIPT: &str = "cargo build --manifest-path server/Cargo.toml --release --target wasm32-unknown-unknown && mkdir -p dist && wasm-tools component new server/target/wasm32-unknown-unknown/release/server_component.wasm -o dist/server.wasm";
+
+const SERVER_CARGO_TOML: &str = r#"[package]
+name = "server_component"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.57.1"
+
+[workspace]
+"#;
+
+const SERVER_LIB: &str = r##"// One component answers commands, events and operations. See the Server runtime
+// and Operations pages of the extension docs.
+wit_bindgen::generate!({ path: "wit", world: "outcome-extension" });
+
+use attricat::host::api::{self, Event};
+use attricat::host::outcomes::Failure;
+use exports::attricat::host::command_handler::{CommandRequest, CommandResponse};
+use exports::attricat::host::deferrable_operations::{BatchOutcome, OperationRequest};
+use exports::attricat::host::event_handler::Delivery;
+
+struct Extension;
+
+impl exports::attricat::host::command_handler::Guest for Extension {
+    fn handle_command(request: CommandRequest) -> Result<CommandResponse, String> {
+        match request.handler.as_str() {
+            "ping" => {
+                // Needs logging.write. A failed log is not worth failing for.
+                let _ = api::log("info", "ping");
+                Ok(CommandResponse {
+                    payload: r#"{"notification":{"message":"Pong","severity":"info"}}"#.into(),
+                })
+            }
+            other => Err(format!("unknown command {other}")),
+        }
+    }
+}
+
+// Declare handlers in manifest.json's `server` section before relying on these.
+impl exports::attricat::host::event_handler::Guest for Extension {
+    fn handle_event(_event: Event, _delivery: Delivery) -> Result<(), Failure> {
+        Ok(())
+    }
+}
+
+impl exports::attricat::host::deferrable_operations::Guest for Extension {
+    fn prepare(_request: OperationRequest) -> Result<String, String> {
+        Ok(String::new())
+    }
+
+    fn start(_request: OperationRequest) -> Result<String, String> {
+        Ok(String::new())
+    }
+
+    fn process_batch(_request: OperationRequest) -> Result<BatchOutcome, Failure> {
+        Ok(BatchOutcome {
+            checkpoint: "{}".into(),
+            progress: "{}".into(),
+            done: true,
+            resume_after_ms: None,
+        })
+    }
+
+    fn checkpoint(_request: OperationRequest) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn finish(_request: OperationRequest) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn cancel(_request: OperationRequest) -> Result<(), String> {
+        Ok(())
+    }
+}
+
+export!(Extension);
+"##;
 
 const VITE_CONFIG: &str = "import { defineConfig } from 'vite';
 import { attricatExtension } from '@attricat/extension/vite';

@@ -433,6 +433,8 @@ See [Translate labels](/builders/translations/).
 | `GET`, `POST`, `DELETE` | `/extension-registries[/{id}]`; `GET /extension-registries/discover`; `GET /extension-registries/extensions/{owner}/{repo}` | Registries and discovery. |
 | `GET`, `POST` | `/extensions` | List or install. |
 | `POST` | `/extensions/sideload` | Install an uploaded `application/zstd` archive. |
+| `POST` | `/extensions/{id}/upgrade-archive` | Upgrade from an uploaded `application/zstd` archive of a newer version. |
+| `POST` | `/extensions/{id}/{contribution_id}/input-uploads` | Upload the multipart `file` an action asks for; returns `{"file"}`. Needs `records.write`. |
 | `GET`, `DELETE` | `/extensions/{id}` | Read or remove. |
 | `POST` | `/extensions/{id}/upgrade`, `/enable`, `/disable`, `/quarantine` | Lifecycle. |
 | `PUT` | `/extensions/{id}/configure` | Configuration. |

@@ -20,7 +20,24 @@ Rozszerzenie to archiwum `.tar.zst` z plikiem `manifest.json` w katalogu główn
 
 Wybieraj je w tej kolejności. Kontrybucje **deklaratywne** tylko opisują, co pokazać, więc nic nie kosztują na rekord i zawsze wyglądają jak Attricat. **Natywny interfejs** pozwala Twojej logice sterować ekranem, a Attricat rysuje go własnymi komponentami: interfejs podąża za motywem, językiem i obsługą klawiatury reszty aplikacji i zachowuje swój stan przy zmianie kontekstu lub motywu. Zobacz [Natywny interfejs](/pl/extensions/native/). **Interfejs w ramce** daje Ci całą stronę do narysowania po swojemu, dla warsztatów i edytorów, których nie da się wyrazić zestawem UI. Zobacz [Kontrybucje klienckie](/pl/extensions/client/).
 
-Rozszerzenie referencyjne `attricat-extension-example` pokazuje, jak wszystkie te elementy działają razem: oblicza numeryczne atrybuty z formuł i ma stronę warsztatu, akcję rekordu, komórkę tabeli oraz serwerową obsługę zdarzeń.
+Rozszerzenie referencyjne [`attricat-extension-example`](https://github.com/attricat/attricat-extension-example) pokazuje, jak wszystkie te elementy działają razem: oblicza numeryczne atrybuty z formuł i generuje dokumenty PDF, a do tego ma stronę warsztatu, akcję rekordu, komórkę tabeli, serwerową obsługę zdarzeń i operacje interaktywne. W jego kodzie najłatwiej zobaczyć, jak używać poszczególnych wywołań.
+
+## Utwórz projekt
+
+Najszybciej uzyskasz działające rozszerzenie, generując je:
+
+```sh
+acli extension new inventory --id acme.inventory --name "Inventory" --with-server
+cd inventory
+pnpm install
+pnpm test
+pnpm package
+acli extension validate dist/acme.inventory-0.1.0.tar.zst
+```
+
+Polecenie tworzy [natywny interfejs](/pl/extensions/native/) z panelem, edytorem atrybutu i testem, a z `--with-server` także [komponent serwerowy](/pl/extensions/server/) w Rust, który odpowiada na jedno polecenie. Pomiń `--with-server`, jeśli rozszerzenie ma tylko interfejs. Do zbudowania komponentu serwerowego potrzebne są cel Rust `wasm32-unknown-unknown` i `wasm-tools`.
+
+`acli extension validate` wykonuje te same kontrole co przesłanie, ale bez serwera. Wskaż mu katalog po zbudowaniu albo archiwum.
 
 ## Od czego zacząć
 
@@ -168,7 +185,7 @@ Pakiety są ograniczone do 32 MiB po kompresji. Ścieżki muszą być względne,
 3. Przyznaj wszystkie potrzebne uprawnienia i włącz rozszerzenie.
 4. Przetestuj każdą kontrybucję: otwórz strony, na których pojawia się Twój interfejs, wyzwól zdarzenia, na które nasłuchują Twoje procedury obsługi, uruchom swoje polecenia i operacje.
 
-Każde przesłanie to nowe wydanie, więc po każdym trzeba ponownie przyznać uprawnienia i włączyć rozszerzenie.
+W trakcie pracy nie przesyłaj rozszerzenia ponownie. Na lokalnym serwerze z `ATTRICAT_DEVTOOLS=true` polecenie [`acli extension dev`](#pracuj-bez-przesyłania) podmienia zbudowany kod w zainstalowanym wydaniu i zachowuje przyznane uprawnienia. Drugie przesłanie tego samego rozszerzenia kończy się błędem `extension_already_installed`.
 
 Sprawdź, czy Twój kod obsługuje:
 
@@ -178,6 +195,25 @@ Sprawdź, czy Twój kod obsługuje:
 - **Brakujące uprawnienia.** Uprawnienia opcjonalne mogą nie zostać przyznane; zadbaj o łagodną degradację.
 - **Tryb jasny i ciemny.** W komponentach klienckich odczytuj `attricat.theme`.
 
+### Pracuj bez przesyłania
+
+```sh
+acli extension dev acme.inventory --build "pnpm build" --watch src
+acli extension dev acme.inventory --component dist/server.wasm --build "pnpm build:server" --watch server/src
+```
+
+Każda zmiana przebudowuje i podmienia pakiet Workera albo komponent serwerowy. Aby podmienić oba, podaj `--bundle` i `--component`. Manifest pozostaje taki jak przy instalacji, więc zmiana `manifest.json` wymaga uaktualnienia.
+
+### Uaktualnij do nowej wersji
+
+Gdy zmienia się manifest, podnieś `version`, spakuj rozszerzenie i uaktualnij je:
+
+```sh
+acli extension upgrade acme.inventory --file dist/acme.inventory-1.0.1.tar.zst
+```
+
+Wersja musi być wyższa od zainstalowanej. Uaktualnienie usuwa przyznane uprawnienia i konfigurację oraz pozostawia rozszerzenie wyłączone, więc przyznaj uprawnienia i włącz je ponownie. Pamięć rozszerzenia, połączenia i mapowania eksportu zostają.
+
 ### Debugowanie
 
 - `api.log(level, message)` z `logging.write` zapisuje wpis w dzienniku serwera Attricat, oznaczony identyfikatorem rozszerzenia. Poziomy to `trace`, `debug`, `info`, `warn` i `error`. Wpisy są ograniczone do 16 KiB.
@@ -185,6 +221,19 @@ Sprawdź, czy Twój kod obsługuje:
 - Instalacja objęta kwarantanną pokazuje swój stan na swojej stronie w **Zarządzanie → Rozszerzenia**. Usuń przyczynę, w razie błędu w kodzie przesyłając poprawione wydanie, i włącz rozszerzenie ponownie.
 - Dla operacji `acli extension operation get <run-id>` pokazuje stan, postęp i błąd wykonania.
 - W ramce klienckiej narzędzia deweloperskie przeglądarki pokazują wyjście konsoli i błędy. Wybierz ramkę rozszerzenia w menu kontekstu konsoli.
+
+### Częste problemy
+
+| Co widzisz | Dlaczego | Co zrobić |
+| --- | --- | --- |
+| `unknown field` z `validate` lub przy przesyłaniu | Manifesty są ścisłe, więc pole z literówką lub w złym miejscu jest odrzucane. | Porównaj je z [dokumentacją manifestu](/pl/extensions/manifest/). |
+| `extension_already_installed` | Rozszerzenie o tym identyfikatorze jest już zainstalowane. | Użyj `acli extension dev` lub `acli extension upgrade --file`. |
+| `upgrade version must be greater than the installed release` | Uaktualnienia działają tylko w przód. | Podnieś `version` w manifeście. |
+| `missing capability '…'` z wywołania hosta | Uprawnienie nie jest zadeklarowane lub nie zostało przyznane. | Zadeklaruj je, przyznaj i włącz rozszerzenie ponownie. |
+| Instalacja jest w kwarantannie | Komponent uległ awarii, zwrócił błąd krytyczny lub osiągnął [limit](/pl/extensions/server/#limity). | Sprawdź dziennik serwera, rób mniej w jednym wywołaniu i włącz rozszerzenie ponownie. |
+| Komponentu nie da się uruchomić | Został zbudowany dla celu WASI. | Buduj dla `wasm32-unknown-unknown` i sprawdź wynik poleceniem `wasm-tools component wit`. |
+| `forbidden`, gdy panel wywołuje polecenie | Panele są tylko do odczytu, z wyjątkiem `export_mapping`. | Wywołaj je z akcji, karty rekordu, okna dialogowego lub strony. |
+| `extension command failed` w interfejsie | Polecenie zwróciło błąd, który nie dociera do klienta. | To, co ma zobaczyć użytkownik, przekaż w odpowiedzi, a resztę zapisz w dzienniku. |
 
 ## Opublikuj
 
@@ -203,4 +252,12 @@ Aby dystrybuować rozszerzenie przez rejestr, opublikuj archiwum jako zasób Git
 }
 ```
 
-Administratorzy obszaru roboczego dodają Twój rejestr poleceniem `acli extension registry add --source acme/attricat-extensions`. Oficjalny rejestr to `attricat/attricat-extensions`.
+Administratorzy obszaru roboczego dodają Twój rejestr poleceniem `acli extension registry add --source acme/attricat-extensions`. Oficjalny rejestr to [`attricat/attricat-extensions`](https://github.com/attricat/attricat-extensions); aby zaproponować w nim wpis, otwórz pull request dodający go do pliku `registry.json`.
+
+### Wydaj nową wersję
+
+- Stosuj SemVer dla `version` i nigdy nie używaj ponownie wydanej wersji.
+- Zachowuj niezmienne identyfikatory kontrybucji, procedur obsługi i reguł uprawnień, bo odwołują się do nich układy i przyznane uprawnienia.
+- Uaktualnienia usuwają przyznane uprawnienia i konfigurację, więc w informacjach o wydaniu napisz, które uprawnienia lub ustawienia się zmieniły.
+- Pamięć rozszerzenia zostaje, a uaktualnienie nie uruchamia żadnego kodu. Zapisuj wersję formatu razem z danymi, a Twój kod niech odczytuje starsze formaty.
+- W CI uruchom testy, spakuj rozszerzenie i wykonaj `acli extension validate` na archiwum, zanim dołączysz je do wydania.

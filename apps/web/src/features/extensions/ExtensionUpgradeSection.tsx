@@ -1,7 +1,8 @@
 import { Button, Paper, Stack, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { CircleArrowUpIcon } from 'lucide-react';
+import { CircleArrowUpIcon, UploadIcon } from 'lucide-react';
+import { extensionArchiveAccept } from './constants';
 import {
   repositoryParts,
   sourceReleaseTag,
@@ -20,6 +21,7 @@ type ExtensionUpgradeSectionProps = {
   canManage: boolean;
   installation: ExtensionInstallation;
   onUpgrade: (release: ExtensionReleaseReference) => void;
+  onUpgradeArchive: (archive: File) => void;
 };
 
 export const ExtensionUpgradeSection = ({
@@ -27,6 +29,7 @@ export const ExtensionUpgradeSection = ({
   canManage,
   installation,
   onUpgrade,
+  onUpgradeArchive,
 }: ExtensionUpgradeSectionProps) => {
   const { t } = useTranslation();
   const [owner = '', repository = ''] = repositoryParts(
@@ -68,6 +71,29 @@ export const ExtensionUpgradeSection = ({
           </Button>
         </Stack>
       ))}
+      <Stack spacing={1} sx={{ alignItems: 'flex-start', mt: 1 }}>
+        <Typography color="text.secondary" variant="body2">
+          {t('extensions.upgradeArchiveHint')}
+        </Typography>
+        <Button
+          component="label"
+          disabled={!canManage || busy}
+          startIcon={<UploadIcon />}
+          variant="outlined"
+        >
+          {t('extensions.upgradeFromArchive')}
+          <input
+            accept={extensionArchiveAccept}
+            hidden
+            onChange={(event) => {
+              const archive = event.target.files?.[0];
+              event.target.value = '';
+              if (archive) onUpgradeArchive(archive);
+            }}
+            type="file"
+          />
+        </Button>
+      </Stack>
     </Paper>
   );
 };

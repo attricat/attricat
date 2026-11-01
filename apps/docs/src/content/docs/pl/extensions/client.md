@@ -57,7 +57,7 @@ Ramka pozostaje zamontowana, gdy użytkownik przełącza kontekst lub motyw. Nas
 
 Ramka nie ma innych składowych. W szczególności nie ma `fetch` do API, dostępu do adresu URL przeglądarki ani możliwości wywołania innego rozszerzenia. Manifest przyjmuje niektóre uprawnienia [zarezerwowane](/pl/extensions/manifest/#interakcja-z-klientem) dla przyszłych API ramki; ich przyznanie na razie niczego nie daje.
 
-Wywołania zwracają obietnice. Wywołanie, na które nie pozwalają Twoje uprawnienia albo które host odrzuci, kończy się odrzuceniem z obiektem `Error`, którego komunikat podaje przyczynę.
+Wywołania zwracają obietnice. Wywołanie, na które nie pozwalają Twoje uprawnienia albo które host odrzuci, kończy się odrzuceniem z obiektem `Error`. Jego komunikat jest krótki i ogólny, np. `Request denied`, i nie wymienia brakującego uprawnienia; przyczynę pomogą ustalić [`useCapabilities()`](/pl/extensions/native/#komponenty) w natywnym interfejsie i dziennik serwera.
 
 Twój interfejs musi dostarczać własne przetłumaczone teksty i dostępne etykiety.
 
@@ -153,12 +153,13 @@ Akcja to pozycja menu lub przycisk, które Attricat rysuje sam. Deklarujesz jej 
 | --- | --- | --- |
 | `{ "command": "<id>" }` | `client.commands` | Wywołuje jedno z Twoich [poleceń serwerowych](/pl/extensions/manifest/#serwer); akcja może wywołać tylko to polecenie. |
 | `{ "dialog": "<id>" }` | `client.action_dialog` | Otwiera jedną z Twoich kontrybucji `dialog`. |
-| `{ "operation": { "id", "input" } }` | `client.operations.start` | Uruchamia jedną z Twoich [operacji interaktywnych](/pl/extensions/operations/#operacje-interaktywne) dla rekordów akcji z `input` ustalonym w manifeście. Niedostępne w `explorer_action`, które nie ma rekordów. |
+| `{ "operation": { "id", "input" } }` | `client.operations.start` | Uruchamia jedną z Twoich [operacji interaktywnych](/pl/extensions/operations/#operacje-interaktywne) dla rekordów akcji z `input` ustalonym w manifeście. W `explorer_action`, które nie ma rekordów, musi to być [operacja na schemacie](/pl/extensions/operations/#operacje-na-schemacie), a w pozostałych miejscach nie może nią być. |
 
 | Pole opcjonalne | Działanie |
 | --- | --- |
 | `when` | Oferuje akcję tylko tam, gdzie ma sens: `blueprints` (kody), `min_records`, `max_records` (najwyżej 50), `has_tags`, `missing_tags`, `requires_write`. Attricat odrzuca też polecenia i uruchomienia akcji z `requires_write` dla rekordów, których użytkownik nie może zmieniać. Akcja `explorer_action` nie wskazuje rekordów, więc nie może użyć `requires_write`. |
 | `confirm` | `{ "message", "destructive" }`: Attricat pyta przed uruchomieniem akcji. |
+| `accepts` | Typy pliku, o który Attricat poprosi przed rozpoczęciem akcji operacji, np. `["text/csv"]`; najwyżej 16. Zobacz [Plik wejściowy](/pl/extensions/operations/#plik-wejściowy). |
 | `icon` | Jedna z `alert`, `calculator`, `check`, `clock`, `download`, `file`, `info`, `link`, `refresh`, `search`, `send`, `settings`, `sparkles`, `tag`, `wand`. |
 | `translations` | Tytuły w innych językach, np. `{ "pl": { "title": "…" } }`. Może je mieć każda kontrybucja z tytułem. |
 

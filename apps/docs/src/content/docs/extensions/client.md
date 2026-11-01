@@ -57,7 +57,7 @@ The frame stays mounted when the user switches context or theme. Listen for the 
 
 The frame has no other members. In particular it has no `fetch` to the API, no access to the browser URL, and no way to call another extension. The manifest accepts some capabilities that are [reserved](/extensions/manifest/#client-interaction) for future frame APIs; granting them adds nothing yet.
 
-Calls return promises. A call your grants don't allow, or that the host refuses, rejects with an `Error` whose message says why.
+Calls return promises. A call your grants don't allow, or that the host refuses, rejects with an `Error`. Its message is short and generic, such as `Request denied`, and doesn't name a missing grant; [`useCapabilities()`](/extensions/native/#components) in native UI and your server log help you find out why.
 
 Your UI must supply its own translated text and accessible labels.
 
@@ -153,12 +153,13 @@ An action is a menu item or button that Attricat draws itself. You declare its t
 | --- | --- | --- |
 | `{ "command": "<id>" }` | `client.commands` | Calls one of your [server commands](/extensions/manifest/#server); the action can call only that command. |
 | `{ "dialog": "<id>" }` | `client.action_dialog` | Opens one of your `dialog` contributions. |
-| `{ "operation": { "id", "input" } }` | `client.operations.start` | Starts one of your [interactive operations](/extensions/operations/#interactive-operations) for the action's records with the `input` you fix in the manifest. Not at `explorer_action`, which has no records. |
+| `{ "operation": { "id", "input" } }` | `client.operations.start` | Starts one of your [interactive operations](/extensions/operations/#interactive-operations) for the action's records with the `input` you fix in the manifest. At `explorer_action`, which has no records, the operation must be a [blueprint operation](/extensions/operations/#blueprint-operations), and elsewhere it must not be. |
 
 | Optional field | Does |
 | --- | --- |
 | `when` | Offers the action only where it applies: `blueprints` (codes), `min_records`, `max_records` (at most 50), `has_tags`, `missing_tags`, `requires_write`. Attricat also refuses commands and runs of a `requires_write` action for records the user can't change. An `explorer_action` names no records, so it can't use `requires_write`. |
 | `confirm` | `{ "message", "destructive" }`: Attricat asks before running the action. |
+| `accepts` | Media types of a file Attricat asks for before starting an operation action, such as `["text/csv"]`; up to 16. See [File input](/extensions/operations/#file-input). |
 | `icon` | One of `alert`, `calculator`, `check`, `clock`, `download`, `file`, `info`, `link`, `refresh`, `search`, `send`, `settings`, `sparkles`, `tag`, `wand`. |
 | `translations` | Titles in other languages, such as `{ "pl": { "title": "…" } }`. Any contribution with a title can have them. |
 

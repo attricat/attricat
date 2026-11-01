@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { extensionRunFailures, extensionRunStatuses } from './constants';
+import {
+  extensionRunFailures,
+  extensionRunSelectionScopes,
+  extensionRunStatuses,
+} from './constants';
 
 /**
  * Optional, extension-reported domain outcome. Execution status stays
@@ -16,6 +20,7 @@ export const extensionRunSchema = z.object({
   progress: progressSchema,
   failure: z.enum(extensionRunFailures).nullable(),
   can_cancel: z.boolean(),
+  scope: z.enum(extensionRunSelectionScopes),
   selection_count: z.number().int().nonnegative(),
   blueprint_id: z.uuid().nullable(),
   blueprint_version: z.number().int().positive().nullable(),

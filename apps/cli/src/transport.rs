@@ -31,6 +31,7 @@ const LAST_EVENT_ID_HEADER: &str = "last-event-id";
 /// Media type of extension and solution-pack archives.
 pub(crate) const ZSTD_MEDIA_TYPE: &str = "application/zstd";
 pub(crate) const JAVASCRIPT_MEDIA_TYPE: &str = "text/javascript";
+pub(crate) const WASM_MEDIA_TYPE: &str = "application/wasm";
 
 /// The configured client and API base URL every command sends requests through.
 pub(crate) struct Api {

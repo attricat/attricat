@@ -305,6 +305,9 @@ pub struct ExtensionRuntimeInstallation {
     pub manifest: Arc<Manifest>,
     pub capability_grants: HashSet<String>,
     pub host_permission_grants: HashSet<String>,
+    /// The development build of the server component that replaces the
+    /// release's own, when `acli extension dev` stored one.
+    pub dev_server_revision: Option<String>,
 }
 
 /// Management projection; secret values intentionally have no serializable
@@ -343,6 +346,7 @@ pub struct ClientExtensionContribution {
     pub invoke: Option<ActionInvocation>,
     pub when: Option<ActionCondition>,
     pub confirm: Option<ActionConfirmation>,
+    pub accepts: Vec<String>,
     pub icon: Option<String>,
     pub translations: std::collections::BTreeMap<String, ContributionTranslation>,
     /// How the host draws a `cell` contribution.
@@ -376,6 +380,7 @@ struct RuntimeInstallationRow {
     configuration: Value,
     grant_kinds: Vec<String>,
     grant_ids: Vec<String>,
+    dev_server_revision: Option<String>,
 }
 
 impl AttricatRepository {
@@ -690,6 +695,7 @@ impl AttricatRepository {
                     invoke: contribution.invoke,
                     when: contribution.when,
                     confirm: contribution.confirm,
+                    accepts: contribution.accepts,
                     icon: contribution.icon,
                     translations: contribution.translations,
                     cell: contribution.cell,
@@ -960,6 +966,48 @@ impl AttricatRepository {
         Ok((release_id, artifact.id.clone()))
     }
 
+    /// The installed release of an extension that has a server component.
+    pub async fn extension_server_release(
+        &self,
+        extension_id: &str,
+    ) -> Result<Uuid, RepositoryError> {
+        let release_id: Uuid = sqlx::query_scalar(
+            "SELECT installed_release_id FROM extension_installations WHERE workspace_id = $1 AND extension_id = $2",
+        )
+        .bind(self.workspace_id())
+        .bind(extension_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or(RepositoryError::NotFound("extension installation"))?;
+        let manifest = self.cached_release_manifest(release_id).await?;
+        if !manifest
+            .artifacts
+            .iter()
+            .any(|artifact| artifact.kind == crate::extensions::ArtifactKind::ServerWasm)
+        {
+            return Err(RepositoryError::InvalidExtension(
+                "the installed release has no server_wasm artifact".into(),
+            ));
+        }
+        Ok(release_id)
+    }
+
+    /// Loads a stored development build in place of the release's server
+    /// component from the next invocation on. Runs stay pinned to their
+    /// release, so they pick the build up at their next batch.
+    pub async fn record_extension_dev_server_artifact(
+        &self,
+        installed_release_id: Uuid,
+        revision: &str,
+    ) -> Result<(), RepositoryError> {
+        sqlx::query("INSERT INTO extension_dev_server_artifacts (installed_release_id, revision) VALUES ($1, $2) ON CONFLICT (installed_release_id) DO UPDATE SET revision = EXCLUDED.revision, updated_at = clock_timestamp()")
+            .bind(installed_release_id)
+            .bind(revision)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
     /// Serves a stored development build in place of the release's native
     /// artifact. Advancing the extensions generation makes clients see the
     /// new revision on their next runtime read and restart the Worker.
@@ -1171,7 +1219,7 @@ impl AttricatRepository {
         only: Option<(&str, Uuid)>,
     ) -> Result<Vec<RuntimeInstallationRow>, RepositoryError> {
         Ok(sqlx::query_as::<_, RuntimeInstallationRow>(
-            "SELECT i.extension_id, i.installed_release_id, i.configuration, ARRAY(SELECT g.grant_kind FROM extension_grants g WHERE g.installation_id = i.id ORDER BY g.grant_kind, g.grant_id) AS grant_kinds, ARRAY(SELECT g.grant_id FROM extension_grants g WHERE g.installation_id = i.id ORDER BY g.grant_kind, g.grant_id) AS grant_ids FROM extension_installations i JOIN workspaces w ON w.id = i.workspace_id WHERE i.workspace_id = $1 AND i.state = 'enabled' AND w.extensions_enabled AND ($2::text IS NULL OR i.extension_id = $2) AND ($3::uuid IS NULL OR i.installed_release_id = $3) ORDER BY i.extension_id",
+            "SELECT i.extension_id, i.installed_release_id, i.configuration, ARRAY(SELECT g.grant_kind FROM extension_grants g WHERE g.installation_id = i.id ORDER BY g.grant_kind, g.grant_id) AS grant_kinds, ARRAY(SELECT g.grant_id FROM extension_grants g WHERE g.installation_id = i.id ORDER BY g.grant_kind, g.grant_id) AS grant_ids, d.revision AS dev_server_revision FROM extension_installations i LEFT JOIN extension_dev_server_artifacts d ON d.installed_release_id = i.installed_release_id JOIN workspaces w ON w.id = i.workspace_id WHERE i.workspace_id = $1 AND i.state = 'enabled' AND w.extensions_enabled AND ($2::text IS NULL OR i.extension_id = $2) AND ($3::uuid IS NULL OR i.installed_release_id = $3) ORDER BY i.extension_id",
         )
         .bind(self.workspace_id())
         .bind(only.map(|(extension_id, _)| extension_id))
@@ -1242,6 +1290,7 @@ impl AttricatRepository {
             manifest,
             capability_grants,
             host_permission_grants,
+            dev_server_revision: row.dev_server_revision,
         }))
     }
 

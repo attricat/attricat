@@ -15,6 +15,7 @@ impl<S: RepositoryScope> AttricatRepository<S> {
             task_fence: self.task_fence.clone(),
             extension_id: self.extension_id.clone(),
             authorization_actor: self.authorization_actor,
+            actor_may_create_records: self.actor_may_create_records,
             status_unlock: None,
             transition_operation: TransitionOperation::Edit,
             cache: self.cache.clone(),
