@@ -4,7 +4,7 @@
 
 use std::sync::OnceLock;
 
-use attricat_domain::states::PasswordSignIn;
+use attricat_domain::states::{PasswordSignIn, SessionAuthMethod};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -12,11 +12,13 @@ use uuid::Uuid;
 
 use super::{
     AttricatRepository, RepositoryError,
+    roles::OWNER_ROLE_ID,
     sealing::{SEALING_KEY_BYTES, open, seal},
 };
 
 const UPDATED_ACTION: &str = "workspace.identity_provider.update";
 const DELETED_ACTION: &str = "workspace.identity_provider.delete";
+const AUDIT_METADATA_KEY: &str = "identity_provider";
 
 static CREDENTIAL_KEY: OnceLock<[u8; SEALING_KEY_BYTES]> = OnceLock::new();
 
@@ -169,7 +171,21 @@ impl AttricatRepository {
         .bind(PasswordSignIn::All.as_str())
         .fetch_one(&mut *tx)
         .await?;
-        self.audited_as(UPDATED_ACTION).commit_mutation(tx).await?;
+        let previous =
+            current.map(|(issuer, client_id)| json!({ "issuer": issuer, "client_id": client_id }));
+        self.audited_as(UPDATED_ACTION)
+            .commit_mutation_with_audit_metadata(
+                tx,
+                AUDIT_METADATA_KEY,
+                json!({
+                    "previous": previous,
+                    "issuer": provider.issuer,
+                    "client_id": provider.client_id,
+                    "display_name": provider.display_name,
+                    "secret_replaced": input.client_secret.is_some(),
+                }),
+            )
+            .await?;
         Ok(provider)
     }
 
@@ -182,6 +198,8 @@ impl AttricatRepository {
     ) -> Result<IdentityProvider, RepositoryError> {
         let workspace_id = self.workspace_id();
         let mut tx = self.pool.begin().await?;
+        // Password sign-ins take this lock before checking the restriction.
+        Self::lock_workspace_for_session_on(&mut tx, workspace_id).await?;
         let current: Option<(Option<DateTime<Utc>>, bool, String)> = sqlx::query_as(
             "SELECT verified_at, enabled, password_sign_in FROM workspace_identity_providers WHERE workspace_id = $1 FOR UPDATE",
         )
@@ -212,7 +230,20 @@ impl AttricatRepository {
         .bind(policy)
         .fetch_one(&mut *tx)
         .await?;
-        self.audited_as(UPDATED_ACTION).commit_mutation(tx).await?;
+        if policy == PasswordSignIn::Owners.as_str() {
+            Self::end_restricted_password_sessions_on(&mut tx, workspace_id).await?;
+        }
+        self.audited_as(UPDATED_ACTION)
+            .commit_mutation_with_audit_metadata(
+                tx,
+                AUDIT_METADATA_KEY,
+                json!({
+                    "previous": { "enabled": current_enabled, "password_sign_in": current_policy },
+                    "enabled": enabled,
+                    "password_sign_in": policy,
+                }),
+            )
+            .await?;
         Ok(provider)
     }
 
@@ -220,17 +251,23 @@ impl AttricatRepository {
     /// unless this workspace configures that issuer again.
     pub async fn delete_identity_provider(&self) -> Result<bool, RepositoryError> {
         let mut tx = self.pool.begin().await?;
-        let deleted =
-            sqlx::query("DELETE FROM workspace_identity_providers WHERE workspace_id = $1")
-                .bind(self.workspace_id())
-                .execute(&mut *tx)
-                .await?
-                .rows_affected()
-                == 1;
-        if deleted {
-            self.audited_as(DELETED_ACTION).commit_mutation(tx).await?;
-        }
-        Ok(deleted)
+        let deleted: Option<(String, String)> = sqlx::query_as(
+            "DELETE FROM workspace_identity_providers WHERE workspace_id = $1 RETURNING issuer, client_id",
+        )
+        .bind(self.workspace_id())
+        .fetch_optional(&mut *tx)
+        .await?;
+        let Some((issuer, client_id)) = deleted else {
+            return Ok(false);
+        };
+        self.audited_as(DELETED_ACTION)
+            .commit_mutation_with_audit_metadata(
+                tx,
+                AUDIT_METADATA_KEY,
+                json!({ "issuer": issuer, "client_id": client_id }),
+            )
+            .await?;
+        Ok(true)
     }
 }
 
@@ -249,15 +286,22 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         .await?)
     }
 
-    /// Whether this user is an active owner of the workspace, who keeps a
-    /// password as the way back in if the provider fails.
-    pub async fn is_active_workspace_owner(
-        &self,
-        user_id: Uuid,
+    /// Ends the password sessions of everyone but active owners, who alone
+    /// keep a password once the workspace restricts it. Without this, a
+    /// session would outlast the right to sign in that created it.
+    pub(super) async fn end_restricted_password_sessions_on(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         workspace_id: Uuid,
-    ) -> Result<bool, RepositoryError> {
-        let mut connection = self.pool.acquire().await?;
-        Self::active_owner_on(&mut connection, user_id, workspace_id).await
+    ) -> Result<(), RepositoryError> {
+        sqlx::query(
+            "UPDATE browser_sessions s SET revoked_at = clock_timestamp() WHERE s.workspace_id = $1 AND s.auth_method = $2 AND s.revoked_at IS NULL AND NOT EXISTS (SELECT 1 FROM workspace_memberships m JOIN role_grants g ON g.membership_id = m.id AND g.workspace_id = m.workspace_id WHERE m.user_id = s.user_id AND m.workspace_id = $1 AND m.state = 'active' AND g.role_id = $3 AND g.scope_type = 'workspace' AND g.scope_target_id = $1)",
+        )
+        .bind(workspace_id)
+        .bind(SessionAuthMethod::LocalPassword.as_str())
+        .bind(OWNER_ROLE_ID)
+        .execute(&mut **tx)
+        .await?;
+        Ok(())
     }
 
     /// The workspace's provider with its secret decrypted, for a sign-in.

@@ -524,7 +524,7 @@ Nowy obszar roboczy nie ma właściciela, dopóki ktoś nie przyjmie zaproszenia
 | --- | --- | --- |
 | `GET` | `/health/live`, `/health/ready` | Sondy. |
 | `GET` | `/system/health` | Uruchomiona wersja API, gałąź i commit źródła (`data_health.read`). |
-| `GET` | `/metrics` | Metryki Prometheus. |
+| `GET` | `/metrics` | Metryki Prometheus (`Authorization: Bearer`, sekret `api_metrics_token`). |
 | `GET` | `/export-status` | Liczby rekordów według rozszerzenia, połączenia i stanu eksportu oraz włączone miejsca docelowe eksportu (`data_health.read`). |
 | `GET` | `/data-health/summary`, `/blueprints`, `/freshness`, `/completeness`, `/contexts`, `/relationships`, `/storage`, `/background-processing` | Stan danych. |
 | `POST` | `/data-health/refresh` | Czyści bufor stanu danych. |

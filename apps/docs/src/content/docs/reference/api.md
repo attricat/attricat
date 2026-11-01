@@ -524,7 +524,7 @@ A new workspace has no owner until someone accepts the seven-day invitation, and
 | --- | --- | --- |
 | `GET` | `/health/live`, `/health/ready` | Probes. |
 | `GET` | `/system/health` | Running API version, source branch, and commit (`data_health.read`). |
-| `GET` | `/metrics` | Prometheus metrics. |
+| `GET` | `/metrics` | Prometheus metrics (`Authorization: Bearer`, the `api_metrics_token` secret). |
 | `GET` | `/export-status` | Export status counts per extension, connection, and status, with the enabled export destinations (`data_health.read`). |
 | `GET` | `/data-health/summary`, `/blueprints`, `/freshness`, `/completeness`, `/contexts`, `/relationships`, `/storage`, `/background-processing` | Data health. |
 | `POST` | `/data-health/refresh` | Clear the data-health cache. |

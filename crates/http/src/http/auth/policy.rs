@@ -273,13 +273,11 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     if path == "/workspace/invitations/accept" {
         return None;
     }
+    // A failed delivery's error can quote the record values it was handling,
+    // which `data_health.read` alone, held by viewers, does not cover.
     if path.starts_with("/event-deliveries/") {
         return Some(Policy {
-            permission: if method == Method::GET {
-                Permission::DataHealthRead
-            } else {
-                Permission::RolesManage
-            },
+            permission: Permission::RolesManage,
             target: TargetKind::None,
         });
     }
@@ -368,7 +366,7 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
             target: TargetKind::None,
         });
     }
-    if path == "/metrics" || path == "/system/health" || path.starts_with("/data-health/") {
+    if path == "/system/health" || path.starts_with("/data-health/") {
         return Some(Policy {
             permission: Permission::DataHealthRead,
             target: TargetKind::None,

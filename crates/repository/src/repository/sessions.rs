@@ -226,6 +226,13 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
     ) -> Result<(), RepositoryError> {
         let mut tx = self.pool.begin().await?;
         Self::lock_workspace_for_session_on(&mut tx, workspace_id).await?;
+        // Under the workspace lock, so a restriction turned on now cannot miss
+        // a session that appears just after it ended the others.
+        if Self::passwords_restricted_on(&mut tx, workspace_id).await?
+            && !Self::active_owner_on(&mut tx, credential.user_id, workspace_id).await?
+        {
+            return Err(RepositoryError::PasswordSignInDisabled);
+        }
         let result = sqlx::query("INSERT INTO browser_sessions (id, user_id, workspace_id, issued_security_version, issued_credential_version, session_digest, csrf_digest, expires_at) SELECT $1, $2, $3, $4, $5, $6, $7, $8 WHERE EXISTS (SELECT 1 FROM users u JOIN local_password_credentials c ON c.user_id = u.id JOIN workspace_memberships m ON m.user_id = u.id WHERE u.id = $2 AND u.kind = 'person' AND u.state = 'active' AND u.security_version = $4 AND c.credential_version = $5 AND m.workspace_id = $3 AND m.state = 'active')")
             .bind(id).bind(credential.user_id).bind(workspace_id).bind(credential.security_version).bind(credential.credential_version).bind(session.as_ref()).bind(csrf.as_ref()).bind(expires_at)
             .execute(&mut *tx)
@@ -271,7 +278,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
     /// Serializes issuing a session with membership and role revocation, so a
     /// revocation cannot miss a session that appears just after it. Otherwise
     /// that session would come back if the member were reactivated.
-    async fn lock_workspace_for_session_on(
+    pub(super) async fn lock_workspace_for_session_on(
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         workspace_id: Uuid,
     ) -> Result<(), RepositoryError> {
@@ -283,6 +290,27 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         .await?
         .ok_or(RepositoryError::NotFound("active credential or membership"))?;
         Ok(())
+    }
+
+    /// Whether a principal may change what every workspace of the account
+    /// sees. A session from a workspace's provider proves only what that
+    /// workspace's provider says, and a token may have been issued by such a
+    /// session, so neither speaks for an account that is also elsewhere.
+    pub async fn may_change_account_data(
+        &self,
+        user_id: Uuid,
+        workspace_id: Uuid,
+        session: Option<&SessionDigest>,
+    ) -> Result<bool, RepositoryError> {
+        Ok(sqlx::query_scalar(
+            "SELECT NOT EXISTS (SELECT 1 FROM workspace_memberships WHERE user_id = $1 AND workspace_id <> $2 AND state = 'active') OR EXISTS (SELECT 1 FROM browser_sessions WHERE session_digest = $3 AND user_id = $1 AND auth_method = $4)",
+        )
+        .bind(user_id)
+        .bind(workspace_id)
+        .bind(session.map(AsRef::as_ref))
+        .bind(SessionAuthMethod::LocalPassword.as_str())
+        .fetch_one(&self.pool)
+        .await?)
     }
 
     pub async fn validate_browser_session(

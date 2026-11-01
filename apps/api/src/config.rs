@@ -77,6 +77,7 @@ pub mod secret {
     pub const FILE_WORKER_METRICS_TOKEN: &str = "file_worker_metrics_token";
     pub const EXTENSION_CREDENTIAL_KEY: &str = "extension_credential_key";
     pub const OPERATOR_API_TOKEN: &str = "operator_api_token";
+    pub const API_METRICS_TOKEN: &str = "api_metrics_token";
     pub const IDENTITY_PROVIDER_CREDENTIAL_KEY: &str = "identity_provider_credential_key";
 }
 
@@ -156,6 +157,8 @@ pub struct HttpConfig {
     pub session_cookie_secure: bool,
     pub devtools_enabled: bool,
     pub operator_api_token: Option<SecretString>,
+    /// Bearer token of `/metrics`, which stays closed without it.
+    pub api_metrics_token: Option<SecretString>,
     pub oidc: Option<OidcConfig>,
     pub request_timeout: Duration,
     pub max_concurrent_requests: usize,
@@ -333,6 +336,7 @@ impl Config {
                 session_cookie_secure: source.boolean("SESSION_COOKIE_SECURE", true)?,
                 devtools_enabled,
                 operator_api_token: operator_api_token(source)?,
+                api_metrics_token: source.secret(secret::API_METRICS_TOKEN)?,
                 oidc: oidc_config(source)?,
                 request_timeout: Duration::from_secs(source.positive(
                     "HTTP_REQUEST_TIMEOUT_SECONDS",

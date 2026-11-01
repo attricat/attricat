@@ -202,6 +202,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             callback_url: oidc.callback_url,
             allowed_private_hosts: oidc.allowed_private_hosts.into(),
             extra_root_certificates_pem: oidc.extra_root_certificates_pem.map(Into::into),
+            starting_metadata: Default::default(),
         }
     });
 
@@ -390,6 +391,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             oidc: oidc_settings,
             operator_token: http
                 .operator_api_token
+                .as_ref()
+                .map(|token| OperatorToken::new(token.expose_secret())),
+            metrics_token: http
+                .api_metrics_token
                 .as_ref()
                 .map(|token| OperatorToken::new(token.expose_secret())),
             sample_logins,

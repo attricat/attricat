@@ -141,8 +141,19 @@ async fn metrics_endpoint_exposes_low_cardinality_request_metrics(pool: PgPool) 
         .unwrap()
         .error_for_status()
         .unwrap();
-    let metrics = client
+    // A session or token with `data_health.read` is not enough.
+    assert_eq!(
+        client
+            .get(format!("{base_url}/metrics"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        reqwest::StatusCode::UNAUTHORIZED
+    );
+    let metrics = reqwest::Client::new()
         .get(format!("{base_url}/metrics"))
+        .bearer_auth(METRICS_TOKEN)
         .send()
         .await
         .unwrap()
@@ -186,5 +197,40 @@ async fn data_health_completeness_counts_default_values(pool: PgPool) {
     assert_eq!(completeness[0]["outdated_records"], 0);
     assert_eq!(completeness[0]["default_complete_records"], 1);
 
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn readiness_is_withdrawn_while_a_migration_this_build_needs_is_missing(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let ready = || reqwest::get(format!("{base_url}/health/ready"));
+    assert_eq!(ready().await.unwrap().status(), reqwest::StatusCode::OK);
+    sqlx::query(
+        "DELETE FROM _sqlx_migrations WHERE version = (SELECT max(version) FROM _sqlx_migrations)",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        ready().await.unwrap().status(),
+        reqwest::StatusCode::SERVICE_UNAVAILABLE
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn readiness_is_withdrawn_when_the_schema_lacks_what_this_build_reads(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    sqlx::query("ALTER TABLE browser_sessions RENAME COLUMN csrf_digest TO csrf_digest_renamed")
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        reqwest::get(format!("{base_url}/health/ready"))
+            .await
+            .unwrap()
+            .status(),
+        reqwest::StatusCode::SERVICE_UNAVAILABLE
+    );
     server.abort();
 }

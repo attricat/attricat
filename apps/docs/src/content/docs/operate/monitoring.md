@@ -37,7 +37,7 @@ Both processes expose Prometheus metrics. Keep them on a private network.
 
 | Process | Endpoint | Access |
 | --- | --- | --- |
-| API | `GET /api/metrics` | A session or token with `data_health.read`. |
+| API | `GET /api/metrics` | `Authorization: Bearer <token>`, the `api_metrics_token` secret. Metrics cover every workspace, so sessions and personal tokens are refused. Without the secret the endpoint stays closed. |
 | File worker | `GET /metrics` on the operations listener (port 3001) | `Authorization: Bearer <token>`, the `file_worker_metrics_token` secret. |
 
 Labels are bounded: routes are reported as templates, and no file name, ID, or URL is ever a label. The only series labelled by workspace is `attricat_event_delivery_queue_depth` (`workspace_id`).

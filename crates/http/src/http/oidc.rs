@@ -7,7 +7,14 @@
 //! redirect URI per workspace keeps one workspace's provider from receiving a
 //! code meant for another's.
 
-use std::{future::Future, net::SocketAddr, pin::Pin, time::Duration};
+use std::{
+    collections::HashMap,
+    future::Future,
+    net::SocketAddr,
+    pin::Pin,
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
 
 use attricat_extension_manifest::extensions::is_public_destination;
 use axum::{
@@ -41,7 +48,7 @@ use super::{
     error::ApiError,
     extractors::{ApiJson, ApiPath, ApiQuery},
     members::opaque_secret,
-    sessions::{issue_session, session_redirect},
+    sessions::{discover_workspace, issue_session, session_redirect},
 };
 use crate::repository::{
     IdentityProviderSignIn, NewOidcLoginRequest, NewOidcSession, OidcIntent, OidcLoginRequest,
@@ -61,6 +68,56 @@ const COMPLETION_ERROR_PARAMETER: &str = "error";
 const COMPLETION_LINKED_PARAMETER: &str = "linked";
 const SCOPE_EMAIL: &str = "email";
 const SCOPE_PROFILE: &str = "profile";
+/// How far ahead of this server's clock a provider may date a token.
+const ID_TOKEN_CLOCK_SKEW_SECONDS: i64 = 60;
+const STARTING_METADATA_LIFETIME: Duration = Duration::from_secs(5 * 60);
+const STARTING_METADATA_FAILURE_LIFETIME: Duration = Duration::from_secs(10);
+/// Issuers remembered at once. Workspace administrators choose them.
+const STARTING_METADATA_MAX_ISSUERS: usize = 1024;
+
+type CachedMetadata = Arc<tokio::sync::Mutex<Option<(Instant, Option<CoreProviderMetadata>)>>>;
+
+/// Provider metadata for starting sign-ins, which anyone may do. Without it an
+/// anonymous flood becomes a flood of requests to the provider, and starting
+/// needs only an address the browser is sent to. Finishing a sign-in always
+/// reads fresh metadata, so a rotated signing key takes effect at once.
+#[derive(Clone, Default)]
+pub struct StartingMetadataCache(Arc<Mutex<HashMap<String, CachedMetadata>>>);
+
+impl StartingMetadataCache {
+    fn entry(&self, issuer: &str) -> CachedMetadata {
+        let mut entries = self.0.lock().expect("metadata cache lock is not poisoned");
+        if entries.len() >= STARTING_METADATA_MAX_ISSUERS && !entries.contains_key(issuer) {
+            entries.clear();
+        }
+        entries.entry(issuer.to_owned()).or_default().clone()
+    }
+
+    /// One discovery per issuer runs at a time; the others wait for its result.
+    async fn get(
+        &self,
+        provider: &IdentityProviderSignIn,
+        http: &(impl Fn(HttpRequest) -> ProviderFuture + Sync),
+    ) -> Result<CoreProviderMetadata, ApiError> {
+        let entry = self.entry(&provider.issuer);
+        let mut cached = entry.lock().await;
+        if let Some((read_at, metadata)) = cached.as_ref() {
+            let lifetime = if metadata.is_some() {
+                STARTING_METADATA_LIFETIME
+            } else {
+                STARTING_METADATA_FAILURE_LIFETIME
+            };
+            if read_at.elapsed() < lifetime {
+                return metadata
+                    .clone()
+                    .ok_or_else(ApiError::oidc_provider_unavailable);
+            }
+        }
+        let metadata = discover_provider(provider, http).await;
+        *cached = Some((Instant::now(), metadata.as_ref().ok().cloned()));
+        metadata
+    }
+}
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -81,7 +138,7 @@ pub(super) struct LinkStatus {
     linked: bool,
 }
 
-#[derive(Deserialize)]
+#[derive(Default, Deserialize)]
 pub(super) struct CallbackQuery {
     state: Option<String>,
     code: Option<String>,
@@ -245,20 +302,26 @@ type ProviderOidcClient = CoreClient<
 >;
 
 /// Reads the provider's current metadata and signing keys.
-async fn provider_oidc_client(
-    settings: &OidcSettings,
-    workspace_id: Uuid,
+async fn discover_provider(
     provider: &IdentityProviderSignIn,
     http: &(impl Fn(HttpRequest) -> ProviderFuture + Sync),
-) -> Result<ProviderOidcClient, ApiError> {
+) -> Result<CoreProviderMetadata, ApiError> {
     let issuer = IssuerUrl::new(provider.issuer.clone())
         .map_err(|_| ApiError::oidc_provider_unavailable())?;
-    let metadata = CoreProviderMetadata::discover_async(issuer, http)
+    CoreProviderMetadata::discover_async(issuer, http)
         .await
         .map_err(|error| {
             tracing::warn!(%error, "identity provider discovery failed");
             ApiError::oidc_provider_unavailable()
-        })?;
+        })
+}
+
+fn provider_oidc_client(
+    settings: &OidcSettings,
+    workspace_id: Uuid,
+    provider: &IdentityProviderSignIn,
+    metadata: CoreProviderMetadata,
+) -> Result<ProviderOidcClient, ApiError> {
     Ok(CoreClient::from_provider_metadata(
         metadata,
         ClientId::new(provider.client_id.clone()),
@@ -279,7 +342,8 @@ async fn begin(
 ) -> Result<Response, ApiError> {
     let settings = settings(state)?;
     let http = provider_client(settings, state.devtools_enabled);
-    let client = provider_oidc_client(settings, workspace_id, provider, &http).await?;
+    let metadata = settings.starting_metadata.get(provider, &http).await?;
+    let client = provider_oidc_client(settings, workspace_id, provider, metadata)?;
     let (challenge, verifier) = PkceCodeChallenge::new_random_sha256();
     let (authorization_url, csrf, nonce) = client
         .authorize_url(
@@ -343,11 +407,7 @@ pub(super) async fn start(
     }
     settings(&state)?;
     let identifier = input.login_identifier.trim().to_lowercase();
-    let workspace = state
-        .repository
-        .discover_workspace(&identifier)
-        .await?
-        .ok_or_else(|| ApiError::not_found("workspace"))?;
+    let workspace = discover_workspace(&state, &identifier).await?;
     let provider = state
         .repository
         .identity_provider_for_sign_in(workspace.id)
@@ -477,7 +537,8 @@ async fn verify_identity(
 ) -> Result<VerifiedIdentity, ApiError> {
     let settings = settings(state)?;
     let http = provider_client(settings, state.devtools_enabled);
-    let client = provider_oidc_client(settings, workspace_id, provider, &http).await?;
+    let metadata = discover_provider(provider, &http).await?;
+    let client = provider_oidc_client(settings, workspace_id, provider, metadata)?;
     let token: CoreTokenResponse = client
         .exchange_code(AuthorizationCode::new(code))
         .map_err(|_| ApiError::oidc_sign_in_failed())?
@@ -500,6 +561,16 @@ async fn verify_identity(
             tracing::warn!(%error, "identity token was rejected");
             ApiError::oidc_sign_in_failed()
         })?;
+    // A token naming the party it was issued to must name this client.
+    if claims
+        .authorized_party()
+        .is_some_and(|party| party.as_str() != provider.client_id)
+    {
+        return Err(ApiError::oidc_sign_in_failed());
+    }
+    if claims.issue_time() > Utc::now() + chrono::Duration::seconds(ID_TOKEN_CLOCK_SKEW_SECONDS) {
+        return Err(ApiError::oidc_sign_in_failed());
+    }
     // A token that names its access token's hash must match it.
     if let Some(expected) = claims.access_token_hash() {
         let actual = AccessTokenHash::from_token(
@@ -563,12 +634,14 @@ enum CallbackOutcome {
     Linked,
 }
 
-async fn complete(
+/// Spends the request a callback answers. Anyone can send a browser to the
+/// callback, so until this succeeds nothing about the sign-in may change.
+async fn take_request(
     state: &AppState,
     path_workspace: Uuid,
-    query: CallbackQuery,
+    query: &CallbackQuery,
     headers: &HeaderMap,
-) -> Result<CallbackOutcome, ApiError> {
+) -> Result<(OidcLoginRequest, LoginCookie), ApiError> {
     let raw_cookie = cookie_value(
         headers
             .get(header::COOKIE)
@@ -583,11 +656,7 @@ async fn complete(
         .state
         .as_deref()
         .ok_or_else(ApiError::oidc_request_expired)?;
-    let OidcLoginRequest {
-        workspace_id,
-        issuer,
-        intent,
-    } = state
+    let request = state
         .repository
         .take_oidc_login_request(
             path_workspace,
@@ -598,6 +667,21 @@ async fn complete(
         )
         .await?
         .ok_or_else(ApiError::oidc_request_expired)?;
+    Ok((request, cookie))
+}
+
+async fn complete(
+    state: &AppState,
+    request: OidcLoginRequest,
+    cookie: LoginCookie,
+    query: CallbackQuery,
+    headers: &HeaderMap,
+) -> Result<CallbackOutcome, ApiError> {
+    let OidcLoginRequest {
+        workspace_id,
+        issuer,
+        intent,
+    } = request;
     // RFC 9207: a response naming an issuer must name the one we asked.
     if query.iss.as_deref().is_some_and(|iss| iss != issuer) {
         return Err(ApiError::oidc_sign_in_failed());
@@ -688,11 +772,19 @@ async fn complete(
 pub(super) async fn callback(
     State(state): State<AppState>,
     ApiPath(workspace_id): ApiPath<Uuid>,
-    ApiQuery(query): ApiQuery<CallbackQuery>,
+    query: Result<ApiQuery<CallbackQuery>, ApiError>,
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
     let settings = settings(&state)?.clone();
-    let mut response = match complete(&state, workspace_id, query, &headers).await {
+    // A query that cannot be read names no request, like one with no state.
+    let query = query.map_or_else(|_| CallbackQuery::default(), |ApiQuery(query)| query);
+    let taken = take_request(&state, workspace_id, &query, &headers).await;
+    let spent = taken.is_ok();
+    let outcome = match taken {
+        Ok((request, cookie)) => complete(&state, request, cookie, query, &headers).await,
+        Err(error) => Err(error),
+    };
+    let mut response = match outcome {
         Ok(CallbackOutcome::SignedIn(response)) => response,
         Ok(CallbackOutcome::Linked) => redirect_response(&completion(
             &settings,
@@ -703,9 +795,11 @@ pub(super) async fn callback(
             Some((COMPLETION_ERROR_PARAMETER, error.code().as_str())),
         )?)?,
     };
-    response.headers_mut().append(
-        header::SET_COOKIE,
-        login_cookie("", state.session_cookie_secure, 0),
-    );
+    if spent {
+        response.headers_mut().append(
+            header::SET_COOKIE,
+            login_cookie("", state.session_cookie_secure, 0),
+        );
+    }
     Ok(response)
 }

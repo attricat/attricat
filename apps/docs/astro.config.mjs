@@ -258,6 +258,11 @@ export default defineConfig({
               translations: polish('API'),
             },
             {
+              label: 'Compatibility',
+              slug: 'reference/compatibility',
+              translations: polish('Zgodność'),
+            },
+            {
               label: 'Events',
               slug: 'reference/events',
               translations: polish('Zdarzenia'),

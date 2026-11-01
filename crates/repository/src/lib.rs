@@ -18,8 +18,8 @@ pub mod repository;
 pub mod round_trips;
 pub mod solution_pack_extensions;
 
-/// The API migrations, embedded once for this crate's database tests. A bare
-/// `#[sqlx::test]` embeds every migration again in each test.
+/// The API migrations, which readiness compares with the database. Tests use
+/// this too: a bare `#[sqlx::test]` embeds every migration again in each test.
+pub static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("../../apps/api/migrations");
 #[cfg(test)]
-pub(crate) static TEST_MIGRATOR: sqlx::migrate::Migrator =
-    sqlx::migrate!("../../apps/api/migrations");
+pub(crate) use MIGRATOR as TEST_MIGRATOR;

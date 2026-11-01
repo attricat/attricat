@@ -1,6 +1,6 @@
 use crate::repository::ErrorCode;
 use attricat_domain::states::{PasswordSignIn, SessionAuthMethod};
-use axum::{Json, extract::State, response::Response};
+use axum::{Extension, Json, extract::State, response::Response};
 use chrono::{Duration, Utc};
 use serde::Deserialize;
 use sha2::{Digest as _, Sha256};
@@ -17,7 +17,7 @@ use crate::{
         ActionTokenSecret, LifecycleActionPurpose, SessionDigest, SessionSecret, validate_password,
     },
     constants::SESSION_LIFETIME_HOURS,
-    repository::RepositoryError,
+    repository::{DiscoveredWorkspace, RepositoryError},
 };
 
 mod access;
@@ -110,27 +110,36 @@ pub(super) async fn sample_logins(State(state): State<AppState>) -> Json<Option<
     Json(state.sample_logins)
 }
 
+/// The workspace an identifier names. Only misses count: everyone in a
+/// workspace shares its identifier, so counting hits would let a busy morning,
+/// or anyone at all, block sign-in.
+pub(super) async fn discover_workspace(
+    state: &AppState,
+    identifier: &str,
+) -> Result<DiscoveredWorkspace, ApiError> {
+    if let Some(workspace) = state.repository.discover_workspace(identifier).await? {
+        return Ok(workspace);
+    }
+    let rate_key = digest_login_key(identifier);
+    Err(
+        if state
+            .repository
+            .reserve_workspace_discovery_attempt(&rate_key)
+            .await?
+        {
+            ApiError::not_found("workspace")
+        } else {
+            ApiError::rate_limited()
+        },
+    )
+}
+
 pub(super) async fn discover(
     State(state): State<AppState>,
     ApiJson(request): ApiJson<DiscoveryRequest>,
 ) -> Result<Json<DiscoveryResponse>, ApiError> {
     let identifier = request.login_identifier.trim().to_lowercase();
-    // Only misses count: everyone in a workspace shares its identifier, so
-    // counting hits would let a busy morning, or anyone at all, block sign-in.
-    let Some(workspace) = state.repository.discover_workspace(&identifier).await? else {
-        let rate_key = digest_login_key(&identifier);
-        return Err(
-            if state
-                .repository
-                .reserve_workspace_discovery_attempt(&rate_key)
-                .await?
-            {
-                ApiError::not_found("workspace")
-            } else {
-                ApiError::rate_limited()
-            },
-        );
-    };
+    let workspace = discover_workspace(&state, &identifier).await?;
     let options = state.repository.sign_in_options(workspace.id).await?;
     // A provider is unusable on a deployment without a callback.
     let provider = options.provider.filter(|_| state.oidc.is_some());
@@ -256,16 +265,8 @@ pub(super) async fn login(
         return Err(ApiError::invalid_credentials());
     };
     state.repository.clear_login_failures(&rate_key).await?;
-    // Checked only after the password, so this reveals nothing to a stranger.
-    let options = state.repository.sign_in_options(workspace.id).await?;
-    if options.password_sign_in == PasswordSignIn::Owners
-        && !state
-            .repository
-            .is_active_workspace_owner(credential.user_id, workspace.id)
-            .await?
-    {
-        return Err(RepositoryError::PasswordSignInDisabled.into());
-    }
+    // Issuing checks any password restriction, after the password itself so
+    // that it reveals nothing to a stranger.
     let (session, csrf, expires_at) = issue_session();
     state
         .repository
@@ -312,13 +313,35 @@ pub(super) async fn current_session(
     Ok(Json(session))
 }
 
+/// Display preferences and the name belong to the account, which every one of
+/// its workspaces sees, so one workspace's sign-in cannot speak for the others.
+async fn require_account_authority(
+    state: &AppState,
+    user_id: Uuid,
+    workspace_id: Uuid,
+    session: Option<Extension<AuthenticatedSession>>,
+) -> Result<(), ApiError> {
+    let session = session.map(|Extension(AuthenticatedSession(digest))| digest);
+    if state
+        .repository
+        .may_change_account_data(user_id, workspace_id, session.as_ref())
+        .await?
+    {
+        Ok(())
+    } else {
+        Err(RepositoryError::AccountChangeRefused.into())
+    }
+}
+
 pub(super) async fn update_preferences(
     State(state): State<AppState>,
     AuthenticatedPrincipal(user_id, token_id): AuthenticatedPrincipal,
     ActiveWorkspace(workspace_id): ActiveWorkspace,
+    session: Option<Extension<AuthenticatedSession>>,
     ScopedRepository(repository): ScopedRepository,
     ApiJson(request): ApiJson<PreferencesRequest>,
 ) -> Result<Json<SessionResponse>, ApiError> {
+    require_account_authority(&state, user_id, workspace_id, session).await?;
     let time_zone = request
         .time_zone
         .map(|zone| validate_time_zone(&zone))
@@ -338,9 +361,11 @@ pub(super) async fn update_display_name(
     State(state): State<AppState>,
     AuthenticatedPrincipal(user_id, token_id): AuthenticatedPrincipal,
     ActiveWorkspace(workspace_id): ActiveWorkspace,
+    session: Option<Extension<AuthenticatedSession>>,
     ScopedRepository(repository): ScopedRepository,
     ApiJson(request): ApiJson<DisplayNameRequest>,
 ) -> Result<Json<SessionResponse>, ApiError> {
+    require_account_authority(&state, user_id, workspace_id, session).await?;
     validate_display_name(&request.display_name)?;
     repository
         .update_user_display_name(user_id, &request.display_name)
@@ -357,8 +382,10 @@ pub(super) async fn clear_display_name(
     State(state): State<AppState>,
     AuthenticatedPrincipal(user_id, token_id): AuthenticatedPrincipal,
     ActiveWorkspace(workspace_id): ActiveWorkspace,
+    session: Option<Extension<AuthenticatedSession>>,
     ScopedRepository(repository): ScopedRepository,
 ) -> Result<Json<SessionResponse>, ApiError> {
+    require_account_authority(&state, user_id, workspace_id, session).await?;
     repository.clear_user_display_name(user_id).await?;
     current_session(
         State(state),

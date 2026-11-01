@@ -37,7 +37,7 @@ Oba procesy udostępniają metryki Prometheus. Trzymaj je w sieci prywatnej.
 
 | Proces | Punkt końcowy | Dostęp |
 | --- | --- | --- |
-| API | `GET /api/metrics` | Sesja lub token z `data_health.read`. |
+| API | `GET /api/metrics` | `Authorization: Bearer <token>`, sekret `api_metrics_token`. Metryki obejmują wszystkie obszary robocze, więc sesje i tokeny osobiste są odrzucane. Bez sekretu punkt końcowy pozostaje zamknięty. |
 | Proces roboczy plików | `GET /metrics` na nasłuchu operacyjnym (port 3001) | `Authorization: Bearer <token>`, sekret `file_worker_metrics_token`. |
 
 Etykiety mają ograniczony zbiór wartości: trasy są raportowane jako szablony, a nazwa pliku, identyfikator ani URL nigdy nie są etykietą. Jedyną serią z etykietą obszaru roboczego jest `attricat_event_delivery_queue_depth` (`workspace_id`).

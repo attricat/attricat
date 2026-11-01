@@ -31,9 +31,11 @@ Permissions come from role grants on active workspace memberships:
 - Record operations require `records.read`, `records.write`, `records.delete`,
   `records.publish`, or `records.unlock`.
 - Context operations require `contexts.read` or `contexts.write`.
-- Data-health, metrics, and event-delivery dead-letter inspection require
-  `data_health.read`.
-- Event-delivery replay and role management require `roles.manage`.
+- Data-health inspection requires `data_health.read`.
+- `/metrics` answers only to the `api_metrics_token` secret, since it covers
+  every workspace.
+- Event-delivery dead-letter inspection and replay, and role management, require
+  `roles.manage`. A delivery's error can quote the record values it handled.
 - Extension release discovery requires `extensions.read`; trusted registry
   source management requires `extensions.manage`.
 - Starting an interactive extension run requires `records.read` on every
@@ -127,9 +129,9 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `DELETE` | `/auth/display-name` | Remove the authenticated user's display name, so people see their email, and return the updated session payload. |
 | `PUT`, `DELETE` | `/auth/avatar` | Upload (multipart `file`, PNG or JPEG) or remove the caller's avatar in the active workspace. Upload returns `201` with `{ "file_id", "status" }`; the file worker produces the square `avatar` variant. See [Avatars](authentication.md#avatars). |
 | `POST` | `/onboarding/complete` | Complete the public onboarding flow with its verified invitation or lifecycle secret. |
-| `GET` | `/metrics` | Scrape Prometheus service metrics (`data_health.read`). |
+| `GET` | `/metrics` | Scrape Prometheus service metrics (`Authorization: Bearer`, the `api_metrics_token` secret). |
 | `GET` | `/audit-events` | List workspace audit evidence (`audit.read`). |
-| `GET` | `/event-deliveries/dead-letters` | List terminal event-handler deliveries for the active workspace (`data_health.read`). |
+| `GET` | `/event-deliveries/dead-letters` | List terminal event-handler deliveries for the active workspace (`roles.manage`). |
 | `POST` | `/event-deliveries/{consumer_id}/{event_id}/replay` | Reactivate one terminal delivery as pending; it preserves the event and attempts (`roles.manage`). |
 | `GET` | `/workspace/roles` | List fixed and workspace-local roles with permissions (`roles.manage`). |
 | `GET`, `PUT` | `/workspace/navigation` | Read or replace configured workspace navigation (`workspace_navigation.manage`). |
