@@ -2001,6 +2001,7 @@
     "removeTagColorFor": "Remove the color of {{tag}}",
     "newTagColorTag": "Tag",
     "newTagColorHelp": "The tag as records store it, for example reviewed or my-extension:synced.",
+    "newTagColorExists": "This tag already has a color. Change it in its row above.",
     "newTagColorTooLong": "The tag must be at most {{max}} bytes.",
     "newTagColorColor": "Color",
     "addTagColor": "Add color",

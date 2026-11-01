@@ -2089,6 +2089,7 @@
     "removeTagColorFor": "Usuń kolor znacznika {{tag}}",
     "newTagColorTag": "Znacznik",
     "newTagColorHelp": "Znacznik w postaci zapisanej w rekordach, np. reviewed lub my-extension:synced.",
+    "newTagColorExists": "Ten znacznik ma już kolor. Zmień go w jego wierszu powyżej.",
     "newTagColorTooLong": "Znacznik może mieć najwyżej {{max}} bajtów.",
     "newTagColorColor": "Kolor",
     "addTagColor": "Dodaj kolor",
