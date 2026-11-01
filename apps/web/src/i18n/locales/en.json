@@ -41,6 +41,7 @@
   },
   "app": {
     "attricat": "Attricat",
+    "skipToContent": "Skip to main content",
     "loading": "Loading",
     "findings": "Findings",
     "runs": "Runs"

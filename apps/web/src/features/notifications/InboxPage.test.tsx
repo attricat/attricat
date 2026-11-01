@@ -141,6 +141,27 @@ describe('InboxPage', () => {
     expect(markAllNotificationsRead).toHaveBeenCalledWith(assigned.created_at);
   });
 
+  it('keeps keyboard focus after marking everything read', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const markAll = await screen.findByRole('button', {
+      name: 'Mark all as read',
+    });
+    await waitFor(() => expect(markAll.hasAttribute('disabled')).toBe(false));
+    vi.mocked(listNotifications).mockResolvedValue({
+      items: [{ ...assigned, read: true }, joined],
+      has_more: false,
+      unread_count: 0,
+    });
+    markAll.focus();
+    await user.keyboard('{Enter}');
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole('tab', { name: 'All' }),
+      ),
+    );
+  });
+
   it('opens the profile of someone who accepted an invitation', async () => {
     vi.mocked(listNotifications).mockResolvedValue({
       items: [

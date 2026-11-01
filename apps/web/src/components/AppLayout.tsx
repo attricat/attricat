@@ -31,6 +31,7 @@ import { SessionErrorState, SignOutErrorState } from './SessionErrorStates';
 import { isWithinRoute } from './sideNavigationLayout';
 import { sessionOptions } from '../features/auth/queryOptions';
 import { ActionPalette } from '../features/extensions/ActionPalette';
+import { mainContentId, SkipToContentLink } from './SkipToContentLink';
 
 const signOutErrorMaxWidth = 480;
 
@@ -129,6 +130,7 @@ export const AppLayout = () => {
   return (
     <Fragment key={sessionBoundary.identity}>
       <Box sx={{ display: 'flex', minHeight: '100dvh' }}>
+        <SkipToContentLink />
         {signOutError && (
           <Box
             sx={{
@@ -147,7 +149,13 @@ export const AppLayout = () => {
         ) : (
           <MobileNavigation onSignOut={signOut} pathname={pathname} />
         )}
-        <Box component="main" sx={{ flexGrow: 1, minWidth: 0 }}>
+        <Box
+          component="main"
+          id={mainContentId}
+          // Focusable for the skip link; the landmark itself shows no ring.
+          sx={{ flexGrow: 1, minWidth: 0, '&:focus': { outline: 'none' } }}
+          tabIndex={-1}
+        >
           {/* Offsets content below the fixed mobile app bar at every toolbar height. */}
           {!isDesktop && <Toolbar aria-hidden />}
           <Outlet />
