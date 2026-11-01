@@ -194,6 +194,7 @@ Pliki o rozmiarze co najmniej 8 MiB są przesyłane wieloczęściowo. Takie prze
 | `FILE_WORKER_POLL_MILLISECONDS` | `500` | Proces roboczy plików | Opóźnienie między odpytaniami o zadania. |
 | `FILE_WORKER_OPERATIONS_BIND_ADDR` | `127.0.0.1:3001` | Proces roboczy plików | Prywatny nasłuch dla `/health/live`, `/health/ready` i `/metrics`. Poza interfejsem loopback `/metrics` wymaga [sekretu](#sekrety) `file_worker_metrics_token`. |
 | `FILE_WORKER_MAX_PIXELS` | `40000000` | Proces roboczy plików | Największy zdekodowany obraz, w pikselach, jaki przetworzy proces roboczy. |
+| `FILE_WORKER_CONCURRENCY` | `4` | Proces roboczy plików | Liczba zadań przetwarzanych jednocześnie, od 1 do 32. |
 | `FILE_WORKER_MAX_ATTEMPTS` | `5` | Proces roboczy plików | Liczba prób, po której zadanie przetwarzania trwale kończy się niepowodzeniem. |
 | `FILE_DELETE_GRACE_SECONDS` | `86400` (jeden dzień) | Proces roboczy plików | Czas między oznaczeniem pliku bez odwołań jako usuniętego a trwałym usunięciem jego obiektu. |
 
@@ -231,7 +232,7 @@ Agenci są wyłączeni, dopóki nie podasz [sekretu](#sekrety) `llm_api_key`. Re
 | `LLM_RUN_TIMEOUT_SECONDS` | `300` | Limit czasu całego uruchomienia agenta, od 1 do 3600. |
 | `LLM_MAX_TOOL_ROUNDS` | `25` | Ile razy agent może wywołać narzędzia i kontynuować, zanim się zatrzyma; licznik zaczyna się od nowa po każdym zatwierdzeniu. Od 1 do 100. |
 
-Te limity agentów są stałe: 32 KiB na wiadomość użytkownika, 16 załączników na wiadomość, 5 MiB na obraz osadzony w wiadomości, osiem rund wywołań narzędzi na uruchomienie, 64 KiB na zserializowany wynik narzędzia i 32 wywołania narzędzi na odpowiedź dostawcy.
+Te limity agentów są stałe: 32 KiB na wiadomość użytkownika, 16 załączników na wiadomość, 5 MiB na obraz osadzony w wiadomości, 64 KiB na zserializowany wynik narzędzia i 32 wywołania narzędzi na odpowiedź dostawcy.
 
 ## Rozszerzenia
 

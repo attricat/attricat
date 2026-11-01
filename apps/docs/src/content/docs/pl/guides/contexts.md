@@ -50,7 +50,7 @@ Nie można usunąć kontekstu, który jest w użyciu.
 
 - W **Przeglądarce** selektor **Kontekst** pokazuje, filtruje i sortuje wartości rozstrzygnięte w danym kontekście.
 - Na stronie rekordu selektor **Kontekst** przełącza wartości, które widzisz i edytujesz.
-- W fasetach relacji **Opcje drzewa** określają kontekst używany do rozwiązywania powiązań.
+- W panelu **Przeglądaj według** w Przeglądarce rekordów powiązania relacji są rozwiązywane w kontekście wybranym w Przeglądarce.
 
 ## Najpierw zaplanuj drzewo
 

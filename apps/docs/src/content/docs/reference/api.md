@@ -17,7 +17,7 @@ API routes are served below `/api`, for example `GET https://attricat.example.co
 
 Clients never send a workspace ID; it always comes from the token or session.
 
-Public routes that need no credentials: `/health`, `/health/live`, `/health/ready`, `POST /auth/discover`, `POST /auth/login`, `POST /auth/password-reset`, `POST /auth/password-reset/confirm`, `POST /onboarding/complete`, and `GET /public/extension-files/{token}`, where the token in the link is the credential.
+Public routes that need no credentials: `/health`, `/health/live`, `/health/ready`, `POST /auth/discover`, `GET /auth/sample-logins`, `POST /auth/login`, `POST /auth/password-reset`, `POST /auth/password-reset/confirm`, `POST /onboarding/complete`, `GET /public/extension-oauth/callback`, where the single-use OAuth state is the credential, and `GET /public/extension-files/{token}`, where the token in the link is the credential.
 
 ## Conventions
 
@@ -117,6 +117,8 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `POST` | `/blueprints/{id}/versions/{version}/publish` | Publish a draft. Rules never block it. If enabled [rules](/builders/rules/#rules-and-blueprint-revisions) do not fit the new revision, the response has `rule_warnings`: `[{rule_id, code, name, reason, message}]`, where `reason` is `attribute_missing`, `attribute_type_changed`, or `status_changed`. |
 | `GET` | `/blueprints/by-code/{code}` and `/blueprints/by-code/{code}/versions/{version}` | Look up by code. |
 | `GET` | `/blueprints/{id}/migration-batches` | Background migration batches. |
+| `GET` | `/blueprints/{id}/versions/{version}/safe-migration-impact` | What migrating compatible records to this revision would do: `eligible_records`, `removed_attribute_codes`, `records_with_removed_values`, `removed_values`, and `requires_removal_disposition`. |
+| `POST` | `/blueprints/{id}/versions/{version}/safe-migration-batches` | Start a background batch that migrates compatible records to this revision (`blueprints.publish`). When the revision removes attributes that have values, send `{"removal_disposition": "archive"}`. Returns `202`. |
 | `GET` | `/blueprints/{id}/sequences` | Counters of the blueprint's [generated attributes](/reference/blueprint/#counters), with `attribute_code`, `period`, `next_value`, and `updated_at`. |
 | `POST` | `/blueprints/{id}/sequences/{attribute_code}/advance` | Raise a counter with `{"next_value": 10000, "period": "2026"}`. `period` defaults to the current one. Needs `blueprints.publish`. |
 | `GET` | `/blueprints/{id}/connector-jobs` | Connector jobs. |
@@ -154,9 +156,13 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `POST` | `/v1/records/{id}/blueprint-migration` | Migrate. |
 | `POST` | `/v1/records/{id}/reusable-attributes`, `/v1/records/{id}/reusable-attribute-groups/{group_id}` | Attach a reusable attribute or group. |
 | `GET` | `/v1/records/{id}/status-transitions?context_id=…` | Declared transitions from the saved status in one context (default context if omitted): `{"items": [{attribute_code, from, to, code, allowed, denial_code, denial_reason, waives_separation, unmet}]}`. `denial_code` is `status_transition_forbidden`, `status_separation_of_duties` or `transition_conditions_unmet`; `waives_separation` is `true` when the transition is allowed only because the caller holds `records.unlock`; `unmet` lists unmet conditions and enforcing rules as violations. |
+| `POST` | `/v1/records/{id}/status-unlock` | Change a locking status to any of its options, outside the blueprint's transitions: `{"attribute_code": "…", "context_id": "…", "to": "…", "expected_updated_at": "…"}`, with `context_id` optional (default context). Only the status changes. Requires `records.unlock` (owners and admins). Returns the record. |
 | `GET` | `/v1/records/{id}/approvals` | Approvals recorded by status transitions, newest first and 20 per page, with who approved, when, a digest of the covered content, and why an approval was voided. Returns `{"items","has_more"}`; continue with `before_time` (the last item's `approved_at`) and `before_id`. |
 | `GET` | `/v1/records/{id}/export-status` | The record's export status at every export extension (`statuses`: connection, status, external ID, error, last sync) and the enabled export destinations (`destinations`). |
 | `GET` | `/v1/records/{id}/retention-holds` | Retention holds on the record's files, newest first and 20 per page. Returns `{"items","has_more"}`; continue with `before_time` (the last item's `created_at`) and `before_id`. |
+| `GET`, `POST` | `/v1/records/{id}/comments` | The record's comments, newest first and 30 per page, with `has_more`; continue with `before_time` and `before_id`. Post `{"body": "…"}` (Markdown, up to 10,000 characters) to add one; returns `204`. Anyone who can read the record can comment. |
+| `GET` | `/v1/records/{id}/comments/count` | `{"count"}`. |
+| `PATCH` | `/v1/records/{id}/comments/{comment_id}` | Edit your own comment: `{"body", "revision"}`, with the `revision` you read. Returns `204`, or `409` `comment_conflict` if the comment changed since. |
 
 ### Batch changes
 
@@ -282,11 +288,11 @@ sort by Core tags:
 | --- | --- | --- |
 | `POST` | `/records/{record_id}/file-attributes/{attribute_code}/uploads` | Upload with `multipart/form-data`: one or more `files` parts and an optional `context_id` part. Returns `201`. |
 | `POST` | `/blueprints/{blueprint_id}/file-attributes/{attribute_code}/staged-uploads` | Upload files for a record you are about to create. Same body as above. Returns `201` with `files` and `expires_at`. |
+| `PUT` | `/records/{record_id}/file-attributes/{attribute_code}/references` | Reorder or remove a file attribute's files: `{"context_id"?, "expected_file_ids", "file_ids"}`. `expected_file_ids` is the current list and `file_ids` the new one, taken from it. Returns `{"record_updated_at"}`, or `409` `file_references_changed` if the list changed. Removed files stay in history. |
 | `GET` | `/files/{file_id}` | Metadata and processing status. |
 | `GET` | `/files/{file_id}/download` | Original file. Supports one `Range`. |
 | `GET` | `/files/{file_id}/variants/{kind}/download` | `thumbnail` or `display` variant. |
 | `GET`, `POST` | `/files/{file_id}/retention-holds` | List a file's retention holds, or place an explicit hold with `{"days": 365, "reason": "…"}` (`files.hold`). |
-| `POST` | `/v1/records/{id}/status-unlock` | Change a locking status to any of its options, outside the blueprint's transitions: `{"attribute_code": "…", "context_id": "…", "to": "…", "expected_updated_at": "…"}`, with `context_id` optional (default context). Only the status changes. Requires `records.unlock` (owners and admins). Returns the record. |
 | `POST` | `/files/{file_id}/retention-holds/{hold_id}/release` | Release an explicit hold early (`files.hold`). Holds placed by a status cannot be released. |
 
 Downloads return `409 file_processing` until the file is `ready`.
@@ -395,6 +401,7 @@ See [Translate labels](/builders/translations/).
 | `POST` | `/agent/conversations` | Create a conversation, optionally about a record (`record_id`, `context_id`). |
 | `GET` | `/agent/conversations/search` | Pages of conversations, newest first. `q` matches titles and user messages. Lists conversations not about a record unless `scope=all`; `record_id` (and optionally `context_id`) lists the conversations about one record. |
 | `GET`, `PATCH`, `DELETE` | `/agent/conversations/{id}` | Read, rename, or archive. |
+| `PUT` | `/agent/conversations/{id}/auto-approval` | `{"enabled": true}` approves the agent's changes in a conversation about a record automatically, on your behalf. Turning it on needs `records.write` on the record; anyone who can read the conversation can turn it off. |
 | `GET`, `POST` | `/agent/conversations/{id}/messages` | Messages. Posting starts a run and returns `202`. |
 | `POST` | `/agent/conversations/{id}/uploads` | Upload an attachment. |
 | `GET` | `/agent/conversations/{id}/runs` | Runs. |
@@ -409,6 +416,9 @@ See [Translate labels](/builders/translations/).
 | --- | --- | --- |
 | `POST` | `/auth/discover`, `/auth/login`, `/auth/renew`, `/auth/logout` | Sessions. |
 | `GET` | `/auth/session` | Current identity and capabilities. |
+| `PATCH` | `/auth/preferences` | Your preferences: `{"time_zone": "Europe/Warsaw"}`, an IANA name, or `null` to clear it. Returns the session. |
+| `PUT` | `/auth/display-name` | Your display name: `{"display_name"}`, 2 to 64 letters, digits, and spaces. Returns the session. |
+| `PUT`, `DELETE` | `/auth/avatar` | Upload your avatar as `multipart/form-data` with one `file` part (returns `201`), or remove it. |
 | `POST` | `/auth/access` | Which of the named records, blueprints or contexts (`kind`, `ids`, at most 500) the caller holds a `permission` on, counting record, blueprint-family and context-subtree grants. |
 | `GET`, `POST`, `DELETE` | `/personal-access-tokens[/{id}]` | Personal API tokens. The secret is returned once. |
 | `GET` | `/workspace/members`; `PUT /workspace/members/{id}` | Members and state. |
@@ -445,6 +455,11 @@ See [Translate labels](/builders/translations/).
 | `GET` | `/extension-operation-runs[/{id}]`, `…/artifacts`, `…/deliveries` | Runs, outputs, deliveries. |
 | `GET` | `/extension-operation-runs/{id}/artifacts/{artifact_id}/download` | Download an output. |
 | `POST`, `GET`, `PATCH` | `/extensions/{id}/operation-schedules`, `/extension-operation-schedules[/{id}]` | Schedules. |
+| `POST` | `/extensions/{id}/{contribution_id}/operations` | Start an interactive operation from an action or dialog on the selected records: `{"release_id", "operation_id", "input", "idempotency_key", "selection": {"blueprint_id", "blueprint_version", "context_id", "record_ids"}}`. Returns `202` with `run_id`. |
+| `GET` | `/extension-runs` | Your recent interactive runs, optionally for one `extension_id`. |
+| `GET` | `/extension-runs/{run_id}` | One interactive run with its outputs. You see your own runs; `extensions.manage` holders see every run. Add `scope=own` to see only your own. |
+| `POST` | `/extension-runs/{run_id}/cancel` | Cancel a run that has not finished. Returns `204`, or `409` once it can no longer be cancelled. |
+| `GET` | `/extension-runs/{run_id}/artifacts/{artifact_id}/download` | Download an output of a completed run. Takes `scope=own` like the run. |
 | `GET` | `/extensions/{id}/export-status` | Status counts per connection and status, a page of export mappings (`?connection=&status=&after=&limit=`, up to 100, continue with `next`), and the 20 most recent rejected or exhausted event deliveries (`handler_failures`); counts and failures come only with the first page. It names records across the workspace, so it also needs a workspace-wide `records.read` grant. |
 | `POST` | `/extensions/{id}/export-status/retry` | `{"connection"?, "record_ids"?, "status"?, "run"?, "idempotency_key"?}`, with record IDs, a status, or both: set up to 1,000 matching records back to `pending` (records chosen by ID alone that were never exported start as `pending` when one of the extension's export jobs covers their blueprint and connection, or the extension handles retry requests itself; deleted records and withdrawn mappings are never selected, and `"status": "withdrawn"` is refused: publish the record again instead) and send the extension `export.retry_requested.v1` for each. With `"run": true`, also resync just those records on the extension's export jobs for that connection; with `idempotency_key` (1–40 ASCII bytes) the same request sent again retries nothing twice: it finds the records it retried and the runs it started, and starts a run only for a job that could not start before. Returns `202` with `{"record_ids", "run_ids", "job_errors"}`; a job that cannot resync is listed in `job_errors` as `{"job_id", "code", "message", "details"}` and does not fail the retry: `code` is `export_job_resync_failed` (with `job_id` and `job_code` in `details`) unless the cause has a more specific error code, which keeps its own details plus those two. Needs a workspace-wide `records.read` grant too; an extension that is not installed with `exports.mappings` is a `404`, and a disabled one a `422`. |
 | `POST` | `/extensions/{id}/exports/{export_id}/preview` | `{"record_id", "connection"?}`: the payload the destination's preview command builds for one record, conventionally `{"payload", "issues"}`. Nothing is pushed. Needs `records.write`, like other extension commands, and `records.read` across the whole workspace; `connection` must be a connection of the export's kind. |
@@ -452,9 +467,12 @@ See [Translate labels](/builders/translations/).
 | `PATCH`, `DELETE` | `/extensions/{id}/connections/{connection}` | Change `display_name`, `token_url`, `device_authorization_url`, `scope` (an empty string clears it), or `parameters`, or replace `client_secret` or `refresh_token`; or delete the connection with its credentials. Moving `token_url` or `device_authorization_url` to another host needs `client_secret` again and drops the stored tokens, so the connection waits for authorization unless a `refresh_token` is sent too. Its export mappings stay, so a connection re-created under the same name keeps the destination's external IDs. |
 | `POST` | `/extensions/{id}/connections/{connection}/device-authorization`, `…/device-authorization/poll` | Start the device authorization grant (the response holds the user code and verification URL), then complete it once the user has approved. An active connection keeps working while a new authorization is pending. |
 | `POST` | `/extensions/{id}/connections/{connection}/authorization-code` | Exchange an authorization code: `{"code", "redirect_uri", "code_verifier"?}`. |
+| `POST` | `/extensions/{id}/connections/{connection}/authorization` | Start a browser authorization of an authorization-code connection. Returns `{"authorization_url"}`; the provider sends the browser back to `/public/extension-oauth/callback`. Needs a browser session, not an API token. |
 | `POST` | `/extensions/{id}/connections/{connection}/test` | Get an access token to check the connection. |
 | `GET` | `/extensions/{id}/host-permission-budgets` | Each host permission's declared and lowered request budget. |
 | `PUT`, `DELETE` | `/extensions/{id}/host-permission-budgets/{host_permission_id}` | Lower a declared budget with `{"requests", "per_seconds"}`, never above the declared rate, or reset it. |
+| `GET`, `POST` | `/extensions/{id}/annotation-namespace` | The extension's [annotation namespace](#system-tags): whether it is claimed and how many records carry its tags or metadata. `POST` adopts tags and metadata already stored under the extension's name; nothing is renamed or deleted. |
+| `POST` | `/extensions/{id}/annotation-namespace/records/{record_id}` | Repair or clean up the namespace on one record: `{"add_tags", "remove_tags", "set_metadata", "remove_metadata", "expected_revision"?}`, with local names. Needs `records.write` on the record too. |
 | `GET` | `/public/extension-files/{token}` | A file behind a public link an extension issued. No credentials; it works while the link is unexpired and the extension is enabled with `attricat.files.public_links` and `attricat.files.read`. |
 
 ### Solution packs
@@ -466,6 +484,7 @@ See [Translate labels](/builders/translations/).
 | `GET` | `/solution-packs/plans/{id}` | Read a plan. |
 | `POST` | `/solution-packs/plans/{id}/apply` | Apply. |
 | `GET` | `/solution-packs/applications[/{id}]` | Application history. |
+| `POST` | `/solution-packs/applications/{id}/abandon` | Permanently stop an unfinished application with sample data. See [Solution packs](/builders/solution-packs/). |
 | `GET`, `POST` | `/solution-packs/applications/{id}/checks` | Check runs. |
 | `GET` | `/presentation-assets[/{id}[/content]]` | Presentation assets. |
 

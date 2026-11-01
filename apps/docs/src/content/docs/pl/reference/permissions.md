@@ -30,6 +30,7 @@ Brak zalogowania lub wygasła sesja zwraca `401`. Zalogowana osoba bez uprawnien
 | `contexts.write` | Tworzenie, zmienianie i usuwanie kontekstów; włączanie kanałów eksportu. | ✓ | ✓ | ✓ | |
 | `data_health.read` | Stan danych, przetwarzanie w tle, metryki i listy martwych wiadomości zdarzeń; liczby stanów eksportu i filtr **Stan eksportu** w przeglądarce rekordów. | ✓ | ✓ | ✓ | ✓ |
 | `agents.run` | Rozmowy z agentami i zatwierdzenia. | ✓ | ✓ | | |
+| `agents.manage` | Sposób, w jaki agent proponuje i stosuje zmiany, na przykład zatwierdzanie edycji zbiorczych (`GET`/`PUT /workspace/agent-settings`, `acli workspace agent set`). | ✓ | ✓ | | |
 | `rules.read` | Reguły, uruchomienia i ustalenia. | ✓ | ✓ | | |
 | `rules.manage` | Tworzenie, zmienianie, włączanie i uruchamianie reguł; potwierdzanie ustaleń. | ✓ | ✓ | | |
 | `workflows.read` | Przepływy pracy i historia uruchomień. | ✓ | ✓ | | |

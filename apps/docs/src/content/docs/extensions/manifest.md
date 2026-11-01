@@ -30,7 +30,7 @@ IDs used in the manifest (`attricat.id`, artifact, dependency, permission-rule, 
 | `server` | | Event handlers, commands, operations, webhooks, connection kinds, and export destinations. |
 | `ui` | | Client contributions. |
 | `attribute_types` | | Attribute types for blueprints. |
-| `record_field_notes` | | The source that describes records' fields, files and actions: `{ "command": "<id>" }` or a client handler, `{ "client": "<artifact>" }`. See [Field notes](/extensions/client/#field-notes). |
+| `record_field_notes` | | The source that describes records' fields, files and actions: `{ "version": 1, "source": { "command": "<id>" } }` or a client handler, `{ "version": 1, "source": { "client": "<artifact>" } }`. See [Field notes](/extensions/client/#field-notes). |
 
 ## Artifacts
 

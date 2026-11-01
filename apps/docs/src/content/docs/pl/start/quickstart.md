@@ -110,9 +110,9 @@ Przełączaj selektor **Kontekst** w Przeglądarce między `default` a `PL`, aby
 
 Otwórz **Zarządzanie → Eksporty** i włącz **Kanał eksportu** dla `PL`.
 
-Po powrocie do produktu sekcja **Publikacja** pokazuje `PL` jako *Nieopublikowano*. Wybierz **Opublikuj**.
+Po powrocie do produktu wybierz kontekst `PL`. Ikona globu na pasku narzędzi rekordu pokazuje *Nieopublikowano*. Wybierz **Akcje → Opublikuj**.
 
-Teraz zmień cenę produktu i opuść pole. Publikacja zostaje wycofana: ponownie widać *Nieopublikowano*, ponieważ zatwierdzony stan nie jest już bieżący. Użyj **Opublikuj ponownie**, aby zatwierdzić zmianę.
+Teraz zmień cenę produktu i opuść pole. Publikacja zostaje wycofana: ikona znów pokazuje *Nieopublikowano*, ponieważ zatwierdzony stan nie jest już bieżący. Ponownie wybierz **Akcje → Opublikuj**, aby zatwierdzić zmianę.
 
 ## 7. Wypróbuj Przeglądarkę
 

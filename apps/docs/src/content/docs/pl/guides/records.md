@@ -5,6 +5,8 @@ description: Twórz, edytuj i usuwaj rekordy, pracuj z wartościami kontekstowym
 
 Rekord to jeden element katalogu, na przykład produkt lub kategoria. Jego schemat określa, jakie ma atrybuty, jak są one walidowane i jak wygląda układ jego strony.
 
+Strona rekordu ma jeden rząd kart pod paskiem narzędzi. Karta **Dane**, wybrana na początku, zawiera selektor **Kontekst** i pola rekordu. Pozostałe karty to **Jakość danych**, **Komentarze**, **Agenci**, **Kontrola rekordu**, **Znaczniki i metadane** oraz **Eksporty**; niektóre pojawiają się tylko wtedy, gdy mają zastosowanie.
+
 ## Tworzenie rekordu
 
 W Przeglądarce wybierz **Utwórz rekord** (lub **Utwórz: *Schemat***, gdy wybrany jest schemat). Wypełnij formularz i zapisz. Nowe rekordy zawsze korzystają z bieżącej opublikowanej wersji schematu.
@@ -40,7 +42,7 @@ Każde pole informuje, skąd pochodzi jego wartość:
 
 Każdy zapis waliduje cały rekord w każdym kontekście. Jeśli zmiana unieważniłaby którykolwiek kontekst, nie zostaje zapisana: pozostaje w polu wraz z błędem, a strona pokazuje, ile zmian nie jest jeszcze zapisanych. Odrzucone zmiany są wysyłane ponownie z następnym zapisywanym polem, więc kilka brakujących wymaganych wartości możesz uzupełniać po kolei. Escape w polu porzuca jego odrzuconą zmianę. Zobacz [Walidacja](/pl/builders/validation/).
 
-Dopóki są niezapisane zmiany, selektor **Kontekst** jest wyłączony.
+Jeśli wybierzesz inny kontekst, gdy zmiany nie są jeszcze zapisane, Attricat otworzy go po ich zapisaniu.
 
 Schemat może też zawierać kontrole, na przykład „data ważności nie może być wcześniejsza niż data rozpoczęcia” albo „każdy zakład należy do tego dostawcy”, a obszar roboczy może egzekwować reguły jakości danych. Gdy któraś z nich nie przejdzie, komunikat podaje nazwę kontroli lub reguły i opisuje problem. Zmień wskazane pola w wymienionych kontekstach. Jeśli komunikat dotyczy powiązanego rekordu, na przykład niezatwierdzonego zakładu, najpierw popraw lub zastąp ten rekord.
 
@@ -83,11 +85,11 @@ Niektóre schematy używają statusów do kontrolowania cyklu życia rekordu. Wt
 - Gdy rekord zostaje zatwierdzony, zatwierdzenie jest powiązane z dokładnie tą treścią, którą przejrzano. Edycja tej treści unieważnia zatwierdzenie, a rekord w tym samym zapisie wraca do wcześniejszego statusu.
 - Pliki sfinalizowanych rekordów mogą być objęte blokadą retencji do określonej daty.
 
-Karta **Kontrola rekordu** pod wartościami rekordu wyświetla, od najnowszych, zatwierdzenia wraz z informacją, kto i kiedy zatwierdził oraz czy zatwierdzenie jest nadal ważne, a także blokady retencji plików rekordu.
+Karta **Kontrola rekordu** wyświetla, od najnowszych, zatwierdzenia wraz z informacją, kto i kiedy zatwierdził oraz czy zatwierdzenie jest nadal ważne, a także blokady retencji plików rekordu.
 
 ## Komentarze
 
-Strona rekordu ma pod wartościami kartę **Komentarze** z najnowszymi komentarzami na początku; starsze wczytuje **Wczytaj więcej komentarzy**. Każdy, kto może odczytać rekord, może dodać komentarz w Markdownie; **Podgląd Markdown** pokazuje, jak będzie wyglądał. Aby wspomnieć o osobie, wpisz `@` i część jej imienia, nazwiska lub adresu e-mail, a następnie wybierz ją z listy strzałkami i klawiszem **Enter** lub **Tab** albo myszą. Wzmianka prowadzi do profilu tej osoby i powiadamia ją w jej [skrzynce](/pl/guides/inbox/), o ile może ona otworzyć rekord. Edycja komentarza powiadamia tylko osoby, o których wspomniano w niej po raz pierwszy. Możesz edytować tylko własne komentarze. Jeśli komentarz zmieni się, zanim zapiszesz edycję, zostanie ona odrzucona; odśwież komentarze i przywróć szkic, aby uzgodnić tekst.
+Strona rekordu ma kartę **Komentarze**. Komentarze są wyświetlane od najstarszego, a formularz nowego komentarza znajduje się pod nimi; starsze wczytuje **Pokaż wcześniejsze komentarze**. Każdy, kto może odczytać rekord, może dodać komentarz w Markdownie; **Podgląd Markdown** pokazuje, jak będzie wyglądał. Aby wspomnieć o osobie, wpisz `@` i część jej imienia, nazwiska lub adresu e-mail, a następnie wybierz ją z listy strzałkami i klawiszem **Enter** lub **Tab** albo myszą. Wzmianka prowadzi do profilu tej osoby i powiadamia ją w jej [skrzynce](/pl/guides/inbox/), o ile może ona otworzyć rekord. Edycja komentarza powiadamia tylko osoby, o których wspomniano w niej po raz pierwszy. Możesz edytować tylko własne komentarze. Jeśli komentarz zmieni się, zanim zapiszesz edycję, zostanie ona odrzucona; odśwież komentarze i przywróć szkic, aby uzgodnić tekst.
 
 ## Dodatkowe atrybuty
 
@@ -105,7 +107,7 @@ Poprzednie wartości atrybutów są domyślnie przechowywane przez 90 dni. Z his
 
 ## Ustalenia dotyczące jakości danych
 
-Jeśli [reguły jakości danych](/pl/builders/rules/) oznaczą rekord, jego strona pokazuje liczbę otwartych ustaleń. Kliknięcie jej otwiera kartę **Jakość danych**, która wymienia je pod wartościami rekordu. Najpoważniejsze ustalenia są na górze. Każde pokazuje nazwę reguły, co jest nie tak i w którym polu, konteksty, w których występuje, oraz kiedy wykryto je po raz pierwszy.
+Jeśli [reguły jakości danych](/pl/builders/rules/) oznaczą rekord, jego strona pokazuje liczbę otwartych ustaleń. Kliknięcie jej otwiera kartę **Jakość danych**, która je wymienia. Najpoważniejsze ustalenia są na górze. Każde pokazuje nazwę reguły, co jest nie tak i w którym polu, konteksty, w których występuje, oraz kiedy wykryto je po raz pierwszy.
 
 ## Aktualizacja do nowszej wersji
 
@@ -113,7 +115,7 @@ Gdy schemat ma nowszą opublikowaną wersję, ikona ostrzeżenia obok odnośnika
 
 ## Publikowanie
 
-Jeśli obszar roboczy korzysta z kanałów publikacji, strona rekordu pokazuje jego stan w każdym kanale oraz działania **Opublikuj** / **Cofnij publikację**. Zobacz [Publikowanie](/pl/guides/publishing/).
+Jeśli obszar roboczy korzysta z kanałów publikacji, pasek narzędzi rekordu pokazuje stan publikacji w wybranym kontekście, a menu **Akcje** publikuje rekord lub cofa jego publikację. Zobacz [Publikowanie](/pl/guides/publishing/).
 
 ## Eksporty
 
@@ -138,7 +140,7 @@ Przepływy pracy, agenci, rozszerzenia i klienci API mogą oznaczać rekord [tag
 
 **Zapytaj o ten rekord** otwiera panel, w którym możesz rozpocząć nową [rozmowę z agentem](/pl/guides/agents/) o rekordzie, który właśnie przeglądasz. Wpisz pytanie; rozmowa powstaje w chwili wysłania.
 
-Rekord może mieć dowolnie wiele rozmów. Karta **Rozmowy** wyświetla je od najnowszej wszystkim, którzy mogą odczytać rekord. Wybierz rozmowę, aby kontynuować ją w panelu, albo otwórz ją na stronie **Agenci**. Rozmowy o rekordach nie pojawiają się na głównej liście **Agenci**, chyba że włączysz **Pokaż rozmowy o rekordach**.
+Rekord może mieć dowolnie wiele rozmów. Karta **Agenci** wyświetla je od najnowszej wszystkim, którzy mogą odczytać rekord. Wybierz rozmowę, aby kontynuować ją w panelu, albo otwórz ją na stronie **Agenci**. Rozmowy o rekordach nie pojawiają się na głównej liście **Agenci**, chyba że włączysz **Pokaż rozmowy o rekordach**.
 
 ## Usuwanie rekordu
 
