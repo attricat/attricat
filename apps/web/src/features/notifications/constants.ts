@@ -6,6 +6,9 @@ export const unreadCountRefreshMs = 30_000;
 /** The navigation badge shows this count at most, then `99+`. */
 export const maxBadgeCount = 99;
 
+/** How far the inbox count may overlap the corner of its icon. */
+export const inboxBadgeOverlapPx = 8;
+
 export const recordRoute = '/records/$recordId';
 
 /** What a notification is about, linking to it. */
