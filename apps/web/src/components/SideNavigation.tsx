@@ -91,6 +91,8 @@ export const CompactSideNavigation = ({
   });
   return (
     <Box
+      aria-label={t('navigation.main')}
+      component="nav"
       sx={{
         ...navigationSx,
         backgroundColor: 'background.navigation.rail',
@@ -231,6 +233,8 @@ export const MobileSideNavigation = ({
   const primary = section === 'primary';
   return (
     <Box
+      aria-label={t('navigation.main')}
+      component="nav"
       sx={{
         ...navigationSx,
         backgroundColor: 'background.navigation.panel',

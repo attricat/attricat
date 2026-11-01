@@ -35,7 +35,7 @@ export const UserAvatar = ({
     sx={[
       {
         bgcolor: 'action.selected',
-        color: 'primary.main',
+        color: 'text.primary',
         fontSize: size * initialsFontScale,
         fontWeight: 600,
         height: size,
