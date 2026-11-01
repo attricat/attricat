@@ -10,7 +10,11 @@ import { recordQueryKeys } from '../records/queryKeys';
 import { useActionConfirmStore } from './actionConfirmStore';
 import { useActionDialogStore } from './actionDialogStore';
 import i18n from '../../i18n';
-import { startExtensionRun } from '../extension-runs/api';
+import {
+  startExtensionRun,
+  uploadExtensionRunInput,
+} from '../extension-runs/api';
+import { pickFile } from './pickFile';
 import { notifyRunStarted } from '../extension-runs/runNotifications';
 import { ActionMenuCloseContext } from './actions';
 import type { ExtensionContribution } from './api';
@@ -23,7 +27,9 @@ vi.mock('./api', async (importOriginal) => ({
 vi.mock('../extension-runs/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../extension-runs/api')>()),
   startExtensionRun: vi.fn(),
+  uploadExtensionRunInput: vi.fn(),
 }));
+vi.mock('./pickFile', () => ({ pickFile: vi.fn() }));
 vi.mock('../extension-runs/runNotifications', () => ({
   notifyRunStarted: vi.fn(),
 }));
@@ -71,6 +77,7 @@ const action = (
   invoke,
   when: null,
   confirm: null,
+  accepts: [],
   icon: null,
   translations: {},
   cell: null,
@@ -288,6 +295,54 @@ describe('action behaviours', () => {
       expect(useActionConfirmStore.getState().pending).toBeNull(),
     );
     expect(extensionCommand).not.toHaveBeenCalled();
+  });
+
+  it('asks for the file an action accepts and starts the run on it', async () => {
+    const file = new File(['sku\n1'], 'items.csv', { type: 'text/csv' });
+    const fileId = '44444444-4444-4444-8444-444444444444';
+    vi.mocked(pickFile).mockResolvedValue(file);
+    vi.mocked(uploadExtensionRunInput).mockResolvedValue({
+      file: { id: fileId },
+    });
+    vi.mocked(startExtensionRun).mockResolvedValue({
+      run_id: '55555555-5555-4555-8555-555555555555',
+    });
+    vi.mocked(getExtensionRuntime).mockResolvedValue([
+      action(
+        'import',
+        { operation: { id: 'import', input: {} } },
+        { accepts: ['text/csv'] },
+      ),
+    ]);
+    renderRow();
+    await userEvent.click(
+      await screen.findByRole('menuitem', { name: 'Title import' }),
+    );
+    await waitFor(() => expect(startExtensionRun).toHaveBeenCalled());
+    expect(pickFile).toHaveBeenCalledWith(['text/csv']);
+    expect(vi.mocked(startExtensionRun).mock.calls.at(-1)?.[2]).toMatchObject({
+      operation_id: 'import',
+      input_file_id: fileId,
+    });
+  });
+
+  it('starts nothing when the person cancels choosing a file', async () => {
+    vi.mocked(pickFile).mockResolvedValue(undefined);
+    vi.mocked(startExtensionRun).mockClear();
+    vi.mocked(getExtensionRuntime).mockResolvedValue([
+      action(
+        'import',
+        { operation: { id: 'import', input: {} } },
+        { accepts: ['text/csv'] },
+      ),
+    ]);
+    renderRow();
+    await userEvent.click(
+      await screen.findByRole('menuitem', { name: 'Title import' }),
+    );
+    await waitFor(() => expect(pickFile).toHaveBeenCalled());
+    expect(uploadExtensionRunInput).not.toHaveBeenCalled();
+    expect(startExtensionRun).not.toHaveBeenCalled();
   });
 
   it('starts its operation for the records and follows the run', async () => {

@@ -129,6 +129,454 @@ fn start_body(release: Uuid, key: &str, blueprint: (Uuid, i64), records: &[Uuid]
     })
 }
 
+const IMPORTER: &str = "acme.importer";
+const IMPORTER_PERMISSIONS: &[&str] = &[
+    "attricat.read",
+    "attricat.write",
+    "artifacts.read",
+    "client.explorer_action",
+    "client.explorer_bulk_action",
+    "client.operations.start",
+    "client.files.upload",
+];
+
+fn importer_archive(server: &[u8]) -> Vec<u8> {
+    let manifest = serde_json::to_vec(&json!({
+        "manifest_version": 1,
+        "name": "Importer",
+        "version": "1.0.0",
+        "description": "blueprint-scoped import integration test",
+        "icons": {"48": "icon.png"},
+        "attricat": {"id": IMPORTER, "host_api": ">=1.0.0, <2.0.0"},
+        "permissions": IMPORTER_PERMISSIONS,
+        "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
+        "artifacts": [{"id": "server", "kind": "server_wasm", "path": "server.wasm"}],
+        "server": {"operations": [{
+            "id": "import", "handler": "import", "request_schema": {"type": "object"},
+            "interactive": {"version": 1, "scope": "blueprint"}
+        }, {
+            "id": "summarize", "handler": "summarize", "request_schema": {"type": "object"},
+            "interactive": {"version": 1, "max_selection": 50}
+        }]},
+        "ui": [
+            {"id": "import-csv", "version": 1, "kind": "action", "outlet": "explorer_action", "title": "Import CSV",
+             "accepts": ["text/csv"], "invoke": {"operation": {"id": "import", "input": {}}}},
+            {"id": "sync", "version": 1, "kind": "action", "outlet": "explorer_action", "title": "Sync",
+             "invoke": {"operation": {"id": "import", "input": {}}}},
+            {"id": "no-file", "version": 1, "kind": "action", "outlet": "explorer_bulk_action", "title": "Summarize",
+             "invoke": {"operation": {"id": "summarize", "input": {}}}}
+        ]
+    }))
+    .unwrap();
+    tar_zst(&[("manifest.json", &manifest), ("server.wasm", server)])
+}
+
+async fn upload_input(
+    client: &reqwest::Client,
+    base: &str,
+    contribution: &str,
+    filename: &str,
+    bytes: &'static [u8],
+) -> reqwest::Response {
+    client
+        .post(format!(
+            "{base}/extensions/{IMPORTER}/{contribution}/input-uploads"
+        ))
+        .multipart(reqwest::multipart::Form::new().part(
+            "file",
+            reqwest::multipart::Part::bytes(bytes).file_name(filename.to_owned()),
+        ))
+        .send()
+        .await
+        .unwrap()
+}
+
+fn import_body(release: Uuid, key: &str, blueprint: (Uuid, i64), file: Option<&str>) -> Value {
+    let mut body = json!({
+        "release_id": release,
+        "operation_id": "import",
+        "input": {},
+        "idempotency_key": key,
+        "selection": {
+            "blueprint_id": blueprint.0,
+            "blueprint_version": blueprint.1,
+            "context_id": null,
+            "record_ids": []
+        }
+    });
+    if let Some(file) = file {
+        body["input_file_id"] = json!(file);
+    }
+    body
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_blueprint_run_imports_a_file_within_what_its_initiator_may_do(pool: sqlx::PgPool) {
+    let repository =
+        AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
+    let store = Arc::new(FakeObjectStore::available());
+    let release = install_extension(
+        &repository,
+        store.clone(),
+        IMPORTER,
+        &importer_archive(&interactive_component()),
+        IMPORTER_PERMISSIONS,
+    )
+    .await;
+    let blueprint = published_blueprint(&repository, DOCUMENT_BLUEPRINT).await;
+    let existing = titled_record(&repository, blueprint, "Existing").await;
+    let (base, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
+    let owner = authenticated_client();
+
+    // The upload is refused where no action accepts a file, or in another format.
+    let response = upload_input(&owner, &base, "sync", "items.csv", b"First\n").await;
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    let response = upload_input(&owner, &base, "import-csv", "items.txt", b"First\n").await;
+    assert_eq!(response.status(), StatusCode::UNSUPPORTED_MEDIA_TYPE);
+    // A reader cannot upload, whatever the action.
+    let viewer = record_scoped_viewer(&pool, existing).await.user;
+    let response = upload_input(
+        &client_for(viewer),
+        &base,
+        "import-csv",
+        "items.csv",
+        b"First\n",
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+    let response = upload_input(&owner, &base, "import-csv", "items.csv", b"First\nSecond\n").await;
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let uploaded = response.json::<Value>().await.unwrap();
+    let file_id = uploaded["file"]["id"].as_str().unwrap().to_owned();
+    assert_eq!(uploaded["file"]["mime_type"], "text/csv");
+    assert_eq!(uploaded["file"]["status"], "ready");
+
+    let start_url = format!("{base}/extensions/{IMPORTER}/import-csv/operations");
+    // An action that accepts a file needs one; one that does not takes none.
+    let response = owner
+        .post(&start_url)
+        .json(&import_body(release, "no-file", blueprint, None))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let response = owner
+        .post(format!("{base}/extensions/{IMPORTER}/sync/operations"))
+        .json(&import_body(
+            release,
+            "extra-file",
+            blueprint,
+            Some(&file_id),
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    // A blueprint run selects nothing.
+    let mut with_records = import_body(release, "records", blueprint, Some(&file_id));
+    with_records["selection"]["record_ids"] = json!([existing]);
+    let response = owner
+        .post(&start_url)
+        .json(&with_records)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+    // Someone who may only write one record can neither upload nor start it,
+    // because the run could create records.
+    let (editor, membership) = add_workspace_user(&pool).await;
+    grant_role(
+        &pool,
+        membership,
+        EDITOR_ROLE_ID,
+        GrantScope::Record(existing),
+    )
+    .await;
+    let response = upload_input(&client_for(editor), &base, "import-csv", "e.csv", b"Edit\n").await;
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    let response = client_for(editor)
+        .post(&start_url)
+        .json(&import_body(release, "scoped", blueprint, Some(&file_id)))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    // Another writer's file is not available, even to a workspace owner.
+    let (writer, membership) = add_workspace_user(&pool).await;
+    grant_role(&pool, membership, EDITOR_ROLE_ID, GrantScope::Workspace).await;
+    let response = upload_input(&client_for(writer), &base, "import-csv", "w.csv", b"Own\n").await;
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let writer_file = response.json::<Value>().await.unwrap()["file"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let response = owner
+        .post(&start_url)
+        .json(&import_body(
+            release,
+            "theirs",
+            blueprint,
+            Some(&writer_file),
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        response.json::<Value>().await.unwrap()["error"]["code"],
+        "extension_input_file_unavailable"
+    );
+
+    let response = owner
+        .post(&start_url)
+        .json(&import_body(release, "import-1", blueprint, Some(&file_id)))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
+    let run_id = response.json::<Value>().await.unwrap()["run_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let detail = owner
+        .get(format!("{base}/extension-runs/{run_id}"))
+        .send()
+        .await
+        .unwrap()
+        .json::<Value>()
+        .await
+        .unwrap();
+    assert_eq!(detail["scope"], "blueprint");
+    assert_eq!(detail["selection_count"], 0);
+
+    drain_extension_operations(&repository, store.clone()).await;
+
+    let run = repository
+        .interactive_extension_run(run_id.parse().unwrap())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(run.status, InteractiveRunStatus::Completed);
+    let checkpoint: Value =
+        sqlx::query_scalar("SELECT checkpoint FROM extension_operation_runs WHERE id=$1::uuid")
+            .bind(&run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(checkpoint["scope"], "blueprint");
+    assert_eq!(checkpoint["count"], 0);
+    assert_eq!(checkpoint["media_type"], "text/csv");
+    assert_eq!(checkpoint["schema_read"], true);
+    assert_eq!(
+        checkpoint["statuses"],
+        json!(["applied", "applied"]),
+        "{checkpoint}"
+    );
+    for refused in [
+        "generic_read_rejected",
+        "other_schema_rejected",
+        "update_rejected",
+        "other_blueprint_rejected",
+        "system_tags_rejected",
+    ] {
+        assert_eq!(checkpoint[refused], true, "{refused}");
+    }
+    let imported: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM records WHERE blueprint_id=$1 AND blueprint_version=$2 AND deleted_at IS NULL",
+    )
+    .bind(blueprint.0)
+    .bind(blueprint.1)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(imported, 3);
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_blueprint_run_stops_creating_when_its_initiator_loses_write_access(pool: sqlx::PgPool) {
+    let repository =
+        AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
+    let store = Arc::new(FakeObjectStore::available());
+    let release = install_extension(
+        &repository,
+        store.clone(),
+        IMPORTER,
+        &importer_archive(&interactive_component()),
+        IMPORTER_PERMISSIONS,
+    )
+    .await;
+    let blueprint = published_blueprint(&repository, DOCUMENT_BLUEPRINT).await;
+    let (base, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
+    let (writer, membership) = add_workspace_user(&pool).await;
+    let grant = grant_role(&pool, membership, EDITOR_ROLE_ID, GrantScope::Workspace).await;
+    let client = client_for(writer);
+    let response = upload_input(&client, &base, "import-csv", "items.csv", b"Late\n").await;
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let file_id = response.json::<Value>().await.unwrap()["file"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let response = client
+        .post(format!(
+            "{base}/extensions/{IMPORTER}/import-csv/operations"
+        ))
+        .json(&import_body(release, "late", blueprint, Some(&file_id)))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
+    let run_id = response.json::<Value>().await.unwrap()["run_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    // Still a member, so the run goes ahead, but only with reading left.
+    sqlx::query("DELETE FROM role_grants WHERE id=$1")
+        .bind(grant)
+        .execute(&pool)
+        .await
+        .unwrap();
+    grant_role(&pool, membership, VIEWER_ROLE_ID, GrantScope::Workspace).await;
+
+    drain_extension_operations(&repository, store).await;
+
+    let checkpoint: Value =
+        sqlx::query_scalar("SELECT checkpoint FROM extension_operation_runs WHERE id=$1::uuid")
+            .bind(&run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(checkpoint["statuses"], json!(["rejected"]), "{checkpoint}");
+    let created: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM records WHERE blueprint_id=$1 AND blueprint_version=$2",
+    )
+    .bind(blueprint.0)
+    .bind(blueprint.1)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(created, 0);
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn an_archive_upgrades_a_side_loaded_extension_like_a_release(pool: sqlx::PgPool) {
+    let store = Arc::new(FakeObjectStore::available());
+    let repository =
+        AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
+    install_extension(
+        &repository,
+        store.clone(),
+        IMPORTER,
+        &importer_archive(&interactive_component()),
+        IMPORTER_PERMISSIONS,
+    )
+    .await;
+    let (base, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
+    let client = authenticated_client();
+    let upgrade = |id: &str, archive: Vec<u8>, media_type: &'static str| {
+        let request = client
+            .post(format!("{base}/extensions/{id}/upgrade-archive"))
+            .header(reqwest::header::CONTENT_TYPE, media_type)
+            .body(archive);
+        async move { request.send().await.unwrap() }
+    };
+    let release_at = |version: &str, id: &str| {
+        let manifest = serde_json::to_vec(&json!({
+            "manifest_version": 1, "name": "Importer", "version": version,
+            "description": "upgrade", "icons": {"48": "icon.png"},
+            "attricat": {"id": id, "host_api": ">=1.0.0, <2.0.0"},
+            "artifacts": [{"id": "client", "kind": "client_frame", "path": "client.js"}]
+        }))
+        .unwrap();
+        tar_zst(&[
+            ("manifest.json", &manifest),
+            ("client.js", b"export const mount = () => {};"),
+        ])
+    };
+    // Only this extension's own newer version replaces it, as an archive.
+    let wrong_media = upgrade(IMPORTER, release_at("2.0.0", IMPORTER), "application/json").await;
+    assert_eq!(wrong_media.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let other = upgrade(
+        IMPORTER,
+        release_at("2.0.0", "acme.other"),
+        "application/zstd",
+    )
+    .await;
+    assert_eq!(other.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let same = upgrade(IMPORTER, release_at("1.0.0", IMPORTER), "application/zstd").await;
+    assert_eq!(same.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+    let upgraded = upgrade(IMPORTER, release_at("2.0.0", IMPORTER), "application/zstd").await;
+    assert_eq!(upgraded.status(), StatusCode::OK);
+    let installation = repository.installed_extensions().await.unwrap().remove(0);
+    assert_eq!(installation.version, "2.0.0");
+    assert_eq!(installation.state.as_str(), "disabled");
+    assert_eq!(installation.source, "sideload");
+    let grants: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM extension_grants g JOIN extension_installations i ON i.id=g.installation_id WHERE i.extension_id=$1",
+    )
+    .bind(IMPORTER)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(grants, 0);
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_development_server_build_replaces_the_component_on_a_devtools_server(
+    pool: sqlx::PgPool,
+) {
+    let store = Arc::new(FakeObjectStore::available());
+    let repository =
+        AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
+    let component = interactive_component();
+    let release = install_extension(
+        &repository,
+        store.clone(),
+        IMPORTER,
+        &importer_archive(&component),
+        IMPORTER_PERMISSIONS,
+    )
+    .await;
+    let client = authenticated_client();
+    let (base, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
+    let swap = |base: &str, body: Vec<u8>| {
+        client
+            .put(format!("{base}/extensions/{IMPORTER}/dev-server-artifact"))
+            .body(body)
+            .send()
+    };
+    let refused = swap(&base, component.clone()).await.unwrap();
+    assert_eq!(refused.status(), StatusCode::NOT_FOUND);
+    server.abort();
+
+    let (base, server) = start_server_with_config(pool, |state| {
+        state.devtools_enabled = true;
+        state.object_store = store.clone();
+    })
+    .await;
+    let not_component = swap(&base, b"export const dev = 1;".to_vec())
+        .await
+        .unwrap();
+    assert_eq!(not_component.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let swapped = swap(&base, component).await.unwrap();
+    assert_eq!(swapped.status(), StatusCode::NO_CONTENT);
+    let installation = repository
+        .runtime_extension_installation(IMPORTER, release)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(installation.dev_server_revision.is_some());
+    // Grants and the release stay, so nothing has to be granted again.
+    assert_eq!(installation.installed_release_id, release);
+    assert!(installation.capability_grants.contains("attricat.write"));
+    server.abort();
+}
+
 struct ScopedViewer {
     user: Uuid,
     membership: Uuid,
@@ -1214,6 +1662,7 @@ async fn selection_pages_hold_at_most_one_pool_connection(pool: sqlx::PgPool) {
     let bounded_repository =
         AttricatRepository::system(bounded).for_workspace(bootstrap_workspace_id());
     let scope = InteractiveRunScope {
+        scope: api::extensions::InteractiveScope::Selection,
         actor: AuthorizationActor {
             user_id: viewer,
             token_id: None,
@@ -1283,6 +1732,7 @@ async fn interactive_links_require_read_access_to_every_target(pool: sqlx::PgPoo
     )
     .await;
     let scope = InteractiveRunScope {
+        scope: api::extensions::InteractiveScope::Selection,
         actor: AuthorizationActor {
             user_id: user,
             token_id: None,

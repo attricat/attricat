@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { request, requestNoContent, jsonRequest } from '../../api/request';
+import {
+  jsonRequest,
+  request,
+  requestNoContent,
+  requestUpload,
+} from '../../api/request';
 import { extensionRunScopes, extensionRunsPath } from './constants';
 import {
   extensionRunDetailSchema,
@@ -20,6 +25,7 @@ type StartExtensionRunInput = {
     context_id: string | null;
     record_ids: string[];
   };
+  input_file_id?: string;
 };
 
 /**
@@ -45,6 +51,24 @@ export const startExtensionRun = (
     startedExtensionRunSchema,
     jsonRequest('POST', input),
   );
+
+/**
+ * Uploads the file an action asked for. It stays bound to the signed-in user
+ * and this extension until a run takes it as its input.
+ */
+export const uploadExtensionRunInput = (
+  extensionId: string,
+  contributionId: string,
+  file: File,
+) => {
+  const data = new FormData();
+  data.append('file', file);
+  return requestUpload(
+    `${contributionPath(extensionId, contributionId)}/input-uploads`,
+    data,
+    z.object({ file: z.object({ id: z.uuid() }) }),
+  );
+};
 
 export const listExtensionRuns = (extensionId?: string) =>
   request(

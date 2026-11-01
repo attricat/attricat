@@ -82,6 +82,8 @@ pub(super) struct RuntimeContribution {
     when: Option<ActionCondition>,
     #[serde(skip_serializing_if = "Option::is_none")]
     confirm: Option<ActionConfirmation>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    accepts: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     icon: Option<String>,
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
@@ -509,6 +511,16 @@ pub(super) async fn sideload(
     headers: HeaderMap,
     archive: Bytes,
 ) -> Result<(StatusCode, Json<InstallationResponse>), ApiError> {
+    require_zstd_archive(&headers)?;
+    let package = unpack_extension(archive).await?;
+    let installation = ExtensionInstaller::new(repository, state.object_store.clone())
+        .install_package("sideload", package)
+        .await
+        .map_err(install_error)?;
+    Ok((StatusCode::CREATED, Json(installation.into())))
+}
+
+fn require_zstd_archive(headers: &HeaderMap) -> Result<(), ApiError> {
     let media_type = headers
         .get(header::CONTENT_TYPE)
         .and_then(|value| value.to_str().ok())
@@ -519,12 +531,7 @@ pub(super) async fn sideload(
             "extension archives must use application/zstd".into(),
         ));
     }
-    let package = unpack_extension(archive).await?;
-    let installation = ExtensionInstaller::new(repository, state.object_store.clone())
-        .install_package("sideload", package)
-        .await
-        .map_err(install_error)?;
-    Ok((StatusCode::CREATED, Json(installation.into())))
+    Ok(())
 }
 
 pub(super) async fn install(
@@ -570,6 +577,28 @@ pub(super) async fn upgrade(
     let source = format!("{}@{}", release.source, release.tag_name);
     let installation = ExtensionInstaller::new(repository, state.object_store.clone())
         .upgrade_package(&source, package)
+        .await
+        .map_err(install_error)?;
+    Ok(Json(installation.into()))
+}
+/// Upgrades an installation from a locally supplied archive, with the same
+/// checks and consequences as upgrading to a registry release.
+pub(super) async fn upgrade_archive(
+    State(state): State<AppState>,
+    ScopedRepository(repository): ScopedRepository,
+    ApiPath(extension_id): ApiPath<String>,
+    headers: HeaderMap,
+    archive: Bytes,
+) -> Result<Json<InstallationResponse>, ApiError> {
+    require_zstd_archive(&headers)?;
+    let package = unpack_extension(archive).await?;
+    if package.manifest().attricat.id != extension_id {
+        return Err(ApiError::invalid_input(
+            "the archive has a different extension ID".to_owned(),
+        ));
+    }
+    let installation = ExtensionInstaller::new(repository, state.object_store.clone())
+        .upgrade_package("sideload", package)
         .await
         .map_err(install_error)?;
     Ok(Json(installation.into()))
@@ -870,6 +899,7 @@ pub(super) async fn runtime(
                 invoke: item.invoke,
                 when: item.when,
                 confirm: item.confirm,
+                accepts: item.accepts,
                 icon: item.icon,
                 translations: item.translations,
                 cell: item.cell,
@@ -1289,6 +1319,46 @@ pub(super) async fn dev_artifact(
         .map_err(|_| ApiError::service_unavailable("extension artifact storage is unavailable"))?;
     repository
         .record_extension_dev_artifact(release_id, &revision)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// How a WebAssembly component begins: the magic number, then the version and
+/// layer that distinguish it from a core module.
+const WASM_COMPONENT_PREAMBLE: [u8; 8] = *b"\0asm\x0d\0\x01\0";
+
+/// Replaces an installed release's server component with a development build,
+/// so `acli extension dev` can hot-swap it without a new upload or new grants.
+/// Only a server running with `ATTRICAT_DEVTOOLS` accepts it.
+pub(super) async fn dev_server_artifact(
+    State(state): State<AppState>,
+    ScopedRepository(repository): ScopedRepository,
+    ApiPath(extension_id): ApiPath<String>,
+    component: Bytes,
+) -> Result<StatusCode, ApiError> {
+    if !state.devtools_enabled {
+        return Err(ApiError::not_found("extension development build"));
+    }
+    if !component.starts_with(&WASM_COMPONENT_PREAMBLE) {
+        return Err(ApiError::invalid_input(
+            "a development server build must be a WebAssembly component".into(),
+        ));
+    }
+    let release_id = repository.extension_server_release(&extension_id).await?;
+    let revision = format!("{:x}", Sha256::digest(&component));
+    state
+        .object_store
+        .put(
+            &dev_artifact_key(release_id, &revision),
+            StoredObject {
+                bytes: component,
+                content_type: None,
+            },
+        )
+        .await
+        .map_err(|_| ApiError::service_unavailable("extension artifact storage is unavailable"))?;
+    repository
+        .record_extension_dev_server_artifact(release_id, &revision)
         .await?;
     Ok(StatusCode::NO_CONTENT)
 }

@@ -104,6 +104,35 @@ Pobierz z każdego rekordu to, czego potrzebujesz, raz i zapisz w punkcie kontro
 
 Użytkownicy widzą swoje uruchomienia w **Profil → Uruchomienia rozszerzeń**. Uruchomienie widzą tylko osoba, która je rozpoczęła, i osoby z `extensions.manage`. Osoba, która je rozpoczęła, zawsze może je anulować, ale otworzyć je i pobrać wyniki może tylko dopóty, dopóki może odczytać każdy zaznaczony rekord. Osoby z `extensions.manage` mogą otwierać, anulować i pobierać każde uruchomienie.
 
+## Operacje na schemacie
+
+Import zaczyna się od schematu, a nie od rekordów. Ustaw `scope` na `blueprint`, aby akcja paska narzędzi mogła uruchomić operację dla jednej wersji schematu:
+
+```json
+{"id": "import", "handler": "import", "request_schema": {"type": "object"}, "interactive": {"version": 1, "scope": "blueprint"}}
+```
+
+Uruchomienie wymaga uprawnienia `records.write` w całym obszarze roboczym, bo może ono tworzyć rekordy. Nie ma zaznaczenia, a jego możliwości są węższe niż osoby wpisującej te same wartości:
+
+- `attricat-data.batch` przyjmuje tylko intencje `create` i `upsert` dla wersji schematu tego uruchomienia, bez tagów i metadanych systemowych, sprawdzane względem bieżących uprawnień osoby, która je rozpoczęła. Inne intencje powodują błąd wywołania.
+- Odczyty rekordów są odrzucane. `attricat.schema` działa dla wersji schematu tego uruchomienia, więc możesz mapować kody na identyfikatory atrybutów.
+- `selection.describe()` zwraca `scope: "blueprint"`, `count` równe 0, wersję schematu i `context_id` oraz `default_context_id` na wypadek uruchomienia akcji w kontekście domyślnym. Przy każdej zapisywanej wartości podaj kontekst.
+
+## Plik wejściowy
+
+Dodaj `accepts` do [akcji](/pl/extensions/client/#akcje) operacji, aby Attricat poprosił o plik, gdy użytkownik ją wybierze:
+
+```json
+{ "id": "import-csv", "version": 1, "kind": "action", "outlet": "explorer_action", "title": "Import CSV…",
+  "accepts": ["text/csv"], "invoke": { "operation": { "id": "import", "input": {} } } }
+```
+
+Wymaga to `client.files.upload` i `artifacts.read`, a osoba musi mieć `records.write`. Attricat przesyła plik i rozpoczyna uruchomienie. Twój komponent otwiera go przez `artifacts.open-input("source")`, a `describe-input` podaje jego rozmiar, typ i sumę kontrolną. Przetwarzaj go partiami, a pozycję trzymaj w punkcie kontrolnym.
+
+Attricat ustala typ na podstawie samego pliku i odrzuca plik, którego nie ma w `accepts`. PNG, JPEG, GIF, WebP, PDF, DOCX, XLSX i PPTX rozpoznaje po zawartości. Tekst nazywa rozszerzenie pliku: `text/csv`, `text/tab-separated-values`, `application/json`, `application/xml` albo `text/plain` dla pozostałych. Tekst musi być poprawnym UTF-8. Obowiązuje zwykły limit rozmiaru przesyłanych plików.
+
+Plik może wykorzystać tylko osoba, która go przesłała, dla Twojego rozszerzenia i w ciągu godziny od przesłania. Attricat usuwa go jakiś czas po zakończeniu uruchomienia, więc skopiuj to, co chcesz zachować. Plik nie jest nigdzie pokazywany w Attricat ani wyszukiwany.
+
 ## Adnotacje rekordów
 
 Z `attricat.annotations.write` dodawaj do paczki intencje `annotate`, aby zapisać informacje o rekordzie we własnej przestrzeni nazw: tagi `<extension-id>:<tag>` i obiekt w `system_metadata[<extension-id>]`. Intencje wskazują rekord przez `record_id`.

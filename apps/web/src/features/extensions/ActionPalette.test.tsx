@@ -37,6 +37,7 @@ const action = (id: string, title: string): ExtensionContribution => ({
   invoke: { dialog: 'documents' },
   when: null,
   confirm: null,
+  accepts: [],
   icon: 'file',
   translations: {},
   cell: null,

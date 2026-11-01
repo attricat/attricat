@@ -68,6 +68,26 @@ pub fn detect_mime(signature: &[u8], filename: &str, valid_text: bool) -> Option
     }
 }
 
+/// The media type of a file chosen for an extension action. Signatures decide
+/// binary types. Text has no signature, so its extension names the format.
+pub fn detect_input_mime(
+    signature: &[u8],
+    filename: &str,
+    valid_text: bool,
+) -> Option<&'static str> {
+    let mime = detect_mime(signature, filename, valid_text)?;
+    if mime != "text/plain" {
+        return Some(mime);
+    }
+    Some(match extension(filename).as_deref() {
+        Some("csv") => "text/csv",
+        Some("tsv") => "text/tab-separated-values",
+        Some("json") => "application/json",
+        Some("xml") => "application/xml",
+        _ => mime,
+    })
+}
+
 /// Whether complete in-memory bytes are UTF-8 text without NUL bytes.
 pub fn is_plain_text(bytes: &[u8]) -> bool {
     std::str::from_utf8(bytes).is_ok_and(|text| !text.contains('\0'))
@@ -128,6 +148,17 @@ mod tests {
         assert!(!policy.allows("image/jpeg", "photo.jpg", 1));
         assert!(!policy.allows("image/png", "photo.png", 1025));
         assert!(!policy.allows("image/svg+xml", "photo.png", 1));
+    }
+
+    #[test]
+    fn input_text_formats_follow_the_file_name_but_binary_signatures_win() {
+        assert_eq!(detect_input_mime(b"a,b", "a.CSV", true), Some("text/csv"));
+        assert_eq!(detect_input_mime(b"a", "a.txt", true), Some("text/plain"));
+        assert_eq!(
+            detect_input_mime(b"%PDF-1.7", "a.csv", false),
+            Some(PDF_MIME)
+        );
+        assert_eq!(detect_input_mime(&[0, 1], "a.csv", false), None);
     }
 
     #[test]

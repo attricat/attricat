@@ -5,6 +5,7 @@ import { extensionRunDetailOptions } from './queryOptions';
 import { isActiveExtensionRun } from './runPolling';
 import { notifyRunFinished } from './runNotifications';
 import { useRunWatchStore } from './runWatchStore';
+import { extensionRunSelectionScopes } from './constants';
 import { refreshRecord } from '../extensions/refreshRecord';
 import { recordQueryKeys } from '../records/queryKeys';
 
@@ -40,8 +41,9 @@ export const ExtensionRunWatcher = () => {
       announcedRuns.add(runId);
       notifyRunFinished(run, navigate);
       // A finished run may have changed its records; show their new state.
+      // A blueprint run has no records to name, but may have added some.
       const changed = records[runId] ?? [];
-      if (changed.length)
+      if (changed.length || run.scope === extensionRunSelectionScopes.blueprint)
         void Promise.all([
           ...changed.map((recordId) => refreshRecord(queryClient, recordId)),
           queryClient.invalidateQueries({

@@ -26,6 +26,7 @@
     "duplicate_needs_unique_values",
     "export_job_resync_failed",
     "extension_already_installed",
+    "extension_input_file_unavailable",
     "file_attribute_readonly",
     "file_cardinality_exceeded",
     "file_count_exceeded",

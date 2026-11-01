@@ -35,6 +35,8 @@ Enabling fails if a required permission is not granted, the configuration is inv
 
 Upgrading switches the installation to a newer release. Because a new release can ask for different permissions, an upgrade clears all grants and configuration and leaves the extension disabled. Review, configure, grant, and enable it again.
 
+The extension's page offers newer releases from its registry. **Upgrade from archive** there, or `acli extension upgrade <id> --file`, upgrades from an uploaded archive instead, with the same effect. Either way the version must be greater than the installed one.
+
 Running operations stay on the release they started with. They pause until that exact release is authorized again.
 
 ## Arrange extension UI
@@ -104,6 +106,7 @@ acli extension registry add --source acme/attricat-extensions
 acli extension list
 acli extension install --owner acme --repository attricat-inventory --release-id <github-release-id>
 acli extension sideload --file inventory-1.2.0.tar.zst
+acli extension upgrade acme.inventory --file inventory-1.3.0.tar.zst
 acli extension configure acme.inventory --configuration config.json
 acli extension grant acme.inventory --grant-kind capability --grant-id attricat.read
 acli extension grant acme.inventory --grant-kind host_permission --grant-id inventory-api

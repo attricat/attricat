@@ -7,6 +7,7 @@ pub(crate) mod registry;
 pub(crate) mod run;
 pub(crate) mod scaffold;
 pub(crate) mod schedule;
+pub(crate) mod validate;
 
 use std::path::PathBuf;
 
@@ -45,7 +46,7 @@ pub(crate) enum ExtensionCommand {
         file: PathBuf,
     },
     /// Create a native UI extension (Preact and the Attricat UI kit) in a
-    /// new directory. Needs no server.
+    /// new directory, optionally with a server component. Needs no server.
     New {
         directory: PathBuf,
         /// The manifest's attricat.id.
@@ -56,15 +57,30 @@ pub(crate) enum ExtensionCommand {
         /// A local checkout of attricat-extension-sdk to link the packages to.
         #[arg(long)]
         sdk: Option<PathBuf>,
+        /// Also create a Rust server component with one command.
+        #[arg(long)]
+        with_server: bool,
     },
-    /// Rebuild a native extension's Worker bundle and hot-swap it in a
-    /// development server (ATTRICAT_DEVTOOLS=true), keeping the installed
-    /// release and its grants. Watches until interrupted.
+    /// Check an extension without a server: a directory's manifest and the
+    /// files it declares, or a packed archive, as this CLI's host version
+    /// would on upload.
+    Validate {
+        /// An extension directory or a .tar.zst archive.
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
+    /// Rebuild an extension's Worker bundle or server component and hot-swap
+    /// it in a development server (ATTRICAT_DEVTOOLS=true), keeping the
+    /// installed release and its grants. Watches until interrupted.
     Dev {
         extension_id: String,
         /// The built Worker bundle, as the manifest's client_native path.
-        #[arg(long, default_value = "dist/ui.js")]
-        bundle: PathBuf,
+        /// Defaults to dist/ui.js unless only --component is given.
+        #[arg(long)]
+        bundle: Option<PathBuf>,
+        /// The built server component, as the manifest's server_wasm path.
+        #[arg(long)]
+        component: Option<PathBuf>,
         /// A shell command that rebuilds the bundle before each swap.
         #[arg(long)]
         build: Option<String>,
@@ -75,14 +91,19 @@ pub(crate) enum ExtensionCommand {
         #[arg(long)]
         once: bool,
     },
+    /// Upgrade to a newer registry release, or with --file to a newer local
+    /// archive. Either clears grants and configuration.
     Upgrade {
         extension_id: String,
+        #[arg(long, conflicts_with = "file", required_unless_present = "file")]
+        owner: Option<String>,
+        #[arg(long, conflicts_with = "file", required_unless_present = "file")]
+        repository: Option<String>,
+        #[arg(long, conflicts_with = "file", required_unless_present = "file")]
+        release_id: Option<u64>,
+        /// A .tar.zst archive of a newer version of this extension.
         #[arg(long)]
-        owner: String,
-        #[arg(long)]
-        repository: String,
-        #[arg(long)]
-        release_id: u64,
+        file: Option<PathBuf>,
     },
     Remove {
         extension_id: String,
@@ -299,10 +320,13 @@ pub(crate) async fn extension_command(
             id,
             name,
             sdk,
-        } => scaffold::scaffold(&directory, &id, &name, sdk.as_deref()),
+            with_server,
+        } => scaffold::scaffold(&directory, &id, &name, sdk.as_deref(), with_server),
+        ExtensionCommand::Validate { path } => validate::validate(&path),
         ExtensionCommand::Dev {
             extension_id,
             bundle,
+            component,
             build,
             watch,
             once,
@@ -311,7 +335,12 @@ pub(crate) async fn extension_command(
                 api,
                 dev::DevOptions {
                     extension_id,
-                    bundle,
+                    bundle: bundle.or_else(|| {
+                        component
+                            .is_none()
+                            .then(|| PathBuf::from(dev::DEFAULT_BUNDLE_PATH))
+                    }),
+                    server: component,
                     build,
                     watch,
                     once,
@@ -321,9 +350,22 @@ pub(crate) async fn extension_command(
         }
         ExtensionCommand::Upgrade {
             extension_id,
+            file: Some(file),
+            ..
+        } => {
+            api.upload(
+                &extension_path(&extension_id, "/upgrade-archive"),
+                &file,
+                ZSTD_MEDIA_TYPE,
+            )
+            .await
+        }
+        ExtensionCommand::Upgrade {
+            extension_id,
             owner,
             repository,
             release_id,
+            file: None,
         } => {
             api.post_json(
                 &extension_path(&extension_id, "/upgrade"),

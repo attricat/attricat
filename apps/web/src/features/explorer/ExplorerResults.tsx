@@ -12,7 +12,10 @@ import type { ExplorerData } from './useExplorerData';
 import { useExplorerSelection } from './useExplorerSelection';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
-import { singleResultVersionScope } from '../records/schemas';
+import {
+  resultsShowBlueprintRevision,
+  singleResultVersionScope,
+} from '../records/schemas';
 
 type Props = {
   data: ExplorerData;
@@ -118,10 +121,7 @@ export const ExplorerResults = ({
               relationshipSortAvailable={
                 !search.allVersions || Boolean(singleVersionScope)
               }
-              showExplorerActions={
-                singleVersionScope?.version ===
-                resultBlueprint.blueprint.version
-              }
+              showExplorerActions={resultsShowBlueprintRevision(firstPage)}
               onFilterCell={onFilterCell}
               onFilterSystemTag={onFilterSystemTag}
               onOpenPanel={onOpenPanel}

@@ -252,6 +252,24 @@ export const singleResultVersionScope = (
   page?.result_version_scope.kind === resultVersionScopeKinds.single
     ? page.result_version_scope
     : undefined;
+
+/**
+ * Whether a search shows exactly its blueprint's revision, so actions on that
+ * revision apply. No results still show it, which is where an import starts.
+ */
+export const resultsShowBlueprintRevision = (
+  page:
+    | {
+        blueprint?: { blueprint: { version: number } };
+        result_version_scope: ResultVersionScope;
+      }
+    | undefined,
+) =>
+  page !== undefined &&
+  (page.result_version_scope.kind === resultVersionScopeKinds.empty ||
+    singleResultVersionScope(page)?.version ===
+      page.blueprint?.blueprint.version);
+
 const recordSearchResponseSchema = z.object({
   blueprint: blueprintWithAttributesSchema,
   items: z.array(recordItemSchema),

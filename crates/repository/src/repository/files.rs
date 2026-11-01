@@ -1,5 +1,8 @@
 use super::*;
-use crate::constants::{CONVERSATION_ATTACHMENT_LIFETIME_SECONDS, STAGED_UPLOAD_LIFETIME_SECONDS};
+use crate::constants::{
+    CONVERSATION_ATTACHMENT_LIFETIME_SECONDS, EXTENSION_INPUT_UPLOAD_LIFETIME_SECONDS,
+    STAGED_UPLOAD_LIFETIME_SECONDS,
+};
 use crate::domain_events::{ATTRIBUTE_VALUE_CHANGED_V1, AttributeValueMutationV1};
 use crate::model::NewFileAttributeValue;
 use crate::persistence_rows::{Db, IntoDomain};
@@ -140,6 +143,13 @@ pub(super) enum UploadClaim<'a> {
         conversation_id: Uuid,
         user_id: Uuid,
     },
+    /// A run of `extension_id` started by `user_id` may take it as its input
+    /// until `expires_at`.
+    ExtensionInput {
+        expires_at: DateTime<Utc>,
+        user_id: Uuid,
+        extension_id: &'a str,
+    },
 }
 
 impl AttricatRepository {
@@ -263,8 +273,24 @@ impl AttricatRepository {
         let workspace_id = self.workspace_id.0;
         self.finish_file_upload(transaction, &file.object_key)
             .await?;
+        // An extension input goes straight into a run: nothing shows, previews
+        // or searches it, so it needs no processing and is ready at once.
+        let extension_input = match &claim {
+            UploadClaim::ExtensionInput {
+                user_id,
+                extension_id,
+                ..
+            } => Some((*user_id, *extension_id)),
+            _ => None,
+        };
+        let status = if extension_input.is_some() {
+            FileStatus::Ready
+        } else {
+            FileStatus::Queued
+        };
         let (expires_at, staged, conversation) = match claim {
             UploadClaim::Immediate => (None, None, None),
+            UploadClaim::ExtensionInput { expires_at, .. } => (Some(expires_at), None, None),
             UploadClaim::Staged {
                 expires_at,
                 user_id,
@@ -283,7 +309,7 @@ impl AttricatRepository {
             } => (Some(expires_at), None, Some((conversation_id, user_id))),
         };
         sqlx::query(
-            "INSERT INTO files (id, workspace_id, original_filename, display_filename, mime_type, byte_size, sha256, original_key, status, attachment_expires_at, staged_upload_user_id, staged_upload_blueprint_id, staged_upload_attribute_code, staged_upload_context_id, conversation_upload_conversation_id, conversation_upload_user_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'queued',$9,$10,$11,$12,$13,$14,$15)",
+            "INSERT INTO files (id, workspace_id, original_filename, display_filename, mime_type, byte_size, sha256, original_key, status, attachment_expires_at, staged_upload_user_id, staged_upload_blueprint_id, staged_upload_attribute_code, staged_upload_context_id, conversation_upload_conversation_id, conversation_upload_user_id, extension_input_user_id, extension_input_extension_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)",
         )
         .bind(id)
         .bind(workspace_id)
@@ -293,6 +319,7 @@ impl AttricatRepository {
         .bind(file.byte_size as i64)
         .bind(&file.sha256)
         .bind(&file.object_key)
+        .bind(status.as_str())
         .bind(expires_at)
         .bind(staged.map(|staged| staged.0))
         .bind(staged.map(|staged| staged.1))
@@ -300,11 +327,15 @@ impl AttricatRepository {
         .bind(staged.map(|staged| staged.3))
         .bind(conversation.map(|conversation| conversation.0))
         .bind(conversation.map(|conversation| conversation.1))
+        .bind(extension_input.map(|input| input.0))
+        .bind(extension_input.map(|input| input.1))
         .execute(&mut **transaction)
         .await?;
-        sqlx::query("INSERT INTO file_processing_jobs (id, workspace_id, file_id, kind, status) VALUES ($1,$2,$3,$4,$5)")
-            .bind(Uuid::new_v4()).bind(workspace_id).bind(id).bind(FileJobKind::Metadata.as_str()).bind(FileJobStatus::Queued.as_str()).execute(&mut **transaction).await?;
-        if is_text_extraction_mime(&file.mime_type) {
+        if extension_input.is_none() {
+            sqlx::query("INSERT INTO file_processing_jobs (id, workspace_id, file_id, kind, status) VALUES ($1,$2,$3,$4,$5)")
+                .bind(Uuid::new_v4()).bind(workspace_id).bind(id).bind(FileJobKind::Metadata.as_str()).bind(FileJobStatus::Queued.as_str()).execute(&mut **transaction).await?;
+        }
+        if extension_input.is_none() && is_text_extraction_mime(&file.mime_type) {
             sqlx::query("INSERT INTO file_processing_jobs (id, workspace_id, file_id, kind, status) VALUES ($1,$2,$3,$4,$5)")
                 .bind(Uuid::new_v4()).bind(workspace_id).bind(id).bind(FileJobKind::TextExtraction.as_str()).bind(FileJobStatus::Queued.as_str()).execute(&mut **transaction).await?;
         }
@@ -314,7 +345,7 @@ impl AttricatRepository {
             mime_type: file.mime_type,
             byte_size: file.byte_size as i64,
             sha256: file.sha256,
-            status: FileStatus::Queued,
+            status,
         })
     }
 
@@ -830,6 +861,34 @@ impl AttricatRepository {
         }
         transaction.commit().await?;
         Ok(result)
+    }
+
+    /// Stores a file a person chose for an extension action. It stays bound to
+    /// them and to that extension, and expires unless a run claims it first.
+    pub async fn persist_extension_input_upload(
+        &self,
+        extension_id: &str,
+        uploaded_by_user_id: Uuid,
+        file: NewUploadedFile,
+    ) -> Result<UploadedFile, RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
+        let expires_at =
+            Self::claim_window_end(&mut transaction, EXTENSION_INPUT_UPLOAD_LIFETIME_SECONDS)
+                .await?;
+        let uploaded = self
+            .insert_file_in_transaction(
+                &mut transaction,
+                Uuid::new_v4(),
+                file,
+                UploadClaim::ExtensionInput {
+                    expires_at,
+                    user_id: uploaded_by_user_id,
+                    extension_id,
+                },
+            )
+            .await?;
+        transaction.commit().await?;
+        Ok(uploaded)
     }
 
     /// Returns active records that currently reference a file. Deleted records

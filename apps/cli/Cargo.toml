@@ -12,6 +12,7 @@ name = "acli"
 path = "src/main.rs"
 
 [dependencies]
+attricat-extension-manifest = { path = "../../crates/extension-manifest" }
 clap = { version = "4", features = ["derive", "env"] }
 dotenvy = "0.15"
 futures-util = "0.3"
@@ -29,7 +30,6 @@ uuid = { version = "1", features = ["serde"] }
 tempfile = "3"
 
 [dev-dependencies]
-attricat-extension-manifest = { path = "../../crates/extension-manifest" }
 axum = "0.8"
 tempfile = "3"
 

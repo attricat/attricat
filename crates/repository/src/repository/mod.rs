@@ -324,6 +324,9 @@ pub struct AttricatRepository<S = WorkspaceScope> {
     /// extension run. It is rechecked at each host call; selection membership
     /// is never treated as permission.
     authorization_actor: Option<AuthorizationActor>,
+    /// Whether that principal's run may create records: a blueprint-scoped
+    /// run, whose intents were already confined to its blueprint revision.
+    actor_may_create_records: bool,
     /// The status attribute an owner or administrator is unlocking: this
     /// write may leave its locking status for any option, outside the
     /// declared transitions. Set only by `unlock_record_status`.
@@ -502,6 +505,7 @@ impl AttricatRepository {
             task_fence: None,
             extension_id: None,
             authorization_actor: None,
+            actor_may_create_records: false,
             status_unlock: None,
             transition_operation: TransitionOperation::Edit,
             cache: QueryCache::default(),

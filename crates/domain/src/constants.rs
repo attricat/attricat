@@ -24,6 +24,8 @@ pub const CSRF_COOKIE: &str = "attricat_csrf";
 pub const SESSION_LIFETIME_HOURS: i64 = 8;
 /// Conversation attachments are reclaimed unless a message claims them promptly.
 pub const CONVERSATION_ATTACHMENT_LIFETIME_SECONDS: i64 = 15 * 60;
+/// How long a file chosen for an extension action waits for a run to claim it.
+pub const EXTENSION_INPUT_UPLOAD_LIFETIME_SECONDS: i64 = 60 * 60;
 /// Files uploaded before their record exists are reclaimed unless creating
 /// the record claims them within this window.
 pub const STAGED_UPLOAD_LIFETIME_SECONDS: i64 = SECONDS_PER_HOUR;

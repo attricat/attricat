@@ -4,6 +4,7 @@ use super::{
     error::ApiError,
     extractors::{ApiJson, ApiPath},
 };
+use crate::extensions::CLIENT_FILES_UPLOAD_CAPABILITY;
 use crate::{
     file_access::{FileAccessDecision, FileAccessOperation, authorize_file_read},
     repository::{
@@ -36,7 +37,9 @@ const SIGNATURE_SNIFF_BYTES: usize = 512;
 const MAX_CONTEXT_ID_BYTES: usize = 64;
 const MAX_FILENAME_BYTES: usize = 255;
 
-use attricat_validation::files::{detect_mime as detected_mime, is_supported_upload_mime};
+use attricat_validation::files::{
+    detect_input_mime, detect_mime as detected_mime, is_supported_upload_mime,
+};
 
 /// Avatars accept only these formats; the file worker re-encodes them.
 const AVATAR_MIME_TYPES: &[&str] = &["image/png", "image/jpeg"];
@@ -256,6 +259,53 @@ pub(super) async fn upload_conversation(
     Ok((
         StatusCode::CREATED,
         Json(serde_json::json!({ "files": files })),
+    ))
+}
+
+/// Stores the file a person chose for an extension action. It shares the
+/// streaming and object-store pipeline of other uploads, but its media type is
+/// checked against what the action accepts instead of the upload allowlist, and
+/// browsers disagree on what they declare for formats such as CSV. The file
+/// stays bound to the caller and the extension until a run claims it.
+pub(super) async fn upload_extension_input(
+    State(state): State<AppState>,
+    super::auth::AuthenticatedPrincipal(user_id, _): super::auth::AuthenticatedPrincipal,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ApiPath((extension_id, contribution_id)): ApiPath<(String, String)>,
+    mut multipart: Multipart,
+) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
+    authorize(&state, FileAccessOperation::ExtensionInputUpload).await?;
+    let contribution = repository
+        .client_extension_contribution(&extension_id, &contribution_id)
+        .await?;
+    if contribution.accepts.is_empty()
+        || !contribution
+            .capabilities
+            .iter()
+            .any(|capability| capability == CLIENT_FILES_UPLOAD_CAPABILITY)
+    {
+        return Err(ApiError::forbidden());
+    }
+    let (_, staged) = read_upload_parts(&state, &mut multipart, false).await?;
+    let [file] = staged.as_slice() else {
+        return Err(ApiError::file_count_exceeded());
+    };
+    let mime = detect_input_mime(&file.signature, &file.display_filename, file.valid_text)
+        .filter(|mime| contribution.accepts.iter().any(|accepted| accepted == mime))
+        .ok_or_else(ApiError::unsupported_media_type)?;
+    let mut records = store_uploads(&state, &repository, &staged, vec![mime.to_owned()]).await?;
+    let record = records
+        .pop()
+        .ok_or_else(|| ApiError::internal("stored upload is missing"))?;
+    let uploaded = repository
+        .persist_extension_input_upload(&extension_id, user_id, record)
+        .await;
+    cleanup(&staged).await;
+    let uploaded = uploaded?;
+    metrics::counter!("attricat_file_uploads_total", "outcome" => "success").increment(1);
+    Ok((
+        StatusCode::CREATED,
+        Json(serde_json::json!({ "file": uploaded })),
     ))
 }
 

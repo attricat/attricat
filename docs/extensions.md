@@ -72,7 +72,10 @@ unpacked size limits, safe entry-path checks, strict `manifest.json`
 validation, artifact staging, disabled initial state, lifecycle records, and
 audit events as registry installs. Their recorded source is `sideload`; the raw
 archive is never retained. Users must review configuration and explicitly grant
-required permissions before enabling a side-loaded extension.
+required permissions before enabling a side-loaded extension. A second upload
+of an installed ID fails with `extension_already_installed`; `POST
+/extensions/{id}/upgrade-archive` replaces it with a newer version under the same
+rules as a registry upgrade, and its source stays `sideload`.
 
 Registry installs validate the selected `.tar.zst` archive with bounded
 decompression and entry-path checks, then read and validate `manifest.json`
@@ -931,6 +934,30 @@ Inside the run:
 Disable, quarantine, grant loss, and upgrade pause interactive runs exactly as
 they pause other release-pinned runs. Existing administrative operations,
 schedules, and connector jobs keep their separate contracts.
+
+### Blueprint-scoped runs and file input
+
+An operation declared with `interactive: {"version": 1, "scope": "blueprint"}` runs
+for one blueprint revision with no selection. `selection_scope` stores this on the
+run rather than inferring it from having no members, so a run that loses members
+can never widen. Starting one needs a workspace-wide `records.write` grant.
+`check_batch_scope` confines its batches to `create` and `upsert` intents of that
+revision, without system tags or metadata; `apply_extension_attricat_create` then
+checks the initiator's live grants for the new ID (only a workspace grant covers an
+ID that does not exist) and read access to link targets. Record reads stay refused,
+and `attricat.schema` works only for the run's own revision. A toolbar
+(`explorer_action`) operation action must start a blueprint operation, and every
+other surface must not.
+
+An operation action's `accepts` lists media types, and needs `client.files.upload`
+and `artifacts.read`. The host picks the file and posts it to
+`/extensions/{id}/{contribution_id}/input-uploads`, which detects the type from the
+content (`detect_input_mime`; text is named by its extension, because browsers
+disagree on what they declare) and stores it bound to the caller and the extension,
+`ready` at once with no processing jobs, since nothing displays or searches it. Only
+that user can pass it as `input_file_id` for that extension within
+`EXTENSION_INPUT_UPLOAD_LIFETIME_SECONDS`. The file lifecycle then keeps the object
+while a pending run's input artifact needs it.
 
 ### Runs, results, and retention
 
@@ -2114,6 +2141,16 @@ without a new upload or new grants; frame artifacts are unaffected.
 swaps on every change, and `acli extension new <dir> --id <id>` scaffolds a
 native Preact extension whose manifest validates against the host.
 
+## Development builds of server components
+
+`PUT /extensions/{id}/dev-server-artifact` stores a component under its SHA-256 and
+records the revision in `extension_dev_server_artifacts`. Like the native
+`dev-artifact` route, it is a 404 unless `ATTRICAT_DEVTOOLS` is on. The runtime reads
+the revision with the installation, and includes it in the component and
+pre-instantiation cache keys, so the next invocation compiles the new build. The
+route checks only the component preamble, so a build that doesn't link faults on its
+next invocation.
+
 ## Webhooks
 
 `webhooks.receive` is server-only and is not an outbound host permission. A
@@ -2145,8 +2182,9 @@ example_extension="$(cd ../../attricat-extension-example && pwd)"
 With this worktree's local stack running, upload the resulting
 `$example_extension/dist/*.tar.zst` archive through **Manage → Extensions →
 Upload archive**. Grant every requested permission and enable the extension.
-Each side-loaded replacement is a new release and must be granted and enabled
-again. Exercise an extension UI contribution and a server event (for example,
+To replace it, raise its version and use **Upgrade from archive** or `acli
+extension upgrade --file`; the new release must be granted and enabled again.
+`acli extension dev` swaps built code while keeping grants. Exercise an extension UI contribution and a server event (for example,
 update a formula dependency in the example's blueprint YAML) to verify both the
 browser and WASM runtime paths. Use this workflow when changing extension
 installation, permissions, artifact storage, runtime, or event dispatch; unit

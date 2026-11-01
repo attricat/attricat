@@ -85,6 +85,32 @@ jobs:
           df -h
           du -sh target 2>/dev/null || true
 
+  extension-scaffold:
+    # `acli extension new` pins SDK release tarballs; this catches a stale pin
+    # and any drift between the templates, the SDK and the host's validation.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@wasm-tools
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - run: corepack enable
+      - run: cargo build --locked -p acli
+      - run: target/debug/acli extension new "$RUNNER_TEMP/scaffold" --id acme.scaffold --name Scaffold --with-server
+      - name: Build, test and pack the new extension
+        working-directory: ${{ runner.temp }}/scaffold
+        run: |
+          pnpm install
+          pnpm test
+          pnpm package
+      - run: target/debug/acli extension validate "$RUNNER_TEMP/scaffold/dist/acme.scaffold-0.1.0.tar.zst"
+
   web:
     runs-on: ubuntu-latest
     timeout-minutes: 20

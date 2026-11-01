@@ -9,7 +9,10 @@ import {
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Timestamp } from '../../time/Timestamp';
-import type { ExtensionRunStatus } from './constants';
+import {
+  extensionRunSelectionScopes,
+  type ExtensionRunStatus,
+} from './constants';
 import { isActiveExtensionRun } from './runPolling';
 import {
   runOutcomeSchema,
@@ -80,7 +83,9 @@ export const ExtensionRunHeader = ({
         <ExtensionRunStatusChip status={run.status} />
       </Stack>
       <Typography color="text.secondary" variant="body2">
-        {t('extensionRuns.recordCount', { count: run.selection_count })}
+        {run.scope === extensionRunSelectionScopes.blueprint
+          ? t('extensionRuns.wholeBlueprint')
+          : t('extensionRuns.recordCount', { count: run.selection_count })}
         {' · '}
         <Timestamp style="dateTime" value={run.created_at} />
       </Typography>

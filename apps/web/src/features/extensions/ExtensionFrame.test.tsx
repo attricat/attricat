@@ -42,6 +42,7 @@ const contribution: ExtensionContribution = {
   invoke: null,
   when: null,
   confirm: null,
+  accepts: [],
   icon: null,
   translations: {},
   cell: null,

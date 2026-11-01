@@ -222,6 +222,12 @@ Przekaż `record_ids` dla wybranych rekordów albo `status` dla rekordów z tym 
 - `preview_command` miejsca docelowego wskazuje [polecenie serwerowe](/pl/extensions/server/#polecenia-dla-twojego-interfejsu), które buduje ładunek dla jednego rekordu bez wysyłania go. Otrzymuje `{export_id, record_id, connection}` i zwyczajowo zwraca `{payload, issues}`, gdzie `issues` wymienia, co miejsce docelowe by odrzuciło, np. brakujące atrybuty typu produktu. Karta **Eksporty** rekordu pokazuje go jako **Podgląd**.
 - Panel [`export_mapping`](/pl/extensions/client/#inne-miejsca) pojawia się na stronie zarządzania Twoim rozszerzeniem raz dla każdego miejsca docelowego eksportu. Używaj go do edycji mapowań zbyt dużych na konfigurację, np. atrybutów na atrybuty typu produktu marketplace'u. W przeciwieństwie do innych paneli może wywoływać Twoje polecenia serwerowe, więc polecenie waliduje mapowanie i zapisuje je w magazynie rozszerzenia, skąd odczytuje je eksporter. Nieprawidłowe dane zgłaszaj w odpowiedzi polecenia: błąd polecenia dociera do panelu tylko jako ogólne niepowodzenie.
 
+## Testuj eksporter lokalnie
+
+Do testowania eksportera nie potrzebujesz prawdziwego sklepu. Na lokalnym serwerze z `ATTRICAT_DEVTOOLS=true` ustawienia [`EXTENSION_DEV_EGRESS_RESOLVE` i `EXTENSION_DEV_EGRESS_CA_FILE`](/pl/reference/configuration/#extensions) kierują żądania do wybranych hostów na lokalną atrapę.
+
+[`examples/marketplace-export`](https://github.com/attricat/attricat/tree/main/examples/marketplace-export) w repozytorium Attricat zawiera działający testowy eksporter dla Shopify, Amazona i Allegro, atrapę ich API, która potrafi symulować ograniczanie i awarie, oraz skrypt end-to-end. Zacznij od niego, pisząc własny eksporter.
+
 ## Uwagi projektowe
 
 - **Kanały i konta.** Zadanie eksportuje jeden kanał publikacji, z wartościami rozwiązanymi w kontekście tego kanału. Konto w miejscu docelowym to połączenie: jeden kanał może zasilać kilka połączeń, każde przez osobne zadanie, a jedno połączenie może obejmować kilka marketplace'ów jednego konta, np. identyfikatory marketplace'ów Amazon jako parametry połączenia.

@@ -361,6 +361,8 @@ pub enum RepositoryError {
     InvalidExtensionTransition(&'static str),
     #[error("extension is already installed")]
     ExtensionAlreadyInstalled,
+    #[error("the file for this action is no longer available; choose it again")]
+    ExtensionInputFileUnavailable,
     #[error("{0}")]
     ExportMappingConflict(String),
     #[error("invalid domain event: {0}")]

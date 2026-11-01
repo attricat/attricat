@@ -444,6 +444,8 @@ Trasy `GET` reguł, wykonań i ustaleń wymagają `rules.read`; pozostałe trasy
 | `GET`, `POST`, `DELETE` | `/extension-registries[/{id}]`; `GET /extension-registries/discover`; `GET /extension-registries/extensions/{owner}/{repo}` | Rejestry i wykrywanie. |
 | `GET`, `POST` | `/extensions` | Wyświetla lub instaluje. |
 | `POST` | `/extensions/sideload` | Instaluje przesłane archiwum `application/zstd`. |
+| `POST` | `/extensions/{id}/upgrade-archive` | Uaktualnia z przesłanego archiwum `application/zstd` nowszej wersji. |
+| `POST` | `/extensions/{id}/{contribution_id}/input-uploads` | Przesyła wieloczęściowy `file`, o który prosi akcja; zwraca `{"file"}`. Wymaga `records.write`. |
 | `GET`, `DELETE` | `/extensions/{id}` | Odczytuje lub usuwa. |
 | `POST` | `/extensions/{id}/upgrade`, `/enable`, `/disable`, `/quarantine` | Cykl życia. |
 | `PUT` | `/extensions/{id}/configure` | Konfiguracja. |

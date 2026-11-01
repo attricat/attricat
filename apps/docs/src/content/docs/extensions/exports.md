@@ -222,6 +222,12 @@ Pass `record_ids` for given records, or `status` for the records with that expor
 - A destination's `preview_command` names a [server command](/extensions/server/#commands-for-your-ui) that builds the payload for one record without pushing it. It receives `{export_id, record_id, connection}` and conventionally returns `{payload, issues}`, where `issues` lists what the destination would reject, such as missing product-type attributes. The record's **Exports** tab shows it as **Preview**.
 - An [`export_mapping`](/extensions/client/#elsewhere) panel appears on your extension's management page once per export destination. Use it to edit mappings that are too large for configuration, such as attributes to a marketplace's product-type attributes. Unlike other panels it can call your server commands, so a command validates the mapping and saves it to extension storage, where your exporter reads it. Report invalid input in the command's response: a command error reaches the panel only as a generic failure.
 
+## Test an exporter locally
+
+You don't need a real shop to test an exporter. On a local server with `ATTRICAT_DEVTOOLS=true`, [`EXTENSION_DEV_EGRESS_RESOLVE` and `EXTENSION_DEV_EGRESS_CA_FILE`](/reference/configuration/#extensions) send requests for chosen hosts to a local mock.
+
+[`examples/marketplace-export`](https://github.com/attricat/attricat/tree/main/examples/marketplace-export) in the Attricat repository has a working test exporter for Shopify, Amazon, and Allegro, a mock of their APIs that can inject throttling and failures, and an end-to-end script. Start from it when you write your own.
+
 ## Design notes
 
 - **Channels and accounts.** A job exports one publication channel, with values resolved in that channel's context. A destination account is a connection: one channel can feed several connections, with one job each, and one connection can cover several marketplaces of an account, for example Amazon marketplace IDs as connection parameters.

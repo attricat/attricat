@@ -2,12 +2,14 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { errorMessage } from '../../api/errors';
 import { randomUuid } from '../../components/randomUuid';
 import { toast } from '../../components/toast';
 import {
   extensionRunArtifactUrl,
   getExtensionRun,
   startExtensionRun,
+  uploadExtensionRunInput,
 } from '../extension-runs/api';
 import { extensionRunScopes } from '../extension-runs/constants';
 import { notifyRunStarted } from '../extension-runs/runNotifications';
@@ -21,6 +23,7 @@ import {
   type ActionTarget,
 } from './actions';
 import { extensionCommand, type ExtensionContribution } from './api';
+import { pickFile } from './pickFile';
 import { contributionKinds, type ActionOutlet } from './constants';
 import { contributionTitle } from './contributionTitle';
 import { refreshRecord } from './refreshRecord';
@@ -80,7 +83,17 @@ export const useInvokeExtensionAction = () => {
         return;
       }
       if ('operation' in invoke) {
+        const { accepts } = action;
+        const file = accepts.length ? await pickFile(accepts) : undefined;
+        if (accepts.length && !file) return;
         try {
+          const upload = file
+            ? await uploadExtensionRunInput(
+                action.extension_id,
+                action.id,
+                file,
+              )
+            : undefined;
           const { run_id } = await startExtensionRun(
             action.extension_id,
             action.id,
@@ -95,11 +108,17 @@ export const useInvokeExtensionAction = () => {
                 context_id: context.context_id,
                 record_ids: context.record_ids,
               },
+              ...(upload && { input_file_id: upload.file.id }),
             },
           );
           notifyRunStarted(run_id, navigate, context.record_ids);
-        } catch {
-          toast.error(t('extensions.actionFailed', { action: title }));
+        } catch (error) {
+          // A person can act on why their file was refused.
+          toast.error(
+            file && error instanceof Error
+              ? errorMessage(error)
+              : t('extensions.actionFailed', { action: title }),
+          );
         }
         return;
       }

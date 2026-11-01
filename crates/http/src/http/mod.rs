@@ -449,6 +449,12 @@ pub fn router(state: AppState) -> Router {
             get(extensions::list).post(extensions::install),
         )
         .route(
+            "/extensions/{extension_id}/upgrade-archive",
+            post(extensions::upgrade_archive).layer(axum::extract::DefaultBodyLimit::max(
+                MAX_EXTENSION_ARCHIVE_BYTES,
+            )),
+        )
+        .route(
             "/extensions/sideload",
             post(extensions::sideload).layer(axum::extract::DefaultBodyLimit::max(
                 MAX_EXTENSION_ARCHIVE_BYTES,
@@ -596,6 +602,17 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/extension-operation-schedules/{id}",
             axum::routing::patch(extensions::update_operation_schedule),
+        )
+        .route(
+            "/extensions/{extension_id}/dev-server-artifact",
+            axum::routing::put(extensions::dev_server_artifact).layer(
+                axum::extract::DefaultBodyLimit::max(MAX_EXTENSION_ARCHIVE_BYTES),
+            ),
+        )
+        .route(
+            "/extensions/{extension_id}/{contribution_id}/input-uploads",
+            // Streams and limits the file itself, like record uploads.
+            post(files::upload_extension_input).layer(axum::extract::DefaultBodyLimit::disable()),
         )
         .route(
             "/extensions/{extension_id}/dev-artifact",
