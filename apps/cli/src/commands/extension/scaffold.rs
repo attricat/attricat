@@ -85,6 +85,7 @@ pub(crate) fn scaffold(
                 }
             })),
         ),
+        ("pnpm-workspace.yaml".into(), PNPM_WORKSPACE.into()),
         ("vite.config.ts".into(), VITE_CONFIG.into()),
         ("tsconfig.json".into(), TSCONFIG.into()),
         ("src/main.tsx".into(), MAIN.into()),
@@ -322,6 +323,10 @@ impl exports::attricat::host::deferrable_operations::Guest for Extension {
 
 export!(Extension);
 "##;
+
+// Vite's esbuild has a build script, and pnpm fails an install that leaves one
+// unapproved.
+const PNPM_WORKSPACE: &str = "allowBuilds:\n  esbuild: true\n";
 
 const VITE_CONFIG: &str = "import { defineConfig } from 'vite';
 import { attricatExtension } from '@attricat/extension/vite';

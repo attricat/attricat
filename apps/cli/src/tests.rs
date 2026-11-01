@@ -3421,6 +3421,7 @@ fn new_extensions_have_a_valid_native_manifest() {
     );
     for file in [
         "package.json",
+        "pnpm-workspace.yaml",
         "vite.config.ts",
         "src/main.tsx",
         "src/Summary.test.tsx",
