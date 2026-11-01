@@ -16,6 +16,19 @@ vi.mock(
 vi.mock('./api', () => ({
   listAuditEvents: vi.fn(),
 }));
+vi.mock('../principals/api', () => ({
+  getDirectory: async () => ({
+    users: [
+      {
+        id: '00000000-0000-4000-8000-000000000001',
+        display_name: 'Ada Lovelace',
+        email: 'ada@example.test',
+        active: true,
+      },
+    ],
+    teams: [],
+  }),
+}));
 const { outletMount } = vi.hoisted(() => ({ outletMount: vi.fn() }));
 vi.mock('../extensions/ExtensionOutlet', () => ({
   ExtensionOutlet: (props: unknown) => {
@@ -143,9 +156,9 @@ describe('AuditLogPage', () => {
     renderPage();
 
     await waitFor(() => expect(listAuditEvents).toHaveBeenCalledTimes(1));
-    const actor = screen.getByRole('textbox', { name: 'Actor ID' });
+    const actor = screen.getByRole('combobox', { name: 'Actor' });
     await user.type(actor, 'not-an-id{Enter}');
-    expect(screen.getByText(/Enter a full ID/)).toBeTruthy();
+    expect(screen.getByText(/paste a full user ID/)).toBeTruthy();
     expect(
       screen.getByRole('button', { name: 'Apply filters' }),
     ).toHaveProperty('disabled', true);
@@ -153,6 +166,36 @@ describe('AuditLogPage', () => {
 
     await user.clear(actor);
     await user.type(actor, `${event.actor_user_id}{Enter}`);
+    await waitFor(() =>
+      expect(listAuditEvents).toHaveBeenLastCalledWith({
+        actor_user_id: event.actor_user_id,
+        limit: 50,
+        offset: 0,
+      }),
+    );
+  });
+
+  it('finds an actor by name or email', async () => {
+    await i18n.changeLanguage('en');
+    vi.mocked(listAuditEvents).mockResolvedValue({
+      events: [],
+      limit: 50,
+      offset: 0,
+      total: 0,
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await waitFor(() => expect(listAuditEvents).toHaveBeenCalledTimes(1));
+    await user.type(
+      screen.getByRole('combobox', { name: 'Actor' }),
+      'ada@example',
+    );
+    await user.click(
+      await screen.findByRole('option', {
+        name: 'Ada Lovelace · ada@example.test',
+      }),
+    );
+    await user.click(screen.getByRole('button', { name: 'Apply filters' }));
     await waitFor(() =>
       expect(listAuditEvents).toHaveBeenLastCalledWith({
         actor_user_id: event.actor_user_id,
