@@ -256,6 +256,7 @@ impl AttricatRepository {
 
     /// The run completion is a domain write, so it validates and locks the
     /// current task token in the same transaction before acknowledging it.
+    /// Terminal runs keep the attempts their task took.
     pub async fn complete_workflow_run_task(
         &self,
         task: &ClaimedTask,
@@ -264,8 +265,8 @@ impl AttricatRepository {
         let mut tx = self.pool.begin().await?;
         let fenced = self.for_task(task);
         fenced.ensure_task_fence(&mut tx).await?;
-        sqlx::query("UPDATE workflow_runs SET status='completed',completed_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='pending'")
-            .bind(task.subject_id).bind(ws).execute(&mut *tx).await?;
+        sqlx::query("UPDATE workflow_runs SET status='completed',attempts=$3,completed_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='pending'")
+            .bind(task.subject_id).bind(ws).bind(task.attempts).execute(&mut *tx).await?;
         tx.commit().await?;
         Ok(())
     }
@@ -279,8 +280,8 @@ impl AttricatRepository {
         let mut tx = self.pool.begin().await?;
         let fenced = self.for_task(task);
         fenced.ensure_task_fence(&mut tx).await?;
-        let run_changed = sqlx::query("UPDATE workflow_runs SET status='dead_letter',failed_at=clock_timestamp(),last_error=$3,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='pending'")
-            .bind(task.subject_id).bind(ws).bind(error).execute(&mut *tx).await?.rows_affected();
+        let run_changed = sqlx::query("UPDATE workflow_runs SET status='dead_letter',attempts=$4,failed_at=clock_timestamp(),last_error=$3,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='pending'")
+            .bind(task.subject_id).bind(ws).bind(error).bind(task.attempts).execute(&mut *tx).await?.rows_affected();
         if run_changed != 1 {
             return Err(RepositoryError::InvalidWorkflowDefinition(
                 "workflow run is not available for its task".into(),
