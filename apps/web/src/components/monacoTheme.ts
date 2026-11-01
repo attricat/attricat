@@ -39,6 +39,8 @@ export const monacoThemeColors = (mode: DesignMode) => {
     'editorCursor.foreground': c.brand.primary,
     'editorLineNumber.foreground': c.text.disabled,
     'editorLineNumber.activeForeground': c.text.secondary,
+    // Monaco dims the numbers of lines past the end below readable contrast.
+    'editorLineNumber.dimmedForeground': c.text.disabled,
     'editorIndentGuide.background1': c.border.subtle,
     'editorIndentGuide.activeBackground1': c.border.default,
     'editorWidget.background': c.background.elevated,
@@ -50,6 +52,21 @@ export const monacoThemeColors = (mode: DesignMode) => {
     'editorHoverWidget.border': c.border.default,
     focusBorder: c.action.focus,
   };
+};
+
+/**
+ * Syntax colors that replace the base theme's where they fall below text
+ * contrast on the editor background, such as comments in dark mode and keys
+ * on the highlighted line.
+ */
+export const monacoThemeRules = (mode: DesignMode) => {
+  const c = colors[mode];
+  // Monaco token colors are hex digits without the leading `#`.
+  return [
+    { token: 'comment', foreground: c.text.secondary.slice(1) },
+    // Keys such as YAML mapping keys, on the highlighted line too.
+    { token: 'type', foreground: c.semantic.info.main.slice(1) },
+  ];
 };
 
 /** The Monaco theme that matches the app's current color mode. */
