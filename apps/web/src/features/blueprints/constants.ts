@@ -1,3 +1,4 @@
+import type { TFunction } from 'i18next';
 import type { BlueprintMigrationBatchStatus } from './schemas';
 
 export const migrationBatchStatuses = {
@@ -14,6 +15,14 @@ export const blueprintKinds = {
   record: 'record',
   mixin: 'mixin',
 } as const;
+
+const knownBlueprintKinds: ReadonlySet<string> = new Set(
+  Object.values(blueprintKinds),
+);
+
+/** A blueprint kind's label; a kind the web app does not know shows as is. */
+export const blueprintKindLabel = (t: TFunction, kind: string) =>
+  knownBlueprintKinds.has(kind) ? t(`blueprints.blueprintKinds.${kind}`) : kind;
 
 /** Approves archival of stored values for attributes removed by a migration. */
 export const archiveRemovalDisposition = 'archive';

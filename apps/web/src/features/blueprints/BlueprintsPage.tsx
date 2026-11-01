@@ -29,6 +29,7 @@ import { useAccess, useCan } from '../auth/useCan';
 import { capabilities, accessTargetKinds } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { blueprintCatalogueOptions } from './queryOptions';
+import { blueprintKindLabel } from './constants';
 
 export const BlueprintsPage = () => {
   const { t } = useTranslation();
@@ -47,6 +48,7 @@ export const BlueprintsPage = () => {
       blueprint.name.toLowerCase().includes(term) ||
       lexiconText(blueprint.name).toLowerCase().includes(term) ||
       blueprint.kind.toLowerCase().includes(term) ||
+      blueprintKindLabel(t, blueprint.kind).toLowerCase().includes(term) ||
       blueprint.status.toLowerCase().includes(term)
     );
   });
@@ -122,7 +124,7 @@ export const BlueprintsPage = () => {
                     </TableCell>
                     <TableCell>
                       <Chip
-                        label={blueprint.kind}
+                        label={blueprintKindLabel(t, blueprint.kind)}
                         size="small"
                         variant="outlined"
                       />
