@@ -2997,6 +2997,8 @@ pub fn is_public_destination(ip: IpAddr) -> bool {
                 || octets[0] == 0
                 || (octets[0] == 100 && (64..=127).contains(&octets[1]))
                 || (octets[0] == 192 && octets[1] == 0 && octets[2] == 0)
+                // The retired 6to4 relay range.
+                || (octets[0] == 192 && octets[1] == 88 && octets[2] == 99)
                 || (octets[0] == 198 && (octets[1] == 18 || octets[1] == 19))
                 || octets[0] >= 240)
         }
@@ -3007,6 +3009,11 @@ pub fn is_public_destination(ip: IpAddr) -> bool {
                 || ip.is_unique_local()
                 || ip.is_unicast_link_local()
                 || ip.is_multicast()
+                // Deprecated site-local, and IPv4-compatible `::a.b.c.d`.
+                || (segments[0] & 0xffc0) == 0xfec0
+                || segments[..6].iter().all(|segment| *segment == 0)
+                // Teredo tunnels to an address this check cannot see.
+                || (segments[0] == 0x2001 && segments[1] == 0)
                 // NAT64 and 6to4 embed an IPv4 address this check cannot see.
                 || (segments[0] == 0x0064 && segments[1] == 0xff9b)
                 || segments[0] == 0x2002
@@ -4448,6 +4455,10 @@ mod tests {
             "192.0.2.1",
             "::1",
             "fc00::1",
+            "fec0::1",
+            "::127.0.0.1",
+            "2001::1",
+            "192.88.99.1",
             "::ffff:127.0.0.1",
             "::ffff:169.254.169.254",
             "::ffff:10.0.0.1",

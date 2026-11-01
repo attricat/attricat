@@ -101,9 +101,10 @@ export const RecordChangeEvent = ({
           {approval}
         </Typography>
       )}
-      {changes.map((change) => (
+      {changes.map((change, index) => (
         <Box
-          key={`${change.attribute_id}-${change.context_id}-${change.change_kind}`}
+          // One save can add several relationships to the same attribute.
+          key={`${change.attribute_id}-${change.context_id}-${change.change_kind}-${index}`}
           sx={{ mt: 1 }}
         >
           <Typography variant="body2">

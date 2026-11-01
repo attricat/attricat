@@ -42,18 +42,19 @@ impl AttricatRepository {
             return Err(RepositoryError::NotFound("valid token input"));
         }
         let mut tx = self.pool.begin().await?;
-        let permitted = Self::is_authorized_on(
+        // The workspace lock orders issuance with deactivation, which revokes
+        // tokens: a token is either seen and revoked, or refused here.
+        Self::lock_workspace_permission_on(
             &mut tx,
             user_id,
             workspace_id,
             Permission::TokensManage,
-            None,
-            None,
         )
-        .await?;
-        if !permitted {
-            return Err(RepositoryError::NotFound("token authority"));
-        }
+        .await
+        .map_err(|error| match error {
+            RepositoryError::NotFound(_) => RepositoryError::NotFound("token authority"),
+            error => error,
+        })?;
         // A PAT may delegate only its own authority and lifetime. Lock the
         // issuer so revocation cannot race this issuance transaction.
         if let Some(issuer) = issuer_token_id {

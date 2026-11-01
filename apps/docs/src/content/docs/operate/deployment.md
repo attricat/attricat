@@ -163,5 +163,7 @@ Secrets are read at startup. To rotate: create the new credential, replace its s
 - The `file_worker_metrics_token` secret set, and `/metrics` reachable only from your monitoring network.
 - A private bucket, with credentials limited to `PutObject`, `GetObject`, `DeleteObject`, `AbortMultipartUpload`, and `ListBucket`.
 - `ATTRICAT_E2E_FIXTURE_EMAIL` unset.
+- A proxy that sets `Strict-Transport-Security` and rate-limits `/api/auth/` per client address. Attricat limits guesses per account and workspace, which does not stop one client trying many of them.
+- At least 2 GiB of memory for each API process. Password hashing is deliberately memory-hard, so a smaller limit can end the process under a burst of sign-ins.
 - A tested backup and restore procedure.
 - With several API replicas: PostgreSQL `max_connections` sized for up to three extra connections per API process, no transaction-mode pooler, and optionally `CACHE_BACKEND=redis`.

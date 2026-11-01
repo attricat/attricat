@@ -942,3 +942,26 @@ async fn a_demo_owner_keeps_no_way_to_sign_in(pool: PgPool) {
     assert_eq!((credentials, tokens), (0, 0));
     server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn unknown_api_routes_are_not_found_and_responses_carry_security_headers(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let response = Client::new()
+        .get(format!("{base_url}/health"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.headers()["x-content-type-options"], "nosniff");
+    assert_eq!(response.headers()["referrer-policy"], "same-origin");
+    assert_eq!(
+        response.headers()["content-security-policy"],
+        "frame-ancestors 'none'"
+    );
+    let unknown = Client::new()
+        .get(format!("{base_url}/no-such-route"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(unknown.status(), StatusCode::NOT_FOUND);
+    server.abort();
+}

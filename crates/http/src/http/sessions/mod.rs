@@ -187,15 +187,17 @@ pub(super) async fn request_password_reset(
         &state.password_reset_url,
         &[("token", secret.expose_for_delivery())],
     )?;
-    // Delivery failure must not change the response: a 500 only for real,
-    // verified accounts would disclose which addresses exist.
-    if let Err(error) = state
-        .mail_delivery
-        .deliver_password_reset(&email, &reset_url)
-        .await
-    {
-        tracing::error!(%error, "password reset email delivery failed");
-    }
+    // Neither a delivery failure nor the time delivery takes may change the
+    // response, since only real, verified accounts get this far.
+    let mail_delivery = state.mail_delivery.clone();
+    tokio::spawn(async move {
+        if let Err(error) = mail_delivery
+            .deliver_password_reset(&email, &reset_url)
+            .await
+        {
+            tracing::error!(%error, "password reset email delivery failed");
+        }
+    });
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 

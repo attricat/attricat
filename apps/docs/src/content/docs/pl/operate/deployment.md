@@ -163,5 +163,7 @@ Sekrety są odczytywane przy starcie. Aby przeprowadzić rotację: utwórz nowe 
 - Ustawiony sekret `file_worker_metrics_token`, a `/metrics` osiągalne tylko z sieci monitoringu.
 - Prywatny zasobnik z danymi uwierzytelniającymi ograniczonymi do `PutObject`, `GetObject`, `DeleteObject`, `AbortMultipartUpload` i `ListBucket`.
 - Nieustawione `ATTRICAT_E2E_FIXTURE_EMAIL`.
+- Proxy, które ustawia `Strict-Transport-Security` i ogranicza liczbę żądań do `/api/auth/` dla każdego adresu klienta. Attricat ogranicza próby dla konta i obszaru roboczego, co nie powstrzyma jednego klienta próbującego wielu z nich.
+- Co najmniej 2 GiB pamięci dla każdego procesu API. Haszowanie haseł celowo zużywa dużo pamięci, więc przy mniejszym limicie seria logowań może zakończyć proces.
 - Przetestowana procedura tworzenia kopii zapasowej i przywracania.
 - Przy kilku replikach API: `max_connections` w PostgreSQL z zapasem do trzech dodatkowych połączeń na proces API, brak poolera w trybie transakcyjnym i opcjonalnie `CACHE_BACKEND=redis`.

@@ -14,13 +14,15 @@ use crate::account::{
     MAXIMUM_PASSWORD_BYTES, Password, PasswordHash, hash_password as hash_password_blocking,
 };
 
-/// Concurrent hashes when the available parallelism cannot be determined.
-const FALLBACK_PASSWORD_WORK_PERMITS: usize = 4;
+/// The most concurrent hashes, each of which holds Argon2's whole memory cost,
+/// however many cores the host has.
+const MAX_PASSWORD_WORK_PERMITS: usize = 4;
 
 static PASSWORD_WORK: LazyLock<Semaphore> = LazyLock::new(|| {
     Semaphore::new(
         std::thread::available_parallelism()
-            .map_or(FALLBACK_PASSWORD_WORK_PERMITS, NonZeroUsize::get),
+            .map_or(MAX_PASSWORD_WORK_PERMITS, NonZeroUsize::get)
+            .min(MAX_PASSWORD_WORK_PERMITS),
     )
 });
 
