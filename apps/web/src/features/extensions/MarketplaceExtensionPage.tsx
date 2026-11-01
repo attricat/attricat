@@ -1,6 +1,15 @@
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { Alert, Button, Paper, Stack, Typography } from '@mui/material';
+import {
+  Alert,
+  Button,
+  MenuItem,
+  Paper,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material';
 import ReactMarkdown from 'react-markdown';
 import { useTranslation } from 'react-i18next';
 import { PackagePlusIcon } from 'lucide-react';
@@ -32,6 +41,11 @@ export const MarketplaceExtensionPage = ({
     onSuccess: () => invalidateExtensions(client),
   });
   const canManage = useCan(capabilities.extensionsManage);
+  const [selectedReleaseId, setSelectedReleaseId] = useState<number>();
+  const releases = details.data?.releases ?? [];
+  const selectedRelease =
+    releases.find((release) => release.release_id === selectedReleaseId) ??
+    releases[0];
   return (
     <PageContainer>
       <PageHeader
@@ -54,41 +68,51 @@ export const MarketplaceExtensionPage = ({
                 origin: details.data.extension.registry_source,
               })}
             </Typography>
-            <Typography sx={{ mt: 2 }} variant="h6">
-              {t('extensions.requestedRelease')}
-            </Typography>
-            {details.data.releases.length === 0 ? (
-              <Alert severity="info">{t('extensions.noStableReleases')}</Alert>
-            ) : (
-              <Stack spacing={1} sx={{ mt: 1 }}>
-                {details.data.releases.map((release) => (
-                  <Stack
-                    direction="row"
-                    key={release.release_id}
-                    spacing={2}
-                    sx={{ alignItems: 'center' }}
-                  >
-                    <Typography>{release.name || release.tag_name}</Typography>
-                    <Typography color="text.secondary" variant="body2">
-                      {release.tag_name}
-                    </Typography>
-                    <Button
-                      disabled={!canManage || install.isPending}
-                      onClick={() =>
-                        install.mutate({
-                          owner,
-                          repository,
-                          release_id: release.release_id,
-                        })
-                      }
-                      startIcon={<PackagePlusIcon />}
-                      variant="contained"
+            {selectedRelease ? (
+              <Stack
+                direction={{ xs: 'column', sm: 'row' }}
+                spacing={2}
+                sx={{ alignItems: { sm: 'center' }, mt: 2 }}
+              >
+                <TextField
+                  label={t('extensions.requestedRelease')}
+                  onChange={(event) =>
+                    setSelectedReleaseId(Number(event.target.value))
+                  }
+                  select
+                  sx={{ flexGrow: 1 }}
+                  value={selectedRelease.release_id}
+                >
+                  {releases.map((release) => (
+                    <MenuItem
+                      key={release.release_id}
+                      value={release.release_id}
                     >
-                      {t('extensions.install')}
-                    </Button>
-                  </Stack>
-                ))}
+                      {release.name && release.name !== release.tag_name
+                        ? `${release.name} (${release.tag_name})`
+                        : release.tag_name}
+                    </MenuItem>
+                  ))}
+                </TextField>
+                <Button
+                  disabled={!canManage || install.isPending}
+                  onClick={() =>
+                    install.mutate({
+                      owner,
+                      repository,
+                      release_id: selectedRelease.release_id,
+                    })
+                  }
+                  startIcon={<PackagePlusIcon />}
+                  variant="contained"
+                >
+                  {t('extensions.install')}
+                </Button>
               </Stack>
+            ) : (
+              <Alert severity="info" sx={{ mt: 2 }}>
+                {t('extensions.noStableReleases')}
+              </Alert>
             )}
           </Paper>
           <Paper sx={{ mt: 3, p: 2 }}>
