@@ -11,6 +11,7 @@ attricat_domain::code_enum! {
         Rule => "rule",
         Team => "team",
         ReusableAttribute => "reusable_attribute",
+        ReusableAttributeGroup => "reusable_attribute_group",
         /// An extension connection, named by its connection key.
         Connection => "connection",
     }
