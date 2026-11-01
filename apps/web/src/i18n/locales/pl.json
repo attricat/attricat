@@ -153,6 +153,7 @@
     "password_missing_symbol": "Hasło musi zawierać symbol.",
     "password_reset_invalid": "Ten link do resetowania hasła jest nieprawidłowy lub wygasł.",
     "password_sign_in_disabled": "Ten obszar roboczy loguje przez dostawcę tożsamości.",
+    "account_change_refused": "Twoje konto należy też do innych obszarów roboczych. Aby to zmienić, zaloguj się hasłem.",
     "password_too_long": "Hasło jest za długie.",
     "password_too_short": "Hasło musi mieć co najmniej {{min}} znaków.",
     "payload_too_large": "Żądanie przekracza limit rozmiaru.",

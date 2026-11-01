@@ -111,6 +111,19 @@ jobs:
           pnpm package
       - run: target/debug/acli extension validate "$RUNNER_TEMP/scaffold/dist/acme.scaffold-0.1.0.tar.zst"
 
+  # Kept out of `release-path`: a new advisory should not stop an unrelated
+  # release, and this needs the registry to answer.
+  dependency-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - run: corepack enable
+      - run: pnpm audit --prod --audit-level=high
+
   web:
     runs-on: ubuntu-latest
     timeout-minutes: 20

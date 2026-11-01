@@ -19,6 +19,7 @@ async fn start(pool: &PgPool) -> (String, JoinHandle<()>) {
             callback_url: CALLBACK.parse().unwrap(),
             allowed_private_hosts: Vec::new().into(),
             extra_root_certificates_pem: None,
+            starting_metadata: Default::default(),
         });
     })
     .await

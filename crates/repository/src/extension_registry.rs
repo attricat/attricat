@@ -5,9 +5,9 @@
 //! may have their README and release assets resolved. No index, README,
 //! release catalogue, or archive is persisted.
 
-use std::str::FromStr;
+use std::{str::FromStr, time::Duration};
 
-use reqwest::{Client, Url, redirect::Policy};
+use reqwest::{Client, Response, Url, redirect::Policy};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -29,6 +29,10 @@ const MAX_GITHUB_OWNER_BYTES: usize = 39;
 const MAX_GITHUB_REPOSITORY_BYTES: usize = 100;
 /// Redirects followed from a release download to its short-lived asset URL.
 const MAX_ASSET_REDIRECTS: usize = 5;
+const REGISTRY_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+const REGISTRY_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+/// Archives are far larger than catalogue responses.
+const ASSET_REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
 const USER_AGENT: &str = "attricat-extension-registry";
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -177,11 +181,36 @@ pub struct GitHubRegistry {
     api_origin: Url,
     raw_origin: Url,
 }
+/// Reads a response no larger than `limit`, stopping as soon as it passes that,
+/// so a body that does not declare its size cannot fill memory first.
+async fn read_capped(mut response: Response, limit: usize) -> Result<Vec<u8>, RegistryError> {
+    if response
+        .content_length()
+        .is_some_and(|size| size > limit as u64)
+    {
+        return Err(RegistryError::InvalidResponse);
+    }
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|_| RegistryError::Unavailable)?
+    {
+        if bytes.len() + chunk.len() > limit {
+            return Err(RegistryError::InvalidResponse);
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    Ok(bytes)
+}
+
 impl GitHubRegistry {
     pub fn new() -> Result<Self, RegistryError> {
         let client = Client::builder()
             .redirect(Policy::none())
             .user_agent(USER_AGENT)
+            .connect_timeout(REGISTRY_CONNECT_TIMEOUT)
+            .timeout(REGISTRY_REQUEST_TIMEOUT)
             .build()
             .map_err(|_| RegistryError::Unavailable)?;
         // GitHub release download URLs redirect to a short-lived asset URL.
@@ -190,6 +219,8 @@ impl GitHubRegistry {
         let asset_client = Client::builder()
             .redirect(Policy::limited(MAX_ASSET_REDIRECTS))
             .user_agent(USER_AGENT)
+            .connect_timeout(REGISTRY_CONNECT_TIMEOUT)
+            .timeout(ASSET_REQUEST_TIMEOUT)
             .build()
             .map_err(|_| RegistryError::Unavailable)?;
         Ok(Self {
@@ -219,19 +250,7 @@ impl GitHubRegistry {
         if !response.status().is_success() {
             return Err(RegistryError::Unavailable);
         }
-        if response
-            .content_length()
-            .is_some_and(|size| size > MAX_REGISTRY_INDEX_BYTES as u64)
-        {
-            return Err(RegistryError::InvalidResponse);
-        }
-        let bytes = response
-            .bytes()
-            .await
-            .map_err(|_| RegistryError::Unavailable)?;
-        if bytes.len() > MAX_REGISTRY_INDEX_BYTES {
-            return Err(RegistryError::InvalidResponse);
-        }
+        let bytes = read_capped(response, MAX_REGISTRY_INDEX_BYTES).await?;
         let index: RegistryIndex =
             serde_json::from_slice(&bytes).map_err(|_| RegistryError::InvalidResponse)?;
         if index.registry_version != 1 || index.extensions.len() > MAX_REGISTRY_ENTRIES {
@@ -293,15 +312,8 @@ impl GitHubRegistry {
         if !response.status().is_success() {
             return Err(RegistryError::Unavailable);
         }
-        let bytes = response
-            .bytes()
-            .await
-            .map_err(|_| RegistryError::Unavailable)?;
-        if bytes.len() > MAX_README_BYTES {
-            return Err(RegistryError::InvalidResponse);
-        }
-        let readme =
-            String::from_utf8(bytes.to_vec()).map_err(|_| RegistryError::InvalidResponse)?;
+        let bytes = read_capped(response, MAX_README_BYTES).await?;
+        let readme = String::from_utf8(bytes).map_err(|_| RegistryError::InvalidResponse)?;
         let releases = self.releases(&repository).await?;
         Ok(ExtensionDetails {
             extension,
@@ -346,21 +358,10 @@ impl GitHubRegistry {
             .send()
             .await
             .map_err(|_| RegistryError::Unavailable)?;
-        if !response.status().is_success()
-            || response
-                .content_length()
-                .is_some_and(|size| size > crate::extensions::MAX_EXTENSION_ARCHIVE_BYTES as u64)
-        {
+        if !response.status().is_success() {
             return Err(RegistryError::Unavailable);
         }
-        let bytes = response
-            .bytes()
-            .await
-            .map_err(|_| RegistryError::Unavailable)?;
-        if bytes.len() > crate::extensions::MAX_EXTENSION_ARCHIVE_BYTES {
-            return Err(RegistryError::InvalidResponse);
-        }
-        Ok(bytes.to_vec())
+        read_capped(response, crate::extensions::MAX_EXTENSION_ARCHIVE_BYTES).await
     }
 
     async fn releases(
@@ -383,19 +384,7 @@ impl GitHubRegistry {
         if !response.status().is_success() {
             return Err(RegistryError::Unavailable);
         }
-        if response
-            .content_length()
-            .is_some_and(|size| size > MAX_RELEASE_CATALOGUE_BYTES as u64)
-        {
-            return Err(RegistryError::InvalidResponse);
-        }
-        let bytes = response
-            .bytes()
-            .await
-            .map_err(|_| RegistryError::Unavailable)?;
-        if bytes.len() > MAX_RELEASE_CATALOGUE_BYTES {
-            return Err(RegistryError::InvalidResponse);
-        }
+        let bytes = read_capped(response, MAX_RELEASE_CATALOGUE_BYTES).await?;
         let releases: Vec<GitHubRelease> =
             serde_json::from_slice(&bytes).map_err(|_| RegistryError::InvalidResponse)?;
         Ok(releases
@@ -450,6 +439,40 @@ struct GitHubAsset {
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// Serves one chunked response, which declares no size, of `size` bytes.
+    async fn undeclared_size_response(size: usize) -> Response {
+        use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = [0; 1024];
+            let _ = socket.read(&mut request).await.unwrap();
+            let _ = socket
+                .write_all(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n")
+                .await;
+            let chunk = format!("{size:x}\r\n{}\r\n0\r\n\r\n", "x".repeat(size));
+            let _ = socket.write_all(chunk.as_bytes()).await;
+        });
+        reqwest::get(format!("http://{address}/")).await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn a_body_past_the_limit_is_refused_without_a_declared_size() {
+        const LIMIT: usize = 1024;
+        assert_eq!(
+            read_capped(undeclared_size_response(LIMIT).await, LIMIT)
+                .await
+                .unwrap()
+                .len(),
+            LIMIT
+        );
+        assert!(matches!(
+            read_capped(undeclared_size_response(LIMIT + 1).await, LIMIT).await,
+            Err(RegistryError::InvalidResponse)
+        ));
+    }
+
     #[test]
     fn canonicalizes_only_safe_github_sources() {
         let source: GitHubRepository = "https://github.com/Acme/Widget/".parse().unwrap();

@@ -1,11 +1,17 @@
 use crate::persistence_rows::{Db, IntoDomain};
 use sqlx::query_as;
+use std::collections::HashSet;
 
 use super::{AttricatRepository, RepositoryError};
+use crate::account::SessionDigest;
 use crate::model::{
     BlueprintHealth, CompletenessHealth, ContextHealth, DataHealthSummary, FreshnessBand,
     RelationshipHealth, StorageHealth,
 };
+
+/// Values that match nothing, for running real queries during readiness.
+const READINESS_PROBE_IDENTIFIER: &str = "";
+const READINESS_PROBE_DIGEST: [u8; 32] = [0; 32];
 
 impl AttricatRepository {
     pub async fn data_health_summary(
@@ -103,8 +109,28 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
     /// Performs a bounded, side-effect-free database dependency probe for the
     /// API readiness endpoint. This is intentionally separate from liveness:
     /// a live process with an unavailable database must not receive traffic.
+    /// Whether this build can serve from the database as it is: reachable,
+    /// with every migration this build expects, and with the columns a signed-in
+    /// request reads. A later migration is fine, since a rollback runs on one,
+    /// unless it removed something this build still uses.
     pub async fn readiness(&self) -> Result<(), RepositoryError> {
-        sqlx::query("SELECT 1").execute(&self.pool).await?;
+        let applied: HashSet<i64> =
+            sqlx::query_scalar("SELECT version FROM _sqlx_migrations WHERE success")
+                .fetch_all(&self.pool)
+                .await?
+                .into_iter()
+                .collect();
+        if let Some(missing) = crate::MIGRATOR
+            .iter()
+            .map(|migration| migration.version)
+            .find(|version| !applied.contains(version))
+        {
+            tracing::warn!(missing, "the database is missing a migration");
+            return Err(RepositoryError::NotFound("database migration"));
+        }
+        self.discover_workspace(READINESS_PROBE_IDENTIFIER).await?;
+        let digest = SessionDigest::from_slice(&READINESS_PROBE_DIGEST).expect("digest length");
+        self.validate_browser_session(&digest).await?;
         Ok(())
     }
 }

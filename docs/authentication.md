@@ -90,6 +90,21 @@ non-owner invitees receive an acceptance link rather than a password setup link,
 an onboarding link issued earlier stops working. Passwords belong to the account, so
 this applies only to signing in to that workspace.
 
+Turning the restriction on ends the password sessions of everyone but active owners,
+and so does losing ownership while it is on. Someone already signed in elsewhere
+cannot accept a non-owner invitation to a restricted workspace from that session: it
+gets the same `403` and the invitation stays pending, to be accepted through the
+provider. Removing `OIDC_CALLBACK_URL` leaves a restriction in place with no provider
+to use, so an owner must lift it before anyone else can sign in.
+
+### Account-wide changes
+
+The display name and time zone belong to the account, which every one of its
+workspaces shows. A session from a workspace's provider proves only what that
+provider says, and a personal token may have been issued by one, so when the account
+is also an active member elsewhere, both get `403 account_change_refused`. A password
+session can still make the change.
+
 ### Offboarding
 
 Attricat is not told when a provider disables someone. New sign-ins stop at once,

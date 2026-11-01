@@ -14,7 +14,7 @@ use axum::{
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{Duration, Utc};
 use openidconnect::{
-    Audience, EmptyAdditionalClaims, EndUserEmail, IssuerUrl, JsonWebKeyId, Nonce,
+    Audience, ClientId, EmptyAdditionalClaims, EndUserEmail, IssuerUrl, JsonWebKeyId, Nonce,
     PrivateSigningKey, StandardClaims, SubjectIdentifier,
     core::{
         CoreIdToken, CoreIdTokenClaims, CoreJsonWebKeySet, CoreJwsSigningAlgorithm,
@@ -46,6 +46,8 @@ pub struct FakeLogin {
     pub expired: bool,
     pub signed_by_other_key: bool,
     pub unsigned: bool,
+    pub authorized_party: Option<String>,
+    pub issued_in_the_future: bool,
 }
 
 impl FakeLogin {
@@ -61,6 +63,8 @@ impl FakeLogin {
             expired: false,
             signed_by_other_key: false,
             unsigned: false,
+            authorized_party: None,
+            issued_in_the_future: false,
         }
     }
 }
@@ -251,6 +255,8 @@ fn id_token(issuer: &str, nonce: &str, login: &FakeLogin) -> String {
     let now = Utc::now();
     let (issued_at, expires_at) = if login.expired {
         (now - Duration::hours(2), now - Duration::hours(1))
+    } else if login.issued_in_the_future {
+        (now + Duration::days(1), now + Duration::days(2))
     } else {
         (now, now + Duration::hours(1))
     };
@@ -273,6 +279,7 @@ fn id_token(issuer: &str, nonce: &str, login: &FakeLogin) -> String {
         standard,
         EmptyAdditionalClaims {},
     )
+    .set_authorized_party(login.authorized_party.clone().map(ClientId::new))
     .set_nonce(Some(Nonce::new(
         login.nonce.clone().unwrap_or_else(|| nonce.to_owned()),
     )));

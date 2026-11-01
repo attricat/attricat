@@ -18,6 +18,7 @@ x-app: &app
     - extension_credential_key
     - identity_provider_credential_key
     - operator_api_token
+    - api_metrics_token
   restart: unless-stopped
   read_only: true
   tmpfs:
@@ -86,3 +87,5 @@ secrets:
     file: ${ATTRICAT_SECRETS_HOST_DIR:-./secrets}/identity_provider_credential_key
   operator_api_token:
     file: ${ATTRICAT_SECRETS_HOST_DIR:-./secrets}/operator_api_token
+  api_metrics_token:
+    file: ${ATTRICAT_SECRETS_HOST_DIR:-./secrets}/api_metrics_token

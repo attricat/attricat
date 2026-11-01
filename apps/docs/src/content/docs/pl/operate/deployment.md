@@ -72,6 +72,7 @@ printf '%s\n' 'postgres://attricat:…@postgres.example:5432/attricat' > databas
 printf '%s\n' '…' > s3_secret_access_key
 printf '%s\n' '…' > smtp_password
 printf '%s\n' '…' > file_worker_metrics_token
+printf '%s\n' '…' > api_metrics_token
 printf '%s\n' '…' > bootstrap_owner_password
 touch llm_api_key redis_url extension_credential_key identity_provider_credential_key operator_api_token
 sudo chown 10001:10001 * && sudo chmod 400 *
@@ -160,7 +161,7 @@ Sekrety są odczytywane przy starcie. Aby przeprowadzić rotację: utwórz nowe 
 - `SMTP_TLS_MODE=starttls` lub `implicit`.
 - Prawdziwy `ATTRICAT_BOOTSTRAP_OWNER_EMAIL`; sekret `bootstrap_owner_password` opróżniony po pierwszym uruchomieniu.
 - Pliki sekretów czytelne tylko dla uid 10001 i żadnych sekretów w zmiennych środowiskowych.
-- Ustawiony sekret `file_worker_metrics_token`, a `/metrics` osiągalne tylko z sieci monitoringu.
+- Ustawione sekrety `file_worker_metrics_token` i `api_metrics_token`, a `/metrics` osiągalne tylko z sieci monitoringu.
 - Prywatny zasobnik z danymi uwierzytelniającymi ograniczonymi do `PutObject`, `GetObject`, `DeleteObject`, `AbortMultipartUpload` i `ListBucket`.
 - Nieustawione `ATTRICAT_E2E_FIXTURE_EMAIL`.
 - Proxy, które ustawia `Strict-Transport-Security` i ogranicza liczbę żądań do `/api/auth/` dla każdego adresu klienta. Attricat ogranicza próby dla konta i obszaru roboczego, co nie powstrzyma jednego klienta próbującego wielu z nich.

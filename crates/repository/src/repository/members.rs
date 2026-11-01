@@ -594,6 +594,9 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
             sqlx::query("INSERT INTO role_grants (id, workspace_id, membership_id, role_id, scope_type, scope_target_id) VALUES ($1, $2, $3, $4, 'workspace', $2) ON CONFLICT (workspace_id, membership_id, role_id, scope_type, scope_target_id) DO NOTHING").bind(Uuid::new_v4()).bind(workspace_id).bind(target_membership_id).bind(OWNER_ROLE_ID).execute(&mut *tx).await?;
             sqlx::query("DELETE FROM role_grants WHERE workspace_id = $1 AND membership_id IN (SELECT id FROM workspace_memberships WHERE workspace_id = $1 AND user_id = $2) AND role_id = $3 AND scope_type = 'workspace' AND scope_target_id = $1").bind(workspace_id).bind(actor_id).bind(OWNER_ROLE_ID).execute(&mut *tx).await?;
         }
+        if Self::passwords_restricted_on(&mut tx, workspace_id).await? {
+            Self::end_restricted_password_sessions_on(&mut tx, workspace_id).await?;
+        }
         advance_generation(&mut tx, workspace_id, Generation::Access).await?;
         self.commit_mutation(tx).await?;
         Ok(())
@@ -709,6 +712,14 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         .bind(digest)
         .fetch_one(&mut *tx)
         .await?;
+        // Accepting here links no identity, so a member who may not use a
+        // password would have spent the invitation with no way to sign in.
+        // Refusing leaves it pending for them to accept through the provider.
+        if Self::passwords_restricted_on(&mut tx, workspace_id).await?
+            && !Self::active_owner_on(&mut tx, user_id, workspace_id).await?
+        {
+            return Err(RepositoryError::PasswordSignInDisabled);
+        }
         self.for_workspace(workspace_id).commit_mutation(tx).await?;
         Ok(membership_id)
     }

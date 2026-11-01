@@ -452,8 +452,10 @@ mod route_tests {
         let unauthorized: Vec<_> = routes
             .iter()
             .filter(|(route, method)| {
-                // Health probes are mounted outside the authorization layer.
+                // Health probes are mounted outside the authorization layer, and
+                // so are metrics, which check the deployment's own secret.
                 !route.starts_with("/health")
+                    && route != "/metrics"
                     && !is_public_route(route)
                     && !is_self_service_route(route)
                     && route != "/workspace/invitations/accept"

@@ -1,5 +1,6 @@
 {
   "codes": [
+    "account_change_refused",
     "annotation_namespace_adoption_required",
     "annotation_revision_conflict",
     "approval_already_decided",

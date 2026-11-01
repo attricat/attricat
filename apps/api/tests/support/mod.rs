@@ -24,6 +24,7 @@ use api::{
     },
     extension_runtime::{ExtensionRuntime, ExtensionRuntimeConfig},
     file_access::{AllowFileAccess, FileAccessPolicy},
+    http::OperatorToken,
     http::{AppState, BuildInfo, router},
     mail::{MailDelivery, MailError},
     repository::AttricatRepository,
@@ -312,6 +313,7 @@ pub async fn start_session_server(pool: PgPool) -> (String, JoinHandle<()>) {
     start_server_with_auth_mode(pool, 0, false).await
 }
 
+pub const METRICS_TOKEN: &str = "test-metrics-token";
 pub const BOOTSTRAP_WORKSPACE_ID: &str = "00000000-0000-4000-8000-000000000002";
 pub const BOOTSTRAP_OWNER_ID: &str = "00000000-0000-4000-8000-000000000201";
 
@@ -492,6 +494,7 @@ async fn start_configured_server(
         demo_mode: false,
         oidc: None,
         operator_token: None,
+        metrics_token: Some(OperatorToken::new(METRICS_TOKEN)),
         sample_logins: None,
         build_info: BuildInfo {
             version: env!("CARGO_PKG_VERSION"),

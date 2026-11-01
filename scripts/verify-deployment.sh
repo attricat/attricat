@@ -73,6 +73,81 @@ curl --fail --silent --cookie-jar "$session_cookies" \
 for path in auth/session blueprints contexts workspace/navigation/sidebar extensions/runtime; do
   curl --fail --silent --cookie "$session_cookies" "http://127.0.0.1:3000/api/$path" >/dev/null
 done
+
+# The release path must also write: a record and a file through the running
+# API and object store, and a real email through the mail relay.
+csrf="$(awk '$6 == "attricat_csrf" { print $7 }' "$session_cookies")"
+token="$(curl --fail --silent --cookie "$session_cookies" --header "x-attricat-csrf: $csrf" \
+  --header 'content-type: application/json' \
+  --data '{"label":"release-test","permissions":["blueprints.read","blueprints.write","blueprints.publish","records.read","records.write","records.publish"]}' \
+  http://127.0.0.1:3000/api/personal-access-tokens | jq -r .secret)"
+[[ -n "$token" && "$token" != null ]]
+acli() {
+  "${compose[@]}" exec -T -e ATTRICAT_API_URL=http://127.0.0.1:3000/api -e "ATTRICAT_TOKEN=$token" api acli "$@"
+}
+write_in_api() {
+  "${compose[@]}" exec -T api sh -c "cat > /tmp/$1"
+}
+write_in_api smoke-blueprint.yaml <<'YAML'
+format_version: 1
+code: release_smoke
+name: Release smoke
+kind: record
+attributes:
+  - code: name
+    value_type: string
+  - code: attachment
+    value_type: file
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+  detail:
+    type: stack
+    children:
+      - {type: heading, text: Release smoke}
+      - {type: field, field: name}
+  table:
+    type: table
+    columns:
+      - {field: name}
+YAML
+write_in_api smoke-values.yaml <<'YAML'
+values:
+  - kind: scalar
+    attribute_code: name
+    value: Release smoke
+YAML
+blueprint_id="$(acli blueprint create --file /tmp/smoke-blueprint.yaml | jq -r .blueprint.id)"
+acli blueprint publish "$blueprint_id" 1 >/dev/null
+record_id="$(acli record create --blueprint release_smoke --values /tmp/smoke-values.yaml \
+  --context-id 00000000-0000-4000-8000-000000000001 | jq -r .id)"
+curl --fail --silent --header "Authorization: Bearer $token" \
+  "http://127.0.0.1:3000/api/v1/records/$record_id" | grep -q 'Release smoke'
+# A 1x1 PNG, compared byte for byte after going through the object store.
+smoke_png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
+printf '%s' "$smoke_png" | base64 -d | write_in_api smoke.png
+file_id="$(acli file upload "$record_id" attachment --file /tmp/smoke.png | jq -r '(.files // .)[0].id // .id')"
+# The API serves a file once the file worker has prepared it.
+for _ in $(seq 1 60); do
+  [[ "$(curl --fail --silent --header "Authorization: Bearer $token" \
+    "http://127.0.0.1:3000/api/files/$file_id/download" | base64 -w0 || true)" == "$smoke_png" ]] \
+    && file_served=true && break
+  sleep 1
+done
+[[ "${file_served:-false}" == true ]]
+curl --fail --silent --output /dev/null --header 'content-type: application/json' \
+  --data '{"email":"owner@example.test"}' http://127.0.0.1:3000/api/auth/password-reset
+for _ in $(seq 1 30); do
+  "${compose[@]}" exec -T mailpit wget -qO- http://127.0.0.1:8025/api/v1/messages \
+    | grep -q 'owner@example.test' && mail_delivered=true && break
+  sleep 1
+done
+[[ "${mail_delivered:-false}" == true ]]
+
+assert_status 401 http://127.0.0.1:3000/api/metrics
+curl --fail --silent -H 'Authorization: Bearer release-test-api-metrics-token' http://127.0.0.1:3000/api/metrics \
+  | grep -q attricat_http_requests_total
 assert_status 401 http://127.0.0.1:3001/metrics
 curl --fail --silent -H 'Authorization: Bearer release-test-token' http://127.0.0.1:3001/metrics \
   | grep -q attricat_file_worker_queue_depth
@@ -117,6 +192,7 @@ api_container="$(ATTRICAT_IMAGE="$rollback_image" "${compose[@]}" ps -q api)"
   echo "rollback_fixture_version=$rollback_version"
   echo "rollback_image_id=$rollback_image_id"
   echo 'smoke=passed'
+  echo 'writes=passed'
   echo 'api_alias_authorization=passed'
   echo 'dependency_outages=passed'
   echo 'runtime_utilities_absent=passed'

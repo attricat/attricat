@@ -65,7 +65,7 @@ use crate::{
 use axum::{
     Router,
     extract::State,
-    http::{HeaderName, HeaderValue, header},
+    http::{HeaderMap, HeaderName, HeaderValue, header},
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::{get, post, put},
@@ -128,6 +128,8 @@ pub struct AppState {
     pub oidc: Option<OidcSettings>,
     /// Enables the operator API when set.
     pub operator_token: Option<OperatorToken>,
+    /// The `api_metrics_token` secret. `/metrics` stays closed without it.
+    pub metrics_token: Option<OperatorToken>,
     /// Seeded per-role accounts that the web sign-in offers to pre-fill.
     pub sample_logins: Option<SampleLogins>,
     pub build_info: BuildInfo,
@@ -166,6 +168,7 @@ pub struct OidcSettings {
     /// PEM certificates trusted for provider connections beyond the system
     /// roots, for a provider behind a corporate CA.
     pub extra_root_certificates_pem: Option<Arc<[u8]>>,
+    pub starting_metadata: oidc::StartingMetadataCache,
 }
 pub use self::sessions::{SampleAccount, SampleLogins};
 pub use self::streams::StreamControl;
@@ -415,12 +418,12 @@ async fn server_timing(
 
 pub fn router(state: AppState) -> Router {
     let probes = Router::new()
+        .route("/metrics", get(metrics))
         .route("/health", get(data_health::liveness))
         .route("/health/live", get(data_health::liveness))
         .route("/health/ready", get(data_health::readiness))
         .with_state(state.clone());
     let api = Router::new()
-        .route("/metrics", get(metrics))
         .route("/agent/conversations", post(agents::create_conversation))
         .route(
             "/agent/conversations/search",
@@ -1404,7 +1407,16 @@ fn panic_response(panic: Box<dyn std::any::Any + Send + 'static>) -> Response {
     ApiError::internal("internal server error").into_response()
 }
 
-async fn metrics(State(state): State<AppState>) -> Response {
+/// Metrics describe the whole process, across workspaces, so they answer to a
+/// deployment secret and never to a workspace's session or token. Without the
+/// secret nobody can read them.
+async fn metrics(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let authorized = state.metrics_token.as_ref().is_some_and(|token| {
+        auth::bearer_credentials(&headers).is_some_and(|supplied| token.matches(supplied))
+    });
+    if !authorized {
+        return ApiError::unauthenticated().into_response();
+    }
     (
         [(header::CONTENT_TYPE, PROMETHEUS_CONTENT_TYPE)],
         state.metrics.render(),

@@ -46,7 +46,7 @@ impl OperatorToken {
         Self(Sha256::digest(secret.as_bytes()).into())
     }
 
-    fn matches(&self, supplied: &str) -> bool {
+    pub(super) fn matches(&self, supplied: &str) -> bool {
         Sha256::digest(supplied.as_bytes())
             .as_slice()
             .ct_eq(&self.0)

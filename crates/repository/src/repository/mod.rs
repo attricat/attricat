@@ -141,6 +141,7 @@ mod sealing;
 mod search_page;
 mod search_scope;
 mod sessions;
+pub use sessions::DiscoveredWorkspace;
 mod solution_packs;
 mod status;
 mod structural_constraints;

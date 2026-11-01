@@ -83,6 +83,16 @@ fn user_audit_context(action: &str, user_id: Uuid, metadata: Value) -> AuditCont
     }
 }
 
+/// Whether an address a provider proved is the one invited. A non-ASCII
+/// character that lowercases to ASCII, like the Kelvin sign, is a different
+/// address at the provider that would otherwise compare equal here.
+fn email_matches_invitation(email: &str, invitee_email: &str) -> bool {
+    let email = email.trim();
+    email.chars().all(|character| {
+        character.is_ascii() || !character.to_lowercase().all(|lower| lower.is_ascii())
+    }) && email.to_lowercase() == invitee_email
+}
+
 impl AttricatRepository {
     /// Returns a copy whose next mutation is audited as `user_id` signing in
     /// with `method`. A sign-in has no request context yet.
@@ -296,7 +306,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         .await?;
         let (invitation_id, invitee_email) =
             invitation.ok_or(RepositoryError::InvitationInvalid)?;
-        if email.trim().to_lowercase() != invitee_email {
+        if !email_matches_invitation(email, &invitee_email) {
             return Err(RepositoryError::InvitationEmailMismatch);
         }
         let user_id = Self::upsert_invited_user_on(&mut tx, &invitee_email, None)
