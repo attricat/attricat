@@ -1627,6 +1627,7 @@
     "runNow": "Uruchom teraz",
     "recordId": "ID rekordu",
     "manualRunRecordId": "ID rekordu dla ręcznego uruchomienia",
+    "runRecordNotFound": "Żaden rekord nie ma tego ID albo nie masz do niego dostępu.",
     "invalidRecordId": "Wpisz poprawny ID rekordu.",
     "title": "Przepływy pracy",
     "description": "Twórz, przeglądaj i obsługuj wersjonowane przepływy pracy obszaru roboczego.",
