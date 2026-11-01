@@ -249,6 +249,13 @@ describe('ExplorerResultsTable', () => {
     expect(getRecordsPublications).toHaveBeenCalledTimes(2);
   });
 
+  it('keeps the table short without results, so the empty message is in view', () => {
+    renderTable([]);
+    expect(screen.getByText('No records matched this search.')).toBeTruthy();
+    const table = screen.getByRole('table', { name: 'Results' });
+    expect(getComputedStyle(table.parentElement!).height).toBe('auto');
+  });
+
   it('offers revision-scoped Explorer actions only for single-version results', () => {
     popoverMount.mockClear();
     renderTable([item], false, vi.fn(), undefined, true, false);
