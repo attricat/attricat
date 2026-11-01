@@ -185,16 +185,16 @@ attributes:
             .unwrap(),
         task_worker::TaskOutcome::DeadLettered
     ));
-    let (run_status, task_status): (String, String) = sqlx::query_as(
-        "SELECT r.status,t.status FROM workflow_runs r JOIN tasks t ON t.subject_id=r.id AND t.kind='workflow_run.v1' WHERE r.id=$1",
+    let (run_status, task_status, run_attempts): (String, String, i32) = sqlx::query_as(
+        "SELECT r.status,t.status,r.attempts FROM workflow_runs r JOIN tasks t ON t.subject_id=r.id AND t.kind='workflow_run.v1' WHERE r.id=$1",
     )
     .bind(run_id)
     .fetch_one(&pool)
     .await
     .unwrap();
     assert_eq!(
-        (run_status.as_str(), task_status.as_str()),
-        ("dead_letter", "dead_letter")
+        (run_status.as_str(), task_status.as_str(), run_attempts),
+        ("dead_letter", "dead_letter", 1)
     );
 
     assert!(
@@ -217,14 +217,16 @@ attributes:
 
 async fn wait_for_completed_retry(pool: &PgPool, run_id: Uuid) {
     for _ in 0..100 {
-        let (status, attempts): (String, i32) = sqlx::query_as(
-            "SELECT r.status, t.attempts FROM workflow_runs r JOIN tasks t ON t.subject_id=r.id AND t.kind='workflow_run.v1' WHERE r.id=$1",
+        let (status, attempts, run_attempts): (String, i32, i32) = sqlx::query_as(
+            "SELECT r.status, t.attempts, r.attempts FROM workflow_runs r JOIN tasks t ON t.subject_id=r.id AND t.kind='workflow_run.v1' WHERE r.id=$1",
         )
                 .bind(run_id)
                 .fetch_one(pool)
                 .await
                 .unwrap();
         if status == "completed" && attempts >= 2 {
+            // The run reports the attempts it took, not the default zero.
+            assert_eq!(run_attempts, attempts);
             return;
         }
         tokio::time::sleep(Duration::from_millis(25)).await;
