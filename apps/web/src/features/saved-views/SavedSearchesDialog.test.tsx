@@ -50,12 +50,14 @@ describe('SavedSearchesDialog', () => {
       await screen.findByRole('button', { name: /Delete saved search Chairs/ }),
     );
     expect(remove).not.toHaveBeenCalled();
-    expect(screen.getByText('Delete this saved search?')).toBeTruthy();
+    expect(screen.getByText('Delete the saved search “Chairs”?')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Delete' }));
 
     expect(remove).toHaveBeenCalledWith(view.id);
     await waitFor(() =>
-      expect(screen.queryByText('Delete this saved search?')).toBeNull(),
+      expect(
+        screen.queryByText('Delete the saved search “Chairs”?'),
+      ).toBeNull(),
     );
   });
 });

@@ -1343,7 +1343,7 @@
     "saveChanges": "Zapisz zmiany",
     "discardSearchChanges": "Odrzuć zmiany",
     "deleteSavedSearch": "Usuń zapisane wyszukiwanie",
-    "deleteSavedSearchConfirm": "Usunąć zapisane wyszukiwanie?",
+    "deleteSavedSearchConfirm": "Usunąć zapisane wyszukiwanie „{{name}}”?",
     "confirmDeleteSavedSearch": "Usuń",
     "linkCopied": "Skopiowano link",
     "savedSearches": "Zapisane wyszukiwania",

@@ -38,9 +38,7 @@ export const SaveSearchDialog = ({
       description: '',
       visibility: SAVED_VIEW_VISIBILITY_PRIVATE as SavedViewVisibility,
     },
-    onSubmit: ({ value }) => {
-      if (value.name.trim()) onSave({ ...value, name: value.name.trim() });
-    },
+    onSubmit: ({ value }) => onSave({ ...value, name: value.name.trim() }),
   });
 
   return (
@@ -53,10 +51,19 @@ export const SaveSearchDialog = ({
       title={title ?? t('explorer.saveSearch')}
     >
       <Stack spacing={2} sx={{ pt: 1 }}>
-        <form.Field name="name">
+        <form.Field
+          name="name"
+          validators={{
+            // Spaces alone are no name.
+            onSubmit: ({ value }) =>
+              value.trim() ? undefined : t('validation.required'),
+          }}
+        >
           {(field) => (
             <TextField
               required
+              error={field.state.meta.errors.length > 0}
+              helperText={field.state.meta.errors[0]}
               label={t('explorer.searchName')}
               slotProps={{
                 htmlInput: { maxLength: SAVED_VIEW_NAME_MAX_LENGTH },
