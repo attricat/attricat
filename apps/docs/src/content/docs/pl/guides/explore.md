@@ -111,7 +111,7 @@ Rekordy wymagające uwagi mają też [tag systemowy](/pl/builders/modeling/#tagi
 
 Wszystko, co ustawisz w Przeglądarce, jest przechowywane w adresie URL strony, więc przeładowanie strony lub wysłanie linku odtwarza ten stan.
 
-- **Zapisz wyszukiwanie** zapisuje wyszukiwanie pod nazwą. Wybierz **Prywatne**, aby zachować je dla siebie, albo **Obszar roboczy**, aby udostępnić je każdemu członkowi, który może odczytywać rekordy. Zapisane wyszukiwania otwierasz z listy **Zapisane wyszukiwania**.
+- **Zapisz wyszukiwanie** zapisuje wyszukiwanie pod nazwą. Wybierz **Prywatne**, aby zachować je dla siebie, albo **Obszar roboczy**, aby udostępnić je każdemu członkowi, który może odczytywać rekordy. Zapisane wyszukiwania otwierasz z listy **Zapisane wyszukiwania**. Nazwa musi się różnić od nazw wszystkich zapisanych wyszukiwań, które już widzisz.
 - Zmiana zapisanego wyszukiwania oznacza je jako mające niezapisane zmiany. **Zapisz zmiany** je aktualizuje, a **Zapisz wyszukiwanie** zapisuje kopię.
 - [Pakiet rozwiązania](/pl/builders/solution-packs/#reguły-przepływy-pracy-i-zapisane-wyszukiwania) może dodać gotowe wyszukiwania z widocznością **Obszar roboczy**, na przykład kolejki do przeglądu. Pojawiają się na tej samej liście, a ich właścicielem jest osoba, która zastosowała pakiet.
 - **Udostępnij wyszukiwanie** kopiuje link. Długie wyszukiwania są zapisywane jako migawka i udostępniane jako krótki link.

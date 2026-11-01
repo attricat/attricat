@@ -42,7 +42,7 @@ A role is a named set of permissions. Four built-in roles cannot be changed:
 | `editor` | Read and write blueprints, records, and contexts; delete records; read data health. Cannot publish blueprints or records, or administer the workspace. |
 | `viewer` | Read blueprints, records, contexts, and data health. |
 
-Create **custom roles** under **Roles** to give a narrower or different set. You can only put permissions into a role that you have yourself. Duplicate a built-in role to start from its permissions. Retiring a custom role can move its grants to a replacement role.
+Create **custom roles** under **Roles** to give a narrower or different set. You can only put permissions into a role that you have yourself. Duplicate a built-in role to start from its permissions. You can change a custom role's permissions later. A role needs at least one permission; saving one without any fails with `422 role_permissions_required`. Retiring a custom role can move its grants to a replacement role.
 
 The full permission list is in the [permissions reference](/reference/permissions/).
 

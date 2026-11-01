@@ -42,7 +42,7 @@ Rola to nazwany zestaw uprawnień. Czterech wbudowanych ról nie można zmienia�
 | `editor` | Odczytywać i zapisywać schematy, rekordy i konteksty; usuwać rekordy; odczytywać stan danych. Nie może publikować schematów ani rekordów ani administrować obszarem roboczym. |
 | `viewer` | Odczytywać schematy, rekordy, konteksty i stan danych. |
 
-Utwórz **role niestandardowe** na karcie **Role**, aby przyznać węższy lub inny zestaw uprawnień. Do roli możesz dodać tylko te uprawnienia, które masz sam. Zduplikuj rolę wbudowaną, aby zacząć od jej uprawnień. Wycofując rolę niestandardową, możesz przenieść jej przydziały na rolę zastępczą.
+Utwórz **role niestandardowe** na karcie **Role**, aby przyznać węższy lub inny zestaw uprawnień. Do roli możesz dodać tylko te uprawnienia, które posiadasz. Zduplikuj rolę wbudowaną, aby zacząć od jej uprawnień. Uprawnienia roli niestandardowej możesz później zmienić. Rola musi mieć co najmniej jedno uprawnienie; zapisanie roli bez uprawnień kończy się błędem `422 role_permissions_required`. Wycofując rolę niestandardową, możesz przenieść jej przydziały na rolę zastępczą.
 
 Pełna lista uprawnień znajduje się w [dokumentacji uprawnień](/pl/reference/permissions/).
 

@@ -163,6 +163,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `GET`, `POST` | `/v1/records/{id}/comments` | The record's comments, newest first and 30 per page, with `has_more`; continue with `before_time` and `before_id`. Post `{"body": "…"}` (Markdown, up to 10,000 characters) to add one; returns `204`. Anyone who can read the record can comment. |
 | `GET` | `/v1/records/{id}/comments/count` | `{"count"}`. |
 | `PATCH` | `/v1/records/{id}/comments/{comment_id}` | Edit your own comment: `{"body", "revision"}`, with the `revision` you read. Returns `204`, or `409` `comment_conflict` if the comment changed since. |
+| `DELETE` | `/v1/records/{id}/comments/{comment_id}?revision=<n>` | Delete your own comment, with the `revision` you read. Returns `204`, or `409` `comment_conflict` if the comment changed since. |
 
 ### Batch changes
 
@@ -417,7 +418,7 @@ See [Translate labels](/builders/translations/).
 | `POST` | `/auth/discover`, `/auth/login`, `/auth/renew`, `/auth/logout` | Sessions. |
 | `GET` | `/auth/session` | Current identity and capabilities. |
 | `PATCH` | `/auth/preferences` | Your preferences: `{"time_zone": "Europe/Warsaw"}`, an IANA name, or `null` to clear it. Returns the session. |
-| `PUT` | `/auth/display-name` | Your display name: `{"display_name"}`, 2 to 64 letters, digits, and spaces. Returns the session. |
+| `PUT`, `DELETE` | `/auth/display-name` | Set your display name, `{"display_name"}` with 2 to 64 letters, digits, and spaces, or clear it. Returns the session. |
 | `PUT`, `DELETE` | `/auth/avatar` | Upload your avatar as `multipart/form-data` with one `file` part (returns `201`), or remove it. |
 | `POST` | `/auth/access` | Which of the named records, blueprints or contexts (`kind`, `ids`, at most 500) the caller holds a `permission` on, counting record, blueprint-family and context-subtree grants. |
 | `GET`, `POST`, `DELETE` | `/personal-access-tokens[/{id}]` | Personal API tokens. The secret is returned once. |

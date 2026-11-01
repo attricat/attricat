@@ -111,7 +111,7 @@ Records that need attention also carry the `attricat.needs_attention` [system ta
 
 Everything you set up in the Explorer is kept in the page URL, so reloading the page or sending the link restores it.
 
-- **Save search** stores the search under a name. Choose **Private** to keep it to yourself, or **Workspace** to share it with every member who can read records. Open saved searches from the **Saved searches** list.
+- **Save search** stores the search under a name. Choose **Private** to keep it to yourself, or **Workspace** to share it with every member who can read records. Open saved searches from the **Saved searches** list. The name must differ from every saved search you can already see.
 - Changing a saved search marks it as having unsaved changes. **Save changes** updates it; **Save search** saves a copy.
 - A [solution pack](/builders/solution-packs/#rules-workflows-and-saved-searches) can add ready-made **Workspace** searches, such as review queues. They appear in the same list, and the person who applied the pack owns them.
 - **Share search** copies a link. Long searches are stored as a snapshot and shared as a short link.

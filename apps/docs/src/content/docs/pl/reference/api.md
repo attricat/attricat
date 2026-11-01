@@ -163,6 +163,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `GET`, `POST` | `/v1/records/{id}/comments` | Komentarze rekordu, od najnowszych, po 30 na stronę, z `has_more`; kontynuuj z `before_time` i `before_id`. Wysłanie `{"body": "…"}` (Markdown, do 10 000 znaków) dodaje komentarz i zwraca `204`. Komentować może każdy, kto może odczytać rekord. |
 | `GET` | `/v1/records/{id}/comments/count` | `{"count"}`. |
 | `PATCH` | `/v1/records/{id}/comments/{comment_id}` | Edytuje własny komentarz: `{"body", "revision"}` z odczytaną wartością `revision`. Zwraca `204` albo `409` `comment_conflict`, jeśli komentarz od tego czasu się zmienił. |
+| `DELETE` | `/v1/records/{id}/comments/{comment_id}?revision=<n>` | Usuwa własny komentarz z odczytaną wartością `revision`. Zwraca `204` albo `409` `comment_conflict`, jeśli komentarz od tego czasu się zmienił. |
 
 ### Zmiany wsadowe
 
@@ -417,7 +418,7 @@ Trasy `GET` reguł, wykonań i ustaleń wymagają `rules.read`; pozostałe trasy
 | `POST` | `/auth/discover`, `/auth/login`, `/auth/renew`, `/auth/logout` | Sesje. |
 | `GET` | `/auth/session` | Bieżąca tożsamość i możliwości. |
 | `PATCH` | `/auth/preferences` | Twoje preferencje: `{"time_zone": "Europe/Warsaw"}`, nazwa strefy IANA, albo `null`, aby ją wyczyścić. Zwraca sesję. |
-| `PUT` | `/auth/display-name` | Twoja nazwa wyświetlana: `{"display_name"}`, od 2 do 64 liter, cyfr i spacji. Zwraca sesję. |
+| `PUT`, `DELETE` | `/auth/display-name` | Ustawia nazwę wyświetlaną, `{"display_name"}` od 2 do 64 liter, cyfr i spacji, albo ją usuwa. Zwraca sesję. |
 | `PUT`, `DELETE` | `/auth/avatar` | Przesyła awatar jako `multipart/form-data` z jedną częścią `file` (zwraca `201`) albo go usuwa. |
 | `POST` | `/auth/access` | Które z podanych rekordów, schematów lub kontekstów (`kind`, `ids`, najwyżej 500) objęte są uprawnieniem `permission` wywołującego, z uwzględnieniem nadań na rekord, rodzinę schematu i poddrzewo kontekstów. |
 | `GET`, `POST`, `DELETE` | `/personal-access-tokens[/{id}]` | Osobiste tokeny API. Sekret jest zwracany tylko raz. |
