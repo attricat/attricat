@@ -159,6 +159,7 @@
     "reserved_context_code": "Kod kontekstu „default” jest zarezerwowany.",
     "reusable_attribute_already_attached": "Rekord ma już ten atrybut wielokrotnego użytku.",
     "reusable_attribute_not_published": "Opublikuj rewizję atrybutu wielokrotnego użytku, zanim go dołączysz lub dodasz do grupy.",
+    "role_permissions_required": "Wybierz co najmniej jedno uprawnienie dla roli.",
     "rule_dry_run_required": "Przed włączeniem tej rewizji reguły przeprowadź pełne próbne wykonanie.",
     "rule_has_existing_violations": "Rekordy już naruszają tę regułę (naruszenia: {{existing_violations}}). Popraw je albo zaakceptuj istniejące naruszenia.",
     "rule_not_enabled": "Reguła nie jest włączona. Włącz ją albo uruchom próbne wykonanie.",

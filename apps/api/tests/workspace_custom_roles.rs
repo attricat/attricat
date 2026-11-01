@@ -133,3 +133,30 @@ async fn retiring_a_role_into_owner_keeps_owner_grants_workspace_scoped(pool: Pg
     .unwrap();
     assert_eq!(scoped_owner_grants, 0);
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_role_needs_at_least_one_permission(pool: PgPool) {
+    let (workspace, owner, _) = workspace_owner(&pool).await;
+    let repository = AttricatRepository::system(pool.clone());
+    assert!(matches!(
+        repository
+            .create_workspace_role(owner, workspace, "attricat-empty", &[])
+            .await,
+        Err(api::repository::RepositoryError::RolePermissionsRequired)
+    ));
+    let reader = repository
+        .create_workspace_role(
+            owner,
+            workspace,
+            "attricat-reader",
+            &["records.read".to_owned()],
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        repository
+            .update_workspace_role(owner, workspace, reader, "attricat-reader", &[])
+            .await,
+        Err(api::repository::RepositoryError::RolePermissionsRequired)
+    ));
+}

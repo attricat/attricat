@@ -129,6 +129,7 @@ error_codes! {
     ReservedContextCode = "reserved_context_code",
     ReusableAttributeAlreadyAttached = "reusable_attribute_already_attached",
     ReusableAttributeNotPublished = "reusable_attribute_not_published",
+    RolePermissionsRequired = "role_permissions_required",
     RuleDryRunRequired = "rule_dry_run_required",
     RuleHasExistingViolations = "rule_has_existing_violations",
     RuleNotEnabled = "rule_not_enabled",
@@ -315,6 +316,7 @@ impl RepositoryError {
             Self::ContextCycle => plain(Unprocessable, Code::ContextCycle),
             Self::ContextInUse => plain(Unprocessable, Code::ContextInUse),
             Self::LastWorkspaceOwner => plain(Conflict, Code::LastWorkspaceOwner),
+            Self::RolePermissionsRequired => plain(Unprocessable, Code::RolePermissionsRequired),
             Self::SavedSearchNameTaken => plain(Conflict, Code::SavedSearchNameTaken),
             Self::DefaultContextOnly => plain(Unprocessable, Code::DefaultContextOnly),
             Self::RecordLocked {

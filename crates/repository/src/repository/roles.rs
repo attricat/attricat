@@ -172,6 +172,11 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         {
             return Err(RepositoryError::InvalidCode);
         }
+        // A role without permissions grants nothing to the members it is
+        // granted to.
+        if permissions.is_empty() {
+            return Err(RepositoryError::RolePermissionsRequired);
+        }
         let known: i64 =
             sqlx::query_scalar("SELECT count(*) FROM permissions WHERE code = ANY($1)")
                 .bind(permissions)

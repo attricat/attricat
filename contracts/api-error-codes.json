@@ -88,6 +88,7 @@
     "reserved_context_code",
     "reusable_attribute_already_attached",
     "reusable_attribute_not_published",
+    "role_permissions_required",
     "rule_dry_run_required",
     "rule_has_existing_violations",
     "rule_not_enabled",
