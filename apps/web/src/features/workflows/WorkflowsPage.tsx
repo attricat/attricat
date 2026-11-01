@@ -148,7 +148,10 @@ export const WorkflowsPage = () => {
                             size="small"
                           />
                         ) : summary ? (
-                          <Stack spacing={0.25}>
+                          <Stack
+                            spacing={0.25}
+                            sx={{ alignItems: 'flex-start' }}
+                          >
                             <RunStatusChip status={summary.latest.status} />
                             <Typography
                               color="text.secondary"
