@@ -13,7 +13,29 @@ Every workspace has a **sign-in identifier** that looks like a domain name, such
 
 Sessions last eight hours, and renewing one through the API or `acli auth renew` cannot keep it alive more than 24 hours after signing in. Five failed sign-ins for the same email within fifteen minutes block further attempts for a while, in every workspace. **Forgot password** sends a reset link that works once, for 30 minutes. For security, the reset form never says whether an address has an account.
 
-Password sign-in is the only method today. Single sign-on, multi-factor authentication, and passkeys are not available yet.
+Sign-in is a password or [single sign-on](#single-sign-on). Multi-factor authentication and passkeys are not available yet, though your identity provider can require them for single sign-on.
+
+## Single sign-on
+
+A workspace can let people sign in through one OpenID Connect identity provider, such as Microsoft Entra ID, Okta, Google Workspace, or Keycloak. Your deployment needs `OIDC_CALLBACK_URL` and the `identity_provider_credential_key` secret; see the [configuration reference](/reference/configuration/). Set it up under **Manage → Workspace management → Sign-in**, which requires `workspace.manage`:
+
+1. Register an application with your provider, using the redirect URI that **Sign-in** shows. Make sure the provider shares the `email` claim.
+2. Enter the issuer URL, client ID, client secret, and the name for the sign-in button, and save.
+3. Select **Run test sign-in**. This proves the settings work and connects your account.
+4. Turn on **Offer this provider on the sign-in page**.
+5. Optionally, let only owners use a password, so they have a way back in if the provider fails.
+
+Changing the issuer or client ID turns the provider off again and restores password sign-in for everyone until a new test sign-in succeeds. Each sign-in is checked against the workspace's own provider, so a provider set up for one workspace gives no access to another.
+
+### Who can sign in
+
+Single sign-on does not create accounts on its own. Someone gets access by accepting an [invitation](#invitations) through the provider, which requires the provider's address to match the invitation, or by connecting their account under **Profile** while signed in. An email address alone never links an account.
+
+### Removing access
+
+Attricat is not told when your provider disables someone. They cannot start a new sign-in, but a session they already have lasts up to eight hours, or 24 hours if renewed, and their personal API tokens keep working.
+
+To end access at once, set the member **inactive**. That signs them out and revokes their API tokens in this workspace, and reactivating them does not restore those tokens. To disconnect someone from the provider without deactivating them, use **Disconnect single sign-on** under **Members**.
 
 ## Members
 

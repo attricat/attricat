@@ -52,6 +52,17 @@ other endpoints, so each provider request is checked: HTTPS only (HTTP also unde
 addresses unless the deployment lists the host in `OIDC_ALLOWED_PRIVATE_HOSTS`. The
 connection is pinned to the addresses that passed the check.
 
+### Trying it locally
+
+`just keycloak` starts Keycloak in the worktree's stack with two realms, so two
+workspaces can have different issuers. Both have the client `attricat` with the
+secret `attricat-dev-secret`. Sign in as `ada@acme.example` or
+`grace@globex.example`, with the password `dev-password`. Use the issuer
+`http://127.0.0.1:$KEYCLOAK_PORT/realms/acme` under **Manage → Workspace management
+→ Sign-in**; plain HTTP is accepted only with `ATTRICAT_DEVTOOLS`. `just setup`
+writes the local callback for `127.0.0.1`, so a browser on another address needs
+`OIDC_CALLBACK_URL` set to match it.
+
 ### Restricting passwords
 
 `password_sign_in = 'owners'` leaves a password only to active owners, as the way

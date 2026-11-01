@@ -89,7 +89,8 @@ export const AppLayout = () => {
   const isLoginRoute = isWithinRoute(pathname, publicRoutes.login);
   if (
     isWithinRoute(pathname, publicRoutes.passwordReset) ||
-    pathname === publicRoutes.onboarding
+    pathname === publicRoutes.onboarding ||
+    pathname === publicRoutes.singleSignOnComplete
   )
     return <Outlet />;
   if (session.isPending || (session.isSuccess && !sessionBoundary.ready))
@@ -119,6 +120,9 @@ export const AppLayout = () => {
         onSignOut={() => void signOutAfterSessionFailure()}
       />
     );
+  // An invitee may have no account to sign in with yet.
+  if (!session.data && pathname === publicRoutes.invitationAccept)
+    return <Outlet />;
   if (!session.data)
     return (
       <>

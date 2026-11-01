@@ -12,6 +12,11 @@ dev: _assert-env
     docker compose --env-file .env --project-name attricat-$POSTGRES_PORT -f apps/api/compose.yml wait rustfs-init
     trap 'just down' EXIT; process-compose --no-server --env .env up
 
+# Start a local identity provider for trying single sign-on.
+keycloak: _assert-env
+    docker compose --env-file .env --project-name attricat-$POSTGRES_PORT -f apps/api/compose.yml --profile oidc up -d keycloak
+    @echo "Keycloak: http://127.0.0.1:$KEYCLOAK_PORT (realms acme and globex, client attricat, secret attricat-dev-secret)"
+
 down: _assert-env
     docker compose --env-file .env --project-name attricat-$POSTGRES_PORT -f apps/api/compose.yml down
 

@@ -55,8 +55,10 @@ export const navigationRoutes = {
 
 // Routes rendered outside the authenticated application shell.
 export const publicRoutes = {
+  invitationAccept: '/invitations/accept',
   login: '/login',
   onboarding: '/onboarding',
+  singleSignOnComplete: '/oidc/complete',
   passwordReset: '/password-reset',
 } as const;
 
@@ -162,6 +164,7 @@ const managementNavigationItems = [
       capabilities.workspaceNavigationManage,
       capabilities.tagColorsManage,
       capabilities.agentsManage,
+      capabilities.workspaceManage,
     ],
   },
   {

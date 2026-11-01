@@ -67,6 +67,7 @@ const rulesTitle = (t: TFunction, [section]: Segments) => {
 /** Workspace sections whose title key differs from their path segment. */
 const workspaceSectionKeys: Record<string, string | undefined> = {
   'tag-colors': 'workspace.tagColors',
+  'sign-in': 'workspace.signIn',
 };
 
 const simpleManagementPageKeys: Record<string, string> = {
@@ -122,6 +123,8 @@ const sectionTitle = (t: TFunction, [section, ...rest]: Segments) => {
       return t('auth.signIn');
     case 'password-reset':
       return t('auth.resetPassword');
+    case 'oidc':
+      return t('auth.signIn');
     case 'onboarding':
       return t('navigation.workspaceManagement');
     case 'invitations':

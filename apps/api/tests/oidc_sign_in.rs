@@ -1341,3 +1341,27 @@ async fn deactivating_a_member_revokes_their_tokens_for_good(pool: PgPool) {
     harness.server.abort();
     harness.provider.server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn only_workspace_managers_are_told_they_can_manage_sign_in(pool: PgPool) {
+    let harness = start(&pool).await;
+    harness.set_owner_password().await;
+    let owner = harness
+        .sign_in_with_password("default.local", OWNER_EMAIL)
+        .await;
+    let session: Value = harness.session_of(&owner).await.json().await.unwrap();
+    assert_eq!(session["capabilities"]["workspace_manage"], true);
+
+    let viewer = member_with_role(&pool, VIEWER_ROLE_ID).await;
+    set_password(&pool, viewer).await;
+    let email: String = sqlx::query_scalar("SELECT email FROM users WHERE id = $1")
+        .bind(viewer)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let browser = harness.sign_in_with_password("default.local", &email).await;
+    let session: Value = harness.session_of(&browser).await.json().await.unwrap();
+    assert_eq!(session["capabilities"]["workspace_manage"], false);
+    harness.server.abort();
+    harness.provider.server.abort();
+}

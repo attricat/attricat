@@ -487,7 +487,9 @@ acli workspace identity-provider update [--enabled true|false] [--password-sign-
 acli workspace identity-provider delete
 ```
 
-`acli operator workspace identity-provider <id> …` przyjmuje te same podpolecenia dla dowolnego obszaru roboczego.
+`acli operator workspace identity-provider <id> …` przyjmuje te same podpolecenia dla dowolnego obszaru roboczego. `acli workspace member unlink-identity <id-członka>` usuwa połączenie członka z dostawcą.
+
+`acli` nie loguje się przez dostawcę. Jeśli używasz logowania jednokrotnego, utwórz osobisty token API w aplikacji internetowej.
 
 ### Operator
 

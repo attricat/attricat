@@ -28,6 +28,7 @@ import { Route as ManageDataHealthRouteImport } from './routes/manage/data-healt
 import { Route as ManageExportsRouteImport } from './routes/manage/exports'
 import { Route as ManageLexiconRouteImport } from './routes/manage/lexicon'
 import { Route as ManageSystemHealthRouteImport } from './routes/manage/system-health'
+import { Route as OidcCompleteRouteImport } from './routes/oidc/complete'
 import { Route as PasswordResetIndexRouteImport } from './routes/password-reset/index'
 import { Route as PasswordResetConfirmRouteImport } from './routes/password-reset/confirm'
 import { Route as ProfileIndexRouteImport } from './routes/profile/index'
@@ -63,6 +64,7 @@ import { Route as ManageWorkspaceInvitationsRouteImport } from './routes/manage/
 import { Route as ManageWorkspaceMembersRouteImport } from './routes/manage/workspace/members'
 import { Route as ManageWorkspaceNavigationRouteImport } from './routes/manage/workspace/navigation'
 import { Route as ManageWorkspaceRolesRouteImport } from './routes/manage/workspace/roles'
+import { Route as ManageWorkspaceSignInRouteImport } from './routes/manage/workspace/sign-in'
 import { Route as ManageWorkspaceTagColorsRouteImport } from './routes/manage/workspace/tag-colors'
 import { Route as ManageWorkspaceTeamsRouteImport } from './routes/manage/workspace/teams'
 import { Route as ProfileExtensionRunsIndexRouteImport } from './routes/profile/extension-runs/index'
@@ -175,6 +177,11 @@ const ManageLexiconRoute = ManageLexiconRouteImport.update({
 const ManageSystemHealthRoute = ManageSystemHealthRouteImport.update({
   id: '/manage/system-health',
   path: '/manage/system-health',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OidcCompleteRoute = OidcCompleteRouteImport.update({
+  id: '/oidc/complete',
+  path: '/oidc/complete',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PasswordResetIndexRoute = PasswordResetIndexRouteImport.update({
@@ -364,6 +371,11 @@ const ManageWorkspaceRolesRoute = ManageWorkspaceRolesRouteImport.update({
   path: '/manage/workspace/roles',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ManageWorkspaceSignInRoute = ManageWorkspaceSignInRouteImport.update({
+  id: '/manage/workspace/sign-in',
+  path: '/manage/workspace/sign-in',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ManageWorkspaceTagColorsRoute =
   ManageWorkspaceTagColorsRouteImport.update({
     id: '/manage/workspace/tag-colors',
@@ -477,6 +489,7 @@ export interface FileRoutesByFullPath {
   '/manage/exports': typeof ManageExportsRoute
   '/manage/lexicon': typeof ManageLexiconRoute
   '/manage/system-health': typeof ManageSystemHealthRoute
+  '/oidc/complete': typeof OidcCompleteRoute
   '/password-reset/confirm': typeof PasswordResetConfirmRoute
   '/records/$recordId': typeof RecordsRecordIdRouteWithChildren
   '/records/new': typeof RecordsNewRoute
@@ -509,6 +522,7 @@ export interface FileRoutesByFullPath {
   '/manage/workspace/members': typeof ManageWorkspaceMembersRoute
   '/manage/workspace/navigation': typeof ManageWorkspaceNavigationRoute
   '/manage/workspace/roles': typeof ManageWorkspaceRolesRoute
+  '/manage/workspace/sign-in': typeof ManageWorkspaceSignInRoute
   '/manage/workspace/tag-colors': typeof ManageWorkspaceTagColorsRoute
   '/manage/workspace/teams': typeof ManageWorkspaceTeamsRoute
   '/profile/extension-runs/$runId': typeof ProfileExtensionRunsRunIdRoute
@@ -548,6 +562,7 @@ export interface FileRoutesByTo {
   '/manage/exports': typeof ManageExportsRoute
   '/manage/lexicon': typeof ManageLexiconRoute
   '/manage/system-health': typeof ManageSystemHealthRoute
+  '/oidc/complete': typeof OidcCompleteRoute
   '/password-reset/confirm': typeof PasswordResetConfirmRoute
   '/records/new': typeof RecordsNewRoute
   '/users/$userId': typeof UsersUserIdRoute
@@ -577,6 +592,7 @@ export interface FileRoutesByTo {
   '/manage/workspace/members': typeof ManageWorkspaceMembersRoute
   '/manage/workspace/navigation': typeof ManageWorkspaceNavigationRoute
   '/manage/workspace/roles': typeof ManageWorkspaceRolesRoute
+  '/manage/workspace/sign-in': typeof ManageWorkspaceSignInRoute
   '/manage/workspace/tag-colors': typeof ManageWorkspaceTagColorsRoute
   '/manage/workspace/teams': typeof ManageWorkspaceTeamsRoute
   '/profile/extension-runs/$runId': typeof ProfileExtensionRunsRunIdRoute
@@ -619,6 +635,7 @@ export interface FileRoutesById {
   '/manage/exports': typeof ManageExportsRoute
   '/manage/lexicon': typeof ManageLexiconRoute
   '/manage/system-health': typeof ManageSystemHealthRoute
+  '/oidc/complete': typeof OidcCompleteRoute
   '/password-reset/confirm': typeof PasswordResetConfirmRoute
   '/records/$recordId': typeof RecordsRecordIdRouteWithChildren
   '/records/new': typeof RecordsNewRoute
@@ -651,6 +668,7 @@ export interface FileRoutesById {
   '/manage/workspace/members': typeof ManageWorkspaceMembersRoute
   '/manage/workspace/navigation': typeof ManageWorkspaceNavigationRoute
   '/manage/workspace/roles': typeof ManageWorkspaceRolesRoute
+  '/manage/workspace/sign-in': typeof ManageWorkspaceSignInRoute
   '/manage/workspace/tag-colors': typeof ManageWorkspaceTagColorsRoute
   '/manage/workspace/teams': typeof ManageWorkspaceTeamsRoute
   '/profile/extension-runs/$runId': typeof ProfileExtensionRunsRunIdRoute
@@ -694,6 +712,7 @@ export interface FileRouteTypes {
     | '/manage/exports'
     | '/manage/lexicon'
     | '/manage/system-health'
+    | '/oidc/complete'
     | '/password-reset/confirm'
     | '/records/$recordId'
     | '/records/new'
@@ -726,6 +745,7 @@ export interface FileRouteTypes {
     | '/manage/workspace/members'
     | '/manage/workspace/navigation'
     | '/manage/workspace/roles'
+    | '/manage/workspace/sign-in'
     | '/manage/workspace/tag-colors'
     | '/manage/workspace/teams'
     | '/profile/extension-runs/$runId'
@@ -765,6 +785,7 @@ export interface FileRouteTypes {
     | '/manage/exports'
     | '/manage/lexicon'
     | '/manage/system-health'
+    | '/oidc/complete'
     | '/password-reset/confirm'
     | '/records/new'
     | '/users/$userId'
@@ -794,6 +815,7 @@ export interface FileRouteTypes {
     | '/manage/workspace/members'
     | '/manage/workspace/navigation'
     | '/manage/workspace/roles'
+    | '/manage/workspace/sign-in'
     | '/manage/workspace/tag-colors'
     | '/manage/workspace/teams'
     | '/profile/extension-runs/$runId'
@@ -835,6 +857,7 @@ export interface FileRouteTypes {
     | '/manage/exports'
     | '/manage/lexicon'
     | '/manage/system-health'
+    | '/oidc/complete'
     | '/password-reset/confirm'
     | '/records/$recordId'
     | '/records/new'
@@ -867,6 +890,7 @@ export interface FileRouteTypes {
     | '/manage/workspace/members'
     | '/manage/workspace/navigation'
     | '/manage/workspace/roles'
+    | '/manage/workspace/sign-in'
     | '/manage/workspace/tag-colors'
     | '/manage/workspace/teams'
     | '/profile/extension-runs/$runId'
@@ -908,6 +932,7 @@ export interface RootRouteChildren {
   ManageExportsRoute: typeof ManageExportsRoute
   ManageLexiconRoute: typeof ManageLexiconRoute
   ManageSystemHealthRoute: typeof ManageSystemHealthRoute
+  OidcCompleteRoute: typeof OidcCompleteRoute
   PasswordResetConfirmRoute: typeof PasswordResetConfirmRoute
   RecordsRecordIdRoute: typeof RecordsRecordIdRouteWithChildren
   RecordsNewRoute: typeof RecordsNewRoute
@@ -938,6 +963,7 @@ export interface RootRouteChildren {
   ManageWorkspaceMembersRoute: typeof ManageWorkspaceMembersRoute
   ManageWorkspaceNavigationRoute: typeof ManageWorkspaceNavigationRoute
   ManageWorkspaceRolesRoute: typeof ManageWorkspaceRolesRoute
+  ManageWorkspaceSignInRoute: typeof ManageWorkspaceSignInRoute
   ManageWorkspaceTagColorsRoute: typeof ManageWorkspaceTagColorsRoute
   ManageWorkspaceTeamsRoute: typeof ManageWorkspaceTeamsRoute
   ManageBlueprintsIndexRoute: typeof ManageBlueprintsIndexRoute
@@ -1086,6 +1112,13 @@ declare module '@tanstack/react-router' {
       path: '/manage/system-health'
       fullPath: '/manage/system-health'
       preLoaderRoute: typeof ManageSystemHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/oidc/complete': {
+      id: '/oidc/complete'
+      path: '/oidc/complete'
+      fullPath: '/oidc/complete'
+      preLoaderRoute: typeof OidcCompleteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/password-reset/': {
@@ -1333,6 +1366,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManageWorkspaceRolesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/manage/workspace/sign-in': {
+      id: '/manage/workspace/sign-in'
+      path: '/manage/workspace/sign-in'
+      fullPath: '/manage/workspace/sign-in'
+      preLoaderRoute: typeof ManageWorkspaceSignInRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/manage/workspace/tag-colors': {
       id: '/manage/workspace/tag-colors'
       path: '/manage/workspace/tag-colors'
@@ -1552,6 +1592,7 @@ const rootRouteChildren: RootRouteChildren = {
   ManageExportsRoute: ManageExportsRoute,
   ManageLexiconRoute: ManageLexiconRoute,
   ManageSystemHealthRoute: ManageSystemHealthRoute,
+  OidcCompleteRoute: OidcCompleteRoute,
   PasswordResetConfirmRoute: PasswordResetConfirmRoute,
   RecordsRecordIdRoute: RecordsRecordIdRouteWithChildren,
   RecordsNewRoute: RecordsNewRoute,
@@ -1585,6 +1626,7 @@ const rootRouteChildren: RootRouteChildren = {
   ManageWorkspaceMembersRoute: ManageWorkspaceMembersRoute,
   ManageWorkspaceNavigationRoute: ManageWorkspaceNavigationRoute,
   ManageWorkspaceRolesRoute: ManageWorkspaceRolesRoute,
+  ManageWorkspaceSignInRoute: ManageWorkspaceSignInRoute,
   ManageWorkspaceTagColorsRoute: ManageWorkspaceTagColorsRoute,
   ManageWorkspaceTeamsRoute: ManageWorkspaceTeamsRoute,
   ManageBlueprintsIndexRoute: ManageBlueprintsIndexRoute,

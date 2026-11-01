@@ -11,6 +11,7 @@ export const capabilities = {
   workspaceNavigationManage: 'workspace_navigation_manage',
   tagColorsManage: 'tag_colors_manage',
   agentsManage: 'agents_manage',
+  workspaceManage: 'workspace_manage',
   extensionsRead: 'extensions_read',
   extensionsManage: 'extensions_manage',
   workflowsRead: 'workflows_read',

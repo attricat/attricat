@@ -45,6 +45,7 @@ pub(super) struct SessionCapabilities {
     workspace_navigation_manage: bool,
     tag_colors_manage: bool,
     agents_manage: bool,
+    workspace_manage: bool,
     extensions_read: bool,
     extensions_manage: bool,
     workflows_read: bool,
@@ -77,6 +78,7 @@ impl SessionResponse {
         c.workspace_navigation_manage &= permits(Permission::WorkspaceNavigationManage);
         c.tag_colors_manage &= permits(Permission::TagColorsManage);
         c.agents_manage &= permits(Permission::AgentsManage);
+        c.workspace_manage &= permits(Permission::WorkspaceManage);
         c.extensions_read &= permits(Permission::ExtensionsRead);
         c.extensions_manage &= permits(Permission::ExtensionsManage);
         c.workflows_read &= permits(Permission::WorkflowsRead);
@@ -192,7 +194,7 @@ async fn session_response_payload_with_identifier(
 }
 
 /// Workspace-wide permissions reported as session capability flags.
-const CAPABILITY_PERMISSIONS: [Permission; 24] = [
+const CAPABILITY_PERMISSIONS: [Permission; 25] = [
     Permission::AuditRead,
     Permission::DataHealthRead,
     Permission::MembersManage,
@@ -202,6 +204,7 @@ const CAPABILITY_PERMISSIONS: [Permission; 24] = [
     Permission::WorkspaceNavigationManage,
     Permission::TagColorsManage,
     Permission::AgentsManage,
+    Permission::WorkspaceManage,
     Permission::ExtensionsRead,
     Permission::ExtensionsManage,
     Permission::WorkflowsRead,
@@ -241,6 +244,7 @@ async fn session_capabilities(
         workspace_navigation_manage: has(Permission::WorkspaceNavigationManage),
         tag_colors_manage: has(Permission::TagColorsManage),
         agents_manage: has(Permission::AgentsManage),
+        workspace_manage: has(Permission::WorkspaceManage),
         extensions_read: has(Permission::ExtensionsRead),
         extensions_manage: has(Permission::ExtensionsManage),
         workflows_read: has(Permission::WorkflowsRead),

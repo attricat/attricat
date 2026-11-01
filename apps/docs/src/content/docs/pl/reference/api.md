@@ -416,6 +416,10 @@ Trasy `GET` reguł, wykonań i ustaleń wymagają `rules.read`; pozostałe trasy
 | Metoda | Ścieżka | Opis |
 | --- | --- | --- |
 | `POST` | `/auth/discover`, `/auth/login`, `/auth/renew`, `/auth/logout` | Sesje. |
+| `POST`, `GET` | `/auth/oidc/start`, `/auth/oidc/callback` | Logowanie przez dostawcę tożsamości obszaru roboczego. `start` zwraca `authorization_url` i przyjmuje `invitation_secret`, aby przyjąć zaproszenie. |
+| `POST` | `/auth/oidc/invitation` | Na podstawie `secret` zaproszenia zwraca jego `login_identifier` i `display_name` dostawcy. |
+| `GET`, `POST` | `/auth/oidc/link` | Czy konto wywołującego jest połączone z dostawcą; rozpoczęcie łączenia. |
+| `DELETE` | `/workspace/members/{id}/identity` | Usunięcie połączenia członka z dostawcą (`workspace.manage`). |
 | `GET` | `/auth/session` | Bieżąca tożsamość i możliwości. |
 | `PATCH` | `/auth/preferences` | Twoje preferencje: `{"time_zone": "Europe/Warsaw"}`, nazwa strefy IANA, albo `null`, aby ją wyczyścić. Zwraca sesję. |
 | `PUT`, `DELETE` | `/auth/display-name` | Ustawia nazwę wyświetlaną, `{"display_name"}` od 2 do 64 liter, cyfr i spacji, albo ją usuwa. Zwraca sesję. |

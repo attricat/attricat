@@ -316,6 +316,9 @@ export default async () => {
     PASSWORD_RESET_URL: `${e2eWebUrl}/password-reset/confirm`,
     WORKSPACE_ONBOARDING_URL: `${e2eWebUrl}/onboarding`,
     OIDC_CALLBACK_URL: `${e2eWebUrl}/api/auth/oidc/callback`,
+    // The fake provider in oidc.spec.ts runs on the loopback address over HTTP.
+    OIDC_ALLOWED_PRIVATE_HOSTS: '127.0.0.1',
+    ATTRICAT_DEVTOOLS: 'true',
   };
   const api = start('cargo', ['run', '-p', 'api', '--bin', 'api'], apiEnv);
   let fileWorker: ChildProcess | undefined;

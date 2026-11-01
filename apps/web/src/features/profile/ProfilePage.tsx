@@ -25,6 +25,7 @@ import { fileStatuses, THUMBNAIL_POLLING_STATUSES } from '../files/constants';
 import { AvatarControls } from './AvatarControls';
 import { ChangeDisplayNameDialog } from './ChangeDisplayNameDialog';
 import { ProfileSection } from './ProfileSection';
+import { SingleSignOnSection } from './SingleSignOnSection';
 import { TimeZonePreference } from './TimeZonePreference';
 import {
   avatarPollMilliseconds,
@@ -186,6 +187,7 @@ export const ProfilePage = () => {
       >
         <TimeZonePreference disabled={!account} />
       </ProfileSection>
+      <SingleSignOnSection />
     </Stack>
   );
 };

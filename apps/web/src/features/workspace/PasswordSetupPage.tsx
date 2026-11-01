@@ -1,11 +1,13 @@
-import { Button, TextField, Typography } from '@mui/material';
+import { Button, Divider, TextField, Typography } from '@mui/material';
 import { useForm } from '@tanstack/react-form';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { AuthFormShell } from '../auth/AuthFormShell';
+import { getInvitationOptions } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
+import { SingleSignOnButton } from '../auth/SingleSignOnButton';
 import { completeOnboarding } from './api';
 
 const minimumPasswordLength = 5;
@@ -27,6 +29,12 @@ export const PasswordSetupPage = ({
   const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const options = useQuery({
+    queryKey: authQueryKeys.invitationOptions(initialInvitationSecret),
+    queryFn: () => getInvitationOptions(initialInvitationSecret),
+    enabled: Boolean(initialInvitationSecret),
+    retry: false,
+  });
   const setup = useMutation({
     meta: { toast: false },
     mutationFn: async (value: PasswordSetupValues) => {
@@ -61,6 +69,16 @@ export const PasswordSetupPage = ({
       <Typography component="h1" variant="h5">
         {t('workspace.setupTitle')}
       </Typography>
+      {options.data?.display_name && (
+        <>
+          <SingleSignOnButton
+            displayName={options.data.display_name}
+            invitationSecret={initialInvitationSecret}
+            loginIdentifier={options.data.login_identifier}
+          />
+          <Divider>{t('auth.or')}</Divider>
+        </>
+      )}
       <form.Field name="invitationSecret">
         {(field) => (
           <TextField

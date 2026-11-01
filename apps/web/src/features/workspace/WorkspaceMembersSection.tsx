@@ -2,6 +2,8 @@ import { personName } from '../../components/personName';
 import { useForm } from '@tanstack/react-form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { capabilities } from '../auth/capabilities';
+import { useCan } from '../auth/useCan';
 import {
   Alert,
   Button,
@@ -29,6 +31,7 @@ import {
   selectedScopeTarget,
   transferOwnership,
   type ScopeType,
+  unlinkMemberIdentity,
 } from './api';
 import { activeMemberState, ownerRoleCode, scopeTypes } from './constants';
 import { workspaceQueryKeys } from './queryKeys';
@@ -37,7 +40,7 @@ import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { useExclusiveMutation } from '../../components/useExclusiveMutation';
 import { assignableRolesOptions } from './queryOptions';
-import { Trash2Icon, ArrowRightLeftIcon } from 'lucide-react';
+import { Trash2Icon, ArrowRightLeftIcon, UnlinkIcon } from 'lucide-react';
 
 export const WorkspaceMembersSection = ({
   canManage,
@@ -120,6 +123,19 @@ export const WorkspaceMembersSection = ({
     }) => revokeMemberRole(memberId, grantId),
     onSuccess: async () => {
       setRevokeTarget(undefined);
+      await refresh();
+    },
+  });
+  // Unlinking ends the member's single sign-on sessions here at once.
+  const canManageSignIn = useCan(capabilities.workspaceManage);
+  const [unlinkTarget, setUnlinkTarget] = useState<{
+    id: string;
+    name: string;
+  }>();
+  const unlink = useMutation({
+    mutationFn: unlinkMemberIdentity,
+    onSuccess: async () => {
+      setUnlinkTarget(undefined);
       await refresh();
     },
   });
@@ -206,6 +222,21 @@ export const WorkspaceMembersSection = ({
                   </Button>
                 ))}
               <Stack direction="row" sx={{ gap: 1 }}>
+                {canManageSignIn && member.identity_linked && (
+                  <Button
+                    disabled={unlink.isPending}
+                    onClick={() => {
+                      unlink.reset();
+                      setUnlinkTarget({
+                        id: member.id,
+                        name: personName(member.display_name, member.email),
+                      });
+                    }}
+                    startIcon={<UnlinkIcon />}
+                  >
+                    {t('workspace.unlinkIdentity')}
+                  </Button>
+                )}
                 {isOwner &&
                   member.user_id !== currentUserId &&
                   member.state === activeMemberState && (
@@ -242,6 +273,19 @@ export const WorkspaceMembersSection = ({
             name: revokeTarget.name,
             role: revokeTarget.role,
           })}
+        </ConfirmDialog>
+      )}
+      {unlinkTarget && (
+        <ConfirmDialog
+          confirmLabel={t('workspace.unlinkIdentity')}
+          destructive
+          error={unlink.error}
+          isPending={unlink.isPending}
+          onClose={() => setUnlinkTarget(undefined)}
+          onConfirm={() => unlink.mutate(unlinkTarget.id)}
+          title={t('workspace.unlinkIdentityTitle')}
+        >
+          {t('workspace.unlinkIdentityConfirm', { name: unlinkTarget.name })}
         </ConfirmDialog>
       )}
       {transferTarget && (

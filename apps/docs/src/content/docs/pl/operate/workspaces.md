@@ -13,7 +13,29 @@ Każdy obszar roboczy ma **identyfikator logowania**, który wygląda jak nazwa 
 
 Sesje trwają osiem godzin, a ich odnawianie przez API lub `acli auth renew` nie przedłuży sesji poza 24 godziny od zalogowania. Pięć nieudanych prób logowania dla tego samego adresu e-mail w ciągu piętnastu minut tymczasowo blokuje kolejne próby we wszystkich obszarach roboczych. **Nie pamiętasz hasła?** wysyła link do resetowania, który działa jednorazowo przez 30 minut. Ze względów bezpieczeństwa formularz resetowania nigdy nie ujawnia, czy dany adres ma konto.
 
-Obecnie jedyną metodą jest logowanie hasłem. Logowanie jednokrotne (SSO), uwierzytelnianie wieloskładnikowe i klucze dostępu nie są jeszcze dostępne.
+Logować się można hasłem lub przez [logowanie jednokrotne](#logowanie-jednokrotne). Uwierzytelnianie wieloskładnikowe i klucze dostępu nie są jeszcze dostępne, choć Twój dostawca tożsamości może ich wymagać przy logowaniu jednokrotnym.
+
+## Logowanie jednokrotne
+
+Obszar roboczy może pozwalać na logowanie przez jednego dostawcę tożsamości OpenID Connect, takiego jak Microsoft Entra ID, Okta, Google Workspace lub Keycloak. Wdrożenie wymaga ustawienia `OIDC_CALLBACK_URL` i sekretu `identity_provider_credential_key`; zobacz [opis konfiguracji](/pl/reference/configuration/). Skonfiguruj je w **Zarządzanie → Zarządzanie obszarem roboczym → Logowanie**, co wymaga uprawnienia `workspace.manage`:
+
+1. Zarejestruj aplikację u dostawcy, podając adres przekierowania widoczny w sekcji **Logowanie**. Upewnij się, że dostawca udostępnia atrybut `email`.
+2. Wpisz adres URL wydawcy, identyfikator klienta, sekret klienta i nazwę przycisku logowania, a następnie zapisz.
+3. Wybierz **Uruchom logowanie testowe**. Potwierdza to, że ustawienia działają, i łączy Twoje konto.
+4. Włącz **Pokazuj tego dostawcę na stronie logowania**.
+5. Opcjonalnie pozwól logować się hasłem tylko właścicielom, aby mieli dostęp w razie awarii dostawcy.
+
+Zmiana adresu wydawcy lub identyfikatora klienta wyłącza dostawcę i przywraca logowanie hasłem dla wszystkich, dopóki nowe logowanie testowe się nie powiedzie. Każde logowanie jest sprawdzane względem dostawcy danego obszaru roboczego, więc dostawca skonfigurowany dla jednego obszaru nie daje dostępu do innego.
+
+### Kto może się zalogować
+
+Logowanie jednokrotne nie tworzy kont samodzielnie. Dostęp uzyskuje się, przyjmując [zaproszenie](#zaproszenia) przez dostawcę, przy czym adres u dostawcy musi być zgodny z zaproszeniem, albo łącząc konto w sekcji **Profil** po zalogowaniu. Sam adres e-mail nigdy nie łączy konta.
+
+### Odbieranie dostępu
+
+Attricat nie otrzymuje informacji o wyłączeniu kogoś u dostawcy. Taka osoba nie rozpocznie nowego logowania, ale istniejąca sesja trwa do ośmiu godzin lub 24 godzin po odnowieniu, a jej osobiste tokeny API nadal działają.
+
+Aby natychmiast zakończyć dostęp, ustaw członka jako **nieaktywnego**. To wylogowuje tę osobę i unieważnia jej tokeny API w tym obszarze roboczym, a ponowna aktywacja ich nie przywraca. Aby odłączyć kogoś od dostawcy bez dezaktywacji, użyj **Odłącz logowanie jednokrotne** w sekcji **Członkowie**.
 
 ## Członkowie
 

@@ -46,6 +46,7 @@ const portNames = [
   "RUSTFS_CONSOLE_PORT",
   "FILE_WORKER_OPERATIONS_PORT",
   "REDIS_PORT",
+  "KEYCLOAK_PORT",
 ];
 
 /** Parse simple KEY=VALUE entries from .env-style files. */
@@ -201,6 +202,8 @@ env = setEnvValue(
   "WORKSPACE_INVITATION_URL",
   `http://127.0.0.1:${ports.WEB_PORT}/invitations/accept`,
 );
+// Local identity providers such as `just keycloak` run on a private address.
+env = setEnvValue(env, "OIDC_ALLOWED_PRIVATE_HOSTS", "127.0.0.1,localhost");
 env = setEnvValue(
   env,
   "OIDC_CALLBACK_URL",
