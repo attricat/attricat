@@ -9,11 +9,11 @@ Obraz Attricat nie zawiera `pg_dump`, `pg_restore` ani narzędzi S3. Użyj narz�
 
 ## Utwórz kopię zapasową
 
-1. Wstrzymaj zapisy: zatrzymaj ruch do API i proces roboczy plików w momencie, który potrafisz wskazać.
+1. Wstrzymaj zapisy: zatrzymaj API i proces roboczy plików w momencie, który potrafisz wskazać. Samo wstrzymanie ruchu nie wystarczy, ponieważ API wykonuje też operacje rozszerzeń i inne prace w tle.
 2. Zapisz skrót obrazu Attricat i czas.
 3. Zrzuć bazę danych poleceniem `pg_dump --format=custom` zgodnym z PostgreSQL 18.
 4. Wykonaj migawkę całego zasobnika, dopóki zapisy są nadal wstrzymane.
-5. Zapisz manifest łączący zrzut z migawką, z sumami kontrolnymi i identyfikatorami migawek lub wersji od Twojego dostawcy.
+5. Zapisz manifest łączący zrzut z migawką, z sumami kontrolnymi i identyfikatorami migawek lub wersji od Twojego dostawcy. W przypadku zwykłej kopii zasobnika wystarczą sumy kontrolne poszczególnych obiektów.
 6. Wznów pracę dopiero wtedy, gdy obie części i manifest są bezpiecznie przechowane.
 
 Jeśli Twój dostawca potrafi wykonać migawki bazy danych i zasobnika w tym samym punkcie zatrzymania, użyj ich zamiast tego.
@@ -26,12 +26,14 @@ Przechowuj dane uwierzytelniające w menedżerze sekretów, a nie w poleceniach,
 
 1. Utrzymuj środowisko docelowe zatrzymane.
 2. Zweryfikuj każdą sumę kontrolną w manifeście.
-3. Przywróć bazę danych i zasobnik.
+3. Przywróć bazę danych i zasobnik. Dla innej roli bazy danych użyj `pg_restore --no-owner --no-privileges --exit-on-error`. Zasobnik może mieć nową nazwę: ustaw ją w `S3_BUCKET`.
 4. Jeśli wdrożenie korzysta z Redis (`CACHE_BACKEND=redis`), ustaw dla przywróconej kopii inny `CACHE_KEY_PREFIX` albo inną bazę Redis niż we wdrożeniu, z którego pochodzi. Przywrócona baza danych zachowuje identyfikator bufora, więc w przeciwnym razie obie korzystają z tych samych wpisów, a API może przez maksymalnie dobę serwować z bufora dane nowsze niż przywrócona baza danych. Wyczyszczenie Redis (`FLUSHDB`) wystarczy tylko przy przywracaniu w miejsce bazy, którą obsługiwał ten Redis; dopóki źródłowe wdrożenie działa, zapisuje te same wpisy ponownie.
 5. Uruchom rolę `migrate` obrazu.
 6. Uruchom API i proces roboczy plików na przywróconej parze.
-7. Poczekaj na obie kontrole gotowości.
-8. Sprawdź znany rekord, znany przesłany plik i znany wynik operacji rozszerzenia.
+7. Poczekaj na obie kontrole gotowości. Nie sprawdzają one zawartości zasobnika: pusty zasobnik nadal zgłasza gotowość, więc dopiero następny krok pokazuje, że zasobnik został przywrócony.
+8. Sprawdź znany rekord, znany przesłany plik i jego wariant obrazu, zasób prezentacji oraz znany wynik operacji rozszerzenia, a następnie uruchom operację rozszerzenia, aby potwierdzić przywrócenie jego pakietu. Wyniki wygasają po 30 dniach, więc starsza kopia może ich nie zawierać.
+
+Próba przywracania to działająca kopia wdrożenia. Nie podłączaj jej do prawdziwego przekaźnika poczty i wyłącz eksporty oraz połączenia rozszerzeń, aby nie mogła sięgać do systemów produkcyjnych.
 
 Jeśli którykolwiek krok się nie powiedzie, pozostaw środowisko docelowe zatrzymane i zbadaj problem. Nigdy nie uruchamiaj produkcyjnie środowiska, w którym przywrócono tylko jedną część.
 
