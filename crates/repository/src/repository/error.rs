@@ -124,6 +124,8 @@ pub enum RepositoryError {
     ContextInUse,
     #[error("the workspace's last owner cannot be removed; transfer ownership first")]
     LastWorkspaceOwner,
+    #[error("a role needs at least one permission")]
+    RolePermissionsRequired,
     #[error("a saved search with this name already exists")]
     SavedSearchNameTaken,
     #[error("attribute can only be edited in the default context")]

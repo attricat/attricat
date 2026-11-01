@@ -157,6 +157,7 @@
     "reserved_context_code": "The context code \"default\" is reserved.",
     "reusable_attribute_already_attached": "The record already has this reusable attribute.",
     "reusable_attribute_not_published": "Publish the reusable attribute revision before attaching it or adding it to a group.",
+    "role_permissions_required": "Choose at least one permission for the role.",
     "rule_dry_run_required": "Run a full dry run of this rule revision before enabling it.",
     "rule_has_existing_violations": "Records already violate this rule ({{existing_violations}}). Fix them or accept the existing violations.",
     "rule_not_enabled": "The rule is not enabled. Enable it or start a dry run.",
