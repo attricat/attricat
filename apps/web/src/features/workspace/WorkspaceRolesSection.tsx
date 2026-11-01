@@ -28,6 +28,7 @@ import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { useExclusiveMutation } from '../../components/useExclusiveMutation';
 import { roleListOptions } from './queryOptions';
 import { roleCodePattern } from './constants';
+import { permissionDescription } from './permissionDescription';
 
 export const WorkspaceRolesSection = ({
   canManage,
@@ -179,7 +180,7 @@ export const WorkspaceRolesSection = ({
                       />
                     }
                     key={permission.code}
-                    label={`${permission.code} — ${permission.description}`}
+                    label={`${permission.code} — ${permissionDescription(t, permission)}`}
                   />
                 ))}
               </FormGroup>
