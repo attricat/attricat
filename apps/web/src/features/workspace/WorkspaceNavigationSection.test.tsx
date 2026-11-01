@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { listRecordBlueprints } from '../records/api';
@@ -11,6 +17,12 @@ import {
 } from './api';
 import { WorkspaceNavigationSection } from './WorkspaceNavigationSection';
 
+// The page asks before leaving with unsaved shortcuts; a test sets the
+// status to report a navigation the guard blocked.
+const { blocker } = vi.hoisted(() => ({
+  blocker: { proceed: vi.fn(), reset: vi.fn(), status: 'idle' },
+}));
+vi.mock('@tanstack/react-router', () => ({ useBlocker: () => blocker }));
 vi.mock('../records/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../records/api')>()),
   listRecordBlueprints: vi.fn(),
@@ -47,6 +59,40 @@ describe('WorkspaceNavigationSection', () => {
     fireEvent.click(await screen.findByRole('option', { name: 'reader' }));
     fireEvent.click(screen.getByRole('option', { name: 'editor' }));
     expect(roles.textContent).toBe('retired, reader, editor');
+  });
+
+  it('asks before leaving with unsaved shortcut changes', async () => {
+    vi.mocked(listExploreNavigation).mockResolvedValue([
+      { blueprint_code: 'product', visible_to_role_codes: [] },
+    ]);
+    vi.mocked(listRecordBlueprints).mockResolvedValue([
+      { code: 'product', name: 'Product' },
+    ] as never);
+    vi.mocked(listRoles).mockResolvedValue([]);
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <WorkspaceNavigationSection canManage />
+      </QueryClientProvider>,
+    );
+    await screen.findByRole('combobox', { name: 'Blueprint' });
+    expect(
+      screen.queryByRole('dialog', {
+        name: 'Leave without saving the shortcuts?',
+      }),
+    ).toBeNull();
+    blocker.status = 'blocked';
+    try {
+      fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+      const dialog = await screen.findByRole('dialog', {
+        name: 'Leave without saving the shortcuts?',
+      });
+      fireEvent.click(
+        within(dialog).getByRole('button', { name: 'Discard and leave' }),
+      );
+      expect(blocker.proceed).toHaveBeenCalled();
+    } finally {
+      blocker.status = 'idle';
+    }
   });
 
   it('prevents assigning the same blueprint to two shortcuts', async () => {

@@ -23,6 +23,8 @@ import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { roleListOptions } from './queryOptions';
 import { recordBlueprintsOptions } from '../records/queryOptions';
 import { randomUuid } from '../../components/randomUuid';
+import { UnsavedChangesGuard } from '../drafts/UnsavedChangesGuard';
+import { useBeforeUnloadWarning } from '../drafts/useBeforeUnloadWarning';
 
 /** A shortcut with a key that survives changing its blueprint. */
 type NavigationRow = ExploreNavigationEntry & { rowKey: string };
@@ -83,6 +85,9 @@ export const WorkspaceNavigationSection = ({
       setEntries(undefined);
     },
   });
+  // Edited shortcuts are kept only in this page until saved.
+  const unsaved = entries !== undefined;
+  useBeforeUnloadWarning(unsaved);
   if (!canManage)
     return (
       <Alert severity="error">{t('workspace.notAuthorizedNavigation')}</Alert>
@@ -243,6 +248,13 @@ export const WorkspaceNavigationSection = ({
         </Button>
       </Stack>
       <ApiErrorAlert error={save.error} />
+      {unsaved && !save.isPending && (
+        <UnsavedChangesGuard
+          description={t('workspace.unsavedNavigationDescription')}
+          onDiscard={() => setEntries(undefined)}
+          title={t('workspace.unsavedNavigationTitle')}
+        />
+      )}
     </Stack>
   );
 };

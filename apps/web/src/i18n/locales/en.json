@@ -1901,6 +1901,8 @@
     "moveDown": "Down",
     "addShortcut": "Add shortcut",
     "saveNavigation": "Save navigation",
+    "unsavedNavigationTitle": "Leave without saving the shortcuts?",
+    "unsavedNavigationDescription": "Your changes to the Explore navigation are not saved. Leaving discards them.",
     "notAuthorizedNavigation": "You are not authorized to manage navigation.",
     "scope": "Scope",
     "entireWorkspace": "Entire workspace",
