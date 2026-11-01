@@ -1987,6 +1987,8 @@
     "moveDown": "W dół",
     "addShortcut": "Dodaj skrót",
     "saveNavigation": "Zapisz nawigację",
+    "unsavedNavigationTitle": "Wyjść bez zapisania skrótów?",
+    "unsavedNavigationDescription": "Zmiany w nawigacji przeglądania nie są zapisane. Wyjście je odrzuci.",
     "notAuthorizedNavigation": "Nie masz uprawnień do zarządzania nawigacją.",
     "scope": "Zakres",
     "entireWorkspace": "Cały obszar roboczy",
