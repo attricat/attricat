@@ -14,7 +14,8 @@ type UserAvatarProps = {
 
 /**
  * A person's avatar. It is decorative: callers render the person's name
- * alongside it, so the image has an empty text alternative.
+ * alongside it, so the image has an empty text alternative. It is a span, so
+ * it can sit inside running text such as a paragraph.
  */
 export const UserAvatar = ({
   name,
@@ -25,6 +26,7 @@ export const UserAvatar = ({
   <Avatar
     alt=""
     aria-hidden
+    component="span"
     src={
       avatarFileId
         ? fileDownloadUrl(avatarFileId, AVATAR_VARIANT_KIND)

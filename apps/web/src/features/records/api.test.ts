@@ -20,6 +20,7 @@ import {
   updateRecord,
 } from './api';
 import '../../i18n';
+import { ApiRequestError } from '../../api/request';
 
 const recordId = '123e4567-e89b-12d3-a456-426614174000';
 const blueprintId = '223e4567-e89b-12d3-a456-426614174000';
@@ -649,7 +650,7 @@ describe('record API client', () => {
   });
 
   it('rejects invalid request inputs before fetching', async () => {
-    expect(() => getRecordForm('not-a-uuid')).toThrow('Invalid UUID');
+    expect(() => getRecordForm('not-a-uuid')).toThrow(ApiRequestError);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

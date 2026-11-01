@@ -1608,7 +1608,9 @@
     "agentToolCall": "Wywołanie narzędzia agenta",
     "system": "System",
     "workspace": "Obszar roboczy",
-    "actionCategoryPlaceholder": "attricat"
+    "actionCategoryPlaceholder": "attricat",
+    "idInvalid": "Wpisz pełny identyfikator, np. 0f8e4c2a-5b1d-4e7a-9c3f-2d6b8a1e4f70.",
+    "rangeReversed": "Wybierz czas późniejszy niż w polu Od."
   },
   "workflows": {
     "runNow": "Uruchom teraz",

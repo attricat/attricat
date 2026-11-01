@@ -12,6 +12,7 @@ import {
   updateConversationTitle,
 } from './api';
 import '../../i18n';
+import { ApiRequestError } from '../../api/request';
 
 const id = '123e4567-e89b-12d3-a456-426614174000';
 const fetchMock = vi.fn();
@@ -131,15 +132,15 @@ describe('agent API client', () => {
     );
   });
 
-  it('rejects malformed UUID path IDs before issuing requests', async () => {
+  it('fails malformed UUID path IDs as not found before issuing requests', async () => {
     const malformedId = 'not-a-uuid';
 
-    expect(() => getConversation(malformedId)).toThrow('Invalid UUID');
-    expect(() => listMessages(malformedId)).toThrow('Invalid UUID');
-    expect(() => listRuns(malformedId)).toThrow('Invalid UUID');
-    expect(() => sendMessage(malformedId, 'Hello')).toThrow('Invalid UUID');
-    expect(() => decideApproval(malformedId, true)).toThrow('Invalid UUID');
-    expect(() => agentRunEventsUrl(malformedId)).toThrow('Invalid UUID');
+    expect(() => getConversation(malformedId)).toThrow(ApiRequestError);
+    expect(() => listMessages(malformedId)).toThrow(ApiRequestError);
+    expect(() => listRuns(malformedId)).toThrow(ApiRequestError);
+    expect(() => sendMessage(malformedId, 'Hello')).toThrow(ApiRequestError);
+    expect(() => decideApproval(malformedId, true)).toThrow(ApiRequestError);
+    expect(() => agentRunEventsUrl(malformedId)).toThrow(ApiRequestError);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

@@ -1,5 +1,6 @@
 import i18n from 'i18next';
 import { z } from 'zod';
+import { httpStatus } from './httpStatus';
 import { ApiRequestError } from './request';
 
 /**
@@ -12,6 +13,16 @@ export type ApiErrorCode =
 
 /** The error code of a missing (or unreadable) resource. */
 export const notFoundErrorCode = 'not_found' satisfies ApiErrorCode;
+/**
+ * The failure for a resource that cannot exist, such as one named by a
+ * malformed ID, reported as the API reports a missing one.
+ */
+export const notFoundError = () =>
+  new ApiRequestError(
+    httpStatus.notFound,
+    'resource was not found',
+    notFoundErrorCode,
+  );
 /** A rejected request, such as a query naming fields its blueprint lacks. */
 export const invalidInputErrorCode = 'invalid_input' satisfies ApiErrorCode;
 

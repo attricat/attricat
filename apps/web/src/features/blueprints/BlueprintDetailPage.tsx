@@ -38,6 +38,7 @@ import { useBlueprintRevisionComparison } from './useBlueprintRevisionComparison
 import { useSafeBlueprintMigration } from './useSafeBlueprintMigration';
 import { lexiconText } from '../lexicon/lexicon';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { notFoundError } from '../../api/errors';
 import {
   extensionOutlets,
   supportedOutletContextVersion,
@@ -106,7 +107,14 @@ export const BlueprintDetailPage = ({
       {revisions.isPending && (
         <LoadingState>{t('blueprints.loadingBlueprint')}</LoadingState>
       )}
-      <ApiErrorAlert error={revisions.error} />
+      {/* Every blueprint has a revision, so an empty list means none has
+          this ID. */}
+      <ApiErrorAlert
+        error={
+          revisions.error ??
+          (revisions.isSuccess && !blueprint ? notFoundError() : null)
+        }
+      />
       {blueprint && (
         <>
           <BlueprintDetailHeader
