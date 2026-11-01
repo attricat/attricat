@@ -277,7 +277,9 @@
     "invalidResetLink": "This password reset link is invalid or expired",
     "passwordResetSuccess": "Your password has been reset. Sign in with your new password.",
     "goToSignIn": "Go to sign in",
-    "newPassword": "New password"
+    "newPassword": "New password",
+    "confirmNewPassword": "Confirm new password",
+    "requestNewResetLink": "Request a new link"
   },
   "agents": {
     "autoApproval": {
