@@ -1,3 +1,5 @@
+import { capabilities } from '../auth/capabilities';
+import { useCan } from '../auth/useCan';
 import {
   actionAvailability,
   type ActionAvailability,
@@ -47,6 +49,7 @@ export const useOfferedActions = ({
   target,
 }: ActionsProps): OfferedAction[] => {
   const runtime = useExtensionRuntime(runtimeScope);
+  const canRunCommands = useCan(capabilities.recordsWrite);
   const recordId =
     recordOutlets.has(outlet) && target.recordIds.length === 1
       ? target.recordIds[0]
@@ -61,7 +64,11 @@ export const useOfferedActions = ({
       action.invoke === null
     )
       return [];
-    const availability = actionAvailability(action, target, recordStates);
+    const availability = actionAvailability(
+      action,
+      { ...target, canRunCommands },
+      recordStates,
+    );
     return availability.offered ? [{ action, availability }] : [];
   });
 };

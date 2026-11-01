@@ -14,6 +14,7 @@ vi.mock('./useExtensionRuntime', () => ({
 }));
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => vi.fn() }));
 vi.mock('../auth/useCan', () => ({
+  useCan: () => true,
   useAccess: () => ({ can: () => true, isPending: false }),
 }));
 

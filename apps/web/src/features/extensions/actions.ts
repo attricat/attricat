@@ -26,6 +26,8 @@ export type ActionTarget = {
   /** What the surface knows for `when` conditions; unknown never hides. */
   blueprintCode?: string;
   canWrite?: boolean;
+  /** Whether the caller may run an extension's commands. */
+  canRunCommands?: boolean;
   /** Each record's system tags, in `recordIds` order. */
   recordTags?: readonly (readonly string[])[];
 };
