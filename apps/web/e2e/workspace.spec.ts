@@ -106,6 +106,10 @@ test('grants and revokes a workspace member role', async ({ page }) => {
     .filter({ hasText: 'fixture@example.test' });
   await expect(member).toContainText(roleCode);
   await member.getByRole('button', { name: `Revoke ${roleCode}` }).click();
+  await page
+    .getByRole('dialog', { name: 'Revoke role?' })
+    .getByRole('button', { name: `Revoke ${roleCode}` })
+    .click();
   await expect(member).not.toContainText(roleCode);
 });
 

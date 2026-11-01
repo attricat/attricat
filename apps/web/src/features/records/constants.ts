@@ -212,6 +212,10 @@ export const STALE_RECORD_ERROR_CODE = 'stale_record' satisfies ApiErrorCode;
 export const RECORD_SCHEMA_MISMATCH_ERROR_CODE =
   'record_schema_mismatch' satisfies ApiErrorCode;
 
+/** API error code for a duplicate that would leave out a required unique value. */
+export const DUPLICATE_NEEDS_UNIQUE_VALUES_ERROR_CODE =
+  'duplicate_needs_unique_values' satisfies ApiErrorCode;
+
 /** Matches editors of fields a migration asks the user to review. */
 export const migrationReviewSelector = '[data-migration-review]';
 

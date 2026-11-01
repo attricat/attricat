@@ -102,6 +102,14 @@ export const WorkspaceMembersSection = ({
       form.reset();
     },
   });
+  // Revoking takes effect at once, and only someone who can grant roles can
+  // give it back, so it is confirmed first.
+  const [revokeTarget, setRevokeTarget] = useState<{
+    memberId: string;
+    grantId: string;
+    name: string;
+    role: string;
+  }>();
   const revoke = useMutation({
     mutationFn: ({
       memberId,
@@ -110,7 +118,10 @@ export const WorkspaceMembersSection = ({
       memberId: string;
       grantId: string;
     }) => revokeMemberRole(memberId, grantId),
-    onSuccess: refresh,
+    onSuccess: async () => {
+      setRevokeTarget(undefined);
+      await refresh();
+    },
   });
   // Transferring ownership also removes the caller's own owner role, so it
   // is confirmed first.
@@ -143,7 +154,6 @@ export const WorkspaceMembersSection = ({
   return (
     <Stack spacing={2} sx={{ mt: 3 }}>
       <ApiErrorAlert error={grantRole.error} />
-      <ApiErrorAlert error={revoke.error} />
       <ApiErrorAlert error={members.error} />
       <ApiErrorAlert error={roles.error} />
       <Paper>
@@ -181,9 +191,15 @@ export const WorkspaceMembersSection = ({
                   <Button
                     key={grant.id}
                     disabled={revoke.isPending}
-                    onClick={() =>
-                      revoke.mutate({ memberId: member.id, grantId: grant.id })
-                    }
+                    onClick={() => {
+                      revoke.reset();
+                      setRevokeTarget({
+                        memberId: member.id,
+                        grantId: grant.id,
+                        name: personName(member.display_name, member.email),
+                        role: grant.role_code,
+                      });
+                    }}
                     startIcon={<Trash2Icon />}
                   >
                     {t('workspace.revoke', { role: grant.role_code })}
@@ -212,6 +228,22 @@ export const WorkspaceMembersSection = ({
           ))}
         </List>
       </Paper>
+      {revokeTarget && (
+        <ConfirmDialog
+          confirmLabel={t('workspace.revoke', { role: revokeTarget.role })}
+          destructive
+          error={revoke.error}
+          isPending={revoke.isPending}
+          onClose={() => setRevokeTarget(undefined)}
+          onConfirm={() => revoke.mutate(revokeTarget)}
+          title={t('workspace.revokeRoleTitle')}
+        >
+          {t('workspace.revokeRoleConfirm', {
+            name: revokeTarget.name,
+            role: revokeTarget.role,
+          })}
+        </ConfirmDialog>
+      )}
       {transferTarget && (
         <ConfirmDialog
           confirmLabel={t('workspace.transferOwnership')}
