@@ -1,3 +1,4 @@
+import { ActionsHeaderCell } from '../../components/ActionsHeaderCell';
 import { WorkflowIcon } from '../../components/systemIcons';
 import { EmptyState } from '../../components/EmptyState';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -46,7 +47,7 @@ export const WorkflowRunTable = ({
               <TableCell>{t('workflows.attempts')}</TableCell>
               <TableCell>{t('workflows.created')}</TableCell>
               <TableCell>{t('workflows.outcomeEvidence')}</TableCell>
-              <TableCell />
+              <ActionsHeaderCell />
             </TableRow>
           </TableHead>
           <TableBody>

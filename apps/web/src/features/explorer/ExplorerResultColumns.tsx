@@ -42,6 +42,7 @@ import {
 } from './explorerTableColumns';
 import type { ExplorerColumnPreferences } from './columnPreferences';
 import type { AttributeFilter } from './search';
+import { VisuallyHidden } from '../../components/VisuallyHidden';
 
 type ExtensionRuntime = Awaited<ReturnType<typeof getExtensionRuntime>>;
 type ExplorerColumnDef = LegacyColumnDef<RecordItem, unknown>;
@@ -221,7 +222,7 @@ export const buildExplorerColumnDefinitions = ({
     ...configuredColumns,
     columnHelper.display({
       id: explorerColumnIds.actions,
-      header: '',
+      header: () => <VisuallyHidden>{t('common.actions')}</VisuallyHidden>,
       cell: (info) => (
         <RecordActionsCell
           record={info.row.original}

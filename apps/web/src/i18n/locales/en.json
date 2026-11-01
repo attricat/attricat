@@ -2110,6 +2110,7 @@
     "unableToRenderRecordHeading": "Unable to render record heading."
   },
   "common": {
+    "actions": "Actions",
     "versionNumber": "v{{version}}",
     "opensInNewTab": "Opens in a new tab",
     "close": "Close",

@@ -2200,6 +2200,7 @@
     "unableToRenderRecordHeading": "Nie można wyświetlić nagłówka rekordu."
   },
   "common": {
+    "actions": "Akcje",
     "versionNumber": "v{{version}}",
     "opensInNewTab": "Otwiera się w nowej karcie",
     "close": "Zamknij",

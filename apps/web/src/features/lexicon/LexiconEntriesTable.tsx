@@ -13,6 +13,7 @@ import {
   Typography,
 } from '@mui/material';
 import { PencilIcon, Trash2Icon } from 'lucide-react';
+import { ActionsHeaderCell } from '../../components/ActionsHeaderCell';
 import { LEXICON_SOURCES, LEXICON_MANAGEMENT_NAMESPACES } from './constants';
 import { lexiconEntryId, lexiconReferenceId } from './entries';
 import { pluralCategoryLabel } from './languages';
@@ -43,7 +44,7 @@ export const LexiconEntriesTable = ({
             <TableCell>{t('lexicon.pluralCategory')}</TableCell>
             <TableCell>{t('lexicon.translation')}</TableCell>
             <TableCell>{t('lexicon.source')}</TableCell>
-            {canEdit && <TableCell />}
+            {canEdit && <ActionsHeaderCell />}
           </TableRow>
         </TableHead>
         <TableBody>
