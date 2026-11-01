@@ -93,7 +93,9 @@ const TagColorsEditor = ({ colors }: { colors: TagColors }) => {
   const trimmedTag = newTag.trim();
   // The server bounds a tag in UTF-8 bytes, which `maxLength` does not count.
   const tagTooLong = utf8ByteLength(trimmedTag) > MAX_SYSTEM_TAG_BYTES;
-  const canAdd = trimmedTag !== '' && !tagTooLong;
+  // Setting a colored tag again would silently replace its color.
+  const tagAlreadyColored = tags.includes(trimmedTag);
+  const canAdd = trimmedTag !== '' && !tagTooLong && !tagAlreadyColored;
   const full = Object.keys(colors.overrides).length >= MAX_TAG_COLORS;
   const add = () => {
     save.mutate(
@@ -179,7 +181,7 @@ const TagColorsEditor = ({ colors }: { colors: TagColors }) => {
         >
           <TextField
             disabled={save.isPending || full}
-            error={tagTooLong}
+            error={tagTooLong || tagAlreadyColored}
             helperText={
               full
                 ? t('workspace.tagColorsFull', { max: MAX_TAG_COLORS })
@@ -187,7 +189,9 @@ const TagColorsEditor = ({ colors }: { colors: TagColors }) => {
                   ? t('workspace.newTagColorTooLong', {
                       max: MAX_SYSTEM_TAG_BYTES,
                     })
-                  : t('workspace.newTagColorHelp')
+                  : tagAlreadyColored
+                    ? t('workspace.newTagColorExists')
+                    : t('workspace.newTagColorHelp')
             }
             label={t('workspace.newTagColorTag')}
             onChange={(event) => setNewTag(event.target.value)}
