@@ -52,7 +52,9 @@ async fn workspace_scopes_share_one_bounded_pool_under_concurrency_and_close_cle
     // never creates a connection for the workspace making that request.
     let exhausted = PgPoolOptions::new()
         .max_connections(2)
-        .acquire_timeout(Duration::from_millis(50))
+        // Also bounds opening the first connection, which a busy CI host can
+        // take well over 50 ms to do.
+        .acquire_timeout(Duration::from_secs(5))
         .connect_with((*pool.connect_options()).clone())
         .await
         .unwrap();

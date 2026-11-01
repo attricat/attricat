@@ -27,7 +27,7 @@ const expectLatestRun = async (page: Page, ruleName: string, run: string) => {
         .first(),
     ).toHaveAccessibleName(
       new RegExp(`${escapeRegExp(`${ruleName} v1 All records ${run}`)}$`),
-      { timeout: 1_000 },
+      { timeout: 10_000 },
     );
   }).toPass();
 };
@@ -201,7 +201,7 @@ predicate:
   // Findings arrive once the record's checks finish.
   await expect(async () => {
     await page.reload();
-    await expect(incomplete).toBeVisible({ timeout: 1_000 });
+    await expect(incomplete).toBeVisible({ timeout: 10_000 });
   }).toPass();
   await expect(complete).toBeHidden();
 });

@@ -45,6 +45,12 @@ git fetch --quiet --tags origin main
   echo "main is not at origin/main; pull or push first" >&2
   exit 1
 }
+# A tag publishes images and binaries, so it needs a commit CI has passed.
+ci_conclusion="$(gh run list --commit "$(git rev-parse HEAD)" --workflow ci.yml --event push --limit 1 --json conclusion --jq '.[0].conclusion // "missing"')"
+[[ "$ci_conclusion" == success ]] || {
+  echo "CI on this commit is '$ci_conclusion', not success; wait for it or fix it first" >&2
+  exit 1
+}
 if git rev-parse --quiet --verify "refs/tags/$tag" >/dev/null; then
   echo "$tag already exists" >&2
   exit 1

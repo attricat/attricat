@@ -30,10 +30,10 @@ import {
   getIdentityProvider,
   putIdentityProvider,
   updateIdentityProviderState,
-  type IdentityProvider,
 } from './api';
 import { passwordSignInPolicies } from './constants';
 import { workspaceQueryKeys } from './queryKeys';
+import type { IdentityProvider } from './schemas';
 
 const ProviderForm = ({ provider }: { provider: IdentityProvider | null }) => {
   const { t } = useTranslation();
