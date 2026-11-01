@@ -358,6 +358,22 @@ test('applies and removes an attribute filter on mobile', async ({ page }) => {
     .click();
   await expect(page.getByText('2 results')).toBeVisible();
   await expect(filters.locator('.MuiChip-root')).toHaveCount(0);
+
+  // The selection toolbar wraps instead of widening the page.
+  await page.getByRole('button', { name: 'Select records' }).click();
+  await page
+    .getByRole('checkbox', { name: /^Select / })
+    .nth(1)
+    .check();
+  await expect(page.getByRole('button', { name: /1 selected/ })).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Columns', exact: true }),
+  ).toBeInViewport({ ratio: 1 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
 });
 
 test('filters explorer results with a relationship hierarchy facet', async ({
