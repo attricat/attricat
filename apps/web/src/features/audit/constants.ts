@@ -7,3 +7,6 @@ export const executorTypes = { agent: 'agent', human: 'human' } as const;
 export type ExecutorType = (typeof executorTypes)[keyof typeof executorTypes];
 export const auditOutcomeSuccess = 'success';
 export const auditEventTitleId = (eventId: string) => `audit-event-${eventId}`;
+
+/** Fits a person's name in the actor filter. */
+export const auditActorFieldMinWidth = 280;

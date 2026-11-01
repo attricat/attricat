@@ -1586,7 +1586,7 @@
     "from": "Od",
     "to": "Do",
     "actionCategory": "Kategoria akcji",
-    "actorId": "Identyfikator wykonawcy",
+    "actorInvalid": "Wybierz osobę z listy lub wklej pełny identyfikator użytkownika.",
     "targetType": "Typ celu",
     "executor": "Wykonawca",
     "all": "Wszystkie",

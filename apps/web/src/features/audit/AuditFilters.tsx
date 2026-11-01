@@ -1,11 +1,25 @@
-import { Box, Button, MenuItem, TextField } from '@mui/material';
+import {
+  Autocomplete,
+  Box,
+  Button,
+  MenuItem,
+  TextField,
+  createFilterOptions,
+} from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
 import { AuditExecutorType } from './AuditExecutorType';
 import type { AuditEventFilters } from './api';
 import { zonedDateTimeToIso } from '../../time/instantFormat';
 import { useTimeZone } from '../../time/useInstantFormat';
-import { auditExecutorSelectMinWidth, executorTypes } from './constants';
+import {
+  auditActorFieldMinWidth,
+  auditExecutorSelectMinWidth,
+  executorTypes,
+} from './constants';
+import { usePrincipalDirectory } from '../principals/usePrincipalDirectory';
+import { userLabel } from '../principals/principal';
+import type { DirectoryUser } from '../principals/schemas';
 
 /** Filters that name an event's actor, run or tool call by ID. */
 const idFilterKeys = [
@@ -17,6 +31,13 @@ type IdFilterKey = (typeof idFilterKeys)[number];
 
 const isInvalidId = (value: string | undefined) =>
   value !== undefined && !z.uuid().safeParse(value).success;
+
+// People are found by name or email; former members stay listed.
+const actorSearchText = (user: DirectoryUser) =>
+  `${userLabel(user)} ${user.email}`;
+const filterActors = createFilterOptions<DirectoryUser>({
+  stringify: actorSearchText,
+});
 
 /** Whether `To` comes before `From`, which no event can match. */
 const isReversedRange = ({
@@ -37,6 +58,19 @@ export const AuditFilters = ({
   onChange: (key: keyof AuditEventFilters, value: string) => void;
 }) => {
   const { t } = useTranslation();
+  const directory = usePrincipalDirectory();
+  const actors = directory.data?.users ?? [];
+  const actor = actors.find((user) => user.id === draft.actor_user_id);
+  // Text that still finds someone is a search, not yet a wrong ID.
+  const actorText = draft.actor_user_id?.toLowerCase();
+  const invalidActor =
+    !actor &&
+    isInvalidId(draft.actor_user_id) &&
+    !actors.some((user) =>
+      actorSearchText(user)
+        .toLowerCase()
+        .includes(actorText ?? ''),
+    );
   // `datetime-local` values are wall-clock times in the user's zone.
   const timeZone = useTimeZone();
   const reversedRange = isReversedRange(draft);
@@ -88,9 +122,41 @@ export const AuditFilters = ({
         onChange={(event) => onChange('action_category', event.target.value)}
         placeholder={t('audit.actionCategoryPlaceholder')}
       />
-      <TextField
-        label={t('audit.actorId')}
-        {...idFieldProps('actor_user_id')}
+      {/* Choosing a person fills in their ID; an ID can still be pasted,
+          such as one from an event detail or of someone no longer listed. */}
+      <Autocomplete
+        filterOptions={filterActors}
+        freeSolo
+        getOptionLabel={(option) =>
+          typeof option === 'string' ? option : userLabel(option)
+        }
+        onChange={(_, value) =>
+          onChange(
+            'actor_user_id',
+            typeof value === 'string' ? value.trim() : (value?.id ?? ''),
+          )
+        }
+        onInputChange={(_, value, reason) => {
+          if (reason === 'input') onChange('actor_user_id', value.trim());
+        }}
+        options={actors}
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            error={invalidActor}
+            helperText={invalidActor ? t('audit.actorInvalid') : undefined}
+            label={t('audit.actor')}
+          />
+        )}
+        renderOption={({ key, ...props }, option) => (
+          <li key={key} {...props}>
+            {userLabel(option) === option.email
+              ? option.email
+              : `${userLabel(option)} · ${option.email}`}
+          </li>
+        )}
+        sx={{ minWidth: auditActorFieldMinWidth }}
+        value={actor ?? draft.actor_user_id ?? null}
       />
       <TextField
         label={t('audit.targetType')}

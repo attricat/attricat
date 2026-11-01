@@ -1512,7 +1512,7 @@
     "from": "From",
     "to": "To",
     "actionCategory": "Action category",
-    "actorId": "Actor ID",
+    "actorInvalid": "Choose a person from the list, or paste a full user ID.",
     "targetType": "Target type",
     "executor": "Executor",
     "all": "All",
