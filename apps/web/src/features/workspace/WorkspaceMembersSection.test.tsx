@@ -1,9 +1,20 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import '../../i18n';
-import { grantMemberRole, listAssignableRoles, listMembers } from './api';
+import {
+  grantMemberRole,
+  listAssignableRoles,
+  listMembers,
+  revokeMemberRole,
+} from './api';
 import { WorkspaceMembersSection } from './WorkspaceMembersSection';
 
 vi.mock(
@@ -15,6 +26,7 @@ vi.mock('./api', async (importOriginal) => ({
   grantMemberRole: vi.fn(),
   listAssignableRoles: vi.fn(),
   listMembers: vi.fn(),
+  revokeMemberRole: vi.fn(),
 }));
 
 const workspaceId = '123e4567-e89b-12d3-a456-426614174000';
@@ -81,5 +93,44 @@ describe('WorkspaceMembersSection', () => {
         .getByRole('button', { name: 'Grant role' })
         .hasAttribute('disabled'),
     ).toBe(true);
+  });
+  it('revokes a role only after confirmation', async () => {
+    const memberId = '123e4567-e89b-12d3-a456-426614174001';
+    const grantId = '123e4567-e89b-12d3-a456-426614174003';
+    vi.mocked(listMembers).mockResolvedValue([
+      {
+        id: memberId,
+        email: 'member@example.test',
+        state: 'active',
+        grants: [{ id: grantId, role_code: 'admin' }],
+      },
+    ] as never);
+    vi.mocked(listAssignableRoles).mockResolvedValue([]);
+    vi.mocked(revokeMemberRole).mockResolvedValue(undefined);
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <WorkspaceMembersSection
+          canManage
+          canGrantRoles
+          workspaceId={workspaceId}
+        />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Revoke admin' }),
+    );
+    const dialog = screen.getByRole('dialog', { name: 'Revoke role?' });
+    expect(dialog.textContent).toContain(
+      'member@example.test loses the admin role',
+    );
+    expect(revokeMemberRole).not.toHaveBeenCalled();
+
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'Revoke admin' }),
+    );
+    await waitFor(() =>
+      expect(revokeMemberRole).toHaveBeenCalledWith(memberId, grantId),
+    );
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 });

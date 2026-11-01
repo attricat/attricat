@@ -685,6 +685,7 @@ export const RecordPreview = ({
       })}
       {duplicateOpen && (
         <DuplicateRecordDialog
+          blueprint={canCreateRecords ? blueprint.data?.blueprint : undefined}
           recordId={recordId}
           onClose={() => setDuplicateOpen(false)}
           onDuplicated={(copy) => {

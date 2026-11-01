@@ -1988,6 +1988,8 @@
     "loading": "Wczytywanie…",
     "notAuthorizedMembers": "Nie masz uprawnień do zarządzania członkami.",
     "revoke": "Cofnij {{role}}",
+    "revokeRoleTitle": "Cofnąć rolę?",
+    "revokeRoleConfirm": "{{name}} od razu traci rolę {{role}} i jej uprawnienia. Może ją przywrócić osoba, która nadaje role.",
     "transferOwnership": "Przenieś własność",
     "transferOwnershipTitle": "Przenieść własność?",
     "transferOwnershipConfirm": "{{name}} zostanie właścicielem obszaru roboczego, a Ty utracisz rolę właściciela. Tylko właściciel może ją przywrócić.",

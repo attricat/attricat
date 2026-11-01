@@ -54,7 +54,7 @@ import { useTimeZone } from '../../time/useInstantFormat';
 import { lexiconText } from '../lexicon/lexicon';
 import { EmptyState } from '../../components/EmptyState';
 import { RecordIcon } from '../../components/systemIcons';
-import { useCanOn } from '../auth/useCan';
+import { useCan, useCanOn } from '../auth/useCan';
 import { useLatestCallback } from '../../components/useLatestCallback';
 import { capabilities, accessTargetKinds } from '../auth/capabilities';
 import { ExplorerFieldNotesProvider } from '../extensions/ExplorerFieldNotes';
@@ -202,6 +202,7 @@ export const ExplorerResultsTable = ({
     accessTargetKinds.record,
     activeActionRecord?.id,
   );
+  const canCreateRecords = useCan(capabilities.recordsWrite);
   const canDuplicate = useCanOn(
     capabilities.recordsWrite,
     accessTargetKinds.record,
@@ -459,6 +460,7 @@ export const ExplorerResultsTable = ({
         )}
         {duplicateRecordId && (
           <DuplicateRecordDialog
+            blueprint={canCreateRecords ? blueprint.blueprint : undefined}
             recordId={duplicateRecordId}
             onClose={() => setDuplicateRecordId(null)}
             onDuplicated={(copy) => {

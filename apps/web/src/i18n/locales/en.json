@@ -1902,6 +1902,8 @@
     "loading": "Loading…",
     "notAuthorizedMembers": "You are not authorized to manage members.",
     "revoke": "Revoke {{role}}",
+    "revokeRoleTitle": "Revoke role?",
+    "revokeRoleConfirm": "{{name}} loses the {{role}} role and its permissions at once. Someone who can grant roles can give it back.",
     "transferOwnership": "Transfer ownership",
     "transferOwnershipTitle": "Transfer ownership?",
     "transferOwnershipConfirm": "{{name}} becomes the workspace owner and you lose your owner role. Only an owner can give it back.",
