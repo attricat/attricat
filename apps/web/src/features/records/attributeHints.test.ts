@@ -41,6 +41,27 @@ describe('attributeHint', () => {
     );
   });
 
+  it('groups only limits of five digits or more, so years read naturally', () => {
+    expect(
+      attributeHint(
+        attribute({
+          value_type: 'integer',
+          value_schema: { minimum: 1990, maximum: 2100 },
+        }),
+        t,
+      ),
+    ).toBe('A whole number from 1990 to 2100.');
+    expect(
+      attributeHint(
+        attribute({
+          value_type: 'integer',
+          value_schema: { minimum: 0, maximum: 1500000 },
+        }),
+        t,
+      ),
+    ).toBe('A whole number from 0 to 1,500,000.');
+  });
+
   it('describes exclusive bounds and steps', () => {
     const hint = (
       value_type: Attribute['value_type'],

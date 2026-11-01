@@ -3,6 +3,7 @@ import i18n from '../../i18n';
 import { lexiconText } from '../lexicon/lexicon';
 import { isEmailAddress } from '../views/controls/email';
 import type { JsonSchema } from './schemas';
+import { limitNumberFormat } from './limitNumberFormat';
 
 /** Describes a value schema's `pattern` in words, for hints and errors. */
 const PATTERN_HINT_SCHEMA_KEY = 'x-attricat-pattern-hint';
@@ -53,7 +54,7 @@ export const patternHint = (schema: unknown): string | undefined => {
 
 const formatValue = (value: unknown) =>
   typeof value === 'number'
-    ? new Intl.NumberFormat(i18n.language).format(value)
+    ? limitNumberFormat().format(value)
     : typeof value === 'string'
       ? value
       : JSON.stringify(value);

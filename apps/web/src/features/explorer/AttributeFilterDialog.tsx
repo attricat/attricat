@@ -145,8 +145,8 @@ export const AttributeFilterDialog = ({
       ];
     if (attribute?.value_type === attributeValueTypes.boolean)
       return [
-        { value: booleanFilterValues.true, label: t('explorer.true') },
-        { value: booleanFilterValues.false, label: t('explorer.false') },
+        { value: booleanFilterValues.true, label: t('views.yes') },
+        { value: booleanFilterValues.false, label: t('views.no') },
       ];
     if (principal)
       return [

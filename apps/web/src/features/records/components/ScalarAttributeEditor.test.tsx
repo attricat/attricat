@@ -109,7 +109,7 @@ describe('ScalarAttributeEditor', () => {
       />,
     );
     expect(
-      screen.getByRole('button', { name: 'True' }).getAttribute('aria-pressed'),
+      screen.getByRole('button', { name: 'Yes' }).getAttribute('aria-pressed'),
     ).toBe('true');
     fireEvent.click(screen.getByRole('button', { name: 'Not set' }));
     expect(onChange).toHaveBeenCalledWith('');
