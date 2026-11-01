@@ -281,7 +281,9 @@
     "invalidResetLink": "Ten link do zresetowania hasła jest nieprawidłowy lub wygasł",
     "passwordResetSuccess": "Hasło zostało zresetowane. Zaloguj się nowym hasłem.",
     "goToSignIn": "Przejdź do logowania",
-    "newPassword": "Nowe hasło"
+    "newPassword": "Nowe hasło",
+    "confirmNewPassword": "Potwierdź nowe hasło",
+    "requestNewResetLink": "Poproś o nowy link"
   },
   "agents": {
     "autoApproval": {

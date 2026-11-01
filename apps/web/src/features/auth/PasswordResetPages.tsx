@@ -1,4 +1,4 @@
-import { Button, TextField, Typography } from '@mui/material';
+import { Alert, Button, TextField, Typography } from '@mui/material';
 import { useForm } from '@tanstack/react-form';
 import { useNavigate } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
@@ -66,21 +66,30 @@ export const PasswordResetConfirmationPage = ({
   const navigate = useNavigate();
   const confirm = useExclusiveMutation({
     meta: { toast: false },
-    mutationFn: (password: string) => {
-      if (!token) throw new Error(t('auth.invalidResetLink'));
-      return confirmPasswordReset(token, password);
-    },
+    mutationFn: ({ password, token }: { password: string; token: string }) =>
+      confirmPasswordReset(token, password),
   });
   const form = useForm({
-    defaultValues: { password: '' },
-    onSubmit: ({ value }) => confirm.submit(value.password),
+    defaultValues: { confirmPassword: '', password: '' },
+    onSubmit: ({ value }) => {
+      if (token) confirm.submit({ password: value.password, token });
+    },
   });
   return (
     <AuthFormShell onSubmit={() => form.handleSubmit()}>
       <Typography component="h1" variant="h5">
         {t('auth.chooseNewPassword')}
       </Typography>
-      {confirm.isSuccess ? (
+      {!token ? (
+        // A link without its token cannot reset anything, so it offers a new
+        // link instead of a form that can only fail.
+        <>
+          <Alert severity="error">{t('auth.invalidResetLink')}</Alert>
+          <RouterButton to="/password-reset" variant="contained">
+            {t('auth.requestNewResetLink')}
+          </RouterButton>
+        </>
+      ) : confirm.isSuccess ? (
         <>
           <Typography>{t('auth.passwordResetSuccess')}</Typography>
           <Button
@@ -98,6 +107,29 @@ export const PasswordResetConfirmationPage = ({
                 autoComplete="new-password"
                 label={t('auth.newPassword')}
                 onChange={(event) => field.handleChange(event.target.value)}
+                required
+                type="password"
+                value={field.state.value}
+              />
+            )}
+          </form.Field>
+          <form.Field
+            name="confirmPassword"
+            validators={{
+              onSubmit: ({ value, fieldApi }) =>
+                value === fieldApi.form.getFieldValue('password')
+                  ? undefined
+                  : t('workspace.passwordMismatch'),
+            }}
+          >
+            {(field) => (
+              <TextField
+                autoComplete="new-password"
+                error={field.state.meta.errors.length > 0}
+                helperText={field.state.meta.errors[0]}
+                label={t('auth.confirmNewPassword')}
+                onChange={(event) => field.handleChange(event.target.value)}
+                required
                 type="password"
                 value={field.state.value}
               />
@@ -112,6 +144,11 @@ export const PasswordResetConfirmationPage = ({
             {t('auth.resetPassword')}
           </Button>
         </>
+      )}
+      {!confirm.isSuccess && (
+        <RouterButton startIcon={<ArrowLeftIcon />} to="/login" variant="text">
+          {t('auth.backToSignIn')}
+        </RouterButton>
       )}
     </AuthFormShell>
   );
