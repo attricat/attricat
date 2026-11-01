@@ -154,6 +154,30 @@ impl AttricatRepository {
         self.commit_mutation(transaction).await?;
         Ok(())
     }
+
+    /// Deletes the author's own comment when it is still at `revision`.
+    pub async fn delete_record_comment(
+        &self,
+        record: Uuid,
+        comment: Uuid,
+        actor: Uuid,
+        revision: i64,
+    ) -> Result<(), RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
+        self.lock_record(&mut transaction, record).await?;
+        let current: Option<i64> = sqlx::query_scalar("SELECT revision FROM record_comments WHERE workspace_id=$1 AND record_id=$2 AND id=$3 AND author_user_id=$4 FOR UPDATE")
+            .bind(self.workspace_id()).bind(record).bind(comment).bind(actor)
+            .fetch_optional(&mut *transaction).await?;
+        if current.ok_or(RepositoryError::NotFound("comment"))? != revision {
+            return Err(RepositoryError::CommentConflict);
+        }
+        sqlx::query("DELETE FROM record_comments WHERE id=$1")
+            .bind(comment)
+            .execute(&mut *transaction)
+            .await?;
+        self.commit_mutation(transaction).await?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]

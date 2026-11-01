@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { RecordCommentsPanel } from './RecordCommentsPanel';
-import { listComments } from './api';
+import { deleteComment, listComments } from './api';
 
 const userId = '00000000-0000-4000-8000-000000000201';
 
@@ -16,6 +17,7 @@ vi.mock('./api', () => ({
   listComments: vi.fn(),
   createComment: vi.fn(),
   updateComment: vi.fn(),
+  deleteComment: vi.fn(),
 }));
 vi.mock('../auth/api', () => ({
   currentSession: async () => ({
@@ -84,6 +86,43 @@ describe('record comments', () => {
 });
 
 describe('record comment order', () => {
+  it('deletes an own comment after confirmation', async () => {
+    const own = {
+      ...comment,
+      id: '00000000-0000-4000-8000-000000000303',
+      author_user_id: userId,
+      author_display_name: 'Reader',
+      author_email: 'reader@example.com',
+      author_kind: 'person' as const,
+      body: 'Typo here.',
+      revision: 2,
+    };
+    vi.mocked(listComments)
+      .mockResolvedValueOnce({ has_more: false, items: [own] })
+      .mockResolvedValue({ has_more: false, items: [] });
+    vi.mocked(deleteComment).mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <RecordCommentsPanel recordId="record" />
+      </QueryClientProvider>,
+    );
+    const item = (await screen.findByText('Typo here.')).closest(
+      'li',
+    ) as HTMLElement;
+    await user.click(within(item).getByRole('button', { name: 'Delete' }));
+    expect(deleteComment).not.toHaveBeenCalled();
+    const dialog = screen.getByRole('dialog', { name: 'Delete comment?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Delete' }));
+    expect(deleteComment).toHaveBeenCalledWith('record', own.id, 2);
+    expect(await screen.findByText('Comment deleted.')).toBeTruthy();
+    await waitFor(() => expect(screen.queryByText('Typo here.')).toBeNull());
+  });
+
   it('lists comments oldest first with earlier pages above and the composer below', async () => {
     const person = {
       ...comment,
