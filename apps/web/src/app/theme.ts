@@ -76,6 +76,9 @@ export const codeTypography = {
   lineHeight: typography.roles.code.lineHeight,
 } as const;
 
+/** The narrowest a list item's content gets before its actions wrap below. */
+const listItemContentMinWidth = 192;
+
 // Icons rendered inside a component that sizes them with its own font size.
 const inheritSizeIcon = (icon: LucideIcon) =>
   createElement(icon, { style: { fontSize: 'inherit' } });
@@ -398,6 +401,38 @@ export const makeTheme = (mode: DesignMode) => {
       MuiTableRow: {
         styleOverrides: {
           root: { '&:hover': { backgroundColor: c.action.hover } },
+        },
+      },
+      MuiListItem: {
+        // MUI positions secondary actions over the item and reserves room for
+        // one icon button, so text buttons cover the item's text on narrow
+        // screens. They follow the content instead, wrapping below it once
+        // the text would be narrower than its minimum.
+        styleOverrides: {
+          root: ({ ownerState, theme }) =>
+            ownerState.secondaryAction
+              ? {
+                  columnGap: theme.spacing(2),
+                  flexWrap: 'wrap',
+                  ...(!ownerState.disablePadding && {
+                    paddingRight: theme.spacing(4),
+                  }),
+                  '& > .MuiListItemText-root, & > .MuiListItemButton-root': {
+                    flex: `1 1 ${listItemContentMinWidth}px`,
+                  },
+                  '& > .MuiListItemButton-root': {
+                    paddingRight: theme.spacing(4),
+                  },
+                }
+              : {},
+          secondaryAction: ({ ownerState, theme }) => ({
+            marginLeft: 'auto',
+            position: 'static',
+            transform: 'none',
+            ...(ownerState.disablePadding && {
+              paddingRight: theme.spacing(4),
+            }),
+          }),
         },
       },
       MuiListItemIcon: {
