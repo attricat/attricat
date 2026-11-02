@@ -89,6 +89,9 @@ test('leads from the blueprint preview to the definition', async ({ page }) => {
   );
   await expect(page.getByText('Ready to save')).toBeVisible();
 
+  // Replacing the text clicks into the template, and the preview follows the
+  // cursor to whichever view that lands on. This one is in the new text too.
+  await preview(page).getByRole('tab', { name: 'Edit' }).click();
   await preview(page)
     .getByRole('button', { name: 'Details of summary' })
     .click();
