@@ -1123,6 +1123,13 @@ impl<S: RepositoryScope> AttricatRepository<S> {
         .await?;
         self.ensure_workspace_system_user(workspace_id).await?;
         self.reconcile_needs_attention_tags(workspace_id).await?;
+        let scoped = AttricatRepository::system(self.pool.clone()).for_workspace(workspace_id);
+        for consumer in [
+            attricat_events::RULES_EVENT_CONSUMER,
+            attricat_events::WORKFLOWS_EVENT_CONSUMER,
+        ] {
+            scoped.ensure_event_consumer(consumer).await?;
+        }
         Ok(())
     }
 

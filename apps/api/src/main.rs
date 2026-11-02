@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 
 use api::{
     MIGRATOR, agent_worker, blueprint_migration_worker,
@@ -322,6 +325,9 @@ async fn serve() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     ));
 
     let (shutdown_sender, shutdown_receiver) = tokio::sync::watch::channel(());
+    // Each background loop reports when it ends. Before shutdown that means it
+    // panicked, and the process would otherwise keep serving without it.
+    let (loop_ended, mut ended_loops) = tokio::sync::mpsc::unbounded_channel();
     let maintenance_worker = maintenance::start(
         task_repository.clone(),
         object_store.clone(),
@@ -360,6 +366,25 @@ async fn serve() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let rule_worker =
         rule_runtime::start_schedule_coordinator(workflow_repository, shutdown_receiver);
 
+    let supervised_loops: Vec<_> = dispatcher_handles
+        .into_iter()
+        .map(|handle| ("event dispatcher", handle))
+        .chain([
+            ("maintenance", maintenance_worker),
+            ("solution pack housekeeping", solution_pack_housekeeping),
+            (
+                "extension event delivery",
+                extension_event_delivery_coordinator,
+            ),
+            ("workflow schedules", workflow_worker),
+            ("rule schedules", rule_worker),
+        ])
+        .map(|(name, handle)| supervise(name, handle, loop_ended.clone()))
+        .collect();
+    let task_worker = supervise("task worker", task_worker, loop_ended);
+    let loop_failed = Arc::new(AtomicBool::new(false));
+    let loop_failed_in_server = loop_failed.clone();
+
     let stream_control = StreamControl::new(
         http.max_event_streams,
         http.max_event_streams_per_principal,
@@ -367,7 +392,9 @@ async fn serve() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     );
     let listener = tokio::net::TcpListener::bind(http.bind_addr).await?;
     tracing::info!(address = %listener.local_addr()?, "API listening");
-    axum::serve(
+    let drain_timeout = http.request_timeout + SHUTDOWN_DRAIN_MARGIN;
+    let (shutdown_started, shutdown_begun) = tokio::sync::oneshot::channel::<()>();
+    let server = axum::serve(
         listener,
         router(AppState {
             repository: AttricatRepository::system(request_pool.clone())
@@ -421,26 +448,76 @@ async fn serve() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }),
     )
     .with_graceful_shutdown(async move {
-        shutdown_signal().await;
-        tracing::info!("shutdown signal received");
+        tokio::select! {
+            () = shutdown_signal() => tracing::info!("shutdown signal received"),
+            Some(name) = ended_loops.recv() => {
+                tracing::error!(background_loop = name, "background loop ended; shutting down so the process restarts");
+                loop_failed_in_server.store(true, Ordering::SeqCst);
+            }
+        }
         stream_control.shutdown();
         let _ = shutdown_sender.send(());
+        let _ = shutdown_started.send(());
     })
-    .await?;
-    for handle in dispatcher_handles {
-        handle.await?;
+    .into_future();
+    // A client that stopped reading a download or event stream would otherwise
+    // hold the server open until the process is killed, skipping the worker
+    // joins and pool closes below.
+    let drain_deadline = async {
+        if shutdown_begun.await.is_ok() {
+            tokio::time::sleep(drain_timeout).await;
+        } else {
+            std::future::pending::<()>().await;
+        }
+    };
+    tokio::select! {
+        served = server => served?,
+        () = drain_deadline => {
+            tracing::warn!(timeout = ?drain_timeout, "connections still open after the shutdown deadline; closing them");
+        }
     }
-    workflow_worker.await?;
-    rule_worker.await?;
-    extension_event_delivery_coordinator.await?;
-    task_worker.await??;
-    solution_pack_housekeeping.await?;
-    maintenance_worker.await?;
+    // Every loop is joined, whatever happened to the others, so the pools below
+    // close only once nothing is using them.
+    let mut failures = Vec::new();
+    for handle in supervised_loops {
+        match handle.await {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) | Err(error) => failures.push(error.to_string()),
+        }
+    }
+    match task_worker.await {
+        Ok(Ok(Ok(()))) => {}
+        Ok(Ok(Err(error))) => failures.push(error.to_string()),
+        Ok(Err(error)) | Err(error) => failures.push(error.to_string()),
+    }
     request_pool.close().await;
     task_pool.close().await;
 
-    Ok(())
+    if loop_failed.load(Ordering::SeqCst) {
+        failures.push("a background loop ended before shutdown".to_owned());
+    }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(failures.join("; ").into())
+    }
 }
+
+/// Waits for a background loop, reporting when it ends.
+fn supervise<T: Send + 'static>(
+    name: &'static str,
+    handle: tokio::task::JoinHandle<T>,
+    ended: tokio::sync::mpsc::UnboundedSender<&'static str>,
+) -> tokio::task::JoinHandle<Result<T, tokio::task::JoinError>> {
+    tokio::spawn(async move {
+        let result = handle.await;
+        let _ = ended.send(name);
+        result
+    })
+}
+
+/// How long past the longest request's timeout shutdown waits for connections.
+const SHUTDOWN_DRAIN_MARGIN: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// Sign-in identifier of the bootstrap workspace in `ATTRICAT_DEMO_MODE`.
 const DEMO_LOGIN_IDENTIFIER: &str = "demo.attricat.com";

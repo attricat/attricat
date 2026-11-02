@@ -425,8 +425,17 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         .bind(workspace_id)
         .fetch_one(&mut *tx)
         .await?;
+        // Invitations keep their role after they are accepted, and the foreign
+        // key refuses to delete it, so they need a replacement just as grants do.
+        let invitations: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM workspace_invitations WHERE role_id = $1 AND workspace_id = $2",
+        )
+        .bind(role_id)
+        .bind(workspace_id)
+        .fetch_one(&mut *tx)
+        .await?;
         let Some(replacement) = replacement_role_id else {
-            if grants > 0 {
+            if grants > 0 || invitations > 0 {
                 return Err(RepositoryError::NotFound("replacement role"));
             };
             sqlx::query("DELETE FROM role_permissions WHERE role_id = $1")
@@ -463,7 +472,16 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
                 .bind(workspace_id)
                 .fetch_one(&mut *tx)
                 .await?;
-            if narrower_scope || !Self::active_owner_on(&mut tx, actor_id, workspace_id).await? {
+            // Accepting a pending invitation would create such a grant later.
+            let narrower_invitation: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM workspace_invitations WHERE role_id = $1 AND workspace_id = $2 AND accepted_at IS NULL AND revoked_at IS NULL AND (scope_type <> 'workspace' OR scope_target_id <> $2))")
+                .bind(role_id)
+                .bind(workspace_id)
+                .fetch_one(&mut *tx)
+                .await?;
+            if narrower_scope
+                || narrower_invitation
+                || !Self::active_owner_on(&mut tx, actor_id, workspace_id).await?
+            {
                 return Err(RepositoryError::NotFound("replacement role"));
             }
         }
@@ -474,6 +492,14 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
             .bind(workspace_id)
             .execute(&mut *tx)
             .await?;
+        sqlx::query(
+            "UPDATE workspace_invitations SET role_id = $1 WHERE role_id = $2 AND workspace_id = $3",
+        )
+        .bind(replacement)
+        .bind(role_id)
+        .bind(workspace_id)
+        .execute(&mut *tx)
+        .await?;
         sqlx::query("DELETE FROM role_permissions WHERE role_id = $1")
             .bind(role_id)
             .execute(&mut *tx)

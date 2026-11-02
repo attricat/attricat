@@ -865,6 +865,14 @@ impl AttricatRepository {
         record_id: Uuid,
         expected_updated_at: Option<DateTime<Utc>>,
     ) -> Result<(Vec<AuditEventChange>, NewDomainEvent), RepositoryError> {
+        // No rule run reports on a deleted record, so its findings end here.
+        // Before the record lock, the order rule runs take them in.
+        sqlx::query("UPDATE rule_findings SET state=$3,resolved_at=clock_timestamp(),resolved_by_run_id=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND record_id=$2 AND state<>$3")
+            .bind(self.workspace_id.0)
+            .bind(record_id)
+            .bind(attricat_domain::states::RuleFindingState::Resolved.as_str())
+            .execute(&mut **transaction)
+            .await?;
         let record = self.lock_record(transaction, record_id).await?;
         let before = self.record_audit_snapshot(transaction, record_id).await?;
         if expected_updated_at.is_some_and(|expected| expected != record.updated_at) {
@@ -1959,6 +1967,7 @@ impl AttricatRepository {
                 r#"SELECT av.record_id
                FROM attribute_values av
                JOIN attributes a ON a.id = av.attribute_id
+               JOIN records source ON source.id = av.record_id AND source.deleted_at IS NULL
                WHERE ((a.blueprint_id = $1 AND a.code = $2)
                     OR (a.reusable_attribute_revision_id = (SELECT reusable_attribute_revision_id FROM attributes WHERE id = $7) AND a.code = $2))
                  AND a.workspace_id = $6 AND av.workspace_id = $6

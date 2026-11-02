@@ -77,7 +77,7 @@ pub async fn maybe_generate_title(
                 },
                 ChatMessage {
                     role: "user".into(),
-                    content: input,
+                    content: Value::String(input.to_string()),
                     tool_call_id: None,
                     tool_calls: None,
                 },

@@ -20,6 +20,9 @@ use crate::model::{
     UpdateRecordFormRequest,
 };
 
+/// How many times a batch runs when it keeps being chosen as a deadlock's victim.
+const MAX_BATCH_DEADLOCK_ATTEMPTS: u32 = 3;
+
 impl AttricatRepository {
     /// Checks every operation's permission for one principal, and for a
     /// personal API token its live permissions, before a batch runs. Existing
@@ -76,6 +79,25 @@ impl AttricatRepository {
         request: RecordBatchRequest,
     ) -> Result<RecordBatchResponse, RepositoryError> {
         validate_record_batch(&request)?;
+        // A batch takes locks over its whole length, so it can lose a deadlock
+        // to a single-record write that holds a row it needs while waiting for
+        // the event outbox. The transaction rolled back, so it can run again.
+        let mut attempts = 0;
+        loop {
+            attempts += 1;
+            match self.apply_record_batch_once(request.clone()).await {
+                Err(error) if error.is_deadlock() && attempts < MAX_BATCH_DEADLOCK_ATTEMPTS => {
+                    tracing::warn!(attempts, "record batch lost a deadlock; retrying");
+                }
+                result => return result,
+            }
+        }
+    }
+
+    async fn apply_record_batch_once(
+        &self,
+        request: RecordBatchRequest,
+    ) -> Result<RecordBatchResponse, RepositoryError> {
         let operation_count = request.operations.len();
         let mut transaction = self.pool.begin().await?;
         // Lock order matches single-record writes: the workspace relationship

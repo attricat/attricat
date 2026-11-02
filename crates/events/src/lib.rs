@@ -4,6 +4,12 @@ use serde_json::Value;
 use thiserror::Error;
 use uuid::Uuid;
 
+/// The core event consumers, registered when a workspace is provisioned. A
+/// consumer starts from the newest event when it registers, so one registered
+/// later would miss what the workspace did first.
+pub const RULES_EVENT_CONSUMER: &str = "attricat.rules";
+pub const WORKFLOWS_EVENT_CONSUMER: &str = "attricat.workflows";
+
 pub const RECORD_CREATED_V1: &str = "record.created.v1";
 pub const RECORD_UPDATED_V1: &str = "record.updated.v1";
 pub const RECORD_DELETED_V1: &str = "record.deleted.v1";

@@ -537,6 +537,32 @@ impl AttricatRepository {
         Ok(())
     }
 
+    /// A revision is the sequence of a record's latest retained event, so it
+    /// falls once retention purges that event. A mapping's revision within the
+    /// purged range would then look newer than the record forever and refuse every
+    /// retry, though the record has not changed since: it stands for the record.
+    async fn revision_after_retention(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        mapping_revision: i64,
+        revision: i64,
+    ) -> Result<i64, RepositoryError> {
+        if mapping_revision <= revision {
+            return Ok(revision);
+        }
+        let purged_through: i64 = sqlx::query_scalar(
+            "SELECT COALESCE((SELECT purged_through_sequence FROM domain_event_retention WHERE workspace_id=$1), 0)",
+        )
+        .bind(self.workspace_id())
+        .fetch_one(&mut **transaction)
+        .await?;
+        Ok(if mapping_revision <= purged_through {
+            mapping_revision
+        } else {
+            revision
+        })
+    }
+
     /// Decides whether `record_revision` of a record should be pushed and, if
     /// so, leases the record for this destination. A revision older than the
     /// mapping's is always stale. The mapping's own revision is stale once
@@ -610,6 +636,9 @@ impl AttricatRepository {
             mapping.status,
             ExportStatus::Synced | ExportStatus::Rejected
         );
+        let record_revision = self
+            .revision_after_retention(&mut transaction, mapping.record_revision, record_revision)
+            .await?;
         if mapping.record_revision > record_revision
             || (!force
                 && settled
@@ -789,6 +818,15 @@ impl AttricatRepository {
                 };
                 (own, revision.unwrap_or(mapping.record_revision))
             }
+        };
+        // Only the holder of a lease passed the check when it began. Any other
+        // result names a revision that may really be stale, such as a replayed
+        // delivery's, and must not overwrite a newer one.
+        let revision = if holds_lease {
+            self.revision_after_retention(&mut transaction, mapping.record_revision, revision)
+                .await?
+        } else {
+            revision
         };
         if mapping.record_revision > revision {
             // A refused result still ends the lease of the worker that sent

@@ -27,7 +27,7 @@ pub(crate) struct RuleIntakeHandler;
 #[async_trait]
 impl EventHandler for RuleIntakeHandler {
     fn name(&self) -> &'static str {
-        "attricat.rules"
+        attricat_events::RULES_EVENT_CONSUMER
     }
 
     fn event_types(&self) -> &'static [&'static str] {
@@ -114,6 +114,27 @@ impl TaskHandler for RuleTaskHandler {
                 Err(error) => fail_rule_run(&scoped, &task, error).await,
             },
             Err(error) => fail_rule_run(&scoped, &task, error).await,
+        }
+    }
+
+    async fn on_exhausted(
+        &self,
+        task: &crate::repository::ClaimedTask,
+        message: &str,
+    ) -> Result<bool, TaskHandlerError> {
+        match self
+            .repository
+            .for_workspace(task.workspace_id)
+            .fail_rule_run_task(
+                task,
+                &crate::repository::bounded_task_error_message(message),
+            )
+            .await
+        {
+            Ok(terminal) => Ok(terminal),
+            Err(error @ RepositoryError::Database(_)) => Err(task_error(error)),
+            // The run has already ended; only the envelope remains.
+            Err(_) => Ok(false),
         }
     }
 }

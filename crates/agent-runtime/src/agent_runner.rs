@@ -2,7 +2,7 @@
 use attricat_domain::states::{AgentRunStatus, AgentToolCallState};
 use attricat_domain::value_type::ValueType;
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, VecDeque},
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -29,6 +29,13 @@ use uuid::Uuid;
 
 const MAX_INLINE_TOOL_IMAGE_BYTES: i64 = 1024 * 1024;
 const MAX_INLINE_TOOL_TEXT_BYTES: i64 = 64 * 1024;
+/// The most encoded image data one provider request carries. The attachments of a
+/// long conversation would otherwise all be held in memory and sent every round.
+const MAX_REQUEST_IMAGE_BYTES: usize = 32 * 1024 * 1024;
+/// What stands in for an image left out of a request.
+const OMITTED_IMAGE_NOTE: &str = "An earlier image was left out to keep this request small. Use view_image with its file ID to see it again.";
+/// The result given for a tool call whose run ended before it could answer.
+const UNANSWERED_TOOL_CALL_RESULT: &str = "This tool call did not finish because its run ended first. Check whether anything changed before trying again.";
 /// Largest plain-text file `read_file` reads in windows.
 const MAX_READ_TEXT_FILE_BYTES: i64 = 1024 * 1024;
 /// Longest attached document included in a message in full; longer ones are
@@ -413,7 +420,21 @@ async fn drive(
         None => String::new(),
     };
     if memo.catalog_map.is_none() {
-        memo.catalog_map = Some(catalog_map(repository).await?);
+        // The list_blueprints tool would refuse a run without this permission.
+        let may_read_blueprints = repository
+            .principal_may(
+                agent_tools::tool_actor(repository, actor),
+                repository.workspace_id(),
+                Permission::BlueprintsRead,
+                None,
+                None,
+            )
+            .await?;
+        memo.catalog_map = Some(if may_read_blueprints {
+            catalog_map(repository).await?
+        } else {
+            String::new()
+        });
     }
     let catalog_map = memo.catalog_map.as_deref().unwrap_or_default();
     let settings = match memo.settings {
@@ -430,20 +451,31 @@ async fn drive(
         tool_call_id: None,
         tool_calls: None,
     }];
-    for message in messages {
+    // Newest first, so the images left out of a long history are the oldest.
+    let mut image_bytes_left = MAX_REQUEST_IMAGE_BYTES;
+    let mut history = Vec::with_capacity(messages.len());
+    for message in messages.into_iter().rev() {
         let id = message.id;
-        let converted = match memo.messages.get(&id) {
+        let mut converted = match memo.messages.get(&id) {
             Some(converted) => converted.clone(),
             None => {
-                let converted =
-                    request_message(repository, object_store, &mut memo.document_cache, message)
-                        .await;
+                let converted = request_message(
+                    repository,
+                    object_store,
+                    &mut memo.document_cache,
+                    message,
+                    image_bytes_left > 0,
+                )
+                .await;
                 memo.messages.insert(id, converted.clone());
                 converted
             }
         };
-        request.push(converted);
+        limit_inline_images(&mut converted, &mut image_bytes_left);
+        history.push(converted);
     }
+    history.reverse();
+    request.extend(normalize_tool_messages(history));
     let pending = Arc::new(Mutex::new(String::new()));
     let stream_pending = pending.clone();
     let mut tools = offered_tools(provider.read_only(), &settings);
@@ -510,7 +542,12 @@ async fn drive(
     // defensively if one still returns several. This keeps the assistant's
     // complete tool-call list matched by either an approval or a tool result.
     for call in tool_calls {
-        let mut arguments: Value = match serde_json::from_str::<Value>(&call.function.arguments) {
+        // Some providers send nothing for a tool that takes no arguments.
+        let raw_arguments = match call.function.arguments.trim() {
+            "" => "{}",
+            arguments => arguments,
+        };
+        let mut arguments: Value = match serde_json::from_str::<Value>(raw_arguments) {
             Ok(value) if value.is_object() => value,
             _ => {
                 fail_run(
@@ -816,11 +853,82 @@ async fn flush_deltas(
     Ok(())
 }
 
+/// Replaces the images of `message` that no longer fit in the request's budget
+/// with a note, spending the budget on the ones that do.
+fn limit_inline_images(message: &mut ChatMessage, bytes_left: &mut usize) {
+    let Value::Array(parts) = &mut message.content else {
+        return;
+    };
+    for part in parts {
+        let Some(url) = part.pointer("/image_url/url").and_then(Value::as_str) else {
+            continue;
+        };
+        if url.len() <= *bytes_left {
+            *bytes_left -= url.len();
+        } else {
+            *bytes_left = 0;
+            *part = json!({"type":"text","text":OMITTED_IMAGE_NOTE});
+        }
+    }
+}
+
+/// Puts each tool result right after the call that asked for it, the order
+/// providers require and reject a request without. History can break it: a run
+/// that failed mid-way leaves calls unanswered, and a message sent during a run
+/// lands between a call and its result. Without this, every later run in the
+/// conversation would fail. Images go in a user message after the results,
+/// because a tool message may only hold text.
+fn normalize_tool_messages(messages: Vec<ChatMessage>) -> Vec<ChatMessage> {
+    let mut results: HashMap<String, VecDeque<ChatMessage>> = HashMap::new();
+    let mut others = Vec::with_capacity(messages.len());
+    for message in messages {
+        match (&message.role[..], &message.tool_call_id) {
+            ("tool", Some(id)) => results.entry(id.clone()).or_default().push_back(message),
+            _ => others.push(message),
+        }
+    }
+    let mut ordered = Vec::with_capacity(others.len());
+    for message in others {
+        let calls = message.tool_calls.clone();
+        ordered.push(message);
+        let mut images = Vec::new();
+        for call in calls.iter().flatten() {
+            let mut result = results
+                .get_mut(&call.id)
+                .and_then(VecDeque::pop_front)
+                .unwrap_or_else(|| ChatMessage {
+                    role: "tool".into(),
+                    content: Value::String(UNANSWERED_TOOL_CALL_RESULT.into()),
+                    tool_call_id: Some(call.id.clone()),
+                    tool_calls: None,
+                });
+            if let Value::Array(parts) = &mut result.content {
+                let (image_parts, text_parts) = std::mem::take(parts)
+                    .into_iter()
+                    .partition(|part| part.get("image_url").is_some());
+                *parts = text_parts;
+                images.extend::<Vec<Value>>(image_parts);
+            }
+            ordered.push(result);
+        }
+        if !images.is_empty() {
+            ordered.push(ChatMessage {
+                role: "user".into(),
+                content: Value::Array(images),
+                tool_call_id: None,
+                tool_calls: None,
+            });
+        }
+    }
+    ordered
+}
+
 async fn request_message(
     repository: &AttricatRepository,
     object_store: &Arc<dyn ObjectStore>,
     document_cache: &mut documents::DocumentCache,
     message: crate::repository::ConversationMessage,
+    inline_images: bool,
 ) -> ChatMessage {
     if message.role == "assistant"
         && let Some(proposal) = message.content.get("draft_proposal")
@@ -855,6 +963,10 @@ async fn request_message(
         let tool_name = message.content.get("name").and_then(Value::as_str);
         for attachment in message.attachments {
             if attachment.mime_type.starts_with("image/") {
+                if !inline_images {
+                    parts.push(json!({"type":"text","text":OMITTED_IMAGE_NOTE}));
+                    continue;
+                }
                 let file = match repository.file_object(attachment.id, Some("display")).await {
                     Ok(file) => file,
                     Err(_) => match repository.file_object(attachment.id, None).await {
@@ -941,7 +1053,8 @@ async fn request_message(
                 Err(error) => format!("{note}\n{error}."),
             };
             parts.push(json!({"type":"text","text":text}));
-        } else if attachment.mime_type.starts_with("image/")
+        } else if inline_images
+            && attachment.mime_type.starts_with("image/")
             && file.byte_size <= MAX_INLINE_ATTACHMENT_BYTES
         {
             match object_store.get(&file.object_key).await {
@@ -1382,13 +1495,113 @@ pub(crate) async fn fail_run(
 #[cfg(test)]
 mod tests {
     use super::{
-        SYSTEM_PROMPT_SECTIONS, ToolAuthorization, auto_approves, mutation_authorization,
+        OMITTED_IMAGE_NOTE, SYSTEM_PROMPT_SECTIONS, ToolAuthorization, UNANSWERED_TOOL_CALL_RESULT,
+        auto_approves, limit_inline_images, mutation_authorization, normalize_tool_messages,
         system_prompt,
     };
+    use crate::agent_provider::{ChatMessage, ToolCall};
     use crate::repository::{AgentSettings, BulkEditPolicy};
     use attricat_domain::permissions::Permission;
     use serde_json::json;
     use uuid::Uuid;
+
+    fn message(role: &str, content: serde_json::Value) -> ChatMessage {
+        ChatMessage {
+            role: role.into(),
+            content,
+            tool_call_id: None,
+            tool_calls: None,
+        }
+    }
+
+    fn assistant_calling(ids: &[&str]) -> ChatMessage {
+        let calls = ids
+            .iter()
+            .map(|id| json!({"id": id, "type": "function", "function": {"name": "get_record", "arguments": "{}"}}))
+            .collect::<Vec<_>>();
+        ChatMessage {
+            tool_calls: Some(serde_json::from_value::<Vec<ToolCall>>(json!(calls)).unwrap()),
+            ..message("assistant", serde_json::Value::Null)
+        }
+    }
+
+    fn tool_result(id: &str, content: serde_json::Value) -> ChatMessage {
+        ChatMessage {
+            tool_call_id: Some(id.into()),
+            ..message("tool", content)
+        }
+    }
+
+    #[test]
+    fn unanswered_tool_calls_get_a_result_so_the_conversation_keeps_working() {
+        let normalized = normalize_tool_messages(vec![
+            message("user", json!("first")),
+            assistant_calling(&["a"]),
+            message("user", json!("second")),
+        ]);
+        let roles: Vec<_> = normalized.iter().map(|m| m.role.as_str()).collect();
+        assert_eq!(roles, ["user", "assistant", "tool", "user"]);
+        assert_eq!(normalized[2].tool_call_id.as_deref(), Some("a"));
+        assert_eq!(normalized[2].content, json!(UNANSWERED_TOOL_CALL_RESULT));
+    }
+
+    #[test]
+    fn tool_results_move_next_to_their_calls_and_orphans_are_dropped() {
+        let normalized = normalize_tool_messages(vec![
+            assistant_calling(&["a", "b"]),
+            message("user", json!("sent during the run")),
+            tool_result("b", json!("b result")),
+            tool_result("a", json!("a result")),
+            tool_result("gone", json!("no call")),
+        ]);
+        let ids: Vec<_> = normalized
+            .iter()
+            .map(|m| m.tool_call_id.as_deref())
+            .collect();
+        assert_eq!(ids, [None, Some("a"), Some("b"), None]);
+        assert_eq!(normalized[3].role, "user");
+    }
+
+    #[test]
+    fn repeated_tool_call_ids_keep_each_result_with_its_own_call() {
+        let normalized = normalize_tool_messages(vec![
+            assistant_calling(&["call_0"]),
+            tool_result("call_0", json!("first")),
+            assistant_calling(&["call_0"]),
+            tool_result("call_0", json!("second")),
+        ]);
+        assert_eq!(normalized[1].content, json!("first"));
+        assert_eq!(normalized[3].content, json!("second"));
+    }
+
+    #[test]
+    fn tool_images_move_to_a_user_message_after_the_results() {
+        let image = json!({"type":"image_url","image_url":{"url":"data:image/png;base64,AA"}});
+        let text = json!({"type":"text","text":"{}"});
+        let normalized = normalize_tool_messages(vec![
+            assistant_calling(&["a"]),
+            tool_result("a", json!([text, image])),
+        ]);
+        assert_eq!(normalized[1].content, json!([text]));
+        assert_eq!(normalized[2].role, "user");
+        assert_eq!(normalized[2].content, json!([image]));
+    }
+
+    #[test]
+    fn images_past_the_request_budget_become_a_note() {
+        let image = |url: &str| json!({"type":"image_url","image_url":{"url":url}});
+        let mut newest = message("user", json!([image("aaaa")]));
+        let mut older = message("user", json!([image("bbbb")]));
+        let mut left = 6;
+        limit_inline_images(&mut newest, &mut left);
+        limit_inline_images(&mut older, &mut left);
+        assert_eq!(newest.content, json!([image("aaaa")]));
+        assert_eq!(
+            older.content,
+            json!([{"type":"text","text":OMITTED_IMAGE_NOTE}])
+        );
+        assert_eq!(left, 0);
+    }
 
     #[test]
     fn every_mutation_tool_has_an_authorization_and_audit_permission() {

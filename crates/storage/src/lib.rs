@@ -596,8 +596,8 @@ impl ObjectStore for S3ObjectStore {
                 .list_page(String::new(), None, None, None, Some(1)),
         )
         .await
-        .map_err(|_| ObjectStoreError::TimedOut(READINESS_OPERATION))?
-        .map_err(|_| ObjectStoreError::Operation(READINESS_OPERATION));
+        .map_err(|_| ObjectStoreError::TimedOut(READINESS_OPERATION))
+        .and_then(|listed| listed.map_err(|_| ObjectStoreError::Operation(READINESS_OPERATION)));
         record_readiness(result.is_ok());
         result.map(|_| ())
     }

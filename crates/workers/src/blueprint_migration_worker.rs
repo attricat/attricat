@@ -123,19 +123,24 @@ impl TaskHandler for BlueprintMigrationBatchTaskHandler {
             .await
         {
             Ok(()) => Ok(TaskOutcome::Complete),
-            Err(error) => {
-                // The queue owns the five-attempt budget and dead-letter
-                // record. Keep the user-visible batch in step on the final
-                // failed attempt, fenced by this same task token.
-                if task.failures + 1 >= task.max_failures {
-                    repository
-                        .dead_letter_safe_blueprint_migration_batch(task.subject_id)
-                        .await
-                        .map_err(task_error)?;
-                }
-                Err(task_error(error))
-            }
+            Err(error) => Err(task_error(error)),
         }
+    }
+
+    /// The queue owns the failure budget and dead-letter record. This keeps
+    /// the user-visible batch in step when that budget runs out.
+    async fn on_exhausted(
+        &self,
+        task: &ClaimedTask,
+        _message: &str,
+    ) -> Result<bool, TaskHandlerError> {
+        self.repository
+            .for_workspace(task.workspace_id)
+            .for_task(task)
+            .dead_letter_safe_blueprint_migration_batch(task.subject_id)
+            .await
+            .map_err(task_error)?;
+        Ok(false)
     }
 }
 

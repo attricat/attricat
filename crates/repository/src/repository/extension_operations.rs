@@ -554,6 +554,38 @@ impl AttricatRepository {
             .await
     }
 
+    /// Dead-letters a run and its envelope together once the failure budget
+    /// is spent, however the run was left: a run whose last holder crashed is
+    /// still leased under that holder's token. Returns false when the run had
+    /// already ended, which leaves the envelope to the caller.
+    pub async fn dead_letter_extension_operation_task(
+        &self,
+        task: &ClaimedTask,
+        error: &str,
+    ) -> Result<bool, RepositoryError> {
+        let error = bounded_message(error);
+        let mut transaction = self.pool.begin().await?;
+        self.for_task(task)
+            .ensure_task_fence(&mut transaction)
+            .await?;
+        let changed = sqlx::query(
+            "UPDATE extension_operation_runs SET status='dead_letter',last_error_code='operation',last_error_message=$3,resume_at=NULL,lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status IN ('pending','leased')",
+        )
+        .bind(task.subject_id)
+        .bind(self.workspace_id())
+        .bind(&error)
+        .execute(&mut *transaction)
+        .await?
+        .rows_affected();
+        if changed != 1 {
+            return Ok(false);
+        }
+        self.dead_letter_task_in_transaction(&mut transaction, task, "operation", &error)
+            .await?;
+        transaction.commit().await?;
+        Ok(true)
+    }
+
     /// Releases a failed batch for a retry at `at` without committing a
     /// checkpoint, so the same batch key replays. The envelope's failure
     /// budget decides whether the run is retried or dead-lettered.

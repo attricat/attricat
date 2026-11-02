@@ -1396,11 +1396,13 @@ impl AttricatRepository {
         context_id: Option<Uuid>,
         actor: AuthorizationActor,
     ) -> Result<Vec<StatusTransitionAccess>, RepositoryError> {
-        let mut transaction = self.pool.begin().await?;
+        // Read before the transaction: holding its connection while waiting for
+        // another one lets concurrent requests starve the pool.
         let record = self
             .get_record(record_id)
             .await?
             .ok_or(RepositoryError::NotFound("record"))?;
+        let mut transaction = self.pool.begin().await?;
         let attributes = Self::status_attributes(&mut transaction, &record).await?;
         let tree = ContextTree::load(&mut transaction, self.workspace_id.0).await?;
         let context = match context_id {
@@ -1533,6 +1535,9 @@ impl AttricatRepository {
         let actor = self
             .acting_principal()
             .ok_or(RepositoryError::ActorNotAuthorized)?;
+        // Read before the transaction, as in `status_transition_access`, and
+        // reported missing only after the permission check.
+        let record = self.get_record(record_id).await?;
         let mut transaction = self.pool.begin().await?;
         self.ensure_principal_may(
             &mut transaction,
@@ -1541,10 +1546,7 @@ impl AttricatRepository {
             &[record_id],
         )
         .await?;
-        let record = self
-            .get_record(record_id)
-            .await?
-            .ok_or(RepositoryError::NotFound("record"))?;
+        let record = record.ok_or(RepositoryError::NotFound("record"))?;
         let attribute = Self::status_attributes(&mut transaction, &record)
             .await?
             .into_iter()

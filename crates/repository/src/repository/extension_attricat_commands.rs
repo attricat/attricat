@@ -408,9 +408,10 @@ impl AttricatRepository {
                     .await?;
             }
             sqlx::query_scalar(&format!(
-                "SELECT e.id FROM records e JOIN attribute_values v ON v.record_id=e.id AND v.workspace_id=e.workspace_id AND v.active \
+                "SELECT e.id FROM records e \
                  WHERE e.workspace_id=$1 AND e.deleted_at IS NULL AND e.blueprint_id=$2 AND e.blueprint_version=$3 \
-                   AND v.attribute_id=$4 AND v.relationship_target_record_id IS NULL AND v.value_text=$5 \
+                   AND EXISTS (SELECT 1 FROM attribute_values v WHERE v.record_id=e.id AND v.workspace_id=e.workspace_id AND v.active \
+                     AND v.attribute_id=$4 AND v.relationship_target_record_id IS NULL AND v.value_text=$5) \
                  ORDER BY e.id{row_lock} LIMIT 2",
             ))
             .bind(workspace_id)

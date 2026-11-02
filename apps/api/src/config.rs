@@ -396,15 +396,17 @@ impl Config {
             },
             bootstrap: bootstrap(source, demo_mode)?,
             mail: MailConfig {
+                // Checked here, or the first email to use one fails after its
+                // token was already issued.
+                password_reset_url: mail_url(source, "PASSWORD_RESET_URL", DEFAULT_PASSWORD_RESET_URL)?,
+                workspace_invitation_url: mail_url(source, "WORKSPACE_INVITATION_URL", DEFAULT_WORKSPACE_INVITATION_URL)?,
+                workspace_onboarding_url: mail_url(source, "WORKSPACE_ONBOARDING_URL", DEFAULT_WORKSPACE_ONBOARDING_URL)?,
                 smtp_host: source.var("SMTP_HOST").unwrap_or(DEFAULT_SMTP_HOST).to_owned(),
                 smtp_port: source.parsed("SMTP_PORT", DEFAULT_SMTP_PORT)?,
                 smtp_tls_mode: source.var("SMTP_TLS_MODE").unwrap_or(DEFAULT_SMTP_TLS_MODE).to_owned(),
                 smtp_username: get("SMTP_USERNAME"),
                 smtp_password: source.secret(secret::SMTP_PASSWORD)?,
                 from: source.var("MAIL_FROM").unwrap_or(DEFAULT_MAIL_FROM).to_owned(),
-                password_reset_url: source.var("PASSWORD_RESET_URL").unwrap_or(DEFAULT_PASSWORD_RESET_URL).to_owned(),
-                workspace_invitation_url: source.var("WORKSPACE_INVITATION_URL").unwrap_or(DEFAULT_WORKSPACE_INVITATION_URL).to_owned(),
-                workspace_onboarding_url: source.var("WORKSPACE_ONBOARDING_URL").unwrap_or(DEFAULT_WORKSPACE_ONBOARDING_URL).to_owned(),
             },
             cache: CacheConfig::parse(
                 source.var("CACHE_BACKEND"),
@@ -623,6 +625,14 @@ fn credential_key(source: &Source) -> Result<Option<[u8; 32]>, ConfigError> {
     base64_key(&secret)
         .map(Some)
         .ok_or_else(|| "the extension_credential_key secret must be 32 base64-encoded bytes".into())
+}
+
+/// A base URL for links sent by email.
+fn mail_url(source: &Source, name: &str, default: &str) -> Result<String, ConfigError> {
+    let value = source.var(name).unwrap_or(default);
+    url::Url::parse(value)
+        .map_err(|_| ConfigError::from(format!("{name} must be an absolute URL").as_str()))?;
+    Ok(value.to_owned())
 }
 
 fn development_egress(

@@ -66,10 +66,34 @@ async fn custom_roles_are_managed_by_the_repository(pool: PgPool) {
             .await
             .is_err()
     );
+    // An invitation keeps its role reference, which must not block retirement.
+    let invitation = Uuid::new_v4();
+    repository
+        .create_workspace_invitation(
+            invitation,
+            owner,
+            workspace,
+            "retired-role@example.test",
+            reader,
+            "workspace",
+            workspace,
+            &[7_u8; 32],
+            chrono::Utc::now() + chrono::Duration::hours(1),
+        )
+        .await
+        .unwrap();
     repository
         .retire_workspace_role(owner, workspace, reader, Some(writer))
         .await
         .unwrap();
+    assert_eq!(
+        sqlx::query_scalar::<_, Uuid>("SELECT role_id FROM workspace_invitations WHERE id = $1")
+            .bind(invitation)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        writer
+    );
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT count(*) FROM role_grants WHERE role_id = $1")
             .bind(writer)

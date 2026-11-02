@@ -58,8 +58,19 @@ impl ExtensionInstaller {
         source: &str,
         package: ExtensionPackage,
     ) -> Result<ExtensionInstallation, ExtensionInstallError> {
-        self.install_package_as(source, package, Uuid::new_v4())
+        let installed_release_id = Uuid::new_v4();
+        let keys = self.stage_artifacts(&package, installed_release_id).await?;
+        match self
+            .repository
+            .install_extension(package.manifest(), source, installed_release_id)
             .await
+        {
+            Ok(installation) => Ok(installation),
+            Err(error) => {
+                self.cleanup_after_rejection(&error, &keys).await;
+                Err(error.into())
+            }
+        }
     }
 
     /// Installs a package under an installed-release ID the caller reserved,
@@ -70,18 +81,17 @@ impl ExtensionInstaller {
         package: ExtensionPackage,
         installed_release_id: Uuid,
     ) -> Result<ExtensionInstallation, ExtensionInstallError> {
-        let keys = self.stage_artifacts(&package, installed_release_id).await?;
-        match self
+        // Overlapping requests reserve the same ID and so write the same keys.
+        // Overwriting is safe, because a release ID always names the same bytes.
+        // Deleting is not, because the other request may have won; what a failed
+        // request leaves behind is overwritten by its retry.
+        for (key, artifact) in Self::artifact_objects(&package, installed_release_id) {
+            self.object_store.put(&key, artifact).await?;
+        }
+        Ok(self
             .repository
             .install_extension(package.manifest(), source, installed_release_id)
-            .await
-        {
-            Ok(installation) => Ok(installation),
-            Err(error) => {
-                self.cleanup(&keys).await;
-                Err(error.into())
-            }
-        }
+            .await?)
     }
 
     pub async fn upgrade(
@@ -108,9 +118,20 @@ impl ExtensionInstaller {
         {
             Ok(installation) => Ok(installation),
             Err(error) => {
-                self.cleanup(&keys).await;
+                self.cleanup_after_rejection(&error, &keys).await;
                 Err(error.into())
             }
+        }
+    }
+
+    /// Deletes staged objects unless the database failed, in which case the
+    /// transaction may have committed and the installation may need them. A
+    /// leftover object only costs storage; a missing one breaks the extension.
+    async fn cleanup_after_rejection(&self, error: &RepositoryError, keys: &[String]) {
+        if matches!(error, RepositoryError::Database(_)) {
+            tracing::warn!(%error, ?keys, "keeping staged extension artifacts after a database error");
+        } else {
+            self.cleanup(keys).await;
         }
     }
 
@@ -120,31 +141,36 @@ impl ExtensionInstaller {
         installed_release_id: Uuid,
     ) -> Result<Vec<String>, ExtensionInstallError> {
         let mut keys = Vec::new();
-        for artifact in &package.manifest().artifacts {
-            let bytes = package
-                .artifacts()
-                .find_map(|(path, bytes)| (path == artifact.path).then_some(bytes))
-                .expect("validated package retains every declared artifact");
-            let key = installed_artifact_key(installed_release_id, &artifact.id);
+        for (key, artifact) in Self::artifact_objects(package, installed_release_id) {
             // Include the key before writing: a timed-out or otherwise
             // ambiguous S3 error may still have created the object.
             keys.push(key.clone());
-            if let Err(error) = self
-                .object_store
-                .put(
-                    &key,
-                    StoredObject {
-                        bytes: Bytes::copy_from_slice(bytes),
-                        content_type: None,
-                    },
-                )
-                .await
-            {
+            if let Err(error) = self.object_store.put(&key, artifact).await {
                 self.cleanup(&keys).await;
                 return Err(error.into());
             }
         }
         Ok(keys)
+    }
+
+    /// Each artifact's object and the key it is stored under.
+    fn artifact_objects(
+        package: &ExtensionPackage,
+        installed_release_id: Uuid,
+    ) -> impl Iterator<Item = (String, StoredObject)> {
+        package.manifest().artifacts.iter().map(move |artifact| {
+            let bytes = package
+                .artifacts()
+                .find_map(|(path, bytes)| (path == artifact.path).then_some(bytes))
+                .expect("validated package retains every declared artifact");
+            (
+                installed_artifact_key(installed_release_id, &artifact.id),
+                StoredObject {
+                    bytes: Bytes::copy_from_slice(bytes),
+                    content_type: None,
+                },
+            )
+        })
     }
 
     async fn cleanup(&self, keys: &[String]) {

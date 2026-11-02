@@ -523,6 +523,7 @@ impl OperationState {
             .await
             .map_err(|error| error.to_string())?;
         let path = std::env::temp_dir().join(format!("attricat-http-input-{}", artifact.id));
+        let remove_on_drop = super::TempFile(path.clone());
         let result = async {
             let mut file =
                 File::create(&path).map_err(|_| "temporary transfer unavailable".to_owned())?;
@@ -569,7 +570,7 @@ impl OperationState {
             bounded_serialize(&json!({"artifact_id":artifact.id,"etag":etag,"offset":offset,"length":length,"replayed":false}))
         }
         .await;
-        let _ = std::fs::remove_file(&path);
+        drop(remove_on_drop);
         if result.is_err() {
             let _ = self
                 .repository

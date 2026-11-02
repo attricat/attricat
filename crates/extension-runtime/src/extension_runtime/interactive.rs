@@ -223,19 +223,31 @@ impl wit::attricat::Host for OperationState {
 
 impl wit::transfer::Host for OperationState {
     async fn fetch_input(&mut self, request: String) -> Result<String, String> {
-        self.transfer_fetch_input(request).await
+        let network_wait = self.network_wait.clone();
+        network_wait
+            .around(self.transfer_fetch_input(request))
+            .await
     }
 
     async fn deliver_output(&mut self, request: String) -> Result<String, String> {
-        self.transfer_deliver_output(request).await
+        let network_wait = self.network_wait.clone();
+        network_wait
+            .around(self.transfer_deliver_output(request))
+            .await
     }
 
     async fn fetch_input_v2(&mut self, request: String) -> Result<String, String> {
-        self.transfer_fetch_input_v2(request).await
+        let network_wait = self.network_wait.clone();
+        network_wait
+            .around(self.transfer_fetch_input_v2(request))
+            .await
     }
 
     async fn deliver_output_v2(&mut self, request: String) -> Result<String, String> {
-        self.transfer_deliver_output_v2(request).await
+        let network_wait = self.network_wait.clone();
+        network_wait
+            .around(self.transfer_deliver_output_v2(request))
+            .await
     }
 
     async fn open_record_file(&mut self, request: String) -> Result<String, String> {

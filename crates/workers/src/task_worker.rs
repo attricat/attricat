@@ -6,6 +6,7 @@
 
 use std::{
     collections::HashMap,
+    panic::AssertUnwindSafe,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -13,6 +14,7 @@ use std::{
 use async_trait::async_trait;
 use attricat_repository::round_trips::measure;
 use chrono::Utc;
+use futures_util::FutureExt;
 use metrics::{counter, gauge, histogram};
 use tokio::{sync::watch, task::JoinSet, time};
 use uuid::Uuid;
@@ -27,8 +29,18 @@ const MAX_WORKER_ID_BYTES: usize = 128;
 const METRICS_INTERVAL: Duration = Duration::from_secs(5);
 /// The pause after a failed claim before the worker polls again.
 const CLAIM_RETRY_DELAY: Duration = Duration::from_secs(1);
-/// How long a task whose handler failed waits before it may run again.
+/// How long a task waits after its first handler failure. Each further failure
+/// waits four times longer, so a short database outage or a burst of deadlocks
+/// cannot spend a whole failure budget within seconds.
 const HANDLER_FAILURE_RETRY_DELAY: chrono::TimeDelta = chrono::TimeDelta::seconds(1);
+const HANDLER_FAILURE_BACKOFF_FACTOR: i32 = 4;
+/// How long a task waits to try again after its domain row could not be settled
+/// when its failure budget ran out.
+const EXHAUSTED_SETTLE_RETRY_DELAY: chrono::TimeDelta = chrono::TimeDelta::seconds(30);
+/// The error code of a handler that panicked.
+const HANDLER_PANIC_CODE: &str = "handler_panic";
+/// The error code of a task whose leases kept expiring without it settling.
+const LEASE_EXPIRED_CODE: &str = "lease_expired";
 
 #[derive(Debug, Clone)]
 pub struct TaskWorkerConfig {
@@ -105,6 +117,18 @@ pub trait TaskHandler: Send + Sync {
     /// Called when heartbeat fencing proves this execution no longer owns its
     /// task. Non-resumable handlers can record a terminal domain interruption.
     async fn on_lease_lost(&self, _: ClaimedTask) {}
+    /// Called instead of retrying when the task's failure budget is spent, so
+    /// the domain row and the envelope end together. Return `true` after
+    /// dead-lettering both, `false` when only the envelope remains to end. An
+    /// error is a transient failure to settle: the worker tries again later
+    /// without dead-lettering anything.
+    async fn on_exhausted(
+        &self,
+        _task: &ClaimedTask,
+        _message: &str,
+    ) -> Result<bool, TaskHandlerError> {
+        Ok(false)
+    }
 }
 
 #[derive(Clone, Default)]
@@ -311,6 +335,44 @@ fn bounded_error(code: &str, message: &str) -> (String, String) {
     )
 }
 
+/// When a task that has failed `failures` times may run again.
+fn handler_failure_retry_at(failures: i32) -> chrono::DateTime<Utc> {
+    let delay = HANDLER_FAILURE_RETRY_DELAY
+        * HANDLER_FAILURE_BACKOFF_FACTOR.saturating_pow(failures.clamp(0, 8) as u32);
+    Utc::now() + delay
+}
+
+/// Ends a task whose failure budget is spent: its domain row first, then the
+/// envelope. If the domain row cannot be settled now, the task runs again later
+/// with its last failure unspent, so the two can't end up in different states.
+async fn dead_letter_exhausted(
+    repository: &SystemRepository,
+    handler: &dyn TaskHandler,
+    task: &ClaimedTask,
+    code: &str,
+    message: &str,
+) -> Result<&'static str, TaskError> {
+    match handler.on_exhausted(task, message).await {
+        Ok(true) => Ok("dead_letter"),
+        Ok(false) => repository
+            .dead_letter_task(task, code, message)
+            .await
+            .map(|()| "dead_letter"),
+        Err(error) => {
+            tracing::warn!(task_id = %task.id, code = error.code, error = %error.message, "could not settle a task that spent its failure budget");
+            repository
+                .reschedule_task_at(
+                    task.id,
+                    &task.lease_owner,
+                    task.lease_token,
+                    Utc::now() + EXHAUSTED_SETTLE_RETRY_DELAY,
+                )
+                .await
+                .map(|()| "rescheduled")
+        }
+    }
+}
+
 /// The metric outcome of a retried task: exhausting its failure budget
 /// dead-letters it.
 fn retry_outcome(status: TaskStatus) -> &'static str {
@@ -329,17 +391,58 @@ async fn execute(repository: SystemRepository, handler: Arc<dyn TaskHandler>, ta
     let heartbeat_every = lease_duration
         .checked_div(3)
         .unwrap_or(Duration::from_millis(1));
-    let handled = measure(format!("task:{kind}"), handler.handle(task.clone()));
+    // Reclaiming an expired lease spends a failure, so a task that keeps killing
+    // its process or never settles stops here instead of running forever.
+    if task.failures >= task.max_failures {
+        let (code, message) = bounded_error(
+            LEASE_EXPIRED_CODE,
+            "task lease kept expiring before the task settled",
+        );
+        tracing::error!(task_id = %task.id, kind = %kind, "task lease kept expiring; dead-lettering it");
+        let result =
+            dead_letter_exhausted(&repository, handler.as_ref(), &task, &code, &message).await;
+        record_task_result(kind, started, result);
+        return;
+    }
+    // A panic counts as a failed run rather than leaving the lease to expire.
+    let handled = measure(
+        format!("task:{kind}"),
+        AssertUnwindSafe(handler.handle(task.clone())).catch_unwind(),
+    )
+    .map(|result| {
+        result.unwrap_or_else(|_| {
+            Err(TaskHandlerError {
+                code: HANDLER_PANIC_CODE,
+                message: "task handler panicked".to_owned(),
+            })
+        })
+    });
     let renewals = async {
         let mut heartbeat = time::interval(heartbeat_every);
         heartbeat.tick().await;
+        let mut lease_ends = time::Instant::now() + lease_duration;
         loop {
             heartbeat.tick().await;
-            if let Err(error) = repository
-                .heartbeat_task(task.id, &task.lease_owner, task.lease_token, lease_duration)
-                .await
+            // A database error says nothing about the lease, which stays valid
+            // until it ends. Only then is this execution certainly out of time.
+            let attempted_at = time::Instant::now();
+            match time::timeout_at(
+                lease_ends,
+                repository.heartbeat_task(
+                    task.id,
+                    &task.lease_owner,
+                    task.lease_token,
+                    lease_duration,
+                ),
+            )
+            .await
             {
-                return error;
+                Ok(Ok(())) => lease_ends = attempted_at + lease_duration,
+                Ok(Err(TaskError::LeaseLost)) | Err(_) => return TaskError::LeaseLost,
+                Ok(Err(error)) if time::Instant::now() >= lease_ends => return error,
+                Ok(Err(error)) => {
+                    tracing::warn!(task_id = %task.id, kind = %kind, error = %error, "task heartbeat failed; retrying");
+                }
             }
         }
     };
@@ -382,19 +485,28 @@ async fn execute(repository: SystemRepository, handler: Arc<dyn TaskHandler>, ta
         Err(error) => {
             let (code, message) = bounded_error(error.code, &error.message);
             tracing::error!(task_id = %task.id, kind = %kind, %code, %message, "task handler failed");
-            repository
-                .retry_task_at(
-                    task.id,
-                    &task.lease_owner,
-                    task.lease_token,
-                    Utc::now() + HANDLER_FAILURE_RETRY_DELAY,
-                    &code,
-                    &message,
-                )
-                .await
-                .map(retry_outcome)
+            if task.failures + 1 >= task.max_failures {
+                dead_letter_exhausted(&repository, handler.as_ref(), &task, &code, &message).await
+            } else {
+                repository
+                    .retry_task_at(
+                        task.id,
+                        &task.lease_owner,
+                        task.lease_token,
+                        handler_failure_retry_at(task.failures),
+                        &code,
+                        &message,
+                    )
+                    .await
+                    .map(retry_outcome)
+            }
         }
     };
+    record_task_result(kind, started, result);
+}
+
+/// Records the metrics of a task whose outcome was committed, or could not be.
+fn record_task_result(kind: TaskKind, started: Instant, result: Result<&'static str, TaskError>) {
     let metric_outcome = match result {
         Ok(outcome) => {
             counter!("attricat_tasks_total", "kind" => kind.as_str(), "outcome" => outcome)
@@ -404,7 +516,7 @@ async fn execute(repository: SystemRepository, handler: Arc<dyn TaskHandler>, ta
         Err(error) => {
             counter!("attricat_tasks_total", "kind" => kind.as_str(), "outcome" => "lease_lost")
                 .increment(1);
-            tracing::warn!(task_id = %task.id, kind = %kind, error = %error, "task outcome could not be committed");
+            tracing::warn!(kind = %kind, error = %error, "task outcome could not be committed");
             "lease_lost"
         }
     };

@@ -307,3 +307,51 @@ async fn inviting_a_deactivated_member_back_grants_only_the_invited_role(pool: P
     assert_eq!(roles, [VIEWER_ROLE_ID]);
     server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn only_an_owner_can_change_an_owners_membership_state(pool: PgPool) {
+    let repository = AttricatRepository::system(pool.clone());
+    let workspace = bootstrap_workspace_id();
+    let member_with = async |role: Uuid| {
+        let (user, membership) = add_workspace_user(&pool).await;
+        sqlx::query("UPDATE users SET email_verified_at=clock_timestamp() WHERE id=$1")
+            .bind(user)
+            .execute(&pool)
+            .await
+            .unwrap();
+        grant_role(&pool, membership, role, GrantScope::Workspace).await;
+        (user, membership)
+    };
+    let (admin, _) = member_with(ADMIN_ROLE_ID).await;
+    let (owner, _) = member_with(OWNER_ROLE_ID).await;
+    let (_, other_owner) = member_with(OWNER_ROLE_ID).await;
+    let refused = async |actor: Uuid, state: MembershipState| {
+        matches!(
+            repository
+                .set_workspace_membership_state(other_owner, actor, workspace, state)
+                .await,
+            Err(RepositoryError::NotFound("owner authority"))
+        )
+    };
+
+    assert!(refused(admin, MembershipState::Inactive).await);
+    assert!(
+        repository
+            .set_workspace_membership_state(
+                other_owner,
+                owner,
+                workspace,
+                MembershipState::Inactive,
+            )
+            .await
+            .unwrap()
+    );
+    // The former owner keeps the grant, so reactivating still takes an owner.
+    assert!(refused(admin, MembershipState::Active).await);
+    assert!(
+        repository
+            .set_workspace_membership_state(other_owner, owner, workspace, MembershipState::Active)
+            .await
+            .unwrap()
+    );
+}
