@@ -7,6 +7,10 @@ x-app: &app
     - bootstrap_owner_password
     - file_worker_metrics_token
     - api_metrics_token
+    - identity_provider_credential_key
+  # The certificate authority verify-deployment.sh creates for the identity provider.
+  volumes:
+    - ./ci-tls/ca.pem:/run/idp-ca.pem:ro
   read_only: true
   tmpfs:
     - /tmp:size=256m,mode=1777
@@ -32,6 +36,9 @@ x-environment: &environment
   PASSWORD_RESET_URL: http://127.0.0.1:3000/password-reset/confirm
   WORKSPACE_INVITATION_URL: http://127.0.0.1:3000/invitations/accept
   WORKSPACE_ONBOARDING_URL: http://127.0.0.1:3000/onboarding
+  OIDC_CALLBACK_URL: http://127.0.0.1:3000/api/auth/oidc/callback
+  OIDC_ALLOWED_PRIVATE_HOSTS: idp.test
+  OIDC_CA_FILE: /run/idp-ca.pem
 
 services:
   postgres:
@@ -74,6 +81,27 @@ services:
         done
   mailpit:
     image: axllent/mailpit:v1.28
+  # A real identity provider over TLS, as production requires.
+  idp:
+    image: quay.io/keycloak/keycloak:26.4.2
+    command:
+      - start-dev
+      - --import-realm
+      - --http-enabled=false
+      - --https-port=8443
+      - --https-certificate-file=/tls/idp.pem
+      - --https-certificate-key-file=/tls/idp.key
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HOSTNAME: https://idp.test:8443
+    ports: ["127.0.0.1:8443:8443"]
+    networks:
+      default:
+        aliases: [idp.test]
+    volumes:
+      - ../apps/api/dev/keycloak-acme-realm.json:/opt/keycloak/data/import/acme-realm.json:ro
+      - ./ci-tls:/tls:ro
 
   migrate:
     <<: *app
@@ -128,3 +156,5 @@ secrets:
     file: ./ci-secrets/file_worker_metrics_token
   api_metrics_token:
     file: ./ci-secrets/api_metrics_token
+  identity_provider_credential_key:
+    file: ./ci-secrets/identity_provider_credential_key

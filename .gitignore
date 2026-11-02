@@ -15,4 +15,5 @@ apps/web/playwright-report/
 
 apps/web/e2e/.auth.json
 /deploy/secrets/
+/deploy/ci-tls/
 .e2e/
