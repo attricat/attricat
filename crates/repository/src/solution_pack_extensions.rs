@@ -304,6 +304,16 @@ pub async fn resolve_official_extensions(
     dependency_order(resolved, &installed)
 }
 
+/// The extensions whose events this manifest consumes, itself excluded.
+fn event_providers(manifest: &Manifest) -> impl Iterator<Item = &str> {
+    manifest
+        .event_contracts
+        .consumes
+        .iter()
+        .map(|contract| contract.provider.as_str())
+        .filter(|provider| *provider != manifest.attricat.id)
+}
+
 /// Orders releases so dependencies are enabled first. Every dependency must be
 /// installed by this pack or already enabled in the workspace, because
 /// enablement requires enabled compatible dependencies.
@@ -312,6 +322,20 @@ fn dependency_order(
     installed: &HashMap<String, InstalledExtension>,
 ) -> Result<Vec<ResolvedExtensionRelease>, SolutionPackExtensionError> {
     for release in pending.values() {
+        // Enabling also requires each consumed event provider to be enabled.
+        // Whether it exports a compatible contract is checked at enablement.
+        for provider in event_providers(&release.manifest) {
+            let available = pending.contains_key(provider)
+                || installed
+                    .get(provider)
+                    .is_some_and(|existing| existing.state == ExtensionState::Enabled);
+            if !available {
+                return Err(SolutionPackExtensionError::UnmetDependency {
+                    extension_id: release.extension_id.clone(),
+                    dependency: provider.to_owned(),
+                });
+            }
+        }
         for dependency in &release.manifest.dependencies {
             let matches = |version: &str| {
                 VersionReq::parse(&dependency.version)
@@ -344,6 +368,8 @@ fn dependency_order(
                     .dependencies
                     .iter()
                     .all(|dependency| !pending.contains_key(&dependency.id))
+                    && event_providers(&release.manifest)
+                        .all(|provider| !pending.contains_key(provider))
             })
             .map(|(extension_id, _)| extension_id.clone())
             .ok_or(SolutionPackExtensionError::DependencyCycle)?;
