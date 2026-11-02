@@ -65,12 +65,14 @@ test('opens mobile navigation and closes it after navigation', async ({
     name: 'Back to main navigation',
   });
   const allRecordsLink = page.getByRole('link', { name: 'All records' });
+  // No AI provider is configured here, so Agents is a disabled button.
+  const agentsItem = page.getByRole('button', { name: 'Agents' });
   await expect(backButton).toBeVisible();
   await expect(allRecordsLink).toBeVisible();
   const allRecordsLinkBox = await allRecordsLink.boundingBox();
   expect(allRecordsLinkBox?.width).toBeGreaterThan(220);
   expect(allRecordsLinkBox?.height).toBeLessThan(80);
-  await expect(page.getByRole('link', { name: 'Agents' })).toBeHidden();
+  await expect(agentsItem).toBeHidden();
   await backButton.click();
 
   await page.getByRole('button', { name: 'Manage' }).click();
@@ -79,13 +81,13 @@ test('opens mobile navigation and closes it after navigation', async ({
     name: 'Blueprints',
   });
   await expect(backButton).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Agents' })).toBeHidden();
+  await expect(agentsItem).toBeHidden();
   await expect(blueprintsLink).toBeVisible();
 
   await backButton.click();
   await expect(backButton).toBeHidden();
   await expect(blueprintsLink).toBeHidden();
-  await expect(page.getByRole('link', { name: 'Agents' })).toBeVisible();
+  await expect(agentsItem).toBeDisabled();
 
   await page.getByRole('button', { name: 'Manage' }).click();
   await expect(blueprintsLink).toBeVisible();
