@@ -2,7 +2,7 @@ import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useEffect } from 'react';
 import { extensionRunDetailOptions } from './queryOptions';
-import { isActiveExtensionRun } from './runPolling';
+import { isActiveExtensionRun, isRefusedExtensionRunError } from './runPolling';
 import { notifyRunFinished } from './runNotifications';
 import { useRunWatchStore } from './runWatchStore';
 import { extensionRunSelectionScopes } from './constants';
@@ -30,7 +30,8 @@ export const ExtensionRunWatcher = () => {
   useEffect(() => {
     runs.forEach((result, index) => {
       const runId = runIds[index];
-      if (result.isError) {
+      // A brief outage keeps polling; the run still has to be announced.
+      if (isRefusedExtensionRunError(result.error)) {
         unwatch(runId);
         return;
       }
