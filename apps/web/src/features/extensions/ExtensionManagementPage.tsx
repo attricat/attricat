@@ -1,5 +1,5 @@
-import { Link, type ToOptions } from '@tanstack/react-router';
-import { Box, Tab, Tabs } from '@mui/material';
+import type { ToOptions } from '@tanstack/react-router';
+import { Box, Tabs } from '@mui/material';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -17,7 +17,7 @@ import { useTabAccessibility } from '../../components/useTabAccessibility';
 import { ExtensionIcon } from '../../components/systemIcons';
 import { capabilities } from '../auth/capabilities';
 import { RequireCapability } from '../auth/RequireCapability';
-import { RouterButton } from '../../components/RouterLink';
+import { RouterButton, RouterTab } from '../../components/RouterLink';
 
 const extensionTabs = [
   {
@@ -74,9 +74,8 @@ export const ExtensionManagementPage = ({
         />
         <Tabs aria-label={t('extensions.title')} sx={{ mb: 3 }} value={tab}>
           {extensionTabs.map((item, index) => (
-            <Tab
+            <RouterTab
               {...tabId.tab(index)}
-              component={Link}
               icon={<item.icon aria-hidden size={compactIconSize} />}
               key={item.to}
               label={t(item.label)}

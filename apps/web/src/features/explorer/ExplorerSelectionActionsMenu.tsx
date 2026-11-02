@@ -1,19 +1,13 @@
-import {
-  Button,
-  ListItemIcon,
-  ListItemText,
-  Menu,
-  MenuItem,
-} from '@mui/material';
+import { Button, Menu } from '@mui/material';
 import { ChevronDownIcon } from 'lucide-react';
 import { useId, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { compactIconSize } from '../../components/iconSizes';
 import { AgentIcon, SavedSearchIcon } from '../../components/systemIcons';
 import { useCan } from '../auth/useCan';
 import { capabilities } from '../auth/capabilities';
 import { useActionDialogStore } from '../extensions/actionDialogStore';
 import { ActionMenuCloseContext } from '../extensions/actions';
+import { ActionMenuItem } from '../../components/ActionMenuItem';
 
 type Props = {
   disabled: boolean;
@@ -69,29 +63,25 @@ export const ExplorerSelectionActionsMenu = ({
         transformOrigin={{ horizontal: 'right', vertical: 'top' }}
       >
         {canSendToAgent && (
-          <MenuItem
+          <ActionMenuItem
+            icon={AgentIcon}
             onClick={() => {
               close();
               onSendToAgent();
             }}
           >
-            <ListItemIcon>
-              <AgentIcon size={compactIconSize} />
-            </ListItemIcon>
-            <ListItemText>{t('explorer.sendToAgentConversation')}</ListItemText>
-          </MenuItem>
+            {t('explorer.sendToAgentConversation')}
+          </ActionMenuItem>
         )}
-        <MenuItem
+        <ActionMenuItem
+          icon={SavedSearchIcon}
           onClick={() => {
             close();
             onSaveAsSearch();
           }}
         >
-          <ListItemIcon>
-            <SavedSearchIcon size={compactIconSize} />
-          </ListItemIcon>
-          <ListItemText>{t('explorer.saveSelectionAsSearch')}</ListItemText>
-        </MenuItem>
+          {t('explorer.saveSelectionAsSearch')}
+        </ActionMenuItem>
         <ActionMenuCloseContext value={close}>
           {extensionActions}
         </ActionMenuCloseContext>

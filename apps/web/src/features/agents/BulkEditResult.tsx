@@ -1,17 +1,10 @@
-import {
-  Accordion,
-  AccordionDetails,
-  AccordionSummary,
-  Box,
-  Chip,
-  Stack,
-  Typography,
-} from '@mui/material';
+import { Box, Chip, Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { apiErrorText } from '../../api/errors';
 import { useRecordLabels } from '../records/useRecordLabels';
 import type { BulkEditResult as BulkEditOutcome } from './schemas';
 import { RecordIdLink } from '../../components/RecordIdLink';
+import { DetailsAccordion } from './DetailsAccordion';
 
 const RecordList = ({
   ids,
@@ -23,18 +16,15 @@ const RecordList = ({
   title: string;
 }) =>
   ids.length > 0 && (
-    <Accordion disableGutters elevation={0} sx={{ bgcolor: 'action.hover' }}>
-      <AccordionSummary>{title}</AccordionSummary>
-      <AccordionDetails>
-        <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
-          {ids.map((id) => (
-            <li key={id}>
-              <RecordIdLink label={labels.get(id)} recordId={id} />
-            </li>
-          ))}
-        </Box>
-      </AccordionDetails>
-    </Accordion>
+    <DetailsAccordion title={title}>
+      <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+        {ids.map((id) => (
+          <li key={id}>
+            <RecordIdLink label={labels.get(id)} recordId={id} />
+          </li>
+        ))}
+      </Box>
+    </DetailsAccordion>
   );
 
 /** Which records an approved bulk edit applied, failed at and never ran. */

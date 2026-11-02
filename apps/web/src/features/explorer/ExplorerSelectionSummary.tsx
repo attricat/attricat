@@ -5,7 +5,6 @@ import {
   ListItem,
   ListItemText,
   Popover,
-  Tooltip,
 } from '@mui/material';
 import { ChevronDownIcon, XIcon } from 'lucide-react';
 import { useId, useState } from 'react';
@@ -17,6 +16,7 @@ import {
   selectedRecordListMaxHeight,
   selectedRecordListWidth,
 } from './constants';
+import { CloseIconButton } from '../../components/CloseIconButton';
 
 type Props = {
   selectedItems: RecordItem[];
@@ -49,15 +49,10 @@ export const ExplorerSelectionSummary = ({
         {t('explorer.selectedCount', { count: selectedItems.length })}
       </Button>
       {selectedItems.length > 0 && (
-        <Tooltip title={t('explorer.clearSelection')}>
-          <IconButton
-            aria-label={t('explorer.clearSelection')}
-            onClick={onClear}
-            size="small"
-          >
-            <XIcon size={compactIconSize} />
-          </IconButton>
-        </Tooltip>
+        <CloseIconButton
+          label={t('explorer.clearSelection')}
+          onClick={onClear}
+        />
       )}
       <Popover
         anchorEl={anchor}

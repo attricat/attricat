@@ -13,8 +13,8 @@ import { useTranslation } from 'react-i18next';
 import type { Blueprint } from '../blueprints/api';
 import type { AttributeContext } from '../contexts/api';
 import { contextLabel } from '../contexts/defaultContext';
-import { lexiconText } from '../lexicon/lexicon';
 import { ALL_CONTEXTS, RULE_SCOPE_SELECT_MIN_WIDTH } from './constants';
+import { blueprintFilterOptions } from './ruleFilterOptions';
 
 /** The blueprint and context a rule checks. */
 export type RuleScope = {
@@ -114,12 +114,7 @@ export const RuleScopeFields = ({
           }
           label={t('rules.editor.blueprint')}
           onChange={(blueprintId) => onChange({ ...scope, blueprintId })}
-          options={blueprints
-            .map((blueprint) => ({
-              label: lexiconText(blueprint.name),
-              value: blueprint.id,
-            }))
-            .sort((a, b) => a.label.localeCompare(b.label))}
+          options={blueprintFilterOptions(blueprints)}
           value={scope.blueprintId ?? ''}
         />
         <ScopeSelect

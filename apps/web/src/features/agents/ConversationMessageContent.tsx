@@ -1,13 +1,4 @@
-import {
-  Accordion,
-  AccordionDetails,
-  AccordionSummary,
-  Box,
-  Chip,
-  Link,
-  Stack,
-  Typography,
-} from '@mui/material';
+import { Box, Chip, Link, Stack, Typography } from '@mui/material';
 import ReactMarkdown from 'react-markdown';
 import { bulkEditToolName } from './bulkEdits';
 import { bulkEditResultSchema } from './schemas';
@@ -16,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { isJsonObject as isRecord } from '../../api/jsonObject';
 import { JsonBlock } from '../../components/JsonValue';
 import { messageRoles, uuidPattern } from './constants';
+import { DetailsAccordion } from './DetailsAccordion';
 
 const JsonDetails = ({
   children,
@@ -24,12 +16,9 @@ const JsonDetails = ({
   children: unknown;
   label: string;
 }) => (
-  <Accordion disableGutters elevation={0} sx={{ bgcolor: 'action.hover' }}>
-    <AccordionSummary>{label}</AccordionSummary>
-    <AccordionDetails>
-      <JsonBlock value={children} />
-    </AccordionDetails>
-  </Accordion>
+  <DetailsAccordion title={label}>
+    <JsonBlock value={children} />
+  </DetailsAccordion>
 );
 
 const ToolCall = ({ call }: { call: unknown }) => {

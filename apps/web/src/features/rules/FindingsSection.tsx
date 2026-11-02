@@ -27,20 +27,20 @@ import type { Blueprint } from '../blueprints/api';
 import type { AttributeContext } from '../contexts/api';
 import { blueprintKinds } from '../blueprints/constants';
 import { contextLabel } from '../contexts/defaultContext';
-import { lexiconText } from '../lexicon/lexicon';
 import type { Finding, FindingsSearch, Rule } from './api';
 import { RecordIdLink } from '../../components/RecordIdLink';
 import { RuleRevisionCell } from './RuleCells';
 import type { RulesById } from './rulesById';
 import { useFindingMessages } from './useFindingMessages';
 import { RuleListFilter } from './RuleListFilter';
-import { ruleFilterOptions } from './ruleFilterOptions';
+import { blueprintFilterOptions, ruleFilterOptions } from './ruleFilterOptions';
 import {
   findingStates,
   findingSeverities,
   findingStateFilters,
   findingsTableColumnCount,
 } from './constants';
+import { plainListSx } from '../../components/plainList';
 
 export const FindingsSection = ({
   acknowledging,
@@ -217,13 +217,11 @@ export const FindingsSection = ({
             anyLabel={any}
             label={t('rules.filters.blueprint')}
             onChange={setFilter('blueprint')}
-            options={blueprints
-              .filter((blueprint) => blueprint.kind === blueprintKinds.record)
-              .map((blueprint) => ({
-                value: blueprint.id,
-                label: lexiconText(blueprint.name),
-              }))
-              .sort((a, b) => a.label.localeCompare(b.label))}
+            options={blueprintFilterOptions(
+              blueprints.filter(
+                (blueprint) => blueprint.kind === blueprintKinds.record,
+              ),
+            )}
             value={filters.blueprint}
           />
           <RuleListFilter
@@ -287,7 +285,7 @@ export const FindingsSection = ({
           </LoadingState>
         )}
         {narrow ? (
-          <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
+          <Box component="ul" sx={plainListSx}>
             {findings?.length === 0 && (
               <Typography
                 component="li"

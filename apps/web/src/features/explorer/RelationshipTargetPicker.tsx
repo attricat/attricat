@@ -1,9 +1,7 @@
-import { Box, Chip, InputAdornment, Stack, TextField } from '@mui/material';
-import { SearchIcon } from 'lucide-react';
+import { Box, Chip, Stack } from '@mui/material';
 import { useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { EmptyState } from '../../components/EmptyState';
-import { smallIconSize } from '../../components/iconSizes';
 import { NextPageButton } from '../../components/LoadMoreButton';
 import { RecordIcon } from '../../components/systemIcons';
 import { useRelationshipSelectionLabels } from '../records/components/useRelationshipSelectionLabels';
@@ -18,6 +16,7 @@ import {
 import { useRelationshipTargets } from '../records/components/useRelationshipTargets';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { LoadingState } from '../../components/LoadingState';
+import { SearchField } from '../../components/SearchField';
 
 type Props = {
   onSelectedIdsChange: (ids: string[]) => void;
@@ -54,19 +53,10 @@ export const RelationshipTargetPicker = ({
 
   return (
     <Stack ref={pickerContentRoot} spacing={1.5}>
-      <TextField
+      <SearchField
         fullWidth
         label={t('records.searchRelationshipOptions')}
         onChange={(event) => setQuery(event.target.value)}
-        slotProps={{
-          input: {
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon aria-hidden size={smallIconSize} />
-              </InputAdornment>
-            ),
-          },
-        }}
         value={query}
       />
       {selectedIds.length > 0 && (

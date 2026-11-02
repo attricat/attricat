@@ -1,17 +1,9 @@
 import { useEffect, useId, useRef, useState, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  InputAdornment,
-  MenuItem,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
+import { MenuItem, Stack, TextField, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
-import { SearchIcon } from 'lucide-react';
 import { EmptyState } from '../../../components/EmptyState';
 import { IconLabel } from '../../../components/IconLabel';
-import { smallIconSize } from '../../../components/iconSizes';
 import { LoadMoreButton } from '../../../components/LoadMoreButton';
 import { RelationshipSelectorDialog } from '../../../components/RelationshipSelectorDialog';
 import { BlueprintIcon, RecordIcon } from '../../../components/systemIcons';
@@ -27,6 +19,7 @@ import {
   scrollRelationshipPickerToTop,
   type RecentlyPreviewedRecords,
 } from './useRecentlyPreviewedRecords';
+import { SearchField } from '../../../components/SearchField';
 
 /**
  * Picks the records a relationship field links to. Mount it with a new `key`
@@ -156,19 +149,10 @@ export const RelationshipPickerDialog = ({
             ))}
           </TextField>
         )}
-        <TextField
+        <SearchField
           fullWidth
           label={t('records.searchRelationshipOptions')}
           onChange={(event) => setQuery(event.target.value)}
-          slotProps={{
-            input: {
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon aria-hidden size={smallIconSize} />
-                </InputAdornment>
-              ),
-            },
-          }}
           value={query}
         />
         <RelationshipDraftSelection

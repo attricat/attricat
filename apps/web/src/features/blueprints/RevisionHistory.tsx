@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import {
   Box,
   Button,
-  Paper,
   Table,
   TableBody,
   TableCell,
@@ -18,6 +17,7 @@ import { Timestamp } from '../../time/Timestamp';
 import { useCanOn } from '../auth/useCan';
 import { capabilities, accessTargetKinds } from '../auth/capabilities';
 import { monoFontFamily } from '../../app/theme';
+import { SectionPaper } from '../../components/SectionPaper';
 
 export const RevisionHistory = ({
   blueprintId,
@@ -33,7 +33,7 @@ export const RevisionHistory = ({
     blueprintId,
   );
   return (
-    <Paper component="section" sx={{ mt: 3, p: 2.5 }}>
+    <SectionPaper>
       <Typography component="h2" variant="h6">
         {t('blueprints.revisionHistory')}
       </Typography>
@@ -93,6 +93,6 @@ export const RevisionHistory = ({
           </TableBody>
         </Table>
       </Box>
-    </Paper>
+    </SectionPaper>
   );
 };

@@ -1,5 +1,4 @@
-import { Box, IconButton, Paper, Tab, Tabs, Typography } from '@mui/material';
-import { XIcon } from 'lucide-react';
+import { Box, Paper, Tab, Tabs, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import {
   apiHealthColor,
@@ -22,8 +21,8 @@ import { InspectorServerPane } from './InspectorServerPane';
 import { InspectorSessionPane } from './InspectorSessionPane';
 import { useApiHealth } from './useApiHealth';
 import { useInspectorState } from './useInspectorState';
-import { smallIconSize } from '../../components/iconSizes';
 import { useTabAccessibility } from '../../components/useTabAccessibility';
+import { CloseIconButton } from '../../components/CloseIconButton';
 
 const paneLabelKeys = {
   performance: 'inspector.performance',
@@ -95,14 +94,11 @@ export const Inspector = () => {
         <Typography aria-live="polite" sx={{ flexGrow: 1 }} variant="caption">
           {t('inspector.status', { status: apiStatus })}
         </Typography>
-        <IconButton
+        <CloseIconButton
           aria-expanded
-          aria-label={t('inspector.collapse')}
+          label={t('inspector.collapse')}
           onClick={() => updateInspectorState({ expanded: false })}
-          size="small"
-        >
-          <XIcon size={smallIconSize} />
-        </IconButton>
+        />
       </Box>
       <Box
         sx={{

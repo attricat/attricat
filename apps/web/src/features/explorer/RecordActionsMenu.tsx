@@ -1,4 +1,4 @@
-import { ListItemIcon, ListItemText, Menu, MenuItem } from '@mui/material';
+import { Menu } from '@mui/material';
 import {
   CopyIcon,
   InfoIcon,
@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { compactIconSize } from '../../components/iconSizes';
+import { ActionMenuItem } from '../../components/ActionMenuItem';
 import type {
   RecordItem,
   RecordPublicationReadiness,
@@ -78,6 +78,10 @@ export const RecordActionsMenu = ({
   useEffect(() => {
     if (dialogKey !== undefined && dialogKey !== initialDialogKey) onClose();
   }, [dialogKey, initialDialogKey, onClose]);
+  const choose = (action: () => void) => () => {
+    onClose();
+    action();
+  };
 
   return (
     <Menu
@@ -87,79 +91,49 @@ export const RecordActionsMenu = ({
       open={Boolean(position)}
       transformOrigin={{ horizontal: 'right', vertical: 'top' }}
     >
-      <MenuItem
-        onClick={() => {
-          onClose();
-          onSearchInfo(record);
-        }}
+      <ActionMenuItem
+        icon={InfoIcon}
+        onClick={choose(() => onSearchInfo(record))}
       >
-        <ListItemIcon>
-          <InfoIcon size={compactIconSize} />
-        </ListItemIcon>
-        <ListItemText>{t('explorer.searchInfo')}</ListItemText>
-      </MenuItem>
+        {t('explorer.searchInfo')}
+      </ActionMenuItem>
       {canDuplicate && (
-        <MenuItem
-          onClick={() => {
-            onClose();
-            duplicate();
-          }}
-        >
-          <ListItemIcon>
-            <CopyIcon size={compactIconSize} />
-          </ListItemIcon>
-          <ListItemText>{t('records.duplicateRecord')}</ListItemText>
-        </MenuItem>
+        <ActionMenuItem icon={CopyIcon} onClick={choose(duplicate)}>
+          {t('records.duplicateRecord')}
+        </ActionMenuItem>
       )}
       {canDelete && (
-        <MenuItem
-          onClick={() => {
-            onClose();
-            onDelete();
-          }}
-          sx={{ color: 'error.main' }}
+        <ActionMenuItem
+          icon={Trash2Icon}
+          onClick={choose(onDelete)}
+          tone="destructive"
         >
-          <ListItemIcon sx={{ color: 'inherit' }}>
-            <Trash2Icon size={compactIconSize} />
-          </ListItemIcon>
-          <ListItemText>{t('records.deleteRecord')}</ListItemText>
-        </MenuItem>
+          {t('records.deleteRecord')}
+        </ActionMenuItem>
       )}
       {canPublish && publicationContextId && publication && (
         <>
-          <MenuItem
+          <ActionMenuItem
             disabled={publishing || readiness?.ready === false}
-            onClick={() => {
-              onClose();
-              publish();
-            }}
+            icon={SendIcon}
+            onClick={choose(publish)}
+            secondary={
+              readiness?.ready === false
+                ? publicationReadinessText(readiness)
+                : undefined
+            }
           >
-            <ListItemIcon>
-              <SendIcon size={compactIconSize} />
-            </ListItemIcon>
-            <ListItemText
-              primary={t('records.publish')}
-              secondary={
-                readiness?.ready === false
-                  ? publicationReadinessText(readiness)
-                  : undefined
-              }
-            />
-          </MenuItem>
+            {t('records.publish')}
+          </ActionMenuItem>
           {publication.status !== publicationStatuses.notPublished && (
-            <MenuItem
+            <ActionMenuItem
               disabled={unpublishing}
-              onClick={() => {
-                onClose();
-                unpublish();
-              }}
-              sx={{ color: 'warning.main' }}
+              icon={Undo2Icon}
+              onClick={choose(unpublish)}
+              tone="reversal"
             >
-              <ListItemIcon sx={{ color: 'inherit' }}>
-                <Undo2Icon size={compactIconSize} />
-              </ListItemIcon>
-              <ListItemText>{t('records.unpublish')}</ListItemText>
-            </MenuItem>
+              {t('records.unpublish')}
+            </ActionMenuItem>
           )}
         </>
       )}

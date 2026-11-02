@@ -5,14 +5,13 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  IconButton,
   Stack,
   Typography,
   useMediaQuery,
   useTheme,
 } from '@mui/material';
-import { XIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { CloseIconButton } from './CloseIconButton';
 
 type DialogActionsConfig = {
   applyDisabled?: boolean;
@@ -93,9 +92,7 @@ export const RelationshipSelectorDialog = ({
               {topAction.label}
             </Button>
           )}
-          <IconButton aria-label={closeLabel} onClick={onClose}>
-            <XIcon />
-          </IconButton>
+          <CloseIconButton label={closeLabel} onClick={onClose} />
         </Stack>
       </DialogTitle>
       <DialogContent dividers>{children}</DialogContent>

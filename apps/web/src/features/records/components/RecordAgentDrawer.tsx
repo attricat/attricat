@@ -7,7 +7,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import { ListIcon, PencilIcon, PlusIcon, XIcon } from 'lucide-react';
+import { ListIcon, PencilIcon, PlusIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useState } from 'react';
 import {
@@ -29,6 +29,7 @@ import {
 } from '../../agents/ConversationPanel';
 import { RECORD_DRAWER_WIDTH } from '../constants';
 import { ApiErrorAlert } from '../../../components/ApiErrorAlert';
+import { CloseIconButton } from '../../../components/CloseIconButton';
 
 /**
  * Asks the agent about a record: a new conversation, created by its first
@@ -167,9 +168,7 @@ export const RecordAgentDrawer = ({
               </IconButton>
             </Tooltip>
           )}
-          <IconButton aria-label={t('common.close')} onClick={closePanel}>
-            <XIcon />
-          </IconButton>
+          <CloseIconButton onClick={closePanel} />
         </Box>
         {onShowAll && (
           <Box>

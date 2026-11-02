@@ -27,6 +27,7 @@ import { PencilIcon, Trash2Icon } from 'lucide-react';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { deleteComment } from './api';
 import { LoadingState } from '../../components/LoadingState';
+import { plainListSx } from '../../components/plainList';
 
 const CommentItem = ({
   recordId,
@@ -218,7 +219,7 @@ export const RecordCommentsPanel = ({ recordId }: { recordId: string }) => {
         label={t('comments.loadEarlier')}
         query={comments}
       />
-      <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0 }}>
+      <Box component="ul" sx={plainListSx}>
         {items.map((comment) => (
           <CommentItem
             key={comment.id}
