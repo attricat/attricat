@@ -1,13 +1,11 @@
-import { Avatar, Box, Stack, Typography } from '@mui/material';
+import { Box, Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { AgentIcon } from '../../components/systemIcons';
 import {
   thinkingAnimationDuration,
   thinkingAnimationName,
   thinkingDotDelaysSeconds,
 } from './constants';
-import { smallIconSize } from '../../components/iconSizes';
-import { userAvatarSizes } from '../../components/userAvatars';
+import { AgentAvatar } from './AgentAvatar';
 
 const dotStyles = Object.fromEntries(
   thinkingDotDelaysSeconds.map((delay, index) => [
@@ -26,15 +24,7 @@ export const ThinkingIndicator = () => {
       spacing={1.5}
       sx={{ alignItems: 'center' }}
     >
-      <Avatar
-        sx={{
-          bgcolor: 'primary.main',
-          height: userAvatarSizes.message,
-          width: userAvatarSizes.message,
-        }}
-      >
-        <AgentIcon size={smallIconSize} />
-      </Avatar>
+      <AgentAvatar />
       <Typography color="text.secondary" variant="body2">
         {t('agents.thinking')}
         <Box

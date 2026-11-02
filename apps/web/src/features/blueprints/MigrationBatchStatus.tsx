@@ -25,6 +25,9 @@ import type { BlueprintMigrationBatchStatus as MigrationBatch } from './schemas'
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { emptyValuePlaceholder } from '../../components/placeholders';
 import { monoFontFamily } from '../../app/theme';
+import { LoadingState } from '../../components/LoadingState';
+import { EmptyState } from '../../components/EmptyState';
+import { MigrationIcon } from '../../components/systemIcons';
 
 const statusColor = (status: MigrationBatch['status']) => {
   if (status === migrationBatchStatuses.completed) return 'success';
@@ -90,14 +93,15 @@ export const MigrationBatchStatus = ({
       </Stack>
       <ApiErrorAlert error={batches.error} sx={{ mt: 2 }} />
       {batches.isPending && (
-        <Typography sx={{ mt: 2 }}>
+        <LoadingState sx={{ mt: 2 }}>
           {t('blueprints.loadingMigrations')}
-        </Typography>
+        </LoadingState>
       )}
       {batches.data?.length === 0 && (
-        <Typography color="text.secondary" sx={{ mt: 2 }}>
-          {t('blueprints.noMigrationBatches')}
-        </Typography>
+        <EmptyState
+          icon={MigrationIcon}
+          title={t('blueprints.noMigrationBatches')}
+        />
       )}
       {batches.data && batches.data.length > 0 && (
         <TableContainer sx={{ mt: 2 }}>

@@ -6,9 +6,10 @@ import {
   unreadCountSchema,
 } from './schemas';
 import type { KeysetCursor } from '../../api/keysetCursor';
+import { uuidSegment } from '../../api/pathSegments';
 
 const notificationPath = (id: string) =>
-  `${notificationsPath}/${encodeURIComponent(id)}`;
+  `${notificationsPath}/${uuidSegment(id)}`;
 
 export const listNotifications = (
   unreadOnly: boolean,

@@ -19,6 +19,7 @@ import {
   recordRun,
 } from './diagnostics/extensionDiagnosticsStore';
 import { contributionKey } from './outletContributions';
+import { downloadUrl } from '../../components/downloadUrl';
 
 type FrameContext = Record<string, unknown>;
 
@@ -37,15 +38,7 @@ type UseExtensionFrameOptions = {
 };
 
 /** Downloads through a host-owned link; the frame never receives the URL. */
-export const downloadArtifact = (url: string) => {
-  const link = document.createElement('a');
-  link.href = url;
-  link.rel = 'noopener';
-  link.download = '';
-  document.body.append(link);
-  link.click();
-  link.remove();
-};
+export const downloadArtifact = (url: string) => downloadUrl(url);
 
 const clampFrameHeight = (height: number) =>
   Math.min(Math.max(0, height), maximumExtensionFrameHeight);

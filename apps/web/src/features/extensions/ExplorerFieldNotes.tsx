@@ -4,7 +4,6 @@ import { useContext, useMemo, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { accessTargetKinds, capabilities } from '../auth/capabilities';
 import { useAccess, useCan } from '../auth/useCan';
-import { recordQueryKeys } from '../records/queryKeys';
 import type { ExtensionRuntimeScope } from './api';
 import type { ActionTarget } from './actions';
 import {
@@ -27,6 +26,7 @@ import {
 } from './explorerFieldNotesContext';
 import { useExtensionRuntime } from './useExtensionRuntime';
 import { useInvokeExtensionAction } from './useInvokeExtensionAction';
+import { extensionQueryKeys } from './queryKeys';
 
 const chunks = (ids: readonly string[]) =>
   Array.from(
@@ -61,13 +61,11 @@ export const ExplorerFieldNotesProvider = ({
   const { blueprintId, blueprintVersion } = runtimeScope;
   const records = useQueries({
     queries: chunks(recordIds).map((ids) => ({
-      queryKey: [
-        ...recordQueryKeys.searches(),
-        'extension-field-notes',
+      queryKey: extensionQueryKeys.searchFieldNotes(
         ids,
         contextId,
         i18n.language,
-      ],
+      ),
       queryFn: () =>
         fetchFieldNotes(ids, contextId, i18n.language, queryClient),
       refetchInterval: (query: {

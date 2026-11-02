@@ -1,4 +1,11 @@
-import { Dialog, DialogContent, DialogTitle, Typography } from '@mui/material';
+import {
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Typography,
+} from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import type { RecordItem } from '../records/api';
 
@@ -31,6 +38,9 @@ export const SearchInfoDialog = ({ record, onClose }: Props) => {
       <DialogContent>
         <Typography>{details || t('explorer.noSearchDetails')}</Typography>
       </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>{t('common.close')}</Button>
+      </DialogActions>
     </Dialog>
   );
 };

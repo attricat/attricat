@@ -8,6 +8,7 @@ import {
   type SavedViewVisibility,
 } from './constants';
 import { savedViewSchema } from './schemas';
+import { uuidSegment } from '../../api/pathSegments';
 
 const statePayload = (state: ExplorerSearch) => ({
   kind: EXPLORER_SEARCH_KIND,
@@ -24,7 +25,7 @@ export const listSavedViews = (search: string, signal?: AbortSignal) =>
   );
 export const getSavedView = (id: string, link: boolean, signal?: AbortSignal) =>
   request(
-    `${link ? VIEW_STATE_LINKS_PATH : SAVED_VIEWS_PATH}/${encodeURIComponent(id)}`,
+    `${link ? VIEW_STATE_LINKS_PATH : SAVED_VIEWS_PATH}/${uuidSegment(id)}`,
     savedViewSchema,
     { signal },
   );
@@ -52,7 +53,7 @@ export const updateSavedView = (
   state: ExplorerSearch,
 ) =>
   request(
-    `${SAVED_VIEWS_PATH}/${encodeURIComponent(id)}`,
+    `${SAVED_VIEWS_PATH}/${uuidSegment(id)}`,
     savedViewSchema,
     jsonRequest('PUT', {
       ...statePayload(state),
@@ -62,7 +63,7 @@ export const updateSavedView = (
     }),
   );
 export const deleteSavedView = (id: string) =>
-  requestNoContent(`${SAVED_VIEWS_PATH}/${encodeURIComponent(id)}`, {
+  requestNoContent(`${SAVED_VIEWS_PATH}/${uuidSegment(id)}`, {
     method: 'DELETE',
   });
 export const createViewStateLink = (state: ExplorerSearch) =>

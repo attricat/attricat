@@ -5,6 +5,7 @@ import {
   createAttributeContextSchema,
   type AttributeContext,
 } from './schemas';
+import { uuidSegment } from '../../api/pathSegments';
 export type { AttributeContext } from './schemas';
 
 export const listContexts = (
@@ -30,6 +31,6 @@ export const createContext = (
 };
 
 export const deleteContext = (id: string) =>
-  requestNoContent(`/api/contexts/id/${encodeURIComponent(id)}`, {
+  requestNoContent(`/api/contexts/id/${uuidSegment(id)}`, {
     method: 'DELETE',
   });

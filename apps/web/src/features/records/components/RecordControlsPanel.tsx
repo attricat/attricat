@@ -1,7 +1,7 @@
 import { defaultContextCode } from '../../contexts/constants';
 import { LoadMoreButton } from '../../../components/LoadMoreButton';
 import { useInfiniteQuery } from '@tanstack/react-query';
-import { Box, Chip, CircularProgress, Stack, Typography } from '@mui/material';
+import { Box, Chip, Stack, Typography } from '@mui/material';
 import { useId, type ReactNode } from 'react';
 import { monoFontFamily } from '../../../app/theme';
 import { Trans, useTranslation } from 'react-i18next';
@@ -23,6 +23,7 @@ import {
   transitionChannels,
   transitionOperations,
 } from '../constants';
+import { LoadingState } from '../../../components/LoadingState';
 
 /** Display labels for attribute and status codes the panel reports. */
 const controlLabels = (attributes: readonly Attribute[]) => {
@@ -313,10 +314,7 @@ export const RecordControlsPanel = ({
         }}
       />
       {(approvals.isPending || holds.isPending) && (
-        <CircularProgress
-          aria-label={t('records.recordControls.loading')}
-          enableTrackSlot
-        />
+        <LoadingState>{t('records.recordControls.loading')}</LoadingState>
       )}
       {approvalItems.length > 0 && (
         <Box component="section" aria-labelledby={approvalsHeadingId}>

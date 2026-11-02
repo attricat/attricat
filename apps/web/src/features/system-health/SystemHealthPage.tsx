@@ -1,9 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { Box, Card, LinearProgress, Stack, Typography } from '@mui/material';
 import { GitBranchIcon } from 'lucide-react';
-import { Fragment, useId } from 'react';
+import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
-import { monoFontFamily } from '../../app/theme';
 import { smallIconSize } from '../../components/iconSizes';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
@@ -13,6 +12,7 @@ import { RequireCapability } from '../auth/RequireCapability';
 import type { SystemHealth } from './schemas';
 import { capabilities } from '../auth/capabilities';
 import { systemHealthOptions } from './queryOptions';
+import { Detail, DetailList } from '../../components/DetailList';
 
 const BuildDetails = ({ build }: { build: SystemHealth['build'] }) => {
   const { t } = useTranslation();
@@ -38,32 +38,13 @@ const BuildDetails = ({ build }: { build: SystemHealth['build'] }) => {
           </Typography>
         </Box>
       </Stack>
-      <Box
-        component="dl"
-        sx={{
-          color: 'text.secondary',
-          columnGap: 4,
-          display: 'grid',
-          gridTemplateColumns: 'max-content 1fr',
-          m: 0,
-          rowGap: 2,
-          typography: 'body2',
-          '& dd': {
-            color: 'text.primary',
-            fontFamily: monoFontFamily,
-            m: 0,
-            minWidth: 0,
-            overflowWrap: 'anywhere',
-          },
-        }}
-      >
+      <DetailList>
         {details.map(([label, value]) => (
-          <Fragment key={label}>
-            <dt>{t(label)}</dt>
-            <dd>{value}</dd>
-          </Fragment>
+          <Detail key={label} label={t(label)} mono>
+            {value}
+          </Detail>
         ))}
-      </Box>
+      </DetailList>
     </Card>
   );
 };

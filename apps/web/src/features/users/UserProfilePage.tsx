@@ -12,7 +12,7 @@ import {
   Typography,
 } from '@mui/material';
 import { PencilIcon } from 'lucide-react';
-import { useId, type ReactNode } from 'react';
+import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import { httpStatus } from '../../api/httpStatus';
 import { ApiRequestError } from '../../api/request';
@@ -29,23 +29,7 @@ import { getUserProfile } from './api';
 import { userProfileAvatarSize, userProfileSkeletonWidth } from './constants';
 import { userQueryKeys } from './queryKeys';
 import { sessionOptions } from '../auth/queryOptions';
-
-const ProfileDetail = ({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) => (
-  <>
-    <Typography color="text.secondary" component="dt" variant="subtitle2">
-      {label}
-    </Typography>
-    <Typography component="dd" sx={{ m: 0, overflowWrap: 'anywhere' }}>
-      {children}
-    </Typography>
-  </>
-);
+import { Detail, DetailList } from '../../components/DetailList';
 
 /** A workspace member as every catalog reader sees them. */
 export const UserProfilePage = ({ userId }: { userId: string }) => {
@@ -112,22 +96,11 @@ export const UserProfilePage = ({ userId }: { userId: string }) => {
                   size={userProfileAvatarSize}
                   sx={{ flexShrink: 0 }}
                 />
-                <Box
-                  component="dl"
-                  sx={{
-                    columnGap: 4,
-                    display: 'grid',
-                    flex: 1,
-                    gridTemplateColumns: { sm: 'max-content 1fr' },
-                    m: 0,
-                    minWidth: 0,
-                    rowGap: 1,
-                  }}
-                >
-                  <ProfileDetail label={t('users.email')}>
+                <DetailList sx={{ flex: 1 }}>
+                  <Detail label={t('users.email')}>
                     <Link href={`mailto:${user.email}`}>{user.email}</Link>
-                  </ProfileDetail>
-                  <ProfileDetail label={t('users.membership')}>
+                  </Detail>
+                  <Detail label={t('users.membership')}>
                     {user.active ? (
                       t('users.activeMember')
                     ) : (
@@ -137,11 +110,11 @@ export const UserProfilePage = ({ userId }: { userId: string }) => {
                         variant="outlined"
                       />
                     )}
-                  </ProfileDetail>
-                  <ProfileDetail label={t('users.memberSince')}>
+                  </Detail>
+                  <Detail label={t('users.memberSince')}>
                     <Timestamp style="date" value={user.member_since} />
-                  </ProfileDetail>
-                </Box>
+                  </Detail>
+                </DetailList>
               </Stack>
             </Paper>
             <Box component="section" aria-labelledby={teamsHeadingId}>

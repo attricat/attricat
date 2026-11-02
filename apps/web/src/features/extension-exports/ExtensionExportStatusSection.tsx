@@ -42,6 +42,7 @@ import {
 import { useRetryExports } from './useRetryExports';
 import { RetryResultAlerts } from './RetryResultAlerts';
 import { LoadingState } from '../../components/LoadingState';
+import { RecordIcon } from '../../components/systemIcons';
 
 /**
  * An export extension's destinations: per-connection status counts, the
@@ -219,9 +220,10 @@ export const ExtensionExportStatusSection = ({
       )}
       {page.isSuccess &&
         (mappings.length === 0 ? (
-          <Typography color="text.secondary" variant="body2">
-            {t('extensionExports.noRecordsInStatus')}
-          </Typography>
+          <EmptyState
+            icon={RecordIcon}
+            title={t('extensionExports.noRecordsInStatus')}
+          />
         ) : (
           <ExportMappingsTable
             mappings={mappings}

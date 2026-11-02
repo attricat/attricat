@@ -2,6 +2,7 @@ import {
   Alert,
   Button,
   Dialog,
+  DialogActions,
   DialogContent,
   DialogTitle,
   Stack,
@@ -10,7 +11,6 @@ import {
 import { useTranslation } from 'react-i18next';
 import { CopyIcon } from 'lucide-react';
 import { useCopyToClipboard } from '../../components/useCopyToClipboard';
-import { secretDialogMinWidth } from './constants';
 
 export const SecretDialog = ({
   secret,
@@ -24,10 +24,10 @@ export const SecretDialog = ({
   const copySecret = () => copyText(secret ?? '');
 
   return (
-    <Dialog onClose={onClose} open={Boolean(secret)}>
+    <Dialog fullWidth maxWidth="xs" onClose={onClose} open={Boolean(secret)}>
       <DialogTitle>{t('profile.copySecretTitle')}</DialogTitle>
       <DialogContent>
-        <Stack spacing={2} sx={{ minWidth: secretDialogMinWidth }}>
+        <Stack spacing={2}>
           <Alert severity="warning">{t('profile.copySecretWarning')}</Alert>
           <TextField
             slotProps={{ input: { readOnly: true } }}
@@ -42,6 +42,9 @@ export const SecretDialog = ({
           </Button>
         </Stack>
       </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>{t('common.close')}</Button>
+      </DialogActions>
     </Dialog>
   );
 };
