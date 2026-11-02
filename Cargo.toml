@@ -57,7 +57,8 @@ sqlx = { version = "0.8", default-features = false, features = ["chrono", "json"
 subtle = "2.6"
 tar = "0.4"
 thiserror = "2"
-tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+rlimit = "0.10"
+tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "signal", "sync", "time"] }
 tokio-stream = "0.1"
 tower-http = { version = "0.6", features = ["catch-panic", "fs"] }
 serde-saphyr = "2.0.0"

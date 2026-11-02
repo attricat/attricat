@@ -6,7 +6,7 @@ use crate::support;
 use std::sync::Arc;
 
 use api::{
-    extension_runtime::{ExtensionRuntime, ExtensionRuntimeConfig},
+    extension_runtime::{ComponentCompiler, ExtensionRuntime, ExtensionRuntimeConfig},
     repository::AttricatRepository,
     storage::FakeObjectStore,
 };
@@ -232,4 +232,82 @@ async fn one_unified_component_serves_commands_and_interactive_operations(pool: 
         "operation runs access catalog data through their run-scoped interfaces"
     );
     server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_component_compiled_in_a_child_process_runs_like_any_other(pool: sqlx::PgPool) {
+    let repository =
+        AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
+    let store = Arc::new(FakeObjectStore::available());
+    let release = install_extension(
+        &repository,
+        store.clone(),
+        EXTENSION,
+        &archive(&unified_component()),
+        PERMISSIONS,
+    )
+    .await;
+    let installation = repository
+        .runtime_extension_installation(EXTENSION, release)
+        .await
+        .unwrap()
+        .unwrap();
+    let runtime_with = |executable: &str| {
+        ExtensionRuntime::new(
+            store.clone(),
+            ExtensionRuntimeConfig {
+                compiler: ComponentCompiler::Isolated {
+                    executable: executable.into(),
+                },
+                ..ExtensionRuntimeConfig::default()
+            },
+        )
+        .unwrap()
+    };
+    let response: Value = serde_json::from_str(
+        &runtime_with(env!("CARGO_BIN_EXE_api"))
+            .invoke_command(
+                &installation,
+                repository.clone(),
+                "probe",
+                r#"{"n":1}"#,
+                65536,
+            )
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(response["echo"], json!({"n": 1}));
+
+    // A compiler that fails stays failed for a while, rather than being run again
+    // by every request.
+    let broken = runtime_with("/nonexistent/compiler");
+    for expected in ["component compilation failed", "failed to compile recently"] {
+        let error = broken
+            .invoke_command(&installation, repository.clone(), "probe", "{}", 65536)
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains(expected), "{error}");
+    }
+}
+
+#[test]
+fn the_compile_command_refuses_what_is_not_a_component() {
+    use std::{
+        io::Write as _,
+        process::{Command, Stdio},
+    };
+    let mut child = Command::new(env!("CARGO_BIN_EXE_api"))
+        .arg(api::extension_runtime::COMPILE_COMPONENT_COMMAND)
+        .env_clear()
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    child.stdin.take().unwrap().write_all(b"not wasm").unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
 }

@@ -1,0 +1,152 @@
+//! Compiling server components. What a compilation costs has little to do with
+//! a component's size: 500 KB of nested loops can take 2 GiB. Neither fuel nor an
+//! invocation's timeout applies to it, and no check on the bytes can tell such a
+//! component from a real one. So production compiles in a child process with its
+//! own memory limit, where a hostile component can only end that child.
+
+use std::{path::PathBuf, process::Stdio, sync::Arc, time::Duration};
+
+use tokio::{
+    io::{AsyncReadExt as _, AsyncWriteExt as _},
+    process::Command,
+};
+use wasmtime::{Config, Engine, component::Component};
+
+use super::ExtensionRuntimeError;
+
+/// The argument that makes the API binary compile one component and exit.
+pub const COMPILE_COMPONENT_COMMAND: &str = "compile-extension-component";
+/// The child's address space, which leaves room for the invocations and caches
+/// of the parent within the documented 2 GiB.
+const COMPILATION_MEMORY_BYTES: u64 = 1024 * 1024 * 1024;
+const COMPILATION_TIMEOUT: Duration = Duration::from_secs(120);
+const COMPILATION_CPU_SECONDS: u64 = 120;
+/// Compiled output the parent accepts, which it then holds in memory.
+const MAX_COMPILED_BYTES: u64 = 256 * 1024 * 1024;
+
+/// Where components are compiled.
+#[derive(Clone, Debug, Default)]
+pub enum ComponentCompiler {
+    /// In this process. For tests, whose executable is not the API binary.
+    #[default]
+    InProcess,
+    /// In a child process running this executable with
+    /// [`COMPILE_COMPONENT_COMMAND`].
+    Isolated { executable: PathBuf },
+}
+
+/// The engine both sides use. A compiled component loads only into an engine
+/// configured the same way.
+pub(super) fn engine() -> Result<Engine, ExtensionRuntimeError> {
+    let mut config = Config::new();
+    config.wasm_component_model(true);
+    config.consume_fuel(true);
+    config.epoch_interruption(true);
+    Engine::new(&config).map_err(super::runtime_error)
+}
+
+pub(super) async fn compile<Bytes>(
+    compiler: &ComponentCompiler,
+    engine: Arc<Engine>,
+    bytes: Bytes,
+) -> Result<Component, ExtensionRuntimeError>
+where
+    Bytes: AsRef<[u8]> + Send + 'static,
+{
+    let invalid = |error| ExtensionRuntimeError::Runtime(format!("invalid component: {error:#}"));
+    let joined =
+        |error| ExtensionRuntimeError::Runtime(format!("component compilation failed: {error}"));
+    match compiler {
+        // Compiling takes seconds of CPU; keep it off the async workers so it
+        // cannot stall unrelated requests.
+        ComponentCompiler::InProcess => {
+            tokio::task::spawn_blocking(move || Component::new(&engine, &bytes))
+                .await
+                .map_err(joined)?
+                .map_err(invalid)
+        }
+        ComponentCompiler::Isolated { executable } => {
+            let compiled = compile_in_child(executable, bytes.as_ref()).await?;
+            tokio::task::spawn_blocking(move || {
+                // SAFETY: these bytes are what `Engine::precompile_component` just
+                // produced in our own executable, read straight from the pipe to
+                // its child, and never stored. `deserialize` rejects output from
+                // another version or configuration.
+                unsafe { Component::deserialize(&engine, &compiled) }
+            })
+            .await
+            .map_err(joined)?
+            .map_err(invalid)
+        }
+    }
+}
+
+async fn compile_in_child(
+    executable: &PathBuf,
+    component: &[u8],
+) -> Result<Vec<u8>, ExtensionRuntimeError> {
+    let failed = |reason: &str| {
+        ExtensionRuntimeError::Runtime(format!("component compilation failed: {reason}"))
+    };
+    let mut child = Command::new(executable)
+        .arg(COMPILE_COMPONENT_COMMAND)
+        // The child runs on untrusted input and needs nothing of the parent's.
+        .env_clear()
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .kill_on_drop(true)
+        .spawn()
+        .map_err(|error| failed(&error.to_string()))?;
+    let mut stdin = child.stdin.take().ok_or_else(|| failed("no stdin"))?;
+    let stdout = child.stdout.take().ok_or_else(|| failed("no stdout"))?;
+    let run = async {
+        let mut compiled = Vec::new();
+        let write = async {
+            // A child that dies early closes the pipe, which its exit status
+            // reports better than this write.
+            let _ = stdin.write_all(component).await;
+            drop(stdin);
+        };
+        let read = async {
+            stdout
+                .take(MAX_COMPILED_BYTES + 1)
+                .read_to_end(&mut compiled)
+                .await
+        };
+        let (_, read) = tokio::join!(write, read);
+        read.map_err(|error| failed(&error.to_string()))?;
+        if compiled.len() as u64 > MAX_COMPILED_BYTES {
+            return Err(failed("compiled output is too large"));
+        }
+        let status = child
+            .wait()
+            .await
+            .map_err(|error| failed(&error.to_string()))?;
+        if !status.success() {
+            // Running out of memory or CPU ends the child like any invalid input.
+            return Err(failed(&format!("the compiler process ended with {status}")));
+        }
+        Ok(compiled)
+    };
+    tokio::time::timeout(COMPILATION_TIMEOUT, run)
+        .await
+        .map_err(|_| failed("timed out"))?
+}
+
+/// The child's whole life: reads a component from stdin and writes it compiled to
+/// stdout. Call this before starting anything else in the process.
+pub fn run_compile_command() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    use std::io::{Read as _, Write as _};
+    // Only Linux, where production runs, enforces an address space limit.
+    let memory = rlimit::Resource::AS.set(COMPILATION_MEMORY_BYTES, COMPILATION_MEMORY_BYTES);
+    if cfg!(target_os = "linux") {
+        memory?;
+    }
+    rlimit::Resource::CPU.set(COMPILATION_CPU_SECONDS, COMPILATION_CPU_SECONDS)?;
+    let mut component = Vec::new();
+    std::io::stdin().read_to_end(&mut component)?;
+    let compiled = engine()?.precompile_component(&component)?;
+    std::io::stdout().write_all(&compiled)?;
+    Ok(())
+}
