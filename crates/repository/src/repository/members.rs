@@ -428,26 +428,48 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         .bind(workspace_id)
         .execute(&mut *tx)
         .await?;
-        if state == MembershipState::Inactive {
-            let is_owner: bool = sqlx::query_scalar(
-                "SELECT EXISTS (SELECT 1 FROM role_grants WHERE workspace_id = $1 AND membership_id = $2 AND role_id = $3 AND scope_type = 'workspace' AND scope_target_id = $1)",
+        // Changing an owner's state takes owner authority, as changing their
+        // grants does: deactivating ends their access, and reactivating restores
+        // the owner grant they kept.
+        let is_owner: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM role_grants WHERE workspace_id = $1 AND membership_id = $2 AND role_id = $3 AND scope_type = 'workspace' AND scope_target_id = $1)",
+        )
+        .bind(workspace_id)
+        .bind(id)
+        .bind(OWNER_ROLE_ID)
+        .fetch_one(&mut *tx)
+        .await?;
+        if is_owner && !Self::active_owner_on(&mut tx, actor_id, workspace_id).await? {
+            return Err(RepositoryError::NotFound("owner authority"));
+        }
+        if state == MembershipState::Active {
+            // Reactivating gives back every grant the member kept, so the actor
+            // needs to be able to delegate each of them.
+            let roles: Vec<Uuid> = sqlx::query_scalar(
+                "SELECT DISTINCT role_id FROM role_grants WHERE workspace_id = $1 AND membership_id = $2",
             )
             .bind(workspace_id)
             .bind(id)
+            .fetch_all(&mut *tx)
+            .await?;
+            for role_id in roles {
+                self.ensure_token_can_delegate_role_on(&mut tx, actor_id, workspace_id, role_id)
+                    .await?;
+                if !Self::roles_delegable_on(&mut tx, actor_id, workspace_id, role_id).await? {
+                    return Err(RepositoryError::NotFound("role grant"));
+                }
+            }
+        }
+        if state == MembershipState::Inactive && is_owner {
+            let active_owners: i64 = sqlx::query_scalar(
+                "SELECT count(*) FROM role_grants g JOIN workspace_memberships m ON m.id = g.membership_id WHERE g.workspace_id = $1 AND g.role_id = $2 AND g.scope_type = 'workspace' AND g.scope_target_id = $1 AND m.state = 'active'",
+            )
+            .bind(workspace_id)
             .bind(OWNER_ROLE_ID)
             .fetch_one(&mut *tx)
             .await?;
-            if is_owner {
-                let active_owners: i64 = sqlx::query_scalar(
-                    "SELECT count(*) FROM role_grants g JOIN workspace_memberships m ON m.id = g.membership_id WHERE g.workspace_id = $1 AND g.role_id = $2 AND g.scope_type = 'workspace' AND g.scope_target_id = $1 AND m.state = 'active'",
-                )
-                .bind(workspace_id)
-                .bind(OWNER_ROLE_ID)
-                .fetch_one(&mut *tx)
-                .await?;
-                if active_owners <= 1 {
-                    return Err(RepositoryError::LastWorkspaceOwner);
-                }
+            if active_owners <= 1 {
+                return Err(RepositoryError::LastWorkspaceOwner);
             }
         }
         let user = sqlx::query("UPDATE workspace_memberships SET state = $1, updated_at = clock_timestamp() WHERE id = $2 AND workspace_id = $3 RETURNING user_id").bind(state.as_str()).bind(id).bind(workspace_id).fetch_optional(&mut *tx).await?;
