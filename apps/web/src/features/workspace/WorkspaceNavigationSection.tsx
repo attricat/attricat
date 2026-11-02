@@ -58,6 +58,8 @@ export const WorkspaceNavigationSection = ({
     enabled: canManage,
   });
   const [entries, setEntries] = useState<NavigationRow[] | undefined>();
+  // Saving sends the whole list, so it needs the saved shortcuts first.
+  const loaded = navigation.data !== undefined;
   // Saved shortcuts are unique by blueprint, which keys them until edited.
   const displayed =
     entries ??
@@ -223,7 +225,7 @@ export const WorkspaceNavigationSection = ({
       ))}
       <Stack direction="row" spacing={1}>
         <Button
-          disabled={save.isPending || !unusedBlueprint}
+          disabled={!loaded || save.isPending || !unusedBlueprint}
           onClick={() => {
             if (unusedBlueprint)
               setEntries([
@@ -240,7 +242,7 @@ export const WorkspaceNavigationSection = ({
           {t('workspace.addShortcut')}
         </Button>
         <Button
-          disabled={save.isPending}
+          disabled={!loaded || save.isPending}
           onClick={() => save.mutate(displayed.map(navigationEntry))}
           variant="contained"
         >

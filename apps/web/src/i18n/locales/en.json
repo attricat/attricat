@@ -1981,6 +1981,7 @@
     "loading": "Loading…",
     "notAuthorizedMembers": "You are not authorized to manage members.",
     "revoke": "Revoke {{role}}",
+    "grantWithTarget": "{{role}} ({{target}})",
     "revokeRoleTitle": "Revoke role?",
     "revokeRoleConfirm": "{{name}} loses the {{role}} role and its permissions at once. Someone who can grant roles can give it back.",
     "transferOwnership": "Transfer ownership",

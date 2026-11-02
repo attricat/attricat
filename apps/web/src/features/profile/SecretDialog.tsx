@@ -24,7 +24,9 @@ export const SecretDialog = ({
   const copySecret = () => copyText(secret ?? '');
 
   return (
-    <Dialog fullWidth maxWidth="xs" onClose={onClose} open={Boolean(secret)}>
+    // The secret is never shown again, so only the Close button dismisses this;
+    // a stray click or Escape would lose it.
+    <Dialog fullWidth maxWidth="xs" open={Boolean(secret)}>
       <DialogTitle>{t('profile.copySecretTitle')}</DialogTitle>
       <DialogContent>
         <Stack spacing={2}>
