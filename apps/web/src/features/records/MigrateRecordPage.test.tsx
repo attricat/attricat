@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { listContexts } from '../contexts/api';
 import {
@@ -216,4 +216,65 @@ it("explains inline issues in the user's language with the previous value", asyn
     'record-1',
     expect.objectContaining({ discard_attributes: ['supplier'] }),
   );
+});
+
+describe('while the contexts load', () => {
+  const previewWithoutIssues = {
+    migration_id: 'migration-1',
+    source_version: 1,
+    target: {
+      blueprint: {
+        id: 'blueprint-1',
+        code: 'product',
+        name: 'Product',
+        version: 2,
+      },
+      attributes: [],
+    },
+    values: [],
+    issues: [],
+  } as unknown as Awaited<ReturnType<typeof previewRecordMigration>>;
+  const renderPage = () =>
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <MigrateRecordPage recordId="record-1" />
+      </QueryClientProvider>,
+    );
+
+  it('waits for them, because the form keeps its first values', async () => {
+    let resolveContexts: (contexts: []) => void = () => undefined;
+    vi.mocked(listContexts).mockReturnValue(
+      new Promise((resolve) => {
+        resolveContexts = resolve;
+      }),
+    );
+    vi.mocked(previewRecordMigration).mockResolvedValue(previewWithoutIssues);
+    renderPage();
+    // Let the preview settle while the contexts are still on their way.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+    expect(
+      screen.queryByRole('button', { name: 'Submit migration' }),
+    ).toBeNull();
+
+    resolveContexts([]);
+
+    expect(
+      await screen.findByRole('button', { name: 'Submit migration' }),
+    ).toBeTruthy();
+  });
+
+  it('reports contexts that fail to load instead of an empty form', async () => {
+    vi.mocked(listContexts).mockRejectedValue(new Error('unavailable'));
+    vi.mocked(previewRecordMigration).mockResolvedValue(previewWithoutIssues);
+    renderPage();
+
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(
+      screen.queryByRole('button', { name: 'Submit migration' }),
+    ).toBeNull();
+  });
 });

@@ -169,7 +169,7 @@ export const MigrateRecordPage = ({ recordId }: { recordId: string }) => {
           {t('records.backToRecord')}
         </RouterButton>
       </Box>
-      {preview.isPending && (
+      {(preview.isPending || contexts.isPending) && !preview.error && (
         <Stack
           aria-label={t('records.preparingMigration')}
           spacing={2}
@@ -180,8 +180,9 @@ export const MigrateRecordPage = ({ recordId }: { recordId: string }) => {
           <Skeleton height={48} variant="rounded" />
         </Stack>
       )}
-      <ApiErrorAlert error={preview.error} sx={{ mt: 4 }} />
-      {preview.data && (
+      <ApiErrorAlert error={preview.error ?? contexts.error} sx={{ mt: 4 }} />
+      {/* The form keeps its first values, and those are read per context. */}
+      {preview.data && contexts.data && (
         <RecordForm
           blueprint={preview.data.target}
           expectedUpdatedAt={preview.data.source_updated_at}
