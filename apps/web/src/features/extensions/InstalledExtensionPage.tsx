@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from '@tanstack/react-router';
 import { Alert, Box, Stack, Tabs, Typography } from '@mui/material';
 import {
   ArrowLeftIcon,
@@ -262,6 +263,7 @@ export const InstalledExtensionPage = ({
 }) => {
   const { t } = useTranslation();
   const client = useQueryClient();
+  const navigate = useNavigate();
   const detail = useQuery({
     queryKey: extensionManagementQueryKeys.detail(extensionId),
     queryFn: () => extensionDetail(extensionId),
@@ -270,7 +272,16 @@ export const InstalledExtensionPage = ({
   const action = useMutation({
     mutationFn: (input: InstallationAction) =>
       runInstallationAction(extensionId, input).then(() => undefined),
-    onSuccess: () => invalidateExtensions(client),
+    onSuccess: async (_, { action }) => {
+      // Leave first: the still-mounted detail query would refetch into a 404.
+      if (action === 'remove') {
+        await navigate({ to: '/manage/extensions/installed' });
+        client.removeQueries({
+          queryKey: extensionManagementQueryKeys.detail(extensionId),
+        });
+      }
+      await invalidateExtensions(client);
+    },
   });
   // Waiting for the person to confirm upgrading from this archive.
   const [archive, setArchive] = useState<File | null>(null);

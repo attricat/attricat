@@ -11,7 +11,11 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { InstalledExtensionPage } from './InstalledExtensionPage';
-import { extensionDetail, upgradeExtensionFromArchive } from './managementApi';
+import {
+  extensionDetail,
+  removeExtension,
+  upgradeExtensionFromArchive,
+} from './managementApi';
 import {
   installedExtensionTabs,
   type InstalledExtensionTab,
@@ -70,11 +74,16 @@ const renderPage = async (
     getParentRoute: () => root,
     path: '/manage/extensions',
   });
+  const installed = createRoute({
+    getParentRoute: () => root,
+    path: '/manage/extensions/installed',
+    component: () => <p>Installed extensions</p>,
+  });
   const router = createRouter({
     history: createMemoryHistory({
       initialEntries: ['/manage/extensions/example'],
     }),
-    routeTree: root.addChildren([page, list]),
+    routeTree: root.addChildren([page, list, installed]),
   });
   render(
     <QueryClientProvider client={new QueryClient()}>
@@ -176,5 +185,17 @@ describe('InstalledExtensionPage', () => {
       ),
     );
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('leaves the page once the extension is removed', async () => {
+    vi.mocked(removeExtension).mockResolvedValue(undefined as never);
+    await renderPage({});
+    const reads = vi.mocked(extensionDetail).mock.calls.length;
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+
+    await screen.findByText('Installed extensions');
+    expect(removeExtension).toHaveBeenCalledWith('example');
+    expect(extensionDetail).toHaveBeenCalledTimes(reads);
   });
 });
