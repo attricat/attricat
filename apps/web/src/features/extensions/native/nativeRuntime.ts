@@ -584,6 +584,28 @@ export const nativeHostFor = (
   return host;
 };
 
+let replacedHosts = 0;
+const hostReplacedListeners = new Set<() => void>();
+
+/** How many failed hosts were replaced; every surface of one must follow. */
+export const replacedNativeHosts = () => replacedHosts;
+
+export const subscribeReplacedNativeHosts = (listener: () => void) => {
+  hostReplacedListeners.add(listener);
+  return () => {
+    hostReplacedListeners.delete(listener);
+  };
+};
+
+/** Forgets a failed Worker host, so the next `nativeHostFor` starts a new one. */
+export const forgetFailedNativeHost = (contribution: ExtensionContribution) => {
+  const key = nativeHostKey(contribution);
+  if (!hosts.get(key)?.error) return;
+  hosts.delete(key);
+  replacedHosts += 1;
+  hostReplacedListeners.forEach((listener) => listener());
+};
+
 /**
  * Terminates every Worker whose release is no longer in the runtime: disabled,
  * ungranted, upgraded, rebuilt, or contained by the deployment or workspace

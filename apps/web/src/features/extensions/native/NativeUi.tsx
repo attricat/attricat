@@ -1,4 +1,5 @@
-import { Alert, Box, Collapse } from '@mui/material';
+import { Alert, Box, Button, Collapse } from '@mui/material';
+import { RotateCcwIcon } from 'lucide-react';
 import { useTheme } from '@mui/material';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
@@ -33,7 +34,10 @@ import {
   type NativeUiErrorCode,
 } from './constants';
 import {
+  forgetFailedNativeHost,
   nativeHostFor,
+  replacedNativeHosts,
+  subscribeReplacedNativeHosts,
   type NativeExtensionHost,
   type NativeMountInit,
 } from './nativeRuntime';
@@ -113,6 +117,8 @@ export const NativeUi = ({
   const { t, i18n } = useTranslation();
   const label = useContributionTitle()(contribution);
   const runtime = useExtensionRuntime();
+  // Re-reads the host below once a surface sharing it starts it again.
+  useSyncExternalStore(subscribeReplacedNativeHosts, replacedNativeHosts);
   const host = nativeHostFor(contribution, runtime.data ?? [contribution]);
   const colorMode = useTheme().palette.mode;
   const contextKey = JSON.stringify(context);
@@ -168,6 +174,8 @@ export const NativeUi = ({
     callbacks.current = { dependencies, onPropose };
   }, [dependencies, onPropose]);
 
+  // Starting again replaces a failed host and remounts a failed mount.
+  const [restarts, setRestarts] = useState(0);
   // A mount lasts while its Worker host and what was sent with it hold.
   const mountKey = `${host.key}:${contribution.id}:${JSON.stringify([
     contribution.configuration,
@@ -183,7 +191,7 @@ export const NativeUi = ({
     setMount({ host, ...created });
     return () => host.unmount(created.mountId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mountKey]);
+  }, [host, mountKey, restarts]);
 
   useEffect(() => {
     initRef.current = init;
@@ -231,7 +239,25 @@ export const NativeUi = ({
 
   if (failed)
     return (
-      <Alert role="status" severity="warning">
+      <Alert
+        action={
+          <Button
+            color="inherit"
+            onClick={() => {
+              forgetFailedNativeHost(contribution);
+              reported.current = undefined;
+              setRenderFailed(false);
+              setRestarts((count) => count + 1);
+            }}
+            size="small"
+            startIcon={<RotateCcwIcon />}
+          >
+            {t('errors.retry')}
+          </Button>
+        }
+        role="status"
+        severity="warning"
+      >
         {t(
           `extensions.native.errors.${renderFailed ? nativeUiErrorCodes.renderFailed : errorCode || nativeUiErrorCodes.startFailed}`,
           {
