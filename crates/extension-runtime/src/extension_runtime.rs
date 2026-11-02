@@ -25,15 +25,16 @@ use url::Url;
 
 use async_trait::async_trait;
 use attricat_cache::{LocalRateLimiter, RateLimiter};
+use attricat_extension_manifest::extensions::MAX_SERVER_COMPONENT_BYTES;
 use attricat_repository::round_trips::measure;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
-use tokio::sync::watch;
+use tokio::sync::{OwnedSemaphorePermit, Semaphore, watch};
 use uuid::Uuid;
 use wasmtime::{
-    Config, Engine, Store, StoreLimits, StoreLimitsBuilder,
+    Config, Engine, Store,
     component::{Component, HasSelf, Linker, Resource, ResourceTable},
 };
 
@@ -93,8 +94,37 @@ const MAX_CONNECTOR_UPSERT_VALUES: usize = 128;
 /// Rows one connector catalog page may return; keeps results within the WIT
 /// JSON bound even for wide blueprints.
 const MAX_CONNECTOR_PAGE_LIMIT: u32 = 16;
-const DEFAULT_FUEL: u64 = 100_000_000;
+/// Enough for a field-notes batch of 25 records, which took about 12 million
+/// per record in the example extension. The invocation timeout is the bound on
+/// a loop: fuel only ends one sooner.
+const DEFAULT_FUEL: u64 = 1_000_000_000;
+/// All of one invocation's linear memories together, whatever their number.
 const DEFAULT_MAX_MEMORY_BYTES: usize = 32 * 1024 * 1024;
+/// How often a running component gives its async worker back to other tasks,
+/// in fuel. Without this, components that make no slow host call starve every
+/// request sharing the runtime, including health checks.
+const FUEL_YIELD_INTERVAL: u64 = 1_000_000;
+/// Elements in one table. Each costs memory the linear memory limit does not see.
+const MAX_TABLE_ELEMENTS: usize = 100_000;
+const MAX_TABLES: usize = 64;
+const MAX_MEMORIES: usize = 8;
+const MAX_INSTANCES: usize = 64;
+/// Invocations this process runs at once. With the memory limit this bounds
+/// what extensions can hold together: 512 MiB against the documented 2 GiB.
+const MAX_CONCURRENT_INVOCATIONS: usize = 16;
+/// Half of the above, so one workspace's extensions cannot hold all of it.
+const MAX_CONCURRENT_WORKSPACE_INVOCATIONS: usize = 8;
+/// Compiling takes far more memory than the component's size, and neither fuel
+/// nor the timeout applies to it, so compilations run one at a time.
+const MAX_CONCURRENT_COMPILATIONS: usize = 1;
+/// Compiled code the cache keeps, which instances share.
+const MAX_CACHED_COMPONENT_BYTES: usize = 256 * 1024 * 1024;
+/// What one invocation may write to the process log.
+const MAX_INVOCATION_LOG_BYTES: usize = 1024 * 1024;
+/// Marks a handler attempt as begun. A process that dies during the attempt
+/// leaves this behind, so a component that kills the process still spends its
+/// attempts and ends up quarantined.
+const INTERRUPTED_ATTEMPT_CODE: &str = "interrupted";
 const DEFAULT_INVOCATION_TIMEOUT: Duration = Duration::from_secs(10);
 /// The event consumer that feeds enabled extension event handlers.
 const WASM_EVENT_CONSUMER: &str = "attricat.extensions.wasm";
@@ -201,18 +231,121 @@ impl ComponentCache {
         Some(component)
     }
 
-    fn insert(&mut self, key: ComponentCacheKey, component: Arc<Component>) -> Arc<Component> {
+    /// Keeps `component`, evicting the least recently used beyond the limits.
+    /// The flag tells whether anything was evicted.
+    fn insert(
+        &mut self,
+        key: ComponentCacheKey,
+        component: Arc<Component>,
+    ) -> (Arc<Component>, bool) {
         if let Some(component) = self.get(&key) {
-            return component;
+            return (component, false);
         }
         self.components.insert(key.clone(), component.clone());
         self.lru.push_back(key);
-        if self.components.len() > MAX_CACHED_COMPONENTS
-            && let Some(evicted) = self.lru.pop_front()
+        let mut evicted = false;
+        while (self.components.len() > MAX_CACHED_COMPONENTS
+            || self.compiled_bytes() > MAX_CACHED_COMPONENT_BYTES)
+            && self.components.len() > 1
+            && let Some(oldest) = self.lru.pop_front()
         {
-            self.components.remove(&evicted);
+            self.components.remove(&oldest);
+            evicted = true;
         }
-        component
+        (component, evicted)
+    }
+
+    fn compiled_bytes(&self) -> usize {
+        self.components
+            .values()
+            .map(|component| {
+                let image = component.image_range();
+                image.end as usize - image.start as usize
+            })
+            .sum()
+    }
+}
+
+/// Limits invocations at once, for the process and for each workspace.
+#[derive(Clone)]
+struct InvocationGate {
+    process: Arc<Semaphore>,
+    workspaces: Arc<Mutex<HashMap<Uuid, Arc<Semaphore>>>>,
+}
+
+/// Held for as long as an invocation's store exists.
+struct InvocationPermit {
+    _workspace: OwnedSemaphorePermit,
+    _process: OwnedSemaphorePermit,
+}
+
+impl InvocationGate {
+    fn new() -> Self {
+        Self {
+            process: Arc::new(Semaphore::new(MAX_CONCURRENT_INVOCATIONS)),
+            workspaces: Arc::default(),
+        }
+    }
+
+    /// Waits for room. The workspace comes first, so a workspace at its share
+    /// waits without holding a place others could use.
+    async fn enter(&self, workspace_id: Uuid) -> Result<InvocationPermit, ExtensionRuntimeError> {
+        let workspace = self
+            .workspaces
+            .lock()
+            .expect("invocation gate is not poisoned")
+            .entry(workspace_id)
+            .or_insert_with(|| Arc::new(Semaphore::new(MAX_CONCURRENT_WORKSPACE_INVOCATIONS)))
+            .clone();
+        let closed = |_| ExtensionRuntimeError::Runtime("invocation gate closed".into());
+        Ok(InvocationPermit {
+            _workspace: workspace.acquire_owned().await.map_err(closed)?,
+            _process: self.process.clone().acquire_owned().await.map_err(closed)?,
+        })
+    }
+}
+
+/// What one invocation may hold. Unlike [`wasmtime::StoreLimits`], whose memory
+/// limit applies to each linear memory, this counts them together.
+#[derive(Clone)]
+struct InvocationLimits {
+    memory_bytes_left: usize,
+}
+
+impl wasmtime::ResourceLimiter for InvocationLimits {
+    fn memory_growing(
+        &mut self,
+        current: usize,
+        desired: usize,
+        _maximum: Option<usize>,
+    ) -> wasmtime::Result<bool> {
+        let added = desired.saturating_sub(current);
+        if added > self.memory_bytes_left {
+            return Ok(false);
+        }
+        self.memory_bytes_left -= added;
+        Ok(true)
+    }
+
+    fn table_growing(
+        &mut self,
+        _current: usize,
+        desired: usize,
+        _maximum: Option<usize>,
+    ) -> wasmtime::Result<bool> {
+        Ok(desired <= MAX_TABLE_ELEMENTS)
+    }
+
+    fn instances(&self) -> usize {
+        MAX_INSTANCES
+    }
+
+    fn tables(&self) -> usize {
+        MAX_TABLES
+    }
+
+    fn memories(&self) -> usize {
+        MAX_MEMORIES
     }
 }
 
@@ -247,6 +380,8 @@ pub struct ExtensionRuntime {
     engine: Arc<Engine>,
     _epoch_ticker: Arc<ExtensionEpochTicker>,
     components: Arc<Mutex<ComponentCache>>,
+    invocations: InvocationGate,
+    compilations: Arc<Semaphore>,
     linkers: Arc<Linkers>,
     /// Pre-instantiated unified components by installed release and development
     /// build; linking and type-checking imports is done once for each.
@@ -283,6 +418,8 @@ impl ExtensionRuntime {
             _epoch_ticker: Arc::new(ExtensionEpochTicker { shutdown }),
             components: Arc::new(Mutex::new(ComponentCache::default())),
             linkers,
+            invocations: InvocationGate::new(),
+            compilations: Arc::new(Semaphore::new(MAX_CONCURRENT_COMPILATIONS)),
             unified_instances: Arc::new(Mutex::new(HashMap::new())),
         })
     }
@@ -341,6 +478,14 @@ impl ExtensionRuntime {
         let compiled = compiling
             .get_or_try_init(|| async {
                 let bytes = load().await?;
+                if bytes.as_ref().len() > MAX_SERVER_COMPONENT_BYTES {
+                    return Err(ExtensionRuntimeError::Runtime(format!(
+                        "component is larger than {MAX_SERVER_COMPONENT_BYTES} bytes"
+                    )));
+                }
+                let _compiling = self.compilations.acquire().await.map_err(|_| {
+                    ExtensionRuntimeError::Runtime("compilation gate closed".into())
+                })?;
                 // Compiling takes seconds of CPU; keep it off the async workers
                 // so it cannot stall unrelated requests.
                 let engine = self.engine.clone();
@@ -374,7 +519,16 @@ impl ExtensionRuntime {
         {
             cache.compiling.remove(&key);
         }
-        Ok(cache.insert(key, compiled?))
+        let (component, evicted) = cache.insert(key, compiled?);
+        drop(cache);
+        // Linked instances keep their component's code alive.
+        if evicted {
+            self.unified_instances
+                .lock()
+                .expect("unified instance cache is not poisoned")
+                .clear();
+        }
+        Ok(component)
     }
 
     /// Executes one bounded operation batch. The component and its ABI come
@@ -473,8 +627,10 @@ fn operation_task_error(error: impl ToString) -> TaskHandlerError {
     }
 }
 
-fn runtime_error(error: impl ToString) -> ExtensionRuntimeError {
-    ExtensionRuntimeError::Runtime(error.to_string())
+/// Keeps the whole error chain: the outermost context of a trap says only that
+/// a component failed, and the reason, such as running out of fuel, is below it.
+fn runtime_error(error: impl std::fmt::Display) -> ExtensionRuntimeError {
+    ExtensionRuntimeError::Runtime(format!("{error:#}"))
 }
 
 fn epoch_deadline(timeout: Duration) -> u64 {
@@ -495,6 +651,14 @@ pub struct OutputArtifactStream {
     artifact: ExtensionOperationArtifact,
     path: PathBuf,
     hasher: Sha256,
+}
+
+/// A run that ends without finishing its artifact, by timing out for example,
+/// must not leave the file behind: `/tmp` is usually a memory-backed tmpfs.
+impl Drop for OutputArtifactStream {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
 }
 
 struct OperationState {
@@ -573,7 +737,8 @@ async fn ensure_operation_artifact_access(
 struct HostState {
     installation: ExtensionRuntimeInstallation,
     repository: AttricatRepository,
-    limits: StoreLimits,
+    limits: InvocationLimits,
+    log_bytes_left: usize,
     /// The invocation that holds the export leases it takes, so its own
     /// rejection of a record settles the revision it leased.
     lease_holder: Option<String>,
@@ -603,9 +768,10 @@ impl HostState {
         Self {
             installation,
             repository,
-            limits: StoreLimitsBuilder::new()
-                .memory_size(max_memory_bytes)
-                .build(),
+            limits: InvocationLimits {
+                memory_bytes_left: max_memory_bytes,
+            },
+            log_bytes_left: MAX_INVOCATION_LOG_BYTES,
             lease_holder: None,
             run_id: None,
             run_facts: Arc::default(),
@@ -742,6 +908,11 @@ impl HostState {
         {
             return Err("invalid bounded log entry".into());
         }
+        // Past its budget a component loses its logs, not its work.
+        let Some(left) = self.log_bytes_left.checked_sub(message.len()) else {
+            return Ok(());
+        };
+        self.log_bytes_left = left;
         tracing::info!(extension = %self.installation.extension_id, %level, message = %message, "extension host log");
         Ok(())
     }
@@ -2076,7 +2247,40 @@ impl WasmExtensionTaskHandler {
                 return Ok(HandlerStep::Settled);
             }
         }
+        // The previous attempt never reported back, and neither did those before
+        // it: running this component is what ends the process.
+        if attempts >= MAX_HANDLER_ATTEMPTS
+            && previous.as_ref().is_some_and(|attempt| {
+                attempt.error_code.as_deref() == Some(INTERRUPTED_ATTEMPT_CODE)
+            })
+        {
+            let error = format!("the process ended during {attempts} attempts in a row");
+            tracing::warn!(
+                extension = %installation.extension_id,
+                handler = %handler.id,
+                event_id = %event.id,
+                error = %error,
+                "extension handler keeps ending the process; quarantining extension"
+            );
+            quarantine_after_fault(repository, &installation.extension_id).await?;
+            return Ok(HandlerStep::Faulted(Box::new(
+                ExtensionRuntimeError::Runtime(error),
+            )));
+        }
         let attempt = attempts + 1;
+        repository
+            .record_extension_handler_attempt(HandlerAttemptOutcome {
+                error_code: Some(INTERRUPTED_ATTEMPT_CODE),
+                ..record(
+                    HandlerAttemptStatus::Retrying,
+                    attempt,
+                    Some(
+                        now + chrono::TimeDelta::from_std(retry_backoff(attempt as u32))
+                            .unwrap_or(chrono::TimeDelta::zero()),
+                    ),
+                )
+            })
+            .await?;
         // A publication event concerns one channel, which a handler does not
         // export to by itself, so its delivery carries the record's revision
         // without publication events, on the scale of typed reads. Mapping
@@ -2446,6 +2650,57 @@ const _: () = assert!(MAX_ARTIFACT_CHUNK_BYTES <= MAX_HOST_JSON_BYTES);
 #[cfg(test)]
 #[allow(clippy::items_after_test_module)]
 mod tests {
+    use wasmtime::ResourceLimiter as _;
+
+    #[test]
+    fn memory_is_limited_across_all_of_an_invocations_memories() {
+        const MIB: usize = 1024 * 1024;
+        let mut limits = super::InvocationLimits {
+            memory_bytes_left: 32 * MIB,
+        };
+        assert!(limits.memory_growing(0, 20 * MIB, None).unwrap());
+        // A second memory draws on the same budget, and shrinking gives none back.
+        assert!(!limits.memory_growing(0, 20 * MIB, None).unwrap());
+        assert!(limits.memory_growing(0, 12 * MIB, None).unwrap());
+        assert!(!limits.memory_growing(12 * MIB, 12 * MIB + 1, None).unwrap());
+    }
+
+    #[test]
+    fn tables_are_limited() {
+        let mut limits = super::InvocationLimits {
+            memory_bytes_left: 0,
+        };
+        assert!(
+            limits
+                .table_growing(0, super::MAX_TABLE_ELEMENTS, None)
+                .unwrap()
+        );
+        assert!(
+            !limits
+                .table_growing(0, super::MAX_TABLE_ELEMENTS + 1, None)
+                .unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn one_workspace_cannot_take_every_invocation() {
+        let gate = super::InvocationGate::new();
+        let busy = uuid::Uuid::new_v4();
+        let mut held = Vec::new();
+        for _ in 0..super::MAX_CONCURRENT_WORKSPACE_INVOCATIONS {
+            held.push(gate.enter(busy).await.unwrap());
+        }
+        let wait = std::time::Duration::from_millis(50);
+        assert!(tokio::time::timeout(wait, gate.enter(busy)).await.is_err());
+        assert!(
+            tokio::time::timeout(wait, gate.enter(uuid::Uuid::new_v4()))
+                .await
+                .is_ok()
+        );
+        held.pop();
+        assert!(tokio::time::timeout(wait, gate.enter(busy)).await.is_ok());
+    }
+
     use sha2::{Digest, Sha256};
     use uuid::Uuid;
 
@@ -3327,7 +3582,7 @@ impl OperationState {
             .artifacts
             .delete(handle)
             .map_err(|_| "invalid artifact handle".to_owned())?;
-        let actual = format!("{:x}", output.hasher.finalize());
+        let actual = format!("{:x}", output.hasher.clone().finalize());
         if checksum_sha256 != actual {
             let _ = self
                 .repository

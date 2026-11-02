@@ -53,6 +53,7 @@ const RUN_ATTRICAT_ERROR: &str =
 pub(super) struct UnifiedState {
     host: HostState,
     operation: Option<OperationState>,
+    _permit: super::InvocationPermit,
 }
 
 impl UnifiedState {
@@ -371,6 +372,8 @@ impl ExtensionRuntime {
         ),
         ExtensionRuntimeError,
     > {
+        // Taken before the component, whose first use compiles it.
+        let permit = self.invocations.enter(repository.workspace_id()).await?;
         let component = self.component(installation).await?;
         let mut host = HostState::new(
             installation.clone(),
@@ -379,10 +382,17 @@ impl ExtensionRuntime {
         );
         host.lease_holder = lease_holder;
         host.run_id = operation.as_ref().map(|operation| operation.run_id);
-        let state = UnifiedState { host, operation };
+        let state = UnifiedState {
+            host,
+            operation,
+            _permit: permit,
+        };
         let mut store = Store::new(&self.engine, state);
         store.limiter(|state| &mut state.host.limits);
         store.set_fuel(self.config.fuel).map_err(runtime_error)?;
+        store
+            .fuel_async_yield_interval(Some(FUEL_YIELD_INTERVAL))
+            .map_err(runtime_error)?;
         store.set_epoch_deadline(epoch_deadline(self.config.invocation_timeout));
         let pre = self.unified_instance_pre(installation, &component)?;
         let instance = pre

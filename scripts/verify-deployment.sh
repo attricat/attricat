@@ -65,6 +65,9 @@ wait_url http://127.0.0.1:3001/health/ready
 assert_container_hardening api
 assert_container_hardening file-worker
 curl --fail --silent http://127.0.0.1:3000/ | grep -qi '<div id="root"'
+# The web app's pages carry the security headers, not only the API's responses.
+curl --fail --silent --head http://127.0.0.1:3000/ | grep -qi '^x-content-type-options: nosniff'
+curl --fail --silent --head http://127.0.0.1:3000/ | grep -qi "^content-security-policy: frame-ancestors 'none'"
 curl --fail --silent http://127.0.0.1:3000/api/health/ready | grep -q ready
 curl --fail --silent --cookie-jar "$session_cookies" \
   --header 'content-type: application/json' \

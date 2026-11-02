@@ -989,7 +989,7 @@ mod tests {
         let provider_failure = S3Error::HttpFailWithBody(500, "<Code>InternalError</Code>".into());
         assert!(matches!(
             classify_download_error(provider_failure),
-            ObjectStoreError::Operation(DOWNLOAD_OPERATION)
+            ObjectStoreError::Unavailable
         ));
 
         assert!(matches!(

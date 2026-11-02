@@ -969,8 +969,9 @@ status (`queued`, `running`, `cancelling`, `cancelled`, `completed`, `failed`)
 is separate from the extension's domain outcome: a completed run can report
 per-record failures. Extensions report progress as a bounded object; the host
 displays the optional fields `completed`, `total`, and
-`outcome: {succeeded, failed, skipped}`. A fatal runtime failure still fails
-the run.
+`outcome: {succeeded, failed, skipped}`. A fatal runtime failure quarantines
+the extension and pauses the run, which stays pending until the extension is
+enabled again or the run is cancelled.
 
 Runs started in a tab are polled only while active and announced with a
 notification that links to the run, so users can close the dialog or leave the
@@ -1803,7 +1804,9 @@ runtime descriptor and unmount within 15 seconds; broker calls are rejected
 immediately after containment. Release IDs and
 object-store keys are never client addresses. The host
 runs every contribution in a distinct `<iframe sandbox="allow-scripts">` with
-an opaque origin and a CSP that denies network access. The host imports the
+an opaque origin and a CSP that denies requests from its code. A frame can still
+navigate itself, so treat it as containing a contribution rather than as stopping
+it from sending data out. The host imports the
 artifact and calls its required `mount(root, attricat)` export *inside that
 frame*, not in Attricat's document. The artifact has no access to host DOM,
 cookies, storage, React state, or other extension frames. `mount` may return a

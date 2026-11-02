@@ -66,6 +66,7 @@ impl FakeOfficialExtensions {
                     download_url: format!(
                         "https://github.com/attricat/{extension_id}/releases/download/{tag_name}/{extension_id}.tar.zst"
                     ),
+                    digest: None,
                 },
             },
             archive,

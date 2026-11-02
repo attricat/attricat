@@ -136,6 +136,7 @@ impl OfficialExtensionReleases for LocalExtensionReleases {
                     id,
                     name: file_name,
                     download_url: format!("local:{extension_id}/{version}.tar.zst"),
+                    digest: None,
                 },
             });
         }
@@ -379,6 +380,7 @@ async fn install_planned_extension(
                     id: planned.asset_id as u64,
                     name: planned.asset_name.clone(),
                     download_url: planned.download_url.clone(),
+                    digest: None,
                 },
             };
             let changed =
