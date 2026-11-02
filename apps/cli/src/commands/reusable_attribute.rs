@@ -61,9 +61,25 @@ pub(crate) enum ReusableAttributeGroupCommand {
         name: String,
         #[arg(long, default_value_t = 0)]
         position: i64,
-        /// Published revision ID; repeat for several.
-        #[arg(long = "revision-id", required = true)]
-        revision_ids: Vec<Uuid>,
+        /// Attribute as `namespace:code`; repeat for several. Applying the
+        /// group uses each attribute's latest published revision.
+        #[arg(long = "attribute", required = true)]
+        attributes: Vec<String>,
+    },
+    /// Change a group. Options left out keep their value; its code cannot change.
+    Update {
+        group_id: Uuid,
+        #[arg(long)]
+        name: Option<String>,
+        #[arg(long)]
+        position: Option<i64>,
+        /// Replaces the attributes, as `namespace:code`; repeat for several.
+        #[arg(long = "attribute")]
+        attributes: Vec<String>,
+    },
+    /// Delete a group. Records keep the attributes it already added.
+    Delete {
+        group_id: Uuid,
     },
     /// Add every attribute of a group to a record.
     Apply {
@@ -144,15 +160,38 @@ pub(crate) async fn reusable_attribute_command(
                 code,
                 name,
                 position,
-                revision_ids,
+                attributes,
             } => {
                 let body = json!({
                     "code": code,
                     "name": name,
                     "position": position,
-                    "reusable_attribute_revision_ids": revision_ids,
+                    "reusable_attribute_codes": attributes,
                 });
                 api.post_json(GROUPS_PATH, body).await
+            }
+            ReusableAttributeGroupCommand::Update {
+                group_id,
+                name,
+                position,
+                attributes,
+            } => {
+                let mut body = serde_json::Map::new();
+                if let Some(name) = name {
+                    body.insert("name".to_owned(), json!(name));
+                }
+                if let Some(position) = position {
+                    body.insert("position".to_owned(), json!(position));
+                }
+                if !attributes.is_empty() {
+                    body.insert("reusable_attribute_codes".to_owned(), json!(attributes));
+                }
+                api.patch_json(&format!("{GROUPS_PATH}/{}", segment(group_id)), body.into())
+                    .await
+            }
+            ReusableAttributeGroupCommand::Delete { group_id } => {
+                api.delete(&format!("{GROUPS_PATH}/{}", segment(group_id)))
+                    .await
             }
             ReusableAttributeGroupCommand::Apply {
                 record_id,

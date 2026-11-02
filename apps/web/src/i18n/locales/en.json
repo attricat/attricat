@@ -2627,7 +2627,7 @@
       "createAttribute": "Create attribute"
     },
     "title": "Reusable attributes",
-    "description": "Create immutable attribute revisions, publish them, and assemble published revisions into groups.",
+    "description": "Create immutable attribute revisions, publish them, and assemble attributes into groups that always apply their latest published revisions.",
     "newGroup": "New group",
     "newAttribute": "New attribute",
     "loading": "Loading reusable attributes…",
@@ -2637,6 +2637,10 @@
     "groupsHeading": "Groups",
     "edit": "Edit",
     "publish": "Publish",
+    "editNamedGroup": "Edit group {{group}}",
+    "deleteGroup": "Delete group",
+    "deleteNamedGroup": "Delete group {{group}}",
+    "deleteGroupConfirm": "Delete {{group}}? Records keep the attributes it already added.",
     "columns": {
       "attribute": "Attribute",
       "version": "Version",
@@ -2645,17 +2649,20 @@
       "actions": "Actions",
       "group": "Group",
       "position": "Position",
-      "publishedRevisions": "Published revisions"
+      "attributes": "Attributes"
     },
     "groupDialog": {
       "title": "New reusable attribute group",
+      "editTitle": "Edit {{name}}",
       "code": "Code",
+      "codeImmutable": "A group's code cannot change.",
       "name": "Name",
       "position": "Position",
-      "revisions": "Published revisions",
-      "revisionsHelp": "Only published revisions can be grouped.",
+      "attributes": "Attributes",
+      "attributesHelp": "Applying the group adds each attribute's latest published revision. Only attributes with a published revision are listed.",
       "create": "Create group",
-      "requiredFields": "Code, name, and at least one published revision are required.",
+      "save": "Save changes",
+      "requiredFields": "Code, name, and at least one attribute are required.",
       "invalidPosition": "Position must be a non-negative whole number."
     },
     "templates": {

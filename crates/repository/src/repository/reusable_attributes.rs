@@ -204,6 +204,23 @@ fn parse_definition(
     Ok(definition)
 }
 
+fn validate_group_name(name: &str) -> Result<(), RepositoryError> {
+    if name.trim().is_empty() {
+        return Err(RepositoryError::InvalidReusableAttributeDefinition(
+            "reusable attribute group name is required".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+/// Splits a group member's `namespace:code`.
+fn split_member_code(qualified_code: &str) -> Result<(&str, &str), RepositoryError> {
+    qualified_code
+        .split_once(':')
+        .filter(|(namespace, code)| is_valid_code(namespace) && is_valid_code(code))
+        .ok_or(RepositoryError::InvalidReusableAttributeCode)
+}
+
 impl AttricatRepository {
     pub async fn create_reusable_attribute(
         &self,
@@ -453,23 +470,9 @@ impl AttricatRepository {
         input: CreateReusableAttributeGroup,
     ) -> Result<ReusableAttributeGroup, RepositoryError> {
         validate_code(&input.code)?;
-        if input.name.trim().is_empty() {
-            return Err(RepositoryError::InvalidReusableAttributeDefinition(
-                "reusable attribute group name is required".to_owned(),
-            ));
-        }
+        validate_group_name(&input.name)?;
         let mut transaction = self.pool.begin().await?;
         let ws = self.workspace_id();
-        let mut definitions = HashSet::new();
-        for revision_id in &input.reusable_attribute_revision_ids {
-            let definition_id: Option<Uuid> = sqlx::query_scalar("SELECT definition_id FROM reusable_attribute_revisions WHERE id = $1 AND workspace_id = $2 AND status = 'published' FOR UPDATE")
-                .bind(revision_id).bind(ws).fetch_optional(&mut *transaction).await?;
-            let definition_id =
-                definition_id.ok_or(RepositoryError::ReusableAttributeNotPublished)?;
-            if !definitions.insert(definition_id) {
-                return Err(RepositoryError::ReusableAttributeAlreadyAttached);
-            }
-        }
         let id = Uuid::new_v4();
         sqlx::query("INSERT INTO reusable_attribute_groups (id, workspace_id, code, name, position) VALUES ($1,$2,$3,$4,$5)")
             .bind(id).bind(ws).bind(&input.code).bind(&input.name).bind(input.position).execute(&mut *transaction).await
@@ -479,14 +482,101 @@ impl AttricatRepository {
                 }
                 error => error.into(),
             })?;
-        for (position, revision_id) in input.reusable_attribute_revision_ids.iter().enumerate() {
-            sqlx::query("INSERT INTO reusable_attribute_group_members (group_id, reusable_attribute_revision_id, position) VALUES ($1,$2,$3)")
-                .bind(id).bind(revision_id).bind(position as i64).execute(&mut *transaction).await?;
+        self.insert_group_members(&mut transaction, id, &input.reusable_attribute_codes)
+            .await?;
+        transaction.commit().await?;
+        self.get_reusable_attribute_group(id)
+            .await?
+            .ok_or(RepositoryError::NotFound("reusable attribute group"))
+    }
+
+    /// Records already holding the group's attributes keep them: an attachment
+    /// does not refer back to the group it came from.
+    pub async fn update_reusable_attribute_group(
+        &self,
+        id: Uuid,
+        input: UpdateReusableAttributeGroup,
+    ) -> Result<ReusableAttributeGroup, RepositoryError> {
+        if let Some(name) = &input.name {
+            validate_group_name(name)?;
+        }
+        let mut transaction = self.pool.begin().await?;
+        let updated = sqlx::query("UPDATE reusable_attribute_groups SET name = COALESCE($3, name), position = COALESCE($4, position), updated_at = now() WHERE id = $1 AND workspace_id = $2")
+            .bind(id).bind(self.workspace_id()).bind(&input.name).bind(input.position).execute(&mut *transaction).await?;
+        if updated.rows_affected() == 0 {
+            return Err(RepositoryError::NotFound("reusable attribute group"));
+        }
+        if let Some(codes) = &input.reusable_attribute_codes {
+            sqlx::query("DELETE FROM reusable_attribute_group_members WHERE group_id = $1")
+                .bind(id)
+                .execute(&mut *transaction)
+                .await?;
+            self.insert_group_members(&mut transaction, id, codes)
+                .await?;
         }
         transaction.commit().await?;
         self.get_reusable_attribute_group(id)
             .await?
             .ok_or(RepositoryError::NotFound("reusable attribute group"))
+    }
+
+    /// Records already holding the group's attributes keep them: an attachment
+    /// does not refer back to the group it came from.
+    pub async fn delete_reusable_attribute_group(&self, id: Uuid) -> Result<(), RepositoryError> {
+        let deleted = sqlx::query(
+            "DELETE FROM reusable_attribute_groups WHERE id = $1 AND workspace_id = $2",
+        )
+        .bind(id)
+        .bind(self.workspace_id())
+        .execute(&self.pool)
+        .await?;
+        if deleted.rows_affected() == 0 {
+            return Err(RepositoryError::NotFound("reusable attribute group"));
+        }
+        Ok(())
+    }
+
+    /// Every member must have a published revision for a later apply to use.
+    async fn insert_group_members(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        group_id: Uuid,
+        codes: &[String],
+    ) -> Result<(), RepositoryError> {
+        let mut members = HashSet::new();
+        for (position, qualified_code) in codes.iter().enumerate() {
+            let (namespace, code) = split_member_code(qualified_code)?;
+            if !members.insert((namespace, code)) {
+                return Err(RepositoryError::ReusableAttributeAlreadyAttached);
+            }
+            self.latest_published_revision_id(transaction, namespace, code)
+                .await?;
+            sqlx::query("INSERT INTO reusable_attribute_group_members (group_id, workspace_id, namespace, code, position) VALUES ($1,$2,$3,$4,$5)")
+                .bind(group_id).bind(self.workspace_id()).bind(namespace).bind(code).bind(position as i64).execute(&mut **transaction).await?;
+        }
+        Ok(())
+    }
+
+    async fn latest_published_revision_id(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        namespace: &str,
+        code: &str,
+    ) -> Result<Uuid, RepositoryError> {
+        let revision_id: Option<Uuid> = sqlx::query_scalar(
+            r#"SELECT r.id FROM reusable_attribute_definitions d
+               JOIN reusable_attribute_revisions r ON r.definition_id = d.id
+               WHERE d.workspace_id = $1 AND d.namespace = $2 AND d.code = $3
+                 AND d.deleted_at IS NULL AND r.status = $4
+               ORDER BY r.version DESC LIMIT 1"#,
+        )
+        .bind(self.workspace_id())
+        .bind(namespace)
+        .bind(code)
+        .bind(RevisionStatus::Published.as_str())
+        .fetch_optional(&mut **transaction)
+        .await?;
+        revision_id.ok_or(RepositoryError::ReusableAttributeNotPublished)
     }
 
     pub async fn list_reusable_attribute_groups(
@@ -522,14 +612,14 @@ impl AttricatRepository {
         name: String,
         position: i64,
     ) -> Result<ReusableAttributeGroup, RepositoryError> {
-        let reusable_attribute_revision_ids = sqlx::query_scalar("SELECT reusable_attribute_revision_id FROM reusable_attribute_group_members WHERE group_id = $1 ORDER BY position")
+        let reusable_attribute_codes = sqlx::query_scalar("SELECT namespace || ':' || code FROM reusable_attribute_group_members WHERE group_id = $1 ORDER BY position")
             .bind(id).fetch_all(&self.pool).await?;
         Ok(ReusableAttributeGroup {
             id,
             code,
             name,
             position,
-            reusable_attribute_revision_ids,
+            reusable_attribute_codes,
         })
     }
 
@@ -573,8 +663,12 @@ impl AttricatRepository {
         let before = self
             .record_audit_snapshot(&mut transaction, record_id)
             .await?;
-        let mut attachment_ids = Vec::with_capacity(group.reusable_attribute_revision_ids.len());
-        for revision_id in group.reusable_attribute_revision_ids {
+        let mut attachment_ids = Vec::with_capacity(group.reusable_attribute_codes.len());
+        for qualified_code in &group.reusable_attribute_codes {
+            let (namespace, code) = split_member_code(qualified_code)?;
+            let revision_id = self
+                .latest_published_revision_id(&mut transaction, namespace, code)
+                .await?;
             attachment_ids.push(
                 self.attach_reusable_attribute_in_transaction(
                     &mut transaction,

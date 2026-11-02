@@ -124,7 +124,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `GET` | `/blueprints/{id}/connector-jobs` | Connector jobs. |
 | `POST` | `/blueprint-connector-jobs/{id}/run` | Run a connector job, with `{"idempotency_key": "…"}`. |
 | `POST` | `/blueprint-connector-jobs/{id}/resync` | Export again every published record of an export job: `{"idempotency_key": "…"}`, plus either `record_ids` (only those records) or `status` (only records with that export status on the job's connection; more than 10,000 such records is a `422`, so resync the whole job instead). Returns `{"run_ids": [...]}`. |
-| `GET`, `POST` | `/reusable-attributes`; `POST /reusable-attributes/{id}/versions`; `POST /reusable-attribute-revisions/{id}/publish`; `GET`, `POST /reusable-attribute-groups` | Reusable attributes. |
+| `GET`, `POST` | `/reusable-attributes`; `POST /reusable-attributes/{id}/versions`; `POST /reusable-attribute-revisions/{id}/publish`; `GET`, `POST /reusable-attribute-groups`; `PATCH`, `DELETE /reusable-attribute-groups/{id}` | Reusable attributes. A group lists its members as `reusable_attribute_codes` (`namespace:code`); its own `code` cannot change. Applying a group attaches each member's latest published revision. Editing or deleting a group does not change records. |
 | `POST` | `/reusable-attributes/validate`, `/reusable-attributes/{id}/versions/validate` | Run every check that creating the reusable attribute, or its next revision, would run, without storing it. |
 
 ### Records

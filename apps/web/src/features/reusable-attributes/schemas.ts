@@ -45,7 +45,7 @@ export const reusableAttributeGroupSchema = z.object({
   code: z.string(),
   name: z.string(),
   position: z.number().int(),
-  reusable_attribute_revision_ids: z.array(z.uuid()),
+  reusable_attribute_codes: z.array(z.string()),
 });
 
 export const createReusableAttributeSchema = z.object({
@@ -56,8 +56,11 @@ export const createReusableAttributeGroupSchema = z.object({
   code: z.string().trim().min(1),
   name: z.string().trim().min(1),
   position: z.number().int().nonnegative(),
-  reusable_attribute_revision_ids: z.array(z.uuid()),
+  reusable_attribute_codes: z.array(z.string().min(1)),
 });
+
+export const updateReusableAttributeGroupSchema =
+  createReusableAttributeGroupSchema.omit({ code: true });
 
 export type ReusableAttribute = z.infer<typeof reusableAttributeSchema>;
 export type ReusableAttributeGroup = z.infer<

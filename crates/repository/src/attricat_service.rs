@@ -14,7 +14,7 @@ use crate::{
         CreateReusableAttributeGroup, MigrateRecordRequest, PublishedBlueprint, Record,
         RecordBatchRequest, RecordBatchResponse, RecordPublicationStatus, RecordReusableAttribute,
         RelationshipMutation, ReusableAttribute, ReusableAttributeGroup, SearchBlueprint,
-        UpdateAttributeContext, UpdateRecordFormRequest,
+        UpdateAttributeContext, UpdateRecordFormRequest, UpdateReusableAttributeGroup,
     },
     repository::{
         AttricatRepository, ExtensionAttricatBatch, ExtensionAttricatIntentOutcome, FileMetadata,
@@ -100,6 +100,25 @@ impl<'a> AttricatMutationService<'a> {
         input: CreateReusableAttributeGroup,
     ) -> Result<ReusableAttributeGroup, RepositoryError> {
         self.repository.create_reusable_attribute_group(input).await
+    }
+
+    pub async fn update_reusable_attribute_group(
+        &self,
+        group_id: Uuid,
+        input: UpdateReusableAttributeGroup,
+    ) -> Result<ReusableAttributeGroup, RepositoryError> {
+        self.repository
+            .update_reusable_attribute_group(group_id, input)
+            .await
+    }
+
+    pub async fn delete_reusable_attribute_group(
+        &self,
+        group_id: Uuid,
+    ) -> Result<(), RepositoryError> {
+        self.repository
+            .delete_reusable_attribute_group(group_id)
+            .await
     }
 
     pub async fn attach_reusable_attribute(

@@ -155,7 +155,9 @@ searchable: true
 
 Przyjmuje te same klucze atrybutów co schemat (`value_type`, `value_schema`, `default_value`, `tags`, `context_fallback`, `context_editable`, `readonly` oraz klucze relacji z `target_blueprint_code`), a także `searchable`, który uwzględnia wartości w wyszukiwaniu i filtrach **Przeglądarki rekordów**, oraz `facetable`, który razem z `searchable` udostępnia atrybut w **Dodaj filtr** w **Przeglądarce rekordów**. Każda zmiana tworzy nową wersję; wersję trzeba opublikować, zanim będzie można ją dołączyć. Przestrzeń nazw pochodzi z obszaru roboczego, więc pełny kod atrybutu wielokrotnego użytku to `<namespace>:<code>`. Edytor oferuje przykłady, gotowe fragmenty, kontrole zapisu podczas pisania i podgląd pola; zobacz [Edytor w aplikacji internetowej](/pl/builders/blueprints/#edytor-w-aplikacji-internetowej).
 
-Tworzenie i publikowanie atrybutów wielokrotnego użytku wymaga uprawnienia `blueprints.write`. Dołączenie takiego atrybutu do rekordu wymaga uprawnienia `records.write` do tego rekordu.
+**Grupa** to nazwany zestaw atrybutów wielokrotnego użytku, wskazanych przez pełne kody. Zastosowanie grupy dołącza najnowszą opublikowaną w tym momencie rewizję każdego atrybutu, a jeśli rekord ma już któryś z nich, cała grupa zostaje odrzucona. Opublikowanie rewizji obejmuje więc każde kolejne zastosowanie bez edycji grupy. Edycja lub usunięcie grupy zmienia tylko kolejne zastosowania: rekordy zachowują atrybuty i rewizje, które już mają. Kodu grupy nie można zmienić.
+
+Tworzenie i publikowanie atrybutów wielokrotnego użytku oraz zarządzanie grupami wymaga uprawnienia `blueprints.write`. Dołączenie takiego atrybutu do rekordu wymaga uprawnienia `records.write` do tego rekordu.
 
 ## Przypisz odpowiedzialność
 

@@ -4,7 +4,13 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Alert, MenuItem, Stack, TextField } from '@mui/material';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { createReusableAttributeGroup, type ReusableAttribute } from './api';
+import {
+  createReusableAttributeGroup,
+  updateReusableAttributeGroup,
+  type ReusableAttribute,
+  type ReusableAttributeGroup,
+} from './api';
+import { attachedReusableCode } from './attributeForReusable';
 import {
   DEFAULT_GROUP_POSITION,
   GROUP_POSITION_STEP,
@@ -15,16 +21,25 @@ import { FormDialog } from '../../components/FormDialog';
 
 export const ReusableAttributeGroupDialog = ({
   attributes,
+  group,
   onClose,
 }: {
   attributes: ReusableAttribute[];
+  /** The group to edit; without one the dialog creates a group. */
+  group?: ReusableAttributeGroup;
   onClose: () => void;
 }) => {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [validationError, setValidationError] = useState<string>();
   const save = useMutation({
-    mutationFn: createReusableAttributeGroup,
+    mutationFn: ({
+      code,
+      ...input
+    }: Parameters<typeof createReusableAttributeGroup>[0]) =>
+      group
+        ? updateReusableAttributeGroup(group.id, input)
+        : createReusableAttributeGroup({ code, ...input }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({
         queryKey: reusableAttributeQueryKeys.groups(),
@@ -34,17 +49,17 @@ export const ReusableAttributeGroupDialog = ({
   });
   const form = useForm({
     defaultValues: {
-      code: '',
-      name: '',
-      position: DEFAULT_GROUP_POSITION,
-      revisionIds: [] as string[],
+      code: group?.code ?? '',
+      name: group?.name ?? '',
+      position: group ? String(group.position) : DEFAULT_GROUP_POSITION,
+      attributeCodes: group?.reusable_attribute_codes ?? [],
     },
     onSubmit: ({ value }) => {
       setValidationError(undefined);
       if (
         !value.code.trim() ||
         !value.name.trim() ||
-        !value.revisionIds.length
+        !value.attributeCodes.length
       ) {
         setValidationError(t('reusableAttributes.groupDialog.requiredFields'));
         return;
@@ -58,27 +73,43 @@ export const ReusableAttributeGroupDialog = ({
         code: value.code.trim(),
         name: value.name.trim(),
         position,
-        reusable_attribute_revision_ids: value.revisionIds,
+        reusable_attribute_codes: value.attributeCodes,
       });
     },
   });
-  const published = attributes.filter(
-    (attribute) => attribute.status === revisionStatuses.published,
-  );
+  const publishedCodes = [
+    ...new Set(
+      attributes
+        .filter((attribute) => attribute.status === revisionStatuses.published)
+        .map(attachedReusableCode),
+    ),
+  ].sort();
   return (
     <FormDialog
       error={validationError ? undefined : save.error}
       isPending={save.isPending}
       onClose={onClose}
       onSubmit={() => void form.handleSubmit()}
-      submitDisabled={!published.length}
-      submitLabel={t('reusableAttributes.groupDialog.create')}
-      title={t('reusableAttributes.groupDialog.title')}
+      submitDisabled={!publishedCodes.length}
+      submitLabel={
+        group
+          ? t('reusableAttributes.groupDialog.save')
+          : t('reusableAttributes.groupDialog.create')
+      }
+      title={
+        group
+          ? t('reusableAttributes.groupDialog.editTitle', { name: group.name })
+          : t('reusableAttributes.groupDialog.title')
+      }
     >
       <Stack spacing={2} sx={{ pt: 1 }}>
         <form.Field name="code">
           {(field) => (
             <TextField
+              disabled={Boolean(group)}
+              helperText={
+                group && t('reusableAttributes.groupDialog.codeImmutable')
+              }
               label={t('reusableAttributes.groupDialog.code')}
               onChange={(event) => field.handleChange(event.target.value)}
               required
@@ -112,12 +143,12 @@ export const ReusableAttributeGroupDialog = ({
             />
           )}
         </form.Field>
-        <form.Field name="revisionIds">
+        <form.Field name="attributeCodes">
           {(field) => (
             <TextField
               required
-              helperText={t('reusableAttributes.groupDialog.revisionsHelp')}
-              label={t('reusableAttributes.groupDialog.revisions')}
+              helperText={t('reusableAttributes.groupDialog.attributesHelp')}
+              label={t('reusableAttributes.groupDialog.attributes')}
               onChange={(event) => {
                 // Autofill can set a multiple select to comma-joined text.
                 const { value } = event.target;
@@ -129,10 +160,9 @@ export const ReusableAttributeGroupDialog = ({
               slotProps={{ select: { multiple: true } }}
               value={field.state.value}
             >
-              {published.map((attribute) => (
-                <MenuItem key={attribute.id} value={attribute.id}>
-                  {attribute.namespace}:{attribute.code} ·{' '}
-                  {t('common.versionNumber', { version: attribute.version })}
+              {publishedCodes.map((code) => (
+                <MenuItem key={code} value={code}>
+                  {code}
                 </MenuItem>
               ))}
             </TextField>

@@ -1,10 +1,11 @@
 import { z } from 'zod';
-import { request, jsonRequest } from '../../api/request';
+import { request, jsonRequest, requestNoContent } from '../../api/request';
 import {
   createReusableAttributeGroupSchema,
   createReusableAttributeSchema,
   reusableAttributeGroupSchema,
   reusableAttributeSchema,
+  updateReusableAttributeGroupSchema,
   type CreateReusableAttribute,
   type ReusableAttribute,
   type ReusableAttributeGroup,
@@ -94,13 +95,32 @@ export const createReusableAttributeGroup = (input: {
   code: string;
   name: string;
   position: number;
-  reusable_attribute_revision_ids: string[];
+  reusable_attribute_codes: string[];
 }): Promise<ReusableAttributeGroup> =>
   request(
     '/api/reusable-attribute-groups',
     reusableAttributeGroupSchema,
     jsonRequest('POST', createReusableAttributeGroupSchema.parse(input)),
   );
+
+export const updateReusableAttributeGroup = (
+  groupId: string,
+  input: {
+    name: string;
+    position: number;
+    reusable_attribute_codes: string[];
+  },
+): Promise<ReusableAttributeGroup> =>
+  request(
+    `/api/reusable-attribute-groups/${uuidSegment(groupId)}`,
+    reusableAttributeGroupSchema,
+    jsonRequest('PATCH', updateReusableAttributeGroupSchema.parse(input)),
+  );
+
+export const deleteReusableAttributeGroup = (groupId: string) =>
+  requestNoContent(`/api/reusable-attribute-groups/${uuidSegment(groupId)}`, {
+    method: 'DELETE',
+  });
 
 export const attachReusableAttribute = (recordId: string, revisionId: string) =>
   request(

@@ -5,8 +5,10 @@ import {
   createReusableAttribute,
   createReusableAttributeGroup,
   createReusableAttributeRevision,
+  deleteReusableAttributeGroup,
   listReusableAttributes,
   publishReusableAttributeRevision,
+  updateReusableAttributeGroup,
 } from './api';
 
 const id = '123e4567-e89b-12d3-a456-426614174000';
@@ -89,13 +91,13 @@ describe('reusable attribute API client', () => {
       code: 'dimensions',
       name: 'Dimensions',
       position: 0,
-      reusable_attribute_revision_ids: [id],
+      reusable_attribute_codes: ['catalog:material'],
     });
     await createReusableAttributeGroup({
       code: 'dimensions',
       name: 'Dimensions',
       position: 0,
-      reusable_attribute_revision_ids: [id],
+      reusable_attribute_codes: ['catalog:material'],
     });
     expect(fetchMock).toHaveBeenLastCalledWith(
       '/api/reusable-attribute-groups',
@@ -106,9 +108,41 @@ describe('reusable attribute API client', () => {
           code: 'dimensions',
           name: 'Dimensions',
           position: 0,
-          reusable_attribute_revision_ids: [id],
+          reusable_attribute_codes: ['catalog:material'],
         }),
       },
+    );
+
+    respond({
+      id,
+      code: 'dimensions',
+      name: 'Sizes',
+      position: 1,
+      reusable_attribute_codes: [],
+    });
+    await updateReusableAttributeGroup(id, {
+      name: 'Sizes',
+      position: 1,
+      reusable_attribute_codes: [],
+    });
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      `/api/reusable-attribute-groups/${id}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Sizes',
+          position: 1,
+          reusable_attribute_codes: [],
+        }),
+      },
+    );
+
+    fetchMock.mockResolvedValue({ ok: true, status: 204 });
+    await deleteReusableAttributeGroup(id);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      `/api/reusable-attribute-groups/${id}`,
+      { method: 'DELETE' },
     );
 
     respond({});

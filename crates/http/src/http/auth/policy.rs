@@ -376,6 +376,7 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
         || path.starts_with("/reusable-attributes/")
         || path.starts_with("/reusable-attribute-revisions/")
         || path == "/reusable-attribute-groups"
+        || path == "/reusable-attribute-groups/{group_id}"
     {
         return Some(Policy {
             permission: if method == Method::GET {
@@ -735,6 +736,19 @@ mod tests {
         .unwrap();
         assert_eq!(advance.permission, Permission::BlueprintsPublish);
         assert!(matches!(advance.target, TargetKind::BlueprintId));
+    }
+
+    #[test]
+    fn reusable_attribute_group_changes_require_write_permission() {
+        for method in [Method::PATCH, Method::DELETE] {
+            assert_eq!(
+                policy(&method, "/reusable-attribute-groups/{group_id}")
+                    .unwrap()
+                    .permission,
+                Permission::BlueprintsWrite,
+                "{method}"
+            );
+        }
     }
 
     #[test]
