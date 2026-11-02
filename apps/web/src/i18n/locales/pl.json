@@ -1684,6 +1684,7 @@
     "deadLetters_other": "{{count}} martwego listu",
     "inspect": "Sprawdź",
     "publish": "Opublikuj",
+    "enableRevision": "Włącz rewizję {{version}}",
     "enable": "Włącz",
     "disable": "Wyłącz",
     "revisions": "Historia wersji",

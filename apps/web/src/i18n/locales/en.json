@@ -1608,6 +1608,7 @@
     "deadLetters_other": "{{count}} dead letters",
     "inspect": "Inspect",
     "publish": "Publish",
+    "enableRevision": "Enable revision {{version}}",
     "enable": "Enable",
     "disable": "Disable",
     "revisions": "Revision history",
