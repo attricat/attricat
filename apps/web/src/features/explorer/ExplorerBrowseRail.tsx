@@ -39,6 +39,7 @@ import {
 } from './constants';
 import type { BrowseBy } from './search';
 import { errorMessage } from '../../api/errors';
+import { LabeledIconButton } from '../../components/LabeledIconButton';
 
 type Props = {
   blueprint: string;
@@ -146,14 +147,13 @@ export const ExplorerBrowseRail = ({
             </MenuItem>
           ))}
         </TextField>
-        <Tooltip title={t('explorer.browse.hide')}>
-          <IconButton
-            aria-label={t('explorer.browse.hide')}
-            onClick={() => onFieldChange(false)}
-          >
-            <PanelLeftCloseIcon />
-          </IconButton>
-        </Tooltip>
+        <LabeledIconButton
+          label={t('explorer.browse.hide')}
+
+          onClick={() => onFieldChange(false)}
+        >
+          <PanelLeftCloseIcon />
+        </LabeledIconButton>
       </Box>
       <Box sx={{ flexGrow: 1, overflowY: 'auto', p: 1 }}>
         <List dense disablePadding>

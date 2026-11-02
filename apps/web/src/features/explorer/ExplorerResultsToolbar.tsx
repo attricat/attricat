@@ -1,4 +1,4 @@
-import { Box, Button, IconButton, Tooltip, Typography } from '@mui/material';
+import { Box, Button, Typography } from '@mui/material';
 import { Columns3CogIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -7,6 +7,7 @@ import { lexiconCountNoun } from '../lexicon/lexicon';
 import { maximumAgentSelection } from './agentSelection';
 import { ExplorerSelectionActionsMenu } from './ExplorerSelectionActionsMenu';
 import { ExplorerSelectionSummary } from './ExplorerSelectionSummary';
+import { LabeledIconButton } from '../../components/LabeledIconButton';
 
 type Props = {
   /** Authored blueprint name; a `{{…}}` reference with plural forms names the count. */
@@ -120,14 +121,13 @@ export const ExplorerResultsToolbar = ({
           )}
         </Button>
         {extensionActions}
-        <Tooltip title={t('explorer.columnPreferences')}>
-          <IconButton
-            aria-label={t('explorer.columnPreferences')}
-            onClick={onOpenColumnPreferences}
-          >
-            <Columns3CogIcon />
-          </IconButton>
-        </Tooltip>
+        <LabeledIconButton
+          label={t('explorer.columnPreferences')}
+
+          onClick={onOpenColumnPreferences}
+        >
+          <Columns3CogIcon />
+        </LabeledIconButton>
       </Box>
     </Box>
   );

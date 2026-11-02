@@ -1,12 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  Box,
-  Button,
-  Drawer,
-  IconButton,
-  Tooltip,
-  Typography,
-} from '@mui/material';
+import { Box, Button, Drawer, Typography } from '@mui/material';
 import { ListIcon, PencilIcon, PlusIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useState } from 'react';
@@ -30,6 +23,7 @@ import {
 import { RECORD_DRAWER_WIDTH } from '../constants';
 import { ApiErrorAlert } from '../../../components/ApiErrorAlert';
 import { CloseIconButton } from '../../../components/CloseIconButton';
+import { LabeledIconButton } from '../../../components/LabeledIconButton';
 
 /**
  * Asks the agent about a record: a new conversation, created by its first
@@ -149,24 +143,22 @@ export const RecordAgentDrawer = ({
               : t('records.askAboutRecord')}
           </Typography>
           {conversationId && current && (
-            <Tooltip title={t('agents.renameConversation')}>
-              <IconButton
-                aria-label={t('agents.renameConversation')}
-                onClick={() => setRenameOpen(true)}
-              >
-                <PencilIcon />
-              </IconButton>
-            </Tooltip>
+            <LabeledIconButton
+              label={t('agents.renameConversation')}
+
+              onClick={() => setRenameOpen(true)}
+            >
+              <PencilIcon />
+            </LabeledIconButton>
           )}
           {conversationId && (
-            <Tooltip title={t('agents.newConversation')}>
-              <IconButton
-                aria-label={t('agents.newConversation')}
-                onClick={() => onConversationChange(null)}
-              >
-                <PlusIcon />
-              </IconButton>
-            </Tooltip>
+            <LabeledIconButton
+              label={t('agents.newConversation')}
+
+              onClick={() => onConversationChange(null)}
+            >
+              <PlusIcon />
+            </LabeledIconButton>
           )}
           <CloseIconButton onClick={closePanel} />
         </Box>

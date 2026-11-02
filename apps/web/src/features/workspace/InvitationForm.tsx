@@ -19,8 +19,7 @@ import { useTimeZone } from '../../time/useInstantFormat';
 import {
   createInvitation,
   createWorkspaceUser,
-  ensureActiveScopeTarget,
-  selectedScopeTarget,
+  grantInputFromForm,
   type ScopeType,
 } from './api';
 import { defaultInvitationLifetimeMilliseconds, scopeTypes } from './constants';
@@ -71,16 +70,8 @@ export const InvitationForm = ({
       if (!expiresAt) throw new Error(t('workspace.invitationExpiry'));
       const input = {
         email: value.email,
-        ...ensureActiveScopeTarget(
-          {
-            role_id: value.role_id,
-            scope_type: value.scope_type,
-            scope_target_id: selectedScopeTarget(
-              value.scope_type,
-              value.scope_target_id,
-              workspaceId,
-            ),
-          },
+        ...grantInputFromForm(
+          value,
           workspaceId,
           client.getQueryData(
             workspaceQueryKeys.grantTargets(value.scope_type),

@@ -2,13 +2,11 @@ import {
   Box,
   CircularProgress,
   FormHelperText,
-  IconButton,
   InputAdornment,
   Paper,
   Popper,
   Stack,
   TextField,
-  Tooltip,
   Typography,
 } from '@mui/material';
 import { CircleQuestionMarkIcon } from 'lucide-react';
@@ -44,6 +42,8 @@ import {
 } from './QueryHighlightedInput';
 import { QuerySuggestionOption } from './QuerySuggestionOption';
 import { errorMessage } from '../../api/errors';
+import { LabeledIconButton } from '../../components/LabeledIconButton';
+import { useCursorPlacement } from '../../components/useCursorPlacement';
 
 type Props = {
   value: string;
@@ -77,7 +77,6 @@ export const ExplorerQueryInput = ({
   const [anchor, setAnchor] = useState<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
-  const pendingCursor = useRef<number | null>(null);
   const [cursor, setCursor] = useState(value.length);
   const [open, setOpen] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -111,14 +110,7 @@ export const ExplorerQueryInput = ({
     Boolean(suggestions.length || loading || loadFailure || valueHint);
   const activeIndex = active < suggestions.length ? active : -1;
 
-  useLayoutEffect(() => {
-    if (pendingCursor.current === null || !inputRef.current) return;
-    inputRef.current.setSelectionRange(
-      pendingCursor.current,
-      pendingCursor.current,
-    );
-    pendingCursor.current = null;
-  });
+  const placeCursor = useCursorPlacement(inputRef);
   useLayoutEffect(() => {
     if (activeIndex < 0) return;
     listRef.current
@@ -136,7 +128,7 @@ export const ExplorerQueryInput = ({
   const accept = (suggestion: QuerySuggestion) => {
     if (!completion) return;
     const next = applyQuerySuggestion(value, completion.context, suggestion);
-    pendingCursor.current = next.cursor;
+    placeCursor(next.cursor);
     onChange(next.query);
     setCursor(next.cursor);
     setActive(-1);
@@ -243,16 +235,15 @@ export const ExplorerQueryInput = ({
             inputComponent: HighlightedInput,
             endAdornment: (
               <InputAdornment position="end">
-                <Tooltip title={t('explorer.searchSyntax')}>
-                  <IconButton
-                    aria-label={t('explorer.searchSyntax')}
-                    onClick={(event) => onShowSyntax(event.currentTarget)}
-                    size="small"
-                    type="button"
-                  >
-                    <CircleQuestionMarkIcon size={smallIconSize} />
-                  </IconButton>
-                </Tooltip>
+                <LabeledIconButton
+                  label={t('explorer.searchSyntax')}
+
+                  onClick={(event) => onShowSyntax(event.currentTarget)}
+                  size="small"
+                  type="button"
+                >
+                  <CircleQuestionMarkIcon size={smallIconSize} />
+                </LabeledIconButton>
               </InputAdornment>
             ),
           },

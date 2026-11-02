@@ -1,8 +1,7 @@
 import { RestrictToVerticalAxis } from '@dnd-kit/abstract/modifiers';
-import { Accessibility, type Draggable } from '@dnd-kit/dom';
 import { move } from '@dnd-kit/helpers';
 import { DragDropProvider } from '@dnd-kit/react';
-import { isSortable, useSortable } from '@dnd-kit/react/sortable';
+import { useSortable } from '@dnd-kit/react/sortable';
 import {
   Box,
   Button,
@@ -25,6 +24,7 @@ import { ValueTypeIcon } from '../records/components/ValueTypeLabel';
 import type { AttributeValueType } from '../records/valueTypeIcons';
 import type { ExplorerColumnPreferences } from './columnPreferences';
 import { columnPreferencesListMaxHeight } from './constants';
+import { sortablePlugins } from '../../components/sortableAccessibility';
 
 type Props = {
   columns: { id: string; label: string; valueType?: AttributeValueType }[];
@@ -34,11 +34,6 @@ type Props = {
   open: boolean;
   preferences: ExplorerColumnPreferences;
 };
-
-// `Accessibility.configure` is untyped, so take its options from the plugin.
-type AccessibilityOptions = NonNullable<
-  ConstructorParameters<typeof Accessibility>[1]
->;
 
 type SortableColumnProps = {
   count: number;
@@ -171,38 +166,22 @@ export const ExplorerColumnPreferencesDialog = ({
   };
   // dnd-kit announces IDs in English by default; announce column labels
   // and positions in the user's language instead.
-  const plugins = useMemo(() => {
-    const label = (id: string | number) => labels.get(String(id)) ?? String(id);
-    const announce = (key: string, source: Draggable | null) =>
-      source
-        ? t(key, {
-            column: label(source.id),
-            position: isSortable(source) ? source.index + 1 : undefined,
-            count,
-          })
-        : undefined;
-    const options: AccessibilityOptions = {
-      announcements: {
-        dragstart: ({ operation: { source } }) =>
-          announce('explorer.columnDragStart', source),
-        dragover: ({ operation: { source } }) =>
-          announce('explorer.columnDragOver', source),
-        dragend: ({ operation: { source }, canceled }) =>
-          announce(
-            canceled ? 'explorer.columnDragCancel' : 'explorer.columnDragEnd',
-            source,
-          ),
-      },
-      screenReaderInstructions: {
-        draggable: t('explorer.columnDragInstructions'),
-      },
-    };
-    const accessibility = Accessibility.configure(options);
-    return <T,>(defaults: T[]) =>
-      defaults.map((plugin) =>
-        plugin === Accessibility ? accessibility : plugin,
-      );
-  }, [count, labels, t]);
+  const plugins = useMemo(
+    () =>
+      sortablePlugins({
+        count,
+        describe: (id) => ({ column: labels.get(id) ?? id }),
+        messages: {
+          cancel: 'explorer.columnDragCancel',
+          end: 'explorer.columnDragEnd',
+          instructions: 'explorer.columnDragInstructions',
+          over: 'explorer.columnDragOver',
+          start: 'explorer.columnDragStart',
+        },
+        t,
+      }),
+    [count, labels, t],
+  );
 
   return (
     <Dialog fullWidth maxWidth="sm" onClose={onClose} open={open}>

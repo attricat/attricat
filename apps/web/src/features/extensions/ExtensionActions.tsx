@@ -1,6 +1,5 @@
 import {
   Button,
-  IconButton,
   ListItemIcon,
   ListItemText,
   Menu,
@@ -21,6 +20,7 @@ import { renderHostIcon } from './hostIcons';
 import { contributionKey } from './outletContributions';
 import { useInvokeExtensionAction } from './useInvokeExtensionAction';
 import { useOfferedActions, type ActionsProps } from './useOfferedActions';
+import { LabeledIconButton } from '../../components/LabeledIconButton';
 
 const ActionIcon = ({ action }: { action: ExtensionContribution }) =>
   renderHostIcon(action.icon, compactIconSize);
@@ -63,15 +63,14 @@ export const ExtensionActionsMenuButton = ({
   if (!actions.length) return null;
   return (
     <>
-      <Tooltip title={label}>
-        <IconButton
-          aria-label={label}
-          onClick={(event) => setAnchor(event.currentTarget)}
-          size="medium"
-        >
-          <ExtensionIcon />
-        </IconButton>
-      </Tooltip>
+      <LabeledIconButton
+        label={label}
+
+        onClick={(event) => setAnchor(event.currentTarget)}
+        size="medium"
+      >
+        <ExtensionIcon />
+      </LabeledIconButton>
       <Menu
         anchorEl={anchor}
         anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
@@ -143,15 +142,14 @@ export const ExtensionActionButtons = (props: ActionsProps) => {
       ))}
       {overflow.length > 0 && (
         <>
-          <Tooltip title={t('extensions.moreActions')}>
-            <IconButton
-              aria-label={t('extensions.moreActions')}
-              onClick={(event) => setOverflowAnchor(event.currentTarget)}
-              size="small"
-            >
-              <EllipsisIcon size={compactIconSize} />
-            </IconButton>
-          </Tooltip>
+          <LabeledIconButton
+            label={t('extensions.moreActions')}
+
+            onClick={(event) => setOverflowAnchor(event.currentTarget)}
+            size="small"
+          >
+            <EllipsisIcon size={compactIconSize} />
+          </LabeledIconButton>
           <Menu
             anchorEl={overflowAnchor}
             onClose={() => setOverflowAnchor(null)}

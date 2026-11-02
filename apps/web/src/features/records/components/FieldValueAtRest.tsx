@@ -1,10 +1,11 @@
-import { Box, IconButton, Stack, Tooltip, Typography } from '@mui/material';
+import { Box, Stack, Typography } from '@mui/material';
 import { PencilIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { smallIconSize } from '../../../components/iconSizes';
 import type { Attribute } from '../api';
 import { attributeLabel } from '../recordDisplay';
+import { LabeledIconButton } from '../../../components/LabeledIconButton';
 
 /**
  * An editable field shown as its value, with a button that opens its editor.
@@ -32,11 +33,9 @@ export const FieldValueAtRest = ({
           {label}
           {required && <span aria-hidden="true"> *</span>}
         </Typography>
-        <Tooltip title={editLabel}>
-          <IconButton aria-label={editLabel} onClick={onEdit} size="small">
-            <PencilIcon size={smallIconSize} />
-          </IconButton>
-        </Tooltip>
+        <LabeledIconButton label={editLabel} onClick={onEdit} size="small">
+          <PencilIcon size={smallIconSize} />
+        </LabeledIconButton>
       </Box>
       {children}
     </Stack>

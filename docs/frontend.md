@@ -62,7 +62,7 @@ light and dark modes.
 - Validate API payloads with Zod before using them in the UI.
 - Do not scatter magic values through components or feature clients. Name domain values, repeated UI values, limits, storage keys, query parameters, and API literals as feature-local constants; keep a one-off literal inline only when its meaning is obvious at the use site. Promote cross-feature concepts to a shared, descriptive module rather than duplicating them.
 - For imperative integrations that retain a callback (for example Monaco commands or browser event listeners), do not capture render-time values that can change. Re-register and dispose the callback when dependencies change, or read current values through refs.
-- Reuse the shared building blocks in `src/components` instead of restyling MUI primitives: `LoadingState` says what is loading in a section, and `LoadingSpinner` holds the place of content about to appear; `StatusChip` shows a status with its colour and icon, and `EnabledChip` whether something runs; `ActionMenuItem` is one item of an action menu; `SearchField` narrows a list; `CloseIconButton` closes a panel; `SectionPaper` is the surface of a page section; `CopyIconButton` copies a value; `DetailList` and `Detail` lay out labelled values; `RouterTab` and the other `RouterLink.tsx` exports are MUI components that navigate; `formatBytes` formats a file size, and `downloadUrl` saves a file. Bold text uses `fontWeight: 'fontWeightBold'`, which the theme maps to the design system's label weight, and small text uses a typography variant rather than a raw `fontSize`.
+- Reuse the shared building blocks in `src/components` instead of restyling MUI primitives: `LoadingState` says what is loading in a section, and `LoadingSpinner` holds the place of content about to appear; `StatusChip` shows a status with its colour and icon, and `EnabledChip` whether something runs; `ActionMenuItem` is one item of an action menu; `SearchField` narrows a list; `LabeledIconButton` is an icon button named by its tooltip, and `CloseIconButton` closes a panel; `SectionPaper` is the surface of a page section; `CopyIconButton` copies a value; `DetailList` and `Detail` lay out labelled values; `RouterTab` and the other `RouterLink.tsx` exports are MUI components that navigate; `formatBytes` formats a file size, and `downloadUrl` saves a file. Bold text uses `fontWeight: 'fontWeightBold'`, which the theme maps to the design system's label weight, and small text uses a typography variant rather than a raw `fontSize`.
 - A disabled or readonly field must disable every mutation path, including inline chip removal, keyboard shortcuts, and auxiliary actions.
 - Follow the WAI-ARIA tabs pattern: each `Tab` needs a stable `id` and matching `aria-controls`; the active content needs `role="tabpanel"`, a matching `id`, and `aria-labelledby`. Use `useTabAccessibility` from `src/components` for these props, or generate IDs from stable indices or `useId`, never user-provided labels.
 - Blueprint responses can include JSON Schema contracts. Use the feature-local
@@ -194,8 +194,9 @@ implementation. Follow it for any new drag interaction.
 - dnd-kit's built-in keyboard support works on the handle: Space or Enter picks
   up, the arrow keys move, Space or Enter drops, and Escape cancels. Its
   default screen reader instructions and announcements are English and name
-  raw item IDs. Replace them by configuring the `Accessibility` plugin with
-  translated text that uses item labels and positions.
+  raw item IDs. Replace them with `sortablePlugins` from
+  `src/components/sortableAccessibility.ts`, which announces translated text
+  with item labels and positions.
 - Update state once, in `onDragEnd`. Ignore cancelled drags and apply
   `move(items, event)`. Let dnd-kit's optimistic sorting move items during the
   drag, and do not persist on `dragover`.

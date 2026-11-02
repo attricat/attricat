@@ -63,6 +63,30 @@ export const ensureActiveScopeTarget = (
   return parsed;
 };
 
+/** A role grant from a form's fields, for a target that is still active. */
+export const grantInputFromForm = (
+  value: {
+    role_id: string;
+    scope_type: ScopeType;
+    scope_target_id: string;
+  },
+  workspaceId: string | undefined,
+  activeTargets: Parameters<typeof ensureActiveScopeTarget>[2],
+) =>
+  ensureActiveScopeTarget(
+    {
+      role_id: value.role_id,
+      scope_type: value.scope_type,
+      scope_target_id: selectedScopeTarget(
+        value.scope_type,
+        value.scope_target_id,
+        workspaceId,
+      ),
+    },
+    workspaceId,
+    activeTargets,
+  );
+
 export const listMembers = () =>
   request('/api/workspace/members', z.array(memberSchema));
 export const grantMemberRole = (memberId: string, input: GrantInput) =>

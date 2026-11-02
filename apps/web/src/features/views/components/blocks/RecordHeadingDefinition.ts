@@ -3,21 +3,14 @@ import {
   type ViewDefinition,
   type ViewNode,
 } from '../../../records/api';
+import { isLayoutView } from '../../layoutView';
 
 export const recordHeadingComponentId = 'attricat.record_heading';
 
 export const findRecordHeading = (
   view: ViewDefinition | undefined,
 ): ViewNode | undefined => {
-  if (
-    !view ||
-    view.type === viewBlockTypes.table ||
-    view.type === viewBlockTypes.dropdownOption ||
-    view.type === viewBlockTypes.pageTitle ||
-    view.type === viewBlockTypes.extensionLayout ||
-    view.type === viewBlockTypes.explorer
-  )
-    return undefined;
+  if (!isLayoutView(view)) return undefined;
   const visit = (node: ViewNode): ViewNode | undefined => {
     if (
       node.type === viewBlockTypes.stack &&
