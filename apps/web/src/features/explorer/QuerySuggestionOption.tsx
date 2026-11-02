@@ -127,7 +127,7 @@ export const QuerySuggestionOption = ({
         >
           <Typography
             component="span"
-            sx={{ fontWeight: 600, overflowWrap: 'anywhere' }}
+            sx={{ fontWeight: 'fontWeightBold', overflowWrap: 'anywhere' }}
             variant="body2"
           >
             {suggestion.kind === 'allFields'

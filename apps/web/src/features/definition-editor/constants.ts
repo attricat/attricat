@@ -73,3 +73,9 @@ export const referencePages = {
   contexts: '/manage/contexts',
   roles: '/manage/workspace/roles',
 } as const;
+
+/** One level of indentation in a definition's YAML. */
+export const yamlIndentUnit = '  ';
+
+/** Where a definition schema's `$ref` values point. */
+export const schemaDefinitionsRefPrefix = '#/$defs/';

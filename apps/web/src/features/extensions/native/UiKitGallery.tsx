@@ -20,6 +20,8 @@ import { makeTheme, type DesignMode } from '../../../app/theme';
 import { uiKitElements, uiKitVersions } from './generated/uiKit';
 import { NativeTree } from './NativeTree';
 import { NativeReceiver } from './receiver';
+import { PageHeader } from '../../../components/PageHeader';
+import { ExtensionIcon } from '../../../components/systemIcons';
 
 type Localized = { en: string; pl: string };
 type Child = RemoteElementSerialization | RemoteTextSerialization;
@@ -252,9 +254,10 @@ export const UiKitGallery = () => {
   return (
     <Stack spacing={3} sx={{ p: 3 }}>
       <Box>
-        <Typography component="h1" variant="h5">
-          {t('extensions.native.gallery.title', { version: latestUiKit })}
-        </Typography>
+        <PageHeader
+          icon={ExtensionIcon}
+          title={t('extensions.native.gallery.title', { version: latestUiKit })}
+        />
         <Typography aria-live="polite" color="text.secondary" variant="body2">
           {lastEvent || t('extensions.native.gallery.eventsHint')}
         </Typography>

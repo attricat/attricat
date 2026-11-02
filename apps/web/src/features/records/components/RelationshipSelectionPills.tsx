@@ -3,6 +3,7 @@ import type { MouseEvent, ReactNode } from 'react';
 import { NewTabIcon } from '../../../components/NewTabIcon';
 import { RouterChip } from '../../../components/RouterLink';
 import { relatedRecordLinkProps } from '../linkedRecord';
+import { smallChipIconSize } from '../../../components/iconSizes';
 
 export const RelationshipSelectionPills = ({
   action,
@@ -35,8 +36,7 @@ export const RelationshipSelectionPills = ({
         linkToRecords ? (
           <RouterChip
             clickable
-            // Sized for a small chip.
-            icon={<NewTabIcon size={12} />}
+            icon={<NewTabIcon size={smallChipIconSize} />}
             key={id}
             label={labels.get(id) ?? id}
             onDelete={

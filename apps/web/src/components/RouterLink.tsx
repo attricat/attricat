@@ -1,4 +1,4 @@
-import { Button, IconButton, Link, ListItemButton } from '@mui/material';
+import { Button, IconButton, Link, ListItemButton, Tab } from '@mui/material';
 import { createLink } from '@tanstack/react-router';
 import { AnchorChip } from './AnchorChip';
 import { AnchorMenuItem } from './AnchorMenuItem';
@@ -9,3 +9,4 @@ export const RouterIconButton = createLink(IconButton);
 export const RouterLink = createLink(Link);
 export const RouterListItemButton = createLink(ListItemButton);
 export const RouterMenuItem = createLink(AnchorMenuItem);
+export const RouterTab = createLink(Tab);

@@ -10,7 +10,7 @@ import {
   pendingFileId,
   permittedFileTypes,
 } from './fileAcceptance';
-import { formatBytes } from '../data-health/dataHealthFormat';
+import { formatBytes } from '../../components/formatBytes';
 import { useQueuedFileUploadsContext } from './queuedFileUploads';
 import type { FileMetadata } from './schemas';
 import { errorMessage } from '../../api/errors';

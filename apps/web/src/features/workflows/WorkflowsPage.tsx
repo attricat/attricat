@@ -33,6 +33,7 @@ import { RunStatusChip } from '../../components/RunStatusChip';
 import { RunsUnavailableAlert } from './RunsUnavailableAlert';
 import { LoadingState } from '../../components/LoadingState';
 import type { WorkflowRun } from './schemas';
+import { EnabledChip } from '../../components/EnabledChip';
 
 export const WorkflowsPage = () => {
   const { t } = useTranslation();
@@ -116,8 +117,8 @@ export const WorkflowsPage = () => {
                         </Stack>
                       </TableCell>
                       <TableCell>
-                        <Chip
-                          color={enabled ? 'success' : 'default'}
+                        <EnabledChip
+                          enabled={enabled}
                           label={
                             enabled
                               ? t('workflows.enabled')

@@ -11,8 +11,8 @@ import {
   parseSchemaNode,
   type SchemaNode,
 } from './definitionSchema';
+import { schemaDefinitionsRefPrefix } from './constants';
 
-const refPrefix = '#/$defs/';
 const definitions = {
   jsonSchema: 'JsonSchema',
   predicate: 'Predicate',
@@ -20,7 +20,7 @@ const definitions = {
   status: 'StatusControl',
 } as const;
 const ref = (name: string, description?: string): SchemaNode => ({
-  $ref: `${refPrefix}${name}`,
+  $ref: `${schemaDefinitionsRefPrefix}${name}`,
   description,
 });
 

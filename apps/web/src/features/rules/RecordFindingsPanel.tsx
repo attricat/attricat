@@ -125,7 +125,7 @@ const FindingItem = ({
           component="p"
           variant="body2"
           sx={{
-            fontWeight: 600,
+            fontWeight: 'fontWeightBold',
             // The rule name reads as the heading and links on hover.
             '& a': { color: 'inherit', textDecoration: 'none' },
             '& a:hover, & a:focus-visible': { textDecoration: 'underline' },

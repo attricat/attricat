@@ -10,7 +10,10 @@ import {
   compactNavigationWidth,
   managementSidebarWidth,
 } from './sideNavigationLayout';
-import { compactNavigationPanelForRoute } from './useCompactNavigationPanels';
+import {
+  compactNavigationPanelForRoute,
+  compactNavigationPanels,
+} from './useCompactNavigationPanels';
 
 export const DesktopNavigation = ({
   onSignOut,
@@ -24,10 +27,14 @@ export const DesktopNavigation = ({
       ? undefined
       : compactNavigationPanelForRoute(pathname),
   );
-  const [manageOpen, setManageOpen] = useState(initialPanel === 'manage');
-  const [exploreOpen, setExploreOpen] = useState(initialPanel === 'explore');
+  const [manageOpen, setManageOpen] = useState(
+    initialPanel === compactNavigationPanels.manage,
+  );
+  const [exploreOpen, setExploreOpen] = useState(
+    initialPanel === compactNavigationPanels.explore,
+  );
   const [extensionsOpen, setExtensionsOpen] = useState(
-    initialPanel === 'extensions',
+    initialPanel === compactNavigationPanels.extensions,
   );
   // Opening any panel from the rail forgets an earlier collapse.
   const rememberingOpen =
@@ -48,9 +55,10 @@ export const DesktopNavigation = ({
       return;
     }
     saveNavigationPanelCollapsed(false);
-    if (routePanel === 'manage') setManageOpen(true);
-    if (routePanel === 'explore') setExploreOpen(true);
-    if (routePanel === 'extensions') setExtensionsOpen(true);
+    if (routePanel === compactNavigationPanels.manage) setManageOpen(true);
+    if (routePanel === compactNavigationPanels.explore) setExploreOpen(true);
+    if (routePanel === compactNavigationPanels.extensions)
+      setExtensionsOpen(true);
   };
 
   return (

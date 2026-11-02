@@ -17,7 +17,7 @@ import { RouterButton } from '../../components/RouterLink';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { Timestamp } from '../../time/Timestamp';
-import { formatBytes } from '../data-health/dataHealthFormat';
+import { formatBytes } from '../../components/formatBytes';
 import { cancelExtensionRun, extensionRunArtifactUrl } from './api';
 import {
   extensionRunStatuses,

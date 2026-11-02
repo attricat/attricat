@@ -3,7 +3,6 @@ import {
   Alert,
   Box,
   Button,
-  Chip,
   Link,
   Paper,
   Stack,
@@ -47,13 +46,15 @@ import {
   connectionActions,
   type ConnectionAction,
 } from './constants';
+import { BanIcon, CircleCheckIcon, CircleXIcon, ClockIcon } from 'lucide-react';
+import { StatusChip, type StatusChipStyle } from '../../components/StatusChip';
 
-const statusColors = {
-  active: 'success',
-  pending_authorization: 'warning',
-  failed: 'error',
-  revoked: 'default',
-} as const satisfies Record<ExtensionConnection['status'], string>;
+const statusChips = {
+  active: { color: 'success', icon: CircleCheckIcon },
+  pending_authorization: { color: 'warning', icon: ClockIcon },
+  failed: { color: 'error', icon: CircleXIcon },
+  revoked: { color: 'default', icon: BanIcon },
+} as const satisfies Record<ExtensionConnection['status'], StatusChipStyle>;
 
 type ConnectionFormProps = {
   /** An action on the connection, including this form's, is running. */
@@ -248,11 +249,10 @@ const ConnectionRow = ({
             {t(`extensionExports.grantTypes.${connection.grant_type}`)}
           </Typography>
         </Box>
-        <Chip
-          color={statusColors[connection.status]}
+        <StatusChip
           label={t(`extensionExports.connectionStatus.${connection.status}`)}
           size="small"
-          variant="outlined"
+          style={statusChips[connection.status]}
         />
       </Stack>
       <Typography color="text.secondary" sx={{ mt: 1 }} variant="body2">

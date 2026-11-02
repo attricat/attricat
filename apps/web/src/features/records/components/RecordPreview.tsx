@@ -89,6 +89,7 @@ import {
   supportedOutletContextVersion,
 } from '../../extensions/constants';
 import { usePaletteSurface } from '../../extensions/actionPaletteStore';
+import { LoadingSpinner } from '../../../components/LoadingState';
 
 const loadRecordCommentsPanel = () =>
   import('../../record-comments/RecordCommentsPanel');
@@ -506,12 +507,10 @@ export const RecordPreview = ({
                 }
               />
               {contexts.isPending && (
-                <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
-                  <CircularProgress
-                    aria-label={t('records.loadingContexts')}
-                    enableTrackSlot
-                  />
-                </Box>
+                <LoadingSpinner
+                  label={t('records.loadingContexts')}
+                  sx={{ py: 3 }}
+                />
               )}
               <QueryErrorNotice
                 error={contexts.error}
@@ -521,14 +520,10 @@ export const RecordPreview = ({
               {contexts.data && (
                 <>
                   {resolved.isPending && (
-                    <Box
-                      sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}
-                    >
-                      <CircularProgress
-                        aria-label={t('records.resolvingValues')}
-                        enableTrackSlot
-                      />
-                    </Box>
+                    <LoadingSpinner
+                      label={t('records.resolvingValues')}
+                      sx={{ mt: 3 }}
+                    />
                   )}
                   <ApiErrorAlert error={resolved.error} sx={{ mt: 3 }} />
                   <ApiErrorAlert error={blueprint.error} sx={{ mt: 3 }} />

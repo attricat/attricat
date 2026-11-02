@@ -37,7 +37,7 @@ export const UserAvatar = ({
         bgcolor: 'action.selected',
         color: 'text.primary',
         fontSize: size * initialsFontScale,
-        fontWeight: 600,
+        fontWeight: 'fontWeightBold',
         height: size,
         width: size,
         // Transparent images always sit on white, as the file worker also

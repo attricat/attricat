@@ -19,6 +19,8 @@ import {
 import { attributeValueKinds, attributeValueTypes } from './valueTypes';
 import { RELATIONSHIP_ID_JOINER, RELATIONSHIP_ID_SEPARATOR } from './constants';
 
+const ajvRequiredKeyword = 'required';
+
 type RecordFormValidation = {
   fieldErrors: Record<string, string>;
   formError?: string;
@@ -244,7 +246,7 @@ export const validateRecordForm = (
   const formError = schemaErrors
     .filter(
       (error) =>
-        error.keyword === 'required' ||
+        error.keyword === ajvRequiredKeyword ||
         !fileCodes.has(attributeCodeForSchemaError(error) ?? ''),
     )
     .map((error) => {
@@ -254,12 +256,12 @@ export const validateRecordForm = (
         attributes.some((attribute) => attribute.code === attributeCode)
       ) {
         fieldErrors[attributeCode] ??=
-          error.keyword === 'required'
+          error.keyword === ajvRequiredKeyword
             ? messages.required
             : (jsonSchemaErrorMessage([error]) ?? messages.schema);
         return undefined;
       }
-      if (attributeCode && error.keyword === 'required')
+      if (attributeCode && error.keyword === ajvRequiredKeyword)
         return messages.uneditableRequired(attributeCode);
       return messages.schema;
     })
@@ -273,7 +275,7 @@ const attributeCodeForSchemaError = (error: {
   params: Record<string, unknown>;
 }): string | undefined => {
   if (
-    error.keyword === 'required' &&
+    error.keyword === ajvRequiredKeyword &&
     typeof error.params.missingProperty === 'string'
   )
     return error.params.missingProperty;

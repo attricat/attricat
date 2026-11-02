@@ -7,12 +7,11 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import { CircleAlertIcon, CodeXmlIcon, CopyIcon, InfoIcon } from 'lucide-react';
+import { CircleAlertIcon, CodeXmlIcon, InfoIcon } from 'lucide-react';
 import { useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { monoFontFamily } from '../../../app/theme';
 import { compactIconSize, smallIconSize } from '../../../components/iconSizes';
-import { useCopyToClipboard } from '../../../components/useCopyToClipboard';
 import { findingMessage } from '../../rules/findingMessage';
 import { findingSeverityColor } from '../../rules/findingSeverity';
 import type { Attribute } from '../api';
@@ -43,6 +42,7 @@ import {
   useAttributeEditorDiagnosis,
   type AttributeEditorDiagnosis,
 } from '../../extensions/native/attributeEditorStatus';
+import { CopyIconButton } from '../../../components/CopyIconButton';
 
 const diagnosticsPopoverMaxWidth = 360;
 
@@ -63,7 +63,7 @@ const DiagnosticSection = ({
     <Typography
       color="text.secondary"
       component="h3"
-      sx={{ fontWeight: 700, mb: 0.5 }}
+      sx={{ fontWeight: 'fontWeightBold', mb: 0.5 }}
       variant="caption"
     >
       {title}
@@ -189,7 +189,6 @@ const FieldDiagnostics = ({
   const [revealing, setRevealing] = useState(false);
   // Runs once the popover has closed, whose focus trap would take focus back.
   const afterClose = useRef<() => void>(undefined);
-  const copyText = useCopyToClipboard();
   const revealField = useRevealField();
   if (!diagnostics) return null;
   const { contextCode } = diagnostics;
@@ -251,7 +250,11 @@ const FieldDiagnostics = ({
         }}
       >
         <Stack spacing={2}>
-          <Typography component="h2" sx={{ fontWeight: 700 }} variant="body2">
+          <Typography
+            component="h2"
+            sx={{ fontWeight: 'fontWeightBold' }}
+            variant="body2"
+          >
             {label}
           </Typography>
           <DiagnosticSection title={t('records.fieldDiagnostics.code')}>
@@ -263,15 +266,10 @@ const FieldDiagnostics = ({
               >
                 {attribute.code}
               </Typography>
-              <Tooltip title={t('records.fieldDiagnostics.copyCode')}>
-                <IconButton
-                  aria-label={t('records.fieldDiagnostics.copyCode')}
-                  onClick={() => void copyText(attribute.code)}
-                  size="small"
-                >
-                  <CopyIcon size={smallIconSize} />
-                </IconButton>
-              </Tooltip>
+              <CopyIconButton
+                label={t('records.fieldDiagnostics.copyCode')}
+                value={attribute.code}
+              />
               {diagnostics.showInDefinition && (
                 <Tooltip
                   title={

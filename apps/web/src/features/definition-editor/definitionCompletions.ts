@@ -40,6 +40,7 @@ import {
   referenceCandidates,
   type Candidate,
 } from './definitionReferenceCandidates';
+import { yamlIndentUnit } from './constants';
 
 export const suggestionKinds = {
   property: 'property',
@@ -83,8 +84,6 @@ type Context = {
 const unquotedTypes = new Set(['boolean', 'integer', 'number']);
 
 /** Spaces per nesting level in inserted YAML. */
-const indentUnit = '  ';
-
 const escapeSnippet = (value: string) => value.replace(/[$}\\]/g, '\\$&');
 const escapeChoice = (value: string) => value.replace(/[$}\\|,]/g, '\\$&');
 const choiceList = (values: string[]) =>
@@ -101,12 +100,13 @@ class TabStops {
 const isMapping = (node: SchemaNode) =>
   primaryType(node) === 'object' || Boolean(node.oneOf);
 
-const indented = (lines: string[]) => lines.map((line) => indentUnit + line);
+const indented = (lines: string[]) =>
+  lines.map((line) => yamlIndentUnit + line);
 
 /** Lines of a sequence item: `- ` before the first, aligned after it. */
 const itemLines = (body: string[]) =>
   body.length
-    ? body.map((line, index) => (index ? indentUnit : '- ') + line)
+    ? body.map((line, index) => (index ? yamlIndentUnit : '- ') + line)
     : ['- '];
 
 /** A placeholder for a value written after `key: ` on the same line. */
@@ -188,7 +188,7 @@ type KeyCursor = Extract<YamlCursor, { kind: 'key' }>;
 const joinLines = (cursor: KeyCursor, lines: string[]) =>
   cursor.inline
     ? lines.join(', ')
-    : lines.join(cursor.item ? `\n${indentUnit}` : '\n');
+    : lines.join(cursor.item ? `\n${yamlIndentUnit}` : '\n');
 
 const propertySuggestions = (
   root: SchemaNode,
@@ -264,7 +264,7 @@ const propertySuggestions = (
           ...base,
           insertText: joinLines(cursor, [
             `${name}:`,
-            `${indentUnit}${entry}:`,
+            `${yamlIndentUnit}${entry}:`,
             ...indented(indented(body)),
           ]),
           kind: suggestionKinds.section,

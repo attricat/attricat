@@ -1,5 +1,9 @@
 import i18n from '../../i18n';
-import type { TextRange, YamlOutline } from '../../components/yamlOutline';
+import {
+  rangeContains,
+  type TextRange,
+  type YamlOutline,
+} from '../../components/yamlOutline';
 import {
   aliasKey,
   attributePathSeparator,
@@ -32,9 +36,6 @@ const nameRange = (text: string, range: TextRange, length: number) => {
   return { end: start + length, start };
 };
 
-const contains = (range: TextRange, offset: number) =>
-  offset >= range.start && offset <= range.end;
-
 /** Tables whose items declare a name, and the key that holds it. */
 const declaringKeys: Record<string, string> = {
   [attributesKey]: codeKey,
@@ -52,7 +53,7 @@ const declarationAt = (
       declaringKeys[String(path[0])] === path[2] &&
       typeof value === 'string' &&
       valueRange !== undefined &&
-      contains(valueRange, offset),
+      rangeContains(valueRange, offset),
   );
   if (!entry?.valueRange || typeof entry.value !== 'string') return undefined;
   return {
@@ -78,7 +79,7 @@ export const declaredNameAt = (
   const declaration = target && referenceDeclaration(outline, target);
   if (!target || !declaration) return undefined;
   const [name] = target.value.split(attributePathSeparator);
-  if (!contains(nameRange(text, target.range, name.length), offset))
+  if (!rangeContains(nameRange(text, target.range, name.length), offset))
     return undefined;
   return declarationAt(text, outline, declaration.start);
 };

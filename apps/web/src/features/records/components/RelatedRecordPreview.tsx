@@ -20,8 +20,9 @@ import {
 } from '../linkedRecord';
 import { useResolvedRecordPreview } from '../useRecordContexts';
 import { useRecordBlueprintRevision } from '../useRecordPreviewData';
+import { fieldSkeletons } from '../constants';
 
-const fieldSkeletons = ['first', 'second', 'third'];
+const previewToggleSize = 24;
 
 const LinkedRecordValues = ({
   contextId,
@@ -89,7 +90,7 @@ export const RelatedRecordPreviewToggle = ({
       aria-label={t('records.relatedRecordPreview', { record: label })}
       onClick={preview.toggle}
       size="small"
-      sx={{ height: 24, ml: 'auto', width: 24 }}
+      sx={{ height: previewToggleSize, ml: 'auto', width: previewToggleSize }}
     >
       <ChevronDownIcon
         size={compactIconSize}

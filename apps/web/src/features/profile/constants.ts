@@ -28,10 +28,6 @@ export const tokenPermissionPresets = [
 /** The longest token label the API accepts. */
 export const tokenLabelMaxLength = 120;
 export const secretDialogMinWidth = 360;
-export const profileTabIds = {
-  tab: (index: number) => `profile-tab-${index}`,
-  panel: (index: number) => `profile-tabpanel-${index}`,
-};
 export const profileTabIndex = {
   account: 0,
   personalTokens: 1,

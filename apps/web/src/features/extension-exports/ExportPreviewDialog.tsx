@@ -1,7 +1,6 @@
 import {
   Alert,
   Button,
-  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -15,6 +14,7 @@ import { previewExport } from './api';
 import type { ExportDestination } from './schemas';
 import { extensionExportQueryKeys } from './queryKeys';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { LoadingState } from '../../components/LoadingState';
 
 /**
  * The payload a destination would receive for one record, with the issues
@@ -56,7 +56,7 @@ export const ExportPreviewDialog = ({
       </DialogTitle>
       <DialogContent>
         {preview.isPending && (
-          <CircularProgress aria-label={t('extensionExports.previewLoading')} />
+          <LoadingState>{t('extensionExports.previewLoading')}</LoadingState>
         )}
         <ApiErrorAlert error={preview.error} />
         {preview.data && (

@@ -4,11 +4,6 @@ import {
   Alert,
   Box,
   Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
   Link,
   Paper,
   Skeleton,
@@ -93,6 +88,8 @@ import {
 import { FieldDiagnosticsContext } from '../fieldDiagnostics';
 import { useBlueprintFieldDiagnostics } from '../useBlueprintFieldDiagnostics';
 import { migrationReviewSelector } from '../constants';
+import { fieldSkeletons } from '../constants';
+import { DiscardChangesDialog } from '../../drafts/DiscardChangesDialog';
 
 export type RecordFormHandle = {
   /** Removes the persisted draft after a confirmed save. */
@@ -110,7 +107,6 @@ const noStatusTransitions: readonly [] = [];
 const noResolvedValues = {};
 const noAttributes: readonly Attribute[] = [];
 const noPendingConfirmations: readonly FormErrorSummaryItem[] = [];
-const fieldSkeletons = ['first', 'second', 'third'];
 
 // Errors stand out once a save was attempted; what is merely left to do stays
 // neutral.
@@ -599,47 +595,28 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
         }}
         sx={{ mt: 4, p: formPadding }}
       >
-        <Dialog
+        <DiscardChangesDialog
           // Changing removes the button that opened it; focus moves to the
           // blueprint picker instead.
           disableRestoreFocus
-          onClose={() => setConfirmingBlueprintChange(false)}
-          open={confirmingBlueprintChange}
-          slotProps={{
-            transition: {
-              // The page is hidden from assistive technology until the
-              // dialog has closed, so the picker can only take focus then.
-              onExited: () => {
-                if (!changeConfirmed.current) return;
-                changeConfirmed.current = false;
-                onChangeBlueprint?.();
-              },
-            },
+          description={t('records.changeBlueprintDescription')}
+          discardLabel={t('records.changeBlueprintConfirm')}
+          onDiscard={() => {
+            changeConfirmed.current = true;
+            setConfirmingBlueprintChange(false);
+            draft.clear();
           }}
-        >
-          <DialogTitle>{t('records.changeBlueprintTitle')}</DialogTitle>
-          <DialogContent>
-            <DialogContentText>
-              {t('records.changeBlueprintDescription')}
-            </DialogContentText>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setConfirmingBlueprintChange(false)}>
-              {t('drafts.keepEditing')}
-            </Button>
-            <Button
-              color="error"
-              onClick={() => {
-                changeConfirmed.current = true;
-                setConfirmingBlueprintChange(false);
-                draft.clear();
-              }}
-              variant="contained"
-            >
-              {t('records.changeBlueprintConfirm')}
-            </Button>
-          </DialogActions>
-        </Dialog>
+          // The page is hidden from assistive technology until the dialog has
+          // closed, so the picker can only take focus then.
+          onExited={() => {
+            if (!changeConfirmed.current) return;
+            changeConfirmed.current = false;
+            onChangeBlueprint?.();
+          }}
+          onKeep={() => setConfirmingBlueprintChange(false)}
+          open={confirmingBlueprintChange}
+          title={t('records.changeBlueprintTitle')}
+        />
         <DraftRestoreDialog
           draft={draft.pending}
           onDiscard={draft.discard}

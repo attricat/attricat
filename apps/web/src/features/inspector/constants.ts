@@ -1,4 +1,4 @@
-const millisecondsPerSecond = 1_000;
+import { millisecondsPerSecond } from '../../time/durations';
 
 export const API_HEALTH_POLL_INTERVAL_MS = 5_000;
 export const API_HEALTH_POLL_INTERVAL_SECONDS =

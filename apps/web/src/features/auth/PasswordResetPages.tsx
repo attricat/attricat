@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { ArrowLeftIcon } from 'lucide-react';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { useExclusiveMutation } from '../../components/useExclusiveMutation';
-import { AuthFormShell } from './AuthFormShell';
+import { AuthFormShell, AuthFormTitle } from './AuthFormShell';
 import { confirmPasswordReset, requestPasswordReset } from './api';
 import { RouterButton } from '../../components/RouterLink';
 
@@ -21,9 +21,7 @@ export const PasswordResetRequestPage = () => {
   });
   return (
     <AuthFormShell onSubmit={() => form.handleSubmit()}>
-      <Typography component="h1" variant="h5">
-        {t('auth.resetPassword')}
-      </Typography>
+      <AuthFormTitle>{t('auth.resetPassword')}</AuthFormTitle>
       {request.isSuccess ? (
         <Typography>{t('auth.resetPasswordSent')}</Typography>
       ) : (
@@ -77,9 +75,7 @@ export const PasswordResetConfirmationPage = ({
   });
   return (
     <AuthFormShell onSubmit={() => form.handleSubmit()}>
-      <Typography component="h1" variant="h5">
-        {t('auth.chooseNewPassword')}
-      </Typography>
+      <AuthFormTitle>{t('auth.chooseNewPassword')}</AuthFormTitle>
       {!token ? (
         // A link without its token cannot reset anything, so it offers a new
         // link instead of a form that can only fail.

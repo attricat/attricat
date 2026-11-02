@@ -2,7 +2,6 @@ import {
   Alert,
   Box,
   Button,
-  CircularProgress,
   FormControl,
   FormControlLabel,
   FormHelperText,
@@ -34,6 +33,7 @@ import {
 import { passwordSignInPolicies } from './constants';
 import { workspaceQueryKeys } from './queryKeys';
 import type { IdentityProvider } from './schemas';
+import { LoadingState } from '../../components/LoadingState';
 
 const ProviderForm = ({ provider }: { provider: IdentityProvider | null }) => {
   const { t } = useTranslation();
@@ -286,7 +286,7 @@ export const WorkspaceSignInSection = ({
         </Typography>
       </Stack>
       {provider.isPending && (
-        <CircularProgress aria-label={t('workspace.signInLoading')} />
+        <LoadingState>{t('workspace.signInLoading')}</LoadingState>
       )}
       <ApiErrorAlert error={provider.error} />
       {provider.isSuccess && (

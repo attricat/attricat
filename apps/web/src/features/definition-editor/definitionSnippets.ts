@@ -6,6 +6,8 @@ import {
   type YamlPath,
 } from '../../components/yamlOutline';
 import { yamlKey } from '../../components/yamlSyntax';
+import { lineEnd, lineStart } from './textLines';
+import { yamlIndentUnit } from './constants';
 
 const snippetPlacements = {
   /** Root `key: value` lines, inserted after the last such line. */
@@ -311,19 +313,9 @@ export const snippetIsPresent = (
     outline.keysIn(path.slice(0, -1)).has(String(path.at(-1))),
   );
 
-const indentUnit = '  ';
-
 const samePath = (left: YamlPath, right: YamlPath) =>
   left.length === right.length &&
   left.every((segment, index) => segment === right[index]);
-
-const lineStart = (text: string, offset: number) =>
-  text.lastIndexOf('\n', offset - 1) + 1;
-
-const lineEnd = (text: string, offset: number) => {
-  const end = text.indexOf('\n', offset);
-  return end < 0 ? text.length : end;
-};
 
 const blockAt = (outline: YamlOutline, path: YamlPath) =>
   outline.collections.find(
@@ -382,12 +374,12 @@ export const snippetEdit = (text: string, snippet: DefinitionSnippet) => {
 
   let body =
     snippet.placement === snippetPlacements.item
-      ? lines.map((line, index) => (index ? indentUnit : '- ') + line)
+      ? lines.map((line, index) => (index ? yamlIndentUnit : '- ') + line)
       : lines;
   for (const key of parent.slice(depth).reverse())
     body = [
       `${yamlKey(String(key))}:`,
-      ...body.map((line) => indentUnit + line),
+      ...body.map((line) => yamlIndentUnit + line),
     ];
 
   if (!host) {

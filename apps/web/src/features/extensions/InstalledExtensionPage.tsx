@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { createLink } from '@tanstack/react-router';
-import { Alert, Box, Chip, Stack, Tab, Tabs, Typography } from '@mui/material';
+import { Alert, Box, Chip, Stack, Tabs, Typography } from '@mui/material';
 import {
   ArrowLeftIcon,
   HistoryIcon,
@@ -14,7 +13,7 @@ import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { compactIconSize } from '../../components/iconSizes';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
-import { RouterButton } from '../../components/RouterLink';
+import { RouterButton, RouterTab } from '../../components/RouterLink';
 import { useTabAccessibility } from '../../components/useTabAccessibility';
 import { useCan } from '../auth/useCan';
 import {
@@ -59,7 +58,6 @@ import { manifestExportsSchema } from '../extension-exports/schemas';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
-const RouterTab = createLink(Tab);
 const tabIcons = {
   [installedExtensionTabs.overview]: InfoIcon,
   [installedExtensionTabs.configuration]: SlidersHorizontalIcon,

@@ -1,6 +1,5 @@
 import { Box, IconButton, Paper, Tab, Tabs, Typography } from '@mui/material';
 import { XIcon } from 'lucide-react';
-import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   apiHealthColor,
@@ -24,6 +23,7 @@ import { InspectorSessionPane } from './InspectorSessionPane';
 import { useApiHealth } from './useApiHealth';
 import { useInspectorState } from './useInspectorState';
 import { smallIconSize } from '../../components/iconSizes';
+import { useTabAccessibility } from '../../components/useTabAccessibility';
 
 const paneLabelKeys = {
   performance: 'inspector.performance',
@@ -48,14 +48,10 @@ const InspectorPaneContent = ({
 
 export const Inspector = () => {
   const { t } = useTranslation();
-  const tabId = useId();
+  const tabId = useTabAccessibility();
   const [{ activePane, expanded }, updateInspectorState] = useInspectorState();
   const apiHealth = useApiHealth();
   const apiStatus = t(apiHealthSummaryKeys[apiHealth]);
-  const tabIds = (pane: InspectorPaneId) => ({
-    panel: `${tabId}-${pane}-panel`,
-    tab: `${tabId}-${pane}-tab`,
-  });
 
   if (!expanded)
     return (
@@ -132,15 +128,14 @@ export const Inspector = () => {
           }}
           value={activePane}
         >
-          {inspectorPaneOrder.map((pane) => (
+          {inspectorPaneOrder.map((pane, index) => (
             <Tab
-              aria-controls={tabIds(pane).panel}
-              id={tabIds(pane).tab}
+              {...tabId.tab(index)}
               key={pane}
               label={t(paneLabelKeys[pane])}
               sx={{
-                fontSize: '0.75rem',
-                fontWeight: 600,
+                typography: 'caption',
+                fontWeight: 'fontWeightBold',
                 minHeight: inspectorTabMinHeight,
                 py: 0,
               }}
@@ -149,9 +144,7 @@ export const Inspector = () => {
           ))}
         </Tabs>
         <Box
-          aria-labelledby={tabIds(activePane).tab}
-          id={tabIds(activePane).panel}
-          role="tabpanel"
+          {...tabId.panel(inspectorPaneOrder.indexOf(activePane))}
           sx={{ pt: 1 }}
         >
           <InspectorPaneContent apiHealth={apiHealth} pane={activePane} />

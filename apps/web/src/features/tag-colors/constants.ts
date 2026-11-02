@@ -1,5 +1,6 @@
+import { millisecondsPerMinute } from '../../time/durations';
 /** Colors change rarely and the editor refreshes them on save. */
-export const tagColorsStaleTimeMs = 5 * 60 * 1000;
+export const tagColorsStaleTimeMs = 5 * millisecondsPerMinute;
 
 /**
  * The most tag colors a workspace may set, as the API allows. A changed color

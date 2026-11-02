@@ -29,6 +29,7 @@ import {
   yamlKey,
   yamlValue,
 } from '../../components/yamlSyntax';
+import { lineEnd, lineStart } from './textLines';
 
 /** A text change that resolves a diagnostic, offered as a quick fix. */
 export type DefinitionFix = {
@@ -361,14 +362,6 @@ const startingValue = (root: SchemaNode, property: SchemaNode) => {
     default:
       return undefined;
   }
-};
-
-const lineStart = (text: string, offset: number) =>
-  text.lastIndexOf('\n', offset - 1) + 1;
-
-const lineEnd = (text: string, offset: number) => {
-  const end = text.indexOf('\n', offset);
-  return end < 0 ? text.length : end;
 };
 
 const isSingleLine = (text: string, { start, end }: TextRange) =>

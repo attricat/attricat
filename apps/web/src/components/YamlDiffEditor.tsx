@@ -48,7 +48,7 @@ export const YamlDiffEditor = ({
   const theme = useMonacoTheme();
   return (
     <Box>
-      <Typography sx={{ fontWeight: 700, mb: 1 }}>
+      <Typography sx={{ fontWeight: 'fontWeightBold', mb: 1 }}>
         {t('common.diffTitle', {
           original: originalTitle,
           modified: modifiedTitle,

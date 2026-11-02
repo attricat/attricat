@@ -1,3 +1,4 @@
+import { millisecondsPerDay } from '../../time/durations';
 /** What a role grant applies to: the whole workspace or one part of it. */
 export const scopeTypes = {
   workspace: 'workspace',
@@ -7,7 +8,7 @@ export const scopeTypes = {
 } as const;
 export const ownerRoleCode = 'owner';
 /** How long a new invitation stays open unless the inviter changes it. */
-export const defaultInvitationLifetimeMilliseconds = 7 * 24 * 60 * 60 * 1000;
+export const defaultInvitationLifetimeMilliseconds = 7 * millisecondsPerDay;
 /** A custom role code: lowercase, starting with a letter. */
 export const roleCodePattern = /^[a-z][a-z0-9_-]*$/;
 export const activeMemberState = 'active';

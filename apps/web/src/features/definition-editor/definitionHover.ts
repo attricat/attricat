@@ -16,17 +16,14 @@ import {
   type YamlEntry,
   type YamlOutline,
   type YamlPath,
+  pathKey,
+  rangeContains,
 } from '../../components/yamlOutline';
 
 type DefinitionHover = { contents: string[]; range: TextRange };
 
 /** The keys and values to describe, from YAML or from embedded JSON. */
 type HoverDocument = Pick<YamlOutline, 'entries' | 'valueAt'>;
-
-const contains = (range: TextRange, offset: number) =>
-  offset >= range.start && offset <= range.end;
-
-const pathKey = (path: YamlPath) => JSON.stringify(path);
 
 /** Entries like the YAML outline's for JSON parsed at `start` in the text. */
 const jsonDocument = (root: JsonNode, start: number): HoverDocument => {
@@ -136,11 +133,11 @@ const describeAt = (
 ) => {
   const key = document.entries.find(
     ({ path, range }) =>
-      typeof path.at(-1) === 'string' && contains(range, offset),
+      typeof path.at(-1) === 'string' && rangeContains(range, offset),
   );
   if (key) return describe(root, document, key, false);
   const value = document.entries.find(
-    ({ valueRange }) => valueRange && contains(valueRange, offset),
+    ({ valueRange }) => valueRange && rangeContains(valueRange, offset),
   );
   return value && describe(root, document, value, true);
 };
@@ -156,7 +153,7 @@ export const definitionHover = (
 ): DefinitionHover | undefined => {
   const outline = scanYaml(text);
   const holder = outline.entries.find(
-    ({ valueRange }) => valueRange && contains(valueRange, offset),
+    ({ valueRange }) => valueRange && rangeContains(valueRange, offset),
   );
   const json = holder && embeddedJson(text, holder);
   if (json)

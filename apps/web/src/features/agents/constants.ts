@@ -1,3 +1,4 @@
+import { millisecondsPerMinute } from '../../time/durations';
 export const agentRoutes = {
   list: '/agents',
   create: '/agents/new',
@@ -73,7 +74,7 @@ export const titleSources = {
 } as const;
 
 export const titlePollIntervalMs = 3_000;
-export const titlePendingTimeoutMs = 5 * 60_000;
+export const titlePendingTimeoutMs = 5 * millisecondsPerMinute;
 export const conversationPollIntervalMs = 10_000;
 export const conversationReconcileIntervalMs = 30_000;
 export const conversationIdlePollIntervalMs = 60_000;

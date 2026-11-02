@@ -2,17 +2,24 @@ import { useState } from 'react';
 import { navigationRoutes } from './navigation';
 import { isWithinRoute } from './sideNavigationLayout';
 
-const compactNavigationPanels = ['explore', 'extensions', 'manage'] as const;
-type CompactNavigationPanel = (typeof compactNavigationPanels)[number];
+export const compactNavigationPanels = {
+  explore: 'explore',
+  extensions: 'extensions',
+  manage: 'manage',
+} as const;
+type CompactNavigationPanel =
+  (typeof compactNavigationPanels)[keyof typeof compactNavigationPanels];
 
 // The panel presenting the section a route belongs to, if it has one.
 export const compactNavigationPanelForRoute = (
   pathname: string,
 ): CompactNavigationPanel | undefined => {
-  if (pathname === navigationRoutes.explore) return 'explore';
+  if (pathname === navigationRoutes.explore)
+    return compactNavigationPanels.explore;
   if (isWithinRoute(pathname, navigationRoutes.extensionContributions))
-    return 'extensions';
-  if (isWithinRoute(pathname, navigationRoutes.manage)) return 'manage';
+    return compactNavigationPanels.extensions;
+  if (isWithinRoute(pathname, navigationRoutes.manage))
+    return compactNavigationPanels.manage;
   return undefined;
 };
 
@@ -32,9 +39,9 @@ export const useCompactNavigationPanels = (
   >(() => {
     const routePanel = compactNavigationPanelForRoute(pathname);
     return {
-      explore: routePanel === 'explore',
-      extensions: routePanel === 'extensions',
-      manage: routePanel === 'manage',
+      explore: routePanel === compactNavigationPanels.explore,
+      extensions: routePanel === compactNavigationPanels.extensions,
+      manage: routePanel === compactNavigationPanels.manage,
     };
   });
   const isOpen = (panel: CompactNavigationPanel) =>
@@ -44,9 +51,13 @@ export const useCompactNavigationPanels = (
     controls[panel].onOpenChange?.(open);
   };
   const openOnly = (panel: CompactNavigationPanel) =>
-    compactNavigationPanels.forEach((item) => setOpen(item, item === panel));
+    Object.values(compactNavigationPanels).forEach((item) =>
+      setOpen(item, item === panel),
+    );
   const closeAll = () =>
-    compactNavigationPanels.forEach((item) => setOpen(item, false));
+    Object.values(compactNavigationPanels).forEach((item) =>
+      setOpen(item, false),
+    );
   const toggle = (panel: CompactNavigationPanel) => {
     if (isOpen(panel)) setOpen(panel, false);
     else openOnly(panel);

@@ -75,7 +75,7 @@ export const MigrationIssueList = ({
                   sx={{ px: 2, py: 1.5 }}
                   variant="outlined"
                 >
-                  <Typography sx={{ fontWeight: 600 }}>
+                  <Typography sx={{ fontWeight: 'fontWeightBold' }}>
                     {attributeLabel(code)}
                   </Typography>
                   {value && (
