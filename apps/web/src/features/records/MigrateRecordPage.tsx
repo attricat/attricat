@@ -199,7 +199,10 @@ export const MigrateRecordPage = ({ recordId }: { recordId: string }) => {
           })}
           migrationReviews={migrationReviews}
           pendingConfirmations={pendingConfirmations}
-          requiredAttributes={requiredMigrationAttributes(preview.data.issues)}
+          requiredAttributes={requiredMigrationAttributes(
+            preview.data.issues,
+            discardAttributes,
+          )}
           initialValues={initialFields}
           isSubmitting={migrate.isPending}
           onCancel={() =>

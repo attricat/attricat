@@ -3,6 +3,7 @@ import type { Attribute } from './api';
 import {
   answeredMigrationRelationships,
   migrationLayout,
+  requiredMigrationAttributes,
 } from './migrationReview';
 
 const attributes = ['title', 'price', 'sku'].map(
@@ -73,5 +74,21 @@ describe('answeredMigrationRelationships', () => {
     expect(answeredMigrationRelationships(relationships, retargeted)).toEqual(
       relationships,
     );
+  });
+});
+
+describe('requiredMigrationAttributes', () => {
+  const issues = [
+    { attribute_code: 'sku', kind: 'missing_required', message: '' },
+    {
+      attribute_code: 'brand',
+      kind: 'relationship_target_changed',
+      message: '',
+    },
+  ];
+
+  it('asks for a retargeted relationship until it is discarded', () => {
+    expect(requiredMigrationAttributes(issues)).toEqual(['sku', 'brand']);
+    expect(requiredMigrationAttributes(issues, ['brand'])).toEqual(['sku']);
   });
 });

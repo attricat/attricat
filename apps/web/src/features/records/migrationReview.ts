@@ -134,9 +134,17 @@ export const migrationLayout = (
 
 export const requiredMigrationAttributes = (
   issues: readonly MigrationIssue[],
+  discardAttributes: readonly string[] = [],
 ) =>
   issues
-    .filter((issue) => issue.kind === migrationIssueKinds.missingRequired)
+    .filter(
+      (issue) =>
+        issue.kind === migrationIssueKinds.missingRequired ||
+        // Needs new links or an explicit discard, which the form can ask for
+        // before the server refuses.
+        (issue.kind === migrationIssueKinds.relationshipTargetChanged &&
+          !discardAttributes.includes(issue.attribute_code ?? '')),
+    )
     .map((issue) => issue.attribute_code)
     .filter((attributeCode): attributeCode is string => Boolean(attributeCode));
 
