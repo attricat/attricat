@@ -208,6 +208,20 @@ impl<S: RepositoryScope> AttricatRepository<S> {
         .await?)
     }
 
+    /// The records of `record_ids` that `actor`, including any limits of the token
+    /// it signed in with, holds `permission` on.
+    pub async fn principal_record_ids(
+        &self,
+        actor: AuthorizationActor,
+        workspace_id: Uuid,
+        permission: Permission,
+        record_ids: &[Uuid],
+    ) -> Result<HashSet<Uuid>, RepositoryError> {
+        let mut connection = self.pool.acquire().await?;
+        Self::principal_record_ids_on(&mut connection, actor, workspace_id, permission, record_ids)
+            .await
+    }
+
     /// Returns the subset of `record_ids` the user may access with
     /// `permission`, in one query. Equivalent to calling
     /// [`Self::is_authorized`] with each ID as the target: a workspace grant

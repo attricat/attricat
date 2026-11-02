@@ -493,6 +493,10 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
             target: TargetKind::RecordId,
         });
     }
+    // Duplicating creates a record, which needs a workspace grant like any create.
+    if path == "/v1/records/{record_id}/duplicate" {
+        return Some(write(TargetKind::None));
+    }
     if path.starts_with("/v1/records/{record_id}") || path.starts_with("/records/{record_id}") {
         return Some(if method == Method::DELETE {
             Policy {
