@@ -17,6 +17,7 @@ import {
   migrationFormValues,
   migrationIssueMessage,
   migrationLayout,
+  answeredMigrationRelationships,
   partitionMigrationIssues,
   removalFieldCode,
   removedAttributeIssues,
@@ -198,7 +199,10 @@ export const MigrateRecordPage = ({ recordId }: { recordId: string }) => {
           })}
           migrationReviews={migrationReviews}
           pendingConfirmations={pendingConfirmations}
-          requiredAttributes={requiredMigrationAttributes(preview.data.issues)}
+          requiredAttributes={requiredMigrationAttributes(
+            preview.data.issues,
+            discardAttributes,
+          )}
           initialValues={initialFields}
           isSubmitting={migrate.isPending}
           onCancel={() =>
@@ -211,7 +215,10 @@ export const MigrateRecordPage = ({ recordId }: { recordId: string }) => {
             migrate.mutate({
               expected_updated_at,
               values,
-              relationships,
+              relationships: answeredMigrationRelationships(
+                relationships,
+                inlineIssues,
+              ),
               discardAttributes: [...discardAttributes],
             })
           }

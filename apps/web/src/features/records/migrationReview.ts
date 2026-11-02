@@ -41,6 +41,30 @@ export const migrationFormValues = (
   );
 
 /**
+ * The relationships a migration replaces. A retargeted one left blank was not
+ * answered, and sending it empty would delete its links; the server then asks
+ * for a replacement or an explicit discard instead.
+ */
+export const answeredMigrationRelationships = <
+  Relationship extends {
+    attribute_code?: string | null;
+    target_record_ids: readonly string[];
+  },
+>(
+  relationships: readonly Relationship[],
+  issues: readonly MigrationIssue[],
+) =>
+  relationships.filter(
+    (relationship) =>
+      relationship.target_record_ids.length > 0 ||
+      !issues.some(
+        (issue) =>
+          issue.kind === migrationIssueKinds.relationshipTargetChanged &&
+          issue.attribute_code === relationship.attribute_code,
+      ),
+  );
+
+/**
  * Human-readable value of an attribute before migration; related records are
  * named by `recordLabel`.
  */
@@ -110,9 +134,17 @@ export const migrationLayout = (
 
 export const requiredMigrationAttributes = (
   issues: readonly MigrationIssue[],
+  discardAttributes: readonly string[] = [],
 ) =>
   issues
-    .filter((issue) => issue.kind === migrationIssueKinds.missingRequired)
+    .filter(
+      (issue) =>
+        issue.kind === migrationIssueKinds.missingRequired ||
+        // Needs new links or an explicit discard, which the form can ask for
+        // before the server refuses.
+        (issue.kind === migrationIssueKinds.relationshipTargetChanged &&
+          !discardAttributes.includes(issue.attribute_code ?? '')),
+    )
     .map((issue) => issue.attribute_code)
     .filter((attributeCode): attributeCode is string => Boolean(attributeCode));
 

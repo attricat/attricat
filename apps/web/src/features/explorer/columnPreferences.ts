@@ -75,7 +75,27 @@ export const getExplorerColumnPreferences = (
 export const setExplorerColumnPreferences = (
   blueprintId: string,
   preferences: ExplorerColumnPreferences,
-) => writeStoredJson(storageAreas.local, storageKey(blueprintId), preferences);
+) => {
+  const stored = readStoredJson(
+    storageAreas.local,
+    storageKey(blueprintId),
+    preferencesSchema,
+  );
+  // Preferences cover the shown revision's columns. Those of other revisions
+  // keep their place and visibility.
+  const shown = new Set(preferences.order);
+  const remaining = [...preferences.order];
+  const order = (stored?.order ?? []).map((id) =>
+    shown.has(id) ? (remaining.shift() ?? id) : id,
+  );
+  writeStoredJson(storageAreas.local, storageKey(blueprintId), {
+    hidden: [
+      ...preferences.hidden,
+      ...(stored?.hidden ?? []).filter((id) => !shown.has(id)),
+    ],
+    order: [...order, ...remaining],
+  });
+};
 
 export const clearExplorerColumnPreferences = (blueprintId: string) =>
   writeStored(storageAreas.local, storageKey(blueprintId), null);

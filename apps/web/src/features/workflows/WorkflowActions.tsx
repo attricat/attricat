@@ -22,6 +22,7 @@ export const WorkflowActions = ({
   disable,
   enable,
   publish,
+  revisions,
   runNow,
   workflowId,
 }: {
@@ -29,13 +30,21 @@ export const WorkflowActions = ({
   disable: UseMutationResult<unknown, Error, void>;
   enable: VersionMutation;
   publish: VersionMutation;
+  /** Every revision, newest first. */
+  revisions: readonly Workflow[];
   runNow: UseMutationResult<unknown, Error, string>;
   workflowId: string;
 }) => {
   const { t } = useTranslation();
   const [manualRecordId, setManualRecordId] = useState('');
   const [recordIdInvalid, setRecordIdInvalid] = useState(false);
-  const isEnabledRevision = current.enabled_version === current.version;
+  // A newer draft does not stop the published revisions from running.
+  const enabledRevision = revisions.find(
+    (revision) => revision.version === current.enabled_version,
+  );
+  const enableTarget = revisions.find(
+    (revision) => revision.status === revisionStatuses.published,
+  );
   return (
     <Stack
       direction="row"
@@ -60,17 +69,19 @@ export const WorkflowActions = ({
           {t('workflows.publish')}
         </Button>
       )}
-      {current.status === revisionStatuses.published && !isEnabledRevision && (
+      {enableTarget && enableTarget.version !== current.enabled_version && (
         <Button
           disabled={enable.isPending}
-          onClick={() => enable.mutate(current.version)}
+          onClick={() => enable.mutate(enableTarget.version)}
           startIcon={<PowerIcon />}
           variant="contained"
         >
-          {t('workflows.enable')}
+          {enableTarget === current
+            ? t('workflows.enable')
+            : t('workflows.enableRevision', { version: enableTarget.version })}
         </Button>
       )}
-      {isEnabledRevision && current.manual_enabled && (
+      {enabledRevision?.manual_enabled && (
         <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
           <TextField
             disabled={runNow.isPending}

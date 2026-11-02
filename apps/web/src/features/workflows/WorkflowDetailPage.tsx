@@ -124,6 +124,7 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
               disable={disable}
               enable={enable}
               publish={publish}
+              revisions={revisions.data ?? []}
               runNow={runNow}
               workflowId={workflowId}
             />

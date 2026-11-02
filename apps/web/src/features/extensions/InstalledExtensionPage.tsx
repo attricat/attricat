@@ -285,6 +285,7 @@ export const InstalledExtensionPage = ({
   });
   // Waiting for the person to confirm upgrading from this archive.
   const [archive, setArchive] = useState<File | null>(null);
+  const [removeOpen, setRemoveOpen] = useState(false);
   const closeArchiveDialog = () => {
     setArchive(null);
     action.reset();
@@ -313,7 +314,10 @@ export const InstalledExtensionPage = ({
               onLifecycleAction={(lifecycleAction) =>
                 action.mutate({ action: lifecycleAction })
               }
-              onRemove={() => action.mutate({ action: 'remove' })}
+              onRemove={() => {
+                action.reset();
+                setRemoveOpen(true);
+              }}
             />
           )
         }
@@ -340,7 +344,10 @@ export const InstalledExtensionPage = ({
         </Stack>
       )}
       <ApiErrorAlert error={detail.error} sx={{ mt: 2 }} />
-      <ApiErrorAlert error={archive ? null : action.error} sx={{ mt: 2 }} />
+      <ApiErrorAlert
+        error={archive || removeOpen ? null : action.error}
+        sx={{ mt: 2 }}
+      />
       {detail.data && (
         <InstalledExtensionTabs
           activeTab={tab}
@@ -369,6 +376,23 @@ export const InstalledExtensionPage = ({
       >
         {t('extensions.upgradeArchiveQuestion', { name: archive?.name })}{' '}
         {t('extensions.upgradeEffect')}
+      </ConfirmDialog>
+      <ConfirmDialog
+        confirmLabel={t('extensions.remove')}
+        destructive
+        error={action.error}
+        isPending={action.isPending}
+        onClose={() => {
+          setRemoveOpen(false);
+          action.reset();
+        }}
+        onConfirm={() => action.mutate({ action: 'remove' })}
+        open={removeOpen}
+        title={t('extensions.removeQuestion', {
+          name: installation && installedExtensionName(installation),
+        })}
+      >
+        {t('extensions.removeEffect')}
       </ConfirmDialog>
     </PageContainer>
   );

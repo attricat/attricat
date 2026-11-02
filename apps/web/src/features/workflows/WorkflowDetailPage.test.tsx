@@ -188,6 +188,41 @@ describe('WorkflowDetailPage', () => {
     ).toBe(true);
   });
 
+  it('keeps the live revision usable while a newer draft exists', async () => {
+    vi.mocked(currentSession).mockResolvedValue({
+      capabilities: { workflows_manage: true, workflows_read: true },
+    } as Awaited<ReturnType<typeof currentSession>>);
+    vi.mocked(listWorkflowRevisions).mockResolvedValue([
+      { ...workflow, version: 3, enabled_version: 2 },
+      {
+        ...workflow,
+        status: 'published',
+        version: 2,
+        enabled_version: 2,
+        manual_enabled: true,
+      },
+    ]);
+    vi.mocked(listWorkflowRuns).mockResolvedValue([]);
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Run now' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Enable/ })).toBeNull();
+  });
+
+  it('can enable the latest published revision behind a draft', async () => {
+    vi.mocked(currentSession).mockResolvedValue({
+      capabilities: { workflows_manage: true, workflows_read: true },
+    } as Awaited<ReturnType<typeof currentSession>>);
+    vi.mocked(listWorkflowRevisions).mockResolvedValue([
+      { ...workflow, version: 3 },
+      { ...workflow, status: 'published', version: 2 },
+    ]);
+    vi.mocked(listWorkflowRuns).mockResolvedValue([]);
+    renderPage();
+    expect(
+      await screen.findByRole('button', { name: 'Enable revision 2' }),
+    ).toBeTruthy();
+  });
+
   it('refreshes run diagnostics until a run finishes', async () => {
     vi.mocked(currentSession).mockResolvedValue({
       capabilities: { workflows_read: true },
