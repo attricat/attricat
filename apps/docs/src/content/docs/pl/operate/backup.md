@@ -18,7 +18,7 @@ Obraz Attricat nie zawiera `pg_dump`, `pg_restore` ani narzędzi S3. Użyj narz�
 
 Jeśli Twój dostawca potrafi wykonać migawki bazy danych i zasobnika w tym samym punkcie zatrzymania, użyj ich zamiast tego.
 
-Przechowuj dane uwierzytelniające w menedżerze sekretów, a nie w poleceniach, logach ani manifeście.
+Przechowuj dane uwierzytelniające w menedżerze sekretów, a nie w poleceniach, logach ani manifeście. Zachowaj `identity_provider_credential_key` i `extension_credential_key` tak długo jak kopie, które ich potrzebują: baza przechowuje sekrety klientów i poświadczenia połączeń zaszyfrowane tymi kluczami, więc po przywróceniu bez nich obszary robocze muszą ponownie podać sekrety dostawców tożsamości, a każde połączenie rozszerzenia trzeba skonfigurować od nowa.
 
 ## Przećwicz przywracanie
 
@@ -42,4 +42,7 @@ Jeśli którykolwiek krok się nie powiedzie, pozostaw środowisko docelowe zatr
 - **Historia wartości** starsza niż `ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` (domyślnie 90) jest usuwana przy starcie API.
 - **Pliki bez odwołań** są oznaczane jako usunięte, a następnie trwale usuwane po `FILE_DELETE_GRACE_SECONDS` (domyślnie jeden dzień). Aby zachować taki plik, odtwórz odwołanie do niego przed trwałym usunięciem. Nie traktuj okresu karencji jako kopii zapasowej.
 - **Wyniki operacji rozszerzeń** są przechowywane przez 30 dni od zakończenia uruchomienia.
-- **Zdarzenia i wpisy audytu** nie są automatycznie usuwane. Nie usuwaj ich ręcznie; system zdarzeń od nich zależy.
+- **Zdarzenia**, które otrzymały już wszystkie procedury obsługi i rozszerzenia, są usuwane po `DOMAIN_EVENT_RETENTION_DAYS` (domyślnie 90 dni). Zdarzenia z niedostarczonym lub nieudanym dostarczeniem pozostają.
+- **Wpisy audytu** są przechowywane bezterminowo, chyba że ustawisz `AUDIT_EVENT_RETENTION_DAYS`.
+
+Nie usuwaj ich ręcznie; system zdarzeń od nich zależy. Wszystkie ustawienia retencji opisuje [dokumentacja konfiguracji](/pl/reference/configuration/).

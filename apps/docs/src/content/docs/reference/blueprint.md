@@ -441,7 +441,6 @@ views:
 | `columns[].field` | string | A local scalar attribute, a local file attribute with a compatible renderer, or a path of up to three relationship hops ending in a scalar attribute, such as `family.product_type.name`. |
 | `columns[].label` | string | Column header. Defaults to the attribute name. |
 | `columns[].renderer` | component reference | `attricat.table_image@1`, a string display component (`attricat.color_display@1`, `attricat.email_display@1`, `attricat.url_display@1`, or `attricat.phone_display@1`), or an extension's table cell. |
-| `fields` | array of attribute codes | Older shorthand for local scalar columns. Cannot be combined with `columns`. |
 | `component` | component reference | Optional table component. |
 
 A column can be sorted in the Explorer only when it is scalar and every relationship hop in its path has `cardinality: one`.
@@ -479,7 +478,7 @@ Only a record blueprint can define it, and only under the name `explorer`. Witho
 | `text` | `text` | Static paragraph. |
 | `divider` | | Horizontal rule. |
 
-Every block accepts an optional `component` reference. Every `field` and `relationship_list` must name an attribute the blueprint has, including attributes selected from mixins.
+Every block except `explorer` accepts an optional `component` reference. Every `field` and `relationship_list` must name an attribute the blueprint has, including attributes selected from mixins.
 
 ### Component references
 
@@ -506,27 +505,19 @@ Built-in components:
 | ID | Version | Used on | Value types | Props |
 | --- | --- | --- | --- | --- |
 | `attricat.field_display` | 1 | `field` (detail) | Scalars | |
-| `attricat.field_edit` | 1 | `field` (edit) | Scalars | |
 | `attricat.relationship_list_display` | 1 | `relationship_list` (detail) | `relationship` | |
-| `attricat.relationship_list_edit` | 1 | `relationship_list` (edit) | `relationship` | |
 | `attricat.relationship_hierarchy` | 1 | `relationship_list` (detail) | `relationship` | `parent_field` |
 | `attricat.incoming_relationship_list_display` | 1 | `incoming_relationship_list` | | |
 | `attricat.record_heading` | 1 | `stack` (detail) | | |
 | `attricat.table_display` | 1 | `table` | Scalars | |
-| `attricat.table_edit` | 1 | `table` | Scalars | |
 | `attricat.table_image` | 1 | table column `renderer` | `file` with `cardinality: one` and `image_only: true` | |
 | `attricat.color_display` | 1 | `field` (detail), table column `renderer` | `string` | |
-| `attricat.color_edit` | 1 | `field` (edit) | `string` | |
 | `attricat.email_display` | 1 | `field` (detail), table column `renderer` | `string` | |
-| `attricat.email_edit` | 1 | `field` (edit) | `string` | |
 | `attricat.url_display` | 1 | `field` (detail), table column `renderer` | `string` | |
-| `attricat.url_edit` | 1 | `field` (edit) | `string` | |
 | `attricat.phone_display` | 1 | `field` (detail), table column `renderer` | `string` | |
-| `attricat.phone_edit` | 1 | `field` (edit) | `string` | |
 | `attricat.markdown_display` | 1 | `field` (detail) | `string` | |
-| `attricat.markdown_edit` | 1 | `field` (edit) | `string` | |
 
-Components marked *(edit)* are accepted only in the deprecated `edit` view. Where a `detail` field is editable, the web app uses the display component's paired edit component, or the standard editor for the value type. See [Field controls](/builders/views/#field-controls) for how these behave.
+Where a `detail` field is editable, the web app uses the input that goes with its display component, or the standard editor for the value type. See [Field controls](/builders/views/#field-controls) for how these behave.
 
 An extension cell's ID and version must match a [table cell](/extensions/manifest/#table-cells) declared by an enabled extension for the column's value type, and its `props` must match the cell's declared prop types.
 

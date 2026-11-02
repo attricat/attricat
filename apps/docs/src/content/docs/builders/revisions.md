@@ -7,7 +7,7 @@ description: How blueprint revisions work, why records stay pinned to one, and h
 
 Each blueprint has a sequence of revisions: 1, 2, 3, and so on.
 
-- A **draft** revision can be edited and deleted. No record can use it.
+- A **draft** revision is saved but not in use. No record can use it. Saving your changes again makes a new draft revision. A saved draft can't be changed or deleted; one you don't publish simply stays unpublished.
 - A **published** revision is frozen. Its YAML, attributes, views, and schemas never change again.
 - The **current** revision is the highest published one. New records use it.
 
@@ -42,8 +42,7 @@ Open the record and choose to upgrade it. Attricat compares its current values w
 | Outcome | Meaning | What to do |
 | --- | --- | --- |
 | `ready` | Every value fits the new revision. | Migrate. |
-| `needs_input` | The new revision needs something the record does not have, such as a newly required attribute. | Fill in the missing values on the upgrade page, then migrate. |
-| `blocked` | Existing values cannot fit, for example a value of a changed type or relationships that exceed a new cardinality. | Fix or discard the conflicting values, then migrate. |
+| `needs_input` | The record's values don't fit the new revision: a newly required attribute has no value, or relationships exceed a new cardinality. | Fill in or correct the values on the upgrade page, then migrate. |
 
 The target is always the current published revision. Migration copies values into the new revision, validates them, rebuilds the record's search data, and records the migration in one step. If anything fails, nothing changes.
 
@@ -80,7 +79,7 @@ acli record migrate-bulk --blueprint product --from-version 1 --dry-run
 acli record migrate-bulk --blueprint product --from-version 1
 ```
 
-The summary groups records into `ready`, `needs_input`, `blocked`, and `failed`. Records that need input or are blocked are skipped; resolve them on their upgrade pages, then run the command again.
+The summary groups records into `ready`, `needs_input`, and `failed`. Records that need input are skipped; resolve them on their upgrade pages, then run the command again.
 
 ## Designing revisions that migrate cleanly
 

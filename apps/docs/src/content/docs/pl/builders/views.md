@@ -86,6 +86,7 @@ Aby nadać stronie szczegółów właściwy tytuł, umieść pola w `stack` z ko
 ```yaml
 views:
   detail:
+    type: stack
     children:
       - type: stack
         component: {id: attricat.record_heading, version: 1}
@@ -220,7 +221,7 @@ Każda relacja na ścieżce musi mieć jeden schemat docelowy i `cardinality: on
 
 ## Kontrolki pól
 
-Atrybut `string` jest domyślnie zwykłym tekstem. Aby pokazać go jako kolor, adres e-mail, URL, numer telefonu lub Markdown, wskaż komponent wyświetlania w jego polu szczegółów (lub kolumnie tabeli). Tam, gdzie pole jest edytowalne, aplikacja internetowa używa sparowanego komponentu edycji, na przykład `attricat.url_edit` dla `attricat.url_display`:
+Atrybut `string` jest domyślnie zwykłym tekstem. Aby pokazać go jako kolor, adres e-mail, URL, numer telefonu lub Markdown, wskaż komponent wyświetlania w jego polu szczegółów (lub kolumnie tabeli). Tam, gdzie pole jest edytowalne, aplikacja internetowa używa kontrolki powiązanej z tym komponentem wyświetlania:
 
 ```yaml
 views:
@@ -241,11 +242,11 @@ views:
 
 | Kontrolka | Komponenty | Działanie |
 | --- | --- | --- |
-| Kolor | `attricat.color_display`, `attricat.color_edit` | Sześciocyfrowy kod szesnastkowy (`#RRGGBB`), wybierany w próbniku kolorów; przycisk edycji obok otwiera pole do wpisania dokładnej wartości. Wyświetlany jako próbka obok tekstu, który po kliknięciu kopiuje wartość. |
-| E-mail | `attricat.email_display`, `attricat.email_edit` | Jeden zwykły adres ASCII, np. `name+tag@example.com`. Wyświetlany jako link `mailto:`. |
-| URL | `attricat.url_display`, `attricat.url_edit` | Tylko bezwzględne adresy `http://` lub `https://`. Linki otwierają się w nowej karcie. |
-| Telefon | `attricat.phone_display`, `attricat.phone_edit` | Zapisywany tak, jak go wpisano. Numery zaczynające się od `+` i numeru kierunkowego kraju stają się linkami `tel:`; numer wewnętrzny można poprzedzić `ext.` lub `x`. |
-| Markdown | `attricat.markdown_display`, `attricat.markdown_edit` | CommonMark z kartami **Edytuj** i **Podgląd**. Na stronie rekordu ustawiona wartość jest pokazywana sformatowana, dopóki nie zdecydujesz się jej edytować. Surowy HTML jest pomijany, obrazy pokazują tekst alternatywny, a linki są ograniczone do HTTP(S), `mailto:`, ścieżek względnych i fragmentów. Tekst jest zapisywany dokładnie tak, jak go wpisano, łącznie z białymi znakami. Niedostępny w kolumnach tabeli. |
+| Kolor | `attricat.color_display` | Sześciocyfrowy kod szesnastkowy (`#RRGGBB`), wybierany w próbniku kolorów; przycisk edycji obok otwiera pole do wpisania dokładnej wartości. Wyświetlany jako próbka obok tekstu, który po kliknięciu kopiuje wartość. |
+| E-mail | `attricat.email_display` | Jeden zwykły adres ASCII, np. `name+tag@example.com`. Wyświetlany jako link `mailto:`. |
+| URL | `attricat.url_display` | Tylko bezwzględne adresy `http://` lub `https://`. Linki otwierają się w nowej karcie. |
+| Telefon | `attricat.phone_display` | Zapisywany tak, jak go wpisano. Numery zaczynające się od `+` i numeru kierunkowego kraju stają się linkami `tel:`; numer wewnętrzny można poprzedzić `ext.` lub `x`. |
+| Markdown | `attricat.markdown_display` | CommonMark z kartami **Edytuj** i **Podgląd**. Na stronie rekordu ustawiona wartość jest pokazywana sformatowana, dopóki nie zdecydujesz się jej edytować. Surowy HTML jest pomijany, obrazy pokazują tekst alternatywny, a linki są ograniczone do HTTP(S), `mailto:`, ścieżek względnych i fragmentów. Tekst jest zapisywany dokładnie tak, jak go wpisano, łącznie z białymi znakami. Niedostępny w kolumnach tabeli. |
 
 Wartości, które nie pasują do kontrolki, np. starsze dane, nadal są widoczne jako zwykły tekst bez linku i próbki. Pola bez komponentu korzystają ze standardowego edytora dla swojego typu wartości.
 

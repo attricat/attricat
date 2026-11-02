@@ -100,7 +100,7 @@ triggers:
 - Jeden zapis może wygenerować `attribute_value.changed.v1`, `relationship.changed.v1` albo `record.updated.v1`, zależnie od tego, co zawiera. Wymień każdy typ zdarzenia, przez który mogą zmienić się dane atrybuty, jak w przykładzie powyżej.
 - `record.created.v1` traktuje każdą wartość, z którą powstaje nowy rekord, łącznie z domyślnymi, jako zmienioną.
 - **Atrybuty relacji:** dodanie lub usunięcie celu jest zmianą atrybutu relacji. Każdy dodany lub usunięty cel to osobny fakt z `change_kind` równym `relationship_add` lub `relationship_remove`. Zmiany samego powiązanego rekordu są zdarzeniami tamtego rekordu, nie tego.
-- **Atrybuty plikowe:** przesłanie, podłączenie, zmiana kolejności lub usunięcie plików trafia do dziennika audytu, ale nie tworzy zdarzenia, więc atrybut plikowy w `attributes` nigdy nie uruchamia wykonania. Śledź zmiany plików atrybutem skalarnym, który zmienia się razem z nimi, np. numerem rewizji.
+- **Atrybuty plikowe:** przesłanie, podłączenie, zmiana kolejności lub usunięcie plików tworzy zdarzenie `attribute_value.changed.v1` z faktem dla atrybutu, więc aby reagować na zmiany plików, wymień ten typ zdarzenia.
 - `attributes` nie działa z `record.migrated.v1`, które nie zawiera faktów. Łączy się z `envelope` i `facts`: wszystkie muszą pasować.
 
 ### Reaguj tylko na dodane lub usunięte cele relacji

@@ -86,6 +86,7 @@ To give the detail page a proper title, wrap fields in a `stack` with the `attri
 ```yaml
 views:
   detail:
+    type: stack
     children:
       - type: stack
         component: {id: attricat.record_heading, version: 1}
@@ -220,7 +221,7 @@ Every relationship on a path must have a single target blueprint and `cardinalit
 
 ## Field controls
 
-A `string` attribute is plain text by default. To show it as a color, email address, URL, phone number, or Markdown, name a display component on its detail field (or table column). Where the field is editable, the web app uses the paired edit component, such as `attricat.url_edit` for `attricat.url_display`:
+A `string` attribute is plain text by default. To show it as a color, email address, URL, phone number, or Markdown, name a display component on its detail field (or table column). Where the field is editable, the web app uses the input that goes with that display component:
 
 ```yaml
 views:
@@ -241,11 +242,11 @@ views:
 
 | Control | Components | Behavior |
 | --- | --- | --- |
-| Color | `attricat.color_display`, `attricat.color_edit` | Six-digit hex (`#RRGGBB`), chosen with a color picker; the edit button beside it opens a field for typing an exact value. Shown as a swatch next to the text, which copies the value when clicked. |
-| Email | `attricat.email_display`, `attricat.email_edit` | One plain ASCII address, such as `name+tag@example.com`. Shown as a `mailto:` link. |
-| URL | `attricat.url_display`, `attricat.url_edit` | Absolute `http://` or `https://` URLs only. Links open in a new tab. |
-| Phone | `attricat.phone_display`, `attricat.phone_edit` | Stored as typed. Numbers starting with `+` and a country code become `tel:` links; extensions can use `ext.` or `x`. |
-| Markdown | `attricat.markdown_display`, `attricat.markdown_edit` | CommonMark with **Write** and **Preview** tabs. On the record page a set value shows formatted until you choose to edit it. Raw HTML is ignored, images show their alt text, and links are limited to HTTP(S), `mailto:`, relative paths, and fragments. Text is stored exactly as typed, including whitespace. Not available for table columns. |
+| Color | `attricat.color_display` | Six-digit hex (`#RRGGBB`), chosen with a color picker; the edit button beside it opens a field for typing an exact value. Shown as a swatch next to the text, which copies the value when clicked. |
+| Email | `attricat.email_display` | One plain ASCII address, such as `name+tag@example.com`. Shown as a `mailto:` link. |
+| URL | `attricat.url_display` | Absolute `http://` or `https://` URLs only. Links open in a new tab. |
+| Phone | `attricat.phone_display` | Stored as typed. Numbers starting with `+` and a country code become `tel:` links; extensions can use `ext.` or `x`. |
+| Markdown | `attricat.markdown_display` | CommonMark with **Write** and **Preview** tabs. On the record page a set value shows formatted until you choose to edit it. Raw HTML is ignored, images show their alt text, and links are limited to HTTP(S), `mailto:`, relative paths, and fragments. Text is stored exactly as typed, including whitespace. Not available for table columns. |
 
 Values that do not fit the control, such as older data, are still shown, as plain text without a link or swatch. Fields without a component use the standard editor for their value type.
 

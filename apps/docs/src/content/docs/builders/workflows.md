@@ -100,7 +100,7 @@ triggers:
 - A single save can produce `attribute_value.changed.v1`, `relationship.changed.v1`, or `record.updated.v1`, depending on what it contains. List every event type the attributes can change through, as above.
 - `record.created.v1` counts every value the new record starts with, including defaults, as changed.
 - **Relationship attributes:** adding or removing a target is a change to the relationship attribute. Each added or removed target is its own fact, with `change_kind` `relationship_add` or `relationship_remove`. Changes to the linked record itself are events on that record, not on this one.
-- **File attributes:** uploading, linking, reordering, or removing files is recorded in the audit log but does not record an event, so a file attribute in `attributes` never starts a run. Track file changes with a scalar attribute that changes alongside them, such as a revision number.
+- **File attributes:** uploading, linking, reordering, or removing files records `attribute_value.changed.v1` with a fact for the attribute, so list that event type to react to file changes.
 - `attributes` can't be used with `record.migrated.v1`, which carries no facts. It combines with `envelope` and `facts`: all of them must match.
 
 ### React only to added or removed relationship targets

@@ -62,7 +62,7 @@ views:
 - `kind: record` means people can create records from it.
 - Every record blueprint needs `views.dropdown_option`. It tells Attricat how to label a category wherever one is shown in a list: relationship pickers, filter pills, search results.
 
-Save this as a draft. A draft can be edited freely and cannot hold records yet.
+Save this as a draft. A draft cannot hold records yet, and saving changes to it makes a new draft revision.
 
 ## Step 2: publish
 

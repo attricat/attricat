@@ -18,7 +18,7 @@ The Attricat image contains no `pg_dump`, `pg_restore`, or S3 tools. Use version
 
 If your provider can take database and bucket snapshots at the same stopped point, use them instead.
 
-Keep credentials in your secret manager, not in commands, logs, or the manifest.
+Keep credentials in your secret manager, not in commands, logs, or the manifest. Keep `identity_provider_credential_key` and `extension_credential_key` as long as the backups that need them: the database stores client secrets and connection credentials encrypted with those keys, so a restore without them means workspaces enter their identity provider secrets again and every extension connection is set up again.
 
 ## Rehearse a restore
 
@@ -42,4 +42,7 @@ If any step fails, leave the target stopped and investigate. Never go live with 
 - **Value history** older than `ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` (90 by default) is deleted when the API starts.
 - **Unreferenced files** are marked deleted, then purged after `FILE_DELETE_GRACE_SECONDS` (one day by default). To keep such a file, recreate its reference before the purge runs. Don't rely on the grace period as a backup.
 - **Extension operation outputs** are kept for 30 days after the run completes.
-- **Events and audit records** are not pruned automatically. Do not delete them by hand; the event system depends on them.
+- **Events** that every handler and extension has received are deleted after `DOMAIN_EVENT_RETENTION_DAYS` (90 by default). Events with an undelivered or failed delivery stay.
+- **Audit records** are kept forever unless you set `AUDIT_EVENT_RETENTION_DAYS`.
+
+Don't delete either by hand; the event system depends on them. See the [configuration reference](/reference/configuration/) for every retention setting.

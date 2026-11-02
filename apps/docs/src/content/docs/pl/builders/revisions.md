@@ -7,7 +7,7 @@ description: Jak działają wersje schematów, dlaczego rekordy są przypięte d
 
 Każdy schemat ma ciąg wersji: 1, 2, 3 i tak dalej.
 
-- Wersję w stanie **szkicu** można edytować i usuwać. Żaden rekord nie może z niej korzystać.
+- Wersja w stanie **szkicu** jest zapisana, ale nieużywana. Żaden rekord nie może z niej korzystać. Ponowny zapis zmian tworzy nową wersję szkicu. Zapisanego szkicu nie można zmienić ani usunąć; nieopublikowany po prostu pozostaje nieopublikowany.
 - Wersja **opublikowana** jest zamrożona. Jej YAML, atrybuty, widoki i schematy walidacji nigdy się już nie zmieniają.
 - Wersja **bieżąca** to najwyższa opublikowana wersja. Korzystają z niej nowe rekordy.
 
@@ -42,8 +42,7 @@ Otwórz rekord i wybierz jego aktualizację. Attricat porównuje jego bieżące 
 | Wynik | Znaczenie | Co zrobić |
 | --- | --- | --- |
 | `ready` | Każda wartość pasuje do nowej wersji. | Zmigruj. |
-| `needs_input` | Nowa wersja wymaga czegoś, czego rekord nie ma, np. nowego wymaganego atrybutu. | Uzupełnij brakujące wartości na stronie aktualizacji, a następnie zmigruj. |
-| `blocked` | Istniejące wartości nie mogą pasować, np. wartość zmienionego typu lub relacje przekraczające nową liczność. | Popraw lub odrzuć konfliktowe wartości, a następnie zmigruj. |
+| `needs_input` | Wartości rekordu nie pasują do nowej wersji: nowy wymagany atrybut nie ma wartości albo relacje przekraczają nową liczność. | Uzupełnij lub popraw wartości na stronie aktualizacji, a następnie zmigruj. |
 
 Celem jest zawsze bieżąca opublikowana wersja. Migracja w jednym kroku kopiuje wartości do nowej wersji, waliduje je, odbudowuje dane wyszukiwania rekordu i zapisuje migrację. Jeśli cokolwiek się nie powiedzie, nic się nie zmienia.
 
@@ -80,7 +79,7 @@ acli record migrate-bulk --blueprint product --from-version 1 --dry-run
 acli record migrate-bulk --blueprint product --from-version 1
 ```
 
-Podsumowanie grupuje rekordy w `ready`, `needs_input`, `blocked` i `failed`. Rekordy wymagające danych lub zablokowane są pomijane; rozwiąż je na ich stronach aktualizacji, a następnie uruchom polecenie ponownie.
+Podsumowanie grupuje rekordy w `ready`, `needs_input` i `failed`. Rekordy wymagające danych są pomijane; rozwiąż je na ich stronach aktualizacji, a następnie uruchom polecenie ponownie.
 
 ## Projektowanie wersji, które migrują bez problemów
 

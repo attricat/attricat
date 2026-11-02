@@ -15,8 +15,9 @@ attributes:
 
 views:
   detail:
+    type: tabs
     tabs:
-      - {label: '{{Overview}}'}
+      - {label: '{{Overview}}', children: [{type: field, field: price}]}
 ```
 
 In YAML, quote a label that starts with `{{`, as above; unquoted, YAML reads the braces as a mapping.

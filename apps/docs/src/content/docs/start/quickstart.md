@@ -24,7 +24,8 @@ attributes:
   - code: parent
     value_type: relationship
     target_blueprint: category
-    cardinality: one
+    tree: true
+    context_editable: default
 
 views:
   dropdown_option:
@@ -34,7 +35,7 @@ views:
 
 Save it, then **Publish** revision 1.
 
-`parent` points at another category, so categories can form a tree. `kind: record` makes this a record blueprint.
+`parent` points at another category, and `tree: true` makes categories a tree, which is what lets a filter on a category include everything under it. A tree is shared by every context, so `parent` needs `context_editable: default`. `kind: record` makes this a record blueprint.
 
 ## 2. Create a product blueprint
 

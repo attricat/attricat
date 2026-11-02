@@ -15,8 +15,9 @@ attributes:
 
 views:
   detail:
+    type: tabs
     tabs:
-      - {label: '{{Overview}}'}
+      - {label: '{{Overview}}', children: [{type: field, field: price}]}
 ```
 
 W YAML ujmij w cudzysłów etykietę zaczynającą się od `{{`, jak powyżej; bez cudzysłowu YAML odczyta nawiasy jako mapowanie.

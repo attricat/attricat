@@ -441,7 +441,6 @@ views:
 | `columns[].field` | ciąg znaków | Lokalny atrybut skalarny, lokalny atrybut plikowy ze zgodnym rendererem lub ścieżka o maksymalnie trzech krokach relacji zakończona atrybutem skalarnym, np. `family.product_type.name`. |
 | `columns[].label` | ciąg znaków | Nagłówek kolumny. Domyślnie nazwa atrybutu. |
 | `columns[].renderer` | odwołanie do komponentu | `attricat.table_image@1`, komponent wyświetlania tekstu (`attricat.color_display@1`, `attricat.email_display@1`, `attricat.url_display@1` lub `attricat.phone_display@1`) albo komórka tabeli z rozszerzenia. |
-| `fields` | tablica kodów atrybutów | Starszy skrót dla lokalnych kolumn skalarnych. Nie można go łączyć z `columns`. |
 | `component` | odwołanie do komponentu | Opcjonalny komponent tabeli. |
 
 Kolumnę można sortować w przeglądarce rekordów tylko wtedy, gdy jest skalarna, a każdy krok relacji w jej ścieżce ma `cardinality: one`.
@@ -479,7 +478,7 @@ Może go zdefiniować tylko schemat rekordów i tylko pod nazwą `explorer`. Bez
 | `text` | `text` | Statyczny akapit. |
 | `divider` | | Linia pozioma. |
 
-Każdy blok przyjmuje opcjonalne odwołanie `component`. Każdy `field` i `relationship_list` musi wskazywać atrybut, który schemat posiada, łącznie z atrybutami wybranymi z domieszek.
+Każdy blok oprócz `explorer` przyjmuje opcjonalne odwołanie `component`. Każdy `field` i `relationship_list` musi wskazywać atrybut, który schemat posiada, łącznie z atrybutami wybranymi z domieszek.
 
 ### Odwołania do komponentów
 
@@ -506,27 +505,19 @@ Wbudowane komponenty:
 | ID | Wersja | Używany w | Typy wartości | Właściwości |
 | --- | --- | --- | --- | --- |
 | `attricat.field_display` | 1 | `field` (detail) | Skalarne | |
-| `attricat.field_edit` | 1 | `field` (edit) | Skalarne | |
 | `attricat.relationship_list_display` | 1 | `relationship_list` (detail) | `relationship` | |
-| `attricat.relationship_list_edit` | 1 | `relationship_list` (edit) | `relationship` | |
 | `attricat.relationship_hierarchy` | 1 | `relationship_list` (detail) | `relationship` | `parent_field` |
 | `attricat.incoming_relationship_list_display` | 1 | `incoming_relationship_list` | | |
 | `attricat.record_heading` | 1 | `stack` (detail) | | |
 | `attricat.table_display` | 1 | `table` | Skalarne | |
-| `attricat.table_edit` | 1 | `table` | Skalarne | |
 | `attricat.table_image` | 1 | `renderer` kolumny tabeli | `file` z `cardinality: one` i `image_only: true` | |
 | `attricat.color_display` | 1 | `field` (detail), `renderer` kolumny tabeli | `string` | |
-| `attricat.color_edit` | 1 | `field` (edit) | `string` | |
 | `attricat.email_display` | 1 | `field` (detail), `renderer` kolumny tabeli | `string` | |
-| `attricat.email_edit` | 1 | `field` (edit) | `string` | |
 | `attricat.url_display` | 1 | `field` (detail), `renderer` kolumny tabeli | `string` | |
-| `attricat.url_edit` | 1 | `field` (edit) | `string` | |
 | `attricat.phone_display` | 1 | `field` (detail), `renderer` kolumny tabeli | `string` | |
-| `attricat.phone_edit` | 1 | `field` (edit) | `string` | |
 | `attricat.markdown_display` | 1 | `field` (detail) | `string` | |
-| `attricat.markdown_edit` | 1 | `field` (edit) | `string` | |
 
-Komponenty oznaczone *(edit)* są akceptowane tylko w przestarzałym widoku `edit`. Tam, gdzie pole w `detail` jest edytowalne, aplikacja internetowa używa komponentu edycji sparowanego z komponentem wyświetlania albo standardowego edytora dla typu wartości. Działanie tych komponentów opisano w sekcji [Kontrolki pól](/pl/builders/views/#kontrolki-pól).
+Tam, gdzie pole w `detail` jest edytowalne, aplikacja internetowa używa kontrolki powiązanej z jego komponentem wyświetlania albo standardowego edytora dla typu wartości. Działanie tych komponentów opisano w sekcji [Kontrolki pól](/pl/builders/views/#kontrolki-pól).
 
 Identyfikator i wersja komórki z rozszerzenia muszą odpowiadać [komórce tabeli](/pl/extensions/manifest/#komórki-tabeli) zadeklarowanej przez włączone rozszerzenie dla typu wartości kolumny, a jej `props` muszą pasować do zadeklarowanych typów właściwości.
 

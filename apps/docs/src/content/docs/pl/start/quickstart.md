@@ -24,7 +24,8 @@ attributes:
   - code: parent
     value_type: relationship
     target_blueprint: category
-    cardinality: one
+    tree: true
+    context_editable: default
 
 views:
   dropdown_option:
@@ -34,7 +35,7 @@ views:
 
 Zapisz go, a następnie **Opublikuj** wersję 1.
 
-`parent` wskazuje na inną kategorię, więc kategorie mogą tworzyć drzewo. `kind: record` oznacza schemat rekordu.
+`parent` wskazuje na inną kategorię, a `tree: true` czyni z kategorii drzewo, dzięki czemu filtr po kategorii obejmuje wszystko, co znajduje się pod nią. Drzewo jest wspólne dla wszystkich kontekstów, więc `parent` wymaga `context_editable: default`. `kind: record` oznacza schemat rekordu.
 
 ## 2. Utwórz schemat produktu
 

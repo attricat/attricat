@@ -62,7 +62,7 @@ views:
 - `kind: record` oznacza, że można z niego tworzyć rekordy.
 - Każdy schemat rekordu potrzebuje `views.dropdown_option`. Określa on, jak Attricat opisuje kategorię wszędzie tam, gdzie pojawia się ona na liście: w selektorach relacji, etykietach filtrów i wynikach wyszukiwania.
 
-Zapisz to jako szkic. Szkic można dowolnie edytować, ale nie może jeszcze zawierać rekordów.
+Zapisz to jako szkic. Szkic nie może jeszcze zawierać rekordów, a zapisanie w nim zmian tworzy nową wersję szkicu.
 
 ## Krok 2: opublikuj
 
