@@ -103,6 +103,34 @@ describe('SessionErrorState', () => {
   });
 });
 
+describe('AppLayout session failures', () => {
+  it('keeps the app open when refetching a signed-in session fails', async () => {
+    currentSessionMock.mockResolvedValueOnce(session);
+    const { queryClient } = renderAppLayout();
+    await screen.findByRole('button', { name: 'Sign out' });
+
+    currentSessionMock.mockRejectedValueOnce(new Error('Service unavailable'));
+    await queryClient.refetchQueries({ queryKey: authQueryKeys.session() });
+
+    await waitFor(() =>
+      expect(queryClient.getQueryState(authQueryKeys.session())?.status).toBe(
+        'error',
+      ),
+    );
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('reports a session that could not be restored at all', async () => {
+    currentSessionMock.mockRejectedValueOnce(new Error('Service unavailable'));
+    renderAppLayout();
+
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      "We couldn't restore your session",
+    );
+  });
+});
+
 describe('AppLayout navigation', () => {
   it('uses the expanded navigation width on mobile', async () => {
     isDesktop = false;

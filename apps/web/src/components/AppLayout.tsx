@@ -113,7 +113,9 @@ export const AppLayout = () => {
     ) : (
       <Outlet />
     );
-  if (session.isError)
+  // A failed refetch keeps the cached session, and with it any unsaved input;
+  // being signed out is a successful `null`, not an error.
+  if (session.isError && !session.data)
     return (
       <SessionErrorState
         onRetry={() => void session.refetch()}
