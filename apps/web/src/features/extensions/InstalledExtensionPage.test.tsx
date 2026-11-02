@@ -7,7 +7,13 @@ import {
   createRouter,
   RouterProvider,
 } from '@tanstack/react-router';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { InstalledExtensionPage } from './InstalledExtensionPage';
@@ -193,6 +199,12 @@ describe('InstalledExtensionPage', () => {
     const reads = vi.mocked(extensionDetail).mock.calls.length;
 
     fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+    expect(removeExtension).not.toHaveBeenCalled();
+    fireEvent.click(
+      within(await screen.findByRole('dialog')).getByRole('button', {
+        name: 'Remove',
+      }),
+    );
 
     await screen.findByText('Installed extensions');
     expect(removeExtension).toHaveBeenCalledWith('example');
