@@ -371,6 +371,8 @@ impl AttricatRepository {
         sqlx::query("INSERT INTO rules(id,workspace_id,blueprint_id,context_id,code,name,version,definition,definition_hash,compiled_plan,created_by_user_id) SELECT id,workspace_id,blueprint_id,context_id,$3,$4,$5,$6,$7,$8,$9 FROM rules WHERE workspace_id=$1 AND id=$2 AND version=$10").bind(ws).bind(id).bind(&compiled.code).bind(&compiled.name).bind(next).bind(&input.definition).bind(&compiled.raw_definition_hash).bind(plan).bind(self.actor_user_id()).bind(version).execute(&mut *tx).await?;
         sqlx::query("UPDATE rule_lifecycles SET current_version=$3,updated_at=now() WHERE workspace_id=$1 AND rule_id=$2")
             .bind(ws).bind(id).bind(next).execute(&mut *tx).await?;
+        // Before the record rows below, the order `disable_rule` locks them in.
+        advance_generation(&mut tx, ws, Generation::Attricat).await?;
         // Findings belong to the definition that reported them.
         let superseded: Vec<Uuid> = sqlx::query_scalar("UPDATE rule_findings SET state=$4,resolved_at=clock_timestamp(),resolved_by_run_id=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND rule_id=$2 AND evaluation_key<>$3 AND state<>$4 RETURNING record_id")
             .bind(ws).bind(id).bind(&compiled.raw_definition_hash).bind(RuleFindingState::Resolved.as_str()).fetch_all(&mut *tx).await?;
@@ -391,7 +393,6 @@ impl AttricatRepository {
             self.enqueue_rule_task(&mut tx, ws, run_id, None, None)
                 .await?;
         }
-        advance_generation(&mut tx, ws, Generation::Attricat).await?;
         self.commit_mutation(tx).await?;
         self.get_rule(id)
             .await?
@@ -443,6 +444,15 @@ impl AttricatRepository {
                 accept_existing_violations,
             )
             .await?;
+        }
+        // Occurrences missed while disabled are not owed; catching up one at a
+        // time would hold back the schedule for hours.
+        if re_enabling {
+            sqlx::query("DELETE FROM rule_schedule_states WHERE workspace_id=$1 AND rule_id=$2")
+                .bind(ws)
+                .bind(id)
+                .execute(&mut **tx)
+                .await?;
         }
         sqlx::query("UPDATE rule_lifecycles SET enabled=true,activation_sequence=(SELECT COALESCE(max(sequence),0) FROM domain_events WHERE workspace_id=$1),enabled_at=now(),disabled_at=NULL,updated_at=now() WHERE workspace_id=$1 AND rule_id=$2").bind(ws).bind(id).execute(&mut **tx).await?;
         advance_generation(tx, ws, Generation::Attricat).await?;
@@ -1222,7 +1232,7 @@ impl AttricatRepository {
             let (failed, passed): (Vec<_>, Vec<_>) =
                 results.iter().partition(|result| result.failed);
             if !failed.is_empty() {
-                created = sqlx::query_scalar("WITH upserted AS (INSERT INTO rule_findings(id,workspace_id,rule_id,rule_version,record_id,context_id,evaluation_key,severity,message,evidence) SELECT f.id,$1,$2,$3,f.record_id,$4,f.evaluation_key,f.severity,f.message,f.evidence FROM unnest($5::uuid[],$6::uuid[],$7::text[],$8::text[],$9::text[],$10::jsonb[]) AS f(id,record_id,evaluation_key,severity,message,evidence) ON CONFLICT(workspace_id,rule_id,record_id,context_id,evaluation_key) DO UPDATE SET rule_version=EXCLUDED.rule_version,severity=EXCLUDED.severity,message=EXCLUDED.message,evidence=EXCLUDED.evidence,state='open',resolved_at=NULL,resolved_by_run_id=NULL,updated_at=clock_timestamp() RETURNING (xmax=0) AS inserted) SELECT count(*) FILTER (WHERE inserted) FROM upserted")
+                created = sqlx::query_scalar("WITH upserted AS (INSERT INTO rule_findings(id,workspace_id,rule_id,rule_version,record_id,context_id,evaluation_key,severity,message,evidence) SELECT f.id,$1,$2,$3,f.record_id,$4,f.evaluation_key,f.severity,f.message,f.evidence FROM unnest($5::uuid[],$6::uuid[],$7::text[],$8::text[],$9::text[],$10::jsonb[]) AS f(id,record_id,evaluation_key,severity,message,evidence) ON CONFLICT(workspace_id,rule_id,record_id,context_id,evaluation_key) DO UPDATE SET rule_version=EXCLUDED.rule_version,severity=EXCLUDED.severity,message=EXCLUDED.message,evidence=EXCLUDED.evidence,state=CASE WHEN rule_findings.state='acknowledged' THEN 'acknowledged' ELSE 'open' END,resolved_at=NULL,resolved_by_run_id=NULL,updated_at=clock_timestamp() RETURNING (xmax=0) AS inserted) SELECT count(*) FILTER (WHERE inserted) FROM upserted")
                     .bind(ws)
                     .bind(run.rule_id)
                     .bind(run.rule_version)
@@ -1251,7 +1261,7 @@ impl AttricatRepository {
         } else {
             for result in &results {
                 if result.failed {
-                    let inserted: bool = sqlx::query_scalar("INSERT INTO rule_findings(id,workspace_id,rule_id,rule_version,record_id,context_id,evaluation_key,severity,message,evidence) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(workspace_id,rule_id,record_id,context_id,evaluation_key) DO UPDATE SET rule_version=EXCLUDED.rule_version,severity=EXCLUDED.severity,message=EXCLUDED.message,evidence=EXCLUDED.evidence,state='open',resolved_at=NULL,resolved_by_run_id=NULL,updated_at=clock_timestamp() RETURNING (xmax=0)")
+                    let inserted: bool = sqlx::query_scalar("INSERT INTO rule_findings(id,workspace_id,rule_id,rule_version,record_id,context_id,evaluation_key,severity,message,evidence) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(workspace_id,rule_id,record_id,context_id,evaluation_key) DO UPDATE SET rule_version=EXCLUDED.rule_version,severity=EXCLUDED.severity,message=EXCLUDED.message,evidence=EXCLUDED.evidence,state=CASE WHEN rule_findings.state='acknowledged' THEN 'acknowledged' ELSE 'open' END,resolved_at=NULL,resolved_by_run_id=NULL,updated_at=clock_timestamp() RETURNING (xmax=0)")
                         .bind(Uuid::new_v4()).bind(ws).bind(run.rule_id).bind(run.rule_version).bind(result.record_id).bind(run.context_id).bind(&result.evaluation_key).bind(&result.severity).bind(&result.message).bind(&result.evidence).fetch_one(&mut *tx).await?;
                     created += i64::from(inserted);
                 } else {

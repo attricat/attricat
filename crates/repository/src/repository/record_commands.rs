@@ -865,6 +865,14 @@ impl AttricatRepository {
         record_id: Uuid,
         expected_updated_at: Option<DateTime<Utc>>,
     ) -> Result<(Vec<AuditEventChange>, NewDomainEvent), RepositoryError> {
+        // No rule run reports on a deleted record, so its findings end here.
+        // Before the record lock, the order rule runs take them in.
+        sqlx::query("UPDATE rule_findings SET state=$3,resolved_at=clock_timestamp(),resolved_by_run_id=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND record_id=$2 AND state<>$3")
+            .bind(self.workspace_id.0)
+            .bind(record_id)
+            .bind(attricat_domain::states::RuleFindingState::Resolved.as_str())
+            .execute(&mut **transaction)
+            .await?;
         let record = self.lock_record(transaction, record_id).await?;
         let before = self.record_audit_snapshot(transaction, record_id).await?;
         if expected_updated_at.is_some_and(|expected| expected != record.updated_at) {

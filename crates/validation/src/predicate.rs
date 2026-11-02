@@ -474,7 +474,7 @@ fn walk(
             if !op.is_ordering() {
                 return Err("relative_date op must be lt, lte, gt or gte".into());
             }
-            if offset_days.abs() > MAX_OFFSET_DAYS {
+            if !(-MAX_OFFSET_DAYS..=MAX_OFFSET_DAYS).contains(offset_days) {
                 return Err(format!(
                     "offset_days must be between -{MAX_OFFSET_DAYS} and {MAX_OFFSET_DAYS}"
                 )
@@ -1104,10 +1104,15 @@ fn evaluate_on(predicate: &Predicate, current: &ResolvedRecord, input: &Evaluati
             attribute_code,
             values,
         } => match current.values.get(attribute_code) {
-            Some(value) if present(Some(value)) && !values.contains(value) => Err((
-                format!("'{attribute_code}' must be one of {}", join_values(values)),
-                json!({ "attribute_code": attribute_code, "value": value }),
-            )),
+            Some(value)
+                if present(Some(value))
+                    && !values.iter().any(|allowed| same_value(allowed, value)) =>
+            {
+                Err((
+                    format!("'{attribute_code}' must be one of {}", join_values(values)),
+                    json!({ "attribute_code": attribute_code, "value": value }),
+                ))
+            }
             _ => Ok(()),
         },
         Predicate::RelativeDate {
@@ -1441,6 +1446,18 @@ fn parse_datetime(text: &str) -> Option<DateTime<Utc>> {
 
 /// Compares two present values. `None` means the values are not comparable
 /// with the operator.
+/// Whether two stored values are the same value: `1` and `1.0` are one number
+/// in JSON Schema and to a person, although they serialize differently.
+fn same_value(left: &Value, right: &Value) -> bool {
+    match (left, right) {
+        (Value::Number(left), Value::Number(right)) => match (left.as_i64(), right.as_i64()) {
+            (Some(left), Some(right)) => left == right,
+            _ => left.as_f64() == right.as_f64(),
+        },
+        _ => left == right,
+    }
+}
+
 fn compare(op: CompareOp, left: &Value, right: &Value) -> Option<bool> {
     match (left, right) {
         (Value::Array(left), Value::Array(right)) => {
@@ -1525,6 +1542,30 @@ mod tests {
             json!({"type": "linked", "relationship_code": "supplier",
             "predicate": {"type": "has_tag", "tag": "x"}})
         ));
+    }
+
+    #[test]
+    fn the_most_negative_offset_is_out_of_range() {
+        let source = json!({
+            "type": "relative_date",
+            "attribute_code": "expires_at",
+            "op": "lt",
+            "offset_days": i64::MIN,
+        });
+        assert!(validate(source, Usage::Enforced).is_err());
+    }
+
+    #[test]
+    fn numbers_are_the_same_value_however_they_are_written() {
+        assert!(same_value(&json!(1), &json!(1.0)));
+        assert!(!same_value(&json!(1), &json!(1.5)));
+        // Integers beyond what a float can hold stay distinct.
+        assert!(!same_value(
+            &json!(9_007_199_254_740_993_i64),
+            &json!(9_007_199_254_740_992_i64)
+        ));
+        assert!(same_value(&json!("a"), &json!("a")));
+        assert!(!same_value(&json!("1"), &json!(1)));
     }
 
     fn validate(source: Value, usage: Usage) -> Result<(), PredicateError> {
