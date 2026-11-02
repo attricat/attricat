@@ -14,6 +14,7 @@ import { Trans, useTranslation } from 'react-i18next';
 import { agentRoutes } from './constants';
 import { contextLabel } from '../contexts/defaultContext';
 import { conversationSearchOptions } from './queryOptions';
+import { useAgentsUnavailableReason } from './useAgentsUnavailableReason';
 import { EmptyState } from '../../components/EmptyState';
 import { AgentIcon } from '../../components/systemIcons';
 import { NextPageButton } from '../../components/LoadMoreButton';
@@ -42,15 +43,25 @@ export const RecordConversationsPanel = ({
   onStart: () => void;
 }) => {
   const { t } = useTranslation();
+  const agentsUnavailableReason = useAgentsUnavailableReason();
   const conversations = useInfiniteQuery(
     conversationSearchOptions('', { recordId }),
   );
   const items = conversations.data?.pages.flatMap((page) => page.items) ?? [];
   return (
     <Box>
-      <Button onClick={onStart} startIcon={<PlusIcon />} variant="outlined">
-        {t('agents.newConversation')}
-      </Button>
+      <Tooltip title={agentsUnavailableReason ?? ''}>
+        <span>
+          <Button
+            disabled={Boolean(agentsUnavailableReason)}
+            onClick={onStart}
+            startIcon={<PlusIcon />}
+            variant="outlined"
+          >
+            {t('agents.newConversation')}
+          </Button>
+        </span>
+      </Tooltip>
       {conversations.isPending && (
         <LoadingState sx={{ mt: 2 }}>
           {t('agents.loadingConversations')}

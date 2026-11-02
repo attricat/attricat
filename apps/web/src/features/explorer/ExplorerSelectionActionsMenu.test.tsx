@@ -7,7 +7,14 @@ import '../../i18n';
 import { useActionDialogStore } from '../extensions/actionDialogStore';
 import { ExplorerSelectionActionsMenu } from './ExplorerSelectionActionsMenu';
 
-vi.mock('../auth/useCan', () => ({ useCan: () => false }));
+const access = vi.hoisted(() => ({
+  canRun: false,
+  unavailableReason: undefined as string | undefined,
+}));
+vi.mock('../auth/useCan', () => ({ useCan: () => access.canRun }));
+vi.mock('../agents/useAgentsUnavailableReason', () => ({
+  useAgentsUnavailableReason: () => access.unavailableReason,
+}));
 
 describe('ExplorerSelectionActionsMenu', () => {
   it('offers extension actions and hands off to the dialog one opens', async () => {
@@ -31,5 +38,28 @@ describe('ExplorerSelectionActionsMenu', () => {
 
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
     act(() => useActionDialogStore.getState().close());
+  });
+
+  it('disables sending to an agent when no provider is configured', async () => {
+    access.canRun = true;
+    access.unavailableReason = 'No provider';
+    const user = userEvent.setup();
+    const onSendToAgent = vi.fn();
+    render(
+      <ExplorerSelectionActionsMenu
+        disabled={false}
+        onSaveAsSearch={vi.fn()}
+        onSendToAgent={onSendToAgent}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Actions' }));
+
+    expect(
+      screen
+        .getByRole('menuitem', { name: 'Send to agent conversation' })
+        .getAttribute('aria-disabled'),
+    ).toBe('true');
+    access.canRun = false;
+    access.unavailableReason = undefined;
   });
 });

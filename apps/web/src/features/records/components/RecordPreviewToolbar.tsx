@@ -1,12 +1,11 @@
 import type { ReactNode } from 'react';
 import { AgentIcon } from '../../../components/systemIcons';
-import { Box } from '@mui/material';
+import { Box, IconButton, Tooltip } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { RecordToolbar } from './RecordToolbar';
 import { RecordActionsMenu } from './RecordActionsMenu';
 import { RecordPublishControls } from './RecordPublishControls';
 import type { RecordPublications } from './useRecordPublications';
-import { LabeledIconButton } from '../../../components/LabeledIconButton';
 
 type Props = {
   /** The record's blueprint, offered for creating another record. */
@@ -23,6 +22,8 @@ type Props = {
   canCreate: boolean;
   /** The caller may ask an agent about the record. */
   canAskAgent: boolean;
+  /** Why agents cannot run; disables asking and says so in its tooltip. */
+  agentsUnavailableReason?: string;
   onDuplicate: () => void;
   canDelete: boolean;
   onDelete: () => void;
@@ -42,6 +43,7 @@ export const RecordPreviewToolbar = ({
   canWrite,
   canCreate,
   canAskAgent,
+  agentsUnavailableReason,
   onDuplicate,
   canDelete,
   onDelete,
@@ -71,14 +73,18 @@ export const RecordPreviewToolbar = ({
         publications={publications}
       />
       {loaded && canAskAgent && (
-        <LabeledIconButton
-          label={askLabel}
-          aria-expanded={agentPanelOpen}
-
-          onClick={onOpenAgent}
-        >
-          <AgentIcon />
-        </LabeledIconButton>
+        <Tooltip title={agentsUnavailableReason ?? askLabel}>
+          <span>
+            <IconButton
+              aria-expanded={agentPanelOpen}
+              aria-label={askLabel}
+              disabled={Boolean(agentsUnavailableReason)}
+              onClick={onOpenAgent}
+            >
+              <AgentIcon />
+            </IconButton>
+          </span>
+        </Tooltip>
       )}
     </RecordToolbar>
   );

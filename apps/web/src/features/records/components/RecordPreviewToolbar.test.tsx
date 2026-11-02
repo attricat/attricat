@@ -228,6 +228,20 @@ describe('record actions menu', () => {
     ).toBeTruthy();
   });
 
+  it('disables asking an agent when none can run', () => {
+    const onOpenAgent = vi.fn();
+    renderActions({
+      agentsUnavailableReason: 'No provider',
+      loaded: true,
+      onOpenAgent,
+    });
+    const ask = screen.getByRole<HTMLButtonElement>('button', {
+      name: 'Ask about this record',
+    });
+    expect(ask.disabled).toBe(true);
+    expect(ask.parentElement?.getAttribute('aria-label')).toBe('No provider');
+  });
+
   it('hides actions the caller may not take', async () => {
     renderActions({
       blueprint: { code: 'product', name: 'Product' },

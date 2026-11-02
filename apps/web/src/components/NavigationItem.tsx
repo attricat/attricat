@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router';
 import {
+  Box,
   ListItemButton,
   ListItemIcon,
   ListItemText,
@@ -20,6 +21,8 @@ type NavigationItemProps = {
   ariaControls?: string;
   ariaExpanded?: boolean;
   compact: boolean;
+  /** Disables the item and says why in its tooltip. */
+  disabledReason?: string;
   // External destination opened in a new tab; takes precedence over `to`.
   href?: string;
   icon: ReactNode;
@@ -36,6 +39,7 @@ export const NavigationItem = ({
   ariaControls,
   ariaExpanded,
   compact,
+  disabledReason,
   href,
   icon,
   label,
@@ -68,6 +72,18 @@ export const NavigationItem = ({
       {trailing}
     </>
   );
+
+  if (disabledReason) {
+    return (
+      <Tooltip placement="right" title={disabledReason}>
+        <Box component="span" sx={{ display: 'block', width: '100%' }}>
+          <ListItemButton {...buttonProps} disabled>
+            {content}
+          </ListItemButton>
+        </Box>
+      </Tooltip>
+    );
+  }
 
   return (
     <Tooltip placement="right" title={compact ? label : ''}>

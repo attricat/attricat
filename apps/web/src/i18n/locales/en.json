@@ -324,6 +324,7 @@
     "searchConversations": "Search conversations",
     "search": "Search",
     "newConversation": "New conversation",
+    "notConfigured": "Agents are unavailable until an administrator configures an AI provider.",
     "newAgentConversation": "New agent conversation",
     "conversationDescription": "Ask the Attricat agent to inspect and change your workspace.",
     "newConversationDescription": "Create a focused thread for an agent task.",

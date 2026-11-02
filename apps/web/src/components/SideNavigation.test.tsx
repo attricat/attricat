@@ -156,6 +156,27 @@ beforeEach(() => {
 });
 
 describe('SideNavigation', () => {
+  it('disables Agents with the reason when no provider is configured', async () => {
+    vi.mocked(currentSession).mockResolvedValue({
+      agents_configured: false,
+      capabilities: { agents_run: true },
+    } as never);
+    renderNavigation();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Back to main navigation' }),
+    );
+
+    const agents = await screen.findByRole('button', { name: 'Agents' });
+    await waitFor(() =>
+      expect(agents.getAttribute('aria-disabled')).toBe('true'),
+    );
+    expect(screen.queryByRole('link', { name: 'Agents' })).toBeNull();
+    fireEvent.mouseOver(agents.parentElement!);
+    expect((await screen.findByRole('tooltip')).textContent).toBe(
+      'Agents are unavailable until an administrator configures an AI provider.',
+    );
+  });
+
   it('replaces the mobile primary navigation with sub-navigation and supports going back', async () => {
     vi.mocked(currentSession).mockResolvedValue({
       capabilities: { agents_run: true },

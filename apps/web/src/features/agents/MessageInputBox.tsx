@@ -16,6 +16,8 @@ import { progressSizes } from '../../components/iconSizes';
 type MessageInputBoxProps = {
   /** Whether a message may be sent now; typing is still possible. */
   canSend?: boolean;
+  /** Replaces the send tooltip when `canSend` needs explaining. */
+  cannotSendReason?: string;
   content: string;
   files: File[];
   isPending: boolean;
@@ -31,6 +33,7 @@ const attachmentKey = (file: File) =>
 
 export const MessageInputBox = ({
   canSend = true,
+  cannotSendReason,
   content,
   files,
   isPending,
@@ -115,7 +118,7 @@ export const MessageInputBox = ({
             <PaperclipIcon />
           </IconButton>
         </Tooltip>
-        <Tooltip title={t('agents.send')}>
+        <Tooltip title={cannotSendReason ?? t('agents.send')}>
           <span>
             <IconButton
               aria-label={t('agents.send')}

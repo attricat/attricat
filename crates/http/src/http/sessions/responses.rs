@@ -25,6 +25,9 @@ pub(in crate::http) struct SessionResponse {
     /// The human-facing identifier for the session-bound workspace.
     pub(super) login_identifier: String,
     pub(super) capabilities: SessionCapabilities,
+    /// Whether this deployment has an agent provider. Without one, nothing
+    /// can run an agent, whatever the caller's permissions.
+    pub(super) agents_configured: bool,
 }
 
 #[derive(Serialize)]
@@ -167,6 +170,7 @@ pub(super) async fn session_response_payload(
         workspace_id,
         login_identifier,
         capabilities,
+        agents_configured: state.agent_provider.is_some(),
     })
 }
 
@@ -190,6 +194,7 @@ async fn session_response_payload_with_identifier(
         workspace_id,
         login_identifier,
         capabilities,
+        agents_configured: state.agent_provider.is_some(),
     })
 }
 

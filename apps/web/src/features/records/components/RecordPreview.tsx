@@ -62,6 +62,7 @@ import { DeleteRecordDialog } from './DeleteRecordDialog';
 import { DuplicateRecordDialog } from './DuplicateRecordDialog';
 import { RecordAgentDrawer } from './RecordAgentDrawer';
 import { RecordConversationsPanel } from '../../agents/RecordConversationsPanel';
+import { useAgentsUnavailableReason } from '../../agents/useAgentsUnavailableReason';
 import { RecordBlueprintHeaderActions } from './RecordBlueprintHeaderActions';
 import { RecordHeading } from './RecordHeading';
 import type { RecordInlineFieldsHandle } from './RecordInlineFields';
@@ -232,6 +233,7 @@ export const RecordPreview = ({
   );
   const canCreateRecords = useCan(capabilities.recordsWrite);
   const canAskAgent = useCan(capabilities.agentsRun);
+  const agentsUnavailableReason = useAgentsUnavailableReason();
   const hasRecordControls = useHasRecordControls(recordId);
   const publications = useRecordPublications(recordId, contextId, canPublish);
   const { blueprint, recordForm, resolved, statusTransitions } =
@@ -487,6 +489,7 @@ export const RecordPreview = ({
                 canWrite={recordForm.data?.can_write === true}
                 canCreate={canCreateRecords}
                 canAskAgent={canAskAgent}
+                agentsUnavailableReason={agentsUnavailableReason}
                 onDuplicate={() => setDuplicateOpen(true)}
                 canDelete={canDeleteRecords && Boolean(resolved.data)}
                 onDelete={() => setDeleteOpen(true)}

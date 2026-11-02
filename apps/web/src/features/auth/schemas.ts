@@ -45,6 +45,7 @@ export const sessionSchema = z.object({
       agents_run: z.boolean().default(false),
     })
     .optional(),
+  agents_configured: z.boolean().default(false),
 });
 
 export type Session = z.infer<typeof sessionSchema>;

@@ -5,7 +5,7 @@ description: Ask an AI agent to inspect and change your catalog, and approve the
 
 The Attricat agent is a conversational assistant that can read your catalog and propose changes to it. It can look up records, check blueprints, search, and review data health without asking. Any change it wants to make stops and waits for a person to approve it, unless you let it [change a record without asking](#auto-approve-changes-to-a-record).
 
-Agents are optional. An administrator has to [configure an AI provider](/reference/configuration/#agents) before they appear.
+Agents are optional. Until an administrator [configures an AI provider](/reference/configuration/#agents), the agent controls stay disabled, and their tooltips say why.
 
 In the public demo the agent is read-only. It can do everything listed under *Without approval*, and when you ask for a change it explains what it would do instead of proposing it. The conversation shows a **Read only** notice.
 

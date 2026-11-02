@@ -14,7 +14,6 @@ Your inbox collects notifications about things that concern you in the current w
 | **Mentioned in a comment** | Someone mentions you in a comment, or edits their comment to add a mention of you. You get this instead of *New comment* for that comment. |
 | **Agent needs approval** | An agent run you started is waiting for you to approve a change. |
 | **Agent run failed** | An agent run you started failed or was interrupted. |
-| **Agent run finished** | A scheduled agent run you set up has finished. Runs you start in a conversation show their result there instead. |
 | **Added to a team** | Someone adds you to a team. |
 | **Invitation accepted** | Someone you invited joins the workspace. |
 | **Rule no longer fits** | Someone publishes a blueprint revision that an enabled [data quality rule](/builders/rules/#rules-and-blueprint-revisions) does not fit, so the rule skips its records. Sent to members with the `rules.manage` permission; it opens the rule. |
