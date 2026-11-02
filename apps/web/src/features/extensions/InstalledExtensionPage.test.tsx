@@ -49,6 +49,7 @@ const detail = (manifest: Record<string, unknown>) => ({
     updated_at: '2026-01-01T00:00:00Z',
     version: '1.0.0',
     manifest: { name: 'Example', description: 'Does things', ...manifest },
+    manifest_unreadable: Boolean(manifest.unreadable),
     manifest_sha256: 'abc123',
     source: 'sideload',
   },
@@ -87,6 +88,13 @@ const tabNames = () => screen.getAllByRole('tab').map((tab) => tab.textContent);
 
 describe('InstalledExtensionPage', () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it('says when this version cannot read the stored manifest', async () => {
+    await renderPage({ unreadable: true });
+    expect(screen.getByRole('alert').textContent).toContain(
+      "can't read this extension's manifest",
+    );
+  });
 
   it('offers export and connection tabs only to extensions declaring them', async () => {
     await renderPage({});

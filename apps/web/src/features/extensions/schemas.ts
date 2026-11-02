@@ -328,6 +328,7 @@ export const installationSchema = z.object({
   updated_at: z.string(),
   version: z.string(),
   manifest: jsonValue,
+  manifest_unreadable: z.boolean(),
   manifest_sha256: z.string(),
   source: z.string(),
 });

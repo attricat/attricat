@@ -1932,6 +1932,7 @@
     "detailUpdated": "Ostatnia aktualizacja",
     "detailManifestHash": "SHA-256 manifestu",
     "versionLabel": "v{{version}}",
+    "manifestUnreadable": "Ta wersja Attricat nie może odczytać manifestu tego rozszerzenia, więc rozszerzenie nie działa. Uaktualnij je do nowszego wydania albo usuń je i zainstaluj ponownie. W obu przypadkach trzeba będzie ponownie przyznać jego uprawnienia.",
     "pendingPermissions_one": "{{count}} żądane uprawnienie czeka na przyznanie.",
     "pendingPermissions_few": "{{count}} żądane uprawnienia czekają na przyznanie.",
     "pendingPermissions_many": "{{count}} żądanych uprawnień czeka na przyznanie.",

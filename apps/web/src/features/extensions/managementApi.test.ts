@@ -22,6 +22,7 @@ const installation = {
   updated_at: '2026-01-01T00:00:00Z',
   version: '1.0.0',
   manifest: {},
+  manifest_unreadable: false,
   manifest_sha256: 'a'.repeat(64),
   source: 'github:acme/test@v1.0.0',
 };

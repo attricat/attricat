@@ -4549,3 +4549,126 @@ async fn changing_extension_storage_takes_record_write_authority(pool: sqlx::PgP
     assert_eq!(entry["value"], json!({"enabled": true}));
     server.abort();
 }
+
+/// A later version can remove a manifest field, leaving an installed release
+/// with a stored manifest it refuses to decode.
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn an_unreadable_manifest_only_stops_its_own_extension(pool: sqlx::PgPool) {
+    const BROKEN: &str = "acme.upgrade";
+    const HEALTHY: &str = "acme.client";
+    let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
+    let store = Arc::new(FakeObjectStore::available());
+    let repository = AttricatRepository::system(pool.clone()).for_workspace(workspace);
+    let installer = ExtensionInstaller::new(repository.clone(), store.clone());
+
+    installer
+        .install(
+            "github:acme/client@v1.0.0",
+            &client_release_archive(HEALTHY),
+        )
+        .await
+        .unwrap();
+    repository
+        .grant_extension(HEALTHY, "capability", "configuration.read")
+        .await
+        .unwrap();
+    repository.enable_extension(HEALTHY).await.unwrap();
+
+    installer
+        .install(
+            "github:acme/upgrade@v1.0.0",
+            &upgrade_release_archive("1.0.0", json!({})),
+        )
+        .await
+        .unwrap();
+    repository
+        .configure_extension(BROKEN, json!({"endpoint": "https://api.acme.example/v1"}))
+        .await
+        .unwrap();
+    for (kind, id) in [
+        ("capability", "network.request"),
+        ("capability", "configuration.write"),
+        ("host_permission", "api"),
+    ] {
+        repository.grant_extension(BROKEN, kind, id).await.unwrap();
+    }
+    repository.enable_extension(BROKEN).await.unwrap();
+    sqlx::query(
+        "UPDATE installed_extension_releases SET manifest = jsonb_set(manifest, '{removed_field}', '[]') WHERE extension_id = $1",
+    )
+    .bind(BROKEN)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // A new repository has not cached the manifest, like a restarted server.
+    let repository = AttricatRepository::system(pool.clone()).for_workspace(workspace);
+    let contributions = repository
+        .client_extension_contributions_for_blueprint(None)
+        .await
+        .unwrap();
+    assert_eq!(contributions.len(), 1);
+    assert_eq!(contributions[0].extension_id, HEALTHY);
+    repository.enabled_extension_event_types().await.unwrap();
+    repository.enabled_field_note_providers().await.unwrap();
+    repository.enabled_export_destinations().await.unwrap();
+
+    let (base, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
+    let client = authenticated_client();
+    let status = async |path: String| client.get(path).send().await.unwrap().status();
+    assert_eq!(
+        status(format!("{base}/extensions/runtime")).await,
+        reqwest::StatusCode::OK
+    );
+    assert_eq!(
+        status(format!(
+            "{base}/extensions/{BROKEN}/host-permission-budgets"
+        ))
+        .await,
+        reqwest::StatusCode::OK
+    );
+    let installations: Value = client
+        .get(format!("{base}/extensions"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let unreadable = |id: &str| {
+        installations
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|installation| installation["extension_id"] == id)
+            .unwrap()["manifest_unreadable"]
+            .clone()
+    };
+    assert_eq!(unreadable(BROKEN), json!(true));
+    assert_eq!(unreadable(HEALTHY), json!(false));
+    server.abort();
+
+    // Upgrading replaces it, for review: nothing says what the grants allowed.
+    let installer = ExtensionInstaller::new(repository.clone(), store);
+    let upgraded = installer
+        .upgrade("test", &upgrade_release_archive("1.1.0", json!({})))
+        .await
+        .unwrap();
+    assert_eq!(upgraded.state, ExtensionState::Disabled);
+    assert!(
+        repository
+            .extension_grants(BROKEN)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    for (kind, id) in [
+        ("capability", "network.request"),
+        ("capability", "configuration.write"),
+        ("host_permission", "api"),
+    ] {
+        repository.grant_extension(BROKEN, kind, id).await.unwrap();
+    }
+    repository.enable_extension(BROKEN).await.unwrap();
+    assert!(repository.enabled_extension_event_types().await.is_ok());
+}

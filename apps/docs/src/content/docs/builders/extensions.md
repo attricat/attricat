@@ -41,6 +41,8 @@ An upgrade cancels runs still on the old release, because they can't move to new
 
 The extension's page offers newer releases from its registry. **Upgrade from archive** there, or `acli extension upgrade <id> --file`, upgrades from an uploaded archive instead, with the same effect. Either way the version must be greater than the installed one.
 
+If an Attricat upgrade leaves an extension with a manifest this version can't read, its page says so. That extension stops running and the others are unaffected. Upgrade it to a newer release, or remove it and install it again. Its permissions have to be granted again either way, and it stays disabled until you enable it.
+
 Running operations stay on the release they started with. They pause until that exact release is authorized again.
 
 ## Arrange extension UI

@@ -41,6 +41,8 @@ Uaktualnienie anuluje wykonania pozostające na starym wydaniu, ponieważ nie mo
 
 Strona rozszerzenia proponuje nowsze wydania z jego rejestru. Opcja **Uaktualnij z archiwum** na tej stronie albo `acli extension upgrade <id> --file` uaktualnia z przesłanego archiwum, z takim samym skutkiem. W obu przypadkach wersja musi być wyższa od zainstalowanej.
 
+Jeśli po uaktualnieniu Attricat manifest rozszerzenia nie daje się odczytać w tej wersji, informuje o tym strona rozszerzenia. To rozszerzenie przestaje działać, a pozostałe działają dalej. Uaktualnij je do nowszego wydania albo usuń je i zainstaluj ponownie. W obu przypadkach trzeba ponownie przyznać jego uprawnienia, a rozszerzenie pozostaje wyłączone, dopóki go nie włączysz.
+
 Trwające operacje pozostają przy wydaniu, na którym się rozpoczęły. Są wstrzymywane, dopóki to dokładnie wydanie nie zostanie ponownie autoryzowane.
 
 ## Rozmieść interfejs rozszerzeń

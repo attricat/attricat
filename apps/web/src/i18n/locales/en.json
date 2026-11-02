@@ -1848,6 +1848,7 @@
     "detailUpdated": "Last updated",
     "detailManifestHash": "Manifest SHA-256",
     "versionLabel": "v{{version}}",
+    "manifestUnreadable": "This version of Attricat can't read this extension's manifest, so the extension isn't running. Upgrade it to a newer release, or remove it and install it again. Either way, you'll need to grant its permissions again.",
     "pendingPermissions_one": "{{count}} requested permission is waiting to be granted.",
     "pendingPermissions_other": "{{count}} requested permissions are waiting to be granted.",
     "reviewPermissions": "Review permissions",

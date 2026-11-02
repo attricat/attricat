@@ -699,11 +699,9 @@ impl AttricatRepository {
             };
             let manifest = match self.cached_release_manifest(installed_release_id).await {
                 Ok(manifest) => manifest,
-                // Denying a release must still quarantine a defective
-                // manifest; callers filter that release out anyway.
-                Err(RepositoryError::InvalidExtension(_))
-                    if !extension_policy::allows(&extension_id, installed_release_id) =>
-                {
+                // A defective release loses its own contributions, not everyone's.
+                Err(RepositoryError::InvalidExtension(reason)) => {
+                    tracing::warn!(extension = %extension_id, %reason, "skipping a defective extension installation");
                     continue;
                 }
                 Err(error) => return Err(error),
@@ -1144,7 +1142,7 @@ impl AttricatRepository {
             if !extension_policy::allows(&row.extension_id, row.installed_release_id) {
                 continue;
             }
-            if let Some(installation) = self.runtime_installation(row).await? {
+            if let Some(installation) = self.listed_runtime_installation(row).await? {
                 let subscribed =
                     installation.manifest.server.as_ref().is_some_and(|server| {
                         server.event_handlers.iter().any(|handler| {
@@ -1173,7 +1171,7 @@ impl AttricatRepository {
             if !extension_policy::allows(&row.extension_id, row.installed_release_id) {
                 continue;
             }
-            if let Some(installation) = self.runtime_installation(row).await?
+            if let Some(installation) = self.listed_runtime_installation(row).await?
                 && installation.manifest.record_field_notes.is_some()
                 && installation
                     .capability_grants
@@ -1195,7 +1193,7 @@ impl AttricatRepository {
             if !extension_policy::allows(&row.extension_id, row.installed_release_id) {
                 continue;
             }
-            if let Some(installation) = self.runtime_installation(row).await? {
+            if let Some(installation) = self.listed_runtime_installation(row).await? {
                 installations.insert(installation.extension_id.clone(), installation);
             }
         }
@@ -1281,6 +1279,22 @@ impl AttricatRepository {
         .bind(only.map(|(_, release_id)| release_id))
         .fetch_all(&self.pool)
         .await?)
+    }
+
+    /// [`Self::runtime_installation`] for a caller going through every
+    /// installation: a defective one is left out, so it can't stop the others.
+    async fn listed_runtime_installation(
+        &self,
+        row: RuntimeInstallationRow,
+    ) -> Result<Option<ExtensionRuntimeInstallation>, RepositoryError> {
+        let extension_id = row.extension_id.clone();
+        match self.runtime_installation(row).await {
+            Err(RepositoryError::InvalidExtension(reason)) => {
+                tracing::warn!(extension = %extension_id, %reason, "skipping a defective extension installation");
+                Ok(None)
+            }
+            result => result,
+        }
     }
 
     /// Checks one installation row against its release manifest: the
@@ -1621,10 +1635,23 @@ impl AttricatRepository {
             .await?;
         self.ensure_no_enabled_dependents(&mut transaction, &current.extension_id)
             .await?;
-        let prior_manifest = self
+        // Upgrading is how a release this version can't read gets replaced, so
+        // that isn't an error. Nothing then says what its grants allowed, so
+        // none of them carry over.
+        let prior_manifest = match self
             .installed_release_manifest(&mut transaction, current.installed_release_id)
-            .await?;
-        let prior_version = Version::parse(&prior_manifest.version).map_err(|_| {
+            .await
+        {
+            Ok(manifest) => Some(manifest),
+            Err(RepositoryError::InvalidExtension(_)) => None,
+            Err(error) => return Err(error),
+        };
+        let prior_version: String =
+            sqlx::query_scalar("SELECT version FROM installed_extension_releases WHERE id = $1")
+                .bind(current.installed_release_id)
+                .fetch_one(&mut *transaction)
+                .await?;
+        let prior_version = Version::parse(&prior_version).map_err(|_| {
             RepositoryError::InvalidExtension("stored extension version is invalid".into())
         })?;
         let next_version = Version::parse(&manifest.version).map_err(|_| {
@@ -1648,7 +1675,9 @@ impl AttricatRepository {
         .bind(current.id)
         .fetch_all(&mut *transaction)
         .await?;
-        let kept = grants_surviving_upgrade(&prior_manifest, manifest, grants.clone());
+        let kept = prior_manifest.as_ref().map_or_else(Vec::new, |prior| {
+            grants_surviving_upgrade(prior, manifest, grants.clone())
+        });
         let dropped: Vec<_> = grants
             .into_iter()
             .filter(|grant| !kept.contains(grant))
@@ -1676,7 +1705,9 @@ impl AttricatRepository {
             ExtensionState::Enabled
                 if !configuration_fits
                     || !all_granted
-                    || !same_extension_requirements(&prior_manifest, manifest) =>
+                    || !prior_manifest
+                        .as_ref()
+                        .is_some_and(|prior| same_extension_requirements(prior, manifest)) =>
             {
                 ExtensionState::Disabled
             }
@@ -1916,7 +1947,7 @@ impl AttricatRepository {
     ) -> Result<Vec<(Uuid, ExportDestinationDescriptor)>, RepositoryError> {
         let mut destinations = Vec::new();
         for row in self.runtime_installation_rows(None).await? {
-            let Some(installation) = self.runtime_installation(row).await? else {
+            let Some(installation) = self.listed_runtime_installation(row).await? else {
                 continue;
             };
             for export in installation

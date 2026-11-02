@@ -56,7 +56,7 @@ const MAX_PROVIDER_ERROR_BYTES: usize = 64;
 
 fn installed_manifest(value: &Value) -> Result<Manifest, ApiError> {
     serde::Deserialize::deserialize(value)
-        .map_err(|_| ApiError::internal("installed extension manifest is invalid"))
+        .map_err(|_| ApiError::invalid_input("installed extension manifest is invalid".into()))
 }
 
 /// The enabled, authorized runtime snapshot of an extension.
@@ -872,7 +872,11 @@ pub(super) async fn list_budgets(
     ApiPath(extension_id): ApiPath<String>,
 ) -> Result<Json<Vec<HostPermissionBudget>>, ApiError> {
     let installed = repository.installed_extension(&extension_id).await?;
-    let manifest = installed_manifest(&installed.manifest)?;
+    // The extension's page reads this while offering the way out of a release
+    // this version can't read.
+    let Ok(manifest) = installed_manifest(&installed.manifest) else {
+        return Ok(Json(Vec::new()));
+    };
     let lowered = repository
         .extension_host_permission_budgets(&extension_id)
         .await?;

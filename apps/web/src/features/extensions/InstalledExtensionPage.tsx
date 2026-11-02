@@ -125,6 +125,9 @@ const InstalledExtensionTabs = ({
       key: installedExtensionTabs.overview,
       content: (
         <Stack spacing={4}>
+          {installation.manifest_unreadable && (
+            <Alert severity="error">{t('extensions.manifestUnreadable')}</Alert>
+          )}
           {pending > 0 && (
             <Alert
               action={

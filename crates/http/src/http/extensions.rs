@@ -117,11 +117,16 @@ pub(super) struct InstallationResponse {
     updated_at: chrono::DateTime<chrono::Utc>,
     version: String,
     manifest: Value,
+    /// This version can't read the stored manifest, so the extension does not
+    /// run whatever its state says, until it is upgraded or removed.
+    manifest_unreadable: bool,
     manifest_sha256: String,
     source: String,
 }
 impl From<InstalledExtension> for InstallationResponse {
     fn from(value: InstalledExtension) -> Self {
+        let manifest_unreadable =
+            crate::extensions::Manifest::deserialize(&value.manifest).is_err();
         Self {
             id: value.id,
             extension_id: value.extension_id,
@@ -133,6 +138,7 @@ impl From<InstalledExtension> for InstallationResponse {
             updated_at: value.updated_at,
             version: value.version,
             manifest: value.manifest,
+            manifest_unreadable,
             manifest_sha256: value.manifest_sha256,
             source: value.source,
         }
@@ -153,6 +159,7 @@ impl From<ExtensionInstallation> for InstallationResponse {
             updated_at: value.updated_at,
             version: String::new(),
             manifest: Value::Null,
+            manifest_unreadable: false,
             manifest_sha256: String::new(),
             source: String::new(),
         }
