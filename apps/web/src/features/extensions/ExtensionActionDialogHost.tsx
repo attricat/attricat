@@ -89,7 +89,8 @@ const ActionDialog = ({
     <Dialog fullWidth maxWidth="sm" onClose={onClose} open>
       <DialogTitle>{title}</DialogTitle>
       <DialogContent>
-        <Stack spacing={3}>
+        {/* Room for a first field's floating label, which the content would clip. */}
+        <Stack spacing={3} sx={{ pt: 3 }}>
           {count > 0 && (
             <Typography color="text.secondary" variant="body2">
               {context.outlet === extensionOutlets.explorerBulkAction
