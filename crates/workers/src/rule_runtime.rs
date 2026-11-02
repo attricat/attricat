@@ -27,7 +27,7 @@ pub(crate) struct RuleIntakeHandler;
 #[async_trait]
 impl EventHandler for RuleIntakeHandler {
     fn name(&self) -> &'static str {
-        "attricat.rules"
+        attricat_events::RULES_EVENT_CONSUMER
     }
 
     fn event_types(&self) -> &'static [&'static str] {

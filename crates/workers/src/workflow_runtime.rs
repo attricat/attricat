@@ -30,7 +30,7 @@ pub(crate) struct WorkflowIntakeHandler;
 #[async_trait]
 impl EventHandler for WorkflowIntakeHandler {
     fn name(&self) -> &'static str {
-        "attricat.workflows"
+        attricat_events::WORKFLOWS_EVENT_CONSUMER
     }
     fn event_types(&self) -> &'static [&'static str] {
         ALL_EVENT_TYPES_V1
