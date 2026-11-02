@@ -188,7 +188,9 @@ acli reusable-attribute create-version <definition-id> --file gtin-v2.yaml
 acli reusable-attribute publish <revision-id>
 acli reusable-attribute apply <record-id> --revision-id <revision-id>
 acli reusable-attribute group list
-acli reusable-attribute group create --code <code> --name <name> [--position <n>] --revision-id <revision-id> [--revision-id <revision-id> ...]
+acli reusable-attribute group create --code <code> --name <name> [--position <n>] --attribute <namespace:code> [--attribute <namespace:code> ...]
+acli reusable-attribute group update <group-id> [--name <name>] [--position <n>] [--attribute <namespace:code> ...]
+acli reusable-attribute group delete <group-id>
 acli reusable-attribute group apply <record-id> <group-id>
 ```
 

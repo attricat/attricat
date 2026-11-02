@@ -112,7 +112,18 @@ pub struct CreateReusableAttributeGroup {
     pub name: String,
     #[serde(default)]
     pub position: i64,
-    pub reusable_attribute_revision_ids: Vec<Uuid>,
+    /// Members as `namespace:code`.
+    pub reusable_attribute_codes: Vec<String>,
+}
+
+/// Fields left out keep their value. A group's code cannot change.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct UpdateReusableAttributeGroup {
+    pub name: Option<String>,
+    pub position: Option<i64>,
+    /// Replaces the members, as `namespace:code`.
+    pub reusable_attribute_codes: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -128,7 +139,7 @@ pub struct ReusableAttributeGroup {
     pub name: String,
     pub position: i64,
     #[serde(default)]
-    pub reusable_attribute_revision_ids: Vec<Uuid>,
+    pub reusable_attribute_codes: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]

@@ -7,6 +7,7 @@ use crate::{
     model::{
         AttachReusableAttribute, CreateReusableAttribute, CreateReusableAttributeGroup,
         RecordReusableAttribute, ReusableAttribute, ReusableAttributeGroup,
+        UpdateReusableAttributeGroup,
     },
 };
 use axum::{Json, http::StatusCode};
@@ -138,6 +139,28 @@ pub(super) async fn create_group(
                 .await?,
         ),
     ))
+}
+
+pub(super) async fn update_group(
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ApiPath(group_id): ApiPath<Uuid>,
+    ApiJson(input): ApiJson<UpdateReusableAttributeGroup>,
+) -> Result<Json<ReusableAttributeGroup>, ApiError> {
+    Ok(Json(
+        AttricatMutationService::new(&repository)
+            .update_reusable_attribute_group(group_id, input)
+            .await?,
+    ))
+}
+
+pub(super) async fn delete_group(
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ApiPath(group_id): ApiPath<Uuid>,
+) -> Result<StatusCode, ApiError> {
+    AttricatMutationService::new(&repository)
+        .delete_reusable_attribute_group(group_id)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub(super) async fn attach(

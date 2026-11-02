@@ -63,6 +63,7 @@ use crate::{
         RecordReusableAttribute, RelatedRecordPreview, RelationshipMutation, RelationshipTargets,
         RelationshipTreeFacetChildItem, RelationshipTreeFacetChildrenResponse,
         ResolvedRecordPreviewResponse, ReusableAttribute, ReusableAttributeGroup,
+        UpdateReusableAttributeGroup,
     },
 };
 use attricat_domain::permissions::Permission;

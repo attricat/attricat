@@ -224,7 +224,7 @@ async fn reusable_relationships_and_group_attachments_use_record_owned_attribute
         }),
     )
     .await;
-    let scalar = create_published_reusable(
+    create_published_reusable(
         &client,
         &base_url,
         json!({
@@ -279,7 +279,7 @@ async fn reusable_relationships_and_group_attachments_use_record_owned_attribute
         .json()
         .await
         .unwrap();
-    let relationship_v2: Value = client
+    client
         .post(format!(
             "{base_url}/reusable-attribute-revisions/{}/publish",
             relationship_v2["id"].as_str().unwrap()
@@ -288,16 +288,13 @@ async fn reusable_relationships_and_group_attachments_use_record_owned_attribute
         .await
         .unwrap()
         .error_for_status()
-        .unwrap()
-        .json()
-        .await
         .unwrap();
     let duplicate_group = client.post(format!("{base_url}/reusable-attribute-groups"))
-        .json(&json!({ "code": "invalid", "name": "Invalid", "reusable_attribute_revision_ids": [relationship["id"], relationship_v2["id"]] }))
+        .json(&json!({ "code": "invalid", "name": "Invalid", "reusable_attribute_codes": ["default:related", "default:related"] }))
         .send().await.unwrap();
     assert_eq!(duplicate_group.status(), reqwest::StatusCode::CONFLICT);
     let group: Value = client.post(format!("{base_url}/reusable-attribute-groups"))
-        .json(&json!({ "code": "specs", "name": "Specs", "reusable_attribute_revision_ids": [relationship["id"], scalar["id"]] }))
+        .json(&json!({ "code": "specs", "name": "Specs", "reusable_attribute_codes": ["default:related", "default:rating"] }))
         .send().await.unwrap().error_for_status().unwrap().json().await.unwrap();
     let atomic = client
         .post(format!(
@@ -675,7 +672,7 @@ async fn reusable_attribute_group_codes_report_why_they_are_refused(pool: PgPool
     let create = |code: &str| {
         client
             .post(format!("{base_url}/reusable-attribute-groups"))
-            .json(&json!({ "code": code, "name": "Specs", "reusable_attribute_revision_ids": [] }))
+            .json(&json!({ "code": code, "name": "Specs", "reusable_attribute_codes": [] }))
             .send()
     };
     create("specs").await.unwrap().error_for_status().unwrap();
@@ -692,5 +689,280 @@ async fn reusable_attribute_group_codes_report_why_they_are_refused(pool: PgPool
         let body: Value = response.json().await.unwrap();
         assert_eq!(body["error"]["code"], error_code, "{code}");
     }
+    server.abort();
+}
+
+async fn publish_next_revision(
+    client: &reqwest::Client,
+    base_url: &str,
+    attribute: &Value,
+) -> Value {
+    let draft = create_next_draft(client, base_url, attribute).await;
+    client
+        .post(format!(
+            "{base_url}/reusable-attribute-revisions/{}/publish",
+            draft["id"].as_str().unwrap()
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap()
+}
+
+async fn create_next_draft(client: &reqwest::Client, base_url: &str, attribute: &Value) -> Value {
+    client
+        .post(format!(
+            "{base_url}/reusable-attributes/{}/versions",
+            attribute["definition_id"].as_str().unwrap()
+        ))
+        .json(&json!({ "definition": attribute["definition"] }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap()
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn applying_a_group_uses_each_attributes_latest_published_revision(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    let blueprint = create_blueprint(&client, &base_url, PRODUCT).await;
+    let attribute = create_published_reusable(
+        &client,
+        &base_url,
+        json!({ "code": "weight", "name": "Weight", "value_type": "number" }),
+    )
+    .await;
+    let group: Value = client
+        .post(format!("{base_url}/reusable-attribute-groups"))
+        .json(&json!({ "code": "specs", "name": "Specs", "reusable_attribute_codes": ["default:weight"] }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(group["reusable_attribute_codes"], json!(["default:weight"]));
+    let published = publish_next_revision(&client, &base_url, &attribute).await;
+    // A newer draft is not ready for records.
+    create_next_draft(&client, &base_url, &attribute).await;
+
+    let record = create_record(&client, &base_url, &blueprint).await;
+    let applied: Value = client
+        .post(format!(
+            "{base_url}/v1/records/{}/reusable-attribute-groups/{}",
+            record["id"].as_str().unwrap(),
+            group["id"].as_str().unwrap()
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(applied[0]["revision_id"], published["id"]);
+    assert_eq!(applied[0]["version"], 2);
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn group_members_must_be_qualified_codes_with_a_published_revision(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    client
+        .post(format!("{base_url}/reusable-attributes"))
+        .json(&json!({ "definition": "code: draft_only\nname: Draft\nvalue_type: string" }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    for (code, error_code) in [
+        ("draft_only", "invalid_input"),
+        ("default:bad code", "invalid_input"),
+        ("default:draft_only", "reusable_attribute_not_published"),
+        ("default:missing", "reusable_attribute_not_published"),
+    ] {
+        let refused = client
+            .post(format!("{base_url}/reusable-attribute-groups"))
+            .json(&json!({ "code": "specs", "name": "Specs", "reusable_attribute_codes": [code] }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            refused.status(),
+            reqwest::StatusCode::UNPROCESSABLE_ENTITY,
+            "{code}"
+        );
+        let body: Value = refused.json().await.unwrap();
+        assert_eq!(body["error"]["code"], error_code, "{code}");
+    }
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn editing_and_deleting_a_group_leaves_records_alone(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    let blueprint = create_blueprint(&client, &base_url, PRODUCT).await;
+    for code in ["width", "height"] {
+        create_published_reusable(
+            &client,
+            &base_url,
+            json!({ "code": code, "name": code, "value_type": "number" }),
+        )
+        .await;
+    }
+    let group: Value = client
+        .post(format!("{base_url}/reusable-attribute-groups"))
+        .json(&json!({ "code": "specs", "name": "Specs", "position": 3, "reusable_attribute_codes": ["default:width"] }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let group_url = format!(
+        "{base_url}/reusable-attribute-groups/{}",
+        group["id"].as_str().unwrap()
+    );
+    let record = create_record(&client, &base_url, &blueprint).await;
+    let record_url = format!("{base_url}/v1/records/{}", record["id"].as_str().unwrap());
+    client
+        .post(format!(
+            "{record_url}/reusable-attribute-groups/{}",
+            group["id"].as_str().unwrap()
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let attached_codes = || async {
+        let form: Value = client
+            .get(&record_url)
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        form["reusable_attributes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|attribute| attribute["code"].as_str().unwrap().to_owned())
+            .collect::<Vec<_>>()
+    };
+
+    // Fields left out keep their value.
+    let renamed: Value = client
+        .patch(&group_url)
+        .json(&json!({ "name": "Renamed" }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(renamed["name"], "Renamed");
+    assert_eq!(renamed["code"], "specs");
+    assert_eq!(renamed["position"], 3);
+    assert_eq!(
+        renamed["reusable_attribute_codes"],
+        json!(["default:width"])
+    );
+
+    let edited: Value = client
+        .patch(&group_url)
+        .json(&json!({ "position": 1, "reusable_attribute_codes": ["default:height", "default:width"] }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(edited["position"], 1);
+    assert_eq!(
+        edited["reusable_attribute_codes"],
+        json!(["default:height", "default:width"])
+    );
+    assert_eq!(attached_codes().await, ["default:width"]);
+
+    // A refused edit changes nothing, and the code cannot change.
+    let refused = client
+        .patch(&group_url)
+        .json(&json!({ "name": "Refused", "reusable_attribute_codes": ["default:missing"] }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(refused.status(), reqwest::StatusCode::UNPROCESSABLE_ENTITY);
+    let code_change = client
+        .patch(&group_url)
+        .json(&json!({ "code": "other" }))
+        .send()
+        .await
+        .unwrap();
+    assert!(code_change.status().is_client_error());
+    let groups: Value = client
+        .get(format!("{base_url}/reusable-attribute-groups"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(groups[0]["name"], "Renamed");
+    assert_eq!(groups[0]["code"], "specs");
+    assert_eq!(
+        groups[0]["reusable_attribute_codes"],
+        json!(["default:height", "default:width"])
+    );
+
+    let deleted = client.delete(&group_url).send().await.unwrap();
+    assert_eq!(deleted.status(), reqwest::StatusCode::NO_CONTENT);
+    assert_eq!(attached_codes().await, ["default:width"]);
+    for response in [
+        client.delete(&group_url).send().await.unwrap(),
+        client
+            .patch(&group_url)
+            .json(&json!({ "name": "Gone" }))
+            .send()
+            .await
+            .unwrap(),
+    ] {
+        assert_eq!(response.status(), reqwest::StatusCode::NOT_FOUND);
+    }
+    // Its code is free again.
+    client
+        .post(format!("{base_url}/reusable-attribute-groups"))
+        .json(&json!({ "code": "specs", "name": "Specs", "reusable_attribute_codes": [] }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
     server.abort();
 }

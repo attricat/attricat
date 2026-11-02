@@ -2529,14 +2529,40 @@ async fn reusable_attribute_commands_build_requests() {
         "ids",
         "--name",
         "IDs",
-        "--revision-id",
-        id,
+        "--attribute",
+        "acme:weight",
     ])
     .await;
     assert_eq!(
         group["body"],
-        json!({ "code": "ids", "name": "IDs", "position": 0, "reusable_attribute_revision_ids": [id] })
+        json!({ "code": "ids", "name": "IDs", "position": 0, "reusable_attribute_codes": ["acme:weight"] })
     );
+    let renamed = echo(&[
+        "reusable-attribute",
+        "group",
+        "update",
+        id,
+        "--name",
+        "Renamed",
+    ])
+    .await;
+    assert_eq!(renamed["method"], "PATCH");
+    assert_eq!(renamed["body"], json!({ "name": "Renamed" }));
+    let members = echo(&[
+        "reusable-attribute",
+        "group",
+        "update",
+        id,
+        "--attribute",
+        "acme:height",
+    ])
+    .await;
+    assert_eq!(
+        members["body"],
+        json!({ "reusable_attribute_codes": ["acme:height"] })
+    );
+    let deleted = echo(&["reusable-attribute", "group", "delete", id]).await;
+    assert_eq!(deleted["method"], "DELETE");
 }
 
 #[tokio::test]

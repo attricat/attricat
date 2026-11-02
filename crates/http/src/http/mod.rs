@@ -1061,6 +1061,11 @@ pub fn router(state: AppState) -> Router {
             get(reusable_attributes::list_groups).post(reusable_attributes::create_group),
         )
         .route(
+            "/reusable-attribute-groups/{group_id}",
+            axum::routing::patch(reusable_attributes::update_group)
+                .delete(reusable_attributes::delete_group),
+        )
+        .route(
             "/v1/records/reusable-attributes",
             get(reusable_attributes::list_blueprint_filter_fields),
         )

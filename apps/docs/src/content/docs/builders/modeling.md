@@ -153,7 +153,9 @@ searchable: true
 
 It accepts the same attribute keys as a blueprint (`value_type`, `value_schema`, `default_value`, `tags`, `context_fallback`, `context_editable`, `readonly`, and the relationship keys with `target_blueprint_code`), plus `searchable`, which includes its values in Explorer search and filters, and `facetable`, which together with `searchable` lists it under **Add filter** in the Explorer. Each change creates a new revision; publish a revision before it can be attached. The workspace supplies the namespace, so a reusable attribute's full code is `<namespace>:<code>`. The editor offers examples, ready-made pieces, save checks as you type, and a preview of the field; see [The web editor](/builders/blueprints/#the-web-editor).
 
-Creating and publishing reusable attributes needs `blueprints.write`. Attaching one to a record needs `records.write` on that record.
+A **group** is a named set of reusable attributes, listed by full code. Applying a group attaches each attribute's latest published revision at that moment, and a record already holding one of them refuses the whole group. Publishing a revision therefore reaches every later apply, without editing the group. Editing or deleting a group changes only what later applies do: records keep the attributes and revisions they already have. A group's code cannot change.
+
+Creating and publishing reusable attributes, and managing groups, needs `blueprints.write`. Attaching one to a record needs `records.write` on that record.
 
 ## Assign responsibility
 

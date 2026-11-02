@@ -2747,7 +2747,7 @@
       "createAttribute": "Utwórz atrybut"
     },
     "title": "Atrybuty wielokrotnego użytku",
-    "description": "Twórz niezmienne rewizje atrybutów, publikuj je i składaj opublikowane rewizje w grupy.",
+    "description": "Twórz niezmienne rewizje atrybutów, publikuj je i składaj atrybuty w grupy, które zawsze stosują ich najnowsze opublikowane rewizje.",
     "newGroup": "Nowa grupa",
     "newAttribute": "Nowy atrybut",
     "loading": "Wczytywanie atrybutów wielokrotnego użytku…",
@@ -2757,6 +2757,10 @@
     "groupsHeading": "Grupy",
     "edit": "Edytuj",
     "publish": "Opublikuj",
+    "editNamedGroup": "Edytuj grupę {{group}}",
+    "deleteGroup": "Usuń grupę",
+    "deleteNamedGroup": "Usuń grupę {{group}}",
+    "deleteGroupConfirm": "Usunąć grupę {{group}}? Rekordy zachowają atrybuty, które już z niej dodano.",
     "columns": {
       "attribute": "Atrybut",
       "version": "Wersja",
@@ -2765,17 +2769,20 @@
       "actions": "Akcje",
       "group": "Grupa",
       "position": "Pozycja",
-      "publishedRevisions": "Opublikowane rewizje"
+      "attributes": "Atrybuty"
     },
     "groupDialog": {
       "title": "Nowa grupa atrybutów wielokrotnego użytku",
+      "editTitle": "Edytuj {{name}}",
       "code": "Kod",
+      "codeImmutable": "Kodu grupy nie można zmienić.",
       "name": "Nazwa",
       "position": "Pozycja",
-      "revisions": "Opublikowane rewizje",
-      "revisionsHelp": "Grupować można tylko opublikowane rewizje.",
+      "attributes": "Atrybuty",
+      "attributesHelp": "Zastosowanie grupy dodaje najnowszą opublikowaną rewizję każdego atrybutu. Lista zawiera tylko atrybuty z opublikowaną rewizją.",
       "create": "Utwórz grupę",
-      "requiredFields": "Kod, nazwa i co najmniej jedna opublikowana rewizja są wymagane.",
+      "save": "Zapisz zmiany",
+      "requiredFields": "Kod, nazwa i co najmniej jeden atrybut są wymagane.",
       "invalidPosition": "Pozycja musi być nieujemną liczbą całkowitą."
     },
     "templates": {

@@ -124,7 +124,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `GET` | `/blueprints/{id}/connector-jobs` | Zadania konektorów. |
 | `POST` | `/blueprint-connector-jobs/{id}/run` | Uruchamia zadanie konektora z `{"idempotency_key": "…"}`. |
 | `POST` | `/blueprint-connector-jobs/{id}/resync` | Ponownie eksportuje każdy opublikowany rekord zadania eksportu: `{"idempotency_key": "…"}` oraz `record_ids` (tylko te rekordy) albo `status` (tylko rekordy z tym stanem eksportu w połączeniu zadania; ponad 10 000 takich rekordów daje błąd `422`, więc wtedy wykonaj ponowny eksport całego zadania). Zwraca `{"run_ids": [...]}`. |
-| `GET`, `POST` | `/reusable-attributes`; `POST /reusable-attributes/{id}/versions`; `POST /reusable-attribute-revisions/{id}/publish`; `GET`, `POST /reusable-attribute-groups` | Atrybuty wielokrotnego użytku. |
+| `GET`, `POST` | `/reusable-attributes`; `POST /reusable-attributes/{id}/versions`; `POST /reusable-attribute-revisions/{id}/publish`; `GET`, `POST /reusable-attribute-groups`; `PATCH`, `DELETE /reusable-attribute-groups/{id}` | Atrybuty wielokrotnego użytku. Grupa podaje swoich członków w `reusable_attribute_codes` (`namespace:code`), a jej własnego `code` nie można zmienić. Zastosowanie grupy dołącza najnowszą opublikowaną rewizję każdego członka. Edycja lub usunięcie grupy nie zmienia rekordów. |
 | `POST` | `/reusable-attributes/validate`, `/reusable-attributes/{id}/versions/validate` | Uruchamia wszystkie kontrole, które wykonałoby utworzenie atrybutu wielokrotnego użytku lub jego kolejnej wersji, niczego nie zapisując. |
 
 ### Rekordy
