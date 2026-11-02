@@ -19,6 +19,7 @@ mod files;
 mod identity_providers;
 mod lexicon;
 mod members;
+mod multipart_limit;
 mod notifications;
 mod oidc;
 mod operator;
@@ -340,12 +341,28 @@ fn request_id(request: &axum::extract::Request) -> Uuid {
         .unwrap_or_else(Uuid::new_v4)
 }
 
+/// The method as a metric label. Clients can send any method name, and every
+/// distinct label value is a series kept for the life of the process.
+fn method_label(method: &axum::http::Method) -> &'static str {
+    use axum::http::Method;
+    match *method {
+        Method::GET => "GET",
+        Method::HEAD => "HEAD",
+        Method::POST => "POST",
+        Method::PUT => "PUT",
+        Method::PATCH => "PATCH",
+        Method::DELETE => "DELETE",
+        Method::OPTIONS => "OPTIONS",
+        _ => "other",
+    }
+}
+
 async fn server_timing(
     State(state): State<AppState>,
     mut request: axum::extract::Request,
     next: Next,
 ) -> Response {
-    let method = request.method().to_string();
+    let method = method_label(request.method());
     let route = request
         .extensions()
         .get::<axum::extract::MatchedPath>()
@@ -383,7 +400,7 @@ async fn server_timing(
     let duration_ms = elapsed_ms(started_at);
     span.record("status", status)
         .record("duration_ms", duration_ms);
-    metrics::counter!("attricat_http_requests_total", "method" => method.clone(), "route" => route.clone(), "status" => status.to_string()).increment(1);
+    metrics::counter!("attricat_http_requests_total", "method" => method, "route" => route.clone(), "status" => status.to_string()).increment(1);
     metrics::histogram!("attricat_http_request_duration_seconds", "method" => method, "route" => route).record(duration_ms / MILLIS_PER_SECOND);
     if status_code.is_server_error() {
         tracing::error!(parent: &span, status, duration_ms, "request failed");
@@ -447,7 +464,11 @@ pub fn router(state: AppState) -> Router {
             "/agent/conversations/{conversation_id}/uploads",
             // The handler streams each file to disk and enforces
             // `max_upload_file_bytes` and `max_upload_files` itself.
-            post(files::upload_conversation).layer(axum::extract::DefaultBodyLimit::disable()),
+            post(files::upload_conversation)
+                .layer(axum::extract::DefaultBodyLimit::disable())
+                .layer(axum::middleware::from_fn(
+                    multipart_limit::limit_multipart_framing,
+                )),
         )
         .route(
             "/agent/conversations/{conversation_id}/runs",
@@ -653,7 +674,11 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/extensions/{extension_id}/{contribution_id}/input-uploads",
             // Streams and limits the file itself, like record uploads.
-            post(files::upload_extension_input).layer(axum::extract::DefaultBodyLimit::disable()),
+            post(files::upload_extension_input)
+                .layer(axum::extract::DefaultBodyLimit::disable())
+                .layer(axum::middleware::from_fn(
+                    multipart_limit::limit_multipart_framing,
+                )),
         )
         .route(
             "/extensions/{extension_id}/dev-artifact",
@@ -794,7 +819,9 @@ pub fn router(state: AppState) -> Router {
             "/auth/avatar",
             axum::routing::put(files::upload_avatar)
                 .delete(files::delete_avatar)
-                .layer(axum::extract::DefaultBodyLimit::disable()),
+                .layer(axum::extract::DefaultBodyLimit::max(
+                    files::AVATAR_MAX_BODY_BYTES,
+                )),
         )
         .route("/notifications", get(notifications::list))
         .route(
@@ -1210,12 +1237,20 @@ pub fn router(state: AppState) -> Router {
         )
         .route(
             "/records/{record_id}/file-attributes/{attribute_code}/uploads",
-            post(files::upload).layer(axum::extract::DefaultBodyLimit::disable()),
+            post(files::upload)
+                .layer(axum::extract::DefaultBodyLimit::disable())
+                .layer(axum::middleware::from_fn(
+                    multipart_limit::limit_multipart_framing,
+                )),
         )
         .route(
             "/blueprints/{blueprint_id}/file-attributes/{attribute_code}/staged-uploads",
             // Streams and limits each file itself, like record uploads.
-            post(files::upload_staged).layer(axum::extract::DefaultBodyLimit::disable()),
+            post(files::upload_staged)
+                .layer(axum::extract::DefaultBodyLimit::disable())
+                .layer(axum::middleware::from_fn(
+                    multipart_limit::limit_multipart_framing,
+                )),
         )
         .route(
             "/records/{record_id}/file-attributes/{attribute_code}/references",
