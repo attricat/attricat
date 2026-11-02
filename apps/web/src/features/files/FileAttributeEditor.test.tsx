@@ -4,6 +4,7 @@ import {
   render as testingRender,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
@@ -157,7 +158,6 @@ describe('FileAttributeEditor', () => {
     fireEvent.change(view.container.querySelector('input[type="file"]')!, {
       target: { files: [file] },
     });
-    fireEvent.click(screen.getByRole('button', { name: /Upload 1/ }));
     expect(await screen.findByText('previous.txt')).toBeTruthy();
     view.rerender(
       <FileAttributeEditor
@@ -301,9 +301,9 @@ describe('FileAttributeEditor', () => {
     fireEvent.change(view.container.querySelector('input[type="file"]')!, {
       target: { files: [file] },
     });
-    const upload = screen.getByRole('button', { name: /Upload 1/ });
-    fireEvent.click(upload);
-    fireEvent.click(upload);
+    fireEvent.change(view.container.querySelector('input[type="file"]')!, {
+      target: { files: [file] },
+    });
     expect(uploadFiles).toHaveBeenCalledOnce();
     finish({ files: [] } as never);
     await waitFor(() => expect(screen.queryByText('document.txt')).toBeNull());
@@ -328,7 +328,8 @@ describe('FileAttributeEditor', () => {
     expect(screen.getByText('server.txt')).toBeTruthy();
   });
 
-  it('rejects unsafe images and removes queued previews without uploading', () => {
+  it('rejects unsafe images and removes the preview of a failed upload', async () => {
+    vi.mocked(uploadFiles).mockRejectedValue(new Error('Upload denied'));
     URL.createObjectURL = vi.fn().mockReturnValue('blob:queued');
     URL.revokeObjectURL = vi.fn();
     const imageAttribute = {
@@ -356,8 +357,9 @@ describe('FileAttributeEditor', () => {
       'unsafe.svg was not added',
     );
     expect(URL.createObjectURL).toHaveBeenCalledOnce();
-    // A queued image is not reported as missing.
+    // A picked image is not reported as missing.
     expect(screen.queryByText('No images attached.')).toBeNull();
+    expect(await screen.findByText('Upload denied')).toBeTruthy();
     fireEvent.click(
       screen.getByRole('button', {
         name: 'Remove photo.png from upload queue',
@@ -365,8 +367,87 @@ describe('FileAttributeEditor', () => {
     );
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:queued');
     expect(screen.getByText('No images attached.')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /Upload 1/ })).toBeNull();
-    expect(uploadFiles).not.toHaveBeenCalled();
+  });
+
+  it('uploads files picked for an existing record at once', async () => {
+    vi.mocked(uploadFiles).mockResolvedValue({
+      files: [{ id: 'a', filename: 'document.txt', status: 'ready' }],
+    } as never);
+    const view = renderEditor([], recordId);
+    fireEvent.change(view.container.querySelector('input[type="file"]')!, {
+      target: { files: [file] },
+    });
+    expect(uploadFiles).toHaveBeenCalledOnce();
+    expect(await screen.findByText('document.txt')).toBeTruthy();
+  });
+
+  it('removes an attached non-image file after confirming', async () => {
+    const stored = [
+      { id: 'a', filename: 'keep.pdf', status: 'ready' },
+      { id: 'b', filename: 'wrong.pdf', status: 'ready' },
+    ] as FileMetadata[];
+    vi.mocked(updateFileReferences).mockResolvedValue({
+      record_updated_at: '2026-01-01T00:00:00Z',
+    } as never);
+    renderEditor(stored, recordId);
+    fireEvent.click(screen.getByRole('button', { name: 'Remove wrong.pdf' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'Remove attachment' }),
+    );
+    await waitFor(() =>
+      expect(updateFileReferences).toHaveBeenCalledWith(recordId, 'document', {
+        context_id: null,
+        expected_file_ids: ['a', 'b'],
+        file_ids: ['a'],
+      }),
+    );
+  });
+
+  it('keeps the only file of a required field, which a new one can replace', async () => {
+    const single = {
+      ...attribute,
+      file_policy: { ...attribute.file_policy!, cardinality: 'one' as const },
+    };
+    vi.mocked(uploadFiles).mockResolvedValue({
+      files: [{ id: 'new', filename: 'document.txt', status: 'ready' }],
+    } as never);
+    const view = render(
+      <FileAttributeEditor
+        attribute={single}
+        contextId={null}
+        disabled={false}
+        recordId={recordId}
+        required
+        files={[
+          { id: 'a', filename: 'old.pdf', status: 'ready' } as FileMetadata,
+        ]}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'Remove old.pdf' })).toBeNull();
+    fireEvent.change(view.container.querySelector('input[type="file"]')!, {
+      target: { files: [file] },
+    });
+    expect(uploadFiles).toHaveBeenCalledOnce();
+    expect(await screen.findByText('document.txt')).toBeTruthy();
+    expect(screen.queryByText('old.pdf')).toBeNull();
+  });
+
+  it('offers no removal on a read-only field', () => {
+    render(
+      <FileAttributeEditor
+        attribute={attribute}
+        contextId={null}
+        disabled
+        recordId={recordId}
+        files={[
+          { id: 'a', filename: 'keep.pdf', status: 'ready' } as FileMetadata,
+        ]}
+      />,
+    );
+    expect(
+      screen.queryByRole('button', { name: 'Remove keep.pdf' }),
+    ).toBeNull();
   });
 
   it('blocks drop, retry and queued removal when disabled after an upload error', async () => {
@@ -375,7 +456,6 @@ describe('FileAttributeEditor', () => {
     fireEvent.change(view.container.querySelector('input[type="file"]')!, {
       target: { files: [file] },
     });
-    fireEvent.click(screen.getByRole('button', { name: /Upload 1/ }));
     expect(await screen.findByText('Upload denied')).toBeTruthy();
     view.rerender(
       <FileAttributeEditor
