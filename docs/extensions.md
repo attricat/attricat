@@ -2250,12 +2250,12 @@ root:
 
 ```sh
 (cd ../../attricat-connector-csv && just pack)
-ATTRICAT_CONNECTOR_CSV_ARCHIVE="$(pwd)/../../attricat-connector-csv/dist/attricat-connector-csv-0.1.0.tar.zst" \
+ATTRICAT_CONNECTOR_CSV_ARCHIVE="$(pwd)/../../attricat-connector-csv/dist/attricat-connector-csv-1.0.0.tar.zst" \
   cargo test -p api --test integration extensions::packaged_csv_connector_exports_through_the_real_host
 ```
 
 This test installs the actual packaged component into a migrated PostgreSQL
-workspace, grants its capabilities, runs an export, a 17-row multi-batch import and a multi-batch export
+workspace, grants its capabilities, runs an export, a 41-row multi-batch import and a multi-batch export
 through the production Wasmtime task handler, restarts the runtime between
 batches, and verifies output/download and 30-day retention. The
 `packaged_transfer_import_rejects_ssrf_without_network_io` test packages
@@ -2266,8 +2266,7 @@ real bounded HTTPS input, denied redirects and idempotency-keyed PUT delivery
 through that packaged component. The test requires `httpbin.org`; it is
 opt-in to keep offline CI deterministic. For an
 S3-backed deployment, side-load the same archive via `acli extension sideload
---file ...`, grant `attricat.read`, `attricat.write`, `artifacts.read`,
-`artifacts.write`, enable the release, then POST an export or import to
+--file ...`, grant every capability in its manifest, enable the release, then POST an export or import to
 `/extensions/attricat-connector-csv/operations` and inspect the run and
 `/extension-operation-runs/{run_id}/artifacts` afterward. The run list returns
 the most recent 200; `GET /extension-operation-runs/{id}` retrieves an older

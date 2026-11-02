@@ -317,6 +317,20 @@ pub async fn start_session_server(pool: PgPool) -> (String, JoinHandle<()>) {
 pub const METRICS_TOKEN: &str = "test-metrics-token";
 pub const BOOTSTRAP_WORKSPACE_ID: &str = "00000000-0000-4000-8000-000000000002";
 pub const BOOTSTRAP_OWNER_ID: &str = "00000000-0000-4000-8000-000000000201";
+/// Every capability the packaged CSV connector requires before it can be enabled.
+pub const CSV_CONNECTOR_CAPABILITIES: [&str; 11] = [
+    "attricat.read",
+    "attricat.write",
+    "artifacts.read",
+    "artifacts.write",
+    "storage.extension",
+    "client.action_dialog",
+    "client.explorer_action",
+    "client.explorer_bulk_action",
+    "client.files.upload",
+    "client.notification",
+    "client.operations.start",
+];
 
 pub fn bootstrap_workspace_id() -> Uuid {
     BOOTSTRAP_WORKSPACE_ID.parse().unwrap()
