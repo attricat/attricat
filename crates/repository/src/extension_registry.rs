@@ -2,17 +2,21 @@
 //!
 //! A registry is a GitHub repository containing `registry.json`. Its index
 //! points to extension repositories; only those index-authorized repositories
-//! may have their README and release assets resolved. No index, README,
+//! may have their README and release assets resolved, and only the versions an
+//! entry lists after review may be offered or installed. No index, README,
 //! release catalogue, or archive is persisted.
 
 use std::{str::FromStr, time::Duration};
 
 use reqwest::{Client, Response, Url, redirect::Policy};
+use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
 use thiserror::Error;
 
 pub const DEFAULT_OFFICIAL_REGISTRY: &str = "attricat/attricat-extensions";
+/// The `registry_version` this host reads. Version 2 made `versions` required.
+const REGISTRY_INDEX_VERSION: u32 = 2;
 const GITHUB_API_ORIGIN: &str = "https://api.github.com";
 const GITHUB_RAW_ORIGIN: &str = "https://raw.githubusercontent.com";
 /// Scheme prefix of canonical GitHub registry and extension sources.
@@ -25,6 +29,9 @@ const MAX_REGISTRY_NAME_BYTES: usize = 256;
 const MAX_REGISTRY_DESCRIPTION_BYTES: usize = 4 * 1024;
 const MAX_REGISTRY_ICON_BYTES: usize = 512;
 const MAX_REGISTRY_ID_BYTES: usize = 128;
+const MAX_REGISTRY_VERSIONS: usize = 100;
+const MAX_REGISTRY_VERSION_BYTES: usize = 128;
+const MAX_REGISTRY_HOST_API_BYTES: usize = 256;
 /// GitHub limits for account and repository names.
 const MAX_GITHUB_OWNER_BYTES: usize = 39;
 const MAX_GITHUB_REPOSITORY_BYTES: usize = 100;
@@ -112,15 +119,15 @@ fn valid_repository(value: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
 }
 
-/// The public, versioned raw registry document at `registry.json`.
+/// The public, versioned raw registry document at `registry.json`. Unknown
+/// fields are ignored so a registry can add one without breaking older hosts; a
+/// breaking change raises `registry_version`.
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
 struct RegistryIndex {
     registry_version: u32,
     extensions: Vec<RegistryIndexEntry>,
 }
 #[derive(Clone, Deserialize)]
-#[serde(deny_unknown_fields)]
 struct RegistryIndexEntry {
     id: String,
     repository: String,
@@ -128,6 +135,42 @@ struct RegistryIndexEntry {
     description: String,
     #[serde(default)]
     icon: Option<String>,
+    versions: Vec<ReviewedVersion>,
+}
+
+/// One release a registry has reviewed, and the host ABIs it runs on.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ReviewedVersion {
+    pub version: String,
+    pub host_api: String,
+}
+impl ReviewedVersion {
+    fn is_valid(&self) -> bool {
+        self.version.len() <= MAX_REGISTRY_VERSION_BYTES
+            && self.host_api.len() <= MAX_REGISTRY_HOST_API_BYTES
+            && Version::parse(&self.version).is_ok()
+            && VersionReq::parse(&self.host_api).is_ok()
+    }
+    /// The version, when its `host_api` range accepts this host.
+    fn compatible_version(&self) -> Option<Version> {
+        let host = Version::parse(crate::extensions::SUPPORTED_HOST_API).ok()?;
+        VersionReq::parse(&self.host_api)
+            .ok()
+            .filter(|range| range.matches(&host))?;
+        Version::parse(&self.version).ok()
+    }
+}
+fn valid_reviewed_versions(versions: &[ReviewedVersion]) -> bool {
+    let mut seen = std::collections::HashSet::new();
+    !versions.is_empty()
+        && versions.len() <= MAX_REGISTRY_VERSIONS
+        && versions
+            .iter()
+            .all(|listed| listed.is_valid() && seen.insert(Version::parse(&listed.version).ok()))
+}
+/// Release tags are SemVer versions with an optional `v` prefix.
+pub fn release_version(tag: &str) -> Option<Version> {
+    Version::parse(tag.strip_prefix('v').unwrap_or(tag)).ok()
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -138,8 +181,28 @@ pub struct DiscoveredExtension {
     pub name: String,
     pub description: String,
     pub icon: Option<String>,
+    pub versions: Vec<ReviewedVersion>,
 }
 impl DiscoveredExtension {
+    /// Whether the entry lists the version a release tag names.
+    fn lists_release(&self, release: &DiscoveredRelease) -> bool {
+        release_version(&release.tag_name).is_some_and(|version| {
+            self.versions
+                .iter()
+                .any(|listed| Version::parse(&listed.version).ok().as_ref() == Some(&version))
+        })
+    }
+    /// The highest listed version this host can run, when it is newer than the
+    /// installed one.
+    pub fn available_update(&self, installed_version: &str) -> Option<String> {
+        let installed = Version::parse(installed_version).ok()?;
+        self.versions
+            .iter()
+            .filter_map(ReviewedVersion::compatible_version)
+            .max()
+            .filter(|latest| *latest > installed)
+            .map(|latest| latest.to_string())
+    }
     fn github_repository(&self) -> Result<GitHubRepository, RegistryError> {
         self.repository
             .strip_prefix(GITHUB_SOURCE_PREFIX)
@@ -161,6 +224,15 @@ pub struct DiscoveredRelease {
     pub name: String,
     pub published_at: Option<String>,
     pub asset: ReleaseAsset,
+}
+impl DiscoveredRelease {
+    /// Whether an archive's manifest version is the one its tag names. A listed
+    /// tag vouches only for that version, so an archive declaring another one
+    /// must not install under it.
+    pub fn declares_version(&self, manifest_version: &str) -> bool {
+        let version = release_version(&self.tag_name);
+        version.is_some() && version == Version::parse(manifest_version).ok()
+    }
 }
 #[derive(Clone, Debug, Serialize)]
 pub struct ReleaseAsset {
@@ -245,6 +317,57 @@ fn matches_digest(bytes: &[u8], digest: Option<&str>) -> bool {
         })
 }
 
+/// Parses and validates a `registry.json` document. Any invalid entry rejects
+/// the whole index, so a registry never lists less than it means to review.
+fn parse_index(
+    source: &GitHubRepository,
+    bytes: &[u8],
+) -> Result<Vec<DiscoveredExtension>, RegistryError> {
+    let index: RegistryIndex =
+        serde_json::from_slice(bytes).map_err(|_| RegistryError::InvalidResponse)?;
+    if index.registry_version != REGISTRY_INDEX_VERSION
+        || index.extensions.len() > MAX_REGISTRY_ENTRIES
+    {
+        return Err(RegistryError::InvalidResponse);
+    }
+    let mut ids = std::collections::HashSet::new();
+    index
+        .extensions
+        .into_iter()
+        .map(|entry| {
+            if entry.id.is_empty()
+                || entry.id.len() > MAX_REGISTRY_ID_BYTES
+                || !entry
+                    .id
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+                || entry.name.trim().is_empty()
+                || entry.name.len() > MAX_REGISTRY_NAME_BYTES
+                || entry.description.trim().is_empty()
+                || entry.description.len() > MAX_REGISTRY_DESCRIPTION_BYTES
+                || entry
+                    .icon
+                    .as_ref()
+                    .is_some_and(|icon| icon.len() > MAX_REGISTRY_ICON_BYTES)
+                || !valid_reviewed_versions(&entry.versions)
+                || !ids.insert(entry.id.clone())
+            {
+                return Err(RegistryError::InvalidResponse);
+            }
+            let repository = entry.repository.parse::<GitHubRepository>()?;
+            Ok(DiscoveredExtension {
+                registry_source: source.identity(),
+                id: entry.id,
+                repository: repository.identity(),
+                name: entry.name,
+                description: entry.description,
+                icon: entry.icon,
+                versions: entry.versions,
+            })
+        })
+        .collect()
+}
+
 impl GitHubRegistry {
     pub fn new() -> Result<Self, RegistryError> {
         Self::with_origins(
@@ -302,44 +425,7 @@ impl GitHubRegistry {
             return Err(status_error(response.status()));
         }
         let bytes = read_capped(response, MAX_REGISTRY_INDEX_BYTES).await?;
-        let index: RegistryIndex =
-            serde_json::from_slice(&bytes).map_err(|_| RegistryError::InvalidResponse)?;
-        if index.registry_version != 1 || index.extensions.len() > MAX_REGISTRY_ENTRIES {
-            return Err(RegistryError::InvalidResponse);
-        }
-        let mut ids = std::collections::HashSet::new();
-        index
-            .extensions
-            .into_iter()
-            .map(|entry| {
-                if entry.id.is_empty()
-                    || entry.id.len() > MAX_REGISTRY_ID_BYTES
-                    || !entry.id.bytes().all(|byte| {
-                        byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-')
-                    })
-                    || entry.name.trim().is_empty()
-                    || entry.name.len() > MAX_REGISTRY_NAME_BYTES
-                    || entry.description.trim().is_empty()
-                    || entry.description.len() > MAX_REGISTRY_DESCRIPTION_BYTES
-                    || entry
-                        .icon
-                        .as_ref()
-                        .is_some_and(|icon| icon.len() > MAX_REGISTRY_ICON_BYTES)
-                    || !ids.insert(entry.id.clone())
-                {
-                    return Err(RegistryError::InvalidResponse);
-                }
-                let repository = entry.repository.parse::<GitHubRepository>()?;
-                Ok(DiscoveredExtension {
-                    registry_source: source.identity(),
-                    id: entry.id,
-                    repository: repository.identity(),
-                    name: entry.name,
-                    description: entry.description,
-                    icon: entry.icon,
-                })
-            })
-            .collect()
+        parse_index(source, &bytes)
     }
     pub async fn extension_details(
         &self,
@@ -347,7 +433,7 @@ impl GitHubRegistry {
     ) -> Result<ExtensionDetails, RegistryError> {
         let repository = extension.github_repository()?;
         let readme = self.readme(&repository).await?;
-        let releases = self.releases(&repository).await?;
+        let releases = self.listed_releases(&extension).await?;
         Ok(ExtensionDetails {
             extension,
             readme,
@@ -385,14 +471,13 @@ impl GitHubRegistry {
         self.readmes.insert(key, readme.clone()).await;
         Ok(readme)
     }
-    /// Lists the installable releases of an index-authorized extension without
-    /// loading its README.
+    /// Lists the releases of an index-authorized extension that its entry
+    /// reviewed, without loading its README.
     pub async fn extension_releases(
         &self,
         extension: &DiscoveredExtension,
     ) -> Result<Vec<DiscoveredRelease>, RegistryError> {
-        let repository = extension.github_repository()?;
-        self.releases(&repository).await
+        self.listed_releases(extension).await
     }
     /// Downloads only an asset that was returned by this registry's trusted
     /// release resolution. Callers never provide a URL, preventing this API
@@ -430,6 +515,16 @@ impl GitHubRegistry {
             return Err(RegistryError::InvalidResponse);
         }
         Ok(bytes)
+    }
+
+    async fn listed_releases(
+        &self,
+        extension: &DiscoveredExtension,
+    ) -> Result<Vec<DiscoveredRelease>, RegistryError> {
+        let repository = extension.github_repository()?;
+        let mut releases = self.releases(&repository).await?;
+        releases.retain(|release| extension.lists_release(release));
+        Ok(releases)
     }
 
     async fn releases(
@@ -515,6 +610,118 @@ struct GitHubAsset {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn source() -> GitHubRepository {
+        "acme/registry".parse().unwrap()
+    }
+    fn index(versions: &str) -> String {
+        format!(
+            r#"{{"registry_version": 2, "extensions": [{{
+                "id": "acme.widget", "name": "Widget", "description": "A widget",
+                "repository": "acme/widget", "versions": {versions}
+            }}]}}"#
+        )
+    }
+    fn listing(versions: &[(&str, &str)]) -> DiscoveredExtension {
+        let versions = versions
+            .iter()
+            .map(|(version, host_api)| ReviewedVersion {
+                version: (*version).to_owned(),
+                host_api: (*host_api).to_owned(),
+            })
+            .collect::<Vec<_>>();
+        parse_index(
+            &source(),
+            index(&serde_json::to_string(&versions).unwrap()).as_bytes(),
+        )
+        .unwrap()
+        .remove(0)
+    }
+    fn release(tag_name: &str) -> DiscoveredRelease {
+        DiscoveredRelease {
+            source: "github:acme/widget".to_owned(),
+            release_id: 1,
+            tag_name: tag_name.to_owned(),
+            name: String::new(),
+            published_at: None,
+            asset: ReleaseAsset {
+                id: 1,
+                name: "widget.tar.zst".to_owned(),
+                download_url: String::new(),
+                digest: None,
+            },
+        }
+    }
+
+    #[test]
+    fn an_index_must_list_valid_reviewed_versions() {
+        let valid = index(r#"[{"version": "1.0.0", "host_api": "^1.1"}]"#);
+        assert_eq!(
+            parse_index(&source(), valid.as_bytes()).unwrap()[0].versions[0].version,
+            "1.0.0"
+        );
+        for versions in [
+            "[]",
+            r#"[{"version": "1.0.0"}]"#,
+            r#"[{"host_api": "^1.1"}]"#,
+            r#"[{"version": "v1.0.0", "host_api": "^1.1"}]"#,
+            r#"[{"version": "1.0.0", "host_api": "any"}]"#,
+            r#"[{"version": "1.0.0", "host_api": "^1.1"}, {"version": "1.0.0", "host_api": "^1"}]"#,
+        ] {
+            assert!(
+                parse_index(&source(), index(versions).as_bytes()).is_err(),
+                "{versions}"
+            );
+        }
+        let without_versions = r#"{"registry_version": 2, "extensions": [{"id": "acme.widget",
+            "name": "Widget", "description": "A widget", "repository": "acme/widget"}]}"#;
+        assert!(parse_index(&source(), without_versions.as_bytes()).is_err());
+    }
+
+    #[test]
+    fn an_index_must_use_the_supported_registry_version() {
+        let index = index(r#"[{"version": "1.0.0", "host_api": "^1.1"}]"#)
+            .replace(r#""registry_version": 2"#, r#""registry_version": 1"#);
+        assert!(parse_index(&source(), index.as_bytes()).is_err());
+    }
+
+    #[test]
+    fn an_index_may_add_fields_this_host_does_not_know() {
+        let index = index(r#"[{"version": "1.0.0", "host_api": "^1.1", "note": "ok"}]"#)
+            .replace(r#""id":"#, r#""added": true, "id":"#);
+        assert!(parse_index(&source(), index.as_bytes()).is_ok());
+    }
+
+    #[test]
+    fn only_listed_versions_are_offered() {
+        let extension = listing(&[("1.0.1", "^1.1")]);
+        assert!(extension.lists_release(&release("v1.0.1")));
+        assert!(extension.lists_release(&release("1.0.1")));
+        assert!(!extension.lists_release(&release("v1.0.0")));
+        assert!(!extension.lists_release(&release("v1.0.2")));
+        assert!(!extension.lists_release(&release("latest")));
+    }
+
+    #[test]
+    fn a_release_must_declare_the_version_its_tag_names() {
+        assert!(release("v1.0.1").declares_version("1.0.1"));
+        assert!(!release("v1.0.1").declares_version("2.0.0"));
+        assert!(!release("latest").declares_version("1.0.1"));
+    }
+
+    #[test]
+    fn an_update_is_the_highest_compatible_version_newer_than_the_installed_one() {
+        let incompatible = ">=99.0.0";
+        let extension = listing(&[("0.1.9", "^1"), ("0.1.10", "^1"), ("0.2.0", incompatible)]);
+        assert_eq!(
+            extension.available_update("0.1.9").as_deref(),
+            Some("0.1.10")
+        );
+        assert_eq!(extension.available_update("0.1.10"), None);
+        assert_eq!(extension.available_update("0.3.0"), None);
+        assert_eq!(extension.available_update("not-a-version"), None);
+    }
+
     #[test]
     fn a_release_asset_must_match_the_digest_github_reports() {
         let good = format!("sha256:{:x}", Sha256::digest(b"archive"));

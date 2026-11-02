@@ -72,7 +72,9 @@ describe('MarketplaceExtensionPage', () => {
   it('explains when no release can be installed', async () => {
     renderPage([]);
 
-    await screen.findByText('No installable stable releases were found.');
+    await screen.findByText(
+      'No reviewed stable releases are available to install.',
+    );
     expect(screen.queryByRole('combobox')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Install' })).toBeNull();
   });

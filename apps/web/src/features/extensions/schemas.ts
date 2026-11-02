@@ -357,6 +357,13 @@ const releaseSchema = z.object({
     download_url: z.string(),
   }),
 });
+export const extensionUpdateSchema = z.object({
+  extension_id: z.string(),
+  installed_version: z.string(),
+  latest_version: z.string(),
+  repository: z.string(),
+  registry_source: z.string(),
+});
 export const registryDetailsSchema = z.object({
   extension: discoveredSchema,
   readme: z.string(),
@@ -365,3 +372,4 @@ export const registryDetailsSchema = z.object({
 export { detailSchema };
 export type ExtensionInstallation = z.infer<typeof installationSchema>;
 export type ExtensionDetail = z.infer<typeof detailSchema>;
+export type ExtensionUpdate = z.infer<typeof extensionUpdateSchema>;

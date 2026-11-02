@@ -83,6 +83,14 @@ impl FakeOfficialExtensions {
         release.2 = archive;
     }
 
+    /// Removes a release from the official registry's reviewed versions.
+    pub fn withdraw(&self, extension_id: &str, tag_name: &str) {
+        self.releases
+            .lock()
+            .unwrap()
+            .retain(|(id, release, _)| id != extension_id || release.tag_name != tag_name);
+    }
+
     pub fn set_unavailable(&self, unavailable: bool) {
         self.unavailable
             .store(unavailable, std::sync::atomic::Ordering::SeqCst);
@@ -618,11 +626,12 @@ async fn query_domain_event(
 async fn fake_github() -> GitHubRegistry {
     use axum::{Router, http::StatusCode, response::IntoResponse, routing::get};
     let listing = || async {
-        serde_json::json!({"registry_version": 1, "extensions": [{
+        serde_json::json!({"registry_version": 2, "extensions": [{
             "id": "acme.listed",
             "repository": "acme/listed",
             "name": "Listed",
-            "description": "An extension two registries list"
+            "description": "An extension two registries list",
+            "versions": [{"version": "1.0.0", "host_api": "^1"}]
         }]})
         .to_string()
     };
