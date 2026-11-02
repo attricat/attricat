@@ -4,6 +4,7 @@ use std::{io::Cursor, sync::Arc, time::Duration};
 
 use api::{
     file_worker::{FileWorker, WorkerConfig},
+    repository::AttricatRepository,
     storage::{FakeObjectStore, ObjectStore, StoredObject},
 };
 use image::{DynamicImage, ImageFormat, Rgba};
@@ -520,4 +521,40 @@ async fn purge_keeps_objects_of_a_file_referenced_after_deletion_was_scheduled(p
     );
     assert!(worker.run_once().await.unwrap());
     assert_eq!(store.object_count().await, 1);
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_file_whose_purge_failed_waits_and_keeps_only_its_latest_failure(pool: PgPool) {
+    let workspace: Uuid = support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
+    let file_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO files(id,workspace_id,original_filename,display_filename,mime_type,byte_size,sha256,original_key,status,deleted_at,purge_after) VALUES($1,$2,'a.bin','a.bin','application/octet-stream',1,$3,'files/a','ready',now(),now() - interval '1 minute')")
+        .bind(file_id)
+        .bind(workspace)
+        .bind("0".repeat(64))
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO file_processing_jobs (id, workspace_id, file_id, kind, status, available_at) VALUES ($1,$2,$3,'purge','failed',now())")
+        .bind(Uuid::new_v4())
+        .bind(workspace)
+        .bind(file_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let repository = AttricatRepository::system(pool.clone());
+    assert_eq!(repository.queue_due_file_purges().await.unwrap(), 0);
+
+    sqlx::query("UPDATE file_processing_jobs SET updated_at = now() - interval '2 hours' WHERE file_id = $1")
+        .bind(file_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(repository.queue_due_file_purges().await.unwrap(), 1);
+    let statuses: Vec<String> =
+        sqlx::query_scalar("SELECT status FROM file_processing_jobs WHERE file_id = $1")
+            .bind(file_id)
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(statuses, ["queued"]);
 }

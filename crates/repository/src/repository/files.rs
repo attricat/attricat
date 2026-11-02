@@ -1197,6 +1197,10 @@ const FILE_UNREFERENCED: &str = r#"(f.attachment_expires_at IS NULL OR f.attachm
 
 /// Upper bound on files marked, or purge jobs queued, by one reconciliation.
 const RECONCILE_BATCH: i64 = 256;
+/// How long a file whose purge failed waits before it is queued again. A failure
+/// that outlasts a job's own retries, such as a missing delete permission, needs
+/// an operator rather than more attempts.
+const FAILED_PURGE_RETRY_AFTER: std::time::Duration = std::time::Duration::from_secs(60 * 60);
 
 impl SystemRepository {
     /// Marks a bounded batch of unreferenced live files deleted, to be purged
@@ -1243,15 +1247,22 @@ impl SystemRepository {
         let due: Vec<(Uuid, Uuid, DateTime<Utc>)> = sqlx::query_as(
             r#"SELECT f.workspace_id, f.id, f.purge_after FROM files f
             WHERE f.deleted_at IS NOT NULL AND f.purge_after <= now()
-              AND NOT EXISTS (SELECT 1 FROM file_processing_jobs j WHERE j.file_id = f.id AND j.kind = 'purge' AND j.status IN ('queued','running','retryable','completed'))
+              AND NOT EXISTS (SELECT 1 FROM file_processing_jobs j WHERE j.file_id = f.id AND j.kind = 'purge' AND (j.status IN ('queued','running','retryable','completed') OR (j.status = 'failed' AND j.updated_at > now() - ($2 * interval '1 second'))))
             ORDER BY f.purge_after, f.id
             LIMIT $1 FOR UPDATE OF f SKIP LOCKED"#,
         )
         .bind(RECONCILE_BATCH)
+        .bind(FAILED_PURGE_RETRY_AFTER.as_secs() as i64)
         .fetch_all(&mut *transaction)
         .await?;
         let mut queued = 0;
         for (workspace_id, file_id, available_at) in due {
+            // The newest failure is the evidence an operator needs; a storage
+            // outage must not leave a row per attempt behind.
+            sqlx::query("DELETE FROM file_processing_jobs WHERE file_id = $1 AND kind = 'purge' AND status = 'failed'")
+                .bind(file_id)
+                .execute(&mut *transaction)
+                .await?;
             queued += sqlx::query("INSERT INTO file_processing_jobs (id, workspace_id, file_id, kind, status, available_at) VALUES ($1,$2,$3,'purge','queued',$4) ON CONFLICT DO NOTHING")
                 .bind(Uuid::new_v4())
                 .bind(workspace_id)
