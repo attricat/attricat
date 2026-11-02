@@ -48,8 +48,8 @@ Nie można usunąć kontekstu, który jest w użyciu.
 
 ## Praca w kontekście
 
-- W **Przeglądarce** selektor **Kontekst** pokazuje, filtruje i sortuje wartości rozstrzygnięte w danym kontekście.
-- Na stronie rekordu selektor **Kontekst** przełącza wartości, które widzisz i edytujesz.
+- W **Przeglądarce** selektor **Kontekst** w **Zakresie wyszukiwania** pokazuje, filtruje i sortuje wartości rozstrzygnięte w danym kontekście.
+- Na stronie rekordu karty kontekstów w sekcji **Dane** przełączają wartości, które widzisz i edytujesz.
 - W panelu **Przeglądaj według** w Przeglądarce rekordów powiązania relacji są rozwiązywane w kontekście wybranym w Przeglądarce.
 
 ## Najpierw zaplanuj drzewo

@@ -5,7 +5,7 @@ description: Twórz, edytuj i usuwaj rekordy, pracuj z wartościami kontekstowym
 
 Rekord to jeden element katalogu, na przykład produkt lub kategoria. Jego schemat określa, jakie ma atrybuty, jak są one walidowane i jak wygląda układ jego strony.
 
-Strona rekordu ma jeden rząd kart pod paskiem narzędzi. Karta **Dane**, wybrana na początku, zawiera selektor **Kontekst** i pola rekordu. Pozostałe karty to **Jakość danych**, **Komentarze**, **Agenci**, **Kontrola rekordu**, **Znaczniki i metadane** oraz **Eksporty**; niektóre pojawiają się tylko wtedy, gdy mają zastosowanie.
+Strona rekordu ma jeden rząd kart pod paskiem narzędzi. Karta **Dane**, wybrana na początku, zawiera pola rekordu oraz, gdy obszar roboczy ma więcej niż jeden kontekst, kartę dla każdego z nich. Pozostałe karty to **Jakość danych**, **Komentarze**, **Agenci**, **Kontrola rekordu**, **Znaczniki i metadane** oraz **Eksporty**; niektóre pojawiają się tylko wtedy, gdy mają zastosowanie.
 
 ## Tworzenie rekordu
 
@@ -19,7 +19,7 @@ Wartości wpisane podczas tworzenia rekordu są zapisywane w kontekście domyśl
 
 ## Edycja wartości
 
-Rekord edytujesz bezpośrednio na jego stronie; nie ma osobnego formularza edycji. Każde pole, które możesz zmienić, jest edytowalną kontrolką w układzie schematu i pokazuje wartości dla jednego kontekstu naraz. Przełączaj je selektorem **Kontekst**. Jeśli nie możesz edytować rekordu, widzisz tylko jego wartości.
+Rekord edytujesz bezpośrednio na jego stronie; nie ma osobnego formularza edycji. Każde pole, które możesz zmienić, jest edytowalną kontrolką w układzie schematu i pokazuje wartości dla jednego kontekstu naraz. Przełączaj je kartami kontekstów. Jeśli nie możesz edytować rekordu, widzisz tylko jego wartości.
 
 Każde pole zapisuje się osobno:
 

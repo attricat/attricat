@@ -102,9 +102,9 @@ Spróbuj zapisać produkt bez tytułu: schemat rekordu go odrzuci. Spróbuj usta
 
 Otwórz **Zarządzanie → Konteksty → Utwórz kontekst**. Utwórz `PL` pod korzeniem, z metadanymi `{"language": "pl"}`.
 
-Otwórz produkt i przełącz **Kontekst** na `PL`. Każde pole pokazuje *Dziedziczone z kontekstu Domyślny*. Ustaw `title` na *Lniana koszula* i opuść pole, aby je zapisać. `sku` jest tu tylko do odczytu, ponieważ jest zarządzane w kontekście domyślnym.
+Otwórz produkt i wybierz kartę `PL` w sekcji **Dane**. Każde pole pokazuje *Dziedziczone z kontekstu Domyślny*. Ustaw `title` na *Lniana koszula* i opuść pole, aby je zapisać. `sku` jest tu tylko do odczytu, ponieważ jest zarządzane w kontekście domyślnym.
 
-Przełączaj selektor **Kontekst** w Przeglądarce między `default` a `PL`, aby zobaczyć zmianę tytułu.
+W Przeglądarce otwórz **Zakres wyszukiwania**, czyli przycisk z suwakami obok selektora schematu, i przełączaj **Kontekst** między `default` a `PL`, aby zobaczyć zmianę tytułu.
 
 ## 6. Opublikuj w kanale
 

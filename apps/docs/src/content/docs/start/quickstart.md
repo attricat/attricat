@@ -102,9 +102,9 @@ Try saving without a title: the record schema rejects it. Try a price of *-1*: t
 
 Open **Manage → Contexts → Create context**. Create `PL` under the root, with metadata `{"language": "pl"}`.
 
-Open the product and switch **Context** to `PL`. Every field shows *Inherited from Default context*. Set `title` to *Lniana koszula* and leave the field to save it. `sku` is read-only here because it is managed in the default context.
+Open the product and choose the `PL` tab under **Data**. Every field shows *Inherited from Default context*. Set `title` to *Lniana koszula* and leave the field to save it. `sku` is read-only here because it is managed in the default context.
 
-Switch the Explorer's **Context** selector between `default` and `PL` to see the title change.
+In the Explorer, open **Search scope**, the sliders button next to the blueprint selector, and switch **Context** between `default` and `PL` to see the title change.
 
 ## 6. Publish to a channel
 

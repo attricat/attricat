@@ -19,11 +19,12 @@ Logować się można hasłem lub przez [logowanie jednokrotne](#logowanie-jednok
 
 Obszar roboczy może pozwalać na logowanie przez jednego dostawcę tożsamości OpenID Connect, takiego jak Microsoft Entra ID, Okta, Google Workspace lub Keycloak. Wdrożenie wymaga ustawienia `OIDC_CALLBACK_URL` i sekretu `identity_provider_credential_key`; zobacz [opis konfiguracji](/pl/reference/configuration/). Skonfiguruj je w **Zarządzanie → Zarządzanie obszarem roboczym → Logowanie**, co wymaga uprawnienia `workspace.manage`:
 
-1. Zarejestruj u dostawcy aplikację używaną tylko przez ten obszar roboczy, podając dokładnie adres przekierowania widoczny w sekcji **Logowanie**, bez symboli wieloznacznych. To ważne dla bezpieczeństwa: współdzielona aplikacja lub symbol wieloznaczny mogą pozwolić innemu obszarowi roboczemu w tym samym wdrożeniu przejąć logowania Twoich członków. Upewnij się, że dostawca udostępnia atrybut `email`.
-2. Wpisz adres URL wydawcy, identyfikator klienta, sekret klienta i nazwę przycisku logowania, a następnie zapisz.
-3. Wybierz **Uruchom logowanie testowe**. Potwierdza to, że ustawienia działają, i łączy Twoje konto.
-4. Włącz **Pokazuj tego dostawcę na stronie logowania**.
-5. Opcjonalnie pozwól logować się hasłem tylko właścicielom, aby mieli dostęp w razie awarii dostawcy.
+1. Zarejestruj u dostawcy aplikację używaną tylko przez ten obszar roboczy. Upewnij się, że dostawca udostępnia atrybut `email`.
+2. Wpisz adres URL wydawcy, identyfikator klienta, sekret klienta i nazwę przycisku logowania, a następnie zapisz. Sekcja **Logowanie** pokaże wtedy adres przekierowania obszaru roboczego.
+3. Dodaj dokładnie ten adres przekierowania do aplikacji, bez symboli wieloznacznych. To ważne dla bezpieczeństwa: współdzielona aplikacja lub symbol wieloznaczny mogą pozwolić innemu obszarowi roboczemu w tym samym wdrożeniu przejąć logowania Twoich członków.
+4. Wybierz **Uruchom logowanie testowe**. Potwierdza to, że ustawienia działają, i łączy Twoje konto.
+5. Włącz **Pokazuj tego dostawcę na stronie logowania**.
+6. Opcjonalnie pozwól logować się hasłem tylko właścicielom, aby mieli dostęp w razie awarii dostawcy.
 
 Zmiana adresu wydawcy lub identyfikatora klienta wyłącza dostawcę i przywraca logowanie hasłem dla wszystkich, dopóki nowe logowanie testowe się nie powiedzie. Połączenie z dostawcą obowiązuje tylko w obszarze roboczym, w którym je utworzono, więc osoba korzystająca z tego samego dostawcy w dwóch obszarach łączy konto w każdym z nich, a dostawca skonfigurowany dla jednego obszaru nie daje dostępu do innego.
 

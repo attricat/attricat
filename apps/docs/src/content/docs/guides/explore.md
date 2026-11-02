@@ -89,7 +89,7 @@ To select several targets of one attribute, use **Add filter** and pick the rela
 
 ## Context
 
-The **Context** selector shows values as they resolve in a context: the context's own value if it has one, otherwise the value it inherits. See [Contexts](/guides/contexts/).
+The **Context** selector, under **Search scope**, shows values as they resolve in a context: the context's own value if it has one, otherwise the value it inherits. See [Contexts](/guides/contexts/).
 
 The table columns, the record label, filters, and sorting all use the selected context. For example, with a `pl` context selected, a translated name is shown, filtered, and sorted in Polish, and a record without a Polish name shows the inherited one. Text search matches values in every context.
 
