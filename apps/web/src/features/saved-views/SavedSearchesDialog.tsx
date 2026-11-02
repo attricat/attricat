@@ -7,17 +7,15 @@ import {
   DialogContent,
   DialogTitle,
   IconButton,
-  InputAdornment,
   LinearProgress,
   List,
   ListItem,
   ListItemButton,
   ListItemText,
-  TextField,
   Tooltip,
 } from '@mui/material';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { SearchIcon, Trash2Icon } from 'lucide-react';
+import { Trash2Icon } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { smallIconSize } from '../../components/iconSizes';
@@ -34,6 +32,7 @@ import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { SavedSearchIcon } from '../../components/systemIcons';
 import { EmptyState } from '../../components/EmptyState';
+import { SearchField } from '../../components/SearchField';
 
 export const SavedSearchesDialog = ({
   actions,
@@ -69,19 +68,12 @@ export const SavedSearchesDialog = ({
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
       <DialogTitle>{t('explorer.savedSearches')}</DialogTitle>
       <DialogContent dividers>
-        <TextField
+        <SearchField
           fullWidth
           label={t('explorer.filterSavedSearches')}
           onChange={(event) => setFilter(event.target.value)}
           slotProps={{
             htmlInput: { maxLength: SAVED_VIEW_SEARCH_MAX_LENGTH },
-            input: {
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon size={smallIconSize} />
-                </InputAdornment>
-              ),
-            },
           }}
           sx={{ mb: 1.5, mt: 0.5 }}
           type="search"

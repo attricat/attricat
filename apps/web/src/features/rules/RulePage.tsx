@@ -1,15 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { createLink, Link } from '@tanstack/react-router';
-import {
-  Alert,
-  Box,
-  Button,
-  Paper,
-  Stack,
-  Tab,
-  Tabs,
-  Typography,
-} from '@mui/material';
+import { Link } from '@tanstack/react-router';
+import { Alert, Box, Button, Stack, Tabs, Typography } from '@mui/material';
 import {
   ArrowLeftIcon,
   FileCodeIcon,
@@ -28,7 +19,7 @@ import { LoadingState } from '../../components/LoadingState';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
-import { RouterButton } from '../../components/RouterLink';
+import { RouterButton, RouterTab } from '../../components/RouterLink';
 import { RuleIcon } from '../../components/systemIcons';
 import { useTabAccessibility } from '../../components/useTabAccessibility';
 import { Timestamp } from '../../time/Timestamp';
@@ -70,14 +61,13 @@ import { FindingSeverityChip } from './FindingSeverityChip';
 import { ruleDescription, rulePredicate, ruleSeverity } from './rulePlan';
 import { PredicateSummary } from './PredicateSummary';
 import { useLatestBlueprintAttributes } from './useFindingMessages';
+import { SectionPaper } from '../../components/SectionPaper';
 
-const RouterTab = createLink(Tab);
 const sectionIcons = {
   [RULE_PAGE_DEFINITION]: FileCodeIcon,
   [RULE_PAGE_CHANGELOG]: HistoryIcon,
 } satisfies Record<RulePageSection, LucideIcon>;
 const noComparison: RuleComparisonSearch = {};
-const ignoreChange = () => undefined;
 
 /** A rule's most recent runs, with a link to the full run history. */
 const RecentRuns = ({ rule }: { rule: RuleDetails }) => {
@@ -171,16 +161,16 @@ const RuleDefinition = ({ rule }: { rule: RuleDetails }) => {
         </Alert>
       )}
       {checks && (
-        <Paper component="section" sx={{ mt: 3, p: 2 }}>
+        <SectionPaper>
           <Typography component="h2" variant="h6">
             {t('rules.rulePage.whatItChecks')}
           </Typography>
           <Box sx={{ mt: 1 }}>
             <PredicateSummary attributes={attributes} predicate={checks} />
           </Box>
-        </Paper>
+        </SectionPaper>
       )}
-      <Paper component="section" sx={{ mt: 3, p: 2 }}>
+      <SectionPaper>
         <Typography component="h2" variant="h6">
           {t('rules.rulePage.definition')}
         </Typography>
@@ -189,11 +179,10 @@ const RuleDefinition = ({ rule }: { rule: RuleDetails }) => {
           height={RULE_DEFINITION_VIEWER_HEIGHT}
           kind={definitionKinds.rule}
           marginTop={1}
-          onChange={ignoreChange}
           readOnly
           value={rule.definition}
         />
-      </Paper>
+      </SectionPaper>
       <RecentRuns rule={rule} />
     </>
   );

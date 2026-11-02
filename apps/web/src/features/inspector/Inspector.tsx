@@ -1,6 +1,4 @@
-import { Box, IconButton, Paper, Tab, Tabs, Typography } from '@mui/material';
-import { XIcon } from 'lucide-react';
-import { useId } from 'react';
+import { Box, Paper, Tab, Tabs, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import {
   apiHealthColor,
@@ -23,7 +21,8 @@ import { InspectorServerPane } from './InspectorServerPane';
 import { InspectorSessionPane } from './InspectorSessionPane';
 import { useApiHealth } from './useApiHealth';
 import { useInspectorState } from './useInspectorState';
-import { smallIconSize } from '../../components/iconSizes';
+import { useTabAccessibility } from '../../components/useTabAccessibility';
+import { CloseIconButton } from '../../components/CloseIconButton';
 
 const paneLabelKeys = {
   performance: 'inspector.performance',
@@ -48,14 +47,10 @@ const InspectorPaneContent = ({
 
 export const Inspector = () => {
   const { t } = useTranslation();
-  const tabId = useId();
+  const tabId = useTabAccessibility();
   const [{ activePane, expanded }, updateInspectorState] = useInspectorState();
   const apiHealth = useApiHealth();
   const apiStatus = t(apiHealthSummaryKeys[apiHealth]);
-  const tabIds = (pane: InspectorPaneId) => ({
-    panel: `${tabId}-${pane}-panel`,
-    tab: `${tabId}-${pane}-tab`,
-  });
 
   if (!expanded)
     return (
@@ -99,14 +94,11 @@ export const Inspector = () => {
         <Typography aria-live="polite" sx={{ flexGrow: 1 }} variant="caption">
           {t('inspector.status', { status: apiStatus })}
         </Typography>
-        <IconButton
+        <CloseIconButton
           aria-expanded
-          aria-label={t('inspector.collapse')}
+          label={t('inspector.collapse')}
           onClick={() => updateInspectorState({ expanded: false })}
-          size="small"
-        >
-          <XIcon size={smallIconSize} />
-        </IconButton>
+        />
       </Box>
       <Box
         sx={{
@@ -132,15 +124,14 @@ export const Inspector = () => {
           }}
           value={activePane}
         >
-          {inspectorPaneOrder.map((pane) => (
+          {inspectorPaneOrder.map((pane, index) => (
             <Tab
-              aria-controls={tabIds(pane).panel}
-              id={tabIds(pane).tab}
+              {...tabId.tab(index)}
               key={pane}
               label={t(paneLabelKeys[pane])}
               sx={{
-                fontSize: '0.75rem',
-                fontWeight: 600,
+                typography: 'caption',
+                fontWeight: 'fontWeightBold',
                 minHeight: inspectorTabMinHeight,
                 py: 0,
               }}
@@ -149,9 +140,7 @@ export const Inspector = () => {
           ))}
         </Tabs>
         <Box
-          aria-labelledby={tabIds(activePane).tab}
-          id={tabIds(activePane).panel}
-          role="tabpanel"
+          {...tabId.panel(inspectorPaneOrder.indexOf(activePane))}
           sx={{ pt: 1 }}
         >
           <InspectorPaneContent apiHealth={apiHealth} pane={activePane} />

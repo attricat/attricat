@@ -16,6 +16,9 @@ import { definitionYamlOptions } from './yamlSyntax';
 
 export type YamlPath = (string | number)[];
 export type TextRange = { start: number; end: number };
+
+export const rangeContains = (range: TextRange, offset: number) =>
+  offset >= range.start && offset <= range.end;
 type YamlScalar = string | number | boolean;
 
 export type YamlEntry = {
@@ -71,7 +74,8 @@ export type YamlOutline = {
   valueAt: (path: YamlPath) => YamlScalar | undefined;
 };
 
-const pathKey = (path: YamlPath) => JSON.stringify(path);
+/** A path as a string, for keying maps and sets by path. */
+export const pathKey = (path: YamlPath) => JSON.stringify(path);
 
 const toRange = (range: [number, number, number] | null | undefined) =>
   range ? { end: range[1], start: range[0] } : undefined;

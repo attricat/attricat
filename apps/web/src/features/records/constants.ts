@@ -238,3 +238,6 @@ export const conflictResolutions = {
 } as const;
 export type ConflictResolution =
   (typeof conflictResolutions)[keyof typeof conflictResolutions];
+
+/** Stable keys for the placeholder rows shown while a form's fields load. */
+export const fieldSkeletons = ['first', 'second', 'third'];

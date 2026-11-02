@@ -1,8 +1,9 @@
-import { Alert, Box, CircularProgress } from '@mui/material';
+import { Alert } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { ExtensionFrame } from './ExtensionFrame';
 import { useExtensionRuntime } from './useExtensionRuntime';
 import { contributionKinds } from './constants';
+import { LoadingSpinner } from '../../components/LoadingState';
 
 type ExtensionRoutePageProps = {
   extensionId: string;
@@ -17,16 +18,7 @@ export const ExtensionRoutePage = ({
   const runtime = useExtensionRuntime();
   if (runtime.isPending)
     return (
-      <Box
-        aria-live="polite"
-        role="status"
-        sx={{ display: 'flex', justifyContent: 'center', py: 2 }}
-      >
-        <CircularProgress
-          aria-label={t('extensions.loadingPage')}
-          enableTrackSlot
-        />
-      </Box>
+      <LoadingSpinner label={t('extensions.loadingPage')} sx={{ py: 2 }} />
     );
   if (runtime.isError)
     return (

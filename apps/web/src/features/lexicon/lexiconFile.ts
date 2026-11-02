@@ -1,6 +1,8 @@
 import { parseStrictYaml } from '../../components/yamlSyntax';
 import { YAML_FILE_EXTENSIONS } from './constants';
 import { lexiconFileSchema, type LexiconFile } from './schemas';
+import { downloadUrl } from '../../components/downloadUrl';
+import { formatJson } from '../../components/jsonTokens';
 
 /** Throws on invalid YAML, as `JSON.parse` does on invalid JSON. */
 const parseYaml = (source: string) => {
@@ -22,13 +24,10 @@ export const parseLexiconFile = (name: string, source: string): LexiconFile =>
 /** Saves an export as `lexicon-<language>.json`. */
 export const downloadLexiconFile = (file: LexiconFile) => {
   const url = URL.createObjectURL(
-    new Blob([`${JSON.stringify(file, null, 2)}\n`], {
+    new Blob([`${formatJson(file)}\n`], {
       type: 'application/json',
     }),
   );
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `lexicon-${file.language}.json`;
-  link.click();
+  downloadUrl(url, `lexicon-${file.language}.json`);
   URL.revokeObjectURL(url);
 };

@@ -22,7 +22,10 @@ import {
   navigationItemHoverSx,
 } from './sideNavigationLayout';
 import { AppsIcon, ExplorerIcon, ManagementIcon } from './systemIcons';
-import { useCompactNavigationPanels } from './useCompactNavigationPanels';
+import {
+  compactNavigationPanels,
+  useCompactNavigationPanels,
+} from './useCompactNavigationPanels';
 import {
   mobileSectionTitleKeys,
   useMobileNavigationSection,
@@ -327,7 +330,7 @@ export const MobileSideNavigation = ({
             />
           </>
         )}
-        {section === 'explore' && (
+        {section === compactNavigationPanels.explore && (
           <>
             <Box sx={{ px: 1 }}>
               <QueryErrorNotice
@@ -350,7 +353,7 @@ export const MobileSideNavigation = ({
             </Box>
           </>
         )}
-        {section === 'extensions' && (
+        {section === compactNavigationPanels.extensions && (
           <ExtensionOutlet
             canBrowseExtensions={canBrowseExtensions}
             navigationDisplay="all"
@@ -358,7 +361,7 @@ export const MobileSideNavigation = ({
             outlet={extensionOutlets.navigation}
           />
         )}
-        {section === 'manage' && (
+        {section === compactNavigationPanels.manage && (
           <ManagementNavigationLinks
             items={managementItems}
             onNavigate={onNavigate}

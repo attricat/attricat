@@ -150,7 +150,7 @@ const TokenCard = ({
             component="li"
             key={permission}
             label={permission}
-            sx={{ fontFamily: monoFontFamily, fontWeight: 400 }}
+            sx={{ fontFamily: monoFontFamily, fontWeight: 'fontWeightRegular' }}
             variant="outlined"
           />
         ))}

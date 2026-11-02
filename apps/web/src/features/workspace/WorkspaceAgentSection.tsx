@@ -4,7 +4,6 @@ import {
   Alert,
   Box,
   Button,
-  CircularProgress,
   FormControl,
   FormControlLabel,
   FormLabel,
@@ -28,6 +27,7 @@ import {
 } from './constants';
 import { workspaceQueryKeys } from './queryKeys';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { LoadingState } from '../../components/LoadingState';
 
 const AgentSettingsForm = ({ settings }: { settings: AgentSettings }) => {
   const { t } = useTranslation();
@@ -179,7 +179,7 @@ export const WorkspaceAgentSection = ({
         {t('workspace.agentSettingsDescription')}
       </Typography>
       {settings.isPending && (
-        <CircularProgress aria-label={t('workspace.loadingAgentSettings')} />
+        <LoadingState>{t('workspace.loadingAgentSettings')}</LoadingState>
       )}
       <ApiErrorAlert error={settings.error} />
       {settings.data && <AgentSettingsForm settings={settings.data} />}

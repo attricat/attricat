@@ -1,6 +1,5 @@
 import {
   Box,
-  Paper,
   Tab,
   Table,
   TableBody,
@@ -24,6 +23,7 @@ import { JsonMetadata } from './BlueprintMetadata';
 import { isHiddenByDefault } from '../records/attributeVisibility';
 import { ValueTypeLabel } from '../records/components/ValueTypeLabel';
 import { emptyValuePlaceholder } from '../../components/placeholders';
+import { SectionPaper } from '../../components/SectionPaper';
 
 export const BlueprintVersionMetadata = ({
   blueprint,
@@ -38,7 +38,7 @@ export const BlueprintVersionMetadata = ({
   );
 
   return (
-    <Paper component="section" sx={{ mt: 3, p: 2.5 }}>
+    <SectionPaper>
       <Typography component="h2" variant="h6">
         {t('blueprints.versionMetadata', {
           version: blueprint.blueprint.version,
@@ -161,7 +161,7 @@ export const BlueprintVersionMetadata = ({
           </Box>
         )}
       </Box>
-    </Paper>
+    </SectionPaper>
   );
 };
 

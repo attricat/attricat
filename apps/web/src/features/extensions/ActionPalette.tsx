@@ -6,7 +6,6 @@ import {
   ListItemButton,
   ListItemIcon,
   ListItemText,
-  TextField,
   Typography,
 } from '@mui/material';
 import { useCallback, useEffect, useState } from 'react';
@@ -21,6 +20,7 @@ import { renderHostIcon } from './hostIcons';
 import { contributionKey } from './outletContributions';
 import { useInvokeExtensionAction } from './useInvokeExtensionAction';
 import { useOfferedActions } from './useOfferedActions';
+import { SearchField } from '../../components/SearchField';
 
 /** The key that opens the palette, with Ctrl or ⌘. */
 const paletteKey = 'k';
@@ -98,7 +98,7 @@ export const ActionPalette = () => {
     <Dialog fullWidth maxWidth="sm" onClose={close} open={open}>
       <DialogTitle>{t('extensions.paletteTitle')}</DialogTitle>
       <DialogContent>
-        <TextField
+        <SearchField
           fullWidth
           inputRef={focusOnOpen}
           label={t('extensions.paletteSearch')}

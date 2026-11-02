@@ -20,6 +20,7 @@ import {
   type ExtensionRun,
 } from './schemas';
 import { StatusChip, type StatusChipStyle } from '../../components/StatusChip';
+import { percentOf } from '../../components/percentOf';
 
 const statusChips = {
   queued: { color: 'default', icon: ClockIcon },
@@ -115,10 +116,7 @@ export const ExtensionRunProgress = ({ run }: { run: ExtensionRun }) => {
         <>
           <LinearProgress
             aria-label={t('extensionRuns.progressLabel')}
-            value={Math.min(
-              100,
-              (counts.data.completed / counts.data.total) * 100,
-            )}
+            value={percentOf(counts.data.completed, counts.data.total)}
             variant="determinate"
           />
           <Typography color="text.secondary" variant="body2">

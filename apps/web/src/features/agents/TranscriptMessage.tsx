@@ -1,7 +1,6 @@
 import { Avatar, Box, Chip, Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { CurrentUserAvatar } from '../../components/CurrentUserAvatar';
-import { AgentIcon } from '../../components/systemIcons';
 import { fileDownloadUrl } from '../files/api';
 import {
   messageBubbleRadius,
@@ -12,8 +11,8 @@ import { ConversationMessageContent } from './ConversationMessageContent';
 import { DraftProposal } from './DraftProposal';
 import { parseDraftProposal } from './parseDraftProposal';
 import type { ConversationMessage } from './schemas';
-import { smallIconSize } from '../../components/iconSizes';
 import { userAvatarSizes } from '../../components/userAvatars';
+import { AgentAvatar } from './AgentAvatar';
 
 export const TranscriptMessage = ({
   getDraftValues,
@@ -59,15 +58,7 @@ export const TranscriptMessage = ({
             size={userAvatarSizes.message}
           />
         ) : (
-          <Avatar
-            sx={{
-              bgcolor: 'primary.main',
-              height: userAvatarSizes.message,
-              width: userAvatarSizes.message,
-            }}
-          >
-            <AgentIcon size={smallIconSize} />
-          </Avatar>
+          <AgentAvatar />
         )}
       </Box>
       <Box

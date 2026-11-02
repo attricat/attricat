@@ -141,6 +141,67 @@ async fn oversized_context_id_is_rejected_before_buffering_the_field(pool: PgPoo
 }
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_csv_upload_declaring_its_own_type_is_accepted_as_text(pool: PgPool) {
+    let store = Arc::new(FakeObjectStore::available());
+    let (base_url, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
+    let client = authenticated_client();
+    let blueprint = create_blueprint(
+        &client,
+        &base_url,
+        r#"format_version: 1
+code: csv_upload_product
+name: CSV upload product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [document]
+attributes:
+  - code: document
+    value_type: file
+    cardinality: many
+    allowed_extensions: [csv]
+"#,
+    )
+    .await;
+    let record = create_record(&client, &base_url, &blueprint).await;
+    let upload = |declared: &'static str| {
+        let client = client.clone();
+        let url = format!(
+            "{base_url}/records/{}/file-attributes/document/uploads",
+            record["id"].as_str().unwrap()
+        );
+        async move {
+            client
+                .post(url)
+                .multipart(
+                    Form::new().part(
+                        "file",
+                        Part::bytes(b"sku,qty\nA,1\n".to_vec())
+                            .file_name("feed.csv")
+                            .mime_str(declared)
+                            .unwrap(),
+                    ),
+                )
+                .send()
+                .await
+                .unwrap()
+        }
+    };
+    for declared in ["text/csv", "application/vnd.ms-excel"] {
+        let response = upload(declared).await;
+        assert_eq!(response.status(), StatusCode::CREATED, "{declared}");
+        let body: Value = response.json().await.unwrap();
+        assert_eq!(body["files"][0]["mime_type"], "text/plain");
+    }
+    assert_eq!(
+        upload("text/html").await.status(),
+        StatusCode::UNSUPPORTED_MEDIA_TYPE
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn text_upload_with_binary_tail_is_rejected(pool: PgPool) {
     let store = Arc::new(FakeObjectStore::available());
     let (base_url, server) = start_server_with_object_store(pool.clone(), store.clone()).await;

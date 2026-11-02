@@ -1,3 +1,4 @@
+import { uuidSegment } from '../../api/pathSegments';
 /** Per-record export statuses, in the order lists and filters show them. */
 export const exportStatuses = [
   'pending',
@@ -64,7 +65,7 @@ export type BrowserAuthorizationOutcome =
 
 export const exportStatusPath = '/api/export-status';
 export const recordExportStatusPath = (recordId: string) =>
-  `/api/v1/records/${encodeURIComponent(recordId)}/export-status`;
+  `/api/v1/records/${uuidSegment(recordId)}/export-status`;
 
 /** Longest connection code a returning OAuth callback may name. */
 export const maximumConnectionCodeLength = 128;

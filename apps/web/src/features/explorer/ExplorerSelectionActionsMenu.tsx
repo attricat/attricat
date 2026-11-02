@@ -1,21 +1,14 @@
-import {
-  Button,
-  ListItemIcon,
-  ListItemText,
-  Menu,
-  MenuItem,
-  Tooltip,
-} from '@mui/material';
+import { Button, Menu, Tooltip } from '@mui/material';
 import { ChevronDownIcon } from 'lucide-react';
 import { useId, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { compactIconSize } from '../../components/iconSizes';
 import { AgentIcon, SavedSearchIcon } from '../../components/systemIcons';
 import { useAgentsUnavailableReason } from '../agents/useAgentsUnavailableReason';
 import { useCan } from '../auth/useCan';
 import { capabilities } from '../auth/capabilities';
 import { useActionDialogStore } from '../extensions/actionDialogStore';
 import { ActionMenuCloseContext } from '../extensions/actions';
+import { ActionMenuItem } from '../../components/ActionMenuItem';
 
 type Props = {
   disabled: boolean;
@@ -71,37 +64,36 @@ export const ExplorerSelectionActionsMenu = ({
         open={Boolean(anchor)}
         transformOrigin={{ horizontal: 'right', vertical: 'top' }}
       >
-        {canSendToAgent && (
-          <Tooltip placement="left" title={agentsUnavailableReason ?? ''}>
-            <span>
-              <MenuItem
-                disabled={Boolean(agentsUnavailableReason)}
-                onClick={() => {
-                  close();
-                  onSendToAgent();
-                }}
-              >
-                <ListItemIcon>
-                  <AgentIcon size={compactIconSize} />
-                </ListItemIcon>
-                <ListItemText>
+        {canSendToAgent &&
+          (agentsUnavailableReason ? (
+            // A wrapper would hide an enabled item from arrow-key navigation.
+            <Tooltip placement="left" title={agentsUnavailableReason}>
+              <span>
+                <ActionMenuItem disabled icon={AgentIcon}>
                   {t('explorer.sendToAgentConversation')}
-                </ListItemText>
-              </MenuItem>
-            </span>
-          </Tooltip>
-        )}
-        <MenuItem
+                </ActionMenuItem>
+              </span>
+            </Tooltip>
+          ) : (
+            <ActionMenuItem
+              icon={AgentIcon}
+              onClick={() => {
+                close();
+                onSendToAgent();
+              }}
+            >
+              {t('explorer.sendToAgentConversation')}
+            </ActionMenuItem>
+          ))}
+        <ActionMenuItem
+          icon={SavedSearchIcon}
           onClick={() => {
             close();
             onSaveAsSearch();
           }}
         >
-          <ListItemIcon>
-            <SavedSearchIcon size={compactIconSize} />
-          </ListItemIcon>
-          <ListItemText>{t('explorer.saveSelectionAsSearch')}</ListItemText>
-        </MenuItem>
+          {t('explorer.saveSelectionAsSearch')}
+        </ActionMenuItem>
         <ActionMenuCloseContext value={close}>
           {extensionActions}
         </ActionMenuCloseContext>

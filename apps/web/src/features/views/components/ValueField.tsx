@@ -114,7 +114,10 @@ export const ValueField = ({
         ) : (
           <>
             <Box sx={{ alignItems: 'center', display: 'flex', gap: 0.5 }}>
-              <Typography sx={{ fontWeight: 700 }} variant="subtitle2">
+              <Typography
+                sx={{ fontWeight: 'fontWeightBold' }}
+                variant="subtitle2"
+              >
                 {labelIcon ? (
                   <IconLabel icon={labelIcon}>{label}</IconLabel>
                 ) : (

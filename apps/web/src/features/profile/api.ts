@@ -2,7 +2,8 @@ import { z } from 'zod';
 import i18n from 'i18next';
 import { request, requestNoContent, jsonRequest } from '../../api/request';
 import { uuidSegment } from '../../api/pathSegments';
-import { tokenSchema, permissionSchema, tokenInputSchema } from './schemas';
+import { permissionSchema } from '../workspace/schemas';
+import { tokenSchema, tokenInputSchema } from './schemas';
 export type { PersonalToken } from './schemas';
 
 export const listTokens = () =>

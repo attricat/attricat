@@ -1,8 +1,6 @@
 import {
   Alert,
-  Box,
   Button,
-  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -23,6 +21,7 @@ import { ExtensionUi } from './ExtensionUi';
 import { useExtensionRuntime } from './useExtensionRuntime';
 import { progressSizes } from '../../components/iconSizes';
 import { useContributionTitle } from './contributionTitle';
+import { LoadingSpinner } from '../../components/LoadingState';
 
 /**
  * Host-managed dialog an extension's action opens. It is mounted once in the
@@ -100,17 +99,11 @@ const ActionDialog = ({
             </Typography>
           )}
           {runtime.isPending ? (
-            <Box
-              aria-live="polite"
-              role="status"
-              sx={{ display: 'flex', justifyContent: 'center', py: 2 }}
-            >
-              <CircularProgress
-                aria-label={t('extensions.loadingContent')}
-                enableTrackSlot
-                size={progressSizes.standard}
-              />
-            </Box>
+            <LoadingSpinner
+              label={t('extensions.loadingContent')}
+              size={progressSizes.standard}
+              sx={{ py: 2 }}
+            />
           ) : contribution ? (
             <ExtensionUi context={context} contribution={contribution} />
           ) : runtime.data ? (

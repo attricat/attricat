@@ -1,4 +1,4 @@
-const millisecondsPerSecond = 1_000;
+import { millisecondsPerSecond } from '../../time/durations';
 
 export const backgroundProcessingRefreshInterval = 30_000;
 export const backgroundProcessingRefreshSeconds =

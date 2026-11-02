@@ -217,7 +217,7 @@ export const MigrateRecordPage = ({ recordId }: { recordId: string }) => {
           submitLabel={t('records.upgradeRecord')}
         >
           <Box>
-            <Typography sx={{ fontWeight: 600 }}>
+            <Typography sx={{ fontWeight: 'fontWeightBold' }}>
               {t('records.upgradeFrom', {
                 source: preview.data.source_version,
                 target: preview.data.target.blueprint.version,

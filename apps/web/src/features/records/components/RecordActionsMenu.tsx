@@ -9,19 +9,15 @@ import {
   Trash2Icon,
   Undo2Icon,
 } from 'lucide-react';
-import {
-  Button,
-  Divider,
-  ListItemIcon,
-  ListItemText,
-  Menu,
-  MenuItem,
-} from '@mui/material';
+import { Button, Divider, Menu } from '@mui/material';
 import { useId, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RouterMenuItem } from '../../../components/RouterLink';
 import { useCopyToClipboard } from '../../../components/useCopyToClipboard';
-import { compactIconSize } from '../../../components/iconSizes';
+import {
+  ActionMenuItem,
+  ActionMenuItemContent,
+} from '../../../components/ActionMenuItem';
 import { lexiconText } from '../../lexicon/lexicon';
 import { RecordIdIcon, AuditLogIcon } from '../../../components/systemIcons';
 import { publicationStatuses } from '../constants';
@@ -113,24 +109,20 @@ export const RecordActionsMenu = ({
           params={{ recordId }}
           to="/records/$recordId/changes"
         >
-          <ListItemIcon>
-            <AuditLogIcon size={compactIconSize} />
-          </ListItemIcon>
-          <ListItemText>{t('records.changes')}</ListItemText>
+          <ActionMenuItemContent icon={AuditLogIcon}>
+            {t('records.changes')}
+          </ActionMenuItemContent>
         </RouterMenuItem>
-        <MenuItem onClick={choose(() => void copyText(recordId))}>
-          <ListItemIcon>
-            <RecordIdIcon size={compactIconSize} />
-          </ListItemIcon>
-          <ListItemText>{t('records.copyRecordId')}</ListItemText>
-        </MenuItem>
+        <ActionMenuItem
+          icon={RecordIdIcon}
+          onClick={choose(() => void copyText(recordId))}
+        >
+          {t('records.copyRecordId')}
+        </ActionMenuItem>
         {canWrite && (
-          <MenuItem onClick={choose(onDuplicate)}>
-            <ListItemIcon>
-              <CopyIcon size={compactIconSize} />
-            </ListItemIcon>
-            <ListItemText>{t('records.duplicateRecord')}</ListItemText>
-          </MenuItem>
+          <ActionMenuItem icon={CopyIcon} onClick={choose(onDuplicate)}>
+            {t('records.duplicateRecord')}
+          </ActionMenuItem>
         )}
         {canCreate && blueprint && (
           <RouterMenuItem
@@ -138,14 +130,11 @@ export const RecordActionsMenu = ({
             search={{ blueprint: blueprint.code }}
             to="/records/new"
           >
-            <ListItemIcon>
-              <PlusIcon size={compactIconSize} />
-            </ListItemIcon>
-            <ListItemText>
+            <ActionMenuItemContent icon={PlusIcon}>
               {t('records.createAnother', {
                 blueprint: lexiconText(blueprint.name),
               })}
-            </ListItemText>
+            </ActionMenuItemContent>
           </RouterMenuItem>
         )}
         {canWrite && schemaOutdated && (
@@ -154,10 +143,9 @@ export const RecordActionsMenu = ({
             params={{ recordId }}
             to="/records/$recordId/migrate"
           >
-            <ListItemIcon>
-              <CircleArrowUpIcon size={compactIconSize} />
-            </ListItemIcon>
-            <ListItemText>{t('records.upgradeBlueprint')}</ListItemText>
+            <ActionMenuItemContent icon={CircleArrowUpIcon}>
+              {t('records.upgradeBlueprint')}
+            </ActionMenuItemContent>
           </RouterMenuItem>
         )}
         <ActionMenuCloseContext value={close}>
@@ -165,68 +153,59 @@ export const RecordActionsMenu = ({
         </ActionMenuCloseContext>
         {publications && <Divider />}
         {publications && publication && (
-          <MenuItem
+          <ActionMenuItem
             disabled={publications.isPending || notReady}
+            icon={
+              publication.status === publicationStatuses.notPublished
+                ? SendIcon
+                : RefreshCwIcon
+            }
             onClick={choose(publications.publish)}
+            secondary={notReady ? readinessText : undefined}
           >
-            <ListItemIcon>
-              {publication.status === publicationStatuses.notPublished ? (
-                <SendIcon size={compactIconSize} />
-              ) : (
-                <RefreshCwIcon size={compactIconSize} />
-              )}
-            </ListItemIcon>
-            <ListItemText secondary={notReady ? readinessText : undefined}>
-              {publication.status === publicationStatuses.notPublished
-                ? t('records.publish')
-                : t('records.republish')}
-            </ListItemText>
-          </MenuItem>
+            {publication.status === publicationStatuses.notPublished
+              ? t('records.publish')
+              : t('records.republish')}
+          </ActionMenuItem>
         )}
         {publications && (
-          <MenuItem
+          <ActionMenuItem
             disabled={publications.isPending || notReadyChannels.length > 0}
+            icon={GlobeIcon}
             onClick={choose(publications.publishAll)}
+            secondary={
+              notReadyChannels.length > 0
+                ? t('records.publication.channelsNotReady', {
+                    channels: notReadyChannels
+                      .map((channel) => channel.context_code)
+                      .join(', '),
+                  })
+                : undefined
+            }
           >
-            <ListItemIcon>
-              <GlobeIcon size={compactIconSize} />
-            </ListItemIcon>
-            <ListItemText
-              secondary={
-                notReadyChannels.length > 0
-                  ? t('records.publication.channelsNotReady', {
-                      channels: notReadyChannels
-                        .map((channel) => channel.context_code)
-                        .join(', '),
-                    })
-                  : undefined
-              }
-            >
-              {t('records.publishAllChannels')}
-            </ListItemText>
-          </MenuItem>
+            {t('records.publishAllChannels')}
+          </ActionMenuItem>
         )}
         {publications &&
           publication?.status === publicationStatuses.published && (
-            <MenuItem
+            <ActionMenuItem
               disabled={publications.isPending}
+              icon={Undo2Icon}
               onClick={choose(publications.unpublish)}
-              sx={{ color: 'warning.main' }}
+              tone="reversal"
             >
-              <ListItemIcon sx={{ color: 'inherit' }}>
-                <Undo2Icon size={compactIconSize} />
-              </ListItemIcon>
-              <ListItemText>{t('records.unpublish')}</ListItemText>
-            </MenuItem>
+              {t('records.unpublish')}
+            </ActionMenuItem>
           )}
         {canDelete && <Divider />}
         {canDelete && (
-          <MenuItem onClick={choose(onDelete)} sx={{ color: 'error.main' }}>
-            <ListItemIcon sx={{ color: 'inherit' }}>
-              <Trash2Icon size={compactIconSize} />
-            </ListItemIcon>
-            <ListItemText>{t('records.deleteRecord')}</ListItemText>
-          </MenuItem>
+          <ActionMenuItem
+            icon={Trash2Icon}
+            onClick={choose(onDelete)}
+            tone="destructive"
+          >
+            {t('records.deleteRecord')}
+          </ActionMenuItem>
         )}
       </Menu>
     </>

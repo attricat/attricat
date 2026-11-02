@@ -28,12 +28,15 @@ import {
 import { useInboxActions } from './useInboxActions';
 import { useInboxIdentity } from './useInboxIdentity';
 import { LoadingState } from '../../components/LoadingState';
+import { useTabAccessibility } from '../../components/useTabAccessibility';
 
-const tabId = (filter: InboxFilter) => `inbox-tab-${filter}`;
-const panelId = 'inbox-panel';
+const filterOrder = Object.values(inboxFilters);
 
 export const InboxPage = ({ filter }: { filter: InboxFilter }) => {
   const { t } = useTranslation();
+  const tabId = useTabAccessibility();
+  const activeIndex = filterOrder.indexOf(filter);
+  const activeTabId = tabId.tab(activeIndex).id;
   const navigate = useNavigate();
   const { session, workspaceId, userId } = useInboxIdentity();
   const notifications = useInfiniteQuery({
@@ -79,8 +82,8 @@ export const InboxPage = ({ filter }: { filter: InboxFilter }) => {
       return;
     }
     restoreMarkAllFocus.current = false;
-    document.getElementById(tabId(filter))?.focus();
-  }, [filter, markAllRead.isPending, unreadCount]);
+    document.getElementById(activeTabId)?.focus();
+  }, [activeTabId, filter, markAllRead.isPending, unreadCount]);
 
   return (
     <PageContainer>
@@ -119,10 +122,9 @@ export const InboxPage = ({ filter }: { filter: InboxFilter }) => {
           }
           value={filter}
         >
-          {Object.values(inboxFilters).map((value) => (
+          {filterOrder.map((value, index) => (
             <Tab
-              aria-controls={panelId}
-              id={tabId(value)}
+              {...tabId.tab(index)}
               key={value}
               label={
                 value === inboxFilters.unread
@@ -134,12 +136,7 @@ export const InboxPage = ({ filter }: { filter: InboxFilter }) => {
           ))}
         </Tabs>
       </Box>
-      <Box
-        aria-labelledby={tabId(filter)}
-        id={panelId}
-        role="tabpanel"
-        sx={{ mt: 2 }}
-      >
+      <Box {...tabId.panel(activeIndex)} sx={{ mt: 2 }}>
         <QueryErrorNotice
           error={error}
           isRetrying={notifications.isFetching || session.isFetching}

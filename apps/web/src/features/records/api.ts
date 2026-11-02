@@ -18,7 +18,6 @@ import {
   systemTagFacetRequestSchema,
   systemTagFacetResponseSchema,
   blueprintSelectorSchema,
-  getBlueprintRevisionRequestSchema,
   resolvedRecordPreviewSchema,
   searchRecordsRequestSchema,
   migrateRecordRequestSchema,
@@ -35,7 +34,7 @@ import {
   recordsPublicationsResponseSchema,
 } from './schemas';
 
-import { uuidSegment } from '../../api/pathSegments';
+import { uuidSegment, versionSegment } from '../../api/pathSegments';
 import { keysetQuery, type KeysetCursor } from '../../api/keysetCursor';
 export { viewBlockTypes } from '../views/schemas';
 export type {
@@ -246,13 +245,11 @@ export const getBlueprintByCode = (
   const path = `/api/blueprints/by-code/${encodeURIComponent(input.code)}${input.version === undefined ? '' : `/versions/${input.version}`}`;
   return request(path, blueprintWithAttributesSchema, { signal });
 };
-export const getBlueprintRevision = (id: string, version: number) => {
-  const input = getBlueprintRevisionRequestSchema.parse({ id, version });
-  return request(
-    `/api/blueprints/${encodeURIComponent(input.id)}/versions/${input.version}`,
+export const getBlueprintRevision = (id: string, version: number) =>
+  request(
+    `/api/blueprints/${uuidSegment(id)}/versions/${versionSegment(version)}`,
     blueprintWithAttributesSchema,
   );
-};
 export const getCurrentBlueprint = (id: string) =>
   request(`/api/blueprints/${uuidSegment(id)}`, blueprintWithAttributesSchema);
 export const getRecordChanges = (id: string, offset: number) =>

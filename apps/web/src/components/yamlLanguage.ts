@@ -5,6 +5,7 @@ import {
   type TextRange,
   type YamlOutline,
   type YamlPath,
+  pathKey,
 } from './yamlOutline';
 
 /** Monaco's built-in YAML language, registered by `monacoRuntime`. */
@@ -12,8 +13,6 @@ export const yamlLanguageId = 'yaml';
 
 /** Keys whose value names a mapping in outlines, such as an attribute's code. */
 const mappingNameKeys = ['code', 'name', 'id'];
-
-const pathKey = (path: YamlPath) => JSON.stringify(path);
 
 const itemName = (outline: YamlOutline, path: YamlPath) => {
   for (const key of mappingNameKeys) {

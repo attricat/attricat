@@ -42,7 +42,12 @@ export const ManagementDashboardPage = () => {
               sx={{
                 height: '100%',
                 p: 3,
-                transition: 'box-shadow 150ms ease, transform 150ms ease',
+                transition: theme.transitions.create(
+                  ['box-shadow', 'transform'],
+                  {
+                    duration: theme.transitions.duration.shortest,
+                  },
+                ),
                 '&:hover': { boxShadow: 4, transform: 'translateY(-2px)' },
               }}
             >

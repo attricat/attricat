@@ -1,4 +1,4 @@
-import { Chip, Stack, Tooltip, Typography, useTheme } from '@mui/material';
+import { Stack, Tooltip, Typography, useTheme } from '@mui/material';
 import { Link } from '@tanstack/react-router';
 import { TriangleAlertIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -7,6 +7,7 @@ import { shortId } from '../../components/shortId';
 import { compactIconSize } from '../../components/iconSizes';
 import { findingStates, ruleRoutes } from './constants';
 import type { RulesById } from './rulesById';
+import { EnabledChip } from '../../components/EnabledChip';
 
 /**
  * Names a rule and the revision a run or finding used, linking to that
@@ -113,8 +114,8 @@ export const RuleDescriptionText = ({
 export const RuleLifecycleChip = ({ rule }: { rule: Rule }) => {
   const { t } = useTranslation();
   return (
-    <Chip
-      color={rule.enabled ? 'success' : 'default'}
+    <EnabledChip
+      enabled={rule.enabled}
       label={rule.enabled ? t('rules.enabled') : t('rules.disabled')}
       size="small"
     />

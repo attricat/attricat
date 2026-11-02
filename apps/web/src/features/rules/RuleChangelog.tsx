@@ -3,7 +3,6 @@ import { useNavigate } from '@tanstack/react-router';
 import {
   Box,
   Chip,
-  Paper,
   Stack,
   Table,
   TableBody,
@@ -29,13 +28,13 @@ import type { RuleDetails, RuleRevision } from './api';
 import { RULE_DEFINITION_VIEWER_HEIGHT, ruleRoutes } from './constants';
 import { ruleRevisionsOptions } from './queryOptions';
 import type { RuleComparisonSearch } from './schemas';
+import { SectionPaper } from '../../components/SectionPaper';
 
 const YamlDiffEditor = lazy(() =>
   import('../../components/YamlDiffEditor').then(({ YamlDiffEditor }) => ({
     default: YamlDiffEditor,
   })),
 );
-const ignoreChange = () => undefined;
 
 /**
  * The revisions to compare: those the URL names, else the shown revision and
@@ -100,7 +99,7 @@ export const RuleChangelog = ({
 
   return (
     <>
-      <Paper component="section" sx={{ mt: 3, p: 2.5 }}>
+      <SectionPaper>
         <Typography component="h2" variant="h6">
           {t('rules.changelog.title')}
         </Typography>
@@ -183,9 +182,9 @@ export const RuleChangelog = ({
             </TableBody>
           </Table>
         </Box>
-      </Paper>
+      </SectionPaper>
       {right && (
-        <Paper component="section" sx={{ mt: 3, p: 2.5 }}>
+        <SectionPaper>
           <Typography component="h2" variant="h6">
             {t('rules.changelog.compareTitle')}
           </Typography>
@@ -240,14 +239,13 @@ export const RuleChangelog = ({
                   height={RULE_DEFINITION_VIEWER_HEIGHT}
                   kind={definitionKinds.rule}
                   marginTop={1}
-                  onChange={ignoreChange}
                   readOnly
                   value={right.definition}
                 />
               </>
             )}
           </Box>
-        </Paper>
+        </SectionPaper>
       )}
     </>
   );

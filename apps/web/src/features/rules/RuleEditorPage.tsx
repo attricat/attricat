@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { Alert, Box, Button, Paper, Typography } from '@mui/material';
+import { Alert, Box, Button, Typography } from '@mui/material';
 import { lazy, Suspense, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ApiRequestError } from '../../api/request';
@@ -43,6 +43,7 @@ import { RuleChangeDryRun } from './RuleChangeDryRun';
 import { RulePreview } from './RulePreview';
 import { RuleScopeFields, type RuleScope } from './RuleScopeFields';
 import { ruleTemplates } from './templates';
+import { SectionPaper } from '../../components/SectionPaper';
 
 const YamlDiffEditor = lazy(() =>
   import('../../components/YamlDiffEditor').then(({ YamlDiffEditor }) => ({
@@ -309,7 +310,7 @@ export const RuleEditorPage = ({ ruleId }: { ruleId?: string }) => {
         <DefinitionSaveHint unchanged={!editor.creating && !isDirty} />
       )}
       {source && isDirty && (
-        <Paper component="section" sx={{ mt: 3, p: 2.5 }}>
+        <SectionPaper>
           <RuleChangeDryRun
             definition={definition}
             disabled={save.isPending || check.result === undefined}
@@ -342,7 +343,7 @@ export const RuleEditorPage = ({ ruleId }: { ruleId?: string }) => {
               />
             </Suspense>
           </Box>
-        </Paper>
+        </SectionPaper>
       )}
     </PageContainer>
   );

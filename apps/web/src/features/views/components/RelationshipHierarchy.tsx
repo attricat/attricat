@@ -4,14 +4,13 @@ import { Breadcrumbs, Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import type { ViewComponentDefinition } from './componentTypes';
 import {
-  HIERARCHY_FONT_SIZE,
   HIERARCHY_PARENT_FIELD_PROP,
   VIEW_COMPONENT_IDS,
   VIEW_COMPONENT_VERSION,
 } from '../constants';
-import { errorMessage } from '../../../api/errors';
 import { recordHierarchyOptions } from '../../records/queryOptions';
 import { LoadingState } from '../../../components/LoadingState';
+import { ApiErrorAlert } from '../../../components/ApiErrorAlert';
 
 export const RelationshipHierarchy = ({
   attribute,
@@ -54,12 +53,7 @@ export const RelationshipHierarchy = ({
   if (hierarchies.some((hierarchy) => hierarchy.isPending))
     return <LoadingState>{t('views.loadingHierarchy')}</LoadingState>;
   const failedHierarchy = hierarchies.find((hierarchy) => hierarchy.isError);
-  if (failedHierarchy)
-    return (
-      <Typography color="error">
-        {errorMessage(failedHierarchy.error)}
-      </Typography>
-    );
+  if (failedHierarchy) return <ApiErrorAlert error={failedHierarchy.error} />;
   const paths = hierarchies.flatMap(
     (hierarchy) => hierarchy.data?.paths ?? [hierarchy.data?.items ?? []],
   );
@@ -74,7 +68,6 @@ export const RelationshipHierarchy = ({
         <Breadcrumbs
           aria-label={t('views.hierarchy')}
           key={items.map((item) => item.id).join(':')}
-          sx={{ fontSize: HIERARCHY_FONT_SIZE }}
         >
           {items.map((item) => (
             <Link

@@ -1,6 +1,6 @@
 import { Box, Chip, IconButton } from '@mui/material';
 import { Link } from '@tanstack/react-router';
-import { EllipsisVerticalIcon } from 'lucide-react';
+import { EllipsisIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import type { RecordItem } from '../records/api';
@@ -154,7 +154,7 @@ export const RecordActionsCell = ({
       }}
       size="small"
     >
-      <EllipsisVerticalIcon size={compactIconSize} />
+      <EllipsisIcon size={compactIconSize} />
     </IconButton>
   );
 };

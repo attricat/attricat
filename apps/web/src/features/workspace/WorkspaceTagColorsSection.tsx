@@ -4,7 +4,6 @@ import {
   Box,
   Button,
   Chip,
-  CircularProgress,
   MenuItem,
   Paper,
   Stack,
@@ -27,6 +26,7 @@ import { tagColorQueryKeys } from '../tag-colors/queryKeys';
 import { TagColorDot } from '../tag-colors/TagColorDot';
 import { tagChipSx, tagColorOf } from '../tag-colors/tagColors';
 import { tagColorSelectMinWidth } from './constants';
+import { LoadingState } from '../../components/LoadingState';
 
 const ColorSelect = ({
   disabled,
@@ -240,7 +240,7 @@ export const WorkspaceTagColorsSection = ({
         {t('workspace.tagColorsDescription')}
       </Typography>
       {colors.isPending && (
-        <CircularProgress aria-label={t('workspace.loadingTagColors')} />
+        <LoadingState>{t('workspace.loadingTagColors')}</LoadingState>
       )}
       <ApiErrorAlert error={colors.error} />
       {colors.data && <TagColorsEditor colors={colors.data} />}

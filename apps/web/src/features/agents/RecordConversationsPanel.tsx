@@ -3,7 +3,6 @@ import {
   Box,
   Button,
   Chip,
-  CircularProgress,
   List,
   ListItem,
   ListItemButton,
@@ -25,6 +24,7 @@ import { Timestamp } from '../../time/Timestamp';
 import { PrincipalText } from '../principals/PrincipalValue';
 import { principalKinds } from '../principals/constants';
 import { principalReference } from '../principals/principal';
+import { LoadingState } from '../../components/LoadingState';
 
 /**
  * Everyone's conversations about a record, newest first. Selecting one
@@ -63,9 +63,9 @@ export const RecordConversationsPanel = ({
         </span>
       </Tooltip>
       {conversations.isPending && (
-        <Box sx={{ mt: 2 }}>
-          <CircularProgress aria-label={t('agents.loadingConversations')} />
-        </Box>
+        <LoadingState sx={{ mt: 2 }}>
+          {t('agents.loadingConversations')}
+        </LoadingState>
       )}
       <QueryErrorNotice
         error={conversations.error}

@@ -50,6 +50,8 @@ import {
   useOnRunsFinished,
 } from './runCompletion';
 import { progressSizes } from '../../components/iconSizes';
+import { LoadingState } from '../../components/LoadingState';
+import { plainListSx } from '../../components/plainList';
 
 /** Lines up the messages beside severity chips of different lengths. */
 const severityChipMinWidth = 72;
@@ -125,7 +127,7 @@ const FindingItem = ({
           component="p"
           variant="body2"
           sx={{
-            fontWeight: 600,
+            fontWeight: 'fontWeightBold',
             // The rule name reads as the heading and links on hover.
             '& a': { color: 'inherit', textDecoration: 'none' },
             '& a:hover, & a:focus-visible': { textDecoration: 'underline' },
@@ -339,13 +341,10 @@ export const RecordFindingsPanel = ({
       <ApiErrorAlert error={recheck.error} sx={{ mb: 1 }} />
       <ApiErrorAlert error={acknowledge.error} sx={{ mb: 1 }} />
       {findings.isPending && (
-        <CircularProgress
-          aria-label={t('rules.recordFindings.loading')}
-          enableTrackSlot
-        />
+        <LoadingState>{t('rules.recordFindings.loading')}</LoadingState>
       )}
       {unresolved.length > 0 ? (
-        <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0 }}>
+        <Box component="ul" sx={plainListSx}>
           {unresolved.map((finding) => (
             <FindingItem
               key={finding.id}

@@ -1,16 +1,7 @@
-import {
-  Box,
-  Chip,
-  InputAdornment,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
-import { SearchIcon } from 'lucide-react';
+import { Box, Chip, Stack } from '@mui/material';
 import { useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { EmptyState } from '../../components/EmptyState';
-import { smallIconSize } from '../../components/iconSizes';
 import { NextPageButton } from '../../components/LoadMoreButton';
 import { RecordIcon } from '../../components/systemIcons';
 import { useRelationshipSelectionLabels } from '../records/components/useRelationshipSelectionLabels';
@@ -23,7 +14,9 @@ import {
   RelationshipTargetOption,
 } from '../records/components/RelationshipTargetOption';
 import { useRelationshipTargets } from '../records/components/useRelationshipTargets';
-import { errorMessage } from '../../api/errors';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { LoadingState } from '../../components/LoadingState';
+import { SearchField } from '../../components/SearchField';
 
 type Props = {
   onSelectedIdsChange: (ids: string[]) => void;
@@ -60,19 +53,10 @@ export const RelationshipTargetPicker = ({
 
   return (
     <Stack ref={pickerContentRoot} spacing={1.5}>
-      <TextField
+      <SearchField
         fullWidth
         label={t('records.searchRelationshipOptions')}
         onChange={(event) => setQuery(event.target.value)}
-        slotProps={{
-          input: {
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon aria-hidden size={smallIconSize} />
-              </InputAdornment>
-            ),
-          },
-        }}
         value={query}
       />
       {selectedIds.length > 0 && (
@@ -116,13 +100,9 @@ export const RelationshipTargetPicker = ({
       )}
       <NextPageButton query={targets} />
       {targets.isPending && (
-        <Typography variant="body2">{t('records.loadingOptions')}</Typography>
+        <LoadingState>{t('records.loadingOptions')}</LoadingState>
       )}
-      {targets.isError && (
-        <Typography color="error" variant="body2">
-          {errorMessage(targets.error)}
-        </Typography>
-      )}
+      <ApiErrorAlert error={targets.error} />
     </Stack>
   );
 };

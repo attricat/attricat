@@ -39,4 +39,3 @@ export const VIEW_GRID_COLUMNS = {
   xs: '1fr',
   md: 'repeat(2, minmax(0, 1fr))',
 } as const;
-export const HIERARCHY_FONT_SIZE = '0.875rem';

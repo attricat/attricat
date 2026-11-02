@@ -1,8 +1,9 @@
-import { Box, MenuItem, Paper, TextField } from '@mui/material';
+import { Box, MenuItem, TextField } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { YamlDiffEditor } from '../../components/YamlDiffEditor';
 import { compareSelectMinWidth } from './constants';
 import type { Workflow } from './schemas';
+import { SectionPaper } from '../../components/SectionPaper';
 
 export const WorkflowComparePanel = ({
   compared,
@@ -19,7 +20,7 @@ export const WorkflowComparePanel = ({
   const revisionLabel = ({ version, status }: Workflow) =>
     `v${version} (${t(`common.revisionStatuses.${status}`)})`;
   return (
-    <Paper component="section" sx={{ mt: 3, p: 2 }}>
+    <SectionPaper>
       <TextField
         label={t('workflows.compareRevision')}
         onChange={(event) => onSelectVersion(Number(event.target.value))}
@@ -43,6 +44,6 @@ export const WorkflowComparePanel = ({
           }
         />
       </Box>
-    </Paper>
+    </SectionPaper>
   );
 };

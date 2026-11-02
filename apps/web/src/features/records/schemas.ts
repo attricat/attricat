@@ -463,10 +463,6 @@ export const systemTagFacetResponseSchema = z.object({
   /** More tags match than `items` lists. */
   truncated: z.boolean(),
 });
-const getBlueprintRevisionRequestSchema = z.object({
-  id: uuidSchema,
-  version: z.number().int().positive(),
-});
 const newFileAttributeValueSchema = attributeValueTargetSchema.extend({
   file_ids: z.array(uuidSchema).min(1),
 });
@@ -541,7 +537,6 @@ export {
   recordSearchResponseSchema,
   recordSearchPageSchema,
   blueprintSelectorSchema,
-  getBlueprintRevisionRequestSchema,
   resolvedRecordPreviewSchema,
 };
 

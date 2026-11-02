@@ -2,17 +2,19 @@ import motionTokens from '../../design/tokens/motion.json';
 import type { TargetAndTransition, Variants } from 'motion/react';
 import { useReducedMotion } from 'motion/react';
 import { useEffect, useState, type RefObject } from 'react';
+import { millisecondsPerSecond } from '../time/durations';
 
 // Shared timing for navigation icon gestures, from the design motion tokens
 // (milliseconds there, seconds in Motion). Each gesture plays once when its row
 // is hovered or keyboard-focused and ends on the icon's resting pose.
 export const navigationIconTransition = {
-  duration: motionTokens.duration.gesture / 1000,
+  duration: motionTokens.duration.gesture / millisecondsPerSecond,
   ease: motionTokens.easing.standard as [number, number, number, number],
 };
 
 /** Delay between parts of one icon that move in turn. */
-export const navigationIconStagger = motionTokens.stagger / 1000;
+export const navigationIconStagger =
+  motionTokens.stagger / millisecondsPerSecond;
 
 // The longest gesture: the full duration after the last staggered part starts.
 const maxStaggerSteps = 4;

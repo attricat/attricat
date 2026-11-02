@@ -2,7 +2,6 @@ import { recordExportStatusOptions } from './queryOptions';
 import {
   Box,
   Button,
-  CircularProgress,
   Stack,
   Table,
   TableBody,
@@ -33,6 +32,7 @@ import { formatPushError } from './pushErrors';
 import { emptyValuePlaceholder } from '../../components/placeholders';
 import { useRetryExports } from './useRetryExports';
 import { RetryResultAlerts } from './RetryResultAlerts';
+import { LoadingState } from '../../components/LoadingState';
 
 type Row = {
   key: string;
@@ -125,7 +125,7 @@ export const RecordExportStatusPanel = ({ recordId }: { recordId: string }) => {
   });
   const retry = useRetryExports();
   if (status.isPending) {
-    return <CircularProgress aria-label={t('extensionExports.loading')} />;
+    return <LoadingState>{t('extensionExports.loading')}</LoadingState>;
   }
   if (status.error) {
     return <ApiErrorAlert error={status.error} />;

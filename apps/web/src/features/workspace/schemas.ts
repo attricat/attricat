@@ -65,7 +65,7 @@ export const exploreNavigationItemSchema = exploreNavigationEntrySchema
   })
   .extend({ blueprint_name: z.string() });
 
-const permissionCodesSchema = z
+export const permissionCodesSchema = z
   .array(z.string())
   .refine((permissions) => new Set(permissions).size === permissions.length, {
     error: () => i18n.t('errors.permissionsUnique'),

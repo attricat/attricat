@@ -15,7 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { useExclusiveMutation } from '../../components/useExclusiveMutation';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
-import { AuthFormShell, authFormWidth } from './AuthFormShell';
+import { AuthFormShell, AuthFormTitle, authFormWidth } from './AuthFormShell';
 import {
   type SampleLogins,
   discoverWorkspace,
@@ -100,9 +100,7 @@ const WorkspaceLoginForm = ({
   });
   return (
     <LoginShell onSubmit={() => form.handleSubmit()}>
-      <Typography component="h1" variant="h5">
-        {t('auth.signIn')}
-      </Typography>
+      <AuthFormTitle>{t('auth.signIn')}</AuthFormTitle>
       <Typography>{t('auth.workspacePrompt')}</Typography>
       <form.Field name="loginIdentifier">
         {(field) => (
@@ -184,9 +182,7 @@ const PasswordLoginForm = ({
   });
   return (
     <LoginShell onSubmit={() => form.handleSubmit()}>
-      <Typography component="h1" variant="h5">
-        {t('auth.signInTo', { identifier })}
-      </Typography>
+      <AuthFormTitle>{t('auth.signInTo', { identifier })}</AuthFormTitle>
       {samples?.demo ? (
         <Alert severity="info" sx={{ mb: 2 }}>
           {t('auth.demoNotice')}

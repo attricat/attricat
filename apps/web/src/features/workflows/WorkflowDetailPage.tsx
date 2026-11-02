@@ -41,6 +41,7 @@ import {
 } from './queryOptions';
 import { RunsUnavailableAlert } from './RunsUnavailableAlert';
 import { LoadingState } from '../../components/LoadingState';
+import { EnabledChip } from '../../components/EnabledChip';
 
 export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
   const { t } = useTranslation();
@@ -135,8 +136,8 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
       <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', mt: 1 }}>
         <Chip label={current.code} variant="outlined" />
         <RevisionStatusChip status={current.status} />
-        <Chip
-          color={current.enabled_version === null ? 'default' : 'success'}
+        <EnabledChip
+          enabled={current.enabled_version !== null}
           label={
             current.enabled_version === null
               ? t('workflows.disabled')

@@ -1,10 +1,9 @@
-import { Box, Button, IconButton, Tooltip } from '@mui/material';
-import { ChevronDownIcon, ChevronRightIcon, CopyIcon } from 'lucide-react';
+import { Box, Button, IconButton } from '@mui/material';
+import { ChevronDownIcon, ChevronRightIcon } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { codeTypography } from '../app/theme';
-import { useCopyToClipboard } from './useCopyToClipboard';
-import { captionIconSize, compactIconSize } from './iconSizes';
+import { captionIconSize } from './iconSizes';
 import {
   formatJson,
   isJsonContainer,
@@ -16,6 +15,7 @@ import {
   type JsonToken,
   type JsonTokenKind,
 } from './jsonTokens';
+import { CopyIconButton } from './CopyIconButton';
 
 /** Characters rendered on a line that does not wrap, such as a table cell. */
 const noWrapLength = 200;
@@ -78,21 +78,12 @@ export const JsonInline = ({
 
 const CopyJsonButton = ({ value }: { value: unknown }) => {
   const { t } = useTranslation();
-  const copyText = useCopyToClipboard();
-  const copy = () => copyText(formatJson(value));
   return (
-    <Tooltip title={t('json.copy')}>
-      <IconButton
-        aria-label={t('json.copy')}
-        onClick={(event) => {
-          event.stopPropagation();
-          void copy();
-        }}
-        sx={{ position: 'absolute', right: 4, top: 4 }}
-      >
-        <CopyIcon size={compactIconSize} />
-      </IconButton>
-    </Tooltip>
+    <CopyIconButton
+      label={t('json.copy')}
+      sx={{ position: 'absolute', right: 4, top: 4 }}
+      value={() => formatJson(value)}
+    />
   );
 };
 
