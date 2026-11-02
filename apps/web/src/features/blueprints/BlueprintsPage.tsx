@@ -31,6 +31,7 @@ import { capabilities, accessTargetKinds } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { blueprintCatalogueOptions } from './queryOptions';
 import { blueprintKindLabel } from './constants';
+import { LoadingState } from '../../components/LoadingState';
 
 export const BlueprintsPage = () => {
   const { t } = useTranslation();
@@ -80,9 +81,9 @@ export const BlueprintsPage = () => {
         value={query}
       />
       {blueprints.isPending && (
-        <Typography sx={{ mt: 3 }}>
+        <LoadingState sx={{ mt: 3 }}>
           {t('blueprints.loadingBlueprints')}
-        </Typography>
+        </LoadingState>
       )}
       <ApiErrorAlert error={blueprints.error} sx={{ mt: 3 }} />
       {blueprints.data && (

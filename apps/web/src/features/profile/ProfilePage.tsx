@@ -13,7 +13,6 @@ import {
 import { PencilIcon } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { monoFontFamily } from '../../app/theme';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import {
   ProfileIcon,
@@ -35,6 +34,7 @@ import {
 } from './constants';
 import { sessionOptions } from '../auth/queryOptions';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { Detail, DetailList } from '../../components/DetailList';
 
 const AccountDetail = ({
   label,
@@ -43,18 +43,9 @@ const AccountDetail = ({
   label: string;
   value: ReactNode;
 }) => (
-  <>
-    <Typography color="text.secondary" component="dt" variant="subtitle1">
-      {label}
-    </Typography>
-    <Typography
-      component="dd"
-      sx={{ fontFamily: monoFontFamily, m: 0, overflowWrap: 'anywhere' }}
-      variant="body2"
-    >
-      {value ?? <Skeleton width={profileValueSkeletonWidth} />}
-    </Typography>
-  </>
+  <Detail label={label} mono>
+    {value ?? <Skeleton width={profileValueSkeletonWidth} />}
+  </Detail>
 );
 
 export const ProfilePage = () => {
@@ -155,23 +146,13 @@ export const ProfilePage = () => {
           />
         )}
         <Divider sx={{ my: 5 }} />
-        <Box
-          component="dl"
-          sx={{
-            columnGap: 8,
-            display: 'grid',
-            gridTemplateColumns: { xs: '1fr', sm: 'max-content 1fr' },
-            m: 0,
-            rowGap: { xs: 1, sm: 3 },
-            '& dd:not(:last-of-type)': { mb: { xs: 3, sm: 0 } },
-          }}
-        >
+        <DetailList>
           <AccountDetail label={t('profile.userId')} value={account?.user_id} />
           <AccountDetail
             label={t('profile.activeWorkspace')}
             value={account?.workspace_id}
           />
-        </Box>
+        </DetailList>
       </ProfileSection>
       <ProfileSection
         description={t('profile.languageDescription')}

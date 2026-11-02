@@ -1,11 +1,4 @@
-import {
-  Box,
-  Chip,
-  InputAdornment,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
+import { Box, Chip, InputAdornment, Stack, TextField } from '@mui/material';
 import { SearchIcon } from 'lucide-react';
 import { useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -23,7 +16,8 @@ import {
   RelationshipTargetOption,
 } from '../records/components/RelationshipTargetOption';
 import { useRelationshipTargets } from '../records/components/useRelationshipTargets';
-import { errorMessage } from '../../api/errors';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { LoadingState } from '../../components/LoadingState';
 
 type Props = {
   onSelectedIdsChange: (ids: string[]) => void;
@@ -116,13 +110,9 @@ export const RelationshipTargetPicker = ({
       )}
       <NextPageButton query={targets} />
       {targets.isPending && (
-        <Typography variant="body2">{t('records.loadingOptions')}</Typography>
+        <LoadingState>{t('records.loadingOptions')}</LoadingState>
       )}
-      {targets.isError && (
-        <Typography color="error" variant="body2">
-          {errorMessage(targets.error)}
-        </Typography>
-      )}
+      <ApiErrorAlert error={targets.error} />
     </Stack>
   );
 };

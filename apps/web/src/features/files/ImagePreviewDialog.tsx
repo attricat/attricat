@@ -2,7 +2,6 @@ import {
   Alert,
   Box,
   Button,
-  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -29,6 +28,7 @@ import {
 } from './constants';
 import type { GalleryFile } from './ImageGallery';
 import { useFileVariant } from './useFileVariant';
+import { LoadingSpinner } from '../../components/LoadingState';
 
 const ImagePreview = ({ file }: { file: GalleryFile }) => {
   const { t } = useTranslation();
@@ -101,9 +101,7 @@ const ImagePreview = ({ file }: { file: GalleryFile }) => {
           <Alert severity="warning">{t('files.imageUnavailable')}</Alert>
         ) : (
           <>
-            {!loaded && (
-              <CircularProgress aria-label={t('files.imageLoading')} />
-            )}
+            {!loaded && <LoadingSpinner label={t('files.imageLoading')} />}
             {ready && variant && (
               <Box
                 component="img"

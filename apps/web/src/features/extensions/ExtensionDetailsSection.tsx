@@ -1,25 +1,8 @@
-import { Box, Paper, Typography } from '@mui/material';
-import type { ReactNode } from 'react';
+import { Paper, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { Timestamp } from '../../time/Timestamp';
 import type { ExtensionInstallation } from './managementApi';
-
-const Detail = ({
-  children,
-  label,
-}: {
-  children: ReactNode;
-  label: string;
-}) => (
-  <>
-    <Typography color="text.secondary" component="dt" variant="subtitle2">
-      {label}
-    </Typography>
-    <Typography component="dd" sx={{ m: 0, overflowWrap: 'anywhere' }}>
-      {children}
-    </Typography>
-  </>
-);
+import { Detail, DetailList } from '../../components/DetailList';
 
 /** The installed release's identity and where it came from. */
 export const ExtensionDetailsSection = ({
@@ -33,17 +16,7 @@ export const ExtensionDetailsSection = ({
       <Typography component="h2" sx={{ mb: 2 }} variant="h6">
         {t('extensions.details')}
       </Typography>
-      <Box
-        component="dl"
-        sx={{
-          alignItems: 'baseline',
-          columnGap: 4,
-          display: 'grid',
-          gridTemplateColumns: { sm: 'max-content 1fr' },
-          m: 0,
-          rowGap: 1,
-        }}
-      >
+      <DetailList>
         <Detail label={t('extensions.detailId')}>
           {installation.extension_id}
         </Detail>
@@ -62,7 +35,7 @@ export const ExtensionDetailsSection = ({
         <Detail label={t('extensions.detailManifestHash')}>
           {installation.manifest_sha256}
         </Detail>
-      </Box>
+      </DetailList>
     </Paper>
   );
 };

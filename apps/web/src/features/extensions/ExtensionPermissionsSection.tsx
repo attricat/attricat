@@ -22,6 +22,8 @@ import { grantKindLabelKey } from './extensionPageUtils';
 import { grantExtension, revokeExtensionGrant } from './managementApi';
 import { ActionsHeaderCell } from '../../components/ActionsHeaderCell';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { EmptyState } from '../../components/EmptyState';
+import { PermissionIcon } from '../../components/systemIcons';
 
 type ExtensionPermissionsSectionProps = {
   enabled: boolean;
@@ -63,9 +65,10 @@ export const ExtensionPermissionsSection = ({
       </Typography>
       <ApiErrorAlert error={grant.error ?? revoke.error} sx={{ mb: 2 }} />
       {pending.length === 0 && grants.length === 0 ? (
-        <Typography color="text.secondary">
-          {t('extensions.noPermissions')}
-        </Typography>
+        <EmptyState
+          icon={PermissionIcon}
+          title={t('extensions.noPermissions')}
+        />
       ) : (
         <TableContainer>
           <Table>

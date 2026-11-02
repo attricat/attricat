@@ -5,9 +5,10 @@ import {
   commentPageSchema,
 } from './schemas';
 import { keysetQuery, type KeysetCursor } from '../../api/keysetCursor';
+import { uuidSegment } from '../../api/pathSegments';
 
 const commentsPath = (recordId: string) =>
-  `/api/v1/records/${encodeURIComponent(recordId)}/comments`;
+  `/api/v1/records/${uuidSegment(recordId)}/comments`;
 
 export const listComments = (recordId: string, cursor?: KeysetCursor) =>
   request(`${commentsPath(recordId)}${keysetQuery(cursor)}`, commentPageSchema);
@@ -28,7 +29,7 @@ export const updateComment = (
   body: string,
 ) =>
   requestNoContent(
-    `${commentsPath(recordId)}/${encodeURIComponent(commentId)}`,
+    `${commentsPath(recordId)}/${uuidSegment(commentId)}`,
     jsonRequest('PATCH', { ...commentInputSchema.parse({ body }), revision }),
   );
 
@@ -38,6 +39,6 @@ export const deleteComment = (
   revision: number,
 ) =>
   requestNoContent(
-    `${commentsPath(recordId)}/${encodeURIComponent(commentId)}?${new URLSearchParams({ revision: String(revision) })}`,
+    `${commentsPath(recordId)}/${uuidSegment(commentId)}?${new URLSearchParams({ revision: String(revision) })}`,
     { method: 'DELETE' },
   );

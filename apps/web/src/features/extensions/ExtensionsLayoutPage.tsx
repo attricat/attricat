@@ -14,6 +14,7 @@ import { workspaceExtensionLayoutSchema } from './schemas';
 import { sessionOptions } from '../auth/queryOptions';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { formatJson } from '../../components/jsonTokens';
 
 export const ExtensionsLayoutPage = () => {
   const { t } = useTranslation();
@@ -48,7 +49,7 @@ export const ExtensionsLayoutPage = () => {
   const hydratedLayout = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (layout.data) {
-      const serialized = JSON.stringify(layout.data, null, 2);
+      const serialized = formatJson(layout.data);
       if (hydratedLayout.current !== serialized) {
         // A background refetch must not overwrite an unsaved JSON draft.
         if (

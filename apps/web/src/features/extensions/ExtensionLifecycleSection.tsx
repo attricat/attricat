@@ -8,6 +8,8 @@ import {
 import type { ExtensionDetail } from './managementApi';
 import { Timestamp } from '../../time/Timestamp';
 import { personName } from '../../components/personName';
+import { EmptyState } from '../../components/EmptyState';
+import { ExtensionIcon } from '../../components/systemIcons';
 
 type LifecycleRecord = ExtensionDetail['lifecycle'][number];
 
@@ -70,9 +72,7 @@ export const ExtensionLifecycleSection = ({
         {t('extensions.lifecycle')}
       </Typography>
       {lifecycle.length === 0 ? (
-        <Typography color="text.secondary">
-          {t('extensions.noLifecycle')}
-        </Typography>
+        <EmptyState icon={ExtensionIcon} title={t('extensions.noLifecycle')} />
       ) : (
         <Stack divider={<Divider />} spacing={1}>
           {lifecycle.map((record) => (

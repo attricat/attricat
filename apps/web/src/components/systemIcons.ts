@@ -45,3 +45,4 @@ export { UserRoundIcon as AssignedUserIcon } from 'lucide-react';
 export { UsersRoundIcon as TeamIcon } from 'lucide-react';
 export { UserPlusIcon as InvitationIcon } from 'lucide-react';
 export { AtSignIcon as MentionIcon } from 'lucide-react';
+export { CircleArrowUpIcon as MigrationIcon } from 'lucide-react';

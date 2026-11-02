@@ -50,6 +50,7 @@ import {
   useOnRunsFinished,
 } from './runCompletion';
 import { progressSizes } from '../../components/iconSizes';
+import { LoadingState } from '../../components/LoadingState';
 
 /** Lines up the messages beside severity chips of different lengths. */
 const severityChipMinWidth = 72;
@@ -339,10 +340,7 @@ export const RecordFindingsPanel = ({
       <ApiErrorAlert error={recheck.error} sx={{ mb: 1 }} />
       <ApiErrorAlert error={acknowledge.error} sx={{ mb: 1 }} />
       {findings.isPending && (
-        <CircularProgress
-          aria-label={t('rules.recordFindings.loading')}
-          enableTrackSlot
-        />
+        <LoadingState>{t('rules.recordFindings.loading')}</LoadingState>
       )}
       {unresolved.length > 0 ? (
         <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0 }}>

@@ -104,7 +104,7 @@ export const AppLayout = () => {
           justifyContent: 'center',
         }}
       >
-        <CircularProgress enableTrackSlot />
+        <CircularProgress aria-label={t('common.loading')} enableTrackSlot />
       </Box>
     );
   if (isLoginRoute)
