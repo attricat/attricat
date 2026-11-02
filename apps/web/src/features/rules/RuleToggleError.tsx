@@ -1,15 +1,14 @@
 import { PowerIcon } from 'lucide-react';
 import { Alert, Button, type SxProps, type Theme } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { ApiRequestError } from '../../api/request';
-import { errorMessage } from '../../api/errors';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
-import { RULE_HAS_EXISTING_VIOLATIONS } from './constants';
+import { canAcceptExistingViolations, dryRunGateMessage } from './dryRunGate';
 import type { ToggleRule } from './useToggleRule';
 
 /**
  * Why enabling or disabling a rule failed. When an enforcing rule's dry run
- * found existing violations, offers to enable it anyway.
+ * found existing violations or reached the record limit, offers to enable it
+ * anyway.
  */
 export const RuleToggleError = ({
   sx,
@@ -20,11 +19,9 @@ export const RuleToggleError = ({
 }) => {
   const { t } = useTranslation();
   if (!toggle.error) return null;
-  const violationsToAccept =
-    toggle.error instanceof ApiRequestError &&
-    toggle.error.code === RULE_HAS_EXISTING_VIOLATIONS
-      ? toggle.variables
-      : undefined;
+  const violationsToAccept = canAcceptExistingViolations(toggle.error)
+    ? toggle.variables
+    : undefined;
   if (!violationsToAccept)
     return <ApiErrorAlert error={toggle.error} sx={sx} />;
   return (
@@ -48,7 +45,7 @@ export const RuleToggleError = ({
       severity="warning"
       sx={sx}
     >
-      {errorMessage(toggle.error)}
+      {dryRunGateMessage(t, toggle.error)}
     </Alert>
   );
 };

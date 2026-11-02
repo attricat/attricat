@@ -2351,6 +2351,7 @@
     "enabled": "Enabled",
     "disabled": "Disabled",
     "toggleRule": "Enable {{name}}",
+    "dryRunTruncated": "The dry run stopped at the record limit, so not every record was checked. It found {{existing_violations}} existing violations before stopping. Running it again will not check more.",
     "enableAnyway": "Enable anyway",
     "dryRun": "Dry run",
     "runNow": "Run now",

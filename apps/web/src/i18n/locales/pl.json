@@ -2445,6 +2445,7 @@
     "enabled": "Włączona",
     "disabled": "Wyłączona",
     "toggleRule": "Włącz {{name}}",
+    "dryRunTruncated": "Próbne wykonanie zatrzymało się na limicie rekordów, więc nie sprawdziło wszystkich rekordów. Przed zatrzymaniem znalazło istniejące naruszenia: {{existing_violations}}. Ponowne uruchomienie nie sprawdzi ich więcej.",
     "enableAnyway": "Włącz mimo to",
     "dryRun": "Próbne wykonanie",
     "runNow": "Uruchom teraz",
