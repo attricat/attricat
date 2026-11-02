@@ -48,8 +48,11 @@ export const YamlEditor = ({
       if (mounted.current) return;
     }
     const current = mounted.current;
+    // Given a new `value`, the wrapper resets a read-only editor even to the
+    // text it already has, which loses the cursor and undo history.
+    if (current?.getValue() === value) return;
     const model = current?.getModel();
-    if (current && model && current.getValue() !== value) {
+    if (current && model) {
       applying.current = true;
       if (readOnly) current.setValue(value);
       else {
