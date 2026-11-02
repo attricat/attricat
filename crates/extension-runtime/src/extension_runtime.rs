@@ -111,7 +111,7 @@ const FUEL_YIELD_INTERVAL: u64 = 1_000_000;
 const MAX_TABLE_ELEMENTS: usize = 100_000;
 const MAX_TABLES: usize = 64;
 const MAX_MEMORIES: usize = 8;
-const MAX_INSTANCES: usize = 64;
+const MAX_INSTANCES: usize = 32;
 /// Invocations this process runs at once, which with the limits above bounds
 /// what extensions can hold together against the documented 2 GiB.
 const MAX_CONCURRENT_INVOCATIONS: usize = 16;
@@ -385,13 +385,30 @@ impl Linkers {
     }
 }
 
+/// Advances the engine's epoch on a thread of its own. Invocations run on the API's
+/// async workers and enough of them can occupy every worker, so a ticker among them
+/// would stop just when it is needed.
 struct ExtensionEpochTicker {
-    shutdown: watch::Sender<()>,
+    // Dropping this ends the thread.
+    _shutdown: std::sync::mpsc::Sender<()>,
 }
 
-impl Drop for ExtensionEpochTicker {
-    fn drop(&mut self) {
-        let _ = self.shutdown.send(());
+impl ExtensionEpochTicker {
+    fn start(engine: Arc<Engine>) -> Result<Self, ExtensionRuntimeError> {
+        let (shutdown, stopped) = std::sync::mpsc::channel::<()>();
+        std::thread::Builder::new()
+            .name("extension-epoch".to_owned())
+            .spawn(move || {
+                while let Err(std::sync::mpsc::RecvTimeoutError::Timeout) =
+                    stopped.recv_timeout(EPOCH_TICK_INTERVAL)
+                {
+                    engine.increment_epoch();
+                }
+            })
+            .map_err(runtime_error)?;
+        Ok(Self {
+            _shutdown: shutdown,
+        })
     }
 }
 
@@ -418,21 +435,12 @@ impl ExtensionRuntime {
         let engine = compilation::engine()?;
         let linkers = Arc::new(Linkers::new(&engine)?);
         let engine = Arc::new(engine);
-        let (shutdown, mut shutdown_receiver) = watch::channel(());
-        let tick_engine = engine.clone();
-        tokio::spawn(async move {
-            loop {
-                tokio::select! {
-                    _ = tokio::time::sleep(EPOCH_TICK_INTERVAL) => tick_engine.increment_epoch(),
-                    _ = shutdown_receiver.changed() => return,
-                }
-            }
-        });
+        let epoch_ticker = ExtensionEpochTicker::start(engine.clone())?;
         Ok(Self {
             object_store,
             config,
             engine,
-            _epoch_ticker: Arc::new(ExtensionEpochTicker { shutdown }),
+            _epoch_ticker: Arc::new(epoch_ticker),
             components: Arc::new(Mutex::new(ComponentCache::default())),
             linkers,
             invocations: InvocationGate::new(),
@@ -700,11 +708,20 @@ fn runtime_error(error: impl std::fmt::Display) -> ExtensionRuntimeError {
     ExtensionRuntimeError::Runtime(format!("{error:#}"))
 }
 
-fn epoch_deadline(timeout: Duration) -> u64 {
-    timeout
-        .as_millis()
-        .div_ceil(EPOCH_TICK_INTERVAL.as_millis())
-        .max(1) as u64
+/// Ends the invocation after `timeout` and otherwise hands its worker back at every
+/// epoch tick. Fuel can't do this alone, because the host's copying of a guest's
+/// strings costs almost none: without this, a few guests looping on host calls hold
+/// every worker and the API stops answering.
+fn limit_invocation_time<T: 'static>(store: &mut Store<T>, timeout: Duration) {
+    const TICKS_BETWEEN_YIELDS: u64 = 1;
+    let deadline = Instant::now() + timeout;
+    store.epoch_deadline_callback(move |_| {
+        if Instant::now() >= deadline {
+            return Err(wasmtime::Trap::Interrupt.into());
+        }
+        Ok(wasmtime::UpdateDeadline::Yield(TICKS_BETWEEN_YIELDS))
+    });
+    store.set_epoch_deadline(TICKS_BETWEEN_YIELDS);
 }
 
 const MAX_ARTIFACT_CHUNK_BYTES: usize = 64 * 1024;
@@ -2747,6 +2764,52 @@ mod tests {
                 .unwrap()
         );
         assert!(!limits.table_growing(0, 1, None).unwrap());
+    }
+
+    /// `(module (func (export "spin") (loop (br 0))))`
+    const SPINNING_MODULE: &[u8] = &[
+        0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, // header
+        0x01, 0x04, 0x01, 0x60, 0x00, 0x00, // type: () -> ()
+        0x03, 0x02, 0x01, 0x00, // one function of that type
+        0x07, 0x08, 0x01, 0x04, b's', b'p', b'i', b'n', 0x00, 0x00, // its export
+        0x0a, 0x09, 0x01, 0x07, 0x00, 0x03, 0x40, 0x0c, 0x00, 0x0b, 0x0b, // its body
+    ];
+
+    /// One worker is the worst case: a guest that kept it would stop both the rest of
+    /// the API and, were the ticker a task, its own timeout.
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_spinning_guest_shares_its_worker_and_still_times_out() {
+        use super::{
+            Arc, Duration, ExtensionEpochTicker, Instant, Store, compilation, limit_invocation_time,
+        };
+        const TIMEOUT: Duration = Duration::from_millis(200);
+        let engine = Arc::new(compilation::engine().unwrap());
+        let _ticker = ExtensionEpochTicker::start(engine.clone()).unwrap();
+        let module = wasmtime::Module::new(&engine, SPINNING_MODULE).unwrap();
+        let mut store = Store::new(&engine, ());
+        store.set_fuel(u64::MAX).unwrap();
+        limit_invocation_time(&mut store, TIMEOUT);
+        let instance = wasmtime::Instance::new_async(&mut store, &module, &[])
+            .await
+            .unwrap();
+        let spin = instance
+            .get_typed_func::<(), ()>(&mut store, "spin")
+            .unwrap();
+
+        let other_work = tokio::spawn(async {
+            for _ in 0..10 {
+                tokio::task::yield_now().await;
+            }
+            Instant::now()
+        });
+        let error = spin.call_async(&mut store, ()).await.unwrap_err();
+        let finished = Instant::now();
+
+        assert_eq!(
+            error.downcast_ref::<wasmtime::Trap>(),
+            Some(&wasmtime::Trap::Interrupt)
+        );
+        assert!(other_work.await.unwrap() < finished);
     }
 
     #[tokio::test]

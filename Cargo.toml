@@ -59,6 +59,7 @@ tar = "0.4"
 thiserror = "2"
 libc = "0.2"
 rlimit = "0.10"
+wasmparser = { version = "0.258", default-features = false, features = ["std", "component-model"] }
 tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "signal", "sync", "time"] }
 tokio-stream = "0.1"
 tower-http = { version = "0.6", features = ["catch-panic", "fs"] }
