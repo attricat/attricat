@@ -397,7 +397,22 @@ pub enum RepositoryError {
     Task(#[from] tasks::TaskError),
 }
 
+/// PostgreSQL's `deadlock_detected`.
+const DEADLOCK_DETECTED: &str = "40P01";
+
 impl RepositoryError {
+    /// Whether the database aborted this transaction to break a deadlock, so
+    /// nothing was written and the same work can run again.
+    pub fn is_deadlock(&self) -> bool {
+        match self {
+            Self::Database(sqlx::Error::Database(error)) => {
+                error.code().as_deref() == Some(DEADLOCK_DETECTED)
+            }
+            Self::RecordBatchOperationFailed { source, .. } => source.is_deadlock(),
+            _ => false,
+        }
+    }
+
     pub fn invalid_blueprint_definition(error: impl std::fmt::Display) -> Self {
         Self::InvalidBlueprintDefinition(error.to_string())
     }

@@ -1783,6 +1783,13 @@ impl AttricatRepository {
             json!({}),
         )
         .await?;
+        // Its pinned release can never come back, so its runs could only wait.
+        self.cancel_extension_operations_of_release(
+            &mut transaction,
+            &current.extension_id,
+            current.installed_release_id,
+        )
+        .await?;
         sqlx::query("DELETE FROM extension_installations WHERE id = $1")
             .bind(current.id)
             .execute(&mut *transaction)

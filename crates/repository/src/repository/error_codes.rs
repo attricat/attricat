@@ -619,6 +619,12 @@ impl RepositoryError {
             Self::Task(_) => {
                 ErrorDescription::new(Internal, Code::InternalError, "task queue operation failed")
             }
+            // Nothing was written, and the same request can succeed in a moment.
+            error @ Self::Database(_) if error.is_deadlock() => ErrorDescription::new(
+                Unavailable,
+                Code::ServiceUnavailable,
+                "the change conflicted with another one; try again",
+            ),
             Self::Database(_) => {
                 ErrorDescription::new(Internal, Code::InternalError, "database operation failed")
             }

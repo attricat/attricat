@@ -708,15 +708,51 @@ fn runtime_error(error: impl std::fmt::Display) -> ExtensionRuntimeError {
     ExtensionRuntimeError::Runtime(format!("{error:#}"))
 }
 
+/// A temporary file removed when this is dropped, including when a lost lease or
+/// shutdown drops the future using it. Each can hold up to a large artifact.
+struct TempFile(PathBuf);
+
+impl Drop for TempFile {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
+
+/// Time an invocation has spent waiting on outbound requests. A stalled destination
+/// says nothing about the component: the request times out by its own rule and the
+/// component decides what to do, so that wait doesn't count against its deadline.
+#[derive(Clone, Default)]
+struct NetworkWait(Arc<std::sync::atomic::AtomicU64>);
+
+impl NetworkWait {
+    async fn around<F: std::future::Future>(&self, request: F) -> F::Output {
+        let started = Instant::now();
+        let output = request.await;
+        self.0.fetch_add(
+            u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+            std::sync::atomic::Ordering::Relaxed,
+        );
+        output
+    }
+
+    fn total(&self) -> Duration {
+        Duration::from_millis(self.0.load(std::sync::atomic::Ordering::Relaxed))
+    }
+}
+
 /// Ends the invocation after `timeout` and otherwise hands its worker back at every
 /// epoch tick. Fuel can't do this alone, because the host's copying of a guest's
 /// strings costs almost none: without this, a few guests looping on host calls hold
 /// every worker and the API stops answering.
-fn limit_invocation_time<T: 'static>(store: &mut Store<T>, timeout: Duration) {
+fn limit_invocation_time<T: 'static>(
+    store: &mut Store<T>,
+    timeout: Duration,
+    network_wait: NetworkWait,
+) {
     const TICKS_BETWEEN_YIELDS: u64 = 1;
     let deadline = Instant::now() + timeout;
     store.epoch_deadline_callback(move |_| {
-        if Instant::now() >= deadline {
+        if Instant::now() >= deadline + network_wait.total() {
             return Err(wasmtime::Trap::Interrupt.into());
         }
         Ok(wasmtime::UpdateDeadline::Yield(TICKS_BETWEEN_YIELDS))
@@ -754,6 +790,7 @@ struct OperationState {
     artifacts: ResourceTable,
     /// The run's scope, loaded on first use.
     run_facts: Arc<tokio::sync::OnceCell<transfer::RunFacts>>,
+    network_wait: NetworkWait,
 }
 
 impl OperationState {
@@ -771,6 +808,7 @@ impl OperationState {
             batch_key: String::new(),
             artifacts: ResourceTable::new(),
             run_facts: Arc::default(),
+            network_wait: NetworkWait::default(),
         }
     }
 
@@ -831,6 +869,7 @@ struct HostState {
     run_id: Option<Uuid>,
     /// The run's scope, loaded on first use.
     run_facts: Arc<tokio::sync::OnceCell<transfer::RunFacts>>,
+    network_wait: NetworkWait,
 }
 
 /// The export lease holder of an operation run.
@@ -860,6 +899,7 @@ impl HostState {
             lease_holder: None,
             run_id: None,
             run_facts: Arc::default(),
+            network_wait: NetworkWait::default(),
         }
     }
 
@@ -966,10 +1006,12 @@ impl HostState {
             return Ok(json!({"value": value}).to_string());
         }
         if operation == "network.request.v1" {
-            return self.network_request(&request).await;
+            let network_wait = self.network_wait.clone();
+            return network_wait.around(self.network_request(&request)).await;
         }
         if operation == "network.request.v2" {
-            return self.network_request_v2(&request).await;
+            let network_wait = self.network_wait.clone();
+            return network_wait.around(self.network_request_v2(&request)).await;
         }
         if operation.starts_with("mappings.") {
             return self.mappings_call(&operation, &request).await;
@@ -1721,6 +1763,21 @@ impl TaskHandler for ExtensionOperationTaskHandler {
     fn kind(&self) -> TaskKind {
         TaskKind::ExtensionOperationRunV1
     }
+
+    /// A run left pending or leased behind a dead task would block its schedule
+    /// and connector job, and could not be replayed.
+    async fn on_exhausted(
+        &self,
+        task: &ClaimedTask,
+        message: &str,
+    ) -> Result<bool, TaskHandlerError> {
+        self.repository
+            .for_workspace(task.workspace_id)
+            .dead_letter_extension_operation_task(task, message)
+            .await
+            .map_err(operation_task_error)
+    }
+
     async fn handle(&self, task: ClaimedTask) -> Result<TaskOutcome, TaskHandlerError> {
         let repository = self.repository.for_workspace(task.workspace_id);
         let repository = repository.for_task(&task);
@@ -2416,7 +2473,13 @@ impl WasmExtensionTaskHandler {
                 return Ok(HandlerStep::Completed);
             }
             Ok(Err(failure)) => failure,
-            Err(error) => InvocationFailure::Fault(error.to_string()),
+            // The handler never ran: the component could not be loaded, as in an
+            // object-store outage, which is no reason to quarantine it. The
+            // operation path treats these the same way.
+            Err(error) => InvocationFailure::Retry {
+                message: error.to_string(),
+                after: None,
+            },
         };
         match failure {
             InvocationFailure::Rejected(rejection) => {
@@ -2782,12 +2845,45 @@ mod tests {
         0x0a, 0x09, 0x01, 0x07, 0x00, 0x03, 0x40, 0x0c, 0x00, 0x0b, 0x0b, // its body
     ];
 
+    #[tokio::test]
+    async fn time_spent_on_outbound_requests_does_not_count_against_the_deadline() {
+        use super::{
+            Arc, Duration, ExtensionEpochTicker, Instant, NetworkWait, Store, compilation,
+            limit_invocation_time,
+        };
+        const TIMEOUT: Duration = Duration::from_millis(100);
+        const REQUEST: Duration = Duration::from_millis(400);
+        let engine = Arc::new(compilation::engine().unwrap());
+        let _ticker = ExtensionEpochTicker::start(engine.clone()).unwrap();
+        let module = wasmtime::Module::new(&engine, SPINNING_MODULE).unwrap();
+        let mut store = Store::new(&engine, ());
+        store.set_fuel(u64::MAX).unwrap();
+        let network_wait = NetworkWait::default();
+        limit_invocation_time(&mut store, TIMEOUT, network_wait.clone());
+        network_wait.around(tokio::time::sleep(REQUEST)).await;
+        let instance = wasmtime::Instance::new_async(&mut store, &module, &[])
+            .await
+            .unwrap();
+        let spin = instance
+            .get_typed_func::<(), ()>(&mut store, "spin")
+            .unwrap();
+        let spinning = Instant::now();
+        let error = spin.call_async(&mut store, ()).await.unwrap_err();
+        // The guest still gets its whole allowance after the request returned.
+        assert!(spinning.elapsed() >= TIMEOUT / 2);
+        assert_eq!(
+            error.downcast_ref::<wasmtime::Trap>(),
+            Some(&wasmtime::Trap::Interrupt)
+        );
+    }
+
     /// One worker is the worst case: a guest that kept it would stop both the rest of
     /// the API and, were the ticker a task, its own timeout.
     #[tokio::test(flavor = "current_thread")]
     async fn a_spinning_guest_shares_its_worker_and_still_times_out() {
         use super::{
-            Arc, Duration, ExtensionEpochTicker, Instant, Store, compilation, limit_invocation_time,
+            Arc, Duration, ExtensionEpochTicker, Instant, NetworkWait, Store, compilation,
+            limit_invocation_time,
         };
         const TIMEOUT: Duration = Duration::from_millis(200);
         let engine = Arc::new(compilation::engine().unwrap());
@@ -2795,7 +2891,7 @@ mod tests {
         let module = wasmtime::Module::new(&engine, SPINNING_MODULE).unwrap();
         let mut store = Store::new(&engine, ());
         store.set_fuel(u64::MAX).unwrap();
-        limit_invocation_time(&mut store, TIMEOUT);
+        limit_invocation_time(&mut store, TIMEOUT, NetworkWait::default());
         let instance = wasmtime::Instance::new_async(&mut store, &module, &[])
             .await
             .unwrap();
@@ -3520,7 +3616,8 @@ impl OperationState {
         }
         let path =
             std::env::temp_dir().join(format!("attricat-operation-finalize-{}", artifact.id));
-        let result = async {
+        let _remove_on_drop = TempFile(path.clone());
+        async {
             let mut file =
                 File::create(&path).map_err(|_| "temporary output unavailable".to_owned())?;
             let mut hasher = Sha256::new();
@@ -3565,9 +3662,7 @@ impl OperationState {
                 .map_err(|error| error.to_string())?;
             Ok(artifact.id.to_string())
         }
-        .await;
-        let _ = std::fs::remove_file(&path);
-        result
+        .await
     }
 
     async fn artifacts_open_input(

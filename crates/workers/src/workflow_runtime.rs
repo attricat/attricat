@@ -30,7 +30,7 @@ pub(crate) struct WorkflowIntakeHandler;
 #[async_trait]
 impl EventHandler for WorkflowIntakeHandler {
     fn name(&self) -> &'static str {
-        "attricat.workflows"
+        attricat_events::WORKFLOWS_EVENT_CONSUMER
     }
     fn event_types(&self) -> &'static [&'static str] {
         ALL_EVENT_TYPES_V1
@@ -99,6 +99,27 @@ impl TaskHandler for WorkflowTaskHandler {
                 Err(error) => fail_workflow_run(&scoped, &task, error.to_string()).await,
             },
             Err(error) => fail_workflow_run(&scoped, &task, error.to_string()).await,
+        }
+    }
+
+    async fn on_exhausted(
+        &self,
+        task: &ClaimedTask,
+        message: &str,
+    ) -> Result<bool, TaskHandlerError> {
+        match self
+            .repository
+            .for_workspace(task.workspace_id)
+            .dead_letter_workflow_run_task(
+                task,
+                &crate::repository::bounded_task_error_message(message),
+            )
+            .await
+        {
+            Ok(()) => Ok(true),
+            Err(error @ crate::repository::RepositoryError::Database(_)) => Err(task_error(error)),
+            // The run has already ended; only the envelope remains.
+            Err(_) => Ok(false),
         }
     }
 }

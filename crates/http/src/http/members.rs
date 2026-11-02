@@ -169,7 +169,14 @@ pub(super) async fn create_workspace_user(
     let invitation = repository
         .workspace_invitation(actor, workspace, invitation_id)
         .await?;
-    deliver_invitation(&state, &email, user.needs_password_setup, &secrets).await?;
+    if let Err(error) =
+        deliver_invitation(&state, &email, user.needs_password_setup, &secrets).await
+    {
+        tracing::error!(?error, "workspace user invitation email delivery failed");
+        return Err(
+            withdraw_undelivered_invitation(&repository, actor, workspace, invitation_id).await,
+        );
+    }
     Ok((
         StatusCode::CREATED,
         Json(CreatedWorkspaceUser {
@@ -393,6 +400,23 @@ pub(super) async fn transfer_ownership(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// Only the emailed link holds an invitation's secret, so one that was never
+/// delivered can't be accepted and must not stay listed as pending.
+async fn withdraw_undelivered_invitation(
+    repository: &crate::repository::AttricatRepository,
+    actor: Uuid,
+    workspace: Uuid,
+    invitation_id: Uuid,
+) -> ApiError {
+    if let Err(error) = repository
+        .revoke_workspace_invitation(invitation_id, actor, workspace)
+        .await
+    {
+        tracing::error!(%error, "could not withdraw an undelivered workspace invitation");
+    }
+    ApiError::invitation_delivery_failed()
+}
+
 pub(super) async fn create_invitation(
     State(state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
@@ -422,14 +446,14 @@ pub(super) async fn create_invitation(
         .workspace_invitation(actor, workspace, id)
         .await?;
     let delivery_url = action_url(&state.workspace_invitation_url, &[("secret", &secret)])?;
-    state
+    if let Err(error) = state
         .mail_delivery
         .deliver_workspace_invitation(&email, &delivery_url)
         .await
-        .map_err(|error| {
-            tracing::error!(%error, "workspace invitation email delivery failed");
-            ApiError::internal("workspace invitation email could not be delivered")
-        })?;
+    {
+        tracing::error!(%error, "workspace invitation email delivery failed");
+        return Err(withdraw_undelivered_invitation(&repository, actor, workspace, id).await);
+    }
     Ok((
         StatusCode::CREATED,
         Json(CreatedInvitation {

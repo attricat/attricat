@@ -3090,7 +3090,19 @@ pub async fn execute_mutation(
         }
         _ => return Err(ToolError::UnknownTool(name.to_owned())),
     };
-    bounded(result)
+    Ok(committed_result(result))
+}
+
+/// The result of a mutation that has already committed. Reporting one too large
+/// to show as a failure would tell the model nothing changed, inviting it to
+/// apply the same change again.
+fn committed_result(result: Value) -> Value {
+    bounded(result).unwrap_or_else(|_| {
+        json!({
+            "applied": true,
+            "result_omitted": "The change was saved, but its result is too large to show. Read the affected records if you need their current values."
+        })
+    })
 }
 
 /// The record, relationship sets and optional `expected_updated_at` of a

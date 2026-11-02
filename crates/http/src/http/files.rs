@@ -46,6 +46,8 @@ const AVATAR_MIME_TYPES: &[&str] = &["image/png", "image/jpeg"];
 /// Avatars are small once processed, so originals are capped well below the
 /// general upload limit.
 const AVATAR_MAX_BYTES: u64 = 10 * 1024 * 1024;
+/// An avatar request's whole body: the file and its multipart framing.
+pub(super) const AVATAR_MAX_BODY_BYTES: usize = AVATAR_MAX_BYTES as usize + 64 * 1024;
 
 /// Owns the staged path even if a multipart stream fails or the request is
 /// cancelled before the handlers reach their explicit cleanup path.

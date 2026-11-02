@@ -597,10 +597,19 @@ impl AttricatRepository {
             })
             .expect("withdrawn cursor serializes"),
         );
+        // Withdrawals older than retention are gone. An exporter resuming from
+        // before them may have missed some and can reconcile with its destination.
+        let purged_through: i64 = sqlx::query_scalar(
+            "SELECT COALESCE((SELECT purged_through_sequence FROM domain_event_retention WHERE workspace_id=$1), 0)",
+        )
+        .bind(self.workspace_id.0)
+        .fetch_one(&self.pool)
+        .await?;
         Ok(json!({
             "records": items,
             "next_cursor": next_cursor,
             "more": events.len() == limit as usize,
+            "history_purged": after_sequence < purged_through,
         }))
     }
 }

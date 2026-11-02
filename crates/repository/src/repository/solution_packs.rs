@@ -4982,9 +4982,10 @@ async fn evaluate_solution_pack_check(
             }
         }
         SolutionPackCheckPredicate::WorkspaceExtensionLayoutPlacementPresent { contribution } => {
-            let payload: Option<Value> = sqlx::query_scalar("SELECT normalized_payload FROM solution_pack_plan_actions WHERE workspace_id=$1 AND plan_id=$2 AND logical_key='workspace/extension-layout'")
+            // A skipped layout has a row with no payload.
+            let payload: Option<Option<Value>> = sqlx::query_scalar("SELECT normalized_payload FROM solution_pack_plan_actions WHERE workspace_id=$1 AND plan_id=$2 AND logical_key='workspace/extension-layout'")
                 .bind(workspace_id).bind(plan_id).fetch_optional(&mut **tx).await?;
-            let Some(payload) = payload else {
+            let Some(payload) = payload.flatten() else {
                 return Ok(unresolvable());
             };
             let entries = parse_extension_layout_payload(payload)?;

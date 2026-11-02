@@ -6,7 +6,7 @@ use crate::{
     agent_provider::OpenAiCompatibleClient,
     agent_runner,
     agents::AgentProviderConfig,
-    repository::{ClaimedTask, SystemRepository},
+    repository::{ClaimedTask, RepositoryError, SystemRepository},
     storage::ObjectStore,
     task_queue::TaskKind,
     task_worker::{TaskHandler, TaskHandlerError, TaskOutcome},
@@ -114,6 +114,38 @@ impl TaskHandler for AgentTaskHandler {
                 })?;
                 Ok(TaskOutcome::Complete)
             }
+        }
+    }
+
+    /// A run the worker gives up on must not keep showing as running.
+    async fn on_exhausted(
+        &self,
+        task: &ClaimedTask,
+        message: &str,
+    ) -> Result<bool, TaskHandlerError> {
+        let repository = self
+            .repository
+            .for_workspace(task.workspace_id)
+            .for_task(task);
+        // Claiming fails a run left running, and only a queued run comes back.
+        let settled = async {
+            if repository
+                .claim_queued_agent_run(task.subject_id)
+                .await?
+                .is_some()
+            {
+                agent_runner::fail_run(&repository, task.subject_id, "runner_error", message)
+                    .await?;
+            }
+            Ok::<(), RepositoryError>(())
+        };
+        match settled.await {
+            Err(error @ RepositoryError::Database(_)) => Err(TaskHandlerError {
+                code: "transition",
+                message: error.to_string(),
+            }),
+            // Otherwise the run has ended; only the envelope remains.
+            _ => Ok(false),
         }
     }
 

@@ -97,7 +97,7 @@ pub struct Choice {
 pub struct AssistantMessage {
     #[serde(default)]
     pub content: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_empty")]
     pub tool_calls: Vec<ToolCall>,
 }
 
@@ -274,7 +274,8 @@ impl OpenAiCompatibleClient {
                             calls.push(PartialToolCall::default());
                         }
                         let slot = &mut calls[call.index];
-                        if let Some(id) = call.id {
+                        // Continuation chunks can repeat an empty ID.
+                        if let Some(id) = call.id.filter(|id| !id.is_empty()) {
                             slot.id = id;
                         }
                         if let Some(kind) = call.kind {
@@ -359,8 +360,16 @@ struct StreamChoice {
 struct StreamDelta {
     #[serde(default)]
     content: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_empty")]
     tool_calls: Vec<StreamToolCall>,
+}
+/// Some providers send `"tool_calls": null` rather than leaving the field out.
+fn null_as_empty<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Ok(Option::<Vec<T>>::deserialize(deserializer)?.unwrap_or_default())
 }
 #[derive(Deserialize)]
 struct StreamToolCall {

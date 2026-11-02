@@ -382,6 +382,11 @@ impl ExtensionRuntime {
         );
         host.lease_holder = lease_holder;
         host.run_id = operation.as_ref().map(|operation| operation.run_id);
+        let network_wait = host.network_wait.clone();
+        let mut operation = operation;
+        if let Some(operation) = &mut operation {
+            operation.network_wait = network_wait.clone();
+        }
         let state = UnifiedState {
             host,
             operation,
@@ -393,7 +398,7 @@ impl ExtensionRuntime {
         store
             .fuel_async_yield_interval(Some(FUEL_YIELD_INTERVAL))
             .map_err(runtime_error)?;
-        limit_invocation_time(&mut store, self.config.invocation_timeout);
+        limit_invocation_time(&mut store, self.config.invocation_timeout, network_wait);
         let pre = self.unified_instance_pre(installation, &component)?;
         let instance = pre
             .instantiate_async(&mut store)

@@ -86,6 +86,25 @@ attributes:
         "relationship_cardinality_conflict"
     );
 
+    // A deleted source no longer holds its target.
+    let deleted = client
+        .delete(format!(
+            "{base_url}/records/{}",
+            source_a["id"].as_str().unwrap()
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(deleted.status(), StatusCode::NO_CONTENT);
+    assert_eq!(
+        replace(&source_b, json!([target_a["id"]]))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CREATED
+    );
+
     server.abort();
 }
 

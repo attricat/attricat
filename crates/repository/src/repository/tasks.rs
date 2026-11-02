@@ -204,7 +204,11 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
 
     /// Claims one due envelope of any registered kind with one statement,
     /// leasing it for that kind's own lease duration. Workspaces are served
-    /// least-recently first, then tasks oldest first.
+    /// least-recently first, then tasks oldest first. Reclaiming an expired
+    /// lease spends a failure, because whatever held it never settled. Event
+    /// deliveries don't: each handler's attempts are counted separately, and
+    /// quarantining the extension that keeps ending the process needs more of
+    /// them than the envelope's budget allows.
     pub async fn claim_task_with_leases(
         &self,
         worker_id: &str,
@@ -223,7 +227,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
             seconds.push(lease_seconds(*lease)?);
         }
         let row = sqlx::query_as::<_, ClaimedTaskRow>(
-            "WITH policy AS (SELECT * FROM UNNEST($4::text[], $3::bigint[]) AS p(kind, lease_seconds)), candidate AS (SELECT t.id, t.workspace_id, p.lease_seconds FROM tasks t JOIN policy p ON p.kind = t.kind JOIN task_workspace_service s ON s.workspace_id = t.workspace_id WHERE ((t.status = 'queued' AND t.available_at <= now()) OR (t.status = 'leased' AND t.lease_until <= now())) ORDER BY s.last_served_at ASC, t.available_at ASC, t.created_at ASC, t.id ASC FOR UPDATE OF t, s SKIP LOCKED LIMIT 1), service AS (UPDATE task_workspace_service s SET last_served_at = now(), updated_at = now() FROM candidate c WHERE s.workspace_id = c.workspace_id RETURNING s.workspace_id) UPDATE tasks t SET status = 'leased', attempts = t.attempts + 1, lease_owner = $1, lease_token = $2, lease_until = now() + (c.lease_seconds * interval '1 second'), started_at = COALESCE(t.started_at, now()), updated_at = now() FROM candidate c JOIN service s ON s.workspace_id = c.workspace_id WHERE t.id = c.id RETURNING t.id, t.workspace_id, t.kind, t.subject_id, t.generation, t.payload, t.attempts, t.failures, t.max_failures, t.lease_owner, t.lease_token, t.lease_until, t.correlation_id, t.causation_id",
+            "WITH policy AS (SELECT * FROM UNNEST($4::text[], $3::bigint[]) AS p(kind, lease_seconds)), candidate AS (SELECT t.id, t.workspace_id, p.lease_seconds FROM tasks t JOIN policy p ON p.kind = t.kind JOIN task_workspace_service s ON s.workspace_id = t.workspace_id WHERE ((t.status = 'queued' AND t.available_at <= now()) OR (t.status = 'leased' AND t.lease_until <= now())) ORDER BY s.last_served_at ASC, t.available_at ASC, t.created_at ASC, t.id ASC FOR UPDATE OF t, s SKIP LOCKED LIMIT 1), service AS (UPDATE task_workspace_service s SET last_served_at = now(), updated_at = now() FROM candidate c WHERE s.workspace_id = c.workspace_id RETURNING s.workspace_id) UPDATE tasks t SET status = 'leased', attempts = t.attempts + 1, failures = t.failures + CASE WHEN t.status = 'leased' AND t.kind <> 'event_delivery.v1' THEN 1 ELSE 0 END, lease_owner = $1, lease_token = $2, lease_until = now() + (c.lease_seconds * interval '1 second'), started_at = COALESCE(t.started_at, now()), updated_at = now() FROM candidate c JOIN service s ON s.workspace_id = c.workspace_id WHERE t.id = c.id RETURNING t.id, t.workspace_id, t.kind, t.subject_id, t.generation, t.payload, t.attempts, t.failures, t.max_failures, t.lease_owner, t.lease_token, t.lease_until, t.correlation_id, t.causation_id",
         )
         .bind(worker_id)
         .bind(Uuid::new_v4())
@@ -259,7 +263,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
             .execute(&mut *transaction)
             .await?;
         let row = sqlx::query_as::<_, ClaimedTaskRow>(
-            "WITH candidate AS (SELECT t.id, t.workspace_id FROM tasks t JOIN task_workspace_service s ON s.workspace_id = t.workspace_id WHERE t.kind = ANY($4) AND ((t.status = 'queued' AND t.available_at <= now()) OR (t.status = 'leased' AND t.lease_until <= now())) ORDER BY s.last_served_at ASC, t.available_at ASC, t.created_at ASC, t.id ASC FOR UPDATE OF t, s SKIP LOCKED LIMIT 1), service AS (UPDATE task_workspace_service s SET last_served_at = now(), updated_at = now() FROM candidate c WHERE s.workspace_id = c.workspace_id RETURNING s.workspace_id) UPDATE tasks t SET status = 'leased', attempts = t.attempts + 1, lease_owner = $1, lease_token = $2, lease_until = now() + ($3 * interval '1 second'), started_at = COALESCE(t.started_at, now()), updated_at = now() FROM candidate c JOIN service s ON s.workspace_id = c.workspace_id WHERE t.id = c.id RETURNING t.id, t.workspace_id, t.kind, t.subject_id, t.generation, t.payload, t.attempts, t.failures, t.max_failures, t.lease_owner, t.lease_token, t.lease_until, t.correlation_id, t.causation_id",
+            "WITH candidate AS (SELECT t.id, t.workspace_id FROM tasks t JOIN task_workspace_service s ON s.workspace_id = t.workspace_id WHERE t.kind = ANY($4) AND ((t.status = 'queued' AND t.available_at <= now()) OR (t.status = 'leased' AND t.lease_until <= now())) ORDER BY s.last_served_at ASC, t.available_at ASC, t.created_at ASC, t.id ASC FOR UPDATE OF t, s SKIP LOCKED LIMIT 1), service AS (UPDATE task_workspace_service s SET last_served_at = now(), updated_at = now() FROM candidate c WHERE s.workspace_id = c.workspace_id RETURNING s.workspace_id) UPDATE tasks t SET status = 'leased', attempts = t.attempts + 1, failures = t.failures + CASE WHEN t.status = 'leased' AND t.kind <> 'event_delivery.v1' THEN 1 ELSE 0 END, lease_owner = $1, lease_token = $2, lease_until = now() + ($3 * interval '1 second'), started_at = COALESCE(t.started_at, now()), updated_at = now() FROM candidate c JOIN service s ON s.workspace_id = c.workspace_id WHERE t.id = c.id RETURNING t.id, t.workspace_id, t.kind, t.subject_id, t.generation, t.payload, t.attempts, t.failures, t.max_failures, t.lease_owner, t.lease_token, t.lease_until, t.correlation_id, t.causation_id",
         )
         .bind(worker_id)
         .bind(Uuid::new_v4())

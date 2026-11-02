@@ -293,7 +293,7 @@ Każde wywołanie Twojego komponentu, np. jedno polecenie, dostarczenie zdarzeni
 - 1 miliard jednostek paliwa, co z grubsza odpowiada liczbie instrukcji WebAssembly;
 - 32 MiB pamięci łącznie, a także najwyżej 8 pamięci, 64 tabele z łącznie 100 000 elementów i 32 instancje;
 - 1 MiB komunikatów w logach, po przekroczeniu którego kolejne są pomijane;
-- 10 sekund.
+- 10 sekund, nie licząc czasu oczekiwania na wychodzące żądania sieciowe i transfery, które mają własne limity czasu.
 
 Komponent serwerowy może mieć najwyżej 32 MiB, a każdy jego moduł najwyżej 16 384 typy, importy, zmienne globalne, tabele, pamięci, eksporty i elementy tabel łącznie. Kompiluje się w osobnym procesie ograniczonym do 512 MiB pamięci i 2 minut, a po niepowodzeniu kolejna próba nastąpi dopiero po 5 minutach. Każdy proces API wykonuje naraz 16 wywołań, w tym 8 z jednego obszaru roboczego, a kolejne czekają na swoją kolej.
 

@@ -1,12 +1,22 @@
-use std::time::Duration;
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
+    time::Duration,
+};
 
 use api::{
-    repository::AttricatRepository,
+    repository::{AttricatRepository, ClaimedTask},
     task_queue::{TaskInsert, TaskKind, TaskStatus},
+    task_worker::{
+        self, TaskHandler, TaskHandlerError, TaskHandlerRegistry, TaskOutcome, TaskWorkerConfig,
+    },
 };
 use chrono::{Duration as ChronoDuration, Utc};
 use serde_json::json;
 use sqlx::PgPool;
+use tokio::sync::watch;
 use uuid::Uuid;
 
 async fn workspace(pool: &PgPool, slug: &str) -> Uuid {
@@ -645,4 +655,219 @@ async fn set_based_cancellation_obeys_kind_policy_and_skips_leased_work(pool: Pg
         statuses,
         vec![(queued, "cancelled".into()), (leased, "leased".into())]
     );
+}
+
+/// A handler whose calls are counted, and which panics when told to.
+struct ScriptedHandler {
+    handled: Arc<AtomicUsize>,
+    panics: bool,
+    settles: bool,
+}
+
+#[async_trait::async_trait]
+impl TaskHandler for ScriptedHandler {
+    fn kind(&self) -> TaskKind {
+        TaskKind::RuleRunV1
+    }
+
+    async fn handle(&self, _: ClaimedTask) -> Result<TaskOutcome, TaskHandlerError> {
+        self.handled.fetch_add(1, Ordering::SeqCst);
+        assert!(!self.panics, "scripted panic");
+        Ok(TaskOutcome::Complete)
+    }
+
+    async fn on_exhausted(&self, _: &ClaimedTask, _: &str) -> Result<bool, TaskHandlerError> {
+        if self.settles {
+            Ok(false)
+        } else {
+            Err(TaskHandlerError {
+                code: "settle",
+                message: "the domain row could not be settled".into(),
+            })
+        }
+    }
+}
+
+/// Runs the worker with `handler` until `task_id` satisfies `done`, returning its
+/// status, failures and last error code.
+async fn run_until(
+    pool: &PgPool,
+    handler: ScriptedHandler,
+    task_id: Uuid,
+    done: impl Fn(&str, i32) -> bool,
+) -> (String, i32, Option<String>) {
+    let repository = AttricatRepository::system(pool.clone());
+    let (shutdown, receiver) = watch::channel(());
+    let worker = task_worker::start(
+        repository,
+        TaskHandlerRegistry::new(vec![Arc::new(handler)]).unwrap(),
+        TaskWorkerConfig {
+            worker_id: "task-failure-test".into(),
+            concurrency: 1,
+            poll_interval: Duration::from_millis(10),
+            shutdown_grace: Duration::from_secs(1),
+        },
+        receiver,
+    );
+    let row = tokio::time::timeout(Duration::from_secs(20), async {
+        loop {
+            let row: (String, i32, Option<String>) =
+                sqlx::query_as("SELECT status, failures, last_error_code FROM tasks WHERE id = $1")
+                    .bind(task_id)
+                    .fetch_one(pool)
+                    .await
+                    .unwrap();
+            if done(&row.0, row.1) {
+                return row;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("task did not reach the expected state");
+    shutdown.send(()).unwrap();
+    worker.await.unwrap().unwrap();
+    row
+}
+
+/// A task of `RuleRunV1` already leased by a worker that died.
+async fn abandoned_task(pool: &PgPool, slug: &str, failures: i32) -> Uuid {
+    abandoned_task_of_kind(pool, slug, "rule_run.v1", failures).await
+}
+
+async fn abandoned_task_of_kind(pool: &PgPool, slug: &str, kind: &str, failures: i32) -> Uuid {
+    let workspace_id = workspace(pool, slug).await;
+    let id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO task_workspace_service (workspace_id) VALUES ($1) ON CONFLICT DO NOTHING",
+    )
+    .bind(workspace_id)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO tasks (id, workspace_id, kind, subject_id, generation, envelope_version, max_failures, failures, status, lease_owner, lease_token, lease_until, payload)
+         VALUES ($1, $2, $5, $3, 0, 1, 5, $4, 'leased', 'dead-worker', $1, now() - interval '1 minute', '{}')",
+    )
+    .bind(id)
+    .bind(workspace_id)
+    .bind(Uuid::new_v4())
+    .bind(failures)
+    .bind(kind)
+    .execute(pool)
+    .await
+    .unwrap();
+    id
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_panicking_handler_spends_the_failure_budget(pool: PgPool) {
+    let workspace_id = workspace(&pool, "tasks-panic").await;
+    let repository = AttricatRepository::system(pool.clone());
+    let mut transaction = pool.begin().await.unwrap();
+    let task_id = repository
+        .enqueue_task(&mut transaction, insert(workspace_id, Uuid::new_v4()))
+        .await
+        .unwrap()
+        .unwrap();
+    transaction.commit().await.unwrap();
+    let handled = Arc::new(AtomicUsize::new(0));
+    let (status, failures, code) = run_until(
+        &pool,
+        ScriptedHandler {
+            handled: handled.clone(),
+            panics: true,
+            settles: true,
+        },
+        task_id,
+        |_, failures| failures >= 1,
+    )
+    .await;
+    assert_eq!(status, "queued");
+    assert_eq!(failures, 1);
+    assert_eq!(code.as_deref(), Some("handler_panic"));
+    assert_eq!(handled.load(Ordering::SeqCst), 1);
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_task_whose_leases_keep_expiring_is_dead_lettered_without_running(pool: PgPool) {
+    let task_id = abandoned_task(&pool, "tasks-crash-loop", 4).await;
+    let handled = Arc::new(AtomicUsize::new(0));
+    let (_, failures, code) = run_until(
+        &pool,
+        ScriptedHandler {
+            handled: handled.clone(),
+            panics: false,
+            settles: true,
+        },
+        task_id,
+        |status, _| status == "dead_letter",
+    )
+    .await;
+    assert_eq!(failures, 5);
+    assert_eq!(code.as_deref(), Some("lease_expired"));
+    assert_eq!(handled.load(Ordering::SeqCst), 0);
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn reclaiming_an_expired_lease_spends_one_failure_and_runs_the_task(pool: PgPool) {
+    let task_id = abandoned_task(&pool, "tasks-reclaim", 0).await;
+    let handled = Arc::new(AtomicUsize::new(0));
+    let (status, failures, _) = run_until(
+        &pool,
+        ScriptedHandler {
+            handled: handled.clone(),
+            panics: false,
+            settles: true,
+        },
+        task_id,
+        |status, _| status == "succeeded",
+    )
+    .await;
+    assert_eq!(status, "succeeded");
+    assert_eq!(failures, 1);
+    assert_eq!(handled.load(Ordering::SeqCst), 1);
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_task_that_cannot_settle_its_domain_row_is_not_dead_lettered(pool: PgPool) {
+    let task_id = abandoned_task(&pool, "tasks-unsettled", 4).await;
+    let (status, _, _) = run_until(
+        &pool,
+        ScriptedHandler {
+            handled: Arc::new(AtomicUsize::new(0)),
+            panics: false,
+            settles: false,
+        },
+        task_id,
+        |status, _| status == "queued",
+    )
+    .await;
+    assert_eq!(status, "queued");
+    let available_later: bool =
+        sqlx::query_scalar("SELECT available_at > now() FROM tasks WHERE id = $1")
+            .bind(task_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(available_later);
+}
+
+/// An event delivery counts each handler's attempts itself, and quarantining the
+/// extension that keeps ending the process needs more than the envelope's budget.
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn reclaiming_an_event_delivery_spends_no_failure(pool: PgPool) {
+    let task_id = abandoned_task_of_kind(&pool, "tasks-delivery", "event_delivery.v1", 4).await;
+    let repository = AttricatRepository::system(pool.clone());
+    let task = repository
+        .claim_task_for_kinds(
+            "reclaimer",
+            Duration::from_secs(30),
+            &[TaskKind::EventDeliveryV1],
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(task.id, task_id);
+    assert_eq!(task.failures, 4);
 }

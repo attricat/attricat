@@ -237,12 +237,13 @@ impl FileWorker {
                 false
             }
         };
+        // A failing sweep must not stop uploads from being processed.
         if should_reconcile && let Err(error) = self.reconcile().await {
             *self
                 .last_reconciled
                 .lock()
                 .expect("reconcile clock poisoned") = None;
-            return Err(error);
+            tracing::warn!(error = %error, "file reconciliation failed; claiming jobs anyway");
         }
         let job = self.claim().await?;
         if job.is_none() {
@@ -259,6 +260,13 @@ impl FileWorker {
     ) -> Result<(), RepositoryError> {
         let kind = FileJobKind::parse(&job.kind).unwrap_or(FileJobKind::Metadata);
         let span = info_span!("file_worker.job", job_id = %job.id, file_id = %job.file_id, kind = kind.as_str());
+        // Only a job whose worker died can be claimed past its last attempt. It
+        // may be what killed the worker, so it does not run again.
+        if job.attempts > self.config.max_attempts {
+            tracing::error!(job_id = %job.id, attempts = job.attempts, "file job kept losing its lease; failing it");
+            self.fail(&job, "file job kept losing its lease").await?;
+            return Ok(());
+        }
         let operation = async {
             let result = match kind {
                 FileJobKind::Purge => self.purge(&job).await,
@@ -275,10 +283,22 @@ impl FileWorker {
         let renewals = async {
             let mut heartbeat = tokio::time::interval(heartbeat_every);
             heartbeat.tick().await;
+            let stale_after = Duration::from_secs(STALE_LOCK_SECONDS as u64);
+            let mut lease_ends = tokio::time::Instant::now() + stale_after;
             loop {
                 heartbeat.tick().await;
-                if !self.renew_lease(&job).await? {
-                    return Ok::<(), sqlx::Error>(());
+                // A database error says nothing about the lease, which holds
+                // until it goes stale. Only then has this job certainly lost it.
+                let attempted_at = tokio::time::Instant::now();
+                match tokio::time::timeout_at(lease_ends, self.renew_lease(&job)).await {
+                    Ok(Ok(true)) => lease_ends = attempted_at + stale_after,
+                    Ok(Ok(false)) | Err(_) => return Ok::<(), sqlx::Error>(()),
+                    Ok(Err(error)) if tokio::time::Instant::now() >= lease_ends => {
+                        return Err(error);
+                    }
+                    Ok(Err(error)) => {
+                        tracing::warn!(job_id = %job.id, error = %error, "file job heartbeat failed; retrying");
+                    }
                 }
             }
         };
@@ -727,17 +747,22 @@ fn decode_and_orient(bytes: &[u8], max_pixels: u64) -> Result<DynamicImage, Work
             exif.get_field(exif::Tag::Orientation, exif::In::PRIMARY)
                 .and_then(|field| field.value.get_uint(0))
         });
-    let image = ImageReader::new(Cursor::new(bytes))
+    // Read from the header before decoding, which is what the limit protects.
+    let (width, height) = ImageReader::new(Cursor::new(bytes))
         .with_guessed_format()
         .map_err(|e| WorkerError::Image(e.to_string()))?
-        .decode()
+        .into_dimensions()
         .map_err(|e| WorkerError::Image(e.to_string()))?;
-    let (width, height) = image.dimensions();
     if u64::from(width) * u64::from(height) > max_pixels {
         return Err(WorkerError::Image(format!(
             "image exceeds configured pixel limit of {max_pixels}"
         )));
     }
+    let image = ImageReader::new(Cursor::new(bytes))
+        .with_guessed_format()
+        .map_err(|e| WorkerError::Image(e.to_string()))?
+        .decode()
+        .map_err(|e| WorkerError::Image(e.to_string()))?;
     Ok(match orientation {
         Some(2) => image.fliph(),
         Some(3) => image.rotate180(),

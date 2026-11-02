@@ -537,6 +537,42 @@ async fn rule_task_lease_loss_and_crash_after_page_are_fenced(pool: PgPool) {
 }
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
+async fn an_acknowledged_finding_stays_acknowledged_until_the_record_passes(pool: PgPool) {
+    let (base_url, server, rule_id, blueprint) = setup_rule(&pool).await;
+    let client = authenticated_client();
+    let record = create_record(&client, &base_url, &blueprint).await;
+    let record_id: Uuid = record["id"].as_str().unwrap().parse().unwrap();
+    let repository = AttricatRepository::new(
+        pool.clone(),
+        support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
+    );
+    manual_run(&base_url, rule_id, Some(record_id), "acknowledge-first").await;
+    drain_tasks(&repository).await;
+    let finding_id: Uuid = sqlx::query_scalar("SELECT id FROM rule_findings WHERE record_id=$1")
+        .bind(record_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let acknowledged = client
+        .post(format!("{base_url}/rule-findings/{finding_id}/acknowledge"))
+        .send()
+        .await
+        .unwrap();
+    assert!(acknowledged.status().is_success());
+
+    manual_run(&base_url, rule_id, Some(record_id), "acknowledge-second").await;
+    drain_tasks(&repository).await;
+
+    let state: String = sqlx::query_scalar("SELECT state FROM rule_findings WHERE id=$1")
+        .bind(finding_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(state, "acknowledged");
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn checkpoint_failure_on_final_attempt_dead_letters_rule_run_and_replays_generation(
     pool: PgPool,
 ) {
