@@ -31,10 +31,9 @@ use crate::{
     },
     repository::{
         BlueprintConnectorJob, CreateExtensionOperationSchedule, ExtensionGrant,
-        ExtensionHttpDelivery, ExtensionInstallation, ExtensionLifecycleRecord,
-        ExtensionOperationArtifact, ExtensionOperationRun, ExtensionOperationSchedule,
-        ExtensionStorageEntry, ExtensionStorageError, InstalledExtension, RepositoryError,
-        StartExtensionOperation,
+        ExtensionHttpDelivery, ExtensionLifecycleRecord, ExtensionOperationArtifact,
+        ExtensionOperationRun, ExtensionOperationSchedule, ExtensionStorageEntry,
+        ExtensionStorageError, InstalledExtension, RepositoryError, StartExtensionOperation,
     },
     storage::{ObjectStoreError, StoredObject},
 };
@@ -141,27 +140,6 @@ impl From<InstalledExtension> for InstallationResponse {
             manifest_unreadable,
             manifest_sha256: value.manifest_sha256,
             source: value.source,
-        }
-    }
-}
-impl From<ExtensionInstallation> for InstallationResponse {
-    fn from(value: ExtensionInstallation) -> Self {
-        // Mutation responses intentionally omit immutable metadata. The client
-        // invalidates and reloads the management projection after a mutation.
-        Self {
-            id: value.id,
-            extension_id: value.extension_id,
-            installed_release_id: value.installed_release_id,
-            state: value.state,
-            configuration: value.configuration,
-            configuration_version: value.configuration_version,
-            created_at: value.created_at,
-            updated_at: value.updated_at,
-            version: String::new(),
-            manifest: Value::Null,
-            manifest_unreadable: false,
-            manifest_sha256: String::new(),
-            source: String::new(),
         }
     }
 }
@@ -539,6 +517,16 @@ fn reject_in_demo(state: &AppState) -> Result<(), ApiError> {
     Ok(())
 }
 
+/// The installation as `list` and `detail` report it, for a mutation's response.
+async fn installation_response(
+    repository: &crate::repository::AttricatRepository,
+    extension_id: &str,
+) -> Result<Json<InstallationResponse>, ApiError> {
+    Ok(Json(
+        repository.installed_extension(extension_id).await?.into(),
+    ))
+}
+
 /// Installs a locally supplied archive. The archive goes through the exact
 /// same manifest validation, bounded unpacking, artifact staging, and
 /// lifecycle recording as a registry release.
@@ -551,11 +539,12 @@ pub(super) async fn sideload(
     reject_in_demo(&state)?;
     require_zstd_archive(&headers)?;
     let package = unpack_extension(archive).await?;
-    let installation = ExtensionInstaller::new(repository, state.object_store.clone())
+    let installation = ExtensionInstaller::new(repository.clone(), state.object_store.clone())
         .install_package("sideload", package)
         .await
         .map_err(install_error)?;
-    Ok((StatusCode::CREATED, Json(installation.into())))
+    let response = installation_response(&repository, &installation.extension_id).await?;
+    Ok((StatusCode::CREATED, response))
 }
 
 fn require_zstd_archive(headers: &HeaderMap) -> Result<(), ApiError> {
@@ -587,11 +576,12 @@ pub(super) async fn install(
     let source = format!("{}@{}", release.source, release.tag_name);
     let package = unpack_extension(archive).await?;
     require_reviewed_version(&release, &package)?;
-    let installation = ExtensionInstaller::new(repository, state.object_store.clone())
+    let installation = ExtensionInstaller::new(repository.clone(), state.object_store.clone())
         .install_package(&source, package)
         .await
         .map_err(install_error)?;
-    Ok((StatusCode::CREATED, Json(installation.into())))
+    let response = installation_response(&repository, &installation.extension_id).await?;
+    Ok((StatusCode::CREATED, response))
 }
 pub(super) async fn upgrade(
     State(state): State<AppState>,
@@ -617,11 +607,11 @@ pub(super) async fn upgrade(
     }
     require_reviewed_version(&release, &package)?;
     let source = format!("{}@{}", release.source, release.tag_name);
-    let installation = ExtensionInstaller::new(repository, state.object_store.clone())
+    ExtensionInstaller::new(repository.clone(), state.object_store.clone())
         .upgrade_package(&source, package)
         .await
         .map_err(install_error)?;
-    Ok(Json(installation.into()))
+    installation_response(&repository, &extension_id).await
 }
 /// Upgrades an installation from a locally supplied archive, with the same
 /// checks and consequences as upgrading to a registry release.
@@ -640,23 +630,21 @@ pub(super) async fn upgrade_archive(
             "the archive has a different extension ID".to_owned(),
         ));
     }
-    let installation = ExtensionInstaller::new(repository, state.object_store.clone())
+    ExtensionInstaller::new(repository.clone(), state.object_store.clone())
         .upgrade_package("sideload", package)
         .await
         .map_err(install_error)?;
-    Ok(Json(installation.into()))
+    installation_response(&repository, &extension_id).await
 }
 pub(super) async fn configure(
     ScopedRepository(repository): ScopedRepository,
     ApiPath(extension_id): ApiPath<String>,
     ApiJson(input): ApiJson<ConfigurationRequest>,
 ) -> Result<Json<InstallationResponse>, ApiError> {
-    Ok(Json(
-        repository
-            .configure_extension(&extension_id, input.configuration)
-            .await?
-            .into(),
-    ))
+    repository
+        .configure_extension(&extension_id, input.configuration)
+        .await?;
+    installation_response(&repository, &extension_id).await
 }
 pub(super) async fn grant(
     ScopedRepository(repository): ScopedRepository,
@@ -681,29 +669,25 @@ pub(super) async fn enable(
     ScopedRepository(repository): ScopedRepository,
     ApiPath(extension_id): ApiPath<String>,
 ) -> Result<Json<InstallationResponse>, ApiError> {
-    Ok(Json(
-        repository.enable_extension(&extension_id).await?.into(),
-    ))
+    repository.enable_extension(&extension_id).await?;
+    installation_response(&repository, &extension_id).await
 }
 pub(super) async fn disable(
     ScopedRepository(repository): ScopedRepository,
     ApiPath(extension_id): ApiPath<String>,
 ) -> Result<Json<InstallationResponse>, ApiError> {
-    Ok(Json(
-        repository.disable_extension(&extension_id).await?.into(),
-    ))
+    repository.disable_extension(&extension_id).await?;
+    installation_response(&repository, &extension_id).await
 }
 pub(super) async fn quarantine(
     ScopedRepository(repository): ScopedRepository,
     ApiPath(extension_id): ApiPath<String>,
     ApiJson(input): ApiJson<QuarantineRequest>,
 ) -> Result<Json<InstallationResponse>, ApiError> {
-    Ok(Json(
-        repository
-            .quarantine_extension(&extension_id, &input.diagnostic_code)
-            .await?
-            .into(),
-    ))
+    repository
+        .quarantine_extension(&extension_id, &input.diagnostic_code)
+        .await?;
+    installation_response(&repository, &extension_id).await
 }
 pub(super) async fn remove(
     ScopedRepository(repository): ScopedRepository,

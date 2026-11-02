@@ -85,7 +85,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `GET`, `POST` | `/extensions` | List installed extensions or install a validated release the trusted index lists (`extensions.read` / `extensions.manage`). |
 | `POST` | `/extensions/sideload` | Install a local `.tar.zst` archive supplied as an `application/zstd` request body. The 32 MiB archive limit and normal package validation apply; installations start disabled (`extensions.manage`). |
 | `GET`, `DELETE` | `/extensions/{extension_id}` | Read or remove an installation (`extensions.read` / `extensions.manage`). |
-| `POST` | `/extensions/{extension_id}/upgrade`, `/enable`, `/disable`, `/quarantine` | Change the installed release or lifecycle state (`extensions.manage`). |
+| `POST` | `/extensions/{extension_id}/upgrade`, `/enable`, `/disable`, `/quarantine` | Change the installed release or lifecycle state (`extensions.manage`). Every install, upgrade, configuration and lifecycle response is the complete installation that `GET /extensions` lists. |
 | `PUT` | `/extensions/{extension_id}/configure` | Update validated installation configuration (`extensions.manage`). |
 | `POST`; `DELETE` | `/extensions/{extension_id}/grants`; `/grants/{grant_kind}/{grant_id}` | Grant or revoke a declared extension permission (`extensions.manage`). |
 | `GET` | `/extensions/{extension_id}/{contribution_id}/artifact` | Fetch a validated client artifact for an enabled release, with a release-scoped ETag and `Cache-Control: private, no-cache`. |

@@ -849,6 +849,46 @@ async fn sideload_installs_a_validated_local_archive(pool: sqlx::PgPool) {
     assert_eq!(installation["extension_id"], "acme.extension");
     assert_eq!(installation["state"], "disabled");
     assert_eq!(store.object_count().await, 1);
+    let client = authenticated_client();
+    let listed: Value = client
+        .get(format!("{base}/extensions"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(installation, listed[0]);
+    assert_eq!(installation["version"], "1.0.0");
+    assert_eq!(installation["source"], "sideload");
+    assert_eq!(installation["manifest"]["version"], "1.0.0");
+    assert_eq!(installation["manifest_sha256"].as_str().unwrap().len(), 64);
+
+    let upgraded: Value = client
+        .post(format!("{base}/extensions/acme.extension/upgrade-archive"))
+        .header("content-type", "application/zstd")
+        .body(release_archive("1.1.0", json!([]), ARTIFACT_BYTES))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(upgraded["version"], "1.1.0");
+    assert_eq!(upgraded["manifest"]["version"], "1.1.0");
+
+    let quarantined: Value = client
+        .post(format!("{base}/extensions/acme.extension/quarantine"))
+        .json(&json!({"diagnostic_code": "manual_review"}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(quarantined["state"], "quarantined");
+    assert_eq!(quarantined["version"], "1.1.0");
+    assert_eq!(quarantined["source"], "sideload");
     server.abort();
 }
 
