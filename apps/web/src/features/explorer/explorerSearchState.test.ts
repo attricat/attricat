@@ -6,6 +6,7 @@ import {
   relationshipFiltersFromSearch,
   relationshipTreeFacetsRequest,
   relationshipTreeSelectionsFromSearch,
+  submittedExplorerSearch,
   updateRelationshipFacets,
 } from './explorerSearchState';
 import { parseExplorerSearch, type ExplorerSearch } from './search';
@@ -21,6 +22,38 @@ const search: ExplorerSearch = {
     { field: 'categories', hierarchyField: 'parent', selectedIds: [shoesId] },
   ],
 };
+
+describe('submittedExplorerSearch', () => {
+  const facets = [
+    { field: 'brand.owner', selectedIds: [brandId], targetBlueprint: 'owner' },
+  ];
+
+  it('treats the current version named explicitly as the same scope', () => {
+    const { nextSearch, scopeChanged } = submittedExplorerSearch(
+      { blueprint: 'product', version: 3, relationshipFacets: facets },
+      { blueprint: 'product', query: 'shoe' },
+      3,
+    );
+    expect(scopeChanged).toBe(false);
+    expect(nextSearch.relationshipFacets).toEqual(facets);
+    expect(nextSearch.query).toBe('shoe');
+  });
+
+  it('reports a change to another revision or to every version', () => {
+    const current = { blueprint: 'product', version: 3 };
+    expect(
+      submittedExplorerSearch(current, { blueprint: 'product', version: 2 }, 3)
+        .scopeChanged,
+    ).toBe(true);
+    expect(
+      submittedExplorerSearch(
+        current,
+        { blueprint: 'product', allVersions: true },
+        3,
+      ).scopeChanged,
+    ).toBe(true);
+  });
+});
 
 describe('relationship facet requests', () => {
   it('sends Browse rail paths like direct fields', () => {

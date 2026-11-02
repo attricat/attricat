@@ -3,7 +3,7 @@ import { attributeFilterOperators } from '../records/constants';
 import type { AttributeFilterOperator } from './attributeFilters';
 import { defaultAttributeFilterOperator } from './constants';
 import {
-  isoToZonedDateTime,
+  isoToExactZonedDateTime,
   utcTimeZone,
   zonedDateTimeToIso,
 } from '../../time/instantFormat';
@@ -99,7 +99,8 @@ export const attributeFilterInputType = (valueType: ValueType) =>
 
 /**
  * Converts a stored filter value into the string an input control edits;
- * datetime values become wall-clock time in `timeZone`.
+ * datetime values become wall-clock time in `timeZone`, to the same precision
+ * because the server compares them exactly.
  */
 export const attributeFilterInputValue = (
   filter: AttributeFilter,
@@ -109,6 +110,6 @@ export const attributeFilterInputValue = (
   const inputValue = String(filter.value);
   return valueType === attributeValueTypes.datetime &&
     filter.operator !== attributeFilterOperators.isSet
-    ? isoToZonedDateTime(inputValue, timeZone)
+    ? isoToExactZonedDateTime(inputValue, timeZone)
     : inputValue;
 };

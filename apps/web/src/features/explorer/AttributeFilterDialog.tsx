@@ -309,7 +309,8 @@ export const AttributeFilterDialog = ({
                     fullWidth
                     slotProps={{
                       htmlInput:
-                        attribute.value_type === attributeValueTypes.integer
+                        attribute.value_type === attributeValueTypes.integer ||
+                        attribute.value_type === attributeValueTypes.datetime
                           ? { step: 1 }
                           : undefined,
                     }}

@@ -111,7 +111,6 @@ export const useSavedSearchActions = ({
       ) {
         url.search = `?${SAVED_VIEW_PARAM}=${savedView.id}`;
       } else {
-        // TanStack Router's default JSON query serialization matches Explorer's URL format.
         url.search = inlineExplorerSearchParams(search).toString();
         if (url.href.length > MAXIMUM_INLINE_LINK_LENGTH) {
           const view = await createViewStateLink(search);

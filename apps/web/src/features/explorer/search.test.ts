@@ -1,3 +1,4 @@
+import { defaultParseSearch } from '@tanstack/react-router';
 import { describe, expect, it } from 'vitest';
 import {
   recordSelectionSearch,
@@ -129,6 +130,19 @@ describe('parseExplorerSearch', () => {
       query: 'shirt',
     });
   });
+});
+
+describe('inlineExplorerSearchParams', () => {
+  it.each(['12345', '1.5', 'true', 'null'])(
+    'keeps the query %s a string when a shared link is opened',
+    (query) => {
+      const link = `?${inlineExplorerSearchParams({ blueprint: '42', query }).toString()}`;
+      expect(parseExplorerSearch(defaultParseSearch(link))).toEqual({
+        blueprint: '42',
+        query,
+      });
+    },
+  );
 });
 
 describe('recordSelectionSearch', () => {

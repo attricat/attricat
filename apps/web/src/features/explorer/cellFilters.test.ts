@@ -1,3 +1,4 @@
+import { zonedDateTimeToIso } from '../../time/instantFormat';
 import { describe, expect, it } from 'vitest';
 import type { Attribute } from '../records/api';
 import {
@@ -56,5 +57,16 @@ describe('cell filters', () => {
     expect(filter && cellFilterDraft(filter, 'string', 'UTC').value).toBe(
       '2026-01-02T03:04:00.000Z',
     );
+  });
+
+  it.each([
+    ['2026-01-02T03:04:37.000Z', '2026-01-02T04:04:37'],
+    ['2026-01-02T03:04:37.250Z', '2026-01-02T04:04:37.250'],
+  ])('keeps the seconds of %s, which must match exactly', (value, draft) => {
+    const filter = cellValueFilter('seen_at', 'datetime', [value]);
+    const edited =
+      filter && cellFilterDraft(filter, 'datetime', 'Europe/Warsaw');
+    expect(edited?.value).toBe(draft);
+    expect(zonedDateTimeToIso(draft, 'Europe/Warsaw')).toBe(value);
   });
 });
