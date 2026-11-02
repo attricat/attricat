@@ -17,6 +17,7 @@ import {
   migrationFormValues,
   migrationIssueMessage,
   migrationLayout,
+  answeredMigrationRelationships,
   partitionMigrationIssues,
   removalFieldCode,
   removedAttributeIssues,
@@ -211,7 +212,10 @@ export const MigrateRecordPage = ({ recordId }: { recordId: string }) => {
             migrate.mutate({
               expected_updated_at,
               values,
-              relationships,
+              relationships: answeredMigrationRelationships(
+                relationships,
+                inlineIssues,
+              ),
               discardAttributes: [...discardAttributes],
             })
           }

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { Attribute } from './api';
-import { migrationLayout } from './migrationReview';
+import {
+  answeredMigrationRelationships,
+  migrationLayout,
+} from './migrationReview';
 
 const attributes = ['title', 'price', 'sku'].map(
   (code) => ({ code, value_type: 'string' }) as Attribute,
@@ -41,5 +44,34 @@ describe('migrationLayout', () => {
         field: attribute.code,
       })),
     });
+  });
+});
+
+describe('answeredMigrationRelationships', () => {
+  const retargeted = [
+    {
+      attribute_code: 'brand',
+      kind: 'relationship_target_changed',
+      message: '',
+    },
+  ];
+
+  it('leaves out a retargeted relationship left blank', () => {
+    expect(
+      answeredMigrationRelationships(
+        [{ attribute_code: 'brand', target_record_ids: [] }],
+        retargeted,
+      ),
+    ).toEqual([]);
+  });
+
+  it('keeps a replacement, and a relationship the user cleared', () => {
+    const relationships = [
+      { attribute_code: 'brand', target_record_ids: ['a'] },
+      { attribute_code: 'owner', target_record_ids: [] },
+    ];
+    expect(answeredMigrationRelationships(relationships, retargeted)).toEqual(
+      relationships,
+    );
   });
 });
