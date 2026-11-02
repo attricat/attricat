@@ -1835,7 +1835,7 @@
     "remove": "Remove",
     "upgrade": "Upgrade",
     "upgradeFromArchive": "Upgrade from archive",
-    "upgradeArchiveHint": "Upload a newer version of this extension. Upgrading clears its permissions and configuration and leaves it disabled.",
+    "upgradeArchiveHint": "Upload a newer version of this extension. Permissions and configuration carry over while they still apply. Runs still on the current version are cancelled, and the extension is disabled if the new version needs review.",
     "lifecycle": "Lifecycle and health",
     "noLifecycle": "No lifecycle history.",
     "configurationJsonError": "Configuration must be valid JSON.",

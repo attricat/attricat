@@ -212,7 +212,7 @@ When the manifest changes, raise `version`, package again, and upgrade:
 acli extension upgrade acme.inventory --file dist/acme.inventory-1.0.1.tar.zst
 ```
 
-The version must be greater than the installed one. An upgrade clears grants and configuration and leaves the extension disabled, so grant and enable it again. Extension storage, connections, and export mappings stay.
+The version must be greater than the installed one. Extension storage, connections, and export mappings stay. Grants and configuration stay while they still apply, and an enabled extension stays enabled unless the new release needs review. See [Upgrades](/builders/extensions/#upgrades).
 
 ### Debug
 
@@ -258,6 +258,6 @@ Workspace administrators add your registry with `acli extension registry add --s
 
 - Use SemVer for `version`, and never reuse a released version.
 - Keep contribution, handler, and permission-rule IDs stable, because layouts and grants refer to them.
-- Upgrades clear grants and configuration, so say in your release notes which permissions or settings changed.
+- A new required permission, a changed host permission rule or configuration that no longer validates leaves the extension disabled for review, so say in your release notes which ones changed. Raise the `scoped_configuration` version when its values change meaning: values of an older version stay behind.
 - Extension storage carries over and there is no upgrade hook. Keep a format version in what you store, and have your code read older formats.
 - In CI, run your tests, package, and `acli extension validate` on the archive before you attach it to a release.

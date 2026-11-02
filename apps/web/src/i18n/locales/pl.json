@@ -1919,7 +1919,7 @@
     "remove": "Usuń",
     "upgrade": "Uaktualnij",
     "upgradeFromArchive": "Uaktualnij z archiwum",
-    "upgradeArchiveHint": "Prześlij nowszą wersję tego rozszerzenia. Uaktualnienie usuwa jego uprawnienia i konfigurację oraz pozostawia je wyłączone.",
+    "upgradeArchiveHint": "Prześlij nowszą wersję tego rozszerzenia. Uprawnienia i konfiguracja zostają, jeśli nadal obowiązują. Wykonania na obecnej wersji są anulowane, a rozszerzenie zostaje wyłączone, jeśli nowa wersja wymaga sprawdzenia.",
     "lifecycle": "Cykl życia i stan",
     "noLifecycle": "Brak historii cyklu życia.",
     "configurationJsonError": "Konfiguracja musi być poprawnym kodem JSON.",

@@ -170,6 +170,9 @@ async fn echo(State(seen): State<Shared>, request: Request) -> Response {
         "body": String::from_utf8_lossy(&body),
     });
     seen.lock().unwrap().requests.push(record.clone());
+    if parts.uri.path() == "/large" {
+        return (StatusCode::OK, vec![b'x'; LARGE_RESPONSE_BYTES]).into_response();
+    }
     if parts.uri.path() == "/result" {
         return (StatusCode::OK, Bytes::from_static(b"processingStatus=DONE")).into_response();
     }
@@ -215,6 +218,8 @@ fn shared_mock() -> (std::net::SocketAddr, Shared) {
     })
     .clone()
 }
+
+const LARGE_RESPONSE_BYTES: usize = 900 * 1024;
 
 fn manifest() -> Value {
     json!({
@@ -1087,6 +1092,64 @@ async fn moving_the_token_endpoint_to_another_host_needs_the_secret_and_drops_to
     assert!(!updated.has_refresh_token);
     assert!(!updated.has_access_token);
     assert_eq!(updated.status, ConnectionStatus::PendingAuthorization);
+}
+
+/// A response the rule admits but whose base64 no longer fits a host answer.
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_response_too_large_to_return_is_uncertain_not_an_error(pool: sqlx::PgPool) {
+    shared_mock();
+    let repository =
+        AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
+    let store = Arc::new(FakeObjectStore::available());
+    let installer =
+        api::extension_installer::ExtensionInstaller::new(repository.clone(), store.clone());
+    installer.install("test", &archive()).await.unwrap();
+    for capability in PERMISSIONS {
+        repository
+            .grant_extension(EXTENSION, "capability", capability)
+            .await
+            .unwrap();
+    }
+    for rule in HOST_PERMISSIONS {
+        repository
+            .grant_extension(EXTENSION, "host_permission", rule)
+            .await
+            .unwrap();
+    }
+    repository.enable_extension(EXTENSION).await.unwrap();
+    let release = repository
+        .installed_extension(EXTENSION)
+        .await
+        .unwrap()
+        .installed_release_id;
+    let installation = repository
+        .runtime_extension_installation(EXTENSION, release)
+        .await
+        .unwrap()
+        .unwrap();
+    let runtime = ExtensionRuntime::new(store, ExtensionRuntimeConfig::default()).unwrap();
+    let request = json!({
+        "operation": "network.request.v2",
+        "request": {
+            "host_permission_id": "bucket",
+            "method": "POST",
+            "url": "https://bucket.mock.test/large",
+            "body": "{}"
+        }
+    });
+    let response = runtime
+        .invoke_command(
+            &installation,
+            repository,
+            "call",
+            &request.to_string(),
+            65536,
+        )
+        .await
+        .unwrap();
+    let response: Value = serde_json::from_str(&response).unwrap();
+    assert_eq!(response["ok"]["outcome"], "uncertain", "{response}");
+    assert_eq!(response["ok"]["reason"], "response_too_large");
 }
 
 fn base64_decode(value: &str) -> Vec<u8> {

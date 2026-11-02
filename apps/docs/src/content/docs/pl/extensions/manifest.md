@@ -27,7 +27,7 @@ Identyfikatory używane w manifeście (`attricat.id` oraz identyfikatory artefak
 | `scoped_configuration` | | Ustawienia przechowywane dla Schematu lub atrybutu. |
 | `dependencies` | | Inne rozszerzenia, których to rozszerzenie potrzebuje. |
 | `event_contracts` | | Zdarzenia publikowane lub konsumowane przez to rozszerzenie. |
-| `server` | | Procedury obsługi zdarzeń, polecenia, operacje, webhooki, rodzaje połączeń i miejsca docelowe eksportu. |
+| `server` | | Procedury obsługi zdarzeń, polecenia, operacje, rodzaje połączeń i miejsca docelowe eksportu. |
 | `ui` | | Kontrybucje klienckie. |
 | `attribute_types` | | Typy atrybutów dla Schematów. |
 | `record_field_notes` | | Źródło opisujące pola, pliki i akcje rekordów: `{ "version": 1, "source": { "command": "<id>" } }` albo procedura kliencka, `{ "version": 1, "source": { "client": "<artefakt>" } }`. Zobacz [Notatki pól](/pl/extensions/client/#notatki-pól). |
@@ -78,7 +78,6 @@ Wymień uprawnienia w `permissions` lub `optional_permissions`. Każde z nich ze
 | `connections.use` | Odczyt [połączeń](/pl/extensions/exports/#połączenia) rozszerzenia i wysyłanie żądań z ich tokenami. Wymagane do zadeklarowania `server.connections`. |
 | `attricat.files.read` | Kopiowanie pliku, do którego odwołuje się rekord, do danych wejściowych operacji przez `transfer.open-record-file`. |
 | `attricat.files.public_links` | Wydawanie [publicznych linków](/pl/extensions/exports/#publiczne-linki-do-plików) do plików, do których odwołują się rekordy. |
-| `webhooks.receive` | Deklarowanie przychodzących webhooków (jeszcze nie są dostarczane). |
 
 ### Interakcja z klientem
 
@@ -89,13 +88,10 @@ Wymień uprawnienia w `permissions` lub `optional_permissions`. Każde z nich ze
 | `client.notification` | Wyświetlenie powiadomienia. |
 | `client.refresh` | Odświeżenie bieżącego rekordu po zmianie. |
 | `client.events` | Odbieranie w ramce zdarzeń zmiany kontekstu. |
-| `client.theme.read` | Akceptowane dla zgodności. Motyw jest zawsze dostępny. |
 | `client.operations.start` | Uruchamianie operacji interaktywnych rozszerzenia dla zaznaczenia ramki. |
 | `client.operations.read` | Wyświetlanie, odczyt i pobieranie wyników uruchomień tego rozszerzenia należących do użytkownika. |
 | `client.operations.cancel` | Anulowanie uruchomień tego rozszerzenia należących do użytkownika. |
 | `client.files.upload` | Proszenie użytkownika o plik, gdy wybierze [akcję, która go przyjmuje](/pl/extensions/client/#akcje). |
-
-Manifest przyjmuje też `client.confirmation`, `client.download`, `client.external_navigation`, `client.files.read`, `client.search`, `client.live_updates`, `client.clipboard` i `client.locale.read`. Są one zarezerwowane dla API ramki, które jeszcze nie istnieją: ich przyznanie nic ramce nie daje, więc nie proś o nie.
 
 ### Umiejscowienie w kliencie
 
@@ -124,7 +120,7 @@ Uprawnienie hosta to reguła dla żądań wychodzących. Samo `network.request` 
 | `matches` | Wymagane | Wzorce URL. |
 | `methods` | Wymagane | Dozwolone metody HTTP. |
 | `max_request_bytes` | 65536 | Limit treści żądania. |
-| `max_response_bytes` | 1048576 | Limit treści odpowiedzi (maksymalnie 1 MiB). |
+| `max_response_bytes` | 1048576 | Limit treści odpowiedzi (maksymalnie 1 MiB). `network.request.v2` odpowiada w base64 w granicach 1 MiB, więc odpowiedź od około 750 KiB wraca jako `uncertain` z powodem `response_too_large`. |
 | `timeout_ms` | 10000 | Limit czasu żądania. |
 | `max_transfer_bytes` | 0 | Włącza strumieniowe przesyłanie plików dla operacji, do 1 GiB. `0` je wyłącza. |
 | `idempotent_delivery` | `false` | Zezwala na `POST` przy dostarczaniu danych wyjściowych. Ustaw tylko wtedy, gdy miejsce docelowe respektuje nagłówek `Idempotency-Key`. |
@@ -213,7 +209,6 @@ Eksportowane typy zdarzeń muszą zaczynać się od `plugin.<extension-id>.` i k
 | `event_handlers` | `id`, `event_types` (dokładne wersjonowane typy), `handler` (zawsze `handle-event`), opcjonalnie `debounce_ms` (od 1 do 3 600 000) i `max_wait_ms` (co najmniej `debounce_ms`, najwyżej 86 400 000; domyślnie dziesięciokrotność `debounce_ms`). Zobacz [Łączenie serii zdarzeń](/pl/extensions/server/#łączenie-serii-zdarzeń). | `events.subscribe` i artefaktu `server_wasm` |
 | `commands` | `id`, `handler`, `request_schema`, `response_schema`, `max_request_bytes`, `max_response_bytes` (domyślnie 64 KiB) | `client.commands` |
 | `operations` | `id`, `handler`, `request_schema`, `max_request_bytes`, `max_checkpoint_bytes` (domyślnie i maksymalnie 64 KiB), opcjonalnie `interactive`: `{"version": 1, "max_selection": 1–50}` dla zaznaczenia albo `{"version": 1, "scope": "blueprint"}` dla [operacji na schemacie](/pl/extensions/operations/#operacje-na-schemacie) | `interactive` wymaga `client.operations.start` |
-| `webhooks` | `id`, `event_type`, `handler`, `methods` (`["POST"]`), `authentication`, `max_body_bytes` | `webhooks.receive`. Zadeklarowane, ale jeszcze niedostarczane. |
 | `connections` | Zobacz [Połączenia](#połączenia). | `connections.use` |
 | `exports` | Zobacz [Miejsca docelowe eksportu](#miejsca-docelowe-eksportu). | `exports.mappings` |
 
@@ -373,7 +368,7 @@ views:
     children:
       - type: field
         field: discount_formula
-        editor: { id: formula, version: 1, props: { rows: 2 } }
+        editor: { extension_id: acme.formulas, id: formula, version: 1, props: { rows: 2 } }
 ```
 
 Zapisanie i opublikowanie schematu sprawdza typ wartości pola i właściwości względem deklaracji włączonego rozszerzenia. Edytor wymaga `client.attribute_editor`. Gdy rozszerzenie jest wyłączone, nie ma tego uprawnienia, uległo awarii lub dopiero się uruchamia, pole używa domyślnej kontrolki. Zobacz [Edytory atrybutów](/pl/extensions/native/#edytory-atrybutów).

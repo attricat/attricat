@@ -4,6 +4,7 @@ use api::states::{ExtensionState, HttpDeliveryState};
 use api::value_type::ValueType;
 use std::{io::Cursor, path::Path, sync::Arc};
 
+use api::task_worker::TaskHandler;
 use api::{
     agent_tools::execute_read,
     extension_installer::{ExtensionInstaller, installed_artifact_key},
@@ -4003,6 +4004,272 @@ attributes:
     }
 }
 
+/// A release whose upgrades differ only in what each test changes.
+fn upgrade_release_archive(version: &str, manifest_changes: Value) -> Vec<u8> {
+    let mut manifest = json!({
+        "manifest_version": 1,
+        "name": "Upgrade extension",
+        "version": version,
+        "description": "upgrade integration test",
+        "icons": {"48": "icon.png"},
+        "attricat": {"id": "acme.upgrade", "host_api": "^1.0"},
+        "permissions": ["network.request", "configuration.write"],
+        "host_permissions": [{
+            "id": "api",
+            "matches": ["https://api.acme.example/v1/*"],
+            "methods": ["GET"]
+        }],
+        "artifacts": [{"id": "server", "kind": "server_wasm", "path": "server.wasm"}],
+        "configuration": {
+            "version": 1,
+            "schema": {"type": "object", "required": ["endpoint"], "properties": {"endpoint": {"type": "string"}}}
+        },
+        "scoped_configuration": {
+            "version": 1,
+            "scopes": ["attribute"],
+            "schema": {"type": "object"}
+        },
+        "server": {"operations": [{
+            "id": "sync", "handler": "sync", "request_schema": {"type": "object"},
+            "max_request_bytes": 1024, "max_checkpoint_bytes": 1024
+        }]}
+    });
+    for (key, value) in manifest_changes.as_object().unwrap() {
+        manifest[key] = value.clone();
+    }
+    let mut tar_bytes = Vec::new();
+    {
+        let mut tar = tar::Builder::new(&mut tar_bytes);
+        append_file(
+            &mut tar,
+            "manifest.json",
+            &serde_json::to_vec(&manifest).unwrap(),
+        );
+        append_file(&mut tar, "server.wasm", ARTIFACT_BYTES);
+        tar.finish().unwrap();
+    }
+    zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn an_upgrade_keeps_what_the_new_release_leaves_unchanged(pool: sqlx::PgPool) {
+    const ID: &str = "acme.upgrade";
+    let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
+    let repository = AttricatRepository::system(pool.clone()).for_workspace(workspace);
+    let store = Arc::new(FakeObjectStore::available());
+    let installer = ExtensionInstaller::new(repository.clone(), store.clone());
+    let v1 = installer
+        .install("test", &upgrade_release_archive("1.0.0", json!({})))
+        .await
+        .unwrap()
+        .installed_release_id;
+    let endpoint = json!({"endpoint": "https://api.acme.example"});
+    repository
+        .configure_extension(ID, endpoint.clone())
+        .await
+        .unwrap();
+    let grant_all = async |repository: &AttricatRepository| {
+        for capability in ["network.request", "configuration.write"] {
+            repository
+                .grant_extension(ID, "capability", capability)
+                .await
+                .unwrap();
+        }
+        repository
+            .grant_extension(ID, "host_permission", "api")
+            .await
+            .unwrap();
+    };
+    grant_all(&repository).await;
+    repository.enable_extension(ID).await.unwrap();
+    let blueprint = repository
+        .create_blueprint(CreateBlueprint {
+            definition: SYNC_BLUEPRINT.into(),
+        })
+        .await
+        .unwrap();
+    let scope = api::repository::ExtensionConfigurationScope {
+        kind: api::extensions::ConfigurationScope::Attribute,
+        blueprint_id: blueprint.blueprint.id,
+        blueprint_version: blueprint.blueprint.version,
+        attribute_id: Some(blueprint.attributes[0].id),
+    };
+    repository
+        .extension_scoped_configuration_set(ID, v1, &scope, json!({"rounding": 2}))
+        .await
+        .unwrap();
+    let schedule = repository
+        .create_extension_operation_schedule(api::repository::CreateExtensionOperationSchedule {
+            extension_id: ID.into(),
+            release_id: v1,
+            operation_id: "sync".into(),
+            input: json!({}),
+            source_reference: json!({}),
+            destination_reference: json!({}),
+            interval_seconds: 60,
+        })
+        .await
+        .unwrap();
+    let start = |key: &'static str, release: Uuid| api::repository::StartExtensionOperation {
+        extension_id: ID.into(),
+        expected_release_id: release,
+        operation_id: "sync".into(),
+        input: json!({}),
+        source_reference: json!({}),
+        destination_reference: json!({}),
+        idempotency_key: key.into(),
+        schedule_id: None,
+        configuration_snapshot: None,
+    };
+    let queued = repository
+        .start_extension_operation(start("queued", v1))
+        .await
+        .unwrap();
+    let schedule_release = async |pool: &sqlx::PgPool| -> Uuid {
+        sqlx::query_scalar(
+            "SELECT installed_release_id FROM extension_operation_schedules WHERE id = $1",
+        )
+        .bind(schedule.id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+    };
+    let run_status = async |pool: &sqlx::PgPool, run: Uuid| -> String {
+        sqlx::query_scalar("SELECT status FROM extension_operation_runs WHERE id = $1")
+            .bind(run)
+            .fetch_one(pool)
+            .await
+            .unwrap()
+    };
+
+    // Nothing to review: it stays enabled with its settings, and the run
+    // that can never resume on the old release ends.
+    let upgraded = installer
+        .upgrade("test", &upgrade_release_archive("1.1.0", json!({})))
+        .await
+        .unwrap();
+    assert_eq!(upgraded.state, ExtensionState::Enabled);
+    assert_eq!(upgraded.configuration, endpoint);
+    let v2 = upgraded.installed_release_id;
+    assert_eq!(
+        repository
+            .extension_scoped_configuration_get(ID, v2, &scope)
+            .await
+            .unwrap(),
+        Some(json!({"rounding": 2}))
+    );
+    assert_eq!(schedule_release(&pool).await, v2);
+    assert_eq!(run_status(&pool, queued).await, "cancelled");
+
+    // A run a worker already holds learns it was cancelled from that worker.
+    let held = repository
+        .start_extension_operation(start("held", v2))
+        .await
+        .unwrap();
+    let task = repository
+        .claim_task_for_kinds(
+            "upgrade-test",
+            std::time::Duration::from_secs(30),
+            &[api::task_queue::TaskKind::ExtensionOperationRunV1],
+        )
+        .await
+        .unwrap()
+        .unwrap();
+
+    // A rule with the same ID that reaches further is reviewed again.
+    let widened = installer
+        .upgrade(
+            "test",
+            &upgrade_release_archive(
+                "1.2.0",
+                json!({"host_permissions": [{
+                    "id": "api",
+                    "matches": ["https://*.acme.example/*"],
+                    "methods": ["GET", "POST"]
+                }]}),
+            ),
+        )
+        .await
+        .unwrap();
+    assert_eq!(widened.state, ExtensionState::Disabled);
+    assert_eq!(widened.configuration, endpoint);
+    let grants = repository.extension_grants(ID).await.unwrap();
+    assert!(!grants.iter().any(|grant| grant.grant_id == "api"));
+    assert!(
+        grants
+            .iter()
+            .any(|grant| grant.grant_id == "network.request")
+    );
+
+    let runtime = api::extension_runtime::ExtensionRuntime::new(
+        store.clone(),
+        api::extension_runtime::ExtensionRuntimeConfig::default(),
+    )
+    .unwrap();
+    api::extension_runtime::ExtensionOperationTaskHandler::new(repository.clone(), runtime)
+        .handle(task)
+        .await
+        .unwrap();
+    assert_eq!(run_status(&pool, held).await, "cancelled");
+
+    // A new required permission is reviewed too, and the rest stay granted.
+    grant_all(&repository).await;
+    repository.enable_extension(ID).await.unwrap();
+    let asking = installer
+        .upgrade(
+            "test",
+            &upgrade_release_archive(
+                "1.3.0",
+                json!({
+                    "permissions": ["network.request", "configuration.write", "secrets.read"],
+                    "host_permissions": [{
+                        "id": "api",
+                        "matches": ["https://*.acme.example/*"],
+                        "methods": ["GET", "POST"]
+                    }]
+                }),
+            ),
+        )
+        .await
+        .unwrap();
+    assert_eq!(asking.state, ExtensionState::Disabled);
+    assert!(
+        repository
+            .extension_grants(ID)
+            .await
+            .unwrap()
+            .iter()
+            .any(|grant| grant.grant_id == "api")
+    );
+    let schedule_before = schedule_release(&pool).await;
+
+    // Configuration that no longer fits is cleared, and a schedule holding it
+    // stays behind and pauses; a new scoped version leaves old values out.
+    let changed = installer
+        .upgrade(
+            "test",
+            &upgrade_release_archive(
+                "1.4.0",
+                json!({
+                    "configuration": {
+                        "version": 2,
+                        "schema": {"type": "object", "required": ["url"], "properties": {"url": {"type": "string"}}}
+                    },
+                    "scoped_configuration": {
+                        "version": 2,
+                        "scopes": ["attribute"],
+                        "schema": {"type": "object"}
+                    }
+                }),
+            ),
+        )
+        .await
+        .unwrap();
+    assert_eq!(changed.configuration, json!({}));
+    assert_eq!(changed.state, ExtensionState::Disabled);
+    assert_eq!(schedule_release(&pool).await, schedule_before);
+}
+
 /// A release with native UI: a blueprint panel and a string attribute editor,
 /// both drawn from one Worker bundle built against UI kit 1.0.0.
 fn native_release_archive(extension_id: &str) -> Vec<u8> {
@@ -4104,6 +4371,7 @@ views:
       - type: field
         field: {field}
         editor:
+          extension_id: acme.native
           id: formula
           version: 1
           props: {props}
@@ -4135,6 +4403,18 @@ attributes:
             .to_string();
         assert!(error.contains(problem), "{code}: {error}");
     }
+
+    // Another extension's editor of the same ID does not satisfy the reference.
+    let other_extension = definition("editors_other", "title", "{}")
+        .replace("extension_id: acme.native", "extension_id: acme.other");
+    let error = repository
+        .create_blueprint(CreateBlueprint {
+            definition: other_extension,
+        })
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("acme.other:formula@1"), "{error}");
 
     // A development build replaces only the native Worker, and only on a
     // server with developer tools.

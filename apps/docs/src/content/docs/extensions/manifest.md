@@ -27,7 +27,7 @@ IDs used in the manifest (`attricat.id`, artifact, dependency, permission-rule, 
 | `scoped_configuration` | | Settings stored per blueprint or attribute. |
 | `dependencies` | | Other extensions this one needs. |
 | `event_contracts` | | Events this extension publishes or consumes. |
-| `server` | | Event handlers, commands, operations, webhooks, connection kinds, and export destinations. |
+| `server` | | Event handlers, commands, operations, connection kinds, and export destinations. |
 | `ui` | | Client contributions. |
 | `attribute_types` | | Attribute types for blueprints. |
 | `record_field_notes` | | The source that describes records' fields, files and actions: `{ "version": 1, "source": { "command": "<id>" } }` or a client handler, `{ "version": 1, "source": { "client": "<artifact>" } }`. See [Field notes](/extensions/client/#field-notes). |
@@ -78,7 +78,6 @@ List capabilities in `permissions` or `optional_permissions`. Each one allows a 
 | `connections.use` | Reading the extension's [connections](/extensions/exports/#connections) and sending requests with their tokens. Required to declare `server.connections`. |
 | `attricat.files.read` | Copying a file a record references into an operation input with `transfer.open-record-file`. |
 | `attricat.files.public_links` | Issuing [public links](/extensions/exports/#public-file-links) to files records reference. |
-| `webhooks.receive` | Declaring inbound webhooks (not delivered yet). |
 
 ### Client interaction
 
@@ -89,13 +88,10 @@ List capabilities in `permissions` or `optional_permissions`. Each one allows a 
 | `client.notification` | Showing a notification. |
 | `client.refresh` | Refreshing the current record after a change. |
 | `client.events` | Receiving context-change events in the frame. |
-| `client.theme.read` | Accepted for compatibility. The theme is always available. |
 | `client.operations.start` | Starting the extension's interactive operations for the frame's selection. |
 | `client.operations.read` | Listing the user's runs of this extension, reading them, and downloading their outputs. |
 | `client.operations.cancel` | Cancelling the user's runs of this extension. |
 | `client.files.upload` | Asking the user for a file when they choose an [action that accepts one](/extensions/client/#actions). |
-
-The manifest also accepts `client.confirmation`, `client.download`, `client.external_navigation`, `client.files.read`, `client.search`, `client.live_updates`, `client.clipboard`, and `client.locale.read`. These are reserved for frame APIs that don't exist yet: granting them gives a frame nothing, so don't request them.
 
 ### Client placement
 
@@ -124,7 +120,7 @@ A host permission is a rule for outbound requests. `network.request` alone permi
 | `matches` | Required | URL patterns. |
 | `methods` | Required | Allowed HTTP methods. |
 | `max_request_bytes` | 65536 | Request body limit. |
-| `max_response_bytes` | 1048576 | Response body limit (1 MiB maximum). |
+| `max_response_bytes` | 1048576 | Response body limit (1 MiB maximum). `network.request.v2` answers in base64 within 1 MiB, so a larger response of about 750 KiB or more comes back as `uncertain` with reason `response_too_large`. |
 | `timeout_ms` | 10000 | Request timeout. |
 | `max_transfer_bytes` | 0 | Enables streamed file transfers for operations, up to 1 GiB. `0` disables them. |
 | `idempotent_delivery` | `false` | Allows `POST` for output delivery. Set it only when the destination honors the `Idempotency-Key` header. |
@@ -213,7 +209,6 @@ Exported event types must start with `plugin.<extension-id>.` and end in `.vN`. 
 | `event_handlers` | `id`, `event_types` (exact versioned types), `handler` (always `handle-event`), optional `debounce_ms` (1 to 3,600,000) and `max_wait_ms` (at least `debounce_ms`, at most 86,400,000; default ten times `debounce_ms`). See [Debounce](/extensions/server/#debounce). | `events.subscribe` and a `server_wasm` artifact |
 | `commands` | `id`, `handler`, `request_schema`, `response_schema`, `max_request_bytes`, `max_response_bytes` (default 64 KiB) | `client.commands` |
 | `operations` | `id`, `handler`, `request_schema`, `max_request_bytes`, `max_checkpoint_bytes` (default and maximum 64 KiB), optional `interactive`: `{"version": 1, "max_selection": 1–50}` for a selection, or `{"version": 1, "scope": "blueprint"}` for a [blueprint operation](/extensions/operations/#blueprint-operations) | `interactive` needs `client.operations.start` |
-| `webhooks` | `id`, `event_type`, `handler`, `methods` (`["POST"]`), `authentication`, `max_body_bytes` | `webhooks.receive`. Declared but not delivered yet. |
 | `connections` | See [Connections](#connections). | `connections.use` |
 | `exports` | See [Export destinations](#export-destinations). | `exports.mappings` |
 
@@ -373,7 +368,7 @@ views:
     children:
       - type: field
         field: discount_formula
-        editor: { id: formula, version: 1, props: { rows: 2 } }
+        editor: { extension_id: acme.formulas, id: formula, version: 1, props: { rows: 2 } }
 ```
 
 Saving and publishing the blueprint check the field's value type and props against an enabled extension's declaration. An editor needs `client.attribute_editor`. While its extension is disabled, lacks that grant, fails or is still starting, the field uses its default control. See [Attribute editors](/extensions/native/#attribute-editors).

@@ -85,7 +85,7 @@ The hooks give each mounted contribution what it needs:
 | `useCapabilities()` | The capabilities granted to the extension. |
 | `useAttricat()` | The same calls as the [Frame UI `attricat` API](/extensions/client/#the-attricat-api): `request`, `command`, `storage`, `operations`, `navigate`, `notify`, `refresh` and `dialog.close`, each checked against your grants. |
 | `useUiKitVersion()` | The UI kit version Attricat negotiated. |
-| `useEditor()` | In an attribute editor: the field's value, attribute, props, required and read-only state, errors, `recordId`, `contextId`, and `propose(value)`. |
+| `useEditor()` | In an attribute editor: the field's value, attribute, props, required and read-only state, errors, `recordId` (`null` while a new record is being entered), `contextId`, and `propose(value)`. |
 
 When the context, language or color mode changes, Attricat sends the new values to your mounted component instead of starting it again, so its state survives.
 

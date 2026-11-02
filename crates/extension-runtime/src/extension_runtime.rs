@@ -1743,6 +1743,13 @@ impl TaskHandler for ExtensionOperationTaskHandler {
             // Disable, upgrade, grant change, and quarantine never switch an
             // in-flight run to a different release. It remains resumable only
             // when its exact pinned release becomes authorized again.
+            if repository
+                .cancel_superseded_extension_operation_task(&task)
+                .await
+                .map_err(operation_task_error)?
+            {
+                return Ok(TaskOutcome::Complete);
+            }
             repository
                 .pause_extension_operation_task(&task)
                 .await

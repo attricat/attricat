@@ -36,8 +36,13 @@ export const useAttributeEditorStatusStore = create<{
   statuses: Record<string, Status>;
 }>()(() => ({ statuses: {} }));
 
-export const attributeEditorStatusKey = (recordId: string, code: string) =>
-  `${recordId}:${code}`;
+/** Stands in for the record ID while a new record is being entered. */
+const newRecordStatusKey = 'new';
+
+export const attributeEditorStatusKey = (
+  recordId: string | null | undefined,
+  code: string,
+) => `${recordId ?? newRecordStatusKey}:${code}`;
 
 export const reportAttributeEditorStatus = (key: string, status?: Status) =>
   useAttributeEditorStatusStore.setState((state) => {
@@ -64,10 +69,9 @@ export const useAttributeEditorDiagnosis = (
   recordId: string | undefined,
 ): AttributeEditorDiagnosis | undefined => {
   const runtime = useExtensionRuntime();
-  const status = useAttributeEditorStatusStore((state) =>
-    recordId
-      ? state.statuses[attributeEditorStatusKey(recordId, attribute.code)]
-      : undefined,
+  const status = useAttributeEditorStatusStore(
+    (state) =>
+      state.statuses[attributeEditorStatusKey(recordId, attribute.code)],
   );
   if (!reference) return undefined;
   if (!runtime.data)
@@ -76,6 +80,7 @@ export const useAttributeEditorDiagnosis = (
     (item) =>
       item.kind === contributionKinds.editor &&
       item.outlet === extensionOutlets.attributeEditor &&
+      item.extension_id === reference.extension_id &&
       item.id === reference.id &&
       item.version === reference.version,
   );

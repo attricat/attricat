@@ -189,7 +189,7 @@ views:
     children:
       - type: field
         field: discount_formula
-        editor: {id: formula, version: 1, props: {rows: 2}}
+        editor: {extension_id: acme.formulas, id: formula, version: 1, props: {rows: 2}}
 ```
 
 The editor must be declared by an enabled extension for the field's value type, and each prop must match the type and bounds it declares. The field keeps its label, help, validation and saving: it still saves when you leave it or press Enter, and Escape restores the saved value. While the extension is disabled or not working, the field shows its default control. Editors apply only on the record page, never in Explorer tables.

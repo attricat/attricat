@@ -519,14 +519,18 @@ impl HostState {
             }
             bytes.extend_from_slice(&chunk);
         }
-        counter!("attricat_extension_network_requests_total", "outcome" => "response").increment(1);
-        histogram!("attricat_extension_network_duration_seconds", "extension" => self.installation.extension_id.clone(), "host_permission" => rule.id.clone()).record(started.elapsed());
-        bounded_serialize(&json!({
+        // Base64 makes the answer larger than the bytes the rule admitted.
+        let Ok(answer) = bounded_serialize(&json!({
             "outcome": "response",
             "status": status,
             "headers": response_headers,
             "body_base64": BASE64.encode(bytes),
-        }))
+        })) else {
+            return too_large();
+        };
+        counter!("attricat_extension_network_requests_total", "outcome" => "response").increment(1);
+        histogram!("attricat_extension_network_duration_seconds", "extension" => self.installation.extension_id.clone(), "host_permission" => rule.id.clone()).record(started.elapsed());
+        Ok(answer)
     }
 }
 
