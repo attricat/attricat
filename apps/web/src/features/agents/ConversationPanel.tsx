@@ -80,7 +80,8 @@ export const ConversationPanel = ({
   const decide = useMutation({
     mutationFn: ({ id, approved }: { id: string; approved: boolean }) =>
       decideApproval(id, approved),
-    onSuccess: invalidate,
+    // A refused decision may mean it was already decided, so refresh either way.
+    onSettled: invalidate,
   });
   return (
     <Box
@@ -91,7 +92,9 @@ export const ConversationPanel = ({
         minHeight: 0,
       }}
     >
-      <ApiErrorAlert error={messages.error ?? runs.error ?? approvals.error} />
+      <ApiErrorAlert
+        error={decide.error ?? messages.error ?? runs.error ?? approvals.error}
+      />
       {live.error && <Alert severity="info">{live.error}</Alert>}
       <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>
         <ConversationTranscript
