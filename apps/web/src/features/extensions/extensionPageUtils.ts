@@ -24,6 +24,9 @@ export const sourceReleaseTag = (source: string) =>
   source.split(releaseTagSeparator).at(-1);
 
 const manifestNameSchema = z.looseObject({ name: z.string().trim().min(1) });
+const manifestDescriptionSchema = z.looseObject({
+  description: z.string().trim().min(1),
+});
 
 /** An installed extension's name from its manifest, or its ID without one. */
 export const installedExtensionName = (installation: {
@@ -33,6 +36,12 @@ export const installedExtensionName = (installation: {
   const parsed = manifestNameSchema.safeParse(installation.manifest);
   return parsed.success ? parsed.data.name : installation.extension_id;
 };
+
+/** What an installed extension's manifest says it does, if anything. */
+export const installedExtensionDescription = (installation: {
+  manifest: unknown;
+}) =>
+  manifestDescriptionSchema.safeParse(installation.manifest).data?.description;
 
 export const installationStateColor = (state: InstallationState) =>
   state === installationStates.enabled

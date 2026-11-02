@@ -425,9 +425,9 @@ export const ExtensionConnectionsSection = ({
   });
   if (!kinds.length) return null;
   return (
-    <Paper sx={{ p: 2 }}>
+    <Paper sx={{ p: 4 }}>
       <Stack direction="row" sx={{ alignItems: 'center', mb: 1 }}>
-        <Typography sx={{ flex: 1 }} variant="h6">
+        <Typography component="h2" sx={{ flex: 1 }} variant="h6">
           {t('extensionExports.connections')}
         </Typography>
         {canManage && (

@@ -58,8 +58,10 @@ export const ExtensionConfigurationSection = ({
       ? undefined
       : t('extensions.configurationJsonError');
   return (
-    <Paper sx={{ p: 2 }}>
-      <Typography variant="h6">{t('extensions.configuration')}</Typography>
+    <Paper sx={{ p: 4 }}>
+      <Typography component="h2" variant="h6">
+        {t('extensions.configuration')}
+      </Typography>
       <Typography color="text.secondary" variant="body2">
         {t('extensions.serverValidation')}
       </Typography>

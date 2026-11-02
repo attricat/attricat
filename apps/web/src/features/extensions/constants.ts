@@ -117,6 +117,17 @@ export type LifecycleOperation = (typeof lifecycleOperations)[number];
 
 export const manualQuarantineDiagnosticCode = 'manual_quarantine';
 export const extensionArchiveAccept = '.tar.zst,application/zstd';
+/** The sections of an installed extension's page, as its `tab` search value. */
+export const installedExtensionTabs = {
+  overview: 'overview',
+  configuration: 'configuration',
+  permissions: 'permissions',
+  exports: 'exports',
+  connections: 'connections',
+  lifecycle: 'lifecycle',
+} as const;
+export type InstalledExtensionTab =
+  (typeof installedExtensionTabs)[keyof typeof installedExtensionTabs];
 export const githubRepositoryPrefix = /^github:/;
 export const releaseTagSeparator = '@';
 

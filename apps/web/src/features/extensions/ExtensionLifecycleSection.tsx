@@ -1,4 +1,4 @@
-import { Box, Divider, Paper, Typography } from '@mui/material';
+import { Box, Divider, Paper, Stack, Typography } from '@mui/material';
 import { Trans, useTranslation } from 'react-i18next';
 import { UserProfileLink } from '../../components/UserProfileLink';
 import {
@@ -21,7 +21,7 @@ const ExtensionLifecycleRecord = ({ record }: { record: LifecycleRecord }) => {
   const stateLabel = (state: string | null) =>
     state === null ? t('extensions.noState') : lifecycleStateLabel(state, t);
   return (
-    <Box sx={{ py: 1 }}>
+    <Box>
       <Typography>
         {t('extensions.lifecycleTransition', {
           operation: lifecycleOperationLabel(record.operation, t),
@@ -54,7 +54,6 @@ const ExtensionLifecycleRecord = ({ record }: { record: LifecycleRecord }) => {
             diagnostics: JSON.stringify(record.diagnostics),
           })}`}
       </Typography>
-      <Divider />
     </Box>
   );
 };
@@ -66,16 +65,20 @@ export const ExtensionLifecycleSection = ({
 }) => {
   const { t } = useTranslation();
   return (
-    <Paper sx={{ p: 2 }}>
-      <Typography variant="h6">{t('extensions.lifecycle')}</Typography>
+    <Paper sx={{ p: 4 }}>
+      <Typography component="h2" sx={{ mb: 1 }} variant="h6">
+        {t('extensions.lifecycle')}
+      </Typography>
       {lifecycle.length === 0 ? (
         <Typography color="text.secondary">
           {t('extensions.noLifecycle')}
         </Typography>
       ) : (
-        lifecycle.map((record) => (
-          <ExtensionLifecycleRecord key={record.id} record={record} />
-        ))
+        <Stack divider={<Divider />} spacing={1}>
+          {lifecycle.map((record) => (
+            <ExtensionLifecycleRecord key={record.id} record={record} />
+          ))}
+        </Stack>
       )}
     </Paper>
   );

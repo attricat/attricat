@@ -5,6 +5,7 @@ import { Link } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { exportProblemStatuses, type ExportStatus } from './constants';
 import { ExportStatusChip } from './ExportStatusChip';
+import { installedExtensionTabs } from '../extensions/constants';
 
 /**
  * Export health on the Data Health page: per export extension, how many
@@ -54,6 +55,7 @@ export const ExportHealthCard = () => {
             >
               <Link
                 params={{ extensionId }}
+                search={{ tab: installedExtensionTabs.exports }}
                 style={{ flex: 1 }}
                 to="/manage/extensions/$extensionId"
               >

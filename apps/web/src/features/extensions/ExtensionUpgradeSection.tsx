@@ -1,8 +1,7 @@
-import { Button, Paper, Stack, Typography } from '@mui/material';
+import { Button, Divider, Paper, Stack, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
-import { useTranslation } from 'react-i18next';
-import { CircleArrowUpIcon, UploadIcon } from 'lucide-react';
-import { extensionArchiveAccept } from './constants';
+import { Trans, useTranslation } from 'react-i18next';
+import { CircleArrowUpIcon } from 'lucide-react';
 import {
   repositoryParts,
   sourceReleaseTag,
@@ -15,21 +14,21 @@ import {
 } from './managementApi';
 import { extensionManagementQueryKeys } from './managementQueryKeys';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { Timestamp } from '../../time/Timestamp';
 
 type ExtensionUpgradeSectionProps = {
   busy: boolean;
   canManage: boolean;
   installation: ExtensionInstallation;
   onUpgrade: (release: ExtensionReleaseReference) => void;
-  onUpgradeArchive: (archive: File) => void;
 };
 
+/** The registry's other releases; nothing for a side-loaded extension. */
 export const ExtensionUpgradeSection = ({
   busy,
   canManage,
   installation,
   onUpgrade,
-  onUpgradeArchive,
 }: ExtensionUpgradeSectionProps) => {
   const { t } = useTranslation();
   const [owner = '', repository = ''] = repositoryParts(
@@ -44,55 +43,55 @@ export const ExtensionUpgradeSection = ({
   const releases = (upgrades.data?.releases ?? []).filter(
     (release) => release.tag_name !== installedTag,
   );
+  if (!upgrades.error && releases.length === 0) return null;
   return (
-    <Paper sx={{ p: 2 }}>
-      <Typography variant="h6">{t('extensions.upgrade')}</Typography>
+    <Paper sx={{ p: 4 }}>
+      <Typography component="h2" variant="h6">
+        {t('extensions.availableReleases')}
+      </Typography>
+      <Typography color="text.secondary" sx={{ mb: 2 }} variant="body2">
+        {t('extensions.upgradeEffect')}
+      </Typography>
       <ApiErrorAlert error={upgrades.error} sx={{ mb: 2 }} />
-      {releases.map((release) => (
-        <Stack
-          direction="row"
-          key={release.release_id}
-          spacing={1}
-          sx={{ alignItems: 'center' }}
-        >
-          <Typography>{release.name || release.tag_name}</Typography>
-          <Button
-            disabled={!canManage || busy}
-            onClick={() =>
-              onUpgrade({
-                owner,
-                repository,
-                release_id: release.release_id,
-              })
-            }
-            startIcon={<CircleArrowUpIcon />}
+      <Stack divider={<Divider />} spacing={1}>
+        {releases.map((release) => (
+          <Stack
+            direction="row"
+            key={release.release_id}
+            spacing={1}
+            sx={{ alignItems: 'center', justifyContent: 'space-between' }}
           >
-            {t('extensions.upgrade')}
-          </Button>
-        </Stack>
-      ))}
-      <Stack spacing={1} sx={{ alignItems: 'flex-start', mt: 1 }}>
-        <Typography color="text.secondary" variant="body2">
-          {t('extensions.upgradeArchiveHint')}
-        </Typography>
-        <Button
-          component="label"
-          disabled={!canManage || busy}
-          startIcon={<UploadIcon />}
-          variant="outlined"
-        >
-          {t('extensions.upgradeFromArchive')}
-          <input
-            accept={extensionArchiveAccept}
-            hidden
-            onChange={(event) => {
-              const archive = event.target.files?.[0];
-              event.target.value = '';
-              if (archive) onUpgradeArchive(archive);
-            }}
-            type="file"
-          />
-        </Button>
+            <div>
+              <Typography>{release.name || release.tag_name}</Typography>
+              {release.published_at && (
+                <Typography color="text.secondary" variant="body2">
+                  <Trans
+                    components={{
+                      timestamp: (
+                        <Timestamp style="date" value={release.published_at} />
+                      ),
+                    }}
+                    i18nKey="extensions.availableReleasesPublished"
+                    t={t}
+                  />
+                </Typography>
+              )}
+            </div>
+            <Button
+              disabled={!canManage || busy}
+              onClick={() =>
+                onUpgrade({
+                  owner,
+                  repository,
+                  release_id: release.release_id,
+                })
+              }
+              startIcon={<CircleArrowUpIcon />}
+            >
+              {t('extensions.upgrade')}
+            </Button>
+          </Stack>
+        ))}
       </Stack>
     </Paper>
   );
