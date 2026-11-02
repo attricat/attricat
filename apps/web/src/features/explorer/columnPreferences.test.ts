@@ -26,6 +26,23 @@ beforeEach(() => {
 afterEach(() => storage.clear());
 
 describe('explorer column preferences', () => {
+  it('keeps preferences for columns another revision does not show', () => {
+    const newest = ['id', 'added', 'name'];
+    setExplorerColumnPreferences(blueprintId, {
+      hidden: ['added'],
+      order: ['name', 'added', 'id'],
+    });
+    // An older revision has no such column.
+    setExplorerColumnPreferences(blueprintId, {
+      hidden: ['id'],
+      order: ['id', 'name'],
+    });
+    expect(getExplorerColumnPreferences(blueprintId, newest)).toEqual({
+      hidden: ['id', 'added'],
+      order: ['id', 'added', 'name'],
+    });
+  });
+
   it('returns the table order when no preferences are stored', () => {
     expect(getExplorerColumnPreferences(blueprintId, columns)).toEqual({
       hidden: [],

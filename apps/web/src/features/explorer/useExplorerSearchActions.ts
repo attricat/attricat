@@ -97,6 +97,7 @@ export const useExplorerSearchActions = (
     selectBlueprint: (blueprint: string | undefined) =>
       go({
         blueprint,
+        context: search.context,
         sourceView: search.sourceView,
         query: search.query,
         relationshipFacets: undefined,
