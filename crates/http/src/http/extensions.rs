@@ -497,13 +497,11 @@ async fn selected_release(
         .identity();
     let extension =
         super::extension_registries::find_trusted_extension(state, repository, &target).await?;
-    let details = state
+    state
         .registry
-        .extension_details(extension)
+        .extension_releases(&extension)
         .await
-        .map_err(|_| ApiError::service_unavailable("extension repository could not be resolved"))?;
-    details
-        .releases
+        .map_err(super::extension_registries::catalogue_error)?
         .into_iter()
         .find(|release| release.release_id == input.release_id)
         .ok_or_else(|| ApiError::not_found("trusted extension release"))

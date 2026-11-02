@@ -36,6 +36,11 @@ const REGISTRY_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 /// Archives are far larger than catalogue responses.
 const ASSET_REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
 const USER_AGENT: &str = "attricat-extension-registry";
+/// How long READMEs and release lists are reused. GitHub allows an address 60
+/// unauthenticated API requests an hour, and viewing and then installing an
+/// extension would otherwise spend four of them.
+const CATALOGUE_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
+const CATALOGUE_CACHE_ENTRIES: u64 = 1_024;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct GitHubRepository {
@@ -172,6 +177,10 @@ pub enum RegistryError {
     InvalidSource,
     #[error("registry request failed")]
     Unavailable,
+    #[error("registry repository or file was not found")]
+    NotFound,
+    #[error("GitHub's rate limit for this server's address is used up")]
+    RateLimited,
     #[error("registry returned an invalid index or release response")]
     InvalidResponse,
     #[error("extension repository is not listed by a trusted registry")]
@@ -184,6 +193,24 @@ pub struct GitHubRegistry {
     asset_client: Client,
     api_origin: Url,
     raw_origin: Url,
+    readmes: moka::future::Cache<String, String>,
+    releases: moka::future::Cache<String, Vec<DiscoveredRelease>>,
+}
+/// Why a catalogue response was not a success.
+fn status_error(status: reqwest::StatusCode) -> RegistryError {
+    match status {
+        reqwest::StatusCode::NOT_FOUND => RegistryError::NotFound,
+        reqwest::StatusCode::FORBIDDEN | reqwest::StatusCode::TOO_MANY_REQUESTS => {
+            RegistryError::RateLimited
+        }
+        _ => RegistryError::Unavailable,
+    }
+}
+fn catalogue_cache<V: Clone + Send + Sync + 'static>() -> moka::future::Cache<String, V> {
+    moka::future::Cache::builder()
+        .max_capacity(CATALOGUE_CACHE_ENTRIES)
+        .time_to_live(CATALOGUE_CACHE_TTL)
+        .build()
 }
 /// Reads a response no larger than `limit`, stopping as soon as it passes that,
 /// so a body that does not declare its size cannot fill memory first.
@@ -220,6 +247,14 @@ fn matches_digest(bytes: &[u8], digest: Option<&str>) -> bool {
 
 impl GitHubRegistry {
     pub fn new() -> Result<Self, RegistryError> {
+        Self::with_origins(
+            Url::parse(GITHUB_API_ORIGIN).expect("constant URL"),
+            Url::parse(GITHUB_RAW_ORIGIN).expect("constant URL"),
+        )
+    }
+    /// A registry reading its catalogue from other origins, for tests. Assets
+    /// still have to come from GitHub.
+    pub fn with_origins(api_origin: Url, raw_origin: Url) -> Result<Self, RegistryError> {
         let client = Client::builder()
             .redirect(Policy::none())
             .user_agent(USER_AGENT)
@@ -240,8 +275,10 @@ impl GitHubRegistry {
         Ok(Self {
             client,
             asset_client,
-            api_origin: Url::parse(GITHUB_API_ORIGIN).expect("constant URL"),
-            raw_origin: Url::parse(GITHUB_RAW_ORIGIN).expect("constant URL"),
+            api_origin,
+            raw_origin,
+            readmes: catalogue_cache(),
+            releases: catalogue_cache(),
         })
     }
     pub async fn discover(
@@ -262,7 +299,7 @@ impl GitHubRegistry {
             .await
             .map_err(|_| RegistryError::Unavailable)?;
         if !response.status().is_success() {
-            return Err(RegistryError::Unavailable);
+            return Err(status_error(response.status()));
         }
         let bytes = read_capped(response, MAX_REGISTRY_INDEX_BYTES).await?;
         let index: RegistryIndex =
@@ -309,6 +346,20 @@ impl GitHubRegistry {
         extension: DiscoveredExtension,
     ) -> Result<ExtensionDetails, RegistryError> {
         let repository = extension.github_repository()?;
+        let readme = self.readme(&repository).await?;
+        let releases = self.releases(&repository).await?;
+        Ok(ExtensionDetails {
+            extension,
+            readme,
+            releases,
+        })
+    }
+    /// The repository's README, empty if it has none.
+    async fn readme(&self, repository: &GitHubRepository) -> Result<String, RegistryError> {
+        let key = repository.identity();
+        if let Some(readme) = self.readmes.get(&key).await {
+            return Ok(readme);
+        }
         let readme_url = self
             .api_origin
             .join(&format!(
@@ -323,17 +374,16 @@ impl GitHubRegistry {
             .send()
             .await
             .map_err(|_| RegistryError::Unavailable)?;
-        if !response.status().is_success() {
-            return Err(RegistryError::Unavailable);
-        }
-        let bytes = read_capped(response, MAX_README_BYTES).await?;
-        let readme = String::from_utf8(bytes).map_err(|_| RegistryError::InvalidResponse)?;
-        let releases = self.releases(&repository).await?;
-        Ok(ExtensionDetails {
-            extension,
-            readme,
-            releases,
-        })
+        let readme = match response.status() {
+            status if status.is_success() => {
+                let bytes = read_capped(response, MAX_README_BYTES).await?;
+                String::from_utf8(bytes).map_err(|_| RegistryError::InvalidResponse)?
+            }
+            reqwest::StatusCode::NOT_FOUND => String::new(),
+            status => return Err(status_error(status)),
+        };
+        self.readmes.insert(key, readme.clone()).await;
+        Ok(readme)
     }
     /// Lists the installable releases of an index-authorized extension without
     /// loading its README.
@@ -386,6 +436,10 @@ impl GitHubRegistry {
         &self,
         source: &GitHubRepository,
     ) -> Result<Vec<DiscoveredRelease>, RegistryError> {
+        let key = source.identity();
+        if let Some(releases) = self.releases.get(&key).await {
+            return Ok(releases);
+        }
         let url = self
             .api_origin
             .join(&format!(
@@ -400,12 +454,12 @@ impl GitHubRegistry {
             .await
             .map_err(|_| RegistryError::Unavailable)?;
         if !response.status().is_success() {
-            return Err(RegistryError::Unavailable);
+            return Err(status_error(response.status()));
         }
         let bytes = read_capped(response, MAX_RELEASE_CATALOGUE_BYTES).await?;
         let releases: Vec<GitHubRelease> =
             serde_json::from_slice(&bytes).map_err(|_| RegistryError::InvalidResponse)?;
-        Ok(releases
+        let releases: Vec<DiscoveredRelease> = releases
             .into_iter()
             .filter(|release| !release.draft && !release.prerelease)
             .filter_map(|release| {
@@ -435,7 +489,9 @@ impl GitHubRegistry {
                     },
                 })
             })
-            .collect())
+            .collect();
+        self.releases.insert(key, releases.clone()).await;
+        Ok(releases)
     }
 }
 #[derive(Deserialize)]
@@ -483,6 +539,59 @@ mod tests {
             let _ = socket.write_all(chunk.as_bytes()).await;
         });
         reqwest::get(format!("http://{address}/")).await.unwrap()
+    }
+
+    /// A registry whose origin answers one request, then refuses connections.
+    async fn registry_answering_once(response: &'static str) -> GitHubRegistry {
+        use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let origin = Url::parse(&format!("http://{}/", listener.local_addr().unwrap())).unwrap();
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = [0; 1024];
+            let _ = socket.read(&mut request).await.unwrap();
+            let _ = socket.write_all(response.as_bytes()).await;
+        });
+        GitHubRegistry::with_origins(origin.clone(), origin).unwrap()
+    }
+    const EMPTY_LIST: &str = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n[]";
+    const NOT_FOUND: &str =
+        "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+    const LIMITED: &str =
+        "HTTP/1.1 429 Too Many Requests\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+    fn acme() -> GitHubRepository {
+        "acme/example".parse().unwrap()
+    }
+
+    #[tokio::test]
+    async fn release_lists_are_reused_rather_than_spending_the_rate_limit() {
+        let registry = registry_answering_once(EMPTY_LIST).await;
+        registry.releases(&acme()).await.unwrap();
+        registry.releases(&acme()).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn catalogue_failures_say_why_and_are_not_reused() {
+        let registry = registry_answering_once(NOT_FOUND).await;
+        assert!(matches!(
+            registry.discover(&acme()).await,
+            Err(RegistryError::NotFound)
+        ));
+        let registry = registry_answering_once(LIMITED).await;
+        assert!(matches!(
+            registry.releases(&acme()).await,
+            Err(RegistryError::RateLimited)
+        ));
+        assert!(matches!(
+            registry.releases(&acme()).await,
+            Err(RegistryError::Unavailable)
+        ));
+    }
+
+    #[tokio::test]
+    async fn a_repository_without_a_readme_can_still_be_shown() {
+        let registry = registry_answering_once(NOT_FOUND).await;
+        assert_eq!(registry.readme(&acme()).await.unwrap(), "");
     }
 
     #[tokio::test]

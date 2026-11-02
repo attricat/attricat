@@ -2831,8 +2831,10 @@ impl ExtensionPackage {
         let manifest_bytes = manifest_bytes.ok_or_else(|| {
             ManifestError::Invalid("extension archive must contain manifest.json".into())
         })?;
-        let manifest: Manifest = serde_json::from_slice(&manifest_bytes).map_err(|_| {
-            ManifestError::Invalid("manifest.json is not a valid strict manifest".into())
+        let manifest: Manifest = serde_json::from_slice(&manifest_bytes).map_err(|error| {
+            ManifestError::Invalid(format!(
+                "manifest.json is not valid for this version of Attricat: {error}"
+            ))
         })?;
         manifest.validate(SUPPORTED_HOST_API)?;
         if let Some(native) = manifest.native_artifact() {
