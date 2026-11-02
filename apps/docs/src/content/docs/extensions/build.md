@@ -237,22 +237,25 @@ The version must be greater than the installed one. Extension storage, connectio
 
 ## Publish
 
-To distribute through a registry, publish the archive as an asset of a GitHub Release (not a draft or prerelease) in your extension's repository, and list the repository in a registry's `registry.json`:
+To distribute through a registry, publish the archive as an asset of a GitHub Release (not a draft or prerelease) in your extension's repository, and list the repository and the reviewed version in a registry's `registry.json`:
 
 ```json
 {
-  "registry_version": 1,
+  "registry_version": 2,
   "extensions": [{
     "id": "acme.inventory",
     "name": "Inventory panel",
     "description": "Shows warehouse stock on product pages.",
     "icon": "icon.svg",
-    "repository": "acme/attricat-inventory"
+    "repository": "acme/attricat-inventory",
+    "versions": [{ "version": "1.2.0", "host_api": "^1.1" }]
   }]
 }
 ```
 
 Workspace administrators add your registry with `acli extension registry add --source acme/attricat-extensions`. The official registry is [`attricat/attricat-extensions`](https://github.com/attricat/attricat-extensions); to propose a listing there, open a pull request that adds your entry to its `registry.json`.
+
+`versions` is required. Attricat offers and installs from a registry only the versions listed there, so each new release is unavailable until it is added, with `version` and `host_api` copied from its manifest. The release tag must name that version, with an optional `v` prefix.
 
 ### Release a new version
 

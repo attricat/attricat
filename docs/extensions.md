@@ -33,25 +33,27 @@ downgrades any of these contracts.
 Extension registries and extension repositories are separate external inputs.
 Every workspace has the built-in Attricat GitHub registry plus zero or more
 workspace-managed GitHub `owner/repository` registries. Each registry exposes a
-raw root `registry.json` with `registry_version: 1` and an `extensions` list;
-each entry supplies a stable `id`, `name`, `description`, optional `icon`, and a
-GitHub extension `repository`. Sources may be submitted as
+raw root `registry.json` with `registry_version: 2` and an `extensions` list;
+each entry supplies a stable `id`, `name`, `description`, optional `icon`, a
+GitHub extension `repository`, and the reviewed `versions`. Sources may be submitted as
 `github:owner/repository`, `owner/repository`, or the canonical GitHub URL.
 Attricat canonicalizes them and rejects non-GitHub origins, credentials,
 query/fragment suffixes, and ambiguous paths.
 
 Discovery loads trusted registry indexes only; an index is the sole authority
-for which extension repositories Attricat may resolve. The v1 index shape is:
+for which extension repositories and versions Attricat may resolve. The v2 index
+shape is:
 
 ```json
 {
-  "registry_version": 1,
+  "registry_version": 2,
   "extensions": [{
     "id": "acme.example",
     "name": "Acme Example",
     "description": "Example extension",
     "icon": "icon.svg",
-    "repository": "acme/attricat-extension"
+    "repository": "acme/attricat-extension",
+    "versions": [{ "version": "1.2.0", "host_api": "^1.1" }]
   }]
 }
 ```
@@ -60,6 +62,20 @@ Opening a listed entry loads that extension repository's README and non-draft,
 non-prerelease GitHub Releases, returning its `.tar.zst` assets only when their
 download path belongs to that exact extension repository. Attricat stores no
 global copy of indexes, READMEs, releases, or archives.
+
+`versions` is the review gate. Each item names a reviewed `version` and the
+`host_api` range of that release, and an entry must list at least one. Attricat
+offers and installs only releases whose tag (with an optional `v` prefix) names a
+listed version, refuses an archive whose manifest declares a different version
+than its tag, and applies the same rule to solution-pack installs. A release
+withdrawn from the list stops being installable, including by a solution-pack
+plan reviewed earlier, but existing installations are left alone. Side-loading
+is not gated by a registry. An invalid entry rejects its whole index.
+
+`GET /extension-registries/updates` compares installations with these indexes
+without calling GitHub's release API. It reports the highest listed version whose
+`host_api` accepts this host, when that is newer than the installed version.
+Side-loaded installations never report updates.
 
 A user with `extensions.manage` may alternatively install a local archive from
 **Extensions → Upload archive** (`/manage/extensions/sideload`). The archive is

@@ -474,6 +474,10 @@ pub fn router(state: AppState) -> Router {
             get(extension_registries::discover),
         )
         .route(
+            "/extension-registries/updates",
+            get(extension_registries::updates),
+        )
+        .route(
             "/extension-registries/extensions/{owner}/{repository}",
             get(extension_registries::extension_details),
         )

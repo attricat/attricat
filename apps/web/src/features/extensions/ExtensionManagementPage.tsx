@@ -10,6 +10,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { compactIconSize } from '../../components/iconSizes';
+import { useExtensionUpdates } from './useExtensionUpdates';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { useCan } from '../auth/useCan';
@@ -41,6 +42,8 @@ const extensionTabs = [
   to: ToOptions['to'];
 }>;
 
+const installedTabPath = '/manage/extensions/installed';
+
 type ExtensionManagementPageProps = {
   children: ReactNode;
   tab: number;
@@ -53,6 +56,7 @@ export const ExtensionManagementPage = ({
   const { t } = useTranslation();
   const canManage = useCan(capabilities.extensionsManage);
   const tabId = useTabAccessibility();
+  const updateCount = useExtensionUpdates().length;
 
   return (
     <RequireCapability capability={capabilities.extensionsRead}>
@@ -78,7 +82,11 @@ export const ExtensionManagementPage = ({
               {...tabId.tab(index)}
               icon={<item.icon aria-hidden size={compactIconSize} />}
               key={item.to}
-              label={t(item.label)}
+              label={
+                item.to === installedTabPath && updateCount > 0
+                  ? t('extensions.installedWithUpdates', { count: updateCount })
+                  : t(item.label)
+              }
               to={item.to}
               value={index}
             />

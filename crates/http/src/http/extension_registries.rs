@@ -15,6 +15,9 @@ use crate::{
     repository::{AttricatRepository, ExtensionRegistrySource},
 };
 
+/// Separates the repository from the release tag in an installation's source.
+const RELEASE_TAG_SEPARATOR: char = '@';
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct CreateSourceRequest {
@@ -89,8 +92,53 @@ pub(super) async fn discover(
     State(state): State<AppState>,
     ScopedRepository(repository): ScopedRepository,
 ) -> Result<Json<Vec<crate::extension_registry::DiscoveredExtension>>, ApiError> {
+    Ok(Json(discovered_extensions(&state, &repository).await?))
+}
+
+/// An installed registry extension's newest version its registry reviewed.
+#[derive(Serialize)]
+pub(super) struct ExtensionUpdate {
+    extension_id: String,
+    installed_version: String,
+    latest_version: String,
+    repository: String,
+    registry_source: String,
+}
+
+/// Compares installations with the registry indexes, without calling GitHub's
+/// release API. A registry that cannot be read reports no updates.
+pub(super) async fn updates(
+    State(state): State<AppState>,
+    ScopedRepository(repository): ScopedRepository,
+) -> Result<Json<Vec<ExtensionUpdate>>, ApiError> {
+    let installations = repository.installed_extensions().await?;
+    let listed = discovered_extensions(&state, &repository).await?;
+    Ok(Json(
+        installations
+            .into_iter()
+            .filter_map(|installation| {
+                let (source, _) = installation.source.split_once(RELEASE_TAG_SEPARATOR)?;
+                let entry = listed.iter().find(|entry| entry.repository == source)?;
+                let latest_version = entry.available_update(&installation.version)?;
+                Some(ExtensionUpdate {
+                    extension_id: installation.extension_id,
+                    installed_version: installation.version,
+                    latest_version,
+                    repository: entry.repository.clone(),
+                    registry_source: entry.registry_source.clone(),
+                })
+            })
+            .collect(),
+    ))
+}
+
+/// Every entry of every readable registry, in trust order.
+async fn discovered_extensions(
+    state: &AppState,
+    repository: &AttricatRepository,
+) -> Result<Vec<DiscoveredExtension>, ApiError> {
     let mut extensions = Vec::new();
-    for source in registry_sources(&state, &repository).await? {
+    for source in registry_sources(state, repository).await? {
         match state.registry.discover(&source).await {
             Ok(found) => extensions.extend(found),
             Err(error) => {
@@ -98,7 +146,7 @@ pub(super) async fn discover(
             }
         }
     }
-    Ok(Json(extensions))
+    Ok(extensions)
 }
 
 /// Resolves a repository only after its current trusted registry index lists it.

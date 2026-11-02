@@ -12,6 +12,8 @@ import { EmptyState } from '../../components/EmptyState';
 import { LoadingState } from '../../components/LoadingState';
 import { ExtensionIcon } from '../../components/systemIcons';
 import { InstallationStateChip } from './InstallationStateChip';
+import { ExtensionUpdateChip } from './ExtensionUpdateChip';
+import { useExtensionUpdates } from './useExtensionUpdates';
 
 export const ExtensionsInstalledPage = () => {
   const { t } = useTranslation();
@@ -21,6 +23,7 @@ export const ExtensionsInstalledPage = () => {
     queryFn: installedExtensions,
     enabled: canRead,
   });
+  const updates = useExtensionUpdates();
 
   return (
     <>
@@ -49,7 +52,13 @@ export const ExtensionsInstalledPage = () => {
               <Box>
                 <Typography component="h3" variant="h6">
                   {installedExtensionName(extension)}{' '}
-                  <InstallationStateChip state={extension.state} />
+                  <InstallationStateChip state={extension.state} />{' '}
+                  <ExtensionUpdateChip
+                    update={updates.find(
+                      (update) =>
+                        update.extension_id === extension.extension_id,
+                    )}
+                  />
                 </Typography>
                 <Typography color="text.secondary">
                   {t('extensions.idVersionSource', {

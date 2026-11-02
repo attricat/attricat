@@ -80,8 +80,9 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `GET`, `POST` | `/extension-registries` | List the built-in official source and workspace custom sources, or add a trusted GitHub source (`extensions.manage`). |
 | `DELETE` | `/extension-registries/{id}` | Remove one workspace custom source (`extensions.manage`). |
 | `GET` | `/extension-registries/discover` | Load extension metadata from configured trusted registry `registry.json` indexes (`extensions.read`). |
-| `GET` | `/extension-registries/extensions/{owner}/{repository}` | Resolve a repository listed in a current trusted index, returning its README and non-draft, non-prerelease `.tar.zst` GitHub Release assets (`extensions.read`). |
-| `GET`, `POST` | `/extensions` | List installed extensions or install a validated release (`extensions.read` / `extensions.manage`). |
+| `GET` | `/extension-registries/updates` | Report installed registry extensions with a newer compatible version listed in a trusted index, without calling GitHub's release API (`extensions.read`). |
+| `GET` | `/extension-registries/extensions/{owner}/{repository}` | Resolve a repository listed in a current trusted index, returning its README and the non-draft, non-prerelease `.tar.zst` GitHub Release assets of the versions the index lists (`extensions.read`). |
+| `GET`, `POST` | `/extensions` | List installed extensions or install a validated release the trusted index lists (`extensions.read` / `extensions.manage`). |
 | `POST` | `/extensions/sideload` | Install a local `.tar.zst` archive supplied as an `application/zstd` request body. The 32 MiB archive limit and normal package validation apply; installations start disabled (`extensions.manage`). |
 | `GET`, `DELETE` | `/extensions/{extension_id}` | Read or remove an installation (`extensions.read` / `extensions.manage`). |
 | `POST` | `/extensions/{extension_id}/upgrade`, `/enable`, `/disable`, `/quarantine` | Change the installed release or lifecycle state (`extensions.manage`). |

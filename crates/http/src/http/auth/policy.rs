@@ -145,6 +145,7 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
         });
     }
     if path == "/extension-registries/discover"
+        || path == "/extension-registries/updates"
         || path.starts_with("/extension-registries/extensions/")
     {
         return Some(Policy {
@@ -900,6 +901,12 @@ mod tests {
                 Permission::ExtensionsManage
             );
         }
+        assert_eq!(
+            policy(&Method::GET, "/extension-registries/updates")
+                .unwrap()
+                .permission,
+            Permission::ExtensionsRead
+        );
         assert_eq!(
             policy(&Method::GET, "/extensions").unwrap().permission,
             Permission::ExtensionsRead

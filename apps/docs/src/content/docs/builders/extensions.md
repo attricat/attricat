@@ -13,7 +13,7 @@ Managing extensions needs `extensions.manage`. Browsing the registry needs `exte
 
 **Manage → Extensions** has three places to get an extension:
 
-- **Marketplace** lists extensions from trusted registries. Every workspace has the official Attricat registry. Administrators can add more GitHub registries. A registry is a GitHub repository with a `registry.json` index; Attricat only resolves repositories listed in an index it trusts.
+- **Marketplace** lists extensions from trusted registries. Every workspace has the official Attricat registry. Administrators can add more GitHub registries. A registry is a GitHub repository with a `registry.json` index; Attricat only resolves repositories listed in an index it trusts, and installs only the versions that index lists.
 - **Upload archive** installs a `.tar.zst` package from your computer, up to 32 MiB. Use it for private extensions and for testing your own.
 - The **CLI**: `acli extension install`, `acli extension sideload --file extension.tar.zst`.
 

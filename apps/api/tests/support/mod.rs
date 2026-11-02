@@ -83,6 +83,14 @@ impl FakeOfficialExtensions {
         release.2 = archive;
     }
 
+    /// Removes a release from the official registry's reviewed versions.
+    pub fn withdraw(&self, extension_id: &str, tag_name: &str) {
+        self.releases
+            .lock()
+            .unwrap()
+            .retain(|(id, release, _)| id != extension_id || release.tag_name != tag_name);
+    }
+
     pub fn set_unavailable(&self, unavailable: bool) {
         self.unavailable
             .store(unavailable, std::sync::atomic::Ordering::SeqCst);

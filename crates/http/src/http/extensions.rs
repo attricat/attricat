@@ -509,6 +509,20 @@ async fn selected_release(
         .ok_or_else(|| ApiError::not_found("trusted extension release"))
 }
 
+/// A registry reviewed the version a release's tag names, so its archive must
+/// declare that version to install under it.
+fn require_reviewed_version(
+    release: &DiscoveredRelease,
+    package: &crate::extensions::ExtensionPackage,
+) -> Result<(), ApiError> {
+    if release.declares_version(&package.manifest().version) {
+        return Ok(());
+    }
+    Err(ApiError::invalid_input(
+        "selected release declares a different version than its tag".to_owned(),
+    ))
+}
+
 /// Demo visitors share an administrator account, so they cannot run their own
 /// code on the host.
 fn reject_in_demo(state: &AppState) -> Result<(), ApiError> {
@@ -565,6 +579,7 @@ pub(super) async fn install(
         .map_err(|_| ApiError::service_unavailable("extension archive could not be downloaded"))?;
     let source = format!("{}@{}", release.source, release.tag_name);
     let package = unpack_extension(archive).await?;
+    require_reviewed_version(&release, &package)?;
     let installation = ExtensionInstaller::new(repository, state.object_store.clone())
         .install_package(&source, package)
         .await
@@ -593,6 +608,7 @@ pub(super) async fn upgrade(
             "selected release has a different extension ID".to_owned(),
         ));
     }
+    require_reviewed_version(&release, &package)?;
     let source = format!("{}@{}", release.source, release.tag_name);
     let installation = ExtensionInstaller::new(repository, state.object_store.clone())
         .upgrade_package(&source, package)

@@ -10,6 +10,7 @@ export const extensionManagementQueryKeys = {
       repository,
     ] as const,
   installed: () => [...extensionManagementQueryKeys.all, 'installed'] as const,
+  updates: () => [...extensionManagementQueryKeys.all, 'updates'] as const,
   layout: () => [...extensionManagementQueryKeys.all, 'layout'] as const,
   detail: (id: string) =>
     [...extensionManagementQueryKeys.all, 'detail', id] as const,

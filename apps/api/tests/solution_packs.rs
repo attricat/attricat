@@ -5263,6 +5263,48 @@ async fn interrupted_official_extension_install_resumes_without_reinstalling(poo
 }
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
+async fn official_release_withdrawn_after_review_is_refused(pool: PgPool) {
+    let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    let (base_url, server, official) = start_server_with_official_extensions(pool.clone()).await;
+    official.publish(
+        "acme.shopify",
+        "v2.2.0",
+        official_extension_archive("acme.shopify", "2.2.0", "reviewed release"),
+    );
+    let client = authenticated_client();
+    let plan = create_plan(
+        &client,
+        &base_url,
+        archive_with_extension_requirement(true),
+        "withdrawn",
+    )
+    .await
+    .json::<Value>()
+    .await
+    .unwrap();
+    assert_eq!(plan["ready"], true);
+    official.withdraw("acme.shopify", "v2.2.0");
+
+    let response = apply_plan(&client, &base_url, plan["id"].as_str().unwrap()).await;
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        response.json::<Value>().await.unwrap()["error"]["code"],
+        "solution_pack_plan_stale"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM extension_installations WHERE workspace_id=$1"
+        )
+        .bind(workspace_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        0
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn official_release_changed_after_review_is_refused(pool: PgPool) {
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let (base_url, server, official) = start_server_with_official_extensions(pool.clone()).await;

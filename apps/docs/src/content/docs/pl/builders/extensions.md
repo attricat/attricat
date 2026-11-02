@@ -13,7 +13,7 @@ Zarządzanie rozszerzeniami wymaga `extensions.manage`. Przeglądanie rejestru w
 
 W **Zarządzanie → Rozszerzenia** rozszerzenie można uzyskać z trzech miejsc:
 
-- **Rynek** wyświetla rozszerzenia z zaufanych rejestrów. Każdy obszar roboczy ma oficjalny rejestr Attricat. Administratorzy mogą dodawać kolejne rejestry GitHub. Rejestr to repozytorium GitHub z indeksem `registry.json`; Attricat rozwiązuje tylko repozytoria wymienione w indeksie, któremu ufa.
+- **Rynek** wyświetla rozszerzenia z zaufanych rejestrów. Każdy obszar roboczy ma oficjalny rejestr Attricat. Administratorzy mogą dodawać kolejne rejestry GitHub. Rejestr to repozytorium GitHub z indeksem `registry.json`; Attricat rozwiązuje tylko repozytoria wymienione w indeksie, któremu ufa, i instaluje tylko wersje wymienione w tym indeksie.
 - **Prześlij archiwum** instaluje pakiet `.tar.zst` z Twojego komputera, do 32 MiB. Używaj tej opcji dla prywatnych rozszerzeń i do testowania własnych.
 - **CLI**: `acli extension install`, `acli extension sideload --file extension.tar.zst`.
 

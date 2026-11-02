@@ -4,6 +4,7 @@ import { manualQuarantineDiagnosticCode, type GrantKind } from './constants';
 import {
   detailSchema,
   discoveredSchema,
+  extensionUpdateSchema,
   installationSchema,
   registryDetailsSchema,
   workspaceExtensionLayoutSchema,
@@ -15,6 +16,8 @@ export type { ExtensionDetail, ExtensionInstallation } from './schemas';
 
 export const discoverExtensions = () =>
   request('/api/extension-registries/discover', z.array(discoveredSchema));
+export const extensionUpdates = () =>
+  request('/api/extension-registries/updates', z.array(extensionUpdateSchema));
 export const registryDetails = (owner: string, repository: string) =>
   request(
     `/api/extension-registries/extensions/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}`,

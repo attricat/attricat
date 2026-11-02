@@ -27,6 +27,7 @@ use crate::{
     extension_installer::{ExtensionInstallError, ExtensionInstaller},
     extension_registry::{
         DiscoveredRelease, GitHubRegistry, GitHubRepository, RegistryError, ReleaseAsset,
+        release_version,
     },
     extensions::{ExtensionPackage, Manifest},
     repository::{
@@ -385,6 +386,16 @@ async fn install_planned_extension(
             };
             let changed =
                 || SolutionPackExtensionError::ReleaseChanged(planned.extension_id.clone());
+            // The registry may have withdrawn the release since the plan was reviewed.
+            if !releases
+                .releases(&planned.extension_id)
+                .await
+                .map_err(registry_error)?
+                .iter()
+                .any(|offered| offered.tag_name == planned.tag_name)
+            {
+                return Err(changed());
+            }
             let archive = releases.download(&release).await.map_err(registry_error)?;
             if sha256_hex(&archive) != planned.archive_sha256 {
                 return Err(changed());
@@ -443,11 +454,6 @@ async fn install_planned_extension(
 
 fn registry_error(_: RegistryError) -> SolutionPackExtensionError {
     SolutionPackExtensionError::RegistryUnavailable
-}
-
-/// Release tags are SemVer versions with an optional `v` prefix.
-fn release_version(tag: &str) -> Option<Version> {
-    Version::parse(tag.strip_prefix('v').unwrap_or(tag)).ok()
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {

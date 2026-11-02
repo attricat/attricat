@@ -237,22 +237,25 @@ Wersja musi być wyższa od zainstalowanej. Pamięć rozszerzenia, połączenia 
 
 ## Opublikuj
 
-Aby dystrybuować rozszerzenie przez rejestr, opublikuj archiwum jako zasób GitHub Release (nie szkic ani wersję przedpremierową) w repozytorium rozszerzenia i dodaj repozytorium do pliku `registry.json` rejestru:
+Aby dystrybuować rozszerzenie przez rejestr, opublikuj archiwum jako zasób GitHub Release (nie szkic ani wersję przedpremierową) w repozytorium rozszerzenia i dodaj repozytorium wraz ze sprawdzoną wersją do pliku `registry.json` rejestru:
 
 ```json
 {
-  "registry_version": 1,
+  "registry_version": 2,
   "extensions": [{
     "id": "acme.inventory",
     "name": "Inventory panel",
     "description": "Shows warehouse stock on product pages.",
     "icon": "icon.svg",
-    "repository": "acme/attricat-inventory"
+    "repository": "acme/attricat-inventory",
+    "versions": [{ "version": "1.2.0", "host_api": "^1.1" }]
   }]
 }
 ```
 
 Administratorzy obszaru roboczego dodają Twój rejestr poleceniem `acli extension registry add --source acme/attricat-extensions`. Oficjalny rejestr to [`attricat/attricat-extensions`](https://github.com/attricat/attricat-extensions); aby zaproponować w nim wpis, otwórz pull request dodający go do pliku `registry.json`.
+
+Pole `versions` jest wymagane. Attricat oferuje i instaluje z rejestru tylko wymienione tam wersje, więc każde nowe wydanie jest niedostępne, dopóki nie zostanie dodane, z polami `version` i `host_api` skopiowanymi z jego manifestu. Tag wydania musi wskazywać tę wersję, opcjonalnie z prefiksem `v`.
 
 ### Wydaj nową wersję
 
