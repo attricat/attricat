@@ -1,6 +1,11 @@
 import { personName } from '../../components/personName';
 import { useForm } from '@tanstack/react-form';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { useState } from 'react';
 import { capabilities } from '../auth/capabilities';
 import { useCan } from '../auth/useCan';
@@ -24,6 +29,7 @@ import { invalidateAuthorization } from '../auth/invalidateAuthorization';
 import { principalQueryKeys } from '../principals/queryKeys';
 import { useTranslation } from 'react-i18next';
 import {
+  listGrantTargets,
   grantInputFromForm,
   grantMemberRole,
   listMembers,
@@ -33,6 +39,7 @@ import {
   unlinkMemberIdentity,
 } from './api';
 import { activeMemberState, ownerRoleCode, scopeTypes } from './constants';
+import { useRecordLabels } from '../records/useRecordLabels';
 import { workspaceQueryKeys } from './queryKeys';
 import { ScopeFields } from './ScopeFields';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
@@ -117,6 +124,55 @@ export const WorkspaceMembersSection = ({
       await refresh();
     },
   });
+  // One role can be granted on several scopes, so a grant names what it covers.
+  const narrowScopes = [
+    ...new Set(
+      (members.data ?? [])
+        .flatMap((member) => member.grants)
+        .map((grant) => grant.scope_type)
+        // Every record of the workspace is a target; those are looked up by id.
+        .filter(
+          (scope) =>
+            scope !== scopeTypes.workspace && scope !== scopeTypes.record,
+        ),
+    ),
+  ];
+  const recordLabels = useRecordLabels(
+    (members.data ?? [])
+      .flatMap((member) => member.grants)
+      .filter((grant) => grant.scope_type === scopeTypes.record)
+      .map((grant) => grant.scope_target_id),
+  );
+  const grantTargets = useQueries({
+    queries: narrowScopes.map((scope) => ({
+      queryKey: workspaceQueryKeys.grantTargets(scope),
+      queryFn: () => listGrantTargets(scope),
+    })),
+  });
+  const targetLabels = new Map(
+    grantTargets
+      .flatMap((targets) => targets.data ?? [])
+      .map((target) => [target.id, target.label]),
+  );
+  const scopeLabels: Record<string, string> = {
+    [scopeTypes.blueprintFamily]: t('workspace.blueprintFamily'),
+    [scopeTypes.contextSubtree]: t('workspace.contextSubtree'),
+  };
+  const grantLabel = (grant: {
+    role_code: string;
+    scope_type: ScopeType;
+    scope_target_id: string;
+  }) =>
+    grant.scope_type === scopeTypes.workspace
+      ? grant.role_code
+      : t('workspace.grantWithTarget', {
+          role: grant.role_code,
+          target:
+            targetLabels.get(grant.scope_target_id) ??
+            recordLabels.get(grant.scope_target_id) ??
+            scopeLabels[grant.scope_type] ??
+            grant.scope_target_id,
+        });
   // Unlinking ends the member's single sign-on sessions here at once.
   const canManageSignIn = useCan(capabilities.workspaceManage);
   const [unlinkTarget, setUnlinkTarget] = useState<{
@@ -187,9 +243,7 @@ export const WorkspaceMembersSection = ({
                   {
                     email: member.email,
                     state: t(`workspace.memberStates.${member.state}`),
-                    roles: roleFormatter.format(
-                      member.grants.map((grant) => grant.role_code),
-                    ),
+                    roles: roleFormatter.format(member.grants.map(grantLabel)),
                   },
                 )}
               />
@@ -204,12 +258,12 @@ export const WorkspaceMembersSection = ({
                         memberId: member.id,
                         grantId: grant.id,
                         name: personName(member.display_name, member.email),
-                        role: grant.role_code,
+                        role: grantLabel(grant),
                       });
                     }}
                     startIcon={<Trash2Icon />}
                   >
-                    {t('workspace.revoke', { role: grant.role_code })}
+                    {t('workspace.revoke', { role: grantLabel(grant) })}
                   </Button>
                 ))}
               <Stack direction="row" sx={{ gap: 1 }}>

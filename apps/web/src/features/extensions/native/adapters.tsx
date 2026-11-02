@@ -61,7 +61,8 @@ export type AdapterProps = {
   /** Whether the extension listens for an event. */
   listens: (event: string) => boolean;
   /** Hands the element's declared methods to the receiver. */
-  provideMethods: (methods: Record<string, () => void>) => void;
+  /** Returns what stops offering them. */
+  provideMethods: (methods: Record<string, () => void>) => () => void;
 };
 
 /** Theme spacing for each UI kit spacing step. */
@@ -104,9 +105,10 @@ const useFocusMethod = <T extends HTMLElement = HTMLElement>(
   provideMethods: AdapterProps['provideMethods'],
 ) => {
   const ref = useRef<T>(null);
-  useEffect(() => {
-    provideMethods({ focus: () => ref.current?.focus() });
-  }, [provideMethods]);
+  useEffect(
+    () => provideMethods({ focus: () => ref.current?.focus() }),
+    [provideMethods],
+  );
   return ref;
 };
 
@@ -332,6 +334,7 @@ export const TextFieldAdapter = ({
   );
   const suggestions = (props.suggestions as string[] | undefined) ?? [];
   const [listOpen, setListOpen] = useState(false);
+  const highlighted = useRef<string | null>(null);
   const multiline = flag(props.multiline);
   const chrome = useInputChrome(props);
   // Autocomplete hands its input wiring over in `slotProps`; keep it.
@@ -349,6 +352,9 @@ export const TextFieldAdapter = ({
       onBlur={() => flush(draft)}
       onKeyDown={(event) => {
         if (event.key !== 'Enter' || multiline) return;
+        // Enter picks the highlighted suggestion, which reports itself; this
+        // handler runs first and would send the text typed so far.
+        if (listOpen && highlighted.current !== null) return;
         // The last change goes first, so a host committing on Enter sees it.
         flush(draft);
         if (listens('submit')) emit('submit', { value: draft });
@@ -385,7 +391,13 @@ export const TextFieldAdapter = ({
       filterOptions={(options) => options}
       freeSolo
       inputValue={draft}
-      onClose={() => setListOpen(false)}
+      onClose={() => {
+        highlighted.current = null;
+        setListOpen(false);
+      }}
+      onHighlightChange={(_, option) => {
+        highlighted.current = option;
+      }}
       onOpen={() => setListOpen(true)}
       // Open only with suggestions to show, so Escape reaches the field
       // (an inline edit restores its value) instead of closing an empty list.
@@ -396,7 +408,10 @@ export const TextFieldAdapter = ({
         flush(value);
       }}
       onInputChange={(_, value, reason) => {
-        if (reason === 'input') change(value);
+        if (reason !== 'input') return;
+        // MUI drops the highlight here without reporting it.
+        highlighted.current = null;
+        change(value);
       }}
       options={suggestions}
       readOnly={flag(props.readOnly)}
@@ -607,9 +622,14 @@ export const TableAdapter = ({ props, emit, listens }: AdapterProps) => {
     );
     return sort.descending ? ordered.reverse() : ordered;
   }, [rows, sort]);
+  // A shorter list can end before the page the user was on.
+  const shownPage = Math.min(
+    page,
+    Math.max(0, Math.ceil(sorted.length / tablePageSize) - 1),
+  );
   const visible = sorted.slice(
-    page * tablePageSize,
-    (page + 1) * tablePageSize,
+    shownPage * tablePageSize,
+    (shownPage + 1) * tablePageSize,
   );
   const interactive = listens('rowPress');
   return (
@@ -697,7 +717,7 @@ export const TableAdapter = ({ props, emit, listens }: AdapterProps) => {
           component="div"
           count={sorted.length}
           onPageChange={(_, next) => setPage(next)}
-          page={page}
+          page={shownPage}
           rowsPerPage={tablePageSize}
           rowsPerPageOptions={[tablePageSize]}
         />

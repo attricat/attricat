@@ -1,5 +1,5 @@
 import { Alert, Box, Typography } from '@mui/material';
-import { useMemo, useRef, type Ref } from 'react';
+import { useImperativeHandle, useMemo, useRef, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AttributeContext } from '../../contexts/api';
 import { extensionOutlets } from '../../extensions/constants';
@@ -39,6 +39,8 @@ type Props = {
   statusParentContextIds: readonly string[];
   statusTransitions?: readonly StatusTransitionAccess[];
   onContextChange: (contextId: string) => void;
+  /** Receives the switch that waits for unsaved changes, for other controls. */
+  changeContextRef?: Ref<(contextId: string) => void>;
   resolved: Awaited<ReturnType<typeof getResolvedRecordPreview>>;
   /** Lays the view out in one column, as in a narrow panel. */
   singleColumn?: boolean;
@@ -58,6 +60,7 @@ export const RecordPreviewContent = ({
   statusParentContextIds,
   statusTransitions,
   onContextChange,
+  changeContextRef,
   resolved,
   singleColumn,
 }: Props) => {
@@ -71,6 +74,7 @@ export const RecordPreviewContent = ({
     if (hasPendingChanges.current) queuedContextId.current = nextContextId;
     else onContextChange(nextContextId);
   };
+  useImperativeHandle(changeContextRef, () => changeContext);
   const pendingChanged = (pending: boolean) => {
     hasPendingChanges.current = pending;
     const queued = queuedContextId.current;

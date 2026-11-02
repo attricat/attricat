@@ -121,7 +121,7 @@ export const useExplorerSearchActions = (
       go({ ...search, sort: toggledSort(search.sort, field) }),
     submit: (value: ExplorerSearch) => {
       const { keepsBlueprint, nextSearch, scopeChanged } =
-        submittedExplorerSearch(search, value);
+        submittedExplorerSearch(search, value, currentVersion);
       // Resubmitting an unchanged search refreshes its first page.
       void queryClient.invalidateQueries({
         exact: true,

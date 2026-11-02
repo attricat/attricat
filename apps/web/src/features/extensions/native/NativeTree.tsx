@@ -44,9 +44,8 @@ const NativeElement = ({
 }) => {
   useNode(receiver, node.id);
   const provideMethods = useCallback(
-    (methods: Record<string, () => void>) => {
-      receiver.registerMethods(node.id, methods);
-    },
+    (methods: Record<string, () => void>) =>
+      receiver.registerMethods(node.id, methods),
     [receiver, node.id],
   );
   const emit = useCallback(

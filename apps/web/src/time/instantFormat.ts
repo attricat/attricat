@@ -34,6 +34,7 @@ const zoneLabelOptions = {
 const utcSecondsLength = 19;
 // `YYYY-MM-DDTHH:mm`, the value a `datetime-local` input edits.
 const localDateTimeMinutesLength = 16;
+const millisecondDigits = 3;
 const secondMilliseconds = 1000;
 const dayMilliseconds = 86_400_000;
 
@@ -216,10 +217,10 @@ const zoneOffsetMilliseconds = (epoch: number, timeZone: string) => {
 };
 
 const localDateTimePattern =
-  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/;
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?$/;
 
 /**
- * Interprets a `datetime-local` value (`YYYY-MM-DDTHH:mm[:ss]`) as wall-clock
+ * Interprets a `datetime-local` value (`YYYY-MM-DDTHH:mm[:ss[.SSS]]`) as wall-clock
  * time in `timeZone` and returns the UTC ISO instant. A time skipped by a DST
  * transition moves forward by the gap; a repeated time resolves to the earlier
  * instant.
@@ -227,7 +228,7 @@ const localDateTimePattern =
 export const zonedDateTimeToIso = (value: string, timeZone: string) => {
   const match = localDateTimePattern.exec(value);
   if (!match) return '';
-  const [, year, month, day, hour, minute, second = '0'] = match;
+  const [, year, month, day, hour, minute, second = '0', fraction = ''] = match;
   const wallClock = Date.UTC(
     Number(year),
     Number(month) - 1,
@@ -235,6 +236,7 @@ export const zonedDateTimeToIso = (value: string, timeZone: string) => {
     Number(hour),
     Number(minute),
     Number(second),
+    Number(fraction.padEnd(millisecondDigits, '0')),
   );
   // Offsets a day either side bracket any transition affecting this time.
   const offsetBefore = zoneOffsetMilliseconds(
@@ -262,13 +264,27 @@ export const futureZonedInstant = (value: string, timeZone: string) => {
   return instant && instant.getTime() > Date.now() ? instant : undefined;
 };
 
+const zonedWallClockIso = (date: Date, timeZone: string) =>
+  new Date(
+    date.getTime() + zoneOffsetMilliseconds(date.getTime(), timeZone),
+  ).toISOString();
+
 /** The `datetime-local` input value showing `value` in `timeZone`. */
 export const isoToZonedDateTime = (value: InstantValue, timeZone: string) => {
   const date = parseInstant(value);
   if (!date) return '';
-  return new Date(
-    date.getTime() + zoneOffsetMilliseconds(date.getTime(), timeZone),
-  )
-    .toISOString()
-    .slice(0, localDateTimeMinutesLength);
+  return zonedWallClockIso(date, timeZone).slice(0, localDateTimeMinutesLength);
+};
+
+/**
+ * Like `isoToZonedDateTime`, keeping any seconds and milliseconds, for an input
+ * whose value must still name exactly this instant.
+ */
+export const isoToExactZonedDateTime = (
+  value: InstantValue,
+  timeZone: string,
+) => {
+  const date = parseInstant(value);
+  if (!date) return '';
+  return zonedWallClockIso(date, timeZone).replace(/(?::00)?\.000Z$|Z$/, '');
 };

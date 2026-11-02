@@ -109,7 +109,7 @@ export const AppLayout = () => {
     );
   if (isLoginRoute)
     return session.data ? (
-      <Navigate to={navigationRoutes.explore} />
+      <Navigate replace to={navigationRoutes.explore} />
     ) : (
       <Outlet />
     );
@@ -129,7 +129,7 @@ export const AppLayout = () => {
     return (
       <>
         <RememberReturnLocation />
-        <Navigate to={publicRoutes.login} />
+        <Navigate replace to={publicRoutes.login} />
       </>
     );
 

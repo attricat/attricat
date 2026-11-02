@@ -352,6 +352,24 @@ describe('record form values', () => {
   });
 });
 
+describe('required files without counts', () => {
+  it('leaves them to the server, since existing files can satisfy them', () => {
+    const photo = { code: 'photo', value_type: 'file' } as Attribute;
+    const schema = {
+      type: 'object',
+      required: ['photo'],
+      properties: { photo: { type: 'array', minItems: 1 } },
+    };
+    expect(validateRecordForm([photo], {}, [], schema)).toEqual({
+      fieldErrors: {},
+    });
+    expect(
+      validateRecordForm([photo], {}, [], schema, undefined, undefined, {})
+        .fieldErrors.photo,
+    ).toBeTruthy();
+  });
+});
+
 describe('formRecordSchema', () => {
   const generatedAttributes = [
     { code: 'title', value_type: 'string' },

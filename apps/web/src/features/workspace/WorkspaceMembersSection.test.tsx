@@ -12,6 +12,7 @@ import '../../i18n';
 import {
   grantMemberRole,
   listAssignableRoles,
+  listGrantTargets,
   listMembers,
   revokeMemberRole,
 } from './api';
@@ -25,6 +26,7 @@ vi.mock('./api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./api')>()),
   grantMemberRole: vi.fn(),
   listAssignableRoles: vi.fn(),
+  listGrantTargets: vi.fn(),
   listMembers: vi.fn(),
   revokeMemberRole: vi.fn(),
 }));
@@ -38,7 +40,14 @@ describe('WorkspaceMembersSection', () => {
         id: '123e4567-e89b-12d3-a456-426614174001',
         email: 'member@example.test',
         state: 'active',
-        grants: [{ id: 'grant-id', role_code: 'reader' }],
+        grants: [
+          {
+            id: 'grant-id',
+            role_code: 'reader',
+            scope_type: 'workspace',
+            scope_target_id: workspaceId,
+          },
+        ],
       },
     ] as never);
     vi.mocked(listAssignableRoles).mockResolvedValue([]);
@@ -94,6 +103,45 @@ describe('WorkspaceMembersSection', () => {
         .hasAttribute('disabled'),
     ).toBe(true);
   });
+  it('tells apart grants of one role on different scopes', async () => {
+    const target = '123e4567-e89b-12d3-a456-426614174009';
+    vi.mocked(listMembers).mockResolvedValue([
+      {
+        id: '123e4567-e89b-12d3-a456-426614174001',
+        email: 'member@example.test',
+        state: 'active',
+        grants: [
+          {
+            id: 'whole',
+            role_code: 'editor',
+            scope_type: 'workspace',
+            scope_target_id: workspaceId,
+          },
+          {
+            id: 'narrow',
+            role_code: 'editor',
+            scope_type: 'blueprint_family',
+            scope_target_id: target,
+          },
+        ],
+      },
+    ] as never);
+    vi.mocked(listAssignableRoles).mockResolvedValue([]);
+    vi.mocked(listGrantTargets).mockResolvedValue([
+      { id: target, label: 'Red shoe' },
+    ]);
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <WorkspaceMembersSection
+          canManage
+          canGrantRoles
+          workspaceId={workspaceId}
+        />
+      </QueryClientProvider>,
+    );
+    await screen.findByRole('button', { name: 'Revoke editor (Red shoe)' });
+    expect(screen.getByRole('button', { name: 'Revoke editor' })).toBeTruthy();
+  });
   it('revokes a role only after confirmation', async () => {
     const memberId = '123e4567-e89b-12d3-a456-426614174001';
     const grantId = '123e4567-e89b-12d3-a456-426614174003';
@@ -102,7 +150,14 @@ describe('WorkspaceMembersSection', () => {
         id: memberId,
         email: 'member@example.test',
         state: 'active',
-        grants: [{ id: grantId, role_code: 'admin' }],
+        grants: [
+          {
+            id: grantId,
+            role_code: 'admin',
+            scope_type: 'workspace',
+            scope_target_id: workspaceId,
+          },
+        ],
       },
     ] as never);
     vi.mocked(listAssignableRoles).mockResolvedValue([]);

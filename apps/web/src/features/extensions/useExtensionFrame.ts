@@ -74,7 +74,11 @@ export const useExtensionFrame = ({
   useEffect(() => {
     colorModeRef.current = colorMode;
   }, [colorMode]);
-  const [errorKey, setErrorKey] = useState<FrameErrorKey>();
+  // Another page's frame must load even though this one failed.
+  const [failure, setFailure] = useState<{
+    errorKey: FrameErrorKey;
+    frameKey: string;
+  }>();
   const [ready, setReady] = useState(false);
   const [height, setHeight] = useState(defaultExtensionFrameHeight);
   // The frame reports readiness just before its first size, so `ready` alone
@@ -120,7 +124,7 @@ export const useExtensionFrame = ({
         errorCode: key,
       });
       callbacksRef.current.onFailure?.();
-      setErrorKey(key);
+      setFailure({ errorKey: key, frameKey });
     };
     const timer = window.setTimeout(() => {
       if (!disposed) fail('extensions.startTimedOut');
@@ -239,7 +243,7 @@ export const useExtensionFrame = ({
   }, [colorMode, ready]);
 
   const handleFrameLoad = () => {
-    setErrorKey(undefined);
+    setFailure(undefined);
     setHeight(defaultExtensionFrameHeight);
     setMeasured(false);
     setReady(false);
@@ -247,7 +251,7 @@ export const useExtensionFrame = ({
   };
 
   return {
-    errorKey,
+    errorKey: failure?.frameKey === frameKey ? failure.errorKey : undefined,
     frameKey,
     handleFrameLoad,
     height,

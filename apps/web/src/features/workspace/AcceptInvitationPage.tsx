@@ -1,6 +1,6 @@
 import { Alert, Button, Stack, TextField } from '@mui/material';
 import { useForm } from '@tanstack/react-form';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { NarrowPage } from '../../components/CenteredPage';
@@ -58,12 +58,17 @@ export const AcceptInvitationPage = ({
   secret?: string;
 }) => {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const session = useQuery(sessionOptions());
   const formRef = useInitialFocus<HTMLFormElement>();
   const accept = useMutation({
     meta: { toast: false },
     mutationFn: acceptInvitation,
-    onSuccess: () => form.reset({ secret: '' }),
+    onSuccess: async () => {
+      form.reset({ secret: '' });
+      // The new grant changes what the session and every page may show.
+      await queryClient.invalidateQueries();
+    },
   });
   const form = useForm({
     defaultValues: { secret: initialSecret },

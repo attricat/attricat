@@ -1,5 +1,5 @@
 import { Chip, IconButton, Stack, Typography } from '@mui/material';
-import { DownloadIcon } from 'lucide-react';
+import { DownloadIcon, Trash2Icon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { fileDownloadUrl } from './api';
 import { UPLOADED_FILE_THUMBNAIL_SIZE } from './constants';
@@ -8,11 +8,19 @@ import type { FileMetadata } from './schemas';
 
 type Props = {
   file: FileMetadata;
+  /** Offers removal; left out where the file cannot change. */
+  onRemove?: () => void;
+  removeDisabled?: boolean;
   showThumbnail: boolean;
 };
 
 /** A stored file with its processing status and download link. */
-export const UploadedFileRow = ({ file, showThumbnail }: Props) => {
+export const UploadedFileRow = ({
+  file,
+  onRemove,
+  removeDisabled,
+  showThumbnail,
+}: Props) => {
   const { t } = useTranslation();
   return (
     <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
@@ -28,6 +36,16 @@ export const UploadedFileRow = ({ file, showThumbnail }: Props) => {
       >
         <DownloadIcon />
       </IconButton>
+      {onRemove && (
+        <IconButton
+          aria-label={t('files.removeImage', { filename: file.filename })}
+          color="error"
+          disabled={removeDisabled}
+          onClick={onRemove}
+        >
+          <Trash2Icon />
+        </IconButton>
+      )}
     </Stack>
   );
 };

@@ -167,7 +167,7 @@ const PasswordLoginForm = ({
       const session = await login(identifier, email, password);
       queryClient.clear();
       queryClient.setQueryData(authQueryKeys.session(), session);
-      await navigate({ to: takeReturnLocation() ?? '/' });
+      await navigate({ replace: true, to: takeReturnLocation() ?? '/' });
     },
   });
   const submitting = signIn.isPending;

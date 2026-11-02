@@ -17,7 +17,7 @@ test('opens Profile and manages a personal API token', async ({ page }) => {
   await page.getByRole('button', { name: 'Create token' }).click();
   await expect(page.getByText('Copy this secret now')).toBeVisible();
   await expect(page.locator('input[value^="cat_pat_"]')).toBeVisible();
-  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(page).toHaveURL(/\/profile\/personal-access-tokens$/);
 
   const token = page

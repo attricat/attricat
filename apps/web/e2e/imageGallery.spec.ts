@@ -47,11 +47,15 @@ attributes:
     // Leaving the edited title for the upload saves it without losing the click.
     await title.fill('Edited title');
     const titleSaved = recordSave(page, record.id);
-    await page.locator('input[type="file"]').setInputFiles([
+    const chooser = page.waitForEvent('filechooser');
+    await page.getByRole('button', { name: 'Choose or drop files' }).click();
+    // Picked files upload at once, racing the title's save for the record.
+    await (
+      await chooser
+    ).setFiles([
       { name: 'front.png', mimeType: 'image/png', buffer: png },
       { name: 'back.png', mimeType: 'image/png', buffer: png },
     ]);
-    await page.getByRole('button', { name: 'Upload 2 files' }).click();
     expect((await titleSaved).ok()).toBe(true);
     await expect(
       page.getByRole('button', { name: 'Preview front.png' }),

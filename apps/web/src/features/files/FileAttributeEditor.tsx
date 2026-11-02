@@ -12,7 +12,7 @@ import {
 import { CloudUploadIcon, InfoIcon } from 'lucide-react';
 import { IconLabel } from '../../components/IconLabel';
 import { compactIconSize } from '../../components/iconSizes';
-import { useId, useRef } from 'react';
+import { useId, useRef, useState } from 'react';
 import { ImageGalleryEditor } from './ImageGalleryEditor';
 import { useTranslation } from 'react-i18next';
 import type { Attribute } from '../records/api';
@@ -24,6 +24,7 @@ import { PendingFileRow, PendingImageTile } from './PendingFileRow';
 import type { FileMetadata } from './schemas';
 import { UploadedFileRow } from './UploadedFileRow';
 import { usePendingFileUploads } from './usePendingFileUploads';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { FieldHint } from '../../components/FieldHint';
 
 type FileAttributeEditorProps = {
@@ -44,10 +45,13 @@ const FileAttributeEditorContent = (props: FileAttributeEditorProps) => {
   const { t } = useTranslation();
   const input = useRef<HTMLInputElement>(null);
   const uploads = usePendingFileUploads({ ...props, disabled });
+  const [removeFile, setRemoveFile] = useState<FileMetadata | null>(null);
   const helpId = useId();
   const errorId = useId();
   const policy = attribute.file_policy;
   if (!policy) return null;
+  // The server takes an empty list, which would leave a required field empty.
+  const lastRequiredFile = required === true && uploads.uploaded.length === 1;
   const queueDisabled = !uploads.canQueue || !uploads.canQueueFile;
   const pendingProps = (item: (typeof uploads.pending)[number]) => ({
     disabled: !uploads.canQueue,
@@ -142,21 +146,12 @@ const FileAttributeEditorContent = (props: FileAttributeEditorProps) => {
           >
             {t('files.chooseOrDropFiles')}
           </Button>
-          {recordId && uploads.pending.length > 0 && (
-            <Button
-              color="primary"
-              disabled={!uploads.canUpload || !uploads.hasQueuedFiles}
-              onClick={uploads.uploadPending}
-              variant="contained"
-            >
-              {t('files.uploadCount', { count: uploads.pending.length })}
-            </Button>
-          )}
         </Box>
         {policy.image_only ? (
           <ImageGalleryEditor
             files={uploads.uploaded}
             disabled={!uploads.canUpload}
+            keepsLastFile={required}
             ordered={policy.ordered}
             // Picked images sit in the grid with the attached ones.
             pendingTiles={uploads.pending.map((item) => (
@@ -173,12 +168,39 @@ const FileAttributeEditorContent = (props: FileAttributeEditorProps) => {
               <UploadedFileRow
                 file={file}
                 key={file.id}
+                onRemove={
+                  disabled || !recordId || lastRequiredFile
+                    ? undefined
+                    : () => setRemoveFile(file)
+                }
+                removeDisabled={!uploads.canUpload}
                 showThumbnail={false}
               />
             ))}
           </>
         )}
       </Stack>
+      <ConfirmDialog
+        confirmLabel={t('files.confirmRemove')}
+        confirmDisabled={!uploads.canUpload}
+        destructive
+        error={null}
+        isPending={uploads.busy}
+        onClose={() => setRemoveFile(null)}
+        onConfirm={async () => {
+          // Close on failure too, so inline server errors are not hidden by the dialog.
+          await uploads.changeReferences(
+            uploads.uploaded
+              .filter((file) => file.id !== removeFile?.id)
+              .map((file) => file.id),
+          );
+          setRemoveFile(null);
+        }}
+        open={removeFile !== null}
+        title={t('files.removeImage', { filename: removeFile?.filename })}
+      >
+        {t('files.removeImageExplanation')}
+      </ConfirmDialog>
     </FormControl>
   );
 };

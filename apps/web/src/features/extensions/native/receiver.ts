@@ -171,7 +171,11 @@ export class NativeReceiver {
     const listeners = this.#listeners.get(id) ?? new Set();
     listeners.add(listener);
     this.#listeners.set(id, listeners);
-    return () => listeners.delete(listener);
+    return () => {
+      listeners.delete(listener);
+      if (listeners.size === 0 && this.#listeners.get(id) === listeners)
+        this.#listeners.delete(id);
+    };
   }
 
   version(id: string) {
@@ -346,8 +350,9 @@ export class NativeReceiver {
   #forget(node: NativeNode) {
     this.#nodes.delete(node.id);
     this.#parents.delete(node.id);
-    this.#methods.delete(node.id);
-    this.#listeners.delete(node.id);
+    // A moved element is removed and inserted again under its id while its
+    // component stays mounted, so its subscriptions and methods stay too;
+    // both end when the component unmounts.
     this.budget.countNodes(-1);
     if (node.kind === 'element')
       node.children.forEach((child) => this.#forget(child));

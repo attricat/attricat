@@ -205,10 +205,12 @@ export const exportStatusRequest = (search: ExplorerSearch) =>
 export const submittedExplorerSearch = (
   search: ExplorerSearch,
   value: ExplorerSearch,
+  currentVersion?: number,
 ) => {
   const keepsBlueprint = value.blueprint === search.blueprint;
+  // Naming the current version explicitly is still the default scope.
   const scopeChanged =
-    value.version !== search.version ||
+    (value.version ?? currentVersion) !== (search.version ?? currentVersion) ||
     Boolean(value.allVersions) !== Boolean(search.allVersions);
   const nextSearch: ExplorerSearch = {
     ...(keepsBlueprint

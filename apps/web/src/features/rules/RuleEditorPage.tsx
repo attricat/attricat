@@ -4,7 +4,6 @@ import { Alert, Box, Button, Typography } from '@mui/material';
 import { lazy, Suspense, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ApiRequestError } from '../../api/request';
-import { errorMessage } from '../../api/errors';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { LoadingState } from '../../components/LoadingState';
 import { PageContainer } from '../../components/PageContainer';
@@ -40,6 +39,7 @@ import { ruleQueryKeys } from './queryKeys';
 import { ruleOptions } from './queryOptions';
 import { latestPublishedVersion } from './useFindingMessages';
 import { RuleChangeDryRun } from './RuleChangeDryRun';
+import { canAcceptExistingViolations, dryRunGateMessage } from './dryRunGate';
 import { RulePreview } from './RulePreview';
 import { RuleScopeFields, type RuleScope } from './RuleScopeFields';
 import { ruleTemplates } from './templates';
@@ -252,7 +252,7 @@ export const RuleEditorPage = ({ ruleId }: { ruleId?: string }) => {
       {dryRunGate ? (
         <Alert
           action={
-            dryRunGate.code === RULE_HAS_EXISTING_VIOLATIONS && (
+            canAcceptExistingViolations(dryRunGate) && (
               <Button
                 color="inherit"
                 disabled={save.isPending}
@@ -271,7 +271,7 @@ export const RuleEditorPage = ({ ruleId }: { ruleId?: string }) => {
           severity="warning"
           sx={{ mt: 3 }}
         >
-          {errorMessage(dryRunGate)}
+          {dryRunGateMessage(t, dryRunGate)}
         </Alert>
       ) : (
         <ApiErrorAlert error={save.error} sx={{ mt: 3 }} />

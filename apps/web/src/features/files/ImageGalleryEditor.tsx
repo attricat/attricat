@@ -121,12 +121,15 @@ const GalleryAction = ({
 export const ImageGalleryEditor = ({
   files,
   disabled,
+  keepsLastFile = false,
   ordered,
   pendingTiles,
   onChange,
 }: {
   files: readonly GalleryFile[];
   disabled: boolean;
+  /** Keeps a required field from losing its only file. */
+  keepsLastFile?: boolean;
   pendingTiles?: readonly ReactNode[];
   ordered: boolean;
   onChange: (fileIds: string[]) => Promise<boolean>;
@@ -254,7 +257,7 @@ export const ImageGalleryEditor = ({
             <GalleryAction
               label={t('files.removeImage', { filename: file.filename })}
               color="error"
-              disabled={disabled}
+              disabled={disabled || (keepsLastFile && count === 1)}
               onClick={() => {
                 if (!disabled) setRemoveId(file.id);
               }}

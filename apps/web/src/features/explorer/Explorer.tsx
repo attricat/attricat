@@ -52,12 +52,17 @@ export const Explorer = ({ search: urlSearch, savedView }: Props) => {
   const navigate = useNavigate({ from: '/' });
   const panelOpenerRef = useRef<HTMLElement | null>(null);
   const readPanelRecordId = usePanelRecordReader();
+  // Choosing "All blueprints" on a URL that names none leaves the URL as it
+  // was, so `urlSearch` alone would not show that the blueprint was cleared.
+  const [clearedFor, setClearedFor] = useState<ExplorerSearch>();
   const search = useMemo(
     () => ({
       ...urlSearch,
-      blueprint: urlSearch.blueprint ?? getLastBlueprint(),
+      blueprint:
+        urlSearch.blueprint ??
+        (clearedFor === urlSearch ? undefined : getLastBlueprint()),
     }),
-    [urlSearch],
+    [clearedFor, urlSearch],
   );
 
   useEffect(() => {
@@ -180,7 +185,10 @@ export const Explorer = ({ search: urlSearch, savedView }: Props) => {
             lockedBlueprint={Boolean(search.locked)}
             onBlueprintChange={(value) => {
               // Otherwise the remembered blueprint is restored at once.
-              if (!value) clearLastBlueprint();
+              if (!value) {
+                clearLastBlueprint();
+                setClearedFor(urlSearch);
+              }
               actions.selectBlueprint(value || undefined);
             }}
             contextCode={contextCode}

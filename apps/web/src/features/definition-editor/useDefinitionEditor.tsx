@@ -67,7 +67,10 @@ export const useDefinitionEditor = ({
   const confirmUnsavedAction = () => {
     if (pendingUnsavedAction?.type === 'replace')
       applyTemplate(pendingUnsavedAction.templateIndex);
-    else if (pendingUnsavedAction?.type === 'discard') onLeave();
+    else if (pendingUnsavedAction?.type === 'discard') {
+      draft.clear();
+      onLeave();
+    }
     setPendingUnsavedAction(undefined);
   };
 

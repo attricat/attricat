@@ -289,7 +289,8 @@ export const WorkspaceSignInSection = ({
         <LoadingState>{t('workspace.signInLoading')}</LoadingState>
       )}
       <ApiErrorAlert error={provider.error} />
-      {provider.isSuccess && (
+      {/* A failed refetch keeps the form and what was typed into it. */}
+      {!provider.isPending && !provider.isLoadingError && (
         <ProviderForm
           key={provider.data?.updated_at ?? 'new'}
           provider={provider.data}

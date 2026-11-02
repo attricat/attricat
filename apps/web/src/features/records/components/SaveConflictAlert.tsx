@@ -10,12 +10,15 @@ import { ConflictingChange } from './ConflictingChange';
  */
 export const SaveConflictAlert = ({
   attributes,
+  disabled = false,
   latest,
   onResolve,
   pending,
 }: {
   /** The fields with a pending change. */
   attributes: readonly Attribute[];
+  /** Whether a choice is already being applied. */
+  disabled?: boolean;
   latest: Readonly<Record<string, string>>;
   onResolve: (resolution: ConflictResolution) => void;
   pending: Readonly<Record<string, string>>;
@@ -27,6 +30,7 @@ export const SaveConflictAlert = ({
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Button
             color="inherit"
+            disabled={disabled}
             onClick={() => onResolve(conflictResolutions.keepMine)}
             size="small"
           >
@@ -34,6 +38,7 @@ export const SaveConflictAlert = ({
           </Button>
           <Button
             color="inherit"
+            disabled={disabled}
             onClick={() => onResolve(conflictResolutions.useTheirs)}
             size="small"
           >
