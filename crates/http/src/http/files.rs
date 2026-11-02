@@ -896,11 +896,22 @@ fn sanitize_filename(name: &str) -> Option<String> {
     (!clean.is_empty() && clean != "." && clean != ".." && clean.len() <= MAX_FILENAME_BYTES)
         .then_some(clean)
 }
+/// Types clients declare for delimited text, which has no signature and is
+/// detected as `text/plain`. Windows declares `.csv` files as Excel's type.
+const DELIMITED_TEXT_DECLARED_TYPES: [&str; 4] = [
+    "text/csv",
+    "application/csv",
+    "application/vnd.ms-excel",
+    "text/tab-separated-values",
+];
 fn declared_mime_matches(declared: Option<&str>, detected: &str) -> bool {
     let declared = declared
         .and_then(|value| value.split(';').next())
         .map(str::trim);
-    matches!(declared, None | Some("application/octet-stream")) || declared == Some(detected)
+    matches!(declared, None | Some("application/octet-stream"))
+        || declared == Some(detected)
+        || (detected == "text/plain"
+            && declared.is_some_and(|value| DELIMITED_TEXT_DECLARED_TYPES.contains(&value)))
 }
 fn allowed_by_policy(policy: &FilePolicy, mime: &str, filename: &str, size: u64) -> bool {
     policy.allows(mime, filename, size)
@@ -1026,6 +1037,23 @@ mod tests {
         assert!(allowed_by_policy(&policy, "image/png", "photo.PNG", 1024));
         assert!(!allowed_by_policy(&policy, "image/jpeg", "photo.jpg", 1));
         assert!(!allowed_by_policy(&policy, "image/png", "photo.png", 1025));
+    }
+    #[test]
+    fn delimited_text_may_declare_its_own_type_but_nothing_else_may() {
+        for declared in DELIMITED_TEXT_DECLARED_TYPES {
+            assert!(declared_mime_matches(Some(declared), "text/plain"));
+            assert!(!declared_mime_matches(Some(declared), "image/png"));
+            assert!(!declared_mime_matches(Some(declared), "application/pdf"));
+        }
+        assert!(declared_mime_matches(
+            Some("text/csv; charset=utf-8"),
+            "text/plain"
+        ));
+        assert!(declared_mime_matches(Some("text/plain"), "text/plain"));
+        assert!(declared_mime_matches(None, "text/plain"));
+        for declared in ["text/html", "image/svg+xml", "application/json"] {
+            assert!(!declared_mime_matches(Some(declared), "text/plain"));
+        }
     }
     #[test]
     fn standalone_and_unrestricted_attribute_uploads_share_mime_boundaries() {

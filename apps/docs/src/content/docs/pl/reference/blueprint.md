@@ -244,7 +244,7 @@ attributes:
 | --- | --- | --- | --- |
 | `cardinality` | `"one"` lub `"many"` | `"one"` | Pojedynczy plik lub lista plików. |
 | `ordered` | wartość logiczna | `true` dla `many` | Czy kolejność listy `many` ma znaczenie. Dla `one` musi mieć wartość `false` lub zostać pominięty. |
-| `allowed_mime_groups` | tablica ciągów znaków | Dowolne | Akceptowane grupy MIME, np. `image`. |
+| `allowed_mime_groups` | tablica ciągów znaków | Dowolne | Akceptowane grupy MIME, np. `image`. Pliki CSV i inne pliki tekstowe są zapisywane jako `text/plain`, więc należą do grupy `text`; aby akceptować tylko `csv`, użyj `allowed_extensions`. |
 | `allowed_extensions` | tablica ciągów znaków | Dowolne | Akceptowane rozszerzenia plików, wyłącznie litery i cyfry (`jpg`, a nie `*.jpg`). Początkowa `.` jest ignorowana. |
 | `max_bytes` | dodatnia liczba całkowita | Limit serwera | Limit rozmiaru pojedynczego pliku. Nie może przekraczać `FILE_UPLOAD_MAX_BYTES` serwera. |
 | `purposes` | tablica kodów | `[]` | Etykiety opisujące przeznaczenie plików, np. `product_image`. |
@@ -701,7 +701,7 @@ connector_jobs:
 | `operation_id` | ciąg znaków | Wymagany | Operacja zadeklarowana przez rozszerzenie. |
 | `input` | mapowanie | Wymagany | Dane wejściowe operacji, weryfikowane względem schematu operacji. |
 | `context` | kod kontekstu | | Wymagany dla importów: zaimportowane wartości są zapisywane w tym kontekście. Dla eksportów kanał publikacji do eksportu (musi nim być); bez niego zadanie uruchamia się raz dla każdego włączonego kanału. Zadanie rozszerzenia, które prowadzi mapowania eksportu, musi go ustawić, gdy włączonych jest kilka kanałów. |
-| `input_file_id` | UUID | | Tylko importy. Gotowy plik obszaru roboczego do zaimportowania. |
+| `input_file_id` | UUID | | Tylko importy. Gotowy plik obszaru roboczego do zaimportowania, np. wartość atrybutu plikowego. |
 | `interval_seconds` | liczba całkowita | Tylko ręcznie | Uruchamia zadanie co N sekund, od 60 do 2592000. |
 | `enabled` | wartość logiczna | `true` | Ustaw `false`, aby wstrzymać zadanie. |
 | `connection` | ciąg znaków | Domyślne miejsce docelowe | Tylko eksporty. [Połączenie](/pl/builders/extensions/#połączenia) rozszerzenia, do którego zadanie wysyła dane: od 1 do 128 liter ASCII, cyfr, `.`, `_` lub `-`. |

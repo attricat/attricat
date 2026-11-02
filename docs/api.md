@@ -915,7 +915,10 @@ and an optional single `context_id` text part. The API streams parts to a
 temporary file rather than buffering the whole request. It validates the
 content signature, declared MIME type, extension, request limits, and the
 pinned file-attribute policy before persisting metadata and queuing processing.
-A successful response is `201` with the attribute, context, and safe file
+The declared type must match the detected one. Text has no signature and is
+stored as `text/plain`, so it may also declare a delimited text type: `text/csv`,
+`application/csv`, `application/vnd.ms-excel` (Windows, for `.csv` files) or
+`text/tab-separated-values`. A successful response is `201` with the attribute, context, and safe file
 metadata; originals and storage keys are never returned.
 
 ### Files on create
