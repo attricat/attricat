@@ -1721,6 +1721,21 @@ impl TaskHandler for ExtensionOperationTaskHandler {
     fn kind(&self) -> TaskKind {
         TaskKind::ExtensionOperationRunV1
     }
+
+    /// A run left pending or leased behind a dead task would block its schedule
+    /// and connector job, and could not be replayed.
+    async fn on_exhausted(
+        &self,
+        task: &ClaimedTask,
+        message: &str,
+    ) -> Result<bool, TaskHandlerError> {
+        self.repository
+            .for_workspace(task.workspace_id)
+            .dead_letter_extension_operation_task(task, message)
+            .await
+            .map_err(operation_task_error)
+    }
+
     async fn handle(&self, task: ClaimedTask) -> Result<TaskOutcome, TaskHandlerError> {
         let repository = self.repository.for_workspace(task.workspace_id);
         let repository = repository.for_task(&task);

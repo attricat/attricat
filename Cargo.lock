@@ -734,6 +734,7 @@ dependencies = [
  "attricat-workflow",
  "bytes",
  "chrono",
+ "futures-util",
  "image",
  "kamadak-exif",
  "metrics",

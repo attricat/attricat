@@ -4786,3 +4786,96 @@ async fn an_unreadable_manifest_only_stops_its_own_extension(pool: sqlx::PgPool)
     repository.enable_extension(BROKEN).await.unwrap();
     assert!(repository.enabled_extension_event_types().await.is_ok());
 }
+
+/// A run whose task ran out of failures has to end with it, or its schedule and
+/// connector job would treat it as active forever and it could not be replayed.
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn an_exhausted_operation_task_dead_letters_a_run_left_leased(pool: sqlx::PgPool) {
+    use api::{
+        extension_runtime::{
+            ExtensionOperationTaskHandler, ExtensionRuntime, ExtensionRuntimeConfig,
+        },
+        repository::StartExtensionOperation,
+    };
+    use attricat_domain::task_queue::TaskKind;
+    use std::time::Duration;
+
+    let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
+    let repository = AttricatRepository::system(pool.clone()).for_workspace(workspace);
+    let store = Arc::new(FakeObjectStore::available());
+    let component = artifact_stream_component();
+    ExtensionInstaller::new(repository.clone(), store.clone())
+        .install(
+            "test",
+            &artifact_operation_release_archive("acme.artifact-wit", &component),
+        )
+        .await
+        .unwrap();
+    for capability in ["artifacts.read", "artifacts.write"] {
+        repository
+            .grant_extension("acme.artifact-wit", "capability", capability)
+            .await
+            .unwrap();
+    }
+    repository
+        .enable_extension("acme.artifact-wit")
+        .await
+        .unwrap();
+    let release_id = repository
+        .installed_extension("acme.artifact-wit")
+        .await
+        .unwrap()
+        .installed_release_id;
+    let run_id = repository
+        .start_extension_operation(StartExtensionOperation {
+            extension_id: "acme.artifact-wit".into(),
+            expected_release_id: release_id,
+            operation_id: "copy".into(),
+            input: json!({}),
+            source_reference: json!({}),
+            destination_reference: json!({}),
+            idempotency_key: "exhausted".into(),
+            schedule_id: None,
+            configuration_snapshot: None,
+        })
+        .await
+        .unwrap();
+    let task = repository
+        .claim_task_for_kinds(
+            "exhausted-test",
+            Duration::from_secs(30),
+            &[TaskKind::ExtensionOperationRunV1],
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        repository
+            .begin_extension_operation_task(&task)
+            .await
+            .unwrap()
+            .is_some()
+    );
+
+    let handler = ExtensionOperationTaskHandler::new(
+        repository.clone(),
+        ExtensionRuntime::new(store, ExtensionRuntimeConfig::default()).unwrap(),
+    );
+    assert!(handler.on_exhausted(&task, "gave up").await.unwrap());
+
+    let run_status: String =
+        sqlx::query_scalar("SELECT status FROM extension_operation_runs WHERE id = $1")
+            .bind(run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let task_status: String = sqlx::query_scalar("SELECT status FROM tasks WHERE id = $1")
+        .bind(task.id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        (run_status.as_str(), task_status.as_str()),
+        ("dead_letter", "dead_letter")
+    );
+}
