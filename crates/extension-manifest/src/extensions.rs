@@ -1958,7 +1958,8 @@ impl Manifest {
     /// primitive `type` values. More schema vocabulary requires a new contract.
     pub fn validate_configuration(&self, value: &Value) -> Result<(), ManifestError> {
         let Some(configuration) = &self.configuration else {
-            return if value.is_null() {
+            // An installation stores `{}` until someone configures it.
+            return if value.is_null() || value.as_object().is_some_and(|object| object.is_empty()) {
                 Ok(())
             } else {
                 Err(ManifestError::Invalid(
@@ -4462,6 +4463,20 @@ mod tests {
         ] {
             assert!(!is_public_destination(value.parse().unwrap()), "{value}");
         }
+    }
+
+    #[test]
+    fn an_extension_without_a_schema_only_accepts_empty_configuration() {
+        let mut value = manifest();
+        value.configuration = None;
+        for empty in [serde_json::Value::Null, serde_json::json!({})] {
+            assert!(value.validate_configuration(&empty).is_ok(), "{empty}");
+        }
+        assert!(
+            value
+                .validate_configuration(&serde_json::json!({"url":"https://example.test"}))
+                .is_err()
+        );
     }
 
     #[test]

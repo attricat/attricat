@@ -4,12 +4,14 @@ import {
   ListItemText,
   Menu,
   MenuItem,
+  Tooltip,
 } from '@mui/material';
 import { ChevronDownIcon } from 'lucide-react';
 import { useId, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { compactIconSize } from '../../components/iconSizes';
 import { AgentIcon, SavedSearchIcon } from '../../components/systemIcons';
+import { useAgentsUnavailableReason } from '../agents/useAgentsUnavailableReason';
 import { useCan } from '../auth/useCan';
 import { capabilities } from '../auth/capabilities';
 import { useActionDialogStore } from '../extensions/actionDialogStore';
@@ -31,6 +33,7 @@ export const ExplorerSelectionActionsMenu = ({
 }: Props) => {
   const { t } = useTranslation();
   const canSendToAgent = useCan(capabilities.agentsRun);
+  const agentsUnavailableReason = useAgentsUnavailableReason();
   const menuId = useId();
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const close = () => setAnchor(null);
@@ -69,17 +72,24 @@ export const ExplorerSelectionActionsMenu = ({
         transformOrigin={{ horizontal: 'right', vertical: 'top' }}
       >
         {canSendToAgent && (
-          <MenuItem
-            onClick={() => {
-              close();
-              onSendToAgent();
-            }}
-          >
-            <ListItemIcon>
-              <AgentIcon size={compactIconSize} />
-            </ListItemIcon>
-            <ListItemText>{t('explorer.sendToAgentConversation')}</ListItemText>
-          </MenuItem>
+          <Tooltip placement="left" title={agentsUnavailableReason ?? ''}>
+            <span>
+              <MenuItem
+                disabled={Boolean(agentsUnavailableReason)}
+                onClick={() => {
+                  close();
+                  onSendToAgent();
+                }}
+              >
+                <ListItemIcon>
+                  <AgentIcon size={compactIconSize} />
+                </ListItemIcon>
+                <ListItemText>
+                  {t('explorer.sendToAgentConversation')}
+                </ListItemText>
+              </MenuItem>
+            </span>
+          </Tooltip>
         )}
         <MenuItem
           onClick={() => {

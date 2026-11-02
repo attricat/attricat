@@ -6,6 +6,7 @@ import { ExtensionOutlet } from '../features/extensions/ExtensionOutlet';
 import { ExploreNavigationLinks } from './ExploreNavigationLinks';
 import { ManagementNavigationLinks } from './ManagementNavigationLinks';
 import { navigationRoutes } from './navigation';
+import { useAgentsUnavailableReason } from '../features/agents/useAgentsUnavailableReason';
 import { NavigationBrandIcon } from './NavigationBrandIcon';
 import { NavigationFlyout } from './NavigationFlyout';
 import { NavigationFooter } from './NavigationFooter';
@@ -75,6 +76,7 @@ export const CompactSideNavigation = ({
   onSignOut?: () => void;
 }) => {
   const { t } = useTranslation();
+  const agentsUnavailableReason = useAgentsUnavailableReason();
   const {
     canBrowseExtensions,
     documentationHref,
@@ -120,6 +122,11 @@ export const CompactSideNavigation = ({
         {primaryItems.map((item) => (
           <NavigationItem
             compact
+            disabledReason={
+              item.to === navigationRoutes.agents
+                ? agentsUnavailableReason
+                : undefined
+            }
             icon={<NavigationIcon icon={item.icon} />}
             key={item.to}
             label={t(item.labelKey)}
@@ -220,6 +227,7 @@ export const MobileSideNavigation = ({
   onSignOut?: () => void;
 }) => {
   const { t } = useTranslation();
+  const agentsUnavailableReason = useAgentsUnavailableReason();
   const {
     canBrowseExtensions,
     documentationHref,
@@ -287,6 +295,11 @@ export const MobileSideNavigation = ({
               .map((item) => (
                 <NavigationItem
                   compact={false}
+                  disabledReason={
+                    item.to === navigationRoutes.agents
+                      ? agentsUnavailableReason
+                      : undefined
+                  }
                   icon={<NavigationIcon icon={item.icon} />}
                   key={item.to}
                   label={t(item.labelKey)}

@@ -94,11 +94,10 @@ Before you turn it on:
 
 - Conversation text and tool results go to the configured provider. The
   browser never sees the provider key.
-- Read-only tools run on their own. Every change to the catalog, including
-  changes from scheduled runs, waits for a person to approve it. Review the
-  proposed arguments and change summary before you approve.
-- An approved scheduled run writes with the permissions of the user who started
-  it.
+- Read-only tools run on their own. Every change to the catalog waits for a
+  person to approve it, unless they switch on auto-approval for a record's
+  conversation. Review the proposed arguments and change summary before you
+  approve.
 - Use a provider account with no more access than it needs.
 - Give the `agents.run` permission only to people who are allowed to request
   catalog changes.

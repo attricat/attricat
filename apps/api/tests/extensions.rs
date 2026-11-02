@@ -978,6 +978,80 @@ async fn enabled_event_types_follow_authorized_consumption_contracts(pool: sqlx:
 }
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
+async fn an_extension_without_configuration_runs_once_enabled(pool: sqlx::PgPool) {
+    let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
+    let repository = AttricatRepository::system(pool).for_workspace(workspace);
+    let installer =
+        ExtensionInstaller::new(repository.clone(), Arc::new(FakeObjectStore::available()));
+    let mut archive = serde_json::to_vec(&json!({
+        "manifest_version": 1,
+        "name": "Unconfigured extension",
+        "version": "1.0.0",
+        "description": "extension integration test",
+        "icons": {"48": "icon.png"},
+        "attricat": {"id": "acme.unconfigured", "host_api": "^1.0"},
+        "artifacts": [{"id": "server", "kind": "server_wasm", "path": "server.wasm"}],
+        "server": {}
+    }))
+    .unwrap();
+    let mut tar_bytes = Vec::new();
+    {
+        let mut tar = tar::Builder::new(&mut tar_bytes);
+        append_file(&mut tar, "manifest.json", &archive);
+        append_file(&mut tar, "server.wasm", ARTIFACT_BYTES);
+        tar.finish().unwrap();
+    }
+    archive = zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap();
+    installer.install("test", &archive).await.unwrap();
+
+    let enabled = repository
+        .enable_extension("acme.unconfigured")
+        .await
+        .unwrap();
+
+    let runtime = repository
+        .runtime_extension_installation("acme.unconfigured", enabled.installed_release_id)
+        .await
+        .unwrap();
+    assert!(runtime.is_some());
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn enabling_refuses_a_configuration_that_does_not_fit_its_schema(pool: sqlx::PgPool) {
+    let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
+    let repository = AttricatRepository::system(pool).for_workspace(workspace);
+    let installer =
+        ExtensionInstaller::new(repository.clone(), Arc::new(FakeObjectStore::available()));
+    installer
+        .install("test", &release_archive("1.0.0", json!([]), ARTIFACT_BYTES))
+        .await
+        .unwrap();
+    repository
+        .grant_extension("acme.extension", "capability", "network.request")
+        .await
+        .unwrap();
+    repository
+        .grant_extension("acme.extension", "host_permission", "api-read")
+        .await
+        .unwrap();
+
+    // The schema requires `endpoint`, which nobody has set yet.
+    assert!(matches!(
+        repository.enable_extension("acme.extension").await,
+        Err(api::repository::RepositoryError::InvalidExtension(_))
+    ));
+
+    repository
+        .configure_extension(
+            "acme.extension",
+            json!({"endpoint": "https://api.acme.example"}),
+        )
+        .await
+        .unwrap();
+    repository.enable_extension("acme.extension").await.unwrap();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn navigation_contributions_target_same_release_routes(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
     let repository = AttricatRepository::system(pool).for_workspace(workspace);

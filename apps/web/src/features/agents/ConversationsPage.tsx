@@ -11,6 +11,7 @@ import {
   Paper,
   Switch,
   TextField,
+  Tooltip,
 } from '@mui/material';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
@@ -28,6 +29,7 @@ import {
   maximumSearchLength,
 } from './constants';
 import { conversationSearchOptions } from './queryOptions';
+import { useAgentsUnavailableReason } from './useAgentsUnavailableReason';
 import { EmptyState } from '../../components/EmptyState';
 import { AgentIcon } from '../../components/systemIcons';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
@@ -39,6 +41,7 @@ export const ConversationsPage = ({
   search: { q?: string; scope?: typeof conversationScopes.all };
 }) => {
   const { t } = useTranslation();
+  const agentsUnavailableReason = useAgentsUnavailableReason();
   const navigate = useNavigate({ from: '/agents/' });
   const [draftQuery, setDraftQuery] = useState(search.q ?? '');
   const submitSearch = () =>
@@ -56,13 +59,18 @@ export const ConversationsPage = ({
     <PageContainer>
       <PageHeader
         actions={
-          <RouterButton
-            startIcon={<PlusIcon />}
-            to={agentRoutes.create}
-            variant="contained"
-          >
-            {t('agents.newConversation')}
-          </RouterButton>
+          <Tooltip title={agentsUnavailableReason ?? ''}>
+            <span>
+              <RouterButton
+                disabled={Boolean(agentsUnavailableReason)}
+                startIcon={<PlusIcon />}
+                to={agentRoutes.create}
+                variant="contained"
+              >
+                {t('agents.newConversation')}
+              </RouterButton>
+            </span>
+          </Tooltip>
         }
         description={t('agents.conversationDescription')}
         icon={AgentIcon}

@@ -22,6 +22,8 @@ type Props = {
   canCreate: boolean;
   /** The caller may ask an agent about the record. */
   canAskAgent: boolean;
+  /** Why agents cannot run; disables asking and says so in its tooltip. */
+  agentsUnavailableReason?: string;
   onDuplicate: () => void;
   canDelete: boolean;
   onDelete: () => void;
@@ -41,6 +43,7 @@ export const RecordPreviewToolbar = ({
   canWrite,
   canCreate,
   canAskAgent,
+  agentsUnavailableReason,
   onDuplicate,
   canDelete,
   onDelete,
@@ -70,14 +73,17 @@ export const RecordPreviewToolbar = ({
         publications={publications}
       />
       {loaded && canAskAgent && (
-        <Tooltip title={askLabel}>
-          <IconButton
-            aria-expanded={agentPanelOpen}
-            aria-label={askLabel}
-            onClick={onOpenAgent}
-          >
-            <AgentIcon />
-          </IconButton>
+        <Tooltip title={agentsUnavailableReason ?? askLabel}>
+          <span>
+            <IconButton
+              aria-expanded={agentPanelOpen}
+              aria-label={askLabel}
+              disabled={Boolean(agentsUnavailableReason)}
+              onClick={onOpenAgent}
+            >
+              <AgentIcon />
+            </IconButton>
+          </span>
         </Tooltip>
       )}
     </RecordToolbar>

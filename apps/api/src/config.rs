@@ -81,11 +81,11 @@ pub mod secret {
     pub const IDENTITY_PROVIDER_CREDENTIAL_KEY: &str = "identity_provider_credential_key";
 }
 
-/// Environment variables that used to carry a secret. Startup refuses them
-/// rather than silently ignoring a credential an operator meant to apply.
+/// Environment variables named after a secret. Startup refuses them rather
+/// than silently ignoring a credential an operator meant to apply.
 /// `DATABASE_URL` is absent: SQLx tooling and tests still read it, so the
 /// binaries ignore it instead.
-const RETIRED_SECRET_VARIABLES: [(&str, &str); 7] = [
+const SECRET_VARIABLES: [(&str, &str); 11] = [
     ("S3_SECRET_ACCESS_KEY", secret::S3_SECRET_ACCESS_KEY),
     ("SMTP_PASSWORD", secret::SMTP_PASSWORD),
     ("LLM_API_KEY", secret::LLM_API_KEY),
@@ -101,6 +101,13 @@ const RETIRED_SECRET_VARIABLES: [(&str, &str); 7] = [
     (
         "FILE_WORKER_METRICS_TOKEN",
         secret::FILE_WORKER_METRICS_TOKEN,
+    ),
+    ("API_METRICS_TOKEN", secret::API_METRICS_TOKEN),
+    ("OPERATOR_API_TOKEN", secret::OPERATOR_API_TOKEN),
+    ("EXTENSION_CREDENTIAL_KEY", secret::EXTENSION_CREDENTIAL_KEY),
+    (
+        "IDENTITY_PROVIDER_CREDENTIAL_KEY",
+        secret::IDENTITY_PROVIDER_CREDENTIAL_KEY,
     ),
 ];
 
@@ -705,7 +712,7 @@ impl Source {
     }
 
     fn reject_secret_variables(&self) -> Result<(), ConfigError> {
-        for (variable, secret) in RETIRED_SECRET_VARIABLES {
+        for (variable, secret) in SECRET_VARIABLES {
             if self.var(variable).is_some() {
                 return Err(format!(
                     "{variable} must not be set in the environment; provide it as the {secret} secret file in {} instead",
@@ -968,7 +975,7 @@ mod tests {
     #[test]
     fn secrets_in_the_environment_stop_startup() {
         let secrets = required_secrets();
-        for (variable, secret) in RETIRED_SECRET_VARIABLES {
+        for (variable, secret) in SECRET_VARIABLES {
             let error = load(&secrets, &[(variable, "value")]).err().unwrap();
             assert!(error.to_string().contains(secret), "{error}");
         }

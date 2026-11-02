@@ -14,6 +14,7 @@ import {
 import { agentQueryKeys } from './queryKeys';
 import { invalidateConversation } from './queryOptions';
 import { MessageInputBox } from './MessageInputBox';
+import { useAgentsUnavailableReason } from './useAgentsUnavailableReason';
 import { useMessageAttachments } from './useMessageAttachments';
 import { errorMessage } from '../../api/errors';
 
@@ -60,12 +61,14 @@ export const ConversationComposer = (props: ConversationComposerProps) => {
     onSendingChange,
     onSent,
     sendDraft,
-    sendBlocked = false,
+    sendBlocked: sendHeldBack = false,
     settings,
     sticky = true,
     surface = composerSurfaces.page,
   } = props;
   const { t } = useTranslation();
+  const agentsUnavailableReason = useAgentsUnavailableReason();
+  const sendBlocked = sendHeldBack || Boolean(agentsUnavailableReason);
   const client = useQueryClient();
   const form = useForm({ defaultValues: { content: '' } });
   const content = useStore(form.store, (state) => state.values.content);
@@ -158,6 +161,7 @@ export const ConversationComposer = (props: ConversationComposerProps) => {
       {settings}
       <MessageInputBox
         canSend={!sendBlocked}
+        cannotSendReason={agentsUnavailableReason}
         content={content}
         files={attachments.files}
         isPending={send.isPending}

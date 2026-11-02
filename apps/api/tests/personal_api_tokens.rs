@@ -99,6 +99,8 @@ async fn personal_api_tokens_are_one_time_secrets_and_enforce_permission_subsets
         .await
         .unwrap();
     assert_eq!(owner_session["capabilities"]["blueprints_write"], true);
+    // The test server has no agent provider, whatever the caller may do.
+    assert_eq!(owner_session["agents_configured"], false);
     for capability in [
         "records_write",
         "blueprints_publish",

@@ -328,6 +328,7 @@
     "searchConversations": "Szukaj rozmów",
     "search": "Szukaj",
     "newConversation": "Nowa rozmowa",
+    "notConfigured": "Agenci są niedostępni, dopóki administrator nie skonfiguruje dostawcy AI.",
     "newAgentConversation": "Nowa rozmowa z agentem",
     "conversationDescription": "Poproś agenta Katalogu o sprawdzenie i zmianę obszaru roboczego.",
     "newConversationDescription": "Utwórz osobny wątek dla zadania agenta.",

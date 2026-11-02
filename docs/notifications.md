@@ -51,7 +51,7 @@ transaction for producers that have none. Both apply these rules:
 | `record.mentioned` | Users a comment mentions with `[@Name](user:<id>)`; on an edit, only users it newly mentions | Record | `create_record_comment` and `update_record_comment`; `body` holds the first 500 characters of the comment and `data.comment_id` the comment. |
 | `agent.approval_required` | The user who started the run | Agent conversation | `transition_agent_run` to `awaiting_approval` |
 | `agent.run_failed` | The user who started the run | Agent conversation | A run that fails, times out or is interrupted |
-| `agent.run_completed` | The user who started the run | Agent conversation | Completion of scheduled and manual runs; interactive completions are visible in the conversation |
+| `agent.run_completed` | The user who started the run | Agent conversation | Reserved for runs outside a conversation, which nothing starts today; interactive completions are visible in the conversation |
 | `team.member_added` | Users added to a team | None | Team creation and member changes |
 | `workspace.invitation_accepted` | The member who sent the invitation | None | Invitation acceptance and invited-user onboarding |
 | `rule.not_applicable` | Members who hold `rules.manage` for the workspace | Rule | Publishing a blueprint revision that an enabled rule does not fit; `data` holds `rule_name`, `blueprint_id`, `blueprint_name`, `blueprint_version` and the `reason`, and `body` the rule's message. See [Rules](rules.md#blueprint-revisions). |

@@ -5,7 +5,7 @@ description: Poproś agenta AI o sprawdzenie i zmianę katalogu i zatwierdzaj pr
 
 Agent Attricat to asystent konwersacyjny, który może odczytywać katalog i proponować w nim zmiany. Bez pytania może wyszukiwać rekordy, sprawdzać schematy, przeszukiwać katalog i przeglądać stan danych. Każda zmiana, którą chce wprowadzić, zatrzymuje się i czeka na zatwierdzenie przez człowieka, chyba że pozwolisz mu [zmieniać rekord bez pytania](#automatyczne-zatwierdzanie-zmian-rekordu).
 
-Agenci są opcjonalni. Zanim się pojawią, administrator musi [skonfigurować dostawcę AI](/pl/reference/configuration/#agenci).
+Agenci są opcjonalni. Dopóki administrator nie [skonfiguruje dostawcy AI](/pl/reference/configuration/#agenci), elementy sterujące agentów pozostają wyłączone, a ich podpowiedzi wyjaśniają dlaczego.
 
 W publicznym demo agent działa tylko w trybie odczytu. Może robić wszystko, co opisano w części *Bez zatwierdzenia*, a gdy poprosisz o zmianę, objaśnia, co by zrobił, zamiast ją proponować. Rozmowa pokazuje komunikat **Tylko odczyt**.
 
