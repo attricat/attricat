@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
+import { ThemeProvider } from '@mui/material';
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { ApiRequestError } from '../../api/request';
+import { makeTheme } from '../../app/theme';
 import { useActionDialogStore } from './actionDialogStore';
 import { ExtensionActionDialogHost } from './ExtensionActionDialogHost';
 import { useExtensionRuntime } from './useExtensionRuntime';
@@ -42,5 +44,32 @@ describe('ExtensionActionDialogHost', () => {
     );
     expect(refetch).toHaveBeenCalledOnce();
     expect(screen.queryByText(/could not be loaded/i)).toBeNull();
+  });
+
+  it('leaves room for the floating label of a first field', async () => {
+    vi.mocked(useExtensionRuntime).mockReturnValue({
+      data: [],
+      isPending: false,
+    } as never);
+    render(
+      <ThemeProvider theme={makeTheme('light')}>
+        <ExtensionActionDialogHost />
+      </ThemeProvider>,
+    );
+    act(() =>
+      useActionDialogStore.getState().open({
+        extensionId: 'acme.tools',
+        dialogId: 'tools',
+        context: { record_ids: [], outlet: 'explorer_action' } as never,
+      }),
+    );
+
+    const content = (await screen.findByRole('dialog')).querySelector(
+      '.MuiDialogContent-root > *',
+    );
+    // The floated label reaches 9px above its field.
+    expect(parseFloat(getComputedStyle(content!).paddingTop)).toBeGreaterThan(
+      9,
+    );
   });
 });
