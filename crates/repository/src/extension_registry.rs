@@ -3,8 +3,8 @@
 //! A registry is a GitHub repository containing `registry.json`. Its index
 //! points to extension repositories; only those index-authorized repositories
 //! may have their README and release assets resolved, and only the versions an
-//! entry lists after review may be offered or installed. No index, README,
-//! release catalogue, or archive is persisted.
+//! entry lists after review may be offered or installed, with the archive
+//! digest it pins. No index, README, release catalogue, or archive is persisted.
 
 use std::{str::FromStr, time::Duration};
 
@@ -32,6 +32,8 @@ const MAX_REGISTRY_ID_BYTES: usize = 128;
 const MAX_REGISTRY_VERSIONS: usize = 100;
 const MAX_REGISTRY_VERSION_BYTES: usize = 128;
 const MAX_REGISTRY_HOST_API_BYTES: usize = 256;
+/// Length of a SHA-256 digest in hexadecimal.
+const SHA256_HEX_BYTES: usize = 64;
 /// GitHub limits for account and repository names.
 const MAX_GITHUB_OWNER_BYTES: usize = 39;
 const MAX_GITHUB_REPOSITORY_BYTES: usize = 100;
@@ -138,11 +140,13 @@ struct RegistryIndexEntry {
     versions: Vec<ReviewedVersion>,
 }
 
-/// One release a registry has reviewed, and the host ABIs it runs on.
+/// One release a registry has reviewed: its version, the host ABIs it runs on,
+/// and the lowercase hexadecimal SHA-256 of the archive that was reviewed.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ReviewedVersion {
     pub version: String,
     pub host_api: String,
+    pub sha256: String,
 }
 impl ReviewedVersion {
     fn is_valid(&self) -> bool {
@@ -150,6 +154,11 @@ impl ReviewedVersion {
             && self.host_api.len() <= MAX_REGISTRY_HOST_API_BYTES
             && Version::parse(&self.version).is_ok()
             && VersionReq::parse(&self.host_api).is_ok()
+            && self.sha256.len() == SHA256_HEX_BYTES
+            && self
+                .sha256
+                .bytes()
+                .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
     }
     /// The version, when its `host_api` range accepts this host.
     fn compatible_version(&self) -> Option<Version> {
@@ -184,13 +193,17 @@ pub struct DiscoveredExtension {
     pub versions: Vec<ReviewedVersion>,
 }
 impl DiscoveredExtension {
-    /// Whether the entry lists the version a release tag names.
-    fn lists_release(&self, release: &DiscoveredRelease) -> bool {
-        release_version(&release.tag_name).is_some_and(|version| {
-            self.versions
-                .iter()
-                .any(|listed| Version::parse(&listed.version).ok().as_ref() == Some(&version))
-        })
+    /// The release, pinned to the reviewed digest, when the entry lists the
+    /// version its tag names. The pin replaces the digest GitHub reports, which
+    /// would follow an asset replaced after review.
+    fn reviewed_release(&self, mut release: DiscoveredRelease) -> Option<DiscoveredRelease> {
+        let version = release_version(&release.tag_name)?;
+        let listed = self
+            .versions
+            .iter()
+            .find(|listed| Version::parse(&listed.version).ok().as_ref() == Some(&version))?;
+        release.asset.digest = Some(format!("{SHA256_DIGEST_PREFIX}{}", listed.sha256));
+        Some(release)
     }
     /// The highest listed version this host can run, when it is newer than the
     /// installed one.
@@ -239,7 +252,8 @@ pub struct ReleaseAsset {
     pub id: u64,
     pub name: String,
     pub download_url: String,
-    /// The `sha256:<hex>` GitHub reports for the asset, checked on download.
+    /// The `sha256:<hex>` checked on download: the digest a registry reviewed
+    /// for a listed release, otherwise the one GitHub reports.
     pub digest: Option<String>,
 }
 
@@ -257,6 +271,8 @@ pub enum RegistryError {
     InvalidResponse,
     #[error("extension repository is not listed by a trusted registry")]
     UntrustedExtension,
+    #[error("release archive does not match the digest its registry reviewed")]
+    DigestMismatch,
 }
 
 #[derive(Clone)]
@@ -307,8 +323,8 @@ async fn read_capped(mut response: Response, limit: usize) -> Result<Vec<u8>, Re
     Ok(bytes)
 }
 
-/// Whether bytes match the digest GitHub reports. An asset without one, or in a
-/// form this does not know, has nothing to check against.
+/// Whether bytes match an asset's digest. An asset without one, or in a form
+/// this does not know, has nothing to check against.
 fn matches_digest(bytes: &[u8], digest: Option<&str>) -> bool {
     digest
         .and_then(|digest| digest.strip_prefix(SHA256_DIGEST_PREFIX))
@@ -512,7 +528,7 @@ impl GitHubRegistry {
         }
         let bytes = read_capped(response, crate::extensions::MAX_EXTENSION_ARCHIVE_BYTES).await?;
         if !matches_digest(&bytes, release.asset.digest.as_deref()) {
-            return Err(RegistryError::InvalidResponse);
+            return Err(RegistryError::DigestMismatch);
         }
         Ok(bytes)
     }
@@ -522,9 +538,11 @@ impl GitHubRegistry {
         extension: &DiscoveredExtension,
     ) -> Result<Vec<DiscoveredRelease>, RegistryError> {
         let repository = extension.github_repository()?;
-        let mut releases = self.releases(&repository).await?;
-        releases.retain(|release| extension.lists_release(release));
-        Ok(releases)
+        let releases = self.releases(&repository).await?;
+        Ok(releases
+            .into_iter()
+            .filter_map(|release| extension.reviewed_release(release))
+            .collect())
     }
 
     async fn releases(
@@ -614,6 +632,7 @@ mod tests {
     fn source() -> GitHubRepository {
         "acme/registry".parse().unwrap()
     }
+    const PIN: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     fn index(versions: &str) -> String {
         format!(
             r#"{{"registry_version": 2, "extensions": [{{
@@ -628,6 +647,7 @@ mod tests {
             .map(|(version, host_api)| ReviewedVersion {
                 version: (*version).to_owned(),
                 host_api: (*host_api).to_owned(),
+                sha256: PIN.to_owned(),
             })
             .collect::<Vec<_>>();
         parse_index(
@@ -655,21 +675,32 @@ mod tests {
 
     #[test]
     fn an_index_must_list_valid_reviewed_versions() {
-        let valid = index(r#"[{"version": "1.0.0", "host_api": "^1.1"}]"#);
+        let valid = index(&format!(
+            r#"[{{"version": "1.0.0", "host_api": "^1.1", "sha256": "{PIN}"}}]"#
+        ));
         assert_eq!(
             parse_index(&source(), valid.as_bytes()).unwrap()[0].versions[0].version,
             "1.0.0"
         );
         for versions in [
-            "[]",
-            r#"[{"version": "1.0.0"}]"#,
-            r#"[{"host_api": "^1.1"}]"#,
-            r#"[{"version": "v1.0.0", "host_api": "^1.1"}]"#,
-            r#"[{"version": "1.0.0", "host_api": "any"}]"#,
-            r#"[{"version": "1.0.0", "host_api": "^1.1"}, {"version": "1.0.0", "host_api": "^1"}]"#,
+            "[]".to_owned(),
+            format!(r#"[{{"host_api": "^1.1", "sha256": "{PIN}"}}]"#),
+            format!(r#"[{{"version": "1.0.0", "sha256": "{PIN}"}}]"#),
+            r#"[{"version": "1.0.0", "host_api": "^1.1"}]"#.to_owned(),
+            format!(r#"[{{"version": "v1.0.0", "host_api": "^1.1", "sha256": "{PIN}"}}]"#),
+            format!(r#"[{{"version": "1.0.0", "host_api": "any", "sha256": "{PIN}"}}]"#),
+            r#"[{"version": "1.0.0", "host_api": "^1.1", "sha256": "abc"}]"#.to_owned(),
+            format!(
+                r#"[{{"version": "1.0.0", "host_api": "^1.1", "sha256": "{}"}}]"#,
+                PIN.to_ascii_uppercase()
+            ),
+            format!(
+                r#"[{{"version": "1.0.0", "host_api": "^1.1", "sha256": "{PIN}"}},
+                    {{"version": "1.0.0", "host_api": "^1", "sha256": "{PIN}"}}]"#
+            ),
         ] {
             assert!(
-                parse_index(&source(), index(versions).as_bytes()).is_err(),
+                parse_index(&source(), index(&versions).as_bytes()).is_err(),
                 "{versions}"
             );
         }
@@ -680,26 +711,43 @@ mod tests {
 
     #[test]
     fn an_index_must_use_the_supported_registry_version() {
-        let index = index(r#"[{"version": "1.0.0", "host_api": "^1.1"}]"#)
-            .replace(r#""registry_version": 2"#, r#""registry_version": 1"#);
+        let index = index(&format!(
+            r#"[{{"version": "1.0.0", "host_api": "^1.1", "sha256": "{PIN}"}}]"#
+        ))
+        .replace(r#""registry_version": 2"#, r#""registry_version": 1"#);
         assert!(parse_index(&source(), index.as_bytes()).is_err());
     }
 
     #[test]
     fn an_index_may_add_fields_this_host_does_not_know() {
-        let index = index(r#"[{"version": "1.0.0", "host_api": "^1.1", "note": "ok"}]"#)
-            .replace(r#""id":"#, r#""added": true, "id":"#);
+        let index = index(&format!(
+            r#"[{{"version": "1.0.0", "host_api": "^1.1", "sha256": "{PIN}", "note": "ok"}}]"#
+        ))
+        .replace(r#""id":"#, r#""added": true, "id":"#);
         assert!(parse_index(&source(), index.as_bytes()).is_ok());
     }
 
     #[test]
     fn only_listed_versions_are_offered() {
         let extension = listing(&[("1.0.1", "^1.1")]);
-        assert!(extension.lists_release(&release("v1.0.1")));
-        assert!(extension.lists_release(&release("1.0.1")));
-        assert!(!extension.lists_release(&release("v1.0.0")));
-        assert!(!extension.lists_release(&release("v1.0.2")));
-        assert!(!extension.lists_release(&release("latest")));
+        assert!(extension.reviewed_release(release("v1.0.1")).is_some());
+        assert!(extension.reviewed_release(release("1.0.1")).is_some());
+        assert!(extension.reviewed_release(release("v1.0.0")).is_none());
+        assert!(extension.reviewed_release(release("v1.0.2")).is_none());
+        assert!(extension.reviewed_release(release("latest")).is_none());
+    }
+
+    #[test]
+    fn a_listed_release_is_checked_against_the_reviewed_digest_not_githubs() {
+        let reviewed = format!("{:x}", Sha256::digest(b"reviewed"));
+        let replaced = format!("sha256:{:x}", Sha256::digest(b"replaced"));
+        let mut extension = listing(&[("1.0.1", "^1.1")]);
+        extension.versions[0].sha256 = reviewed;
+        let mut offered = release("v1.0.1");
+        offered.asset.digest = Some(replaced);
+        let digest = extension.reviewed_release(offered).unwrap().asset.digest;
+        assert!(matches_digest(b"reviewed", digest.as_deref()));
+        assert!(!matches_digest(b"replaced", digest.as_deref()));
     }
 
     #[test]

@@ -5305,6 +5305,57 @@ async fn official_release_withdrawn_after_review_is_refused(pool: PgPool) {
 }
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
+async fn official_release_repinned_after_review_is_refused(pool: PgPool) {
+    let (base_url, server, official) = start_server_with_official_extensions(pool).await;
+    official.publish(
+        "acme.shopify",
+        "v2.2.0",
+        official_extension_archive("acme.shopify", "2.2.0", "reviewed release"),
+    );
+    let client = authenticated_client();
+    let plan = create_plan(
+        &client,
+        &base_url,
+        archive_with_extension_requirement(true),
+        "repinned",
+    )
+    .await
+    .json::<Value>()
+    .await
+    .unwrap();
+    assert_eq!(plan["ready"], true);
+    official.set_digest_mismatch(true);
+
+    let response = apply_plan(&client, &base_url, plan["id"].as_str().unwrap()).await;
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        response.json::<Value>().await.unwrap()["error"]["code"],
+        "solution_pack_plan_stale"
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_release_that_fails_its_pin_cannot_be_planned(pool: PgPool) {
+    let (base_url, server, official) = start_server_with_official_extensions(pool).await;
+    official.publish(
+        "acme.shopify",
+        "v2.2.0",
+        official_extension_archive("acme.shopify", "2.2.0", "replaced release"),
+    );
+    official.set_digest_mismatch(true);
+    let response = create_plan(
+        &authenticated_client(),
+        &base_url,
+        archive_with_extension_requirement(true),
+        "unpinned",
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn official_release_changed_after_review_is_refused(pool: PgPool) {
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let (base_url, server, official) = start_server_with_official_extensions(pool.clone()).await;

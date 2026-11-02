@@ -251,7 +251,13 @@ pub async fn resolve_official_extensions(
             tag: release.tag_name.clone(),
             reason,
         };
-        let archive = releases.download(&release).await.map_err(registry_error)?;
+        let archive = releases
+            .download(&release)
+            .await
+            .map_err(|error| match error {
+                RegistryError::DigestMismatch => invalid(error.to_string()),
+                _ => registry_error(error),
+            })?;
         let archive_sha256 = sha256_hex(&archive);
         let manifest = unpack(archive)
             .await
@@ -371,32 +377,24 @@ async fn install_planned_extension(
     let installation = match repository.installed_extension(&planned.extension_id).await {
         Ok(installation) => installation,
         Err(RepositoryError::NotFound(_)) => {
-            let release = DiscoveredRelease {
-                source: planned.repository.clone(),
-                release_id: planned.release_id as u64,
-                tag_name: planned.tag_name.clone(),
-                name: String::new(),
-                published_at: None,
-                asset: ReleaseAsset {
-                    id: planned.asset_id as u64,
-                    name: planned.asset_name.clone(),
-                    download_url: planned.download_url.clone(),
-                    digest: None,
-                },
-            };
             let changed =
                 || SolutionPackExtensionError::ReleaseChanged(planned.extension_id.clone());
-            // The registry may have withdrawn the release since the plan was reviewed.
-            if !releases
+            // The registry may have withdrawn or re-pinned the release since the
+            // plan was reviewed.
+            let release = releases
                 .releases(&planned.extension_id)
                 .await
                 .map_err(registry_error)?
-                .iter()
-                .any(|offered| offered.tag_name == planned.tag_name)
-            {
-                return Err(changed());
-            }
-            let archive = releases.download(&release).await.map_err(registry_error)?;
+                .into_iter()
+                .find(|offered| offered.tag_name == planned.tag_name)
+                .ok_or_else(changed)?;
+            let archive = releases
+                .download(&release)
+                .await
+                .map_err(|error| match error {
+                    RegistryError::DigestMismatch => changed(),
+                    _ => registry_error(error),
+                })?;
             if sha256_hex(&archive) != planned.archive_sha256 {
                 return Err(changed());
             }

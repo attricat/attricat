@@ -53,7 +53,11 @@ shape is:
     "description": "Example extension",
     "icon": "icon.svg",
     "repository": "acme/attricat-extension",
-    "versions": [{ "version": "1.2.0", "host_api": "^1.1" }]
+    "versions": [{
+      "version": "1.2.0",
+      "host_api": "^1.1",
+      "sha256": "98e1d47b1c191e15b6b7101b22aa28784f2cf1981a77f85cd94b0d34953a2f93"
+    }]
   }]
 }
 ```
@@ -63,13 +67,16 @@ non-prerelease GitHub Releases, returning its `.tar.zst` assets only when their
 download path belongs to that exact extension repository. Attricat stores no
 global copy of indexes, READMEs, releases, or archives.
 
-`versions` is the review gate. Each item names a reviewed `version` and the
-`host_api` range of that release, and an entry must list at least one. Attricat
-offers and installs only releases whose tag (with an optional `v` prefix) names a
-listed version, refuses an archive whose manifest declares a different version
-than its tag, and applies the same rule to solution-pack installs. A release
-withdrawn from the list stops being installable, including by a solution-pack
-plan reviewed earlier, but existing installations are left alone. Side-loading
+`versions` is the review gate. Each item names a reviewed `version`, the
+`host_api` range of that release, and the lowercase hexadecimal `sha256` of its
+`.tar.zst` archive, and an entry must list at least one. Attricat offers and
+installs only releases whose tag (with an optional `v` prefix) names a listed
+version, refuses an archive whose digest differs from the pin or whose manifest
+declares a different version than its tag, and applies the same rules to
+solution-pack installs. The pin takes the place of the digest GitHub reports,
+which would follow an asset replaced after review. A release withdrawn from the
+list or given a new pin stops being installable by a solution-pack plan reviewed
+earlier, but existing installations are left alone. Side-loading
 is not gated by a registry. An invalid entry rejects its whole index.
 
 `GET /extension-registries/updates` compares installations with these indexes

@@ -248,14 +248,18 @@ To distribute through a registry, publish the archive as an asset of a GitHub Re
     "description": "Shows warehouse stock on product pages.",
     "icon": "icon.svg",
     "repository": "acme/attricat-inventory",
-    "versions": [{ "version": "1.2.0", "host_api": "^1.1" }]
+    "versions": [{
+      "version": "1.2.0",
+      "host_api": "^1.1",
+      "sha256": "98e1d47b1c191e15b6b7101b22aa28784f2cf1981a77f85cd94b0d34953a2f93"
+    }]
   }]
 }
 ```
 
 Workspace administrators add your registry with `acli extension registry add --source acme/attricat-extensions`. The official registry is [`attricat/attricat-extensions`](https://github.com/attricat/attricat-extensions); to propose a listing there, open a pull request that adds your entry to its `registry.json`.
 
-`versions` is required. Attricat offers and installs from a registry only the versions listed there, so each new release is unavailable until it is added, with `version` and `host_api` copied from its manifest. The release tag must name that version, with an optional `v` prefix.
+`versions` is required. Attricat offers and installs from a registry only the versions listed there, so each new release is unavailable until it is added, with `version` and `host_api` copied from its manifest and `sha256` set to the lowercase SHA-256 of its `.tar.zst` archive (`sha256sum` prints it). The release tag must name that version, with an optional `v` prefix. An archive that doesn't match its `sha256` is refused, so replacing a release's asset means listing the new digest.
 
 ### Release a new version
 
