@@ -293,7 +293,7 @@ Each call into your component, such as one command, event delivery, or operation
 - 1 billion units of fuel, which roughly counts WebAssembly instructions;
 - 32 MiB of memory in total, plus at most 8 memories, 64 tables with 100,000 elements between them, and 32 instances;
 - 1 MiB of log messages, after which further messages are dropped;
-- 10 seconds.
+- 10 seconds, not counting time spent waiting on outbound network requests and transfers, which have their own timeouts.
 
 A server component can be at most 32 MiB, and each module in it at most 16,384 types, imports, globals, tables, memories, exports and table elements together. It compiles in a separate process limited to 512 MiB of memory and 2 minutes, and if that fails it isn't tried again for 5 minutes. Each API process runs 16 invocations at once, and 8 from one workspace, so more wait their turn.
 
