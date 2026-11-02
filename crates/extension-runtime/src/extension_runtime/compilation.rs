@@ -211,8 +211,8 @@ fn limit_compile_process() -> Result<(), Box<dyn std::error::Error + Send + Sync
     Ok(())
 }
 
-// The server only runs on Linux. The release builds the whole workspace for every
-// `acli` target, including Windows, which has no resource limits to set.
+// The server only runs on Linux; this keeps the workspace compiling on platforms
+// that have no resource limits to set.
 #[cfg(not(unix))]
 fn limit_compile_process() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     Ok(())
