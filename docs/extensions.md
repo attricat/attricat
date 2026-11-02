@@ -1705,7 +1705,9 @@ contextual actions—not an application-wide navigation tree.
   menu, acting on that record.
 - **`explorer_table_cell`** (`cell`, requiring `client.explorer_table_cell`)
   is declarative: a table column names the cell, and the host draws the value
-  with the cell's `display` and the column's `props`. No frame mounts, so a
+  with the cell's `display` and the column's `props`. A column has only the ID
+  to go on, so `validate_cell_namespace` requires `<extension-id>.<name>`, with
+  no dots in the name and outside the built-in `attricat.` prefix. No frame mounts, so a
   viewport of cells costs nothing extra. The blueprint compiler checks the
   column's value type and props against the enabled release's declaration;
   an unavailable cell shows the value as usual.

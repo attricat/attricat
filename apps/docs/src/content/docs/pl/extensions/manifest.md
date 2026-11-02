@@ -338,6 +338,8 @@ Typy `display`:
 
 - `number` pokazuje każdą wartość w ustawieniach regionalnych oglądającego, wyrównaną do prawej. `precision` ustala liczbę miejsc po przecinku (0–20; wskazana właściwość musi być liczbą całkowitą ograniczoną do tego zakresu), a `unit` (1–16 znaków; wskazana właściwość musi być tekstem o długości najwyżej 16) stoi za wartością. Typy wartości muszą być `number` lub `integer`.
 
+Identyfikator komórki ma postać `<extension-id>.<nazwa>`, bez kropek w nazwie, ponieważ kolumna tabeli wskazuje komórkę wyłącznie po identyfikatorze. Przykład należy do rozszerzenia `example`.
+
 Komórka wymaga `client.explorer_table_cell` i jest używana tylko, gdy jej rozszerzenie jest włączone, a ta możliwość przyznana; w przeciwnym razie, a także dla wartości, której jej sposób wyświetlania nie pokaże, kolumna pokazuje wartość jak zwykle. Rozszerzenie może zadeklarować kilka komórek.
 
 ## Edytory atrybutów

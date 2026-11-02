@@ -142,6 +142,8 @@ pub const MAX_CELL_UNIT_CHARS: usize = 16;
 pub const MAX_CELL_PROPS: usize = 16;
 /// Longest string a cell prop may declare as its `max_length`.
 pub const MAX_CELL_STRING_PROP_CHARS: u32 = 256;
+/// Table renderers with IDs under this prefix are built in, not extensions' cells.
+pub const BUILT_IN_CELL_PREFIX: &str = "attricat.";
 pub const CAPABILITIES: &[&str] = &[
     "attricat.read",
     "attricat.write",
@@ -1748,6 +1750,7 @@ impl Manifest {
                 )));
             }
             if matches!(contribution.kind, UiContributionKind::Cell) {
+                validate_cell_namespace(&self.attricat.id, &contribution.id)?;
                 validate_cell(contribution)?;
             } else if contribution.cell.is_some() {
                 return Err(ManifestError::Invalid(format!(
@@ -2513,6 +2516,24 @@ impl ServerOperation {
         }
         Ok(())
     }
+}
+
+/// A table column names a cell by its ID alone, so the ID must identify one
+/// extension: `<extension-id>.<name>`. A name without dots leaves one possible
+/// owner, since `acme` could otherwise declare what `acme.foo` means by
+/// `acme.foo.bar`. `attricat.` belongs to the built-in renderers.
+fn validate_cell_namespace(extension_id: &str, cell_id: &str) -> Result<(), ManifestError> {
+    let name = cell_id
+        .strip_prefix(extension_id)
+        .and_then(|rest| rest.strip_prefix('.'));
+    if !name.is_some_and(|name| !name.is_empty() && !name.contains('.'))
+        || cell_id.starts_with(BUILT_IN_CELL_PREFIX)
+    {
+        return Err(ManifestError::Invalid(format!(
+            "cell '{cell_id}' must be named '{extension_id}.<name>', with no dots in <name> and outside '{BUILT_IN_CELL_PREFIX}'"
+        )));
+    }
+    Ok(())
 }
 
 /// A language code such as `pl` or `pt-BR`.
@@ -4053,6 +4074,34 @@ mod tests {
     }
 
     #[test]
+    fn a_cell_id_names_one_extension() {
+        for (extension, cell, valid) in [
+            ("acme", "acme.amount", true),
+            ("acme.foo", "acme.foo.amount", true),
+            (
+                "attricat-extension-example",
+                "attricat-extension-example.amount",
+                true,
+            ),
+            ("acme", "amount", false),
+            ("acme", "acme.", false),
+            ("acme", "acme-amount", false),
+            ("acme", "other.amount", false),
+            // This would also be `acme.foo`'s cell `bar`.
+            ("acme", "acme.foo.bar", false),
+            // The host resolves these as built-in renderers.
+            ("attricat", "attricat.amount", false),
+            ("attricat.x", "attricat.x.amount", false),
+        ] {
+            assert_eq!(
+                validate_cell_namespace(extension, cell).is_ok(),
+                valid,
+                "{extension} {cell}"
+            );
+        }
+    }
+
+    #[test]
     fn recognizes_artifact_stream_capabilities() {
         let mut value = manifest();
         value.permissions = vec![
@@ -4144,7 +4193,7 @@ mod tests {
             .unwrap()
         };
         value.ui.push(UiContribution {
-            id: "example.amount".into(),
+            id: "acme.test.amount".into(),
             version: 1,
             kind: UiContributionKind::Cell,
             artifact: None,
@@ -4163,7 +4212,7 @@ mod tests {
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
         // Several cells may share the outlet.
         let mut second = value.ui[0].clone();
-        second.id = "example.fixed".into();
+        second.id = "acme.test.other".into();
         second.cell = Some(
             serde_json::from_value(serde_json::json!({
                 "value_types": ["number"],

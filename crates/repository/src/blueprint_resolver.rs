@@ -2,7 +2,7 @@ use attricat_domain::attribute_options::Cardinality;
 use attricat_domain::value_type::ValueType;
 use std::collections::HashSet;
 
-use crate::extensions::{Manifest, UiContributionKind, UiOutlet};
+use crate::extensions::{BUILT_IN_CELL_PREFIX, Manifest, UiContributionKind, UiOutlet};
 use attricat_blueprint::{
     BlueprintKind, BrowseBy, CompiledBlueprint, ResolvedInclude, ViewDefinition, ViewNode, compile,
     parse, validate_table_renderer,
@@ -601,7 +601,7 @@ async fn validate_renderer(
     renderer: &attricat_blueprint::ComponentReference,
     value_type: ValueType,
 ) -> Result<(), RepositoryError> {
-    if renderer.id.starts_with("attricat.") {
+    if renderer.id.starts_with(BUILT_IN_CELL_PREFIX) {
         return validate_table_renderer(renderer, value_type)
             .map_err(RepositoryError::invalid_blueprint_definition);
     }

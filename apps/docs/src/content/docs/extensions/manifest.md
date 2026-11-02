@@ -338,6 +338,8 @@ views:
 
 - `number` shows each value in the viewer's locale, right-aligned. `precision` fixes the decimal places (0–20; a prop it names must be an integer bounded to that range), and `unit` (1–16 characters; a prop it names must be a string of at most 16) follows the value. Its value types must be `number` or `integer`.
 
+A cell's ID is `<extension-id>.<name>`, with no dots in the name, because a table column names the cell by ID alone. The example belongs to the extension `example`.
+
 A cell needs `client.explorer_table_cell`, and is used only while its extension is enabled and that capability granted; otherwise, and for a value its display cannot show, the column shows the value as usual. An extension may declare several cells.
 
 ## Attribute editors

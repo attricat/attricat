@@ -382,7 +382,7 @@ fn cell_release_archive(extension_id: &str) -> Vec<u8> {
         "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
         "artifacts": [{"id": "client", "kind": "client_frame", "path": "client.js"}],
         "ui": [{
-            "id": "amount",
+            "id": format!("{extension_id}.amount"),
             "version": 1,
             "kind": "cell",
             "outlet": "explorer_table_cell",
@@ -3937,7 +3937,7 @@ async fn declarative_cells_reach_the_runtime_and_check_column_props(pool: sqlx::
         .unwrap();
     let cell = contributions
         .iter()
-        .find(|item| item.contribution_key == "acme.cells:amount")
+        .find(|item| item.contribution_key == "acme.cells:acme.cells.amount")
         .unwrap();
     assert!(cell.artifact_key.is_none());
     assert_eq!(
@@ -3961,7 +3961,7 @@ views:
     columns:
       - field: {field}
         renderer:
-          id: amount
+          id: acme.cells.amount
           version: 1
           props: {props}
 attributes:
@@ -4026,7 +4026,7 @@ fn upgrade_release_archive(version: &str, manifest_changes: Value) -> Vec<u8> {
         },
         "scoped_configuration": {
             "version": 1,
-            "scopes": ["attribute"],
+            "scopes": ["attribute", "blueprint"],
             "schema": {"type": "object"}
         },
         "server": {"operations": [{
@@ -4098,6 +4098,16 @@ async fn an_upgrade_keeps_what_the_new_release_leaves_unchanged(pool: sqlx::PgPo
         .extension_scoped_configuration_set(ID, v1, &scope, json!({"rounding": 2}))
         .await
         .unwrap();
+    let blueprint_scope = api::repository::ExtensionConfigurationScope {
+        kind: api::extensions::ConfigurationScope::Blueprint,
+        blueprint_id: blueprint.blueprint.id,
+        blueprint_version: blueprint.blueprint.version,
+        attribute_id: None,
+    };
+    repository
+        .extension_scoped_configuration_set(ID, v1, &blueprint_scope, json!({"currency": "EUR"}))
+        .await
+        .unwrap();
     let schedule = repository
         .create_extension_operation_schedule(api::repository::CreateExtensionOperationSchedule {
             extension_id: ID.into(),
@@ -4157,6 +4167,13 @@ async fn an_upgrade_keeps_what_the_new_release_leaves_unchanged(pool: sqlx::PgPo
             .await
             .unwrap(),
         Some(json!({"rounding": 2}))
+    );
+    assert_eq!(
+        repository
+            .extension_scoped_configuration_get(ID, v2, &blueprint_scope)
+            .await
+            .unwrap(),
+        Some(json!({"currency": "EUR"}))
     );
     assert_eq!(schedule_release(&pool).await, v2);
     assert_eq!(run_status(&pool, queued).await, "cancelled");
