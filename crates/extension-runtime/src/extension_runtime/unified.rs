@@ -393,7 +393,7 @@ impl ExtensionRuntime {
         store
             .fuel_async_yield_interval(Some(FUEL_YIELD_INTERVAL))
             .map_err(runtime_error)?;
-        store.set_epoch_deadline(epoch_deadline(self.config.invocation_timeout));
+        limit_invocation_time(&mut store, self.config.invocation_timeout);
         let pre = self.unified_instance_pre(installation, &component)?;
         let instance = pre
             .instantiate_async(&mut store)
