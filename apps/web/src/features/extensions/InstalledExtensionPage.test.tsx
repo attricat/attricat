@@ -156,7 +156,9 @@ describe('InstalledExtensionPage', () => {
     });
     const dialog = await screen.findByRole('dialog');
     expect(dialog.textContent).toContain('example.tar.zst');
-    expect(dialog.textContent).toContain('Permissions and configuration carry over');
+    expect(dialog.textContent).toContain(
+      'Permissions and configuration carry over',
+    );
     expect(upgradeExtensionFromArchive).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Upgrade' }));
     await waitFor(() =>
