@@ -7,16 +7,10 @@ description: Klient wiersza poleceń acli, jego konfiguracja, uwierzytelnianie, 
 
 ## Instalacja
 
-Każde [wydanie](https://github.com/attricat/attricat/releases) publikuje pliki binarne `acli` dla systemów Linux, macOS i Windows w tej samej wersji co serwer. Zainstaluj najnowsze wydanie w systemie Linux lub macOS:
+Każde [wydanie](https://github.com/attricat/attricat/releases) publikuje pliki binarne `acli` dla systemów Linux i macOS w tej samej wersji co serwer. Zainstaluj najnowsze wydanie:
 
 ```sh
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/attricat/attricat/releases/latest/download/acli-installer.sh | sh
-```
-
-W systemie Windows, w PowerShell:
-
-```powershell
-powershell -ExecutionPolicy Bypass -c "irm https://github.com/attricat/attricat/releases/latest/download/acli-installer.ps1 | iex"
 ```
 
 Instalator umieszcza `acli` w `~/.local/bin` (lub `$XDG_BIN_HOME`). Aby zainstalować konkretną wersję, zamień `latest/download` na `download/v0.3.0` albo pobierz z wydania archiwum i jego sumę kontrolną `.sha256`. Używaj wersji `acli` zgodnej z wersją serwera; wypisuje ją `acli --version`.

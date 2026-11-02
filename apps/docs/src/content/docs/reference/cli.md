@@ -7,16 +7,10 @@ description: The acli command-line client, its configuration, authentication, in
 
 ## Install
 
-Each [release](https://github.com/attricat/attricat/releases) publishes `acli` binaries for Linux, macOS and Windows with the same version as the server. Install the latest release on Linux or macOS:
+Each [release](https://github.com/attricat/attricat/releases) publishes `acli` binaries for Linux and macOS with the same version as the server. Install the latest release:
 
 ```sh
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/attricat/attricat/releases/latest/download/acli-installer.sh | sh
-```
-
-On Windows, in PowerShell:
-
-```powershell
-powershell -ExecutionPolicy Bypass -c "irm https://github.com/attricat/attricat/releases/latest/download/acli-installer.ps1 | iex"
 ```
 
 The installer puts `acli` in `~/.local/bin` (or `$XDG_BIN_HOME`). To install a specific version, replace `latest/download` with `download/v0.3.0`, or download an archive and its `.sha256` checksum from the release. Use the `acli` version that matches your server; `acli --version` prints it.
