@@ -244,7 +244,7 @@ attributes:
 | --- | --- | --- | --- |
 | `cardinality` | `"one"` or `"many"` | `"one"` | Single file or a list of files. |
 | `ordered` | boolean | `true` for `many` | Whether the order of a `many` list is meaningful. Must be `false` or omitted for `one`. |
-| `allowed_mime_groups` | array of strings | Any | Accepted MIME groups, such as `image`. |
+| `allowed_mime_groups` | array of strings | Any | Accepted MIME groups, such as `image`. CSV and other text files are stored as `text/plain`, so they belong to the `text` group; use `allowed_extensions` to accept only `csv`. |
 | `allowed_extensions` | array of strings | Any | Accepted extensions, letters and digits only (`jpg`, not `*.jpg`). A leading `.` is ignored. |
 | `max_bytes` | positive integer | Server limit | Per-file size limit. Cannot exceed the server's `FILE_UPLOAD_MAX_BYTES`. |
 | `purposes` | array of codes | `[]` | Labels describing what the files are for, such as `product_image`. |
@@ -701,7 +701,7 @@ connector_jobs:
 | `operation_id` | string | Required | Operation declared by the extension. |
 | `input` | mapping | Required | Operation input, validated against the operation's schema. |
 | `context` | context code | | Required for imports: imported values are written to this context. For exports, the publication channel to export (it must be one); without it the job runs once per enabled channel. A job of an extension that keeps export mappings must set it when several channels are enabled. |
-| `input_file_id` | UUID | | Imports only. A ready workspace file to import. |
+| `input_file_id` | UUID | | Imports only. A ready workspace file to import, such as a value of a file attribute. |
 | `interval_seconds` | integer | Manual only | Run every N seconds, 60 to 2592000. |
 | `enabled` | boolean | `true` | Set `false` to pause the job. |
 | `connection` | string | Default destination | Exports only. The extension [connection](/builders/extensions/#connections) the job pushes to: 1 to 128 ASCII letters, digits, `.`, `_`, or `-`. |
