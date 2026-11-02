@@ -41,6 +41,7 @@ test('side-loads the example extension and recalculates a blueprint formula', as
   ).toBeVisible();
 
   await page.goto('/manage/extensions/attricat-extension-example');
+  await page.getByRole('tab', { name: 'Permissions' }).click();
   const grants = page.getByRole('button', { name: 'Grant' });
   await expect(grants.first()).toBeVisible();
   while (await grants.count()) {

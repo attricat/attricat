@@ -111,8 +111,10 @@ export const ExtensionExportStatusSection = ({
   const handlerFailures = page.data?.pages[0]?.handler_failures ?? [];
   const retryable = retryableExportStatuses.includes(status);
   return (
-    <Paper sx={{ p: 2 }}>
-      <Typography variant="h6">{t('extensionExports.sectionTitle')}</Typography>
+    <Paper sx={{ p: 4 }}>
+      <Typography component="h2" variant="h6">
+        {t('extensionExports.sectionTitle')}
+      </Typography>
       <Typography color="text.secondary" sx={{ mb: 2 }} variant="body2">
         {t('extensionExports.sectionDescription', {
           destinations: exports.map((item) => item.title).join(', '),

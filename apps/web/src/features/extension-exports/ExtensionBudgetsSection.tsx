@@ -128,8 +128,10 @@ export const ExtensionBudgetsSection = ({
   if (budgets.isError) return <ApiErrorAlert error={budgets.error} />;
   if (!budgets.data?.length) return null;
   return (
-    <Paper sx={{ p: 2 }}>
-      <Typography variant="h6">{t('extensionExports.budgets')}</Typography>
+    <Paper sx={{ p: 4 }}>
+      <Typography component="h2" variant="h6">
+        {t('extensionExports.budgets')}
+      </Typography>
       <Typography color="text.secondary" sx={{ mb: 1 }} variant="body2">
         {t('extensionExports.budgetsDescription')}
       </Typography>
