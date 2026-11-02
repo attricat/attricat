@@ -20,8 +20,10 @@ pub const COMPILE_COMPONENT_COMMAND: &str = "compile-extension-component";
 /// 32 MiB, the component cache and itself) and `/tmp` 256 MiB, so this keeps the
 /// worst case inside the documented 2 GiB. Real components compile in far less: a
 /// 17 MB debug build takes under 100 MiB.
+#[cfg(unix)]
 const COMPILATION_MEMORY_BYTES: u64 = 512 * 1024 * 1024;
 const COMPILATION_TIMEOUT: Duration = Duration::from_secs(120);
+#[cfg(unix)]
 const COMPILATION_CPU_SECONDS: u64 = 120;
 /// Compiled output the parent accepts, which it then holds in memory.
 const MAX_COMPILED_BYTES: u64 = 256 * 1024 * 1024;
@@ -189,13 +191,7 @@ async fn compile_in_child(
 /// stdout. Call this before starting anything else in the process.
 pub fn run_compile_command() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use std::io::{Read as _, Write as _};
-    forbid_core_dumps()?;
-    // Only Linux, where production runs, enforces an address space limit.
-    let memory = rlimit::Resource::AS.set(COMPILATION_MEMORY_BYTES, COMPILATION_MEMORY_BYTES);
-    if cfg!(target_os = "linux") {
-        memory?;
-    }
-    rlimit::Resource::CPU.set(COMPILATION_CPU_SECONDS, COMPILATION_CPU_SECONDS)?;
+    limit_compile_process()?;
     let mut component = Vec::new();
     std::io::stdin().read_to_end(&mut component)?;
     let compiled = engine()?.precompile_component(&component)?;
@@ -203,9 +199,29 @@ pub fn run_compile_command() -> Result<(), Box<dyn std::error::Error + Send + Sy
     Ok(())
 }
 
+#[cfg(unix)]
+fn limit_compile_process() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    forbid_core_dumps()?;
+    // Only Linux, where production runs, enforces an address space limit.
+    let memory = rlimit::Resource::AS.set(COMPILATION_MEMORY_BYTES, COMPILATION_MEMORY_BYTES);
+    if cfg!(target_os = "linux") {
+        memory?;
+    }
+    rlimit::Resource::CPU.set(COMPILATION_CPU_SECONDS, COMPILATION_CPU_SECONDS)?;
+    Ok(())
+}
+
+// The server only runs on Linux. The release builds the whole workspace for every
+// `acli` target, including Windows, which has no resource limits to set.
+#[cfg(not(unix))]
+fn limit_compile_process() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    Ok(())
+}
+
 /// Running out of memory aborts the child, which is expected here. Otherwise any
 /// extension could write a core dump of up to the memory limit to the host's disk
 /// on every compilation.
+#[cfg(unix)]
 fn forbid_core_dumps() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     rlimit::Resource::CORE.set(0, 0)?;
     // The kernel ignores that limit when `core_pattern` pipes dumps to a program,
