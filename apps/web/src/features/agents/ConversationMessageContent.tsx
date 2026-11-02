@@ -139,6 +139,9 @@ export const ConversationMessageContent = ({
               ) : (
                 <a href={href}>{children}</a>
               ),
+            // Loading an image needs no click, so text the agent was tricked
+            // into writing could send data to any address in its URL.
+            img: ({ alt }) => <span>{alt}</span>,
           }}
         >
           {content}

@@ -70,8 +70,8 @@ export const ConversationDetailPage = ({
           />
         )}
         {/* The panel would repeat the failure of a conversation that cannot
-            be read. */}
-        {!conversation.isError && (
+            be read. A failed refetch keeps it, and the message being typed. */}
+        {!conversation.isLoadingError && (
           <ConversationPanel
             key={conversationId}
             conversationId={conversationId}
