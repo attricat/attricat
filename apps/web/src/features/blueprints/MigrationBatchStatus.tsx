@@ -3,7 +3,6 @@ import {
   Button,
   Chip,
   LinearProgress,
-  Paper,
   Stack,
   Table,
   TableBody,
@@ -15,11 +14,7 @@ import {
 } from '@mui/material';
 import { RefreshCwIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import {
-  completePercentage,
-  migrationBatchStatuses,
-  migrationProgressMinWidth,
-} from './constants';
+import { migrationBatchStatuses, migrationProgressMinWidth } from './constants';
 import { Timestamp } from '../../time/Timestamp';
 import type { BlueprintMigrationBatchStatus as MigrationBatch } from './schemas';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
@@ -28,6 +23,8 @@ import { monoFontFamily } from '../../app/theme';
 import { LoadingState } from '../../components/LoadingState';
 import { EmptyState } from '../../components/EmptyState';
 import { MigrationIcon } from '../../components/systemIcons';
+import { SectionPaper } from '../../components/SectionPaper';
+import { percentOf } from '../../components/percentOf';
 
 const statusColor = (status: MigrationBatch['status']) => {
   if (status === migrationBatchStatuses.completed) return 'success';
@@ -49,14 +46,6 @@ const removalPolicyLabel = (
     : emptyValuePlaceholder;
 };
 
-const progressPercentage = ({
-  processed_records: processed,
-  total_records: total,
-}: MigrationBatch) =>
-  total === 0
-    ? completePercentage
-    : Math.min(completePercentage, (processed / total) * completePercentage);
-
 export const MigrationBatchStatus = ({
   batches,
 }: {
@@ -66,7 +55,7 @@ export const MigrationBatchStatus = ({
   const emptyDate = t('blueprints.migrationNotStarted');
 
   return (
-    <Paper component="section" sx={{ mt: 3, p: 2.5 }}>
+    <SectionPaper>
       <Stack
         direction={{ xs: 'column', sm: 'row' }}
         spacing={1}
@@ -146,7 +135,10 @@ export const MigrationBatchStatus = ({
                     <LinearProgress
                       aria-label={t('blueprints.migrationProgress')}
                       sx={{ mt: 0.5 }}
-                      value={progressPercentage(batch)}
+                      value={percentOf(
+                        batch.processed_records,
+                        batch.total_records,
+                      )}
                       variant="determinate"
                     />
                   </TableCell>
@@ -177,6 +169,6 @@ export const MigrationBatchStatus = ({
           </Table>
         </TableContainer>
       )}
-    </Paper>
+    </SectionPaper>
   );
 };

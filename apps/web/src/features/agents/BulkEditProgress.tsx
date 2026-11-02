@@ -1,6 +1,7 @@
 import { LinearProgress, Paper, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import type { BulkProgress } from './schemas';
+import { percentOf } from '../../components/percentOf';
 
 /** How far an approved bulk edit has got while it runs. */
 export const BulkEditProgress = ({ progress }: { progress: BulkProgress }) => {
@@ -16,7 +17,7 @@ export const BulkEditProgress = ({ progress }: { progress: BulkProgress }) => {
       </Typography>
       <LinearProgress
         aria-labelledby={`bulk-progress-${progress.tool_call_id}`}
-        value={(progress.applied / progress.total) * 100}
+        value={percentOf(progress.applied, progress.total)}
         variant="determinate"
       />
     </Paper>

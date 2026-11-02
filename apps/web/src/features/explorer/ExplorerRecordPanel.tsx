@@ -1,12 +1,6 @@
-import {
-  Box,
-  ClickAwayListener,
-  IconButton,
-  Paper,
-  Tooltip,
-} from '@mui/material';
+import { Box, ClickAwayListener, Paper } from '@mui/material';
 import { useQueryClient } from '@tanstack/react-query';
-import { Maximize2Icon, XIcon } from 'lucide-react';
+import { Maximize2Icon } from 'lucide-react';
 import { useEffect, useRef, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RouterButton } from '../../components/RouterLink';
@@ -15,6 +9,7 @@ import { RecordPreview } from '../records/components/RecordPreview';
 import { refreshStaleRecordSearches } from '../records/invalidateRecord';
 import { lexiconText } from '../lexicon/lexicon';
 import { recordPanelOpenerAttribute, recordPanelWidth } from './constants';
+import { CloseIconButton } from '../../components/CloseIconButton';
 
 /** Another result's link switches the panel instead of closing it. */
 const closesPanelOnClick = (event: MouseEvent | TouchEvent) =>
@@ -163,15 +158,10 @@ export const ExplorerRecordPanel = ({
                 >
                   {t('explorer.openFullPage')}
                 </RouterButton>
-                <Tooltip title={t('explorer.closeRecordPanel')}>
-                  <IconButton
-                    aria-label={t('explorer.closeRecordPanel')}
-                    onClick={onClose}
-                    size="small"
-                  >
-                    <XIcon size={compactIconSize} />
-                  </IconButton>
-                </Tooltip>
+                <CloseIconButton
+                  label={t('explorer.closeRecordPanel')}
+                  onClick={onClose}
+                />
               </Box>
               {children}
             </Paper>

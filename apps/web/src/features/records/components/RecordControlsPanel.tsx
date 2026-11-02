@@ -24,6 +24,7 @@ import {
   transitionOperations,
 } from '../constants';
 import { LoadingState } from '../../../components/LoadingState';
+import { plainListSx } from '../../../components/plainList';
 
 /** Display labels for attribute and status codes the panel reports. */
 const controlLabels = (attributes: readonly Attribute[]) => {
@@ -325,7 +326,7 @@ export const RecordControlsPanel = ({
           >
             {t('records.recordControls.approvals')}
           </Typography>
-          <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0 }}>
+          <Box component="ul" sx={plainListSx}>
             {groupApprovals(approvalItems).map((group) => (
               <ApprovalItem
                 key={group.approval.id}
@@ -354,7 +355,7 @@ export const RecordControlsPanel = ({
           <Typography id={holdsHeadingId} component="h2" variant="subtitle1">
             {t('records.recordControls.retentionHolds')}
           </Typography>
-          <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0 }}>
+          <Box component="ul" sx={plainListSx}>
             {holdItems.map((hold) => (
               <HoldItem key={hold.id} hold={hold} labels={labels} />
             ))}

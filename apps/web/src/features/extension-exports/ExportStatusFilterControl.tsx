@@ -1,14 +1,12 @@
 import { workspaceExportStatusOptions } from './queryOptions';
-import { Button, Chip, ListSubheader, Menu, MenuItem } from '@mui/material';
+import { Chip, ListSubheader, MenuItem } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { CircleXIcon, FilterIcon } from 'lucide-react';
-import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { compactOutlinedActionButtonSx } from '../../components/CompactOutlinedActionButton';
-import { smallIconSize } from '../../components/iconSizes';
 import { useCan } from '../auth/useCan';
 import { exportStatuses, type ExportStatus } from './constants';
 import { capabilities } from '../auth/capabilities';
+import { FilterMenuButton } from '../../components/FilterMenuButton';
 
 export type ExportStatusFilterValue = {
   extension: string;
@@ -29,7 +27,6 @@ export const ExportStatusFilterControl = ({
 }) => {
   const { t } = useTranslation();
   const canRead = useCan(capabilities.dataHealthRead);
-  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const overview = useQuery({
     ...workspaceExportStatusOptions(),
     enabled: canRead,
@@ -84,23 +81,12 @@ export const ExportStatusFilterControl = ({
     ).values(),
   ];
   return (
-    <>
-      <Button
-        color="primary"
-        size="small"
-        startIcon={<FilterIcon size={smallIconSize} />}
-        sx={compactOutlinedActionButtonSx}
-        variant="outlined"
-        onClick={(event) => setAnchor(event.currentTarget)}
-      >
-        {t('extensionExports.filterByExport')}
-      </Button>
-      <Menu
-        anchorEl={anchor}
-        open={Boolean(anchor)}
-        onClose={() => setAnchor(null)}
-      >
-        {targets.flatMap((target) => [
+    <FilterMenuButton
+      icon={FilterIcon}
+      label={t('extensionExports.filterByExport')}
+    >
+      {(close) =>
+        targets.flatMap((target) => [
           <ListSubheader key={`${target.extension}:${target.connection ?? ''}`}>
             {destinationTitle(target.extension)}
             {target.connection ? ` · ${target.connection}` : ''}
@@ -109,15 +95,15 @@ export const ExportStatusFilterControl = ({
             <MenuItem
               key={`${target.extension}:${target.connection ?? ''}:${status}`}
               onClick={() => {
-                setAnchor(null);
+                close();
                 onChange({ ...target, status });
               }}
             >
               {t(`extensionExports.status.${status}`)}
             </MenuItem>
           )),
-        ])}
-      </Menu>
-    </>
+        ])
+      }
+    </FilterMenuButton>
   );
 };

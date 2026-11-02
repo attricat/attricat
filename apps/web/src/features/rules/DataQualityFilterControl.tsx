@@ -1,13 +1,11 @@
-import { Button, Chip, Menu, MenuItem } from '@mui/material';
+import { Chip, MenuItem } from '@mui/material';
 import { CircleXIcon } from 'lucide-react';
-import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { compactOutlinedActionButtonSx } from '../../components/CompactOutlinedActionButton';
-import { smallIconSize } from '../../components/iconSizes';
 import { RuleFindingIcon } from '../../components/systemIcons';
 import { capabilities } from '../auth/capabilities';
 import { useCan } from '../auth/useCan';
 import { dataQualityFilters, type DataQualityFilter } from './constants';
+import { FilterMenuButton } from '../../components/FilterMenuButton';
 
 /**
  * Filters Explorer results by their unresolved rule findings: a chip while
@@ -23,7 +21,6 @@ export const DataQualityFilterControl = ({
 }) => {
   const { t } = useTranslation();
   const canReadRules = useCan(capabilities.rulesRead);
-  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   if (!canReadRules) return null;
   if (value) {
     const label = t('explorer.dataQualityFilterChip', {
@@ -46,34 +43,20 @@ export const DataQualityFilterControl = ({
     );
   }
   return (
-    <>
-      <Button
-        color="primary"
-        size="small"
-        startIcon={<RuleFindingIcon size={smallIconSize} />}
-        sx={compactOutlinedActionButtonSx}
-        variant="outlined"
-        onClick={(event) => setAnchor(event.currentTarget)}
-      >
-        {t('explorer.dataQuality')}
-      </Button>
-      <Menu
-        anchorEl={anchor}
-        open={Boolean(anchor)}
-        onClose={() => setAnchor(null)}
-      >
-        {Object.values(dataQualityFilters).map((filter) => (
+    <FilterMenuButton icon={RuleFindingIcon} label={t('explorer.dataQuality')}>
+      {(close) =>
+        Object.values(dataQualityFilters).map((filter) => (
           <MenuItem
             key={filter}
             onClick={() => {
-              setAnchor(null);
+              close();
               onChange(filter);
             }}
           >
             {t(`explorer.dataQualityFilters.${filter}`)}
           </MenuItem>
-        ))}
-      </Menu>
-    </>
+        ))
+      }
+    </FilterMenuButton>
   );
 };

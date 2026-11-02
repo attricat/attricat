@@ -10,6 +10,7 @@ import { ruleRunOptions } from './queryOptions';
 import { isActiveRun } from './runCompletion';
 import { findingMessage } from './findingMessage';
 import { useLatestBlueprintAttributes } from './useFindingMessages';
+import { plainListSx } from '../../components/plainList';
 
 /**
  * Follows a dry run until it finishes, then says how many records it checked
@@ -75,7 +76,7 @@ export const DryRunResult = ({
           <Typography component="h3" variant="subtitle2">
             {t('rules.dryRunResult.failures')}
           </Typography>
-          <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
+          <Box component="ul" sx={plainListSx}>
             {failures.map((failure, index) => (
               <Box
                 component="li"

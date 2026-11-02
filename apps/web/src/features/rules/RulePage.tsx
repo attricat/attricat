@@ -1,14 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import {
-  Alert,
-  Box,
-  Button,
-  Paper,
-  Stack,
-  Tabs,
-  Typography,
-} from '@mui/material';
+import { Alert, Box, Button, Stack, Tabs, Typography } from '@mui/material';
 import {
   ArrowLeftIcon,
   FileCodeIcon,
@@ -69,6 +61,7 @@ import { FindingSeverityChip } from './FindingSeverityChip';
 import { ruleDescription, rulePredicate, ruleSeverity } from './rulePlan';
 import { PredicateSummary } from './PredicateSummary';
 import { useLatestBlueprintAttributes } from './useFindingMessages';
+import { SectionPaper } from '../../components/SectionPaper';
 
 const sectionIcons = {
   [RULE_PAGE_DEFINITION]: FileCodeIcon,
@@ -168,16 +161,16 @@ const RuleDefinition = ({ rule }: { rule: RuleDetails }) => {
         </Alert>
       )}
       {checks && (
-        <Paper component="section" sx={{ mt: 3, p: 2 }}>
+        <SectionPaper>
           <Typography component="h2" variant="h6">
             {t('rules.rulePage.whatItChecks')}
           </Typography>
           <Box sx={{ mt: 1 }}>
             <PredicateSummary attributes={attributes} predicate={checks} />
           </Box>
-        </Paper>
+        </SectionPaper>
       )}
-      <Paper component="section" sx={{ mt: 3, p: 2 }}>
+      <SectionPaper>
         <Typography component="h2" variant="h6">
           {t('rules.rulePage.definition')}
         </Typography>
@@ -189,7 +182,7 @@ const RuleDefinition = ({ rule }: { rule: RuleDetails }) => {
           readOnly
           value={rule.definition}
         />
-      </Paper>
+      </SectionPaper>
       <RecentRuns rule={rule} />
     </>
   );

@@ -68,4 +68,3 @@ export const sandboxEditView = 'detail';
 
 export const blueprintFilterWidth = 420;
 export const migrationProgressMinWidth = 150;
-export const completePercentage = 100;

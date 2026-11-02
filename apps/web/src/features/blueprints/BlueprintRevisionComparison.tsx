@@ -1,4 +1,4 @@
-import { Box, Paper, Stack, Typography } from '@mui/material';
+import { Box, Stack, Typography } from '@mui/material';
 import { lazy, Suspense, type ComponentProps } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Blueprint } from './schemas';
@@ -6,6 +6,7 @@ import type { BlueprintRevisionComparison as Comparison } from './useBlueprintRe
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { LoadingState } from '../../components/LoadingState';
 import { RevisionSelect } from '../../components/RevisionSelect';
+import { SectionPaper } from '../../components/SectionPaper';
 
 const YamlDiffEditor = lazy(() =>
   import('../../components/YamlDiffEditor').then(({ YamlDiffEditor }) => ({
@@ -37,7 +38,7 @@ export const BlueprintRevisionComparison = ({
   }));
 
   return (
-    <Paper {...panelProps} component="section" sx={{ mt: 3, p: 2.5 }}>
+    <SectionPaper {...panelProps}>
       <Typography component="h2" variant="h6">
         {t('blueprints.compareDefinitions')}
       </Typography>
@@ -75,6 +76,6 @@ export const BlueprintRevisionComparison = ({
           )}
         </Suspense>
       </Box>
-    </Paper>
+    </SectionPaper>
   );
 };

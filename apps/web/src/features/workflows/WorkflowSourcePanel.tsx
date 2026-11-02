@@ -1,6 +1,7 @@
-import { Paper, Typography } from '@mui/material';
+import { Typography } from '@mui/material';
 import { YamlEditor } from '../../components/YamlEditor';
 import { editorHeight } from './constants';
+import { SectionPaper } from '../../components/SectionPaper';
 
 /** A read-only view of one workflow revision's YAML definition. */
 export const WorkflowSourcePanel = ({
@@ -10,7 +11,7 @@ export const WorkflowSourcePanel = ({
   definition: string;
   title: string;
 }) => (
-  <Paper component="section" sx={{ mt: 3, p: 2 }}>
+  <SectionPaper>
     <Typography component="h2" variant="h6">
       {title}
     </Typography>
@@ -22,5 +23,5 @@ export const WorkflowSourcePanel = ({
       readOnly
       value={definition}
     />
-  </Paper>
+  </SectionPaper>
 );

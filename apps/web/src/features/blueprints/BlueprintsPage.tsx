@@ -10,7 +10,6 @@ import {
   TableCell,
   TableHead,
   TableRow,
-  TextField,
   Typography,
 } from '@mui/material';
 import { useState } from 'react';
@@ -32,6 +31,7 @@ import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { blueprintCatalogueOptions } from './queryOptions';
 import { blueprintKindLabel } from './constants';
 import { LoadingState } from '../../components/LoadingState';
+import { SearchField } from '../../components/SearchField';
 
 export const BlueprintsPage = () => {
   const { t } = useTranslation();
@@ -73,7 +73,7 @@ export const BlueprintsPage = () => {
         icon={BlueprintIcon}
         title={t('blueprints.blueprints')}
       />
-      <TextField
+      <SearchField
         label={t('blueprints.filterBlueprints')}
         onChange={(event) => setQuery(event.target.value)}
         placeholder={t('blueprints.filterBlueprintsPlaceholder')}

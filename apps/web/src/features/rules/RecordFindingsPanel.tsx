@@ -51,6 +51,7 @@ import {
 } from './runCompletion';
 import { progressSizes } from '../../components/iconSizes';
 import { LoadingState } from '../../components/LoadingState';
+import { plainListSx } from '../../components/plainList';
 
 /** Lines up the messages beside severity chips of different lengths. */
 const severityChipMinWidth = 72;
@@ -343,7 +344,7 @@ export const RecordFindingsPanel = ({
         <LoadingState>{t('rules.recordFindings.loading')}</LoadingState>
       )}
       {unresolved.length > 0 ? (
-        <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0 }}>
+        <Box component="ul" sx={plainListSx}>
           {unresolved.map((finding) => (
             <FindingItem
               key={finding.id}

@@ -13,6 +13,7 @@ import {
 } from './ExtensionRunSummary';
 import { extensionRunListOptions } from './queryOptions';
 import type { ExtensionRun } from './schemas';
+import { plainListSx } from '../../components/plainList';
 
 const RunCard = ({ run }: { run: ExtensionRun }) => {
   const { t } = useTranslation();
@@ -74,11 +75,7 @@ export const ExtensionRunsPage = () => {
         <EmptyState icon={ExtensionRunIcon} title={t('extensionRuns.empty')} />
       )}
       {runs.data && runs.data.length > 0 && (
-        <Stack
-          component="ul"
-          spacing={4}
-          sx={{ listStyle: 'none', m: 0, p: 0 }}
-        >
+        <Stack component="ul" spacing={4} sx={plainListSx}>
           {runs.data.map((run) => (
             <RunCard key={run.id} run={run} />
           ))}
