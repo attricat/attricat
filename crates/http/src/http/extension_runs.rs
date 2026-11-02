@@ -202,7 +202,7 @@ pub(super) async fn start(
     }
     super::extensions::ensure_action_may_write(
         &repository,
-        principal.0,
+        principal.actor(),
         workspace,
         contribution.when.as_ref(),
         &input.selection.record_ids,

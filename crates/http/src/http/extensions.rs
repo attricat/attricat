@@ -999,7 +999,7 @@ pub(super) async fn command(
     if requires_write {
         ensure_action_may_write(
             &repository,
-            principal.0,
+            principal.actor(),
             workspace.0,
             contribution.when.as_ref(),
             &command_record_ids(&input.payload)?,
@@ -1085,7 +1085,7 @@ fn command_record_ids(payload: &Value) -> Result<Vec<Uuid>, ApiError> {
 /// user may change; the condition the browser checks is also enforced here.
 pub(super) async fn ensure_action_may_write(
     repository: &crate::repository::AttricatRepository,
-    user: Uuid,
+    actor: crate::repository::AuthorizationActor,
     workspace: Uuid,
     when: Option<&ActionCondition>,
     record_ids: &[Uuid],
@@ -1094,7 +1094,7 @@ pub(super) async fn ensure_action_may_write(
         return Ok(());
     }
     let writable = repository
-        .authorized_record_ids(user, workspace, Permission::RecordsWrite, record_ids)
+        .principal_record_ids(actor, workspace, Permission::RecordsWrite, record_ids)
         .await?;
     if record_ids.is_empty() || record_ids.iter().any(|id| !writable.contains(id)) {
         return Err(ApiError::forbidden());

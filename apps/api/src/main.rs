@@ -197,8 +197,21 @@ async fn serve() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     // Every workspace shares these bounded pools. Repository scope is carried
     // in explicit SQL predicates, never in mutable connection state.
+    // A statement outlasting the request would keep its connection after the
+    // client got its timeout, until enough of them stalled every request.
+    let request_statement_timeout = http.request_timeout.as_millis().to_string();
     let request_pool = PgPoolOptions::new()
         .max_connections(request_pool_connections)
+        .after_connect(move |connection, _| {
+            let timeout = request_statement_timeout.clone();
+            Box::pin(async move {
+                sqlx::query("SELECT set_config('statement_timeout', $1, false)")
+                    .bind(timeout)
+                    .execute(connection)
+                    .await
+                    .map(|_| ())
+            })
+        })
         .connect(database_url)
         .await?;
     let task_pool = PgPoolOptions::new()

@@ -54,7 +54,8 @@ COPY --from=rust-builder /src/target/release/acli /usr/local/bin/acli
 COPY --from=rust-builder /tmp/web-dist /srv/attricat/web
 COPY scripts/docker-entrypoint.sh /usr/local/bin/
 RUN chmod 0555 /usr/local/bin/docker-entrypoint.sh \
- && chown -R attricat:attricat /srv/attricat
+ && mkdir -p /var/tmp/attricat \
+ && chown -R attricat:attricat /srv/attricat /var/tmp/attricat
 ENV BIND_ADDR=0.0.0.0:3000 \
     WEB_DIST_DIR=/srv/attricat/web \
     ATTRICAT_AUTO_MIGRATE=false

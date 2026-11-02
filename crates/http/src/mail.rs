@@ -6,6 +6,10 @@ use lettre::{
 };
 use thiserror::Error;
 
+/// How long one SMTP command may take. Below the request timeout, so a request
+/// waiting on mail can still report a failed delivery and withdraw what it sent.
+const SMTP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
+
 #[derive(Debug, Error)]
 pub enum MailError {
     #[error("email delivery failed")]
@@ -88,7 +92,8 @@ impl SmtpMailDelivery {
             SmtpTlsMode::ImplicitTls => AsyncSmtpTransport::<Tokio1Executor>::relay(host)
                 .map_err(|_| MailError::Configuration)?,
         }
-        .port(port);
+        .port(port)
+        .timeout(Some(SMTP_TIMEOUT));
         if let Some(credentials) = credentials {
             builder = builder.credentials(credentials);
         }

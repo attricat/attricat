@@ -439,8 +439,13 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         .bind(OWNER_ROLE_ID)
         .fetch_one(&mut *tx)
         .await?;
-        if is_owner && !Self::active_owner_on(&mut tx, actor_id, workspace_id).await? {
-            return Err(RepositoryError::NotFound("owner authority"));
+        if is_owner {
+            if !Self::active_owner_on(&mut tx, actor_id, workspace_id).await? {
+                return Err(RepositoryError::NotFound("owner authority"));
+            }
+            // An owner's token limited to fewer permissions has no such authority.
+            self.ensure_token_can_delegate_role_on(&mut tx, actor_id, workspace_id, OWNER_ROLE_ID)
+                .await?;
         }
         if state == MembershipState::Active {
             // Reactivating gives back every grant the member kept, so the actor
@@ -559,10 +564,12 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         let membership_id: Uuid = grant.try_get("membership_id")?;
         // Retirement can replace a grant's role while this request waits.
         let role_id: Uuid = grant.try_get("role_id")?;
-        if role_id == OWNER_ROLE_ID
-            && !Self::active_owner_on(&mut tx, actor_id, workspace_id).await?
-        {
-            return Err(RepositoryError::NotFound("owner authority"));
+        if role_id == OWNER_ROLE_ID {
+            if !Self::active_owner_on(&mut tx, actor_id, workspace_id).await? {
+                return Err(RepositoryError::NotFound("owner authority"));
+            }
+            self.ensure_token_can_delegate_role_on(&mut tx, actor_id, workspace_id, OWNER_ROLE_ID)
+                .await?;
         }
         sqlx::query(
             "SELECT id FROM workspace_memberships WHERE id = $1 AND workspace_id = $2 FOR UPDATE",

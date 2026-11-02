@@ -23,6 +23,19 @@ x-app: &app
   read_only: true
   tmpfs:
     - /tmp:size=256m,mode=1777
+  # Uploads and extension artifacts stage here, and can outgrow memory-backed /tmp.
+  environment: &app-environment
+    TMPDIR: /var/tmp/attricat
+  volumes:
+    - /var/tmp/attricat
+  # Longer than the API's request timeout and drain margin, or Docker kills it
+  # mid-request at its default of 10 seconds.
+  stop_grace_period: 45s
+  logging:
+    driver: json-file
+    options:
+      max-size: 50m
+      max-file: "5"
   security_opt:
     - no-new-privileges:true
 
@@ -54,6 +67,7 @@ services:
       migrate:
         condition: service_completed_successfully
     environment:
+      <<: *app-environment
       FILE_WORKER_OPERATIONS_BIND_ADDR: 0.0.0.0:3001
     expose:
       - "3001"
