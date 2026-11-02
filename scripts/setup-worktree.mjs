@@ -168,6 +168,7 @@ env = setEnvValue(env, "MAILPIT_SMTP_PORT", ports.MAILPIT_SMTP_PORT);
 env = setEnvValue(env, "MAILPIT_UI_PORT", ports.MAILPIT_UI_PORT);
 env = setEnvValue(env, "JAEGER_OTLP_GRPC_PORT", ports.JAEGER_OTLP_GRPC_PORT);
 env = setEnvValue(env, "JAEGER_UI_PORT", ports.JAEGER_UI_PORT);
+env = setEnvValue(env, "KEYCLOAK_PORT", ports.KEYCLOAK_PORT);
 env = setEnvValue(
   env,
   "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
