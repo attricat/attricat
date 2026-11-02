@@ -46,6 +46,7 @@ pub use uuid::Uuid;
 pub struct FakeOfficialExtensions {
     releases: std::sync::Mutex<Vec<(String, DiscoveredRelease, Vec<u8>)>>,
     unavailable: std::sync::atomic::AtomicBool,
+    digest_mismatch: std::sync::atomic::AtomicBool,
 }
 
 impl FakeOfficialExtensions {
@@ -91,6 +92,12 @@ impl FakeOfficialExtensions {
             .retain(|(id, release, _)| id != extension_id || release.tag_name != tag_name);
     }
 
+    /// Makes downloads fail as they do once a release's reviewed pin changes.
+    pub fn set_digest_mismatch(&self, mismatch: bool) {
+        self.digest_mismatch
+            .store(mismatch, std::sync::atomic::Ordering::SeqCst);
+    }
+
     pub fn set_unavailable(&self, unavailable: bool) {
         self.unavailable
             .store(unavailable, std::sync::atomic::Ordering::SeqCst);
@@ -121,6 +128,12 @@ impl OfficialExtensionReleases for FakeOfficialExtensions {
 
     async fn download(&self, release: &DiscoveredRelease) -> Result<Vec<u8>, RegistryError> {
         self.check_available()?;
+        if self
+            .digest_mismatch
+            .load(std::sync::atomic::Ordering::SeqCst)
+        {
+            return Err(RegistryError::DigestMismatch);
+        }
         self.releases
             .lock()
             .unwrap()
@@ -631,7 +644,11 @@ async fn fake_github() -> GitHubRegistry {
             "repository": "acme/listed",
             "name": "Listed",
             "description": "An extension two registries list",
-            "versions": [{"version": "1.0.0", "host_api": "^1"}]
+            "versions": [{
+                "version": "1.0.0",
+                "host_api": "^1",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }]
         }]})
         .to_string()
     };

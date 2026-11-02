@@ -248,14 +248,18 @@ Aby dystrybuować rozszerzenie przez rejestr, opublikuj archiwum jako zasób Git
     "description": "Shows warehouse stock on product pages.",
     "icon": "icon.svg",
     "repository": "acme/attricat-inventory",
-    "versions": [{ "version": "1.2.0", "host_api": "^1.1" }]
+    "versions": [{
+      "version": "1.2.0",
+      "host_api": "^1.1",
+      "sha256": "98e1d47b1c191e15b6b7101b22aa28784f2cf1981a77f85cd94b0d34953a2f93"
+    }]
   }]
 }
 ```
 
 Administratorzy obszaru roboczego dodają Twój rejestr poleceniem `acli extension registry add --source acme/attricat-extensions`. Oficjalny rejestr to [`attricat/attricat-extensions`](https://github.com/attricat/attricat-extensions); aby zaproponować w nim wpis, otwórz pull request dodający go do pliku `registry.json`.
 
-Pole `versions` jest wymagane. Attricat oferuje i instaluje z rejestru tylko wymienione tam wersje, więc każde nowe wydanie jest niedostępne, dopóki nie zostanie dodane, z polami `version` i `host_api` skopiowanymi z jego manifestu. Tag wydania musi wskazywać tę wersję, opcjonalnie z prefiksem `v`.
+Pole `versions` jest wymagane. Attricat oferuje i instaluje z rejestru tylko wymienione tam wersje, więc każde nowe wydanie jest niedostępne, dopóki nie zostanie dodane, z polami `version` i `host_api` skopiowanymi z jego manifestu oraz polem `sha256` ustawionym na skrót SHA-256 archiwum `.tar.zst` zapisany małymi literami (wypisuje go `sha256sum`). Tag wydania musi wskazywać tę wersję, opcjonalnie z prefiksem `v`. Archiwum niezgodne z `sha256` jest odrzucane, więc podmiana zasobu wydania wymaga wpisania nowego skrótu.
 
 ### Wydaj nową wersję
 

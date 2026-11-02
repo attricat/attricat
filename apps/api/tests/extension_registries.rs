@@ -115,8 +115,8 @@ const REGISTRY_INDEX: &str = r#"{
     "description": "A widget",
     "repository": "acme/widget",
     "versions": [
-      {"version": "1.1.0", "host_api": "^1"},
-      {"version": "1.2.0", "host_api": ">=99.0.0"}
+      {"version": "1.1.0", "host_api": "^1", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+      {"version": "1.2.0", "host_api": ">=99.0.0", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
     ]
   }]
 }"#;
@@ -200,6 +200,10 @@ async fn only_releases_the_registry_lists_are_offered_or_installable(pool: PgPoo
         .map(|release| release["tag_name"].as_str().unwrap())
         .collect::<Vec<_>>();
     assert_eq!(tags, ["v1.1.0"]);
+    assert_eq!(
+        details["releases"][0]["asset"]["digest"],
+        "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    );
 
     let response = client
         .post(format!("{base}/extensions"))

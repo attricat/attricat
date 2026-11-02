@@ -22,7 +22,7 @@ use super::{
 use crate::{
     constants::DEFAULT_LIST_PAGE_SIZE,
     extension_installer::{ExtensionInstallError, ExtensionInstaller, dev_artifact_key},
-    extension_registry::{DiscoveredRelease, GitHubRepository},
+    extension_registry::{DiscoveredRelease, GitHubRepository, RegistryError},
     extensions::{
         ActionCondition, ActionConfirmation, ActionInvocation, CellDeclaration,
         ContributionTranslation, EditorDeclaration, ExtensionPackage,
@@ -507,6 +507,15 @@ async fn selected_release(
         .ok_or_else(|| ApiError::not_found("trusted extension release"))
 }
 
+/// A release whose archive isn't the one its registry reviewed is refused, not
+/// reported as an outage.
+fn download_error(error: RegistryError) -> ApiError {
+    match error {
+        RegistryError::DigestMismatch => ApiError::invalid_input(error.to_string()),
+        _ => ApiError::service_unavailable("extension archive could not be downloaded"),
+    }
+}
+
 /// A registry reviewed the version a release's tag names, so its archive must
 /// declare that version to install under it.
 fn require_reviewed_version(
@@ -574,7 +583,7 @@ pub(super) async fn install(
         .registry
         .download_release_asset(&release)
         .await
-        .map_err(|_| ApiError::service_unavailable("extension archive could not be downloaded"))?;
+        .map_err(download_error)?;
     let source = format!("{}@{}", release.source, release.tag_name);
     let package = unpack_extension(archive).await?;
     require_reviewed_version(&release, &package)?;
@@ -596,7 +605,7 @@ pub(super) async fn upgrade(
         .registry
         .download_release_asset(&release)
         .await
-        .map_err(|_| ApiError::service_unavailable("extension archive could not be downloaded"))?;
+        .map_err(download_error)?;
     // Verify the package identity before passing it to the installer. Checking
     // only its returned installation would allow a selected archive to mutate
     // a different installed extension before this handler rejects the request.
