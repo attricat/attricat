@@ -185,6 +185,10 @@ Attricat stores uploaded files, generated image variants, extension artifacts, a
 
 Grant the credentials only `PutObject`, `GetObject`, `DeleteObject`, `AbortMultipartUpload`, and `ListBucket` on that bucket, keep the bucket private, and use TLS. Clients never receive object keys or signed URLs; every download goes through the API.
 
+The endpoint's TLS certificate has to chain to a public certificate authority. There is no setting to trust a private one, and `SSL_CERT_FILE` has no effect; an untrusted certificate stops startup with the same `cannot access the configured S3 bucket` error as a wrong endpoint.
+
+In a bucket with versioning on, purging a file only adds a delete marker, so its contents stay in the bucket and keep using storage. To remove them, add a lifecycle rule that expires noncurrent versions and delete markers, after a period that suits your retention policy.
+
 Files of 8 MiB or more upload as multipart uploads, which are aborted when any part or the completion fails or times out, or the upload is cancelled. The S3 client honours the standard `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` and `NO_PROXY` environment variables (or their lowercase forms); set `NO_PROXY` to the S3 host when a proxy is configured for other traffic but must not carry object-store requests.
 
 ## File uploads and processing

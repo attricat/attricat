@@ -185,6 +185,10 @@ Attricat przechowuje przesłane pliki, wygenerowane warianty obrazów, artefakty
 
 Przyznaj danym uwierzytelniającym tylko `PutObject`, `GetObject`, `DeleteObject`, `AbortMultipartUpload` i `ListBucket` na tym zasobniku, utrzymuj zasobnik jako prywatny i używaj TLS. Klienci nigdy nie otrzymują kluczy obiektów ani podpisanych adresów URL; każde pobranie przechodzi przez API.
 
+Certyfikat TLS punktu końcowego musi prowadzić do publicznego urzędu certyfikacji. Nie ma ustawienia pozwalającego zaufać prywatnemu urzędowi, a `SSL_CERT_FILE` nie ma wpływu na połączenie; niezaufany certyfikat zatrzymuje uruchamianie tym samym błędem `cannot access the configured S3 bucket` co błędny punkt końcowy.
+
+W zasobniku z włączonym wersjonowaniem usunięcie pliku dodaje tylko znacznik usunięcia, więc jego zawartość pozostaje w zasobniku i nadal zajmuje miejsce. Aby ją usunąć, dodaj regułę cyklu życia, która wygasza wcześniejsze wersje i znaczniki usunięcia po okresie zgodnym z Twoją polityką przechowywania.
+
 Pliki o rozmiarze co najmniej 8 MiB są przesyłane wieloczęściowo. Takie przesyłanie jest przerywane, gdy dowolna część lub zakończenie się nie powiedzie albo przekroczy limit czasu, a także gdy przesyłanie zostanie anulowane. Klient S3 respektuje standardowe zmienne środowiskowe `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` i `NO_PROXY` (także zapisane małymi literami); ustaw `NO_PROXY` na host S3, gdy serwer proxy jest skonfigurowany dla innego ruchu, ale nie powinien obsługiwać żądań do magazynu obiektów.
 
 ## Przesyłanie i przetwarzanie plików
