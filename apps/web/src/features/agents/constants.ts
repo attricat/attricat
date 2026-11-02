@@ -60,6 +60,7 @@ export const bulkProgressStates = {
 export const runUpdateEvents = [
   'status',
   'message',
+  'message_completed',
   'tool_call',
   'approval_required',
   'error',

@@ -60,9 +60,14 @@ export const ConversationPanel = ({
   );
   const wasWorking = useRef(working);
   useEffect(() => {
-    if (wasWorking.current && !working) onRunFinished?.();
+    if (wasWorking.current && !working) {
+      // Seeing the run end closes its stream, which may not have reported the
+      // final reply yet.
+      void invalidateConversation(client, conversationId);
+      onRunFinished?.();
+    }
     wasWorking.current = working;
-  }, [working, onRunFinished]);
+  }, [client, conversationId, working, onRunFinished]);
   const interval = conversationPollInterval(
     runs.data,
     live.connected,
