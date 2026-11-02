@@ -3,9 +3,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
   Button,
-  Checkbox,
-  FormControlLabel,
-  FormGroup,
   List,
   ListItem,
   ListItemText,
@@ -28,7 +25,7 @@ import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { useExclusiveMutation } from '../../components/useExclusiveMutation';
 import { roleListOptions } from './queryOptions';
 import { roleCodePattern } from './constants';
-import { permissionDescription } from './permissionDescription';
+import { PermissionCheckboxes } from './PermissionCheckboxes';
 
 export const WorkspaceRolesSection = ({
   canManage,
@@ -162,28 +159,11 @@ export const WorkspaceRolesSection = ({
           </form.Field>
           <form.Field name="permissions">
             {(field) => (
-              <FormGroup>
-                {permissions.data?.map((permission) => (
-                  <FormControlLabel
-                    control={
-                      <Checkbox
-                        checked={field.state.value.includes(permission.code)}
-                        onChange={(event) =>
-                          field.handleChange(
-                            event.target.checked
-                              ? [...field.state.value, permission.code]
-                              : field.state.value.filter(
-                                  (code) => code !== permission.code,
-                                ),
-                          )
-                        }
-                      />
-                    }
-                    key={permission.code}
-                    label={`${permission.code} — ${permissionDescription(t, permission)}`}
-                  />
-                ))}
-              </FormGroup>
+              <PermissionCheckboxes
+                onChange={field.handleChange}
+                permissions={permissions.data}
+                selected={field.state.value}
+              />
             )}
           </form.Field>
           <Button disabled={create.isPending} type="submit" variant="contained">

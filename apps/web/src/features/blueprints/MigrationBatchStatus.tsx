@@ -1,7 +1,6 @@
 import type { UseQueryResult } from '@tanstack/react-query';
 import {
   Button,
-  Chip,
   LinearProgress,
   Stack,
   Table,
@@ -25,16 +24,25 @@ import { EmptyState } from '../../components/EmptyState';
 import { MigrationIcon } from '../../components/systemIcons';
 import { SectionPaper } from '../../components/SectionPaper';
 import { percentOf } from '../../components/percentOf';
+import {
+  BanIcon,
+  CircleCheckIcon,
+  ClockIcon,
+  LoaderIcon,
+  TriangleAlertIcon,
+} from 'lucide-react';
+import { StatusChip, type StatusChipStyle } from '../../components/StatusChip';
 
-const statusColor = (status: MigrationBatch['status']) => {
-  if (status === migrationBatchStatuses.completed) return 'success';
-  if (
-    status === migrationBatchStatuses.queued ||
-    status === migrationBatchStatuses.running
-  )
-    return 'info';
-  if (status === migrationBatchStatuses.superseded) return 'default';
-  return 'warning';
+const statusChip = (status: MigrationBatch['status']): StatusChipStyle => {
+  if (status === migrationBatchStatuses.completed)
+    return { color: 'success', icon: CircleCheckIcon };
+  if (status === migrationBatchStatuses.queued)
+    return { color: 'info', icon: ClockIcon };
+  if (status === migrationBatchStatuses.running)
+    return { color: 'info', icon: LoaderIcon };
+  if (status === migrationBatchStatuses.superseded)
+    return { color: 'default', icon: BanIcon };
+  return { color: 'warning', icon: TriangleAlertIcon };
 };
 
 const removalPolicyLabel = (
@@ -119,10 +127,10 @@ export const MigrationBatchStatus = ({
                     })}
                   </TableCell>
                   <TableCell>
-                    <Chip
-                      color={statusColor(batch.status)}
+                    <StatusChip
                       label={t(`blueprints.migrationStatuses.${batch.status}`)}
                       size="small"
+                      style={statusChip(batch.status)}
                     />
                   </TableCell>
                   <TableCell sx={{ minWidth: migrationProgressMinWidth }}>

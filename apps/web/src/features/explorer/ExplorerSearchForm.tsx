@@ -3,14 +3,12 @@ import {
   Badge,
   Box,
   Button,
-  IconButton,
   Link,
   MenuItem,
   Paper,
   Popover,
   Stack,
   TextField,
-  Tooltip,
   Typography,
   useMediaQuery,
   useTheme,
@@ -41,6 +39,7 @@ import {
 import { ExplorerQueryInput } from './ExplorerQueryInput';
 import type { ExplorerSearch } from './search';
 import { lexiconText } from '../lexicon/lexicon';
+import { LabeledIconButton } from '../../components/LabeledIconButton';
 
 type SearchFormValues = {
   blueprint: string;
@@ -186,34 +185,33 @@ export const ExplorerSearchForm = ({
     versionScope !== versionScopes.current ||
     contextCode !== defaultContextCode;
   const scopeButton = search.blueprint && (
-    <Tooltip title={scopeLabel}>
-      <IconButton
-        aria-controls={scopeAnchor ? scopePopoverId : undefined}
-        aria-expanded={Boolean(scopeAnchor)}
-        aria-haspopup="true"
-        aria-label={scopeLabel}
-        color={revisionsError ? 'error' : scopeChanged ? 'primary' : 'default'}
-        onClick={(event) => setScopeAnchor(event.currentTarget)}
-        sx={[
-          { alignSelf: 'center', flexShrink: 0 },
-          scopeChanged && {
-            bgcolor: 'action.selected',
-            '&:hover': { bgcolor: 'action.focus' },
-          },
-        ]}
+    <LabeledIconButton
+      label={scopeLabel}
+      aria-controls={scopeAnchor ? scopePopoverId : undefined}
+      aria-expanded={Boolean(scopeAnchor)}
+      aria-haspopup="true"
+
+      color={revisionsError ? 'error' : scopeChanged ? 'primary' : 'default'}
+      onClick={(event) => setScopeAnchor(event.currentTarget)}
+      sx={[
+        { alignSelf: 'center', flexShrink: 0 },
+        scopeChanged && {
+          bgcolor: 'action.selected',
+          '&:hover': { bgcolor: 'action.focus' },
+        },
+      ]}
+    >
+      {/* The dot marks a non-default scope; the label announces it. */}
+      <Badge
+        aria-hidden
+        color={revisionsError ? 'error' : 'primary'}
+        invisible={!scopeChanged && !revisionsError}
+        overlap="circular"
+        variant="dot"
       >
-        {/* The dot marks a non-default scope; the label announces it. */}
-        <Badge
-          aria-hidden
-          color={revisionsError ? 'error' : 'primary'}
-          invisible={!scopeChanged && !revisionsError}
-          overlap="circular"
-          variant="dot"
-        >
-          <SearchScopeIcon size={smallIconSize} />
-        </Badge>
-      </IconButton>
-    </Tooltip>
+        <SearchScopeIcon size={smallIconSize} />
+      </Badge>
+    </LabeledIconButton>
   );
 
   return (

@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { personName } from '../../components/personName';
-import type { Attribute } from '../records/api';
 import { principalKinds, PRINCIPAL_SCHEMA_KEY } from './constants';
 import {
   principalConfigurationSchema,
@@ -10,7 +9,7 @@ import {
   type PrincipalConfiguration,
   type PrincipalKind,
 } from './schemas';
-import { attributeValueTypes } from '../records/valueTypes';
+import { stringAttributeConfiguration } from '../records/attributeConfiguration';
 
 /** Separates a principal reference's kind from its id (`user:<uuid>`). */
 const referenceSeparator = ':';
@@ -19,32 +18,11 @@ const referenceSchema = z
   .transform((value) => value.split(referenceSeparator))
   .pipe(z.tuple([z.enum(principalKinds), z.uuid()]));
 
-// Every string cell of a table asks for its column's configuration, so each
-// attribute's configuration is parsed once.
-const principalConfigurations = new WeakMap<
-  Attribute,
-  PrincipalConfiguration | undefined
->();
-
 /** The assignment configuration of a string attribute, if it has one. */
-export const principalConfiguration = (
-  attribute: Attribute,
-): PrincipalConfiguration | undefined => {
-  if (
-    attribute.value_type !== attributeValueTypes.string ||
-    !attribute.value_schema ||
-    typeof attribute.value_schema !== 'object'
-  )
-    return undefined;
-  if (principalConfigurations.has(attribute))
-    return principalConfigurations.get(attribute);
-  const result = principalConfigurationSchema.safeParse(
-    attribute.value_schema[PRINCIPAL_SCHEMA_KEY],
-  );
-  const configuration = result.success ? result.data : undefined;
-  principalConfigurations.set(attribute, configuration);
-  return configuration;
-};
+export const principalConfiguration = stringAttributeConfiguration(
+  PRINCIPAL_SCHEMA_KEY,
+  principalConfigurationSchema,
+);
 
 type PrincipalReference = { kind: PrincipalKind; id: string };
 

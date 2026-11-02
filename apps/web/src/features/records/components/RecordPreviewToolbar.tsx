@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { AgentIcon } from '../../../components/systemIcons';
-import { Box, IconButton, Tooltip } from '@mui/material';
+import { Box } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { RecordToolbar } from './RecordToolbar';
 import { RecordActionsMenu } from './RecordActionsMenu';

@@ -6,7 +6,8 @@ import type {
   StatusTransitionAccess,
 } from './api';
 import { attributeContextFallbacks, statusCoverageAll } from './constants';
-import { attributeValueKinds, attributeValueTypes } from './valueTypes';
+import { attributeValueKinds } from './valueTypes';
+import { stringAttributeConfiguration } from './attributeConfiguration';
 
 export const STATUS_SCHEMA_KEY = 'x-attricat-status';
 const codeSchema = z
@@ -76,31 +77,10 @@ const statusConfigurationSchema = z
   .strict();
 export type StatusConfiguration = z.infer<typeof statusConfigurationSchema>;
 
-// Every status cell of a table asks for its column's configuration, so each
-// attribute's configuration is parsed once.
-const statusConfigurations = new WeakMap<
-  Attribute,
-  StatusConfiguration | undefined
->();
-
-export const statusConfiguration = (
-  attribute: Attribute,
-): StatusConfiguration | undefined => {
-  if (
-    attribute.value_type !== attributeValueTypes.string ||
-    !attribute.value_schema ||
-    typeof attribute.value_schema !== 'object'
-  )
-    return undefined;
-  if (statusConfigurations.has(attribute))
-    return statusConfigurations.get(attribute);
-  const result = statusConfigurationSchema.safeParse(
-    attribute.value_schema[STATUS_SCHEMA_KEY],
-  );
-  const configuration = result.success ? result.data : undefined;
-  statusConfigurations.set(attribute, configuration);
-  return configuration;
-};
+export const statusConfiguration = stringAttributeConfiguration(
+  STATUS_SCHEMA_KEY,
+  statusConfigurationSchema,
+);
 
 export const statusTransitionAllowed = (
   config: StatusConfiguration,

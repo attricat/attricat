@@ -2,7 +2,6 @@ import {
   Box,
   Collapse,
   Divider,
-  IconButton,
   Skeleton,
   Stack,
   Typography,
@@ -21,6 +20,7 @@ import {
 import { useResolvedRecordPreview } from '../useRecordContexts';
 import { useRecordBlueprintRevision } from '../useRecordPreviewData';
 import { fieldSkeletons } from '../constants';
+import { LabeledIconButton } from '../../../components/LabeledIconButton';
 
 const previewToggleSize = 24;
 
@@ -84,10 +84,10 @@ export const RelatedRecordPreviewToggle = ({
   const { t } = useTranslation();
   const { transitions } = useTheme();
   return (
-    <IconButton
+    <LabeledIconButton
       aria-controls={preview.detailsId}
       aria-expanded={preview.expanded}
-      aria-label={t('records.relatedRecordPreview', { record: label })}
+      label={t('records.relatedRecordPreview', { record: label })}
       onClick={preview.toggle}
       size="small"
       sx={{ height: previewToggleSize, ml: 'auto', width: previewToggleSize }}
@@ -101,7 +101,7 @@ export const RelatedRecordPreviewToggle = ({
           }),
         }}
       />
-    </IconButton>
+    </LabeledIconButton>
   );
 };
 

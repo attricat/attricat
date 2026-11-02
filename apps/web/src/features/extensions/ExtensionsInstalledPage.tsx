@@ -1,13 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { Box, Chip, Paper, Stack, Typography } from '@mui/material';
+import { Box, Paper, Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { useCan } from '../auth/useCan';
-import {
-  installationStateColor,
-  installationStateLabelKey,
-  installedExtensionName,
-} from './extensionPageUtils';
+import { installedExtensionName } from './extensionPageUtils';
 import { installedExtensions } from './managementApi';
 import { extensionManagementQueryKeys } from './managementQueryKeys';
 import { capabilities } from '../auth/capabilities';
@@ -15,6 +11,7 @@ import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { EmptyState } from '../../components/EmptyState';
 import { LoadingState } from '../../components/LoadingState';
 import { ExtensionIcon } from '../../components/systemIcons';
+import { InstallationStateChip } from './InstallationStateChip';
 
 export const ExtensionsInstalledPage = () => {
   const { t } = useTranslation();
@@ -52,11 +49,7 @@ export const ExtensionsInstalledPage = () => {
               <Box>
                 <Typography component="h3" variant="h6">
                   {installedExtensionName(extension)}{' '}
-                  <Chip
-                    color={installationStateColor(extension.state)}
-                    label={t(installationStateLabelKey(extension.state))}
-                    size="small"
-                  />
+                  <InstallationStateChip state={extension.state} />
                 </Typography>
                 <Typography color="text.secondary">
                   {t('extensions.idVersionSource', {

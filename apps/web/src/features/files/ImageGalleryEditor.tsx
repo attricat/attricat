@@ -1,7 +1,6 @@
-import { Accessibility, type Draggable } from '@dnd-kit/dom';
 import { move as moveDragged } from '@dnd-kit/helpers';
 import { DragDropProvider } from '@dnd-kit/react';
-import { isSortable, useSortable } from '@dnd-kit/react/sortable';
+import { useSortable } from '@dnd-kit/react/sortable';
 import { Box, IconButton, Stack, Tooltip } from '@mui/material';
 import {
   ArrowLeftIcon,
@@ -21,11 +20,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { ImageGallery, type GalleryFile } from './ImageGallery';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
-
-// `Accessibility.configure` is untyped, so take its options from the plugin.
-type AccessibilityOptions = NonNullable<
-  ConstructorParameters<typeof Accessibility>[1]
->;
+import { sortablePlugins } from '../../components/sortableAccessibility';
 
 // The handle sits among the tile's actions, away from the hook that owns it.
 const DragHandleContext = createContext<{
@@ -193,35 +188,18 @@ export const ImageGalleryEditor = ({
   const count = shown.length;
   const plugins = useMemo(() => {
     const names = new Map(shown.map((file) => [file.id, file.filename]));
-    const announce = (key: string, source: Draggable | null) =>
-      source
-        ? t(key, {
-            filename: names.get(String(source.id)) ?? String(source.id),
-            position: isSortable(source) ? source.index + 1 : undefined,
-            count,
-          })
-        : undefined;
-    const options: AccessibilityOptions = {
-      announcements: {
-        dragstart: ({ operation: { source } }) =>
-          announce('files.imageDragStart', source),
-        dragover: ({ operation: { source } }) =>
-          announce('files.imageDragOver', source),
-        dragend: ({ operation: { source }, canceled }) =>
-          announce(
-            canceled ? 'files.imageDragCancel' : 'files.imageDragEnd',
-            source,
-          ),
+    return sortablePlugins({
+      count,
+      describe: (id) => ({ filename: names.get(id) ?? id }),
+      messages: {
+        cancel: 'files.imageDragCancel',
+        end: 'files.imageDragEnd',
+        instructions: 'files.imageDragInstructions',
+        over: 'files.imageDragOver',
+        start: 'files.imageDragStart',
       },
-      screenReaderInstructions: {
-        draggable: t('files.imageDragInstructions'),
-      },
-    };
-    const accessibility = Accessibility.configure(options);
-    return <T,>(defaults: T[]) =>
-      defaults.map((plugin) =>
-        plugin === Accessibility ? accessibility : plugin,
-      );
+      t,
+    });
   }, [count, shown, t]);
   const gallery = (
     <ImageGallery

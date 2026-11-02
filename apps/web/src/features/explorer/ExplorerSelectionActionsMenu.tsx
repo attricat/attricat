@@ -1,14 +1,14 @@
 import { Button, Menu, Tooltip } from '@mui/material';
 import { ChevronDownIcon } from 'lucide-react';
-import { useId, useState, type ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AgentIcon, SavedSearchIcon } from '../../components/systemIcons';
 import { useAgentsUnavailableReason } from '../agents/useAgentsUnavailableReason';
 import { useCan } from '../auth/useCan';
 import { capabilities } from '../auth/capabilities';
-import { useActionDialogStore } from '../extensions/actionDialogStore';
 import { ActionMenuCloseContext } from '../extensions/actions';
 import { ActionMenuItem } from '../../components/ActionMenuItem';
+import { useActionMenuAnchor } from '../extensions/useActionMenuAnchor';
 
 type Props = {
   disabled: boolean;
@@ -28,16 +28,7 @@ export const ExplorerSelectionActionsMenu = ({
   const canSendToAgent = useCan(capabilities.agentsRun);
   const agentsUnavailableReason = useAgentsUnavailableReason();
   const menuId = useId();
-  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
-  const close = () => setAnchor(null);
-  // An extension action that opens the host dialog hands off to it; the
-  // dialog keeps its captured selection after this menu and its frames close.
-  const dialogKey = useActionDialogStore((state) => state.dialog?.key);
-  const [openedDialogKey, setOpenedDialogKey] = useState(dialogKey);
-  if (anchor && dialogKey !== undefined && dialogKey !== openedDialogKey) {
-    setOpenedDialogKey(dialogKey);
-    setAnchor(null);
-  }
+  const { anchor, close, open } = useActionMenuAnchor();
 
   return (
     <>
@@ -47,10 +38,7 @@ export const ExplorerSelectionActionsMenu = ({
         aria-haspopup="menu"
         disabled={disabled}
         endIcon={<ChevronDownIcon />}
-        onClick={(event) => {
-          setOpenedDialogKey(dialogKey);
-          setAnchor(event.currentTarget);
-        }}
+        onClick={open}
         size="small"
         variant="contained"
       >

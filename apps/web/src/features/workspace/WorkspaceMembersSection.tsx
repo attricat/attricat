@@ -24,11 +24,10 @@ import { invalidateAuthorization } from '../auth/invalidateAuthorization';
 import { principalQueryKeys } from '../principals/queryKeys';
 import { useTranslation } from 'react-i18next';
 import {
-  ensureActiveScopeTarget,
+  grantInputFromForm,
   grantMemberRole,
   listMembers,
   revokeMemberRole,
-  selectedScopeTarget,
   transferOwnership,
   type ScopeType,
   unlinkMemberIdentity,
@@ -85,16 +84,8 @@ export const WorkspaceMembersSection = ({
   });
   const grantRole = useExclusiveMutation({
     mutationFn: (value: typeof form.state.values) => {
-      const input = ensureActiveScopeTarget(
-        {
-          role_id: value.role_id,
-          scope_type: value.scope_type,
-          scope_target_id: selectedScopeTarget(
-            value.scope_type,
-            value.scope_target_id,
-            workspaceId,
-          ),
-        },
+      const input = grantInputFromForm(
+        value,
         workspaceId,
         client.getQueryData(workspaceQueryKeys.grantTargets(value.scope_type)),
       );
