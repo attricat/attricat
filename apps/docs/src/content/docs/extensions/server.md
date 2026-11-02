@@ -295,7 +295,7 @@ Each call into your component, such as one command, event delivery, or operation
 - 1 MiB of log messages, after which further messages are dropped;
 - 10 seconds.
 
-A server component can be at most 32 MiB. It compiles in a separate process limited to 1 GiB of memory and 2 minutes, and if that fails it isn't tried again for 5 minutes. Each API process runs 16 invocations at once, and 8 from one workspace, so more wait their turn.
+A server component can be at most 32 MiB. It compiles in a separate process limited to 512 MiB of memory and 2 minutes, and if that fails it isn't tried again for 5 minutes. Each API process runs 16 invocations at once, and 8 from one workspace, so more wait their turn.
 
 Going over any of them counts as a fault and quarantines the installation, so keep each call small. Long work belongs in an [operation](/extensions/operations/), which does a bounded amount per batch.
 

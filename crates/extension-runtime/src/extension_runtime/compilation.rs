@@ -16,9 +16,11 @@ use super::ExtensionRuntimeError;
 
 /// The argument that makes the API binary compile one component and exit.
 pub const COMPILE_COMPONENT_COMMAND: &str = "compile-extension-component";
-/// The child's address space, which leaves room for the invocations and caches
-/// of the parent within the documented 2 GiB.
-const COMPILATION_MEMORY_BYTES: u64 = 1024 * 1024 * 1024;
+/// The child's address space. A full parent takes about 1 GiB (16 invocations of
+/// 32 MiB, the component cache and itself) and `/tmp` 256 MiB, so this keeps the
+/// worst case inside the documented 2 GiB. Real components compile in far less: a
+/// 17 MB debug build takes under 100 MiB.
+const COMPILATION_MEMORY_BYTES: u64 = 512 * 1024 * 1024;
 const COMPILATION_TIMEOUT: Duration = Duration::from_secs(120);
 const COMPILATION_CPU_SECONDS: u64 = 120;
 /// Compiled output the parent accepts, which it then holds in memory.
@@ -138,6 +140,7 @@ async fn compile_in_child(
 /// stdout. Call this before starting anything else in the process.
 pub fn run_compile_command() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use std::io::{Read as _, Write as _};
+    forbid_core_dumps()?;
     // Only Linux, where production runs, enforces an address space limit.
     let memory = rlimit::Resource::AS.set(COMPILATION_MEMORY_BYTES, COMPILATION_MEMORY_BYTES);
     if cfg!(target_os = "linux") {
@@ -148,5 +151,23 @@ pub fn run_compile_command() -> Result<(), Box<dyn std::error::Error + Send + Sy
     std::io::stdin().read_to_end(&mut component)?;
     let compiled = engine()?.precompile_component(&component)?;
     std::io::stdout().write_all(&compiled)?;
+    Ok(())
+}
+
+/// Running out of memory aborts the child, which is expected here. Otherwise any
+/// extension could write a core dump of up to the memory limit to the host's disk
+/// on every compilation.
+fn forbid_core_dumps() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    rlimit::Resource::CORE.set(0, 0)?;
+    // The kernel ignores that limit when `core_pattern` pipes dumps to a program,
+    // as systemd-coredump does.
+    #[cfg(target_os = "linux")]
+    {
+        const NOT_DUMPABLE: libc::c_ulong = 0;
+        // SAFETY: PR_SET_DUMPABLE takes one integer and touches no memory of ours.
+        if unsafe { libc::prctl(libc::PR_SET_DUMPABLE, NOT_DUMPABLE) } != 0 {
+            return Err(std::io::Error::last_os_error().into());
+        }
+    }
     Ok(())
 }

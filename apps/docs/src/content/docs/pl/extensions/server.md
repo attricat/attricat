@@ -295,7 +295,7 @@ Każde wywołanie Twojego komponentu, np. jedno polecenie, dostarczenie zdarzeni
 - 1 MiB komunikatów w logach, po przekroczeniu którego kolejne są pomijane;
 - 10 sekund.
 
-Komponent serwerowy może mieć najwyżej 32 MiB. Kompiluje się w osobnym procesie ograniczonym do 1 GiB pamięci i 2 minut, a po niepowodzeniu kolejna próba nastąpi dopiero po 5 minutach. Każdy proces API wykonuje naraz 16 wywołań, w tym 8 z jednego obszaru roboczego, a kolejne czekają na swoją kolej.
+Komponent serwerowy może mieć najwyżej 32 MiB. Kompiluje się w osobnym procesie ograniczonym do 512 MiB pamięci i 2 minut, a po niepowodzeniu kolejna próba nastąpi dopiero po 5 minutach. Każdy proces API wykonuje naraz 16 wywołań, w tym 8 z jednego obszaru roboczego, a kolejne czekają na swoją kolej.
 
 Przekroczenie któregokolwiek z tych limitów liczy się jako błąd krytyczny i powoduje kwarantannę instalacji, więc utrzymuj wywołania małe. Długotrwała praca należy do [operacji](/pl/extensions/operations/), która w każdej partii wykonuje ograniczoną ilość pracy.
 
