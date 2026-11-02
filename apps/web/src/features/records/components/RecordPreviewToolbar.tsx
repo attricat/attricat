@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react';
 import { AgentIcon } from '../../../components/systemIcons';
-import { Box, IconButton, Tooltip } from '@mui/material';
+import { Box } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { RecordToolbar } from './RecordToolbar';
 import { RecordActionsMenu } from './RecordActionsMenu';
 import { RecordPublishControls } from './RecordPublishControls';
 import type { RecordPublications } from './useRecordPublications';
+import { LabeledIconButton } from '../../../components/LabeledIconButton';
 
 type Props = {
   /** The record's blueprint, offered for creating another record. */
@@ -70,15 +71,14 @@ export const RecordPreviewToolbar = ({
         publications={publications}
       />
       {loaded && canAskAgent && (
-        <Tooltip title={askLabel}>
-          <IconButton
-            aria-expanded={agentPanelOpen}
-            aria-label={askLabel}
-            onClick={onOpenAgent}
-          >
-            <AgentIcon />
-          </IconButton>
-        </Tooltip>
+        <LabeledIconButton
+          label={askLabel}
+          aria-expanded={agentPanelOpen}
+
+          onClick={onOpenAgent}
+        >
+          <AgentIcon />
+        </LabeledIconButton>
       )}
     </RecordToolbar>
   );

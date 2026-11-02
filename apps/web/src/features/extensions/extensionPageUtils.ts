@@ -43,13 +43,6 @@ export const installedExtensionDescription = (installation: {
 }) =>
   manifestDescriptionSchema.safeParse(installation.manifest).data?.description;
 
-export const installationStateColor = (state: InstallationState) =>
-  state === installationStates.enabled
-    ? 'success'
-    : state === installationStates.quarantined
-      ? 'error'
-      : 'default';
-
 export const installationStateLabelKey = (state: InstallationState) =>
   `extensions.installationStates.${state}`;
 

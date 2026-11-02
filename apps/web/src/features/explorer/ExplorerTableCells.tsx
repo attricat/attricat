@@ -1,4 +1,4 @@
-import { Box, Chip, IconButton } from '@mui/material';
+import { Box, Chip } from '@mui/material';
 import { Link } from '@tanstack/react-router';
 import { EllipsisIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -12,6 +12,7 @@ import { emptyValuePlaceholder } from '../../components/placeholders';
 import { publicationStatuses } from '../records/constants';
 import { SystemTagChips } from '../records/components/SystemTagChips';
 import { visibleSystemTags } from '../records/systemTags';
+import { LabeledIconButton } from '../../components/LabeledIconButton';
 
 export type ActionMenuPosition = { left: number; top: number };
 
@@ -144,8 +145,8 @@ export const RecordActionsCell = ({
 }) => {
   const { t } = useTranslation();
   return (
-    <IconButton
-      aria-label={t('explorer.recordActionsFor', {
+    <LabeledIconButton
+      label={t('explorer.recordActionsFor', {
         record: displayLabel(record.display, record.id),
       })}
       onClick={(event) => {
@@ -155,6 +156,6 @@ export const RecordActionsCell = ({
       size="small"
     >
       <EllipsisIcon size={compactIconSize} />
-    </IconButton>
+    </LabeledIconButton>
   );
 };

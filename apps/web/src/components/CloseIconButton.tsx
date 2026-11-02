@@ -1,22 +1,24 @@
-import { IconButton, Tooltip, type IconButtonProps } from '@mui/material';
+import type { IconButtonProps } from '@mui/material';
 import { XIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { compactIconSize } from './iconSizes';
+import { LabeledIconButton } from './LabeledIconButton';
 
 /** Closes a panel, dialog or selection; `label` says what, where it helps. */
 export const CloseIconButton = ({
   label,
   ...props
-}: Omit<IconButtonProps, 'aria-label' | 'children' | 'size'> & {
+}: Omit<IconButtonProps, 'aria-label' | 'children' | 'disabled' | 'size'> & {
   label?: string;
 }) => {
   const { t } = useTranslation();
-  const name = label ?? t('common.close');
   return (
-    <Tooltip title={name}>
-      <IconButton {...props} aria-label={name} size="small">
-        <XIcon size={compactIconSize} />
-      </IconButton>
-    </Tooltip>
+    <LabeledIconButton
+      {...props}
+      label={label ?? t('common.close')}
+      size="small"
+    >
+      <XIcon size={compactIconSize} />
+    </LabeledIconButton>
   );
 };

@@ -8,6 +8,7 @@ import type { ExplorerSearch } from '../explorer/search';
 import { SavedSearchesDialog } from './SavedSearchesDialog';
 import { SaveSearchDialog } from './SaveSearchDialog';
 import type { SavedSearchActions } from './useSavedSearchActions';
+import { LabeledIconButton } from '../../components/LabeledIconButton';
 
 type Props = {
   actions: SavedSearchActions;
@@ -26,24 +27,23 @@ export const SavedSearchesButton = ({ actions, search }: Props) => {
 
   return (
     <>
-      <Tooltip title={label}>
-        <IconButton
-          aria-label={label}
-          aria-pressed={Boolean(search.sourceView)}
-          color={search.sourceView ? 'primary' : 'default'}
-          onClick={() => setOpen(true)}
-          sx={
-            search.sourceView
-              ? {
-                  bgcolor: 'action.selected',
-                  '&:hover': { bgcolor: 'action.focus' },
-                }
-              : undefined
-          }
-        >
-          <SavedSearchIcon size={smallIconSize} />
-        </IconButton>
-      </Tooltip>
+      <LabeledIconButton
+        label={label}
+
+        aria-pressed={Boolean(search.sourceView)}
+        color={search.sourceView ? 'primary' : 'default'}
+        onClick={() => setOpen(true)}
+        sx={
+          search.sourceView
+            ? {
+                bgcolor: 'action.selected',
+                '&:hover': { bgcolor: 'action.focus' },
+              }
+            : undefined
+        }
+      >
+        <SavedSearchIcon size={smallIconSize} />
+      </LabeledIconButton>
       <SavedSearchesDialog
         actions={actions}
         onClose={() => setOpen(false)}

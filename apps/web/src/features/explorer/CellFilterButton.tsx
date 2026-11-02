@@ -1,4 +1,4 @@
-import { Box, IconButton, Tooltip } from '@mui/material';
+import { Box } from '@mui/material';
 import { use, type ReactNode } from 'react';
 import { FunnelPlusIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -6,6 +6,7 @@ import { compactIconSize } from '../../components/iconSizes';
 import { attributeFilterValueLabel } from './attributeFilters';
 import { RowInterestContext } from './rowInterest';
 import type { AttributeFilter } from './search';
+import { LabeledIconButton } from '../../components/LabeledIconButton';
 
 type Props = {
   fieldLabel: string;
@@ -22,28 +23,27 @@ const CellFilterButton = ({ fieldLabel, filter, onFilter }: Props) => {
   });
 
   return (
-    <Tooltip title={label}>
-      <IconButton
-        aria-label={label}
-        onClick={() => onFilter(filter)}
-        size="small"
-        sx={{
-          bgcolor: 'background.paper',
-          border: 1,
-          borderColor: 'divider',
-          opacity: 0,
-          p: 0.25,
-          position: 'absolute',
-          right: 0,
-          top: '50%',
-          transform: 'translateY(-50%)',
-          'td:hover &, &:focus-visible': { opacity: 1 },
-          '&:hover': { bgcolor: 'background.paper' },
-        }}
-      >
-        <FunnelPlusIcon size={compactIconSize} />
-      </IconButton>
-    </Tooltip>
+    <LabeledIconButton
+      label={label}
+
+      onClick={() => onFilter(filter)}
+      size="small"
+      sx={{
+        bgcolor: 'background.paper',
+        border: 1,
+        borderColor: 'divider',
+        opacity: 0,
+        p: 0.25,
+        position: 'absolute',
+        right: 0,
+        top: '50%',
+        transform: 'translateY(-50%)',
+        'td:hover &, &:focus-visible': { opacity: 1 },
+        '&:hover': { bgcolor: 'background.paper' },
+      }}
+    >
+      <FunnelPlusIcon size={compactIconSize} />
+    </LabeledIconButton>
   );
 };
 

@@ -31,6 +31,7 @@ import { ValueField, type ResolvedValue } from './ValueField';
 import { ViewTabs } from './ViewTabs';
 import { ViewAccordionSection } from './ViewAccordionSection';
 import { lexiconText } from '../../lexicon/lexicon';
+import { isLayoutView } from '../layoutView';
 
 export type RecordViewProps = {
   view?: ViewDefinition;
@@ -204,15 +205,7 @@ export const RecordView = ({
     return null;
   };
 
-  if (
-    !view ||
-    view.type === viewBlockTypes.table ||
-    view.type === viewBlockTypes.dropdownOption ||
-    view.type === viewBlockTypes.pageTitle ||
-    view.type === viewBlockTypes.extensionLayout ||
-    view.type === viewBlockTypes.explorer
-  )
-    return <>{renderNodes(fallback)}</>;
+  if (!isLayoutView(view)) return <>{renderNodes(fallback)}</>;
 
   return <>{renderNode(view, ROOT_NODE_KEY)}</>;
 };

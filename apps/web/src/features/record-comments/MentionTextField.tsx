@@ -30,6 +30,7 @@ import {
   maxMentionSuggestions,
   mentionSuggestionListMaxHeight,
 } from './constants';
+import { useCursorPlacement } from '../../components/useCursorPlacement';
 
 type Props = Omit<
   TextFieldProps,
@@ -55,7 +56,6 @@ export const MentionTextField = ({
   const [anchor, setAnchor] = useState<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
-  const pendingCursor = useRef<number | null>(null);
   const [cursor, setCursor] = useState(value.length);
   const [focused, setFocused] = useState(false);
   const [dismissed, setDismissed] = useState(false);
@@ -76,14 +76,7 @@ export const MentionTextField = ({
   const open = Boolean(mention) && !dismissed && suggestions.length > 0;
   const activeIndex = active < suggestions.length ? active : 0;
 
-  useLayoutEffect(() => {
-    if (pendingCursor.current === null || !inputRef.current) return;
-    inputRef.current.setSelectionRange(
-      pendingCursor.current,
-      pendingCursor.current,
-    );
-    pendingCursor.current = null;
-  });
+  const placeCursor = useCursorPlacement(inputRef);
   useLayoutEffect(() => {
     if (!open) return;
     listRef.current
@@ -105,7 +98,7 @@ export const MentionTextField = ({
   const accept = (user: DirectoryUser) => {
     if (!mention) return;
     const next = insertMention(value, mention, user);
-    pendingCursor.current = next.cursor;
+    placeCursor(next.cursor);
     onValueChange(next.text);
     setCursor(next.cursor);
     setActive(0);

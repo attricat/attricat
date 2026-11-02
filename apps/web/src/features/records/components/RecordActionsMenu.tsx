@@ -10,7 +10,7 @@ import {
   Undo2Icon,
 } from 'lucide-react';
 import { Button, Divider, Menu } from '@mui/material';
-import { useId, useState, type ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RouterMenuItem } from '../../../components/RouterLink';
 import { useCopyToClipboard } from '../../../components/useCopyToClipboard';
@@ -23,8 +23,8 @@ import { RecordIdIcon, AuditLogIcon } from '../../../components/systemIcons';
 import { publicationStatuses } from '../constants';
 import { publicationReadinessText } from '../checkViolations';
 import type { RecordPublications } from './useRecordPublications';
-import { useActionDialogStore } from '../../extensions/actionDialogStore';
 import { ActionMenuCloseContext } from '../../extensions/actions';
+import { useActionMenuAnchor } from '../../extensions/useActionMenuAnchor';
 
 /**
  * The record's Actions menu: history, copying, creating, extension actions,
@@ -60,15 +60,7 @@ export const RecordActionsMenu = ({
 }) => {
   const { t } = useTranslation();
   const menuId = useId();
-  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
-  const close = () => setAnchor(null);
-  // An extension action that opens the host dialog hands off to it.
-  const dialogKey = useActionDialogStore((state) => state.dialog?.key);
-  const [openedDialogKey, setOpenedDialogKey] = useState(dialogKey);
-  if (anchor && dialogKey !== undefined && dialogKey !== openedDialogKey) {
-    setOpenedDialogKey(dialogKey);
-    setAnchor(null);
-  }
+  const { anchor, close, open } = useActionMenuAnchor();
   const copyText = useCopyToClipboard();
   const choose = (action: () => void) => () => {
     close();
@@ -87,10 +79,7 @@ export const RecordActionsMenu = ({
         aria-haspopup="menu"
         color="inherit"
         endIcon={<ChevronDownIcon />}
-        onClick={(event) => {
-          setOpenedDialogKey(dialogKey);
-          setAnchor(event.currentTarget);
-        }}
+        onClick={open}
         size="small"
       >
         {t('records.recordActions')}

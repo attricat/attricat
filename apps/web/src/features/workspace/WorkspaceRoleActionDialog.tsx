@@ -1,12 +1,6 @@
 import { useForm } from '@tanstack/react-form';
 import { useMutation } from '@tanstack/react-query';
-import {
-  Checkbox,
-  FormControlLabel,
-  FormGroup,
-  MenuItem,
-  TextField,
-} from '@mui/material';
+import { MenuItem, TextField } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import type { z } from 'zod';
 import { roleCodePattern } from './constants';
@@ -18,7 +12,7 @@ import {
 } from './api';
 import { FormDialog } from '../../components/FormDialog';
 import type { permissionSchema } from './schemas';
-import { permissionDescription } from './permissionDescription';
+import { PermissionCheckboxes } from './PermissionCheckboxes';
 
 export type RoleDialogAction =
   | { role: WorkspaceRole; type: 'rename' }
@@ -163,28 +157,12 @@ export const WorkspaceRoleActionDialog = ({
       {action.type === 'rename' && (
         <form.Field name="permissions">
           {(field) => (
-            <FormGroup sx={{ mt: 1 }}>
-              {permissions.map((permission) => (
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={field.state.value.includes(permission.code)}
-                      onChange={(event) =>
-                        field.handleChange(
-                          event.target.checked
-                            ? [...field.state.value, permission.code]
-                            : field.state.value.filter(
-                                (code) => code !== permission.code,
-                              ),
-                        )
-                      }
-                    />
-                  }
-                  key={permission.code}
-                  label={`${permission.code} — ${permissionDescription(t, permission)}`}
-                />
-              ))}
-            </FormGroup>
+            <PermissionCheckboxes
+              onChange={field.handleChange}
+              permissions={permissions}
+              selected={field.state.value}
+              sx={{ mt: 1 }}
+            />
           )}
         </form.Field>
       )}

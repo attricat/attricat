@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Box, Chip, Stack, Tabs, Typography } from '@mui/material';
+import { Alert, Box, Stack, Tabs, Typography } from '@mui/material';
 import {
   ArrowLeftIcon,
   HistoryIcon,
@@ -33,8 +33,6 @@ import {
 import { pendingGrants } from './extensionGrants';
 import { extensionManagementQueryKeys } from './managementQueryKeys';
 import {
-  installationStateColor,
-  installationStateLabelKey,
   installedExtensionDescription,
   installedExtensionName,
   invalidateExtensions,
@@ -57,6 +55,7 @@ import { ExtensionExportStatusSection } from '../extension-exports/ExtensionExpo
 import { manifestExportsSchema } from '../extension-exports/schemas';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { InstallationStateChip } from './InstallationStateChip';
 
 const tabIcons = {
   [installedExtensionTabs.overview]: InfoIcon,
@@ -323,11 +322,7 @@ export const InstalledExtensionPage = ({
       />
       {installation && (
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mt: 1 }}>
-          <Chip
-            color={installationStateColor(installation.state)}
-            label={t(installationStateLabelKey(installation.state))}
-            size="small"
-          />
+          <InstallationStateChip state={installation.state} />
           <Typography color="text.secondary" variant="body2">
             {t('extensions.versionLabel', { version: installation.version })}
           </Typography>

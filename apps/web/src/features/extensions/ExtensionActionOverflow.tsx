@@ -1,10 +1,11 @@
-import { IconButton, Popover, Stack, Tooltip } from '@mui/material';
+import { Popover, Stack } from '@mui/material';
 import { EllipsisIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { ExtensionContribution } from './api';
 import { OutletContribution } from './OutletContribution';
 import { contributionKey, type OutletContext } from './outletContributions';
 import { compactIconSize } from '../../components/iconSizes';
+import { LabeledIconButton } from '../../components/LabeledIconButton';
 
 type ExtensionActionOverflowProps = {
   context?: OutletContext;
@@ -22,15 +23,14 @@ export const ExtensionActionOverflow = ({
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   return (
     <>
-      <Tooltip title={label}>
-        <IconButton
-          aria-label={label}
-          onClick={(event) => setAnchor(event.currentTarget)}
-          size="small"
-        >
-          <EllipsisIcon size={compactIconSize} />
-        </IconButton>
-      </Tooltip>
+      <LabeledIconButton
+        label={label}
+
+        onClick={(event) => setAnchor(event.currentTarget)}
+        size="small"
+      >
+        <EllipsisIcon size={compactIconSize} />
+      </LabeledIconButton>
       <Popover
         anchorEl={anchor}
         anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
