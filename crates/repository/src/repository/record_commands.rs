@@ -1959,6 +1959,7 @@ impl AttricatRepository {
                 r#"SELECT av.record_id
                FROM attribute_values av
                JOIN attributes a ON a.id = av.attribute_id
+               JOIN records source ON source.id = av.record_id AND source.deleted_at IS NULL
                WHERE ((a.blueprint_id = $1 AND a.code = $2)
                     OR (a.reusable_attribute_revision_id = (SELECT reusable_attribute_revision_id FROM attributes WHERE id = $7) AND a.code = $2))
                  AND a.workspace_id = $6 AND av.workspace_id = $6
