@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   createMemoryHistory,
@@ -11,6 +11,8 @@ import {
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
+import { httpStatus } from '../../api/httpStatus';
+import { ApiRequestError } from '../../api/request';
 import type { ExtensionContribution } from './api';
 
 const { frameMounts } = vi.hoisted(() => ({ frameMounts: vi.fn() }));
@@ -75,6 +77,68 @@ const contribution: ExtensionContribution = {
 beforeEach(() => vi.clearAllMocks());
 
 describe('ExtensionOutlet', () => {
+  describe('when polling the runtime fails', () => {
+    const renderPanel = async () => {
+      vi.mocked(getExtensionRuntime).mockResolvedValueOnce([
+        {
+          ...contribution,
+          id: 'audit-panel',
+          kind: 'panel',
+          outlet: 'audit_event_panel',
+        },
+      ]);
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      render(
+        <QueryClientProvider client={queryClient}>
+          <ExtensionOutlet
+            context={{
+              context_version: 1,
+              event_id: '22222222-2222-4222-8222-222222222222',
+            }}
+            outlet="audit_event_panel"
+          />
+        </QueryClientProvider>,
+      );
+      await screen.findByText('audit-panel');
+      expect(frameMounts).toHaveBeenCalledTimes(1);
+      return queryClient;
+    };
+
+    it('keeps the mounted frame through an outage', async () => {
+      const queryClient = await renderPanel();
+      vi.mocked(getExtensionRuntime).mockRejectedValueOnce(
+        new TypeError('offline'),
+      );
+      await act(() => queryClient.refetchQueries());
+      await waitFor(() =>
+        expect(queryClient.getQueryCache().getAll()[0].state.status).toBe(
+          'error',
+        ),
+      );
+
+      expect(screen.getByText('audit-panel')).toBeTruthy();
+      expect(frameMounts).toHaveBeenCalledTimes(1);
+      expect(
+        screen.queryByText('Extension content could not be loaded.'),
+      ).toBeNull();
+    });
+
+    it('removes the frame when access is refused', async () => {
+      const queryClient = await renderPanel();
+      vi.mocked(getExtensionRuntime).mockRejectedValueOnce(
+        new ApiRequestError(httpStatus.forbidden, 'refused'),
+      );
+      await act(() => queryClient.refetchQueries());
+
+      expect(
+        await screen.findByText('Extension content could not be loaded.'),
+      ).toBeTruthy();
+      expect(screen.queryByText('audit-panel')).toBeNull();
+    });
+  });
+
   it('mounts only read-only publish panels for a strict blueprint revision', async () => {
     vi.mocked(getExtensionRuntime).mockResolvedValue([
       {

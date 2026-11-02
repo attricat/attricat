@@ -1,7 +1,10 @@
 import { Alert } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { ExtensionFrame } from './ExtensionFrame';
-import { useExtensionRuntime } from './useExtensionRuntime';
+import {
+  isExtensionRuntimeUnavailable,
+  useExtensionRuntime,
+} from './useExtensionRuntime';
 import { contributionKinds } from './constants';
 import { LoadingSpinner } from '../../components/LoadingState';
 
@@ -20,7 +23,7 @@ export const ExtensionRoutePage = ({
     return (
       <LoadingSpinner label={t('extensions.loadingPage')} sx={{ py: 2 }} />
     );
-  if (runtime.isError)
+  if (isExtensionRuntimeUnavailable(runtime))
     return (
       <Alert severity="warning">{t('extensions.contentLoadFailed')}</Alert>
     );

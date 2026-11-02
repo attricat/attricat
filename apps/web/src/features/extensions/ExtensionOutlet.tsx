@@ -12,7 +12,10 @@ import {
   type OutletName,
 } from './outletContributions';
 import { extensionFramePlaceholders } from './constants';
-import { useExtensionRuntime } from './useExtensionRuntime';
+import {
+  isExtensionRuntimeUnavailable,
+  useExtensionRuntime,
+} from './useExtensionRuntime';
 import { progressSizes } from '../../components/iconSizes';
 import { LoadingSpinner } from '../../components/LoadingState';
 
@@ -66,7 +69,7 @@ export const ExtensionOutlet = ({
         sx={{ py: 1 }}
       />
     );
-  if (runtime.isError)
+  if (isExtensionRuntimeUnavailable(runtime))
     return (
       <Alert role="status" severity="warning">
         {t('extensions.contentLoadFailed')}
