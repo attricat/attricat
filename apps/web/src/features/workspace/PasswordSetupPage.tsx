@@ -77,28 +77,33 @@ export const PasswordSetupPage = ({
           <Divider>{t('auth.or')}</Divider>
         </>
       )}
-      <form.Field name="invitationSecret">
-        {(field) => (
-          <TextField
-            autoComplete="off"
-            label={t('workspace.invitationSecret')}
-            onChange={(event) => field.handleChange(event.target.value)}
-            type="password"
-            value={field.state.value}
-          />
-        )}
-      </form.Field>
-      <form.Field name="onboardingSecret">
-        {(field) => (
-          <TextField
-            autoComplete="off"
-            label={t('workspace.passwordSetupSecret')}
-            onChange={(event) => field.handleChange(event.target.value)}
-            type="password"
-            value={field.state.value}
-          />
-        )}
-      </form.Field>
+      {/* A link from the invitation email already carries its secrets. */}
+      {!initialInvitationSecret && (
+        <form.Field name="invitationSecret">
+          {(field) => (
+            <TextField
+              autoComplete="off"
+              label={t('workspace.invitationSecret')}
+              onChange={(event) => field.handleChange(event.target.value)}
+              type="password"
+              value={field.state.value}
+            />
+          )}
+        </form.Field>
+      )}
+      {!initialOnboardingSecret && (
+        <form.Field name="onboardingSecret">
+          {(field) => (
+            <TextField
+              autoComplete="off"
+              label={t('workspace.passwordSetupSecret')}
+              onChange={(event) => field.handleChange(event.target.value)}
+              type="password"
+              value={field.state.value}
+            />
+          )}
+        </form.Field>
+      )}
       <form.Field name="password">
         {(field) => (
           <TextField

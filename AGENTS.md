@@ -86,7 +86,8 @@ ordinary catalog inspection.
 When changing extension installation, runtime, artifact storage, event dispatch,
 permissions, or client contributions, validate the host integration against the
 sibling example extension when it is available at
-`../../attricat-extension-example` (two levels above this worktree). Build and
+`attricat-extension-example`, two levels above the main checkout and three above
+a worktree. Build and
 package it, side-load the generated archive into this worktree's running server,
 grant its requested permissions, enable it, and exercise a real extension
 event/action. Unit tests alone are not sufficient for these changes. See

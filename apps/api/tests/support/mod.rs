@@ -466,7 +466,7 @@ async fn start_configured_server(
     let mut state = AppState {
         repository: AttricatRepository::system(pool.clone()),
         agent_provider: None,
-        registry: Arc::new(GitHubRegistry::new().unwrap()),
+        registry: Arc::new(fake_github().await),
         official_registry: "attricat/attricat-extensions"
             .parse::<GitHubRepository>()
             .unwrap(),
@@ -619,4 +619,42 @@ async fn query_domain_event(
     .await
     .unwrap();
     serde_json::from_value(row).unwrap()
+}
+
+/// A registry reading from a local stand-in for GitHub, so tests never need the
+/// network. Anything not listed here is a 404, as on GitHub.
+async fn fake_github() -> GitHubRegistry {
+    use axum::{Router, http::StatusCode, response::IntoResponse, routing::get};
+    let listing = || async {
+        serde_json::json!({"registry_version": 2, "extensions": [{
+            "id": "acme.listed",
+            "repository": "acme/listed",
+            "name": "Listed",
+            "description": "An extension two registries list",
+            "versions": [{"version": "1.0.0", "host_api": "^1"}]
+        }]})
+        .to_string()
+    };
+    let app = Router::new()
+        .route(
+            "/attricat/attricat-extensions/HEAD/registry.json",
+            get(listing),
+        )
+        .route("/acme/example/HEAD/registry.json", get(listing))
+        .route(
+            "/acme/invalid/HEAD/registry.json",
+            get(|| async { "not a registry" }),
+        )
+        .route(
+            "/acme/limited/HEAD/registry.json",
+            get(|| async { StatusCode::TOO_MANY_REQUESTS.into_response() }),
+        )
+        .route("/repos/acme/listed/readme", get(|| async { "# Listed" }))
+        .route("/repos/acme/listed/releases", get(|| async { "[]" }));
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let origin = format!("http://{}/", listener.local_addr().unwrap())
+        .parse::<reqwest::Url>()
+        .unwrap();
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    GitHubRegistry::with_origins(origin.clone(), origin).unwrap()
 }

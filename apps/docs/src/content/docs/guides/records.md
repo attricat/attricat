@@ -5,7 +5,7 @@ description: Create, edit, and delete records, work with contextual values, file
 
 A record is one catalog item, such as a product or a category. Its blueprint decides which attributes it has, how they are validated, and how its page is laid out.
 
-The record page has one row of tabs under its toolbar. The **Data** tab, selected first, holds the **Context** selector and the record's fields. The other tabs are **Data quality**, **Comments**, **Agents**, **Record control**, **Tags and metadata**, and **Exports**; some appear only when they apply.
+The record page has one row of tabs under its toolbar. The **Data** tab, selected first, holds the record's fields and, when the workspace has more than one context, a tab for each. The other tabs are **Data quality**, **Comments**, **Agents**, **Record control**, **Tags and metadata**, and **Exports**; some appear only when they apply.
 
 ## Create a record
 
@@ -19,7 +19,7 @@ Values you enter when creating a record are stored in the default context. Attri
 
 ## Edit values
 
-You edit a record on its page; there is no separate edit form. Every field you may change is an editable control in the blueprint's layout, showing the values for one context at a time. Switch with the **Context** selector. If you cannot edit the record, you see its values only.
+You edit a record on its page; there is no separate edit form. Every field you may change is an editable control in the blueprint's layout, showing the values for one context at a time. Switch with the context tabs. If you cannot edit the record, you see its values only.
 
 Each field saves on its own:
 

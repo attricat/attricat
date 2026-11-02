@@ -25,6 +25,7 @@ chrono.workspace = true
 chrono-tz.workspace = true
 futures-util.workspace = true
 metrics.workspace = true
+moka = { workspace = true, features = ["future"] }
 reqwest.workspace = true
 ring.workspace = true
 rust_decimal.workspace = true

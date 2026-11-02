@@ -11,12 +11,23 @@ use super::{
     extractors::{ApiJson, ApiPath},
 };
 use crate::{
-    extension_registry::{DiscoveredExtension, GitHubRepository},
+    extension_registry::{DiscoveredExtension, GitHubRepository, RegistryError},
     repository::{AttricatRepository, ExtensionRegistrySource},
 };
 
 /// Separates the repository from the release tag in an installation's source.
 const RELEASE_TAG_SEPARATOR: char = '@';
+
+/// The API's answer to a failed lookup of a repository's catalogue.
+pub(super) fn catalogue_error(error: RegistryError) -> ApiError {
+    match error {
+        RegistryError::NotFound => ApiError::not_found("extension repository"),
+        RegistryError::RateLimited => ApiError::service_unavailable(
+            "GitHub's rate limit for this server is used up; try again within an hour",
+        ),
+        _ => ApiError::service_unavailable("extension repository could not be resolved"),
+    }
+}
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -73,6 +84,32 @@ pub(super) async fn create(
     }
     let source = GitHubRepository::from_str(&input.source)
         .map_err(|error| ApiError::invalid_input(error.to_string()))?;
+    if source == state.official_registry {
+        return Err(ApiError::conflict(
+            "the official registry is always included",
+        ));
+    }
+    // A source that lists nothing would only make later lookups fail.
+    match state.registry.discover(&source).await {
+        Ok(_) => {}
+        Err(RegistryError::NotFound) => {
+            return Err(ApiError::invalid_input(format!(
+                "{} has no registry.json on its default branch",
+                source.identity()
+            )));
+        }
+        Err(RegistryError::InvalidResponse | RegistryError::InvalidSource) => {
+            return Err(ApiError::invalid_input(format!(
+                "the registry.json of {} isn't valid",
+                source.identity()
+            )));
+        }
+        Err(_) => {
+            return Err(ApiError::service_unavailable(
+                "the registry could not be checked; try again later",
+            ));
+        }
+    }
     Ok((
         StatusCode::CREATED,
         Json(SourceResponse::custom(
@@ -132,15 +169,26 @@ pub(super) async fn updates(
     ))
 }
 
-/// Every entry of every readable registry, in trust order.
+/// Every extension the readable registries list.
 async fn discovered_extensions(
     state: &AppState,
     repository: &AttricatRepository,
 ) -> Result<Vec<DiscoveredExtension>, ApiError> {
-    let mut extensions = Vec::new();
+    let mut extensions: Vec<DiscoveredExtension> = Vec::new();
     for source in registry_sources(state, repository).await? {
         match state.registry.discover(&source).await {
-            Ok(found) => extensions.extend(found),
+            // Sources come in trust order, so the first to list a repository
+            // keeps it.
+            Ok(found) => {
+                for extension in found {
+                    if !extensions
+                        .iter()
+                        .any(|listed| listed.repository == extension.repository)
+                    {
+                        extensions.push(extension);
+                    }
+                }
+            }
             Err(error) => {
                 tracing::warn!(source = %source.identity(), %error, "extension registry discovery failed")
             }
@@ -160,9 +208,11 @@ pub(super) async fn extension_details(
         .identity();
     let entry = find_trusted_extension(&state, &repository, &target).await?;
     Ok(Json(
-        state.registry.extension_details(entry).await.map_err(|_| {
-            ApiError::service_unavailable("extension repository could not be resolved")
-        })?,
+        state
+            .registry
+            .extension_details(entry)
+            .await
+            .map_err(catalogue_error)?,
     ))
 }
 
@@ -189,7 +239,8 @@ async fn registry_sources(
 /// Finds `target` in the first trusted registry that lists it. A failing
 /// source is skipped so one broken registry cannot block lookups served by the
 /// others; the lookup is unavailable only if the target was not found and a
-/// source could not be checked.
+/// source could not be checked. A source that no longer exists lists nothing,
+/// which is an answer.
 pub(super) async fn find_trusted_extension(
     state: &AppState,
     repository: &AttricatRepository,
@@ -205,7 +256,7 @@ pub(super) async fn find_trusted_extension(
             }
             Err(error) => {
                 tracing::warn!(source = %source.identity(), %error, "extension registry discovery failed");
-                unavailable = true;
+                unavailable |= !matches!(error, RegistryError::NotFound);
             }
         }
     }

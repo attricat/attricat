@@ -89,7 +89,7 @@ Aby wybrać kilka celów jednego atrybutu, użyj **Dodaj filtr** i wybierz atryb
 
 ## Kontekst
 
-Selektor **Kontekst** pokazuje wartości rozstrzygnięte w danym kontekście: własną wartość kontekstu, jeśli ją ma, a w przeciwnym razie wartość dziedziczoną. Zobacz [Konteksty](/pl/guides/contexts/).
+Selektor **Kontekst** w **Zakresie wyszukiwania** pokazuje wartości rozstrzygnięte w danym kontekście: własną wartość kontekstu, jeśli ją ma, a w przeciwnym razie wartość dziedziczoną. Zobacz [Konteksty](/pl/guides/contexts/).
 
 Kolumny tabeli, etykieta rekordu, filtry i sortowanie korzystają z wybranego kontekstu. Na przykład po wybraniu kontekstu `pl` przetłumaczona nazwa jest wyświetlana, filtrowana i sortowana po polsku, a rekord bez polskiej nazwy pokazuje nazwę dziedziczoną. Wyszukiwanie tekstowe dopasowuje wartości we wszystkich kontekstach.
 

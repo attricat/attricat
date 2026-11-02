@@ -68,6 +68,20 @@ Każda trasa żądania, rodzaj zadania i pętla w tle to osobny `scope` liczby z
 
 Sugerowane alerty: powiadamiaj dyżurnego, gdy wskaźnik gotowości wynosi zero przez dwa interwały, gdy liczba martwych wiadomości lub nieudanych zadań jest większa od zera albo gdy rosną liczniki niepowodzeń. Ostrzegaj, gdy najstarszy element w kolejce jest starszy niż pięć minut przez dziesięć minut lub gdy kolejka rośnie przez piętnaście minut. Alarmuj, jeśli metryki znikną na dwa interwały pobierania. Dostosuj progi do wolumenu importów i eksportów.
 
+## Zużycie pamięci
+
+Jako punkt odniesienia: tyle pamięci zużyły jeden proces API, jeden proces roboczy plików i PostgreSQL na jednej maszynie amd64 z 5000 rekordów i jednym rozszerzeniem. Są to najwyższe wartości pokazane przez `docker stats` w każdej czynności, bez pamięci podręcznej plików. Traktuj je jako punkt wyjścia i porównuj z własnym katalogiem i ruchem.
+
+| Czynność | API | Proces roboczy plików | PostgreSQL |
+| --- | --- | --- | --- |
+| Bezczynność po uruchomieniu | 45 MiB | 3 MiB | 100 MiB |
+| Wyszukiwanie i odczyty od 16 klientów | 300 MiB | 3 MiB | 310 MiB |
+| Zapisy uruchamiające rozszerzenie, od 8 klientów | 310 MiB | 4 MiB | 510 MiB |
+| Przetwarzanie 24 obrazów o rozdzielczości 6 megapikseli, po 3 naraz | 400 MiB | 300 MiB | 510 MiB |
+| 16 logowań naraz, cztery razy | 810 MiB | 100 MiB | 550 MiB |
+
+Największy skok powoduje haszowanie haseł, a API zachowało tę pamięć przez co najmniej 90 sekund pomiaru po nim, więc wysoka wartość po serii logowań sama w sobie nie oznacza wycieku. Zachowaj limit 2 GiB z [listy kontrolnej dla produkcji](/pl/operate/deployment/#lista-kontrolna-dla-produkcji). Większe obrazy wymagają więcej pamięci procesu roboczego plików, do wartości `FILE_WORKER_MAX_PIXELS`, której ten pomiar nie osiągnął.
+
 ## Czas obsługi żądań
 
 Każda odpowiedź API ma nagłówek `Server-Timing` z łącznym czasem obsługi (`app;dur=…`). Narzędzia deweloperskie przeglądarki pokazują go w szczegółach czasu żądania. Odpowiedzi stanu danych informują też, czy użyto bufora.

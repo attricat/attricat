@@ -48,8 +48,8 @@ A context that is in use cannot be deleted.
 
 ## Work in a context
 
-- In the **Explorer**, the **Context** selector shows, filters, and sorts values as they resolve in that context.
-- On a record, the **Context** selector switches the values you see and edit.
+- In the **Explorer**, the **Context** selector under **Search scope** shows, filters, and sorts values as they resolve in that context.
+- On a record, the context tabs under **Data** switch the values you see and edit.
 - In the Explorer's **Browse by** panel, relationship links resolve in the context selected in the Explorer.
 
 ## Plan the tree first

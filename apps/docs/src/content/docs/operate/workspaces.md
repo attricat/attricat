@@ -19,11 +19,12 @@ Sign-in is a password or [single sign-on](#single-sign-on). Multi-factor authent
 
 A workspace can let people sign in through one OpenID Connect identity provider, such as Microsoft Entra ID, Okta, Google Workspace, or Keycloak. Your deployment needs `OIDC_CALLBACK_URL` and the `identity_provider_credential_key` secret; see the [configuration reference](/reference/configuration/). Set it up under **Manage → Workspace management → Sign-in**, which requires `workspace.manage`:
 
-1. Register an application with your provider, used only by this workspace, with exactly the redirect URI that **Sign-in** shows and no wildcards. This matters for security: a shared application or a wildcard could let another workspace on the same deployment obtain your members' sign-ins. Make sure the provider shares the `email` claim.
-2. Enter the issuer URL, client ID, client secret, and the name for the sign-in button, and save.
-3. Select **Run test sign-in**. This proves the settings work and connects your account.
-4. Turn on **Offer this provider on the sign-in page**.
-5. Optionally, let only owners use a password, so they have a way back in if the provider fails.
+1. Register an application with your provider, used only by this workspace. Make sure the provider shares the `email` claim.
+2. Enter the issuer URL, client ID, client secret, and the name for the sign-in button, and save. **Sign-in** then shows the workspace's redirect URI.
+3. Add exactly that redirect URI to the application, with no wildcards. This matters for security: a shared application or a wildcard could let another workspace on the same deployment obtain your members' sign-ins.
+4. Select **Run test sign-in**. This proves the settings work and connects your account.
+5. Turn on **Offer this provider on the sign-in page**.
+6. Optionally, let only owners use a password, so they have a way back in if the provider fails.
 
 Changing the issuer or client ID turns the provider off again and restores password sign-in for everyone until a new test sign-in succeeds. A link to a provider holds only in the workspace that made it, so someone who uses the same provider in two workspaces connects in each, and a provider set up for one workspace gives no access to another.
 

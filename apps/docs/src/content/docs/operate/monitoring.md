@@ -68,6 +68,20 @@ Each request route, task kind and background loop is a round-trip `scope`. To lo
 
 Suggested alerts: page when a readiness gauge is zero for two intervals, when any dead-letter or failed count is above zero, or when failure counters increase. Warn when the oldest queued item is older than five minutes for ten minutes, or a queue grows for fifteen minutes. Alert if metrics disappear for two scrape intervals. Tune thresholds to your import and export volume.
 
+## Memory use
+
+As a baseline, this is what one API process, one file worker and PostgreSQL used on a single amd64 machine with 5,000 records and one extension. These are the highest values `docker stats` showed in each activity, which leaves out the file cache. Treat them as a starting point, and compare with your own catalog and traffic.
+
+| Activity | API | File worker | PostgreSQL |
+| --- | --- | --- | --- |
+| Idle after starting | 45 MiB | 3 MiB | 100 MiB |
+| Searches and reads from 16 clients | 300 MiB | 3 MiB | 310 MiB |
+| Saves that run an extension, from 8 clients | 310 MiB | 4 MiB | 510 MiB |
+| Processing 24 images of 6 megapixels, 3 at a time | 400 MiB | 300 MiB | 510 MiB |
+| 16 sign-ins at once, four times | 810 MiB | 100 MiB | 550 MiB |
+
+Password hashing causes the largest jump, and the API held on to that memory for at least the 90 seconds measured afterwards, so a high value after a burst of sign-ins doesn't by itself mean a leak. Keep the 2 GiB limit from the [production checklist](/operate/deployment/#production-checklist). Larger images need more file worker memory, up to `FILE_WORKER_MAX_PIXELS`, which this baseline didn't reach.
+
 ## Request timing
 
 Every API response has a `Server-Timing` header with the total handling time (`app;dur=…`). Browser developer tools show it under the request's timing. Data-health responses also say whether the cache was hit.

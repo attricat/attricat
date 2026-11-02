@@ -2179,10 +2179,10 @@ next invocation.
 
 The sibling [`attricat-extension-example`](../../attricat-extension-example)
 checkout is the host's end-to-end test extension. From an Attricat worktree,
-it is available two levels above the repository root:
+it is two levels above the main checkout, and three above a worktree:
 
 ```sh
-example_extension="$(cd ../../attricat-extension-example && pwd)"
+example_extension="$(cd ../../attricat-extension-example && pwd)" # ../../.. from a worktree
 (cd "$example_extension" && just check && just pack)
 ```
 

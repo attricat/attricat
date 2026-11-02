@@ -9,7 +9,7 @@ Attricat ships as one container image. The same image runs three roles:
 | --- | --- | --- |
 | `migrate` | Applies database migrations, then exits. | One, before each rollout. |
 | `api` | The web app at `/`, the API at `/api`, and all background workers except file processing. | One or more. |
-| `file-worker` | Scans, processes, and cleans up uploaded files. | One or more. |
+| `file-worker` | Processes and cleans up uploaded files. | One or more. |
 
 The image also contains the `acli` CLI as a fourth role.
 
@@ -166,5 +166,6 @@ Secrets are read at startup. To rotate: create the new credential, replace its s
 - `ATTRICAT_E2E_FIXTURE_EMAIL` unset.
 - A proxy that sets `Strict-Transport-Security` and rate-limits `/api/auth/` per client address. Attricat limits guesses per account and workspace, which does not stop one client trying many of them.
 - At least 2 GiB of memory for each API process. Password hashing is deliberately memory-hard, so a smaller limit can end the process under a burst of sign-ins.
+- Malware scanning outside Attricat, if your uploads need it. Attricat checks file types and sizes but does not scan file contents for malware.
 - A tested backup and restore procedure.
 - With several API replicas: PostgreSQL `max_connections` sized for up to three extra connections per API process, no transaction-mode pooler, and optionally `CACHE_BACKEND=redis`.

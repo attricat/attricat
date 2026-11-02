@@ -9,7 +9,7 @@ Attricat jest dostarczany jako jeden obraz kontenera. Ten sam obraz uruchamia tr
 | --- | --- | --- |
 | `migrate` | Stosuje migracje bazy danych, a następnie kończy działanie. | Jedna, przed każdym wdrożeniem. |
 | `api` | Aplikację webową pod `/`, API pod `/api` i wszystkie procesy robocze w tle z wyjątkiem przetwarzania plików. | Jedna lub więcej. |
-| `file-worker` | Skanuje, przetwarza i porządkuje przesłane pliki. | Jedna lub więcej. |
+| `file-worker` | Przetwarza i porządkuje przesłane pliki. | Jedna lub więcej. |
 
 Obraz zawiera też klienta CLI `acli` jako czwartą rolę.
 
@@ -166,5 +166,6 @@ Sekrety są odczytywane przy starcie. Aby przeprowadzić rotację: utwórz nowe 
 - Nieustawione `ATTRICAT_E2E_FIXTURE_EMAIL`.
 - Proxy, które ustawia `Strict-Transport-Security` i ogranicza liczbę żądań do `/api/auth/` dla każdego adresu klienta. Attricat ogranicza próby dla konta i obszaru roboczego, co nie powstrzyma jednego klienta próbującego wielu z nich.
 - Co najmniej 2 GiB pamięci dla każdego procesu API. Haszowanie haseł celowo zużywa dużo pamięci, więc przy mniejszym limicie seria logowań może zakończyć proces.
+- Skanowanie pod kątem złośliwego oprogramowania poza Attricat, jeśli wymagają tego przesyłane pliki. Attricat sprawdza typy i rozmiary plików, ale nie skanuje ich zawartości.
 - Przetestowana procedura tworzenia kopii zapasowej i przywracania.
 - Przy kilku replikach API: `max_connections` w PostgreSQL z zapasem do trzech dodatkowych połączeń na proces API, brak poolera w trybie transakcyjnym i opcjonalnie `CACHE_BACKEND=redis`.
