@@ -61,7 +61,12 @@ const editor = (overrides: Partial<ExtensionContribution> = {}) =>
     ...overrides,
   }) as ExtensionContribution;
 
-const reference = { id: 'formula', version: 1, props: { rows: 2 } };
+const reference = {
+  extension_id: 'acme.formulas',
+  id: 'formula',
+  version: 1,
+  props: { rows: 2 },
+};
 
 const renderEditor = () => {
   const onChange = vi.fn();
@@ -97,6 +102,14 @@ describe('attribute editors', () => {
     expect(resolveAttributeEditor([], reference, attribute)).toBeUndefined();
     expect(
       resolveAttributeEditor([editor({ version: 2 })], reference, attribute),
+    ).toBeUndefined();
+    // Another extension's editor of the same ID is not the one named.
+    expect(
+      resolveAttributeEditor(
+        [editor({ extension_id: 'acme.other' })],
+        reference,
+        attribute,
+      ),
     ).toBeUndefined();
     expect(
       resolveAttributeEditor(

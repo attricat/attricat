@@ -20,6 +20,7 @@ type ReferenceBlueprint = {
 export type ReferenceEditor = {
   id: string;
   version: number;
+  extensionId: string;
   extensionName: string;
   title: string | null;
   valueTypes: string[];
@@ -114,6 +115,7 @@ export const createDefinitionReferences = (
               {
                 id: contribution.id,
                 version: contribution.version,
+                extensionId: contribution.extension_id,
                 extensionName: contribution.extension_name,
                 title: contribution.title,
                 valueTypes: contribution.editor.value_types,

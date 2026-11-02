@@ -988,9 +988,13 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "extension_id": {
+          "type": "string",
+          "description": "The enabled extension that declares the editor."
+        },
         "id": {
           "type": "string",
-          "description": "The editor contribution's ID in an enabled extension.",
+          "description": "The editor contribution's ID in that extension.",
           "x-attricat-reference": "attribute_editor"
         },
         "version": {
@@ -1007,6 +1011,7 @@
         }
       },
       "required": [
+        "extension_id",
         "id",
         "version"
       ],

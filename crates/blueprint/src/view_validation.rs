@@ -273,11 +273,14 @@ fn validate_field_editor(
             field: field.to_owned(),
         });
     }
-    if editor.id.is_empty()
-        || !editor
-            .id
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+    let valid_id = |id: &str| {
+        !id.is_empty()
+            && id
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+    };
+    if !valid_id(&editor.extension_id)
+        || !valid_id(&editor.id)
         || editor.version == 0
         || (!editor.props.is_null() && !editor.props.is_object())
     {

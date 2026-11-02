@@ -28,7 +28,12 @@ vi.mock('../../../components/RouterLink', () => ({
 }));
 
 const editorRecordId = crypto.randomUUID();
-const formulaEditor = { id: 'formula', version: 1, props: {} };
+const formulaEditor = {
+  extension_id: 'acme.formulas',
+  id: 'formula',
+  version: 1,
+  props: {},
+};
 
 /** The record page with the runtime the app loaded. */
 const withRuntime = (

@@ -464,7 +464,11 @@ async function valueSuggestions(
           version: editor.version,
         }),
         filterText: editor.id,
-        insertText: yamlValue({ id: editor.id, version: editor.version }),
+        insertText: yamlValue({
+          extension_id: editor.extensionId,
+          id: editor.id,
+          version: editor.version,
+        }),
         kind: suggestionKinds.reference,
         label: editor.id,
         range: cursor.range,

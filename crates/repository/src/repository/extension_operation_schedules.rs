@@ -8,6 +8,7 @@ use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
 use super::{AttricatRepository, RepositoryError, StartExtensionOperation};
+use crate::extensions::Manifest;
 
 const MAX_SNAPSHOT_BYTES: usize = 64 * 1024;
 const MAX_DUE_PER_POLL: i64 = 16;
@@ -205,6 +206,55 @@ impl AttricatRepository {
         sqlx::query_as(&format!("UPDATE extension_operation_schedules SET enabled=$3,interval_seconds=$4,next_at=CASE WHEN $3 AND NOT enabled THEN clock_timestamp()+($4*interval '1 second') ELSE next_at END,paused_reason=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 RETURNING {PROJECTION}"))
             .bind(id).bind(self.workspace_id()).bind(enabled).bind(interval_seconds)
             .fetch_optional(&self.pool).await.map_err(Into::into)
+    }
+
+    /// Moves a release's schedules to its upgrade. A schedule whose operation,
+    /// input or configuration no longer fits stays on the old release and
+    /// pauses, because nothing can run it until it is recreated.
+    pub(crate) async fn repin_extension_operation_schedules(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        extension_id: &str,
+        prior_release_id: Uuid,
+        release_id: Uuid,
+        manifest: &Manifest,
+    ) -> Result<(), RepositoryError> {
+        let schedules: Vec<(Uuid, String, Value, Value)> = sqlx::query_as(
+            "SELECT id,operation_id,input,configuration_snapshot FROM extension_operation_schedules WHERE workspace_id=$1 AND extension_id=$2 AND installed_release_id=$3 FOR UPDATE",
+        )
+        .bind(self.workspace_id())
+        .bind(extension_id)
+        .bind(prior_release_id)
+        .fetch_all(&mut **transaction)
+        .await?;
+        let operations = manifest
+            .server
+            .as_ref()
+            .map_or(&[][..], |server| &server.operations);
+        for (id, operation_id, input, configuration) in schedules {
+            let fits = operations
+                .iter()
+                .find(|operation| operation.id == operation_id)
+                .is_some_and(|operation| {
+                    serde_json::to_vec(&input)
+                        .is_ok_and(|v| v.len() <= operation.max_request_bytes as usize)
+                        && attricat_extension_manifest::validate_schema(
+                            &operation.request_schema,
+                            &input,
+                        )
+                        .is_ok()
+                })
+                && manifest
+                    .configuration
+                    .as_ref()
+                    .is_none_or(|_| manifest.validate_configuration(&configuration).is_ok());
+            if fits {
+                sqlx::query("UPDATE extension_operation_schedules SET installed_release_id=$3,paused_reason=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2")
+                    .bind(id).bind(self.workspace_id()).bind(release_id)
+                    .execute(&mut **transaction).await?;
+            }
+        }
+        Ok(())
     }
 
     /// Missed ticks are skipped; only the latest due occurrence is considered.

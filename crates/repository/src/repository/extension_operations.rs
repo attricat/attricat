@@ -8,6 +8,7 @@ use super::stored_code;
 use attricat_domain::states::RunStatus;
 use chrono::{DateTime, Duration, Utc};
 use serde_json::{Value, json};
+use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
 use crate::task_queue::{TaskInsert, TaskKind, TaskStatus};
@@ -693,19 +694,85 @@ impl AttricatRepository {
             transaction.commit().await?;
             return Ok(false);
         };
-        let changed = match status.as_str() {
-            "pending" => {
+        let changed = self
+            .cancel_locked_extension_operation(&mut transaction, id, &status)
+            .await?;
+        transaction.commit().await?;
+        Ok(changed)
+    }
+
+    /// Cancels a run whose row the transaction holds. A worker may already
+    /// hold a pending run's task, so it is then asked to cancel like a leased
+    /// run.
+    async fn cancel_locked_extension_operation(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        id: Uuid,
+        status: &str,
+    ) -> Result<bool, RepositoryError> {
+        let queued_task: Option<Uuid> = if status == "pending" {
+            sqlx::query_scalar("SELECT id FROM tasks WHERE workspace_id=$1 AND kind='extension_operation_run.v1' AND subject_id=$2 AND status='queued' ORDER BY generation DESC LIMIT 1 FOR UPDATE")
+                .bind(self.workspace_id()).bind(id).fetch_optional(&mut **transaction).await?
+        } else {
+            None
+        };
+        let changed = match (status, queued_task) {
+            ("pending", Some(task_id)) => {
                 let changed = sqlx::query("UPDATE extension_operation_runs SET status='cancelled',cancelled_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1")
-                    .bind(id).execute(&mut *transaction).await?.rows_affected();
-                let task_id: Uuid = sqlx::query_scalar("SELECT id FROM tasks WHERE workspace_id=$1 AND kind='extension_operation_run.v1' AND subject_id=$2 AND status='queued' ORDER BY generation DESC LIMIT 1 FOR UPDATE")
-                    .bind(self.workspace_id()).bind(id).fetch_one(&mut *transaction).await?;
-                self.cancel_queued_task(&mut transaction, task_id).await?;
+                    .bind(id).execute(&mut **transaction).await?.rows_affected();
+                self.cancel_queued_task(transaction, task_id).await?;
                 changed
             }
-            "leased" => sqlx::query("UPDATE extension_operation_runs SET cancellation_requested=true,updated_at=clock_timestamp() WHERE id=$1")
-                .bind(id).execute(&mut *transaction).await?.rows_affected(),
+            ("pending" | "leased", _) => sqlx::query("UPDATE extension_operation_runs SET cancellation_requested=true,updated_at=clock_timestamp() WHERE id=$1")
+                .bind(id).execute(&mut **transaction).await?.rows_affected(),
             _ => 0,
         };
+        Ok(changed == 1)
+    }
+
+    /// Ends a superseded release's unfinished runs: they can never resume, and
+    /// would otherwise count as overlap for its schedules and jobs.
+    pub(crate) async fn cancel_extension_operations_of_release(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        extension_id: &str,
+        release_id: Uuid,
+    ) -> Result<(), RepositoryError> {
+        let runs: Vec<(Uuid, String)> = sqlx::query_as(
+            "SELECT id,status FROM extension_operation_runs WHERE workspace_id=$1 AND extension_id=$2 AND installed_release_id=$3 AND status IN ('pending','leased') FOR UPDATE",
+        )
+        .bind(self.workspace_id())
+        .bind(extension_id)
+        .bind(release_id)
+        .fetch_all(&mut **transaction)
+        .await?;
+        for (id, status) in runs {
+            self.cancel_locked_extension_operation(transaction, id, &status)
+                .await?;
+        }
+        Ok(())
+    }
+
+    /// Cancels a leased run asked to cancel whose release is no longer the
+    /// installed one, so no code remains to deliver the cancellation to.
+    /// Answers whether it did.
+    pub async fn cancel_superseded_extension_operation_task(
+        &self,
+        task: &ClaimedTask,
+    ) -> Result<bool, RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
+        self.for_task(task)
+            .ensure_task_fence(&mut transaction)
+            .await?;
+        let changed = sqlx::query(
+            "UPDATE extension_operation_runs r SET status='cancelled',cancelled_at=clock_timestamp(),lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE r.id=$1 AND r.workspace_id=$2 AND r.status='leased' AND r.lease_token=$3 AND r.cancellation_requested AND NOT EXISTS(SELECT 1 FROM extension_installations i WHERE i.workspace_id=r.workspace_id AND i.extension_id=r.extension_id AND i.installed_release_id=r.installed_release_id)",
+        )
+        .bind(task.subject_id)
+        .bind(self.workspace_id())
+        .bind(task.lease_token)
+        .execute(&mut *transaction)
+        .await?
+        .rows_affected();
         transaction.commit().await?;
         Ok(changed == 1)
     }

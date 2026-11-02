@@ -33,7 +33,11 @@ Enabling fails if a required permission is not granted, the configuration is inv
 
 ## Upgrades
 
-Upgrading switches the installation to a newer release. Because a new release can ask for different permissions, an upgrade clears all grants and configuration and leaves the extension disabled. Review, configure, grant, and enable it again.
+Upgrading switches the installation to a newer release. Grants and configuration carry over when they still apply, and an enabled extension stays enabled if there is nothing new for you to review.
+
+The extension is left disabled for review when the new release needs a permission that isn't granted, changes a host permission rule, needs configuration the current values don't satisfy, or depends on other extensions differently. A changed rule loses its grant, and configuration that no longer fits is cleared.
+
+An upgrade cancels runs still on the old release, because they can't move to new code. Schedules move to the new release unless their operation, input or configuration no longer fits; those stay paused until you recreate them. If you depend on a change-triggered export, resync it after the upgrade so that a cancelled run's changes are pushed.
 
 The extension's page offers newer releases from its registry. **Upgrade from archive** there, or `acli extension upgrade <id> --file`, upgrades from an uploaded archive instead, with the same effect. Either way the version must be greater than the installed one.
 

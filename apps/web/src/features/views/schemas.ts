@@ -26,7 +26,7 @@ export type ComponentReference = {
   props: Record<string, unknown>;
 };
 /** An extension's attribute editor a detail field names. */
-export type EditorReference = ComponentReference;
+export type EditorReference = ComponentReference & { extension_id: string };
 export type ViewNode =
   | {
       type: 'stack' | 'grid' | 'section';
@@ -116,6 +116,7 @@ const componentReferenceSchema = z.object({
 });
 // Editor IDs are extension contribution IDs.
 const editorReferenceSchema = componentReferenceSchema.extend({
+  extension_id: z.string().regex(/^[A-Za-z0-9._-]{1,128}$/),
   id: z.string().regex(/^[A-Za-z0-9._-]{1,128}$/),
 });
 /**
