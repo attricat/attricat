@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "acli"
-version = "1.0.0-rc.3"
+version = "1.0.0-rc.4"
 dependencies = [
  "attricat-extension-manifest",
  "attricat-yaml",
@@ -173,7 +173,7 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
 name = "api"
-version = "1.0.0-rc.3"
+version = "1.0.0-rc.4"
 dependencies = [
  "async-stream",
  "async-trait",
@@ -327,7 +327,7 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
 name = "attricat-agent-runtime"
-version = "1.0.0-rc.3"
+version = "1.0.0-rc.4"
 dependencies = [
  "async-trait",
  "attricat-blueprint",
@@ -358,7 +358,7 @@ dependencies = [
 
 [[package]]
 name = "attricat-artifact-test-component"
-version = "1.0.0-rc.3"
+version = "1.0.0-rc.4"
 dependencies = [
  "sha2 0.10.9",
  "wit-bindgen",
@@ -366,7 +366,7 @@ dependencies = [
 
 [[package]]
 name = "attricat-blueprint"
-version = "1.0.0-rc.3"
+version = "1.0.0-rc.4"
 dependencies = [
  "attricat-domain",
  "attricat-events",
@@ -384,7 +384,7 @@ dependencies = [
 
 [[package]]
 name = "attricat-cache"
-version = "1.0.0-rc.3"
+version = "1.0.0-rc.4"
 dependencies = [
  "async-trait",
  "bytes",
@@ -403,7 +403,7 @@ dependencies = [
 
 [[package]]
 name = "attricat-document-text"
-version = "1.0.0-rc.3"
+version = "1.0.0-rc.4"
 dependencies = [
  "attricat-validation",
  "calamine",
@@ -418,7 +418,7 @@ dependencies = [
 
 [[package]]
 name = "attricat-domain"
-version = "1.0.0-rc.3"
+version = "1.0.0-rc.4"
 dependencies = [
  "argon2",
  "base64 0.22.1",
@@ -435,7 +435,7 @@ dependencies = [
 
 [[package]]
 name = "attricat-events"
-version = "1.0.0-rc.3"
+version = "1.0.0-rc.4"
 dependencies = [
  "chrono",
  "serde",
@@ -446,7 +446,7 @@ dependencies = [
 
 [[package]]
 name = "attricat-export-test-component"
-version = "1.0.0-rc.3"
+version = "1.0.0-rc.4"
 dependencies = [
  "serde_json",
  "wit-bindgen",
@@ -454,7 +454,7 @@ dependencies = [
 
 [[package]]
 name = "attricat-extension-manifest"
-version = "1.0.0-rc.3"
+version = "1.0.0-rc.4"
 dependencies = [
  "attricat-domain",
  "attricat-validation",
@@ -470,7 +470,7 @@ dependencies = [
 
 [[package]]
 name = "attricat-extension-runtime"
-version = "1.0.0-rc.3"
+version = "1.0.0-rc.4"
 dependencies = [
  "async-trait",
  "attricat-cache",
@@ -505,7 +505,7 @@ dependencies = [
 
 [[package]]
 name = "attricat-extension-transfer-test-component"
-version = "1.0.0-rc.3"
+version = "1.0.0-rc.4"
 dependencies = [
  "serde_json",
  "wit-bindgen",
@@ -513,7 +513,7 @@ dependencies = [
 
 [[package]]
 name = "attricat-http"
-version = "1.0.0-rc.3"
+version = "1.0.0-rc.4"
 dependencies = [
  "async-stream",
  "async-trait",
@@ -563,7 +563,7 @@ dependencies = [
 
 [[package]]
 name = "attricat-interactive-test-component"
-version = "1.0.0-rc.3"
+version = "1.0.0-rc.4"
 dependencies = [
  "serde_json",
  "wit-bindgen",
@@ -571,7 +571,7 @@ dependencies = [
 
 [[package]]
 name = "attricat-lexicon"
-version = "1.0.0-rc.3"
+version = "1.0.0-rc.4"
 dependencies = [
  "schemars 1.2.2",
  "serde",
@@ -581,7 +581,7 @@ dependencies = [
 
 [[package]]
 name = "attricat-marketplace-test-component"
-version = "1.0.0-rc.3"
+version = "1.0.0-rc.4"
 dependencies = [
  "base64 0.22.1",
  "serde_json",
@@ -590,7 +590,7 @@ dependencies = [
 
 [[package]]
 name = "attricat-repository"
-version = "1.0.0-rc.3"
+version = "1.0.0-rc.4"
 dependencies = [
  "async-trait",
  "attricat-blueprint",
@@ -629,7 +629,7 @@ dependencies = [
 
 [[package]]
 name = "attricat-rules"
-version = "1.0.0-rc.3"
+version = "1.0.0-rc.4"
 dependencies = [
  "attricat-domain",
  "attricat-events",
@@ -645,7 +645,7 @@ dependencies = [
 
 [[package]]
 name = "attricat-solution-pack"
-version = "1.0.0-rc.3"
+version = "1.0.0-rc.4"
 dependencies = [
  "attricat-blueprint",
  "attricat-domain",
@@ -677,7 +677,7 @@ dependencies = [
 
 [[package]]
 name = "attricat-storage"
-version = "1.0.0-rc.3"
+version = "1.0.0-rc.4"
 dependencies = [
  "async-stream",
  "async-trait",
@@ -695,7 +695,7 @@ dependencies = [
 
 [[package]]
 name = "attricat-unified-test-component"
-version = "1.0.0-rc.3"
+version = "1.0.0-rc.4"
 dependencies = [
  "serde_json",
  "wit-bindgen",
@@ -703,7 +703,7 @@ dependencies = [
 
 [[package]]
 name = "attricat-validation"
-version = "1.0.0-rc.3"
+version = "1.0.0-rc.4"
 dependencies = [
  "attricat-domain",
  "attricat-yaml",
@@ -720,7 +720,7 @@ dependencies = [
 
 [[package]]
 name = "attricat-workers"
-version = "1.0.0-rc.3"
+version = "1.0.0-rc.4"
 dependencies = [
  "async-trait",
  "attricat-document-text",
@@ -749,7 +749,7 @@ dependencies = [
 
 [[package]]
 name = "attricat-workflow"
-version = "1.0.0-rc.3"
+version = "1.0.0-rc.4"
 dependencies = [
  "attricat-events",
  "attricat-validation",
@@ -765,7 +765,7 @@ dependencies = [
 
 [[package]]
 name = "attricat-yaml"
-version = "1.0.0-rc.3"
+version = "1.0.0-rc.4"
 dependencies = [
  "granit-parser",
  "serde",
