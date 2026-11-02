@@ -224,7 +224,12 @@ export const LexiconPage = ({
       {dialog?.kind === 'add' && (
         <LexiconEntryDialog
           existingIds={
-            new Set(languageEntries.map((entry) => lexiconEntryId(entry)))
+            // Every entry of the language, not only those the filter shows.
+            new Set(
+              (entries.data ?? [])
+                .filter((entry) => entry.language === language)
+                .map((entry) => lexiconEntryId(entry)),
+            )
           }
           initial={dialog.draft}
           language={language}
