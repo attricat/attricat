@@ -931,9 +931,10 @@ fn storage_error(error: ObjectStoreError) -> ApiError {
         ObjectStoreError::Unavailable | ObjectStoreError::TimedOut(_) => {
             ApiError::storage_unavailable()
         }
-        ObjectStoreError::NotFound | ObjectStoreError::Operation(_) => {
-            ApiError::internal("object storage operation failed")
-        }
+        // The record of the file exists but its bytes do not, as after
+        // restoring a database without its bucket.
+        ObjectStoreError::NotFound => ApiError::not_found("file content"),
+        ObjectStoreError::Operation(_) => ApiError::internal("object storage operation failed"),
     }
 }
 

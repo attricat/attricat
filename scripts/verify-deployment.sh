@@ -26,6 +26,11 @@ run_app() {
   docker run --rm --read-only --tmpfs /tmp:size=256m,mode=1777 \
     --security-opt no-new-privileges "$@"
 }
+# Reads all its input. `grep -q` stops at the first match, so with pipefail the
+# writer's broken pipe would fail a check that passed, depending on timing.
+contains() {
+  grep "$@" >/dev/null
+}
 wait_url() {
   local url=$1
   for _ in $(seq 1 90); do curl --fail --silent "$url" >/dev/null 2>&1 && return 0; sleep 2; done
@@ -47,7 +52,7 @@ assert_container_hardening() {
   [[ -n "$container" ]]
   [[ "$(docker inspect --format '{{.Config.User}}' "$container")" == "10001:10001" ]]
   [[ "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' "$container")" == "true" ]]
-  docker inspect --format '{{json .HostConfig.SecurityOpt}}' "$container" | grep -q 'no-new-privileges'
+  docker inspect --format '{{json .HostConfig.SecurityOpt}}' "$container" | contains 'no-new-privileges'
 }
 
 [[ "$(docker image inspect --format '{{.Config.User}}' "$image")" == "10001:10001" ]]
@@ -64,8 +69,11 @@ wait_url http://127.0.0.1:3000/health/ready
 wait_url http://127.0.0.1:3001/health/ready
 assert_container_hardening api
 assert_container_hardening file-worker
-curl --fail --silent http://127.0.0.1:3000/ | grep -qi '<div id="root"'
-curl --fail --silent http://127.0.0.1:3000/api/health/ready | grep -q ready
+curl --fail --silent http://127.0.0.1:3000/ | contains -i '<div id="root"'
+# The web app's pages carry the security headers, not only the API's responses.
+curl --fail --silent --head http://127.0.0.1:3000/ | contains -i '^x-content-type-options: nosniff'
+curl --fail --silent --head http://127.0.0.1:3000/ | contains -i "^content-security-policy: frame-ancestors 'none'"
+curl --fail --silent http://127.0.0.1:3000/api/health/ready | contains ready
 curl --fail --silent --cookie-jar "$session_cookies" \
   --header 'content-type: application/json' \
   --data '{"login_identifier":"default.local","email":"owner@example.test","password":"test-release-password"}' \
@@ -123,7 +131,7 @@ acli blueprint publish "$blueprint_id" 1 >/dev/null
 record_id="$(acli record create --blueprint release_smoke --values /tmp/smoke-values.yaml \
   --context-id 00000000-0000-4000-8000-000000000001 | jq -r .id)"
 curl --fail --silent --header "Authorization: Bearer $token" \
-  "http://127.0.0.1:3000/api/v1/records/$record_id" | grep -q 'Release smoke'
+  "http://127.0.0.1:3000/api/v1/records/$record_id" | contains 'Release smoke'
 # A 1x1 PNG, compared byte for byte after going through the object store.
 smoke_png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
 printf '%s' "$smoke_png" | base64 -d | write_in_api smoke.png
@@ -140,17 +148,17 @@ curl --fail --silent --output /dev/null --header 'content-type: application/json
   --data '{"email":"owner@example.test"}' http://127.0.0.1:3000/api/auth/password-reset
 for _ in $(seq 1 30); do
   "${compose[@]}" exec -T mailpit wget -qO- http://127.0.0.1:8025/api/v1/messages \
-    | grep -q 'owner@example.test' && mail_delivered=true && break
+    | contains 'owner@example.test' && mail_delivered=true && break
   sleep 1
 done
 [[ "${mail_delivered:-false}" == true ]]
 
 assert_status 401 http://127.0.0.1:3000/api/metrics
 curl --fail --silent -H 'Authorization: Bearer release-test-api-metrics-token' http://127.0.0.1:3000/api/metrics \
-  | grep -q attricat_http_requests_total
+  | contains attricat_http_requests_total
 assert_status 401 http://127.0.0.1:3001/metrics
 curl --fail --silent -H 'Authorization: Bearer release-test-token' http://127.0.0.1:3001/metrics \
-  | grep -q attricat_file_worker_queue_depth
+  | contains attricat_file_worker_queue_depth
 
 # Dependency outages withdraw readiness for both roles without changing liveness.
 "${compose[@]}" stop rustfs

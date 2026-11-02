@@ -79,6 +79,7 @@ pub struct HandlerAttempt {
     pub status: HandlerAttemptStatus,
     pub attempts: i32,
     pub next_attempt_at: Option<DateTime<Utc>>,
+    pub error_code: Option<String>,
 }
 
 /// An outcome to record for one handler and event.
@@ -357,7 +358,7 @@ impl AttricatRepository {
             #[sqlx(flatten)]
             attempt: HandlerAttempt,
         }
-        let rows: Vec<StoredAttempt> = sqlx::query_as("SELECT extension_id,handler_id,status,attempts,next_attempt_at FROM extension_handler_attempts WHERE workspace_id=$1 AND event_id=$2")
+        let rows: Vec<StoredAttempt> = sqlx::query_as("SELECT extension_id,handler_id,status,attempts,next_attempt_at,error_code FROM extension_handler_attempts WHERE workspace_id=$1 AND event_id=$2")
             .bind(self.workspace_id()).bind(event_id)
             .fetch_all(&self.pool).await?;
         Ok(rows

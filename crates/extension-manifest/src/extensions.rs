@@ -25,6 +25,9 @@ pub const MANIFEST_VERSION: u32 = 1;
 pub const SUPPORTED_HOST_API: &str = "1.1.0";
 pub const MAX_EXTENSION_ARCHIVE_BYTES: usize = 32 * 1024 * 1024;
 pub const MAX_EXTENSION_UNPACKED_BYTES: usize = 128 * 1024 * 1024;
+/// A server component, which leaves room for a debug build. This bounds what is
+/// stored and read, not what compiling it costs; see the runtime's `compilation`.
+pub const MAX_SERVER_COMPONENT_BYTES: usize = 32 * 1024 * 1024;
 pub const MAX_EXTENSION_ARCHIVE_ENTRIES: usize = 256;
 /// Tar header and padding allowance per archive entry when bounding the
 /// decompressed archive size.
@@ -2910,6 +2913,17 @@ impl ExtensionPackage {
                     native.id
                 )));
             }
+        }
+        if let Some(server) = manifest.artifacts.iter().find(|artifact| {
+            artifact.kind == ArtifactKind::ServerWasm
+                && files
+                    .get(&artifact.path)
+                    .is_some_and(|bytes| bytes.len() > MAX_SERVER_COMPONENT_BYTES)
+        }) {
+            return Err(ManifestError::Invalid(format!(
+                "server_wasm artifact '{}' exceeds {MAX_SERVER_COMPONENT_BYTES} bytes",
+                server.id
+            )));
         }
         let artifacts = manifest
             .artifacts

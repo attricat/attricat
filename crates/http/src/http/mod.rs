@@ -1350,12 +1350,14 @@ pub fn router(state: AppState) -> Router {
 fn mount(api: Router, probes: Router, web_dist: Option<&str>) -> Router {
     let app = Router::new()
         .nest("/api", api.fallback(api_route_not_found))
-        .merge(probes)
-        .layer(middleware::from_fn(security_headers));
+        .merge(probes);
+    // After the web app, so its pages carry the headers too: a layer does not
+    // cover a fallback added later.
     match web_dist {
         Some(web_dist) => app.fallback_service(web_app(web_dist)),
         None => app,
     }
+    .layer(middleware::from_fn(security_headers))
 }
 
 /// An unknown API path must not fall through to the web app's `200 OK`.

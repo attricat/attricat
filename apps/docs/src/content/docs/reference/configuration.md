@@ -179,7 +179,7 @@ Attricat stores uploaded files, generated image variants, extension artifacts, a
 | `S3_REGION` | Signing region. |
 | `S3_BUCKET` | Existing bucket name. Attricat does not create it in production. |
 | `S3_ACCESS_KEY_ID` | Access key ID. Its secret key is the `s3_secret_access_key` secret. |
-| `S3_FORCE_PATH_STYLE` | `true` or `false`. Use `true` for services that do not support virtual-hosted buckets, such as RustFS or MinIO. |
+| `S3_FORCE_PATH_STYLE` | `true` or `false`. Use `true` for services without virtual-hosted buckets, or without the wildcard DNS those need, which is common with RustFS or MinIO. |
 | `S3_UPLOAD_TIMEOUT_SECONDS` | Timeout for uploads and deletes. A multipart upload applies it to each request: initiation, every part, and completion. |
 | `S3_DOWNLOAD_TIMEOUT_SECONDS` | Timeout for downloads and the startup bucket check. |
 

@@ -290,9 +290,12 @@ Między rozszerzeniami nie ma wywołań typu żądanie-odpowiedź ani współdzi
 
 Każde wywołanie Twojego komponentu, np. jedno polecenie, dostarczenie zdarzenia lub partia operacji, dostaje:
 
-- 100 milionów jednostek paliwa, co z grubsza odpowiada liczbie instrukcji WebAssembly;
-- 32 MiB pamięci;
+- 1 miliard jednostek paliwa, co z grubsza odpowiada liczbie instrukcji WebAssembly;
+- 32 MiB pamięci łącznie, a także najwyżej 8 pamięci, 64 tabele z łącznie 100 000 elementów i 64 instancje;
+- 1 MiB komunikatów w logach, po przekroczeniu którego kolejne są pomijane;
 - 10 sekund.
+
+Komponent serwerowy może mieć najwyżej 32 MiB. Kompiluje się w osobnym procesie ograniczonym do 1 GiB pamięci i 2 minut, a po niepowodzeniu kolejna próba nastąpi dopiero po 5 minutach. Każdy proces API wykonuje naraz 16 wywołań, w tym 8 z jednego obszaru roboczego, a kolejne czekają na swoją kolej.
 
 Przekroczenie któregokolwiek z tych limitów liczy się jako błąd krytyczny i powoduje kwarantannę instalacji, więc utrzymuj wywołania małe. Długotrwała praca należy do [operacji](/pl/extensions/operations/), która w każdej partii wykonuje ograniczoną ilość pracy.
 

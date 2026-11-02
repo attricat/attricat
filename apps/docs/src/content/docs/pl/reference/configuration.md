@@ -179,7 +179,7 @@ Attricat przechowuje przesłane pliki, wygenerowane warianty obrazów, artefakty
 | `S3_REGION` | Region podpisywania. |
 | `S3_BUCKET` | Nazwa istniejącego zasobnika. W produkcji Attricat go nie tworzy. |
 | `S3_ACCESS_KEY_ID` | Identyfikator klucza dostępu. Jego klucz tajny to sekret `s3_secret_access_key`. |
-| `S3_FORCE_PATH_STYLE` | `true` lub `false`. Użyj `true` dla usług, które nie obsługują zasobników adresowanych przez host wirtualny, takich jak RustFS czy MinIO. |
+| `S3_FORCE_PATH_STYLE` | `true` lub `false`. Użyj `true` dla usług bez zasobników adresowanych przez host wirtualny lub bez potrzebnego do nich wieloznacznego DNS, co jest częste w przypadku RustFS czy MinIO. |
 | `S3_UPLOAD_TIMEOUT_SECONDS` | Limit czasu przesyłania i usuwania. Przesyłanie wieloczęściowe stosuje go do każdego żądania: rozpoczęcia, każdej części i zakończenia. |
 | `S3_DOWNLOAD_TIMEOUT_SECONDS` | Limit czasu pobierania i sprawdzania zasobnika przy starcie. |
 

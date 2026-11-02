@@ -232,7 +232,7 @@ impl S3ObjectStore {
         let result = timeout(self.upload_timeout, future)
             .await
             .map_err(|_| ObjectStoreError::TimedOut(UPLOAD_OPERATION))
-            .and_then(|result| result.map_err(|_| ObjectStoreError::Operation(UPLOAD_OPERATION)));
+            .and_then(|result| result.map_err(|error| classify_error(error, UPLOAD_OPERATION)));
         record_operation(
             UPLOAD_OPERATION,
             if result.is_ok() { "success" } else { "failure" },
@@ -316,7 +316,7 @@ impl S3ObjectStore {
         timeout(self.upload_timeout, future)
             .await
             .map_err(|_| ObjectStoreError::TimedOut(UPLOAD_OPERATION))?
-            .map_err(|_| ObjectStoreError::Operation(UPLOAD_OPERATION))
+            .map_err(|error| classify_error(error, UPLOAD_OPERATION))
     }
 
     /// The bucket handle for one download, carrying the `Range` header when a
@@ -383,10 +383,25 @@ async fn read_part(file: &mut tokio::fs::File) -> Result<Vec<u8>, ObjectStoreErr
 /// HTTP 404, which S3 answers for a missing key.
 const HTTP_NOT_FOUND: u16 = 404;
 
+/// The lowest status a provider answers when the fault is on its side.
+const HTTP_SERVER_ERROR: u16 = 500;
+
+/// An outage is `Unavailable` whether the store hangs, refuses connections, or
+/// answers with a server error, so clients can tell they may retry.
+fn classify_error(error: S3Error, operation: &'static str) -> ObjectStoreError {
+    match error {
+        S3Error::Reqwest(_) => ObjectStoreError::Unavailable,
+        S3Error::HttpFailWithBody(status, _) if status >= HTTP_SERVER_ERROR => {
+            ObjectStoreError::Unavailable
+        }
+        _ => ObjectStoreError::Operation(operation),
+    }
+}
+
 fn classify_download_error(error: S3Error) -> ObjectStoreError {
     match error {
         S3Error::HttpFailWithBody(HTTP_NOT_FOUND, _) => ObjectStoreError::NotFound,
-        _ => ObjectStoreError::Operation(DOWNLOAD_OPERATION),
+        error => classify_error(error, DOWNLOAD_OPERATION),
     }
 }
 
@@ -753,6 +768,23 @@ impl ObjectStore for FakeObjectStore {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn outages_are_told_apart_from_refusals_and_missing_objects() {
+        let status = |code| S3Error::HttpFailWithBody(code, String::new());
+        assert!(matches!(
+            classify_download_error(status(HTTP_NOT_FOUND)),
+            ObjectStoreError::NotFound
+        ));
+        assert!(matches!(
+            classify_download_error(status(503)),
+            ObjectStoreError::Unavailable
+        ));
+        assert!(matches!(
+            classify_error(status(403), UPLOAD_OPERATION),
+            ObjectStoreError::Operation(UPLOAD_OPERATION)
+        ));
+    }
+
     use super::*;
 
     fn values(name: &str) -> Option<String> {
@@ -957,7 +989,7 @@ mod tests {
         let provider_failure = S3Error::HttpFailWithBody(500, "<Code>InternalError</Code>".into());
         assert!(matches!(
             classify_download_error(provider_failure),
-            ObjectStoreError::Operation(DOWNLOAD_OPERATION)
+            ObjectStoreError::Unavailable
         ));
 
         assert!(matches!(

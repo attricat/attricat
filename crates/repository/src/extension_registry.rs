@@ -9,6 +9,7 @@ use std::{str::FromStr, time::Duration};
 
 use reqwest::{Client, Response, Url, redirect::Policy};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest as _, Sha256};
 use thiserror::Error;
 
 pub const DEFAULT_OFFICIAL_REGISTRY: &str = "attricat/attricat-extensions";
@@ -29,6 +30,7 @@ const MAX_GITHUB_OWNER_BYTES: usize = 39;
 const MAX_GITHUB_REPOSITORY_BYTES: usize = 100;
 /// Redirects followed from a release download to its short-lived asset URL.
 const MAX_ASSET_REDIRECTS: usize = 5;
+const SHA256_DIGEST_PREFIX: &str = "sha256:";
 const REGISTRY_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const REGISTRY_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 /// Archives are far larger than catalogue responses.
@@ -160,6 +162,8 @@ pub struct ReleaseAsset {
     pub id: u64,
     pub name: String,
     pub download_url: String,
+    /// The `sha256:<hex>` GitHub reports for the asset, checked on download.
+    pub digest: Option<String>,
 }
 
 #[derive(Debug, Error)]
@@ -202,6 +206,16 @@ async fn read_capped(mut response: Response, limit: usize) -> Result<Vec<u8>, Re
         bytes.extend_from_slice(&chunk);
     }
     Ok(bytes)
+}
+
+/// Whether bytes match the digest GitHub reports. An asset without one, or in a
+/// form this does not know, has nothing to check against.
+fn matches_digest(bytes: &[u8], digest: Option<&str>) -> bool {
+    digest
+        .and_then(|digest| digest.strip_prefix(SHA256_DIGEST_PREFIX))
+        .is_none_or(|expected| {
+            format!("{:x}", Sha256::digest(bytes)).eq_ignore_ascii_case(expected)
+        })
 }
 
 impl GitHubRegistry {
@@ -361,7 +375,11 @@ impl GitHubRegistry {
         if !response.status().is_success() {
             return Err(RegistryError::Unavailable);
         }
-        read_capped(response, crate::extensions::MAX_EXTENSION_ARCHIVE_BYTES).await
+        let bytes = read_capped(response, crate::extensions::MAX_EXTENSION_ARCHIVE_BYTES).await?;
+        if !matches_digest(&bytes, release.asset.digest.as_deref()) {
+            return Err(RegistryError::InvalidResponse);
+        }
+        Ok(bytes)
     }
 
     async fn releases(
@@ -413,6 +431,7 @@ impl GitHubRegistry {
                         id: asset.id,
                         name: asset.name,
                         download_url: asset.browser_download_url,
+                        digest: asset.digest,
                     },
                 })
             })
@@ -434,11 +453,20 @@ struct GitHubAsset {
     id: u64,
     name: String,
     browser_download_url: String,
+    digest: Option<String>,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn a_release_asset_must_match_the_digest_github_reports() {
+        let good = format!("sha256:{:x}", Sha256::digest(b"archive"));
+        assert!(matches_digest(b"archive", Some(&good)));
+        assert!(!matches_digest(b"tampered", Some(&good)));
+        assert!(matches_digest(b"archive", None));
+    }
+
     /// Serves one chunked response, which declares no size, of `size` bytes.
     async fn undeclared_size_response(size: usize) -> Response {
         use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};

@@ -6,7 +6,7 @@ use api::{
     constants::{MAINTENANCE_POOL_CONNECTIONS, READINESS_PROBE_PERMITS},
     event_dispatcher, extension_policy,
     extension_registry::GitHubRegistry,
-    extension_runtime::{self, ExtensionRuntime, ExtensionRuntimeConfig},
+    extension_runtime::{self, ComponentCompiler, ExtensionRuntime, ExtensionRuntimeConfig},
     file_access::AllowFileAccess,
     http::{
         AppState, BuildInfo, OidcSettings, OperatorToken, SampleAccount, SampleLogins,
@@ -31,8 +31,15 @@ use sqlx::postgres::PgPoolOptions;
 use tokio::sync::Semaphore;
 use uuid::Uuid;
 
+fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    if std::env::args().nth(1).as_deref() == Some(extension_runtime::COMPILE_COMPONENT_COMMAND) {
+        return extension_runtime::run_compile_command();
+    }
+    serve()
+}
+
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn serve() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let Config {
         telemetry,
         database,
@@ -274,9 +281,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     if agent_provider.is_some() {
         task_repository.recover_interrupted_agent_runs().await?;
     }
-    let extension_runtime =
-        ExtensionRuntime::new(object_store.clone(), ExtensionRuntimeConfig::default())
-            .map_err(|error| format!("invalid extension runtime configuration: {error}"))?;
+    let extension_runtime = ExtensionRuntime::new(
+        object_store.clone(),
+        ExtensionRuntimeConfig {
+            compiler: ComponentCompiler::Isolated {
+                executable: std::env::current_exe()?,
+            },
+            ..ExtensionRuntimeConfig::default()
+        },
+    )
+    .map_err(|error| format!("invalid extension runtime configuration: {error}"))?;
     let mut task_handlers: Vec<Arc<dyn api::task_worker::TaskHandler>> = agent_provider
         .clone()
         .map(|config| {
