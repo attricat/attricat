@@ -2,7 +2,7 @@ use attricat_domain::attribute_options::Cardinality;
 use attricat_domain::value_type::ValueType;
 use std::collections::HashSet;
 
-use crate::extensions::{Manifest, UiContributionKind, UiOutlet};
+use crate::extensions::{BUILT_IN_CELL_PREFIX, Manifest, UiContributionKind, UiOutlet};
 use attricat_blueprint::{
     BlueprintKind, BrowseBy, CompiledBlueprint, ResolvedInclude, ViewDefinition, ViewNode, compile,
     parse, validate_table_renderer,
@@ -519,8 +519,14 @@ async fn validate_field_editors(
     let declared = enabled_manifests(transaction, workspace_id)
         .await?
         .into_iter()
-        .flat_map(|manifest| manifest.ui)
-        .filter(|contribution| {
+        .flat_map(|manifest| {
+            let extension_id = manifest.attricat.id;
+            manifest
+                .ui
+                .into_iter()
+                .map(move |contribution| (extension_id.clone(), contribution))
+        })
+        .filter(|(_, contribution)| {
             contribution.kind == UiContributionKind::Editor
                 && contribution.outlet == Some(UiOutlet::AttributeEditor)
         })
@@ -535,10 +541,12 @@ async fn validate_field_editors(
         let mut problem = None;
         let valid = declared
             .iter()
-            .filter(|contribution| {
-                contribution.id == editor.id && contribution.version == editor.version
+            .filter(|(extension_id, contribution)| {
+                *extension_id == editor.extension_id
+                    && contribution.id == editor.id
+                    && contribution.version == editor.version
             })
-            .filter_map(|contribution| contribution.editor.as_ref())
+            .filter_map(|(_, contribution)| contribution.editor.as_ref())
             .filter(|declaration| {
                 declaration
                     .value_types
@@ -557,12 +565,12 @@ async fn validate_field_editors(
         if !valid {
             return Err(RepositoryError::InvalidBlueprintDefinition(match problem {
                 Some(problem) => format!(
-                    "field '{field}' editor '{}@{}' {problem}",
-                    editor.id, editor.version
+                    "field '{field}' editor '{}:{}@{}' {problem}",
+                    editor.extension_id, editor.id, editor.version
                 ),
                 None => format!(
-                    "field '{field}' editor '{}@{}' is not declared for {value_type} by an enabled extension",
-                    editor.id, editor.version
+                    "field '{field}' editor '{}:{}@{}' is not declared for {value_type} by an enabled extension",
+                    editor.extension_id, editor.id, editor.version
                 ),
             }));
         }
@@ -593,7 +601,7 @@ async fn validate_renderer(
     renderer: &attricat_blueprint::ComponentReference,
     value_type: ValueType,
 ) -> Result<(), RepositoryError> {
-    if renderer.id.starts_with("attricat.") {
+    if renderer.id.starts_with(BUILT_IN_CELL_PREFIX) {
         return validate_table_renderer(renderer, value_type)
             .map_err(RepositoryError::invalid_blueprint_definition);
     }

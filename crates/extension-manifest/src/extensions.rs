@@ -142,6 +142,8 @@ pub const MAX_CELL_UNIT_CHARS: usize = 16;
 pub const MAX_CELL_PROPS: usize = 16;
 /// Longest string a cell prop may declare as its `max_length`.
 pub const MAX_CELL_STRING_PROP_CHARS: u32 = 256;
+/// Table renderers with IDs under this prefix are built in, not extensions' cells.
+pub const BUILT_IN_CELL_PREFIX: &str = "attricat.";
 pub const CAPABILITIES: &[&str] = &[
     "attricat.read",
     "attricat.write",
@@ -165,16 +167,7 @@ pub const CAPABILITIES: &[&str] = &[
     "client.notification",
     "client.events",
     "client.refresh",
-    "client.confirmation",
-    "client.download",
-    "client.external_navigation",
-    "client.files.read",
     "client.files.upload",
-    "client.search",
-    "client.live_updates",
-    "client.clipboard",
-    "client.theme.read",
-    "client.locale.read",
     "client.explorer_action",
     "client.explorer_bulk_action",
     "client.record_header_action",
@@ -189,7 +182,6 @@ pub const CAPABILITIES: &[&str] = &[
     "client.operations.cancel",
     "attricat.annotations.write",
     "network.request",
-    "webhooks.receive",
     // 1.1 export platform (#424).
     "exports.mappings",
     "connections.use",
@@ -492,8 +484,6 @@ pub struct EventContractConsume {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Server {
-    #[serde(default)]
-    pub webhooks: Vec<Webhook>,
     /// Durable catalog event subscriptions delivered to named component exports.
     #[serde(default)]
     pub event_handlers: Vec<EventHandler>,
@@ -710,34 +700,6 @@ impl InteractiveScope {
     fn is_selection(&self) -> bool {
         *self == Self::Selection
     }
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct Webhook {
-    pub id: String,
-    pub event_type: String,
-    pub handler: String,
-    pub methods: Vec<String>,
-    pub authentication: WebhookAuthentication,
-    pub max_body_bytes: u64,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct WebhookAuthentication {
-    #[serde(rename = "type")]
-    pub kind: WebhookAuthenticationKind,
-    pub signature_header: String,
-    pub timestamp_header: String,
-    pub max_age_seconds: u64,
-    pub secret: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
-pub enum WebhookAuthenticationKind {
-    HmacSha256,
 }
 
 /// A client contribution is either a namespaced full page or an embedded view
@@ -1675,19 +1637,6 @@ impl Manifest {
             }
         }
         if let Some(server) = &self.server {
-            if !server.webhooks.is_empty()
-                && !self
-                    .artifacts
-                    .iter()
-                    .any(|artifact| artifact.kind == ArtifactKind::ServerWasm)
-            {
-                return Err(ManifestError::Invalid(
-                    "webhooks require a server_wasm artifact".into(),
-                ));
-            }
-            for webhook in &server.webhooks {
-                webhook.validate(&self.permissions)?;
-            }
             unique(
                 server.event_handlers.iter().map(|handler| &handler.id),
                 "event handler",
@@ -1801,6 +1750,7 @@ impl Manifest {
                 )));
             }
             if matches!(contribution.kind, UiContributionKind::Cell) {
+                validate_cell_namespace(&self.attricat.id, &contribution.id)?;
                 validate_cell(contribution)?;
             } else if contribution.cell.is_some() {
                 return Err(ManifestError::Invalid(format!(
@@ -2568,40 +2518,22 @@ impl ServerOperation {
     }
 }
 
-impl Webhook {
-    fn validate(&self, permissions: &[String]) -> Result<(), ManifestError> {
-        valid_id(&self.id, "webhook id")?;
-        valid_id(&self.handler, "webhook handler")?;
-        if !permissions.iter().any(|p| p == "webhooks.receive") {
-            return Err(ManifestError::Invalid(format!(
-                "webhook '{}' requires webhooks.receive",
-                self.id
-            )));
-        }
-        if self.methods.as_slice() != ["POST"]
-            || self.max_body_bytes == 0
-            || self.authentication.max_age_seconds == 0
-            || self.authentication.signature_header.trim().is_empty()
-            || self.authentication.timestamp_header.trim().is_empty()
-        {
-            return Err(ManifestError::Invalid(format!(
-                "webhook '{}' must use bounded POST HMAC authentication",
-                self.id
-            )));
-        }
-        valid_id(&self.authentication.secret, "webhook secret name")?;
-        if !self
-            .event_type
-            .rsplit_once(".v")
-            .is_some_and(|(_, version)| version.parse::<u32>().is_ok_and(|v| v > 0))
-        {
-            return Err(ManifestError::Invalid(format!(
-                "webhook '{}' event_type must end in .vN",
-                self.id
-            )));
-        }
-        Ok(())
+/// A table column names a cell by its ID alone, so the ID must identify one
+/// extension: `<extension-id>.<name>`. A name without dots leaves one possible
+/// owner, since `acme` could otherwise declare what `acme.foo` means by
+/// `acme.foo.bar`. `attricat.` belongs to the built-in renderers.
+fn validate_cell_namespace(extension_id: &str, cell_id: &str) -> Result<(), ManifestError> {
+    let name = cell_id
+        .strip_prefix(extension_id)
+        .and_then(|rest| rest.strip_prefix('.'));
+    if !name.is_some_and(|name| !name.is_empty() && !name.contains('.'))
+        || cell_id.starts_with(BUILT_IN_CELL_PREFIX)
+    {
+        return Err(ManifestError::Invalid(format!(
+            "cell '{cell_id}' must be named '{extension_id}.<name>', with no dots in <name> and outside '{BUILT_IN_CELL_PREFIX}'"
+        )));
     }
+    Ok(())
 }
 
 /// A language code such as `pl` or `pt-BR`.
@@ -3215,7 +3147,7 @@ mod tests {
     }
 
     fn manifest() -> Manifest {
-        serde_json::from_value(serde_json::json!({"manifest_version":1,"name":"Acme","version":"1.2.3","description":"test extension","icons":{"48":"icon.png"},"attricat":{"id":"acme.test","host_api":"^1.0"},"permissions":["network.request","webhooks.receive"],"host_permissions":[{"id":"acme","matches":["https://api.acme.example/v1/*"],"methods":["GET"]}],"artifacts":[{"id":"server","kind":"server_wasm","path":"server.wasm"}],"configuration":{"version":1,"schema":{"type":"object","required":["url"],"properties":{"url":{"type":"string"}},"additionalProperties":false}},"server":{"webhooks":[{"id":"events","event_type":"webhook.acme.events.v1","handler":"handle_events_v1","methods":["POST"],"authentication":{"type":"hmac-sha256","signature_header":"X-Signature","timestamp_header":"X-Timestamp","max_age_seconds":300,"secret":"webhook_secret"},"max_body_bytes":1024}]}})).unwrap()
+        serde_json::from_value(serde_json::json!({"manifest_version":1,"name":"Acme","version":"1.2.3","description":"test extension","icons":{"48":"icon.png"},"attricat":{"id":"acme.test","host_api":"^1.0"},"permissions":["network.request"],"host_permissions":[{"id":"acme","matches":["https://api.acme.example/v1/*"],"methods":["GET"]}],"artifacts":[{"id":"server","kind":"server_wasm","path":"server.wasm"}],"configuration":{"version":1,"schema":{"type":"object","required":["url"],"properties":{"url":{"type":"string"}},"additionalProperties":false}},"server":{}})).unwrap()
     }
     #[test]
     fn bounds_tar_metadata_and_trailing_expansion() {
@@ -3504,7 +3436,7 @@ mod tests {
         assert!(invalid.validate(SUPPORTED_HOST_API).is_err());
         invalid = value;
         invalid.permissions.clear();
-        invalid.optional_permissions = vec!["network.request".into(), "webhooks.receive".into()];
+        invalid.optional_permissions = vec!["network.request".into()];
         assert!(invalid.validate(SUPPORTED_HOST_API).is_err());
     }
     #[test]
@@ -4119,11 +4051,61 @@ mod tests {
     }
 
     #[test]
+    fn rejects_capabilities_and_declarations_the_host_does_not_implement() {
+        for capability in [
+            "client.confirmation",
+            "client.download",
+            "client.external_navigation",
+            "client.files.read",
+            "client.search",
+            "client.live_updates",
+            "client.clipboard",
+            "client.theme.read",
+            "client.locale.read",
+            "webhooks.receive",
+        ] {
+            let mut value = manifest();
+            value.permissions.push(capability.into());
+            assert!(value.validate(SUPPORTED_HOST_API).is_err(), "{capability}");
+        }
+        let mut raw = serde_json::to_value(manifest()).unwrap();
+        raw["server"] = serde_json::json!({"webhooks": []});
+        assert!(serde_json::from_value::<Manifest>(raw).is_err());
+    }
+
+    #[test]
+    fn a_cell_id_names_one_extension() {
+        for (extension, cell, valid) in [
+            ("acme", "acme.amount", true),
+            ("acme.foo", "acme.foo.amount", true),
+            (
+                "attricat-extension-example",
+                "attricat-extension-example.amount",
+                true,
+            ),
+            ("acme", "amount", false),
+            ("acme", "acme.", false),
+            ("acme", "acme-amount", false),
+            ("acme", "other.amount", false),
+            // This would also be `acme.foo`'s cell `bar`.
+            ("acme", "acme.foo.bar", false),
+            // The host resolves these as built-in renderers.
+            ("attricat", "attricat.amount", false),
+            ("attricat.x", "attricat.x.amount", false),
+        ] {
+            assert_eq!(
+                validate_cell_namespace(extension, cell).is_ok(),
+                valid,
+                "{extension} {cell}"
+            );
+        }
+    }
+
+    #[test]
     fn recognizes_artifact_stream_capabilities() {
         let mut value = manifest();
         value.permissions = vec![
             "network.request".into(),
-            "webhooks.receive".into(),
             "artifacts.read".into(),
             "artifacts.write".into(),
         ];
@@ -4132,14 +4114,13 @@ mod tests {
             "{:?}",
             value.validate(SUPPORTED_HOST_API)
         );
-        value.permissions[3] = "artifacts.execute".into();
+        value.permissions[2] = "artifacts.execute".into();
         assert!(value.validate(SUPPORTED_HOST_API).is_err());
     }
 
     #[test]
     fn validates_mediated_capabilities_and_matching_placement() {
         let mut value = manifest();
-        value.permissions.push("client.confirmation".into());
         value.permissions.push("client.explorer_action".into());
         value.artifacts.push(Artifact {
             id: "client".into(),
@@ -4212,7 +4193,7 @@ mod tests {
             .unwrap()
         };
         value.ui.push(UiContribution {
-            id: "example.amount".into(),
+            id: "acme.test.amount".into(),
             version: 1,
             kind: UiContributionKind::Cell,
             artifact: None,
@@ -4231,7 +4212,7 @@ mod tests {
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
         // Several cells may share the outlet.
         let mut second = value.ui[0].clone();
-        second.id = "example.fixed".into();
+        second.id = "acme.test.other".into();
         second.cell = Some(
             serde_json::from_value(serde_json::json!({
                 "value_types": ["number"],

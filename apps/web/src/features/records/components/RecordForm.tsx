@@ -21,6 +21,7 @@ import type {
   Attribute,
   BlueprintWithAttributes,
   ComponentReference,
+  EditorReference,
   FormAttributeValue,
   ViewDefinition,
 } from '../api';
@@ -75,6 +76,7 @@ import { ApiErrorAlert } from '../../../components/ApiErrorAlert';
 import { RouterLink } from '../../../components/RouterLink';
 import { conflictingRecordId } from '../uniqueKeyConflict';
 import { RecordFormAttributeEditor } from './RecordFormAttributeEditor';
+import { NewRecordAttributeEditor } from '../../extensions/native/NewRecordAttributeEditor';
 import { useQueuedFileUploadsContext } from '../../files/queuedFileUploads';
 import { useInitialFocus } from '../../../components/initialFocus';
 import { FormActionBar } from '../../../components/FormActionBar';
@@ -729,17 +731,23 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
           {blueprint && (
             <form.Field name="fields">
               {(field) => {
+                const handleFieldChange =
+                  (attribute: Attribute) => (nextValue: string) => {
+                    const nextFields = {
+                      ...field.state.value,
+                      [attribute.code]: nextValue,
+                    };
+                    markEdited(attribute.code);
+                    markTouched([attribute.code]);
+                    validateFields(nextFields);
+                    field.handleChange(nextFields);
+                  };
                 const renderEditor = (
                   attribute: Attribute,
                   component?: ComponentReference | null,
-                ) => (
-                  // Marks where the field is, to focus it from an error, and
-                  // that the user changed it.
-                  <Box
-                    data-changed={changedCodes.has(attribute.code) || undefined}
-                    data-field-code={attribute.code}
-                    sx={changedFieldSx}
-                  >
+                  editorReference?: EditorReference | null,
+                ) => {
+                  const defaultControl = (
                     <RecordFormAttributeEditor
                       {...editorContext}
                       attribute={attribute}
@@ -748,20 +756,39 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
                         fieldComponents.get(attribute.code)
                       }
                       required={requiredCodes.has(attribute.code)}
-                      onChange={(nextValue) => {
-                        const nextFields = {
-                          ...field.state.value,
-                          [attribute.code]: nextValue,
-                        };
-                        markEdited(attribute.code);
-                        markTouched([attribute.code]);
-                        validateFields(nextFields);
-                        field.handleChange(nextFields);
-                      }}
+                      onChange={handleFieldChange(attribute)}
                       value={field.state.value[attribute.code] ?? ''}
                     />
-                  </Box>
-                );
+                  );
+                  return (
+                    // Marks where the field is, to focus it from an error, and
+                    // that the user changed it.
+                    <Box
+                      data-changed={
+                        changedCodes.has(attribute.code) || undefined
+                      }
+                      data-field-code={attribute.code}
+                      sx={changedFieldSx}
+                    >
+                      {editorReference &&
+                      lockedAttributes[attribute.code] === undefined ? (
+                        <NewRecordAttributeEditor
+                          attribute={attribute}
+                          contextId={contextId}
+                          error={allFieldErrors[attribute.code]}
+                          fallback={defaultControl}
+                          onChange={handleFieldChange(attribute)}
+                          readOnly={busy}
+                          reference={editorReference}
+                          required={requiredCodes.has(attribute.code)}
+                          value={field.state.value[attribute.code] ?? ''}
+                        />
+                      ) : (
+                        defaultControl
+                      )}
+                    </Box>
+                  );
+                };
                 return (
                   <FieldDiagnosticsContext value={diagnostics}>
                     <RevealFieldContext value={revealField}>

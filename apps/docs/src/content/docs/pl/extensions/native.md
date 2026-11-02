@@ -85,7 +85,7 @@ Hooki dają każdej zamontowanej kontrybucji to, czego potrzebuje:
 | `useCapabilities()` | Uprawnienia przyznane rozszerzeniu. |
 | `useAttricat()` | Te same wywołania co [API `attricat` interfejsu w ramce](/pl/extensions/client/): `request`, `command`, `storage`, `operations`, `navigate`, `notify`, `refresh` i `dialog.close`, każde sprawdzane względem Twoich uprawnień. |
 | `useUiKitVersion()` | Wersję zestawu UI wynegocjowaną przez Attricat. |
-| `useEditor()` | W edytorze atrybutu: wartość pola, atrybut, właściwości, wymagalność i tryb tylko do odczytu, błędy, `recordId`, `contextId` oraz `propose(value)`. |
+| `useEditor()` | W edytorze atrybutu: wartość pola, atrybut, właściwości, wymagalność i tryb tylko do odczytu, błędy, `recordId` (`null` podczas wprowadzania nowego rekordu), `contextId` oraz `propose(value)`. |
 
 Gdy zmienia się kontekst, język lub tryb kolorów, Attricat przekazuje nowe wartości zamontowanemu komponentowi zamiast uruchamiać go od nowa, więc jego stan się zachowuje.
 

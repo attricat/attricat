@@ -51,7 +51,7 @@ A run whose release is disabled, quarantined, or loses a grant during a batch pa
 ## How runs are durable
 
 - A run is created once per workspace, release, operation, and idempotency key. Starting it again with the same key returns the same run.
-- A run is pinned to the release it started on. Disabling, quarantining, upgrading, or revoking a grant pauses it until that exact release is authorized again; it never switches to new code.
+- A run is pinned to the release it started on and never switches to new code. Disabling, quarantining, or revoking a grant pauses it until that release is authorized again; upgrading cancels it.
 - After each batch, the checkpoint is saved. The batch key changes only once the checkpoint is saved.
 - If a worker crashes before the checkpoint, the batch runs again with the **same batch key**. If your component writes to the catalog or an external system, make those writes idempotent on the batch key.
 - Cancelling a queued run ends it immediately. Cancelling a running one asks the component to stop at the next batch.
@@ -184,7 +184,7 @@ acli extension schedule create acme.export --operation-id export \
 acli extension schedule update <schedule-id> --enabled false --interval-seconds 86400
 ```
 
-A schedule runs an operation every 60 seconds to 30 days. Missed intervals and overlapping runs are skipped. A schedule pauses while its release is disabled, quarantined, upgraded, or missing a grant.
+A schedule runs an operation every 60 seconds to 30 days. Missed intervals and overlapping runs are skipped. A schedule pauses while its release is disabled, quarantined, or missing a grant. An upgrade moves it to the new release, unless its operation, input or configuration no longer fits; it then stays paused until you recreate it.
 
 ## Blueprint connector jobs
 

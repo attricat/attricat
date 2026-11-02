@@ -137,18 +137,15 @@ The v1 capability catalogue is: `attricat.read`, `attricat.write`,
 `artifacts.write`, `configuration.read`,
 `configuration.write`, `secrets.read`, `logging.write`, `client.commands`,
 `client.navigation`, `client.notification`, `client.events`, `client.refresh`,
-`client.confirmation`, `client.download`, `client.external_navigation`,
-`client.files.read`, `client.files.upload`, `client.search`,
-`client.live_updates`, `client.clipboard`, `client.theme.read`,
-`client.locale.read`, `client.blueprint_configuration`, `client.record_tab`,
+`client.files.upload`, `client.blueprint_configuration`, `client.record_tab`,
 `client.record_field_notes`, `client.record_action`, `client.explorer_row_action`,
 `client.explorer_table_cell`, `client.blueprint_detail_panel`, `client.explorer_action`,
 `client.explorer_bulk_action`, `client.record_header_action`,
 `client.blueprint_panel`, `client.blueprint_publish_check`,
 `client.audit_event_panel`, `client.data_health_card`, `client.action_dialog`,
 `client.operations.start`, `client.operations.read`,
-`client.operations.cancel`, `attricat.annotations.write`, `network.request`,
-and `webhooks.receive`. Host ABI 1.1 adds `exports.mappings`,
+`client.operations.cancel`, `attricat.annotations.write`, and
+`network.request`. Host ABI 1.1 adds `exports.mappings`,
 `connections.use`, `attricat.files.read`, `attricat.files.public_links` and
 `client.export_mapping` (see [Export platform](#export-platform-attricathost-11)),
 and native UI adds `client.attribute_editor` (see [Attribute editors](#attribute-editors)).
@@ -182,8 +179,15 @@ an external GitHub registry. Enablement requires valid configuration, enabled
 compatible dependencies without cycles, and every required capability and
 host-permission grant. Quarantine may occur from any installed state; direct
 re-enablement revalidates the installed release and its configuration before
-handlers resume. Upgrade snapshots a newly selected installed release, clears grants and
-configuration, and leaves a formerly enabled installation disabled. Removal
+handlers resume. Upgrade snapshots a newly selected installed release and keeps
+what still applies (`upgrade_extension`): grants the release still declares,
+except a host permission whose rule changed; configuration that validates
+against the new schema; scoped configuration of the same version; and schedules
+whose operation, input and configuration snapshot still fit. A formerly enabled
+installation stays enabled unless a required grant is missing, its configuration
+no longer fits, or its dependencies or consumed contracts changed. It cancels
+unfinished runs of the prior release, since they can never resume and would
+otherwise count as overlap. Removal
 deletes current state, including the extension's connections and their
 credentials, host-permission budgets and handler outcomes, but retains
 installed-release and append-only lifecycle history and export mappings.
@@ -199,7 +203,8 @@ Attricat provides management APIs and web UI for registry sources, discovery,
 installation, configuration, grants, lifecycle actions, and client runtime
 descriptors. Server WASM execution, client components, storage, commands, mediated
 extension-owned event publication, and mediated network/secrets APIs are
-implemented. Webhook delivery remains follow-on work.
+implemented. There is no inbound webhook route; see
+[Decisions](#decisions).
 
 ## Host ABI versions and evolution
 
@@ -416,9 +421,8 @@ version, and `blueprint` and/or `attribute` scopes. It requires
 `configuration.write`. Attricat persists these values separately from blueprint
 schemas and verifies the workspace-owned blueprint revision and attribute on
 every get/set. Both attribute-scoped and blueprint-scoped values are
-operational. Values are release-bound and
-inaccessible after disable,
-quarantine, grant changes, or upgrade.
+operational. Values are inaccessible after disable, quarantine or grant changes,
+and follow an upgrade only when `scoped_configuration.version` is unchanged.
 
 A server manifest may declare bounded `server.commands` (stable ID, handler,
 object request/response schemas, and byte limits). They require
@@ -505,8 +509,10 @@ commits. Consequently a crash before checkpoint replays the same batch key, and
 a crash after a component's domain commit but before checkpoint is safe only when
 the component treats that key as idempotent. Restarts reclaim the pending run
 from its last committed checkpoint. Runs never switch to upgraded code: disable,
-quarantine, grant loss, and upgrades pause a release-pinned run until that exact
-release is authorized again. Cancelling queued work is terminal immediately;
+quarantine and grant loss pause a release-pinned run until that exact release is
+authorized again, and an upgrade cancels it. A leased run the upgrade cancels ends
+at its next lease, without a cancellation delivered, because no code remains to
+receive one. Cancelling queued work is terminal immediately;
 cancelling leased work invokes cooperative cancellation at the next batch.
 
 `POST /extensions/{extension_id}/operations` starts a run, while operators can
@@ -599,8 +605,9 @@ and `interval_seconds` (60–2592000). `GET /extension-operation-schedules`
 lists schedule IDs/status without returning inputs/configuration. `PATCH
 /extension-operation-schedules/{id}` accepts `{enabled,interval_seconds}`.
 Each due tick enqueues an occurrence-specific idempotent run through the normal
-task queue. Missed intervals and overlaps are skipped; disabled, quarantined,
-upgraded or grant-revoked releases pause occurrence creation. Schedules retain
+task queue. Missed intervals and overlaps are skipped; disabled, quarantined
+or grant-revoked releases pause occurrence creation, as does a schedule an upgrade
+could not move to the new release. Schedules retain
 the release and validated input/configuration snapshot, not credentials, URLs
 or request bodies. Output, progress, status and errors use the existing
 workspace-scoped run and artifact endpoints.
@@ -1273,8 +1280,8 @@ headers, body_base64}`, `{outcome: "rate_limited", retry_after_ms}` when the
 rule's budget is spent, `{outcome: "unreachable"}` when the connection or
 TLS handshake failed (nothing was sent, so it may be sent again),
 `{outcome: "uncertain"}` after any other transport failure,
-a timeout or a response larger than the rule's `max_response_bytes` (the
-request may have been applied), or `{outcome: "connection_unavailable", message}` when a token could
+a timeout or a response larger than the rule's `max_response_bytes` or too large
+to return in base64 within the 1 MiB answer (the request may have been applied), or `{outcome: "connection_unavailable", message}` when a token could
 not be refreshed for a temporary reason. Redirects are never followed; v2
 returns a 3xx response as it is, so a component may request its `Location`
 through a granted rule (Allegro answers finished offer commands with
@@ -1341,7 +1348,8 @@ token's SHA-256 is stored. `GET /api/public/extension-files/{token}` serves the 
 session while the link is unexpired, the extension is enabled with all three
 grants it was issued under, and the record the link was issued for still references the file.
 Deleting the record or replacing the file stops the link at once; disabling,
-quarantining, upgrading or removing the extension, or revoking one of the
+quarantining or removing the extension, an upgrade that leaves it disabled or
+without one of the grants, or revoking one of the
 three grants, revokes its links for good.
 
 ### Credential connections
@@ -1554,7 +1562,8 @@ mappings pointing at missing items.
   `{context_version: 1, export_id}` (requires `client.export_mapping`).
   Scoped configuration remains for small per-blueprint settings.
 - **Webhook ingress** (inbound order and stock events) is tracked in #279
-  and is not needed for pure export. OAuth callbacks are implemented; see
+  and is not needed for pure export. Manifests cannot declare webhooks until
+  it exists. OAuth callbacks are implemented; see
   [Browser authorization](#browser-authorization).
 
 ## Client extension runtime (v1)
@@ -1696,7 +1705,9 @@ contextual actions—not an application-wide navigation tree.
   menu, acting on that record.
 - **`explorer_table_cell`** (`cell`, requiring `client.explorer_table_cell`)
   is declarative: a table column names the cell, and the host draws the value
-  with the cell's `display` and the column's `props`. No frame mounts, so a
+  with the cell's `display` and the column's `props`. A column has only the ID
+  to go on, so `validate_cell_namespace` requires `<extension-id>.<name>`, with
+  no dots in the name and outside the built-in `attricat.` prefix. No frame mounts, so a
   viewport of cells costs nothing extra. The blueprint compiler checks the
   column's value type and props against the enabled release's declaration;
   an unavailable cell shows the value as usual.
@@ -1909,24 +1920,12 @@ accessibility UI.
 
 `client.refresh` currently supports only `current_record` in record outlets;
 other targets such as Explorer results require separate host implementations.
-The color mode is available to every contribution as `attricat.theme`;
-`client.theme.read` is still accepted in manifests for compatibility but is no
-longer required.
+The color mode is available to every contribution as `attricat.theme`, without
+a capability.
 
-`client.confirmation`, `client.download`, `client.external_navigation`,
-`client.files.read`, `client.files.upload`, `client.search`,
-`client.live_updates`, `client.clipboard` and `client.locale.read` are in the
-capability catalogue and grantable, but **no frame API implements them yet**:
-`frameDocument.ts` exposes no member for them and `extensionBroker.ts` has no
-method. The public docs list them as reserved. Their intended contracts are:
-confirmation with bounded title, message and severity; download of bounded
-data or a host artifact reference with a validated filename and media type;
-external navigation to allowlisted HTTPS URLs in a new tab; file read and
-upload restricted to file-detail context with host-owned selection and
-progress; bounded authorized search; typed current-context live updates;
-bounded user-initiated clipboard writes; and locale reads that return only the
-locale. Implementing one means adding the frame member, the broker method and
-its capability check, and updating both documents.
+A capability exists only with the frame member, broker method and check that
+implement it. A manifest requesting anything else fails validation, so a grant
+always gives what it names.
 
 Placement capabilities authorize only their matching fixed outlet; they do not
 imply `client.commands`. Disabling, quarantining, removing, upgrading, or
@@ -2114,22 +2113,24 @@ An `editor` contribution at `attribute_editor` (requiring
 }
 ```
 
-A field in `views.detail` names it (`editor: {id: formula, version: 1, props:
-{rows: 3}}`); the compiler rejects `editor` in any other view, and saving or
+A field in `views.detail` names it with its extension (`editor: {extension_id:
+acme.formulas, id: formula, version: 1, props: {rows: 3}}`), so two extensions may
+use the same contribution ID; the compiler rejects `editor` in any other view, and saving or
 publishing the blueprint checks the field's value type and the props against
 an enabled release's declaration, as table columns are checked against cells.
 The definition editor suggests editors whose value types fit the field.
 
 The strict v1 context (`attributeEditorContextSchema`) holds the value, the
 attribute's code, name, value type, constraints and options, read-only and
-required state, current validation errors, the record and value context and
-the field's props; locale and theme arrive with every update. The editor only
+required state, current validation errors, the record (`record_id` is null while
+a new record is entered) and value context and the field's props; locale and theme arrive with every update. The editor only
 proposes values (`editor.propose`, accepted only from attribute-editor
 mounts). The first UI kit input that sets `hideLabel` draws the field's label
 on its outline, at the field's size, as every other field does; the host's own
 label then names the field for assistive technology only. The host converts a proposal to the field's type, validates it
 against the attribute and saves it through the inline-edit path — save on
-blur or Enter, Escape restores — with the user's permissions; label, help,
+blur or Enter, Escape restores — with the user's permissions, or in the record
+form keeps it as a change until the form is submitted; label, help,
 errors, focus and keyboard stay host-drawn. When the extension is disabled,
 lacks the grant, fails or is not ready yet, the field keeps its default
 control, so a blueprint never depends on an extension being healthy. Editors
@@ -2155,21 +2156,6 @@ the revision with the installation, and includes it in the component and
 pre-instantiation cache keys, so the next invocation compiles the new build. The
 route checks only the component preamble, so a build that doesn't link faults on its
 next invocation.
-
-## Webhooks
-
-`webhooks.receive` is server-only and is not an outbound host permission. A
-v1 webhook declares a stable ID, a versioned `.vN` internal event type, named
-handler, exactly `POST`, bounded body size, and `hmac-sha256` authentication.
-The auth declaration supplies signature and timestamp headers, a positive
-replay window, and a *name* for a host-managed secret; manifest snapshots and
-audit records never contain the secret.
-
-The future ingress runtime owns public routes and validates method, body,
-signature, timestamp, replay/deduplication, rate limits, and diagnostics before
-durably queuing an at-least-once delivery. Disabled or quarantined installations
-must never invoke a handler. Binding routes, delivery execution, retries, and
-observability are deliberately deferred to #145.
 
 ## Testing
 

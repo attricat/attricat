@@ -146,7 +146,9 @@ pub struct PublicationPolicy {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct EditorReference {
-    /// The editor contribution's ID in an enabled extension.
+    /// The enabled extension that declares the editor.
+    pub extension_id: String,
+    /// The editor contribution's ID in that extension.
     #[schemars(extend("x-attricat-reference" = "attribute_editor"))]
     pub id: String,
     /// The editor contribution's version.

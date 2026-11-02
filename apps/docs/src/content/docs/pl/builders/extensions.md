@@ -33,7 +33,11 @@ Włączenie się nie powiedzie, jeśli wymagane uprawnienie nie zostało przyzna
 
 ## Uaktualnienia
 
-Uaktualnienie przełącza instalację na nowsze wydanie. Ponieważ nowe wydanie może żądać innych uprawnień, uaktualnienie usuwa wszystkie przyznane uprawnienia i konfigurację oraz pozostawia rozszerzenie wyłączone. Ponownie je sprawdź, skonfiguruj, przyznaj uprawnienia i włącz.
+Uaktualnienie przełącza instalację na nowsze wydanie. Przyznane uprawnienia i konfiguracja zostają, jeśli nadal obowiązują, a włączone rozszerzenie pozostaje włączone, gdy nie ma nic nowego do sprawdzenia.
+
+Rozszerzenie zostaje wyłączone do sprawdzenia, gdy nowe wydanie wymaga nieprzyznanego uprawnienia, zmienia regułę uprawnienia hosta, wymaga konfiguracji, której obecne wartości nie spełniają, albo inaczej zależy od innych rozszerzeń. Zmieniona reguła traci przyznane uprawnienie, a niepasująca konfiguracja jest czyszczona.
+
+Uaktualnienie anuluje wykonania pozostające na starym wydaniu, ponieważ nie mogą przejść na nowy kod. Harmonogramy przechodzą na nowe wydanie, chyba że ich operacja, dane wejściowe lub konfiguracja już nie pasują; takie pozostają wstrzymane, dopóki nie utworzysz ich ponownie. Jeśli korzystasz z eksportu wyzwalanego zmianami, po uaktualnieniu uruchom ponowną synchronizację, aby wysłać zmiany z anulowanego wykonania.
 
 Strona rozszerzenia proponuje nowsze wydania z jego rejestru. Opcja **Uaktualnij z archiwum** na tej stronie albo `acli extension upgrade <id> --file` uaktualnia z przesłanego archiwum, z takim samym skutkiem. W obu przypadkach wersja musi być wyższa od zainstalowanej.
 

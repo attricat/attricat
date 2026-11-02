@@ -189,7 +189,7 @@ views:
     children:
       - type: field
         field: discount_formula
-        editor: {id: formula, version: 1, props: {rows: 2}}
+        editor: {extension_id: acme.formulas, id: formula, version: 1, props: {rows: 2}}
 ```
 
 Edytor musi być zadeklarowany przez włączone rozszerzenie dla typu wartości pola, a każda właściwość musi pasować do zadeklarowanego typu i granic. Pole zachowuje swoją etykietę, pomoc, walidację i zapisywanie: nadal zapisuje się po opuszczeniu pola lub naciśnięciu Enter, a Escape przywraca zapisaną wartość. Gdy rozszerzenie jest wyłączone albo nie działa, pole pokazuje domyślną kontrolkę. Edytory działają tylko na stronie rekordu, nigdy w tabelach Przeglądarki rekordów.

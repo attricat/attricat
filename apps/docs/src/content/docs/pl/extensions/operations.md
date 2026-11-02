@@ -51,7 +51,7 @@ Wykonanie, którego wydanie zostanie wyłączone, poddane kwarantannie lub utrac
 ## Jak wykonania zachowują trwałość
 
 - Wykonanie jest tworzone raz dla danego obszaru roboczego, wydania, operacji i klucza idempotencji. Ponowne uruchomienie z tym samym kluczem zwraca to samo wykonanie.
-- Wykonanie jest przypięte do wydania, na którym się rozpoczęło. Wyłączenie, kwarantanna, uaktualnienie lub cofnięcie uprawnienia wstrzymuje je, dopóki to dokładnie wydanie nie zostanie ponownie autoryzowane; nigdy nie przechodzi na nowy kod.
+- Wykonanie jest przypięte do wydania, na którym się rozpoczęło, i nigdy nie przechodzi na nowy kod. Wyłączenie, kwarantanna lub cofnięcie uprawnienia wstrzymuje je, dopóki to wydanie nie zostanie ponownie autoryzowane; uaktualnienie je anuluje.
 - Po każdej partii zapisywany jest punkt kontrolny. Klucz partii zmienia się dopiero po zapisaniu punktu kontrolnego.
 - Jeśli proces roboczy ulegnie awarii przed punktem kontrolnym, partia jest wykonywana ponownie z **tym samym kluczem partii**. Jeśli Twój komponent zapisuje do katalogu lub systemu zewnętrznego, zadbaj, aby te zapisy były idempotentne względem klucza partii.
 - Anulowanie wykonania oczekującego w kolejce kończy je natychmiast. Anulowanie trwającego prosi komponent o zatrzymanie się przy następnej partii.
@@ -184,7 +184,7 @@ acli extension schedule create acme.export --operation-id export \
 acli extension schedule update <schedule-id> --enabled false --interval-seconds 86400
 ```
 
-Harmonogram uruchamia operację w odstępach od 60 sekund do 30 dni. Przegapione interwały i nakładające się wykonania są pomijane. Harmonogram jest wstrzymywany, gdy jego wydanie jest wyłączone, poddane kwarantannie, uaktualnione lub nie ma wymaganego uprawnienia.
+Harmonogram uruchamia operację w odstępach od 60 sekund do 30 dni. Przegapione interwały i nakładające się wykonania są pomijane. Harmonogram jest wstrzymywany, gdy jego wydanie jest wyłączone, poddane kwarantannie lub nie ma wymaganego uprawnienia. Uaktualnienie przenosi go na nowe wydanie, chyba że jego operacja, dane wejściowe lub konfiguracja już nie pasują; wtedy pozostaje wstrzymany, dopóki nie utworzysz go ponownie.
 
 ## Zadania konektorów w Schematach
 

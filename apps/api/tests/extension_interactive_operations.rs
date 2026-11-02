@@ -513,7 +513,8 @@ async fn an_archive_upgrades_a_side_loaded_extension_like_a_release(pool: sqlx::
     assert_eq!(upgraded.status(), StatusCode::OK);
     let installation = repository.installed_extensions().await.unwrap().remove(0);
     assert_eq!(installation.version, "2.0.0");
-    assert_eq!(installation.state.as_str(), "disabled");
+    // The release requires nothing, so nothing waits for review.
+    assert_eq!(installation.state.as_str(), "enabled");
     assert_eq!(installation.source, "sideload");
     let grants: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM extension_grants g JOIN extension_installations i ON i.id=g.installation_id WHERE i.extension_id=$1",
@@ -522,6 +523,7 @@ async fn an_archive_upgrades_a_side_loaded_extension_like_a_release(pool: sqlx::
     .fetch_one(&pool)
     .await
     .unwrap();
+    // Nor does it declare the permissions granted to the release before it.
     assert_eq!(grants, 0);
     server.abort();
 }

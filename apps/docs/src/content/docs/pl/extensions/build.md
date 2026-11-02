@@ -212,7 +212,7 @@ Gdy zmienia się manifest, podnieś `version`, spakuj rozszerzenie i uaktualnij 
 acli extension upgrade acme.inventory --file dist/acme.inventory-1.0.1.tar.zst
 ```
 
-Wersja musi być wyższa od zainstalowanej. Uaktualnienie usuwa przyznane uprawnienia i konfigurację oraz pozostawia rozszerzenie wyłączone, więc przyznaj uprawnienia i włącz je ponownie. Pamięć rozszerzenia, połączenia i mapowania eksportu zostają.
+Wersja musi być wyższa od zainstalowanej. Pamięć rozszerzenia, połączenia i mapowania eksportu zostają. Przyznane uprawnienia i konfiguracja zostają, jeśli nadal obowiązują, a włączone rozszerzenie pozostaje włączone, chyba że nowe wydanie wymaga sprawdzenia. Zobacz [Uaktualnienia](/pl/builders/extensions/#uaktualnienia).
 
 ### Debugowanie
 
@@ -258,6 +258,6 @@ Administratorzy obszaru roboczego dodają Twój rejestr poleceniem `acli extensi
 
 - Stosuj SemVer dla `version` i nigdy nie używaj ponownie wydanej wersji.
 - Zachowuj niezmienne identyfikatory kontrybucji, procedur obsługi i reguł uprawnień, bo odwołują się do nich układy i przyznane uprawnienia.
-- Uaktualnienia usuwają przyznane uprawnienia i konfigurację, więc w informacjach o wydaniu napisz, które uprawnienia lub ustawienia się zmieniły.
+- Nowe wymagane uprawnienie, zmieniona reguła uprawnienia hosta lub konfiguracja, która przestaje być poprawna, pozostawiają rozszerzenie wyłączone do sprawdzenia, więc w informacjach o wydaniu napisz, co się zmieniło. Podnieś wersję `scoped_configuration`, gdy jej wartości zmieniają znaczenie: wartości starszej wersji zostają w tyle.
 - Pamięć rozszerzenia zostaje, a uaktualnienie nie uruchamia żadnego kodu. Zapisuj wersję formatu razem z danymi, a Twój kod niech odczytuje starsze formaty.
 - W CI uruchom testy, spakuj rozszerzenie i wykonaj `acli extension validate` na archiwum, zanim dołączysz je do wydania.

@@ -44,6 +44,61 @@ fn event_contract_grant_id(provider: &str, contract: &str) -> String {
     format!("{provider}:{contract}")
 }
 
+/// The grants that still mean the same in `next`: what it declares, and host
+/// permissions only while their rule is unchanged, because a rule's ID says
+/// nothing about where it may send data.
+fn grants_surviving_upgrade(
+    prior: &Manifest,
+    next: &Manifest,
+    grants: Vec<(String, String)>,
+) -> Vec<(String, String)> {
+    let rules = |manifest: &'_ Manifest| {
+        manifest
+            .host_permissions
+            .iter()
+            .chain(&manifest.optional_host_permissions)
+            .map(|rule| (rule.id.clone(), serde_json::to_value(rule).ok()))
+            .collect::<HashMap<_, _>>()
+    };
+    let (prior_rules, next_rules) = (rules(prior), rules(next));
+    grants
+        .into_iter()
+        .filter(|(kind, id)| match kind.as_str() {
+            GRANT_KIND_CAPABILITY => next
+                .permissions
+                .iter()
+                .chain(&next.optional_permissions)
+                .any(|item| item == id),
+            GRANT_KIND_HOST_PERMISSION => {
+                next_rules.contains_key(id) && next_rules.get(id) == prior_rules.get(id)
+            }
+            GRANT_KIND_EVENT_PUBLISH => next
+                .event_contracts
+                .exports
+                .iter()
+                .any(|item| &item.id == id),
+            GRANT_KIND_EVENT_SUBSCRIBE => next
+                .event_contracts
+                .consumes
+                .iter()
+                .any(|item| &event_contract_grant_id(&item.provider, &item.contract) == id),
+            _ => false,
+        })
+        .collect()
+}
+
+/// Whether a release relies on the same other extensions as `prior`, so what
+/// enabled `prior` still holds for it.
+fn same_extension_requirements(prior: &Manifest, next: &Manifest) -> bool {
+    let requirements = |manifest: &'_ Manifest| {
+        (
+            serde_json::to_value(&manifest.dependencies).ok(),
+            serde_json::to_value(&manifest.event_contracts.consumes).ok(),
+        )
+    };
+    requirements(prior) == requirements(next)
+}
+
 /// Every `(grant_kind, grant_id)` a release needs before it can be enabled.
 /// Optional permissions are excluded.
 pub fn required_extension_grants(manifest: &Manifest) -> Vec<(&'static str, String)> {
@@ -1511,7 +1566,7 @@ impl AttricatRepository {
     }
 
     /// Quarantine is legal from either installed state and blocks all future
-    /// runtime/webhook policy checks until explicit remediation.
+    /// runtime policy checks until explicit remediation.
     pub async fn quarantine_extension(
         &self,
         extension_id: &str,
@@ -1587,21 +1642,79 @@ impl AttricatRepository {
             source,
         )
         .await?;
-        let state = if current.state == ExtensionState::Enabled {
-            ExtensionState::Disabled
+        let grants: Vec<(String, String)> = sqlx::query_as(
+            "SELECT grant_kind, grant_id FROM extension_grants WHERE installation_id = $1",
+        )
+        .bind(current.id)
+        .fetch_all(&mut *transaction)
+        .await?;
+        let kept = grants_surviving_upgrade(&prior_manifest, manifest, grants.clone());
+        let dropped: Vec<_> = grants
+            .into_iter()
+            .filter(|grant| !kept.contains(grant))
+            .collect();
+        for (kind, id) in &dropped {
+            sqlx::query("DELETE FROM extension_grants WHERE installation_id = $1 AND grant_kind = $2 AND grant_id = $3")
+                .bind(current.id).bind(kind).bind(id).execute(&mut *transaction).await?;
+        }
+        let configuration_fits = manifest.configuration.as_ref().is_none_or(|_| {
+            manifest
+                .validate_configuration(&current.configuration)
+                .is_ok()
+        });
+        let configuration = if configuration_fits && manifest.configuration.is_some() {
+            current.configuration.clone()
         } else {
-            current.state
+            json!({})
         };
-        let row = sqlx::query_as::<_, ExtensionInstallation>("UPDATE extension_installations SET installed_release_id = $2, state = $3, configuration = '{}'::jsonb, configuration_version = $4, updated_at = clock_timestamp() WHERE id = $1 RETURNING id, workspace_id, extension_id, installed_release_id, state, configuration, configuration_version, created_at, updated_at")
-            .bind(current.id).bind(installed_release_id).bind(state.as_str()).bind(manifest.configuration.as_ref().map(|item| item.version as i32)).fetch_one(&mut *transaction).await?;
-        sqlx::query("DELETE FROM extension_grants WHERE installation_id = $1")
-            .bind(current.id)
-            .execute(&mut *transaction)
-            .await?;
-        // The grants its links were issued under are gone, so the links go
-        // too; re-enabling the new release never revives them.
-        self.revoke_extension_file_links(&mut transaction, &current.extension_id)
-            .await?;
+        let all_granted = required_extension_grants(manifest)
+            .into_iter()
+            .all(|(kind, id)| kept.iter().any(|(k, i)| k == kind && *i == id));
+        // An enabled extension stays enabled only when the operator has
+        // nothing new to review.
+        let state = match current.state {
+            ExtensionState::Enabled
+                if !configuration_fits
+                    || !all_granted
+                    || !same_extension_requirements(&prior_manifest, manifest) =>
+            {
+                ExtensionState::Disabled
+            }
+            state => state,
+        };
+        let row = sqlx::query_as::<_, ExtensionInstallation>("UPDATE extension_installations SET installed_release_id = $2, state = $3, configuration = $4, configuration_version = $5, updated_at = clock_timestamp() WHERE id = $1 RETURNING id, workspace_id, extension_id, installed_release_id, state, configuration, configuration_version, created_at, updated_at")
+            .bind(current.id).bind(installed_release_id).bind(state.as_str()).bind(&configuration).bind(manifest.configuration.as_ref().map(|item| item.version as i32)).fetch_one(&mut *transaction).await?;
+        // A link lives only while its extension is enabled with the grants it
+        // was issued under; once lost, re-enabling never revives it.
+        let links_stay = state == ExtensionState::Enabled
+            && super::PUBLIC_FILE_LINK_GRANTS.iter().all(|grant| {
+                kept.iter()
+                    .any(|(kind, id)| kind == GRANT_KIND_CAPABILITY && id == grant)
+            });
+        if !links_stay {
+            self.revoke_extension_file_links(&mut transaction, &current.extension_id)
+                .await?;
+        }
+        // Values of the same scoped configuration version follow the release.
+        if let Some(scoped) = &manifest.scoped_configuration {
+            sqlx::query("UPDATE extension_scoped_configuration SET installed_release_id = $4 WHERE workspace_id = $1 AND extension_id = $2 AND installed_release_id = $3 AND configuration_version = $5")
+                .bind(self.workspace_id()).bind(&current.extension_id).bind(current.installed_release_id).bind(installed_release_id).bind(scoped.version as i32)
+                .execute(&mut *transaction).await?;
+        }
+        self.repin_extension_operation_schedules(
+            &mut transaction,
+            &current.extension_id,
+            current.installed_release_id,
+            installed_release_id,
+            manifest,
+        )
+        .await?;
+        self.cancel_extension_operations_of_release(
+            &mut transaction,
+            &current.extension_id,
+            current.installed_release_id,
+        )
+        .await?;
         self.write_extension_lifecycle(
             &mut transaction,
             &row,
@@ -1609,7 +1722,14 @@ impl AttricatRepository {
             Some(current.state),
             Some(row.state),
             source,
-            json!({"prior_installed_release_id": current.installed_release_id}),
+            json!({
+                "prior_installed_release_id": current.installed_release_id,
+                "configuration_kept": configuration_fits,
+                "dropped_grants": dropped
+                    .iter()
+                    .map(|(kind, id)| format!("{kind}:{id}"))
+                    .collect::<Vec<_>>(),
+            }),
         )
         .await?;
         self.commit_extension_mutation(transaction, "upgrade", &row.extension_id)

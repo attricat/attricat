@@ -215,7 +215,7 @@ for their value type.
 ### Extension attribute editors
 
 A `field` in `views.detail` may also name an extension's attribute editor
-under `editor`, by its contribution `id`, `version` and `props`:
+under `editor`, by its `extension_id`, contribution `id`, `version` and `props`:
 
 ```yaml
 views:
@@ -224,7 +224,7 @@ views:
     children:
       - type: field
         field: price_gross
-        editor: {id: formula, version: 1, props: {rows: 2}}
+        editor: {extension_id: acme.formulas, id: formula, version: 1, props: {rows: 2}}
 ```
 
 The compiler rejects `editor` in other views and malformed references; saving

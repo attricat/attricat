@@ -36,12 +36,14 @@ type Props = {
   contribution: ExtensionContribution;
   reference: EditorReference;
   attribute: Attribute;
-  recordId: string;
+  /** Null while the field is entered for a record not yet created. */
+  recordId: string | null;
   contextId: string | null;
   /** The field's inline-form text. */
   value: string;
   error?: string;
   required: boolean;
+  readOnly?: boolean;
   /** Keeps a proposal as a local edit, as typing does. */
   onChange: (text: string) => void;
   /** Validates and saves a proposal through the inline-edit path. */
@@ -73,6 +75,7 @@ export const ExtensionAttributeEditor = ({
   value,
   error,
   required,
+  readOnly = false,
   onChange,
   onCommit,
   fallback,
@@ -141,7 +144,7 @@ export const ExtensionAttributeEditor = ({
           ? (constraints as { enum: (string | number)[] }).enum
           : null,
       },
-      read_only: false,
+      read_only: readOnly,
       required,
       errors: error ? [error] : [],
       props: reference.props,
@@ -151,6 +154,7 @@ export const ExtensionAttributeEditor = ({
       constraints,
       contextId,
       error,
+      readOnly,
       recordId,
       reference.props,
       required,

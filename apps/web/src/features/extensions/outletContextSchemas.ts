@@ -51,7 +51,8 @@ export const outletContextSchemas = {
 export const attributeEditorContextSchema = z
   .object({
     context_version: contextVersion,
-    record_id: z.uuid(),
+    /** Null while the field is entered for a record not yet created. */
+    record_id: z.uuid().nullable(),
     context_id: z.uuid().nullable(),
     /** The field's value as the inline editor holds it, or null when empty. */
     value: z.union([z.string(), z.number(), z.boolean()]).nullable(),

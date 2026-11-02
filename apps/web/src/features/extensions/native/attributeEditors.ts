@@ -9,6 +9,7 @@ import {
 
 /** How a detail field names an extension's attribute editor. */
 export type EditorReference = {
+  extension_id: string;
   id: string;
   version: number;
   props: Record<string, unknown>;
@@ -34,6 +35,7 @@ export const resolveAttributeEditor = (
           contribution.kind === contributionKinds.editor &&
           contribution.outlet === extensionOutlets.attributeEditor &&
           contribution.rendering === renderingModes.native &&
+          contribution.extension_id === reference.extension_id &&
           contribution.id === reference.id &&
           contribution.version === reference.version &&
           contribution.editor?.value_types.includes(attribute.value_type),
