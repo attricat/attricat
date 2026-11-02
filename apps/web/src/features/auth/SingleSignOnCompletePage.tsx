@@ -1,11 +1,11 @@
-import { Alert, Typography } from '@mui/material';
+import { Alert } from '@mui/material';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { apiErrorText } from '../../api/errors';
 import { RouterButton } from '../../components/RouterLink';
-import { AuthFormShell } from './AuthFormShell';
+import { AuthFormShell, AuthFormTitle } from './AuthFormShell';
 import { takeReturnLocation } from './returnLocation';
 import { sessionOptions } from './queryOptions';
 
@@ -38,9 +38,7 @@ export const SingleSignOnCompletePage = ({ error }: { error?: string }) => {
   if (!error) return null;
   return (
     <AuthFormShell onSubmit={() => undefined}>
-      <Typography component="h1" variant="h5">
-        {t('auth.singleSignOnFailed')}
-      </Typography>
+      <AuthFormTitle>{t('auth.singleSignOnFailed')}</AuthFormTitle>
       <Alert severity="error">
         {apiErrorText({
           code: error,

@@ -11,7 +11,8 @@ type EditorProps = ComponentProps<typeof Editor>;
 export type YamlEditorProps = {
   ariaLabel?: string;
   height: string;
-  onChange: EditorProps['onChange'];
+  /** Leave out for a read-only editor. */
+  onChange?: EditorProps['onChange'];
   onMount?: EditorProps['onMount'];
   /** Additional Monaco options, such as suggestion behavior. */
   options?: EditorProps['options'];

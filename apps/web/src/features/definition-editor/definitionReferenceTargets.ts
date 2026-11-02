@@ -1,8 +1,9 @@
 import i18n from '../../i18n';
-import type {
-  TextRange,
-  YamlEntry,
-  YamlOutline,
+import {
+  type TextRange,
+  type YamlEntry,
+  type YamlOutline,
+  rangeContains,
 } from '../../components/yamlOutline';
 import {
   aliasKey,
@@ -61,9 +62,6 @@ const documentReferences = new Set<DefinitionReferenceKind>([
   definitionReferenceKinds.relationshipPath,
 ]);
 
-const contains = (range: TextRange, offset: number) =>
-  offset >= range.start && offset <= range.end;
-
 export const referenceValues = (
   kind: DefinitionKind,
   outline: YamlOutline,
@@ -96,7 +94,9 @@ export const referenceAt = (
   outline: YamlOutline,
   offset: number,
 ) =>
-  referenceValues(kind, outline).find(({ range }) => contains(range, offset));
+  referenceValues(kind, outline).find(({ range }) =>
+    rangeContains(range, offset),
+  );
 
 /**
  * The lookup candidate a reference names. `known` is false when the lookup

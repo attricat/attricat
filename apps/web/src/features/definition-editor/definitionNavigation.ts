@@ -2,6 +2,7 @@ import {
   scanYaml,
   type TextRange,
   type YamlOutline,
+  rangeContains,
 } from '../../components/yamlOutline';
 import {
   attributePathSeparator,
@@ -81,9 +82,6 @@ export type DefinitionSection =
       name: string;
     };
 
-const contains = (range: TextRange, offset: number) =>
-  offset >= range.start && offset <= range.end;
-
 /**
  * Whether `offset` is on one of the lines a block covers: from the start of
  * its first line, so a `- ` item marker counts, to its end, which for a block
@@ -123,7 +121,7 @@ export const definitionSectionAt = (
       path[1] === view.path[1] &&
       typeof value === 'string' &&
       valueRange !== undefined &&
-      contains(valueRange, offset) &&
+      rangeContains(valueRange, offset) &&
       (path.at(-1) === fieldKey || path.at(-2) === fieldsKey),
   );
   return {

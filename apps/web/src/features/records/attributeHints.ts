@@ -1,5 +1,5 @@
 import type { TFunction } from 'i18next';
-import { formatBytes } from '../data-health/dataHealthFormat';
+import { formatBytes } from '../../components/formatBytes';
 import { lexiconText } from '../lexicon/lexicon';
 import type { Attribute } from './api';
 import { attributeCardinalities } from './constants';

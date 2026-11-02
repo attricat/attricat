@@ -1,14 +1,14 @@
 import { useAcknowledgeFinding } from './useAcknowledgeFinding';
 import { useAcknowledgeFindings } from './useAcknowledgeFindings';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { createLink, useNavigate } from '@tanstack/react-router';
-import { Box, Tab, Tabs } from '@mui/material';
+import { useNavigate } from '@tanstack/react-router';
+import { Box, Tabs } from '@mui/material';
 import { PlusIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
-import { RouterButton } from '../../components/RouterLink';
+import { RouterButton, RouterTab } from '../../components/RouterLink';
 import { DryRunDialog } from './DryRunDialog';
 import { useRunRule } from './useRunRule';
 import { useCan } from '../auth/useCan';
@@ -48,7 +48,6 @@ import { capabilities } from '../auth/capabilities';
 import { blueprintCatalogueOptions } from '../blueprints/queryOptions';
 import { contextListOptions } from '../contexts/queryOptions';
 
-const RouterTab = createLink(Tab);
 const sectionIcons = {
   [RULE_SECTION_RULES]: RuleIcon,
   [RULE_SECTION_FINDINGS]: RuleFindingIcon,

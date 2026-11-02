@@ -35,7 +35,6 @@ const YamlDiffEditor = lazy(() =>
     default: YamlDiffEditor,
   })),
 );
-const ignoreChange = () => undefined;
 
 /**
  * The revisions to compare: those the URL names, else the shown revision and
@@ -240,7 +239,6 @@ export const RuleChangelog = ({
                   height={RULE_DEFINITION_VIEWER_HEIGHT}
                   kind={definitionKinds.rule}
                   marginTop={1}
-                  onChange={ignoreChange}
                   readOnly
                   value={right.definition}
                 />

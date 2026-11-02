@@ -2,20 +2,23 @@ import type { TFunction } from 'i18next';
 import { shortId } from '../components/shortId';
 
 const titleSeparator = ' · ';
+/** The URL segment of a page that creates a resource rather than showing one. */
+const newResourceSegment = 'new';
 
 const joinTitle = (...parts: string[]) => parts.join(titleSeparator);
 
 type Segments = (string | undefined)[];
 
 const agentsTitle = (t: TFunction, [conversation]: Segments) => {
-  if (conversation === 'new') return t('agents.newAgentConversation');
+  if (conversation === newResourceSegment)
+    return t('agents.newAgentConversation');
   return conversation
     ? joinTitle(t('agents.conversation'), shortId(conversation))
     : t('agents.agentConversations');
 };
 
 const recordsTitle = (t: TFunction, [recordId, subpage]: Segments) => {
-  if (recordId === 'new') return t('records.createRecord');
+  if (recordId === newResourceSegment) return t('records.createRecord');
   const record = `${t('workspace.record')} ${recordId ? shortId(recordId) : ''}`;
   const subpageKeys: Record<string, string> = {
     changes: 'records.changes',
@@ -26,7 +29,7 @@ const recordsTitle = (t: TFunction, [recordId, subpage]: Segments) => {
 };
 
 const blueprintsTitle = (t: TFunction, [blueprintId, subpage]: Segments) => {
-  if (blueprintId === 'new') return t('blueprints.newBlueprint');
+  if (blueprintId === newResourceSegment) return t('blueprints.newBlueprint');
   if (!blueprintId) return t('navigation.blueprints');
   return subpage === 'revisions'
     ? t('blueprints.newBlueprintRevision')
@@ -34,7 +37,7 @@ const blueprintsTitle = (t: TFunction, [blueprintId, subpage]: Segments) => {
 };
 
 const workflowsTitle = (t: TFunction, [workflowId, subpage]: Segments) => {
-  if (workflowId === 'new') return t('workflows.newWorkflow');
+  if (workflowId === newResourceSegment) return t('workflows.newWorkflow');
   if (!workflowId) return t('navigation.workflows');
   return subpage === 'revisions'
     ? t('workflows.newRevision')
@@ -100,11 +103,11 @@ const managementTitle = (t: TFunction, [group, ...rest]: Segments) => {
     case 'rules':
       return rulesTitle(t, rest);
     case 'contexts':
-      return item === 'new'
+      return item === newResourceSegment
         ? t('contexts.createContext')
         : t('navigation.contexts');
     case 'reusable-attributes':
-      return item && item !== 'new'
+      return item && item !== newResourceSegment
         ? joinTitle(t('navigation.reusableAttributes'), shortId(item))
         : t('navigation.reusableAttributes');
     default: {
@@ -132,7 +135,7 @@ const sectionTitle = (t: TFunction, [section, ...rest]: Segments) => {
     case 'profile':
       if (group === 'extension-runs') return t('profile.extensionRuns');
       if (group !== 'personal-access-tokens') return t('navigation.profile');
-      return rest[1] === 'new'
+      return rest[1] === newResourceSegment
         ? t('profile.createToken')
         : t('profile.tokenList');
     case 'agents':

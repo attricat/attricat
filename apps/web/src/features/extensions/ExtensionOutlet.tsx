@@ -1,4 +1,4 @@
-import { Alert, Box, CircularProgress } from '@mui/material';
+import { Alert } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import type { ExtensionRuntimeScope } from './api';
 import { ExtensionAppsList } from './ExtensionAppsList';
@@ -14,6 +14,7 @@ import {
 import { extensionFramePlaceholders } from './constants';
 import { useExtensionRuntime } from './useExtensionRuntime';
 import { progressSizes } from '../../components/iconSizes';
+import { LoadingSpinner } from '../../components/LoadingState';
 
 // Existing callers import every outlet surface from this module.
 export { ExtensionRoutePage } from './ExtensionRoutePage';
@@ -59,17 +60,11 @@ export const ExtensionOutlet = ({
     return null;
   if (runtime.isPending)
     return (
-      <Box
-        aria-live="polite"
-        role="status"
-        sx={{ display: 'flex', justifyContent: 'center', py: 1 }}
-      >
-        <CircularProgress
-          aria-label={t('extensions.loadingContent')}
-          enableTrackSlot
-          size={progressSizes.standard}
-        />
-      </Box>
+      <LoadingSpinner
+        label={t('extensions.loadingContent')}
+        size={progressSizes.standard}
+        sx={{ py: 1 }}
+      />
     );
   if (runtime.isError)
     return (

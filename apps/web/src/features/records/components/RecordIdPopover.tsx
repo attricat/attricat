@@ -1,17 +1,14 @@
 import { IconButton, Popover, Stack, Tooltip, Typography } from '@mui/material';
-import { CopyIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { monoFontFamily } from '../../../app/theme';
-import { useCopyToClipboard } from '../../../components/useCopyToClipboard';
 import { compactIconSize } from '../../../components/iconSizes';
 import { RecordIdIcon } from '../../../components/systemIcons';
+import { CopyIconButton } from '../../../components/CopyIconButton';
 
 export const RecordIdPopover = ({ recordId }: { recordId: string }) => {
   const { t } = useTranslation();
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
-  const copyText = useCopyToClipboard();
-  const copyRecordId = () => copyText(recordId);
   const label = t('records.viewRecordIdWithId', { recordId });
   return (
     <>
@@ -34,15 +31,7 @@ export const RecordIdPopover = ({ recordId }: { recordId: string }) => {
           <Typography component="code" sx={{ fontFamily: monoFontFamily }}>
             {recordId}
           </Typography>
-          <Tooltip title={t('records.copyRecordId')}>
-            <IconButton
-              aria-label={t('records.copyRecordId')}
-              onClick={() => void copyRecordId()}
-              size="small"
-            >
-              <CopyIcon size={compactIconSize} />
-            </IconButton>
-          </Tooltip>
+          <CopyIconButton label={t('records.copyRecordId')} value={recordId} />
         </Stack>
       </Popover>
     </>

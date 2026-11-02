@@ -1,7 +1,6 @@
 import { EmptyState } from '../../components/EmptyState';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Chip,
   FormControlLabel,
   Paper,
   Switch,
@@ -33,6 +32,7 @@ import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { contextListOptions } from '../contexts/queryOptions';
 import { publicationChannelsOptions } from './queryOptions';
 import { LoadingState } from '../../components/LoadingState';
+import { EnabledChip } from '../../components/EnabledChip';
 
 export const ExportsPage = () => {
   const { t } = useTranslation();
@@ -134,8 +134,8 @@ export const ExportsPage = () => {
                           />
                         }
                         label={
-                          <Chip
-                            color={enabled ? 'success' : 'default'}
+                          <EnabledChip
+                            enabled={enabled}
                             label={
                               enabled
                                 ? t('exports.enabled')

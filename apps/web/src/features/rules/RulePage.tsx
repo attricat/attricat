@@ -1,12 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
-import { createLink, Link } from '@tanstack/react-router';
+import { Link } from '@tanstack/react-router';
 import {
   Alert,
   Box,
   Button,
   Paper,
   Stack,
-  Tab,
   Tabs,
   Typography,
 } from '@mui/material';
@@ -28,7 +27,7 @@ import { LoadingState } from '../../components/LoadingState';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
-import { RouterButton } from '../../components/RouterLink';
+import { RouterButton, RouterTab } from '../../components/RouterLink';
 import { RuleIcon } from '../../components/systemIcons';
 import { useTabAccessibility } from '../../components/useTabAccessibility';
 import { Timestamp } from '../../time/Timestamp';
@@ -71,13 +70,11 @@ import { ruleDescription, rulePredicate, ruleSeverity } from './rulePlan';
 import { PredicateSummary } from './PredicateSummary';
 import { useLatestBlueprintAttributes } from './useFindingMessages';
 
-const RouterTab = createLink(Tab);
 const sectionIcons = {
   [RULE_PAGE_DEFINITION]: FileCodeIcon,
   [RULE_PAGE_CHANGELOG]: HistoryIcon,
 } satisfies Record<RulePageSection, LucideIcon>;
 const noComparison: RuleComparisonSearch = {};
-const ignoreChange = () => undefined;
 
 /** A rule's most recent runs, with a link to the full run history. */
 const RecentRuns = ({ rule }: { rule: RuleDetails }) => {
@@ -189,7 +186,6 @@ const RuleDefinition = ({ rule }: { rule: RuleDetails }) => {
           height={RULE_DEFINITION_VIEWER_HEIGHT}
           kind={definitionKinds.rule}
           marginTop={1}
-          onChange={ignoreChange}
           readOnly
           value={rule.definition}
         />

@@ -17,7 +17,7 @@ import {
 } from '@mui/material';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { BlueprintLabel } from './BlueprintLabel';
-import { formatBytes } from './dataHealthFormat';
+import { formatBytes } from '../../components/formatBytes';
 import { Timestamp } from '../../time/Timestamp';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import type {

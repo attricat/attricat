@@ -6,14 +6,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import {
-  Box,
-  Button,
-  Chip,
-  CircularProgress,
-  Stack,
-  Typography,
-} from '@mui/material';
+import { Box, Button, Chip, Stack, Typography } from '@mui/material';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
@@ -33,6 +26,7 @@ import { userAvatarSizes } from '../../components/userAvatars';
 import { PencilIcon, Trash2Icon } from 'lucide-react';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { deleteComment } from './api';
+import { LoadingState } from '../../components/LoadingState';
 
 const CommentItem = ({
   recordId,
@@ -209,7 +203,7 @@ export const RecordCommentsPanel = ({ recordId }: { recordId: string }) => {
         {notice}
       </Typography>
       {(comments.isPending || session.isPending) && (
-        <CircularProgress aria-label={t('comments.loading')} />
+        <LoadingState>{t('comments.loading')}</LoadingState>
       )}
       <QueryErrorNotice
         error={comments.error ?? session.error}

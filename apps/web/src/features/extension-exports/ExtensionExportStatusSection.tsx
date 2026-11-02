@@ -2,7 +2,6 @@ import { extensionConnectionsOptions } from './queryOptions';
 import {
   Box,
   Button,
-  CircularProgress,
   FormControl,
   InputLabel,
   MenuItem,
@@ -42,6 +41,7 @@ import {
 } from '../extensions/constants';
 import { useRetryExports } from './useRetryExports';
 import { RetryResultAlerts } from './RetryResultAlerts';
+import { LoadingState } from '../../components/LoadingState';
 
 /**
  * An export extension's destinations: per-connection status counts, the
@@ -125,7 +125,7 @@ export const ExtensionExportStatusSection = ({
       <ApiErrorAlert error={page.error} />
       <RetryResultAlerts retry={retry} />
       {overview.isPending && (
-        <CircularProgress aria-label={t('extensionExports.loading')} />
+        <LoadingState>{t('extensionExports.loading')}</LoadingState>
       )}
       {overview.isSuccess &&
         (rows.length === 0 ? (
@@ -215,7 +215,7 @@ export const ExtensionExportStatusSection = ({
         )}
       </Stack>
       {page.isPending && overview.isSuccess && (
-        <CircularProgress aria-label={t('extensionExports.loading')} />
+        <LoadingState>{t('extensionExports.loading')}</LoadingState>
       )}
       {page.isSuccess &&
         (mappings.length === 0 ? (

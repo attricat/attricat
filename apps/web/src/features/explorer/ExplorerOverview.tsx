@@ -1,4 +1,4 @@
-import { Alert, Paper } from '@mui/material';
+import { Paper } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { EmptyState } from '../../components/EmptyState';
 import { BlueprintIcon, RecordIcon } from '../../components/systemIcons';
@@ -8,6 +8,7 @@ import { ExplorerOverviewSection } from './ExplorerOverviewSection';
 import type { OpenRecordPanel } from './ExplorerTableCells';
 import type { ExplorerSearch, ExplorerSort } from './search';
 import { isRejectedQuery, useExplorerOverview } from './useExplorerOverview';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 
 type Props = {
   /** Undefined while the blueprints load. */
@@ -62,9 +63,7 @@ export const ExplorerOverview = ({
       ? results[0]?.error
       : undefined;
     return rejection ? (
-      <Alert severity="error" sx={{ mt: 3 }}>
-        {rejection.message}
-      </Alert>
+      <ApiErrorAlert error={rejection} sx={{ mt: 3 }} />
     ) : (
       <Paper sx={{ mt: 3 }}>
         <EmptyState icon={RecordIcon} title={t('explorer.noMatchingRecords')} />

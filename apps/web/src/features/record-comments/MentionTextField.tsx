@@ -228,7 +228,7 @@ export const MentionTextField = ({
                 <Box sx={{ minWidth: 0 }}>
                   <Typography
                     component="span"
-                    sx={{ display: 'block', fontWeight: 600 }}
+                    sx={{ display: 'block', fontWeight: 'fontWeightBold' }}
                     variant="body2"
                   >
                     {userLabel(user)}

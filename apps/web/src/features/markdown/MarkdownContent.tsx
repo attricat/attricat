@@ -26,7 +26,7 @@ export const MarkdownContent = ({ value }: { value: string }) => (
       '& a': { color: 'primary.main' },
       '& h2, & h3, & h4, & h5, & h6': {
         typography: 'subtitle1',
-        fontWeight: 600,
+        fontWeight: 'fontWeightBold',
       },
       '& pre': {
         overflowX: 'auto',
@@ -54,7 +54,7 @@ export const MarkdownContent = ({ value }: { value: string }) => (
             return (
               <Box
                 component="span"
-                sx={{ color: 'primary.main', fontWeight: 600 }}
+                sx={{ color: 'primary.main', fontWeight: 'fontWeightBold' }}
               >
                 <UserProfileLink userId={userId}>{children}</UserProfileLink>
               </Box>

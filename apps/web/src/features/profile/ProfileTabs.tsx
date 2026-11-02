@@ -1,5 +1,5 @@
-import { Link, type ToOptions } from '@tanstack/react-router';
-import { Box, Tab, Tabs } from '@mui/material';
+import type { ToOptions } from '@tanstack/react-router';
+import { Box, Tabs } from '@mui/material';
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -11,7 +11,8 @@ import {
   PersonalTokenIcon,
   ProfileIcon,
 } from '../../components/systemIcons';
-import { profileTabIds } from './constants';
+import { RouterTab } from '../../components/RouterLink';
+import { useTabAccessibility } from '../../components/useTabAccessibility';
 
 const profileTabs = [
   { icon: ProfileIcon, label: 'profile.account', to: '/profile' },
@@ -38,6 +39,7 @@ type ProfileTabsProps = {
 
 export const ProfileTabs = ({ children, tab }: ProfileTabsProps) => {
   const { t } = useTranslation();
+  const tabId = useTabAccessibility();
   return (
     <SettingsPage>
       <PageHeader
@@ -47,11 +49,9 @@ export const ProfileTabs = ({ children, tab }: ProfileTabsProps) => {
       />
       <Tabs aria-label={t('profile.title')} sx={{ mb: 6, mt: 5 }} value={tab}>
         {profileTabs.map((item, index) => (
-          <Tab
-            aria-controls={profileTabIds.panel(index)}
-            component={Link}
+          <RouterTab
+            {...tabId.tab(index)}
             icon={<item.icon aria-hidden size={compactIconSize} />}
-            id={profileTabIds.tab(index)}
             key={item.to}
             label={t(item.label)}
             to={item.to}
@@ -59,13 +59,7 @@ export const ProfileTabs = ({ children, tab }: ProfileTabsProps) => {
           />
         ))}
       </Tabs>
-      <Box
-        aria-labelledby={profileTabIds.tab(tab)}
-        id={profileTabIds.panel(tab)}
-        role="tabpanel"
-      >
-        {children}
-      </Box>
+      <Box {...tabId.panel(tab)}>{children}</Box>
     </SettingsPage>
   );
 };

@@ -1,10 +1,17 @@
-import { Box, Paper, Stack } from '@mui/material';
+import { Box, Paper, Stack, Typography } from '@mui/material';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BrandIcon } from '../../components/BrandIcon';
 import { useInitialFocus } from '../../components/initialFocus';
 
 export const authFormWidth = 360;
+
+/** Names the page; the first thing inside an auth form. */
+export const AuthFormTitle = ({ children }: { children: ReactNode }) => (
+  <Typography component="h1" variant="h5">
+    {children}
+  </Typography>
+);
 
 export const AuthFormShell = ({
   children,

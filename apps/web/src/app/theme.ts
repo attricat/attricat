@@ -142,6 +142,8 @@ export const makeTheme = (mode: DesignMode) => {
     typography: {
       fontFamily: typography.families.sans,
       fontSize: 14,
+      // The design system's strongest text weight, its label role.
+      fontWeightBold: role.label.weight,
       h1: type(role.display),
       h2: type(role.marketingHeading),
       h3: type(role.appHeading),

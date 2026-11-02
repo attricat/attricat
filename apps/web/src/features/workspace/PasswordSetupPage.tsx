@@ -1,10 +1,10 @@
-import { Button, Divider, TextField, Typography } from '@mui/material';
+import { Button, Divider, TextField } from '@mui/material';
 import { useForm } from '@tanstack/react-form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
-import { AuthFormShell } from '../auth/AuthFormShell';
+import { AuthFormShell, AuthFormTitle } from '../auth/AuthFormShell';
 import { getInvitationOptions } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
 import { SingleSignOnButton } from '../auth/SingleSignOnButton';
@@ -66,9 +66,7 @@ export const PasswordSetupPage = ({
   });
   return (
     <AuthFormShell onSubmit={() => form.handleSubmit()}>
-      <Typography component="h1" variant="h5">
-        {t('workspace.setupTitle')}
-      </Typography>
+      <AuthFormTitle>{t('workspace.setupTitle')}</AuthFormTitle>
       {options.data?.display_name && (
         <>
           <SingleSignOnButton

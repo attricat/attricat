@@ -3,6 +3,7 @@ import {
   type TextRange,
   type YamlEntry,
   type YamlPath,
+  pathKey,
 } from '../../components/yamlOutline';
 import {
   aliasKey,
@@ -41,8 +42,6 @@ export type DefinitionSymbol = {
 
 /** Keys that name a sequence item, in the order they are preferred. */
 const itemNameKeys = [codeKey, aliasKey, fieldKey, labelKey, nameKey];
-
-const pathKey = (path: YamlPath) => JSON.stringify(path);
 
 /**
  * The definition's mappings and sequences as a tree. Items are named by

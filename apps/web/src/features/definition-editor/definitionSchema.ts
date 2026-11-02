@@ -10,6 +10,7 @@ import {
   type DefinitionKind,
 } from './constants';
 import type { YamlPath } from '../../components/yamlOutline';
+import { schemaDefinitionsRefPrefix } from './constants';
 
 /**
  * The subset of JSON Schema that the Rust definition types generate. Unused
@@ -91,7 +92,6 @@ export const definitionSchemas: Record<DefinitionKind, SchemaNode> = {
   [definitionKinds.workflow]: schemaNodeSchema.parse(workflowContract),
 };
 
-const refPrefix = '#/$defs/';
 const nullType = 'null';
 
 const isNullSchema = (node: SchemaNode) => node.type === nullType;
@@ -114,8 +114,9 @@ export const unwrapSchema = (
       ),
       ...overrides,
     });
-    if ($ref?.startsWith(refPrefix)) {
-      const target = root.$defs?.[$ref.slice(refPrefix.length)];
+    if ($ref?.startsWith(schemaDefinitionsRefPrefix)) {
+      const target =
+        root.$defs?.[$ref.slice(schemaDefinitionsRefPrefix.length)];
       if (!target) return overrides;
       current = target;
       continue;

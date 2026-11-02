@@ -4,11 +4,7 @@ export const minimumStaleAfterDays = 1;
 export const maximumStaleAfterDays = 3_650;
 export const dataHealthStaleTime = 30_000;
 
-export const bytesPerKilobyte = 1_024;
-export const byteDisplayPrecision = 1;
-
 export const customThresholdValue = 'custom';
 export const staleAfterSelectMinWidth = 160;
 export const customThresholdInputWidth = 110;
 export const summaryCardMinWidth = 190;
-export const byteUnits = ['KB', 'MB', 'GB', 'TB'] as const;

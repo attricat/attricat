@@ -1,4 +1,4 @@
-import { Alert, Box, CircularProgress, Typography } from '@mui/material';
+import { Alert, Box, Typography } from '@mui/material';
 import { useMemo, useRef, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AttributeContext } from '../../contexts/api';
@@ -21,6 +21,7 @@ import {
   type RecordInlineFieldsHandle,
 } from './RecordInlineFields';
 import { usePaletteSurface } from '../../extensions/actionPaletteStore';
+import { LoadingSpinner } from '../../../components/LoadingState';
 
 type Props = {
   blueprint: Awaited<ReturnType<typeof getBlueprintRevision>>;
@@ -156,12 +157,7 @@ export const RecordPreviewContent = ({
               view={blueprint.blueprint.views.detail}
             />
           ) : formPending ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
-              <CircularProgress
-                aria-label={t('records.loadingFields')}
-                enableTrackSlot
-              />
-            </Box>
+            <LoadingSpinner label={t('records.loadingFields')} sx={{ mt: 3 }} />
           ) : (
             <>
               <RecordView
