@@ -1,4 +1,4 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Box, Button, Stack } from '@mui/material';
 import { useEffect, useImperativeHandle, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -241,6 +241,10 @@ export const RecordInlineFields = ({
       updatedAt: latest.record.updated_at,
     });
   };
+  const conflictChoice = useMutation({
+    meta: { toast: false },
+    mutationFn: resolveConflict,
+  });
 
   const renderEditor = (
     attribute: Attribute,
@@ -404,10 +408,14 @@ export const RecordInlineFields = ({
           attributes={changeable.filter(
             (attribute) => attribute.code in saves.pending,
           )}
+          disabled={conflictChoice.isPending}
           latest={latestFields}
-          onResolve={(resolution) => void resolveConflict(resolution)}
+          onResolve={(resolution) => conflictChoice.mutate(resolution)}
           pending={saves.pending}
         />
+      )}
+      {saves.conflict && (
+        <ApiErrorAlert error={conflictChoice.error} sx={{ mb: 2 }} />
       )}
       {generalError && (
         <ApiErrorAlert

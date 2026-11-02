@@ -620,6 +620,7 @@
     "unsavedChangeCount_many": "{{count}} niezapisanych zmian",
     "unsavedChangeCount_other": "{{count}} niezapisanej zmiany",
     "editField": "Edytuj {{field}}",
+    "saveFailedAfterLeaving": "Zmiana wprowadzona przed opuszczeniem rekordu nie została zapisana: {{message}}",
     "changeNotSaved": "Ta zmiana nie jest jeszcze zapisana.",
     "valueRequired": "Wartość jest wymagana.",
     "uneditableRequiredValue": "Wymaganego atrybutu „{{attribute}}” nie można ustawić w tym formularzu. Poproś administratora o nadanie mu wartości lub zmianę schematu.",

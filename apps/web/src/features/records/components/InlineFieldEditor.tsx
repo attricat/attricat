@@ -7,6 +7,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from 'react';
+import { useBeforeUnloadWarning } from '../../drafts/useBeforeUnloadWarning';
 
 /** Input types where a change is part of typing rather than a final choice. */
 const textEntryInputTypes = new Set([
@@ -84,6 +85,8 @@ export const InlineFieldEditor = ({
     }
   }
   const shown = draft ?? value;
+  // A reload or closed tab never blurs the field, so typing is not committed.
+  useBeforeUnloadWarning(draft !== null && draft !== value);
   const [editing, setEditing] = useState(false);
   const container = useRef<HTMLDivElement>(null);
   const returnFocus = useRef(false);

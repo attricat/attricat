@@ -255,9 +255,12 @@ export const RecordPreview = ({
   }, [showComments]);
   // A finding about other contexts opens the first of them, then its field
   // once the record's values there have loaded.
+  const changeContextRef = useRef<(contextId: string) => void>(null);
   const [pendingReveal, setPendingReveal] = useState<{
     code: string;
     contextId: string;
+    /** The context left; the switch can wait there for unsaved changes. */
+    fromContextId: string | null;
   }>();
   const revealFindingField = (
     code: string,
@@ -271,19 +274,24 @@ export const RecordPreview = ({
       revealField(code);
       return;
     }
-    selectContext(target.id);
-    setPendingReveal({ code, contextId: target.id });
+    // Rejected changes stay pending and would be lost with the old context.
+    (changeContextRef.current ?? selectContext)(target.id);
+    setPendingReveal({ code, contextId: target.id, fromContextId: contextId });
   };
   // The reveal is dropped when another context is chosen first or its values
   // cannot be loaded.
   if (
     pendingReveal !== undefined &&
-    (pendingReveal.contextId !== contextId ||
-      (resolved.isError && !resolved.isFetching))
+    (![pendingReveal.contextId, pendingReveal.fromContextId].includes(
+      contextId,
+    ) ||
+      (pendingReveal.contextId === contextId &&
+        resolved.isError &&
+        !resolved.isFetching))
   )
     setPendingReveal(undefined);
   else if (
-    pendingReveal !== undefined &&
+    pendingReveal?.contextId === contextId &&
     resolved.isSuccess &&
     !resolved.isFetching
   ) {
@@ -552,6 +560,7 @@ export const RecordPreview = ({
                                 value={compact ? null : (contextId ?? null)}
                               >
                                 <RecordPreviewContent
+                                  changeContextRef={changeContextRef}
                                   blueprint={blueprint.data}
                                   contextId={selectedContextId}
                                   contexts={contexts.data}

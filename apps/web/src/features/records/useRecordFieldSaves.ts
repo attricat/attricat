@@ -1,6 +1,9 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { errorMessage } from '../../api/errors';
 import { ApiRequestError } from '../../api/request';
+import { useToast } from '../../components/useToast';
 import { updateRecord, type Attribute } from './api';
 import { RECENT_SAVE_DURATION_MS, STALE_RECORD_ERROR_CODE } from './constants';
 import type { FieldEditRules } from './recordForm';
@@ -67,6 +70,8 @@ export const useRecordFieldSaves = ({
   onPendingChange,
 }: Options) => {
   const client = useQueryClient();
+  const { t } = useTranslation();
+  const { show } = useToast();
   const [state, setState] = useState<State>(() => ({
     version: updatedAt,
     saved: { ...savedFields },
@@ -82,6 +87,13 @@ export const useRecordFieldSaves = ({
   // write these refs, and React state mirrors them for render.
   const current = useRef(state);
   const inFlight = useRef<Readonly<Record<string, string>> | null>(null);
+  const active = useRef(true);
+  useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
   // What the latest commit knew about the editable attributes.
   const request = useRef({ attributes, fieldRules });
   // The save loop outlives the render that started it.
@@ -175,12 +187,21 @@ export const useRecordFieldSaves = ({
         return flush();
       }
       const conflict = isStaleRecord(error);
+      const failure = error instanceof Error ? error : new Error(String(error));
       publish({
         saving: false,
         sending: [],
-        error: error instanceof Error ? error : new Error(String(error)),
+        error: failure,
         conflict,
       });
+      // Saves finish after leaving the record, with nothing left to show this.
+      if (!active.current)
+        show({
+          message: t('records.saveFailedAfterLeaving', {
+            message: errorMessage(failure),
+          }),
+          severity: 'error',
+        });
       // Another editor's values are shown beside this editor's changes.
       if (conflict) void invalidateRecord(client, recordId);
     }

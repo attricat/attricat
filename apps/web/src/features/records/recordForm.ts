@@ -186,8 +186,8 @@ export const validateRecordForm = (
     const value = fields[attribute.code] ?? '';
     const required = requiredAttributes.includes(attribute.code);
     if (attribute.value_type === attributeValueTypes.file) {
-      if (!fileCounts) continue;
       fileCodes.add(attribute.code);
+      if (!fileCounts) continue;
       const count = fileCounts[attribute.code] ?? 0;
       if (required && count === 0)
         fieldErrors[attribute.code] = messages.required;
@@ -246,7 +246,9 @@ export const validateRecordForm = (
   const formError = schemaErrors
     .filter(
       (error) =>
-        error.keyword === ajvRequiredKeyword ||
+        // Without counts, such as when upgrading a record, the record's
+        // existing files can satisfy a required file attribute.
+        (error.keyword === ajvRequiredKeyword && fileCounts !== undefined) ||
         !fileCodes.has(attributeCodeForSchemaError(error) ?? ''),
     )
     .map((error) => {
