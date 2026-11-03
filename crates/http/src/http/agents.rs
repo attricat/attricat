@@ -609,7 +609,7 @@ async fn decide_and_enqueue(
     let run = repository.get_agent_run(call.run_id).await?;
     readable_conversation(&repository, user, workspace_id, run.conversation_id).await?;
     if matches!(decision, ApprovalDecision::Approve)
-        && !attricat_agent_runtime::agent_runner::mutation_authorized(
+        && !attricat_agent_runtime::agent_runner::approval_authorized(
             &repository,
             user,
             workspace_id,

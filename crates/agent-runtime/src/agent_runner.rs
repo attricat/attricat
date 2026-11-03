@@ -1435,6 +1435,38 @@ pub async fn mutation_authorized(
         .await
 }
 
+/// Whether `approver` holds the permission for the operation they would approve.
+/// A bulk edit is authorized per record when it runs, for its initiator only, so
+/// approving one needs write access to every record it lists.
+pub async fn approval_authorized(
+    repository: &AttricatRepository,
+    approver: Uuid,
+    workspace: Uuid,
+    name: &str,
+    arguments: &Value,
+) -> Result<bool, RepositoryError> {
+    if !mutation_authorized(repository, approver, workspace, name, arguments).await? {
+        return Ok(false);
+    }
+    if name != bulk_edits::TOOL {
+        return Ok(true);
+    }
+    let Ok(edit) = <bulk_edits::ResolvedBulkEdit as serde::Deserialize>::deserialize(arguments)
+    else {
+        return Ok(false);
+    };
+    let records: Vec<Uuid> = edit.records.iter().map(|record| record.record_id).collect();
+    let writable = repository
+        .principal_record_ids(
+            agent_tools::tool_actor(repository, approver),
+            workspace,
+            Permission::RecordsWrite,
+            &records,
+        )
+        .await?;
+    Ok(records.iter().all(|record| writable.contains(record)))
+}
+
 fn agent_audit_context(
     actor: crate::repository::AuthorizationActor,
     run: &crate::repository::AgentRun,

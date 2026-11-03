@@ -514,6 +514,66 @@ async fn every_record_needs_the_initiators_write_access(pool: PgPool) {
 }
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
+async fn approving_needs_write_access_to_every_record(pool: PgPool) {
+    let (base, server) = start_server(pool.clone()).await;
+    create_blueprint(&authenticated_client(), &base, PRODUCT).await;
+    let repository = scoped(&pool).await;
+    let first = product(&repository, "Boot", "Acme").await;
+    let second = product(&repository, "Coat", "Acme").await;
+    let item = |record: Uuid| json!({"record_id": record, "values": [{"attribute_code":"brand","value":"Acme Co"}]});
+    let (provider, provider_server, _) =
+        scripted_provider(json!({"items": [item(first), item(second)]})).await;
+    let run = start_run(&pool, owner(), &provider).await;
+    let pending = repository
+        .pending_agent_tool_calls(Some(run.conversation))
+        .await
+        .unwrap();
+    let approve = async |user: Uuid| {
+        client_for(user)
+            .post(format!("{base}/agent/tool-calls/{}/approve", pending[0].id))
+            .send()
+            .await
+            .unwrap()
+            .status()
+    };
+    let runner = create_role(&pool, "bulk_runner", &["agents.run"]).await;
+    let writer = create_role(&pool, "bulk_writer", &["records.write"]).await;
+
+    let bystander = member_with_role(&pool, runner).await;
+    assert_eq!(approve(bystander).await, reqwest::StatusCode::FORBIDDEN);
+
+    let (partial, membership) = add_workspace_user(&pool).await;
+    grant_role(&pool, membership, runner, GrantScope::Workspace).await;
+    grant_role(&pool, membership, writer, GrantScope::Record(first)).await;
+    assert_eq!(approve(partial).await, reqwest::StatusCode::FORBIDDEN);
+    assert_eq!(
+        repository
+            .pending_agent_tool_calls(Some(run.conversation))
+            .await
+            .unwrap()
+            .len(),
+        1,
+        "refused approvals leave the call waiting"
+    );
+
+    grant_role(&pool, membership, writer, GrantScope::Record(second)).await;
+    assert!(
+        api::agent_runner::approval_authorized(
+            &repository,
+            partial,
+            bootstrap_workspace_id(),
+            bulk_edits::TOOL,
+            &pending[0].arguments,
+        )
+        .await
+        .unwrap()
+    );
+
+    provider_server.abort();
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn admins_configure_the_bulk_edit_policy_and_limit(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
     let owner = authenticated_client();
