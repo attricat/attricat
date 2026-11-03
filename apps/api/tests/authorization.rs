@@ -776,3 +776,17 @@ async fn moving_a_context_needs_access_to_its_destination(pool: PgPool) {
     server.abort();
 }
 
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn migrations_give_up_waiting_for_a_lock(pool: PgPool) {
+    let options = api::migration_connect_options((*pool.connect_options()).clone());
+    let migration_pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .connect_with(options)
+        .await
+        .unwrap();
+    let timeout: String = sqlx::query_scalar("SHOW lock_timeout")
+        .fetch_one(&migration_pool)
+        .await
+        .unwrap();
+    assert_eq!(timeout, "15s");
+}

@@ -114,7 +114,7 @@ printf '%s\n' 'rediss://:haslo@redis.example.com:6380/0' > deploy/secrets/redis_
 ## Wdróż nową wersję
 
 1. Zachowaj skrót aktualnie działającej wersji.
-2. Uruchom raz rolę `migrate` nowego obrazu. Środowisko produkcyjne ustawia `ATTRICAT_AUTO_MIGRATE=false`, więc repliki API nigdy nie migrują samodzielnie.
+2. Uruchom raz rolę `migrate` nowego obrazu. Środowisko produkcyjne ustawia `ATTRICAT_AUTO_MIGRATE=false`, więc repliki API nigdy nie migrują samodzielnie. Instrukcja migracji, która czeka na blokadę dłużej niż 15 sekund, kończy się błędem, zamiast wstrzymywać ruch; zakończ lub przerwij długą transakcję i uruchom `migrate` ponownie.
 3. Zastąp repliki API i procesu roboczego plików nowym skrótem.
 4. Poczekaj na `/health/ready` i uruchom testy dymne.
 

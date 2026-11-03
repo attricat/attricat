@@ -40,6 +40,16 @@ pub use attricat_workers::{
 pub mod config;
 pub mod runtime;
 
-use sqlx::migrate::Migrator;
+use sqlx::{migrate::Migrator, postgres::PgConnectOptions};
 
 pub static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
+
+/// How long a migration statement waits for a lock. A schema change queued
+/// behind a long transaction would make every later query on that table wait
+/// too, so it fails instead and the rollout can be retried.
+const MIGRATION_LOCK_TIMEOUT: &str = "15s";
+
+/// Connection options for running [`MIGRATOR`].
+pub fn migration_connect_options(options: PgConnectOptions) -> PgConnectOptions {
+    options.options([("lock_timeout", MIGRATION_LOCK_TIMEOUT)])
+}

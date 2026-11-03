@@ -16,7 +16,7 @@ use api::{
         StreamControl, router,
     },
     mail::SmtpMailDelivery,
-    maintenance,
+    maintenance, migration_connect_options,
     repository::{AttricatRepository, SystemRepository},
     rule_runtime,
     runtime::{ready_object_store, shutdown_signal},
@@ -103,7 +103,12 @@ async fn serve() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .await?;
     if database.auto_migrate {
         tracing::info!("running database migrations");
-        MIGRATOR.run(&maintenance_pool).await?;
+        let migration_pool = PgPoolOptions::new()
+            .max_connections(MAINTENANCE_POOL_CONNECTIONS)
+            .connect_with(migration_connect_options(database_url.parse()?))
+            .await?;
+        MIGRATOR.run(&migration_pool).await?;
+        migration_pool.close().await;
     } else {
         tracing::info!(
             "automatic migrations disabled; expecting the migrate role to have completed"

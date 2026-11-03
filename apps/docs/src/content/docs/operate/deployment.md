@@ -114,7 +114,7 @@ printf '%s\n' 'rediss://:password@redis.example.com:6380/0' > deploy/secrets/red
 ## Roll out a new version
 
 1. Keep the digest of the version you are running.
-2. Run the new image's `migrate` role once. Production sets `ATTRICAT_AUTO_MIGRATE=false`, so API replicas never migrate on their own.
+2. Run the new image's `migrate` role once. Production sets `ATTRICAT_AUTO_MIGRATE=false`, so API replicas never migrate on their own. A migration statement that waits more than 15 seconds for a lock fails instead of stalling traffic behind it; finish or stop the long transaction, then run `migrate` again.
 3. Replace the API and file-worker replicas with the new digest.
 4. Wait for `/health/ready` and run your smoke tests.
 
