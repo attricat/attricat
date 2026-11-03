@@ -20,10 +20,11 @@ pub use attricat_validation::saved_search::MAX_SYSTEM_TAG_FILTERS;
 /// Totals and hidden-outdated counts stop at this many records.
 pub const SEARCH_TOTAL_COUNT_CAP: i64 = 500;
 
-/// Filter matches a search page loads and binds as IDs. Each statement of a page
-/// would otherwise evaluate the filters again, which doubles a page's latency;
-/// past this many, the memory matters more and they run inside each statement.
-pub const MAX_LOADED_FILTER_MATCHES: i64 = 100_000;
+/// Filter matches a search page loads, which is as many as its capped total can
+/// use. A filter matching no more than this scans once and every query of the page
+/// then reads those IDs; one matching more stops scanning here and runs inside
+/// each query, where the page and the total stop as soon as they have enough.
+pub const MAX_LOADED_FILTER_MATCHES: i64 = SEARCH_TOTAL_COUNT_CAP;
 
 pub struct SearchPageRequest<'a> {
     /// The blueprint code the scope was resolved for.
@@ -79,9 +80,10 @@ impl AttricatRepository {
             ..
         } = scope;
         let selected = *selected;
-        let loaded_ids = match (&scope.filters, request.loaded_filter_matches) {
-            (Some(_), limit) if limit > 0 => Some(
-                self.matching_record_ids(
+        let limit = request.loaded_filter_matches;
+        let loaded_ids = if scope.filters.is_some() && limit > 0 {
+            let ids = self
+                .first_matching_record_ids(
                     current.blueprint.id,
                     selected,
                     scope.matching(),
@@ -91,17 +93,18 @@ impl AttricatRepository {
                     "sql.operation",
                     label = "attribute-filter"
                 ))
-                .await?,
-            )
-            .filter(|ids| ids.len() as i64 <= limit),
-            _ => None,
+                .await?;
+            (ids.len() as i64 <= limit).then_some(ids)
+        } else {
+            None
         };
-        let matching = loaded_ids
-            .as_deref()
-            .map_or(scope.matching(), |ids| RecordMatching {
+        let matching = match &loaded_ids {
+            Some(ids) => RecordMatching {
                 ids: Some(ids),
                 filters: None,
-            });
+            },
+            None => scope.matching(),
+        };
         let records = RecordSearchScope {
             blueprint_id: current.blueprint.id,
             blueprint_version: selected,

@@ -127,26 +127,47 @@ a root through `listing` reaches about 10,000 listings and products, about
 
 ## Filter scenarios
 
-`FACET_BENCH_SCENARIOS=filter` runs only the attribute and relationship filter
-searches. A search page loads up to 100,000 filter matches
-(`MAX_LOADED_FILTER_MATCHES`) and binds them as IDs. Past that, the filters run
-inside each statement, so a first page evaluates them three times: the check
-against the limit, the version scope and total, and the page.
+`FACET_BENCH_SCENARIOS=filter,reference` runs only the attribute and
+relationship filter searches and two searches without filters. Each filter is
+an `EXISTS` condition on the statement's records:
 
-Medians on a local PostgreSQL (Linux, release build). The "Inside statements"
-column always evaluates the filters in each statement, and shows why the page
-loads matches below the limit. At 120,000 products only the broad and
-twenty-filter scenarios pass the limit.
+- A filter that can start from an index (`eq`, `@me`, relationship and reusable
+  attribute filters) may become a semi-join. All its conditions must sit in the
+  subquery's `WHERE`, or PostgreSQL runs it once per record.
+- Any other filter, or any filter under a text query, runs per record (`OFFSET
+  0`), so a page or capped total stops as soon as it has enough rows.
 
-| Scenario | Before, 100k | Inside statements, 100k | Now, 100k | Now, 120k |
+A page first loads up to 500 matches (`MAX_LOADED_FILTER_MATCHES`), the most its
+capped total can use. With no more than that, one scan answers the whole page and
+the other statements read those IDs. With more, the scan stops at the limit and
+the filters run inside each statement.
+
+Medians on a local PostgreSQL (Linux, release build). Filter searches load at
+most 501 IDs into the API.
+
+| Scenario | Before, 100k | Now, 100k | Before, 120k | Now, 120k |
 | --- | ---: | ---: | ---: | ---: |
-| Selective scalar | 555 ms | 1,270 ms | 570 ms | 585 ms |
-| Broad scalar | 1,234 ms | 2,594 ms | 1,402 ms | 4,246 ms |
-| Absence, no matches | 1,040 ms | 2,261 ms | 1,059 ms | 1,181 ms |
-| One hop | 1,101 ms | 2,390 ms | 1,152 ms | 1,245 ms |
-| Three hops | 2,498 ms | 5,122 ms | 2,612 ms | 3,122 ms |
-| Relationship | 916 ms | 1,934 ms | 914 ms | 1,080 ms |
-| Twenty broad scalars | 21.2 s | 503 at 30 s | 21.8 s | 503 at 30 s |
+| No filter | 34 ms | 10 ms | 45 ms | 10 ms |
+| Text query | 120 ms | 110 ms | 139 ms | 127 ms |
+| Selective scalar | 100 ms | 8 ms | 107 ms | 7 ms |
+| Twenty selective scalars | 9,555 ms | 102 ms | 9,740 ms | 94 ms |
+| Relationship | 686 ms | 11 ms | 821 ms | 10 ms |
+| One hop | 738 ms | 21 ms | 944 ms | 22 ms |
+| One hop, child context | 1,019 ms | 19 ms | 1,238 ms | 19 ms |
+| Reusable attribute | 9 ms | 10 ms | 10 ms | 9 ms |
+| Broad scalar | 732 ms | 300 ms | 895 ms | 295 ms |
+| Broad, sorted by a column | 1,157 ms | 1,214 ms | 1,377 ms | 1,321 ms |
+| Broad, sorted through a relationship | 4,475 ms | 309 ms | 6,349 ms | 299 ms |
+| Text query and broad scalar | 619 ms | 148 ms | 934 ms | 164 ms |
+| Twenty broad scalars | 19,266 ms | 9,348 ms | 21,643 ms | 9,320 ms |
+| Contains, rare value | 457 ms | 492 ms | 546 ms | 555 ms |
+| Absence, few matches | 470 ms | 325 ms | 545 ms | 350 ms |
+| Absence, no matches | 460 ms | 303 ms | 566 ms | 323 ms |
+| Three hops | 2,807 ms | 3,304 ms | 3,408 ms | 2,998 ms |
+
+A filter matching just over 500 records spread across the catalog is the worst
+case: the first scan finds no shortcut, and the version, total and page statements
+each read most of the blueprint again.
 
 ## Remaining cost
 
