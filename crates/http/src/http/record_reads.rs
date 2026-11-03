@@ -504,7 +504,7 @@ pub(super) async fn relationship_tree_facet_children(
             .relationship_tree_facet_children(
                 source.blueprint.id,
                 version,
-                resolved.as_ref().map(|resolved| &resolved.ids),
+                resolved.as_ref(),
                 &source_path,
                 target.blueprint.id,
                 input.hierarchy_field.as_deref(),

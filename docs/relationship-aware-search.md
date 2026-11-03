@@ -40,13 +40,8 @@ separated terms are intersected (implicit `AND`). Relationship-tree facet
 counts, selected-facet filtering, and paginated result pages consume that same
 candidate set, so they cannot disagree about which source records match.
 
-The resolver retains a match witness for every accepted result and term. The
-search response includes `match_explanations` to each item: an array
-with one deterministic witness per matched term containing the original term,
-the matching record ID, matching attribute code when applicable, traversal
-depth, and the relationship-edge path from the returned record to that match.
-Depth `0` has an empty path. This data lets clients show why a record matched
-without rerunning the search; it is explanatory metadata, not ranking input.
+`match_explanations` on each item is deprecated and always empty; it will be
+removed in the next major version.
 
 ## Query Language
 
@@ -98,11 +93,8 @@ are out of scope. `*:` remains the only global multi-hop mode.
 ## API and UI Contract
 
 `POST /v1/records/search` continues to take the query in its existing `query`
-string field. An empty or absent query preserves current browse behavior. Each
-non-empty-query result additionally returns `match_explanations` as described
-above. The Explore query field and URL query parameter preserve the supplied
-query text. The UI shows selector and wildcard examples; the API returns
-explanation metadata for clients to display why a result matched. API errors
+string field. An empty or absent query preserves current browse behavior. The Explore query field and URL query parameter preserve the supplied
+query text. The UI shows selector and wildcard examples. API errors
 are rendered in the Explore error alert.
 
 There is no client-selected traversal depth. The server owns the
@@ -133,6 +125,5 @@ traverse relationships, `*:` global traversal, explicit relationship matches,
 deleted records, inactive relationships, structured selectors (including
 selected-blueprint code and user-specified-name aliases in both `blueprint:term`
 and `blueprint.attribute:term` forms), wildcard matching, invalid or ambiguous
-syntax/selectors, AND intersections, pagination, facet counts/filtering, and
-deterministic per-term match explanations. Frontend coverage should verify URL parsing/submission, forwarding structured
-query text, and displaying returned match rationale.
+syntax/selectors, AND intersections, pagination, and facet counts/filtering. Frontend coverage should verify URL parsing/submission and forwarding structured
+query text.

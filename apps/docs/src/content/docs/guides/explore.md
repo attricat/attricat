@@ -36,8 +36,6 @@ To search further, qualify the term:
 
 Several terms separated by spaces must all match. The full grammar is in [Search syntax](/guides/search-syntax/).
 
-Open **Search info** on a result to see why it matched, for example _red via 1 relationship_.
-
 ## Filters
 
 **Add filter** narrows results by an attribute's value in the selected [context](#context). Operators depend on the type:

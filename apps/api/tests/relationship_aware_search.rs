@@ -98,17 +98,9 @@ attributes:
             .json(&json!({ "blueprint": { "code": "search_product" }, "query": query, "page": { "size": 25 } }))
             .send().await.unwrap().error_for_status().unwrap().json().await.unwrap();
         assert_eq!(response["items"].as_array().unwrap().len(), 1, "{query}");
-        let witness = &response["items"][0]["match_explanations"][0];
-        assert_eq!(witness["term"], query);
-        if query.contains("Crimson") {
-            assert_eq!(witness["matching_record_id"], red["id"]);
-            assert_eq!(witness["traversal_depth"], 1);
-            assert_eq!(witness["relationship_path"][0]["attribute_code"], "color");
-        } else {
-            assert_eq!(witness["matching_record_id"], item["id"]);
-            assert_eq!(witness["traversal_depth"], 0);
-            assert!(witness["relationship_path"].as_array().unwrap().is_empty());
-        }
+        assert_eq!(response["items"][0]["id"], item["id"], "{query}");
+        // Deprecated: the field stays until the next major version, always empty.
+        assert_eq!(response["items"][0]["match_explanations"], json!([]));
     }
     let invalid = client.post(format!("{base_url}/v1/records/search"))
         .json(&json!({ "blueprint": { "code": "search_product" }, "query": "color.name:bad*middle", "page": { "size": 25 } }))
@@ -209,9 +201,6 @@ attributes:
         .await
         .unwrap();
     assert_eq!(ids(direct.clone()), sorted(vec![id(&first), id(&third)]));
-    let witness = &direct["items"][0]["match_explanations"][0];
-    assert_eq!(witness["traversal_depth"], 0);
-    assert!(witness["matching_attribute_code"].is_null());
 
     // IDs of other blueprints never match the selected blueprint directly.
     let foreign: Value = search(format!("id_product.@ID:{}", id(&red)))
@@ -227,9 +216,6 @@ attributes:
         .await
         .unwrap();
     assert_eq!(ids(related.clone()), sorted(vec![id(&first), id(&second)]));
-    let witness = &related["items"][0]["match_explanations"][0];
-    assert_eq!(witness["traversal_depth"], 1);
-    assert_eq!(witness["relationship_path"][0]["attribute_code"], "color");
 
     let intersected: Value = search(format!(
         "color.@id:{},{} @id:{}",

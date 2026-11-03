@@ -251,7 +251,7 @@ POST /api/v1/records/search
 - `context_code` (default `default`) is the context in which filters, sorting, and `table_values` are resolved, inheriting from parent contexts per attribute. `query` matches values in every context.
 - `sort.field` must be a scalar column in the blueprint's table view, `blueprint_version`, `system_tag:<tag>`, or `publication_status` (with `sort.context_code` naming a channel). `system_tag:<tag>` sorts records that carry the tag apart from the rest, by record ID within each group.
 - `system_tags` (at most 20) keeps records that carry every listed tag, including [Core tags](#system-tags) such as `attricat.needs_attention`.
-- Responses contain `items`, `next_cursor`, `result_version_scope`, and, for each item, `system_tags`, `table_values` and `match_explanations`. Pass `next_cursor` back as `page.cursor` with the same sort.
+- Responses contain `items`, `next_cursor`, `result_version_scope`, and, for each item, `system_tags` and `table_values`. `match_explanations` is deprecated and always empty, and will be removed in the next major version. Pass `next_cursor` back as `page.cursor` with the same sort.
 - `include_total` returns a first-page total in `total_count`, capped at 500; `total_count_capped` says when the cap was reached.
 - `include_blueprint: false` leaves `blueprint` out of the response, for later pages when you kept the first page's.
 - `include_previews: false` leaves out each item's `preview` and `related` records, unless a table column uses an extension renderer. `display` and `table_values` are always returned.

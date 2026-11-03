@@ -87,10 +87,6 @@ znajduje produkty, które same są czerwone, produkty powiązane z kolorem o naz
 
 Wyszukiwanie globalne to najbardziej kosztowna postać zapytania. Ma limity po stronie serwera dotyczące liczby sprawdzanych wartości, rekordów i powiązań oraz limit czasu 250 ms na każdy odczyt z bazy danych. Jeśli zapytanie je przekroczy, żądanie kończy się błędem `422`, zamiast zwracać częściowe wyniki. W takim przypadku zawęź zapytanie kwalifikowanym selektorem.
 
-## Dlaczego to pasuje?
-
-Każdy wynik zawiera wyjaśnienie dopasowania dla każdego terminu: rekord i atrybut, które pasowały, oraz ścieżkę relacji od wyniku do nich. W Przeglądarce otwórz **Informacje o wyszukiwaniu** przy wyniku.
-
 ## Łączenie z filtrami i fasetami
 
 Zapytanie, [filtry atrybutów](/pl/guides/explore/#filtry), [fasety relacji](/pl/guides/explore/#fasety-relacji), zakres wersji i filtry tagów systemowych zawężają ten sam zbiór wyników. Liczniki faset uwzględniają tylko zapytanie i zakres wersji. Filtry atrybutów i inne fasety na nie nie wpływają, więc licznik może być wyższy niż przefiltrowana lista wyników.

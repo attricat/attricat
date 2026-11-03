@@ -36,8 +36,6 @@ Aby wyszukiwać szerzej, dodaj kwalifikator do terminu:
 
 Kilka terminów oddzielonych spacjami musi pasować jednocześnie. Pełną gramatykę opisuje [Składnia wyszukiwania](/pl/guides/search-syntax/).
 
-Otwórz **Informacje o wyszukiwaniu** przy wyniku, aby zobaczyć, dlaczego został dopasowany, na przykład _red przez 1 relację_.
-
 ## Filtry
 
 **Dodaj filtr** zawęża wyniki według wartości atrybutu w wybranym [kontekście](#kontekst). Dostępne operatory zależą od typu:

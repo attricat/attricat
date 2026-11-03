@@ -200,23 +200,6 @@ const recordItemSchema = z.object({
       ),
     )
     .optional(),
-  match_explanations: z
-    .array(
-      z.object({
-        term: z.string(),
-        matching_record_id: uuidSchema,
-        matching_attribute_code: z.string().nullable(),
-        traversal_depth: z.number().int().nonnegative(),
-        relationship_path: z.array(
-          z.object({
-            source_record_id: uuidSchema,
-            attribute_code: z.string(),
-            target_record_id: uuidSchema,
-          }),
-        ),
-      }),
-    )
-    .default([]),
 });
 const recordContextSchema = z.record(z.string(), jsonObjectSchema);
 const resolvedPreviewValueSchema = z.union([

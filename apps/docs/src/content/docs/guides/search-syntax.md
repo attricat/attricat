@@ -87,10 +87,6 @@ finds products that are red themselves, products linked to a color named red, an
 
 Global search is the most expensive query form. It has server-side limits on how many values, records, and links it will examine and a 250 ms time limit on each database read. If a query exceeds them, the request fails with `422` rather than returning partial results. Narrow the query with a qualified selector when that happens.
 
-## Why did this match?
-
-Each result includes a match explanation per term: the record and attribute that matched, and the relationship path from the result to it. In the Explorer, open **Search info** on a result.
-
 ## Combining with filters and facets
 
 The query, [attribute filters](/guides/explore/#filters), [relationship facets](/guides/explore/#relationship-facets), version scope, and system-tag filters all narrow the same result set. Facet counts reflect only the query and version scope. Attribute filters and other facets do not change them, so a count can be higher than the filtered result list.

@@ -86,7 +86,6 @@ const page = (
     system_tags: [],
     is_sample: isSample,
     display: { default: label },
-    match_explanations: [],
     preview: {},
     table_values: {},
   })),
