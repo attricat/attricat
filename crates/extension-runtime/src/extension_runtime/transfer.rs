@@ -11,6 +11,8 @@
 use super::network_v2::{admit_request, granted_rule, https_url};
 use super::*;
 use crate::extension_runtime::connections;
+use crate::repository::AuthorizationActor;
+use attricat_domain::permissions::Permission;
 use attricat_domain::states::ArtifactState;
 use attricat_domain::states::FileStatus;
 use reqwest::StatusCode;
@@ -1098,6 +1100,8 @@ pub(super) struct RunFacts {
     connector: bool,
     /// An interactive run's selection.
     selection: Option<Vec<Uuid>>,
+    /// Who started an interactive run, whose live access bounds its reads.
+    initiator: Option<AuthorizationActor>,
     /// When a resync run started.
     pub(super) resync_since: Option<chrono::DateTime<chrono::Utc>>,
     /// A connector run's connection, the only one whose mappings it writes.
@@ -1109,17 +1113,18 @@ impl RunFacts {
         repository: &AttricatRepository,
         run_id: Uuid,
     ) -> Result<Self, String> {
+        let interactive = repository
+            .interactive_run_scope(run_id)
+            .await
+            .map_err(|error| error.to_string())?;
         Ok(Self {
             connector: repository
                 .connector_run_scope(run_id)
                 .await
                 .map_err(|error| error.to_string())?
                 .is_some(),
-            selection: repository
-                .interactive_run_scope(run_id)
-                .await
-                .map_err(|error| error.to_string())?
-                .map(|scope| scope.record_ids),
+            initiator: interactive.as_ref().map(|scope| scope.actor),
+            selection: interactive.map(|scope| scope.record_ids),
             resync_since: repository
                 .resync_run_started_at(run_id)
                 .await
@@ -1188,6 +1193,20 @@ impl RunFacts {
             .is_some_and(|selection| !selection.contains(&record_id))
         {
             return Err("the record is outside the run selection".into());
+        }
+        if let (RunReach::Read, Some(initiator)) = (reach, self.initiator) {
+            let readable = repository
+                .principal_record_ids(
+                    initiator,
+                    repository.workspace_id(),
+                    Permission::RecordsRead,
+                    &[record_id],
+                )
+                .await
+                .map_err(|error| error.to_string())?;
+            if !readable.contains(&record_id) {
+                return Err("the run's initiator can no longer read the record".into());
+            }
         }
         Ok(())
     }
