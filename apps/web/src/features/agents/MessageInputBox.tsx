@@ -56,7 +56,6 @@ export const MessageInputBox = ({
       }}
     >
       <TextField
-        disabled={isPending}
         fullWidth
         hiddenLabel
         maxRows={composerMaxRows}
@@ -74,7 +73,11 @@ export const MessageInputBox = ({
           }
         }}
         placeholder={t('agents.messagePlaceholder')}
-        slotProps={{ htmlInput: { 'aria-label': t('agents.message') } }}
+        slotProps={{
+          // Read-only while sending: disabling it would drop the focus, and
+          // with it the way to type the next message.
+          htmlInput: { 'aria-label': t('agents.message'), readOnly: isPending },
+        }}
         sx={{ '& .MuiOutlinedInput-notchedOutline': { border: 0 } }}
         value={content}
       />

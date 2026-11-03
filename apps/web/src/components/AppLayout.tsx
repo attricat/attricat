@@ -17,6 +17,8 @@ import { Fragment, useEffect, useLayoutEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { pageTitle } from '../app/pageTitle';
 import { logout } from '../features/auth/api';
+import { DiscardChangesDialog } from '../features/drafts/DiscardChangesDialog';
+import { hasUnsavedChangesGuard } from '../features/drafts/UnsavedChangesGuard';
 import { authQueryKeys } from '../features/auth/queryKeys';
 import { ExtensionRunWatcher } from '../features/extension-runs/ExtensionRunWatcher';
 import { ExtensionActionDialogHost } from '../features/extensions/ExtensionActionDialogHost';
@@ -67,9 +69,19 @@ export const AppLayout = () => {
   const completeSignOut = async () => {
     queryClient.clear();
     queryClient.setQueryData(authQueryKeys.session(), null);
-    await navigate({ to: publicRoutes.login });
+    await navigate({ to: publicRoutes.login, ignoreBlocker: true });
   };
+  // Asks first: a session ended behind the unsaved-changes dialog would leave
+  // nothing able to save what the dialog offers to keep.
+  const [confirmingSignOut, setConfirmingSignOut] = useState(false);
   const signOut = async () => {
+    if (hasUnsavedChangesGuard()) {
+      setConfirmingSignOut(true);
+      return;
+    }
+    await endSession();
+  };
+  const endSession = async () => {
     try {
       await logout();
     } catch {
@@ -167,6 +179,17 @@ export const AppLayout = () => {
           <Outlet />
         </Box>
       </Box>
+      <DiscardChangesDialog
+        description={t('auth.signOutUnsavedDescription')}
+        discardLabel={t('auth.signOutDiscard')}
+        onDiscard={() => {
+          setConfirmingSignOut(false);
+          void endSession();
+        }}
+        onKeep={() => setConfirmingSignOut(false)}
+        open={confirmingSignOut}
+        title={t('auth.signOutUnsavedTitle')}
+      />
       <ExtensionActionDialogHost />
       <ExtensionActionConfirmHost />
       <ActionPalette />

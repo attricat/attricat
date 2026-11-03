@@ -1,6 +1,13 @@
 import { Alert, Box, Typography } from '@mui/material';
-import { useImperativeHandle, useMemo, useRef, type Ref } from 'react';
+import {
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  type Ref,
+} from 'react';
 import { useTranslation } from 'react-i18next';
+import { DiscardChangesDialog } from '../../drafts/DiscardChangesDialog';
 import type { AttributeContext } from '../../contexts/api';
 import { extensionOutlets } from '../../extensions/constants';
 import { ExtensionActionButtons } from '../../extensions/ExtensionActions';
@@ -70,8 +77,13 @@ export const RecordPreviewContent = ({
   // waits for those changes to save rather than being lost to a disabled tab.
   const hasPendingChanges = useRef(false);
   const queuedContextId = useRef<string>(undefined);
+  // A value that failed validation is never sent, so there is nothing to wait
+  // for: the choice asks instead of going ahead or happening much later.
+  const hasHeldDrafts = useRef(false);
+  const [confirmingContextId, setConfirmingContextId] = useState<string>();
   const changeContext = (nextContextId: string) => {
-    if (hasPendingChanges.current) queuedContextId.current = nextContextId;
+    if (hasHeldDrafts.current) setConfirmingContextId(nextContextId);
+    else if (hasPendingChanges.current) queuedContextId.current = nextContextId;
     else onContextChange(nextContextId);
   };
   useImperativeHandle(changeContextRef, () => changeContext);
@@ -120,6 +132,18 @@ export const RecordPreviewContent = ({
   });
   return (
     <>
+      <DiscardChangesDialog
+        description={t('records.unsavedFieldChangesDescription')}
+        discardLabel={t('drafts.discardAndLeave')}
+        onDiscard={() => {
+          if (confirmingContextId !== undefined)
+            onContextChange(confirmingContextId);
+          setConfirmingContextId(undefined);
+        }}
+        onKeep={() => setConfirmingContextId(undefined)}
+        open={confirmingContextId !== undefined}
+        title={t('records.unsavedFieldChangesTitle')}
+      />
       <FieldDiagnosticsContext value={diagnostics}>
         <FieldNotesProvider
           conditions={recordActionTarget}
@@ -151,6 +175,9 @@ export const RecordPreviewContent = ({
               recordId={recordId}
               form={form}
               ref={inlineFieldsRef}
+              onHeldDraftsChange={(held) => {
+                hasHeldDrafts.current = held;
+              }}
               onPendingChange={pendingChanged}
               refreshing={formRefreshing}
               resolvedValues={resolved.values}

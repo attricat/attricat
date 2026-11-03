@@ -1,4 +1,7 @@
-import { extensionConnectionsOptions } from './queryOptions';
+import {
+  exportStatusRefetchInterval,
+  extensionConnectionsOptions,
+} from './queryOptions';
 import {
   Box,
   Button,
@@ -12,7 +15,7 @@ import {
 } from '@mui/material';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { RotateCcwIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { EmptyState } from '../../components/EmptyState';
 import { NextPageButton } from '../../components/LoadMoreButton';
@@ -80,14 +83,28 @@ export const ExtensionExportStatusSection = ({
         limit: 1,
       }),
     enabled: exports.length > 0,
+    refetchInterval: ({ state: { data, error } }) =>
+      exportStatusRefetchInterval(
+        data?.counts.map((count) => count.status) ?? [],
+        error,
+      ),
   });
   // A connection without exports yet can be picked too.
   const connections = useQuery({
     ...extensionConnectionsOptions(extensionId),
     enabled: exports.length > 0,
   });
+  // A deleted connection stops being a choice once both lists have loaded.
+  const chosenIsGone =
+    Boolean(chosenConnection) &&
+    overview.data !== undefined &&
+    connections.data !== undefined &&
+    !overview.data.counts.some(
+      (count) => count.connection === chosenConnection,
+    ) &&
+    !connections.data.some((item) => item.connection === chosenConnection);
   const connection =
-    chosenConnection !== undefined
+    chosenConnection !== undefined && !chosenIsGone
       ? chosenConnection
       : (overview.data?.counts.find((count) => count.connection)?.connection ??
         null);
@@ -99,7 +116,26 @@ export const ExtensionExportStatusSection = ({
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.next,
     enabled: exports.length > 0 && overview.isSuccess,
+    // A retried row can come back to this list once its push has finished.
+    refetchInterval: ({ state: { error } }) =>
+      exportStatusRefetchInterval(
+        overview.data?.counts.map((count) => count.status) ?? [],
+        error,
+      ),
   });
+  // The timer stops with the overview's last poll, which may be the first to
+  // see a push finish, so the list takes one more look.
+  const pushesRunning =
+    exportStatusRefetchInterval(
+      overview.data?.counts.map((count) => count.status) ?? [],
+      overview.error,
+    ) !== false;
+  const wasRunning = useRef(false);
+  const { refetch: refetchPage } = page;
+  useEffect(() => {
+    if (wasRunning.current && !pushesRunning) void refetchPage();
+    wasRunning.current = pushesRunning;
+  }, [pushesRunning, refetchPage]);
   const retry = useRetryExports(() => setSelected([]));
   const retryRecords = (recordIds?: string[]) =>
     retry.mutate({
@@ -109,6 +145,11 @@ export const ExtensionExportStatusSection = ({
   if (!exports.length) return null;
   const rows = countsByConnection(overview.data?.counts ?? []);
   const mappings = page.data?.pages.flatMap((item) => item.mappings) ?? [];
+  // Polling and a deleted connection can take selected rows off the list, and
+  // a retry must only name rows the person can still see ticked.
+  const visibleSelected = selected.filter((recordId) =>
+    mappings.some((mapping) => mapping.record_id === recordId),
+  );
   const handlerFailures = page.data?.pages[0]?.handler_failures ?? [];
   const retryable = retryableExportStatuses.includes(status);
   return (
@@ -197,11 +238,13 @@ export const ExtensionExportStatusSection = ({
         {canManage && retryable && (
           <>
             <Button
-              disabled={!selected.length || retry.isPending}
+              disabled={!visibleSelected.length || retry.isPending}
               startIcon={<RotateCcwIcon />}
-              onClick={() => retryRecords(selected)}
+              onClick={() => retryRecords(visibleSelected)}
             >
-              {t('extensionExports.retrySelected', { count: selected.length })}
+              {t('extensionExports.retrySelected', {
+                count: visibleSelected.length,
+              })}
             </Button>
             <Button
               disabled={!mappings.length || retry.isPending}
@@ -228,7 +271,7 @@ export const ExtensionExportStatusSection = ({
           <ExportMappingsTable
             mappings={mappings}
             onSelectedChange={setSelected}
-            selected={canManage && retryable ? selected : undefined}
+            selected={canManage && retryable ? visibleSelected : undefined}
           />
         ))}
       <NextPageButton query={page} sx={{ mt: 2 }} />

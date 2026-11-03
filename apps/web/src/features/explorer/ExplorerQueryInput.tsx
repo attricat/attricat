@@ -80,6 +80,7 @@ export const ExplorerQueryInput = ({
   const [cursor, setCursor] = useState(value.length);
   const [open, setOpen] = useState(false);
   const [focused, setFocused] = useState(false);
+  const typed = useRef(false);
   const [active, setActive] = useState(-1);
   const { schema, blueprintNames, targetsError, targetsLoading } =
     useQuerySchema(blueprint, blueprints, value);
@@ -169,12 +170,13 @@ export const ExplorerQueryInput = ({
       return;
     }
     // Enter submits the search unless a suggestion was chosen with the
-    // arrow keys; Tab completes the highlighted or first suggestion.
+    // arrow keys; Tab completes the highlighted suggestion, or the first one
+    // after typing. Otherwise it moves on, so tabbing through changes nothing.
     const chosen =
       event.key === 'Enter'
         ? suggestions[activeIndex]
         : event.key === 'Tab' && !event.shiftKey
-          ? suggestions[Math.max(activeIndex, 0)]
+          ? suggestions[activeIndex >= 0 || !typed.current ? activeIndex : 0]
           : undefined;
     if (chosen) {
       event.preventDefault();
@@ -201,8 +203,10 @@ export const ExplorerQueryInput = ({
         onBlur={() => {
           setFocused(false);
           setOpen(false);
+          typed.current = false;
         }}
         onChange={(event) => {
+          typed.current = true;
           onChange(event.target.value);
           trackCursor(event);
           setActive(-1);

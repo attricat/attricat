@@ -1,6 +1,12 @@
 import { useBlocker, type ShouldBlockFn } from '@tanstack/react-router';
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DiscardChangesDialog } from './DiscardChangesDialog';
+
+let mountedGuards = 0;
+
+/** Whether something on the page would ask before a navigation drops changes. */
+export const hasUnsavedChangesGuard = () => mountedGuards > 0;
 
 const leavesPage: ShouldBlockFn = ({ current, next }) =>
   next.pathname !== current.pathname;
@@ -24,6 +30,12 @@ export const UnsavedChangesGuard = ({
   onDiscard?: () => void;
 }) => {
   const { t } = useTranslation();
+  useEffect(() => {
+    mountedGuards += 1;
+    return () => {
+      mountedGuards -= 1;
+    };
+  }, []);
   const blocker = useBlocker({
     shouldBlockFn: shouldBlock,
     enableBeforeUnload: false,

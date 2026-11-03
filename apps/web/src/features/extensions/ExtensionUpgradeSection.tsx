@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Trans, useTranslation } from 'react-i18next';
 import { CircleArrowUpIcon } from 'lucide-react';
 import {
+  isNewerRelease,
   repositoryParts,
   sourceReleaseTag,
   sourceRepository,
@@ -20,10 +21,10 @@ type ExtensionUpgradeSectionProps = {
   busy: boolean;
   canManage: boolean;
   installation: ExtensionInstallation;
-  onUpgrade: (release: ExtensionReleaseReference) => void;
+  onUpgrade: (release: ExtensionReleaseReference, name: string) => void;
 };
 
-/** The registry's other releases; nothing for a side-loaded extension. */
+/** The registry's newer releases; nothing for a side-loaded extension. */
 export const ExtensionUpgradeSection = ({
   busy,
   canManage,
@@ -41,7 +42,9 @@ export const ExtensionUpgradeSection = ({
     enabled: Boolean(owner && repository),
   });
   const releases = (upgrades.data?.releases ?? []).filter(
-    (release) => release.tag_name !== installedTag,
+    (release) =>
+      release.tag_name !== installedTag &&
+      isNewerRelease(release.tag_name, installation.version),
   );
   if (!upgrades.error && releases.length === 0) return null;
   return (
@@ -80,11 +83,14 @@ export const ExtensionUpgradeSection = ({
             <Button
               disabled={!canManage || busy}
               onClick={() =>
-                onUpgrade({
-                  owner,
-                  repository,
-                  release_id: release.release_id,
-                })
+                onUpgrade(
+                  {
+                    owner,
+                    repository,
+                    release_id: release.release_id,
+                  },
+                  release.name || release.tag_name,
+                )
               }
               startIcon={<CircleArrowUpIcon />}
             >

@@ -54,6 +54,10 @@ const isNewer = (candidate?: string, baseline?: string) =>
   candidate !== undefined &&
   (baseline === undefined || Date.parse(candidate) > Date.parse(baseline));
 
+const isNotOlder = (candidate?: string, baseline?: string) =>
+  candidate !== undefined &&
+  (baseline === undefined || Date.parse(candidate) >= Date.parse(baseline));
+
 /**
  * Saves committed field values one request at a time, each against the
  * version the previous save produced. A rejected change stays pending and is
@@ -111,17 +115,20 @@ export const useRecordFieldSaves = ({
 
   // While idle, a newer server version (another editor, an attachment, a file
   // upload) is the baseline instead of a conflict. Render shows it; the next
-  // commit adopts it.
+  // commit adopts it. The same version counts too: a save can change other
+  // fields in its transaction, as voiding an approval moves the status, and
+  // only the refetch that follows it shows them. Until that refetch arrives
+  // the server's version is older, so `saved` keeps the values just saved.
   const idle =
     !state.saving && !state.conflict && Object.keys(state.pending).length === 0;
-  const serverIsNewer = idle && isNewer(updatedAt, state.version);
+  const serverIsCurrent = idle && isNotOlder(updatedAt, state.version);
   const adoptServerVersion = () => {
     const { pending, conflict } = current.current;
     if (
       inFlight.current ||
       conflict ||
       Object.keys(pending).length > 0 ||
-      !isNewer(updatedAt, current.current.version)
+      !isNotOlder(updatedAt, current.current.version)
     )
       return;
     publish({ version: updatedAt, saved: { ...savedFields } });
@@ -252,7 +259,7 @@ export const useRecordFieldSaves = ({
   return {
     /** Saved values overlaid with changes that are not saved yet. */
     fields: {
-      ...(serverIsNewer ? savedFields : state.saved),
+      ...(serverIsCurrent ? savedFields : state.saved),
       ...state.pending,
     },
     pending: state.pending,

@@ -108,7 +108,7 @@ const InstalledExtensionTabs = ({
   detail: ExtensionDetail;
   extensionId: string;
   onChanged: () => void;
-  onUpgrade: (release: ExtensionReleaseReference) => void;
+  onUpgrade: (release: ExtensionReleaseReference, name: string) => void;
 }) => {
   const { t } = useTranslation();
   const tabId = useTabAccessibility();
@@ -285,6 +285,11 @@ export const InstalledExtensionPage = ({
   });
   // Waiting for the person to confirm upgrading from this archive.
   const [archive, setArchive] = useState<File | null>(null);
+  // Waiting for the person to confirm upgrading to this registry release.
+  const [upgrade, setUpgrade] = useState<{
+    name: string;
+    release: ExtensionReleaseReference;
+  } | null>(null);
   const [removeOpen, setRemoveOpen] = useState(false);
   const closeArchiveDialog = () => {
     setArchive(null);
@@ -345,7 +350,7 @@ export const InstalledExtensionPage = ({
       )}
       <ApiErrorAlert error={detail.error} sx={{ mt: 2 }} />
       <ApiErrorAlert
-        error={archive || removeOpen ? null : action.error}
+        error={archive || upgrade || removeOpen ? null : action.error}
         sx={{ mt: 2 }}
       />
       {detail.data && (
@@ -356,9 +361,33 @@ export const InstalledExtensionPage = ({
           detail={detail.data}
           extensionId={extensionId}
           onChanged={() => invalidateExtensions(client)}
-          onUpgrade={(release) => action.mutate({ action: 'upgrade', release })}
+          onUpgrade={(release, name) => {
+            action.reset();
+            setUpgrade({ name, release });
+          }}
         />
       )}
+      <ConfirmDialog
+        confirmLabel={t('extensions.upgrade')}
+        error={action.error}
+        isPending={action.isPending}
+        onClose={() => {
+          setUpgrade(null);
+          action.reset();
+        }}
+        onConfirm={() => {
+          if (upgrade)
+            action.mutate(
+              { action: 'upgrade', release: upgrade.release },
+              { onSuccess: () => setUpgrade(null) },
+            );
+        }}
+        open={upgrade !== null}
+        title={t('extensions.upgradeToRelease')}
+      >
+        {t('extensions.upgradeReleaseQuestion', { name: upgrade?.name })}{' '}
+        {t('extensions.upgradeEffect')}
+      </ConfirmDialog>
       <ConfirmDialog
         confirmLabel={t('extensions.upgrade')}
         error={action.error}

@@ -1,5 +1,6 @@
 import { Button } from '@mui/material';
 import { useMutation } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { startSingleSignOn } from './api';
@@ -23,6 +24,15 @@ export const SingleSignOnButton = ({
     mutationFn: () => startSingleSignOn(loginIdentifier, invitationSecret),
     onSuccess: ({ authorization_url }) => leaveForProvider(authorization_url),
   });
+  // Coming back from the provider can restore this page as it was left.
+  const { reset } = start;
+  useEffect(() => {
+    const resetRestoredPage = (event: PageTransitionEvent) => {
+      if (event.persisted) reset();
+    };
+    window.addEventListener('pageshow', resetRestoredPage);
+    return () => window.removeEventListener('pageshow', resetRestoredPage);
+  }, [reset]);
   return (
     <>
       <ApiErrorAlert error={start.error} />

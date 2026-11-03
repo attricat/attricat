@@ -57,23 +57,31 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
   // Revisions and runs are both under the workflows root key.
   const refresh = () =>
     queryClient.invalidateQueries({ queryKey: workflowQueryKeys.all() });
+  // Only the latest action's failure is shown; an earlier one no longer applies.
+  const [lastAction, setLastAction] = useState<
+    'publish' | 'enable' | 'runNow' | 'disable'
+  >();
   const publish = useMutation({
     mutationFn: (version: number) =>
       publishWorkflowRevision(workflowId, version),
+    onMutate: () => setLastAction('publish'),
     onSuccess: refresh,
   });
   const enable = useMutation({
     mutationFn: (version: number) =>
       enableWorkflowRevision(workflowId, version),
+    onMutate: () => setLastAction('enable'),
     onSuccess: refresh,
   });
   const runNow = useMutation({
     mutationFn: (recordId: string) =>
       runWorkflowNow(workflowId, recordId, randomUuid()),
+    onMutate: () => setLastAction('runNow'),
     onSuccess: refresh,
   });
   const disable = useMutation({
     mutationFn: () => disableWorkflow(workflowId),
+    onMutate: () => setLastAction('disable'),
     onSuccess: refresh,
   });
   const current = revisions.data?.[0];
@@ -87,7 +95,7 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
     (run) => run.workflow_id === workflowId,
   );
   const mutationError =
-    publish.error ?? enable.error ?? runNow.error ?? disable.error;
+    lastAction && { publish, enable, runNow, disable }[lastAction].error;
   // This page's workflow exists, so a refused run names a missing record.
   const runRecordMissing =
     mutationError === runNow.error &&

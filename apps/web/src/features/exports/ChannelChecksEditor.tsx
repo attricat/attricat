@@ -45,6 +45,8 @@ export const ChannelChecksEditor = ({
         label={t('exports.requireValidRecord')}
       />
       <Autocomplete
+        // The page has no Save button: leaving the field applies a typed code.
+        autoSelect
         disabled={disabled}
         freeSolo
         multiple

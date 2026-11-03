@@ -18,7 +18,7 @@ const grantSchema = z.object({
 export const memberSchema = z.object({
   id: uuid,
   user_id: uuid,
-  email: z.string().email(),
+  email: z.string(),
   display_name: z.string().nullable(),
   /** The member's ready avatar in this workspace. */
   avatar_file_id: uuid.nullable().default(null),
@@ -30,9 +30,9 @@ export const memberSchema = z.object({
 });
 export const invitationSchema = z.object({
   id: uuid,
-  invitee_email: z.string().email(),
+  invitee_email: z.string(),
   inviter_user_id: uuid,
-  inviter_email: z.string().email(),
+  inviter_email: z.string(),
   role_id: uuid,
   role_code: z.string(),
   scope_type: scopeTypeSchema,
@@ -76,7 +76,7 @@ export const grantInputSchema = z.object({
   scope_target_id: uuid,
 });
 export const invitationInputSchema = grantInputSchema.extend({
-  email: z.string().email(),
+  email: z.string(),
   expires_at: z.string().datetime({ offset: true }),
 });
 export const roleCodeSchema = z.string().regex(/^[a-z][a-z0-9_-]*$/);

@@ -308,6 +308,46 @@ describe('useRecordFieldSaves', () => {
     });
   });
 
+  it('shows what a save changed elsewhere once its version is refetched', async () => {
+    vi.mocked(updateRecord).mockResolvedValue(
+      savedRecord('2026-10-07T10:05:00Z') as never,
+    );
+    const client = new QueryClient();
+    const { result, rerender } = renderHook(
+      (props: { updatedAt: string; savedFields: Record<string, string> }) =>
+        useRecordFieldSaves({
+          recordId,
+          contextId: null,
+          attributes,
+          ...props,
+        }),
+      {
+        initialProps: {
+          updatedAt: '2026-10-07T10:00:00Z',
+          savedFields: { title: 'Old', summary: 'approved' },
+        },
+        wrapper: ({ children }: { children: ReactNode }) => (
+          <QueryClientProvider client={client}>{children}</QueryClientProvider>
+        ),
+      },
+    );
+
+    act(() => result.current.commit('title', 'New'));
+    await waitFor(() => expect(result.current.pending).toEqual({}));
+    // The refetch has not arrived, so what was just saved stays shown.
+    expect(result.current.fields).toEqual({
+      title: 'New',
+      summary: 'approved',
+    });
+
+    // The same transaction voided the approval this field shows.
+    rerender({
+      updatedAt: '2026-10-07T10:05:00Z',
+      savedFields: { title: 'New', summary: 'review' },
+    });
+    expect(result.current.fields).toEqual({ title: 'New', summary: 'review' });
+  });
+
   it('reports when changes start and stop waiting to be saved', async () => {
     vi.mocked(updateRecord).mockResolvedValue(savedRecord('v2') as never);
     const onPendingChange = vi.fn();

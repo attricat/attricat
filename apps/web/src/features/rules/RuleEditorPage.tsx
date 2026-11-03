@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { Alert, Box, Button, Typography } from '@mui/material';
 import { lazy, Suspense, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { z } from 'zod';
 import { ApiRequestError } from '../../api/request';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { LoadingState } from '../../components/LoadingState';
@@ -51,6 +52,10 @@ const YamlDiffEditor = lazy(() =>
   })),
 );
 const noScope: RuleScope = { contextId: null };
+const ruleScopeDraftSchema: z.ZodType<RuleScope> = z.object({
+  blueprintId: z.string().optional(),
+  contextId: z.string().nullable(),
+});
 /** Stands in for a blueprint or context name that is still loading. */
 const loadingName = '…';
 
@@ -108,7 +113,17 @@ export const RuleEditorPage = ({ ruleId }: { ruleId?: string }) => {
     );
   const editor = useDefinitionEditor({
     draftEditor: creating ? draftEditors.ruleCreate : draftEditors.ruleEdit,
-    draftResource: creating ? [] : [ruleId, source?.version ?? 0],
+    // A new rule's scope is part of the draft: it cannot change once saved.
+    draftScope: creating
+      ? {
+          schema: ruleScopeDraftSchema,
+          value: chosenScope,
+          onRestore: setChosenScope,
+        }
+      : undefined,
+    // Not by version: a revision saved elsewhere must not strand the draft,
+    // which is offered with a warning that the rule has changed.
+    draftResource: creating ? [] : [ruleId],
     onLeave: leaveEditor,
     ready: creating || Boolean(source),
     source: source?.definition,

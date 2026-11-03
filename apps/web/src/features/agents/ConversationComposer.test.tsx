@@ -111,7 +111,7 @@ describe('ConversationComposer', () => {
     await user.upload(document.querySelector('input[type="file"]')!, file);
     await user.click(screen.getByRole('button', { name: 'Send' }));
     await waitFor(() => expect(uploadConversationFiles).toHaveBeenCalledOnce());
-    expect(message.hasAttribute('disabled')).toBe(true);
+    expect(message.hasAttribute('readonly')).toBe(true);
     expect(
       screen
         .getByRole('button', { name: 'Add files' })

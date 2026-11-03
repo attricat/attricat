@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Box, Button, Stack } from '@mui/material';
-import { useEffect, useImperativeHandle, type Ref } from 'react';
+import { useEffect, useImperativeHandle, useState, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RotateCcwIcon } from 'lucide-react';
 import { checkViolationError } from '../../../api/checkViolations';
@@ -78,6 +78,8 @@ type Props = {
   view: RecordFormResponse['blueprint']['blueprint']['views']['detail'];
   /** Reports whether changes are waiting to be saved in this context. */
   onPendingChange?: (pending: boolean) => void;
+  /** Reports whether a field keeps a value that cannot be saved as it is. */
+  onHeldDraftsChange?: (held: boolean) => void;
   /** Lays the view out in one column, as in a narrow panel. */
   singleColumn?: boolean;
   /**
@@ -123,6 +125,7 @@ export const RecordInlineFields = ({
   reusableResolvedValues,
   view,
   onPendingChange,
+  onHeldDraftsChange,
   singleColumn,
   refreshing = false,
 }: Props & { ref?: Ref<RecordInlineFieldsHandle> }) => {
@@ -156,6 +159,22 @@ export const RecordInlineFields = ({
       ? recordSchemaRequiredAttributes(form.blueprint.blueprint.record_schema)
       : [];
   const latestFields = valuesForForm(allAttributes, existingValues, contextId);
+  // Values that failed validation and stay with their field, by attribute.
+  const [allHeldDrafts, setHeldDrafts] = useState<
+    Readonly<Record<string, string>>
+  >({});
+  // A field that stops being editable, say locked by a status, can't show one.
+  const heldDraftCodes = Object.keys(allHeldDrafts).filter((code) =>
+    changeableCodes.includes(code),
+  );
+  const hasHeldDrafts = heldDraftCodes.length > 0;
+  const reportHeldDrafts = useLatestCallback((held: boolean) =>
+    onHeldDraftsChange?.(held),
+  );
+  useEffect(() => {
+    reportHeldDrafts(hasHeldDrafts);
+    return () => reportHeldDrafts(false);
+  }, [hasHeldDrafts, reportHeldDrafts]);
   const saves = useRecordFieldSaves({
     recordId,
     contextId,
@@ -177,11 +196,18 @@ export const RecordInlineFields = ({
     getDraftValues: () => ({ ...saves.fields }),
     applySmartFillValues: (values) => {
       const fields = smartFillFormFields(changeable, values);
-      if (Object.keys(fields).length > 0) saves.commitMany(fields);
+      if (Object.keys(fields).length === 0) return;
+      // A field hidden in another view tab can't replace its own held value.
+      setHeldDrafts((held) =>
+        Object.fromEntries(
+          Object.entries(held).filter(([code]) => !(code in fields)),
+        ),
+      );
+      saves.commitMany(fields);
     },
   }));
   // Leaving would drop changes that are not saved yet.
-  useBeforeUnloadWarning(hasPending || saves.saving);
+  useBeforeUnloadWarning(hasPending || saves.saving || hasHeldDrafts);
   // Changes dropped with these fields, for example on opening another
   // record, no longer wait to be saved.
   const reportPending = useLatestCallback((pending: boolean) =>
@@ -273,8 +299,19 @@ export const RecordInlineFields = ({
         : undefined;
     const editor = (
       <InlineFieldEditor
+        // View tabs reuse positions, and a draft must not move to another field.
+        key={attribute.code}
+        heldDraft={allHeldDrafts[attribute.code]}
         immediate={commitsImmediately(attribute, editComponent)}
         onCommit={(value) => saves.commit(attribute.code, value)}
+        onHeldDraftChange={(draft) =>
+          setHeldDrafts((held) => {
+            const next = { ...held };
+            if (draft === undefined) delete next[attribute.code];
+            else next[attribute.code] = draft;
+            return next;
+          })
+        }
         onRevert={() => saves.revert(attribute.code)}
         renderAtRest={
           AtRestDisplay &&
@@ -392,7 +429,7 @@ export const RecordInlineFields = ({
     contextId: contextId ?? undefined,
     recordId,
     // Tabs and accordions point to a field whose change was not saved.
-    invalidFields: new Set(Object.keys(fieldErrors)),
+    invalidFields: new Set([...Object.keys(fieldErrors), ...heldDraftCodes]),
     renderEditor,
     singleColumn,
   };
@@ -402,7 +439,7 @@ export const RecordInlineFields = ({
 
   return (
     <>
-      {unsaved && <UnsavedFieldChangesGuard />}
+      {(unsaved || hasHeldDrafts) && <UnsavedFieldChangesGuard />}
       {saves.conflict && (
         <SaveConflictAlert
           attributes={changeable.filter(

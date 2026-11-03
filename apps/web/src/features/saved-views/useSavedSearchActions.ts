@@ -105,8 +105,11 @@ export const useSavedSearchActions = ({
   const copyLink = () =>
     runBusy(async () => {
       const url = new URL(window.location.href);
+      // Only its owner can open a private saved search, so a link to one
+      // carries the search itself.
       if (
         savedView &&
+        savedView.visibility !== SAVED_VIEW_VISIBILITY_PRIVATE &&
         new URLSearchParams(window.location.search).has(SAVED_VIEW_PARAM)
       ) {
         url.search = `?${SAVED_VIEW_PARAM}=${savedView.id}`;

@@ -159,9 +159,11 @@ export const RecordFormAttributeEditor = ({
 
   return (
     <>
-      {inherited && attribute.value_type === attributeValueTypes.file && (
-        <AttributeValue attribute={attribute} value={resolvedValue.value} />
-      )}
+      {inherited &&
+        (attribute.value_type === attributeValueTypes.file ||
+          attribute.value_type === attributeValueTypes.relationship) && (
+          <AttributeValue attribute={attribute} value={resolvedValue.value} />
+        )}
       <Box sx={protectedValue ? protectedValueSx : { display: 'contents' }}>
         <RecordAttributeEditor
           attribute={attribute}

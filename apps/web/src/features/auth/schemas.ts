@@ -9,7 +9,7 @@ export const ownAvatarSchema = z.object({
 export const sessionSchema = z.object({
   user_id: z.uuid(),
   display_name: z.string().nullable(),
-  email: z.string().email(),
+  email: z.string(),
   /** IANA zone for rendering instants; `null` follows the browser zone. */
   time_zone: z.string().nullable().default(null),
   /** The caller's avatar in this workspace, including one still processing. */

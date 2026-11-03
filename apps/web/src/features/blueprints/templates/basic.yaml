@@ -6,10 +6,11 @@ kind: record
 # Required fields are enforced for API writes as well as in the form.
 record_schema: '{"type":"object","required":["name"]}'
 
+# Optional: edits by these workspace roles retain channel publication.
+# publication:
+#   retain_on_edit_roles: [attricat_manager]
+
 views:
-  # Optional: edits by these workspace roles retain channel publication.
-  # [publication]
-  # retain_on_edit_roles = ["attricat_manager"]
   dropdown_option:
     type: dropdown_option
     fields: [name]

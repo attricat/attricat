@@ -83,10 +83,9 @@ const AuthorizationCodeForm = ({
         code,
         redirect_uri: redirectUri,
       }),
-    onSuccess: () => {
-      setCode('');
-      return onExchanged();
-    },
+    onSuccess: () => setCode(''),
+    // A refused code can also change the connection on the server.
+    onSettled: onExchanged,
   });
   return (
     <Box sx={{ mt: 1 }}>
@@ -202,7 +201,8 @@ const ConnectionRow = ({
     mutationKey,
     mutationFn: (name: ConnectionAction) =>
       connectionAction(extensionId, connection.connection, name),
-    onSuccess: refresh,
+    // A failed test or poll marks the connection failed on the server.
+    onSettled: refresh,
   });
   // The provider sends the operator back to this page after approving.
   const authorize = useMutation({
@@ -218,7 +218,13 @@ const ConnectionRow = ({
     mutationKey,
     mutationFn: () => deleteConnection(extensionId, connection.connection),
     onSuccess: async () => {
-      await refresh();
+      // The connection's exports leave the status counts and lists with it.
+      await Promise.all([
+        refresh(),
+        client.invalidateQueries({
+          queryKey: extensionExportQueryKeys.extensionRoot(extensionId),
+        }),
+      ]);
       setConfirmingDelete(false);
     },
   });

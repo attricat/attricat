@@ -44,7 +44,13 @@ const ProviderForm = ({ provider }: { provider: IdentityProvider | null }) => {
     mutationFn: putIdentityProvider,
     onSuccess: (saved) => {
       queryClient.setQueryData(workspaceQueryKeys.identityProvider(), saved);
-      form.setFieldValue('client_secret', '');
+      // Leaves the form untouched, so it follows later changes by others.
+      form.reset({
+        client_id: saved.client_id,
+        client_secret: '',
+        display_name: saved.display_name,
+        issuer: saved.issuer,
+      });
       setNotice(t('workspace.signInSaved'));
     },
   });
@@ -137,7 +143,13 @@ const ProviderForm = ({ provider }: { provider: IdentityProvider | null }) => {
   );
 };
 
-const ProviderState = ({ provider }: { provider: IdentityProvider }) => {
+const ProviderState = ({
+  onRemoved,
+  provider,
+}: {
+  onRemoved: () => void;
+  provider: IdentityProvider;
+}) => {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -158,8 +170,10 @@ const ProviderState = ({ provider }: { provider: IdentityProvider }) => {
   const remove = useMutation({
     meta: { toast: false },
     mutationFn: deleteIdentityProvider,
-    onSuccess: () =>
-      queryClient.setQueryData(workspaceQueryKeys.identityProvider(), null),
+    onSuccess: () => {
+      queryClient.setQueryData(workspaceQueryKeys.identityProvider(), null);
+      onRemoved();
+    },
   });
   const verified = provider.verified_at !== null;
   return (
@@ -268,6 +282,7 @@ export const WorkspaceSignInSection = ({
   canManage: boolean;
 }) => {
   const { t } = useTranslation();
+  const [removals, setRemovals] = useState(0);
   const provider = useQuery({
     queryKey: workspaceQueryKeys.identityProvider(),
     queryFn: getIdentityProvider,
@@ -291,12 +306,16 @@ export const WorkspaceSignInSection = ({
       <ApiErrorAlert error={provider.error} />
       {/* A failed refetch keeps the form and what was typed into it. */}
       {!provider.isPending && !provider.isLoadingError && (
-        <ProviderForm
-          key={provider.data?.updated_at ?? 'new'}
+        // Starts over only after a removal: remounting on each saved version
+        // would drop its notice and what is typed when the switch saves.
+        <ProviderForm key={removals} provider={provider.data} />
+      )}
+      {provider.data && (
+        <ProviderState
+          onRemoved={() => setRemovals((count) => count + 1)}
           provider={provider.data}
         />
       )}
-      {provider.data && <ProviderState provider={provider.data} />}
     </Stack>
   );
 };
