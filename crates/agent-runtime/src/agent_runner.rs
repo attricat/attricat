@@ -504,7 +504,15 @@ async fn drive(
         Ok(answer) => answer,
         Err(error) => {
             tracing::warn!(%run_id, %error, "agent provider request failed");
-            fail_run(repository, run_id, "provider_error", &error.to_string()).await?;
+            let code = if matches!(
+                error,
+                crate::agent_provider::ProviderError::ConversationTooLong
+            ) {
+                CONVERSATION_TOO_LONG
+            } else {
+                "provider_error"
+            };
+            fail_run(repository, run_id, code, &error.to_string()).await?;
             return Ok(());
         }
     };
@@ -1517,6 +1525,10 @@ fn agent_audit_context(
         }),
     }
 }
+
+/// A run refused for this will fail the same way until history shrinks, so the
+/// web app tells the user to start a new conversation.
+const CONVERSATION_TOO_LONG: &str = "conversation_too_long";
 
 pub(crate) async fn fail_run(
     repository: &AttricatRepository,

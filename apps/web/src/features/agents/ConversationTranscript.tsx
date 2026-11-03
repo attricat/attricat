@@ -16,6 +16,9 @@ import { ToolActivityGroup } from './ToolActivityGroup';
 import { TranscriptMessage } from './TranscriptMessage';
 import { progressSizes } from '../../components/iconSizes';
 
+/** A run refused for this fails again until the user starts afresh. */
+const conversationTooLongCode = 'conversation_too_long';
+
 type ConversationTranscriptProps = {
   approvals: AgentToolCall[] | undefined;
   bulkProgress?: BulkProgress[];
@@ -84,9 +87,11 @@ export const ConversationTranscript = ({
       {latestRun?.error_message && (
         <Alert severity="error">
           <Typography component="pre" sx={{ m: 0, whiteSpace: 'pre-wrap' }}>
-            {latestRun.error_code
-              ? `${latestRun.error_code}: ${latestRun.error_message}`
-              : latestRun.error_message}
+            {latestRun.error_code === conversationTooLongCode
+              ? t('agents.conversationTooLong')
+              : latestRun.error_code
+                ? `${latestRun.error_code}: ${latestRun.error_message}`
+                : latestRun.error_message}
           </Typography>
         </Alert>
       )}

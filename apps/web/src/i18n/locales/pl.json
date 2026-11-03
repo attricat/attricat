@@ -320,6 +320,7 @@
     "singleSignOnFailedDescription": "Nie udało się dokończyć logowania. Spróbuj ponownie."
   },
   "agents": {
+    "conversationTooLong": "Ta rozmowa jest zbyt długa dla modelu. Aby kontynuować, rozpocznij nową rozmowę.",
     "autoApproval": {
       "about": "O automatycznym zatwierdzaniu",
       "label": "Automatycznie zatwierdzaj zmiany w tej rozmowie",

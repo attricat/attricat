@@ -101,6 +101,9 @@ pub struct AssistantMessage {
     pub tool_calls: Vec<ToolCall>,
 }
 
+/// How much of a refusal is read for its reason.
+const MAX_REFUSAL_BODY_BYTES: usize = 64 * 1024;
+
 #[derive(Debug, Error)]
 pub enum ProviderError {
     #[error("provider request timed out")]
@@ -109,6 +112,8 @@ pub enum ProviderError {
     Unavailable,
     #[error("provider rejected the request")]
     Rejected,
+    #[error("the conversation is too long for the model")]
+    ConversationTooLong,
     #[error("provider returned malformed data")]
     Malformed,
 }
@@ -160,7 +165,7 @@ impl OpenAiCompatibleClient {
             .send()
             .await
             .map_err(map_request_error)?;
-        status(response.status())?;
+        let response = accepted(response).await?;
         if response
             .content_length()
             .is_some_and(|length| length > MAX_PROVIDER_BODY_BYTES as u64)
@@ -207,7 +212,7 @@ impl OpenAiCompatibleClient {
             .send()
             .await
             .map_err(map_request_error)?;
-        status(response.status())?;
+        let response = accepted(response).await?;
         let mut stream = response.bytes_stream();
         let mut buffer = Vec::new();
         let mut received_bytes: usize = 0;
@@ -340,6 +345,38 @@ fn status(status: StatusCode) -> Result<(), ProviderError> {
         Err(ProviderError::Rejected)
     }
 }
+/// Passes a successful response on. A refusal because the request is too long
+/// has its own error, since retrying the same conversation can never succeed.
+async fn accepted(response: reqwest::Response) -> Result<reqwest::Response, ProviderError> {
+    let code = response.status();
+    if code == StatusCode::BAD_REQUEST || code == StatusCode::PAYLOAD_TOO_LARGE {
+        let body = response.bytes().await.unwrap_or_default();
+        if refuses_length(&body) {
+            tracing::warn!(%code, "agent provider refused the conversation's length");
+            return Err(ProviderError::ConversationTooLong);
+        }
+        tracing::warn!(%code, "agent provider rejected the request");
+        return Err(ProviderError::Rejected);
+    }
+    status(code)?;
+    Ok(response)
+}
+
+/// What OpenAI-compatible providers say when a request exceeds a model's limit.
+fn refuses_length(body: &[u8]) -> bool {
+    let body =
+        String::from_utf8_lossy(&body[..body.len().min(MAX_REFUSAL_BODY_BYTES)]).to_lowercase();
+    [
+        "context_length_exceeded",
+        "maximum context length",
+        "prompt is too long",
+        "too many tokens",
+        "input is too long",
+    ]
+    .iter()
+    .any(|phrase| body.contains(phrase))
+}
+
 fn map_request_error(error: reqwest::Error) -> ProviderError {
     tracing::warn!(error = %format!("{error:#}"), "agent provider HTTP request failed");
     if error.is_timeout() {
@@ -421,6 +458,20 @@ fn finish_calls(calls: Vec<PartialToolCall>) -> Result<Vec<ToolCall>, ProviderEr
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn recognizes_a_refusal_for_length() {
+        for body in [
+            r#"{"error":{"code":"context_length_exceeded"}}"#,
+            "This model's maximum context length is 8192 tokens",
+            r#"{"error":{"message":"prompt is too long: 300000 tokens"}}"#,
+        ] {
+            assert!(super::refuses_length(body.as_bytes()), "{body}");
+        }
+        assert!(!super::refuses_length(
+            b"{\"error\":\"invalid tool schema\"}"
+        ));
+    }
+
     use super::{
         ChatRequest, OpenAiCompatibleClient, PartialToolCall, ProviderError, ToolChoice,
         chat_completions_url, finish_calls,

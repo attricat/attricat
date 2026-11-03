@@ -316,6 +316,7 @@
     "singleSignOnFailedDescription": "The sign-in could not be completed. Try again."
   },
   "agents": {
+    "conversationTooLong": "This conversation is too long for the model. Start a new conversation to continue.",
     "autoApproval": {
       "about": "About auto-approval",
       "label": "Auto-approve changes within this conversation",
