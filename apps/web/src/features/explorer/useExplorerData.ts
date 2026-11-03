@@ -14,6 +14,7 @@ import { isHiddenByDefault } from '../records/attributeVisibility';
 import { contextAncestorCodes } from '../records/previewContext';
 import {
   explorerVisibilityScope,
+  invalidSearchSortErrorCode,
   relationshipPathSortErrorCode,
 } from './constants';
 import {
@@ -162,9 +163,12 @@ export const useExplorerData = (search: ExplorerSearch) => {
   useEffect(() => {
     if (
       results.error instanceof ApiRequestError &&
-      results.error.code === relationshipPathSortErrorCode &&
       search.sort &&
-      isRelationshipPath(search.sort.field)
+      // A saved link can name a column or channel that is gone, and over all
+      // versions only the server knows which revision it searched.
+      (results.error.code === invalidSearchSortErrorCode ||
+        (results.error.code === relationshipPathSortErrorCode &&
+          isRelationshipPath(search.sort.field)))
     ) {
       void navigate({
         to: '/',

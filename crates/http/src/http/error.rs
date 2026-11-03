@@ -228,6 +228,9 @@ impl ApiError {
         )
         .with_details(serde_json::json!({ "field": label, "min": min, "max": max }))
     }
+    pub(super) fn invalid_search_sort(message: String) -> Self {
+        Self::unprocessable(ErrorCode::InvalidSearchSort, message)
+    }
     pub(super) fn relationship_sort_requires_single_version() -> Self {
         Self::new(
             StatusCode::UNPROCESSABLE_ENTITY,

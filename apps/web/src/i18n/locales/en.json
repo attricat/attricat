@@ -118,6 +118,7 @@
     "invalid_code": "Codes may contain only letters, digits, hyphens and underscores.",
     "invalid_comment": "Comments must contain 1 to {{max}} characters.",
     "invalid_credentials": "The email or password is incorrect.",
+    "invalid_search_sort": "This list can't be sorted that way.",
     "invalid_display_name": "Display names have {{min}} to {{max}} letters, digits and spaces, and don't start or end with a space.",
     "invalid_email": "Enter a valid email address.",
     "invalid_file": "The file is invalid: {{message}}",

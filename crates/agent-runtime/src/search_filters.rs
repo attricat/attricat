@@ -58,6 +58,7 @@ impl From<SearchScopeError> for ToolError {
                 blueprint: Some(blueprint),
             } => invalid(format!("{message}. {}", search_fields_hint(&blueprint))),
             SearchScopeError::Invalid { message, .. } => invalid(message),
+            SearchScopeError::InvalidSort(message) => invalid(message),
             SearchScopeError::Query { error, blueprint } => {
                 invalid(format!("{error}. {}", search_fields_hint(&blueprint)))
             }

@@ -97,6 +97,7 @@ error_codes! {
     InvalidFileReferences = "invalid_file_references",
     InvalidIdentityProvider = "invalid_identity_provider",
     InvalidInput = "invalid_input",
+    InvalidSearchSort = "invalid_search_sort",
     InvalidLoginIdentifier = "invalid_login_identifier",
     InvalidRange = "invalid_range",
     InvalidRuleDefinition = "invalid_rule_definition",

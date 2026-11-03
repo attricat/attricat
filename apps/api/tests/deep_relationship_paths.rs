@@ -828,3 +828,35 @@ attributes:
     assert_eq!(stale.status(), StatusCode::UNPROCESSABLE_ENTITY);
     server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_refused_sort_has_its_own_error_code(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    create_blueprint(
+        &client,
+        &base_url,
+        "format_version: 1\ncode: sorted_item\nname: Sorted item\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string\n",
+    )
+    .await;
+
+    let refused = client
+        .post(format!("{base_url}/v1/records/search"))
+        .json(&json!({
+            "blueprint": { "code": "sorted_item" },
+            "query": "",
+            "filters": [],
+            "sort": { "field": "publication_status", "direction": "asc", "context_code": "no-channel" },
+            "page": { "size": 10 },
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(refused.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        refused.json::<Value>().await.unwrap()["error"]["code"],
+        "invalid_search_sort"
+    );
+    server.abort();
+}

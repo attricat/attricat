@@ -320,6 +320,7 @@ fn search_scope_error(error: SearchScopeError) -> ApiError {
         SearchScopeError::UnknownBlueprint => ApiError::not_found("blueprint"),
         SearchScopeError::Invalid { message, .. } => ApiError::invalid_input(message),
         SearchScopeError::Query { error, .. } => map_search_error(error),
+        SearchScopeError::InvalidSort(message) => ApiError::invalid_search_sort(message),
         SearchScopeError::RelationshipSortRequiresSingleVersion => {
             ApiError::relationship_sort_requires_single_version()
         }

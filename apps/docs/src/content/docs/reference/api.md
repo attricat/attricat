@@ -60,6 +60,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `record_locked` | 409 | The record's status locks the content being changed, or the record cannot be deleted while it is locked. |
 | `status_not_locked` | 409 | An unlock named a status that does not lock the record. |
 | `record_id_taken` | 409 | A batch `create` chose an `record_id` that already exists. |
+| `invalid_search_sort` | 422 | The search can't be sorted that way, for example by a column or publication channel that no longer exists. Drop the sort and search again. |
 | `relationship_path_sort_requires_single_result_version` | 422 | Sorting by a related value across several blueprint revisions. |
 | `file_processing` | 409 | The file is not ready to download yet. |
 | `approval_already_decided` | 409 | An agent tool call was already approved or rejected. |

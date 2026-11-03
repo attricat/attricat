@@ -60,6 +60,7 @@
     "invalid_login_identifier",
     "invalid_range",
     "invalid_rule_definition",
+    "invalid_search_sort",
     "invalid_system_metadata",
     "invalid_system_tags",
     "invalid_workflow_definition",

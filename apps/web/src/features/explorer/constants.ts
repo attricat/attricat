@@ -54,6 +54,9 @@ export const explorerSortFields = {
   publicationStatus: 'publication_status',
 } as const;
 
+export const invalidSearchSortErrorCode =
+  'invalid_search_sort' satisfies ApiErrorCode;
+
 export const relationshipPathSortErrorCode =
   'relationship_path_sort_requires_single_result_version' satisfies ApiErrorCode;
 

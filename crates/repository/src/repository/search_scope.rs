@@ -37,6 +37,10 @@ pub enum SearchScopeError {
         message: String,
         blueprint: Option<Box<BlueprintWithAttributes>>,
     },
+    /// The sort can't apply to this search, which a client can't always tell
+    /// beforehand: its column or channel may be gone from a saved link.
+    #[error("{0}")]
+    InvalidSort(String),
     /// A related-value sort over every version matched records of several
     /// versions, whose relationship paths may differ.
     #[error("related-value sorting requires results from one blueprint version")]
@@ -49,6 +53,10 @@ pub enum SearchScopeError {
     },
     #[error(transparent)]
     Repository(#[from] RepositoryError),
+}
+
+fn invalid_sort(message: impl Into<String>) -> SearchScopeError {
+    SearchScopeError::InvalidSort(message.into())
 }
 
 fn invalid(message: impl Into<String>) -> SearchScopeError {
@@ -469,12 +477,14 @@ impl AttricatRepository {
             "asc" => false,
             "desc" => true,
             _ => {
-                return Err(invalid("sort.direction must be asc or desc".to_owned()));
+                return Err(invalid_sort(
+                    "sort.direction must be asc or desc".to_owned(),
+                ));
             }
         };
         if sort.field == "publication_status" {
             let code = sort.context_code.as_deref().ok_or_else(|| {
-                invalid("sort.context_code is required for publication_status".to_owned())
+                invalid_sort("sort.context_code is required for publication_status".to_owned())
             })?;
             let channel = self
                 .list_publication_channels()
@@ -482,7 +492,9 @@ impl AttricatRepository {
                 .into_iter()
                 .find(|channel| channel.context_code == code && channel.enabled)
                 .ok_or_else(|| {
-                    invalid("sort.context_code must be an enabled publication channel".to_owned())
+                    invalid_sort(
+                        "sort.context_code must be an enabled publication channel".to_owned(),
+                    )
                 })?;
             return Ok(Some(RecordSearchSort {
                 field: sort.field.clone(),
@@ -498,13 +510,13 @@ impl AttricatRepository {
             }));
         }
         if sort.context_code.is_some() {
-            return Err(invalid(
+            return Err(invalid_sort(
                 "sort.context_code is only valid for publication_status".to_owned(),
             ));
         }
         let system_tag = system_tag_sort(&sort.field);
         if sort.field.starts_with(SYSTEM_TAG_SORT_PREFIX) && system_tag.is_none() {
-            return Err(invalid(format!(
+            return Err(invalid_sort(format!(
                 "sort.field {SYSTEM_TAG_SORT_PREFIX} must name a tag of 1-{MAX_TAG_LENGTH} bytes"
             )));
         }
@@ -536,7 +548,7 @@ impl AttricatRepository {
             })
             .unwrap_or_default();
         if !columns.contains(&sort.field.as_str()) {
-            return Err(invalid(format!(
+            return Err(invalid_sort(format!(
                 "sort.field must be a configured table column, blueprint_version, system_tag:<tag> or publication_status; {} table columns: {}",
                 blueprint.blueprint.code,
                 if columns.is_empty() {
@@ -548,7 +560,7 @@ impl AttricatRepository {
         }
         let parts: Vec<_> = sort.field.split('.').collect();
         if parts.is_empty() || parts.len() > MAX_RELATIONSHIP_HOPS + 1 {
-            return Err(invalid(
+            return Err(invalid_sort(
                 "sort.field may contain at most three relationship hops and a scalar leaf"
                     .to_owned(),
             ));
@@ -563,16 +575,16 @@ impl AttricatRepository {
                     attribute.code == *relationship_name
                         && attribute.value_type == ValueType::Relationship
                 })
-                .ok_or_else(|| invalid("sort.field relationship is invalid".to_owned()))?;
+                .ok_or_else(|| invalid_sort("sort.field relationship is invalid".to_owned()))?;
             if relationship.cardinality != Some(Cardinality::One) {
-                return Err(invalid(
+                return Err(invalid_sort(
                     "sort.field relationship path must be single-valued".to_owned(),
                 ));
             }
             relationship_path.push(relationship.code.clone());
             current = self
                 .get_blueprint_by_code(relationship.target_blueprint_code.as_deref().ok_or_else(
-                    || invalid("sort.field relationship has no target blueprint".to_owned()),
+                    || invalid_sort("sort.field relationship has no target blueprint".to_owned()),
                 )?)
                 .await?
                 .ok_or(RepositoryError::NotFound("target blueprint"))?;
@@ -584,10 +596,10 @@ impl AttricatRepository {
             .find(|attribute| attribute.code == leaf_field)
             .map(|attribute| attribute.value_type)
             .ok_or_else(|| {
-                invalid("sort.field must resolve to a scalar table column".to_owned())
+                invalid_sort("sort.field must resolve to a scalar table column".to_owned())
             })?;
         if !value_type.is_scalar() {
-            return Err(invalid(
+            return Err(invalid_sort(
                 "sort.field must resolve to a scalar table column".to_owned(),
             ));
         }

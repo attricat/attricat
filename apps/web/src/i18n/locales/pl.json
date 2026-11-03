@@ -120,6 +120,7 @@
     "invalid_code": "Kody mogą zawierać tylko litery, cyfry, łączniki i podkreślenia.",
     "invalid_comment": "Komentarz musi mieć od 1 do {{max}} znaków.",
     "invalid_credentials": "Nieprawidłowy adres e-mail lub hasło.",
+    "invalid_search_sort": "Tej listy nie można tak posortować.",
     "invalid_display_name": "Nazwa wyświetlana ma od {{min}} do {{max}} liter, cyfr i spacji i nie zaczyna się ani nie kończy spacją.",
     "invalid_email": "Podaj prawidłowy adres e-mail.",
     "invalid_file": "Plik jest nieprawidłowy: {{message}}",
