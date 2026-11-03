@@ -533,6 +533,15 @@ pub(super) async fn apply_plan(
     ScopedRepository(repository): ScopedRepository,
     ApiPath(plan_id): ApiPath<Uuid>,
 ) -> Result<Response, ApiError> {
+    // Demo visitors can't install extensions directly, so a pack can't either.
+    if state.demo_mode
+        && !repository
+            .solution_pack_extension_installs(plan_id)
+            .await?
+            .is_empty()
+    {
+        return Err(ApiError::disabled_in_demo());
+    }
     // Extensions come first: reviewed steps may reference their contributions.
     install_planned_extensions(
         &repository,

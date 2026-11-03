@@ -5033,6 +5033,49 @@ async fn start_server_with_official_extensions(
 }
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
+async fn demo_mode_refuses_a_pack_that_installs_an_extension(pool: PgPool) {
+    let official = std::sync::Arc::new(FakeOfficialExtensions::default());
+    official.publish(
+        "acme.shopify",
+        "v2.2.0",
+        official_extension_archive("acme.shopify", "2.2.0", "official release"),
+    );
+    let releases = official.clone();
+    let (base_url, server) = start_server_with_config(pool.clone(), move |state| {
+        state.official_extension_releases = releases;
+        state.demo_mode = true;
+    })
+    .await;
+    let client = authenticated_client();
+    let plan: Value = create_plan(
+        &client,
+        &base_url,
+        archive_with_extension_requirement(true),
+        "demoinstall",
+    )
+    .await
+    .json()
+    .await
+    .unwrap();
+
+    let response = apply_plan(&client, &base_url, plan["id"].as_str().unwrap()).await;
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    assert_eq!(
+        response.json::<Value>().await.unwrap()["error"]["code"],
+        "disabled_in_demo"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM extension_installations")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        0
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn pack_installs_configures_grants_and_enables_an_official_extension(pool: PgPool) {
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let (base_url, server, official) = start_server_with_official_extensions(pool.clone()).await;
