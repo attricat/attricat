@@ -11,13 +11,16 @@ x-app: &app
   # The certificate authority verify-deployment.sh creates for the identity provider.
   volumes:
     - ./ci-tls/ca.pem:/run/idp-ca.pem:ro
+    - /var/tmp/attricat
   read_only: true
   tmpfs:
     - /tmp:size=256m,mode=1777
+  stop_grace_period: 45s
   security_opt:
     - no-new-privileges:true
 
 x-environment: &environment
+  TMPDIR: /var/tmp/attricat
   ATTRICAT_AUTO_MIGRATE: "false"
   ATTRICAT_BOOTSTRAP_OWNER_EMAIL: owner@example.test
   SESSION_COOKIE_SECURE: "false"
