@@ -724,7 +724,8 @@ impl AttricatRepository {
                       approver.display_name AS approved_by_display_name,
                       approver_avatar.id AS approved_by_avatar_file_id,
                       c.attribute_id, c.attribute_code, c.context_id, c.context_code,
-                      c.change_kind, c.before_value, c.after_value
+                      c.change_kind, c.before_value, c.after_value,
+                      ARRAY(SELECT f.id FROM attributes a CROSS JOIN LATERAL (VALUES (c.before_value), (c.after_value)) x(v) CROSS JOIN LATERAL jsonb_array_elements_text(CASE WHEN a.value_type = 'file' AND jsonb_typeof(x.v) = 'array' THEN x.v ELSE '[]'::jsonb END) e(id) JOIN files f ON f.id = e.id::uuid AND f.workspace_id = c.workspace_id AND f.deleted_at IS NOT NULL WHERE a.id = c.attribute_id) AS deleted_file_ids
                FROM audit_event_changes c
                JOIN audit_events e ON e.id = c.audit_event_id
                LEFT JOIN users actor ON actor.id = e.actor_user_id
@@ -755,7 +756,8 @@ impl AttricatRepository {
                       approver.display_name AS approved_by_display_name,
                       approver_avatar.id AS approved_by_avatar_file_id,
                       c.attribute_id, c.attribute_code, c.context_id, c.context_code,
-                      c.change_kind, c.before_value, c.after_value
+                      c.change_kind, c.before_value, c.after_value,
+                      ARRAY(SELECT f.id FROM attributes a CROSS JOIN LATERAL (VALUES (c.before_value), (c.after_value)) x(v) CROSS JOIN LATERAL jsonb_array_elements_text(CASE WHEN a.value_type = 'file' AND jsonb_typeof(x.v) = 'array' THEN x.v ELSE '[]'::jsonb END) e(id) JOIN files f ON f.id = e.id::uuid AND f.workspace_id = c.workspace_id AND f.deleted_at IS NOT NULL WHERE a.id = c.attribute_id) AS deleted_file_ids
                FROM audit_event_changes c
                JOIN audit_events e ON e.id = c.audit_event_id
                LEFT JOIN users actor ON actor.id = e.actor_user_id

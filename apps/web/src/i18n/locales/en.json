@@ -744,6 +744,8 @@
     "blueprintLabel": "Blueprint: {{name}}",
     "blueprintOption": "{{name}} ({{code}})",
     "reusableAttributeOption": "{{qualifiedCode}} · {{name}} v{{version}}",
+    "changeFilesDeleted_one": "This file is no longer stored.",
+    "changeFilesDeleted_other": "{{count}} of these files are no longer stored.",
     "changeKind": {
       "set": "set",
       "replace": "changed",

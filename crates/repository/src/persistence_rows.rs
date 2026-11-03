@@ -317,6 +317,7 @@ domain_row!(RecordAuditChange {
     change_kind,
     before_value,
     after_value,
+    deleted_file_ids,
 });
 domain_row!(FileVariantMetadata {
     kind,

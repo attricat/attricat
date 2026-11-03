@@ -41,6 +41,7 @@ const change = (code: string) => ({
   change_kind: 'replace' as const,
   before_value: null,
   after_value: code,
+  deleted_file_ids: [] as string[],
 });
 
 beforeEach(() => {
@@ -109,4 +110,24 @@ it('shows changed values as the record does, and removed attributes as JSON', as
   const size = await screen.findByText('Size', { selector: 'strong' });
   expect(size.closest('div')?.textContent).toContain('Small→Large');
   expect(screen.getByText('"old"')).toBeTruthy();
+});
+
+it('says when a file a change names is no longer stored', async () => {
+  vi.mocked(getRecordChanges).mockResolvedValue({
+    items: [
+      {
+        ...change('manual'),
+        deleted_file_ids: ['00000000-0000-4000-8000-000000000002'],
+      },
+    ],
+    next_offset: null,
+  });
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <RecordChangesPage recordId="00000000-0000-4000-8000-000000000001" />
+    </QueryClientProvider>,
+  );
+  expect(
+    await screen.findByText('This file is no longer stored.'),
+  ).toBeTruthy();
 });

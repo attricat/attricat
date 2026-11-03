@@ -774,6 +774,10 @@
     "blueprintLabel": "Schemat: {{name}}",
     "blueprintOption": "{{name}} ({{code}})",
     "reusableAttributeOption": "{{qualifiedCode}} · {{name}} v{{version}}",
+    "changeFilesDeleted_one": "Ten plik nie jest już przechowywany.",
+    "changeFilesDeleted_few": "{{count}} z tych plików nie są już przechowywane.",
+    "changeFilesDeleted_many": "{{count}} z tych plików nie jest już przechowywanych.",
+    "changeFilesDeleted_other": "{{count}} z tych plików nie jest już przechowywane.",
     "changeKind": {
       "set": "ustawienie",
       "replace": "zastąpienie",

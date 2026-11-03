@@ -288,6 +288,9 @@ pub struct RecordAuditChange {
     pub change_kind: String,
     pub before_value: Option<Value>,
     pub after_value: Option<Value>,
+    /// Files this change names that are no longer stored. History doesn't keep
+    /// a file alive, so these IDs lead nowhere.
+    pub deleted_file_ids: Vec<Uuid>,
 }
 
 #[derive(Clone, Debug, Deserialize)]

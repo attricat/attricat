@@ -150,7 +150,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `GET` | `/records/{id}/values/current` | Bieżące wartości bezpośrednie i powiązania. |
 | `POST` | `/records/{id}/values` | Dołącza wartości. |
 | `POST` | `/records/{id}/relationships/replace`, `/remove` | Zastępuje lub usuwa cele relacji. |
-| `GET` | `/records/{id}/changes` | Historia zmian. Dodaj `limit` (od 1 do 50) i `offset`, aby stronicować. |
+| `GET` | `/records/{id}/changes` | Historia zmian. Dodaj `limit` (od 1 do 50) i `offset`, aby stronicować. Historia nie utrzymuje pliku: `deleted_file_ids` zmiany wskazuje wspomniane w niej pliki, które nie są już przechowywane. |
 | `GET` | `/records/{id}/values/history` | Historia wartości. Stronicowanie jak wyżej. |
 | `POST` | `/records/{id}/values/history/{history_id}/restore` | Przywraca wcześniejszą wartość. |
 | `POST` | `/v1/records/{id}/blueprint-migration/preview` | Sprawdza migrację do bieżącej wersji. Problem dotyczący zapisanej wartości zawiera jej `context_id`. |

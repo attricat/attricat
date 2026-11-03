@@ -139,6 +139,13 @@ export const RecordChangeEvent = ({
               </>
             )}
           </Typography>
+          {change.deleted_file_ids.length > 0 && (
+            <Typography color="text.secondary" variant="body2">
+              {t('records.changeFilesDeleted', {
+                count: change.deleted_file_ids.length,
+              })}
+            </Typography>
+          )}
         </Box>
       ))}
     </Paper>

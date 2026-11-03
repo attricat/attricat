@@ -150,7 +150,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `GET` | `/records/{id}/values/current` | Current direct values and links. |
 | `POST` | `/records/{id}/values` | Append values. |
 | `POST` | `/records/{id}/relationships/replace`, `/remove` | Replace or remove relationship targets. |
-| `GET` | `/records/{id}/changes` | Change history. Add `limit` (1 to 50) and `offset` for pages. |
+| `GET` | `/records/{id}/changes` | Change history. Add `limit` (1 to 50) and `offset` for pages. History doesn't keep a file alive: a change's `deleted_file_ids` names the files it mentions that are no longer stored. |
 | `GET` | `/records/{id}/values/history` | Value history. Same paging. |
 | `POST` | `/records/{id}/values/history/{history_id}/restore` | Restore an earlier value. |
 | `POST` | `/v1/records/{id}/blueprint-migration/preview` | Check migration to the current revision. An issue about a stored value carries that value's `context_id`. |

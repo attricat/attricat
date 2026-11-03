@@ -416,7 +416,10 @@ key. The S3 client honours the standard `HTTP_PROXY`, `HTTPS_PROXY`,
 set `NO_PROXY` to the S3 host when a proxy is configured for other traffic but
 must not carry object-store requests.
 
-Uploaded files are retained while referenced. Conversation uploads have a
+Uploaded files are retained while referenced. A record's value history doesn't
+count as a reference: once a file leaves its last value it is purged like any
+other, and `GET /records/{id}/changes` lists it in that change's
+`deleted_file_ids`. Conversation uploads have a
 15-minute pending-attachment window, so reconciliation does not delete them
 between the upload response and message creation. Attaching a file clears that
 window in the same transaction as its attachment record. Never-attached uploads

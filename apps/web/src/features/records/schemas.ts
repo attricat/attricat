@@ -323,6 +323,7 @@ const recordAuditChangeSchema = z.object({
     'relationship_remove',
     'restore',
   ]),
+  deleted_file_ids: z.array(uuidSchema).default([]),
   before_value: z.unknown().nullable(),
   after_value: z.unknown().nullable(),
 });

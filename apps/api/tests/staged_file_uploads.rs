@@ -717,3 +717,58 @@ async fn a_required_file_attribute_cannot_be_emptied(pool: PgPool) {
     assert_eq!(linked_files(&pool, record_id).await.len(), 1);
     server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn record_changes_say_when_a_file_is_no_longer_stored(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let blueprint = required_image_blueprint(&client, &base_url, "gone_image").await;
+    let image = stage_png(&client, &base_url, &blueprint, "image").await;
+    let record = expect_status(
+        create_with_files(
+            &client,
+            &base_url,
+            &blueprint,
+            json!([{"attribute_code": "image", "file_ids": [image]}]),
+        )
+        .await,
+        StatusCode::CREATED,
+    )
+    .await;
+    let record_id = record["id"].as_str().unwrap();
+    let file_id = Uuid::new_v4();
+    let gallery: Vec<_> = sqlx::query_scalar::<_, Uuid>(
+        "SELECT id FROM attributes WHERE code = 'gallery' AND blueprint_id = $1",
+    )
+    .bind(blueprint_id(&blueprint).parse::<Uuid>().unwrap())
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO files (id, workspace_id, original_filename, display_filename, mime_type, byte_size, sha256, original_key, status, deleted_at) VALUES ($1, $2, 'old.png', 'old.png', 'image/png', 7, $3, 'files/old.png', 'deleted', now())")
+        .bind(file_id)
+        .bind(bootstrap_workspace_id())
+        .bind("0".repeat(64))
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE audit_event_changes SET attribute_id = $1, attribute_code = 'gallery', after_value = $2 WHERE record_id = $3")
+        .bind(gallery[0])
+        .bind(json!([file_id]))
+        .bind(record_id.parse::<Uuid>().unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let changes = expect_status(
+        client
+            .get(format!("{base_url}/records/{record_id}/changes"))
+            .send()
+            .await
+            .unwrap(),
+        StatusCode::OK,
+    )
+    .await;
+
+    assert_eq!(changes[0]["deleted_file_ids"], json!([file_id]));
+    server.abort();
+}
