@@ -1,5 +1,6 @@
 import { Box } from '@mui/material';
 import {
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -41,6 +42,13 @@ type Props = {
   /** Discards the field's unsaved value, including a rejected pending one. */
   onRevert: () => void;
   /**
+   * A value kept earlier because it could not be saved. The field reopens on
+   * it, so the value outlives a view tab or accordion hiding the field.
+   */
+  heldDraft?: string;
+  /** Called when a value starts or stops being kept as a local edit. */
+  onHeldDraftChange?: (draft: string | undefined) => void;
+  /**
    * Shows a set value at rest until `onEdit` opens the editor, which closes
    * again once focus leaves it or Escape is pressed. The editor stays open
    * while its value is blank or not committed; Escape returns focus to the
@@ -68,11 +76,15 @@ export const InlineFieldEditor = ({
   validate,
   onCommit,
   onRevert,
+  heldDraft,
+  onHeldDraftChange,
   renderAtRest,
   children,
 }: Props) => {
-  const [draft, setDraft] = useState<string | null>(null);
-  const [error, setError] = useState<string>();
+  const [draft, setDraft] = useState<string | null>(heldDraft ?? null);
+  const [error, setError] = useState(() =>
+    heldDraft === undefined ? undefined : validate?.(heldDraft),
+  );
   const [focused, setFocused] = useState(false);
   const [baseline, setBaseline] = useState(value);
   // A value set from outside (Smart Fill, a resolved conflict) replaces an
@@ -87,6 +99,14 @@ export const InlineFieldEditor = ({
   const shown = draft ?? value;
   // A reload or closed tab never blurs the field, so typing is not committed.
   useBeforeUnloadWarning(draft !== null && draft !== value);
+  const held = draft !== null && error !== undefined ? draft : undefined;
+  // Only this editor's own changes: a field can be placed twice in a view.
+  const reportedHeld = useRef(heldDraft);
+  useEffect(() => {
+    if (held === reportedHeld.current) return;
+    reportedHeld.current = held;
+    onHeldDraftChange?.(held);
+  }, [held, onHeldDraftChange]);
   const [editing, setEditing] = useState(false);
   const container = useRef<HTMLDivElement>(null);
   const returnFocus = useRef(false);

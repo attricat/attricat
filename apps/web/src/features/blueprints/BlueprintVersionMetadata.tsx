@@ -10,6 +10,8 @@ import {
   Typography,
 } from '@mui/material';
 import { useState } from 'react';
+import { z } from 'zod';
+import { parseStrictYaml } from '../../components/yamlSyntax';
 import { JsonInline } from '../../components/JsonValue';
 import { useTabAccessibility } from '../../components/useTabAccessibility';
 import { useTranslation } from 'react-i18next';
@@ -165,12 +167,14 @@ export const BlueprintVersionMetadata = ({
   );
 };
 
+const publicationPolicySchema = z.looseObject({
+  publication: z.looseObject({ retain_on_edit_roles: z.array(z.string()) }),
+});
+
 const publicationRoles = (definition: string) => {
-  const section = definition
-    .split(/^\[publication\]\s*$/m)[1]
-    ?.split(/^\[[^\]]+\]\s*$/m)[0];
-  const roles = section?.match(/retain_on_edit_roles\s*=\s*\[([^\]]*)\]/)?.[1];
-  return roles
-    ? [...roles.matchAll(/["']([^"']+)["']/g)].map((match) => match[1])
+  const parsed = parseStrictYaml(definition);
+  return 'data' in parsed
+    ? (publicationPolicySchema.safeParse(parsed.data).data?.publication
+        .retain_on_edit_roles ?? [])
     : [];
 };

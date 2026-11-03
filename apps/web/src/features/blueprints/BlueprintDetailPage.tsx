@@ -88,11 +88,10 @@ export const BlueprintDetailPage = ({
   const blueprint = revisionItems[0];
   // Metadata describes the version records use: the latest published one,
   // or the latest draft before anything is published.
-  const metadataVersion = (
-    revisionItems.find(
-      (revision) => revision.status === revisionStatuses.published,
-    ) ?? blueprint
-  )?.version;
+  const publishedRevision = revisionItems.find(
+    (revision) => revision.status === revisionStatuses.published,
+  );
+  const metadataVersion = (publishedRevision ?? blueprint)?.version;
   const metadata = useQuery(
     blueprintRevisionOptions(blueprintId, metadataVersion),
   );
@@ -119,6 +118,7 @@ export const BlueprintDetailPage = ({
         <>
           <BlueprintDetailHeader
             blueprint={blueprint}
+            hasPublishedRevision={publishedRevision !== undefined}
             canStartSafeMigration={migration.canStart}
             migrationActive={migration.currentVersionMigrationActive}
             migrationStatusKnown={migration.migrationBatches.isSuccess}
@@ -223,12 +223,16 @@ export const BlueprintDetailPage = ({
             </Box>
           )}
           <PublishBlueprintRecordsDialog
-            blueprint={blueprint}
+            // Records are on published revisions, not on a newer draft.
+            blueprint={publishedRevision ?? blueprint}
             error={publishRecords.error}
             isPending={publishRecords.isPending}
             onClose={closeDialog}
             onConfirm={(contextId) =>
-              publishRecords.mutate({ version: blueprint.version, contextId })
+              publishRecords.mutate({
+                version: (publishedRevision ?? blueprint).version,
+                contextId,
+              })
             }
             open={openDialog === 'publishRecords'}
           />

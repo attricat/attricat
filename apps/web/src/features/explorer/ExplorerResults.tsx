@@ -1,4 +1,7 @@
-import { Box } from '@mui/material';
+import { Box, Button } from '@mui/material';
+import { useTranslation } from 'react-i18next';
+import { ApiRequestError } from '../../api/request';
+import { isClientErrorStatus } from '../../api/httpStatus';
 import { useMemo, useState } from 'react';
 import { useCan } from '../auth/useCan';
 import type { RecordItem } from '../records/api';
@@ -23,6 +26,7 @@ type Props = {
   onFilterSystemTag: (tag: string) => void;
   onOpenPanel?: OpenRecordPanel;
   onShowAllVersions: () => void;
+  onClearSort: () => void;
   onSortChange: (field: string) => void;
   search: ExplorerSearch;
 };
@@ -33,9 +37,11 @@ export const ExplorerResults = ({
   onFilterSystemTag,
   onOpenPanel,
   onShowAllVersions,
+  onClearSort,
   onSortChange,
   search,
 }: Props) => {
+  const { t } = useTranslation();
   const {
     contextCode,
     contextCodes,
@@ -88,7 +94,21 @@ export const ExplorerResults = ({
 
   return (
     <>
-      <ApiErrorAlert error={results.error} sx={{ mt: 3 }} />
+      <ApiErrorAlert
+        action={
+          // A sort can stop applying when the context or revision changes,
+          // and the headers that would change it go with the table.
+          search.sort &&
+          results.error instanceof ApiRequestError &&
+          isClientErrorStatus(results.error.status) && (
+            <Button color="inherit" onClick={onClearSort} size="small">
+              {t('explorer.clearSort')}
+            </Button>
+          )
+        }
+        error={results.error}
+        sx={{ mt: 3 }}
+      />
       {results.data && (
         <Box sx={{ mt: 3 }}>
           {!search.allVersions &&

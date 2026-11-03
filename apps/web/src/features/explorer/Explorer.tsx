@@ -126,6 +126,9 @@ export const Explorer = ({ search: urlSearch, savedView }: Props) => {
     (selectedBlueprint.data &&
       lexiconText(selectedBlueprint.data.blueprint.name)) ??
     search.blueprint;
+  // A hierarchy selection waits for its context, which may never resolve.
+  const searchBlockedOnContext =
+    results.isPending && results.fetchStatus === 'idle' && !contexts.isPending;
   // Only a first load shows the spinner: a new blueprint, or results still
   // waiting to run. Background refetches (such as on window focus) and
   // search changes keep the table in place and show its own progress bar.
@@ -134,7 +137,7 @@ export const Explorer = ({ search: urlSearch, savedView }: Props) => {
     !blueprintMissing &&
     (blueprints.isLoading ||
       selectedBlueprint.isLoading ||
-      (canSearch && results.isPending));
+      (canSearch && results.isPending && !searchBlockedOnContext));
   const showInPanel = (record: string | undefined) =>
     void navigate({
       to: '/',
@@ -172,6 +175,10 @@ export const Explorer = ({ search: urlSearch, savedView }: Props) => {
           <ExplorerLoadErrors
             blueprintMissing={blueprintMissing}
             blueprints={blueprints}
+            contextMissing={
+              canSearch && searchBlockedOnContext && !contexts.error
+            }
+            contexts={contexts}
             selectedBlueprint={selectedBlueprint}
           />
           <ExplorerSearchForm
@@ -286,6 +293,7 @@ export const Explorer = ({ search: urlSearch, savedView }: Props) => {
                   onFilterSystemTag={actions.addSystemTag}
                   onOpenPanel={isWideDesktop ? openPanel : undefined}
                   onShowAllVersions={actions.showAllVersions}
+                  onClearSort={actions.clearSort}
                   onSortChange={actions.toggleSort}
                   search={search}
                 />

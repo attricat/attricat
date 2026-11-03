@@ -1,6 +1,7 @@
 import { QueryClient } from '@tanstack/react-query';
-import { expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
+  isNewerRelease,
   installedExtensionName,
   invalidateExtensions,
 } from './extensionPageUtils';
@@ -38,4 +39,19 @@ it('names an installed extension by its manifest, or by its ID', () => {
     expect(installedExtensionName({ extension_id, manifest })).toBe(
       extension_id,
     );
+});
+
+describe('isNewerRelease', () => {
+  it.each([
+    ['v1.3.0', '1.2.9', true],
+    ['1.10.0', '1.9.0', true],
+    ['v1.2.0', '1.2.0', false],
+    ['v1.1.9', '1.2.0', false],
+    ['1.2.0', '1.2.0-beta.1', true],
+    ['1.2.0-beta.1', '1.2.0', false],
+    ['1.2.0-beta.10', '1.2.0-beta.9', true],
+    ['nightly', '1.2.0', true],
+  ])('%s after %s: %s', (tag, installed, newer) => {
+    expect(isNewerRelease(tag, installed)).toBe(newer);
+  });
 });

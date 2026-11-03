@@ -12,7 +12,13 @@ import { authQueryKeys } from '../features/auth/queryKeys';
 let pathname = '/attricat';
 let isDesktop = true;
 
-const { currentSessionMock, logoutMock, navigateMock } = vi.hoisted(() => ({
+const {
+  currentSessionMock,
+  hasUnsavedChangesGuardMock,
+  logoutMock,
+  navigateMock,
+} = vi.hoisted(() => ({
+  hasUnsavedChangesGuardMock: vi.fn(() => false),
   currentSessionMock: vi.fn(),
   logoutMock: vi.fn(),
   navigateMock: vi.fn(),
@@ -33,6 +39,9 @@ vi.mock('@mui/material', async (importOriginal) => ({
   useMediaQuery: () => isDesktop,
 }));
 
+vi.mock('../features/drafts/UnsavedChangesGuard', () => ({
+  hasUnsavedChangesGuard: hasUnsavedChangesGuardMock,
+}));
 vi.mock('../features/auth/api', () => ({
   currentSession: currentSessionMock,
   logout: logoutMock,
@@ -239,8 +248,33 @@ describe('AppLayout sign out', () => {
     await user.click(await screen.findByRole('button', { name: 'Sign out' }));
 
     await waitFor(() =>
-      expect(navigateMock).toHaveBeenCalledWith({ to: '/login' }),
+      expect(navigateMock).toHaveBeenCalledWith({
+        to: '/login',
+        ignoreBlocker: true,
+      }),
     );
+  });
+
+  it('asks before signing out over unsaved changes, and stays signed in on keep', async () => {
+    currentSessionMock.mockResolvedValue(session);
+    logoutMock.mockResolvedValue(undefined);
+    hasUnsavedChangesGuardMock.mockReturnValue(true);
+    renderAppLayout();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Sign out' }));
+    await screen.findByRole('dialog');
+    expect(logoutMock).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Keep editing' }));
+    expect(logoutMock).not.toHaveBeenCalled();
+
+    await user.click(await screen.findByRole('button', { name: 'Sign out' }));
+    await user.click(
+      await screen.findByRole('button', { name: 'Discard and sign out' }),
+    );
+    await waitFor(() => expect(logoutMock).toHaveBeenCalledOnce());
+    hasUnsavedChangesGuardMock.mockReturnValue(false);
   });
 
   it('keeps the session and provides a retry when sign out fails, then clears it after a successful retry', async () => {
@@ -263,6 +297,9 @@ describe('AppLayout sign out', () => {
     await user.click(screen.getByRole('button', { name: 'Retry sign out' }));
 
     await waitFor(() => expect(clear).toHaveBeenCalledOnce());
-    expect(navigateMock).toHaveBeenCalledWith({ to: '/login' });
+    expect(navigateMock).toHaveBeenCalledWith({
+      to: '/login',
+      ignoreBlocker: true,
+    });
   });
 });

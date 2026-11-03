@@ -28,6 +28,15 @@ export const retryableExportStatuses: readonly ExportStatus[] = [
   'pending',
 ];
 
+/** Statuses a background push will still move on from. */
+export const activeExportStatuses: readonly ExportStatus[] = [
+  'pending',
+  'retrying',
+];
+
+/** How often status views refresh while a push is still running. */
+export const exportStatusPollMilliseconds = 5_000;
+
 export const connectionGrantTypes = {
   clientCredentials: 'client_credentials',
   refreshToken: 'refresh_token',

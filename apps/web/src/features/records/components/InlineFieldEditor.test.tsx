@@ -141,4 +141,43 @@ describe('InlineFieldEditor', () => {
     await user.click(screen.getByRole('option', { name: 'B' }));
     expect(onCommit).toHaveBeenCalledExactlyOnceWith('b');
   });
+
+  it('reports a value it keeps and reopens on it', async () => {
+    const onHeldDraftChange = vi.fn();
+    const validate = () => 'Too long';
+    const editor = (heldDraft?: string) => (
+      <InlineFieldEditor
+        heldDraft={heldDraft}
+        onCommit={vi.fn()}
+        onHeldDraftChange={onHeldDraftChange}
+        onRevert={vi.fn()}
+        validate={validate}
+        value=""
+      >
+        {({ value, error, onChange }) => (
+          <TextField
+            helperText={error}
+            label="Title"
+            onChange={(event) => onChange(event.target.value)}
+            value={value}
+          />
+        )}
+      </InlineFieldEditor>
+    );
+    const user = userEvent.setup();
+    const { unmount } = render(editor());
+
+    await user.type(screen.getByRole('textbox', { name: 'Title' }), 'abc');
+    expect(onHeldDraftChange).not.toHaveBeenCalled();
+    await user.tab();
+    expect(onHeldDraftChange).toHaveBeenLastCalledWith('abc');
+
+    unmount();
+    render(editor('abc'));
+    expect(screen.getByRole('textbox', { name: 'Title' })).toHaveProperty(
+      'value',
+      'abc',
+    );
+    expect(screen.getByText('Too long')).toBeTruthy();
+  });
 });

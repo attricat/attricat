@@ -107,6 +107,21 @@ describe('ExtensionConnectionsSection', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
+  it('shows what a failed action changed on the server', async () => {
+    vi.mocked(listConnections)
+      .mockResolvedValueOnce([connection])
+      .mockResolvedValue([{ ...connection, status: 'failed' }]);
+    vi.mocked(connectionAction).mockRejectedValue(
+      new ApiRequestError(502, 'Provider refused', 'connection_failed'),
+    );
+    const user = userEvent.setup();
+    renderSection();
+
+    await user.click(await screen.findByRole('button', { name: 'Test' }));
+    await waitFor(() => expect(listConnections).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText('Failed')).toBeTruthy();
+  });
+
   it('disables the row while a secret is being replaced', async () => {
     vi.mocked(listConnections).mockResolvedValue([connection]);
     let finish!: (value: ExtensionConnection) => void;

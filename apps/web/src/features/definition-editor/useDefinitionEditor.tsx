@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { z } from 'zod';
 import type { DraftEditor } from '../drafts/constants';
 import { DraftRestoreDialog } from '../drafts/DraftRestoreDialog';
 import { definitionDraftSchema } from '../drafts/schemas';
@@ -17,8 +18,9 @@ type PendingUnsavedAction =
  * revision of `source`: the edited text, its unsaved draft, and the
  * confirmations before a template or Cancel would drop changes.
  */
-export const useDefinitionEditor = ({
+export const useDefinitionEditor = <Scope = never,>({
   draftEditor,
+  draftScope,
   draftResource,
   onLeave,
   ready,
@@ -32,6 +34,15 @@ export const useDefinitionEditor = ({
    */
   templatesReady?: boolean;
   draftEditor: DraftEditor;
+  /**
+   * What else the definition depends on, kept in its draft and given back on
+   * restore. Keep `schema` referentially stable.
+   */
+  draftScope?: {
+    schema: z.ZodType<Scope>;
+    value: Scope;
+    onRestore: (scope: Scope) => void;
+  };
   /** The revised resource; empty when writing a new definition. */
   draftResource: readonly (string | number)[];
   onLeave: () => void;
@@ -49,14 +60,28 @@ export const useDefinitionEditor = ({
   const initialDefinition = source ?? templates[templateIndex].definition;
   const definition = editedDefinition ?? initialDefinition;
   const isDirty = definition !== initialDefinition;
+  const scopeSchema = draftScope?.schema;
+  const scopeValue = draftScope?.value;
+  const draftSchema = useMemo(
+    () =>
+      scopeSchema
+        ? z.object({ definition: definitionDraftSchema, scope: scopeSchema })
+        : definitionDraftSchema,
+    [scopeSchema],
+  ) as z.ZodType<string | { definition: string; scope: Scope }>;
+  const draftValue = useMemo(
+    () =>
+      scopeSchema ? { definition, scope: scopeValue as Scope } : definition,
+    [definition, scopeSchema, scopeValue],
+  );
   const draft = useEditorDraft({
     dirty: isDirty,
     editor: draftEditor,
     ready,
     resource: draftResource,
-    schema: definitionDraftSchema,
+    schema: draftSchema,
     source: source ?? null,
-    value: definition,
+    value: draftValue,
   });
 
   const applyTemplate = (index: number) => {
@@ -110,7 +135,11 @@ export const useDefinitionEditor = ({
           onRestore={() => {
             const restored = draft.restore();
             if (restored === undefined) return;
-            setEditedDefinition(restored);
+            if (typeof restored === 'string') setEditedDefinition(restored);
+            else {
+              setEditedDefinition(restored.definition);
+              draftScope?.onRestore(restored.scope);
+            }
             setTemplateDialogOpen(false);
           }}
         />

@@ -93,6 +93,7 @@ export const useExplorerSearchActions = (
         ),
       }),
     changeContext: (context: string) => go({ ...search, context }),
+    clearSort: () => go({ ...search, sort: undefined }),
     changeBrowseBy: (browseBy: BrowseBy) => go({ ...search, browseBy }),
     selectBlueprint: (blueprint: string | undefined) =>
       go({

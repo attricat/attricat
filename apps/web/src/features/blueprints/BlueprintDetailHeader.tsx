@@ -21,6 +21,7 @@ export const BlueprintDetailHeader = ({
   migrationStatusKnown,
   onMigrate,
   onPublish,
+  hasPublishedRevision,
   onPublishRecords,
 }: {
   blueprint: Blueprint;
@@ -29,6 +30,8 @@ export const BlueprintDetailHeader = ({
   migrationStatusKnown: boolean;
   onMigrate: () => void;
   onPublish: () => void;
+  /** Whether a revision records can be on exists, even under a newer draft. */
+  hasPublishedRevision: boolean;
   onPublishRecords: () => void;
 }) => {
   const { t } = useTranslation();
@@ -75,16 +78,15 @@ export const BlueprintDetailHeader = ({
                 {t('blueprints.publish')}
               </Button>
             )}
-            {canPublishRecords &&
-              blueprint.status === revisionStatuses.published && (
-                <Button
-                  onClick={onPublishRecords}
-                  startIcon={<SendIcon />}
-                  variant="outlined"
-                >
-                  {t('blueprints.publishRecords')}
-                </Button>
-              )}
+            {canPublishRecords && hasPublishedRevision && (
+              <Button
+                onClick={onPublishRecords}
+                startIcon={<SendIcon />}
+                variant="outlined"
+              >
+                {t('blueprints.publishRecords')}
+              </Button>
+            )}
             {canPublish && canStartSafeMigration && (
               <Button
                 disabled={!migrationStatusKnown || migrationActive}

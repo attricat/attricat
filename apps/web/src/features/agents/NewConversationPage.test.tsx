@@ -44,7 +44,7 @@ describe('NewConversationPage', () => {
     );
     await user.click(screen.getByRole('button', { name: 'Send' }));
     await waitFor(() => expect(createConversation).toHaveBeenCalledOnce());
-    expect(message.hasAttribute('disabled')).toBe(true);
+    expect(message.hasAttribute('readonly')).toBe(true);
     expect(
       screen
         .getByRole('button', { name: 'Add files' })

@@ -8,16 +8,26 @@ type RetryableQuery = Pick<UseQueryResult, 'error' | 'isFetching' | 'refetch'>;
 type Props = {
   blueprintMissing: boolean;
   blueprints: RetryableQuery;
+  contextMissing: boolean;
+  contexts: RetryableQuery;
   selectedBlueprint: RetryableQuery;
 };
 
 export const ExplorerLoadErrors = ({
   blueprintMissing,
   blueprints,
+  contextMissing,
+  contexts,
   selectedBlueprint,
 }: Props) => {
   const { t } = useTranslation();
-  if (!blueprints.error && !selectedBlueprint.error && !blueprintMissing)
+  if (
+    !blueprints.error &&
+    !contexts.error &&
+    !selectedBlueprint.error &&
+    !blueprintMissing &&
+    !contextMissing
+  )
     return null;
   return (
     <Stack spacing={2} sx={{ mb: 2 }}>
@@ -31,6 +41,14 @@ export const ExplorerLoadErrors = ({
         isRetrying={selectedBlueprint.isFetching}
         onRetry={() => void selectedBlueprint.refetch()}
       />
+      <QueryErrorNotice
+        error={contexts.error}
+        isRetrying={contexts.isFetching}
+        onRetry={() => void contexts.refetch()}
+      />
+      {contextMissing && (
+        <Alert severity="error">{t('explorer.contextNotFound')}</Alert>
+      )}
       {blueprintMissing && (
         <Alert severity="error">{t('explorer.blueprintNotFound')}</Alert>
       )}

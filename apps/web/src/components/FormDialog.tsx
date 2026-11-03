@@ -62,6 +62,8 @@ export const FormDialog = ({
         component="form"
         onSubmit={(event) => {
           event.preventDefault();
+          // React events cross portals, and a dialog can sit inside a form.
+          event.stopPropagation();
           onSubmit();
         }}
       >

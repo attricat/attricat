@@ -13,6 +13,9 @@ import {
   type RecordInlineFieldsHandle,
 } from './RecordInlineFields';
 
+vi.mock('./UnsavedFieldChangesGuard', () => ({
+  UnsavedFieldChangesGuard: () => <div>Leaving is guarded</div>,
+}));
 vi.mock('../api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api')>()),
   updateRecord: vi.fn(),
@@ -107,10 +110,12 @@ const renderFields = (
     recordSchema,
     viewContextId = contextId,
     onPendingChange,
+    onHeldDraftsChange,
   }: {
     recordSchema?: unknown;
     viewContextId?: string;
     onPendingChange?: (pending: boolean) => void;
+    onHeldDraftsChange?: (held: boolean) => void;
   } = {},
 ) => {
   const ref = createRef<RecordInlineFieldsHandle>();
@@ -122,6 +127,7 @@ const renderFields = (
         defaultContextId={contextId}
         recordId={recordId}
         form={form(canWrite, notes, recordSchema)}
+        onHeldDraftsChange={onHeldDraftsChange}
         onPendingChange={onPendingChange}
         ref={ref}
         resolvedValues={
@@ -310,6 +316,22 @@ describe('RecordInlineFields', () => {
 
     expect(await screen.findByText('A value is required.')).toBeTruthy();
     expect(updateRecord).not.toHaveBeenCalled();
+  });
+
+  it('guards leaving while a field keeps a value that cannot be saved', async () => {
+    const user = userEvent.setup();
+    const onHeldDraftsChange = vi.fn();
+    renderFields(true, undefined, {
+      recordSchema: { required: ['name'] },
+      onHeldDraftsChange,
+    });
+    expect(screen.queryByText('Leaving is guarded')).toBeNull();
+
+    await user.clear(screen.getByRole('textbox', { name: 'name' }));
+    await user.click(screen.getByRole('button', { name: 'Elsewhere' }));
+
+    expect(await screen.findByText('Leaving is guarded')).toBeTruthy();
+    expect(onHeldDraftsChange).toHaveBeenLastCalledWith(true);
   });
 
   it('saves a cleared required field outside the default context', async () => {

@@ -150,7 +150,8 @@ export const ExtensionBudgetsSection = ({
               budget={budget}
               canManage={canManage}
               extensionId={extensionId}
-              key={budget.host_permission_id}
+              // A release declaring another budget starts its inputs over.
+              key={`${budget.host_permission_id}:${budget.declared?.requests}:${budget.declared?.per_seconds}`}
             />
           ))}
         </TableBody>
