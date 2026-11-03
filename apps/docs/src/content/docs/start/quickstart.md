@@ -103,7 +103,7 @@ Try saving without a title: the record schema rejects it. Try a price of *-1*: t
 
 Open **Manage → Contexts → Create context**. Create `PL` under the root, with metadata `{"language": "pl"}`.
 
-Open the product and choose the `PL` tab under **Data**. Every field shows *Inherited from Default context*. Set `title` to *Lniana koszula* and leave the field to save it. `sku` is read-only here because it is managed in the default context.
+Open the product and choose the `PL` tab under **Data**. Every field shows *Inherited from default context*. Set `title` to *Lniana koszula* and leave the field to save it. `sku` is read-only here because it is managed in the default context.
 
 In the Explorer, open **Search scope**, the sliders button next to the blueprint selector, and switch **Context** between `default` and `PL` to see the title change.
 
@@ -120,7 +120,7 @@ Now change the product's price and leave the field. The publication is withdrawn
 With a few more products and categories:
 
 - search `categories.name:shirts`;
-- open the **categories** facet and pick *Apparel* to include everything under it;
+- in the **Browse by** panel, shown on wide screens, pick *Apparel* to include everything under it;
 - **Add filter** for `price` less than 50;
 - **Save search** to keep the result.
 

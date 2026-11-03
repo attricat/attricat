@@ -109,7 +109,7 @@ Jeśli pole tytułu jest puste, wyświetlany jest identyfikator rekordu. Nagłó
     - {source_blueprint: product, field: categories}
 ```
 
-Wymień kilka pozycji w `relationships`, aby połączyć źródła. Rekord pasujący do więcej niż jednego źródła pojawia się raz.
+`page_size` jest wymagane, ale łącze go nie używa.
 
 ## Hierarchie
 
@@ -156,6 +156,7 @@ Kolumny można sortować, gdy prowadzą do wartości skalarnej, a każda relacja
 ```yaml
 views:
   table:
+    type: table
     columns:
       - field: main_photo
         label: Image
@@ -169,6 +170,7 @@ Włączone rozszerzenie może deklarować komórki tabeli, np. kwotę ze stałą
 ```yaml
 views:
   table:
+    type: table
     columns:
       - field: price
         renderer:
@@ -235,6 +237,7 @@ views:
         field: description
         component: {id: attricat.markdown_display, version: 1}
   table:
+    type: table
     columns:
       - field: website
         renderer: {id: attricat.url_display, version: 1}
@@ -254,7 +257,7 @@ Kontrolki edycji walidują wartości tylko w aplikacji internetowej. Aby odrzuca
 
 ## Komponenty
 
-Każdy blok może wskazać komponent przez `component: {id, version, props}`. Identyfikator i wersja muszą odpowiadać zarejestrowanemu komponentowi, komponent musi obsługiwać dany blok i typ wartości, a `props` może zawierać tylko zadeklarowane przez niego opcje. Wbudowane komponenty są wymienione w [dokumentacji schematu](/pl/reference/blueprint/#odwołania-do-komponentów).
+Bloki `field`, `relationship_list`, `incoming_relationship_list`, `stack` i `table` mogą wskazać komponent przez `component: {id, version, props}`; blok `grid`, `section`, `tabs`, `accordion`, `heading`, `text` lub `divider`, który go wskazuje, jest odrzucany. Identyfikator i wersja muszą odpowiadać zarejestrowanemu komponentowi, komponent musi obsługiwać dany blok i typ wartości, a `props` może zawierać tylko zadeklarowane przez niego opcje. Wbudowane komponenty są wymienione w [dokumentacji schematu](/pl/reference/blueprint/#odwołania-do-komponentów).
 
 ## Panele rozszerzeń na stronach rekordów
 

@@ -24,7 +24,7 @@ acli blueprint create-version <blueprint-id> --file product-v2.yaml
 acli blueprint publish <blueprint-id> 2
 ```
 
-`code` musi pozostać taki sam. Wszystko inne może się zmienić.
+`code` musi pozostać taki sam, podobnie jak `reset` atrybutu generowanego. Wszystko inne może się zmienić.
 
 ## Nieaktualne rekordy
 

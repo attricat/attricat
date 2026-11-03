@@ -24,7 +24,7 @@ acli blueprint create-version <blueprint-id> --file product-v2.yaml
 acli blueprint publish <blueprint-id> 2
 ```
 
-The `code` must stay the same. Everything else can change.
+The `code` must stay the same, and so must the `reset` of a generated attribute. Everything else can change.
 
 ## Outdated records
 

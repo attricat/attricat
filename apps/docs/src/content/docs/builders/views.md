@@ -109,7 +109,7 @@ If the title field is empty, the record ID is shown. The heading is removed from
     - {source_blueprint: product, field: categories}
 ```
 
-List several `relationships` to combine sources. A record that matches more than one appears once.
+`page_size` is required, but the link does not use it.
 
 ## Hierarchies
 
@@ -156,6 +156,7 @@ Columns can be sorted when they resolve to a scalar and every relationship in th
 ```yaml
 views:
   table:
+    type: table
     columns:
       - field: main_photo
         label: Image
@@ -169,6 +170,7 @@ An enabled extension can declare table cells, such as an amount with a fixed num
 ```yaml
 views:
   table:
+    type: table
     columns:
       - field: price
         renderer:
@@ -235,6 +237,7 @@ views:
         field: description
         component: {id: attricat.markdown_display, version: 1}
   table:
+    type: table
     columns:
       - field: website
         renderer: {id: attricat.url_display, version: 1}
@@ -254,7 +257,7 @@ The edit controls validate only in the web app. To reject bad values from the AP
 
 ## Components
 
-Every block can name a component with `component: {id, version, props}`. The ID and version must match a registered component, the component must support the block and value type, and `props` may contain only the options it declares. The built-in components are listed in the [blueprint reference](/reference/blueprint/#component-references).
+`field`, `relationship_list`, `incoming_relationship_list`, `stack`, and `table` blocks can name a component with `component: {id, version, props}`; a `grid`, `section`, `tabs`, `accordion`, `heading`, `text`, or `divider` block that names one is rejected. The ID and version must match a registered component, the component must support the block and value type, and `props` may contain only the options it declares. The built-in components are listed in the [blueprint reference](/reference/blueprint/#component-references).
 
 ## Extension panels on record pages
 

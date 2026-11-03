@@ -31,14 +31,16 @@ Ponieważ leksykon jest oddzielony od schematów, możesz poprawić tłumaczenie
 | Etykieta | Gdzie |
 | --- | --- |
 | Nazwa schematu | `name` |
+| Opis schematu | `description` |
 | Nazwa atrybutu | `name` atrybutu zdefiniowanego w `attributes` schematu |
+| Opis atrybutu | `description` atrybutu zdefiniowanego w `attributes` schematu |
 | Nazwa atrybutu wielokrotnego użytku | `name` w jego definicji |
 | Etykieta opcji statusu | `label` każdej opcji w adnotacji `x-attricat-status`, w atrybutach zdefiniowanych w schemacie i wielokrotnego użytku |
 | Etykieta listy wyboru | Każda etykieta w mapie `x-attricat-enum-labels`, w atrybutach zdefiniowanych w schemacie i wielokrotnego użytku |
 | Wskazówka wzorca | `x-attricat-pattern-hint` w schemacie wartości, w atrybutach zdefiniowanych w schemacie i wielokrotnego użytku |
 | Etykieta karty i sekcji akordeonu | `label` w blokach `tabs` i `accordion` |
 | Nagłówek kolumny tabeli | `label` w `views.table.columns` |
-| Przycisk i tytuł okna relacji przychodzących | `label` w `incoming_relationship_list` |
+| Łącze relacji przychodzących | `label` w `incoming_relationship_list` |
 
 Pozostały tekst, na przykład bloki `heading` i `text`, separatory wyświetlania i wartości katalogu, zawsze wyświetla się tak, jak go zapisano.
 

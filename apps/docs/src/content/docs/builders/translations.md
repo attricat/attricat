@@ -31,14 +31,16 @@ Because the lexicon is separate from blueprints, you can fix a translation or ad
 | Label | Where |
 | --- | --- |
 | Blueprint name | `name` |
+| Blueprint description | `description` |
 | Attribute name | `name` of an inline attribute in `attributes` |
+| Attribute description | `description` of an inline attribute in `attributes` |
 | Reusable attribute name | `name` in its definition |
 | Status option label | `label` of each option in an `x-attricat-status` annotation, on inline and reusable attributes |
 | Choice label | Each label in an `x-attricat-enum-labels` map, on inline and reusable attributes |
 | Pattern hint | `x-attricat-pattern-hint` in a value schema, on inline and reusable attributes |
 | Tab and accordion section label | `label` in `tabs` and `accordion` blocks |
 | Table column heading | `label` in `views.table.columns` |
-| Incoming relationship button and dialog title | `label` in `incoming_relationship_list` |
+| Incoming relationship link | `label` in `incoming_relationship_list` |
 
 Other text, such as `heading` and `text` blocks, display separators, and catalog values, is always shown as written.
 

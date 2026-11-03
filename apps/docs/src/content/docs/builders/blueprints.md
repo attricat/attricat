@@ -357,6 +357,6 @@ A blueprint can also carry:
 - A [publication policy](/guides/publishing/#keep-publication-after-trusted-edits) that lets trusted roles edit without withdrawing channel approvals.
 - [Connector jobs](/reference/blueprint/#connector-jobs) that import or export records through a connector extension.
 - Attributes whose type comes from an [extension](/reference/blueprint/#extension-attribute-types).
+- A [layout for extension panels and actions](/reference/blueprint/#extension_layout) on its record pages.
 
 [Data quality rules](/builders/rules/) are created separately, not in the blueprint. A rule flags problems in the blueprint's records, such as a missing title, and can [reject](/builders/rules/#enforce-a-rule) saves or status changes that break it.
-- A [layout for extension panels and actions](/reference/blueprint/#extension_layout) on its record pages.

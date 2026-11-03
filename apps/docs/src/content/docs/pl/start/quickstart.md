@@ -103,7 +103,7 @@ Spróbuj zapisać produkt bez tytułu: schemat rekordu go odrzuci. Spróbuj usta
 
 Otwórz **Zarządzanie → Konteksty → Utwórz kontekst**. Utwórz `PL` pod korzeniem, z metadanymi `{"language": "pl"}`.
 
-Otwórz produkt i wybierz kartę `PL` w sekcji **Dane**. Każde pole pokazuje *Dziedziczone z kontekstu Domyślny*. Ustaw `title` na *Lniana koszula* i opuść pole, aby je zapisać. `sku` jest tu tylko do odczytu, ponieważ jest zarządzane w kontekście domyślnym.
+Otwórz produkt i wybierz kartę `PL` w sekcji **Dane**. Każde pole pokazuje *Dziedziczone z kontekstu domyślnego*. Ustaw `title` na *Lniana koszula* i opuść pole, aby je zapisać. `sku` jest tu tylko do odczytu, ponieważ jest zarządzane w kontekście domyślnym.
 
 W Przeglądarce otwórz **Zakres wyszukiwania**, czyli przycisk z suwakami obok selektora schematu, i przełączaj **Kontekst** między `default` a `PL`, aby zobaczyć zmianę tytułu.
 
@@ -120,7 +120,7 @@ Teraz zmień cenę produktu i opuść pole. Publikacja zostaje wycofana: ikona z
 Gdy masz już kilka produktów i kategorii:
 
 - wyszukaj `categories.name:shirts`;
-- otwórz fasetę **categories** i wybierz *Apparel*, aby uwzględnić wszystko, co się pod nią znajduje;
+- w panelu **Przeglądaj według**, widocznym na szerokich ekranach, wybierz *Apparel*, aby uwzględnić wszystko, co się pod nią znajduje;
 - użyj **Dodaj filtr** dla `price` mniejszej niż 50;
 - użyj **Zapisz wyszukiwanie**, aby zachować wynik.
 

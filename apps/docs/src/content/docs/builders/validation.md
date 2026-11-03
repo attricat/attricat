@@ -33,7 +33,7 @@ attributes:
     value_schema: '{"enum":["XS","S","M","L","XL"]}'
 ```
 
-`value_schema` works on scalar attributes: strings, numbers, integers, booleans, dates, datetimes, and times. Relationships and files cannot have one. Constrain relationships with `record_schema`.
+`value_schema` works on scalar attributes: strings, numbers, integers, booleans, dates, datetimes, times, and JSON values. Relationships and files cannot have one. Constrain relationships with `record_schema`.
 
 A value that fails returns `422 attribute_value_schema_mismatch`.
 

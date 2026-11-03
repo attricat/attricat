@@ -33,7 +33,7 @@ attributes:
     value_schema: '{"enum":["XS","S","M","L","XL"]}'
 ```
 
-`value_schema` działa na atrybutach skalarnych: łańcuchach znaków, liczbach, liczbach całkowitych, wartościach logicznych, datach, datach z godziną i godzinach. Relacje i pliki nie mogą go mieć. Relacje ograniczaj przez `record_schema`.
+`value_schema` działa na atrybutach skalarnych: łańcuchach znaków, liczbach, liczbach całkowitych, wartościach logicznych, datach, datach z godziną, godzinach i wartościach JSON. Relacje i pliki nie mogą go mieć. Relacje ograniczaj przez `record_schema`.
 
 Wartość, która nie przejdzie walidacji, zwraca `422 attribute_value_schema_mismatch`.
 

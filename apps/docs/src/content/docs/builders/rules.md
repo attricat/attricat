@@ -169,7 +169,7 @@ The **Changelog** tab keeps every earlier revision, with who saved it and when. 
 
 ### Rules and blueprint revisions
 
-A rule checks the records of every revision of its blueprint that it fits. It fits a revision when every attribute that its predicate and enforcement transitions name exists there with a suitable type and, for guarded transitions, the status attribute and its codes exist. For a revision it does not fit, the rule skips that revision's records: it records no findings for them and does not enforce anything, and an open finding of such a record is resolved. Runs count those records as skipped; the **Runs** tab shows, for example, "3 (1 skipped)".
+A rule checks the records of every revision of its blueprint that it fits. It fits a revision when every attribute that its predicate and enforcement transitions name exists there with a suitable type and, for guarded transitions, the status attribute and its codes exist. For a revision it does not fit, the rule skips that revision's records: it records no findings for them and does not enforce anything, and an open finding of such a record is resolved. Runs count those records as skipped; the **Run history** tab shows, for example, "3 (1 skipped)".
 
 Saving or validating a rule checks it against the blueprint's latest published revision only. A warning icon in the list, and a warning on the rule's page, mark a rule that skips some revisions of its blueprint and say why.
 
@@ -231,7 +231,7 @@ A write that violates an enforcing rule is rejected with `422 rule_violation`, a
 Enforcing a rule on existing data can block people who did nothing wrong. So when the rule's blueprint already has records, Attricat needs a completed **full dry run** of the rule's current definition before you enable it. Otherwise enabling fails with `409 rule_dry_run_required`.
 
 1. Save the rule.
-2. Run a dry run over all records, without `--record-id`, and wait for it to complete on the **Runs** tab. A dry run works on a disabled rule.
+2. Run a dry run over all records, without `--record-id`, and wait for it to complete on the **Run history** tab. A dry run works on a disabled rule.
 
    ```sh
    acli rule run-now <rule-id> --idempotency-key enforce-preview --dry-run
