@@ -33,3 +33,67 @@ pub async fn shutdown_signal() {
     #[cfg(not(unix))]
     ctrl_c.await.expect("install Ctrl-C handler");
 }
+
+/// Temp files of a process that crashed are left behind on a persistent volume.
+/// A live request's file is younger than this, even with replicas sharing the
+/// directory.
+const STALE_TEMP_FILE_AGE: std::time::Duration = std::time::Duration::from_secs(60 * 60);
+
+/// Removes this application's old files from the temp directory, at startup.
+pub async fn clear_stale_temp_files() {
+    let directory = std::env::temp_dir();
+    let removed = tokio::task::spawn_blocking(move || {
+        remove_stale_temp_files(&directory, STALE_TEMP_FILE_AGE)
+    })
+    .await
+    .unwrap_or(0);
+    if removed > 0 {
+        tracing::info!(removed, "removed temp files left by an earlier run");
+    }
+}
+
+fn remove_stale_temp_files(directory: &std::path::Path, age: std::time::Duration) -> usize {
+    let Ok(entries) = std::fs::read_dir(directory) else {
+        return 0;
+    };
+    entries
+        .flatten()
+        .filter(|entry| entry.file_name().to_string_lossy().starts_with("attricat-"))
+        .filter(|entry| {
+            entry.metadata().is_ok_and(|metadata| {
+                metadata.is_file()
+                    && metadata
+                        .modified()
+                        .ok()
+                        .and_then(|modified| modified.elapsed().ok())
+                        .is_some_and(|elapsed| elapsed >= age)
+            })
+        })
+        .filter(|entry| std::fs::remove_file(entry.path()).is_ok())
+        .count()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_old_files_of_this_application_are_removed() {
+        let directory =
+            std::env::temp_dir().join(format!("stale-temp-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&directory).unwrap();
+        let old = std::time::SystemTime::now() - 2 * STALE_TEMP_FILE_AGE;
+        for name in ["attricat-upload-old", "other-old"] {
+            let file = std::fs::File::create(directory.join(name)).unwrap();
+            file.set_modified(old).unwrap();
+        }
+        std::fs::File::create(directory.join("attricat-upload-new")).unwrap();
+
+        assert_eq!(remove_stale_temp_files(&directory, STALE_TEMP_FILE_AGE), 1);
+
+        assert!(!directory.join("attricat-upload-old").exists());
+        assert!(directory.join("other-old").exists());
+        assert!(directory.join("attricat-upload-new").exists());
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+}

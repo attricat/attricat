@@ -19,7 +19,7 @@ use api::{
     maintenance, migration_connect_options,
     repository::{AttricatRepository, SystemRepository},
     rule_runtime,
-    runtime::{ready_object_store, shutdown_signal},
+    runtime::{clear_stale_temp_files, ready_object_store, shutdown_signal},
     solution_pack_extensions::{
         LocalExtensionReleases, OfficialExtensionRegistry, OfficialExtensionReleases,
     },
@@ -87,6 +87,7 @@ async fn serve() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             + u64::from(task_pool_connections),
         "configured bounded database connection pools"
     );
+    clear_stale_temp_files().await;
     let object_store = ready_object_store(storage).await?;
     let BootstrapConfig {
         workspace_id,

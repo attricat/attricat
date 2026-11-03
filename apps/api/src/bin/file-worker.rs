@@ -3,7 +3,7 @@ use std::sync::Arc;
 use api::{
     config::Config,
     file_worker::FileWorker,
-    runtime::{ready_object_store, shutdown_signal},
+    runtime::{clear_stale_temp_files, ready_object_store, shutdown_signal},
     storage::ObjectStore,
     telemetry::{PROMETHEUS_CONTENT_TYPE, init_metrics, init_tracing},
 };
@@ -42,6 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     )?;
     let metrics = init_metrics()?;
     let file_worker = config.file_worker;
+    clear_stale_temp_files().await;
     let object_store = ready_object_store(config.storage).await?;
     let concurrency = file_worker.concurrency;
     let pool = PgPoolOptions::new()
