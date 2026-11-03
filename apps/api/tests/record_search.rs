@@ -1590,7 +1590,7 @@ async fn filtering_by_export_status_needs_data_health_read(pool: PgPool) {
                 "blueprint": { "code": "export_item" },
                 "query": "",
                 "filters": [],
-                "export_status": { "status": "failed" },
+                "export_status": { "extension_id": "acme.exporter", "status": "rejected" },
                 "page": { "size": 10 },
             }))
             .send()
