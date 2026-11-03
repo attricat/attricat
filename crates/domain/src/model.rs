@@ -421,9 +421,6 @@ pub struct RecordPreview {
     /// attribute code. Each target is loaded once for the page and carries scalar cache only.
     #[serde(default)]
     pub related: HashMap<String, Vec<RelatedRecordPreview>>,
-    /// Deprecated and always empty; delete in the next major version.
-    #[serde(default)]
-    pub match_explanations: Vec<Value>,
 }
 
 #[derive(Clone, Debug, Serialize)]

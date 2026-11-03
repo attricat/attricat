@@ -40,8 +40,6 @@ separated terms are intersected (implicit `AND`). Relationship-tree facet
 counts, selected-facet filtering, and paginated result pages consume that same
 candidate set, so they cannot disagree about which source records match.
 
-`match_explanations` on each item is deprecated and always empty; it will be
-removed in the next major version.
 
 ## Query Language
 
