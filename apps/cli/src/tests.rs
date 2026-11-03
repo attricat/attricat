@@ -1539,15 +1539,21 @@ async fn migrate_bulk_classifies_needs_input_without_submitting_a_migration() {
         }
     });
     let client = Client::builder().build().unwrap();
-    let body = migrate_records(
-        &Api::new(client, Url::parse(&format!("http://{address}")).unwrap()),
-        "product",
-        1,
-        25,
-        false,
-    )
-    .await
-    .unwrap();
+    let api = Api::new(client, Url::parse(&format!("http://{address}")).unwrap());
+    let error = migrate_records(&api, "product", 1, 25, false)
+        .await
+        .unwrap_err();
+    assert_eq!(error.exit_code(), 6);
+    assert_eq!(
+        serde_json::from_str::<Value>(error.output().unwrap()).unwrap()["needs_input"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(migrations.load(Ordering::SeqCst), 0);
+    // A dry run reports the same record as an answer, not a failure.
+    let body = migrate_records(&api, "product", 1, 25, true).await.unwrap();
     assert_eq!(
         serde_json::from_str::<Value>(&body).unwrap()["needs_input"]
             .as_array()
@@ -1555,7 +1561,6 @@ async fn migrate_bulk_classifies_needs_input_without_submitting_a_migration() {
             .len(),
         1
     );
-    assert_eq!(migrations.load(Ordering::SeqCst), 0);
     server.abort();
 }
 

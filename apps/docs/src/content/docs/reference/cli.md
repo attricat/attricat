@@ -69,6 +69,7 @@ Commands that download files, artifacts, or metrics require `--output <path>` an
 | `3` | Could not reach the server. |
 | `4` | The API returned an error. |
 | `5` | The API returned invalid JSON. |
+| `6` | `record migrate-bulk` left records undone: some failed, or were skipped by a run that isn't a dry run. Its summary still goes to standard output. |
 
 ```json
 { "error": { "code": "invalid_blueprint_definition", "message": "blueprints must define at least one attribute", "status": 422 } }

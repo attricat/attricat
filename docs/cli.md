@@ -587,7 +587,9 @@ record targets the latest published revision. Use `--dry-run` to classify record
 without migrating them. The command returns a JSON summary with `ready`,
 `needs_input`, `blocked`, and `failed` entries. It skips `needs_input` and
 `blocked` records. Resolve missing, incompatible, or conditionally required
-values through the record upgrade page before rerunning the bulk command.
+values through the record upgrade page before rerunning the bulk command. The
+command exits with `6` when any record failed, or was skipped by a run that
+isn't a dry run; the summary still goes to standard output.
 
 For example, after creating `seed_product` v2:
 
@@ -721,4 +723,5 @@ check violations or unique-key conflicts), the CLI passes it through
 unchanged as `error.details`.
 
 Exit codes are `0` for success, `2` for local input/configuration errors, `3`
-for transport errors, `4` for API error responses, and `5` for invalid API JSON.
+for transport errors, `4` for API error responses, `5` for invalid API JSON, and
+`6` for a bulk command that left records undone.

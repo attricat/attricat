@@ -997,7 +997,10 @@ pub(crate) async fn migrate_records(
             break;
         }
     }
-    serde_json::to_string(&json!({
+    // A dry run only classifies records, so skipped ones are its normal answer.
+    let incomplete =
+        !failed.is_empty() || (!dry_run && !(needs_input.is_empty() && blocked.is_empty()));
+    let summary = serde_json::to_string(&json!({
         "blueprint": blueprint,
         "from_version": from_version,
         "dry_run": dry_run,
@@ -1007,5 +1010,9 @@ pub(crate) async fn migrate_records(
         "blocked": blocked,
         "failed": failed,
     }))
-    .map_err(|_| CliError::InvalidResponse)
+    .map_err(|_| CliError::InvalidResponse)?;
+    if incomplete {
+        return Err(CliError::Incomplete { summary });
+    }
+    Ok(summary)
 }

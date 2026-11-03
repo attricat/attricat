@@ -74,6 +74,9 @@ async fn main() -> ExitCode {
         Ok(body) if body.is_empty() => ExitCode::SUCCESS,
         Ok(body) => print_output(&body),
         Err(error) => {
+            if let Some(output) = error.output() {
+                print_output(output);
+            }
             eprintln!("{}", error.json());
             ExitCode::from(error.exit_code())
         }

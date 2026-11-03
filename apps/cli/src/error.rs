@@ -23,6 +23,9 @@ pub(crate) enum CliError {
     InvalidResponse,
     #[error("server response exceeded {MAX_RESPONSE_BYTES} bytes")]
     ResponseTooLarge,
+    /// A bulk command ran but left work undone; `summary` says what.
+    #[error("some records were not migrated")]
+    Incomplete { summary: String },
 }
 
 impl CliError {
@@ -32,6 +35,15 @@ impl CliError {
             Self::Transport(_) => 3,
             Self::Api { .. } => 4,
             Self::InvalidResponse | Self::ResponseTooLarge => 5,
+            Self::Incomplete { .. } => 6,
+        }
+    }
+
+    /// What the command still reports on standard output.
+    pub(crate) fn output(&self) -> Option<&str> {
+        match self {
+            Self::Incomplete { summary } => Some(summary),
+            _ => None,
         }
     }
 
@@ -43,6 +55,7 @@ impl CliError {
             Self::Api { code, .. } => code,
             Self::InvalidResponse => "invalid_response",
             Self::ResponseTooLarge => "response_too_large",
+            Self::Incomplete { .. } => "incomplete",
         }
     }
 

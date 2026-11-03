@@ -69,6 +69,7 @@ Polecenia, które pobierają pliki, artefakty lub metryki, wymagają `--output <
 | `3` | Nie udało się połączyć z serwerem. |
 | `4` | API zwróciło błąd. |
 | `5` | API zwróciło nieprawidłowy JSON. |
+| `6` | `record migrate-bulk` nie przetworzyło wszystkich rekordów: część się nie powiodła lub została pominięta w uruchomieniu innym niż próbne. Podsumowanie i tak trafia na standardowe wyjście. |
 
 ```json
 { "error": { "code": "invalid_blueprint_definition", "message": "blueprints must define at least one attribute", "status": 422 } }
