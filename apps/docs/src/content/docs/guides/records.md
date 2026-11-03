@@ -5,7 +5,7 @@ description: Create, edit, and delete records, work with contextual values, file
 
 A record is one catalog item, such as a product or a category. Its blueprint decides which attributes it has, how they are validated, and how its page is laid out.
 
-The record page has one row of tabs under its toolbar. The **Data** tab, selected first, holds the record's fields and, when the workspace has more than one context, a tab for each. The other tabs are **Data quality**, **Comments**, **Agents**, **Record control**, **Tags and metadata**, and **Exports**; some appear only when they apply.
+The record page has one row of tabs under its toolbar. The **Data** tab, selected first, holds the record's fields and, when the workspace has more than one context, a tab for each. The other tabs are **Data quality**, **Comments**, **Agents**, **Record control**, **Tags and metadata**, and **Exports**; some appear only when they apply. Extensions can add tabs of their own; those that do not fit are under **More**.
 
 ## Create a record
 
@@ -15,11 +15,11 @@ The create form keeps your unsaved values for the browser tab. If you reload or 
 
 Values you enter when creating a record are stored in the default context. Attributes with a `default_value` start filled in.
 
-**Duplicate record**, in a record's **Actions** menu or the Explorer row menu, asks for confirmation, then creates a copy with its values, relationships, and files and opens the copy. Values of the blueprint's [unique keys](/reference/blueprint/#unique-keys) are left out, because the copy cannot share them with the original: for a key unique in the whole workspace, the default-context value; for a key unique per context, the values in every context. Fill them in on the copy. If a key attribute is required, duplication fails with a validation error instead.
+**Duplicate record**, in a record's **Actions** menu or the Explorer row menu, asks for confirmation, then creates a copy with its values, relationships, and files and opens the copy. It is offered only when your role grants `records.write` for the whole workspace, because it creates a new record; a grant limited to some records is not enough. Values of the blueprint's [unique keys](/reference/blueprint/#unique-keys) are left out, because the copy cannot share them with the original: for a key unique in the whole workspace, the default-context value; for a key unique per context, the values in every context. Fill them in on the copy. If a key attribute is required, the copy cannot be made: the dialog says so and offers **Create another *Blueprint*** instead.
 
 ## Edit values
 
-You edit a record on its page; there is no separate edit form. Every field you may change is an editable control in the blueprint's layout, showing the values for one context at a time. Switch with the context tabs. If you cannot edit the record, you see its values only.
+You edit a record on its page; there is no separate edit form. Every field you may change is an editable control in the blueprint's layout, showing the values for one context at a time. Switch with the context tabs; contexts that do not fit are under **More contexts**. If you cannot edit the record, you see its values only.
 
 Each field saves on its own:
 
@@ -42,7 +42,7 @@ Each field tells you where its value comes from:
 
 Every save validates the whole record in every context. If a change would make any context invalid, it is not saved: it stays in the field with the error, and the page shows how many changes are not saved yet. Rejected changes are sent again with the next field you save, so you can fill several missing required values one after another. Escape in a field drops its rejected change. See [Validation](/builders/validation/).
 
-If you choose another context while changes are not saved yet, Attricat opens it once they are saved.
+If you choose another context while changes are still saving, Attricat opens it once they are saved. If a change was rejected, it asks first: **Discard and leave** drops the change and opens the context.
 
 The blueprint can also have checks, such as "valid until must not be before valid from" or "every facility belongs to this supplier", and your workspace can enforce data quality rules. When one fails, the message names the check or rule and says what is wrong. Change the fields it mentions, in the contexts it lists. If it points to a linked record, such as a facility that is not approved, fix or replace that record first.
 
@@ -64,13 +64,13 @@ Integrations can ask which statuses are available without trying to save; see [C
 
 ## Relationships
 
-Relationship fields open a picker. Search for targets, **Select** them, and **Apply**. Single-select relationships replace the current target. Each option can be previewed in a new tab.
+**Choose** on a relationship field opens a picker. Search for targets, select them, and choose **Apply**. Single-select relationships replace the current target. Each option can be previewed in a new tab.
 
 Relationship values are contextual, like any other value: a product can have a different set of categories in one market.
 
 ## Files
 
-File fields accept uploads once the record has been saved. Choose or drop files; each one is checked against the attribute's rules for type, extension, and size.
+Choose or drop files; each one is checked against the attribute's rules for type, extension, and size. On a saved record, files upload and save at once. On the create form they upload when the record is created; if one fails, the record is not created, and you can retry or remove the file.
 
 A new file goes through these statuses: **Uploading**, **Queued**, **Processing**, and **Ready**. Images get a thumbnail and a display-sized version. A file can be downloaded once it is ready. If processing fails, the file shows **Failed**; an administrator can retry it.
 
@@ -97,21 +97,28 @@ Some records need a field their blueprint does not have. If your workspace has p
 
 ## Smart fill
 
-When agents are enabled and you can edit the record, open **Ask about this record** in the record toolbar and paste text, such as a supplier's product description, or attach a file, such as a PDF datasheet, a Word document or an Excel sheet. The agent proposes values for the current context. Nothing is saved until you apply the proposal; applying it saves all the proposed values as one change.
+When agents are enabled and you can edit the record, open **Ask about this record** in the record toolbar and paste text, such as a supplier's product description, or attach a file, such as a PDF datasheet, a Word document or an Excel sheet. The agent proposes values for the current context. Nothing is saved until you choose **Apply values**, which saves all the proposed values as one change. With [auto-approve](/guides/agents/#auto-approve-changes-to-a-record) switched on, the agent saves field changes itself instead.
 
 ## History
 
 **Changes**, in the record's **Actions** menu, lists every change to the record: what changed, in which context, when, and by whom. Changes made by an agent show the agent and the person who approved them.
 
-Previous attribute values are kept for 90 days by default. From the value history you can restore an earlier value; the restore is recorded as a new change.
+Previous attribute values are kept for 90 days by default. The **Changes** page only lists them. To restore an earlier value, use the [CLI](/reference/cli/), the [API](/reference/api/), or an [agent](/guides/agents/); the restore is recorded as a new change.
 
 ## Data quality findings
 
-If [data quality rules](/builders/rules/) flag the record, its page shows the number of open findings. Select it to open the **Data quality** tab, which lists them. The most severe findings come first. Each one shows the rule's name, what is wrong with which field, the contexts it fails in, and when it was first found.
+If [data quality rules](/builders/rules/) flag the record, its page shows the number of open findings. Select it to open the **Data quality** tab, which lists them. The most severe findings come first. Each one shows the rule's name, what is wrong with which field, the contexts it fails in, and when it was first found. With `rules.manage`, **Re-run checks** checks the record again.
 
 ## Upgrade to a newer revision
 
-When the blueprint has a newer published revision, a warning icon next to the blueprint link at the top of the record page says **Schema is outdated**, and the **Actions** menu offers **Upgrade blueprint**. The upgrade page compares the record's values with the new revision and asks for anything missing. See [Revisions and migration](/builders/revisions/).
+When the blueprint has a newer published revision, a warning icon next to the blueprint link at the top of the record page says **Schema is outdated**, and, if you can edit the record, the **Actions** menu offers **Upgrade blueprint**. The upgrade page compares the record's values with the new revision and shows the fields to answer under **Needs review**. Choose **Upgrade record** once everything is answered:
+
+- **Missing or unfit values.** Fill in the field. Emptying a field clears its value in the default context. For a stored value the new revision cannot take, **Discard previous value** archives it in every context instead.
+- **A newly required file.** Choose or drop the file in its field. It uploads when you upgrade; if the upload fails, the record is not upgraded, and you can retry or remove the file.
+- **Values in other contexts.** The form's fields edit the default context. A stored value in another context that the new revision cannot take is listed under **Values in other contexts**. Enter a replacement, or choose **Remove this value from *X***. Relationships, files, and values that can no longer be edited in that context can only be removed.
+- **Removed attributes.** Under **Removed in version *N***, confirm **Discard the stored *X* value**. The value is archived.
+
+See [Revisions and migration](/builders/revisions/).
 
 ## Publish
 
@@ -130,7 +137,7 @@ If an extension exports records to a marketplace or storefront, the record's **E
 | Uncertain | The destination may or may not have received the last push. The extension checks before pushing again. |
 | Withdrawn | The record was removed from the destination after it was unpublished or deleted. |
 
-**Preview** shows the payload the extension would send for the record, and what the destination would reject, without sending anything. **Retry** asks the extension to export the record again; it needs the `extensions.manage` permission.
+**Preview** shows the payload the extension would send for the record, and what the destination would reject, without sending anything; it needs `records.read` and `records.write` for the whole workspace. **Retry** asks the extension to export the record again; it needs `extensions.manage` and `records.read` for the whole workspace.
 
 ## Tags and metadata
 
@@ -140,7 +147,7 @@ Workflows, agents, extensions and API clients can mark a record with [system tag
 
 **Ask about this record** opens a panel where you can start a new [agent conversation](/guides/agents/) about the record you are looking at. Type your question; the conversation is created when you send it.
 
-A record can have any number of conversations. The **Agents** tab lists them, newest first, for everyone who can read the record. Select one to continue it in the panel, or open it on the **Agents** page. Conversations about a record do not appear in the main **Agents** list unless you turn on **Show record conversations**.
+A record can have any number of conversations. The **Agents** tab lists them, newest first, for everyone with `agents.run` who can read the record. Select one to continue it in the panel, or open it on the **Agents** page. Conversations about a record do not appear in the main **Agents** list unless you turn on **Show record conversations**.
 
 ## Delete a record
 

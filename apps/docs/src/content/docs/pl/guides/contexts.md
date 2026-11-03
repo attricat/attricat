@@ -28,23 +28,23 @@ Wartości relacji są dziedziczone w ten sam sposób.
 Otwórz **Zarządzanie → Konteksty** i wybierz **Utwórz kontekst**.
 
 - **Kod**: litery, cyfry, łączniki i podkreślenia. Za pomocą kodu ludzie i integracje odwołują się do kontekstu.
-- **Kontekst nadrzędny**: miejsce kontekstu w drzewie. Pozostaw korzeń, aby utworzyć kontekst najwyższego poziomu.
+- **Kontekst nadrzędny**: wymagany; miejsce kontekstu w drzewie. Wybierz `default`, aby utworzyć kontekst najwyższego poziomu.
 - **Metadane**: opcjonalny obiekt JSON opisujący kontekst, na przykład `{"language": "pl"}`.
 
 Za pomocą CLI:
 
 ```sh
 acli context create --code PL --data '{"language":"pl"}'
-acli context create --code PL-web --parent-id <PL-context-id>
+acli context create --code PL-web --data '{}' --parent-id <PL-context-id>
 ```
 
 Kontekst `default` zawsze ma identyfikator `00000000-0000-4000-8000-000000000001`.
 
 ## Zmiana drzewa
 
-Możesz przenieść kontekst pod inny kontekst nadrzędny. Zanim przeniesienie zostanie zapisane, Attricat sprawdza każdy rekord względem jego nowego łańcucha dziedziczenia. Jeśli którykolwiek rekord stałby się nieprawidłowy, na przykład przez utratę wymaganej wartości, przeniesienie zostaje odrzucone.
+Możesz przenieść kontekst pod inny kontekst nadrzędny za pomocą `acli context update <context-id> --parent-id <parent-id> --data <metadata-json>` lub [API](/pl/reference/api/); strona **Konteksty** tylko tworzy i usuwa konteksty. Zanim przeniesienie zostanie zapisane, Attricat sprawdza każdy rekord względem jego nowego łańcucha dziedziczenia. Jeśli którykolwiek rekord stałby się nieprawidłowy, na przykład przez utratę wymaganej wartości, przeniesienie zostaje odrzucone.
 
-Nie można usunąć kontekstu, który jest w użyciu.
+Nie można usunąć kontekstu, który ma konteksty podrzędne, wartości lub uruchomienia rozszerzeń, ani kontekstu `default`.
 
 ## Praca w kontekście
 
@@ -77,4 +77,4 @@ Każdy kontekst można włączyć jako kanał eksportu w **Zarządzanie → Eksp
 
 ## Uprawnienia
 
-Uprawnienie `contexts.read` jest potrzebne do wyświetlania kontekstów, a `contexts.write` do ich tworzenia, zmieniania lub usuwania oraz do włączania kanałów publikacji. Przyznanie roli można ograniczyć do poddrzewa kontekstów: obowiązuje ono wtedy w tym kontekście i we wszystkim pod nim, ale nie w kontekście nadrzędnym ani w kontekstach równorzędnych.
+Uprawnienie `contexts.read` jest potrzebne do wyświetlania kontekstów, a `contexts.write` do ich tworzenia, zmieniania lub usuwania oraz do włączania kanałów publikacji. Przyznanie roli można ograniczyć do poddrzewa kontekstów: obowiązuje ono wtedy w tym kontekście i we wszystkim pod nim, ale nie w kontekście nadrzędnym ani w kontekstach równorzędnych. Przeniesienie kontekstu wymaga też `contexts.write` w jego nowym kontekście nadrzędnym.

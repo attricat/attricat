@@ -22,6 +22,8 @@ Attach files with **Add files**, up to 16 per message. Images up to 5 MiB are se
 
 The agent reads text, not pictures of text. It cannot read a scanned PDF without a text layer or a password-protected file, and tells you so. From a spreadsheet it reads the values Excel last calculated, not the formulas. Very large documents are read up to a size limit.
 
+Every request sends the whole conversation to the provider. If it grows past what the model accepts, the conversation says **This conversation is too long for the model. Start a new conversation to continue.** Further messages there would fail the same way, so start a new one.
+
 ## What the agent can do
 
 The agent acts as you. It can only see and change what your role allows.
@@ -31,8 +33,9 @@ The agent acts as you. It can only see and change what your role allows.
 - list and read blueprints, contexts, records, and their history;
 - look up workspace users and teams to fill in user or team attributes;
 - search records and read saved searches;
-- preview a record migration;
-- read data health, rule findings, and workflow runs;
+- preview a record or blueprint migration;
+- read data health, rule findings and runs, workflow runs, and rule and workflow definitions;
+- check a draft rule or workflow definition;
 - view images and read text, PDF, Word and Excel files in the workspace;
 - read extension operation runs and connector jobs (with `extensions.manage`);
 - explain a record's status transitions, approvals, and retention holds;
@@ -69,7 +72,7 @@ Read proposals carefully. Replacing relationships sets the complete list for tha
 
 ### Auto-approve changes to a record
 
-In a conversation about a record, you can switch on **Auto-approve changes within this conversation**. For the messages you send, the agent then changes that record's fields, relationships, tags, files and comments without asking. Deleting or publishing the record, and changes to other records, still need your approval.
+In a conversation about a record, you can switch on **Auto-approve changes within this conversation**. For the messages you send, the agent then changes that record's fields, relationships, tags, files and comments without asking. Deleting, publishing, or upgrading the record, and changes to other records, still need your approval.
 
 Switching it on needs permission to edit the record. It covers the messages of one person at a time: if someone else has it on, switching it on moves it to your messages. Anyone who can read the conversation can switch it off.
 
@@ -81,7 +84,7 @@ When one request changes several records, such as releasing a new revision and s
 
 When you ask for the same value change on many records, such as *set the season to Spring on every Acme product*, the agent proposes one **bulk edit** (`bulk_set_record_values`). It picks the records either by listing them or with a search filter.
 
-When the agent proposes it, the filter is turned into a fixed list of records, and that list is what you approve. The approval card shows a summary such as *Set Brand, Season on 412 Product records* and a table of record names with each current and proposed value: the first 20 records, then **Show all**. A record that someone else saves after the proposal is not overwritten; it fails as changed in the meantime.
+When the agent proposes it, the filter is turned into a fixed list of records, and that list is what you approve. The approval card shows a summary such as *Set Brand, Season on 412 Product records* and a table of record names with each current and proposed value: the first 20 records, then **Show all *N* records**. A record that someone else saves after the proposal is not overwritten; it fails as changed in the meantime.
 
 Unlike a batch, a bulk edit is not all-or-nothing:
 
@@ -121,7 +124,7 @@ Using agents needs `agents.run`, which the owner and admin roles have by default
 
 ### Bulk edit approvals
 
-People with `agents.manage` (by default the owner and admin roles) choose how bulk edits are approved in **Manage → Workspace → Agent**, with `acli workspace agent set`, or through `PUT /workspace/agent-settings`:
+People with `agents.manage` (by default the owner and admin roles) choose how bulk edits are approved in **Manage → Workspace management → Agent**, with `acli workspace agent set`, or through `PUT /workspace/agent-settings`:
 
 - **Approve once per proposal** (the default): one approval covers every record a bulk edit lists.
 - **Approve each record**: the agent is not offered bulk edits, so it proposes each record's change separately and each needs its own approval.

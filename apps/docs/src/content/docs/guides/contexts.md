@@ -28,23 +28,23 @@ Relationship values inherit in the same way.
 Open **Manage → Contexts** and choose **Create context**.
 
 - **Code**: letters, numbers, hyphens, and underscores. The code is how people and integrations refer to the context.
-- **Parent context**: where it sits in the tree. Leave it at the root to make a top-level context.
+- **Parent context**: required; where it sits in the tree. Choose `default` to make a top-level context.
 - **Metadata**: an optional JSON object describing the context, for example `{"language": "pl"}`.
 
 With the CLI:
 
 ```sh
 acli context create --code PL --data '{"language":"pl"}'
-acli context create --code PL-web --parent-id <PL-context-id>
+acli context create --code PL-web --data '{}' --parent-id <PL-context-id>
 ```
 
 The `default` context always has the ID `00000000-0000-4000-8000-000000000001`.
 
 ## Change the tree
 
-You can move a context to a different parent. Before the move is saved, Attricat checks every record against its new inheritance chain. If any record would become invalid, for example by losing a required value, the move is rejected.
+You can move a context to a different parent with `acli context update <context-id> --parent-id <parent-id> --data <metadata-json>` or the [API](/reference/api/); the **Contexts** page only creates and deletes contexts. Before the move is saved, Attricat checks every record against its new inheritance chain. If any record would become invalid, for example by losing a required value, the move is rejected.
 
-A context that is in use cannot be deleted.
+A context that still has child contexts, values, or extension runs cannot be deleted, and neither can `default`.
 
 ## Work in a context
 
@@ -77,4 +77,4 @@ A [solution pack](/builders/solution-packs/#contexts-and-publication-channels) c
 
 ## Permissions
 
-`contexts.read` is needed to see contexts, and `contexts.write` to create, change, or delete them and to enable publication channels. A role grant can be limited to a context subtree: it then applies to that context and everything below it, but not to its parent or siblings.
+`contexts.read` is needed to see contexts, and `contexts.write` to create, change, or delete them and to enable publication channels. A role grant can be limited to a context subtree: it then applies to that context and everything below it, but not to its parent or siblings. Moving a context also needs `contexts.write` on its new parent.

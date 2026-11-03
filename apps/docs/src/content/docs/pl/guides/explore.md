@@ -57,7 +57,7 @@ Możesz też filtrować według atrybutu powiązanego rekordu, na przykład `bra
 
 Lista obejmuje też [atrybuty wielokrotnego użytku](/pl/builders/modeling/#wielokrotne-użycie-atrybutów) dołączone do rekordów schematu, jeśli ich definicja ustawia zarówno `searchable`, jak i `facetable`.
 
-Filtr możesz również utworzyć z poziomu tabeli: otwórz menu komórki i wybierz **Filtruj**.
+Filtr możesz również utworzyć z poziomu tabeli: najedź na komórkę i wybierz jej ikonę filtra, **Filtruj: *pole* = *wartość*…**. Okno **Dodaj filtr** otworzy się z wypełnionym polem i wartością.
 
 Każdy aktywny filtr jest widoczny jako etykieta pod polem wyszukiwania. Wszystkie filtry, fasety i zapytanie wyszukiwania muszą pasować jednocześnie.
 
@@ -93,7 +93,7 @@ Selektor **Kontekst** w **Zakresie wyszukiwania** pokazuje wartości rozstrzygni
 
 Kolumny tabeli, etykieta rekordu, filtry i sortowanie korzystają z wybranego kontekstu. Na przykład po wybraniu kontekstu `pl` przetłumaczona nazwa jest wyświetlana, filtrowana i sortowana po polsku, a rekord bez polskiej nazwy pokazuje nazwę dziedziczoną. Wyszukiwanie tekstowe dopasowuje wartości we wszystkich kontekstach.
 
-Jeśli wybrany kontekst jest [kanałem publikacji](/pl/guides/publishing/), tabela zyskuje kolumnę **Publikacja**, która pokazuje, czy każdy rekord jest w nim opublikowany. Można ją posortować, aby nieopublikowane rekordy znalazły się na początku.
+Jeśli wybrany kontekst jest [kanałem publikacji](/pl/guides/publishing/), tabela zyskuje kolumnę **Publikacja (*kontekst*)**, która pokazuje, czy każdy rekord jest w nim opublikowany. Można ją posortować, aby nieopublikowane rekordy znalazły się na początku.
 
 ## Sortowanie i układ kolumn
 

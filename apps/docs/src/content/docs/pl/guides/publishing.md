@@ -15,7 +15,7 @@ Włączenie kanału wymaga uprawnienia `contexts.write`.
 
 ## Opublikuj rekord
 
-Na stronie rekordu ikona globu na pasku narzędzi pokazuje stan publikacji rekordu w wybranym kontekście. Jej podpowiedź mówi **Opublikowano** lub **Nieopublikowano** oraz kto i kiedy opublikował rekord. Jeśli wybrany kontekst nie jest kanałem, podpowiedź mówi **To nie jest kanał eksportu**. Przełącz selektor **Kontekst**, aby zobaczyć inny kanał.
+Na stronie rekordu ikona globu na pasku narzędzi pokazuje stan publikacji rekordu w wybranym kontekście. Jej podpowiedź mówi **Opublikowano** lub **Nieopublikowano** oraz kto i kiedy opublikował rekord. Jeśli wybrany kontekst nie jest kanałem, podpowiedź mówi **To nie jest kanał eksportu**. Przełącz karty kontekstów w sekcji **Dane**, aby zobaczyć inny kanał.
 
 Publikuj z menu **Akcje** rekordu:
 
@@ -25,7 +25,7 @@ Publikuj z menu **Akcje** rekordu:
 
 Gdy edycja wycofa zatwierdzenie, stan znów to **Nieopublikowano**, więc menu oferuje **Opublikuj**.
 
-W **Przeglądarce rekordów** wybierz kanał jako kontekst, aby zobaczyć kolumnę **Publikacja**. Posortuj ją, aby przenieść nieopublikowane rekordy na górę.
+W **Przeglądarce rekordów** wybierz kanał jako kontekst, aby zobaczyć kolumnę **Publikacja (*kontekst*)**. Posortuj ją, aby przenieść nieopublikowane rekordy na górę. Menu wiersza oferuje wtedy także **Opublikuj**, a dla opublikowanego rekordu **Cofnij publikację**.
 
 Publikowanie wymaga uprawnienia `records.publish`. Mają je role właściciela i administratora; edytorzy go nie mają.
 

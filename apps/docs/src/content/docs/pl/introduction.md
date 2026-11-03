@@ -12,7 +12,7 @@ Każda zmiana jest walidowana na serwerze, zapisywana w dzienniku audytu i zacho
 - **Katalogi, których struktura się zmienia.** Wersja schematu nigdy się nie zmienia po opublikowaniu, a każdy rekord pozostaje przy wersji, w której został zapisany, dopóki go nie zmigrujesz. Możesz rozwijać model bez psucia tego, co już istnieje.
 - **Wartości różniące się zależnie od miejsca.** Drzewo kontekstów (na przykład rynek, a pod nim kanał) pozwala ustawić każdą wartość raz i ją dziedziczyć, z nadpisaniami tylko tam, gdzie są potrzebne.
 - **Klasyfikacje i taksonomie.** Kategorie, marki i materiały są osobnymi rekordami połączonymi relacjami, więc można zmieniać ich nazwy, tłumaczyć je i układać w hierarchie.
-- **Kontrolowane dane wyjściowe.** Publikacja zatwierdza rekord dla kanału. Każda późniejsza edycja wycofuje to zatwierdzenie, dopóki ktoś nie opublikuje rekordu ponownie.
+- **Kontrolowane dane wyjściowe.** Publikacja zatwierdza rekord dla kanału. Późniejsza edycja wycofuje to zatwierdzenie, dopóki ktoś nie opublikuje rekordu ponownie, chyba że schemat pozwala roli edytującego je zachować.
 - **Bezpieczne rozszerzanie.** Rozszerzenia działają w piaskownicach i mogą robić tylko to, na co pozwoli im administrator.
 
 ## Jak łączą się elementy
@@ -27,7 +27,7 @@ Każda zmiana jest walidowana na serwerze, zapisywana w dzienniku audytu i zacho
 | **Relacja** | Typowane powiązanie jednego rekordu z innymi. |
 | **Kanał publikacji** | Kontekst włączony do eksportu, w którym rekordy są zatwierdzane pojedynczo. |
 | **Reguła** | Kontrola jakości danych, która zapisuje ustalenia. |
-| **Przepływ pracy** | Niewielka automatyzacja, która taguje lub aktualizuje rekord po zdarzeniu. |
+| **Przepływ pracy** | Niewielka automatyzacja, która taguje lub aktualizuje rekord po zdarzeniu, według harmonogramu lub po ręcznym uruchomieniu. |
 | **Rozszerzenie** | Pakiet dodający logikę serwera, interfejs, typy atrybutów lub integracje. |
 | **Pakiet rozwiązania** | Archiwum, które przygotowuje obszar roboczy do konkretnego zastosowania. |
 | **Agent** | Asystent AI, który odczytuje katalog i proponuje zmiany do zatwierdzenia. |

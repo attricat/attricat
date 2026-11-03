@@ -5,7 +5,7 @@ description: Twórz, edytuj i usuwaj rekordy, pracuj z wartościami kontekstowym
 
 Rekord to jeden element katalogu, na przykład produkt lub kategoria. Jego schemat określa, jakie ma atrybuty, jak są one walidowane i jak wygląda układ jego strony.
 
-Strona rekordu ma jeden rząd kart pod paskiem narzędzi. Karta **Dane**, wybrana na początku, zawiera pola rekordu oraz, gdy obszar roboczy ma więcej niż jeden kontekst, kartę dla każdego z nich. Pozostałe karty to **Jakość danych**, **Komentarze**, **Agenci**, **Kontrola rekordu**, **Znaczniki i metadane** oraz **Eksporty**; niektóre pojawiają się tylko wtedy, gdy mają zastosowanie.
+Strona rekordu ma jeden rząd kart pod paskiem narzędzi. Karta **Dane**, wybrana na początku, zawiera pola rekordu oraz, gdy obszar roboczy ma więcej niż jeden kontekst, kartę dla każdego z nich. Pozostałe karty to **Jakość danych**, **Komentarze**, **Agenci**, **Kontrola rekordu**, **Znaczniki i metadane** oraz **Eksporty**; niektóre pojawiają się tylko wtedy, gdy mają zastosowanie. Rozszerzenia mogą dodawać własne karty; te, które się nie mieszczą, są w menu **Więcej**.
 
 ## Tworzenie rekordu
 
@@ -15,11 +15,11 @@ Formularz tworzenia przechowuje niezapisane wartości na czas trwania karty prze
 
 Wartości wpisane podczas tworzenia rekordu są zapisywane w kontekście domyślnym. Atrybuty z `default_value` są od początku wypełnione.
 
-**Duplikuj rekord**, w menu **Akcje** rekordu lub w menu wiersza w Przeglądarce, prosi o potwierdzenie, a następnie tworzy kopię z wartościami, relacjami i plikami rekordu i otwiera kopię. Wartości [kluczy unikalnych](/pl/reference/blueprint/#klucze-unikalne) schematu nie są kopiowane, ponieważ kopia nie może ich współdzielić z oryginałem: dla klucza unikalnego w całym obszarze roboczym pomijana jest wartość z kontekstu domyślnego, a dla klucza unikalnego w kontekście – wartości ze wszystkich kontekstów. Uzupełnij je w kopii. Jeśli atrybut klucza jest wymagany, duplikowanie kończy się błędem walidacji.
+**Duplikuj rekord**, w menu **Akcje** rekordu lub w menu wiersza w Przeglądarce, prosi o potwierdzenie, a następnie tworzy kopię z wartościami, relacjami i plikami rekordu i otwiera kopię. Ta opcja jest dostępna tylko wtedy, gdy Twoja rola przyznaje `records.write` w całym obszarze roboczym, ponieważ tworzy ona nowy rekord; przyznanie ograniczone do niektórych rekordów nie wystarczy. Wartości [kluczy unikalnych](/pl/reference/blueprint/#klucze-unikalne) schematu nie są kopiowane, ponieważ kopia nie może ich współdzielić z oryginałem: dla klucza unikalnego w całym obszarze roboczym pomijana jest wartość z kontekstu domyślnego, a dla klucza unikalnego w kontekście – wartości ze wszystkich kontekstów. Uzupełnij je w kopii. Jeśli atrybut klucza jest wymagany, kopii nie można utworzyć: okno dialogowe informuje o tym i proponuje zamiast tego **Utwórz kolejny rekord: *Schemat***.
 
 ## Edycja wartości
 
-Rekord edytujesz bezpośrednio na jego stronie; nie ma osobnego formularza edycji. Każde pole, które możesz zmienić, jest edytowalną kontrolką w układzie schematu i pokazuje wartości dla jednego kontekstu naraz. Przełączaj je kartami kontekstów. Jeśli nie możesz edytować rekordu, widzisz tylko jego wartości.
+Rekord edytujesz bezpośrednio na jego stronie; nie ma osobnego formularza edycji. Każde pole, które możesz zmienić, jest edytowalną kontrolką w układzie schematu i pokazuje wartości dla jednego kontekstu naraz. Przełączaj je kartami kontekstów; konteksty, które się nie mieszczą, są na liście **Więcej kontekstów**. Jeśli nie możesz edytować rekordu, widzisz tylko jego wartości.
 
 Każde pole zapisuje się osobno:
 
@@ -42,7 +42,7 @@ Każde pole informuje, skąd pochodzi jego wartość:
 
 Każdy zapis waliduje cały rekord w każdym kontekście. Jeśli zmiana unieważniłaby którykolwiek kontekst, nie zostaje zapisana: pozostaje w polu wraz z błędem, a strona pokazuje, ile zmian nie jest jeszcze zapisanych. Odrzucone zmiany są wysyłane ponownie z następnym zapisywanym polem, więc kilka brakujących wymaganych wartości możesz uzupełniać po kolei. Escape w polu porzuca jego odrzuconą zmianę. Zobacz [Walidacja](/pl/builders/validation/).
 
-Jeśli wybierzesz inny kontekst, gdy zmiany nie są jeszcze zapisane, Attricat otworzy go po ich zapisaniu.
+Jeśli wybierzesz inny kontekst, gdy zmiany wciąż się zapisują, Attricat otworzy go po ich zapisaniu. Jeśli zmiana została odrzucona, najpierw zapyta: **Odrzuć i wyjdź** porzuca zmianę i otwiera kontekst.
 
 Schemat może też zawierać kontrole, na przykład „data ważności nie może być wcześniejsza niż data rozpoczęcia” albo „każdy zakład należy do tego dostawcy”, a obszar roboczy może egzekwować reguły jakości danych. Gdy któraś z nich nie przejdzie, komunikat podaje nazwę kontroli lub reguły i opisuje problem. Zmień wskazane pola w wymienionych kontekstach. Jeśli komunikat dotyczy powiązanego rekordu, na przykład niezatwierdzonego zakładu, najpierw popraw lub zastąp ten rekord.
 
@@ -64,13 +64,13 @@ Integracje mogą sprawdzić, które statusy są dostępne, bez próby zapisu; zo
 
 ## Relacje
 
-Pola relacji otwierają okno wyboru. Wyszukaj cele, **Wybierz** je i kliknij **Zastosuj**. Relacje jednokrotnego wyboru zastępują bieżący cel. Podgląd każdej opcji można otworzyć w nowej karcie.
+**Wybierz** w polu relacji otwiera okno wyboru. Wyszukaj cele, zaznacz je i kliknij **Zastosuj**. Relacje jednokrotnego wyboru zastępują bieżący cel. Podgląd każdej opcji można otworzyć w nowej karcie.
 
 Wartości relacji są kontekstowe jak każda inna wartość: produkt może mieć inny zestaw kategorii na jednym rynku.
 
 ## Pliki
 
-Pola plików przyjmują przesłane pliki po zapisaniu rekordu. Wybierz lub upuść pliki; każdy z nich jest sprawdzany pod kątem reguł atrybutu dotyczących typu, rozszerzenia i rozmiaru.
+Wybierz lub upuść pliki; każdy z nich jest sprawdzany pod kątem reguł atrybutu dotyczących typu, rozszerzenia i rozmiaru. W zapisanym rekordzie pliki są przesyłane i zapisywane od razu. W formularzu tworzenia są przesyłane podczas tworzenia rekordu; jeśli przesłanie się nie powiedzie, rekord nie powstaje, a plik możesz przesłać ponownie lub usunąć.
 
 Nowy plik przechodzi przez następujące stany: **Przesyłanie**, **W kolejce**, **Przetwarzanie** i **Gotowy**. Obrazy otrzymują miniaturę i wersję w rozmiarze do wyświetlania. Plik można pobrać, gdy jest gotowy. Jeśli przetwarzanie się nie powiedzie, plik pokazuje stan **Niepowodzenie**; administrator może ponowić próbę.
 
@@ -97,21 +97,28 @@ Niektóre rekordy potrzebują pola, którego nie ma ich schemat. Jeśli obszar r
 
 ## Inteligentne wypełnianie
 
-Gdy agenci są włączeni i możesz edytować rekord, otwórz **Zapytaj o ten rekord** na pasku narzędzi rekordu i wklej tekst, na przykład opis produktu od dostawcy, albo dołącz plik, na przykład kartę katalogową w PDF, dokument Word lub arkusz Excel. Agent zaproponuje wartości dla bieżącego kontekstu. Nic nie zostaje zapisane, dopóki nie zastosujesz propozycji; zastosowanie zapisuje wszystkie proponowane wartości jako jedną zmianę.
+Gdy agenci są włączeni i możesz edytować rekord, otwórz **Zapytaj o ten rekord** na pasku narzędzi rekordu i wklej tekst, na przykład opis produktu od dostawcy, albo dołącz plik, na przykład kartę katalogową w PDF, dokument Word lub arkusz Excel. Agent zaproponuje wartości dla bieżącego kontekstu. Nic nie zostaje zapisane, dopóki nie wybierzesz **Zastosuj wartości**, co zapisuje wszystkie proponowane wartości jako jedną zmianę. Gdy włączone jest [automatyczne zatwierdzanie](/pl/guides/agents/#automatyczne-zatwierdzanie-zmian-rekordu), agent sam zapisuje zmiany pól.
 
 ## Historia
 
 **Zmiany**, w menu **Akcje** rekordu, zawierają listę wszystkich zmian rekordu: co się zmieniło, w którym kontekście, kiedy i kto to zrobił. Zmiany wprowadzone przez agenta pokazują agenta i osobę, która je zatwierdziła.
 
-Poprzednie wartości atrybutów są domyślnie przechowywane przez 90 dni. Z historii wartości możesz przywrócić wcześniejszą wartość; przywrócenie jest zapisywane jako nowa zmiana.
+Poprzednie wartości atrybutów są domyślnie przechowywane przez 90 dni. Strona **Zmiany** tylko je wyświetla. Aby przywrócić wcześniejszą wartość, użyj [CLI](/pl/reference/cli/), [API](/pl/reference/api/) lub [agenta](/pl/guides/agents/); przywrócenie jest zapisywane jako nowa zmiana.
 
 ## Ustalenia dotyczące jakości danych
 
-Jeśli [reguły jakości danych](/pl/builders/rules/) oznaczą rekord, jego strona pokazuje liczbę otwartych ustaleń. Kliknięcie jej otwiera kartę **Jakość danych**, która je wymienia. Najpoważniejsze ustalenia są na górze. Każde pokazuje nazwę reguły, co jest nie tak i w którym polu, konteksty, w których występuje, oraz kiedy wykryto je po raz pierwszy.
+Jeśli [reguły jakości danych](/pl/builders/rules/) oznaczą rekord, jego strona pokazuje liczbę otwartych ustaleń. Kliknięcie jej otwiera kartę **Jakość danych**, która je wymienia. Najpoważniejsze ustalenia są na górze. Każde pokazuje nazwę reguły, co jest nie tak i w którym polu, konteksty, w których występuje, oraz kiedy wykryto je po raz pierwszy. Z uprawnieniem `rules.manage` przycisk **Sprawdź ponownie** ponownie sprawdza rekord.
 
 ## Aktualizacja do nowszej wersji
 
-Gdy schemat ma nowszą opublikowaną wersję, ikona ostrzeżenia obok odnośnika do schematu u góry strony rekordu informuje, że **Schemat jest nieaktualny**, a menu **Akcje** oferuje **Zaktualizuj schemat**. Strona aktualizacji porównuje wartości rekordu z nową wersją i prosi o uzupełnienie brakujących danych. Zobacz [Wersje i migracja](/pl/builders/revisions/).
+Gdy schemat ma nowszą opublikowaną wersję, ikona ostrzeżenia obok odnośnika do schematu u góry strony rekordu informuje, że **Schemat jest nieaktualny**, a jeśli możesz edytować rekord, menu **Akcje** oferuje **Zaktualizuj schemat**. Strona aktualizacji porównuje wartości rekordu z nową wersją i pokazuje pola wymagające odpowiedzi w sekcji **Do sprawdzenia**. Wybierz **Zaktualizuj rekord**, gdy wszystko będzie uzupełnione:
+
+- **Brakujące lub niepasujące wartości.** Wypełnij pole. Opróżnienie pola czyści jego wartość w kontekście domyślnym. Zapisaną wartość, której nowa wersja nie przyjmie, **Odrzuć poprzednią wartość** archiwizuje zamiast tego we wszystkich kontekstach.
+- **Nowo wymagany plik.** Wybierz lub upuść plik w jego polu. Zostanie przesłany podczas aktualizacji; jeśli przesłanie się nie powiedzie, rekord nie zostanie zaktualizowany, a plik możesz przesłać ponownie lub usunąć.
+- **Wartości w innych kontekstach.** Pola formularza edytują kontekst domyślny. Zapisana wartość w innym kontekście, której nowa wersja nie przyjmie, jest wymieniona w sekcji **Wartości w innych kontekstach**. Podaj zamiennik albo wybierz **Usuń tę wartość z kontekstu *X***. Relacje, pliki i wartości, których nie można już edytować w tym kontekście, można tylko usunąć.
+- **Usunięte atrybuty.** W sekcji **Usunięte w wersji *N*** potwierdź **Odrzuć zapisaną wartość atrybutu *X***. Wartość zostanie zarchiwizowana.
+
+Zobacz [Wersje i migracja](/pl/builders/revisions/).
 
 ## Publikowanie
 
@@ -130,7 +137,7 @@ Jeśli rozszerzenie eksportuje rekordy do marketplace'u lub sklepu internetowego
 | Niepewny | Nie wiadomo, czy miejsce docelowe otrzymało ostatnie wysłanie. Rozszerzenie sprawdzi to przed ponownym wysłaniem. |
 | Wycofany | Rekord został usunięty z miejsca docelowego po cofnięciu publikacji lub usunięciu. |
 
-**Podgląd** pokazuje ładunek, który rozszerzenie wysłałoby dla rekordu, i to, co odrzuciłoby miejsce docelowe, niczego nie wysyłając. **Ponów** prosi rozszerzenie o ponowny eksport rekordu; wymaga uprawnienia `extensions.manage`.
+**Podgląd** pokazuje ładunek, który rozszerzenie wysłałoby dla rekordu, i to, co odrzuciłoby miejsce docelowe, niczego nie wysyłając; wymaga `records.read` i `records.write` w całym obszarze roboczym. **Ponów** prosi rozszerzenie o ponowny eksport rekordu; wymaga `extensions.manage` oraz `records.read` w całym obszarze roboczym.
 
 ## Znaczniki i metadane
 
@@ -140,7 +147,7 @@ Przepływy pracy, agenci, rozszerzenia i klienci API mogą oznaczać rekord [tag
 
 **Zapytaj o ten rekord** otwiera panel, w którym możesz rozpocząć nową [rozmowę z agentem](/pl/guides/agents/) o rekordzie, który właśnie przeglądasz. Wpisz pytanie; rozmowa powstaje w chwili wysłania.
 
-Rekord może mieć dowolnie wiele rozmów. Karta **Agenci** wyświetla je od najnowszej wszystkim, którzy mogą odczytać rekord. Wybierz rozmowę, aby kontynuować ją w panelu, albo otwórz ją na stronie **Agenci**. Rozmowy o rekordach nie pojawiają się na głównej liście **Agenci**, chyba że włączysz **Pokaż rozmowy o rekordach**.
+Rekord może mieć dowolnie wiele rozmów. Karta **Agenci** wyświetla je od najnowszej wszystkim, którzy mają `agents.run` i mogą odczytać rekord. Wybierz rozmowę, aby kontynuować ją w panelu, albo otwórz ją na stronie **Agenci**. Rozmowy o rekordach nie pojawiają się na głównej liście **Agenci**, chyba że włączysz **Pokaż rozmowy o rekordach**.
 
 ## Usuwanie rekordu
 

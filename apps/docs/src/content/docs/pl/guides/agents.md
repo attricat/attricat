@@ -22,6 +22,8 @@ Dołącz pliki przyciskiem **Dodaj pliki**, maksymalnie 16 na wiadomość. Obraz
 
 Agent czyta tekst, a nie obrazy tekstu. Nie odczyta zeskanowanego pliku PDF bez warstwy tekstowej ani pliku chronionego hasłem i poinformuje o tym. Z arkusza odczytuje wartości ostatnio obliczone przez Excel, a nie formuły. Bardzo duże dokumenty są czytane do limitu rozmiaru.
 
+Każde żądanie wysyła do dostawcy całą rozmowę. Jeśli przekroczy ona to, co przyjmuje model, rozmowa pokaże komunikat **Ta rozmowa jest zbyt długa dla modelu. Aby kontynuować, rozpocznij nową rozmowę.** Kolejne wiadomości w niej zakończyłyby się tak samo, więc rozpocznij nową.
+
 ## Co może agent
 
 Agent działa w Twoim imieniu. Widzi i zmienia tylko to, na co pozwala Twoja rola.
@@ -31,8 +33,9 @@ Agent działa w Twoim imieniu. Widzi i zmienia tylko to, na co pozwala Twoja rol
 - wyświetlać i odczytywać schematy, konteksty, rekordy i ich historię;
 - wyszukiwać użytkowników i zespoły obszaru roboczego, aby wypełnić atrybuty użytkownika lub zespołu;
 - wyszukiwać rekordy i odczytywać zapisane wyszukiwania;
-- wyświetlać podgląd migracji rekordu;
-- odczytywać stan danych, ustalenia reguł i uruchomienia przepływów pracy;
+- wyświetlać podgląd migracji rekordu lub schematu;
+- odczytywać stan danych, ustalenia i uruchomienia reguł, uruchomienia przepływów pracy oraz definicje reguł i przepływów pracy;
+- sprawdzać roboczą definicję reguły lub przepływu pracy;
 - oglądać obrazy i odczytywać pliki tekstowe, PDF, Word i Excel w obszarze roboczym;
 - odczytywać uruchomienia operacji rozszerzeń i zadania konektorów (z uprawnieniem `extensions.manage`);
 - wyjaśniać przejścia statusów encji, jej zatwierdzenia i blokady retencji;
@@ -69,7 +72,7 @@ Czytaj propozycje uważnie. Zastąpienie relacji ustawia pełną listę dla dane
 
 ### Automatyczne zatwierdzanie zmian rekordu
 
-W rozmowie o rekordzie możesz włączyć **Automatycznie zatwierdzaj zmiany w tej rozmowie**. W wiadomościach, które wysyłasz, agent zmienia wtedy pola, relacje, tagi, pliki i komentarze tego rekordu bez pytania. Usunięcie lub publikacja rekordu oraz zmiany innych rekordów nadal wymagają Twojego zatwierdzenia.
+W rozmowie o rekordzie możesz włączyć **Automatycznie zatwierdzaj zmiany w tej rozmowie**. W wiadomościach, które wysyłasz, agent zmienia wtedy pola, relacje, tagi, pliki i komentarze tego rekordu bez pytania. Usunięcie, publikacja lub aktualizacja rekordu do nowszej wersji schematu oraz zmiany innych rekordów nadal wymagają Twojego zatwierdzenia.
 
 Włączenie wymaga uprawnienia do edycji rekordu. Ustawienie obejmuje wiadomości jednej osoby naraz: jeśli włączył je ktoś inny, włączenie przenosi je na Twoje wiadomości. Każdy, kto może odczytać rozmowę, może je wyłączyć.
 
@@ -81,7 +84,7 @@ Gdy jedna prośba zmienia kilka rekordów, np. wydanie nowej wersji i zastąpien
 
 Gdy prosisz o tę samą zmianę wartości w wielu rekordach, np. *ustaw sezon Wiosna we wszystkich produktach Acme*, agent proponuje jedną **edycję zbiorczą** (`bulk_set_record_values`). Wybiera rekordy, wymieniając je albo za pomocą filtra wyszukiwania.
 
-W chwili propozycji filtr zamienia się w stałą listę rekordów i to ją zatwierdzasz. Karta zatwierdzenia pokazuje podsumowanie, np. *Set Brand, Season on 412 Product records*, oraz tabelę z nazwami rekordów, obecną i proponowaną wartością: najpierw 20 rekordów, a po kliknięciu **Pokaż wszystkie rekordy** pozostałe. Rekord, który ktoś zapisze po propozycji, nie zostanie nadpisany; jego zmiana nie powiedzie się, bo rekord zmienił się w międzyczasie.
+W chwili propozycji filtr zamienia się w stałą listę rekordów i to ją zatwierdzasz. Karta zatwierdzenia pokazuje podsumowanie, np. *Set Brand, Season on 412 Product records*, oraz tabelę z nazwami rekordów, obecną i proponowaną wartością: najpierw 20 rekordów, a po kliknięciu **Pokaż wszystkie rekordy (*N*)** pozostałe. Rekord, który ktoś zapisze po propozycji, nie zostanie nadpisany; jego zmiana nie powiedzie się, bo rekord zmienił się w międzyczasie.
 
 W przeciwieństwie do wsadu edycja zbiorcza nie działa na zasadzie „wszystko albo nic”:
 
@@ -121,7 +124,7 @@ Korzystanie z agentów wymaga uprawnienia `agents.run`, które domyślnie mają 
 
 ### Zatwierdzanie edycji zbiorczych
 
-Osoby z uprawnieniem `agents.manage` (domyślnie role właściciela i administratora) wybierają sposób zatwierdzania edycji zbiorczych w **Zarządzanie → Obszar roboczy → Agent**, poleceniem `acli workspace agent set` lub przez `PUT /workspace/agent-settings`:
+Osoby z uprawnieniem `agents.manage` (domyślnie role właściciela i administratora) wybierają sposób zatwierdzania edycji zbiorczych w **Zarządzanie → Zarządzanie obszarem roboczym → Agent**, poleceniem `acli workspace agent set` lub przez `PUT /workspace/agent-settings`:
 
 - **Jedno zatwierdzenie na propozycję** (domyślnie): jedno zatwierdzenie obejmuje wszystkie rekordy z edycji zbiorczej.
 - **Zatwierdzanie każdego rekordu**: agent nie może proponować edycji zbiorczych, więc proponuje zmianę każdego rekordu osobno i każda wymaga osobnego zatwierdzenia.

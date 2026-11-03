@@ -15,11 +15,11 @@ linen shirt
 
 dopasowuje rekordy, które zawierają zarówno „linen”, jak i „shirt”.
 
-Nie ma operatorów `OR` i `NOT` ani grupowania.
+Nie ma operatorów `OR` i `NOT`, grupowania ani cudzysłowów, więc termin nie może zawierać spacji.
 
 ## Zwykłe terminy
 
-Termin bez dwukropka przeszukuje tekst własnych atrybutów skalarnych wybranego schematu. Nie podąża za relacjami.
+Termin bez dwukropka przeszukuje własne atrybuty skalarne wybranego schematu. Pasuje w dowolnym miejscu wartości i nie rozróżnia wielkości liter. Liczby, daty i godziny pasują według zapisanej postaci, na przykład `2026-05`. Nie podąża za relacjami.
 
 ```text
 linen
@@ -50,7 +50,9 @@ sku:ABC-12*
 
 Nazwy wyświetlane schematów są dopasowywane bez rozróżniania wielkości liter. Jeśli dwa schematy mają tę samą nazwę wyświetlaną, użyj kodu.
 
-Gdy jednoczłonowy selektor może oznaczać zarówno nazwę schematu, jak i jedną z jego relacji, pierwszeństwo ma schemat.
+Ostatni człon dłuższej ścieżki musi być atrybutem skalarnym, a nie relacją, plikiem ani atrybutem JSON. Termin może zawierać tylko jeden dwukropek.
+
+Gdy jednoczłonowy selektor może oznaczać zarówno nazwę schematu, jak i jeden z jego atrybutów lub jedną z relacji, pierwszeństwo ma schemat.
 
 ## Identyfikatory rekordów
 
@@ -83,7 +85,7 @@ Lista jest częścią zapytania, więc zapisanie wyszukiwania jako [zapisanego w
 
 znajduje produkty, które same są czerwone, produkty powiązane z kolorem o nazwie red oraz produkty powiązane z rodziną powiązaną z czymś czerwonym.
 
-Wyszukiwanie globalne to najbardziej kosztowna postać zapytania. Ma limity po stronie serwera dotyczące liczby sprawdzanych wartości, rekordów i powiązań oraz budżet czasu 250 ms. Jeśli zapytanie je przekroczy, żądanie kończy się błędem `422`, zamiast zwracać częściowe wyniki. W takim przypadku zawęź zapytanie kwalifikowanym selektorem.
+Wyszukiwanie globalne to najbardziej kosztowna postać zapytania. Ma limity po stronie serwera dotyczące liczby sprawdzanych wartości, rekordów i powiązań oraz limit czasu 250 ms na każdy odczyt z bazy danych. Jeśli zapytanie je przekroczy, żądanie kończy się błędem `422`, zamiast zwracać częściowe wyniki. W takim przypadku zawęź zapytanie kwalifikowanym selektorem.
 
 ## Dlaczego to pasuje?
 
@@ -91,4 +93,4 @@ Każdy wynik zawiera wyjaśnienie dopasowania dla każdego terminu: rekord i atr
 
 ## Łączenie z filtrami i fasetami
 
-Zapytanie, [filtry atrybutów](/pl/guides/explore/#filtry), [fasety relacji](/pl/guides/explore/#fasety-relacji), zakres wersji i filtry tagów systemowych zawężają ten sam zbiór wyników. Liczniki faset są obliczane z tych samych dopasowań, więc licznik nigdy nie jest sprzeczny z listą wyników.
+Zapytanie, [filtry atrybutów](/pl/guides/explore/#filtry), [fasety relacji](/pl/guides/explore/#fasety-relacji), zakres wersji i filtry tagów systemowych zawężają ten sam zbiór wyników. Liczniki faset uwzględniają tylko zapytanie i zakres wersji. Filtry atrybutów i inne fasety na nie nie wpływają, więc licznik może być wyższy niż przefiltrowana lista wyników.

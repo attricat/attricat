@@ -24,7 +24,7 @@ You are never notified about your own actions. Notifications about a record only
 
 Choose **Inbox** in the sidebar. The badge on the icon shows how many notifications you have not read yet; it updates every 30 seconds.
 
-The inbox lists notifications newest first. Unread notifications are bold and marked with a dot. Use the **Unread** tab to see only those.
+The inbox lists notifications newest first. Unread notifications are bold and marked with a dot. Use the **Unread (*N*)** tab to see only those.
 
 Select a notification about a record, an agent conversation, or a rule to open it. Comment and mention notifications open the record's **Comments** tab. Opening a notification marks it as read. Notifications such as *Added to a team* are messages only and do not open anything.
 
@@ -42,4 +42,4 @@ Select a notification about a record, an agent conversation, or a rule to open i
 
 - The [CLI](/reference/cli/#notifications) has `acli notification` commands.
 - The [API](/reference/api/#notifications) has the `/notifications` routes.
-- An [agent](/guides/agents/) can list your notifications and read one in full, and with your approval mark notifications as read or delete them.
+- An [agent](/guides/agents/) can list your notifications and read one in full, and with your approval mark notifications as read or unread, or delete them.

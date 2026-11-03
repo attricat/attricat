@@ -24,7 +24,7 @@ Nie dostajesz powiadomień o własnych działaniach. Powiadomienia o rekordzie t
 
 Wybierz **Powiadomienia** na pasku bocznym. Liczba na ikonie pokazuje liczbę nieprzeczytanych powiadomień i odświeża się co 30 sekund.
 
-Powiadomienia są posortowane od najnowszych. Nieprzeczytane są pogrubione i oznaczone kropką. Karta **Nieprzeczytane** pokazuje tylko je.
+Powiadomienia są posortowane od najnowszych. Nieprzeczytane są pogrubione i oznaczone kropką. Karta **Nieprzeczytane (*N*)** pokazuje tylko je.
 
 Wybierz powiadomienie o rekordzie, rozmowie z agentem lub regule, aby je otworzyć. Powiadomienia o komentarzach i wzmiankach otwierają kartę **Komentarze** rekordu. Otwarcie oznacza powiadomienie jako przeczytane. Powiadomienia takie jak *Dodanie do zespołu* są tylko wiadomościami i niczego nie otwierają.
 
@@ -42,4 +42,4 @@ Wybierz powiadomienie o rekordzie, rozmowie z agentem lub regule, aby je otworzy
 
 - [CLI](/pl/reference/cli/#powiadomienia) ma polecenia `acli notification`.
 - [API](/pl/reference/api/#powiadomienia) udostępnia ścieżki `/notifications`.
-- [Agent](/pl/guides/agents/) może odczytać Twoje powiadomienia, a po Twoim zatwierdzeniu oznaczyć je jako przeczytane lub usunąć.
+- [Agent](/pl/guides/agents/) może odczytać Twoje powiadomienia, a po Twoim zatwierdzeniu oznaczyć je jako przeczytane lub nieprzeczytane albo usunąć.

@@ -57,7 +57,7 @@ You can filter on an attribute of a related record too, such as `brand.name`, th
 
 The list also offers [reusable attributes](/builders/modeling/#reuse-attributes) attached to the blueprint's records when their definition sets both `searchable` and `facetable`.
 
-You can also start a filter from the table: open a cell's menu and choose **Filter by**.
+You can also start a filter from the table: hover over a cell and select its filter icon, **Filter by *field* = *value*…**. **Add filter** opens with that field and value filled in.
 
 Every active filter shows as a pill under the search box. All filters, facets, and the search query must match together.
 
@@ -93,7 +93,7 @@ The **Context** selector, under **Search scope**, shows values as they resolve i
 
 The table columns, the record label, filters, and sorting all use the selected context. For example, with a `pl` context selected, a translated name is shown, filtered, and sorted in Polish, and a record without a Polish name shows the inherited one. Text search matches values in every context.
 
-If the selected context is a [publication channel](/guides/publishing/), the table gains a **Publication** column showing whether each record is published there. It can be sorted to put unpublished records first.
+If the selected context is a [publication channel](/guides/publishing/), the table gains a **Publication (*context*)** column showing whether each record is published there. It can be sorted to put unpublished records first.
 
 ## Sort and arrange columns
 

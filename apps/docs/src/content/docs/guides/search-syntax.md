@@ -15,11 +15,11 @@ linen shirt
 
 matches records that contain both "linen" and "shirt".
 
-There is no `OR`, `NOT`, or grouping.
+There is no `OR`, `NOT`, grouping, or quoting, so a term cannot contain a space.
 
 ## Plain terms
 
-A term without a colon searches the text of the chosen blueprint's own scalar attributes. It does not follow relationships.
+A term without a colon searches the chosen blueprint's own scalar attributes. It matches anywhere in a value and ignores case. Numbers, dates, and times match by their stored form, such as `2026-05`. It does not follow relationships.
 
 ```text
 linen
@@ -50,7 +50,9 @@ sku:ABC-12*
 
 Blueprint display names are matched without regard to case. If two blueprints share a display name, use the code.
 
-When a one-part selector could be either the blueprint's name or one of its relationships, the blueprint wins.
+The last part of a longer path must be a scalar attribute, not a relationship, file, or JSON attribute. A term can contain only one colon.
+
+When a one-part selector could be either the blueprint's name or one of its attributes or relationships, the blueprint wins.
 
 ## Record IDs
 
@@ -83,7 +85,7 @@ Because the list is part of the query, saving the search as a [saved search](/gu
 
 finds products that are red themselves, products linked to a color named red, and products linked to a family linked to something red.
 
-Global search is the most expensive query form. It has server-side limits on how many values, records, and links it will examine and a 250 ms time budget. If a query exceeds them, the request fails with `422` rather than returning partial results. Narrow the query with a qualified selector when that happens.
+Global search is the most expensive query form. It has server-side limits on how many values, records, and links it will examine and a 250 ms time limit on each database read. If a query exceeds them, the request fails with `422` rather than returning partial results. Narrow the query with a qualified selector when that happens.
 
 ## Why did this match?
 
@@ -91,4 +93,4 @@ Each result includes a match explanation per term: the record and attribute that
 
 ## Combining with filters and facets
 
-The query, [attribute filters](/guides/explore/#filters), [relationship facets](/guides/explore/#relationship-facets), version scope, and system-tag filters all narrow the same result set. Facet counts are computed from the same matches, so a count never disagrees with the result list.
+The query, [attribute filters](/guides/explore/#filters), [relationship facets](/guides/explore/#relationship-facets), version scope, and system-tag filters all narrow the same result set. Facet counts reflect only the query and version scope. Attribute filters and other facets do not change them, so a count can be higher than the filtered result list.

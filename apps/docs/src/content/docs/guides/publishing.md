@@ -15,7 +15,7 @@ Enabling a channel needs `contexts.write`.
 
 ## Publish a record
 
-On the record page, a globe icon in the toolbar shows the record's publication status in the selected context. Its tooltip says **Published** or **Not published**, and who published the record and when. If the selected context is not a channel, it says **Not an export channel**. Switch the **Context** selector to see another channel.
+On the record page, a globe icon in the toolbar shows the record's publication status in the selected context. Its tooltip says **Published** or **Not published**, and who published the record and when. If the selected context is not a channel, it says **Not an export channel**. Switch the context tabs under **Data** to see another channel.
 
 Publish from the record's **Actions** menu:
 
@@ -25,7 +25,7 @@ Publish from the record's **Actions** menu:
 
 After an edit withdraws the approval, the status is **Not published** again, so the menu offers **Publish**.
 
-In the Explorer, select a channel as the context to get a **Publication** column. Sort it to bring unpublished records to the top.
+In the Explorer, select a channel as the context to get a **Publication (*context*)** column. Sort it to bring unpublished records to the top. The row menu then also offers **Publish** and, for a published record, **Unpublish**.
 
 Publishing needs `records.publish`. The owner and admin roles have it; editors do not.
 
