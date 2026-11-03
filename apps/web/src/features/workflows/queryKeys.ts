@@ -6,4 +6,7 @@ export const workflowQueryKeys = {
   revision: (id: string, version: number) =>
     [...workflowQueryKeys.revisions(id), version] as const,
   runs: () => [...workflowQueryKeys.all(), 'runs'] as const,
+  workflowRuns: (workflowId: string) =>
+    [...workflowQueryKeys.runs(), workflowId] as const,
+  runSummaries: () => [...workflowQueryKeys.runs(), 'summaries'] as const,
 } as const;

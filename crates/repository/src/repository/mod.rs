@@ -314,8 +314,8 @@ pub use teams::{
 pub use tokens::{AuthenticatedToken, PersonalApiToken};
 pub use upload_intents::AbandonedUpload;
 pub use users::UserAccount;
-pub use workflow_runs::WorkflowRun;
 pub use workflow_runs::{ClaimedWorkflowRun, WorkflowActionResult, WorkflowRunTarget};
+pub use workflow_runs::{WorkflowRun, WorkflowRunSummary};
 pub use workspace_navigation::{ExploreNavigationEntry, ExploreNavigationItem};
 
 #[derive(Clone)]

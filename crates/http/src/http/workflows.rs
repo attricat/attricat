@@ -95,13 +95,27 @@ pub(super) async fn disable(
 
 /// Diagnostics intentionally expose run state and trigger references, never the
 /// internal domain-event payload snapshot.
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct RunsQuery {
+    workflow_id: Option<Uuid>,
+    limit: Option<i64>,
+    offset: Option<i64>,
+}
 pub(super) async fn list_runs(
     super::auth::ScopedRepository(repo): super::auth::ScopedRepository,
-    ApiQuery(page): ApiQuery<ArrayPage>,
+    ApiQuery(query): ApiQuery<RunsQuery>,
 ) -> Result<Response, ApiError> {
-    let (limit, offset) = page.bounds()?;
-    let page_items = repo.workflow_runs_page(limit, offset).await?;
+    let (limit, offset) = ArrayPage::new(query.limit, query.offset).bounds()?;
+    let page_items = repo
+        .workflow_runs_page(query.workflow_id, limit, offset)
+        .await?;
     Ok(array_response(page_items, (limit, offset)))
+}
+pub(super) async fn run_summaries(
+    super::auth::ScopedRepository(repo): super::auth::ScopedRepository,
+) -> Result<Json<Vec<crate::repository::WorkflowRunSummary>>, ApiError> {
+    Ok(Json(repo.workflow_run_summaries().await?))
 }
 pub(super) async fn replay_run(
     super::auth::ScopedRepository(repo): super::auth::ScopedRepository,

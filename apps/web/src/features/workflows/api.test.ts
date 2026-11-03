@@ -29,14 +29,20 @@ describe('workflow API client', () => {
   it('reads only the safe workflow run diagnostic contract', async () => {
     fetchMock.mockResolvedValue({
       ok: true,
+      headers: new Headers({ 'x-next-offset': '25' }),
       json: () =>
         Promise.resolve([
           { ...run, trigger_event_payload: { secret: 'never exposed' } },
         ]),
     });
 
-    await expect(listWorkflowRuns()).resolves.toEqual([run]);
-    expect(fetchMock).toHaveBeenCalledWith('/api/workflow-runs');
+    await expect(listWorkflowRuns(run.workflow_id)).resolves.toEqual({
+      items: [run],
+      nextOffset: 25,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/workflow-runs?workflow_id=${run.workflow_id}`,
+    );
   });
 
   it('starts a bounded manual run with only a record target', async () => {

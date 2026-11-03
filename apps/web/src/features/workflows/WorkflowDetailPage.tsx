@@ -1,7 +1,13 @@
 import { RevisionStatusChip } from '../../components/RevisionStatusChip';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { Alert, Box, Chip, Stack, Tab, Tabs } from '@mui/material';
 import { useState } from 'react';
+import { NextPageButton } from '../../components/LoadMoreButton';
 import { useTranslation } from 'react-i18next';
 import {
   CodeIcon,
@@ -53,7 +59,7 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
   const tabId = useTabAccessibility();
   const canManage = useCan(capabilities.workflowsManage);
   const revisions = useQuery(workflowRevisionListOptions(workflowId));
-  const runs = useQuery(workflowRunListOptions());
+  const runs = useInfiniteQuery(workflowRunListOptions(workflowId));
   // Revisions and runs are both under the workflows root key.
   const refresh = () =>
     queryClient.invalidateQueries({ queryKey: workflowQueryKeys.all() });
@@ -91,9 +97,7 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
       revision.version ===
       (leftVersion ?? revisions.data?.[1]?.version ?? current?.version),
   );
-  const workflowRuns = (runs.data ?? []).filter(
-    (run) => run.workflow_id === workflowId,
-  );
+  const workflowRuns = runs.data?.pages.flatMap((page) => page.items) ?? [];
   const mutationError =
     lastAction && { publish, enable, runNow, disable }[lastAction].error;
   // This page's workflow exists, so a refused run names a missing record.
@@ -228,6 +232,7 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
       {tab === workflowDetailTab.runDiagnostics && (
         <Box {...tabId.panel(workflowDetailTab.runDiagnostics)}>
           <WorkflowRunTable canManage={canManage} runs={workflowRuns} />
+          <NextPageButton query={runs} sx={{ mt: 2 }} />
         </Box>
       )}
     </PageContainer>

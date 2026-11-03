@@ -392,7 +392,8 @@ See [Translate labels](/builders/translations/).
 | `GET`, `POST` | `/workflows`, `/workflows/{id}/versions` | List or create workflows and revisions. |
 | `POST` | `/workflows/{id}/versions/{version}/publish`, `/enable`; `/workflows/{id}/disable` | Lifecycle. |
 | `POST` | `/workflows/{id}/run-now` | Manual run. |
-| `GET` | `/workflow-runs` | Run history. |
+| `GET` | `/workflow-runs` | Run history. `workflow_id` limits it to one workflow. |
+| `GET` | `/workflow-runs/summary` | Each workflow's `dead_letters`, `latest_status` and `latest_created_at`, counted over all its runs. |
 | `GET` | `/workflow-runs/{id}/targets` | Per-record outcomes of a `referencing_records_update` action. |
 | `POST` | `/workflow-runs/{id}/replay` | Replay a dead letter. |
 

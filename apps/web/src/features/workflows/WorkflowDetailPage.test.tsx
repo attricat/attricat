@@ -109,7 +109,7 @@ describe('WorkflowDetailPage', () => {
       capabilities: { workflows_manage: false, workflows_read: true },
     } as Awaited<ReturnType<typeof currentSession>>);
     vi.mocked(listWorkflowRevisions).mockResolvedValue([workflow]);
-    vi.mocked(listWorkflowRuns).mockResolvedValue([run]);
+    vi.mocked(listWorkflowRuns).mockResolvedValue({ items: [run] });
 
     renderPage();
 
@@ -133,7 +133,7 @@ describe('WorkflowDetailPage', () => {
       capabilities: { workflows_manage: false, workflows_read: true },
     } as Awaited<ReturnType<typeof currentSession>>);
     vi.mocked(listWorkflowRevisions).mockResolvedValue([workflow]);
-    vi.mocked(listWorkflowRuns).mockResolvedValue([]);
+    vi.mocked(listWorkflowRuns).mockResolvedValue({ items: [] });
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
@@ -167,7 +167,7 @@ describe('WorkflowDetailPage', () => {
         manual_enabled: true,
       },
     ]);
-    vi.mocked(listWorkflowRuns).mockResolvedValue([]);
+    vi.mocked(listWorkflowRuns).mockResolvedValue({ items: [] });
     vi.mocked(runWorkflowNow).mockImplementation(() => new Promise(() => {}));
     renderPage();
     const user = userEvent.setup();
@@ -202,7 +202,7 @@ describe('WorkflowDetailPage', () => {
         manual_enabled: true,
       },
     ]);
-    vi.mocked(listWorkflowRuns).mockResolvedValue([]);
+    vi.mocked(listWorkflowRuns).mockResolvedValue({ items: [] });
     renderPage();
     expect(await screen.findByRole('button', { name: 'Run now' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /^Enable/ })).toBeNull();
@@ -216,7 +216,7 @@ describe('WorkflowDetailPage', () => {
       { ...workflow, version: 3 },
       { ...workflow, status: 'published', version: 2 },
     ]);
-    vi.mocked(listWorkflowRuns).mockResolvedValue([]);
+    vi.mocked(listWorkflowRuns).mockResolvedValue({ items: [] });
     renderPage();
     expect(
       await screen.findByRole('button', { name: 'Enable revision 2' }),
@@ -229,18 +229,20 @@ describe('WorkflowDetailPage', () => {
     } as Awaited<ReturnType<typeof currentSession>>);
     vi.mocked(listWorkflowRevisions).mockResolvedValue([workflow]);
     vi.mocked(listWorkflowRuns)
-      .mockResolvedValueOnce([
-        { ...run, attempts: 0, failed_at: null, status: 'pending' },
-      ])
-      .mockResolvedValue([
-        {
-          ...run,
-          attempts: 1,
-          completed_at: '2026-01-01T00:00:01Z',
-          failed_at: null,
-          status: 'completed',
-        },
-      ]);
+      .mockResolvedValueOnce({
+        items: [{ ...run, attempts: 0, failed_at: null, status: 'pending' }],
+      })
+      .mockResolvedValue({
+        items: [
+          {
+            ...run,
+            attempts: 1,
+            completed_at: '2026-01-01T00:00:01Z',
+            failed_at: null,
+            status: 'completed',
+          },
+        ],
+      });
     renderPage();
     const user = userEvent.setup();
     await user.click(
@@ -265,7 +267,7 @@ describe('WorkflowDetailPage', () => {
         manual_enabled: true,
       },
     ]);
-    vi.mocked(listWorkflowRuns).mockResolvedValue([]);
+    vi.mocked(listWorkflowRuns).mockResolvedValue({ items: [] });
     vi.mocked(runWorkflowNow).mockRejectedValue(
       new ApiRequestError(404, 'record not found', 'not_found'),
     );
@@ -296,7 +298,7 @@ describe('WorkflowDetailPage', () => {
         manual_enabled: true,
       },
     ]);
-    vi.mocked(listWorkflowRuns).mockResolvedValue([]);
+    vi.mocked(listWorkflowRuns).mockResolvedValue({ items: [] });
     renderPage();
     const user = userEvent.setup();
     const recordId = await screen.findByRole('textbox', {
@@ -315,7 +317,7 @@ describe('WorkflowDetailPage', () => {
       capabilities: { workflows_manage: true, workflows_read: true },
     } as Awaited<ReturnType<typeof currentSession>>);
     vi.mocked(listWorkflowRevisions).mockResolvedValue([workflow]);
-    vi.mocked(listWorkflowRuns).mockResolvedValue([run]);
+    vi.mocked(listWorkflowRuns).mockResolvedValue({ items: [run] });
     vi.mocked(publishWorkflowRevision).mockResolvedValue(workflow);
     vi.mocked(replayWorkflowRun).mockResolvedValue();
     const client = renderPage();

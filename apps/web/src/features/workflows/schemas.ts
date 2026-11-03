@@ -18,6 +18,13 @@ export const workflowSchema = z.object({
   manual_enabled: z.boolean(),
 });
 
+export const workflowRunSummarySchema = z.object({
+  workflow_id: z.uuid(),
+  dead_letters: z.number().int().nonnegative(),
+  latest_status: runStatusSchema,
+  latest_created_at: z.string(),
+});
+
 export const workflowRunSchema = z.object({
   id: z.uuid(),
   workflow_id: z.uuid(),

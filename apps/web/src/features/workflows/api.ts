@@ -1,12 +1,17 @@
 import { z } from 'zod';
-import { request, requestNoContent, jsonRequest } from '../../api/request';
+import {
+  request,
+  requestNoContent,
+  requestOffsetPage,
+  jsonRequest,
+} from '../../api/request';
 import {
   compiledWorkflowSchema,
   workflowRunSchema,
+  workflowRunSummarySchema,
   workflowSchema,
   type CompiledWorkflow,
   type Workflow,
-  type WorkflowRun,
 } from './schemas';
 import { uuidSegment, versionSegment } from '../../api/pathSegments';
 import { maximumRunIdempotencyKeyLength } from './constants';
@@ -99,8 +104,19 @@ export const disableWorkflow = (id: string): Promise<Workflow> =>
     method: 'POST',
   });
 
-export const listWorkflowRuns = (): Promise<WorkflowRun[]> =>
-  request('/api/workflow-runs', z.array(workflowRunSchema));
+/** One page of a workflow's runs, newest first. */
+export const listWorkflowRuns = (workflowId: string, offset?: number) =>
+  requestOffsetPage(
+    `/api/workflow-runs?${new URLSearchParams({
+      workflow_id: z.uuid().parse(workflowId),
+      ...(offset === undefined ? {} : { offset: String(offset) }),
+    })}`,
+    z.array(workflowRunSchema),
+  );
+
+/** Each workflow's dead letters and latest run, over all its runs. */
+export const listWorkflowRunSummaries = () =>
+  request('/api/workflow-runs/summary', z.array(workflowRunSummarySchema));
 
 export const replayWorkflowRun = (id: string) =>
   requestNoContent(`/api/workflow-runs/${uuidSegment(id)}/replay`, {

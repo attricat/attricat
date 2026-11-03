@@ -27,39 +27,24 @@ import { EmptyState } from '../../components/EmptyState';
 import { WorkflowIcon } from '../../components/systemIcons';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
-import { workflowListOptions, workflowRunListOptions } from './queryOptions';
-import { runStatuses } from '../../api/runStatus';
+import { workflowListOptions, workflowRunSummaryOptions } from './queryOptions';
 import { RunStatusChip } from '../../components/RunStatusChip';
 import { RunsUnavailableAlert } from './RunsUnavailableAlert';
 import { LoadingState } from '../../components/LoadingState';
-import type { WorkflowRun } from './schemas';
 import { EnabledChip } from '../../components/EnabledChip';
 
 export const WorkflowsPage = () => {
   const { t } = useTranslation();
   const canManage = useCan(capabilities.workflowsManage);
   const workflows = useQuery(workflowListOptions());
-  const runs = useQuery(workflowRunListOptions());
+  const runs = useQuery(workflowRunSummaryOptions());
   const families = latestRevisions(
     workflows.data ?? [],
     (workflow) => workflow.id,
   );
-  const runSummaries = new Map<
-    string,
-    {
-      deadLetters: number;
-      latest: WorkflowRun;
-    }
-  >();
-  for (const run of runs.data ?? []) {
-    const summary = runSummaries.get(run.workflow_id) ?? {
-      deadLetters: 0,
-      latest: run,
-    };
-    if (run.status === runStatuses.deadLetter) summary.deadLetters += 1;
-    if (run.created_at > summary.latest.created_at) summary.latest = run;
-    runSummaries.set(run.workflow_id, summary);
-  }
+  const runSummaries = new Map(
+    (runs.data ?? []).map((summary) => [summary.workflow_id, summary]),
+  );
 
   return (
     <PageContainer>
@@ -141,11 +126,11 @@ export const WorkflowsPage = () => {
                           t('workflows.loading')
                         ) : runs.isError ? (
                           t('workflows.notAvailable')
-                        ) : summary && summary.deadLetters > 0 ? (
+                        ) : summary && summary.dead_letters > 0 ? (
                           <Chip
                             color="error"
                             label={t('workflows.deadLetters', {
-                              count: summary.deadLetters,
+                              count: summary.dead_letters,
                             })}
                             size="small"
                           />
@@ -154,14 +139,14 @@ export const WorkflowsPage = () => {
                             spacing={0.25}
                             sx={{ alignItems: 'flex-start' }}
                           >
-                            <RunStatusChip status={summary.latest.status} />
+                            <RunStatusChip status={summary.latest_status} />
                             <Typography
                               color="text.secondary"
                               variant="caption"
                             >
                               <Timestamp
                                 fallback={t('workflows.notAvailable')}
-                                value={summary.latest.created_at}
+                                value={summary.latest_created_at}
                               />
                             </Typography>
                           </Stack>

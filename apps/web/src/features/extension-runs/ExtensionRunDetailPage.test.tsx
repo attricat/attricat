@@ -10,7 +10,7 @@ import { ExtensionRunDetailPage } from './ExtensionRunDetailPage';
 
 vi.mock('../../components/RouterLink', () => ({
   RouterButton: ({ children }: { children: React.ReactNode }) => (
-    <a>{children}</a>
+    <span>{children}</span>
   ),
 }));
 vi.mock('./api', async (importOriginal) => ({

@@ -11,7 +11,7 @@ import i18n from '../../i18n';
 import { currentSession } from '../auth/api';
 import { RequireCapability } from '../auth/RequireCapability';
 import { capabilities } from '../auth/capabilities';
-import { listWorkflowRuns, listWorkflows } from './api';
+import { listWorkflowRunSummaries, listWorkflows } from './api';
 import { WorkflowsPage } from './WorkflowsPage';
 
 vi.mock('@tanstack/react-router', () => ({
@@ -40,7 +40,10 @@ vi.mock('../auth/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../auth/api')>()),
   currentSession: vi.fn(),
 }));
-vi.mock('./api', () => ({ listWorkflowRuns: vi.fn(), listWorkflows: vi.fn() }));
+vi.mock('./api', () => ({
+  listWorkflowRunSummaries: vi.fn(),
+  listWorkflows: vi.fn(),
+}));
 
 describe('WorkflowsPage', () => {
   afterEach(async () => {
@@ -70,7 +73,7 @@ describe('WorkflowsPage', () => {
       ),
     ).toBeDefined();
     expect(listWorkflows).not.toHaveBeenCalled();
-    expect(listWorkflowRuns).not.toHaveBeenCalled();
+    expect(listWorkflowRunSummaries).not.toHaveBeenCalled();
   });
 
   it('does not report no runs while run history is still loading', async () => {
@@ -94,9 +97,9 @@ describe('WorkflowsPage', () => {
       },
     ]);
     let finishRuns!: (
-      runs: Awaited<ReturnType<typeof listWorkflowRuns>>,
+      runs: Awaited<ReturnType<typeof listWorkflowRunSummaries>>,
     ) => void;
-    vi.mocked(listWorkflowRuns).mockImplementation(
+    vi.mocked(listWorkflowRunSummaries).mockImplementation(
       () =>
         new Promise((resolve) => {
           finishRuns = resolve;
@@ -118,7 +121,7 @@ describe('WorkflowsPage', () => {
     );
   });
 
-  it('uses the newest run even if run history is returned out of order', async () => {
+  it('shows the latest run the server reports', async () => {
     vi.mocked(currentSession).mockResolvedValue({
       capabilities: { workflows_manage: false, workflows_read: true },
     } as Awaited<ReturnType<typeof currentSession>>);
@@ -139,30 +142,12 @@ describe('WorkflowsPage', () => {
         version: 1,
       },
     ]);
-    const run = {
-      attempts: 0,
-      cancelled_at: null,
-      causal_depth: 0,
-      completed_at: null,
-      created_at: '2026-01-01T00:00:00Z',
-      failed_at: null,
-      id: '123e4567-e89b-12d3-a456-426614174000',
-      last_error: null,
-      root_trigger_event_id: '423e4567-e89b-12d3-a456-426614174000',
-      source: 'event' as const,
-      status: 'completed' as const,
-      trigger_event_id: '323e4567-e89b-12d3-a456-426614174000',
-      trigger_sequence: 4,
-      workflow_id: workflowId,
-      workflow_version: 1,
-    };
-    vi.mocked(listWorkflowRuns).mockResolvedValue([
-      { ...run, created_at: '2026-01-03T00:00:00Z', status: 'completed' },
+    vi.mocked(listWorkflowRunSummaries).mockResolvedValue([
       {
-        ...run,
-        id: '223e4567-e89b-12d3-a456-426614174001',
-        created_at: '2026-01-01T00:00:00Z',
-        status: 'pending',
+        workflow_id: workflowId,
+        dead_letters: 0,
+        latest_status: 'completed',
+        latest_created_at: '2026-01-03T00:00:00Z',
       },
     ]);
     const client = new QueryClient({
@@ -196,23 +181,12 @@ describe('WorkflowsPage', () => {
         version: 1,
       },
     ]);
-    vi.mocked(listWorkflowRuns).mockResolvedValue([
+    vi.mocked(listWorkflowRunSummaries).mockResolvedValue([
       {
-        attempts: 0,
-        cancelled_at: null,
-        causal_depth: 0,
-        completed_at: null,
-        created_at: '2026-01-01T00:00:00Z',
-        failed_at: null,
-        id: '123e4567-e89b-12d3-a456-426614174000',
-        last_error: null,
-        root_trigger_event_id: '423e4567-e89b-12d3-a456-426614174000',
-        source: 'event',
-        status: 'pending',
-        trigger_event_id: '323e4567-e89b-12d3-a456-426614174000',
-        trigger_sequence: 4,
         workflow_id: '223e4567-e89b-12d3-a456-426614174000',
-        workflow_version: 1,
+        dead_letters: 0,
+        latest_status: 'pending',
+        latest_created_at: '2026-01-01T00:00:00Z',
       },
     ]);
     const client = new QueryClient({

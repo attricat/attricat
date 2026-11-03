@@ -1702,7 +1702,7 @@ pub async fn execute_read(
             struct Input { limit: Option<i64>, offset: Option<i64> }
             let input: Input = decode(arguments)?;
             let (limit, offset) = diagnostic_page_arguments(input.limit, input.offset)?;
-            let (items, has_more) = repository.workflow_runs_page(limit, offset).await?;
+            let (items, has_more) = repository.workflow_runs_page(None, limit, offset).await?;
             json!({"items":items.into_iter().map(safe_workflow_run).collect::<Vec<_>>(),
                 "next_offset":next_history_offset(has_more, offset, limit)})
         }

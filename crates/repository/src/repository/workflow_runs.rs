@@ -24,6 +24,15 @@ pub(super) fn valid_manual_idempotency_key(key: &str) -> bool {
     !key.is_empty() && key.len() <= MAX_MANUAL_IDEMPOTENCY_KEY_BYTES && key.is_ascii()
 }
 
+/// What the workflow list shows about one workflow's runs.
+#[derive(Clone, Debug, serde::Serialize, sqlx::FromRow)]
+pub struct WorkflowRunSummary {
+    pub workflow_id: Uuid,
+    pub dead_letters: i64,
+    pub latest_status: String,
+    pub latest_created_at: DateTime<Utc>,
+}
+
 #[derive(Debug, Clone, serde::Serialize, sqlx::FromRow)]
 pub struct WorkflowRun {
     pub id: Uuid,
@@ -332,15 +341,26 @@ impl AttricatRepository {
 
     pub async fn workflow_runs_page(
         &self,
+        workflow_id: Option<Uuid>,
         limit: i64,
         offset: i64,
     ) -> Result<(Vec<WorkflowRun>, bool), RepositoryError> {
         let ws = self.workspace_id.0;
-        let mut rows = sqlx::query_as("SELECT id,workflow_id,workflow_version,trigger_event_id,trigger_sequence,source,status,attempts,failed_at,completed_at,last_error,created_at,cancelled_at,root_trigger_event_id,causal_depth FROM workflow_runs WHERE workspace_id=$1 ORDER BY created_at DESC,id DESC LIMIT $2 OFFSET $3")
-            .bind(ws).bind(limit + 1).bind(offset).fetch_all(&self.pool).await?;
+        let mut rows = sqlx::query_as("SELECT id,workflow_id,workflow_version,trigger_event_id,trigger_sequence,source,status,attempts,failed_at,completed_at,last_error,created_at,cancelled_at,root_trigger_event_id,causal_depth FROM workflow_runs WHERE workspace_id=$1 AND ($4::uuid IS NULL OR workflow_id=$4) ORDER BY created_at DESC,id DESC LIMIT $2 OFFSET $3")
+            .bind(ws).bind(limit + 1).bind(offset).bind(workflow_id).fetch_all(&self.pool).await?;
         let has_more = rows.len() as i64 > limit;
         rows.truncate(limit as usize);
         Ok((rows, has_more))
+    }
+
+    /// Each workflow's dead letters and latest run, counted over all its runs.
+    pub async fn workflow_run_summaries(&self) -> Result<Vec<WorkflowRunSummary>, RepositoryError> {
+        Ok(sqlx::query_as(
+            "SELECT workflow_id, count(*) FILTER (WHERE status = 'dead_letter') AS dead_letters, (array_agg(status ORDER BY created_at DESC, id DESC))[1] AS latest_status, max(created_at) AS latest_created_at FROM workflow_runs WHERE workspace_id = $1 GROUP BY workflow_id",
+        )
+        .bind(self.workspace_id.0)
+        .fetch_all(&self.pool)
+        .await?)
     }
 
     pub async fn create_manual_workflow_run(

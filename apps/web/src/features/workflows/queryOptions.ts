@@ -1,8 +1,13 @@
-import { queryOptions, skipToken } from '@tanstack/react-query';
+import {
+  infiniteQueryOptions,
+  queryOptions,
+  skipToken,
+} from '@tanstack/react-query';
 import { activeRunStatuses } from '../../api/runStatus';
 import {
   getWorkflowRevision,
   listWorkflowRevisions,
+  listWorkflowRunSummaries,
   listWorkflowRuns,
   listWorkflows,
 } from './api';
@@ -12,13 +17,30 @@ import { workflowQueryKeys } from './queryKeys';
 export const workflowListOptions = () =>
   queryOptions({ queryKey: workflowQueryKeys.all(), queryFn: listWorkflows });
 
-/** The workspace's workflow runs, refreshed while one has not finished. */
-export const workflowRunListOptions = () =>
-  queryOptions({
-    queryKey: workflowQueryKeys.runs(),
-    queryFn: listWorkflowRuns,
+/** One workflow's runs, refreshed while one has not finished. */
+export const workflowRunListOptions = (workflowId: string) =>
+  infiniteQueryOptions({
+    queryKey: workflowQueryKeys.workflowRuns(workflowId),
+    queryFn: ({ pageParam }) => listWorkflowRuns(workflowId, pageParam),
+    initialPageParam: undefined as number | undefined,
+    getNextPageParam: (page) => page.nextOffset,
     refetchInterval: (query) =>
-      query.state.data?.some((run) => activeRunStatuses.includes(run.status))
+      query.state.data?.pages.some((page) =>
+        page.items.some((run) => activeRunStatuses.includes(run.status)),
+      )
+        ? workflowRunPollMs
+        : false,
+  });
+
+/** What the list shows about each workflow's runs. */
+export const workflowRunSummaryOptions = () =>
+  queryOptions({
+    queryKey: workflowQueryKeys.runSummaries(),
+    queryFn: listWorkflowRunSummaries,
+    refetchInterval: (query) =>
+      query.state.data?.some((summary) =>
+        activeRunStatuses.includes(summary.latest_status),
+      )
         ? workflowRunPollMs
         : false,
   });

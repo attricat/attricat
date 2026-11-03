@@ -392,7 +392,8 @@ Trasy `GET` reguł, wykonań i ustaleń wymagają `rules.read`; pozostałe trasy
 | `GET`, `POST` | `/workflows`, `/workflows/{id}/versions` | Wyświetla lub tworzy przepływy pracy i ich wersje. |
 | `POST` | `/workflows/{id}/versions/{version}/publish`, `/enable`; `/workflows/{id}/disable` | Cykl życia. |
 | `POST` | `/workflows/{id}/run-now` | Uruchomienie ręczne. |
-| `GET` | `/workflow-runs` | Historia uruchomień. |
+| `GET` | `/workflow-runs` | Historia uruchomień. `workflow_id` ogranicza ją do jednego przepływu pracy. |
+| `GET` | `/workflow-runs/summary` | Dla każdego przepływu pracy `dead_letters`, `latest_status` i `latest_created_at`, liczone ze wszystkich jego uruchomień. |
 | `GET` | `/workflow-runs/{id}/targets` | Wyniki akcji `referencing_records_update` dla poszczególnych rekordów. |
 | `POST` | `/workflow-runs/{id}/replay` | Ponawia martwą wiadomość. |
 

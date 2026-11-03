@@ -1679,3 +1679,68 @@ async fn enabling_a_newer_version_lets_a_queued_run_finish(pool: PgPool) {
     assert_eq!(tags, ["first"]);
     server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn runs_can_be_listed_and_summarized_per_workflow(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let blueprint = create_blueprint(
+        &client,
+        &base_url,
+        "format_version: 1\ncode: filtered_item\nname: Filtered item\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string\n",
+    )
+    .await;
+    let definition = |code: &str| {
+        format!(
+            "format_version: 2\ncode: {code}\nname: {code}\ntriggers:\n  - event_type: record.created.v1\nactions:\n  - type: system_tags_add\n    tags: [seen]\n"
+        )
+    };
+    let quiet = enabled_workflow(&client, &base_url, &definition("quiet_flow")).await;
+    let busy = enabled_workflow(&client, &base_url, &definition("busy_flow")).await;
+    let record = create_record(&client, &base_url, &blueprint).await;
+    assert_eq!(
+        fan_out_latest_event(&pool, record["id"].as_str().unwrap())
+            .await
+            .1,
+        2
+    );
+    sqlx::query("UPDATE workflow_runs SET status = 'dead_letter', failed_at = clock_timestamp() WHERE workflow_id = $1")
+        .bind(quiet)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let listed: Vec<Value> = client
+        .get(format!("{base_url}/workflow-runs?workflow_id={quiet}"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0]["workflow_id"], json!(quiet));
+
+    let summaries: Vec<Value> = client
+        .get(format!("{base_url}/workflow-runs/summary"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let of = |id: Uuid| {
+        summaries
+            .iter()
+            .find(|summary| summary["workflow_id"] == json!(id))
+            .unwrap()
+    };
+    assert_eq!(of(quiet)["dead_letters"], 1);
+    assert_eq!(of(busy)["dead_letters"], 0);
+    assert_eq!(of(busy)["latest_status"], "pending");
+    server.abort();
+}
