@@ -40,9 +40,9 @@ four policies:
 | Policy | Meaning | Used for |
 | --- | --- | --- |
 | `Immutable` | The value never changes for its key; only LRU eviction removes it. | Published blueprint revisions (`blueprint_revision`, `blueprint_revision_code`) and installed release manifests (`extension_manifest`). Drafts are never cached. |
-| `Generation` | The key embeds a workspace generation the request read, so a write makes a new key and old entries age out unused. | `context_tree`, `enabled_rules`, `blueprint_latest_id`, `blueprint_latest_code`, `client_contributions`, `extension_layout`, `explore_navigation`. |
+| `Generation` | The key embeds a workspace generation the request read, so a write makes a new key and old entries age out unused. | `context_tree`, `enabled_rules`, `blueprint_latest_id`, `blueprint_latest_code`, `client_contributions`, `extension_layout`, `export_destinations`, `explore_navigation`, `blueprint_table_paths`. |
 | `LocalGeneration` | Like `Generation`, but never read from or written to Redis. For values that also depend on state every process bootstraps at startup without advancing a generation, which a deploy can change. | `workspace_permissions`. |
-| `Ttl { fresh, stale }` | Served for `fresh`; for a further `stale` one caller reloads while others get the stale value. Use it only where bounded staleness is acceptable. | `active_workspaces` (5 s fresh, 5 s stale), the background loops' workspace list. |
+| `Ttl { fresh, stale }` | Served for `fresh`; for a further `stale` one caller reloads while others get the stale value. Use it only where bounded staleness is acceptable. | `active_workspaces` (5 s fresh, 5 s stale), the background loops' workspace list, `tree_facet_counts` (the Explorer's tree counts). |
 
 `Tag`s and `QueryCache::invalidate_local` evict L1 entries of one process only.
 They never reach Redis or other replicas, so they must never be what keeps an
