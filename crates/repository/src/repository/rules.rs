@@ -868,7 +868,7 @@ impl AttricatRepository {
                 let is_active = match active {
                     Some(active) => active,
                     None => {
-                        let current: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM rule_runs WHERE workspace_id=$1 AND rule_id=$2 AND status IN ('pending','leased'))").bind(ws).bind(rule_id).fetch_one(&mut *tx).await?;
+                        let current: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM rule_runs WHERE workspace_id=$1 AND rule_id=$2 AND scope_record_id IS NULL AND status IN ('pending','leased'))").bind(ws).bind(rule_id).fetch_one(&mut *tx).await?;
                         *active.insert(current)
                     }
                 };

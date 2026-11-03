@@ -1828,3 +1828,45 @@ async fn saving_from_an_older_revision_is_refused(pool: PgPool) {
     expect_status(save(RULE.to_owned(), 2).await.unwrap(), StatusCode::OK).await;
     server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_record_run_does_not_stop_a_scheduled_run(pool: PgPool) {
+    let (base_url, server, rule_id, blueprint) = setup_rule(&pool).await;
+    let client = authenticated_client();
+    let repository = AttricatRepository::new(pool.clone(), BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
+    let scheduled = RULE.replace(
+        "  - type: manual",
+        "  - type: manual\n  - type: schedule\n    cron: '0 0 * * * *'\n    timezone: UTC",
+    );
+    expect_status(
+        client
+            .put(format!("{base_url}/rules/{rule_id}"))
+            .json(&json!({ "definition": scheduled }))
+            .send()
+            .await
+            .unwrap(),
+        StatusCode::OK,
+    )
+    .await;
+    let record = create_record(&client, &base_url, &blueprint).await;
+    let record_id: Uuid = record["id"].as_str().unwrap().parse().unwrap();
+    // Saving the rule queued a full re-check, which rightly blocks a schedule.
+    drain_tasks(&repository).await;
+    manual_run(&base_url, rule_id, Some(record_id), "record").await;
+    let due = |pool: PgPool| async move {
+        sqlx::query(
+            "UPDATE rule_schedule_states SET next_run_at = clock_timestamp() - interval '1 second'",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+    };
+    due(pool.clone()).await;
+
+    assert_eq!(repository.schedule_rule_runs().await.unwrap(), 1);
+
+    // Another full run still blocks the next occurrence.
+    due(pool.clone()).await;
+    assert_eq!(repository.schedule_rule_runs().await.unwrap(), 0);
+    server.abort();
+}
