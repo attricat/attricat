@@ -1443,3 +1443,51 @@ async fn operators_authorize_connections_in_the_browser(pool: sqlx::PgPool) {
     assert_eq!(callback(late, Some(cookie)).await, returned("expired"));
     server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_late_refresh_failure_leaves_newly_saved_credentials_alone(pool: sqlx::PgPool) {
+    shared_mock();
+    let repository =
+        AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
+    let store = Arc::new(FakeObjectStore::available());
+    api::extension_installer::ExtensionInstaller::new(repository.clone(), store)
+        .install("test", &archive())
+        .await
+        .unwrap();
+    repository
+        .create_extension_connection(connection("rotating", "refresh_token"))
+        .await
+        .unwrap();
+    let refresh = repository
+        .claim_extension_connection_refresh(EXTENSION, "rotating")
+        .await
+        .unwrap()
+        .unwrap();
+    repository
+        .update_extension_connection(
+            EXTENSION,
+            "rotating",
+            ExtensionConnectionPatch {
+                display_name: None,
+                token_url: None,
+                device_authorization_url: None,
+                authorization_url: None,
+                scope: None,
+                parameters: None,
+                client_secret: None,
+                refresh_token: Some("reconnected".into()),
+            },
+        )
+        .await
+        .unwrap();
+
+    assert!(refresh.fail("invalid_grant", true).await.is_err());
+
+    let (status, claimed): (String, bool) = sqlx::query_as(
+        "SELECT status, refresh_claim IS NOT NULL FROM extension_connections WHERE connection = 'rotating'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!((status.as_str(), claimed), ("active", false));
+}

@@ -416,8 +416,11 @@ impl ConnectionRefresh {
     pub async fn fail(mut self, message: &str, revoked: bool) -> Result<(), RepositoryError> {
         let message: String = message.chars().take(MAX_CONNECTION_ERROR_CHARS).collect();
         let (workspace_id, id, claim) = (self.workspace_id, self.credentials.id, self.claim);
-        self.settle(sqlx::query("UPDATE extension_connections SET status=CASE WHEN $4 THEN 'failed' ELSE status END,last_error=$3,access_token_ciphertext=CASE WHEN $4 THEN NULL ELSE access_token_ciphertext END,refresh_claim=NULL,refresh_claimed_until=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 AND refresh_claim=$5")
-            .bind(workspace_id).bind(id).bind(message).bind(revoked).bind(claim))
+        // A failure only says something about the credentials it started with.
+        let basis = std::mem::take(&mut self.basis);
+        self.settle(sqlx::query("UPDATE extension_connections SET status=CASE WHEN $4 THEN 'failed' ELSE status END,last_error=$3,access_token_ciphertext=CASE WHEN $4 THEN NULL ELSE access_token_ciphertext END,refresh_claim=NULL,refresh_claimed_until=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 AND refresh_claim=$5 AND token_url=$6 AND scope IS NOT DISTINCT FROM $7 AND client_secret_ciphertext IS NOT DISTINCT FROM $8 AND refresh_token_ciphertext IS NOT DISTINCT FROM $9")
+            .bind(workspace_id).bind(id).bind(message).bind(revoked).bind(claim)
+            .bind(basis.token_url).bind(basis.scope).bind(basis.client_secret).bind(basis.refresh_token))
             .await
     }
 
