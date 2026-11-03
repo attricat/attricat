@@ -87,6 +87,7 @@ async fn start(pool: &PgPool) -> Harness {
                 callback_url: CALLBACK.parse().unwrap(),
                 allowed_private_hosts: vec!["127.0.0.1".to_owned()].into(),
                 extra_root_certificates_pem: None,
+                client_ip_header: None,
                 starting_metadata: Default::default(),
             });
         })
@@ -657,6 +658,7 @@ async fn an_unsafe_provider_address_is_refused(pool: PgPool) {
                 callback_url: CALLBACK.parse().unwrap(),
                 allowed_private_hosts: Vec::new().into(),
                 extra_root_certificates_pem: None,
+                client_ip_header: None,
                 starting_metadata: Default::default(),
             });
         },
@@ -2087,4 +2089,49 @@ async fn provider_changes_are_audited_with_what_changed(pool: PgPool) {
     assert_eq!(change["enabled"], true);
     harness.server.abort();
     harness.provider.server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn sign_on_starts_are_limited_per_client_behind_a_trusted_proxy(pool: PgPool) {
+    use_identity_provider_credential_key([9; 32]);
+    let (base_url, server) = start_configured_session_server(
+        pool.clone(),
+        Arc::new(TestMailDelivery::default()),
+        |state: &mut AppState| {
+            state.oidc = Some(OidcSettings {
+                callback_url: CALLBACK.parse().unwrap(),
+                allowed_private_hosts: Vec::new().into(),
+                extra_root_certificates_pem: None,
+                client_ip_header: Some("x-forwarded-for".parse().unwrap()),
+                starting_metadata: Default::default(),
+            });
+        },
+    )
+    .await;
+    let start = |client_address: &str| {
+        client()
+            .post(format!("{base_url}/auth/oidc/start"))
+            .header("x-forwarded-for", client_address)
+            .json(&sign_in_body())
+            .send()
+    };
+    // The workspace has no provider, which is answered after the limit.
+    assert_eq!(
+        start("198.51.100.1").await.unwrap().status(),
+        StatusCode::NOT_FOUND
+    );
+    sqlx::query("UPDATE workspace_discovery_rate_limits SET attempts = 300")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        start("203.0.113.9, 198.51.100.1").await.unwrap().status(),
+        StatusCode::TOO_MANY_REQUESTS
+    );
+    assert_eq!(
+        start("198.51.100.2").await.unwrap().status(),
+        StatusCode::NOT_FOUND
+    );
+    server.abort();
 }

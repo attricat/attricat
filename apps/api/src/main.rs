@@ -234,6 +234,7 @@ async fn serve() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             callback_url: oidc.callback_url,
             allowed_private_hosts: oidc.allowed_private_hosts.into(),
             extra_root_certificates_pem: oidc.extra_root_certificates_pem.map(Into::into),
+            client_ip_header: oidc.client_ip_header,
             starting_metadata: Default::default(),
         }
     });

@@ -8,6 +8,10 @@ use crate::account::{ActionTokenDigest, PasswordHash, SessionDigest};
 
 use super::{AttricatRepository, RepositoryError, oidc_sign_in::NewOidcSession};
 
+/// Sign-on starts per client in a window. A whole office can share one address,
+/// so this only stops a flood from pushing out other people's sign-ins.
+const OIDC_START_ATTEMPTS_PER_WINDOW: i32 = 300;
+
 pub struct LocalLoginCredential {
     pub user_id: Uuid,
     pub password_hash: PasswordHash,
@@ -76,6 +80,23 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         ).bind(key.as_ref()).fetch_one(&mut *tx).await?;
         self.commit_mutation(tx).await?;
         Ok(allowed)
+    }
+
+    /// Counts a single sign-on start from one client, in the window that
+    /// workspace discovery uses; `key` keeps the two apart.
+    pub async fn reserve_oidc_start_attempt(
+        &self,
+        key: &SessionDigest,
+    ) -> Result<bool, RepositoryError> {
+        let mut tx = self.pool.begin().await?;
+        let attempts = sqlx::query_scalar::<_, i32>(
+            "INSERT INTO workspace_discovery_rate_limits AS l (key_digest, window_started_at, attempts) VALUES ($1, clock_timestamp(), 1) ON CONFLICT (key_digest) DO UPDATE SET attempts = CASE WHEN l.window_started_at <= clock_timestamp() - interval '15 minutes' THEN 1 ELSE l.attempts + 1 END, window_started_at = CASE WHEN l.window_started_at <= clock_timestamp() - interval '15 minutes' THEN clock_timestamp() ELSE l.window_started_at END RETURNING attempts",
+        )
+        .bind(key.as_ref())
+        .fetch_one(&mut *tx)
+        .await?;
+        self.commit_mutation(tx).await?;
+        Ok(attempts <= OIDC_START_ATTEMPTS_PER_WINDOW)
     }
 
     pub async fn reserve_password_reset_attempt(

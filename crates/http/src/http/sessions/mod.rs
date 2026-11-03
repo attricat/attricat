@@ -514,7 +514,7 @@ pub(super) fn issue_session() -> (SessionSecret, SessionSecret, chrono::DateTime
     )
 }
 
-fn digest_login_key(value: &str) -> SessionDigest {
+pub(super) fn digest_login_key(value: &str) -> SessionDigest {
     SessionDigest::from_slice(&Sha256::digest(value.as_bytes())).expect("sha256 is 32 bytes")
 }
 

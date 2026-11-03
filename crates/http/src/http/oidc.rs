@@ -400,12 +400,31 @@ async fn begin(
 /// the provider of the workspace an identifier names.
 pub(super) async fn start(
     State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
     ApiJson(input): ApiJson<StartRequest>,
 ) -> Result<Response, ApiError> {
     if state.demo_mode {
         return Err(ApiError::disabled_in_demo());
     }
-    settings(&state)?;
+    let client = settings(&state)?
+        .client_ip_header
+        .as_ref()
+        .and_then(|header| headers.get(header))
+        .and_then(|value| value.to_str().ok())
+        // A proxy appends the address it saw; earlier entries are the client's claims.
+        .and_then(|value| value.rsplit(',').next())
+        .map(str::trim)
+        .filter(|client| !client.is_empty());
+    if let Some(client) = client
+        && !state
+            .repository
+            .reserve_oidc_start_attempt(&super::sessions::digest_login_key(&format!(
+                "oidc-start:{client}"
+            )))
+            .await?
+    {
+        return Err(ApiError::rate_limited());
+    }
     let identifier = input.login_identifier.trim().to_lowercase();
     let workspace = discover_workspace(&state, &identifier).await?;
     let provider = state

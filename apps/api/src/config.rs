@@ -158,6 +158,8 @@ pub struct DatabaseConfig {
 pub struct OidcConfig {
     /// `OIDC_CALLBACK_URL`, ending in `/api/auth/oidc/callback`.
     pub callback_url: url::Url,
+    /// `TRUSTED_CLIENT_IP_HEADER`, set by the reverse proxy in front of the API.
+    pub client_ip_header: Option<axum::http::HeaderName>,
     /// `OIDC_ALLOWED_PRIVATE_HOSTS`, comma-separated.
     pub allowed_private_hosts: Vec<String>,
     /// The contents of the PEM file named by `OIDC_CA_FILE`.
@@ -614,8 +616,14 @@ fn oidc_config(source: &Source) -> Result<Option<OidcConfig>, ConfigError> {
             fs::read(path).map_err(|error| format!("cannot read OIDC_CA_FILE {path}: {error}"))
         })
         .transpose()?;
+    let client_ip_header = source
+        .var("TRUSTED_CLIENT_IP_HEADER")
+        .map(str::parse)
+        .transpose()
+        .map_err(|_| "TRUSTED_CLIENT_IP_HEADER must be a valid header name")?;
     Ok(Some(OidcConfig {
         callback_url,
+        client_ip_header,
         allowed_private_hosts: source
             .var("OIDC_ALLOWED_PRIVATE_HOSTS")
             .unwrap_or_default()

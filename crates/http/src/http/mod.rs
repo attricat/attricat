@@ -169,6 +169,9 @@ pub struct OidcSettings {
     /// PEM certificates trusted for provider connections beyond the system
     /// roots, for a provider behind a corporate CA.
     pub extra_root_certificates_pem: Option<Arc<[u8]>>,
+    /// The header a trusted reverse proxy puts the client's address in. Sign-on
+    /// starts are rate limited per client only when this says who that is.
+    pub client_ip_header: Option<axum::http::HeaderName>,
     pub starting_metadata: oidc::StartingMetadataCache,
 }
 pub use self::sessions::{SampleAccount, SampleLogins};
