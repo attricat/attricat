@@ -597,6 +597,19 @@ export const subscribeReplacedNativeHosts = (listener: () => void) => {
   };
 };
 
+/**
+ * Resolves once every Worker has answered what it was sent, so a form submitted
+ * right after typing in a native editor sees that editor's last value.
+ */
+export const settleNativeHosts = async () => {
+  await Promise.race([
+    Promise.all([...hosts.values()].map((host) => host.settle())),
+    new Promise((resolve) =>
+      window.setTimeout(resolve, nativeUiBudgets.settleTimeout),
+    ),
+  ]);
+};
+
 /** Forgets a failed Worker host, so the next `nativeHostFor` starts a new one. */
 export const forgetFailedNativeHost = (contribution: ExtensionContribution) => {
   const key = nativeHostKey(contribution);

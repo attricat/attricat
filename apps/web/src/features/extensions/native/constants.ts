@@ -17,6 +17,8 @@ export const nativeUiBudgets = {
   heartbeatTimeout: 4_000,
   /** Input changes are sent once typing pauses this long. */
   inputDebounce: 100,
+  /** How long a form waits for Workers before submitting without them. */
+  settleTimeout: 1_000,
 } as const;
 
 /** Why an extension's native UI stopped; each has a translated message. */

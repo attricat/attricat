@@ -450,6 +450,10 @@ export const NumberFieldAdapter = ({
       inputRef={ref}
       onBlur={() => flush(draft)}
       onChange={(event) => change(event.target.value)}
+      onKeyDown={(event) => {
+        // The last change goes first, so a form submitting on Enter sees it.
+        if (event.key === 'Enter') flush(draft);
+      }}
       placeholder={text(props.placeholder)}
       slotProps={{
         htmlInput: {

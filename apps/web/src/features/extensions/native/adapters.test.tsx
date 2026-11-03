@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { StackAdapter, TextFieldAdapter } from './adapters';
+import { NumberFieldAdapter, StackAdapter, TextFieldAdapter } from './adapters';
 import {
   NativeFieldLabelContext,
   type NativeFieldLabel,
@@ -17,6 +17,16 @@ const adapterProps = (props: Record<string, unknown>) => ({
 });
 
 describe('native input adapters', () => {
+  it('send a number typed just before Enter without waiting for the pause', () => {
+    const field = adapterProps({ label: 'Width' });
+    render(<NumberFieldAdapter {...field} />);
+    const input = screen.getByRole('spinbutton', { name: 'Width' });
+    fireEvent.change(input, { target: { value: '12' } });
+    expect(field.emit).not.toHaveBeenCalled();
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(field.emit).toHaveBeenCalledWith('change', { value: 12 });
+  });
+
   it('fill a column but keep their own width in a row', () => {
     const field = adapterProps({ label: 'Unit' });
     const { container } = render(

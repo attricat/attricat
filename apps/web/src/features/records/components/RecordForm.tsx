@@ -72,6 +72,7 @@ import { RouterLink } from '../../../components/RouterLink';
 import { conflictingRecordId } from '../uniqueKeyConflict';
 import { RecordFormAttributeEditor } from './RecordFormAttributeEditor';
 import { NewRecordAttributeEditor } from '../../extensions/native/NewRecordAttributeEditor';
+import { settleNativeHosts } from '../../extensions/native/nativeRuntime';
 import { useQueuedFileUploadsContext } from '../../files/queuedFileUploads';
 import { useInitialFocus } from '../../../components/initialFocus';
 import { FormActionBar } from '../../../components/FormActionBar';
@@ -391,6 +392,7 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
     };
     // The submit button that was used, read when the form submits.
     const addAnother = useRef(false);
+    const settling = useRef(false);
     const busy = isLoadingBlueprint || isSubmitting;
     const [submitAttempted, setSubmitAttempted] = useState(false);
     const [confirmingBlueprintChange, setConfirmingBlueprintChange] =
@@ -538,8 +540,13 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
       migrationReviews,
       resolvedValues: noResolvedValues,
     };
-    const submit = (another: boolean) => {
+    const submit = async (another: boolean) => {
+      if (settling.current) return;
+      settling.current = true;
       addAnother.current = another;
+      // Typing reaches the form through a Worker round trip.
+      await settleNativeHosts();
+      settling.current = false;
       void form.handleSubmit();
     };
     // The action bar names what still blocks saving and goes to the first of it.
@@ -587,11 +594,11 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
           // Keys bubble from the form's dialogs through their portals.
           if (!event.currentTarget.contains(event.target as Node)) return;
           event.preventDefault();
-          if (!busy) submit(false);
+          if (!busy) void submit(false);
         }}
         onSubmit={(event) => {
           event.preventDefault();
-          submit(false);
+          void submit(false);
         }}
         sx={{ mt: 4, p: formPadding }}
       >
@@ -810,7 +817,7 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
           {blueprint && addAnotherLabel && (
             <Button
               disabled={busy}
-              onClick={() => submit(true)}
+              onClick={() => void submit(true)}
               variant="outlined"
             >
               {addAnotherLabel}

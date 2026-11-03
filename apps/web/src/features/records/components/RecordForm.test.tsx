@@ -13,6 +13,14 @@ import { recordQueryKeys } from '../queryKeys';
 import { RecordForm, type RecordFormHandle } from './RecordForm';
 import { recordHeadingComponentId } from '../../views/components/blocks/RecordHeadingDefinition';
 
+const native = vi.hoisted(() => ({
+  settle: vi.fn(() => Promise.resolve()),
+}));
+vi.mock('../../extensions/native/nativeRuntime', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  settleNativeHosts: native.settle,
+}));
+
 const attribute = (
   code: string,
   overrides: Partial<Attribute> = {},
@@ -132,6 +140,33 @@ describe('RecordForm', () => {
       isLoadingBlueprint: false,
     });
     expect(document.activeElement).toBe(titleBox());
+  });
+
+  it('submits only after native editors have answered their last input', async () => {
+    let settled = () => {};
+    native.settle.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          settled = resolve;
+        }),
+    );
+    const { onSubmit } = renderForm({
+      blueprint: blueprint([attribute('title')]),
+    });
+    fireEvent.change(titleBox(), { target: { value: 'Typed' } });
+    fireEvent.submit(titleBox().closest('form')!);
+    await waitFor(() => expect(native.settle).toHaveBeenCalled());
+    expect(onSubmit).not.toHaveBeenCalled();
+    // What the editor answered in the meantime is what gets saved.
+    fireEvent.change(titleBox(), { target: { value: 'Typed last' } });
+    settled();
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          values: [expect.objectContaining({ value: 'Typed last' })],
+        }),
+      ),
+    );
   });
 
   it('says it is saving, not loading, while the values are submitted', () => {
