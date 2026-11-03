@@ -125,6 +125,29 @@ hop's whole relationship: about 380 ms for `listing.category` against about
 a root through `listing` reaches about 10,000 listings and products, about
 200 ms against 100 ms through the 1,000 product lines.
 
+## Filter scenarios
+
+`FACET_BENCH_SCENARIOS=filter` runs only the attribute and relationship filter
+searches. A search page loads up to 100,000 filter matches
+(`MAX_LOADED_FILTER_MATCHES`) and binds them as IDs. Past that, the filters run
+inside each statement, so a first page evaluates them three times: the check
+against the limit, the version scope and total, and the page.
+
+Medians on a local PostgreSQL (Linux, release build). The "Inside statements"
+column always evaluates the filters in each statement, and shows why the page
+loads matches below the limit. At 120,000 products only the broad and
+twenty-filter scenarios pass the limit.
+
+| Scenario | Before, 100k | Inside statements, 100k | Now, 100k | Now, 120k |
+| --- | ---: | ---: | ---: | ---: |
+| Selective scalar | 555 ms | 1,270 ms | 570 ms | 585 ms |
+| Broad scalar | 1,234 ms | 2,594 ms | 1,402 ms | 4,246 ms |
+| Absence, no matches | 1,040 ms | 2,261 ms | 1,059 ms | 1,181 ms |
+| One hop | 1,101 ms | 2,390 ms | 1,152 ms | 1,245 ms |
+| Three hops | 2,498 ms | 5,122 ms | 2,612 ms | 3,122 ms |
+| Relationship | 916 ms | 1,934 ms | 914 ms | 1,080 ms |
+| Twenty broad scalars | 21.2 s | 503 at 30 s | 21.8 s | 503 at 30 s |
+
 ## Remaining cost
 
 The first Browse rail page for a tree, and the first after its counts expire,

@@ -7,9 +7,9 @@ use std::{collections::HashMap, time::Instant};
 use tracing::Instrument;
 
 use super::{
-    AttricatRepository, RecordSearchScope, RepositoryError, SearchScope, SearchScopeError,
-    decode_search_cursor, search_scope::has_extension_table_renderer, table_relationship_targets,
-    table_value_paths,
+    AttricatRepository, RecordMatching, RecordSearchScope, RepositoryError, SearchScope,
+    SearchScopeError, decode_search_cursor, search_scope::has_extension_table_renderer,
+    table_relationship_targets, table_value_paths,
 };
 use crate::model::{
     ExportStatusFilter, RecordSearchResponse, SearchResultVersionScope, SearchSort,
@@ -19,6 +19,11 @@ pub use attricat_validation::saved_search::MAX_SYSTEM_TAG_FILTERS;
 
 /// Totals and hidden-outdated counts stop at this many records.
 pub const SEARCH_TOTAL_COUNT_CAP: i64 = 500;
+
+/// Filter matches a search page loads and binds as IDs. Each statement of a page
+/// would otherwise evaluate the filters again, which doubles a page's latency;
+/// past this many, the memory matters more and they run inside each statement.
+pub const MAX_LOADED_FILTER_MATCHES: i64 = 100_000;
 
 pub struct SearchPageRequest<'a> {
     /// The blueprint code the scope was resolved for.
@@ -30,6 +35,8 @@ pub struct SearchPageRequest<'a> {
     pub sort: Option<&'a SearchSort>,
     pub cursor: Option<&'a str>,
     pub limit: i64,
+    /// Filter matches to load; see [`MAX_LOADED_FILTER_MATCHES`].
+    pub loaded_filter_matches: i64,
     /// Count the matching records, up to [`SEARCH_TOTAL_COUNT_CAP`]. Cursor
     /// pages never count; clients keep the first page's total.
     pub include_total: bool,
@@ -70,13 +77,36 @@ impl AttricatRepository {
             search_blueprint,
             context,
             explanations,
-            matching,
+            ..
         } = scope;
         let selected = *selected;
+        let loaded_ids = match (&scope.filters, request.loaded_filter_matches) {
+            (Some(_), limit) if limit > 0 => Some(
+                self.matching_record_ids(
+                    current.blueprint.id,
+                    selected,
+                    scope.matching(),
+                    limit + 1,
+                )
+                .instrument(tracing::info_span!(
+                    "sql.operation",
+                    label = "attribute-filter"
+                ))
+                .await?,
+            )
+            .filter(|ids| ids.len() as i64 <= limit),
+            _ => None,
+        };
+        let matching = loaded_ids
+            .as_deref()
+            .map_or(scope.matching(), |ids| RecordMatching {
+                ids: Some(ids),
+                filters: None,
+            });
         let records = RecordSearchScope {
             blueprint_id: current.blueprint.id,
             blueprint_version: selected,
-            matching_record_ids: matching.as_deref(),
+            matching,
             system_tags: request.system_tags,
             outdated: request.outdated,
             export_status: request.export_status,
@@ -174,7 +204,7 @@ impl AttricatRepository {
             self.count_record_previews(
                 RecordSearchScope {
                     blueprint_version: None,
-                    matching_record_ids: None,
+                    matching: RecordMatching::ALL,
                     system_tags: &[],
                     outdated: true,
                     export_status: None,

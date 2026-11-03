@@ -12,9 +12,9 @@ use crate::{
         SystemTagFacetResponse,
     },
     repository::{
-        DEFAULT_SYSTEM_TAG_FACET_LIMIT, MAX_SEARCH_FILTERS, MAX_SYSTEM_TAG_FACET_LIMIT,
-        RelationshipFacetHop, SearchPageRequest, SearchPhase, SearchScopeError, SearchScopeRequest,
-        intersect_record_ids, valid_connection_key,
+        DEFAULT_SYSTEM_TAG_FACET_LIMIT, MAX_LOADED_FILTER_MATCHES, MAX_SEARCH_FILTERS,
+        MAX_SYSTEM_TAG_FACET_LIMIT, RelationshipFacetHop, SearchPageRequest, SearchPhase,
+        SearchScopeError, SearchScopeRequest, intersect_record_ids, valid_connection_key,
     },
 };
 use attricat_domain::permissions::Permission;
@@ -259,7 +259,7 @@ pub(super) async fn search_record_previews(
         )
         .await?;
         let facet_candidates = scope
-            .matching
+            .matching_ids
             .as_ref()
             .map(|ids| ids.iter().copied().collect::<HashSet<_>>());
         let facet_matching = repository
@@ -278,7 +278,10 @@ pub(super) async fn search_record_previews(
             ))
             .await?;
         if let Some(facet_matching) = facet_matching {
-            scope.matching = Some(intersect_record_ids(scope.matching.take(), facet_matching));
+            scope.matching_ids = Some(intersect_record_ids(
+                scope.matching_ids.take(),
+                facet_matching,
+            ));
         }
     }
     // The page's table cells show only the related records the caller may read.
@@ -295,6 +298,7 @@ pub(super) async fn search_record_previews(
                 sort: input.sort.as_ref(),
                 cursor: input.page.cursor.as_deref(),
                 limit: limit.into(),
+                loaded_filter_matches: MAX_LOADED_FILTER_MATCHES,
                 include_total: input.include_total,
                 include_previews: input.include_previews,
             },
@@ -492,7 +496,7 @@ pub(super) async fn relationship_tree_facet_children(
     let resolved = match query {
         Some(query) => Some(
             repository
-                .resolve_search(&search_blueprint, version, Some(query))
+                .resolve_search(&search_blueprint, version, query)
                 .await
                 .map_err(ApiError::from)?,
         ),

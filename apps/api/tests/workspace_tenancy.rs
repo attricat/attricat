@@ -335,7 +335,7 @@ async fn reachable_search_never_traverses_another_workspace(pool: PgPool) {
         .unwrap()
         .unwrap();
     let resolved = bootstrap
-        .resolve_search(&bootstrap_source, None, Some("*:cross-workspace-secret"))
+        .resolve_search(&bootstrap_source, None, "*:cross-workspace-secret")
         .await
         .unwrap();
     assert!(resolved.ids.is_empty());

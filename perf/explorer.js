@@ -50,7 +50,7 @@ const search = (body) => post("/v1/records/search", body);
 const page = { size: 25, cursor: null };
 
 export default function () {
-  const variant = __ITER % 4;
+  const variant = __ITER % 5;
   let response;
   if (variant === 0) {
     response = search({
@@ -82,6 +82,16 @@ export default function () {
           page: { size: 25, cursor },
         })
       : first;
+  } else if (variant === 3) {
+    response = search({
+      blueprint: { code: blueprint },
+      filters: [
+        { field: "price", operator: "gte", value: 0 },
+        { field: "manufacturer.name", operator: "is_set", value: true },
+      ],
+      include_total: true,
+      page,
+    });
   } else {
     response = post("/v1/records/facets/relationship-tree/children", {
       blueprint: { code: blueprint },
