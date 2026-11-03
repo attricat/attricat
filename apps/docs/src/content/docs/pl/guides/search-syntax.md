@@ -27,7 +27,7 @@ linen
 
 ## Podobne słowa
 
-Atrybut tekstowy z tagiem [`search:fuzzy`](/pl/reference/blueprint/#tagi-wyszukiwania) pasuje też do wartości podobnych do terminu o długości co najmniej czterech liter, więc termin znajduje inne formy tego samego słowa i drobne literówki: `tarcze` znajduje „Tarcza tnąca 125 mm”. Wartość zawierająca termin pasuje jak zwykle. Informacje o wyszukiwaniu rekordu wskazują podobną wartość. Terminy zakończone `*` i terminy `*:` pasują dokładnie.
+Atrybut tekstowy z tagiem [`search:fuzzy`](/pl/reference/blueprint/#tagi-wyszukiwania) pasuje też do wartości podobnych do terminu o długości co najmniej czterech liter, więc termin znajduje inne formy tego samego słowa i drobne literówki: `tarcze` znajduje „Tarcza tnąca 125 mm”. Wartość zawierająca termin pasuje jak zwykle. Terminy zakończone `*` i terminy `*:` pasują dokładnie.
 
 ## Symbole wieloznaczne
 
@@ -113,10 +113,6 @@ Lista jest częścią zapytania, więc zapisanie wyszukiwania jako [zapisanego w
 znajduje produkty, które same są czerwone, produkty powiązane z kolorem o nazwie red oraz produkty powiązane z rodziną powiązaną z czymś czerwonym.
 
 Wyszukiwanie globalne to najbardziej kosztowna postać zapytania. Ma limity po stronie serwera dotyczące liczby sprawdzanych wartości, rekordów i powiązań oraz limit czasu 250 ms na każdy odczyt z bazy danych. Jeśli zapytanie je przekroczy, żądanie kończy się błędem `422`, zamiast zwracać częściowe wyniki. W takim przypadku zawęź zapytanie kwalifikowanym selektorem.
-
-## Dlaczego to pasuje?
-
-Każdy wynik zawiera wyjaśnienie dopasowania dla każdego terminu: rekord i atrybut, które pasowały, oraz ścieżkę relacji od wyniku do nich. W Przeglądarce otwórz **Informacje o wyszukiwaniu** przy wyniku.
 
 ## Łączenie z filtrami i fasetami
 

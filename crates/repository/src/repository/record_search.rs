@@ -2972,7 +2972,7 @@ impl AttricatRepository {
         selected: &BlueprintWithAttributes,
         selected_version: Option<i64>,
         query: &str,
-    ) -> Result<ResolvedSearch, RepositoryError> {
+    ) -> Result<HashSet<Uuid>, RepositoryError> {
         let terms = parse_search_terms(query)?;
         let mut per_term = Vec::with_capacity(terms.len());
         // Global `*:` terms share one request budget. Explicit and bare selectors
@@ -3003,21 +3003,10 @@ impl AttricatRepository {
             }
             per_term.push(result?);
         }
-        let mut candidates: Option<HashSet<Uuid>> = None;
-        let mut explanations: HashMap<Uuid, Vec<MatchExplanation>> = HashMap::new();
-        for matches in per_term {
-            let ids: HashSet<_> = matches.keys().copied().collect();
-            candidates = Some(match candidates {
-                Some(existing) => existing.intersection(&ids).copied().collect(),
-                None => ids,
-            });
-            for (id, explanation) in matches {
-                explanations.entry(id).or_default().push(explanation);
-            }
-        }
-        let ids = candidates.unwrap_or_default();
-        explanations.retain(|id, _| ids.contains(id));
-        Ok(ResolvedSearch { ids, explanations })
+        Ok(per_term
+            .into_iter()
+            .reduce(|candidates, ids| candidates.intersection(&ids).copied().collect())
+            .unwrap_or_default())
     }
 
     async fn compile_search_term(
@@ -3232,7 +3221,7 @@ impl AttricatRepository {
         term: SearchTerm,
         plan: TermPlan,
         global_budget: &mut GlobalSearchBudget,
-    ) -> Result<HashMap<Uuid, MatchExplanation>, RepositoryError> {
+    ) -> Result<HashSet<Uuid>, RepositoryError> {
         if matches!(plan, TermPlan::Reachable) {
             return self
                 .resolve_global_search_term(selected, selected_version, term, global_budget)
@@ -3265,38 +3254,23 @@ impl AttricatRepository {
             } => (target_blueprint_ids.clone(), None, None),
         };
         let rows = match &plan {
-            TermPlan::Ids { ids, .. } => sqlx::query_scalar::<_, Uuid>(
-                "SELECT id FROM records WHERE id = ANY($1) AND blueprint_id = ANY($2) AND workspace_id = $3 AND deleted_at IS NULL ORDER BY id",
-            )
-            .bind(ids)
-            .bind(&match_blueprints)
-            .bind(self.workspace_id.0)
-            .fetch_all(&self.pool)
-            .await?
-            .into_iter()
-            .map(|id| (id, None, None))
-            .collect(),
+            TermPlan::Ids { ids, .. } => {
+                sqlx::query_scalar::<_, Uuid>(
+                    "SELECT id FROM records WHERE id = ANY($1) AND blueprint_id = ANY($2) AND workspace_id = $3 AND deleted_at IS NULL",
+                )
+                .bind(ids)
+                .bind(&match_blueprints)
+                .bind(self.workspace_id.0)
+                .fetch_all(&self.pool)
+                .await?
+            }
             _ => {
                 self.scalar_search_matches(&term, &match_blueprints, attribute)
                     .await?
             }
         };
-        let mut witnesses: HashMap<Uuid, MatchExplanation> = HashMap::new();
-        let mut frontier = VecDeque::new();
-        for (id, attribute, similar_value) in rows {
-            if let std::collections::hash_map::Entry::Vacant(e) = witnesses.entry(id) {
-                e.insert(MatchExplanation {
-                    term: term.original.clone(),
-                    matching_record_id: id,
-                    matching_attribute_code: attribute,
-                    similar_value,
-                    traversal_depth: 0,
-                    relationship_path: vec![],
-                });
-                frontier.push_back(id);
-            }
-        }
-        let mut visited: HashSet<_> = witnesses.keys().copied().collect();
+        let mut visited: HashSet<Uuid> = rows.into_iter().collect();
+        let mut frontier: Vec<Uuid> = visited.iter().copied().collect();
         let (path_fields, path_source_blueprints) = match &plan {
             TermPlan::Relationship {
                 fields,
@@ -3318,12 +3292,11 @@ impl AttricatRepository {
             None => 0,
         };
         for depth in 1..=max_depth {
-            let level: Vec<_> = frontier.drain(..).collect();
-            if level.is_empty() {
+            if frontier.is_empty() {
                 break;
             }
-            let edges = sqlx::query_as::<_, (Uuid, String, Uuid)>(
-                r#"SELECT DISTINCT source.id, a.code, av.relationship_target_record_id
+            let sources = sqlx::query_scalar::<_, Uuid>(
+                r#"SELECT DISTINCT source.id
                 FROM records source JOIN attribute_values av ON av.record_id = source.id
                 JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
                 JOIN records target ON target.id = av.relationship_target_record_id
@@ -3332,10 +3305,9 @@ impl AttricatRepository {
                   AND av.workspace_id = $4 AND a.workspace_id = $4
                   AND av.relationship_target_record_id = ANY($1) AND a.value_type = 'relationship'
                   AND ($2::uuid[] IS NULL OR source.blueprint_id = ANY($2))
-                  AND ($3::text IS NULL OR a.code = $3)
-                ORDER BY source.id, a.code, av.relationship_target_record_id"#,
+                  AND ($3::text IS NULL OR a.code = $3)"#,
             )
-            .bind(&level)
+            .bind(&frontier)
             .bind(path_source_blueprints.and_then(|ids| ids.get(ids.len() - depth).cloned()))
             .bind(
                 path_fields
@@ -3345,62 +3317,31 @@ impl AttricatRepository {
             .bind(self.workspace_id.0)
             .fetch_all(&self.pool)
             .await?;
-            for (source, field, target) in edges {
-                if !visited.insert(source) {
-                    continue;
-                }
-                let parent = witnesses.get(&target).expect("frontier has a witness");
-                let mut path = Vec::with_capacity(parent.relationship_path.len() + 1);
-                path.push(MatchPathEdge {
-                    source_record_id: source,
-                    attribute_code: field,
-                    target_record_id: target,
-                });
-                path.extend(parent.relationship_path.clone());
-                witnesses.insert(
-                    source,
-                    MatchExplanation {
-                        term: term.original.clone(),
-                        matching_record_id: parent.matching_record_id,
-                        matching_attribute_code: parent.matching_attribute_code.clone(),
-                        similar_value: None,
-                        traversal_depth: depth as u8,
-                        relationship_path: path,
-                    },
-                );
-                frontier.push_back(source);
-            }
+            frontier = sources
+                .into_iter()
+                .filter(|source| visited.insert(*source))
+                .collect();
         }
-        let ids = witnesses
-            .into_iter()
-            .filter(|(id, _)| {
-                // Explicit selected-blueprint value queries and all traversals only return selected records.
-                // The version restriction is applied here because scalar matches may start on old revisions.
-                *id != Uuid::nil()
-            })
-            .collect::<HashMap<_, _>>();
+        // Explicit selected-blueprint value queries and all traversals only return selected records.
+        // The version restriction is applied here because scalar matches may start on old revisions.
         let selected_ids = sqlx::query_scalar::<_, Uuid>("SELECT id FROM records WHERE blueprint_id = $1 AND ($2::bigint IS NULL OR blueprint_version = $2) AND deleted_at IS NULL AND id = ANY($3) AND workspace_id = $4")
             .bind(selected.blueprint.id)
             .bind(selected_version)
-            .bind(ids.keys().copied().collect::<Vec<_>>())
+            .bind(visited.into_iter().collect::<Vec<_>>())
             .bind(self.workspace_id.0)
             .fetch_all(&self.pool)
             .await?;
-        Ok(selected_ids
-            .into_iter()
-            .filter_map(|id| ids.get(&id).cloned().map(|w| (id, w)))
-            .collect())
+        Ok(selected_ids.into_iter().collect())
     }
 
-    /// Records of `match_blueprints` whose scalar values match a term, with
-    /// the matching attribute code and, for a match by similarity on an
-    /// attribute tagged [`FUZZY_SEARCH_TAG`], the value that matched.
+    /// Records of `match_blueprints` whose scalar values match a term, also by
+    /// similarity on an attribute tagged [`FUZZY_SEARCH_TAG`].
     async fn scalar_search_matches(
         &self,
         term: &SearchTerm,
         match_blueprints: &[Uuid],
         leaf: Option<&SearchLeaf>,
-    ) -> Result<Vec<(Uuid, Option<String>, Option<String>)>, RepositoryError> {
+    ) -> Result<Vec<Uuid>, RepositoryError> {
         if let Some(SearchLeaf {
             code,
             typed: Some(typed),
@@ -3440,18 +3381,17 @@ impl AttricatRepository {
                       AND value_text ILIKE $3
                     {similar_values}
                 )
-                SELECT DISTINCT ON (e.id, a.code) e.id, a.code, av.similar_value
+                SELECT DISTINCT e.id
                 FROM matching_values av
                 JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
                 JOIN records e ON e.id = av.record_id
                 WHERE e.deleted_at IS NULL AND e.workspace_id = $4
                   AND a.workspace_id = $4
                   AND e.blueprint_id = ANY($1)
-                  AND ($2::text IS NULL OR a.code = $2)
-                ORDER BY e.id, a.code, av.similar_value NULLS FIRST"#
+                  AND ($2::text IS NULL OR a.code = $2)"#
             )
         } else {
-            r#"SELECT DISTINCT e.id, a.code, NULL::text
+            r#"SELECT DISTINCT e.id
                 FROM records e JOIN attribute_values av ON av.record_id = e.id
                 JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
                 WHERE e.deleted_at IS NULL AND e.workspace_id = $4
@@ -3459,8 +3399,7 @@ impl AttricatRepository {
                   AND av.relationship_target_record_id IS NULL
                   AND e.blueprint_id = ANY($1)
                   AND ($2::text IS NULL OR a.code = $2)
-                  AND COALESCE(av.value_text, av.value_number::text, av.value_integer::text, av.value_boolean::text, av.value_date::text, av.value_datetime::text, av.value_time::text) ILIKE $3
-                ORDER BY e.id, a.code"#
+                  AND COALESCE(av.value_text, av.value_number::text, av.value_integer::text, av.value_boolean::text, av.value_date::text, av.value_datetime::text, av.value_time::text) ILIKE $3"#
                 .to_owned()
         };
         let mut transaction = self.pool.begin().await?;
@@ -3471,7 +3410,7 @@ impl AttricatRepository {
                 .execute(&mut *transaction)
                 .await?;
         }
-        let mut query = sqlx::query_as::<_, (Uuid, String, Option<String>)>(AssertSqlSafe(sql))
+        let mut query = sqlx::query_scalar::<_, Uuid>(AssertSqlSafe(sql))
             .bind(match_blueprints)
             .bind(attribute)
             .bind(pattern)
@@ -3482,10 +3421,7 @@ impl AttricatRepository {
         }
         let rows = query.fetch_all(&mut *transaction).await?;
         transaction.commit().await?;
-        Ok(rows
-            .into_iter()
-            .map(|(id, code, similar)| (id, Some(code), similar))
-            .collect())
+        Ok(rows)
     }
 
     /// Records of `match_blueprints` whose `attribute` value compares as a
@@ -3496,7 +3432,7 @@ impl AttricatRepository {
         typed: &TypedMatch,
         match_blueprints: &[Uuid],
         attribute: &str,
-    ) -> Result<Vec<(Uuid, Option<String>, Option<String>)>, RepositoryError> {
+    ) -> Result<Vec<Uuid>, RepositoryError> {
         // Comparing the leaf's own column, with its non-null condition, lets
         // the per-attribute value indexes serve the comparison. Operators
         // come from the parsed bounds, and the bounds are parameters.
@@ -3526,17 +3462,16 @@ impl AttricatRepository {
             TypedMatch::Boolean(_) => ("value_boolean", " AND av.value_boolean = $4".to_owned()),
         };
         let sql = format!(
-            r#"SELECT DISTINCT e.id, a.code
+            r#"SELECT DISTINCT e.id
                 FROM records e JOIN attribute_values av ON av.record_id = e.id
                 JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
                 WHERE e.deleted_at IS NULL AND e.workspace_id = $3
                   AND av.workspace_id = $3 AND a.workspace_id = $3 AND av.active
                   AND av.relationship_target_record_id IS NULL
                   AND e.blueprint_id = ANY($1) AND a.code = $2
-                  AND av.{column} IS NOT NULL{predicate}
-                ORDER BY e.id, a.code"#
+                  AND av.{column} IS NOT NULL{predicate}"#
         );
-        let mut query = sqlx::query_as::<_, (Uuid, String)>(AssertSqlSafe(sql))
+        let mut query = sqlx::query_scalar::<_, Uuid>(AssertSqlSafe(sql))
             .bind(match_blueprints)
             .bind(attribute)
             .bind(self.workspace_id.0);
@@ -3556,12 +3491,7 @@ impl AttricatRepository {
             }
             TypedMatch::Boolean(value) => query = query.bind(*value),
         }
-        Ok(query
-            .fetch_all(&self.pool)
-            .await?
-            .into_iter()
-            .map(|(id, code)| (id, Some(code), None))
-            .collect())
+        Ok(query.fetch_all(&self.pool).await?)
     }
 
     /// Global traversal is deliberately isolated from qualified selector search:
@@ -3574,7 +3504,7 @@ impl AttricatRepository {
         selected_version: Option<i64>,
         term: SearchTerm,
         budget: &mut GlobalSearchBudget,
-    ) -> Result<HashMap<Uuid, MatchExplanation>, RepositoryError> {
+    ) -> Result<HashSet<Uuid>, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
         sqlx::query("SET LOCAL statement_timeout = '250ms'")
             .execute(&mut *transaction)
@@ -3612,26 +3542,18 @@ impl AttricatRepository {
             .map_err(global_search_error)?;
         budget.consume_matches(rows.len())?;
 
-        let mut witnesses = HashMap::new();
+        let mut visited = HashSet::new();
         let mut frontier = VecDeque::new();
-        for (id, attribute) in rows {
-            if let std::collections::hash_map::Entry::Vacant(entry) = witnesses.entry(id) {
+        for (id, _) in rows {
+            if visited.insert(id) {
                 budget.consume_records(1)?;
-                entry.insert(MatchExplanation {
-                    term: term.original.clone(),
-                    matching_record_id: id,
-                    matching_attribute_code: Some(attribute),
-                    similar_value: None,
-                    traversal_depth: 0,
-                    relationship_path: vec![],
-                });
                 frontier.push_back(id);
             }
         }
 
-        // Each level is read as one ordered batch. Ordering makes the first
-        // discovered witness stable even when several incoming paths converge.
-        for depth in 1..=MAX_RELATIONSHIP_HOPS as u8 {
+        // Each level is read as one ordered batch, so the budgets stop at the
+        // same edge every time.
+        for _ in 1..=MAX_RELATIONSHIP_HOPS {
             let level: Vec<_> = frontier.drain(..).collect();
             if level.is_empty() {
                 break;
@@ -3660,42 +3582,20 @@ impl AttricatRepository {
             // oversized frontier and make that independent guard unreachable.
             let next_frontier: HashSet<_> = edges
                 .iter()
-                .filter_map(|(source, _, _)| (!witnesses.contains_key(source)).then_some(*source))
+                .filter_map(|(source, _, _)| (!visited.contains(source)).then_some(*source))
                 .collect();
             budget.consume_frontier(next_frontier.len())?;
-            for (source, field, target) in edges {
-                if !witnesses.contains_key(&source) {
+            for (source, _, _) in edges {
+                if visited.insert(source) {
                     budget.consume_records(1)?;
-                    let parent = witnesses
-                        .get(&target)
-                        .expect("edge target belongs to frontier");
-                    let mut path = Vec::with_capacity(parent.relationship_path.len() + 1);
-                    path.push(MatchPathEdge {
-                        source_record_id: source,
-                        attribute_code: field,
-                        target_record_id: target,
-                    });
-                    path.extend(parent.relationship_path.clone());
-                    witnesses.insert(
-                        source,
-                        MatchExplanation {
-                            term: term.original.clone(),
-                            matching_record_id: parent.matching_record_id,
-                            matching_attribute_code: parent.matching_attribute_code.clone(),
-                            similar_value: None,
-                            traversal_depth: depth,
-                            relationship_path: path,
-                        },
-                    );
                     frontier.push_back(source);
                 }
             }
         }
-        let ids: Vec<_> = witnesses.keys().copied().collect();
         let selected_ids = sqlx::query_scalar::<_, Uuid>(
             "SELECT id FROM records WHERE blueprint_id = $1 AND ($2::bigint IS NULL OR blueprint_version = $2) AND deleted_at IS NULL AND id = ANY($3) AND workspace_id = $4",
         )
-        .bind(selected.blueprint.id).bind(selected_version).bind(ids)
+        .bind(selected.blueprint.id).bind(selected_version).bind(visited.into_iter().collect::<Vec<_>>())
         .bind(self.workspace_id.0)
         .fetch_all(&mut *transaction).await.map_err(global_search_error)?;
         transaction.commit().await.map_err(global_search_error)?;
@@ -3711,10 +3611,7 @@ impl AttricatRepository {
             edges = budget.edges,
             "global relationship search resolved"
         );
-        Ok(selected_ids
-            .into_iter()
-            .filter_map(|id| witnesses.remove(&id).map(|w| (id, w)))
-            .collect())
+        Ok(selected_ids.into_iter().collect())
     }
 }
 
@@ -3796,11 +3693,6 @@ fn global_search_error(error: sqlx::Error) -> RepositoryError {
     }
 }
 
-#[derive(Default)]
-pub struct ResolvedSearch {
-    pub ids: HashSet<Uuid>,
-    pub explanations: HashMap<Uuid, Vec<MatchExplanation>>,
-}
 #[derive(Clone)]
 struct SearchTerm {
     original: String,

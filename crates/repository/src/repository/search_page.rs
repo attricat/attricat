@@ -76,7 +76,6 @@ impl AttricatRepository {
             selected,
             search_blueprint,
             context,
-            explanations,
             ..
         } = scope;
         let selected = *selected;
@@ -221,7 +220,6 @@ impl AttricatRepository {
         on_phase(SearchPhase::Page(page_started));
         for item in &mut items {
             item.schema_outdated = item.blueprint_version != current.blueprint.version;
-            item.match_explanations = explanations.get(&item.id).cloned().unwrap_or_default();
         }
         let related_started = Instant::now();
         let previews = request.include_previews || has_extension_table_renderer(&result_blueprint);

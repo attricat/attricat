@@ -338,6 +338,5 @@ async fn reachable_search_never_traverses_another_workspace(pool: PgPool) {
         .resolve_search(&bootstrap_source, None, "*:cross-workspace-secret")
         .await
         .unwrap();
-    assert!(resolved.ids.is_empty());
-    assert!(resolved.explanations.is_empty());
+    assert!(resolved.is_empty());
 }

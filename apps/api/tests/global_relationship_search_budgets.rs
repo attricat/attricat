@@ -321,14 +321,5 @@ async fn global_search_returns_an_exact_three_level_witness(pool: PgPool) {
     assert_eq!(ids.len(), 4);
     assert!(ids.contains(three["id"].as_str().unwrap()));
     assert!(!ids.contains(four["id"].as_str().unwrap()));
-    let witness = items.iter().find(|item| item["id"] == three["id"]).unwrap();
-    assert_eq!(witness["match_explanations"][0]["traversal_depth"], 3);
-    assert_eq!(
-        witness["match_explanations"][0]["relationship_path"]
-            .as_array()
-            .unwrap()
-            .len(),
-        3
-    );
     server.abort();
 }

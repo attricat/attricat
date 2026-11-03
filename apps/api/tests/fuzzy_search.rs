@@ -66,39 +66,14 @@ async fn tagged_text_attributes_also_match_similar_values(pool: sqlx::PgPool) {
         .await;
     }
 
-    // Another inflection of the word finds the tagged name, and says why.
+    // Another inflection of the word finds the tagged name; an untagged
+    // attribute matches only what contains the term.
     let response = search(&client, &base_url, "tarcze").await;
     assert_eq!(
         found(&response),
         ["Tarcza tnąca 125 mm", "Tarcze listkowe", "Wiertło"],
         "{response}"
     );
-    let explanation = |name: &str| {
-        let item = response["items"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|item| item["display"]["default"] == name)
-            .unwrap();
-        item["match_explanations"][0].clone()
-    };
-    assert_eq!(
-        explanation("Tarcza tnąca 125 mm")["similar_value"],
-        "Tarcza tnąca 125 mm"
-    );
-    assert_eq!(
-        explanation("Tarcza tnąca 125 mm")["matching_attribute_code"],
-        "name"
-    );
-    // A value containing the term is an ordinary match.
-    assert!(
-        explanation("Tarcze listkowe")
-            .get("similar_value")
-            .is_none()
-    );
-    // An untagged attribute matches only what contains the term.
-    assert!(explanation("Wiertło").get("similar_value").is_none());
-    assert_eq!(explanation("Wiertło")["matching_attribute_code"], "note");
 
     // A letter left out finds it too; an unrelated word does not.
     assert!(

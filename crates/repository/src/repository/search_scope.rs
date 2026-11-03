@@ -17,9 +17,7 @@ use super::{
     AttricatRepository, RecordMatching, RecordRelationshipFilter, RecordSearchFilter,
     RecordSearchSort, RepositoryError, ResolvedRecordFilters, SEARCH_FILTER_EQ_ANY, SearchContext,
 };
-use crate::model::{
-    BlueprintWithAttributes, MatchExplanation, RelationshipFilter, SearchBlueprint, SearchFilter,
-};
+use crate::model::{BlueprintWithAttributes, RelationshipFilter, SearchBlueprint, SearchFilter};
 use attricat_validation::relationship_path::PathError;
 
 /// What a search resolves a relationship path for, which decides its error.
@@ -100,7 +98,6 @@ pub struct SearchScope {
     /// The revision filters and the query resolve against.
     pub search_blueprint: BlueprintWithAttributes,
     pub context: SearchContext,
-    pub explanations: HashMap<Uuid, Vec<MatchExplanation>>,
     /// The records a text query, and in the records API tree facets, resolved
     /// to; `None` when neither narrows the blueprint.
     pub matching_ids: Option<Vec<Uuid>>,
@@ -193,7 +190,7 @@ impl AttricatRepository {
             );
         }
         // Filters run inside each statement. Only a search term materializes
-        // record IDs, because its matches carry explanations.
+        // record IDs, because the application resolves its terms.
         let query = request
             .query
             .map(str::trim)
@@ -213,9 +210,7 @@ impl AttricatRepository {
             ),
             None => None,
         };
-        let matching_ids = resolved
-            .as_ref()
-            .map(|resolved| resolved.ids.iter().copied().collect());
+        let matching_ids = resolved.map(|ids| ids.into_iter().collect());
         let filters = (!filters.is_empty() || !relationship_filters.is_empty()).then(|| {
             ResolvedRecordFilters {
                 blueprint_id: current.blueprint.id,
@@ -230,9 +225,6 @@ impl AttricatRepository {
             selected,
             search_blueprint,
             context,
-            explanations: resolved
-                .map(|resolved| resolved.explanations)
-                .unwrap_or_default(),
             matching_ids,
             filters,
         })

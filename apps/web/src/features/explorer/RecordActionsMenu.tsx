@@ -1,11 +1,5 @@
-import { Menu } from '@mui/material';
-import {
-  CopyIcon,
-  InfoIcon,
-  SendIcon,
-  Trash2Icon,
-  Undo2Icon,
-} from 'lucide-react';
+import { Menu, MenuItem } from '@mui/material';
+import { CopyIcon, SendIcon, Trash2Icon, Undo2Icon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActionMenuItem } from '../../components/ActionMenuItem';
@@ -20,6 +14,7 @@ import { publicationReadinessText } from '../records/checkViolations';
 import { useActionDialogStore } from '../extensions/actionDialogStore';
 import { ActionMenuCloseContext } from '../extensions/actions';
 import { ExtensionActionMenuItems } from '../extensions/ExtensionActions';
+import { useOfferedActions } from '../extensions/useOfferedActions';
 import { useExplorerActionStates } from '../extensions/explorerFieldNotesContext';
 import { extensionOutlets } from '../extensions/constants';
 import { publicationStatuses } from '../records/constants';
@@ -32,7 +27,6 @@ type Props = {
   record: RecordItem;
   onClose: () => void;
   onDelete: () => void;
-  onSearchInfo: (record: RecordItem) => void;
   position: { left: number; top: number } | null;
   publication: RecordPublicationStatus | undefined;
   publicationContextId: string | undefined;
@@ -53,7 +47,6 @@ export const RecordActionsMenu = ({
   record,
   onClose,
   onDelete,
-  onSearchInfo,
   position,
   publication,
   publicationContextId,
@@ -82,6 +75,30 @@ export const RecordActionsMenu = ({
     onClose();
     action();
   };
+  const extensionActions = {
+    runtimeScope: {
+      blueprintId,
+      blueprintVersion: record.blueprint_version,
+    },
+    states: actionStates,
+    target: {
+      blueprintId,
+      blueprintVersion: record.blueprint_version,
+      contextId: publicationContextId ?? null,
+      recordIds: [record.id],
+      recordTags: [record.system_tags],
+      canWrite: writeAccess.isPending ? undefined : writeAccess.can(record.id),
+    },
+  };
+  const offeredActions = useOfferedActions({
+    ...extensionActions,
+    outlet: extensionOutlets.explorerRowAction,
+  });
+  const hasActions =
+    canDuplicate ||
+    canDelete ||
+    (canPublish && Boolean(publicationContextId && publication)) ||
+    offeredActions.length > 0;
 
   return (
     <Menu
@@ -91,12 +108,9 @@ export const RecordActionsMenu = ({
       open={Boolean(position)}
       transformOrigin={{ horizontal: 'right', vertical: 'top' }}
     >
-      <ActionMenuItem
-        icon={InfoIcon}
-        onClick={choose(() => onSearchInfo(record))}
-      >
-        {t('explorer.searchInfo')}
-      </ActionMenuItem>
+      {!hasActions && (
+        <MenuItem disabled>{t('explorer.noRecordActions')}</MenuItem>
+      )}
       {canDuplicate && (
         <ActionMenuItem icon={CopyIcon} onClick={choose(duplicate)}>
           {t('records.duplicateRecord')}
@@ -139,22 +153,8 @@ export const RecordActionsMenu = ({
       )}
       <ActionMenuCloseContext value={onClose}>
         <ExtensionActionMenuItems
+          {...extensionActions}
           outlet={extensionOutlets.explorerRowAction}
-          runtimeScope={{
-            blueprintId,
-            blueprintVersion: record.blueprint_version,
-          }}
-          states={actionStates}
-          target={{
-            blueprintId,
-            blueprintVersion: record.blueprint_version,
-            contextId: publicationContextId ?? null,
-            recordIds: [record.id],
-            recordTags: [record.system_tags],
-            canWrite: writeAccess.isPending
-              ? undefined
-              : writeAccess.can(record.id),
-          }}
         />
       </ActionMenuCloseContext>
     </Menu>

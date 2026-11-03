@@ -165,8 +165,7 @@ remain:
    - reject filters and sorts on restricted attributes with
      `403 restricted_attribute`, in `resolve_search_filter` and
      `resolve_table_sort` (HTTP and agent);
-   - leave restricted attribute IDs out of the free-text SQL and
-     `match_explanations`;
+   - leave restricted attribute IDs out of the free-text SQL;
    - redact table columns per row.
 
    Saved searches whose filters use a restricted attribute show the filter as
