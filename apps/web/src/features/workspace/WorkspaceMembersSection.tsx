@@ -248,24 +248,29 @@ export const WorkspaceMembersSection = ({
                 )}
               />
               {canGrantRoles &&
-                member.grants.map((grant) => (
-                  <Button
-                    key={grant.id}
-                    disabled={revoke.isPending}
-                    onClick={() => {
-                      revoke.reset();
-                      setRevokeTarget({
-                        memberId: member.id,
-                        grantId: grant.id,
-                        name: personName(member.display_name, member.email),
-                        role: grantLabel(grant),
-                      });
-                    }}
-                    startIcon={<Trash2Icon />}
-                  >
-                    {t('workspace.revoke', { role: grantLabel(grant) })}
-                  </Button>
-                ))}
+                member.grants
+                  // Only an owner can change an owner's access.
+                  .filter(
+                    (grant) => isOwner || grant.role_code !== ownerRoleCode,
+                  )
+                  .map((grant) => (
+                    <Button
+                      key={grant.id}
+                      disabled={revoke.isPending}
+                      onClick={() => {
+                        revoke.reset();
+                        setRevokeTarget({
+                          memberId: member.id,
+                          grantId: grant.id,
+                          name: personName(member.display_name, member.email),
+                          role: grantLabel(grant),
+                        });
+                      }}
+                      startIcon={<Trash2Icon />}
+                    >
+                      {t('workspace.revoke', { role: grantLabel(grant) })}
+                    </Button>
+                  ))}
               <Stack direction="row" sx={{ gap: 1 }}>
                 {canManageSignIn && member.identity_linked && (
                   <Button
