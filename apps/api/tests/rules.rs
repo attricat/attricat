@@ -1870,3 +1870,60 @@ async fn a_record_run_does_not_stop_a_scheduled_run(pool: PgPool) {
     assert_eq!(repository.schedule_rule_runs().await.unwrap(), 0);
     server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_record_deleted_during_a_run_keeps_no_open_finding(pool: PgPool) {
+    let (base_url, server, rule_id, blueprint) = setup_rule(&pool).await;
+    let client = authenticated_client();
+    let repository = AttricatRepository::new(pool.clone(), BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
+    let record = create_record(&client, &base_url, &blueprint).await;
+    let record_id: Uuid = record["id"].as_str().unwrap().parse().unwrap();
+    manual_run(&base_url, rule_id, Some(record_id), "racing").await;
+    let task = repository
+        .claim_task("racing", Duration::from_secs(30))
+        .await
+        .unwrap()
+        .unwrap();
+    let run = repository
+        .begin_rule_run_task(&task)
+        .await
+        .unwrap()
+        .unwrap();
+    client
+        .delete(format!("{base_url}/records/{record_id}"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    repository
+        .checkpoint_rule_page_task(
+            &task,
+            &run,
+            vec![api::repository::RuleCandidateResult {
+                record_id,
+                failed: true,
+                skipped: false,
+                message: "missing".to_owned(),
+                evidence: json!({}),
+                evaluation_key: "key".to_owned(),
+                severity: "error".to_owned(),
+            }],
+            None,
+            true,
+            false,
+        )
+        .await
+        .unwrap();
+
+    let open: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM rule_findings WHERE record_id=$1 AND state='open'",
+    )
+    .bind(record_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(open, 0);
+    server.abort();
+}

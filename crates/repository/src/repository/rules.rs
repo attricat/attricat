@@ -1220,6 +1220,22 @@ impl AttricatRepository {
                 ));
             }
         }
+        // A record deleted since it was evaluated gets no open finding. Sharing
+        // the row keeps a delete from landing between this check and the write.
+        let evaluated: Vec<Uuid> = results.iter().map(|result| result.record_id).collect();
+        let live: std::collections::HashSet<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM records WHERE workspace_id=$1 AND id=ANY($2) AND deleted_at IS NULL FOR SHARE",
+        )
+        .bind(ws)
+        .bind(&evaluated)
+        .fetch_all(&mut *tx)
+        .await?
+        .into_iter()
+        .collect();
+        let results: Vec<_> = results
+            .into_iter()
+            .filter(|result| live.contains(&result.record_id))
+            .collect();
         let mut created = 0_i64;
         let mut resolved = 0_i64;
         let distinct = results
