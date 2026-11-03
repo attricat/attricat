@@ -591,3 +591,65 @@ async fn concurrent_ownership_transfers_recheck_the_owner_after_locking(pool: Pg
     ));
     server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn an_agent_links_only_files_its_initiator_can_read(pool: PgPool) {
+    let repository =
+        AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
+    let workspace = bootstrap_workspace_id();
+    let owner: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
+    let (other_member, _) = add_workspace_user(&pool).await;
+    let conversation = Uuid::new_v4();
+    sqlx::query("INSERT INTO conversations (id, workspace_id, title) VALUES ($1, $2, 'Private')")
+        .bind(conversation)
+        .bind(workspace)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let message = Uuid::new_v4();
+    sqlx::query("INSERT INTO conversation_messages (id, conversation_id, sequence, role, content) VALUES ($1, $2, 0, 'user', '\"See this\"')")
+        .bind(message)
+        .bind(conversation)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let file = Uuid::new_v4();
+    sqlx::query("INSERT INTO files (id, workspace_id, original_filename, display_filename, mime_type, byte_size, sha256, original_key, status, conversation_upload_conversation_id, conversation_upload_user_id) VALUES ($1, $2, 'private.pdf', 'private.pdf', 'application/pdf', 7, $3, 'files/private.pdf', 'ready', $4, $5)")
+        .bind(file)
+        .bind(workspace)
+        .bind("0".repeat(64))
+        .bind(conversation)
+        .bind(other_member)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO conversation_message_attachments (id, workspace_id, message_id, file_id, position) VALUES ($1, $2, $3, $4, 0)")
+        .bind(Uuid::new_v4())
+        .bind(workspace)
+        .bind(message)
+        .bind(file)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let link = json!({"record_id": Uuid::new_v4(), "attribute_code": "manual", "file_id": file});
+
+    // Even the owner can't link someone else's private attachment.
+    assert!(
+        !mutation_authorized(&repository, owner, workspace, "link_file", &link)
+            .await
+            .unwrap()
+    );
+    sqlx::query("INSERT INTO role_grants (id, workspace_id, membership_id, role_id, scope_type, scope_target_id) SELECT $1, $2, m.id, $3, 'workspace', $2 FROM workspace_memberships m WHERE m.user_id = $4 AND m.workspace_id = $2")
+        .bind(Uuid::new_v4())
+        .bind(workspace)
+        .bind(EDITOR_ROLE_ID)
+        .bind(other_member)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(
+        mutation_authorized(&repository, other_member, workspace, "link_file", &link)
+            .await
+            .unwrap()
+    );
+}

@@ -3227,6 +3227,45 @@ pub(crate) async fn agent_search_scope(
     }
 }
 
+/// Whether a run's initiator may read a file: their own conversation
+/// attachment, or a file on a record they can read.
+pub(crate) async fn agent_may_read_file(
+    repository: &AttricatRepository,
+    actor: Uuid,
+    workspace: Uuid,
+    file_id: Uuid,
+) -> Result<bool, RepositoryError> {
+    if !repository
+        .principal_token_permits(
+            tool_actor(repository, actor),
+            workspace,
+            Permission::RecordsRead,
+        )
+        .await?
+    {
+        return Ok(false);
+    }
+    if repository
+        .is_own_conversation_attachment(file_id, actor)
+        .await?
+    {
+        return Ok(true);
+    }
+    authorize_file_read(
+        repository,
+        &AllowFileAccess,
+        actor,
+        workspace,
+        file_id,
+        |file_id, record_id, blueprint_id| FileAccessOperation::AgentRead {
+            file_id,
+            record_id,
+            blueprint_id,
+        },
+    )
+    .await
+}
+
 pub(crate) fn tool_actor(repository: &AttricatRepository, user_id: Uuid) -> AuthorizationActor {
     repository
         .authorization_actor()
@@ -3310,36 +3349,8 @@ async fn read_authorized(
             None,
         ),
         "view_image" | "read_file" => {
-            if !repository
-                .principal_token_permits(
-                    tool_actor(repository, actor),
-                    workspace,
-                    Permission::RecordsRead,
-                )
-                .await?
-            {
-                return Ok(false);
-            }
             let file_id = parse_uuid(arguments, "file_id")?;
-            if repository
-                .is_own_conversation_attachment(file_id, actor)
-                .await?
-            {
-                return Ok(true);
-            }
-            return Ok(authorize_file_read(
-                repository,
-                &AllowFileAccess,
-                actor,
-                workspace,
-                file_id,
-                |file_id, record_id, blueprint_id| FileAccessOperation::AgentRead {
-                    file_id,
-                    record_id,
-                    blueprint_id,
-                },
-            )
-            .await?);
+            return Ok(agent_may_read_file(repository, actor, workspace, file_id).await?);
         }
         // Match the HTTP search endpoint: collection searches require a
         // workspace-wide records.read grant, rather than exposing partial

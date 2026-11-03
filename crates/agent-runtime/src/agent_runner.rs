@@ -1419,6 +1419,20 @@ pub async fn mutation_authorized(
             )
             .await;
     }
+    if name == "link_file" {
+        // Linking publishes a file to everyone who can read the record, so the
+        // initiator must be able to read it, not only to write the record.
+        let file_id = arguments
+            .get("file_id")
+            .and_then(Value::as_str)
+            .and_then(|id| id.parse().ok());
+        let Some(file_id) = file_id else {
+            return Ok(false);
+        };
+        if !agent_tools::agent_may_read_file(repository, actor, workspace, file_id).await? {
+            return Ok(false);
+        }
+    }
     let Some(ToolAuthorization::Permission(permission, target_id)) =
         mutation_authorization(name, arguments)
     else {
