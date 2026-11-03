@@ -246,7 +246,7 @@ attributes:
 | `ordered` | wartość logiczna | `true` dla `many` | Czy kolejność listy `many` ma znaczenie. Dla `one` musi mieć wartość `false` lub zostać pominięty. |
 | `allowed_mime_groups` | tablica ciągów znaków | Dowolne | Akceptowane grupy MIME, np. `image`. Pliki CSV i inne pliki tekstowe są zapisywane jako `text/plain`, więc należą do grupy `text`; aby akceptować tylko `csv`, użyj `allowed_extensions`. |
 | `allowed_extensions` | tablica ciągów znaków | Dowolne | Akceptowane rozszerzenia plików, wyłącznie litery i cyfry (`jpg`, a nie `*.jpg`). Początkowa `.` jest ignorowana. |
-| `max_bytes` | dodatnia liczba całkowita | Limit serwera | Limit rozmiaru pojedynczego pliku. Nie może przekraczać `FILE_UPLOAD_MAX_BYTES` serwera. |
+| `max_bytes` | dodatnia liczba całkowita | Limit serwera | Limit rozmiaru pojedynczego pliku. Gdy jest wyższy, nadal obowiązuje `FILE_UPLOAD_MAX_BYTES` serwera. |
 | `purposes` | tablica kodów | `[]` | Etykiety opisujące przeznaczenie plików, np. `product_image`. |
 | `image_only` | wartość logiczna | `false` | Akceptuje tylko obrazy. Wymagane dla renderera `attricat.table_image`. |
 
@@ -471,9 +471,9 @@ Może go zdefiniować tylko schemat rekordów i tylko pod nazwą `explorer`. Bez
 | `section` | `children` | Zgrupowany obszar. |
 | `tabs` | `tabs`: lista `{label, children}` | Jedna karta na wpis. |
 | `accordion` | `sections`: lista `{label, children}` | Zwijane sekcje. |
-| `field` | `field`; opcjonalnie `editor` | Jeden atrybut skalarny lub plikowy. W `detail` klucz `editor` wskazuje edytor atrybutu z rozszerzenia przez `id`, `version` i `props`; zobacz [Edytory atrybutów](/pl/extensions/manifest/#edytory-atrybutów). |
+| `field` | `field`; opcjonalnie `editor` | Jeden atrybut skalarny lub plikowy. W `detail` klucz `editor` wskazuje edytor atrybutu z rozszerzenia przez `extension_id`, `id`, `version` i `props`; zobacz [Edytory atrybutów](/pl/extensions/manifest/#edytory-atrybutów). |
 | `relationship_list` | `field` | Jeden atrybut relacji i jego cele. |
-| `incoming_relationship_list` | `label`, `relationships`, `page_size` | Link otwierający Przeglądarkę rekordów w nowej karcie, przefiltrowaną do rekordów wskazujących na ten rekord; osobny link dla każdej relacji. `relationships` to lista `{source_blueprint, field}`. `page_size` jest ograniczane przez `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE` serwera; aplikacja webowa go nie używa. |
+| `incoming_relationship_list` | `label`, `relationships`, `page_size` | Link otwierający Przeglądarkę rekordów w nowej karcie, przefiltrowaną do rekordów wskazujących na ten rekord; osobny link dla każdej relacji. `relationships` to lista `{source_blueprint, field}`. `page_size` jest ograniczane przez `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE` serwera; aplikacja webowa go nie używa. Dozwolone tylko w `detail`. |
 | `heading` | `text` | Statyczny nagłówek. |
 | `text` | `text` | Statyczny akapit. |
 | `divider` | | Linia pozioma. |

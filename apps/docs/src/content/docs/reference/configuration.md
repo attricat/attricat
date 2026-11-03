@@ -70,7 +70,7 @@ The file worker reads the same configuration and also needs the `file_worker_met
 | `ATTRICAT_SECRETS_DIR` | `/run/secrets` | Directory holding the [secret files](#secrets). |
 | `RUST_LOG` | `info` | Log filter, for example `api=debug`. |
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | Unset | OTLP/gRPC endpoint for trace export from the API and file worker. Leave unset to disable tracing export. |
-| `ATTRICAT_DEVTOOLS` | `true` in local development | Enables the web Inspector and the Explorer's SQL timing entries in the `Server-Timing` header. Set `false` in production. In other builds, including production, a browser can load the Inspector on demand by setting local storage `attricat.inspector-enabled` to `true` and reloading; SQL timings still require this setting on the API. SQL text and bind values are never exposed. |
+| `ATTRICAT_DEVTOOLS` | `false` | Enables the web Inspector and the Explorer's SQL timing entries in the `Server-Timing` header. The local development `.env` sets it to `true`; keep it `false` in production. In other builds, including production, a browser can load the Inspector on demand by setting local storage `attricat.inspector-enabled` to `true` and reloading; SQL timings still require this setting on the API. SQL text and bind values are never exposed. |
 
 ## Bootstrap workspace and owner
 
@@ -82,7 +82,7 @@ On startup the API makes sure one workspace and its owner exist. These values ar
 | `ATTRICAT_BOOTSTRAP_WORKSPACE_NAME` | `Default workspace` | Display name used when the workspace is first created. |
 | `ATTRICAT_BOOTSTRAP_OWNER_EMAIL` | `owner@example.test` | Email of the initial owner. It is trimmed and lowercased. Startup creates the user, membership, and owner grant if they do not exist. Always set a real address in a deployment. |
 | `ATTRICAT_BOOTSTRAP_OWNER_ID` | Random UUID | Optional fixed UUID for the bootstrap owner. Its first password is the `bootstrap_owner_password` [secret](#secrets). |
-| `ATTRICAT_DEMO_MODE` | `false` | For public demo deployments only. Turns on `ATTRICAT_SAMPLE_ACCOUNTS`, gives the initial workspace the sign-in identifier `demo.attricat.com` and the default name `Demo`, and opens the sign-in page on that workspace with the editor account selected. Visitors can switch to the viewer, admin or owner account. Password reset, member and role-grant changes, ownership transfer, invitations and new users are turned off so visitors cannot lock the shared accounts out. If agents are configured, they can read the catalog and explain changes but cannot make them. Never enable it for a workspace with real data. |
+| `ATTRICAT_DEMO_MODE` | `false` | For public demo deployments only. Turns on `ATTRICAT_SAMPLE_ACCOUNTS`, gives the initial workspace the sign-in identifier `demo.attricat.com` and the default name `Demo`, and opens the sign-in page on that workspace with the editor account selected. Visitors can switch to the viewer, admin or owner account. Password reset, member and role-grant changes, ownership transfer, invitations and new users are turned off so visitors cannot lock the shared accounts out. Single sign-on, identity provider changes, installing or upgrading extensions, adding extension registries, and applying solution packs are refused too. It requires the `bootstrap_owner_password` secret. If agents are configured, they can read the catalog and explain changes but cannot make them. Never enable it for a workspace with real data. |
 | `ATTRICAT_SAMPLE_ACCOUNTS` | `false` | Creates `viewer@`, `editor@` and `admin@` accounts on the owner's email domain, each with that built-in role and the `bootstrap_owner_password` secret as its password (which must then stay set). The sign-in page offers them in a picker. Anyone who can reach the server can sign in with them, so use it only for local development and demos. |
 
 The bootstrap workspace's sign-in identifier is `default.local`.
@@ -93,7 +93,7 @@ The bootstrap workspace's sign-in identifier is `default.local`.
 | --- | --- | --- |
 | `SESSION_COOKIE_SECURE` | `true` | Marks the session and CSRF cookies `Secure`. Set `false` only for local HTTP development. |
 
-Session lifetime (eight hours), the login rate limit (five failures per workspace and email in fifteen minutes), and password-reset link lifetime (30 minutes) are fixed.
+Session lifetime (eight hours), the login rate limit (five failures per email address in fifteen minutes), and password-reset link lifetime (30 minutes) are fixed.
 
 ## HTTP limits
 
@@ -112,7 +112,7 @@ Session lifetime (eight hours), the login rate limit (five failures per workspac
 | --- | --- | --- |
 | `PREVIEW_MAX_RELATIONSHIP_DEPTH` | `3` | Deepest relationship nesting a record preview may request. |
 | `PREVIEW_MAX_RELATIONSHIP_ITEMS` | `10` | Maximum related records shown inline per relationship in a preview. |
-| `RECORD_MAX_PAGE_SIZE` | `100` | Largest page size for relationship target browsing. |
+| `RECORD_MAX_PAGE_SIZE` | `100` | Largest page size for record search and relationship target browsing. |
 | `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE` | `50` | Largest page size for incoming-relationship lists. Caps `page_size` in `incoming_relationship_list` view blocks. |
 | `RELATIONSHIP_FACET_MAX_NODES` | `100` | Maximum nodes returned per page of an Explorer relationship facet. |
 | `DATA_HEALTH_CACHE_TTL_SECONDS` | `300` | How long data-health responses are cached. `0` disables the cache. Any recorded catalog change also refreshes them on the next request. |
@@ -257,6 +257,7 @@ These agent limits are fixed: 32 KiB per user message, 16 attachments per messag
 | `EXTENSION_OAUTH_RETURN_URL` | `/manage/extensions/` on the callback's origin | Where the OAuth callback sends the browser afterwards: the web app's `/manage/extensions/`, ending in `/`. Set it when the web app is served from another origin than the API. |
 | `EXTENSION_DEV_EGRESS_RESOLVE` | Unset | Development only; requires `ATTRICAT_DEVTOOLS=true`, otherwise startup stops. Comma-separated `host=ip:port` or `*.suffix=ip:port` entries that send extension requests for those hosts to a local mock, such as `*.mock.test=127.0.0.1:9443`. They bypass the public-address check, so never set them in production. |
 | `EXTENSION_DEV_EGRESS_CA_FILE` | Unset | Development only; requires `ATTRICAT_DEVTOOLS=true`. A PEM file of certificates that extension requests trust in addition to the system roots, for a local mock's certificate. Never set it in production. |
+| `SOLUTION_PACK_LOCAL_EXTENSIONS_DIR` | Unset | Development only; requires `ATTRICAT_DEVTOOLS=true`, otherwise startup stops. Directory from which solution packs install locally built extensions. Never set it in production. |
 
 ## Web app development server
 

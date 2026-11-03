@@ -37,7 +37,7 @@ Record blueprints use `kind: record`.
 | `code` | code | Yes | Identifier of the blueprint family. It cannot change between revisions. |
 | `name` | string | Yes | Display name. Can change between revisions. |
 | `description` | string | No | What the blueprint's records are, up to 500 characters, such as "Product groupings, such as Basic tools". The agent reads it to match people's words to records; the web app does not show it yet. |
-| `kind` | `"record"` or `"mixin"` | Yes | An `record` blueprint can have records. A `mixin` only supplies attributes to other blueprints through `includes`. |
+| `kind` | `"record"` or `"mixin"` | Yes | A `record` blueprint can have records. A `mixin` only supplies attributes to other blueprints through `includes`. |
 | `attributes` | list of mappings | Yes | At least one attribute. See [Attributes](#attributes). |
 | `includes` | list of mappings | No | Mixins this blueprint pulls attributes from. See [Includes](#includes). |
 | `views` | mapping | For `record`: yes | Layouts for the web app. Record blueprints must define `views.dropdown_option`. See [Views](#views). |
@@ -246,7 +246,7 @@ attributes:
 | `ordered` | boolean | `true` for `many` | Whether the order of a `many` list is meaningful. Must be `false` or omitted for `one`. |
 | `allowed_mime_groups` | array of strings | Any | Accepted MIME groups, such as `image`. CSV and other text files are stored as `text/plain`, so they belong to the `text` group; use `allowed_extensions` to accept only `csv`. |
 | `allowed_extensions` | array of strings | Any | Accepted extensions, letters and digits only (`jpg`, not `*.jpg`). A leading `.` is ignored. |
-| `max_bytes` | positive integer | Server limit | Per-file size limit. Cannot exceed the server's `FILE_UPLOAD_MAX_BYTES`. |
+| `max_bytes` | positive integer | Server limit | Per-file size limit. The server's `FILE_UPLOAD_MAX_BYTES` still applies when this is higher. |
 | `purposes` | array of codes | `[]` | Labels describing what the files are for, such as `product_image`. |
 | `image_only` | boolean | `false` | Accept images only. Required for the `attricat.table_image` renderer. |
 
@@ -471,9 +471,9 @@ Only a record blueprint can define it, and only under the name `explorer`. Witho
 | `section` | `children` | A grouped region. |
 | `tabs` | `tabs`: list of `{label, children}` | One tab per entry. |
 | `accordion` | `sections`: list of `{label, children}` | Collapsible sections. |
-| `field` | `field`; optional `editor` | One scalar or file attribute. In `detail`, `editor` names an extension's attribute editor by `id`, `version` and `props`; see [Attribute editors](/extensions/manifest/#attribute-editors). |
+| `field` | `field`; optional `editor` | One scalar or file attribute. In `detail`, `editor` names an extension's attribute editor by `extension_id`, `id`, `version` and `props`; see [Attribute editors](/extensions/manifest/#attribute-editors). |
 | `relationship_list` | `field` | One relationship attribute and its targets. |
-| `incoming_relationship_list` | `label`, `relationships`, `page_size` | A link that opens the Explorer in a new tab, filtered to records linking to this one; one link per relationship. `relationships` is a list of `{source_blueprint, field}`. `page_size` is capped by the server's `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE`; the web app does not use it. |
+| `incoming_relationship_list` | `label`, `relationships`, `page_size` | A link that opens the Explorer in a new tab, filtered to records linking to this one; one link per relationship. `relationships` is a list of `{source_blueprint, field}`. `page_size` is capped by the server's `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE`; the web app does not use it. Allowed only in `detail`. |
 | `heading` | `text` | Static heading. |
 | `text` | `text` | Static paragraph. |
 | `divider` | | Horizontal rule. |

@@ -14,7 +14,7 @@ Brak zalogowania lub wygasła sesja zwraca `401`. Zalogowana osoba bez uprawnien
 | `workspace.manage` | Cykl życia obszaru roboczego i przeniesienie własności oraz logowanie jednokrotne. | ✓ | | | |
 | `members.manage` | Członkowie, zaproszenia, tworzenie użytkowników i zespoły (`/workspace/teams`, `acli team`). | ✓ | ✓ | | |
 | `roles.grant` | Przydzielanie i odbieranie ról. Wymagane razem z `members.manage`. | ✓ | ✓ | | |
-| `roles.manage` | Role niestandardowe; ponawianie dostarczeń zdarzeń, które stały się martwymi wiadomościami. | ✓ | ✓ | | |
+| `roles.manage` | Role niestandardowe; wyświetlanie i ponawianie dostarczeń zdarzeń, które stały się martwymi wiadomościami. | ✓ | ✓ | | |
 | `tokens.manage` | Tworzenie i odwoływanie własnych osobistych tokenów API. | ✓ | ✓ | | |
 | `workspace_navigation.manage` | Skróty na pasku bocznym przeglądarki rekordów. | ✓ | ✓ | | |
 | `tag_colors.manage` | Kolory tagów systemowych rekordów. | ✓ | ✓ | | |
@@ -28,7 +28,7 @@ Brak zalogowania lub wygasła sesja zwraca `401`. Zalogowana osoba bez uprawnien
 | `records.publish` | Publikowanie rekordów w kanałach i wycofywanie ich publikacji. | ✓ | ✓ | | |
 | `contexts.read` | Konteksty i kanały eksportu. | ✓ | ✓ | ✓ | ✓ |
 | `contexts.write` | Tworzenie, zmienianie i usuwanie kontekstów; włączanie kanałów eksportu. | ✓ | ✓ | ✓ | |
-| `data_health.read` | Stan danych, przetwarzanie w tle, metryki i listy martwych wiadomości zdarzeń; liczby stanów eksportu i filtr **Stan eksportu** w przeglądarce rekordów. | ✓ | ✓ | ✓ | ✓ |
+| `data_health.read` | Stan danych, przetwarzanie w tle i działająca kompilacja (`GET /system/health`); liczby stanów eksportu i filtr **Stan eksportu** w przeglądarce rekordów. | ✓ | ✓ | ✓ | ✓ |
 | `agents.run` | Rozmowy z agentami i zatwierdzenia. | ✓ | ✓ | | |
 | `agents.manage` | Sposób, w jaki agent proponuje i stosuje zmiany, na przykład zatwierdzanie edycji zbiorczych (`GET`/`PUT /workspace/agent-settings`, `acli workspace agent set`). | ✓ | ✓ | | |
 | `rules.read` | Reguły, uruchomienia i ustalenia. | ✓ | ✓ | | |

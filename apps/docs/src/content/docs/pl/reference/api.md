@@ -7,7 +7,7 @@ Aplikacja webowa Attricat jest zbudowana na tym samym HTTP API, które możesz w
 
 ## Bazowy adres URL
 
-Trasy API są dostępne pod `/api`, np. `GET https://attricat.example.com/api/blueprints`; ścieżki na tej stronie są względne wobec tego prefiksu. Wszystkie pozostałe ścieżki należą do aplikacji webowej. Sondy stanu (`/health`, `/health/live`, `/health/ready`) odpowiadają także w katalogu głównym, na potrzeby load balancerów i kontroli kontenerów.
+Trasy API są dostępne pod `/api`, np. `GET https://attricat.example.com/api/blueprints`; ścieżki na tej stronie są względne wobec tego prefiksu. Wszystkie pozostałe ścieżki należą do aplikacji webowej. Sondy stanu (`/health`, `/health/live`, `/health/ready`) i `/metrics` odpowiadają także w katalogu głównym, na potrzeby load balancerów, kontroli kontenerów i zbierania metryk.
 
 ## Uwierzytelnianie
 
@@ -17,7 +17,7 @@ Trasy API są dostępne pod `/api`, np. `GET https://attricat.example.com/api/bl
 
 Klienci nigdy nie wysyłają identyfikatora obszaru roboczego; zawsze pochodzi on z tokenu lub sesji.
 
-Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/health/live`, `/health/ready`, `POST /auth/discover`, `GET /auth/sample-logins`, `POST /auth/login`, `POST /auth/password-reset`, `POST /auth/password-reset/confirm`, `POST /onboarding/complete`, `GET /public/extension-oauth/callback`, gdzie danymi uwierzytelniającymi jest jednorazowy stan OAuth, oraz `GET /public/extension-files/{token}`, gdzie danymi uwierzytelniającymi jest token z linku.
+Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/health/live`, `/health/ready`, `POST /auth/discover`, `GET /auth/sample-logins`, `POST /auth/login`, `POST /auth/password-reset`, `POST /auth/password-reset/confirm`, `POST /onboarding/complete`, `POST /auth/oidc/start`, `POST /auth/oidc/invitation`, `GET /auth/oidc/callback/{workspace_id}`, `GET /public/extension-oauth/callback`, gdzie danymi uwierzytelniającymi jest jednorazowy stan OAuth, oraz `GET /public/extension-files/{token}`, gdzie danymi uwierzytelniającymi jest token z linku.
 
 ## Konwencje
 
@@ -33,9 +33,16 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 
 | Kod | Status | Znaczenie |
 | --- | --- | --- |
-| `invalid_input` | 422 | Treść żądania zawiera nieprawidłową wartość, na przykład powtórzony lub nieznany kod. Komunikat wskazuje, którą. |
+| `unauthenticated` | 401 | Żądanie nie ma prawidłowych danych uwierzytelniających. |
+| `forbidden` | 403 | Dane uwierzytelniające nie mają uprawnienia lub zakresu. |
+| `csrf_failed` | 403 | Niebezpieczne żądanie uwierzytelnione plikiem cookie nie ma nagłówka `X-Attricat-Csrf` albo ma w nim złą wartość. |
+| `not_found` | 404 | Zasób nie istnieje lub nie jest dla Ciebie widoczny. |
+| `payload_too_large` | 413 | Treść żądania przekracza limit. |
+| `rate_limited` | 429 | Zbyt wiele prób logowania. Spróbuj ponownie później. |
+| `request_timeout` | 503 | Żądanie przekroczyło `HTTP_REQUEST_TIMEOUT_SECONDS`. Zapis mógł się mimo to wykonać, więc sprawdź to przed ponowieniem. |
+| `invalid_input` | 422 | Treść żądania zawiera nieprawidłową wartość, na przykład powtórzony lub nieznany kod. Komunikat wskazuje, którą. Zapytanie `query` wyszukiwania, którego nie da się przetworzyć, zwraca ten kod ze statusem `400`. |
 | `invalid_code` | 422 | Kod zawiera znaki inne niż litery ASCII, cyfry, łączniki i podkreślenia. |
-| `code_taken` | 409 | Kod lub nazwa są już używane. `details.resource` to `blueprint`, `context`, `workflow`, `rule` lub `connection`. |
+| `code_taken` | 409 | Kod lub nazwa są już używane. `details.resource` to `blueprint`, `context`, `workflow`, `rule`, `team`, `reusable_attribute`, `reusable_attribute_group` lub `connection`. |
 | `default_context_protected` | 422 | Kontekstu domyślnego nie można zmienić ani usunąć. |
 | `default_context_only` | 422 | Atrybut można zapisywać tylko w kontekście domyślnym. |
 | `context_cycle` | 422 | Kontekst nie może stać się własnym potomkiem. |
@@ -64,7 +71,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `relationship_path_sort_requires_single_result_version` | 422 | Sortowanie według powiązanej wartości w kilku wersjach schematu. |
 | `file_processing` | 409 | Plik nie jest jeszcze gotowy do pobrania. |
 | `approval_already_decided` | 409 | Wywołanie narzędzia przez agenta zostało już zatwierdzone lub odrzucone. |
-| `service_unavailable` | 503 | Dla tras agentów: nie skonfigurowano dostawcy AI. |
+| `service_unavailable` | 503 | Serwer osiągnął limit równoczesnych żądań, zapis był w konflikcie z innym i można go ponowić albo usługa potrzebna trasie nie jest skonfigurowana, na przykład dostawca AI dla tras agentów. |
 | `record_check_failed` | 422 | Kontrola z `x-attricat-checks` nie przechodzi w którymś kontekście. |
 | `transition_conditions_unmet` | 422 | Warunki przejścia statusu nie są spełnione. |
 | `rule_violation` | 422 | Po zapisie rekord naruszałby egzekwowaną regułę. |
@@ -109,7 +116,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 
 | Metoda | Ścieżka | Opis |
 | --- | --- | --- |
-| `GET` | `/blueprints` | Opublikowane schematy rekordów. |
+| `GET` | `/blueprints` | Opublikowane schematy rekordów. Dodaj `include_drafts=true`, aby uwzględnić wersje robocze. |
 | `GET` | `/blueprints/catalogue` | Wszystkie rodziny schematów i wersje. |
 | `POST` | `/blueprints` | Tworzy schemat (pierwszy szkic) z `{"definition": "<yaml>"}`. |
 | `GET`, `POST` | `/blueprints/{id}/versions` | Wyświetla wersje lub tworzy kolejny szkic. |
@@ -237,12 +244,15 @@ POST /api/v1/records/search
 - Element `relationship_tree_facets` bez `source_relationship_field` filtruje przeszukiwany schemat według jego własnego `hierarchy_field`: rekord pasuje, gdy jest wybranym węzłem lub jednym z jego potomków. Punkt końcowy elementów podrzędnych przyjmuje to samo pominięcie, aby wyświetlić własne drzewo schematu, licząc każdy węzeł wraz ze wszystkim, co znajduje się pod nim.
 - `export_status` zostawia rekordy z danym stanem eksportu w połączeniu jednego rozszerzenia albo w jego domyślnym miejscu docelowym, gdy pominięto `connection`. `status` to `pending`, `synced`, `rejected`, `retrying`, `uncertain` lub `withdrawn`. Łączy się z pozostałymi filtrami jak każdy z nich i nie ma limitu liczby rekordów w danym stanie.
 - `data_quality` zostawia rekordy według ich nierozwiązanych ustaleń reguł: `open` (co najmniej jedno otwarte ustalenie), `acknowledged` (nierozwiązane ustalenia, wszystkie potwierdzone) lub `clean` (brak). Wymaga `rules.read`; bez niego żądanie zwraca `403 data_quality_filter_forbidden`.
-- Operatory filtrów to `eq`, `contains`, `starts_with`, `gt`, `gte`, `lt` i `lte`. `field` może być ścieżką relacji o maksymalnie trzech krokach.
+- Operatory filtrów to `eq`, `contains`, `starts_with`, `gt`, `gte`, `lt`, `lte` i `is_set`, którego `value` to `true` lub `false`. `field` może być ścieżką relacji o maksymalnie trzech krokach.
+- `relationship_filters` (`[{"field", "selected_target_ids"}]`) zachowuje rekordy, które przez `field`, ścieżkę relacji o maksymalnie trzech krokach, docierają do wybranych celów.
+- `outdated: true` zachowuje rekordy przypięte do starszej opublikowanej rewizji schematu.
+- `page.size` domyślnie wynosi 20 i może mieć najwyżej `RECORD_MAX_PAGE_SIZE` (domyślnie 100).
 - `context_code` (domyślnie `default`) to kontekst, w którym rozstrzygane są filtry, sortowanie i `table_values`, z dziedziczeniem z kontekstów nadrzędnych zależnie od atrybutu. `query` dopasowuje wartości we wszystkich kontekstach.
 - `sort.field` musi być kolumną skalarną w widoku tabeli schematu, `blueprint_version`, `system_tag:<tag>` lub `publication_status` (z `sort.context_code` wskazującym kanał). `system_tag:<tag>` oddziela rekordy z tym tagiem od pozostałych, w każdej grupie według ID rekordu.
 - `system_tags` (najwyżej 20) zostawia rekordy, które mają wszystkie podane tagi, także [tagi Core](#tagi-systemowe), takie jak `attricat.needs_attention`.
 - Odpowiedzi zawierają `items`, `next_cursor`, `result_version_scope`, a dla każdego elementu `system_tags`, `table_values` i `match_explanations`. Przekaż `next_cursor` z powrotem jako `page.cursor` przy tym samym sortowaniu.
-- `include_total` zwraca łączną liczbę wyników dla pierwszej strony, ograniczoną do 500.
+- `include_total` zwraca w `total_count` łączną liczbę wyników dla pierwszej strony, ograniczoną do 500; `total_count_capped` informuje o osiągnięciu limitu.
 - `include_blueprint: false` pomija `blueprint` w odpowiedzi, na przykład na kolejnych stronach, gdy klient ma już blueprint z pierwszej strony.
 - `include_previews: false` pomija `preview` i rekordy `related` każdego elementu, chyba że kolumna tabeli używa renderera z rozszerzenia. `display` i `table_values` są zwracane zawsze.
 
@@ -334,11 +344,11 @@ Dodaj `context_id` do wpisu dla kontekstu innego niż domyślny. Przesłanych pl
 
 | Metoda | Ścieżka | Opis |
 | --- | --- | --- |
-| `GET`, `POST` | `/saved-views` | Wyświetla (opcjonalnie z `q`) lub tworzy nazwane wyszukiwania. |
-| `GET`, `PUT`, `DELETE` | `/saved-views/{id}` | Odczytuje, aktualizuje lub usuwa własne wyszukiwania. |
+| `GET`, `POST` | `/saved-views` | Wyświetla (opcjonalnie z `q`) lub tworzy nazwane wyszukiwania. Utworzenie przyjmuje `kind` (`explorer_search`), `name`, opcjonalny `description`, `visibility` (`private` lub `workspace`) i `state`. |
+| `GET`, `PUT`, `DELETE` | `/saved-views/{id}` | Odczytuje własne wyszukiwanie lub udostępnione obszarowi roboczemu; aktualizuje lub usuwa własne. |
 | `POST`, `GET` | `/view-state-links`, `/view-state-links/{id}` | Tworzy lub odczytuje migawkę do udostępnienia. |
 
-Stan ma maksymalnie 32 KiB i używa kluczy adresu URL przeglądarki rekordów: `blueprint`, `version`, `allVersions`, `query`, `context`, `locked`, `sort`, `attributeFilters` i `relationshipFacets`.
+Stan ma maksymalnie 32 KiB i używa kluczy adresu URL przeglądarki rekordów: `blueprint`, `version`, `allVersions`, `query`, `context`, `locked`, `sort`, `attributeFilters`, `relationshipFacets`, `browseBy`, `exportStatus`, `systemTags` i `dataQuality`.
 
 ### Powiadomienia
 
@@ -381,7 +391,7 @@ Trasy `GET` reguł, wykonań i ustaleń wymagają `rules.read`; pozostałe trasy
 | `GET` | `/rules/{id}/revisions` | Historia zmian, od najnowszej: `{rule_id, version, name, definition, definition_hash, created_by_user_id, created_at}`. |
 | `GET` | `/rules/{id}/revisions/{version}` | Jedna rewizja. |
 | `POST` | `/rules/{id}/enable`, `/rules/{id}/disable` | Włącza lub wyłącza regułę. `/enable` przyjmuje opcjonalne `{"accept_existing_violations": true}` dla egzekwowanej reguły, której próbne wykonanie znalazło naruszenia. |
-| `POST` | `/rules/{id}/run-now` | `{"record_id": null, "dry_run": false, "idempotency_key": "…"}`. Zwykłe wykonanie wymaga włączonej reguły. Próbne wykonanie może dodać `"definition": "<yaml>"`, aby sprawdzić jeszcze niezapisaną definicję; w przeciwnym razie sprawdza bieżącą rewizję. |
+| `POST` | `/rules/{id}/run-now` | `{"record_id": null, "dry_run": false, "idempotency_key": "…"}`. Zwykłe wykonanie wymaga włączonej reguły. Próbne wykonanie może dodać `"definition": "<yaml>"`, aby sprawdzić jeszcze niezapisaną definicję; w przeciwnym razie sprawdza bieżącą rewizję. Zwraca `202` z `id`. |
 | `GET` | `/rule-runs`, `/rule-findings` | Uruchomienia i ustalenia. Uruchomienie podaje sprawdzony `definition_hash` i `candidates_skipped`, czyli liczbę rekordów pominiętych, bo reguła nie pasuje do ich rewizji schematu. Jego pole `truncated` ma wartość `true`, gdy zatrzymało się ono na limicie rekordów, zanim sprawdziło wszystkie. Strony wybierasz przez `limit` i `offset`; nagłówek `x-next-offset` podaje przesunięcie następnej strony. `unresolved=true` pomija rozwiązane ustalenia. Ustalenia można też zawęzić przez `record_id`, `rule_id`, `blueprint_id`, `context_id`, `severity` (`info`, `warning`, `error`, `critical`) i `state` (`open`, `acknowledged`, `resolved`). Reguły w `GET /rules` i `GET /rules/{id}` mają pola `open_findings` i `acknowledged_findings`. `GET /rule-runs` można zawęzić przez `rule_id` i `record_id`. `scope=all_records` zostawia wykonania obejmujące wszystkie rekordy, a `scope=record` wykonania sprawdzające jeden rekord. |
 | `GET` | `/rule-runs/{id}` | Jedno wykonanie. Próbne wykonanie dodaje `dry_run_failures`: pierwsze 50 rekordów, które by oznaczyło, każdy z `record_id`, `message` i `evidence`. |
 | `GET` | `/rule-findings/count` | `{count}` ustaleń pasujących do filtrów listy: `record_id`, `rule_id`, `blueprint_id`, `context_id`, `severity` i `state`. Bez `state` liczy otwarte i potwierdzone ustalenia; `unresolved=false` liczy wszystkie stany. |
@@ -391,6 +401,7 @@ Trasy `GET` reguł, wykonań i ustaleń wymagają `rules.read`; pozostałe trasy
 | `GET` | `/v1/records/{id}/rule-findings`, `/v1/records/{id}/rule-findings/count`, `/v1/records/{id}/rule-runs`, `/v1/records/{id}/rules` | Otwarte i potwierdzone ustalenia jednego rekordu (z `limit` i `offset`), ich `{count}`, wykonania, które go sprawdziły, oraz reguły jego schematu. Wymagają `records.read` dla rekordu, a nie `rules.read`. |
 | `POST` | `/workflows/validate` | Weryfikuje YAML przepływu pracy. |
 | `GET`, `POST` | `/workflows`, `/workflows/{id}/versions` | Wyświetla lub tworzy przepływy pracy i ich wersje. |
+| `GET` | `/workflows/{id}`, `/workflows/{id}/versions/{version}` | Jeden przepływ pracy lub jedna z jego wersji. |
 | `POST` | `/workflows/{id}/versions/{version}/publish`, `/enable`; `/workflows/{id}/disable` | Cykl życia. |
 | `POST` | `/workflows/{id}/run-now` | Uruchomienie ręczne. |
 | `GET` | `/workflow-runs` | Historia uruchomień. `workflow_id` ogranicza ją do jednego przepływu pracy. |
@@ -413,12 +424,15 @@ Trasy `GET` reguł, wykonań i ustaleń wymagają `rules.read`; pozostałe trasy
 | `GET` | `/agent/runs/{run_id}/events` | Zdarzenia wysyłane przez serwer (SSE). Połącz ponownie z `Last-Event-ID`. |
 | `GET` | `/agent/approvals` | Oczekujące zatwierdzenia. |
 | `POST` | `/agent/tool-calls/{id}/approve`, `/reject` | Decyzja. |
+| `POST` | `/agent/smart-fill` | Proponuje wartości pól rekordu na podstawie tekstu i załączników, bez ich zapisywania: `{"record_id", "context_id", "is_default_context", "content", "conversation_id"?, "draft_values"?, "attachment_ids"?}`. Zwraca `{"fields", "explanation"}`. |
 
 ### Obszar roboczy i dostęp
 
 | Metoda | Ścieżka | Opis |
 | --- | --- | --- |
 | `POST` | `/auth/discover`, `/auth/login`, `/auth/renew`, `/auth/logout` | Sesje. |
+| `POST` | `/auth/password-reset`, `/auth/password-reset/confirm` | Prośba o link do resetowania z `{"email"}`, a następnie ustawienie hasła z `{"token", "password"}`. Obie trasy zwracają `204`. |
+| `POST` | `/onboarding/complete` | Ustawia hasło nowego użytkownika na podstawie linku wdrożeniowego: `{"invitation_secret", "onboarding_secret", "password"}`. |
 | `POST`, `GET` | `/auth/oidc/start`, `/auth/oidc/callback/{workspace_id}` | Logowanie przez dostawcę tożsamości obszaru roboczego. `start` zwraca `authorization_url` i przyjmuje `invitation_secret`, aby przyjąć zaproszenie. |
 | `POST` | `/auth/oidc/invitation` | Na podstawie `secret` zaproszenia zwraca jego `login_identifier`, `display_name` dostawcy oraz `password_allowed`: czy `POST /auth/login` z `invitation_secret` może je przyjąć. |
 | `GET`, `POST` | `/auth/oidc/link` | Czy konto wywołującego jest połączone z dostawcą; rozpoczęcie łączenia. |
@@ -449,10 +463,11 @@ Trasy `GET` reguł, wykonań i ustaleń wymagają `rules.read`; pozostałe trasy
 | Metoda | Ścieżka | Opis |
 | --- | --- | --- |
 | `GET`, `POST`, `DELETE` | `/extension-registries[/{id}]`; `GET /extension-registries/discover`; `GET /extension-registries/extensions/{owner}/{repo}` | Rejestry i wykrywanie. |
+| `GET` | `/extension-registries/updates` | Zainstalowane rozszerzenia, które mają nowszą wersję w rejestrze: `extension_id`, `installed_version`, `latest_version`, `repository` i `registry_source`. |
 | `GET`, `POST` | `/extensions` | Wyświetla lub instaluje. |
 | `POST` | `/extensions/sideload` | Instaluje przesłane archiwum `application/zstd`. |
 | `POST` | `/extensions/{id}/upgrade-archive` | Uaktualnia z przesłanego archiwum `application/zstd` nowszej wersji. |
-| `POST` | `/extensions/{id}/{contribution_id}/input-uploads` | Przesyła wieloczęściowy `file`, o który prosi akcja; zwraca `{"file"}`. Wymaga `records.write`. |
+| `POST` | `/extensions/{id}/{contribution_id}/input-uploads` | Przesyła wieloczęściowy `file`, o który prosi akcja; zwraca `{"file"}`. Wymaga `records.write`. Przekaż jego identyfikator jako `input_file_id` przy rozpoczynaniu operacji. |
 | `GET`, `DELETE` | `/extensions/{id}` | Odczytuje lub usuwa. |
 | `POST` | `/extensions/{id}/upgrade`, `/enable`, `/disable`, `/quarantine` | Cykl życia. |
 | `PUT` | `/extensions/{id}/configure` | Konfiguracja. |
@@ -461,11 +476,14 @@ Trasy `GET` reguł, wykonań i ustaleń wymagają `rules.read`; pozostałe trasy
 | `PUT` | `/workspace/extensions-mode` | `{"enabled": false}` wyłącza wszystkie rozszerzenia w obszarze roboczym. |
 | `GET`, `PUT` | `/workspace/extension-layout` | Układ kontrybucji. |
 | `GET`, `PUT`, `DELETE` | `/workspace/extension-secrets[/{name}]` | Sekrety (przy odczycie tylko nazwy). |
-| `POST` | `/extensions/{id}/operations` | Rozpoczyna operację. |
+| `POST` | `/extensions/{id}/operations` | Rozpoczyna operację. `{"operation_id", "input", "idempotency_key", "source_reference"?, "destination_reference"?}`. Zwraca `202` z `id`. |
 | `GET` | `/extension-operation-runs[/{id}]`, `…/artifacts`, `…/deliveries` | Uruchomienia, wyniki, dostarczenia. |
 | `GET` | `/extension-operation-runs/{id}/artifacts/{artifact_id}/download` | Pobiera wynik. |
+| `POST` | `/extension-operation-runs/{id}/cancel`, `…/replay` | Anuluje uruchomienie (`204`) lub je ponawia (`202`). |
 | `POST`, `GET`, `PATCH` | `/extensions/{id}/operation-schedules`, `/extension-operation-schedules[/{id}]` | Harmonogramy. |
-| `POST` | `/extensions/{id}/{contribution_id}/operations` | Rozpoczyna interaktywną operację z akcji lub okna dialogowego na wybranych rekordach: `{"release_id", "operation_id", "input", "idempotency_key", "selection": {"blueprint_id", "blueprint_version", "context_id", "record_ids"}}`. Zwraca `202` z `run_id`. |
+| `POST` | `/extensions/{id}/{contribution_id}/operations` | Rozpoczyna interaktywną operację z akcji lub okna dialogowego na wybranych rekordach: `{"release_id", "operation_id", "input", "idempotency_key", "input_file_id"?, "selection": {"blueprint_id", "blueprint_version", "context_id", "record_ids"}}`. Zwraca `202` z `run_id`. |
+| `POST` | `/extensions/{id}/{contribution_id}/command` | Uruchamia polecenie zainstalowanego rozszerzenia: `{"release_id", "command_id", "payload"}`. Wymaga `records.write`. |
+| `GET`, `POST` | `/extensions/{id}/{contribution_id}/artifact`, `/extensions/{id}/{contribution_id}/storage/{release_id}` | Pakiet kliencki wkładu i pamięć rozszerzenia. Wymagają `records.read`. |
 | `GET` | `/extension-runs` | Twoje ostatnie wykonania interaktywne, opcjonalnie dla jednego `extension_id`. |
 | `GET` | `/extension-runs/{run_id}` | Jedno wykonanie interaktywne wraz z wynikami. Widzisz własne wykonania; osoby z `extensions.manage` widzą wszystkie. Dodaj `scope=own`, aby widzieć tylko własne. |
 | `POST` | `/extension-runs/{run_id}/cancel` | Anuluje niezakończone wykonanie. Zwraca `204` albo `409`, gdy nie można go już anulować. Inicjator zawsze może je anulować, nawet po utracie dostępu do wybranego rekordu. Opcjonalne `extension_id` odrzuca wykonanie innego rozszerzenia. |
@@ -473,8 +491,8 @@ Trasy `GET` reguł, wykonań i ustaleń wymagają `rules.read`; pozostałe trasy
 | `GET` | `/extensions/{id}/export-status` | Liczby rekordów według połączenia i statusu, strona mapowań eksportu (`?connection=&status=&after=&limit=`, do 100, kontynuuj z `next`) oraz 20 ostatnich odrzuconych lub wyczerpanych dostarczeń zdarzeń (`handler_failures`); liczby i niepowodzenia są zwracane tylko z pierwszą stroną. Wskazuje rekordy z całego obszaru roboczego, więc wymaga też uprawnienia `records.read` w całym obszarze roboczym. |
 | `POST` | `/extensions/{id}/export-status/retry` | `{"connection"?, "record_ids"?, "status"?, "run"?, "idempotency_key"?}`, z identyfikatorami rekordów, statusem lub jednym i drugim: przywraca do `pending` do 1000 pasujących rekordów (rekordy wybrane tylko po identyfikatorze, których nigdy nie eksportowano, zaczynają jako `pending`, gdy ich Schemat i połączenie obejmuje któreś z zadań eksportu rozszerzenia albo rozszerzenie samo obsługuje prośby o ponowienie; usunięte rekordy i wycofane mapowania nigdy nie są wybierane, a `"status": "withdrawn"` jest odrzucany: zamiast tego opublikuj rekord ponownie) i dla każdego wysyła rozszerzeniu `export.retry_requested.v1`. Z `"run": true` uruchamia też ponowną synchronizację tylko tych rekordów w zadaniach eksportu rozszerzenia dla tego połączenia; z `idempotency_key` (1–40 bajtów ASCII) to samo żądanie wysłane ponownie niczego nie ponawia dwa razy: znajduje ponowione rekordy i uruchomione wykonania, a nowe wykonanie uruchamia tylko dla zadania, które wcześniej nie mogło wystartować. Zwraca `202` z `{"record_ids", "run_ids", "job_errors"}`; zadanie, które nie może uruchomić synchronizacji, trafia do `job_errors` jako `{"job_id", "code", "message", "details"}` i nie przerywa ponowienia: `code` to `export_job_resync_failed` (z `job_id` i `job_code` w `details`), chyba że przyczyna ma bardziej szczegółowy kod błędu, który zachowuje własne `details` uzupełnione o te dwa pola. Wymaga też uprawnienia `records.read` w całym obszarze roboczym; rozszerzenie, które nie jest zainstalowane z `exports.mappings`, daje `404`, a wyłączone `422`. |
 | `POST` | `/extensions/{id}/exports/{export_id}/preview` | `{"record_id", "connection"?}`: ładunek, który polecenie podglądu miejsca docelowego buduje dla jednego rekordu, zgodnie z konwencją `{"payload", "issues"}`. Nic nie jest wysyłane. Wymaga `records.write`, jak inne polecenia rozszerzeń, oraz `records.read` w całej przestrzeni roboczej; `connection` musi być połączeniem rodzaju obsługiwanego przez eksport. |
-| `GET`, `POST` | `/extensions/{id}/connections` | Lista połączeń albo utworzenie połączenia: `{"connection", "kind", "display_name", "grant_type", "token_url", "device_authorization_url"?, "client_id", "scope"?, "parameters"?, "client_secret"?, "refresh_token"?}`. Odpowiedzi nigdy nie zawierają sekretów ani tokenów, tylko informację, czy są zapisane. |
-| `PATCH`, `DELETE` | `/extensions/{id}/connections/{connection}` | Zmiana `display_name`, `token_url`, `device_authorization_url`, `scope` (pusty ciąg go usuwa) lub `parameters` albo zastąpienie `client_secret` lub `refresh_token`; albo usunięcie połączenia razem z jego danymi uwierzytelniającymi. Przeniesienie `token_url` lub `device_authorization_url` na inny host wymaga ponownego podania `client_secret` i usuwa zapisane tokeny, więc połączenie czeka na autoryzację, chyba że wysłano też `refresh_token`. Mapowania eksportu zostają, więc połączenie utworzone ponownie pod tą samą nazwą zachowuje zewnętrzne identyfikatory w miejscu docelowym. |
+| `GET`, `POST` | `/extensions/{id}/connections` | Lista połączeń albo utworzenie połączenia: `{"connection", "kind", "display_name", "grant_type", "token_url", "device_authorization_url"?, "authorization_url"?, "client_id", "scope"?, "parameters"?, "client_secret"?, "refresh_token"?}`. Odpowiedzi nigdy nie zawierają sekretów ani tokenów, tylko informację, czy są zapisane. |
+| `PATCH`, `DELETE` | `/extensions/{id}/connections/{connection}` | Zmiana `display_name`, `token_url`, `device_authorization_url`, `authorization_url`, `scope` (pusty ciąg go usuwa) lub `parameters` albo zastąpienie `client_secret` lub `refresh_token`; albo usunięcie połączenia razem z jego danymi uwierzytelniającymi. Przeniesienie `token_url` lub `device_authorization_url` na inny host wymaga ponownego podania `client_secret` i usuwa zapisane tokeny, więc połączenie czeka na autoryzację, chyba że wysłano też `refresh_token`. Mapowania eksportu zostają, więc połączenie utworzone ponownie pod tą samą nazwą zachowuje zewnętrzne identyfikatory w miejscu docelowym. |
 | `POST` | `/extensions/{id}/connections/{connection}/device-authorization`, `…/device-authorization/poll` | Rozpoczęcie przepływu autoryzacji urządzenia (odpowiedź zawiera kod użytkownika i adres weryfikacji), a potem jego dokończenie, gdy użytkownik zatwierdzi dostęp. Aktywne połączenie działa dalej, dopóki nowa autoryzacja czeka na zatwierdzenie. |
 | `POST` | `/extensions/{id}/connections/{connection}/authorization-code` | Wymiana kodu autoryzacji: `{"code", "redirect_uri", "code_verifier"?}`. |
 | `POST` | `/extensions/{id}/connections/{connection}/authorization` | Rozpoczęcie autoryzacji w przeglądarce dla połączenia z kodem autoryzacji. Zwraca `{"authorization_url"}`; dostawca odsyła przeglądarkę do `/public/extension-oauth/callback`. Wymaga sesji przeglądarki, nie tokenu API. |
@@ -490,12 +508,13 @@ Trasy `GET` reguł, wykonań i ustaleń wymagają `rules.read`; pozostałe trasy
 | Metoda | Ścieżka | Opis |
 | --- | --- | --- |
 | `POST` | `/solution-packs/inspect` | Sprawdza archiwum `application/zstd`. |
-| `POST` | `/solution-packs/plans?prefix=…&blueprint_publication=draft\|publish` | Tworzy plan. |
+| `POST` | `/solution-packs/plans?prefix=…&blueprint_publication=draft\|publish[&include_sample_data=true]` | Tworzy plan. Treścią jest archiwum `application/zstd` albo `multipart/form-data` z częścią `archive` oraz częściami `blueprint_map` (`{key, code}`), `asset_map` (`{key, id}`) i `context_map` (`{key, code}`), które przypisują klucze pakietu do istniejących zasobów. |
 | `GET` | `/solution-packs/plans/{id}` | Odczytuje plan. |
 | `POST` | `/solution-packs/plans/{id}/apply` | Stosuje plan. |
 | `GET` | `/solution-packs/applications[/{id}]` | Historia zastosowań. |
 | `POST` | `/solution-packs/applications/{id}/abandon` | Trwale zatrzymuje niedokończone zastosowanie z danymi przykładowymi. Zobacz [Pakiety rozwiązań](/pl/builders/solution-packs/). |
 | `GET`, `POST` | `/solution-packs/applications/{id}/checks` | Uruchomienia kontroli. |
+| `GET` | `/solution-packs/applications/{id}/checks/{run_id}` | Jedno uruchomienie kontroli. |
 | `GET` | `/presentation-assets[/{id}[/content]]` | Zasoby prezentacyjne. |
 
 ### Dostawca tożsamości
@@ -515,7 +534,7 @@ Te trasy obsługują całe wdrożenie, a nie jeden obszar roboczy, i istnieją t
 | `PUT` | `/operator/workspaces/{id}` | Utwórz obszar roboczy z `name`, `login_identifier`, `owner_email` i opcjonalnego `owner_display_name` oraz zaproś jego właściciela. |
 | `GET` | `/operator/workspaces` | Obszary robocze, od najstarszego. |
 | `GET` | `/operator/workspaces/{id}` | Jeden obszar roboczy z `has_active_owner` i `owner_invitation_expires_at`. |
-| `POST` | `/operator/workspaces/{id}/owner-invitation` | Zastąp zaproszenie właściciela, opcjonalnie nowym `owner_email`, dopóki obszar roboczy nie ma aktywnego właściciela. |
+| `POST` | `/operator/workspaces/{id}/owner-invitation` | Zastąp zaproszenie właściciela, opcjonalnie nowym `owner_email` lub `owner_display_name`, dopóki obszar roboczy nie ma aktywnego właściciela. W przeciwnym razie zwraca `409 workspace_owner_exists`. |
 
 UUID obszaru roboczego generujesz samodzielnie, dzięki czemu ponowienie jest bezpieczne: `201` oznacza utworzenie, `200` oznacza, że identyczne wcześniejsze żądanie obowiązuje, a niedokończone kroki zostały dokończone, a `409 workspace_conflict` oznacza, że identyfikator istnieje z innymi wartościami. `409 login_identifier_taken` oznacza, że identyfikator logowania należy do innego obszaru roboczego. Attricat nie sprawdza, czy domena identyfikatora należy do Ciebie, a identyfikatora nie można zmienić, więc najpierw zweryfikuj własność domeny.
 
@@ -525,13 +544,13 @@ Nowy obszar roboczy nie ma właściciela, dopóki ktoś nie przyjmie zaproszenia
 
 | Metoda | Ścieżka | Opis |
 | --- | --- | --- |
-| `GET` | `/health/live`, `/health/ready` | Sondy. |
+| `GET` | `/health`, `/health/live`, `/health/ready` | Sondy. |
 | `GET` | `/system/health` | Uruchomiona wersja API, gałąź i commit źródła (`data_health.read`). |
 | `GET` | `/metrics` | Metryki Prometheus (`Authorization: Bearer`, sekret `api_metrics_token`). |
 | `GET` | `/export-status` | Liczby rekordów według rozszerzenia, połączenia i stanu eksportu oraz włączone miejsca docelowe eksportu (`data_health.read`). |
-| `GET` | `/data-health/summary`, `/blueprints`, `/freshness`, `/completeness`, `/contexts`, `/relationships`, `/storage`, `/background-processing` | Stan danych. |
+| `GET` | `/data-health/summary`, `/blueprints`, `/freshness`, `/completeness`, `/contexts`, `/relationships`, `/storage`, `/background-processing` | Stan danych. `summary` i `blueprints` przyjmują `stale_after_days`. Wymaga `data_health.read`. |
 | `POST` | `/data-health/refresh` | Czyści bufor stanu danych. |
-| `GET` | `/event-deliveries/dead-letters` | Nieudane dostarczenia zdarzeń. |
-| `POST` | `/event-deliveries/{consumer_id}/{event_id}/replay` | Ponawia jedno dostarczenie. |
+| `GET` | `/event-deliveries/dead-letters` | Nieudane dostarczenia zdarzeń. Wymaga `roles.manage`. |
+| `POST` | `/event-deliveries/{consumer_id}/{event_id}/replay` | Ponawia jedno dostarczenie. Wymaga `roles.manage`. |
 
 Uprawnienia wymagane w poszczególnych obszarach opisuje [dokumentacja uprawnień](/pl/reference/permissions/).

@@ -7,7 +7,7 @@ Attricat's web app is built on the same HTTP API you can call from scripts and i
 
 ## Base URL
 
-API routes are served below `/api`, for example `GET https://attricat.example.com/api/blueprints`; the paths on this page are relative to it. Every other path belongs to the web app. The health probes (`/health`, `/health/live`, `/health/ready`) also answer at the root for load balancers and container checks.
+API routes are served below `/api`, for example `GET https://attricat.example.com/api/blueprints`; the paths on this page are relative to it. Every other path belongs to the web app. The health probes (`/health`, `/health/live`, `/health/ready`) and `/metrics` also answer at the root for load balancers, container checks, and metric scrapers.
 
 ## Authentication
 
@@ -17,7 +17,7 @@ API routes are served below `/api`, for example `GET https://attricat.example.co
 
 Clients never send a workspace ID; it always comes from the token or session.
 
-Public routes that need no credentials: `/health`, `/health/live`, `/health/ready`, `POST /auth/discover`, `GET /auth/sample-logins`, `POST /auth/login`, `POST /auth/password-reset`, `POST /auth/password-reset/confirm`, `POST /onboarding/complete`, `GET /public/extension-oauth/callback`, where the single-use OAuth state is the credential, and `GET /public/extension-files/{token}`, where the token in the link is the credential.
+Public routes that need no credentials: `/health`, `/health/live`, `/health/ready`, `POST /auth/discover`, `GET /auth/sample-logins`, `POST /auth/login`, `POST /auth/password-reset`, `POST /auth/password-reset/confirm`, `POST /onboarding/complete`, `POST /auth/oidc/start`, `POST /auth/oidc/invitation`, `GET /auth/oidc/callback/{workspace_id}`, `GET /public/extension-oauth/callback`, where the single-use OAuth state is the credential, and `GET /public/extension-files/{token}`, where the token in the link is the credential.
 
 ## Conventions
 
@@ -33,9 +33,16 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 
 | Code | Status | Meaning |
 | --- | --- | --- |
-| `invalid_input` | 422 | The request body has an invalid value, such as a repeated or unknown code. The message says which. |
+| `unauthenticated` | 401 | The request has no valid credential. |
+| `forbidden` | 403 | The credential lacks the permission or scope. |
+| `csrf_failed` | 403 | A cookie-authenticated unsafe request has a missing or wrong `X-Attricat-Csrf` header. |
+| `not_found` | 404 | The resource does not exist or is not visible to you. |
+| `payload_too_large` | 413 | The request body is over its limit. |
+| `rate_limited` | 429 | Too many sign-in attempts. Try again later. |
+| `request_timeout` | 503 | The request exceeded `HTTP_REQUEST_TIMEOUT_SECONDS`. A write may still have happened, so check before retrying it. |
+| `invalid_input` | 422 | The request body has an invalid value, such as a repeated or unknown code. The message says which. A search `query` that cannot be parsed returns this code with `400`. |
 | `invalid_code` | 422 | A code contains characters other than ASCII letters, digits, hyphens, and underscores. |
-| `code_taken` | 409 | The code or name is already in use. `details.resource` is `blueprint`, `context`, `workflow`, `rule`, or `connection`. |
+| `code_taken` | 409 | The code or name is already in use. `details.resource` is `blueprint`, `context`, `workflow`, `rule`, `team`, `reusable_attribute`, `reusable_attribute_group`, or `connection`. |
 | `default_context_protected` | 422 | The default context cannot be changed or deleted. |
 | `default_context_only` | 422 | The attribute can only be written in the default context. |
 | `context_cycle` | 422 | A context cannot become its own descendant. |
@@ -64,7 +71,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `relationship_path_sort_requires_single_result_version` | 422 | Sorting by a related value across several blueprint revisions. |
 | `file_processing` | 409 | The file is not ready to download yet. |
 | `approval_already_decided` | 409 | An agent tool call was already approved or rejected. |
-| `service_unavailable` | 503 | For agent routes: no AI provider is configured. |
+| `service_unavailable` | 503 | The server is at request capacity, a write conflicted with another and can be retried, or a service the route needs is not set up, such as an AI provider for agent routes. |
 | `record_check_failed` | 422 | An `x-attricat-checks` check fails in some context. |
 | `transition_conditions_unmet` | 422 | A status transition's conditions are not met. |
 | `rule_violation` | 422 | The write leaves the record violating an enforcing rule. |
@@ -109,7 +116,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 
 | Method | Path | Description |
 | --- | --- | --- |
-| `GET` | `/blueprints` | Published record blueprints. |
+| `GET` | `/blueprints` | Published record blueprints. Add `include_drafts=true` to include drafts. |
 | `GET` | `/blueprints/catalogue` | All blueprint families and revisions. |
 | `POST` | `/blueprints` | Create a blueprint (first draft) from `{"definition": "<yaml>"}`. |
 | `GET`, `POST` | `/blueprints/{id}/versions` | List revisions, or create the next draft. |
@@ -237,12 +244,15 @@ POST /api/v1/records/search
 - A `relationship_tree_facets` item without `source_relationship_field` filters the searched blueprint by its own `hierarchy_field`: a record matches when it is a selected node or one of its descendants. The children endpoint accepts the same omission to list the blueprint's own tree, counting each node and everything below it.
 - `export_status` keeps records with that export status at one extension's connection, or its default destination when `connection` is omitted. `status` is `pending`, `synced`, `rejected`, `retrying`, `uncertain`, or `withdrawn`. It combines with the other filters like any of them, with no limit on how many records have the status.
 - `data_quality` keeps records by their unresolved rule findings: `open` (at least one open finding), `acknowledged` (unresolved findings, all acknowledged), or `clean` (none). It requires `rules.read`; without it the request returns `403 data_quality_filter_forbidden`.
-- Filter operators are `eq`, `contains`, `starts_with`, `gt`, `gte`, `lt`, and `lte`. `field` can be a relationship path of up to three hops.
+- Filter operators are `eq`, `contains`, `starts_with`, `gt`, `gte`, `lt`, `lte`, and `is_set`, whose `value` is `true` or `false`. `field` can be a relationship path of up to three hops.
+- `relationship_filters` (`[{"field", "selected_target_ids"}]`) keeps records that reach the selected targets through `field`, a relationship path of up to three hops.
+- `outdated: true` keeps records pinned to an older published blueprint revision.
+- `page.size` defaults to 20 and can be at most `RECORD_MAX_PAGE_SIZE` (100 by default).
 - `context_code` (default `default`) is the context in which filters, sorting, and `table_values` are resolved, inheriting from parent contexts per attribute. `query` matches values in every context.
 - `sort.field` must be a scalar column in the blueprint's table view, `blueprint_version`, `system_tag:<tag>`, or `publication_status` (with `sort.context_code` naming a channel). `system_tag:<tag>` sorts records that carry the tag apart from the rest, by record ID within each group.
 - `system_tags` (at most 20) keeps records that carry every listed tag, including [Core tags](#system-tags) such as `attricat.needs_attention`.
 - Responses contain `items`, `next_cursor`, `result_version_scope`, and, for each item, `system_tags`, `table_values` and `match_explanations`. Pass `next_cursor` back as `page.cursor` with the same sort.
-- `include_total` returns a first-page total, capped at 500.
+- `include_total` returns a first-page total in `total_count`, capped at 500; `total_count_capped` says when the cap was reached.
 - `include_blueprint: false` leaves `blueprint` out of the response, for later pages when you kept the first page's.
 - `include_previews: false` leaves out each item's `preview` and `related` records, unless a table column uses an extension renderer. `display` and `table_values` are always returned.
 
@@ -334,11 +344,11 @@ Add `context_id` to an entry for a context other than the default. Uploaded file
 
 | Method | Path | Description |
 | --- | --- | --- |
-| `GET`, `POST` | `/saved-views` | List (optional `q`) or create named searches. |
-| `GET`, `PUT`, `DELETE` | `/saved-views/{id}` | Read, update, or delete your own. |
+| `GET`, `POST` | `/saved-views` | List (optional `q`) or create named searches. Create takes `kind` (`explorer_search`), `name`, optional `description`, `visibility` (`private` or `workspace`), and `state`. |
+| `GET`, `PUT`, `DELETE` | `/saved-views/{id}` | Read your own or a search shared with the workspace; update or delete your own. |
 | `POST`, `GET` | `/view-state-links`, `/view-state-links/{id}` | Create or read a shareable snapshot. |
 
-State is at most 32 KiB and uses the Explorer URL keys: `blueprint`, `version`, `allVersions`, `query`, `context`, `locked`, `sort`, `attributeFilters`, and `relationshipFacets`.
+State is at most 32 KiB and uses the Explorer URL keys: `blueprint`, `version`, `allVersions`, `query`, `context`, `locked`, `sort`, `attributeFilters`, `relationshipFacets`, `browseBy`, `exportStatus`, `systemTags`, and `dataQuality`.
 
 ### Notifications
 
@@ -381,7 +391,7 @@ See [Translate labels](/builders/translations/).
 | `GET` | `/rules/{id}/revisions` | The changelog, newest first: `{rule_id, version, name, definition, definition_hash, created_by_user_id, created_at}`. |
 | `GET` | `/rules/{id}/revisions/{version}` | One revision. |
 | `POST` | `/rules/{id}/enable`, `/rules/{id}/disable` | Enable or disable the rule. `/enable` accepts an optional `{"accept_existing_violations": true}` for an enforcing rule whose dry run found violations. |
-| `POST` | `/rules/{id}/run-now` | `{"record_id": null, "dry_run": false, "idempotency_key": "…"}`. A normal run needs the rule enabled. A dry run may add `"definition": "<yaml>"` to check a definition that is not saved yet; otherwise it checks the current revision. |
+| `POST` | `/rules/{id}/run-now` | `{"record_id": null, "dry_run": false, "idempotency_key": "…"}`. A normal run needs the rule enabled. A dry run may add `"definition": "<yaml>"` to check a definition that is not saved yet; otherwise it checks the current revision. Returns `202` with `id`. |
 | `GET` | `/rule-runs`, `/rule-findings` | Runs and findings. A run has the `definition_hash` it checked and `candidates_skipped`, the records it skipped because the rule does not fit their blueprint revision. Its `truncated` is `true` when it stopped at its record limit before checking every record. Add `limit` and `offset` for pages; the `x-next-offset` header gives the next page's offset. `unresolved=true` leaves out resolved findings. Findings also narrow by `record_id`, `rule_id`, `blueprint_id`, `context_id`, `severity` (`info`, `warning`, `error`, `critical`) and `state` (`open`, `acknowledged`, `resolved`). Rules in `GET /rules` and `GET /rules/{id}` carry `open_findings` and `acknowledged_findings`. `GET /rule-runs` narrows by `rule_id` and `record_id`. `scope=all_records` keeps runs over every record and `scope=record` runs that checked one record. |
 | `GET` | `/rule-runs/{id}` | One run. A dry run adds `dry_run_failures`: the first 50 records it would flag, each with `record_id`, `message` and `evidence`. |
 | `GET` | `/rule-findings/count` | `{count}` of the findings the list's filters match: `record_id`, `rule_id`, `blueprint_id`, `context_id`, `severity`, and `state`. Without `state` it counts open and acknowledged findings; `unresolved=false` counts every state. |
@@ -391,6 +401,7 @@ See [Translate labels](/builders/translations/).
 | `GET` | `/v1/records/{id}/rule-findings`, `/v1/records/{id}/rule-findings/count`, `/v1/records/{id}/rule-runs`, `/v1/records/{id}/rules` | One record's open and acknowledged findings (with `limit` and `offset`), their `{count}`, the runs that checked it, and the rules of its blueprint. They need `records.read` on the record, not `rules.read`. |
 | `POST` | `/workflows/validate` | Validate workflow YAML. |
 | `GET`, `POST` | `/workflows`, `/workflows/{id}/versions` | List or create workflows and revisions. |
+| `GET` | `/workflows/{id}`, `/workflows/{id}/versions/{version}` | One workflow, or one of its revisions. |
 | `POST` | `/workflows/{id}/versions/{version}/publish`, `/enable`; `/workflows/{id}/disable` | Lifecycle. |
 | `POST` | `/workflows/{id}/run-now` | Manual run. |
 | `GET` | `/workflow-runs` | Run history. `workflow_id` limits it to one workflow. |
@@ -413,12 +424,15 @@ See [Translate labels](/builders/translations/).
 | `GET` | `/agent/runs/{run_id}/events` | Server-sent events. Reconnect with `Last-Event-ID`. |
 | `GET` | `/agent/approvals` | Pending approvals. |
 | `POST` | `/agent/tool-calls/{id}/approve`, `/reject` | Decide. |
+| `POST` | `/agent/smart-fill` | Suggest values for a record's fields from text and attachments, without saving them: `{"record_id", "context_id", "is_default_context", "content", "conversation_id"?, "draft_values"?, "attachment_ids"?}`. Returns `{"fields", "explanation"}`. |
 
 ### Workspace and access
 
 | Method | Path | Description |
 | --- | --- | --- |
 | `POST` | `/auth/discover`, `/auth/login`, `/auth/renew`, `/auth/logout` | Sessions. |
+| `POST` | `/auth/password-reset`, `/auth/password-reset/confirm` | Request a reset link with `{"email"}`, then set the password with `{"token", "password"}`. Both return `204`. |
+| `POST` | `/onboarding/complete` | Set a new user's password from their onboarding link: `{"invitation_secret", "onboarding_secret", "password"}`. |
 | `POST`, `GET` | `/auth/oidc/start`, `/auth/oidc/callback/{workspace_id}` | Sign in through the workspace's identity provider. `start` returns `authorization_url`, and takes `invitation_secret` to accept an invitation. |
 | `POST` | `/auth/oidc/invitation` | From an invitation's `secret`, its `login_identifier`, provider `display_name`, and `password_allowed`: whether `POST /auth/login` with `invitation_secret` can accept it. |
 | `GET`, `POST` | `/auth/oidc/link` | Whether the caller's account is linked to the provider; start linking it. |
@@ -449,10 +463,11 @@ See [Translate labels](/builders/translations/).
 | Method | Path | Description |
 | --- | --- | --- |
 | `GET`, `POST`, `DELETE` | `/extension-registries[/{id}]`; `GET /extension-registries/discover`; `GET /extension-registries/extensions/{owner}/{repo}` | Registries and discovery. |
+| `GET` | `/extension-registries/updates` | Installed extensions that have a newer version in a registry: `extension_id`, `installed_version`, `latest_version`, `repository`, and `registry_source`. |
 | `GET`, `POST` | `/extensions` | List or install. |
 | `POST` | `/extensions/sideload` | Install an uploaded `application/zstd` archive. |
 | `POST` | `/extensions/{id}/upgrade-archive` | Upgrade from an uploaded `application/zstd` archive of a newer version. |
-| `POST` | `/extensions/{id}/{contribution_id}/input-uploads` | Upload the multipart `file` an action asks for; returns `{"file"}`. Needs `records.write`. |
+| `POST` | `/extensions/{id}/{contribution_id}/input-uploads` | Upload the multipart `file` an action asks for; returns `{"file"}`. Needs `records.write`. Pass its ID as `input_file_id` when starting the operation. |
 | `GET`, `DELETE` | `/extensions/{id}` | Read or remove. |
 | `POST` | `/extensions/{id}/upgrade`, `/enable`, `/disable`, `/quarantine` | Lifecycle. |
 | `PUT` | `/extensions/{id}/configure` | Configuration. |
@@ -461,11 +476,14 @@ See [Translate labels](/builders/translations/).
 | `PUT` | `/workspace/extensions-mode` | `{"enabled": false}` turns off all extensions in the workspace. |
 | `GET`, `PUT` | `/workspace/extension-layout` | Contribution layout. |
 | `GET`, `PUT`, `DELETE` | `/workspace/extension-secrets[/{name}]` | Secrets (names only on read). |
-| `POST` | `/extensions/{id}/operations` | Start an operation. |
+| `POST` | `/extensions/{id}/operations` | Start an operation. `{"operation_id", "input", "idempotency_key", "source_reference"?, "destination_reference"?}`. Returns `202` with `id`. |
 | `GET` | `/extension-operation-runs[/{id}]`, `…/artifacts`, `…/deliveries` | Runs, outputs, deliveries. |
 | `GET` | `/extension-operation-runs/{id}/artifacts/{artifact_id}/download` | Download an output. |
+| `POST` | `/extension-operation-runs/{id}/cancel`, `…/replay` | Cancel a run (`204`), or replay one (`202`). |
 | `POST`, `GET`, `PATCH` | `/extensions/{id}/operation-schedules`, `/extension-operation-schedules[/{id}]` | Schedules. |
-| `POST` | `/extensions/{id}/{contribution_id}/operations` | Start an interactive operation from an action or dialog on the selected records: `{"release_id", "operation_id", "input", "idempotency_key", "selection": {"blueprint_id", "blueprint_version", "context_id", "record_ids"}}`. Returns `202` with `run_id`. |
+| `POST` | `/extensions/{id}/{contribution_id}/operations` | Start an interactive operation from an action or dialog on the selected records: `{"release_id", "operation_id", "input", "idempotency_key", "input_file_id"?, "selection": {"blueprint_id", "blueprint_version", "context_id", "record_ids"}}`. Returns `202` with `run_id`. |
+| `POST` | `/extensions/{id}/{contribution_id}/command` | Run a command of an installed extension: `{"release_id", "command_id", "payload"}`. Needs `records.write`. |
+| `GET`, `POST` | `/extensions/{id}/{contribution_id}/artifact`, `/extensions/{id}/{contribution_id}/storage/{release_id}` | A contribution's client bundle, and its extension storage. Need `records.read`. |
 | `GET` | `/extension-runs` | Your recent interactive runs, optionally for one `extension_id`. |
 | `GET` | `/extension-runs/{run_id}` | One interactive run with its outputs. You see your own runs; `extensions.manage` holders see every run. Add `scope=own` to see only your own. |
 | `POST` | `/extension-runs/{run_id}/cancel` | Cancel a run that has not finished. Returns `204`, or `409` once it can no longer be cancelled. Its initiator can always cancel it, even after losing access to a selected record. An optional `extension_id` refuses another extension's run. |
@@ -473,8 +491,8 @@ See [Translate labels](/builders/translations/).
 | `GET` | `/extensions/{id}/export-status` | Status counts per connection and status, a page of export mappings (`?connection=&status=&after=&limit=`, up to 100, continue with `next`), and the 20 most recent rejected or exhausted event deliveries (`handler_failures`); counts and failures come only with the first page. It names records across the workspace, so it also needs a workspace-wide `records.read` grant. |
 | `POST` | `/extensions/{id}/export-status/retry` | `{"connection"?, "record_ids"?, "status"?, "run"?, "idempotency_key"?}`, with record IDs, a status, or both: set up to 1,000 matching records back to `pending` (records chosen by ID alone that were never exported start as `pending` when one of the extension's export jobs covers their blueprint and connection, or the extension handles retry requests itself; deleted records and withdrawn mappings are never selected, and `"status": "withdrawn"` is refused: publish the record again instead) and send the extension `export.retry_requested.v1` for each. With `"run": true`, also resync just those records on the extension's export jobs for that connection; with `idempotency_key` (1–40 ASCII bytes) the same request sent again retries nothing twice: it finds the records it retried and the runs it started, and starts a run only for a job that could not start before. Returns `202` with `{"record_ids", "run_ids", "job_errors"}`; a job that cannot resync is listed in `job_errors` as `{"job_id", "code", "message", "details"}` and does not fail the retry: `code` is `export_job_resync_failed` (with `job_id` and `job_code` in `details`) unless the cause has a more specific error code, which keeps its own details plus those two. Needs a workspace-wide `records.read` grant too; an extension that is not installed with `exports.mappings` is a `404`, and a disabled one a `422`. |
 | `POST` | `/extensions/{id}/exports/{export_id}/preview` | `{"record_id", "connection"?}`: the payload the destination's preview command builds for one record, conventionally `{"payload", "issues"}`. Nothing is pushed. Needs `records.write`, like other extension commands, and `records.read` across the whole workspace; `connection` must be a connection of the export's kind. |
-| `GET`, `POST` | `/extensions/{id}/connections` | List connections, or create one: `{"connection", "kind", "display_name", "grant_type", "token_url", "device_authorization_url"?, "client_id", "scope"?, "parameters"?, "client_secret"?, "refresh_token"?}`. Responses never contain secrets or tokens, only whether they are stored. |
-| `PATCH`, `DELETE` | `/extensions/{id}/connections/{connection}` | Change `display_name`, `token_url`, `device_authorization_url`, `scope` (an empty string clears it), or `parameters`, or replace `client_secret` or `refresh_token`; or delete the connection with its credentials. Moving `token_url` or `device_authorization_url` to another host needs `client_secret` again and drops the stored tokens, so the connection waits for authorization unless a `refresh_token` is sent too. Its export mappings stay, so a connection re-created under the same name keeps the destination's external IDs. |
+| `GET`, `POST` | `/extensions/{id}/connections` | List connections, or create one: `{"connection", "kind", "display_name", "grant_type", "token_url", "device_authorization_url"?, "authorization_url"?, "client_id", "scope"?, "parameters"?, "client_secret"?, "refresh_token"?}`. Responses never contain secrets or tokens, only whether they are stored. |
+| `PATCH`, `DELETE` | `/extensions/{id}/connections/{connection}` | Change `display_name`, `token_url`, `device_authorization_url`, `authorization_url`, `scope` (an empty string clears it), or `parameters`, or replace `client_secret` or `refresh_token`; or delete the connection with its credentials. Moving `token_url` or `device_authorization_url` to another host needs `client_secret` again and drops the stored tokens, so the connection waits for authorization unless a `refresh_token` is sent too. Its export mappings stay, so a connection re-created under the same name keeps the destination's external IDs. |
 | `POST` | `/extensions/{id}/connections/{connection}/device-authorization`, `…/device-authorization/poll` | Start the device authorization grant (the response holds the user code and verification URL), then complete it once the user has approved. An active connection keeps working while a new authorization is pending. |
 | `POST` | `/extensions/{id}/connections/{connection}/authorization-code` | Exchange an authorization code: `{"code", "redirect_uri", "code_verifier"?}`. |
 | `POST` | `/extensions/{id}/connections/{connection}/authorization` | Start a browser authorization of an authorization-code connection. Returns `{"authorization_url"}`; the provider sends the browser back to `/public/extension-oauth/callback`. Needs a browser session, not an API token. |
@@ -490,12 +508,13 @@ See [Translate labels](/builders/translations/).
 | Method | Path | Description |
 | --- | --- | --- |
 | `POST` | `/solution-packs/inspect` | Inspect an `application/zstd` archive. |
-| `POST` | `/solution-packs/plans?prefix=…&blueprint_publication=draft\|publish` | Create a plan. |
+| `POST` | `/solution-packs/plans?prefix=…&blueprint_publication=draft\|publish[&include_sample_data=true]` | Create a plan. The body is the `application/zstd` archive, or `multipart/form-data` with an `archive` part and `blueprint_map` (`{key, code}`), `asset_map` (`{key, id}`), and `context_map` (`{key, code}`) parts that map the pack's keys to existing resources. |
 | `GET` | `/solution-packs/plans/{id}` | Read a plan. |
 | `POST` | `/solution-packs/plans/{id}/apply` | Apply. |
 | `GET` | `/solution-packs/applications[/{id}]` | Application history. |
 | `POST` | `/solution-packs/applications/{id}/abandon` | Permanently stop an unfinished application with sample data. See [Solution packs](/builders/solution-packs/). |
 | `GET`, `POST` | `/solution-packs/applications/{id}/checks` | Check runs. |
+| `GET` | `/solution-packs/applications/{id}/checks/{run_id}` | One check run. |
 | `GET` | `/presentation-assets[/{id}[/content]]` | Presentation assets. |
 
 ### Identity provider
@@ -515,7 +534,7 @@ These routes run the deployment rather than one workspace, and exist only when t
 | `PUT` | `/operator/workspaces/{id}` | Create a workspace from `name`, `login_identifier`, `owner_email`, and optional `owner_display_name`, and invite its owner. |
 | `GET` | `/operator/workspaces` | Workspaces, oldest first. |
 | `GET` | `/operator/workspaces/{id}` | One workspace, with `has_active_owner` and `owner_invitation_expires_at`. |
-| `POST` | `/operator/workspaces/{id}/owner-invitation` | Replace the owner invitation, optionally with a new `owner_email`, while the workspace has no active owner. |
+| `POST` | `/operator/workspaces/{id}/owner-invitation` | Replace the owner invitation, optionally with a new `owner_email` or `owner_display_name`, while the workspace has no active owner. Otherwise returns `409 workspace_owner_exists`. |
 
 You generate the workspace UUID, so a retry is safe: `201` means it was created, `200` means an identical earlier request stands and any unfinished step was completed, and `409 workspace_conflict` means the ID exists with other values. `409 login_identifier_taken` means another workspace holds the identifier. Attricat does not check that you own an identifier's domain, and an identifier cannot change, so check ownership first.
 
@@ -525,13 +544,13 @@ A new workspace has no owner until someone accepts the seven-day invitation, and
 
 | Method | Path | Description |
 | --- | --- | --- |
-| `GET` | `/health/live`, `/health/ready` | Probes. |
+| `GET` | `/health`, `/health/live`, `/health/ready` | Probes. |
 | `GET` | `/system/health` | Running API version, source branch, and commit (`data_health.read`). |
 | `GET` | `/metrics` | Prometheus metrics (`Authorization: Bearer`, the `api_metrics_token` secret). |
 | `GET` | `/export-status` | Export status counts per extension, connection, and status, with the enabled export destinations (`data_health.read`). |
-| `GET` | `/data-health/summary`, `/blueprints`, `/freshness`, `/completeness`, `/contexts`, `/relationships`, `/storage`, `/background-processing` | Data health. |
+| `GET` | `/data-health/summary`, `/blueprints`, `/freshness`, `/completeness`, `/contexts`, `/relationships`, `/storage`, `/background-processing` | Data health. `summary` and `blueprints` take `stale_after_days`. Needs `data_health.read`. |
 | `POST` | `/data-health/refresh` | Clear the data-health cache. |
-| `GET` | `/event-deliveries/dead-letters` | Failed event deliveries. |
-| `POST` | `/event-deliveries/{consumer_id}/{event_id}/replay` | Replay one. |
+| `GET` | `/event-deliveries/dead-letters` | Failed event deliveries. Needs `roles.manage`. |
+| `POST` | `/event-deliveries/{consumer_id}/{event_id}/replay` | Replay one. Needs `roles.manage`. |
 
 Required permissions for each area are in the [permissions reference](/reference/permissions/).

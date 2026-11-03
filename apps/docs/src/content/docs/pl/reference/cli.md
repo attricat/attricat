@@ -13,7 +13,7 @@ Każde [wydanie](https://github.com/attricat/attricat/releases) publikuje pliki 
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/attricat/attricat/releases/latest/download/acli-installer.sh | sh
 ```
 
-Instalator umieszcza `acli` w `~/.local/bin` (lub `$XDG_BIN_HOME`). Aby zainstalować konkretną wersję, zamień `latest/download` na `download/v0.3.0` albo pobierz z wydania archiwum i jego sumę kontrolną `.sha256`. Używaj wersji `acli` zgodnej z wersją serwera; wypisuje ją `acli --version`.
+Instalator umieszcza `acli` w `~/.local/bin` (lub `$XDG_BIN_HOME`). Aby zainstalować konkretną wersję, zamień `latest/download` na `download/v1.0.0` albo pobierz z wydania archiwum i jego sumę kontrolną `.sha256`. Używaj wersji `acli` zgodnej z wersją serwera; wypisuje ją `acli --version`.
 
 `acli` jest też dołączony do obrazu kontenera:
 
@@ -68,7 +68,7 @@ Polecenia, które pobierają pliki, artefakty lub metryki, wymagają `--output <
 | `2` | Nieprawidłowe dane wejściowe lub konfiguracja. |
 | `3` | Nie udało się połączyć z serwerem. |
 | `4` | API zwróciło błąd. |
-| `5` | API zwróciło nieprawidłowy JSON. |
+| `5` | API zwróciło nieprawidłowy JSON lub odpowiedź przekraczającą limit rozmiaru. |
 | `6` | `record migrate-bulk` nie przetworzyło wszystkich rekordów: część się nie powiodła lub została pominięta w uruchomieniu innym niż próbne. Podsumowanie i tak trafia na standardowe wyjście. |
 
 ```json
@@ -79,9 +79,9 @@ Gdy API zwraca szczegóły w formie czytelnej dla maszyn (na przykład naruszeni
 
 ## Argumenty JSON
 
-Opcje przyjmujące dane strukturalne (`--permissions`, `--entries`, `--filters`, `--relationship-tree-facets`, `--relationship-filters`, `--relationships`, `--files`, `--selected-target-ids`, `--include-ids`, `--values`, `--discard-attributes`, `--configuration`, `--body`, `--payload`, `--input`, `--state`, `--operations`) akceptują JSON podany bezpośrednio albo ścieżkę do pliku JSON.
+Opcje przyjmujące dane strukturalne (`--permissions`, `--entries`, `--filters`, `--relationship-tree-facets`, `--relationship-filters`, `--relationships`, `--files`, `--selected-target-ids`, `--include-ids`, `--values`, `--discard-attributes`, `--configuration`, `--body`, `--payload`, `--input`, `--state`, `--operations`, `--data`, `--layout`, `--patch`, `--parameters`, `--destination`, `--draft-values`, `--system-tags`, `--system-metadata`) akceptują JSON podany bezpośrednio albo ścieżkę do pliku JSON.
 
-Polecenia schematów, przepływów pracy i reguł przyjmują `--file <path>` lub `--stdin` i wysyłają YAML bez zmian.
+Polecenia schematów, atrybutów wielokrotnego użytku, przepływów pracy i reguł przyjmują `--file <path>` lub `--stdin` i wysyłają YAML bez zmian.
 
 ## Pliki wartości
 
@@ -102,9 +102,9 @@ values:
     target_record_id: '00000000-0000-0000-0000-000000000004'
 ```
 
-Każdy wpis wskazuje atrybut przez `attribute_code` lub `attribute_id`. Wartości skalarne używają natywnych typów YAML: ciągów znaków, liczb dziesiętnych, liczb całkowitych, wartości logicznych (`true` lub `false`), dat i dat z godziną w formacie RFC 3339. Ujmij w cudzysłów ciąg znaków, który YAML odczytałby jako inny typ, np. UUID zaczynający się od cyfr albo `'09:30:00'`. Każda wartość potrzebuje kontekstu: przekaż `--context-id` dla całego pliku lub ustaw `context_id` we wpisie.
+Każdy wpis wskazuje atrybut przez `attribute_code` lub `attribute_id`. Wartości skalarne używają natywnych typów YAML: ciągów znaków, liczb dziesiętnych, liczb całkowitych, wartości logicznych (`true` lub `false`), dat i dat z godziną w formacie RFC 3339. Ujmij w cudzysłów ciąg znaków, który YAML odczytałby jako inny typ, np. UUID zaczynający się od cyfr albo `'09:30:00'`. Wartość bez kontekstu trafia do kontekstu domyślnego. Aby wybrać inny, przekaż `--context-id` dla całego pliku lub ustaw `context_id` we wpisie.
 
-Pliki zastępowania i usuwania relacji (`value replace`, `value remove`, `record update --relationships`):
+Pliki zastępowania i usuwania relacji (`value replace-relationships`, `value remove-relationships`, `record update --relationships`):
 
 ```yaml
 relationships:
@@ -153,6 +153,8 @@ acli token create --label <label> --permissions <json> [--expires-at <rfc3339>]
 acli token create --generator [--expires-at <rfc3339>]
 acli token revoke <token-id>
 ```
+
+`auth password-reset-confirm` czyta ze standardowego wejścia dwa wiersze: token resetowania, a potem nowe hasło.
 
 ### Schematy
 
@@ -205,7 +207,7 @@ acli context delete <context-id>
 ### Rekordy i wartości
 
 ```sh
-acli record create --blueprint <code> [--values values.yaml] [--files <json-or-file>] [--context-id <id>] [--system-tags <json>] [--system-metadata <json>]
+acli record create --blueprint <code> [--version <n>] [--values values.yaml] [--files <json-or-file>] [--context-id <id>] [--system-tags <json>] [--system-metadata <json>]
 acli record get | form | delete | duplicate | export-status <record-id>
 acli record labels --record-id <id> [--record-id <id> ...]
 acli record update <record-id> [--values f.yaml] [--relationships f.yaml] [--remove-values f.yaml] [--context-id <id>] [--system-tags <json>] [--system-metadata <json>] [--expected-updated-at <t>]
@@ -238,8 +240,8 @@ acli record publication publish-all | readiness <record-id>
 acli record publication status --record-id <id> [--record-id <id> ...]
 
 acli value current <record-id>
-acli value append <record-id> --file values.yaml --context-id <id> [--expected-updated-at <t>]
-acli value replace-relationships | remove-relationships <record-id> --file relationships.yaml --context-id <id>
+acli value append <record-id> --file values.yaml [--context-id <id>] [--expected-updated-at <t>]
+acli value replace-relationships | remove-relationships <record-id> --file relationships.yaml [--context-id <id>]
 ```
 
 `record batch` przyjmuje tablicę JSON z operacjami tworzenia, aktualizacji i usuwania, podaną bezpośrednio lub w pliku, i zapisuje wszystkie albo żadną. Format operacji opisuje sekcja [Zmiany wsadowe](/pl/reference/api/#zmiany-wsadowe).
@@ -400,6 +402,8 @@ acli team delete <team-id>
 acli audit list [--limit <n>] [--offset <n>] [--occurred-after <t>] [--occurred-before <t>] [--actor-user-id <id>] [--action-category <c>] [--target-type <t>] [--executor-type human|agent] [--agent-run-id <id>] [--agent-tool-call-id <id>]
 ```
 
+`workspace user set-password` czyta ze standardowego wejścia trzy wiersze: sekret wdrożeniowy, sekret zaproszenia, a potem hasło.
+
 ### Rozszerzenia
 
 ```sh
@@ -422,6 +426,9 @@ acli extension grant <extension-id> --grant-kind capability|host_permission|even
 acli extension revoke <extension-id> --grant-kind <grant-kind> --grant-id <grant-id>
 acli extension quarantine <extension-id> --diagnostic-code <code>
 acli extension workspace-mode --enabled true|false
+acli extension artifact <extension-id> <contribution-id> --output <path>
+acli extension storage <extension-id> <contribution-id> <release-id> --body <json-or-file>
+acli extension command <extension-id> <contribution-id> --release-id <id> --command-id <id> --payload <json-or-file>
 acli extension operation start <extension-id> --operation-id <id> --input <json> --idempotency-key <key> [--input-file-id <id>] [--destination <json>]
 acli extension operation list
 acli extension operation get | artifacts | deliveries | cancel | replay <run-id>
@@ -445,7 +452,7 @@ acli extension connection delete | device-authorization | poll | authorize | tes
 acli extension connection exchange-code <extension-id> <connection> --code <code> --redirect-uri <url> [--code-verifier <verifier>]
 acli extension export summary
 acli extension export status <extension-id> [--connection <name>] [--status <state>] [--after <id>] [--limit <n>]
-acli extension export retry <extension-id> [--connection <name>] [--record-id <id> ... | --status <state>] [--run --idempotency-key <key>]
+acli extension export retry <extension-id> [--connection <name>] [--record-id <id> ...] [--status <state>] [--run --idempotency-key <key>]
 acli extension export preview <extension-id> <export-id> --record-id <id> [--connection <name>]
 acli extension budget list <extension-id>
 acli extension budget set <extension-id> <host-permission-id> --requests <n> --per-seconds <n>
@@ -468,10 +475,13 @@ acli solution-pack inspect --file pack.tar.zst
 acli solution-pack plan create --file pack.tar.zst --prefix <prefix> --blueprint-publication draft|publish [--include-sample-data] [--map key=code ... --map-asset key=uuid ... --map-context key=code ...]
 acli solution-pack plan get <plan-id>
 acli solution-pack apply <plan-id>
-acli solution-pack applications list | get <id> | abandon <id>
-acli solution-pack checks list | rerun <application-id>
+acli solution-pack applications list [--limit <n>] [--offset <n>]
+acli solution-pack applications get | abandon <id>
+acli solution-pack checks list <application-id> [--limit <n>] [--offset <n>]
+acli solution-pack checks rerun <application-id>
 acli solution-pack checks get <application-id> <run-id>
-acli presentation-asset list | get <id>
+acli presentation-asset list [--limit <n>] [--offset <n>]
+acli presentation-asset get <id>
 acli presentation-asset download <id> --output <path>
 ```
 
@@ -511,3 +521,5 @@ acli metrics get --output metrics.prom
 acli event dead-letters
 acli event replay <consumer-id> <event-id>
 ```
+
+`metrics get` uwierzytelnia się sekretem `api_metrics_token`, a nie osobistym tokenem API: przekaż go jako `ATTRICAT_TOKEN` lub przez `--token-stdin`. Polecenia `event` wymagają `roles.manage`.

@@ -70,7 +70,7 @@ Proces roboczy plików odczytuje tę samą konfigurację, a gdy jego nasłuch op
 | `ATTRICAT_SECRETS_DIR` | `/run/secrets` | Katalog z [plikami sekretów](#sekrety). |
 | `RUST_LOG` | `info` | Filtr logów, np. `api=debug`. |
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | Nieustawiona | Punkt końcowy OTLP/gRPC do eksportu śladów z API i procesu roboczego plików. Pozostaw nieustawioną, aby wyłączyć eksport śladów. |
-| `ATTRICAT_DEVTOOLS` | `true` w lokalnym środowisku deweloperskim | Włącza Inspektor w aplikacji webowej oraz wpisy czasu SQL przeglądarki rekordów w nagłówku `Server-Timing`. W produkcji ustaw `false`. W innych kompilacjach, także produkcyjnych, przeglądarka może wczytać Inspektor na żądanie po ustawieniu w local storage `attricat.inspector-enabled` na `true` i przeładowaniu strony; czasy SQL nadal wymagają tego ustawienia w API. Treść zapytań SQL i wartości parametrów nigdy nie są ujawniane. |
+| `ATTRICAT_DEVTOOLS` | `false` | Włącza Inspektor w aplikacji webowej oraz wpisy czasu SQL przeglądarki rekordów w nagłówku `Server-Timing`. Lokalny plik `.env` ustawia `true`; w produkcji pozostaw `false`. W innych kompilacjach, także produkcyjnych, przeglądarka może wczytać Inspektor na żądanie po ustawieniu w local storage `attricat.inspector-enabled` na `true` i przeładowaniu strony; czasy SQL nadal wymagają tego ustawienia w API. Treść zapytań SQL i wartości parametrów nigdy nie są ujawniane. |
 
 ## Początkowy obszar roboczy i właściciel
 
@@ -82,7 +82,7 @@ Przy starcie API upewnia się, że istnieje jeden obszar roboczy i jego właści
 | `ATTRICAT_BOOTSTRAP_WORKSPACE_NAME` | `Default workspace` | Nazwa wyświetlana używana przy pierwszym utworzeniu obszaru roboczego. |
 | `ATTRICAT_BOOTSTRAP_OWNER_EMAIL` | `owner@example.test` | Adres e-mail pierwszego właściciela. Jest przycinany i zamieniany na małe litery. Start tworzy użytkownika, członkostwo i przydział roli właściciela, jeśli nie istnieją. We wdrożeniu zawsze ustaw prawdziwy adres. |
 | `ATTRICAT_BOOTSTRAP_OWNER_ID` | Losowy UUID | Opcjonalny stały UUID początkowego właściciela. |
-| `ATTRICAT_DEMO_MODE` | `false` | Tylko dla publicznych wdrożeń demonstracyjnych. Włącza `ATTRICAT_SAMPLE_ACCOUNTS`, nadaje początkowemu obszarowi roboczemu identyfikator logowania `demo.attricat.com` i domyślną nazwę `Demo`, a strona logowania otwiera go z wybranym kontem edytora. Odwiedzający mogą przełączyć się na konto przeglądającego, administratora lub właściciela. Resetowanie hasła, zmiany członków i przypisań ról, przekazanie własności, zaproszenia i nowi użytkownicy są wyłączone, aby nikt nie zablokował wspólnych kont. Jeśli agenci są skonfigurowani, mogą odczytywać katalog i objaśniać zmiany, ale nie mogą ich wprowadzać. Nigdy nie włączaj tego trybu dla obszaru roboczego z prawdziwymi danymi. |
+| `ATTRICAT_DEMO_MODE` | `false` | Tylko dla publicznych wdrożeń demonstracyjnych. Włącza `ATTRICAT_SAMPLE_ACCOUNTS`, nadaje początkowemu obszarowi roboczemu identyfikator logowania `demo.attricat.com` i domyślną nazwę `Demo`, a strona logowania otwiera go z wybranym kontem edytora. Odwiedzający mogą przełączyć się na konto przeglądającego, administratora lub właściciela. Resetowanie hasła, zmiany członków i przypisań ról, przekazanie własności, zaproszenia i nowi użytkownicy są wyłączone, aby nikt nie zablokował wspólnych kont. Odrzucane są też logowanie jednokrotne, zmiany dostawcy tożsamości, instalowanie i aktualizowanie rozszerzeń, dodawanie rejestrów rozszerzeń oraz stosowanie pakietów rozwiązań. Tryb wymaga sekretu `bootstrap_owner_password`. Jeśli agenci są skonfigurowani, mogą odczytywać katalog i objaśniać zmiany, ale nie mogą ich wprowadzać. Nigdy nie włączaj tego trybu dla obszaru roboczego z prawdziwymi danymi. |
 | `ATTRICAT_SAMPLE_ACCOUNTS` | `false` | Tworzy konta `viewer@`, `editor@` i `admin@` w domenie adresu e-mail właściciela, każde z odpowiednią rolą wbudowaną i hasłem z sekretu `bootstrap_owner_password` (który musi wtedy pozostać ustawiony). Strona logowania pokazuje je do wyboru. Każdy, kto ma dostęp do serwera, może się nimi zalogować, więc używaj tej opcji tylko lokalnie i w wersjach demonstracyjnych. |
 
 Identyfikator logowania początkowego obszaru roboczego to `default.local`.
@@ -93,7 +93,7 @@ Identyfikator logowania początkowego obszaru roboczego to `default.local`.
 | --- | --- | --- |
 | `SESSION_COOKIE_SECURE` | `true` | Oznacza pliki cookie sesji i CSRF jako `Secure`. Ustaw `false` tylko w lokalnym środowisku deweloperskim bez HTTPS. |
 
-Czas trwania sesji (osiem godzin), limit prób logowania (pięć niepowodzeń na obszar roboczy i adres e-mail w ciągu piętnastu minut) oraz czas ważności linku do resetowania hasła (30 minut) są stałe.
+Czas trwania sesji (osiem godzin), limit prób logowania (pięć niepowodzeń na adres e-mail w ciągu piętnastu minut) oraz czas ważności linku do resetowania hasła (30 minut) są stałe.
 
 ## Limity HTTP
 
@@ -112,7 +112,7 @@ Czas trwania sesji (osiem godzin), limit prób logowania (pięć niepowodzeń na
 | --- | --- | --- |
 | `PREVIEW_MAX_RELATIONSHIP_DEPTH` | `3` | Największa głębokość zagnieżdżenia relacji, o jaką może prosić podgląd rekordu. |
 | `PREVIEW_MAX_RELATIONSHIP_ITEMS` | `10` | Maksymalna liczba powiązanych rekordów pokazywanych bezpośrednio w podglądzie dla jednej relacji. |
-| `RECORD_MAX_PAGE_SIZE` | `100` | Największy rozmiar strony przy przeglądaniu celów relacji. |
+| `RECORD_MAX_PAGE_SIZE` | `100` | Największy rozmiar strony przy wyszukiwaniu rekordów i przeglądaniu celów relacji. |
 | `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE` | `50` | Największy rozmiar strony list relacji przychodzących. Ogranicza `page_size` w blokach widoku `incoming_relationship_list`. |
 | `RELATIONSHIP_FACET_MAX_NODES` | `100` | Maksymalna liczba węzłów zwracanych na stronę faset relacji w przeglądarce rekordów. |
 | `DATA_HEALTH_CACHE_TTL_SECONDS` | `300` | Jak długo buforowane są odpowiedzi stanu danych. `0` wyłącza bufor. Każda zapisana zmiana katalogu odświeża je przy następnym żądaniu. |
@@ -257,6 +257,7 @@ Te limity agentów są stałe: 32 KiB na wiadomość użytkownika, 16 załączni
 | `EXTENSION_OAUTH_RETURN_URL` | `/manage/extensions/` w pochodzeniu adresu wywołania zwrotnego | Dokąd wywołanie zwrotne OAuth przekierowuje przeglądarkę po zakończeniu: adres `/manage/extensions/` aplikacji webowej, zakończony `/`. Ustaw go, gdy aplikacja webowa działa pod innym pochodzeniem niż API. |
 | `EXTENSION_DEV_EGRESS_RESOLVE` | Nieustawiona | Tylko do programowania; wymaga `ATTRICAT_DEVTOOLS=true`, w przeciwnym razie uruchamianie zostaje zatrzymane. Rozdzielone przecinkami wpisy `host=ip:port` lub `*.sufiks=ip:port`, które kierują żądania rozszerzeń do tych hostów na lokalną atrapę, np. `*.mock.test=127.0.0.1:9443`. Omijają kontrolę adresu publicznego, więc nigdy nie ustawiaj ich w produkcji. |
 | `EXTENSION_DEV_EGRESS_CA_FILE` | Nieustawiona | Tylko do programowania; wymaga `ATTRICAT_DEVTOOLS=true`. Plik PEM z certyfikatami, którym żądania rozszerzeń ufają oprócz certyfikatów głównych systemu, dla certyfikatu lokalnej atrapy. Nigdy nie ustawiaj go w produkcji. |
+| `SOLUTION_PACK_LOCAL_EXTENSIONS_DIR` | Nieustawiona | Tylko do programowania; wymaga `ATTRICAT_DEVTOOLS=true`, w przeciwnym razie uruchamianie zostaje zatrzymane. Katalog, z którego pakiety rozwiązań instalują lokalnie zbudowane rozszerzenia. Nigdy nie ustawiaj go w produkcji. |
 
 ## Serwer deweloperski aplikacji webowej
 

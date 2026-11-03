@@ -13,7 +13,7 @@ Each [release](https://github.com/attricat/attricat/releases) publishes `acli` b
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/attricat/attricat/releases/latest/download/acli-installer.sh | sh
 ```
 
-The installer puts `acli` in `~/.local/bin` (or `$XDG_BIN_HOME`). To install a specific version, replace `latest/download` with `download/v0.3.0`, or download an archive and its `.sha256` checksum from the release. Use the `acli` version that matches your server; `acli --version` prints it.
+The installer puts `acli` in `~/.local/bin` (or `$XDG_BIN_HOME`). To install a specific version, replace `latest/download` with `download/v1.0.0`, or download an archive and its `.sha256` checksum from the release. Use the `acli` version that matches your server; `acli --version` prints it.
 
 `acli` is also included in the container image:
 
@@ -68,7 +68,7 @@ Commands that download files, artifacts, or metrics require `--output <path>` an
 | `2` | Invalid input or configuration. |
 | `3` | Could not reach the server. |
 | `4` | The API returned an error. |
-| `5` | The API returned invalid JSON. |
+| `5` | The API returned invalid JSON or a response over the size limit. |
 | `6` | `record migrate-bulk` left records undone: some failed, or were skipped by a run that isn't a dry run. Its summary still goes to standard output. |
 
 ```json
@@ -79,9 +79,9 @@ When the API returns machine-readable `details` (for example check violations or
 
 ## JSON arguments
 
-Options that take structured data (`--permissions`, `--entries`, `--filters`, `--relationship-tree-facets`, `--relationship-filters`, `--relationships`, `--files`, `--selected-target-ids`, `--include-ids`, `--values`, `--discard-attributes`, `--configuration`, `--body`, `--payload`, `--input`, `--state`, `--operations`) accept either inline JSON or a path to a JSON file.
+Options that take structured data (`--permissions`, `--entries`, `--filters`, `--relationship-tree-facets`, `--relationship-filters`, `--relationships`, `--files`, `--selected-target-ids`, `--include-ids`, `--values`, `--discard-attributes`, `--configuration`, `--body`, `--payload`, `--input`, `--state`, `--operations`, `--data`, `--layout`, `--patch`, `--parameters`, `--destination`, `--draft-values`, `--system-tags`, `--system-metadata`) accept either inline JSON or a path to a JSON file.
 
-Blueprint, workflow, and rule commands take `--file <path>` or `--stdin` and send the YAML unchanged.
+Blueprint, reusable attribute, workflow, and rule commands take `--file <path>` or `--stdin` and send the YAML unchanged.
 
 ## Value files
 
@@ -102,9 +102,9 @@ values:
     target_record_id: '00000000-0000-0000-0000-000000000004'
 ```
 
-Each entry names the attribute with `attribute_code` or `attribute_id`. Scalars use YAML's native types: strings, decimals, integers, booleans (`true` or `false`), dates, and RFC 3339 datetimes. Quote a string that YAML would otherwise read as another type, such as a UUID that starts with digits or `'09:30:00'`. Every value needs a context: pass `--context-id` for the whole file or set `context_id` on an entry.
+Each entry names the attribute with `attribute_code` or `attribute_id`. Scalars use YAML's native types: strings, decimals, integers, booleans (`true` or `false`), dates, and RFC 3339 datetimes. Quote a string that YAML would otherwise read as another type, such as a UUID that starts with digits or `'09:30:00'`. A value without a context goes to the default context. To choose another, pass `--context-id` for the whole file or set `context_id` on an entry.
 
-Relationship replacement and removal files (`value replace`, `value remove`, `record update --relationships`):
+Relationship replacement and removal files (`value replace-relationships`, `value remove-relationships`, `record update --relationships`):
 
 ```yaml
 relationships:
@@ -153,6 +153,8 @@ acli token create --label <label> --permissions <json> [--expires-at <rfc3339>]
 acli token create --generator [--expires-at <rfc3339>]
 acli token revoke <token-id>
 ```
+
+`auth password-reset-confirm` reads two lines from standard input: the reset token, then the new password.
 
 ### Blueprints
 
@@ -205,7 +207,7 @@ acli context delete <context-id>
 ### Records and values
 
 ```sh
-acli record create --blueprint <code> [--values values.yaml] [--files <json-or-file>] [--context-id <id>] [--system-tags <json>] [--system-metadata <json>]
+acli record create --blueprint <code> [--version <n>] [--values values.yaml] [--files <json-or-file>] [--context-id <id>] [--system-tags <json>] [--system-metadata <json>]
 acli record get | form | delete | duplicate | export-status <record-id>
 acli record labels --record-id <id> [--record-id <id> ...]
 acli record update <record-id> [--values f.yaml] [--relationships f.yaml] [--remove-values f.yaml] [--context-id <id>] [--system-tags <json>] [--system-metadata <json>] [--expected-updated-at <t>]
@@ -238,8 +240,8 @@ acli record publication publish-all | readiness <record-id>
 acli record publication status --record-id <id> [--record-id <id> ...]
 
 acli value current <record-id>
-acli value append <record-id> --file values.yaml --context-id <id> [--expected-updated-at <t>]
-acli value replace-relationships | remove-relationships <record-id> --file relationships.yaml --context-id <id>
+acli value append <record-id> --file values.yaml [--context-id <id>] [--expected-updated-at <t>]
+acli value replace-relationships | remove-relationships <record-id> --file relationships.yaml [--context-id <id>]
 ```
 
 `record batch` takes a JSON array of create, update, and delete operations, inline or in a file, and saves them all or none. See [Batch changes](/reference/api/#batch-changes) for the operation format.
@@ -400,6 +402,8 @@ acli team delete <team-id>
 acli audit list [--limit <n>] [--offset <n>] [--occurred-after <t>] [--occurred-before <t>] [--actor-user-id <id>] [--action-category <c>] [--target-type <t>] [--executor-type human|agent] [--agent-run-id <id>] [--agent-tool-call-id <id>]
 ```
 
+`workspace user set-password` reads three lines from standard input: the onboarding secret, the invitation secret, then the password.
+
 ### Extensions
 
 ```sh
@@ -422,6 +426,9 @@ acli extension grant <extension-id> --grant-kind capability|host_permission|even
 acli extension revoke <extension-id> --grant-kind <grant-kind> --grant-id <grant-id>
 acli extension quarantine <extension-id> --diagnostic-code <code>
 acli extension workspace-mode --enabled true|false
+acli extension artifact <extension-id> <contribution-id> --output <path>
+acli extension storage <extension-id> <contribution-id> <release-id> --body <json-or-file>
+acli extension command <extension-id> <contribution-id> --release-id <id> --command-id <id> --payload <json-or-file>
 acli extension operation start <extension-id> --operation-id <id> --input <json> --idempotency-key <key> [--input-file-id <id>] [--destination <json>]
 acli extension operation list
 acli extension operation get | artifacts | deliveries | cancel | replay <run-id>
@@ -445,7 +452,7 @@ acli extension connection delete | device-authorization | poll | authorize | tes
 acli extension connection exchange-code <extension-id> <connection> --code <code> --redirect-uri <url> [--code-verifier <verifier>]
 acli extension export summary
 acli extension export status <extension-id> [--connection <name>] [--status <state>] [--after <id>] [--limit <n>]
-acli extension export retry <extension-id> [--connection <name>] [--record-id <id> ... | --status <state>] [--run --idempotency-key <key>]
+acli extension export retry <extension-id> [--connection <name>] [--record-id <id> ...] [--status <state>] [--run --idempotency-key <key>]
 acli extension export preview <extension-id> <export-id> --record-id <id> [--connection <name>]
 acli extension budget list <extension-id>
 acli extension budget set <extension-id> <host-permission-id> --requests <n> --per-seconds <n>
@@ -468,10 +475,13 @@ acli solution-pack inspect --file pack.tar.zst
 acli solution-pack plan create --file pack.tar.zst --prefix <prefix> --blueprint-publication draft|publish [--include-sample-data] [--map key=code ... --map-asset key=uuid ... --map-context key=code ...]
 acli solution-pack plan get <plan-id>
 acli solution-pack apply <plan-id>
-acli solution-pack applications list | get <id> | abandon <id>
-acli solution-pack checks list | rerun <application-id>
+acli solution-pack applications list [--limit <n>] [--offset <n>]
+acli solution-pack applications get | abandon <id>
+acli solution-pack checks list <application-id> [--limit <n>] [--offset <n>]
+acli solution-pack checks rerun <application-id>
 acli solution-pack checks get <application-id> <run-id>
-acli presentation-asset list | get <id>
+acli presentation-asset list [--limit <n>] [--offset <n>]
+acli presentation-asset get <id>
 acli presentation-asset download <id> --output <path>
 ```
 
@@ -511,3 +521,5 @@ acli metrics get --output metrics.prom
 acli event dead-letters
 acli event replay <consumer-id> <event-id>
 ```
+
+`metrics get` authenticates with the `api_metrics_token` secret, not a personal API token: pass it as `ATTRICAT_TOKEN` or with `--token-stdin`. The `event` commands need `roles.manage`.

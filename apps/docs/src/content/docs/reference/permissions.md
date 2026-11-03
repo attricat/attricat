@@ -14,7 +14,7 @@ A missing or expired sign-in returns `401`. A signed-in person without the permi
 | `workspace.manage` | Workspace lifecycle, ownership transfer, and single sign-on. | ✓ | | | |
 | `members.manage` | Members, invitations, user creation, and teams (`/workspace/teams`, `acli team`). | ✓ | ✓ | | |
 | `roles.grant` | Granting and revoking roles. Needed together with `members.manage`. | ✓ | ✓ | | |
-| `roles.manage` | Custom roles; replaying dead-letter event deliveries. | ✓ | ✓ | | |
+| `roles.manage` | Custom roles; listing and replaying dead-letter event deliveries. | ✓ | ✓ | | |
 | `tokens.manage` | Creating and revoking your personal API tokens. | ✓ | ✓ | | |
 | `workspace_navigation.manage` | Explorer sidebar shortcuts. | ✓ | ✓ | | |
 | `tag_colors.manage` | The colors of record system tags. | ✓ | ✓ | | |
@@ -28,7 +28,7 @@ A missing or expired sign-in returns `401`. A signed-in person without the permi
 | `records.publish` | Publishing and unpublishing records to channels. | ✓ | ✓ | | |
 | `contexts.read` | Contexts and publication channels. | ✓ | ✓ | ✓ | ✓ |
 | `contexts.write` | Creating, changing, and deleting contexts; enabling publication channels. | ✓ | ✓ | ✓ | |
-| `data_health.read` | Data health, background processing, metrics, and dead-letter event lists; export status counts and the Explorer's **Export status** filter. | ✓ | ✓ | ✓ | ✓ |
+| `data_health.read` | Data health, background processing, and the running build (`GET /system/health`); export status counts and the Explorer's **Export status** filter. | ✓ | ✓ | ✓ | ✓ |
 | `agents.run` | Agent conversations and approvals. | ✓ | ✓ | | |
 | `agents.manage` | How the agent proposes and applies changes, such as how its bulk edits are approved (`GET`/`PUT /workspace/agent-settings`, `acli workspace agent set`). | ✓ | ✓ | | |
 | `rules.read` | Rules, runs, and findings. | ✓ | ✓ | | |
