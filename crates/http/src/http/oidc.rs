@@ -454,6 +454,17 @@ pub(super) async fn invitation_options(
         .await?
         .provider
         .filter(|_| state.oidc.is_some() && !state.demo_mode);
+    // A provider signs people in to the invited workspace itself, so its button
+    // keeps that identifier; without one, send them where a password works.
+    let login_identifier = if display_name.is_some() {
+        login_identifier
+    } else {
+        state
+            .repository
+            .invitation_password_login_identifier(&digest(&input.secret))
+            .await?
+            .unwrap_or(login_identifier)
+    };
     Ok(Json(InvitationOptions {
         login_identifier,
         display_name,

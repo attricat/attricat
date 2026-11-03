@@ -6,6 +6,9 @@ use api::{repository::AttricatRepository, rule_runtime, task_worker::TaskOutcome
 use support::*;
 use tokio::time::sleep;
 
+/// `attricat_rules::MAX_CANDIDATES_PER_RUN`, which this crate does not re-export.
+const CANDIDATE_CAP: i64 = 10_000;
+
 const PRODUCT: &str = r#"
 format_version: 1
 code: rule_task_product
@@ -449,6 +452,134 @@ async fn manual_run(base_url: &str, rule_id: Uuid, record_id: Option<Uuid>, key:
         .await
         .unwrap();
     run["id"].as_str().unwrap().parse().unwrap()
+}
+
+/// Saving or re-enabling a rule resolves its findings and relies on a full run
+/// to restore them, so only a dry run may stop at the candidate cap.
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn only_a_dry_run_stops_at_the_candidate_cap(pool: PgPool) {
+    let (base_url, server, rule_id, blueprint) = setup_rule(&pool).await;
+    let client = authenticated_client();
+    let repository = AttricatRepository::new(pool.clone(), BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
+    create_record(&client, &base_url, &blueprint).await;
+    create_record(&client, &base_url, &blueprint).await;
+    let at_the_cap = async |run: Uuid| {
+        sqlx::query("UPDATE rule_runs SET candidates_evaluated=$2 WHERE id=$1")
+            .bind(run)
+            .bind(CANDIDATE_CAP)
+            .execute(&pool)
+            .await
+            .unwrap();
+        drain_tasks(&repository).await;
+        sqlx::query_scalar::<_, bool>("SELECT truncated FROM rule_runs WHERE id=$1")
+            .bind(run)
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+    };
+
+    let dry_run: Value = client
+        .post(format!("{base_url}/rules/{rule_id}/run-now"))
+        .json(&json!({"record_id": null, "dry_run": true, "idempotency_key": "dry"}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(at_the_cap(dry_run["id"].as_str().unwrap().parse().unwrap()).await);
+
+    let run = manual_run(&base_url, rule_id, None, "full").await;
+    assert!(!at_the_cap(run).await);
+    let open: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM rule_findings WHERE rule_id=$1 AND state='open'")
+            .bind(rule_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(open, 2);
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn enabling_an_enabled_rule_keeps_its_queued_events(pool: PgPool) {
+    let (base_url, server, rule_id, blueprint) = setup_rule(&pool).await;
+    let client = authenticated_client();
+    let activation = async || {
+        sqlx::query_scalar::<_, i64>(
+            "SELECT activation_sequence FROM rule_lifecycles WHERE rule_id=$1",
+        )
+        .bind(rule_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+    };
+    let before = activation().await;
+    create_record(&client, &base_url, &blueprint).await;
+    client
+        .post(format!("{base_url}/rules/{rule_id}/enable"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    assert_eq!(activation().await, before);
+    server.abort();
+}
+
+/// Only a run of the enabled, current revision can be replayed; any other would
+/// report findings that no later run resolves.
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_dead_run_of_a_disabled_rule_cannot_be_replayed(pool: PgPool) {
+    let (base_url, server, rule_id, blueprint) = setup_rule(&pool).await;
+    let client = authenticated_client();
+    let record = create_record(&client, &base_url, &blueprint).await;
+    let record_id = record["id"].as_str().unwrap().parse().unwrap();
+    let run = manual_run(&base_url, rule_id, Some(record_id), "dead").await;
+    let repository = AttricatRepository::new(pool.clone(), BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
+    let task = repository
+        .claim_task("replay-test", Duration::from_secs(30))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(task.subject_id, run);
+    sqlx::query(
+        "UPDATE rule_runs SET status='dead_letter',lease_owner=NULL,lease_until=NULL WHERE id=$1",
+    )
+    .bind(run)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query("UPDATE tasks SET status='dead_letter',lease_owner=NULL,lease_token=NULL,lease_until=NULL WHERE id=$1")
+        .bind(task.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let toggle = async |action: &str| {
+        client
+            .post(format!("{base_url}/rules/{rule_id}/{action}"))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+    };
+    let replay = async || {
+        client
+            .post(format!("{base_url}/rule-runs/{run}/replay"))
+            .send()
+            .await
+            .unwrap()
+            .status()
+    };
+
+    toggle("disable").await;
+    assert_eq!(replay().await, reqwest::StatusCode::NOT_FOUND);
+    toggle("enable").await;
+    assert_eq!(replay().await, reqwest::StatusCode::NO_CONTENT);
+    server.abort();
 }
 
 #[sqlx::test(migrator = "api::MIGRATOR")]

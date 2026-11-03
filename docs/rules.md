@@ -225,7 +225,7 @@ context when publishing and fail with `422 publication_checks_failed`. See
 ## Runtime guarantees
 
 - A schedule has one durable cursor per rule revision/trigger; Attricat never creates per-record timers.
-- Each run leases one bounded page (500 records of the rule's blueprint, any revision), has a durable UUID cursor, and stops after 10,000 candidates.
+- Each run leases one bounded page (500 records of the rule's blueprint, any revision), and has a durable UUID cursor. A dry run stops after 10,000 candidates; every other run checks all of them.
 - Schedule occurrence and event IDs are idempotency keys. A rule cannot have overlapping pending or leased scheduled runs.
 - Workers lease, retry with bounded exponential delay, dead-letter after five attempts, and recheck the enabled lifecycle on claim.
 - Event intake only creates a durable record-scoped run after the lifecycle high-water boundary. It does not evaluate on an outbox lease.

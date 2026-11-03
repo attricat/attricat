@@ -99,7 +99,7 @@ impl AttricatRepository {
             _ => selected,
         };
         let sort_uses_relationship = request.sort.is_some_and(|sort| sort.field.contains('.'));
-        if selected.is_none() && sort_uses_relationship && matching_versions.len() != 1 {
+        if selected.is_none() && sort_uses_relationship && matching_versions.len() > 1 {
             return Err(SearchScopeError::RelationshipSortRequiresSingleVersion);
         }
         let result_blueprint = match effective_source_version {

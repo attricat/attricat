@@ -184,6 +184,86 @@ async fn a_staged_file_satisfies_a_required_file_attribute(pool: PgPool) {
 }
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_required_file_it_already_has_does_not_stop_a_record_migrating(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let blueprint = required_image_blueprint(&client, &base_url, "required_image").await;
+    let file_id = stage_png(&client, &base_url, &blueprint, "image").await;
+    let record = expect_status(
+        create_with_files(
+            &client,
+            &base_url,
+            &blueprint,
+            json!([{"attribute_code": "image", "file_ids": [file_id]}]),
+        )
+        .await,
+        StatusCode::CREATED,
+    )
+    .await;
+    let record_id = record["id"].as_str().unwrap();
+
+    let id = blueprint_id(&blueprint);
+    let revision = expect_status(
+        client
+            .post(format!("{base_url}/blueprints/{id}/versions"))
+            .json(&json!({ "definition": r#"format_version: 1
+code: required_image
+name: Required image
+kind: record
+record_schema: '{"required": ["image"]}'
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [image]
+attributes:
+  - code: image
+    value_type: file
+    cardinality: one
+    allowed_mime_groups: [image]
+    allowed_extensions: [png]
+    max_bytes: 1024
+    image_only: true
+  - code: gallery
+    value_type: file
+    cardinality: many
+    allowed_mime_groups: [image]
+    allowed_extensions: [png]
+    image_only: true
+  - code: notes
+    value_type: string"# }))
+            .send()
+            .await
+            .unwrap(),
+        StatusCode::CREATED,
+    )
+    .await;
+    let version = revision["blueprint"]["version"].as_i64().unwrap();
+    client
+        .post(format!(
+            "{base_url}/blueprints/{id}/versions/{version}/publish"
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    let preview = expect_status(
+        client
+            .post(format!(
+                "{base_url}/v1/records/{record_id}/blueprint-migration/preview"
+            ))
+            .send()
+            .await
+            .unwrap(),
+        StatusCode::OK,
+    )
+    .await;
+    assert_eq!(preview["issues"], json!([]), "{preview}");
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn a_staged_file_is_claimed_only_once_by_its_uploader_for_its_binding(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();

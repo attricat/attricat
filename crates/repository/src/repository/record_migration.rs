@@ -318,7 +318,16 @@ impl AttricatRepository {
                             .expect("relationship values are arrays")
                             .push(Value::String(target_record_id.to_string()));
                     }
-                    FormAttributeValue::File { .. } => {}
+                    FormAttributeValue::File {
+                        attribute_code,
+                        files,
+                        ..
+                    } => {
+                        document.insert(
+                            attribute_code.clone(),
+                            serde_json::to_value(files).expect("file metadata serializes"),
+                        );
+                    }
                 }
             }
             for violation in validate_json_schema(schema, &Value::Object(document))

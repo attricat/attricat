@@ -454,7 +454,7 @@ impl AttricatRepository {
                 .execute(&mut **tx)
                 .await?;
         }
-        sqlx::query("UPDATE rule_lifecycles SET enabled=true,activation_sequence=(SELECT COALESCE(max(sequence),0) FROM domain_events WHERE workspace_id=$1),enabled_at=now(),disabled_at=NULL,updated_at=now() WHERE workspace_id=$1 AND rule_id=$2").bind(ws).bind(id).execute(&mut **tx).await?;
+        sqlx::query("UPDATE rule_lifecycles SET activation_sequence=CASE WHEN enabled THEN activation_sequence ELSE (SELECT COALESCE(max(sequence),0) FROM domain_events WHERE workspace_id=$1) END,enabled=true,enabled_at=now(),disabled_at=NULL,updated_at=now() WHERE workspace_id=$1 AND rule_id=$2").bind(ws).bind(id).execute(&mut **tx).await?;
         advance_generation(tx, ws, Generation::Attricat).await?;
         self.start_rule_schedules(tx, id, version, &compiled)
             .await?;
@@ -1374,11 +1374,13 @@ impl AttricatRepository {
     }
 
     /// Replays a dead-lettered rule run through a fresh task generation while
-    /// keeping finding idempotency and the candidate cursor durable.
+    /// keeping finding idempotency and the candidate cursor durable. A run of a
+    /// disabled rule or an earlier revision stays dead: its findings would have
+    /// nothing to resolve them.
     pub async fn replay_rule_run(&self, id: Uuid) -> Result<bool, RepositoryError> {
         let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
-        if sqlx::query("UPDATE rule_runs SET status='pending',last_error=NULL,completed_at=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='dead_letter'")
+        if sqlx::query("UPDATE rule_runs SET status='pending',last_error=NULL,completed_at=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='dead_letter' AND (dry_run OR EXISTS (SELECT 1 FROM rule_lifecycles l WHERE l.workspace_id=rule_runs.workspace_id AND l.rule_id=rule_runs.rule_id AND l.enabled AND l.current_version=rule_runs.rule_version))")
             .bind(id).bind(ws).execute(&mut *tx).await?.rows_affected() == 0 {
             tx.commit().await?;
             return Ok(false);

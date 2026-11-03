@@ -3549,7 +3549,7 @@ fn relationship_sort_reverse_joins(depth: usize) -> Result<String, RepositoryErr
         }
     }
     sql.push_str(&format!(
-        " WHERE target_{depth}.id = sort_value.record_id ORDER BY path_source.id) resolved_source ON true \
+        " WHERE target_{depth}.id = sort_value.record_id AND target_{depth}.deleted_at IS NULL ORDER BY path_source.id) resolved_source ON true \
          JOIN records e ON e.id = resolved_source.source_id AND e.workspace_id = $14 AND e.deleted_at IS NULL"
     ));
     Ok(sql)
