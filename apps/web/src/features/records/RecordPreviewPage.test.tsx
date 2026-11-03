@@ -283,11 +283,15 @@ describe('RecordPreviewPage', () => {
       },
     } as never);
     navigate.mockClear();
+    const { currentSession } = await import('../auth/api');
+    vi.mocked(currentSession).mockResolvedValue({
+      capabilities: { records_write: true },
+    } as never);
     renderPage();
 
     await user.click(screen.getByRole('button', { name: 'Actions' }));
     await user.click(
-      within(screen.getByRole('menu')).getByRole('menuitem', {
+      await within(screen.getByRole('menu')).findByRole('menuitem', {
         name: 'Duplicate record',
       }),
     );

@@ -108,7 +108,8 @@ export const RecordActionsMenu = ({
         >
           {t('records.copyRecordId')}
         </ActionMenuItem>
-        {canWrite && (
+        {/* Duplicating creates a record, which needs a workspace grant. */}
+        {canCreate && (
           <ActionMenuItem icon={CopyIcon} onClick={choose(onDuplicate)}>
             {t('records.duplicateRecord')}
           </ActionMenuItem>

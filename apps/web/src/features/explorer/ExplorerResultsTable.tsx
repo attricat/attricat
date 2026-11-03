@@ -203,11 +203,6 @@ export const ExplorerResultsTable = ({
     activeActionRecord?.id,
   );
   const canCreateRecords = useCan(capabilities.recordsWrite);
-  const canDuplicate = useCanOn(
-    capabilities.recordsWrite,
-    accessTargetKinds.record,
-    activeActionRecord?.id,
-  );
   const {
     error,
     publicationsByRecordId,
@@ -442,7 +437,7 @@ export const ExplorerResultsTable = ({
             blueprintId={blueprint.blueprint.id}
             canPublish={canPublish}
             canDelete={canDelete}
-            canDuplicate={canDuplicate}
+            canDuplicate={canCreateRecords}
             record={activeActionRecord}
             onClose={() => setActionMenu(null)}
             onDelete={() => setDeleteRecordId(activeActionRecord.id)}
