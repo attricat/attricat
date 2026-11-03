@@ -1,3 +1,5 @@
+import type { Attribute } from '../records/api';
+import { relationshipFacetSources } from './explorerSearchState';
 import { describe, expect, it } from 'vitest';
 import {
   dataQualityRequest,
@@ -223,5 +225,25 @@ describe('data quality filter', () => {
         false,
       ),
     );
+  });
+});
+
+describe('relationshipFacetSources', () => {
+  it('finds the attribute of a facet on a field hidden from the filters', () => {
+    const hidden = {
+      code: 'made_by',
+      target_blueprint_code: 'supplier',
+      value_type: 'relationship',
+    } as Attribute;
+    expect(
+      relationshipFacetSources(
+        [],
+        {
+          blueprint: 'product',
+          relationshipFacets: [{ field: 'made_by', selectedIds: ['a'] }],
+        },
+        [hidden],
+      ),
+    ).toEqual([hidden]);
   });
 });

@@ -119,6 +119,7 @@ export const Explorer = ({ search: urlSearch, savedView }: Props) => {
         ),
       ],
       search,
+      selectedBlueprint.data?.attributes,
     ),
     search,
   );

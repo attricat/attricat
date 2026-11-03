@@ -6,7 +6,9 @@ import type {
   RelationshipFacetUpdate,
   RelationshipFilterAttribute,
 } from './relationshipFilterTypes';
+import { isRelationshipFilterAttribute } from './relationshipFilterTypes';
 import type { ExplorerSearch, ExplorerSort } from './search';
+import type { Attribute } from '../records/api';
 import { attributeCardinalities } from '../records/constants';
 import { attributeValueTypes } from '../records/valueTypes';
 
@@ -39,12 +41,20 @@ export const withoutRelationshipPathScope = (
 export const relationshipFacetSources = (
   relationshipFields: RelationshipFilterAttribute[],
   search: ExplorerSearch,
+  // A link can filter on an attribute hidden from the filters; its chip must
+  // still show, or the filter couldn't be seen or removed.
+  attributes: readonly Attribute[] = [],
 ): RelationshipFilterAttribute[] => [
   ...relationshipFields,
   ...(search.relationshipFacets ?? []).flatMap(
-    (facet): RelationshipFilterAttribute[] =>
-      facet.targetBlueprint &&
-      !relationshipFields.some((field) => field.code === facet.field)
+    (facet): RelationshipFilterAttribute[] => {
+      if (relationshipFields.some((field) => field.code === facet.field))
+        return [];
+      const hidden = attributes
+        .filter(isRelationshipFilterAttribute)
+        .find((attribute) => attribute.code === facet.field);
+      if (hidden) return [hidden];
+      return facet.targetBlueprint
         ? [
             {
               cardinality: attributeCardinalities.many,
@@ -53,7 +63,8 @@ export const relationshipFacetSources = (
               value_type: attributeValueTypes.relationship,
             },
           ]
-        : [],
+        : [];
+    },
   ),
 ];
 
