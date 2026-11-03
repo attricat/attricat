@@ -871,6 +871,19 @@ impl OperationState {
                     .map_err(|_| "invalid idempotency key")?,
             );
         }
+        // Storage is read before the marker too: a delivery that could never
+        // start must stay retryable under the same key.
+        let object_key = artifact
+            .object_key
+            .as_ref()
+            .ok_or("output object unavailable")?;
+        let stream = self
+            .object_store
+            .get_stream(object_key)
+            .await
+            .map_err(|_| "output storage unavailable")?;
+        let method =
+            Method::from_bytes(input.method.as_bytes()).map_err(|_| "invalid delivery method")?;
         let attempt = self
             .repository
             .begin_extension_http_delivery(
@@ -891,14 +904,6 @@ impl OperationState {
         };
         // Once the durable uncertain marker exists we must not resend on any
         // failure path, including a process crash before the HTTP request.
-        let object_key = artifact.object_key.ok_or("output object unavailable")?;
-        let stream = self
-            .object_store
-            .get_stream(&object_key)
-            .await
-            .map_err(|_| "output storage unavailable")?;
-        let method =
-            Method::from_bytes(input.method.as_bytes()).map_err(|_| "invalid delivery method")?;
         let request = client.request(method, url).headers(headers);
         let request = match input.multipart {
             Some(multipart) => {
