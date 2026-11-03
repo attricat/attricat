@@ -205,8 +205,6 @@ impl AttricatRepository {
         let matching_ids = resolved.map(|ids| ids.into_iter().collect());
         let filters = (!filters.is_empty() || !relationship_filters.is_empty()).then(|| {
             ResolvedRecordFilters {
-                blueprint_id: current.blueprint.id,
-                blueprint_version: selected,
                 context: context.clone(),
                 filters,
                 relationship_filters,

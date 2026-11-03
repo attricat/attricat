@@ -13,9 +13,9 @@
 //! `line.category`; every tenth product and line overrides its hop in the
 //! child context. Each product also has its own listing, in the product's
 //! category and line, for paths whose middle hop is as large as the source:
-//! `listing.category` and `listing.line.category`. `FACET_BENCH_SCENARIOS`
-//! runs only the scenarios whose name contains it, such as `filter`. See
-//! `perf/facets.md` for results.
+//! `listing.category` and `listing.line.category`. `FACET_BENCH_SCENARIOS`, a
+//! comma-separated list such as `filter,reference`, runs only the scenarios
+//! whose name contains one of its entries. See `perf/facets.md` for results.
 
 use crate::support;
 
@@ -56,6 +56,11 @@ views:
   dropdown_option:
     type: dropdown_option
     fields: [name]
+  table:
+    type: table
+    columns:
+      - {field: sku, label: SKU}
+      - {field: line.name, label: Line}
 attributes:
   - code: name
     value_type: string
@@ -144,7 +149,8 @@ FROM bench_product;
 INSERT INTO attribute_values (id, record_id, attribute_id, context_id, value_text)
 SELECT gen_random_uuid(), p.id, a.id, $8,
        CASE a.id WHEN $5 THEN 'Product ' || p.i ELSE 'Value ' || p.i END
-FROM bench_product p, unnest(ARRAY[$5, $6, $7]::uuid[]) a(id);
+FROM bench_product p, unnest(ARRAY[$5, $6, $7]::uuid[]) a(id)
+WHERE a.id <> $7 OR p.i % 10000 <> 0;
 INSERT INTO attribute_values (id, record_id, attribute_id, context_id, relationship_target_record_id)
 SELECT gen_random_uuid(), id, $11, $8, category FROM bench_product;
 INSERT INTO attribute_values (id, record_id, attribute_id, context_id, relationship_target_record_id)
@@ -263,6 +269,49 @@ async fn relationship_tree_facet_latency(pool: PgPool) {
         query.execute(&mut *connection).await.unwrap();
     }
     drop(connection);
+    // A few products carry a searchable reusable attribute.
+    let draft: Value = client
+        .post(format!("{base_url}/reusable-attributes"))
+        .json(&json!({"definition": "code: weight\nname: Weight\nvalue_type: number\nsearchable: true\ndefault_value: 0"}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let revision: Value = client
+        .post(format!(
+            "{base_url}/reusable-attribute-revisions/{}/publish",
+            draft["id"].as_str().unwrap()
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let attached: Vec<Uuid> =
+        sqlx::query_scalar("SELECT id FROM records WHERE blueprint_id = $1 ORDER BY id LIMIT 20")
+            .bind(product_id)
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    for record in attached {
+        client
+            .post(format!(
+                "{base_url}/v1/records/{record}/reusable-attributes"
+            ))
+            .json(&json!({"reusable_attribute_revision_id": revision["id"]}))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+    }
     sqlx::query("VACUUM ANALYZE").execute(&pool).await.unwrap();
     println!("seeded {products} products in {:?}", seeded.elapsed());
 
@@ -346,7 +395,72 @@ async fn relationship_tree_facet_latency(pool: PgPool) {
         )
     };
     let every_sku = filter("sku", "starts_with", json!("Value"));
+    let one_sku = filter("sku", "eq", json!("Value 12"));
+    let with = |(path, mut body): (&'static str, Value), extra: Value| {
+        for (key, value) in extra.as_object().unwrap() {
+            body[key] = value.clone();
+        }
+        (path, body)
+    };
     let scenarios = [
+        ("reference: no filter", filtered(Vec::new(), json!([]))),
+        (
+            "reference: text query",
+            with(filtered(Vec::new(), json!([])), json!({"query": "12"})),
+        ),
+        (
+            "filter: contains, rare value",
+            filtered(
+                vec![filter("sku", "contains", json!("Value 12345"))],
+                json!([]),
+            ),
+        ),
+        (
+            "filter: absence, few matches",
+            filtered(
+                vec![filter("description", "is_set", json!(false))],
+                json!([]),
+            ),
+        ),
+        (
+            "filter: reusable attribute",
+            filtered(
+                vec![filter("default:weight", "is_set", json!(true))],
+                json!([]),
+            ),
+        ),
+        (
+            "filter: broad, sorted by a column",
+            with(
+                filtered(vec![every_sku.clone()], json!([])),
+                json!({"sort": {"field": "sku", "direction": "asc"}}),
+            ),
+        ),
+        (
+            "filter: broad, sorted through a relationship",
+            with(
+                filtered(vec![every_sku.clone()], json!([])),
+                json!({"sort": {"field": "line.name", "direction": "asc"}}),
+            ),
+        ),
+        (
+            "filter: one hop, child context",
+            with(
+                filtered(vec![filter("line.name", "eq", json!("Line 1"))], json!([])),
+                json!({"context_code": "bench_child"}),
+            ),
+        ),
+        (
+            "filter: text query and broad scalar",
+            with(
+                filtered(vec![every_sku.clone()], json!([])),
+                json!({"query": "12"}),
+            ),
+        ),
+        (
+            "filter: twenty selective scalars",
+            filtered(vec![one_sku; 20], json!([])),
+        ),
         (
             "filter: selective scalar",
             filtered(vec![filter("sku", "eq", json!("Value 12"))], json!([])),
@@ -357,10 +471,7 @@ async fn relationship_tree_facet_latency(pool: PgPool) {
         ),
         (
             "filter: absence, no matches",
-            filtered(
-                vec![filter("description", "is_set", json!(false))],
-                json!([]),
-            ),
+            filtered(vec![filter("sku", "is_set", json!(false))], json!([])),
         ),
         (
             "filter: one hop",
@@ -513,7 +624,7 @@ async fn relationship_tree_facet_latency(pool: PgPool) {
     let selected = std::env::var("FACET_BENCH_SCENARIOS").unwrap_or_default();
     for (name, (path, body)) in scenarios
         .into_iter()
-        .filter(|(name, _)| name.contains(&selected))
+        .filter(|(name, _)| selected.split(',').any(|entry| name.contains(entry)))
     {
         let started = Instant::now();
         post(&client, &base_url, path, &body).await;

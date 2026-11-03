@@ -216,10 +216,6 @@ impl RecordMatching<'_> {
 /// A search's attribute and relationship filters, resolved against its blueprint.
 #[derive(Clone, Debug)]
 pub struct ResolvedRecordFilters {
-    pub blueprint_id: Uuid,
-    /// The requested version, or `None` for every version. Filters keep it even
-    /// when a sorted page narrows itself to one version.
-    pub blueprint_version: Option<i64>,
     pub context: SearchContext,
     pub filters: Vec<RecordSearchFilter>,
     pub relationship_filters: Vec<RecordRelationshipFilter>,
@@ -232,19 +228,11 @@ macro_rules! bind_record_filters {
         let mut query = $query;
         let filters: Option<&ResolvedRecordFilters> = $filters;
         if let Some(filters) = filters {
-            query = query
-                .bind(filters.blueprint_id)
-                .bind(filters.blueprint_version)
-                .bind($workspace_id)
-                .bind(&filters.context.ids);
+            query = query.bind($workspace_id).bind(&filters.context.ids);
             for filter in &filters.filters {
-                if !filter.reusable {
-                    query = query.bind(&filter.relationship_path);
-                }
                 query = query
+                    .bind(&filter.relationship_path)
                     .bind(&filter.leaf_field)
-                    .bind(filter.value_type.as_str())
-                    .bind(&filter.operator)
                     .bind(&filter.value);
             }
             for filter in &filters.relationship_filters {
@@ -367,239 +355,253 @@ struct IncomingRelationshipRow {
     blueprint_context_fallback: Value,
 }
 
-/// Walks the relationship path `$3` from every record of blueprint `$1`
-/// (optional version `$2`) as `reached(root_id, current_id, depth)`, for the
-/// filter statements below. `{workspace}` is replaced with the statement's
-/// workspace parameter; `{edge_context}` stays for [`resolved_context`].
-const REACHED_SQL: &str = r#"WITH RECURSIVE reached(root_id, current_id, depth) AS (
-                       SELECT e.id, e.id, 0
-                         FROM records e
-                        WHERE e.blueprint_id = $1
-                          AND ($2::bigint IS NULL OR e.blueprint_version = $2)
-                          AND e.workspace_id = {workspace} AND e.deleted_at IS NULL
-                       UNION ALL
-                       SELECT reached.root_id, av.relationship_target_record_id, reached.depth + 1
-                         FROM reached
-                         JOIN records source ON source.id = reached.current_id
-                          AND source.workspace_id = {workspace} AND source.deleted_at IS NULL
-                         JOIN attributes relationship ON relationship.blueprint_id = source.blueprint_id
-                          AND relationship.blueprint_version = source.blueprint_version
-                          AND relationship.workspace_id = {workspace}
-                          AND relationship.code = $3[reached.depth + 1]
-                          AND relationship.value_type = 'relationship'
-                         JOIN attribute_values av ON av.record_id = source.id
-                          AND av.workspace_id = {workspace}
-                          AND av.attribute_id = relationship.id AND av.active
-                          AND {edge_context}
-                          AND av.relationship_target_record_id IS NOT NULL
-                         JOIN records target ON target.id = av.relationship_target_record_id
-                          AND target.workspace_id = {workspace} AND target.deleted_at IS NULL
-                         JOIN blueprints target_blueprint ON target_blueprint.id = target.blueprint_id
-                          AND target_blueprint.version = target.blueprint_version
-                          AND target_blueprint.code = relationship.target_blueprint_code
-                        WHERE reached.depth < cardinality($3)
-                   )"#;
+/// The scalar value types `is_set` tests besides a filter's own type.
+const PRESENCE_VALUE_TYPES: &str = "'string','number','integer','boolean','date','datetime','time'";
 
-/// A filter statement with its `{reached}` walk expanded for `workspace`.
-fn with_reached(statement: &str, workspace: &str) -> String {
-    statement.replace("{reached}", &REACHED_SQL.replace("{workspace}", workspace))
+/// How PostgreSQL may run a filter's `EXISTS` subquery.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum FilterPlan {
+    /// A semi-join, which can start from the value's index. It's far faster when
+    /// few records match, but much slower when a filter has to scan anyway.
+    FromValue,
+    /// Once per candidate record, which `OFFSET 0` forces. A page stops as soon
+    /// as it's full, and candidates a text query already narrowed stay cheap.
+    PerRecord,
 }
 
-/// Root records whose active relationships, resolved for the context path
-/// `$6`, reach one of `$4` at exactly the path `$3`. `$1` blueprint, `$2`
-/// optional version, `$5` workspace. `{edge_context}` is replaced with
-/// [`resolved_context`].
-const RELATIONSHIP_FILTER_SQL: &str = r#"{reached}
-                   SELECT DISTINCT root_id
-                     FROM reached
-                    WHERE depth = cardinality($3) AND current_id = ANY($4)"#;
+/// An `EXISTS` subquery over tables with their conditions. Every condition sits
+/// in `WHERE`, because PostgreSQL only considers a semi-join when outer
+/// references appear nowhere else.
+fn exists_sql(tables: &[(String, String)], condition: &str, plan: FilterPlan) -> String {
+    let from = tables
+        .iter()
+        .map(|(table, _)| table.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+    let conditions = tables
+        .iter()
+        .map(|(_, condition)| condition.as_str())
+        .collect::<Vec<_>>()
+        .join(" AND ");
+    let offset = if plan == FilterPlan::PerRecord {
+        "OFFSET 0"
+    } else {
+        ""
+    };
+    format!("EXISTS (SELECT 1 FROM {from} WHERE {conditions} AND {condition} {offset})")
+}
 
-/// Root records whose value of a (possibly dotted) field, resolved for the
-/// context path `$9`, satisfies one typed filter. `$1` blueprint, `$2`
-/// optional version, `$3` relationship path, `$4` leaf field, `$5` value type,
-/// `$6` operator, `$7` value, `$8` workspace. `{edge_context}` and
-/// `{value_context}` are replaced with [`resolved_context`].
-const SCALAR_FILTER_SQL: &str = r#"{reached}
-                   SELECT DISTINCT reached.root_id
-                     FROM reached
-                     JOIN records leaf ON leaf.id = reached.current_id
-                      AND leaf.workspace_id = $8 AND leaf.deleted_at IS NULL
-                     JOIN attributes a ON a.blueprint_id = leaf.blueprint_id
-                      AND a.blueprint_version = leaf.blueprint_version
-                      AND a.workspace_id = $8
-                      AND a.code = $4 AND a.deleted_at IS NULL
-                      AND (a.value_type = $5 OR ($6 = 'is_set' AND a.value_type IN
-                          ('string','number','integer','boolean','date','datetime','time')))
-                     JOIN attribute_values av ON av.record_id = leaf.id AND av.attribute_id = a.id
-                      AND av.workspace_id = $8
-                      AND av.active AND av.relationship_target_record_id IS NULL
-                      AND {value_context}
-                    WHERE reached.depth = cardinality($3)
-                      AND (a.value_type <> 'file' OR EXISTS (
-                          SELECT 1 FROM attribute_file_references r
-                           WHERE r.attribute_value_id = av.id AND r.workspace_id = $8))
-                      AND CASE
-                          WHEN $6 = 'is_set' THEN TRUE
-                          WHEN $5 = 'string' AND $6 = 'eq' THEN av.value_text = $7
-                          WHEN $5 = 'string' AND $6 = 'eq_any' THEN $7::jsonb ? av.value_text
-                          WHEN $5 = 'string' AND $6 = 'contains' THEN strpos(lower(av.value_text), lower($7)) > 0
-                          WHEN $5 = 'string' AND $6 = 'starts_with' THEN left(lower(av.value_text), char_length($7)) = lower($7)
-                          WHEN $5 = 'number' AND $6 = 'eq' THEN av.value_number = $7::numeric
-                          WHEN $5 = 'number' AND $6 = 'gt' THEN av.value_number > $7::numeric
-                          WHEN $5 = 'number' AND $6 = 'gte' THEN av.value_number >= $7::numeric
-                          WHEN $5 = 'number' AND $6 = 'lt' THEN av.value_number < $7::numeric
-                          WHEN $5 = 'number' AND $6 = 'lte' THEN av.value_number <= $7::numeric
-                          WHEN $5 = 'integer' AND $6 = 'eq' THEN av.value_integer = $7::bigint
-                          WHEN $5 = 'integer' AND $6 = 'gt' THEN av.value_integer > $7::bigint
-                          WHEN $5 = 'integer' AND $6 = 'gte' THEN av.value_integer >= $7::bigint
-                          WHEN $5 = 'integer' AND $6 = 'lt' THEN av.value_integer < $7::bigint
-                          WHEN $5 = 'integer' AND $6 = 'lte' THEN av.value_integer <= $7::bigint
-                          WHEN $5 = 'boolean' AND $6 = 'eq' THEN av.value_boolean = $7::boolean
-                          WHEN $5 = 'date' AND $6 = 'eq' THEN av.value_date = $7::date
-                          WHEN $5 = 'date' AND $6 = 'gt' THEN av.value_date > $7::date
-                          WHEN $5 = 'date' AND $6 = 'gte' THEN av.value_date >= $7::date
-                          WHEN $5 = 'date' AND $6 = 'lt' THEN av.value_date < $7::date
-                          WHEN $5 = 'date' AND $6 = 'lte' THEN av.value_date <= $7::date
-                          WHEN $5 = 'datetime' AND $6 = 'eq' THEN av.value_datetime = $7::timestamptz
-                          WHEN $5 = 'datetime' AND $6 = 'gt' THEN av.value_datetime > $7::timestamptz
-                          WHEN $5 = 'datetime' AND $6 = 'gte' THEN av.value_datetime >= $7::timestamptz
-                          WHEN $5 = 'datetime' AND $6 = 'lt' THEN av.value_datetime < $7::timestamptz
-                          WHEN $5 = 'datetime' AND $6 = 'lte' THEN av.value_datetime <= $7::timestamptz
-                          WHEN $5 = 'time' AND $6 = 'eq' THEN av.value_time = $7::time
-                          WHEN $5 = 'time' AND $6 = 'gt' THEN av.value_time > $7::time
-                          WHEN $5 = 'time' AND $6 = 'gte' THEN av.value_time >= $7::time
-                          WHEN $5 = 'time' AND $6 = 'lt' THEN av.value_time < $7::time
-                          WHEN $5 = 'time' AND $6 = 'lte' THEN av.value_time <= $7::time
-                          ELSE FALSE
-                      END"#;
+/// The tables walking `hops` relationships from `e`, with the alias of the
+/// record they reach. Codes come from the array parameter `path`. Each hop reads
+/// its source record's pinned blueprint revision and resolves its edges for the
+/// context path `context`.
+fn relationship_hop_tables(
+    hops: usize,
+    path: usize,
+    workspace: usize,
+    context: usize,
+) -> (Vec<(String, String)>, String) {
+    let mut tables = Vec::with_capacity(hops * 4 + 2);
+    let mut source = "e".to_owned();
+    for hop in 1..=hops {
+        let (relationship, edge, target, blueprint) = (
+            format!("relationship_{hop}"),
+            format!("edge_{hop}"),
+            format!("target_{hop}"),
+            format!("target_blueprint_{hop}"),
+        );
+        tables.push((
+            format!("attributes {relationship}"),
+            format!(
+                "{relationship}.blueprint_id = {source}.blueprint_id \
+                 AND {relationship}.blueprint_version = {source}.blueprint_version \
+                 AND {relationship}.workspace_id = ${workspace} \
+                 AND {relationship}.code = ${path}[{hop}] \
+                 AND {relationship}.value_type = 'relationship'"
+            ),
+        ));
+        tables.push((
+            format!("attribute_values {edge}"),
+            format!(
+                "{edge}.record_id = {source}.id AND {edge}.workspace_id = ${workspace} \
+                 AND {edge}.attribute_id = {relationship}.id AND {edge}.active \
+                 AND {edge}.relationship_target_record_id IS NOT NULL AND {}",
+                resolved_context(&edge, &relationship, &format!("${context}"))
+            ),
+        ));
+        tables.push((
+            format!("records {target}"),
+            format!(
+                "{target}.id = {edge}.relationship_target_record_id \
+                 AND {target}.workspace_id = ${workspace} AND {target}.deleted_at IS NULL"
+            ),
+        ));
+        tables.push((
+            format!("blueprints {blueprint}"),
+            format!(
+                "{blueprint}.id = {target}.blueprint_id \
+                 AND {blueprint}.version = {target}.blueprint_version \
+                 AND {blueprint}.code = {relationship}.target_blueprint_code"
+            ),
+        ));
+        source = target;
+    }
+    (tables, source)
+}
 
-/// Records whose attached reusable attribute, resolved for the context path
-/// `$8`, satisfies one typed filter. `$1` blueprint, `$2` optional version, `$3`
-/// attribute, `$4` value type, `$5` operator, `$6` value, `$7` workspace.
-/// `{value_context}` is replaced with [`resolved_context`].
-const REUSABLE_FILTER_SQL: &str = r#"SELECT DISTINCT e.id
-                 FROM records e
-                 JOIN attributes a ON a.record_id = e.id AND a.code = $3
-                  AND (a.value_type = $4 OR ($5 = 'is_set' AND a.value_type IN
-                      ('string','number','integer','boolean','date','datetime','time')))
-                 JOIN reusable_attribute_revisions r ON r.id = a.reusable_attribute_revision_id
-                 JOIN attribute_values av ON av.record_id = e.id AND av.attribute_id = a.id
-                WHERE e.blueprint_id = $1
-                  AND ($2::bigint IS NULL OR e.blueprint_version = $2)
-                  AND e.workspace_id = $7 AND e.deleted_at IS NULL
-                  AND a.workspace_id = $7 AND a.deleted_at IS NULL AND r.searchable
-                  AND av.workspace_id = $7 AND av.active AND av.relationship_target_record_id IS NULL
-                  AND {value_context}
-                  AND (a.value_type <> 'file' OR EXISTS (
-                      SELECT 1 FROM attribute_file_references fr
-                       WHERE fr.attribute_value_id = av.id AND fr.workspace_id = $7))
-                  AND CASE
-                    WHEN $5 = 'is_set' THEN TRUE
-                    WHEN $4 = 'string' AND $5 = 'eq' THEN av.value_text = $6
-                    WHEN $4 = 'string' AND $5 = 'eq_any' THEN $6::jsonb ? av.value_text
-                    WHEN $4 = 'string' AND $5 = 'contains' THEN strpos(lower(av.value_text), lower($6)) > 0
-                    WHEN $4 = 'string' AND $5 = 'starts_with' THEN left(lower(av.value_text), char_length($6)) = lower($6)
-                    WHEN $4 = 'number' AND $5 = 'eq' THEN av.value_number = $6::numeric
-                    WHEN $4 = 'number' AND $5 = 'gt' THEN av.value_number > $6::numeric
-                    WHEN $4 = 'number' AND $5 = 'gte' THEN av.value_number >= $6::numeric
-                    WHEN $4 = 'number' AND $5 = 'lt' THEN av.value_number < $6::numeric
-                    WHEN $4 = 'number' AND $5 = 'lte' THEN av.value_number <= $6::numeric
-                    WHEN $4 = 'integer' AND $5 = 'eq' THEN av.value_integer = $6::bigint
-                    WHEN $4 = 'integer' AND $5 = 'gt' THEN av.value_integer > $6::bigint
-                    WHEN $4 = 'integer' AND $5 = 'gte' THEN av.value_integer >= $6::bigint
-                    WHEN $4 = 'integer' AND $5 = 'lt' THEN av.value_integer < $6::bigint
-                    WHEN $4 = 'integer' AND $5 = 'lte' THEN av.value_integer <= $6::bigint
-                    WHEN $4 = 'boolean' AND $5 = 'eq' THEN av.value_boolean = $6::boolean
-                    WHEN $4 = 'date' AND $5 = 'eq' THEN av.value_date = $6::date
-                    WHEN $4 = 'date' AND $5 = 'gt' THEN av.value_date > $6::date
-                    WHEN $4 = 'date' AND $5 = 'gte' THEN av.value_date >= $6::date
-                    WHEN $4 = 'date' AND $5 = 'lt' THEN av.value_date < $6::date
-                    WHEN $4 = 'date' AND $5 = 'lte' THEN av.value_date <= $6::date
-                    WHEN $4 = 'datetime' AND $5 = 'eq' THEN av.value_datetime = $6::timestamptz
-                    WHEN $4 = 'datetime' AND $5 = 'gt' THEN av.value_datetime > $6::timestamptz
-                    WHEN $4 = 'datetime' AND $5 = 'gte' THEN av.value_datetime >= $6::timestamptz
-                    WHEN $4 = 'datetime' AND $5 = 'lt' THEN av.value_datetime < $6::timestamptz
-                    WHEN $4 = 'datetime' AND $5 = 'lte' THEN av.value_datetime <= $6::timestamptz
-                    WHEN $4 = 'time' AND $5 = 'eq' THEN av.value_time = $6::time
-                    WHEN $4 = 'time' AND $5 = 'gt' THEN av.value_time > $6::time
-                    WHEN $4 = 'time' AND $5 = 'gte' THEN av.value_time >= $6::time
-                    WHEN $4 = 'time' AND $5 = 'lt' THEN av.value_time < $6::time
-                    WHEN $4 = 'time' AND $5 = 'lte' THEN av.value_time <= $6::time
-                    ELSE FALSE END"#;
+/// One filter's test of the leaf value `av`, against the text parameter `value`.
+/// Columns and operators come from closed lists, never from the request.
+fn value_comparison(filter: &RecordSearchFilter, value: usize) -> String {
+    const NEVER: &str = "FALSE";
+    if filter.operator == attricat_validation::saved_search::FILTER_OPERATOR_IS_SET {
+        return format!(
+            "(a.value_type <> '{file}' OR EXISTS (SELECT 1 FROM attribute_file_references file_reference \
+              WHERE file_reference.attribute_value_id = av.id \
+                AND file_reference.workspace_id = av.workspace_id))",
+            file = ValueType::File.as_str()
+        );
+    }
+    let Ok((column, column_type)) = native_sort_column(filter.value_type) else {
+        return NEVER.to_owned();
+    };
+    let text = filter.value_type == ValueType::String;
+    let ordered = !text && filter.value_type != ValueType::Boolean;
+    match filter.operator.as_str() {
+        "eq" if text => format!("av.{column} = ${value}"),
+        "eq" => format!("av.{column} = ${value}::{column_type}"),
+        SEARCH_FILTER_EQ_ANY if text => format!("${value}::jsonb ? av.{column}"),
+        "contains" if text => format!("strpos(lower(av.{column}), lower(${value})) > 0"),
+        "starts_with" if text => {
+            format!("left(lower(av.{column}), char_length(${value})) = lower(${value})")
+        }
+        "gt" if ordered => format!("av.{column} > ${value}::{column_type}"),
+        "gte" if ordered => format!("av.{column} >= ${value}::{column_type}"),
+        "lt" if ordered => format!("av.{column} < ${value}::{column_type}"),
+        "lte" if ordered => format!("av.{column} <= ${value}::{column_type}"),
+        _ => NEVER.to_owned(),
+    }
+}
 
-/// `AND e.id IN (...)` restricting `e` to the records satisfying every filter,
-/// or nothing without filters. Its parameters start at `first_parameter`, past
-/// the statement's own, and are bound with [`bind_record_filters`]: blueprint,
-/// version, workspace and context path, then each filter's own in order.
-fn record_filters_clause(
-    filters: Option<&ResolvedRecordFilters>,
-    first_parameter: usize,
+/// One attribute filter over `e`. Absence is the complement of presence, so it
+/// also holds for records with no reached leaf, older revisions without the
+/// field, or no attached reusable attribute. An active scalar row counts as
+/// present even for empty text, zero or false; a file value is present only
+/// while it references at least one file.
+fn attribute_filter_sql(
+    filter: &RecordSearchFilter,
+    workspace: usize,
+    context: usize,
+    parameter: usize,
+    narrowed: bool,
 ) -> String {
-    let Some(filters) = filters else {
+    let (path, leaf_code, value) = (parameter, parameter + 1, parameter + 2);
+    let presence = filter.operator == attricat_validation::saved_search::FILTER_OPERATOR_IS_SET;
+    let value_type = filter.value_type.as_str();
+    let type_matches = if presence {
+        format!("(a.value_type = '{value_type}' OR a.value_type IN ({PRESENCE_VALUE_TYPES}))")
+    } else {
+        format!("a.value_type = '{value_type}'")
+    };
+    let current_value = |leaf: &str| {
+        (
+            "attribute_values av".to_owned(),
+            format!(
+                "av.record_id = {leaf}.id AND av.attribute_id = a.id \
+                 AND av.workspace_id = ${workspace} AND av.active \
+                 AND av.relationship_target_record_id IS NULL AND {}",
+                resolved_context("av", "a", &format!("${context}"))
+            ),
+        )
+    };
+    let tables = if filter.reusable {
+        vec![
+            (
+                "attributes a".to_owned(),
+                format!(
+                    "a.record_id = e.id AND a.code = ${leaf_code} AND {type_matches} \
+                     AND a.workspace_id = ${workspace} AND a.deleted_at IS NULL"
+                ),
+            ),
+            (
+                "reusable_attribute_revisions revision".to_owned(),
+                "revision.id = a.reusable_attribute_revision_id AND revision.searchable".to_owned(),
+            ),
+            current_value("e"),
+        ]
+    } else {
+        let (mut tables, leaf) =
+            relationship_hop_tables(filter.relationship_path.len(), path, workspace, context);
+        tables.push((
+            "attributes a".to_owned(),
+            format!(
+                "a.blueprint_id = {leaf}.blueprint_id \
+                 AND a.blueprint_version = {leaf}.blueprint_version \
+                 AND a.workspace_id = ${workspace} AND a.code = ${leaf_code} \
+                 AND a.deleted_at IS NULL AND {type_matches}"
+            ),
+        ));
+        tables.push(current_value(&leaf));
+        tables
+    };
+    let absence = presence && filter.value == "false";
+    let from_value = filter.operator == "eq"
+        || filter.operator == SEARCH_FILTER_EQ_ANY
+        || (filter.reusable && !absence);
+    let plan = if from_value && !narrowed {
+        FilterPlan::FromValue
+    } else {
+        FilterPlan::PerRecord
+    };
+    let exists = exists_sql(&tables, &value_comparison(filter, value), plan);
+    if absence {
+        format!("NOT {exists}")
+    } else {
+        exists
+    }
+}
+
+/// One `AND` condition per filter restricting `e`, or nothing without filters.
+/// Each stays correlated to `e`, so PostgreSQL can start from whichever side is
+/// smaller and a page can stop early. Parameters start at `first_parameter`,
+/// past the statement's own, and are bound with [`bind_record_filters`]:
+/// workspace and context path, then each filter's own in order.
+fn record_filters_clause(matching: RecordMatching<'_>, first_parameter: usize) -> String {
+    let Some(filters) = matching.filters else {
         return String::new();
     };
-    let [blueprint, version, workspace, context] =
-        std::array::from_fn(|index| first_parameter + index);
-    let scalar = with_reached(SCALAR_FILTER_SQL, "$8")
-        .replace(
-            "{edge_context}",
-            &resolved_context("av", "relationship", "$9"),
-        )
-        .replace("{value_context}", &resolved_context("av", "a", "$9"));
-    let reusable =
-        REUSABLE_FILTER_SQL.replace("{value_context}", &resolved_context("av", "a", "$8"));
-    let relationship = with_reached(RELATIONSHIP_FILTER_SQL, "$5").replace(
-        "{edge_context}",
-        &resolved_context("av", "relationship", "$6"),
-    );
-    let mut next = first_parameter + 4;
-    let mut branches = Vec::new();
+    let narrowed = matching.ids.is_some();
+    let (workspace, context) = (first_parameter, first_parameter + 1);
+    let mut next = first_parameter + 2;
+    let mut conditions = Vec::new();
     for filter in &filters.filters {
-        let base = next;
-        let branch = if filter.reusable {
-            next += 4;
-            renumber_parameters(&presence_filter_query(&reusable, filter, 7), |parameter| {
-                match parameter {
-                    1 => blueprint,
-                    2 => version,
-                    7 => workspace,
-                    8 => context,
-                    3..=6 => base + parameter - 3,
-                    _ => unreachable!("the filter statement has eight parameters"),
-                }
-            })
-        } else {
-            next += 5;
-            renumber_parameters(&presence_filter_query(&scalar, filter, 8), |parameter| {
-                match parameter {
-                    1 => blueprint,
-                    2 => version,
-                    8 => workspace,
-                    9 => context,
-                    3..=7 => base + parameter - 3,
-                    _ => unreachable!("the filter statement has nine parameters"),
-                }
-            })
-        };
-        branches.push(format!("({branch})"));
+        conditions.push(attribute_filter_sql(
+            filter, workspace, context, next, narrowed,
+        ));
+        next += 3;
     }
-    for _ in &filters.relationship_filters {
-        let base = next;
+    for filter in &filters.relationship_filters {
+        let (tables, _) =
+            relationship_hop_tables(filter.relationship_path.len(), next, workspace, context);
+        let last_edge = format!("edge_{}", filter.relationship_path.len());
+        conditions.push(exists_sql(
+            &tables,
+            &format!(
+                "{last_edge}.relationship_target_record_id = ANY(${}::uuid[])",
+                next + 1
+            ),
+            if narrowed {
+                FilterPlan::PerRecord
+            } else {
+                FilterPlan::FromValue
+            },
+        ));
         next += 2;
-        let branch = renumber_parameters(&relationship, |parameter| match parameter {
-            1 => blueprint,
-            2 => version,
-            5 => workspace,
-            6 => context,
-            3 | 4 => base + parameter - 3,
-            _ => unreachable!("the filter statement has six parameters"),
-        });
-        branches.push(format!("({branch})"));
     }
-    format!(
-        "AND e.id IN (SELECT id FROM ({}) filtered(id))",
-        branches.join(" INTERSECT ")
-    )
+    conditions
+        .iter()
+        .map(|condition| format!("AND {condition}"))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// The `context_path`, `chosen` and `edges(source_id, target_id)` CTEs of one
@@ -634,30 +636,6 @@ const RESOLVED_EDGES_SQL: &str = r#"context_path AS (
                     JOIN records target ON target.id = av.relationship_target_record_id
                     WHERE {target} AND target.deleted_at IS NULL
                 )"#;
-
-/// Absence is the complement of presence within the same live root family and
-/// version scope. This also includes roots with no reached relationship leaf,
-/// older revisions without the field, or no attached reusable attribute.
-/// An active scalar row counts as present even for empty text, zero or false;
-/// a file value is present only while it references at least one file.
-fn presence_filter_query(
-    sql: &str,
-    filter: &RecordSearchFilter,
-    workspace_parameter: usize,
-) -> String {
-    if filter.operator == attricat_validation::saved_search::FILTER_OPERATOR_IS_SET
-        && filter.value == "false"
-    {
-        format!(
-            "SELECT e.id FROM records e WHERE e.blueprint_id = $1
-             AND ($2::bigint IS NULL OR e.blueprint_version = $2)
-             AND e.workspace_id = ${workspace_parameter} AND e.deleted_at IS NULL
-             EXCEPT ({sql})"
-        )
-    } else {
-        sql.to_owned()
-    }
-}
 
 /// The IDs from a root down to `node`'s parent, along the shortest way up and
 /// the lowest parent IDs among equally short ones. A node that reaches no
@@ -991,7 +969,7 @@ impl AttricatRepository {
         } = scope;
         validate_system_tag_filter(system_tags)?;
         let export_status_sql = record_filter_clauses(11, export_status, data_quality);
-        let filters_sql = record_filters_clause(matching.filters, 12);
+        let filters_sql = record_filters_clause(matching, 12);
         let sql = format!(
             r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.system_tags, e.created_at, e.projections -> 'preview' AS preview,
                       b.views AS blueprint_views,
@@ -1059,7 +1037,7 @@ impl AttricatRepository {
         validate_system_tag_filter(system_tags)?;
         let (records, matching_sql) = matching_records(matching.ids.is_some(), 3);
         let export_status_sql = record_filter_clauses(9, export_status, data_quality);
-        let filters_sql = record_filters_clause(matching.filters, 10);
+        let filters_sql = record_filters_clause(matching, 10);
         let sql = format!(
             r#"SELECT COUNT(*)
                  FROM (
@@ -1128,6 +1106,30 @@ impl AttricatRepository {
         Ok(count)
     }
 
+    /// Up to `limit` of a blueprint's matching records, in no particular order, so
+    /// a broad search stops as soon as it has them.
+    pub async fn first_matching_record_ids(
+        &self,
+        blueprint_id: Uuid,
+        blueprint_version: Option<i64>,
+        matching: RecordMatching<'_>,
+        limit: i64,
+    ) -> Result<Vec<Uuid>, RepositoryError> {
+        let sql = format!("SELECT e.id {} LIMIT $5", matching_records_from(matching));
+        Ok(bind_record_filters!(
+            sqlx::query_scalar::<_, Uuid>(&sql)
+                .bind(blueprint_id)
+                .bind(blueprint_version)
+                .bind(matching.ids)
+                .bind(self.workspace_id.0)
+                .bind(limit),
+            matching.filters,
+            self.workspace_id.0
+        )
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
     /// Up to `limit` of a blueprint's matching records, lowest IDs first.
     pub async fn matching_record_ids(
         &self,
@@ -1169,24 +1171,17 @@ impl AttricatRepository {
             current_blueprint_version,
         } = scope;
         validate_system_tag_filter(system_tags)?;
-        let (records, matching_sql) = matching_records(matching.ids.is_some(), 4);
         let export_status_sql = record_filter_clauses(8, export_status, data_quality);
-        let filters_sql = record_filters_clause(matching.filters, 9);
+        let matches = result_version_matches(matching, &export_status_sql, 9);
         let sql = format!(
-            r#"SELECT e.blueprint_version
-                 FROM {records}
-                WHERE e.blueprint_id = $1
-                  AND ($2::bigint IS NULL OR e.blueprint_version = $2)
-                  AND e.workspace_id = $3
-                  AND e.deleted_at IS NULL
-                  {matching_sql}
-                  {filters_sql}
-                  AND ($5::text[] IS NULL OR e.system_tags @> $5)
-                  {export_status_sql}
-                  AND (NOT $6 OR e.blueprint_version <> $7)
-                GROUP BY e.blueprint_version
-                ORDER BY e.blueprint_version DESC
-                LIMIT 2"#,
+            r#"SELECT version.version
+                 FROM blueprints version
+                WHERE version.id = $1
+                  AND ($2::bigint IS NULL OR version.version = $2)
+                  AND version.workspace_id = $3
+                  AND EXISTS (SELECT 1 {matches} AND e.blueprint_version = version.version)
+                ORDER BY version.version DESC
+                LIMIT {MAX_RESULT_VERSIONS}"#,
         );
         Ok(bind_record_filters!(
             sqlx::query_scalar::<_, i64>(&sql)
@@ -1206,7 +1201,8 @@ impl AttricatRepository {
     }
 
     /// [`Self::search_result_versions`] and, with `count_limit`,
-    /// [`Self::count_record_previews`] over the same matches in one scan.
+    /// [`Self::count_record_previews`] over the same matches in one statement,
+    /// each stopping as soon as it has its answer.
     pub async fn search_result_versions_and_count(
         &self,
         scope: RecordSearchScope<'_>,
@@ -1239,30 +1235,20 @@ impl AttricatRepository {
             ));
         };
         validate_system_tag_filter(system_tags)?;
-        let (records, matching_sql) = matching_records(matching.ids.is_some(), 4);
         let export_status_sql = record_filter_clauses(9, export_status, data_quality);
-        let filters_sql = record_filters_clause(matching.filters, 10);
+        let matches = result_version_matches(matching, &export_status_sql, 10);
         let sql = format!(
-            r#"WITH matches AS MATERIALIZED (
-                   SELECT e.blueprint_version
-                     FROM {records}
-                    WHERE e.blueprint_id = $1
-                      AND ($2::bigint IS NULL OR e.blueprint_version = $2)
-                      AND e.workspace_id = $3
-                      AND e.deleted_at IS NULL
-                      {matching_sql}
-                      {filters_sql}
-                      AND ($5::text[] IS NULL OR e.system_tags @> $5)
-                      {export_status_sql}
-                      AND (NOT $6 OR e.blueprint_version <> $7)
-               )
-               SELECT ARRAY(
-                          SELECT blueprint_version FROM matches
-                           GROUP BY blueprint_version
-                           ORDER BY blueprint_version DESC
-                           LIMIT 2
+            r#"SELECT ARRAY(
+                          SELECT version.version
+                            FROM blueprints version
+                           WHERE version.id = $1
+                             AND ($2::bigint IS NULL OR version.version = $2)
+                             AND version.workspace_id = $3
+                             AND EXISTS (SELECT 1 {matches} AND e.blueprint_version = version.version)
+                           ORDER BY version.version DESC
+                           LIMIT {MAX_RESULT_VERSIONS}
                       ),
-                      (SELECT COUNT(*) FROM (SELECT 1 FROM matches LIMIT $8) capped)"#,
+                      (SELECT COUNT(*) FROM (SELECT 1 {matches} LIMIT $8) capped)"#,
         );
         let (versions, count) = bind_record_filters!(
             sqlx::query_as::<_, (Vec<i64>, i64)>(&sql)
@@ -1391,7 +1377,7 @@ impl AttricatRepository {
                     &resolved_context("sort_value", "sort_attribute", "$14"),
                 );
         let export_status_sql = record_filter_clauses(15, export_status, data_quality);
-        let filters_sql = record_filters_clause(matching.filters, 16);
+        let filters_sql = record_filters_clause(matching, 16);
         let sql = format!(
             r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.system_tags, e.created_at, e.projections -> 'preview' AS preview,
                       b.views AS blueprint_views,
@@ -1515,7 +1501,7 @@ impl AttricatRepository {
         let export_status_sql = record_filter_clauses(11, export_status, data_quality);
         let binds_sort_parameter = sort.system_tag.is_some() || sort.field == "publication_status";
         let filters_sql =
-            record_filters_clause(matching.filters, if binds_sort_parameter { 13 } else { 12 });
+            record_filters_clause(matching, if binds_sort_parameter { 13 } else { 12 });
         let sql = format!(
             r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.system_tags, e.created_at, e.projections -> 'preview' AS preview,
                          b.views AS blueprint_views,
@@ -1615,8 +1601,8 @@ impl AttricatRepository {
         let mut rows = Vec::new();
         let leaf_export_status = record_filter_clauses(18, export_status, data_quality);
         let null_export_status = record_filter_clauses(16, export_status, data_quality);
-        let leaf_filters = record_filters_clause(matching.filters, 19);
-        let null_filters = record_filters_clause(matching.filters, 17);
+        let leaf_filters = record_filters_clause(matching, 19);
+        let null_filters = record_filters_clause(matching, 17);
 
         if !cursor_is_null {
             let reverse_joins = relationship_sort_reverse_joins(sort.relationship_path.len())?;
@@ -2684,7 +2670,7 @@ impl AttricatRepository {
         });
         let granted = RECORD_GRANTED_SQL.replace("$2", "$9");
         let (records, matching_sql) = matching_records(matching.ids.is_some(), 11);
-        let filters_sql = record_filters_clause(matching.filters, 12);
+        let filters_sql = record_filters_clause(matching, 12);
         let edges = RESOLVED_EDGES_SQL
             .replace("{sources}", "JOIN matched ON matched.id = av.record_id")
             .replace("{target}", "target.blueprint_id = ANY($3)");
@@ -3826,12 +3812,39 @@ fn matching_records(matching: bool, parameter: usize) -> (String, String) {
     }
 }
 
+/// Result version scopes tell one version from several, so two is enough.
+const MAX_RESULT_VERSIONS: i64 = 2;
+
+/// `FROM ... WHERE` over a page's matches for the version and total statements:
+/// `$1` blueprint, `$2` optional version, `$3` workspace, `$4` matching IDs, `$5`
+/// system tags, `$6` outdated, `$7` current version.
+fn result_version_matches(
+    matching: RecordMatching<'_>,
+    export_status_sql: &str,
+    filters_parameter: usize,
+) -> String {
+    let (records, matching_sql) = matching_records(matching.ids.is_some(), 4);
+    let filters_sql = record_filters_clause(matching, filters_parameter);
+    format!(
+        "FROM {records}
+          WHERE e.blueprint_id = $1
+            AND ($2::bigint IS NULL OR e.blueprint_version = $2)
+            AND e.workspace_id = $3
+            AND e.deleted_at IS NULL
+            {matching_sql}
+            {filters_sql}
+            AND ($5::text[] IS NULL OR e.system_tags @> $5)
+            {export_status_sql}
+            AND (NOT $6 OR e.blueprint_version <> $7)"
+    )
+}
+
 /// `FROM ... WHERE` over a blueprint's matching records: `$1` blueprint, `$2`
 /// optional version, `$3` matching IDs, `$4` workspace. `$5` is left for the
 /// statement's limit, and [`record_filters_clause`] follows it.
 fn matching_records_from(matching: RecordMatching<'_>) -> String {
     let (records, matching_sql) = matching_records(matching.ids.is_some(), 3);
-    let filters_sql = record_filters_clause(matching.filters, 6);
+    let filters_sql = record_filters_clause(matching, 6);
     format!(
         "FROM {records}
           WHERE e.blueprint_id = $1
