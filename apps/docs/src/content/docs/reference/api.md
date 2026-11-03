@@ -53,6 +53,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `generated_reset_changed` | 409 | A blueprint revision changes the `reset` of an attribute that an earlier revision generated, which would repeat numbers. `details` has `attribute`, `previous`, and `requested`. |
 | `generated_sequence_not_raised` | 409 | A counter advance asked for a `next_value` lower than the current one. Counters can only be raised. `details` has `current` and `requested`. |
 | `stale_record` | 409 | `expected_updated_at` no longer matches the record. Reload it and try again. |
+| `stale_rule` | 409 | `expected_version` no longer matches the rule. `details.version` is its current revision. |
 | `status_precondition_required` | 428 | A write to a status attribute did not send `expected_updated_at`. Read the record and send its `updated_at`. |
 | `status_transition_forbidden` | 403 | The status transition requires a permission or role the caller does not have. |
 | `status_separation_of_duties` | 403 | The status transition must be made by someone other than the person who made an earlier transition. Holders of `records.unlock` are exempt. |
@@ -375,7 +376,7 @@ See [Translate labels](/builders/translations/).
 | `GET` | `/rules/{id}` | One rule, in the same shape. |
 | `POST` | `/rules` | `{"blueprint_id": "…", "context_id": null, "definition": "<yaml>"}`. Creates a disabled rule at revision 1. The definition is checked against the blueprint's latest published revision. |
 | `POST` | `/rules/validate` | The same body; checks the rule without saving it. |
-| `PUT` | `/rules/{id}` | `{"definition": "<yaml>", "accept_existing_violations": false}`. Saves a new current revision. |
+| `PUT` | `/rules/{id}` | `{"definition": "<yaml>", "expected_version": 3, "accept_existing_violations": false}`. Saves a new current revision. With `expected_version`, the save fails with `stale_rule` if another revision became current. |
 | `GET` | `/rules/{id}/revisions` | The changelog, newest first: `{rule_id, version, name, definition, definition_hash, created_by_user_id, created_at}`. |
 | `GET` | `/rules/{id}/revisions/{version}` | One revision. |
 | `POST` | `/rules/{id}/enable`, `/rules/{id}/disable` | Enable or disable the rule. `/enable` accepts an optional `{"accept_existing_violations": true}` for an enforcing rule whose dry run found violations. |

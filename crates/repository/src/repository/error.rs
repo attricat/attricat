@@ -337,6 +337,8 @@ pub enum RepositoryError {
     BlueprintRevisionUnchanged { version: i64 },
     #[error("the definition is identical to version {version} of this rule")]
     RuleRevisionUnchanged { version: i64 },
+    #[error("this rule changed since it was loaded; its current revision is {version}")]
+    StaleRule { version: i64 },
     #[error("the {0} code is already in use")]
     CodeTaken(CodedResource),
     #[error("invalid team: {0}")]

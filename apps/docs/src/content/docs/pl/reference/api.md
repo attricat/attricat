@@ -53,6 +53,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `generated_reset_changed` | 409 | Wersja schematu zmienia `reset` atrybutu generowanego we wcześniejszej wersji, co powtórzyłoby numery. `details` zawiera `attribute`, `previous` i `requested`. |
 | `generated_sequence_not_raised` | 409 | Podniesienie licznika podało `next_value` niższe od bieżącego. Liczniki można tylko podnosić. `details` zawiera `current` i `requested`. |
 | `stale_record` | 409 | `expected_updated_at` nie odpowiada już rekordowi. Wczytaj go ponownie i spróbuj jeszcze raz. |
+| `stale_rule` | 409 | `expected_version` nie odpowiada już regule. `details.version` wskazuje jej bieżącą rewizję. |
 | `status_precondition_required` | 428 | Zapis atrybutu statusu nie zawiera `expected_updated_at`. Odczytaj rekord i wyślij jego `updated_at`. |
 | `status_transition_forbidden` | 403 | Przejście statusu wymaga uprawnienia lub roli, których wywołujący nie ma. |
 | `status_separation_of_duties` | 403 | Przejście statusu musi wykonać ktoś inny niż osoba, która wykonała wcześniejsze przejście. Nie dotyczy osób z uprawnieniem `records.unlock`. |
@@ -375,7 +376,7 @@ Trasy `GET` reguł, wykonań i ustaleń wymagają `rules.read`; pozostałe trasy
 | `GET` | `/rules/{id}` | Jedna reguła w tym samym kształcie. |
 | `POST` | `/rules` | `{"blueprint_id": "…", "context_id": null, "definition": "<yaml>"}`. Tworzy wyłączoną regułę w rewizji 1. Definicja jest sprawdzana względem najnowszej opublikowanej rewizji schematu. |
 | `POST` | `/rules/validate` | Ta sama treść; sprawdza regułę bez zapisywania. |
-| `PUT` | `/rules/{id}` | `{"definition": "<yaml>", "accept_existing_violations": false}`. Zapisuje nową bieżącą rewizję. |
+| `PUT` | `/rules/{id}` | `{"definition": "<yaml>", "expected_version": 3, "accept_existing_violations": false}`. Zapisuje nową bieżącą rewizję. Z `expected_version` zapis kończy się błędem `stale_rule`, jeśli bieżąca stała się inna rewizja. |
 | `GET` | `/rules/{id}/revisions` | Historia zmian, od najnowszej: `{rule_id, version, name, definition, definition_hash, created_by_user_id, created_at}`. |
 | `GET` | `/rules/{id}/revisions/{version}` | Jedna rewizja. |
 | `POST` | `/rules/{id}/enable`, `/rules/{id}/disable` | Włącza lub wyłącza regułę. `/enable` przyjmuje opcjonalne `{"accept_existing_violations": true}` dla egzekwowanej reguły, której próbne wykonanie znalazło naruszenia. |

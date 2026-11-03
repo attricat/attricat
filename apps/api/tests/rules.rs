@@ -1803,3 +1803,28 @@ async fn disabling_a_rule_resolves_its_findings_until_it_is_enabled(pool: PgPool
     assert_eq!(open().await, 1);
     server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn saving_from_an_older_revision_is_refused(pool: PgPool) {
+    let (base_url, server, rule_id, _) = setup_rule(&pool).await;
+    let client = authenticated_client();
+    let save = |definition: String, expected: i64| {
+        client
+            .put(format!("{base_url}/rules/{rule_id}"))
+            .json(&json!({ "definition": definition, "expected_version": expected }))
+            .send()
+    };
+    let warning = RULE.replace("severity: error", "severity: warning");
+    expect_status(save(warning.clone(), 1).await.unwrap(), StatusCode::OK).await;
+
+    let stale = expect_error(
+        save(RULE.to_owned(), 1).await.unwrap(),
+        StatusCode::CONFLICT,
+        "stale_rule",
+    )
+    .await;
+    assert_eq!(stale["error"]["details"], json!({ "version": 2 }));
+
+    expect_status(save(RULE.to_owned(), 2).await.unwrap(), StatusCode::OK).await;
+    server.abort();
+}

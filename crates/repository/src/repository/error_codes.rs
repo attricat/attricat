@@ -159,6 +159,7 @@ error_codes! {
     SolutionPackPlanNotReady = "solution_pack_plan_not_ready",
     SolutionPackPlanStale = "solution_pack_plan_stale",
     StaleRecord = "stale_record",
+    StaleRule = "stale_rule",
     StatusNotLocked = "status_not_locked",
     StatusPreconditionRequired = "status_precondition_required",
     StatusSeparationOfDuties = "status_separation_of_duties",
@@ -586,6 +587,9 @@ impl RepositoryError {
             }
             Self::RuleRevisionUnchanged { version } => plain(Conflict, Code::RuleRevisionUnchanged)
                 .with_details(json!({ "version": version })),
+            Self::StaleRule { version } => {
+                plain(Conflict, Code::StaleRule).with_details(json!({ "version": version }))
+            }
             Self::BlueprintNotPublished => plain(Unprocessable, Code::BlueprintNotPublished),
             Self::WorkflowNotPublished => plain(Unprocessable, Code::WorkflowNotPublished),
             Self::WorkflowNotEnabled => plain(Unprocessable, Code::WorkflowNotEnabled),

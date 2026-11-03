@@ -58,6 +58,7 @@ export const createRuleSchema = z.object({
 /** A changed definition, saved as the rule's new current revision. */
 export const updateRuleSchema = z.object({
   definition: z.string(),
+  expected_version: z.number().int().optional(),
   accept_existing_violations: z.boolean().optional(),
 });
 /** An enabled rule that a newly published blueprint revision does not fit. */

@@ -118,6 +118,7 @@
     "solution_pack_plan_not_ready",
     "solution_pack_plan_stale",
     "stale_record",
+    "stale_rule",
     "status_not_locked",
     "status_precondition_required",
     "status_separation_of_duties",

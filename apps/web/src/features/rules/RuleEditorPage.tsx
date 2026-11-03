@@ -4,6 +4,7 @@ import { Alert, Box, Button, Typography } from '@mui/material';
 import { lazy, Suspense, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
+import type { ApiErrorCode } from '../../api/errors';
 import { ApiRequestError } from '../../api/request';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { LoadingState } from '../../components/LoadingState';
@@ -31,6 +32,7 @@ import { useDefinitionEditor } from '../definition-editor/useDefinitionEditor';
 import { draftEditors } from '../drafts/constants';
 import { lexiconText } from '../lexicon/lexicon';
 import { createRule, updateRule, validateRule, type CreateRule } from './api';
+import type { Rule } from './schemas';
 import {
   RULE_DRY_RUN_REQUIRED,
   RULE_HAS_EXISTING_VIOLATIONS,
@@ -60,6 +62,7 @@ const ruleScopeDraftSchema: z.ZodType<RuleScope> = z.object({
 const loadingName = '…';
 
 /** Error codes of a save that an enforcing change's dry run resolves. */
+const STALE_RULE_CODE = 'stale_rule' satisfies ApiErrorCode;
 const dryRunGateCodes: readonly string[] = [
   RULE_DRY_RUN_REQUIRED,
   RULE_HAS_EXISTING_VIOLATIONS,
@@ -79,7 +82,10 @@ export const RuleEditorPage = ({ ruleId }: { ruleId?: string }) => {
     ...ruleOptions(ruleId ?? ''),
     enabled: !creating,
   });
-  const source = rule.data;
+  // The revision being edited stays put while a draft is open, so a revision
+  // saved elsewhere neither moves the diff nor lets a save replace it.
+  const [pinned, setPinned] = useState<Rule>();
+  const source = pinned ?? rule.data;
   const blueprints = useQuery({
     ...blueprintCatalogueOptions(),
     enabled: creating,
@@ -132,6 +138,9 @@ export const RuleEditorPage = ({ ruleId }: { ruleId?: string }) => {
     templatesReady: scope.blueprintId !== undefined,
   });
   const { definition, isDirty } = editor;
+  if (!isDirty && rule.data && pinned !== rule.data) {
+    setPinned(rule.data);
+  }
   const { blueprintId, contextId } = scope;
   const scopeReady =
     blueprintId !== undefined && publishedVersion !== undefined;
@@ -152,6 +161,7 @@ export const RuleEditorPage = ({ ruleId }: { ruleId?: string }) => {
         ? createRule(ruleInput(value)!)
         : updateRule(ruleId, {
             definition: value,
+            expected_version: source?.version,
             accept_existing_violations: acceptExistingViolations,
           }),
     onSuccess: async (saved) => {
@@ -162,6 +172,9 @@ export const RuleEditorPage = ({ ruleId }: { ruleId?: string }) => {
       navigate({ params: { ruleId: saved.id }, to: ruleRoutes.rule });
     },
   });
+  const staleRule =
+    save.error instanceof ApiRequestError &&
+    save.error.code === STALE_RULE_CODE;
   // An enforcing change to an enabled rule waits for a dry run of it.
   const dryRunGate =
     save.error instanceof ApiRequestError &&
@@ -290,6 +303,22 @@ export const RuleEditorPage = ({ ruleId }: { ruleId?: string }) => {
         </Alert>
       ) : (
         <ApiErrorAlert error={save.error} sx={{ mt: 3 }} />
+      )}
+      {staleRule && (
+        <Button
+          disabled={rule.isFetching}
+          onClick={async () => {
+            const latest = await rule.refetch();
+            if (latest.data) {
+              setPinned(latest.data);
+              save.reset();
+            }
+          }}
+          size="small"
+          sx={{ mt: 1 }}
+        >
+          {t('rules.editor.reviewLatest')}
+        </Button>
       )}
       {editor.dialogs}
       <DefinitionWorkspace

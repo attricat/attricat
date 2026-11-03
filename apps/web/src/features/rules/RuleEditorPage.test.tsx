@@ -238,6 +238,7 @@ describe('RuleEditorPage', () => {
     await waitFor(() =>
       expect(updateRule).toHaveBeenCalledWith(ruleId, {
         definition: edited,
+        expected_version: rule.version,
         accept_existing_violations: undefined,
       }),
     );
@@ -326,7 +327,46 @@ describe('RuleEditorPage', () => {
     await waitFor(() =>
       expect(updateRule).toHaveBeenLastCalledWith(ruleId, {
         definition: edited,
+        expected_version: rule.version,
         accept_existing_violations: true,
+      }),
+    );
+  });
+
+  it('refuses to replace a newer revision and offers it for review', async () => {
+    const newer = { ...rule, version: rule.version + 1 };
+    vi.mocked(getRule).mockResolvedValue(rule);
+    vi.mocked(updateRule).mockRejectedValueOnce(
+      new ApiRequestError(409, 'Stale', 'stale_rule', {
+        version: newer.version,
+      }),
+    );
+    renderPage({ ruleId });
+    await screen.findByText('Checks Product · All contexts');
+    const edited = rule.definition.replace('warning', 'error');
+    fireEvent.change(definitionBox(), { target: { value: edited } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    const review = await screen.findByRole('button', {
+      name: 'Review the current revision',
+    });
+    expect(navigate).not.toHaveBeenCalled();
+
+    vi.mocked(getRule).mockResolvedValue(newer);
+    fireEvent.click(review);
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: 'Review the current revision' }),
+      ).toBeNull(),
+    );
+    // The draft is kept, and the next save is made from the newer revision.
+    expect(definitionBox()).toHaveProperty('value', edited);
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(updateRule).toHaveBeenLastCalledWith(ruleId, {
+        definition: edited,
+        expected_version: newer.version,
+        accept_existing_violations: undefined,
       }),
     );
   });

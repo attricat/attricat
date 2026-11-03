@@ -339,6 +339,12 @@ impl AttricatRepository {
         let Some((version, code, blueprint_id, definition_hash, enabled)) = current else {
             return Err(RepositoryError::NotFound("rule"));
         };
+        if input
+            .expected_version
+            .is_some_and(|expected| expected != version)
+        {
+            return Err(RepositoryError::StaleRule { version });
+        }
         if code != compiled.code {
             return Err(RepositoryError::InvalidRuleDefinition(
                 "rule code cannot change across revisions".into(),

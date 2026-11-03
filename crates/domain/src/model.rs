@@ -1297,6 +1297,10 @@ pub struct CreateRule {
 #[serde(deny_unknown_fields)]
 pub struct UpdateRule {
     pub definition: String,
+    /// The revision this definition was edited from. A save from any other
+    /// current revision is refused, so it can't silently replace a newer one.
+    #[serde(default)]
+    pub expected_version: Option<i64>,
     /// Save an enforcing definition of an enabled rule although its completed
     /// dry run found existing violations, or stopped at the candidate cap.
     #[serde(default)]

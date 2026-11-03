@@ -239,7 +239,7 @@ context when publishing and fail with `422 publication_checks_failed`. See
 - `POST /rules/validate` runs the same checks as `POST /rules` (definition, the blueprint's latest published revision, attribute types, context) and returns the compiled rule without storing it. The web rule editor uses it as you type, with `contracts/rule-definition-v1.schema.json` for completions.
 - `GET /rules?blueprint_id=...` and `GET /rules/{rule_id}` return each rule's current revision with `enabled` and `not_applicable`.
 - `POST /rules` with `{ "blueprint_id": "UUID", "context_id": null, "definition": "..." }` creates a disabled rule with revision 1.
-- `PUT /rules/{rule_id}` with `{ "definition": "...", "accept_existing_violations": false }` saves a new current revision.
+- `PUT /rules/{rule_id}` with `{ "definition": "...", "expected_version": 3, "accept_existing_violations": false }` saves a new current revision. With `expected_version`, it returns `409 stale_rule` if another revision became current.
 - `GET /rules/{rule_id}/revisions` returns the changelog, newest first; `GET /rules/{rule_id}/revisions/{version}` returns one revision.
 - `POST /rules/{rule_id}/enable`, with an optional body `{ "accept_existing_violations": true }` for enforcing rules, and `POST /rules/{rule_id}/disable`.
 - `POST /rules/{rule_id}/run-now` with `{ "record_id": "optional UUID", "dry_run": false, "idempotency_key": "...", "definition": "optional YAML" }` runs the current revision; a normal run needs the rule enabled, and only a dry run may send `definition`.
