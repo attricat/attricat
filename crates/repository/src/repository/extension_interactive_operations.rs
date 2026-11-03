@@ -883,6 +883,8 @@ impl AttricatRepository {
                             )
                             .await?;
                         let revision = revisions.get(record_id).copied().unwrap_or(0);
+                        // Stored per record, so the revision's attributes omit them.
+                        let reusable_values = self.reusable_form_values(*record_id).await?;
                         json!({
                             "position": position,
                             "record_id": record_id,
@@ -891,6 +893,7 @@ impl AttricatRepository {
                             "blueprint_version": record.blueprint_version,
                             "updated_at": record.updated_at,
                             "values": resolved.values,
+                            "reusable_values": reusable_values,
                             "annotations": own_annotations(extension_id, &record.system_tags, &record.system_metadata, revision),
                         })
                     }

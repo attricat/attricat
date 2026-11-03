@@ -96,7 +96,7 @@ It needs `client.operations.start`. Build the component against the `attricat-ex
 When a run starts, Attricat checks that the user can read every selected record and freezes the user, release, input, context, and the ordered selection. Then:
 
 - `selection.describe()` returns the count, blueprint revision, and context.
-- `selection.page(cursor, limit)` returns 1 to 10 members with their saved values resolved in the run's context, your own annotations, and `read_at`. Members the user can no longer read come back as `unavailable`, deleted ones as `deleted`.
+- `selection.page(cursor, limit)` returns 1 to 10 members with their saved values resolved in the run's context, the stored values of reusable attributes attached to them (`reusable_values`, with each value's `context_id`), your own annotations, and `read_at`. Members the user can no longer read come back as `unavailable`, deleted ones as `deleted`.
 - `attricat-data.read` and the connector `catalog` calls are refused. `attricat-data.batch` accepts `update`, `relationships`, and `annotate` intents for selected records only, checked against the user's current permissions.
 - If the user leaves the workspace, the run stops with a safe reason rather than continuing with the extension's own grants.
 

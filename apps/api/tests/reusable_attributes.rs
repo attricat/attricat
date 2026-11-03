@@ -966,3 +966,67 @@ async fn editing_and_deleting_a_group_leaves_records_alone(pool: PgPool) {
         .unwrap();
     server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn selection_pages_include_attached_reusable_values(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let blueprint = create_blueprint(&client, &base_url, PRODUCT).await;
+    let rating = create_published_reusable(
+        &client,
+        &base_url,
+        json!({
+            "namespace": "acme", "code": "rating", "name": "Rating", "value_type": "integer"
+        }),
+    )
+    .await;
+    let record = create_record(&client, &base_url, &blueprint).await;
+    let record_id = record["id"].as_str().unwrap();
+    client
+        .post(format!(
+            "{base_url}/v1/records/{record_id}/reusable-attributes"
+        ))
+        .json(&json!({ "reusable_attribute_revision_id": rating["id"] }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    client
+        .put(format!("{base_url}/v1/records/{record_id}"))
+        .json(&json!({ "values": [{ "kind": "scalar", "attribute_code": "default:rating", "value": 4 }] }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let repository =
+        api::repository::AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
+    let scope = api::repository::InteractiveRunScope {
+        scope: api::extensions::InteractiveScope::Selection,
+        actor: api::repository::AuthorizationActor {
+            user_id: BOOTSTRAP_OWNER_ID.parse().unwrap(),
+            token_id: None,
+        },
+        record_ids: vec![record_id.parse().unwrap()],
+        blueprint_id: blueprint["blueprint"]["id"]
+            .as_str()
+            .unwrap()
+            .parse()
+            .unwrap(),
+        blueprint_version: 1,
+        context_id: None,
+    };
+
+    let page = repository
+        .interactive_selection_page("acme.selection", &scope, "", 10)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        page["records"][0]["reusable_values"][0]["value"],
+        json!(4),
+        "{page}"
+    );
+    server.abort();
+}

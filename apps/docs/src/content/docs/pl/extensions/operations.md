@@ -96,7 +96,7 @@ Wymaga to `client.operations.start`. Zbuduj komponent dla [świata](/pl/extensio
 Przy starcie Attricat sprawdza, czy użytkownik może odczytać każdy zaznaczony rekord, i utrwala użytkownika, wydanie, dane wejściowe, kontekst oraz uporządkowane zaznaczenie. Następnie:
 
 - `selection.describe()` zwraca liczbę rekordów, wersję schematu i kontekst.
-- `selection.page(cursor, limit)` zwraca od 1 do 10 rekordów z zapisanymi wartościami rozwiązanymi w kontekście uruchomienia, Twoimi adnotacjami i `read_at`. Rekordy, których użytkownik nie może już odczytać, mają status `unavailable`, a usunięte `deleted`.
+- `selection.page(cursor, limit)` zwraca od 1 do 10 rekordów z zapisanymi wartościami rozwiązanymi w kontekście uruchomienia, zapisanymi wartościami dołączonych atrybutów wielokrotnego użytku (`reusable_values`, z `context_id` każdej wartości), Twoimi adnotacjami i `read_at`. Rekordy, których użytkownik nie może już odczytać, mają status `unavailable`, a usunięte `deleted`.
 - `attricat-data.read` i wywołania konektorowego interfejsu `catalog` są odrzucane. `attricat-data.batch` przyjmuje intencje `update`, `relationships` i `annotate` tylko dla zaznaczonych rekordów, sprawdzane względem bieżących uprawnień użytkownika.
 - Jeśli użytkownik opuści obszar roboczy, uruchomienie zatrzymuje się z bezpiecznym powodem zamiast działać dalej z uprawnieniami rozszerzenia.
 
