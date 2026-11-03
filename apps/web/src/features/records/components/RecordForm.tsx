@@ -179,6 +179,8 @@ type RecordFormProps = {
     expected_updated_at?: string;
     values: ReturnType<typeof serializeAttributeValues>;
     relationships: ReturnType<typeof relationshipTargetsForForm>;
+    /** Attributes the user emptied, which `values` can't say by leaving out. */
+    clearedAttributes: string[];
     addAnother: boolean;
   }) => void;
   submitLabel: string;
@@ -440,6 +442,15 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
             value.fields,
             contextId,
           ),
+          clearedAttributes: submittedAttributes
+            .filter(
+              ({ code, value_type: valueType }) =>
+                valueType !== attributeValueTypes.relationship &&
+                valueType !== attributeValueTypes.file &&
+                initialFields[code]?.trim() &&
+                !value.fields[code]?.trim(),
+            )
+            .map(({ code }) => code),
         });
       },
     });

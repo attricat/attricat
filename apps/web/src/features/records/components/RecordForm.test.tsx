@@ -169,6 +169,20 @@ describe('RecordForm', () => {
     );
   });
 
+  it('reports a loaded value the user emptied, and only that one', async () => {
+    const { onSubmit } = renderForm({
+      blueprint: blueprint([attribute('title'), attribute('notes')]),
+      initialValues: { title: 'Loaded', notes: '' },
+    });
+    fireEvent.change(titleBox(), { target: { value: '' } });
+    fireEvent.submit(titleBox().closest('form')!);
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ clearedAttributes: ['title'] }),
+      ),
+    );
+  });
+
   it('says it is saving, not loading, while the values are submitted', () => {
     renderForm({
       blueprint: blueprint([attribute('title')]),

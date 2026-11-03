@@ -121,11 +121,13 @@ export const MigrateRecordPage = ({ recordId }: { recordId: string }) => {
       values,
       relationships,
       discardAttributes,
+      removeValues,
     }: {
       expected_updated_at?: string;
       values: Parameters<typeof migrateRecord>[1]['values'];
       relationships: Parameters<typeof migrateRecord>[1]['relationships'];
       discardAttributes: string[];
+      removeValues: string[];
     }) => {
       if (!preview.data) throw new Error(t('records.loadMigrationFirst'));
       return migrateRecord(recordId, {
@@ -135,6 +137,10 @@ export const MigrateRecordPage = ({ recordId }: { recordId: string }) => {
         values,
         relationships,
         discard_attributes: discardAttributes,
+        remove_values: removeValues.map((attribute_code) => ({
+          attribute_code,
+          context_id: defaultContextId,
+        })),
       });
     },
     onSuccess: async (record) => {
@@ -211,7 +217,12 @@ export const MigrateRecordPage = ({ recordId }: { recordId: string }) => {
               params: { recordId },
             })
           }
-          onSubmit={({ values, relationships, expected_updated_at }) =>
+          onSubmit={({
+            values,
+            relationships,
+            clearedAttributes,
+            expected_updated_at,
+          }) =>
             migrate.mutate({
               expected_updated_at,
               values,
@@ -220,6 +231,9 @@ export const MigrateRecordPage = ({ recordId }: { recordId: string }) => {
                 inlineIssues,
               ),
               discardAttributes: [...discardAttributes],
+              removeValues: clearedAttributes.filter(
+                (code) => !discardAttributes.includes(code),
+              ),
             })
           }
           submitLabel={t('records.upgradeRecord')}

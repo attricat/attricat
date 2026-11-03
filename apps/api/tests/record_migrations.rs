@@ -89,6 +89,7 @@ async fn compatible_scalar_migration_preserves_row_identity_without_history(pool
                 values: Vec::new(),
                 relationships: Vec::new(),
                 discard_attributes: Vec::new(),
+                remove_values: Vec::new(),
                 removal_policy: None,
             },
         )
@@ -214,6 +215,7 @@ async fn supplied_scalar_replacement_archives_the_old_row_once(pool: PgPool) {
                 }],
                 relationships: Vec::new(),
                 discard_attributes: Vec::new(),
+                remove_values: Vec::new(),
                 removal_policy: None,
             },
         )
@@ -369,6 +371,7 @@ attributes:
                 values: Vec::new(),
                 relationships: Vec::new(),
                 discard_attributes: Vec::new(),
+                remove_values: Vec::new(),
                 removal_policy: None,
             },
         )
@@ -475,6 +478,7 @@ async fn explicitly_discarded_removed_value_is_the_only_row_archived(pool: PgPoo
                 values: Vec::new(),
                 relationships: Vec::new(),
                 discard_attributes: vec!["obsolete".to_owned()],
+                remove_values: Vec::new(),
                 removal_policy: None,
             },
         )
@@ -766,6 +770,7 @@ async fn migration_requires_replacements_in_every_affected_context(pool: PgPool)
                 }],
                 relationships: Vec::new(),
                 discard_attributes: Vec::new(),
+                remove_values: Vec::new(),
                 removal_policy: None,
             },
         )
@@ -874,6 +879,7 @@ attributes:
                 values: Vec::new(),
                 relationships: Vec::new(),
                 discard_attributes: Vec::new(),
+                remove_values: Vec::new(),
                 removal_policy: None,
             },
         )
@@ -985,6 +991,7 @@ async fn migration_audits_field_changes_and_reconciles_publication(pool: PgPool)
                 values: Vec::new(),
                 relationships: Vec::new(),
                 discard_attributes: vec!["obsolete".to_owned()],
+                remove_values: Vec::new(),
                 removal_policy: None,
             },
         )
@@ -1068,4 +1075,98 @@ async fn migration_reports_only_properties_the_target_schema_requires(pool: PgPo
         .filter_map(|issue| issue.attribute_code.as_deref())
         .collect();
     assert_eq!(missing, ["sku"]);
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn migration_removes_a_value_in_one_context_only(pool: PgPool) {
+    let repository = AttricatRepository::new(
+        pool.clone(),
+        support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
+    );
+    let other_context = uuid::Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO attribute_contexts (id, code, data) VALUES ($1, 'removal-other', '{}')",
+    )
+    .bind(other_context)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let definition = format!(
+        "{SCALAR_DEFINITION}  - code: rating\n    value_type: string\n    context_editable: all\n"
+    );
+    let blueprint = repository
+        .create_blueprint(CreateBlueprint {
+            definition: definition.clone(),
+        })
+        .await
+        .unwrap();
+    repository
+        .publish_blueprint_revision(blueprint.blueprint.id, 1)
+        .await
+        .unwrap();
+    let scalar = |code: &str, context_id, value: &str| NewAttributeValue::Scalar {
+        attribute_id: None,
+        attribute_code: Some(code.into()),
+        context_id,
+        value: json!(value),
+    };
+    let record = repository
+        .create_record_with_values(
+            blueprint.blueprint.id,
+            1,
+            vec![
+                scalar("title", None, "name"),
+                scalar("rating", None, "one"),
+                scalar("rating", Some(other_context), "two"),
+            ],
+            Vec::new(),
+            json!({}),
+        )
+        .await
+        .unwrap();
+    let revised = repository
+        .create_blueprint_revision(
+            blueprint.blueprint.id,
+            CreateBlueprint {
+                definition: format!("{definition}  - code: added\n    value_type: string\n"),
+            },
+        )
+        .await
+        .unwrap();
+    repository
+        .publish_blueprint_revision(blueprint.blueprint.id, revised.blueprint.version)
+        .await
+        .unwrap();
+    let preview = repository
+        .preview_record_migration(record.id)
+        .await
+        .unwrap();
+
+    repository
+        .migrate_record_to_latest(
+            record.id,
+            MigrateRecordRequest {
+                migration_id: preview.migration_id,
+                expected_target_version: revised.blueprint.version,
+                values: Vec::new(),
+                relationships: Vec::new(),
+                discard_attributes: Vec::new(),
+                remove_values: vec![api::model::AttributeValueSelector {
+                    attribute_code: "rating".into(),
+                    context_id: None,
+                }],
+                removal_policy: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    let remaining: Vec<(Option<uuid::Uuid>,)> = sqlx::query_as(
+        "SELECT v.context_id FROM attribute_values v JOIN attributes a ON a.id = v.attribute_id WHERE v.record_id = $1 AND a.code = 'rating'",
+    )
+    .bind(record.id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(remaining, vec![(Some(other_context),)]);
 }

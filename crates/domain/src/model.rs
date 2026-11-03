@@ -351,7 +351,7 @@ pub struct RelationshipTargets {
     pub target_record_ids: Vec<Uuid>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AttributeValueSelector {
     pub attribute_code: String,
@@ -1025,6 +1025,10 @@ pub struct MigrateRecordRequest {
     pub relationships: Vec<RelationshipTargets>,
     #[serde(default)]
     pub discard_attributes: Vec<String>,
+    /// Stored values to archive in one context, which also answers an
+    /// incompatible value there. `discard_attributes` covers every context.
+    #[serde(default)]
+    pub remove_values: Vec<AttributeValueSelector>,
     /// Set only by the bulk worker after the batch policy has been approved.
     /// Never accepted from API clients; audit metadata is therefore trusted.
     #[serde(default, skip_deserializing, skip_serializing_if = "Option::is_none")]

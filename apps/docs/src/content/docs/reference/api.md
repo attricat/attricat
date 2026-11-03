@@ -154,7 +154,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `GET` | `/records/{id}/values/history` | Value history. Same paging. |
 | `POST` | `/records/{id}/values/history/{history_id}/restore` | Restore an earlier value. |
 | `POST` | `/v1/records/{id}/blueprint-migration/preview` | Check migration to the current revision. |
-| `POST` | `/v1/records/{id}/blueprint-migration` | Migrate. |
+| `POST` | `/v1/records/{id}/blueprint-migration` | Migrate. `discard_attributes` archives an attribute in every context; `remove_values` (`attribute_code`, `context_id`) archives it in one. |
 | `POST` | `/v1/records/{id}/reusable-attributes`, `/v1/records/{id}/reusable-attribute-groups/{group_id}` | Attach a reusable attribute or group. |
 | `GET` | `/v1/records/{id}/status-transitions?context_id=…` | Declared transitions from the saved status in one context (default context if omitted): `{"items": [{attribute_code, from, to, code, allowed, denial_code, denial_reason, waives_separation, unmet}]}`. `denial_code` is `status_transition_forbidden`, `status_separation_of_duties` or `transition_conditions_unmet`; `waives_separation` is `true` when the transition is allowed only because the caller holds `records.unlock`; `unmet` lists unmet conditions and enforcing rules as violations. |
 | `POST` | `/v1/records/{id}/status-unlock` | Change a locking status to any of its options, outside the blueprint's transitions: `{"attribute_code": "…", "context_id": "…", "to": "…", "expected_updated_at": "…"}`, with `context_id` optional (default context). Only the status changes. Requires `records.unlock` (owners and admins). Returns the record. |

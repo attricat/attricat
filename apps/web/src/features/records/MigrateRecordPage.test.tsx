@@ -46,7 +46,11 @@ vi.mock('./components/RecordForm', () => ({
         onDiscardChange?: (discard: boolean) => void;
       }
     >;
-    onSubmit: (values: { values: []; relationships: [] }) => void;
+    onSubmit: (values: {
+      values: [];
+      relationships: [];
+      clearedAttributes: string[];
+    }) => void;
     pendingConfirmations: { label: string }[];
   }) => (
     <>
@@ -68,7 +72,13 @@ vi.mock('./components/RecordForm', () => ({
       </ul>
       <p>{pendingConfirmations.length} to confirm</p>
       <button
-        onClick={() => onSubmit({ values: [], relationships: [] })}
+        onClick={() =>
+          onSubmit({
+            values: [],
+            relationships: [],
+            clearedAttributes: ['title'],
+          })
+        }
         type="button"
       >
         Submit migration

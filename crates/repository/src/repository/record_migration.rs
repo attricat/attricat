@@ -618,6 +618,13 @@ impl AttricatRepository {
             .iter()
             .map(String::as_str)
             .collect();
+        let mut removed_keys: HashSet<AttributeContextKey> = HashSet::new();
+        for selector in &input.remove_values {
+            let context_id = self
+                .resolve_context_id(transaction, selector.context_id)
+                .await?;
+            removed_keys.insert((selector.attribute_code.clone(), context_id));
+        }
         let mut archive_ids = Vec::new();
         let mut remap_ids: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
         let mut unresolved = HashSet::new();
@@ -637,7 +644,8 @@ impl AttricatRepository {
             let key = (source.code.clone(), value.context_id);
             // A replacement in another context does not resolve this value;
             // silently archiving it would lose data in the current context.
-            if !compatible && !discarded && !supplied_keys.contains(&key) {
+            let removed = removed_keys.contains(&key);
+            if !compatible && !discarded && !removed && !supplied_keys.contains(&key) {
                 unresolved.insert(source.code.clone());
                 continue;
             }
@@ -653,7 +661,7 @@ impl AttricatRepository {
             } else {
                 supplied_scalar_keys.contains(&key)
             };
-            if discarded || !compatible || replaced {
+            if discarded || removed || !compatible || replaced {
                 archive_ids.push(value.id);
             } else {
                 remap_ids
