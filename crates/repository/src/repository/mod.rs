@@ -218,9 +218,7 @@ pub use avatars::{AVATAR_VARIANT_KIND, OwnAvatar};
 pub use blueprint_connector_jobs::{
     BlueprintConnectorJob, ConnectorRunDetails, ConnectorRunMode, MAX_CONNECTOR_RECORD_FILTER,
 };
-pub use domain_events::{
-    EventConsumer, EventDelivery, EventPublisher, FailedEventDelivery, MaterializeScope,
-};
+pub use domain_events::{EventConsumer, EventDelivery, EventPublisher, FailedEventDelivery};
 pub use error::{CodedResource, RepositoryError, StatusTransitionDenial};
 pub use extension_annotations::{
     ExtensionAnnotationNamespace, ExtensionAnnotationPatch, ExtensionAnnotations,

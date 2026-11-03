@@ -13,7 +13,7 @@ use api::{
     model::{CreateAttributeContext, CreateBlueprint, NewAttributeValue},
     repository::{
         AttricatRepository, ExportBegin, ExportMappingUpdate, ExportRetrySelection,
-        ExtensionAttricatPageRequest, MaterializeScope, RejectionRecord,
+        ExtensionAttricatPageRequest, RejectionRecord,
     },
     storage::FakeObjectStore,
     task_queue::TaskKind,
@@ -141,7 +141,7 @@ async fn deliver_events(repository: &AttricatRepository, store: Arc<FakeObjectSt
     let handler = WasmExtensionTaskHandler::new(repository.clone(), runtime);
     let event_types = repository.enabled_extension_event_types().await.unwrap();
     repository
-        .materialize_event_delivery_tasks_with(WASM_CONSUMER, &event_types, MaterializeScope::Full)
+        .materialize_event_delivery_tasks(WASM_CONSUMER, &event_types)
         .await
         .unwrap();
     for _ in 0..200 {

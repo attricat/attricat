@@ -19,15 +19,6 @@ use super::{AttricatRepository, RepositoryError};
 use attricat_cache::{CacheKey, Policy};
 use std::sync::Arc;
 
-/// What [`AttricatRepository::materialize_event_delivery_tasks_with`] scans.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum MaterializeScope {
-    /// Legacy deliveries, the historical gap and new events.
-    Full,
-    /// Only events after the watermark.
-    NewEvents,
-}
-
 #[derive(Debug, sqlx::FromRow)]
 pub struct EventConsumer {
     pub id: Uuid,
@@ -353,81 +344,45 @@ impl AttricatRepository {
         Ok(Some(high_water))
     }
 
-    /// Backfills pre-task deliveries and materializes each newly eligible
-    /// delivery with its task before moving the consumer watermark. The
-    /// coordinator is deliberately only a producer; shared-task handlers own
-    /// execution and all receipt transitions.
+    /// Materializes each newly eligible delivery with its task before moving
+    /// the consumer watermark. A subscriber gets events from when it subscribes,
+    /// not the history before it. The coordinator is deliberately only a
+    /// producer; shared-task handlers own execution and all receipt transitions.
     pub async fn materialize_event_delivery_tasks<T: AsRef<str>>(
         &self,
         consumer_name: &str,
         event_types: &[T],
     ) -> Result<(), RepositoryError> {
-        self.materialize_event_delivery_tasks_with(
-            consumer_name,
-            event_types,
-            MaterializeScope::Full,
-        )
-        .await
-        .map(drop)
-    }
-
-    /// [`Self::materialize_event_delivery_tasks`] for a polling coordinator.
-    /// With [`MaterializeScope::NewEvents`] it skips the legacy backfill and
-    /// the historical gap scan, which only find work after startup or a
-    /// change of the eligible event types, and returns after one statement
-    /// when no event arrived since the watermark.
-    pub async fn materialize_event_delivery_tasks_with<T: AsRef<str>>(
-        &self,
-        consumer_name: &str,
-        event_types: &[T],
-        scope: MaterializeScope,
-    ) -> Result<bool, RepositoryError> {
         let workspace_id = self.workspace_id.0;
         let event_types: Vec<String> = event_types
             .iter()
             .map(|value| value.as_ref().to_owned())
             .collect();
+        // With nothing to deliver the watermark still moves, or retention could
+        // never pass it and a later subscriber would be handed the backlog.
         if event_types.is_empty() {
-            return Ok(false);
+            sqlx::query("UPDATE event_consumers c SET watermark = latest.sequence, updated_at = clock_timestamp() FROM (SELECT max(sequence) AS sequence FROM domain_events WHERE workspace_id = $1) latest WHERE c.workspace_id = $1 AND c.name = $2 AND c.watermark < latest.sequence")
+                .bind(workspace_id)
+                .bind(consumer_name)
+                .execute(&self.pool)
+                .await?;
+            return Ok(());
         }
-        if scope == MaterializeScope::NewEvents {
-            let arrived: bool = sqlx::query_scalar(
-                "SELECT EXISTS (SELECT 1 FROM event_consumers c JOIN domain_events e ON e.workspace_id = c.workspace_id AND e.sequence > c.watermark WHERE c.workspace_id = $1 AND c.name = $2)",
-            )
-            .bind(workspace_id)
-            .bind(consumer_name)
-            .fetch_one(&self.pool)
-            .await?;
-            if !arrived {
-                return Ok(false);
-            }
+        let arrived: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM event_consumers c JOIN domain_events e ON e.workspace_id = c.workspace_id AND e.sequence > c.watermark WHERE c.workspace_id = $1 AND c.name = $2)",
+        )
+        .bind(workspace_id)
+        .bind(consumer_name)
+        .fetch_one(&self.pool)
+        .await?;
+        if !arrived {
+            return Ok(());
         }
         let mut transaction = self.pool.begin().await?;
         let consumer: EventConsumer = sqlx::query_as(
             "SELECT id, workspace_id, name, watermark FROM event_consumers WHERE workspace_id = $1 AND name = $2 FOR UPDATE",
         )
         .bind(workspace_id).bind(consumer_name).fetch_one(&mut *transaction).await?;
-        // A contract can become eligible after this shared consumer has already
-        // passed its event. Drain that historical gap before advancing again;
-        // otherwise a plugin event would be skipped permanently when a consumer
-        // is enabled or re-granted after publication.
-        let historical: Vec<EventTaskSeed> = if scope == MaterializeScope::Full {
-            sqlx::query_as(
-                "SELECT e.id AS event_id, e.workspace_id, e.correlation_id, e.causation_id FROM domain_events e WHERE e.workspace_id = $1 AND e.sequence <= $2 AND e.event_type = ANY($3) AND NOT EXISTS (SELECT 1 FROM event_deliveries d WHERE d.consumer_id = $4 AND d.event_id = e.id) ORDER BY e.sequence LIMIT $5",
-            )
-            .bind(workspace_id).bind(consumer.watermark).bind(&event_types).bind(consumer.id).bind(EVENT_DELIVERY_MATERIALIZATION_BATCH_SIZE)
-            .fetch_all(&mut *transaction).await?
-        } else {
-            Vec::new()
-        };
-        if !historical.is_empty() {
-            self.enqueue_event_delivery_tasks(&mut transaction, consumer.id, historical)
-                .await?;
-            transaction.commit().await?;
-            // More of the historical gap may remain.
-            return Ok(true);
-        }
-
         // Bound both the scan and the inserts. Every event in this sequence
         // window has been considered before its final sequence becomes the
         // watermark; matching events get a durable receipt and task first.
@@ -438,7 +393,7 @@ impl AttricatRepository {
         .fetch_all(&mut *transaction).await?;
         let Some(max_sequence) = sequences.last().copied() else {
             transaction.commit().await?;
-            return Ok(false);
+            return Ok(());
         };
         let seeds: Vec<EventTaskSeed> = sqlx::query_as(
             "SELECT e.id AS event_id, e.workspace_id, e.correlation_id, e.causation_id FROM domain_events e WHERE e.workspace_id = $1 AND e.sequence > $2 AND e.sequence <= $3 AND e.event_type = ANY($4) AND NOT EXISTS (SELECT 1 FROM event_deliveries d WHERE d.consumer_id = $5 AND d.event_id = e.id) ORDER BY e.sequence",
@@ -450,7 +405,7 @@ impl AttricatRepository {
         sqlx::query("UPDATE event_consumers SET watermark = $2, updated_at = clock_timestamp() WHERE id = $1")
             .bind(consumer.id).bind(max_sequence).execute(&mut *transaction).await?;
         transaction.commit().await?;
-        Ok(false)
+        Ok(())
     }
 
     /// Creates each seed's delivery receipt and its task envelope; one

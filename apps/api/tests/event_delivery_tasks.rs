@@ -186,12 +186,34 @@ async fn newly_eligible_plugin_event_is_backfilled_after_watermark_advanced(pool
         )
         .await
         .unwrap();
+    // Subscribing later gets later events, not this history.
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM event_deliveries WHERE event_id = $1")
+            .bind(plugin_event)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        0
+    );
+    let later_event = insert_event(
+        &pool,
+        "plugin.acme.producer.inventory_changed.v1",
+        Uuid::new_v4(),
+    )
+    .await;
+    repository
+        .materialize_event_delivery_tasks(
+            "attricat.extensions.wasm",
+            &["plugin.acme.producer.inventory_changed.v1"],
+        )
+        .await
+        .unwrap();
     assert_eq!(
         sqlx::query_scalar::<_, Uuid>("SELECT event_id FROM event_deliveries")
             .fetch_one(&pool)
             .await
             .unwrap(),
-        plugin_event
+        later_event
     );
 }
 
@@ -259,5 +281,37 @@ async fn expired_event_task_lease_rejects_stale_receipts_and_redelivers(pool: Pg
             .await
             .unwrap(),
         "completed"
+    );
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn the_watermark_moves_with_no_subscribers(pool: PgPool) {
+    let repository = AttricatRepository::new(
+        pool.clone(),
+        Uuid::from_u128(0x00000000000040008000000000000002),
+    );
+    repository
+        .ensure_event_consumer("attricat.extensions.wasm")
+        .await
+        .unwrap();
+    insert_event(&pool, CONTEXT_CREATED_V1, Uuid::new_v4()).await;
+    let latest: i64 = sqlx::query_scalar("SELECT max(sequence) FROM domain_events")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    repository
+        .materialize_event_delivery_tasks("attricat.extensions.wasm", &[] as &[&str])
+        .await
+        .unwrap();
+
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT watermark FROM event_consumers WHERE name = 'attricat.extensions.wasm'"
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        latest
     );
 }

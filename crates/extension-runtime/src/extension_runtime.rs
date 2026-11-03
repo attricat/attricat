@@ -52,8 +52,7 @@ use crate::{
         DeliveryState, ExtensionAttricatBatch, ExtensionAttricatIntent,
         ExtensionAttricatPageRequest, ExtensionConfigurationScope, ExtensionOperationArtifact,
         ExtensionRuntimeInstallation, HandlerAttemptOutcome, MAX_EXTENSION_BATCH_INTENTS,
-        MAX_EXTENSION_LOOKUP_VALUE_BYTES, MaterializeScope, RejectionRecord, RepositoryError,
-        SystemRepository,
+        MAX_EXTENSION_LOOKUP_VALUE_BYTES, RejectionRecord, RepositoryError, SystemRepository,
     },
     storage::{ObjectStore, ObjectStoreError, StoredObject},
     task_queue::TaskKind,
@@ -2707,11 +2706,6 @@ const COORDINATOR_SWEEP_INTERVAL: Duration = Duration::from_secs(5);
 struct CoordinatedWorkspace {
     /// The consumer row exists; it is never removed afterwards.
     registered: bool,
-    /// The eligible event types of the last materialization; a change, or
-    /// the first pass, also scans legacy deliveries and the historical gap.
-    event_types: Option<Vec<String>>,
-    /// A historical batch was enqueued and more may remain.
-    history_pending: bool,
     last_sweep: Option<Instant>,
 }
 
@@ -2789,15 +2783,9 @@ async fn coordinate_workspace(
         state.registered = true;
     }
     let event_types = scoped.enabled_extension_event_types().await?;
-    let scope = if state.history_pending || state.event_types.as_ref() != Some(&event_types) {
-        MaterializeScope::Full
-    } else {
-        MaterializeScope::NewEvents
-    };
-    state.history_pending = scoped
-        .materialize_event_delivery_tasks_with(WASM_EVENT_CONSUMER, &event_types, scope)
+    scoped
+        .materialize_event_delivery_tasks(WASM_EVENT_CONSUMER, &event_types)
         .await?;
-    state.event_types = Some(event_types);
     Ok(())
 }
 

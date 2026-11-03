@@ -941,6 +941,10 @@ async fn enabled_event_types_follow_authorized_consumption_contracts(pool: sqlx:
         event_types,
         vec!["plugin.acme.producer.inventory_changed.v1"]
     );
+    repository
+        .ensure_event_consumer("attricat.extensions.wasm")
+        .await
+        .unwrap();
     let producer_installation = repository
         .runtime_extension_installation("acme.producer", producer.installed_release_id)
         .await
@@ -954,10 +958,6 @@ async fn enabled_event_types_follow_authorized_consumption_contracts(pool: sqlx:
             Uuid::new_v4(),
             json!({}),
         )
-        .await
-        .unwrap();
-    repository
-        .ensure_event_consumer("attricat.extensions.wasm")
         .await
         .unwrap();
     repository
