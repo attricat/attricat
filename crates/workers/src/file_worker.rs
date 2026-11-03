@@ -41,6 +41,8 @@ const LEASE_HEARTBEAT_SECONDS: u64 = 60;
 const RECONCILE_INTERVAL: Duration = Duration::from_secs(30);
 const METRICS_INTERVAL: Duration = Duration::from_secs(5);
 const MAX_BACKOFF_SECONDS: i64 = 300;
+/// How long a job waits to try again while object storage is failing.
+const STORAGE_OUTAGE_RETRY_SECONDS: f64 = 60.0;
 /// Back-off after a failed claim, so a persistent fault does not spin.
 const FAILED_CLAIM_BACKOFF: Duration = Duration::from_secs(1);
 
@@ -275,6 +277,13 @@ impl FileWorker {
             };
             match result {
                 Ok(()) => self.complete(&job).await?,
+                // An outage says nothing about the file, and how long it lasts
+                // must not decide whether the file survives it.
+                Err(WorkerError::Storage(
+                    error @ (ObjectStoreError::Unavailable
+                    | ObjectStoreError::TimedOut(_)
+                    | ObjectStoreError::Operation(_)),
+                )) => self.defer(&job, &error.to_string()).await?,
                 Err(error) => self.fail(&job, &error.to_string()).await?,
             }
             Ok::<(), RepositoryError>(())
@@ -598,6 +607,17 @@ impl FileWorker {
         }
         Ok(())
     }
+    /// Releases a job to run again later without spending its attempt.
+    async fn defer(&self, job: &ClaimedJob, error: &str) -> Result<(), sqlx::Error> {
+        let changed = sqlx::query("UPDATE file_processing_jobs SET status = $2, attempts = attempts - 1, available_at = now() + make_interval(secs => $3), locked_at = NULL, worker_id = NULL, lease_token = NULL, last_error = $4, updated_at = now() WHERE id = $1 AND status = 'running' AND worker_id = $5 AND lease_token = $6")
+            .bind(job.id).bind(FileJobStatus::Retryable.as_str()).bind(STORAGE_OUTAGE_RETRY_SECONDS).bind(error).bind(&self.config.worker_id).bind(job.lease_token).execute(&self.pool).await?.rows_affected();
+        if changed != 1 {
+            tracing::warn!(job_id = %job.id, "file job lease lost before its deferral could be recorded");
+        }
+        counter!("attricat_file_worker_jobs_failed_total", "terminal" => "false").increment(1);
+        Ok(())
+    }
+
     async fn fail(&self, job: &ClaimedJob, error: &str) -> Result<(), sqlx::Error> {
         let terminal = job.attempts >= self.config.max_attempts;
         let backoff = (1_i64 << job.attempts.min(8)).min(MAX_BACKOFF_SECONDS);
@@ -1035,7 +1055,12 @@ mod tests {
             FileJobKind::TextExtraction,
         )
         .await;
-        store.set_available(false);
+        let key: String = sqlx::query_scalar("SELECT original_key FROM files WHERE id = $1")
+            .bind(file)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        store.delete(&key).await.unwrap();
         assert!(test_worker(&pool, store).run_once().await.unwrap());
 
         let (job_status, file_status): (String, String) = sqlx::query_as(

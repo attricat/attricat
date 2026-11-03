@@ -355,3 +355,58 @@ async fn only_an_owner_can_change_an_owners_membership_state(pool: PgPool) {
             .unwrap()
     );
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn an_owners_limited_token_cannot_remove_a_co_owner(pool: PgPool) {
+    let (base, server) = start_server(pool.clone()).await;
+    let owner_of = async || {
+        let (user, membership) = add_workspace_user(&pool).await;
+        sqlx::query("UPDATE users SET email_verified_at=clock_timestamp() WHERE id=$1")
+            .bind(user)
+            .execute(&pool)
+            .await
+            .unwrap();
+        grant_role(&pool, membership, OWNER_ROLE_ID, GrantScope::Workspace).await;
+        (user, membership)
+    };
+    let (owner, _) = owner_of().await;
+    let (_, co_owner) = owner_of().await;
+    let token: Value = client_for(owner)
+        .post(format!("{base}/personal-access-tokens"))
+        .json(&json!({"label":"members only", "permissions":["members.manage"]}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    // The token can manage members in general; only an owner is out of its reach.
+    let (_, ordinary) = add_workspace_user(&pool).await;
+    let allowed = Client::new()
+        .put(format!("{base}/workspace/members/{ordinary}"))
+        .bearer_auth(token["secret"].as_str().unwrap())
+        .json(&json!({"state":"inactive"}))
+        .send()
+        .await
+        .unwrap();
+    assert!(allowed.status().is_success(), "got {}", allowed.status());
+    let response = Client::new()
+        .put(format!("{base}/workspace/members/{co_owner}"))
+        .bearer_auth(token["secret"].as_str().unwrap())
+        .json(&json!({"state":"inactive"}))
+        .send()
+        .await
+        .unwrap();
+    assert!(!response.status().is_success(), "got {}", response.status());
+    assert_eq!(
+        sqlx::query_scalar::<_, String>("SELECT state FROM workspace_memberships WHERE id = $1")
+            .bind(co_owner)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        "active"
+    );
+    server.abort();
+}

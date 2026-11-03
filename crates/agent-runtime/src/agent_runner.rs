@@ -1363,13 +1363,8 @@ fn mutation_authorization(name: &str, arguments: &Value) -> Option<ToolAuthoriza
                 .and_then(|id| id.parse().ok()),
         ),
         "create_saved_search" | "update_saved_search" => (Permission::RecordsRead, None),
-        "duplicate_record" => (
-            Permission::RecordsWrite,
-            arguments
-                .get("record_id")
-                .and_then(Value::as_str)
-                .and_then(|id| id.parse().ok()),
-        ),
+        // It creates a record, which needs a workspace grant like any create.
+        "duplicate_record" => (Permission::RecordsWrite, None),
         // Like the HTTP route, every reader of a record may comment on it.
         "add_record_comment" => (
             Permission::RecordsRead,

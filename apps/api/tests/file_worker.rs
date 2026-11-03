@@ -137,7 +137,27 @@ async fn worker_retries_terminal_failure_and_operator_retry(pool: PgPool) {
     let job_id = queue_metadata_job(&pool, file_id).await;
     let worker = worker(pool.clone(), store.clone(), 2, 60);
 
+    // An outage, however long, leaves the job waiting with its attempts unspent.
     store.set_available(false);
+    for _ in 0..3 {
+        assert!(worker.run_once().await.unwrap());
+        let outage: (String, i32, bool) = sqlx::query_as(
+            "SELECT status, attempts, available_at > now() + interval '1 second' FROM file_processing_jobs WHERE id = $1",
+        )
+        .bind(job_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(outage, ("retryable".into(), 0, true));
+        sqlx::query("UPDATE file_processing_jobs SET available_at = now() WHERE id = $1")
+            .bind(job_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+
+    // The original really is missing, which no retry can fix.
+    store.set_available(true);
     assert!(worker.run_once().await.unwrap());
     let first: (String, i32, bool) = sqlx::query_as(
         "SELECT status, attempts, available_at > now() + interval '1 second' FROM file_processing_jobs WHERE id = $1",
@@ -172,7 +192,6 @@ async fn worker_retries_terminal_failure_and_operator_retry(pool: PgPool) {
     );
 
     assert!(worker.retry_job(job_id).await.unwrap());
-    store.set_available(true);
     store
         .put(
             &original_key,
