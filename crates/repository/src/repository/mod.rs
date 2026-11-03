@@ -281,15 +281,17 @@ pub use leadership::CoordinatorLeadership;
 pub use members::{WorkspaceInvitation, WorkspaceMember};
 pub use presentation_assets::{MAX_PRESENTATION_ASSET_PAGE_SIZE, PresentationAsset};
 pub use record_search::{
-    RecordRelationshipFilter, RecordSearchFilter, RecordSearchScope, RecordSearchSort,
-    RelationshipFacetHop, SEARCH_FILTER_EQ_ANY, SearchContext, decode_search_cursor,
+    RecordMatching, RecordRelationshipFilter, RecordSearchFilter, RecordSearchScope,
+    RecordSearchSort, RelationshipFacetHop, RelationshipTargetGroups, ResolvedRecordFilters,
+    SEARCH_FILTER_EQ_ANY, SearchContext, decode_search_cursor,
 };
 pub use retention::RetentionDays;
 pub use retention_holds::FileRetentionHold;
 pub use roles::{PermissionInfo, WorkspaceGrantTarget, WorkspaceRole};
 pub use rules::{ClaimedRuleRun, RuleCandidateResult};
 pub use search_page::{
-    MAX_SYSTEM_TAG_FILTERS, SEARCH_TOTAL_COUNT_CAP, SearchPageRequest, SearchPhase,
+    MAX_LOADED_FILTER_MATCHES, MAX_SYSTEM_TAG_FILTERS, SEARCH_TOTAL_COUNT_CAP, SearchPageRequest,
+    SearchPhase,
 };
 pub use search_scope::{
     MAX_SEARCH_FILTERS, SearchScope, SearchScopeError, SearchScopeRequest, intersect_record_ids,

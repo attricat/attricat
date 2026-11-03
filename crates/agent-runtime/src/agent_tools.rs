@@ -33,9 +33,10 @@ use crate::{
     },
     file_access::{AllowFileAccess, FileAccessOperation, authorize_file_read},
     repository::{
-        AttricatRepository, AuthorizationActor, FileTextOutcome, MAX_SEARCH_FILTERS,
-        RepositoryError, RuleFindingFilter, RuleRunFilter, SearchPageRequest, SearchScope,
-        SearchScopeError, SearchScopeRequest,
+        AttricatRepository, AuthorizationActor, FileTextOutcome, MAX_LOADED_FILTER_MATCHES,
+        MAX_SEARCH_FILTERS, RelationshipTargetGroups, RepositoryError, RuleFindingFilter,
+        RuleRunFilter, SEARCH_TOTAL_COUNT_CAP, SearchPageRequest, SearchScope, SearchScopeError,
+        SearchScopeRequest,
     },
     search_filters::{check_selected_ids, resolve_agent_relationship_filter},
 };
@@ -661,7 +662,7 @@ pub fn definitions() -> Vec<ToolDefinition> {
         ),
         definition(
             "count_records",
-            "Count the records of a blueprint that match an optional query, filters and relationship_filters (the same as search_records), without listing them. group_by names a relationship field of the blueprint to count matching records per linked record instead, such as products per category; groups come largest first with each linked record's display label, up to group_limit, and ungrouped_count is the matching records that link to nothing. Use it for questions about how many records there are or which has the most.",
+            "Count the records of a blueprint that match an optional query, filters and relationship_filters (the same as search_records), without listing them. Without group_by, total_count stops at 500 and total_count_capped is true when more match, so report that as more than 500. group_by names a relationship field of the blueprint to count matching records per linked record instead, such as products per category; groups come largest first with each linked record's display label, up to group_limit, and ungrouped_count is the matching records that link to nothing. Use it for questions about how many records there are or which has the most.",
             json!({"type":"object","required":["blueprint"],"properties":{"blueprint":{"type":"object","required":["code"],"properties":{"code":{"type":"string"},"version":{"type":"integer","minimum":1}},"additionalProperties":false},"query":{"type":"string"},"filters":attribute_filter_parameters(),"relationship_filters":relationship_filter_parameters(),"context_code":{"type":"string"},"group_by":{"type":"string","description":"A relationship field of the blueprint."},"group_limit":{"type":"integer","minimum":1,"maximum":MAX_COUNT_GROUP_LIMIT}},"additionalProperties":false}),
         ),
         definition(
@@ -2115,14 +2116,7 @@ pub async fn execute_read(
                     "group_limit must be between 1 and {MAX_COUNT_GROUP_LIMIT}"
                 )));
             }
-            let SearchScope {
-                current,
-                selected,
-                search_blueprint,
-                context,
-                matching,
-                ..
-            } = agent_search_scope(
+            let scope = agent_search_scope(
                 repository,
                 actor,
                 &input.blueprint,
@@ -2132,19 +2126,28 @@ pub async fn execute_read(
                 input.context_code.as_deref(),
             )
             .await?;
-            // Grouping needs the matching records, not only how many there are.
-            let matching = match matching {
-                Some(ids) => ids.into_iter().collect::<std::collections::HashSet<_>>(),
-                None => {
-                    repository
-                        .resolve_search(&search_blueprint, selected, None)
-                        .await?
-                        .ids
-                }
-            };
-            let total_count = matching.len();
+            let SearchScope {
+                current,
+                selected,
+                search_blueprint,
+                context,
+                ..
+            } = &scope;
             let Some(field) = input.group_by else {
-                return Ok(json!({"blueprint": current.blueprint.code, "total_count": total_count}));
+                // Like the Explorer, count only so far.
+                let count = repository
+                    .count_matching_records(
+                        current.blueprint.id,
+                        *selected,
+                        scope.matching(),
+                        SEARCH_TOTAL_COUNT_CAP + 1,
+                    )
+                    .await?;
+                return Ok(json!({
+                    "blueprint": current.blueprint.code,
+                    "total_count": count.min(SEARCH_TOTAL_COUNT_CAP),
+                    "total_count_capped": count > SEARCH_TOTAL_COUNT_CAP,
+                }));
             };
             let relationship_fields = search_blueprint
                 .attributes
@@ -2187,28 +2190,24 @@ pub async fn execute_read(
                     target_blueprint_ids.push(target.blueprint.id);
                 }
             }
-            let (counts, linked) = repository
-                .relationship_target_counts(
+            let RelationshipTargetGroups {
+                total,
+                linked,
+                groups,
+                truncated,
+            } = repository
+                .relationship_target_groups(
                     current.blueprint.id,
+                    *selected,
+                    scope.matching(),
                     &field,
                     &target_blueprint_ids,
                     context.requested_id(),
-                    Some(&matching),
+                    actor,
+                    workspace,
+                    group_limit as i64,
                 )
                 .await?;
-            let target_ids = counts.keys().copied().collect::<Vec<_>>();
-            let readable = repository
-                .authorized_record_ids(actor, workspace, Permission::RecordsRead, &target_ids)
-                .await?;
-            let mut groups = counts
-                .into_iter()
-                .filter(|(target, _)| readable.contains(target))
-                .collect::<Vec<_>>();
-            groups.sort_by(|(left_id, left), (right_id, right)| {
-                right.cmp(left).then(left_id.cmp(right_id))
-            });
-            let groups_truncated = groups.len() > group_limit;
-            groups.truncate(group_limit);
             let labels = repository
                 .record_labels(&groups.iter().map(|(id, _)| *id).collect::<Vec<_>>())
                 .await?
@@ -2217,7 +2216,8 @@ pub async fn execute_read(
                 .collect::<HashMap<_, _>>();
             json!({
                 "blueprint": current.blueprint.code,
-                "total_count": total_count,
+                "total_count": total,
+                "total_count_capped": false,
                 "group_by": field,
                 "groups": groups
                     .into_iter()
@@ -2231,8 +2231,8 @@ pub async fn execute_read(
                         })
                     })
                     .collect::<Vec<_>>(),
-                "groups_truncated": groups_truncated,
-                "ungrouped_count": total_count - linked.len(),
+                "groups_truncated": truncated,
+                "ungrouped_count": total - linked,
             })
         }
         "find_records" => {
@@ -2273,7 +2273,7 @@ pub async fn execute_read(
                     continue;
                 };
                 let resolved = repository
-                    .resolve_search(&blueprint, None, Some(&query))
+                    .resolve_search(&blueprint, None, &query)
                     .await
                     .map_err(|error| ToolError::InvalidArguments(error.to_string()))?;
                 let mut ids = resolved.ids.into_iter().collect::<Vec<_>>();
@@ -2379,6 +2379,7 @@ pub async fn execute_read(
                         sort: input.sort.as_ref(),
                         cursor: input.page.cursor.as_deref(),
                         limit: limit.into(),
+                        loaded_filter_matches: MAX_LOADED_FILTER_MATCHES,
                         include_total: true,
                         include_previews: true,
                     },

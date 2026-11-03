@@ -13,8 +13,9 @@
 //! `line.category`; every tenth product and line overrides its hop in the
 //! child context. Each product also has its own listing, in the product's
 //! category and line, for paths whose middle hop is as large as the source:
-//! `listing.category` and `listing.line.category`. See `perf/facets.md` for
-//! results.
+//! `listing.category` and `listing.line.category`. `FACET_BENCH_SCENARIOS`
+//! runs only the scenarios whose name contains it, such as `filter`. See
+//! `perf/facets.md` for results.
 
 use crate::support;
 
@@ -325,7 +326,68 @@ async fn relationship_tree_facet_latency(pool: PgPool) {
         }
         ("/v1/records/search", body)
     };
+    let line_node: Uuid = sqlx::query_scalar(
+        "SELECT id FROM records WHERE blueprint_id = $1 AND projections -> 'preview' ->> 'name' = 'Line 1'",
+    )
+    .bind(line_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let filter = |field: &str, operator: &str, value: Value| json!({"field": field, "operator": operator, "value": value});
+    let filtered = |filters: Vec<Value>, relationship_filters: Value| {
+        (
+            "/v1/records/search",
+            json!({
+                "blueprint": {"code": "bench_product"},
+                "filters": filters,
+                "relationship_filters": relationship_filters,
+                "include_total": true,
+            }),
+        )
+    };
+    let every_sku = filter("sku", "starts_with", json!("Value"));
     let scenarios = [
+        (
+            "filter: selective scalar",
+            filtered(vec![filter("sku", "eq", json!("Value 12"))], json!([])),
+        ),
+        (
+            "filter: broad scalar",
+            filtered(vec![every_sku.clone()], json!([])),
+        ),
+        (
+            "filter: absence, no matches",
+            filtered(
+                vec![filter("description", "is_set", json!(false))],
+                json!([]),
+            ),
+        ),
+        (
+            "filter: one hop",
+            filtered(vec![filter("line.name", "eq", json!("Line 1"))], json!([])),
+        ),
+        (
+            "filter: three hops",
+            filtered(
+                vec![filter(
+                    "listing.line.category.name",
+                    "starts_with",
+                    json!("Category 2"),
+                )],
+                json!([]),
+            ),
+        ),
+        (
+            "filter: relationship",
+            filtered(
+                Vec::new(),
+                json!([{"field": "line", "selected_target_ids": [line_node]}]),
+            ),
+        ),
+        (
+            "filter: twenty broad scalars",
+            filtered(vec![every_sku; 20], json!([])),
+        ),
         (
             "browse: root level",
             children("category", default_context, None, None),
@@ -448,7 +510,11 @@ async fn relationship_tree_facet_latency(pool: PgPool) {
     // query share cached counts, so only the first of them misses the cache.
     println!("| Scenario | First | Median | Min | Max |\n| --- | ---: | ---: | ---: | ---: |");
     let mut slowest = Vec::new();
-    for (name, (path, body)) in scenarios {
+    let selected = std::env::var("FACET_BENCH_SCENARIOS").unwrap_or_default();
+    for (name, (path, body)) in scenarios
+        .into_iter()
+        .filter(|(name, _)| name.contains(&selected))
+    {
         let started = Instant::now();
         post(&client, &base_url, path, &body).await;
         let first = started.elapsed();
@@ -472,6 +538,12 @@ async fn relationship_tree_facet_latency(pool: PgPool) {
     println!("\nServer-Timing of each scenario's slowest sample:");
     for line in slowest {
         println!("  {line}");
+    }
+    // Linux only: the highest memory the test process, server included, reached.
+    if let Ok(status) = std::fs::read_to_string("/proc/self/status")
+        && let Some(peak) = status.lines().find(|line| line.starts_with("VmHWM"))
+    {
+        println!("\n{peak}");
     }
     server.abort();
 }
@@ -509,16 +581,18 @@ fn renumber_parameters(statement: &str) -> (String, Vec<usize>) {
     (renumbered, parameters)
 }
 
-/// Sends one request and returns its `server-timing` header.
+/// Sends one request and returns its `server-timing` header, or its failure.
 async fn post(client: &Client, base_url: &str, path: &str, body: &Value) -> String {
     let response = client
         .post(format!("{base_url}{path}"))
         .json(body)
         .send()
         .await
-        .unwrap()
-        .error_for_status()
         .unwrap();
+    // A scenario past the request timeout is a result to report.
+    if !response.status().is_success() {
+        return format!("status {}", response.status());
+    }
     let timing = response
         .headers()
         .get("server-timing")

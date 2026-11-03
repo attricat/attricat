@@ -163,6 +163,7 @@ async fn filters_resolve_to_pinned_records_within_the_limit_and_never_statuses(p
     )
     .await
     .unwrap_err();
+    assert!(error.to_string().contains("more than 2 records"), "{error}");
     assert!(
         error.to_string().contains("Narrow the selection"),
         "{error}"

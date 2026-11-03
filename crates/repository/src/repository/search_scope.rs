@@ -14,8 +14,8 @@ use tracing::Instrument;
 use uuid::Uuid;
 
 use super::{
-    AttricatRepository, RecordRelationshipFilter, RecordSearchFilter, RecordSearchSort,
-    RepositoryError, SEARCH_FILTER_EQ_ANY, SearchContext,
+    AttricatRepository, RecordMatching, RecordRelationshipFilter, RecordSearchFilter,
+    RecordSearchSort, RepositoryError, ResolvedRecordFilters, SEARCH_FILTER_EQ_ANY, SearchContext,
 };
 use crate::model::{
     BlueprintWithAttributes, MatchExplanation, RelationshipFilter, SearchBlueprint, SearchFilter,
@@ -93,8 +93,21 @@ pub struct SearchScope {
     pub search_blueprint: BlueprintWithAttributes,
     pub context: SearchContext,
     pub explanations: HashMap<Uuid, Vec<MatchExplanation>>,
-    /// `None` when neither a query nor a filter narrows the blueprint.
-    pub matching: Option<Vec<Uuid>>,
+    /// The records a text query, and in the records API tree facets, resolved
+    /// to; `None` when neither narrows the blueprint.
+    pub matching_ids: Option<Vec<Uuid>>,
+    /// `None` without attribute or relationship filters.
+    pub filters: Option<ResolvedRecordFilters>,
+}
+
+impl SearchScope {
+    /// What narrows this search: its matching IDs and its filters together.
+    pub fn matching(&self) -> RecordMatching<'_> {
+        RecordMatching {
+            ids: self.matching_ids.as_deref(),
+            filters: self.filters.as_ref(),
+        }
+    }
 }
 
 /// The IDs in both lists, keeping `current`'s order; `None` means unrestricted.
@@ -171,15 +184,15 @@ impl AttricatRepository {
                     .await?,
             );
         }
-        // Without a search term, the page query already scopes the blueprint
-        // and version, so no record IDs are materialized.
+        // Filters run inside each statement. Only a search term materializes
+        // record IDs, because its matches carry explanations.
         let query = request
             .query
             .map(str::trim)
             .filter(|query| !query.is_empty());
         let resolved = match query {
             Some(query) => Some(
-                self.resolve_search(&search_blueprint, selected, Some(query))
+                self.resolve_search(&search_blueprint, selected, query)
                     .instrument(tracing::info_span!(
                         "sql.operation",
                         label = "search-resolve"
@@ -192,34 +205,18 @@ impl AttricatRepository {
             ),
             None => None,
         };
-        let mut matching: Option<Vec<Uuid>> = resolved
+        let matching_ids = resolved
             .as_ref()
             .map(|resolved| resolved.ids.iter().copied().collect());
-        if !filters.is_empty() {
-            let filtered = self
-                .filter_record_ids(current.blueprint.id, selected, &filters, &context)
-                .instrument(tracing::info_span!(
-                    "sql.operation",
-                    label = "attribute-filter"
-                ))
-                .await?;
-            matching = Some(intersect_record_ids(matching, filtered));
-        }
-        if !relationship_filters.is_empty() {
-            let filtered = self
-                .filter_relationship_record_ids(
-                    current.blueprint.id,
-                    selected,
-                    &relationship_filters,
-                    &context,
-                )
-                .instrument(tracing::info_span!(
-                    "sql.operation",
-                    label = "relationship-filter"
-                ))
-                .await?;
-            matching = Some(intersect_record_ids(matching, filtered));
-        }
+        let filters = (!filters.is_empty() || !relationship_filters.is_empty()).then(|| {
+            ResolvedRecordFilters {
+                blueprint_id: current.blueprint.id,
+                blueprint_version: selected,
+                context: context.clone(),
+                filters,
+                relationship_filters,
+            }
+        });
         Ok(SearchScope {
             current,
             selected,
@@ -228,7 +225,8 @@ impl AttricatRepository {
             explanations: resolved
                 .map(|resolved| resolved.explanations)
                 .unwrap_or_default(),
-            matching,
+            matching_ids,
+            filters,
         })
     }
 

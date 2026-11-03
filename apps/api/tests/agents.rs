@@ -1,5 +1,6 @@
 use crate::support;
 
+use api::permissions::Permission;
 use api::states::AgentRunStatus;
 use std::{sync::Arc, time::Duration};
 
@@ -12,7 +13,8 @@ use api::{
     agents::AgentProviderConfig,
     file_worker::{FileWorker, WorkerConfig},
     repository::{
-        AttricatRepository, NotificationSubject, NotificationSubjectKind, RepositoryError,
+        AttricatRepository, NotificationSubject, NotificationSubjectKind, RecordMatching,
+        RepositoryError, SEARCH_TOTAL_COUNT_CAP,
     },
     storage::FakeObjectStore,
     task_worker::TaskHandler,
@@ -2752,6 +2754,68 @@ async fn read_only_runs_offer_no_mutations_and_refuse_one_named_anyway(pool: PgP
 }
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
+async fn agent_counts_stop_at_the_total_cap_and_groups_cover_every_target_blueprint(pool: PgPool) {
+    let (base_url, api_server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let definition = |code: &str, extra: &str| {
+        format!(
+            "format_version: 1\ncode: {code}\nname: {code}\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string{extra}"
+        )
+    };
+    create_blueprint(&client, &base_url, &definition("shelf", "")).await;
+    create_blueprint(&client, &base_url, &definition("bin", "")).await;
+    create_blueprint(
+        &client,
+        &base_url,
+        &definition("stock", "\n  - code: place\n    value_type: relationship"),
+    )
+    .await;
+    let title = |value: &str| scalar("title", value);
+    let shelf = create_record_with(&client, &base_url, "shelf", json!([title("Shelf")])).await;
+    let bin = create_record_with(&client, &base_url, "bin", json!([title("Bin")])).await;
+    let cap = usize::try_from(SEARCH_TOTAL_COUNT_CAP).unwrap();
+    for index in 0..=cap {
+        let mut values = vec![title("Stock")];
+        match index {
+            0 | 1 => values.push(relationship("place", &shelf)),
+            2 => values.push(relationship("place", &bin)),
+            _ => {}
+        }
+        create_record_with(&client, &base_url, "stock", json!(values)).await;
+    }
+    let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
+    let actor: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
+    let repository = AttricatRepository::system(pool.clone()).for_workspace(workspace);
+    let count =
+        |arguments: Value| execute_read(&repository, actor, workspace, "count_records", arguments);
+    assert_eq!(
+        count(json!({"blueprint": {"code": "stock"}}))
+            .await
+            .unwrap(),
+        json!({"blueprint": "stock", "total_count": SEARCH_TOTAL_COUNT_CAP, "total_count_capped": true})
+    );
+    // A filter leaves the total under the cap.
+    assert_eq!(
+        count(json!({"blueprint": {"code": "stock"}, "filters": [{"field": "title", "operator": "eq", "value": "Other"}]}))
+            .await
+            .unwrap(),
+        json!({"blueprint": "stock", "total_count": 0, "total_count_capped": false})
+    );
+    // Group counts are exact, over every blueprint the field may link to.
+    let grouped = count(json!({"blueprint": {"code": "stock"}, "group_by": "place"}))
+        .await
+        .unwrap();
+    assert_eq!(grouped["total_count"], SEARCH_TOTAL_COUNT_CAP + 1);
+    assert_eq!(grouped["total_count_capped"], false);
+    assert_eq!(grouped["ungrouped_count"], SEARCH_TOTAL_COUNT_CAP - 2);
+    assert_eq!(grouped["groups"][0]["target_id"], shelf["id"]);
+    assert_eq!(grouped["groups"][0]["count"], 2);
+    assert_eq!(grouped["groups"][1]["target_id"], bin["id"]);
+    assert_eq!(grouped["groups"][1]["count"], 1);
+    api_server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn agent_finds_a_named_record_and_counts_what_links_to_it(pool: PgPool) {
     let (base_url, api_server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -2847,7 +2911,10 @@ async fn agent_finds_a_named_record_and_counts_what_links_to_it(pool: PgPool) {
     }))
     .await
     .unwrap();
-    assert_eq!(counted, json!({"blueprint": "product", "total_count": 3}));
+    assert_eq!(
+        counted,
+        json!({"blueprint": "product", "total_count": 3, "total_count_capped": false})
+    );
     // A product without a category counts as ungrouped.
     create(&product, json!([title("Loose part")])).await;
     let grouped = count(json!({"blueprint": {"code": "product"}, "group_by": "category"}))
@@ -2861,6 +2928,83 @@ async fn agent_finds_a_named_record_and_counts_what_links_to_it(pool: PgPool) {
     assert_eq!(grouped["groups"][0]["count"], 3);
     assert_eq!(grouped["groups"][1]["target_id"], power["id"]);
     assert_eq!(grouped["groups"][1]["count"], 1);
+    // Filters and text queries narrow the groups and the totals.
+    let filtered = count(json!({
+        "blueprint": {"code": "product"},
+        "group_by": "category",
+        "filters": [{"field": "title", "operator": "contains", "value": "er"}],
+    }))
+    .await
+    .unwrap();
+    assert_eq!(filtered["total_count"], 3);
+    assert_eq!(filtered["ungrouped_count"], 0);
+    assert_eq!(filtered["groups"].as_array().unwrap().len(), 1);
+    assert_eq!(filtered["groups"][0]["target_id"], basic["id"]);
+    assert_eq!(filtered["groups"][0]["count"], 3);
+    let searched =
+        count(json!({"blueprint": {"code": "product"}, "group_by": "category", "query": "Drill"}))
+            .await
+            .unwrap();
+    assert_eq!(searched["total_count"], 1);
+    assert_eq!(searched["groups"][0]["target_id"], power["id"]);
+    let limited =
+        count(json!({"blueprint": {"code": "product"}, "group_by": "category", "group_limit": 1}))
+            .await
+            .unwrap();
+    assert_eq!(limited["groups"].as_array().unwrap().len(), 1);
+    assert_eq!(limited["groups"][0]["target_id"], basic["id"]);
+    assert_eq!(limited["groups_truncated"], true);
+    assert_eq!(limited["total_count"], 5);
+    assert_eq!(limited["ungrouped_count"], 1);
+    // A target the user can't read is omitted, but its sources are still linked.
+    let reader_role = create_role(
+        &pool,
+        "category_reader",
+        &[Permission::RecordsRead.as_str()],
+    )
+    .await;
+    let (reader, membership) = add_workspace_user(&pool).await;
+    let basic_id: Uuid = basic["id"].as_str().unwrap().parse().unwrap();
+    grant_role(&pool, membership, reader_role, GrantScope::Record(basic_id)).await;
+    let product_id: Uuid = product["blueprint"]["id"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    grant_role(
+        &pool,
+        membership,
+        reader_role,
+        GrantScope::BlueprintFamily(product_id),
+    )
+    .await;
+    let restricted = repository
+        .relationship_target_groups(
+            product_id,
+            None,
+            RecordMatching::ALL,
+            "category",
+            &[category["blueprint"]["id"]
+                .as_str()
+                .unwrap()
+                .parse()
+                .unwrap()],
+            repository
+                .search_context("default")
+                .await
+                .unwrap()
+                .unwrap()
+                .requested_id(),
+            reader,
+            workspace,
+            20,
+        )
+        .await
+        .unwrap();
+    assert_eq!(restricted.groups, [(basic_id, 3)]);
+    assert!(!restricted.truncated);
+    assert_eq!(restricted.total, 5);
+    assert_eq!(restricted.linked, 4);
     let error = count(json!({"blueprint": {"code": "product"}, "group_by": "title"}))
         .await
         .unwrap_err()

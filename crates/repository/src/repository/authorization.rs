@@ -259,7 +259,7 @@ impl<S: RepositoryScope> AttricatRepository<S> {
             return Ok(HashSet::new());
         }
         let sql = format!(
-            "WITH {} SELECT requested.id FROM unnest($4::uuid[]) AS requested(id) LEFT JOIN records e ON e.id = requested.id AND e.workspace_id = $2 WHERE EXISTS (SELECT 1 FROM grants g WHERE (g.scope_type = 'workspace' AND g.scope_target_id = $2) OR (e.id IS NOT NULL AND ((g.scope_type = 'record' AND g.scope_target_id = e.id) OR (g.scope_type = 'blueprint_family' AND g.scope_target_id = e.blueprint_id))))",
+            "WITH {} SELECT requested.id FROM unnest($4::uuid[]) AS requested(id) LEFT JOIN records e ON e.id = requested.id AND e.workspace_id = $2 WHERE {RECORD_GRANTED_SQL}",
             GrantCodes::Permission(permission).grant_set_sql()
         );
         let rows: Vec<Uuid> = sqlx::query_scalar(&sql)
@@ -422,6 +422,10 @@ pub enum AuthorizationTargetKind {
     Context,
 }
 
+/// Whether the `grants` CTE covers record `e` in workspace `$2`, directly, by
+/// its blueprint family or across the workspace.
+pub(super) const RECORD_GRANTED_SQL: &str = "EXISTS (SELECT 1 FROM grants g WHERE (g.scope_type = 'workspace' AND g.scope_target_id = $2) OR (e.id IS NOT NULL AND ((g.scope_type = 'record' AND g.scope_target_id = e.id) OR (g.scope_type = 'blueprint_family' AND g.scope_target_id = e.blueprint_id))))";
+
 /// Which of a user's live grants count: those whose role carries a
 /// permission, or those of any of the named roles.
 #[derive(Clone, Copy)]
@@ -434,7 +438,7 @@ impl<'a> GrantCodes<'a> {
     /// The `grants(scope_type, scope_target_id)` CTE for user `$1` in
     /// workspace `$2`, matching the codes bound as `$3`: active user,
     /// membership and workspace only.
-    fn grant_set_sql(&self) -> String {
+    pub(super) fn grant_set_sql(&self) -> String {
         let filter = match self {
             Self::Permission(_) => {
                 "JOIN role_permissions rp ON rp.role_id = g.role_id WHERE rp.permission_code = ANY($3)"
@@ -449,7 +453,7 @@ impl<'a> GrantCodes<'a> {
     }
 
     /// The codes to bind as `$3`.
-    fn codes(&self) -> Vec<&'a str> {
+    pub(super) fn codes(&self) -> Vec<&'a str> {
         match *self {
             Self::Permission(permission) => vec![permission.as_str()],
             Self::Roles(roles) => roles.iter().map(String::as_str).collect(),

@@ -155,9 +155,12 @@ pub async fn resolve(
                 "relationship_filters": filter.relationship_filters.iter().map(|filter| json!({"field": filter.field, "selected_target_ids": filter.selected_target_ids})).collect::<Vec<_>>(),
                 "context_code": filter.context_code,
             }});
-            let ids = select_filter(repository, actor, workspace, &filter).await?;
+            let ids = select_filter(repository, actor, workspace, &filter, max_records).await?;
             if ids.len() > max_records as usize {
-                return Err(too_large(ids.len(), max_records));
+                return Err(too_large(
+                    format!("more than {max_records} records"),
+                    max_records,
+                ));
             }
             let targets = ids
                 .into_iter()
@@ -178,7 +181,7 @@ pub async fn resolve(
         });
     }
     if targets.len() > max_records as usize {
-        return Err(too_large(targets.len(), max_records));
+        return Err(too_large(format!("{} records", targets.len()), max_records));
     }
     let ids: Vec<Uuid> = targets.iter().map(|target| target.record_id).collect();
     let readable = if repository
@@ -384,11 +387,11 @@ struct Target {
     expected_updated_at: Option<DateTime<Utc>>,
 }
 
-fn too_large(count: usize, max_records: u32) -> ToolError {
+fn too_large(selection: String, max_records: u32) -> ToolError {
     ToolError::Coded {
         code: "bulk_edit_too_large",
         message: format!(
-            "The selection has {count} records, more than this workspace's limit of {max_records} per bulk edit. Narrow the selection with more filters, or split it into smaller edits, and propose again."
+            "The selection has {selection}, more than this workspace's limit of {max_records} per bulk edit. Narrow the selection with more filters, or split it into smaller edits, and propose again."
         ),
     }
 }
@@ -431,12 +434,14 @@ fn checked_values(values: Vec<ProposedValue>) -> Result<Vec<ProposedValue>, Tool
 }
 
 /// The records a filter matches, like `search_records` with the same
-/// filters. Collection searches need workspace-wide read access.
+/// filters, up to one past `max_records`. Collection searches need
+/// workspace-wide read access.
 async fn select_filter(
     repository: &AttricatRepository,
     actor: Uuid,
     workspace: Uuid,
     filter: &ProposedFilter,
+    max_records: u32,
 ) -> Result<Vec<Uuid>, ToolError> {
     if !repository
         .principal_may(
@@ -450,12 +455,7 @@ async fn select_filter(
     {
         return Err(ToolError::Forbidden);
     }
-    let crate::repository::SearchScope {
-        selected,
-        search_blueprint,
-        matching,
-        ..
-    } = agent_search_scope(
+    let scope = agent_search_scope(
         repository,
         actor,
         &filter.blueprint,
@@ -465,18 +465,15 @@ async fn select_filter(
         filter.context_code.as_deref(),
     )
     .await?;
-    let mut ids: Vec<Uuid> = match matching {
-        Some(ids) => ids,
-        None => repository
-            .resolve_search(&search_blueprint, selected, None)
-            .await?
-            .ids
-            .into_iter()
-            .collect(),
-    };
-    ids.sort_unstable();
-    ids.dedup();
-    Ok(ids)
+    // One past the limit is enough to tell the selection is too large.
+    Ok(repository
+        .matching_record_ids(
+            scope.current.blueprint.id,
+            scope.selected,
+            scope.matching(),
+            i64::from(max_records) + 1,
+        )
+        .await?)
 }
 
 /// "Set Brand, Season on 412 Product records."
