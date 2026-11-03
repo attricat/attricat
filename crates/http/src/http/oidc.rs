@@ -250,7 +250,7 @@ fn settings(state: &AppState) -> Result<&OidcSettings, ApiError> {
         .ok_or_else(|| ApiError::not_found("single sign-on"))
 }
 
-fn digest(value: &str) -> Vec<u8> {
+pub(super) fn digest(value: &str) -> Vec<u8> {
     Sha256::digest(value.as_bytes()).to_vec()
 }
 
@@ -434,6 +434,8 @@ pub(super) struct InvitationOptions {
     login_identifier: String,
     /// The workspace's provider, when an invitee can accept by signing in.
     display_name: Option<String>,
+    /// Whether `POST /auth/login` can accept it with the account's password.
+    password_allowed: bool,
 }
 
 /// `POST /auth/oidc/invitation`, public. Tells someone holding an invitation's
@@ -454,20 +456,14 @@ pub(super) async fn invitation_options(
         .await?
         .provider
         .filter(|_| state.oidc.is_some() && !state.demo_mode);
-    // A provider signs people in to the invited workspace itself, so its button
-    // keeps that identifier; without one, send them where a password works.
-    let login_identifier = if display_name.is_some() {
-        login_identifier
-    } else {
-        state
-            .repository
-            .invitation_password_login_identifier(&digest(&input.secret))
-            .await?
-            .unwrap_or(login_identifier)
-    };
+    let password_allowed = state
+        .repository
+        .invitation_allows_password(&digest(&input.secret))
+        .await?;
     Ok(Json(InvitationOptions {
         login_identifier,
         display_name,
+        password_allowed,
     }))
 }
 

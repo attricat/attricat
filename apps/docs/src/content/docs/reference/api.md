@@ -418,7 +418,7 @@ See [Translate labels](/builders/translations/).
 | --- | --- | --- |
 | `POST` | `/auth/discover`, `/auth/login`, `/auth/renew`, `/auth/logout` | Sessions. |
 | `POST`, `GET` | `/auth/oidc/start`, `/auth/oidc/callback/{workspace_id}` | Sign in through the workspace's identity provider. `start` returns `authorization_url`, and takes `invitation_secret` to accept an invitation. |
-| `POST` | `/auth/oidc/invitation` | From an invitation's `secret`, its `login_identifier` and provider `display_name`. |
+| `POST` | `/auth/oidc/invitation` | From an invitation's `secret`, its `login_identifier`, provider `display_name`, and `password_allowed`: whether `POST /auth/login` with `invitation_secret` can accept it. |
 | `GET`, `POST` | `/auth/oidc/link` | Whether the caller's account is linked to the provider; start linking it. |
 | `DELETE` | `/workspace/members/{id}/identity` | Remove a member's link to the provider (`workspace.manage`). |
 | `GET` | `/auth/session` | Current identity and capabilities. |

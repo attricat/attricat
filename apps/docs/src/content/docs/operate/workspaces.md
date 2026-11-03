@@ -88,7 +88,7 @@ The owner role can only be granted on the whole workspace.
 
 ## Invitations
 
-Under **Invitations**, invite someone by email with a role, a scope, and an expiry date, which defaults to one week. They receive a one-time link. Someone who already has an account accepts and joins; someone new sets their password first.
+Under **Invitations**, invite someone by email with a role, a scope, and an expiry date, which defaults to one week. They receive a one-time link. Someone who already has an account accepts and joins, by signing in with their password on the invitation page if the workspace allows passwords, or through its identity provider; someone new sets their password first.
 
 You can also create a user directly and send them an onboarding link. Inviting someone again before they set their password revokes their earlier pending invitation. Revoke a pending invitation at any time.
 

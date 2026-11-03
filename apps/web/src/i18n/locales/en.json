@@ -2046,6 +2046,7 @@
     "setPassword": "Set password and join workspace",
     "invitationAccepted": "Invitation accepted. You can now use the workspace.",
     "acceptTitle": "Accept workspace invitation",
+    "acceptWithPasswordHint": "Already have an Attricat account? Use its email and password. The invitation only works for the address it was sent to.",
     "acceptInvitation": "Accept invitation",
     "teams": "Teams",
     "teamsDescription": "Teams group members so a user-or-team attribute can assign work to a team. Assignments store the team, so renaming a team or changing its members never changes records.",

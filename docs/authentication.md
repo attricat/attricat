@@ -94,7 +94,9 @@ Turning the restriction on ends the password sessions of everyone but active own
 and so does losing ownership while it is on. Someone already signed in elsewhere
 cannot accept a non-owner invitation to a restricted workspace from that session: it
 gets the same `403` and the invitation stays pending, to be accepted through the
-provider. Removing `OIDC_CALLBACK_URL` leaves a restriction in place with no provider
+provider. Outside a restriction, someone with an account and no membership there
+accepts by sending `invitation_secret` with `POST /auth/login`, which accepts and
+signs in to the invited workspace in one transaction. Removing `OIDC_CALLBACK_URL` leaves a restriction in place with no provider
 to use, so an owner must lift it before anyone else can sign in.
 
 ### Account-wide changes

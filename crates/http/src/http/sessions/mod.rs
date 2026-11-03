@@ -37,6 +37,9 @@ pub(super) struct LoginRequest {
     login_identifier: String,
     email: String,
     password: String,
+    /// Accepts this invitation to the workspace while signing in to it.
+    #[serde(default)]
+    invitation_secret: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -268,22 +271,40 @@ pub(super) async fn login(
     // Issuing checks any password restriction, after the password itself so
     // that it reveals nothing to a stranger.
     let (session, csrf, expires_at) = issue_session();
-    state
+    let repository = state
         .repository
         .for_workspace(workspace.id)
         .audited_as_sign_in(
             credential.user_id,
             SessionAuthMethod::LocalPassword.as_str(),
-        )
-        .issue_login_session(
-            Uuid::new_v4(),
-            &credential,
-            workspace.id,
-            &session.digest(),
-            &csrf.digest(),
-            expires_at,
-        )
-        .await?;
+        );
+    match request.invitation_secret {
+        Some(secret) => {
+            repository
+                .accept_invitation_with_password(
+                    Uuid::new_v4(),
+                    &credential,
+                    workspace.id,
+                    &super::oidc::digest(&secret),
+                    &session.digest(),
+                    &csrf.digest(),
+                    expires_at,
+                )
+                .await?
+        }
+        None => {
+            repository
+                .issue_login_session(
+                    Uuid::new_v4(),
+                    &credential,
+                    workspace.id,
+                    &session.digest(),
+                    &csrf.digest(),
+                    expires_at,
+                )
+                .await?
+        }
+    }
     session_response(
         &state,
         credential.user_id,

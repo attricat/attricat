@@ -68,6 +68,7 @@ export const singleSignOnStartSchema = z.object({
 export const invitationOptionsSchema = z.object({
   login_identifier: z.string(),
   display_name: z.string().nullable(),
+  password_allowed: z.boolean(),
 });
 
 export const identityLinkStatusSchema = z.object({

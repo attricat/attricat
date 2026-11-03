@@ -2132,6 +2132,7 @@
     "setPassword": "Ustaw hasło i dołącz do obszaru roboczego",
     "invitationAccepted": "Zaproszenie zostało zaakceptowane. Możesz teraz korzystać z obszaru roboczego.",
     "acceptTitle": "Zaakceptuj zaproszenie do obszaru roboczego",
+    "acceptWithPasswordHint": "Masz już konto Attricat? Użyj jego adresu e-mail i hasła. Zaproszenie działa tylko dla adresu, na który zostało wysłane.",
     "acceptInvitation": "Zaakceptuj zaproszenie",
     "teams": "Zespoły",
     "teamsDescription": "Zespoły grupują członków, aby atrybut użytkownika lub zespołu mógł przypisać pracę zespołowi. Przypisanie zapisuje zespół, więc zmiana nazwy zespołu lub jego składu nigdy nie zmienia rekordów.",

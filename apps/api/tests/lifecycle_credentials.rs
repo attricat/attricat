@@ -318,3 +318,76 @@ async fn a_password_reset_revokes_personal_tokens_in_every_workspace(pool: PgPoo
     .unwrap();
     assert_eq!(live, 0);
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_removed_member_accepts_an_invitation_with_their_password(pool: PgPool) {
+    let repository = AttricatRepository::system(pool.clone());
+    let email = "returning@example.test";
+    let user = create_user(&pool, email, true).await;
+    let password =
+        api::account::hash_password(&api::account::Password::new("their password")).unwrap();
+    sqlx::query("INSERT INTO local_password_credentials (user_id, password_hash) VALUES ($1, $2)")
+        .bind(user)
+        .bind(password.as_phc())
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (owner, workspace, _) = two_owned_workspaces(&pool, "returning").await;
+    sqlx::query("INSERT INTO workspace_memberships (id, workspace_id, user_id, state) VALUES ($1, $2, $3, 'inactive')")
+        .bind(Uuid::new_v4())
+        .bind(workspace)
+        .bind(user)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let digest = vec![31u8; 32];
+    sqlx::query("INSERT INTO workspace_invitations (id, workspace_id, inviter_user_id, invitee_email, role_id, scope_type, scope_target_id, token_digest, expires_at) VALUES ($1, $2, $3, $4, $5, 'workspace', $2, $6, $7)")
+        .bind(Uuid::new_v4())
+        .bind(workspace)
+        .bind(owner)
+        .bind(email)
+        .bind(VIEWER_ROLE_ID.parse::<Uuid>().unwrap())
+        .bind(&digest)
+        .bind(Utc::now() + Duration::hours(1))
+        .execute(&pool)
+        .await
+        .unwrap();
+    let credential = repository
+        .local_login_credential(email)
+        .await
+        .unwrap()
+        .unwrap();
+    let session = api::account::SessionDigest::from_slice(&[32; 32]).unwrap();
+    let csrf = api::account::SessionDigest::from_slice(&[33; 32]).unwrap();
+
+    repository
+        .for_workspace(workspace)
+        .accept_invitation_with_password(
+            Uuid::new_v4(),
+            &credential,
+            workspace,
+            &digest,
+            &session,
+            &csrf,
+            Utc::now() + Duration::hours(1),
+        )
+        .await
+        .unwrap();
+
+    let state: String = sqlx::query_scalar(
+        "SELECT state FROM workspace_memberships WHERE workspace_id = $1 AND user_id = $2",
+    )
+    .bind(workspace)
+    .bind(user)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(state, "active");
+    assert!(
+        repository
+            .validate_browser_session(&session)
+            .await
+            .unwrap()
+            .is_some()
+    );
+}

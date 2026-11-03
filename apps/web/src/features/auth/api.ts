@@ -35,6 +35,7 @@ export const login = async (
   loginIdentifier: string,
   email: string,
   password: string,
+  invitationSecret?: string,
 ) => {
   return request(
     '/api/auth/login',
@@ -43,6 +44,7 @@ export const login = async (
       login_identifier: loginIdentifier,
       email,
       password,
+      invitation_secret: invitationSecret,
     }),
   );
 };

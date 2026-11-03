@@ -122,7 +122,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `POST` | `/extensions/{extension_id}/annotation-namespace/records/{record_id}` | Operator repair or cleanup of one claimed namespace on a record using the extension annotation patch shape (`extensions.manage` and `records.write` on the record). |
 | `POST` | `/auth/discover` | Resolve a normalized workspace identifier and return its sign-in methods; rate-limited and intentionally minimal. |
 | `GET` | `/auth/sample-logins` | Return the sample accounts, their shared password and the workspace identifier when `ATTRICAT_SAMPLE_ACCOUNTS` or `ATTRICAT_DEMO_MODE` is on, otherwise `null`. Demo mode also rejects password reset and member, role-grant, ownership, invitation and user-creation changes with `403 disabled_in_demo`. |
-| `POST` | `/auth/login` | Sign in with a previously resolved workspace identifier, email, and password. |
+| `POST` | `/auth/login` | Sign in with a previously resolved workspace identifier, email, and password. An optional `invitation_secret` accepts that workspace's invitation in the same step, for someone not yet a member. |
 | `POST` | `/auth/password-reset` | Request a password-reset message for a local account. |
 | `POST` | `/auth/password-reset/confirm` | Consume a password-reset secret and set a new password. |
 | `PATCH` | `/auth/preferences` | Replace the authenticated user's display preferences, `{ "time_zone": "Europe/Warsaw" \| null }`, and return the updated session payload. Unknown IANA zone names return `422`. Use `acli auth preferences`. |
@@ -678,7 +678,7 @@ targets its record and records `metadata.batch` with `operation_index` and
 | --- | --- | --- |
 | `POST` | `/auth/oidc/start` | Public. Start signing in from `login_identifier` and an optional `invitation_secret`. Returns `authorization_url` and sets a cookie. |
 | `GET` | `/auth/oidc/callback/{workspace_id}` | Public. The provider's redirect target. Redirects to `/oidc/complete`, with `?error=<code>` on failure or `?linked=true` after linking. |
-| `POST` | `/auth/oidc/invitation` | Public. From an invitation's `secret`, returns its `login_identifier` and the provider's `display_name`, or `null`. |
+| `POST` | `/auth/oidc/invitation` | Public. From an invitation's `secret`, returns its `login_identifier`, the provider's `display_name` or `null`, and `password_allowed`, whether `/auth/login` can accept it. |
 | `GET`, `POST` | `/auth/oidc/link` | The caller's link status; start linking the signed-in account. `POST` needs a browser session. |
 | `DELETE` | `/workspace/members/{member_id}/identity` | Remove a member's links in this workspace (`workspace.manage`). |
 

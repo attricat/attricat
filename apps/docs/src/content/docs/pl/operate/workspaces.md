@@ -88,7 +88,7 @@ Rolę właściciela można przydzielić tylko w całym obszarze roboczym.
 
 ## Zaproszenia
 
-Na karcie **Zaproszenia** zaproś osobę przez e-mail, podając rolę, zakres i datę wygaśnięcia, domyślnie za tydzień. Otrzyma ona jednorazowy link. Osoba, która ma już konto, akceptuje zaproszenie i dołącza; nowa osoba najpierw ustawia hasło.
+Na karcie **Zaproszenia** zaproś osobę przez e-mail, podając rolę, zakres i datę wygaśnięcia, domyślnie za tydzień. Otrzyma ona jednorazowy link. Osoba, która ma już konto, akceptuje zaproszenie i dołącza, logując się hasłem na stronie zaproszenia, jeśli obszar roboczy dopuszcza hasła, lub przez dostawcę tożsamości; nowa osoba najpierw ustawia hasło.
 
 Możesz też utworzyć użytkownika bezpośrednio i wysłać mu link wdrożeniowy. Ponowne zaproszenie osoby, zanim ustawi hasło, odwołuje jej wcześniejsze oczekujące zaproszenie. Oczekujące zaproszenie możesz w każdej chwili odwołać.
 

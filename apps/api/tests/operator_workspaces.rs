@@ -380,27 +380,38 @@ async fn existing_user_accepts_ownership_with_their_current_password(pool: PgPoo
         .workspace_invitation_url(BOOTSTRAP_OWNER_EMAIL)
         .await
         .unwrap();
-    // So the invitation sends them to the workspace they can sign in to.
+    let secret = query_value(&url, "secret");
     let options: Value = Client::new()
         .post(format!("{base_url}/auth/oidc/invitation"))
-        .json(&json!({ "secret": query_value(&url, "secret") }))
+        .json(&json!({ "secret": secret }))
         .send()
         .await
         .unwrap()
         .json()
         .await
         .unwrap();
-    assert_eq!(options["login_identifier"], "default.local");
-    let (cookie, csrf) = sign_in(&base_url, "default.local", BOOTSTRAP_OWNER_EMAIL).await;
-    let accepted = Client::new()
-        .post(format!("{base_url}/workspace/invitations/accept"))
-        .header("cookie", &cookie)
-        .header("x-attricat-csrf", &csrf)
-        .json(&json!({ "secret": query_value(&url, "secret") }))
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(accepted.status(), StatusCode::OK);
+    assert_eq!(options["login_identifier"], "acme.example");
+    assert_eq!(options["password_allowed"], true);
+    // Accepting with a password needs the right one, like any sign-in.
+    let login = |password: &'static str| {
+        Client::new()
+            .post(format!("{base_url}/auth/login"))
+            .json(&json!({
+                "login_identifier": "acme.example",
+                "email": BOOTSTRAP_OWNER_EMAIL,
+                "password": password,
+                "invitation_secret": secret,
+            }))
+            .send()
+    };
+    assert_eq!(
+        login("not the password").await.unwrap().status(),
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        login(OWNER_PASSWORD).await.unwrap().status(),
+        StatusCode::OK
+    );
     let (cookie, _) = sign_in(&base_url, "acme.example", BOOTSTRAP_OWNER_EMAIL).await;
     let session = get_json(&base_url, "/auth/session", &cookie).await;
     assert_eq!(session["login_identifier"], "acme.example");
