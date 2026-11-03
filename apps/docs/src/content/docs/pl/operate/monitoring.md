@@ -46,7 +46,7 @@ Przydatne serie:
 
 | Seria | Na co zwracać uwagę |
 | --- | --- |
-| `attricat_database_ready`, `attricat_object_store_ready` | Zero przez dwa interwały sondy. |
+| `attricat_database_ready`, `attricat_file_worker_database_ready`, `attricat_object_store_ready` | Zero przez dwa interwały sondy. |
 | `attricat_task_queue_depth`, `attricat_task_queue_oldest_age_seconds`, `attricat_task_queue_retries` | Rosnąca głębokość, stare zadania, jakiekolwiek martwe wiadomości. |
 | `attricat_file_worker_queue_depth`, `attricat_file_worker_oldest_age_seconds`, `attricat_file_worker_retries` | To samo dla przetwarzania plików. |
 | `attricat_file_worker_jobs_failed_total` | Wzrosty. |
@@ -114,7 +114,7 @@ Zmiany w katalogu tworzą wewnętrzne zdarzenia, które konsumują przepływy pr
    acli event replay <consumer-id> <event-id>
    ```
 
-Ponowienie nie zeruje licznika prób, więc dostarczenie, które znów się nie powiedzie, od razu wraca do martwych wiadomości. Nie ponawiaj wielokrotnie tego samego dostarczenia bez usunięcia przyczyny.
+Ponowienie dostarczenia reguły lub przepływu pracy nie zeruje licznika prób, więc jeśli znów się nie powiedzie, od razu wraca do martwych wiadomości. Dostarczenie do rozszerzenia zaczyna od nowa z pięcioma próbami. Nie ponawiaj wielokrotnie tego samego dostarczenia bez usunięcia przyczyny.
 
 Uruchomienia reguł i przepływów pracy oraz operacje rozszerzeń mają własne martwe wiadomości i polecenia ponawiania; zobacz [Reguły](/pl/builders/rules/), [Przepływy pracy](/pl/builders/workflows/) i [Operacje](/pl/extensions/operations/).
 

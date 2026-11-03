@@ -43,7 +43,7 @@ Ramka pozostaje zamontowana, gdy użytkownik przełącza kontekst lub motyw. Nas
 | `attricat.command({ command_id, payload })` | `client.commands` | Wywołuje jedno z zadeklarowanych poleceń serwerowych rozszerzenia. |
 | `attricat.storage.get/set/delete/list(…)` | `storage.extension` | Magazyn klucz-wartość rozszerzenia. `set` i `delete` przyjmują `expected_revision`. |
 | `attricat.navigate({ record_id, tab? })` | `client.navigation` | Otwiera stronę rekordu, a z `tab` jedną z Twoich kart na niej. |
-| `attricat.notify({ message, severity })` | `client.notification` | Wyświetla powiadomienie hosta. Komunikaty są przycinane do 512 znaków. |
+| `attricat.notify({ message, severity })` | `client.notification` | Wyświetla powiadomienie hosta. `severity` jest opcjonalne: `success`, `info`, `warning` lub `error`. Komunikat dłuższy niż 512 znaków jest odrzucany. |
 | `attricat.refresh({ target: 'current_record' })` | `client.refresh` | Ponownie ładuje widoki bieżącego rekordu po zmianie wprowadzonej przez Twoje polecenie. Dostępne w miejscach osadzenia na stronach rekordów. |
 | `attricat.dialog.close()` | `client.action_dialog` | Zamyka okno. Dostępne tylko wewnątrz okna akcji; okna otwiera host, gdy użytkownik wybierze [akcję](#akcje). |
 | `attricat.operations.start({ operation_id, input, idempotency_key })` | `client.operations.start` | Uruchamia [operację interaktywną](/pl/extensions/operations/#operacje-interaktywne) dla rekordów akcji, która otworzyła okno, i zwraca `{ run_id }`. Dostępne tylko w oknie akcji. |

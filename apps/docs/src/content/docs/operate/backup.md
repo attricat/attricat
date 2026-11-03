@@ -39,7 +39,7 @@ If any step fails, leave the target stopped and investigate. Never go live with 
 
 ## Retention to be aware of
 
-- **Value history** older than `ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` (90 by default) is deleted when the API starts.
+- **Value history** older than `ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` (90 by default) is deleted by the API's regular cleanup, which runs at startup and every minute by default.
 - **Unreferenced files** are marked deleted, then purged after `FILE_DELETE_GRACE_SECONDS` (one day by default). To keep such a file, recreate its reference before the purge runs. Don't rely on the grace period as a backup.
 - **Extension operation outputs** are kept for 30 days after the run completes.
 - **Events** that every handler and extension has received are deleted after `DOMAIN_EVENT_RETENTION_DAYS` (90 by default). Events with an undelivered or failed delivery stay.

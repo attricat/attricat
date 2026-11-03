@@ -17,7 +17,7 @@ You provide and operate the rest:
 
 - **PostgreSQL 18**;
 - a private **S3-compatible** bucket;
-- an **SMTP** server with TLS;
+- an **SMTP** server with TLS. Outside `ATTRICAT_DEVTOOLS` and `ATTRICAT_DEMO_MODE`, the API refuses to start until `SMTP_HOST`, `MAIL_FROM`, `PASSWORD_RESET_URL`, `WORKSPACE_INVITATION_URL`, and `WORKSPACE_ONBOARDING_URL` are set;
 - optionally an **OTLP** trace collector and **Prometheus**;
 - optionally **Redis**, to share a cache between several API replicas.
 
@@ -59,7 +59,9 @@ docker run -d --env-file attricat.env $secrets ghcr.io/attricat/attricat@sha256:
 
 Each release is also tagged with its version, such as `0.3.0`, and with its minor line, such as `0.3`, which moves to the latest patch release. From 1.0 a major tag, such as `1`, follows the latest release of that major version. Use these tags to find a release's digest, for example with `docker buildx imagetools inspect ghcr.io/attricat/attricat:0.3.0`, then deploy that digest. `latest` follows the main branch, not the latest release. The [releases page](https://github.com/attricat/attricat/releases) lists the changes in each version.
 
-The image runs as uid and gid 10001, works with a read-only root file system, and contains no compilers or build tools. The API listens on port 3000; the file worker's private health and metrics listener is on port 3001.
+The image runs as uid and gid 10001, works with a read-only root file system, and contains no compilers or build tools. The API listens on port 3000; the file worker's private health and metrics listener is on port 3001, on loopback unless `FILE_WORKER_OPERATIONS_BIND_ADDR` says otherwise. Any other address requires the `file_worker_metrics_token` secret.
+
+On a read-only root file system, the processes still need somewhere to write. Uploads and extension artifacts stage in the directory `TMPDIR` names, and can outgrow a memory-backed `/tmp`, so `deploy/compose.yml` sets `TMPDIR=/var/tmp/attricat` on a volume and mounts `/tmp` as a 256 MiB tmpfs. At startup, the API and file worker delete their own temporary files older than an hour from that directory, which a crash can leave behind. Compose also allows 45 seconds to stop, longer than the API's request timeout and drain margin; with `docker run`, pass `--stop-timeout 45`, or Docker kills the process mid-request after 10 seconds.
 
 ## Docker Compose
 
@@ -101,7 +103,7 @@ The file worker serves the same two endpoints on its operations listener.
 
 API replicas can share one database and bucket.
 
-**Database connections.** Besides its request and task pools, each API process may hold up to three more PostgreSQL connections. Rule schedules, workflow schedules and extension intake each run on one replica at a time, which keeps a lock on its own connection. The other replicas briefly connect every five seconds to check whether they should take over. Count these connections when you size PostgreSQL's `max_connections`. Connect directly to PostgreSQL or through a pooler in session mode; PgBouncer's transaction pooling is not supported.
+**Database connections.** Besides its request and task pools and one maintenance connection, each API process may hold up to three more PostgreSQL connections. Rule schedules, workflow schedules and extension intake each run on one replica at a time, which keeps a lock on its own connection. The other replicas briefly connect every five seconds to check whether they should take over. Count these connections when you size PostgreSQL's `max_connections`. Connect directly to PostgreSQL or through a pooler in session mode; PgBouncer's transaction pooling is not supported.
 
 **Shared cache (optional).** Each replica caches definitions in its own memory, which is always correct. To let replicas share cached values and extension network rate limits, run Redis, set `CACHE_BACKEND=redis`, and put its URL in the `redis_url` secret:
 
@@ -149,7 +151,7 @@ If the previous version cannot run against the migrated database, restore the da
 
 ## Rotate secrets
 
-Database, bucket, SMTP, agent, Redis, metrics, and bootstrap credentials are [secret files](/reference/configuration/#secrets) mounted at `/run/secrets`, never environment variables. Startup refuses a secret set as an environment variable. Write the files from your secret manager; never put a credential in the image, a Compose file, a command-line argument, or a log.
+Database, bucket, SMTP, agent, Redis, metrics, and bootstrap credentials are [secret files](/reference/configuration/#secrets) mounted at `/run/secrets`, never environment variables. Startup refuses a secret set as an environment variable, and ignores `DATABASE_URL`. Write the files from your secret manager; never put a credential in the image, a Compose file, a command-line argument, or a log.
 
 Secrets are read at startup. To rotate: create the new credential, replace its secret file, roll out the migrate, API, and worker roles, wait for readiness and smoke tests, then revoke the old credential.
 
@@ -158,13 +160,14 @@ Secrets are read at startup. To rotate: create the new credential, replace its s
 - `SESSION_COOKIE_SECURE=true` and HTTPS in front of the API.
 - `ATTRICAT_DEVTOOLS=false`.
 - `ATTRICAT_AUTO_MIGRATE=false`, with `migrate` run before each rollout.
-- `SMTP_TLS_MODE=starttls` or `implicit`.
+- `SMTP_TLS_MODE=starttls` or `implicit`, and `SMTP_HOST`, `MAIL_FROM`, `PASSWORD_RESET_URL`, `WORKSPACE_INVITATION_URL`, and `WORKSPACE_ONBOARDING_URL` set.
 - A real `ATTRICAT_BOOTSTRAP_OWNER_EMAIL`; the `bootstrap_owner_password` secret emptied after first start.
 - Secret files readable only by uid 10001, and no secrets in environment variables.
 - The `file_worker_metrics_token` and `api_metrics_token` secrets set, and `/metrics` reachable only from your monitoring network.
 - A private bucket, with credentials limited to `PutObject`, `GetObject`, `DeleteObject`, `AbortMultipartUpload`, and `ListBucket`.
 - `ATTRICAT_E2E_FIXTURE_EMAIL` unset.
 - A proxy that sets `Strict-Transport-Security` and rate-limits `/api/auth/` per client address. Attricat limits guesses per account and workspace, which does not stop one client trying many of them.
+- With single sign-on behind a proxy: `TRUSTED_CLIENT_IP_HEADER` set to the header the proxy overwrites or appends the client's address to, so sign-in starts are limited per client. See the [configuration reference](/reference/configuration/).
 - At least 2 GiB of memory for each API process. Password hashing is deliberately memory-hard, so a smaller limit can end the process under a burst of sign-ins.
 - Malware scanning outside Attricat, if your uploads need it. Attricat checks file types and sizes but does not scan file contents for malware.
 - A tested backup and restore procedure.

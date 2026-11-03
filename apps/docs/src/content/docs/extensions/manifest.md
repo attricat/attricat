@@ -5,7 +5,7 @@ description: Every field of an extension's manifest.json, including capabilities
 
 `manifest.json` is strict JSON. Unknown fields anywhere in it make the package invalid.
 
-IDs used in the manifest (`attricat.id`, artifact, dependency, permission-rule, handler, and contribution IDs) may contain ASCII letters, digits, `.`, `_`, and `-`. Keep them stable across releases; layouts and grants refer to them.
+IDs used in the manifest (`attricat.id`, artifact, dependency, permission-rule, handler, and contribution IDs) may contain ASCII letters, digits, `.`, `_`, and `-`, up to 128 bytes. Keep them stable across releases; layouts and grants refer to them.
 
 ## Top-level fields
 
@@ -101,7 +101,7 @@ Each placement capability allows a contribution at one outlet. See [Client contr
 
 ## Host permissions
 
-A host permission is a rule for outbound requests. `network.request` alone permits nothing; each request must match a granted rule.
+A host permission is a rule for outbound requests. `network.request` alone permits nothing; each request must match a granted rule. `host_permissions` need `network.request` in `permissions`; `optional_host_permissions` accept it in either list.
 
 ```json
 "host_permissions": [{
@@ -118,17 +118,17 @@ A host permission is a rule for outbound requests. `network.request` alone permi
 | --- | --- | --- |
 | `id` | Required | Stable rule ID, used when granting and when making requests. |
 | `matches` | Required | URL patterns. |
-| `methods` | Required | Allowed HTTP methods. |
-| `max_request_bytes` | 65536 | Request body limit. |
+| `methods` | Required | Allowed HTTP methods: `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`. |
+| `max_request_bytes` | 65536 | Request body limit (64 KiB maximum). |
 | `max_response_bytes` | 1048576 | Response body limit (1 MiB maximum). `network.request.v2` answers in base64 within 1 MiB, so a larger response of about 750 KiB or more comes back as `uncertain` with reason `response_too_large`. |
-| `timeout_ms` | 10000 | Request timeout. |
+| `timeout_ms` | 10000 | Request timeout (60000 maximum). |
 | `max_transfer_bytes` | 0 | Enables streamed file transfers for operations, up to 1 GiB. `0` disables them. |
 | `idempotent_delivery` | `false` | Allows `POST` for output delivery. Set it only when the destination honors the `Idempotency-Key` header. |
 | `allow_query` | `false` | Lets `network.request.v2` and v2 transfers send query strings, such as presigned URLs, to this rule's destinations. Query values are never logged. |
 | `response_headers` | `[]` | Up to 16 lowercase response header names that `network.request.v2` returns in addition to `content-type`, `etag`, and `retry-after`, such as `location` or a request ID. `set-cookie` and authentication headers are not allowed. |
 | `rate_limit` | Shared budget | The rule's [request budget](#request-budgets). |
 
-A pattern is `http` or `https`, an exact host or a leading `*.` wildcard, an optional port, and a path prefix ending in `/*`. Queries, fragments, credentials, `localhost`, and private, loopback, or link-local addresses are rejected. At request time only HTTPS is allowed, redirects are not followed, and every DNS answer must be a public address. A query string is allowed at request time only on rules with `allow_query`.
+A pattern is `https`, an exact host or a leading `*.` wildcard, an optional port, and a path prefix ending in `/*`. Queries, fragments, credentials, `localhost`, and private, loopback, or link-local addresses are rejected. At request time only HTTPS is allowed, redirects are not followed, and every DNS answer must be a public address. A query string is allowed at request time only on rules with `allow_query`.
 
 ### Request budgets
 
@@ -212,7 +212,7 @@ Exported event types must start with `plugin.<extension-id>.` and end in `.vN`. 
 | `connections` | See [Connections](#connections). | `connections.use` |
 | `exports` | See [Export destinations](#export-destinations). | `exports.mappings` |
 
-`handler` is a name your component sees: commands receive it as `request.handler`, operations as `operation-id`. Event handlers don't receive it; see [Which handler was called](/extensions/server/#which-handler-was-called).
+Event handlers, commands, and operations need a `server_wasm` artifact. `handler` is a name your component sees: commands receive it as `request.handler`, operations as `operation-id`. Event handlers don't receive it; see [Which handler was called](/extensions/server/#which-handler-was-called).
 
 ### Connections
 
@@ -291,7 +291,7 @@ An export destination gives Attricat's export status, preview, retry, and resync
 
 A contribution whose `artifact` is the `client_native` artifact is drawn natively; otherwise its artifact must be `client_frame`. Native UI is allowed at `record_tab`, `blueprint_attribute_configuration`, `blueprint_detail_panel`, `blueprint_panel`, `data_health_card`, `export_mapping`, `action_dialog` and `attribute_editor`; routes, embedded `navigation`, `blueprint_publish_check` and `audit_event_panel` stay Frame UI.
 
-Each extension can use each frame outlet once, but may add several native contributions, actions, dialogs, table cells and editors, and up to two record tabs. Actions, dialogs and tabs use `version` 1. An action's `title` has at most 64 characters; a tab's, in every language, at most 24.
+Each extension can use each frame outlet once, but may add several native contributions, actions, dialogs, table cells and editors, and up to two record tabs. Actions, dialogs and tabs use `version` 1. An action's `title` has at most 64 characters; a tab's, in every language, at most 24. A contribution with a `title` can add `translations`, keyed by a language code such as `pl` or `pt-BR`: `{ "pl": { "title": "…" } }`, at most 128 characters each.
 
 ## Table cells
 

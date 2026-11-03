@@ -5,7 +5,7 @@ description: Manage members, teams, roles, invitations, sidebar navigation, API 
 
 A workspace is one catalog with its own members, blueprints, records, contexts, and extensions. Workspaces are fully separated: nothing is shared between them.
 
-Most administration happens under **Manage → Workspace management**, which has up to seven tabs, depending on your permissions: **Members**, **Teams**, **Roles**, **Invitations**, **Navigation**, **Tag colors**, and **Agent**.
+Most administration happens under **Manage → Workspace management**, which has up to eight tabs, depending on your permissions: **Members**, **Teams**, **Roles**, **Invitations**, **Navigation**, **Tag colors**, **Agent**, and **Sign-in**.
 
 ## Signing in
 

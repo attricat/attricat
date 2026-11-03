@@ -43,7 +43,7 @@ The frame stays mounted when the user switches context or theme. Listen for the 
 | `attricat.command({ command_id, payload })` | `client.commands` | Calls one of the extension's declared server commands. |
 | `attricat.storage.get/set/delete/list(…)` | `storage.extension` | The extension's key-value storage. `set` and `delete` accept `expected_revision`. |
 | `attricat.navigate({ record_id, tab? })` | `client.navigation` | Opens a record page, or with `tab` one of your record tabs on it. |
-| `attricat.notify({ message, severity })` | `client.notification` | Shows a host notification. Messages are trimmed to 512 characters. |
+| `attricat.notify({ message, severity })` | `client.notification` | Shows a host notification. `severity` is optional: `success`, `info`, `warning`, or `error`. A message longer than 512 characters is refused. |
 | `attricat.refresh({ target: 'current_record' })` | `client.refresh` | Reloads the current record's views after your command changed it. Available in record page outlets. |
 | `attricat.dialog.close()` | `client.action_dialog` | Closes the dialog. Available only inside an action dialog; the host opens dialogs when the user chooses an [action](#actions). |
 | `attricat.operations.start({ operation_id, input, idempotency_key })` | `client.operations.start` | Starts an [interactive operation](/extensions/operations/#interactive-operations) for the records of the action that opened the dialog and resolves to `{ run_id }`. Available only in an action dialog. |

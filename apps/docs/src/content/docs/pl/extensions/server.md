@@ -80,7 +80,8 @@ Zasady dostarczania:
 - **Co najmniej raz.** To samo zdarzenie może dotrzeć dwukrotnie, także po zakończeniu Twojej procedury obsługi, ale zanim Attricat to zapisał. Używaj identyfikatora zdarzenia jako klucza idempotencji.
 - **Brak gwarancji kolejności.** Nie wnioskuj o przyczynowości na podstawie kolejności nadejścia.
 - **Bieżący stan odczytujesz sam.** Zdarzenie mówi, co się zmieniło; jeśli potrzebujesz pełnego stanu rekordu, odczytaj go.
-- **Błędy powodują kwarantannę rozszerzenia.** W eksporcie `handler` z wersji 1.0 pułapka (trap), wyczerpanie paliwa lub pamięci, przekroczenie limitu czasu albo zwrócony błąd poddają instalację kwarantannie. Dostarczenie jest ponawiane i po skonfigurowanej liczbie prób staje się martwą wiadomością (dead letter). `event-handler` z wersji 1.1 może zgłosić niepowodzenie bez kwarantanny; zobacz [Typowane wyniki](#typowane-wyniki).
+- **Tylko zdarzenia od chwili subskrypcji.** Procedura obsługi otrzymuje zdarzenia, które wystąpią, gdy jej rozszerzenie jest włączone i je subskrybuje. Włączenie rozszerzenia, przyznanie uprawnienia ani dodanie typu zdarzenia nie odtwarza wcześniejszych zdarzeń, a zdarzenia z czasu, gdy instalacja jest wyłączona lub w kwarantannie, nie są dostarczane później. Aby nadrobić zaległości, odczytaj katalog, na przykład kanałem zmian `changes` opisanym niżej.
+- **Błędy powodują kwarantannę rozszerzenia.** W eksporcie `handler` z wersji 1.0 pułapka (trap), wyczerpanie paliwa lub pamięci, przekroczenie limitu czasu albo zwrócony błąd poddają instalację kwarantannie. Zdarzenie już do niej nie trafi: ponowienie dostarczenia zastaje instalację w kwarantannie i się kończy, a późniejsze włączenie nie przywraca zdarzenia. `event-handler` z wersji 1.1 może zgłosić niepowodzenie bez kwarantanny; zobacz [Typowane wyniki](#typowane-wyniki).
 
 Przed każdym dostarczeniem Attricat ponownie sprawdza, czy instalacja jest włączona, nadal korzysta z tego samego wydania i wciąż ma potrzebne uprawnienia.
 
@@ -167,7 +168,7 @@ Z `storage.extension` rozszerzenie dostaje własny magazyn klucz-wartość w obs
 | `storage.delete.v1` | `{key, expected_revision?}` | `null` |
 | `storage.list.v1` | `{prefix?, cursor?, limit?}` | `{entries: [{key, value, revision}], cursor}` |
 
-`expected_revision` sprawia, że `set` i `delete` kończą się błędem, jeśli klucz zmienił się od Twojego odczytu. Instalacja może przechowywać do 65 536 kluczy i 256 MiB, a pojedyncza wartość może mieć najwyżej 64 KiB.
+`expected_revision` sprawia, że `set` i `delete` kończą się błędem, jeśli klucz zmienił się od Twojego odczytu. Instalacja może przechowywać do 65 536 kluczy i 256 MiB, przy czym klucz może mieć najwyżej 256 bajtów, a pojedyncza wartość najwyżej 64 KiB. `list` zwraca od 1 do 100 wpisów na stronę.
 
 ## Konfiguracja
 
@@ -217,7 +218,7 @@ Host:
 - egzekwuje limity rozmiaru i limit czasu z reguły oraz jej [limit żądań](/pl/extensions/manifest/#limity-żądań): własny `rate_limit` reguły albo 60 żądań na minutę wspólnych dla reguł wydania, które go nie mają (liczonych osobno w każdym procesie API, a przy `CACHE_BACKEND=redis` wspólnie dla wszystkich replik);
 - zwraca status, wybrane bezpieczne nagłówki i treść w base64.
 
-Broker nigdy nie ponawia żądań. Przekroczenie limitu czasu lub błąd połączenia to **niepewny wynik**: druga strona mogła otrzymać żądanie. Ponawiaj tylko wtedy, gdy miejsce docelowe obsługuje klucz idempotencji i wysyłasz stały klucz. Żądanie v1 ponad limit kończy się błędem `network request rate limit exceeded`.
+Broker nigdy nie ponawia żądań. Przekroczenie limitu czasu lub błąd połączenia to **niepewny wynik**: druga strona mogła otrzymać żądanie. Ponawiaj tylko wtedy, gdy miejsce docelowe obsługuje klucz idempotencji i wysyłasz stały klucz jako `idempotency_key`, który host wysyła w nagłówku `Idempotency-Key`. Żądanie v1 ponad limit kończy się błędem `network request rate limit exceeded`.
 
 ### network.request.v2
 
@@ -226,8 +227,7 @@ Broker nigdy nie ponawia żądań. Przekroczenie limitu czasu lub błąd połąc
 - ciąg zapytania w `url`, jeśli pasująca reguła ustawia `allow_query: true`, dla parametrów takich jak `?marketplaceIds=` albo podpisanych adresów URL. Wartości zapytania nigdy nie trafiają do dzienników, śladów, metryk, błędów ani zapisanej historii dostarczeń;
 - `body_base64` dla treści binarnej, zamiast `body`;
 - `secret_body: {"format": "form" | "json", "fields": [{"field", "secret"}]}`, które wstawia sekrety obszaru roboczego do treści formularza lub JSON. `field` w JSON to klucz najwyższego poziomu albo wskaźnik JSON (JSON pointer). Komponent nigdy nie widzi sekretu;
-- `connection`, które dodaje do żądania token dostępu [połączenia](/pl/extensions/exports/#połączenia);
-- `idempotency_key`, wysyłany jako nagłówek `Idempotency-Key`.
+- `connection`, które dodaje do żądania token dostępu [połączenia](/pl/extensions/exports/#połączenia).
 
 ```json
 {
@@ -299,7 +299,7 @@ Każde wywołanie Twojego komponentu, np. jedno polecenie, dostarczenie zdarzeni
 
 Komponent serwerowy może mieć najwyżej 32 MiB, a każdy jego moduł najwyżej 16 384 typy, importy, zmienne globalne, tabele, pamięci, eksporty i elementy tabel łącznie. Kompiluje się w osobnym procesie ograniczonym do 512 MiB pamięci i 2 minut, a po niepowodzeniu kolejna próba nastąpi dopiero po 5 minutach. Każdy proces API wykonuje naraz 16 wywołań, w tym 8 z jednego obszaru roboczego, a kolejne czekają na swoją kolej.
 
-Przekroczenie któregokolwiek z tych limitów liczy się jako błąd krytyczny i powoduje kwarantannę instalacji, więc utrzymuj wywołania małe. Długotrwała praca należy do [operacji](/pl/extensions/operations/), która w każdej partii wykonuje ograniczoną ilość pracy.
+Przekroczenie limitu w wywołaniu liczy się jako błąd krytyczny i powoduje kwarantannę instalacji, więc utrzymuj wywołania małe. Długotrwała praca należy do [operacji](/pl/extensions/operations/), która w każdej partii wykonuje ograniczoną ilość pracy.
 
 - JSON wysyłany do hosta: 64 KiB na wywołanie. JSON w odpowiedzi hosta: 1 MiB.
 - Komunikaty dziennika: 16 KiB.

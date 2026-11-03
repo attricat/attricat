@@ -80,7 +80,8 @@ Delivery rules:
 - **At least once.** The same event can arrive twice, including after your handler finished but before Attricat recorded it. Use the event ID as an idempotency key.
 - **No ordering guarantee.** Don't infer causality from arrival order.
 - **Current state is yours to read.** The event says what changed; read the record if you need its full state.
-- **Failures quarantine the extension.** With the 1.0 `handler` export, a trap, running out of fuel or memory, a timeout, or a returned error quarantines the installation. The delivery is retried, and becomes a dead letter after the configured number of attempts. A 1.1 `event-handler` can report a failure without being quarantined; see [Typed outcomes](#typed-outcomes).
+- **Only events from when you subscribe.** A handler receives events that occur while its extension is enabled and subscribed to them. Enabling an extension, granting a capability, or adding an event type doesn't replay earlier events, and events that occur while the installation is disabled or quarantined aren't delivered later. To catch up, read the catalog, for example with the `changes` feed below.
+- **Failures quarantine the extension.** With the 1.0 `handler` export, a trap, running out of fuel or memory, a timeout, or a returned error quarantines the installation. The event doesn't reach it again: the delivery's retry finds the installation quarantined and ends, and enabling it later doesn't bring the event back. A 1.1 `event-handler` can report a failure without being quarantined; see [Typed outcomes](#typed-outcomes).
 
 Before each delivery, Attricat checks again that the installation is enabled, still on the same release, and still has the grants it needs.
 
@@ -167,7 +168,7 @@ With `storage.extension`, the extension gets its own key-value store in the work
 | `storage.delete.v1` | `{key, expected_revision?}` | `null` |
 | `storage.list.v1` | `{prefix?, cursor?, limit?}` | `{entries: [{key, value, revision}], cursor}` |
 
-`expected_revision` makes `set` and `delete` fail if the key changed since you read it. An installation can store up to 65,536 keys and 256 MiB, with values of at most 64 KiB.
+`expected_revision` makes `set` and `delete` fail if the key changed since you read it. An installation can store up to 65,536 keys and 256 MiB, with keys of at most 256 bytes and values of at most 64 KiB. `list` returns 1 to 100 entries per page.
 
 ## Configuration
 
@@ -217,7 +218,7 @@ The host:
 - enforces the rule's size limits and timeout, and its [request budget](/extensions/manifest/#request-budgets): the rule's own `rate_limit`, or 60 requests per minute shared by the release's rules without one (counted per API process, or shared across replicas when `CACHE_BACKEND=redis`);
 - returns the status, selected safe headers, and the body as base64.
 
-The broker never retries. A timeout or connection failure is an **uncertain outcome**: the other side may have received the request. Retry only if the destination supports an idempotency key and you send a stable one. A v1 request over the budget fails with `network request rate limit exceeded`.
+The broker never retries. A timeout or connection failure is an **uncertain outcome**: the other side may have received the request. Retry only if the destination supports an idempotency key and you send a stable one as `idempotency_key`, which the host sends as the `Idempotency-Key` header. A v1 request over the budget fails with `network request rate limit exceeded`.
 
 ### network.request.v2
 
@@ -226,8 +227,7 @@ The broker never retries. A timeout or connection failure is an **uncertain outc
 - a query string in `url`, if the matching rule sets `allow_query: true`, for parameters such as `?marketplaceIds=` or presigned URLs. Query values never appear in logs, traces, metrics, errors, or the stored delivery history;
 - `body_base64` for a binary body, instead of `body`;
 - `secret_body: {"format": "form" | "json", "fields": [{"field", "secret"}]}`, which puts workspace secrets into a form or JSON body. A JSON `field` is a top-level key or a JSON pointer. The component never sees the secret;
-- `connection`, which adds the [connection's](/extensions/exports/#connections) access token to the request;
-- `idempotency_key`, sent as the `Idempotency-Key` header.
+- `connection`, which adds the [connection's](/extensions/exports/#connections) access token to the request.
 
 ```json
 {
@@ -299,7 +299,7 @@ Each call into your component, such as one command, event delivery, or operation
 
 A server component can be at most 32 MiB, and each module in it at most 16,384 types, imports, globals, tables, memories, exports and table elements together. It compiles in a separate process limited to 512 MiB of memory and 2 minutes, and if that fails it isn't tried again for 5 minutes. Each API process runs 16 invocations at once, and 8 from one workspace, so more wait their turn.
 
-Going over any of them counts as a fault and quarantines the installation, so keep each call small. Long work belongs in an [operation](/extensions/operations/), which does a bounded amount per batch.
+Going over a limit on a call counts as a fault and quarantines the installation, so keep each call small. Long work belongs in an [operation](/extensions/operations/), which does a bounded amount per batch.
 
 - JSON you send to the host: 64 KiB per call. JSON the host answers with: 1 MiB.
 - Log messages: 16 KiB.

@@ -91,13 +91,13 @@ Add `interactive` to an operation to let signed-in users start it for a record o
 {"id": "generate", "handler": "generate", "request_schema": {"type": "object"}, "interactive": {"version": 1, "max_selection": 50}}
 ```
 
-It needs `client.operations.start`. Build the component against the `attricat-extension` or `operation-extension` [world](/extensions/server/#host-api-version); its `selection` interface works inside an interactive run.
+It needs `client.operations.start`. Build the component against a [world](/extensions/server/#host-api-version) that exports `operations` or `deferrable-operations`; its `selection` interface works inside an interactive run.
 
 When a run starts, Attricat checks that the user can read every selected record and freezes the user, release, input, context, and the ordered selection. Then:
 
 - `selection.describe()` returns the count, blueprint revision, and context.
 - `selection.page(cursor, limit)` returns 1 to 10 members with their saved values resolved in the run's context, the stored values of reusable attributes attached to them (`reusable_values`, with each value's `context_id`), your own annotations, and `read_at`. Members the user can no longer read come back as `unavailable`, deleted ones as `deleted`.
-- `attricat-data.read` and the connector `catalog` calls are refused. `attricat-data.batch` accepts `update`, `relationships`, and `annotate` intents for selected records only, checked against the user's current permissions.
+- `attricat-data.read` and the connector `attricat` calls are refused. `attricat-data.batch` accepts `update`, `relationships`, and `annotate` intents for selected records only, checked against the user's current permissions.
 - If the user leaves the workspace, the run stops with a safe reason rather than continuing with the extension's own grants.
 
 Capture what you need from each record once and keep it in the checkpoint, so a retried batch renders the same bytes. Report progress as `{"completed": n, "total": n, "outcome": {"succeeded": n, "failed": n, "skipped": n}}`; Attricat shows these counts separately from the run status, so a run can complete with some records failed.

@@ -5,7 +5,7 @@ description: Zarządzaj członkami, zespołami, rolami, zaproszeniami, nawigacj�
 
 Obszar roboczy to jeden katalog z własnymi członkami, schematami, rekordami, kontekstami i rozszerzeniami. Obszary robocze są całkowicie odseparowane: nic nie jest między nimi współdzielone.
 
-Większość zadań administracyjnych wykonasz w **Zarządzanie → Zarządzanie obszarem roboczym**, gdzie jest do siedmiu kart, zależnie od Twoich uprawnień: **Członkowie**, **Zespoły**, **Role**, **Zaproszenia**, **Nawigacja**, **Kolory znaczników** i **Agent**.
+Większość zadań administracyjnych wykonasz w **Zarządzanie → Zarządzanie obszarem roboczym**, gdzie jest do ośmiu kart, zależnie od Twoich uprawnień: **Członkowie**, **Zespoły**, **Role**, **Zaproszenia**, **Nawigacja**, **Kolory znaczników**, **Agent** i **Logowanie**.
 
 ## Logowanie
 

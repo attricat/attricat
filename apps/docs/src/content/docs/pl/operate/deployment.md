@@ -17,7 +17,7 @@ Resztę zapewniasz i utrzymujesz samodzielnie:
 
 - **PostgreSQL 18**;
 - prywatny zasobnik (bucket) **zgodny z S3**;
-- serwer **SMTP** z TLS;
+- serwer **SMTP** z TLS. Poza `ATTRICAT_DEVTOOLS` i `ATTRICAT_DEMO_MODE` API nie uruchomi się, dopóki nie ustawisz `SMTP_HOST`, `MAIL_FROM`, `PASSWORD_RESET_URL`, `WORKSPACE_INVITATION_URL` i `WORKSPACE_ONBOARDING_URL`;
 - opcjonalnie kolektor śladów **OTLP** i **Prometheus**;
 - opcjonalnie **Redis**, aby kilka replik API współdzieliło bufor.
 
@@ -59,7 +59,9 @@ docker run -d --env-file attricat.env $secrets ghcr.io/attricat/attricat@sha256:
 
 Każde wydanie ma też tag z numerem wersji, np. `0.3.0`, oraz tag linii minor, np. `0.3`, który przechodzi na najnowsze wydanie poprawkowe. Od wersji 1.0 tag wersji głównej, np. `1`, wskazuje najnowsze wydanie tej wersji głównej. Za pomocą tych tagów znajdź skrót wydania, np. poleceniem `docker buildx imagetools inspect ghcr.io/attricat/attricat:0.3.0`, a potem wdrażaj ten skrót. `latest` wskazuje gałąź main, a nie najnowsze wydanie. Zmiany w każdej wersji opisuje [strona wydań](https://github.com/attricat/attricat/releases).
 
-Obraz działa jako uid i gid 10001, działa z systemem plików root tylko do odczytu i nie zawiera kompilatorów ani narzędzi do budowania. API nasłuchuje na porcie 3000; prywatny nasłuch procesu roboczego plików dla kontroli stanu i metryk działa na porcie 3001.
+Obraz działa jako uid i gid 10001, działa z systemem plików root tylko do odczytu i nie zawiera kompilatorów ani narzędzi do budowania. API nasłuchuje na porcie 3000; prywatny nasłuch procesu roboczego plików dla kontroli stanu i metryk działa na porcie 3001, na adresie pętli zwrotnej, chyba że `FILE_WORKER_OPERATIONS_BIND_ADDR` wskazuje inny. Każdy inny adres wymaga sekretu `file_worker_metrics_token`.
+
+Przy systemie plików root tylko do odczytu procesy nadal muszą mieć gdzie zapisywać. Przesyłane pliki i artefakty rozszerzeń są tymczasowo przechowywane w katalogu wskazanym przez `TMPDIR` i mogą nie zmieścić się w `/tmp` trzymanym w pamięci, dlatego `deploy/compose.yml` ustawia `TMPDIR=/var/tmp/attricat` na wolumenie, a `/tmp` montuje jako tmpfs o rozmiarze 256 MiB. Przy starcie API i proces roboczy plików usuwają z tego katalogu własne pliki tymczasowe starsze niż godzina, które może pozostawić awaria. Compose daje też 45 sekund na zatrzymanie, czyli więcej niż limit czasu żądania API i margines na ich dokończenie; przy `docker run` podaj `--stop-timeout 45`, inaczej Docker po 10 sekundach zakończy proces w trakcie żądania.
 
 ## Docker Compose
 
@@ -101,7 +103,7 @@ Proces roboczy plików udostępnia te same dwa punkty końcowe na swoim nasłuch
 
 Repliki API mogą współdzielić jedną bazę danych i jeden zasobnik.
 
-**Połączenia z bazą danych.** Poza pulami żądań i zadań każdy proces API może utrzymywać do trzech dodatkowych połączeń z PostgreSQL. Harmonogramy reguł, harmonogramy przepływów pracy i przyjmowanie zadań rozszerzeń działają w danej chwili tylko na jednej replice, która utrzymuje blokadę na własnym połączeniu. Pozostałe repliki co pięć sekund łączą się na chwilę, aby sprawdzić, czy powinny przejąć tę rolę. Uwzględnij te połączenia przy ustalaniu `max_connections` w PostgreSQL. Łącz się z PostgreSQL bezpośrednio albo przez pooler w trybie sesji; tryb transakcyjny PgBouncera nie jest obsługiwany.
+**Połączenia z bazą danych.** Poza pulami żądań i zadań oraz jednym połączeniem konserwacyjnym każdy proces API może utrzymywać do trzech dodatkowych połączeń z PostgreSQL. Harmonogramy reguł, harmonogramy przepływów pracy i przyjmowanie zadań rozszerzeń działają w danej chwili tylko na jednej replice, która utrzymuje blokadę na własnym połączeniu. Pozostałe repliki co pięć sekund łączą się na chwilę, aby sprawdzić, czy powinny przejąć tę rolę. Uwzględnij te połączenia przy ustalaniu `max_connections` w PostgreSQL. Łącz się z PostgreSQL bezpośrednio albo przez pooler w trybie sesji; tryb transakcyjny PgBouncera nie jest obsługiwany.
 
 **Wspólny bufor (opcjonalnie).** Każda replika buforuje definicje we własnej pamięci, co zawsze jest poprawne. Aby repliki współdzieliły buforowane wartości i limity żądań sieciowych rozszerzeń, uruchom Redis, ustaw `CACHE_BACKEND=redis` i zapisz jego adres w sekrecie `redis_url`:
 
@@ -149,7 +151,7 @@ Jeśli poprzednia wersja nie może działać na zmigrowanej bazie danych, przywr
 
 ## Rotuj sekrety
 
-Dane uwierzytelniające bazy danych, zasobnika, SMTP, agentów, Redis, metryk i inicjalizacji to [pliki sekretów](/pl/reference/configuration/#sekrety) montowane w `/run/secrets`, nigdy zmienne środowiskowe. Start odrzuca sekret ustawiony jako zmienna środowiskowa. Zapisuj pliki z menedżera sekretów; nigdy nie umieszczaj danych uwierzytelniających w obrazie, pliku Compose, argumencie wiersza poleceń ani logu.
+Dane uwierzytelniające bazy danych, zasobnika, SMTP, agentów, Redis, metryk i inicjalizacji to [pliki sekretów](/pl/reference/configuration/#sekrety) montowane w `/run/secrets`, nigdy zmienne środowiskowe. Start odrzuca sekret ustawiony jako zmienna środowiskowa, a `DATABASE_URL` ignoruje. Zapisuj pliki z menedżera sekretów; nigdy nie umieszczaj danych uwierzytelniających w obrazie, pliku Compose, argumencie wiersza poleceń ani logu.
 
 Sekrety są odczytywane przy starcie. Aby przeprowadzić rotację: utwórz nowe dane uwierzytelniające, podmień plik sekretu, wdróż role migrate, API i procesu roboczego, poczekaj na gotowość i testy dymne, a następnie unieważnij stare dane uwierzytelniające.
 
@@ -158,13 +160,14 @@ Sekrety są odczytywane przy starcie. Aby przeprowadzić rotację: utwórz nowe 
 - `SESSION_COOKIE_SECURE=true` i HTTPS przed API.
 - `ATTRICAT_DEVTOOLS=false`.
 - `ATTRICAT_AUTO_MIGRATE=false`, z rolą `migrate` uruchamianą przed każdym wdrożeniem.
-- `SMTP_TLS_MODE=starttls` lub `implicit`.
+- `SMTP_TLS_MODE=starttls` lub `implicit` oraz ustawione `SMTP_HOST`, `MAIL_FROM`, `PASSWORD_RESET_URL`, `WORKSPACE_INVITATION_URL` i `WORKSPACE_ONBOARDING_URL`.
 - Prawdziwy `ATTRICAT_BOOTSTRAP_OWNER_EMAIL`; sekret `bootstrap_owner_password` opróżniony po pierwszym uruchomieniu.
 - Pliki sekretów czytelne tylko dla uid 10001 i żadnych sekretów w zmiennych środowiskowych.
 - Ustawione sekrety `file_worker_metrics_token` i `api_metrics_token`, a `/metrics` osiągalne tylko z sieci monitoringu.
 - Prywatny zasobnik z danymi uwierzytelniającymi ograniczonymi do `PutObject`, `GetObject`, `DeleteObject`, `AbortMultipartUpload` i `ListBucket`.
 - Nieustawione `ATTRICAT_E2E_FIXTURE_EMAIL`.
 - Proxy, które ustawia `Strict-Transport-Security` i ogranicza liczbę żądań do `/api/auth/` dla każdego adresu klienta. Attricat ogranicza próby dla konta i obszaru roboczego, co nie powstrzyma jednego klienta próbującego wielu z nich.
+- Przy logowaniu jednokrotnym za proxy: `TRUSTED_CLIENT_IP_HEADER` ustawione na nagłówek, który proxy nadpisuje lub do którego dopisuje adres klienta, aby rozpoczęcia logowania były ograniczane dla każdego klienta. Zobacz [dokumentację konfiguracji](/pl/reference/configuration/).
 - Co najmniej 2 GiB pamięci dla każdego procesu API. Haszowanie haseł celowo zużywa dużo pamięci, więc przy mniejszym limicie seria logowań może zakończyć proces.
 - Skanowanie pod kątem złośliwego oprogramowania poza Attricat, jeśli wymagają tego przesyłane pliki. Attricat sprawdza typy i rozmiary plików, ale nie skanuje ich zawartości.
 - Przetestowana procedura tworzenia kopii zapasowej i przywracania.

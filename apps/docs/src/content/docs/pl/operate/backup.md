@@ -39,7 +39,7 @@ Jeśli którykolwiek krok się nie powiedzie, pozostaw środowisko docelowe zatr
 
 ## Zasady przechowywania, o których warto pamiętać
 
-- **Historia wartości** starsza niż `ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` (domyślnie 90) jest usuwana przy starcie API.
+- **Historia wartości** starsza niż `ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` (domyślnie 90) jest usuwana przez regularne czyszczenie w API, które działa przy starcie i domyślnie co minutę.
 - **Pliki bez odwołań** są oznaczane jako usunięte, a następnie trwale usuwane po `FILE_DELETE_GRACE_SECONDS` (domyślnie jeden dzień). Aby zachować taki plik, odtwórz odwołanie do niego przed trwałym usunięciem. Nie traktuj okresu karencji jako kopii zapasowej.
 - **Wyniki operacji rozszerzeń** są przechowywane przez 30 dni od zakończenia uruchomienia.
 - **Zdarzenia**, które otrzymały już wszystkie procedury obsługi i rozszerzenia, są usuwane po `DOMAIN_EVENT_RETENTION_DAYS` (domyślnie 90 dni). Zdarzenia z niedostarczonym lub nieudanym dostarczeniem pozostają.

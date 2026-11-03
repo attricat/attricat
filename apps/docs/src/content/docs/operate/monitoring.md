@@ -46,7 +46,7 @@ Useful series:
 
 | Series | Watch for |
 | --- | --- |
-| `attricat_database_ready`, `attricat_object_store_ready` | Zero for two probe intervals. |
+| `attricat_database_ready`, `attricat_file_worker_database_ready`, `attricat_object_store_ready` | Zero for two probe intervals. |
 | `attricat_task_queue_depth`, `attricat_task_queue_oldest_age_seconds`, `attricat_task_queue_retries` | Growing depth, old tasks, any dead letters. |
 | `attricat_file_worker_queue_depth`, `attricat_file_worker_oldest_age_seconds`, `attricat_file_worker_retries` | Same, for file processing. |
 | `attricat_file_worker_jobs_failed_total` | Increases. |
@@ -114,7 +114,7 @@ Attricat changes produce internal events that workflows, rules, and extensions c
    acli event replay <consumer-id> <event-id>
    ```
 
-Replay does not reset the attempt count, so a delivery that fails again goes straight back to dead letter. Don't replay the same delivery repeatedly without fixing the cause.
+Replaying a rule or workflow delivery does not reset its attempt count, so if it fails again it goes straight back to dead letter. An extension delivery starts again with five new attempts. Don't replay the same delivery repeatedly without fixing the cause.
 
 Rule and workflow runs and extension operations have their own dead letters and replay commands; see [Rules](/builders/rules/), [Workflows](/builders/workflows/), and [Operations](/extensions/operations/).
 

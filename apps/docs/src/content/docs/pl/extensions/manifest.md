@@ -5,7 +5,7 @@ description: Każde pole pliku manifest.json rozszerzenia, w tym uprawnienia, up
 
 `manifest.json` to ścisły JSON. Nieznane pola w dowolnym miejscu sprawiają, że pakiet jest nieprawidłowy.
 
-Identyfikatory używane w manifeście (`attricat.id` oraz identyfikatory artefaktów, zależności, reguł uprawnień, procedur obsługi i kontrybucji) mogą zawierać litery ASCII, cyfry, `.`, `_` i `-`. Zachowuj je bez zmian między wydaniami; odwołują się do nich układy i przyznane uprawnienia.
+Identyfikatory używane w manifeście (`attricat.id` oraz identyfikatory artefaktów, zależności, reguł uprawnień, procedur obsługi i kontrybucji) mogą zawierać litery ASCII, cyfry, `.`, `_` i `-`, do 128 bajtów. Zachowuj je bez zmian między wydaniami; odwołują się do nich układy i przyznane uprawnienia.
 
 ## Pola najwyższego poziomu
 
@@ -101,7 +101,7 @@ Każde uprawnienie umiejscowienia zezwala na kontrybucję w jednym miejscu osadz
 
 ## Uprawnienia hosta
 
-Uprawnienie hosta to reguła dla żądań wychodzących. Samo `network.request` na nic nie pozwala; każde żądanie musi pasować do przyznanej reguły.
+Uprawnienie hosta to reguła dla żądań wychodzących. Samo `network.request` na nic nie pozwala; każde żądanie musi pasować do przyznanej reguły. `host_permissions` wymagają `network.request` w `permissions`; `optional_host_permissions` przyjmują je na dowolnej z tych dwóch list.
 
 ```json
 "host_permissions": [{
@@ -118,17 +118,17 @@ Uprawnienie hosta to reguła dla żądań wychodzących. Samo `network.request` 
 | --- | --- | --- |
 | `id` | Wymagane | Stały identyfikator reguły, używany przy przyznawaniu uprawnień i wykonywaniu żądań. |
 | `matches` | Wymagane | Wzorce URL. |
-| `methods` | Wymagane | Dozwolone metody HTTP. |
-| `max_request_bytes` | 65536 | Limit treści żądania. |
+| `methods` | Wymagane | Dozwolone metody HTTP: `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`. |
+| `max_request_bytes` | 65536 | Limit treści żądania (najwyżej 64 KiB). |
 | `max_response_bytes` | 1048576 | Limit treści odpowiedzi (maksymalnie 1 MiB). `network.request.v2` odpowiada w base64 w granicach 1 MiB, więc odpowiedź od około 750 KiB wraca jako `uncertain` z powodem `response_too_large`. |
-| `timeout_ms` | 10000 | Limit czasu żądania. |
+| `timeout_ms` | 10000 | Limit czasu żądania (najwyżej 60000). |
 | `max_transfer_bytes` | 0 | Włącza strumieniowe przesyłanie plików dla operacji, do 1 GiB. `0` je wyłącza. |
 | `idempotent_delivery` | `false` | Zezwala na `POST` przy dostarczaniu danych wyjściowych. Ustaw tylko wtedy, gdy miejsce docelowe respektuje nagłówek `Idempotency-Key`. |
 | `allow_query` | `false` | Pozwala `network.request.v2` i przesyłaniu v2 wysyłać ciągi zapytania, np. podpisane adresy URL, do miejsc docelowych tej reguły. Wartości zapytania nigdy nie trafiają do dzienników. |
 | `response_headers` | `[]` | Do 16 nazw nagłówków odpowiedzi, pisanych małymi literami, które `network.request.v2` zwraca oprócz `content-type`, `etag` i `retry-after`, np. `location` albo identyfikator żądania. `set-cookie` i nagłówki uwierzytelniania są niedozwolone. |
 | `rate_limit` | Wspólny limit | [Limit żądań](#limity-żądań) reguły. |
 
-Wzorzec składa się z `http` lub `https`, dokładnej nazwy hosta albo wiodącego symbolu wieloznacznego `*.`, opcjonalnego portu i prefiksu ścieżki zakończonego `/*`. Zapytania, fragmenty, dane uwierzytelniające, `localhost` oraz adresy prywatne, pętli zwrotnej i lokalne dla łącza są odrzucane. W czasie żądania dozwolony jest tylko HTTPS, przekierowania nie są śledzone, a każda odpowiedź DNS musi być adresem publicznym. Ciąg zapytania jest dozwolony w czasie żądania tylko w regułach z `allow_query`.
+Wzorzec składa się z `https`, dokładnej nazwy hosta albo wiodącego symbolu wieloznacznego `*.`, opcjonalnego portu i prefiksu ścieżki zakończonego `/*`. Zapytania, fragmenty, dane uwierzytelniające, `localhost` oraz adresy prywatne, pętli zwrotnej i lokalne dla łącza są odrzucane. W czasie żądania dozwolony jest tylko HTTPS, przekierowania nie są śledzone, a każda odpowiedź DNS musi być adresem publicznym. Ciąg zapytania jest dozwolony w czasie żądania tylko w regułach z `allow_query`.
 
 ### Limity żądań
 
@@ -212,7 +212,7 @@ Eksportowane typy zdarzeń muszą zaczynać się od `plugin.<extension-id>.` i k
 | `connections` | Zobacz [Połączenia](#połączenia). | `connections.use` |
 | `exports` | Zobacz [Miejsca docelowe eksportu](#miejsca-docelowe-eksportu). | `exports.mappings` |
 
-`handler` to nazwa, którą widzi Twój komponent: polecenia otrzymują ją jako `request.handler`, a operacje jako `operation-id`. Procedury obsługi zdarzeń jej nie otrzymują; zobacz [Która procedura obsługi została wywołana](/pl/extensions/server/#która-procedura-obsługi-została-wywołana).
+Procedury obsługi zdarzeń, polecenia i operacje wymagają artefaktu `server_wasm`. `handler` to nazwa, którą widzi Twój komponent: polecenia otrzymują ją jako `request.handler`, a operacje jako `operation-id`. Procedury obsługi zdarzeń jej nie otrzymują; zobacz [Która procedura obsługi została wywołana](/pl/extensions/server/#która-procedura-obsługi-została-wywołana).
 
 ### Połączenia
 
@@ -291,7 +291,7 @@ Miejsce docelowe eksportu nadaje ekranom stanu eksportu, podglądu, ponawiania i
 
 Kontrybucja, której `artifact` jest artefaktem `client_native`, jest rysowana natywnie; w przeciwnym razie jej artefakt musi być typu `client_frame`. Natywny interfejs jest dozwolony w `record_tab`, `blueprint_attribute_configuration`, `blueprint_detail_panel`, `blueprint_panel`, `data_health_card`, `export_mapping`, `action_dialog` i `attribute_editor`; trasy, osadzona `navigation`, `blueprint_publish_check` i `audit_event_panel` pozostają interfejsem w ramce.
 
-Każde rozszerzenie może użyć każdego miejsca osadzenia z ramką jeden raz, ale może dodać kilka natywnych kontrybucji, akcji, okien, komórek tabeli i edytorów oraz do dwóch kart rekordu. Akcje, okna i karty używają `version` 1. `title` akcji ma najwyżej 64 znaki; tytuł karty, w każdym języku, najwyżej 24.
+Każde rozszerzenie może użyć każdego miejsca osadzenia z ramką jeden raz, ale może dodać kilka natywnych kontrybucji, akcji, okien, komórek tabeli i edytorów oraz do dwóch kart rekordu. Akcje, okna i karty używają `version` 1. `title` akcji ma najwyżej 64 znaki; tytuł karty, w każdym języku, najwyżej 24. Kontrybucja z `title` może dodać `translations`, według kodu języka, takiego jak `pl` lub `pt-BR`: `{ "pl": { "title": "…" } }`, każde najwyżej 128 znaków.
 
 ## Komórki tabeli
 
