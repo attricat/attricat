@@ -96,7 +96,9 @@ for (const locale of ['en', 'pl'] as const) {
     );
     const record = await createRecord(blueprint, [scalar('title', 'Sweep')]);
     await page.addInitScript((language) => {
-      localStorage.setItem('attricat.language', language);
+      // This also runs in extensions' sandboxed frames, which have no storage.
+      if (window.origin !== 'null')
+        localStorage.setItem('attricat.language', language);
     }, locale);
     const problems: string[] = [];
     let current = '';
