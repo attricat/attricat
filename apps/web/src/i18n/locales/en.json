@@ -1791,6 +1791,8 @@
     "uploadedOnCreate": "Files upload when the record is created.",
     "uploadBeforeCreateFailed_one": "{{files}} failed to upload, so the record was not created. Retry or remove the file, then create the record again.",
     "uploadBeforeCreateFailed_other": "{{count}} files failed to upload, so the record was not created: {{files}}. Retry or remove them, then create the record again.",
+    "uploadBeforeUpgradeFailed_one": "{{files}} failed to upload, so the record was not upgraded. Retry or remove the file, then upgrade again.",
+    "uploadBeforeUpgradeFailed_other": "{{count}} files failed to upload, so the record was not upgraded: {{files}}. Retry or remove them, then upgrade again.",
     "retryFile": "Retry {{filename}}",
     "ready": "Ready",
     "downloadFile": "Download {{filename}}",

@@ -491,6 +491,7 @@ export const migrateRecordRequestSchema = z.object({
   relationships: z.array(relationshipTargetsSchema),
   discard_attributes: z.array(z.string()),
   remove_values: z.array(attributeValueSelectorSchema).default([]),
+  files: z.array(newFileAttributeValueSchema).default([]),
 });
 
 export type Attribute = z.infer<typeof attributeSchema>;

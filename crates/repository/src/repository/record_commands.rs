@@ -353,7 +353,7 @@ impl AttricatRepository {
         Ok(changes)
     }
 
-    async fn lock_created_files(
+    pub(super) async fn lock_created_files(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         values: &[NewFileAttributeValue],

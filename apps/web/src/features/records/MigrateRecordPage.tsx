@@ -35,6 +35,12 @@ import { useRecordLabels } from './useRecordLabels';
 import { attributeValueKinds } from './valueTypes';
 import { blueprintByCodeOptions } from './queryOptions';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { ApiRequestError } from '../../api/request';
+import { invalidFileReferencesCode } from '../files/constants';
+import {
+  QueuedFileUploadsContext,
+  useQueuedFileUploads,
+} from '../files/queuedFileUploads';
 import { contextListOptions } from '../contexts/queryOptions';
 
 export const MigrateRecordPage = ({ recordId }: { recordId: string }) => {
@@ -179,8 +185,13 @@ export const MigrateRecordPage = ({ recordId }: { recordId: string }) => {
         ? [...attributes, attributeCode]
         : attributes.filter((attribute) => attribute !== attributeCode),
     );
+  // A new revision's required file can only be supplied with the upgrade.
+  const queuedFiles = useQueuedFileUploads(
+    preview.data &&
+      `${preview.data.target.blueprint.id}:${preview.data.target.blueprint.version}`,
+  );
   const migrate = useMutation({
-    mutationFn: ({
+    mutationFn: async ({
       expected_updated_at,
       values,
       relationships,
@@ -194,15 +205,42 @@ export const MigrateRecordPage = ({ recordId }: { recordId: string }) => {
       removeValues: { attribute_code: string; context_id: string | null }[];
     }) => {
       if (!preview.data) throw new Error(t('records.loadMigrationFirst'));
-      return migrateRecord(recordId, {
-        expected_updated_at,
-        migration_id: preview.data.migration_id,
-        expected_target_version: preview.data.target.blueprint.version,
-        values,
-        relationships,
-        discard_attributes: discardAttributes,
-        remove_values: removeValues,
-      });
+      const staged = await queuedFiles.stageQueued(
+        queuedFiles.queue.pending,
+        preview.data.target.blueprint.id,
+        defaultContextId,
+      );
+      if (staged.failed.length > 0)
+        throw new Error(
+          t('files.uploadBeforeUpgradeFailed', {
+            count: staged.failed.length,
+            files: staged.failed
+              .map(({ filename, message }) =>
+                message ? `${filename} (${message})` : filename,
+              )
+              .join(', '),
+          }),
+        );
+      try {
+        return await migrateRecord(recordId, {
+          expected_updated_at,
+          migration_id: preview.data.migration_id,
+          expected_target_version: preview.data.target.blueprint.version,
+          values,
+          relationships,
+          discard_attributes: discardAttributes,
+          remove_values: removeValues,
+          files: staged.staged,
+        });
+      } catch (error) {
+        // Files that can no longer be claimed upload again on the next attempt.
+        if (
+          error instanceof ApiRequestError &&
+          error.code === invalidFileReferencesCode
+        )
+          queuedFiles.forgetStaged();
+        throw error;
+      }
     },
     onSuccess: async (record) => {
       // Leave first: a completed migration has no preview (409), and the
@@ -251,95 +289,97 @@ export const MigrateRecordPage = ({ recordId }: { recordId: string }) => {
       <ApiErrorAlert error={preview.error ?? contexts.error} sx={{ mt: 4 }} />
       {/* The form keeps its first values, and those are read per context. */}
       {preview.data && contexts.data && (
-        <RecordForm
-          blueprint={preview.data.target}
-          expectedUpdatedAt={preview.data.source_updated_at}
-          contextId={defaultContextId}
-          defaultContextId={defaultContextId}
-          error={migrate.error}
-          existingValues={migrationValues}
-          guardUnsavedChanges
-          layout={migrationLayout(targetAttributes, reviewCodes, {
-            review: t('records.migrationNeedsReview'),
-            others: (count) =>
-              t('records.migrationOtherFieldsSection', { count }),
-          })}
-          migrationReviews={migrationReviews}
-          pendingConfirmations={pendingConfirmations}
-          requiredAttributes={requiredMigrationAttributes(
-            preview.data.issues,
-            discardAttributes,
-          )}
-          initialValues={initialFields}
-          isSubmitting={migrate.isPending}
-          onCancel={() =>
-            void navigate({
-              to: '/records/$recordId',
-              params: { recordId },
-            })
-          }
-          onSubmit={({
-            values,
-            relationships,
-            clearedAttributes,
-            expected_updated_at,
-          }) => {
-            const { replacements, removed } = contextSubmission();
-            migrate.mutate({
-              expected_updated_at,
-              values: [...values, ...replacements],
-              relationships: answeredMigrationRelationships(
-                relationships,
-                inlineIssues,
-              ),
-              discardAttributes: [...discardAttributes],
-              removeValues: [
-                ...clearedAttributes
-                  .filter((code) => !discardAttributes.includes(code))
-                  .map((attribute_code) => ({
-                    attribute_code,
-                    context_id: defaultContextId,
-                  })),
-                ...removed,
-              ],
-            });
-          }}
-          submitLabel={t('records.upgradeRecord')}
-        >
-          <Box>
-            <Typography sx={{ fontWeight: 'fontWeightBold' }}>
-              {t('records.upgradeFrom', {
-                source: preview.data.source_version,
-                target: preview.data.target.blueprint.version,
-              })}
-            </Typography>
-            {summary.length > 0 && (
-              <Typography color="text.secondary" variant="body2">
-                {summary.join(' · ')}
-              </Typography>
+        <QueuedFileUploadsContext value={queuedFiles.queue}>
+          <RecordForm
+            blueprint={preview.data.target}
+            expectedUpdatedAt={preview.data.source_updated_at}
+            contextId={defaultContextId}
+            defaultContextId={defaultContextId}
+            error={migrate.error}
+            existingValues={migrationValues}
+            guardUnsavedChanges
+            layout={migrationLayout(targetAttributes, reviewCodes, {
+              review: t('records.migrationNeedsReview'),
+              others: (count) =>
+                t('records.migrationOtherFieldsSection', { count }),
+            })}
+            migrationReviews={migrationReviews}
+            pendingConfirmations={pendingConfirmations}
+            requiredAttributes={requiredMigrationAttributes(
+              preview.data.issues,
+              discardAttributes,
             )}
-          </Box>
-          <MigrationIssueList
-            attributeLabel={sourceAttributeLabel}
-            disabled={migrate.isPending}
-            discardAttributes={discardAttributes}
-            issues={standaloneIssues}
-            onDiscardChange={setDiscarded}
-            previousValue={previousValue}
-            targetVersion={preview.data.target.blueprint.version}
-          />
-          <MigrationContextValues
-            answers={contextAnswers}
-            attributeLabel={sourceAttributeLabel}
-            contextLabel={contextName}
-            disabled={migrate.isPending}
-            onAnswer={(key, answer) =>
-              setContextAnswers((answers) => ({ ...answers, [key]: answer }))
+            initialValues={initialFields}
+            isSubmitting={migrate.isPending}
+            onCancel={() =>
+              void navigate({
+                to: '/records/$recordId',
+                params: { recordId },
+              })
             }
-            previousValue={contextPreviousValue}
-            values={contextValues}
-          />
-        </RecordForm>
+            onSubmit={({
+              values,
+              relationships,
+              clearedAttributes,
+              expected_updated_at,
+            }) => {
+              const { replacements, removed } = contextSubmission();
+              migrate.mutate({
+                expected_updated_at,
+                values: [...values, ...replacements],
+                relationships: answeredMigrationRelationships(
+                  relationships,
+                  inlineIssues,
+                ),
+                discardAttributes: [...discardAttributes],
+                removeValues: [
+                  ...clearedAttributes
+                    .filter((code) => !discardAttributes.includes(code))
+                    .map((attribute_code) => ({
+                      attribute_code,
+                      context_id: defaultContextId,
+                    })),
+                  ...removed,
+                ],
+              });
+            }}
+            submitLabel={t('records.upgradeRecord')}
+          >
+            <Box>
+              <Typography sx={{ fontWeight: 'fontWeightBold' }}>
+                {t('records.upgradeFrom', {
+                  source: preview.data.source_version,
+                  target: preview.data.target.blueprint.version,
+                })}
+              </Typography>
+              {summary.length > 0 && (
+                <Typography color="text.secondary" variant="body2">
+                  {summary.join(' · ')}
+                </Typography>
+              )}
+            </Box>
+            <MigrationIssueList
+              attributeLabel={sourceAttributeLabel}
+              disabled={migrate.isPending}
+              discardAttributes={discardAttributes}
+              issues={standaloneIssues}
+              onDiscardChange={setDiscarded}
+              previousValue={previousValue}
+              targetVersion={preview.data.target.blueprint.version}
+            />
+            <MigrationContextValues
+              answers={contextAnswers}
+              attributeLabel={sourceAttributeLabel}
+              contextLabel={contextName}
+              disabled={migrate.isPending}
+              onAnswer={(key, answer) =>
+                setContextAnswers((answers) => ({ ...answers, [key]: answer }))
+              }
+              previousValue={contextPreviousValue}
+              values={contextValues}
+            />
+          </RecordForm>
+        </QueuedFileUploadsContext>
       )}
     </RecordPage>
   );

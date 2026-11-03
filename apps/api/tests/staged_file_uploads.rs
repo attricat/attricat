@@ -594,3 +594,93 @@ async fn expired_unclaimed_staged_files_are_reclaimed(pool: PgPool) {
     assert_eq!(deleted(claimed).await, 0);
     server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_staged_file_answers_a_newly_required_attribute_when_migrating(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let first = r#"format_version: 1
+code: later_required
+name: Later required
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+"#;
+    let blueprint = create_blueprint(&client, &base_url, first).await;
+    let record = create_record(&client, &base_url, &blueprint).await;
+    let record_id = record["id"].as_str().unwrap();
+    let id = blueprint_id(&blueprint);
+    let revision = expect_status(
+        client
+            .post(format!("{base_url}/blueprints/{id}/versions"))
+            .json(&json!({ "definition": format!(
+                "{}  - code: image\n    value_type: file\n    cardinality: one\n    allowed_mime_groups: [image]\n    allowed_extensions: [png]\n    image_only: true\n",
+                first.replace("kind: record\n", "kind: record\nrecord_schema: '{\"required\": [\"image\"]}'\n"),
+            ) }))
+            .send()
+            .await
+            .unwrap(),
+        StatusCode::CREATED,
+    )
+    .await;
+    let version = revision["blueprint"]["version"].as_i64().unwrap();
+    client
+        .post(format!(
+            "{base_url}/blueprints/{id}/versions/{version}/publish"
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let preview = expect_status(
+        client
+            .post(format!(
+                "{base_url}/v1/records/{record_id}/blueprint-migration/preview"
+            ))
+            .send()
+            .await
+            .unwrap(),
+        StatusCode::OK,
+    )
+    .await;
+    assert_eq!(
+        preview["issues"][0]["kind"], "missing_required",
+        "{preview}"
+    );
+    let migrate = |files: Value| {
+        client
+            .post(format!(
+                "{base_url}/v1/records/{record_id}/blueprint-migration"
+            ))
+            .json(&json!({
+                "migration_id": preview["migration_id"],
+                "expected_target_version": version,
+                "files": files,
+            }))
+            .send()
+    };
+
+    // Nothing else can supply it, which is what the form used to be left with.
+    assert!(!migrate(json!([])).await.unwrap().status().is_success());
+
+    let file_id = stage_png(&client, &base_url, &revision, "image").await;
+    let migrated = expect_status(
+        migrate(json!([{"attribute_code": "image", "file_ids": [file_id]}]))
+            .await
+            .unwrap(),
+        StatusCode::OK,
+    )
+    .await;
+    assert_eq!(migrated["blueprint_version"], version);
+    assert_eq!(
+        linked_files(&pool, record_id).await,
+        vec![file_id.parse::<Uuid>().unwrap()]
+    );
+    server.abort();
+}

@@ -90,6 +90,7 @@ async fn compatible_scalar_migration_preserves_row_identity_without_history(pool
                 relationships: Vec::new(),
                 discard_attributes: Vec::new(),
                 remove_values: Vec::new(),
+                files: Vec::new(),
                 removal_policy: None,
             },
         )
@@ -216,6 +217,7 @@ async fn supplied_scalar_replacement_archives_the_old_row_once(pool: PgPool) {
                 relationships: Vec::new(),
                 discard_attributes: Vec::new(),
                 remove_values: Vec::new(),
+                files: Vec::new(),
                 removal_policy: None,
             },
         )
@@ -372,6 +374,7 @@ attributes:
                 relationships: Vec::new(),
                 discard_attributes: Vec::new(),
                 remove_values: Vec::new(),
+                files: Vec::new(),
                 removal_policy: None,
             },
         )
@@ -479,6 +482,7 @@ async fn explicitly_discarded_removed_value_is_the_only_row_archived(pool: PgPoo
                 relationships: Vec::new(),
                 discard_attributes: vec!["obsolete".to_owned()],
                 remove_values: Vec::new(),
+                files: Vec::new(),
                 removal_policy: None,
             },
         )
@@ -771,6 +775,7 @@ async fn migration_requires_replacements_in_every_affected_context(pool: PgPool)
                 relationships: Vec::new(),
                 discard_attributes: Vec::new(),
                 remove_values: Vec::new(),
+                files: Vec::new(),
                 removal_policy: None,
             },
         )
@@ -880,6 +885,7 @@ attributes:
                 relationships: Vec::new(),
                 discard_attributes: Vec::new(),
                 remove_values: Vec::new(),
+                files: Vec::new(),
                 removal_policy: None,
             },
         )
@@ -992,6 +998,7 @@ async fn migration_audits_field_changes_and_reconciles_publication(pool: PgPool)
                 relationships: Vec::new(),
                 discard_attributes: vec!["obsolete".to_owned()],
                 remove_values: Vec::new(),
+                files: Vec::new(),
                 removal_policy: None,
             },
         )
@@ -1155,6 +1162,7 @@ async fn migration_removes_a_value_in_one_context_only(pool: PgPool) {
                     attribute_code: "rating".into(),
                     context_id: None,
                 }],
+                files: Vec::new(),
                 removal_policy: None,
             },
         )

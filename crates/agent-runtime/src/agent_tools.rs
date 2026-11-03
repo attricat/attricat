@@ -2643,6 +2643,7 @@ pub async fn execute_mutation(
                             relationships: input.relationships,
                             discard_attributes: input.discard_attributes,
                             remove_values: Vec::new(),
+                            files: Vec::new(),
                             removal_policy: None,
                         },
                         input.expected_updated_at,

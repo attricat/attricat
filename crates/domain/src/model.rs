@@ -770,7 +770,7 @@ pub struct CreateRecordFormRequest {
 
 /// The ordered files of one file attribute in one context (the default
 /// context when omitted), written as a single value.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct NewFileAttributeValue {
     pub attribute_code: String,
@@ -1029,6 +1029,10 @@ pub struct MigrateRecordRequest {
     /// incompatible value there. `discard_attributes` covers every context.
     #[serde(default)]
     pub remove_values: Vec<AttributeValueSelector>,
+    /// Files the caller staged for the target revision, linked before the
+    /// record is validated, so they satisfy a newly required attribute.
+    #[serde(default)]
+    pub files: Vec<NewFileAttributeValue>,
     /// Set only by the bulk worker after the batch policy has been approved.
     /// Never accepted from API clients; audit metadata is therefore trusted.
     #[serde(default, skip_deserializing, skip_serializing_if = "Option::is_none")]

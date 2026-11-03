@@ -467,6 +467,7 @@ impl AttricatRepository {
                         .map(str::to_owned)
                         .collect(),
                     remove_values: Vec::new(),
+                    files: Vec::new(),
                     removal_policy: serde::Deserialize::deserialize(&batch.removal_policy).ok(),
                 },
             )

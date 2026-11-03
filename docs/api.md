@@ -204,7 +204,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `GET`, `PUT` | `/v1/records/{id}` | Read or update a record form atomically, including optional system annotations. |
 | `POST` | `/v1/records/{id}/duplicate` | Create a copy on the source's blueprint revision; see [Record duplication](#record-duplication). |
 | `POST` | `/v1/records/{id}/blueprint-migration/preview` | Assess migration to the highest published revision. An issue about a stored value carries that value's `context_id`. |
-| `POST` | `/v1/records/{id}/blueprint-migration` | Migrate a record to that revision. `discard_attributes` archives an attribute in every context; `remove_values` (`attribute_code`, `context_id`) archives it in one. |
+| `POST` | `/v1/records/{id}/blueprint-migration` | Migrate a record to that revision. `discard_attributes` archives an attribute in every context; `remove_values` (`attribute_code`, `context_id`) archives it in one; `files` claims staged uploads as in [Files on create](#files-on-create), so a newly required file can be supplied. |
 | `GET`, `POST` | `/v1/records/{id}/publications` | List channel publication status or publish to `{ "context_id": "…" }`. |
 | `POST` | `/v1/records/{id}/publications/unpublish` | Unpublish from `{ "context_id": "…" }`. |
 | `POST` | `/v1/records/{id}/publications/publish-all` | Publish atomically to every enabled channel. |

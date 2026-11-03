@@ -622,6 +622,12 @@ impl AttricatRepository {
                 supplied_relationship_sets.insert((code.to_owned(), context_id));
             }
         }
+        for file in &input.files {
+            let context_id = self
+                .resolve_context_id(transaction, file.context_id)
+                .await?;
+            supplied_keys.insert((file.attribute_code.clone(), context_id));
+        }
         let discarded_attributes: HashSet<_> = input
             .discard_attributes
             .iter()
@@ -923,6 +929,31 @@ impl AttricatRepository {
             input.relationships,
         )
         .await?;
+        if !input.files.is_empty() {
+            let uploaded_by = self
+                .authorization_actor
+                .ok_or(RepositoryError::InvalidFileReferences)?
+                .user_id;
+            self.lock_created_files(&mut transaction, &input.files)
+                .await?;
+            self.claim_staged_files_in_transaction(
+                &mut transaction,
+                &target_record,
+                uploaded_by,
+                &input.files,
+            )
+            .await?;
+            for file in &input.files {
+                self.link_files_in_transaction(
+                    &mut transaction,
+                    &target_record,
+                    &file.attribute_code,
+                    file.context_id,
+                    &file.file_ids,
+                )
+                .await?;
+            }
+        }
         // A revision that adds a generated attribute numbers records as they
         // migrate onto it. A value carried over from the source revision is
         // kept; the period comes from when the record was created.
