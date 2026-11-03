@@ -1000,8 +1000,8 @@ async fn selection_pages_include_attached_reusable_values(pool: PgPool) {
         .unwrap()
         .error_for_status()
         .unwrap();
-    let repository =
-        api::repository::AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
+    let repository = api::repository::AttricatRepository::system(pool.clone())
+        .for_workspace(bootstrap_workspace_id());
     let scope = api::repository::InteractiveRunScope {
         scope: api::extensions::InteractiveScope::Selection,
         actor: api::repository::AuthorizationActor {
