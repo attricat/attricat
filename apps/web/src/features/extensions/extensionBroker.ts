@@ -263,8 +263,13 @@ const handleOperation = async (
     can(extensionCapabilities.operationsCancel)
   ) {
     const { run_id } = runReferenceSchema.parse(payload);
-    await ownRun(run_id, dependencies);
-    await cancelExtensionRun(run_id, extensionRunScopes.own);
+    // Not `ownRun`: its read is refused once the initiator loses access to a
+    // selected record, which is when they most need to stop the run.
+    await cancelExtensionRun(
+      run_id,
+      extensionRunScopes.own,
+      contribution.extension_id,
+    );
     return null;
   }
   if (

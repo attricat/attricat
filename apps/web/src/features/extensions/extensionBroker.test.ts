@@ -283,17 +283,16 @@ describe('extension broker', () => {
     vi.mocked(runs.getExtensionRun).mockResolvedValue({
       extension_id: 'other.extension',
     } as Awaited<ReturnType<typeof runs.getExtensionRun>>);
-    const deps = selectionDependencies(['client.operations.cancel']);
+    const deps = selectionDependencies(['client.operations.read']);
     await expect(
       handleBrokerRequest(
         {
-          method: 'operations.cancel',
+          method: 'operations.get',
           payload: { run_id: '55555555-5555-4555-8555-555555555555' },
         },
         deps,
       ),
     ).rejects.toThrow('Request denied');
-    expect(runs.cancelExtensionRun).not.toHaveBeenCalled();
   });
 
   it('reads, cancels and downloads only runs the signed-in user started', async () => {
@@ -320,7 +319,11 @@ describe('extension broker', () => {
       { method: 'operations.cancel', payload: { run_id: runId } },
       deps,
     );
-    expect(runs.cancelExtensionRun).toHaveBeenLastCalledWith(runId, 'own');
+    expect(runs.cancelExtensionRun).toHaveBeenLastCalledWith(
+      runId,
+      'own',
+      'example.extension',
+    );
     await handleBrokerRequest(
       {
         method: 'operations.download',
@@ -341,7 +344,6 @@ describe('extension broker', () => {
     });
     for (const request of [
       { method: 'operations.get', payload: { run_id: runId } },
-      { method: 'operations.cancel', payload: { run_id: runId } },
       {
         method: 'operations.download',
         payload: { run_id: runId, artifact_id: artifactId },

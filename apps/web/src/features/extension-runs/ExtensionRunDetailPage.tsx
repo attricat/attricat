@@ -15,6 +15,8 @@ import { ArrowLeftIcon, DownloadIcon } from 'lucide-react';
 import { Trans, useTranslation } from 'react-i18next';
 import { RouterButton } from '../../components/RouterLink';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
+import { httpStatus } from '../../api/httpStatus';
+import { ApiRequestError } from '../../api/request';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { Timestamp } from '../../time/Timestamp';
 import { formatBytes } from '../../components/formatBytes';
@@ -100,6 +102,10 @@ export const ExtensionRunDetailPage = ({ runId }: { runId: string }) => {
     onSettled: () =>
       queryClient.invalidateQueries({ queryKey: extensionRunQueryKeys.all() }),
   });
+  // The run is theirs, or the answer would be not-found. They may still stop it.
+  const accessLost =
+    run.error instanceof ApiRequestError &&
+    run.error.status === httpStatus.forbidden;
   return (
     <Stack spacing={4}>
       <Box>
@@ -114,8 +120,32 @@ export const ExtensionRunDetailPage = ({ runId }: { runId: string }) => {
       {run.isPending && (
         <Skeleton height={runDetailSkeletonHeight} variant="rounded" />
       )}
+      {accessLost && (
+        <Card sx={{ display: 'flex', flexDirection: 'column', gap: 2, p: 5 }}>
+          <Alert severity={cancel.isSuccess ? 'success' : 'warning'}>
+            {t(
+              cancel.isSuccess
+                ? 'extensionRuns.cancelRequested'
+                : 'extensionRuns.accessLost',
+            )}
+          </Alert>
+          <ApiErrorAlert error={cancel.error} />
+          {!cancel.isSuccess && (
+            <Box>
+              <Button
+                color="error"
+                disabled={cancel.isPending}
+                onClick={() => cancel.mutate()}
+                variant="outlined"
+              >
+                {t('extensionRuns.cancel')}
+              </Button>
+            </Box>
+          )}
+        </Card>
+      )}
       <QueryErrorNotice
-        error={run.error}
+        error={accessLost ? null : run.error}
         isRetrying={run.isFetching}
         onRetry={() => void run.refetch()}
       />

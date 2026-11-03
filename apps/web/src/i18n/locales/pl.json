@@ -2912,6 +2912,8 @@
     "commit": "Commit"
   },
   "extensionRuns": {
+    "accessLost": "Nie możesz już wyświetlić tego uruchomienia, ponieważ utracono dostęp do danych, na których działa. Może nadal trwać i możesz je zatrzymać.",
+    "cancelRequested": "Anulowanie tego uruchomienia.",
     "description": "Praca w tle uruchomiona z akcji rozszerzeń. Uruchomienia trwają po zamknięciu akcji; tutaj możesz śledzić ich postęp i pobrać wyniki.",
     "empty": "Nie uruchomiono jeszcze żadnych rozszerzeń.",
     "viewRun": "Pokaż uruchomienie",

@@ -973,6 +973,18 @@ async fn interactive_runs_are_authorized_per_record_and_fail_closed(pool: sqlx::
         operator.json::<Value>().await.unwrap()["initiated_by_me"],
         false
     );
+    // A frame names its extension, so it can't stop another extension's run.
+    assert_eq!(
+        client_for(viewer)
+            .post(format!(
+                "{base}/extension-runs/{viewer_run}/cancel?scope=own&extension_id=acme.other"
+            ))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NOT_FOUND
+    );
     // Extension frames ask for `scope=own`: an operator's frame cannot read,
     // cancel or download another user's run.
     for request in [

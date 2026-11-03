@@ -86,10 +86,14 @@ export const getExtensionRun = (
 export const cancelExtensionRun = (
   runId: string,
   scope: ExtensionRunScope = extensionRunScopes.visible,
-) =>
-  requestNoContent(scoped(`${runPath(runId)}/cancel`, scope), {
-    method: 'POST',
-  });
+  extensionId?: string,
+) => {
+  const path = scoped(`${runPath(runId)}/cancel`, scope);
+  const owned = extensionId
+    ? `${path}${path.includes('?') ? '&' : '?'}${new URLSearchParams({ extension_id: extensionId })}`
+    : path;
+  return requestNoContent(owned, { method: 'POST' });
+};
 
 export const extensionRunArtifactUrl = (
   runId: string,

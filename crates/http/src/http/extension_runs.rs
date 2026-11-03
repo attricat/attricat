@@ -89,6 +89,9 @@ pub(super) enum RunScope {
 pub(super) struct RunScopeQuery {
     #[serde(default)]
     scope: RunScope,
+    /// The extension asking, whose frame may only act on its own runs.
+    #[serde(default)]
+    extension_id: Option<String>,
 }
 
 /// Resolves a run the caller may inspect. Other users' runs are reported as
@@ -323,6 +326,11 @@ pub(super) async fn cancel(
         .interactive_extension_run(run_id)
         .await?
         .filter(|run| run.actor_user_id == Some(principal.0));
+    if let (Some(extension_id), Some(run)) = (&query.extension_id, &own)
+        && run.extension_id != *extension_id
+    {
+        return Err(ApiError::not_found("extension run"));
+    }
     let run = match own {
         Some(run) => run,
         None => {

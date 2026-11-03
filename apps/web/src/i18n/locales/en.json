@@ -2788,6 +2788,8 @@
     "commit": "Commit"
   },
   "extensionRuns": {
+    "accessLost": "You can no longer view this run, because you lost access to something it works on. It may still be running, and you can stop it.",
+    "cancelRequested": "Cancelling this run.",
     "description": "Background work you started from extension actions. Runs continue after you close the action, and you can return here to follow them and download their results.",
     "empty": "You have not started any extension runs yet.",
     "viewRun": "View run",
