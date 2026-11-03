@@ -73,6 +73,7 @@ export const request = async <T>(
       `E2E setup request failed: ${response.status} ${await response.text()}`,
     );
   }
+  if (response.status === httpStatus.noContent) return undefined as T;
   return response.json() as Promise<T>;
 };
 
