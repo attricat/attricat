@@ -631,6 +631,25 @@ impl AttricatRepository {
         Ok(manifest)
     }
 
+    /// [`Self::enabled_client_extension_contributions`] read on the caller's
+    /// connection, for a caller holding a transaction: it must not wait for a
+    /// second pool connection.
+    pub(crate) async fn enabled_client_extension_contributions_on(
+        &self,
+        connection: &mut sqlx::PgConnection,
+    ) -> Result<Vec<ClientExtensionContribution>, RepositoryError> {
+        let mut contributions = self
+            .unfiltered_client_contributions_on(connection, None)
+            .await?;
+        contributions.retain(|contribution| {
+            extension_policy::allows(
+                &contribution.extension_id,
+                contribution.installed_release_id,
+            )
+        });
+        Ok(contributions)
+    }
+
     /// Resolves enabled, policy-compatible manifest contributions without
     /// applying presentation visibility. Artifact and broker authorization and
     /// publication validation must not depend on a layout hiding a contribution.
@@ -672,13 +691,23 @@ impl AttricatRepository {
         &self,
         extension_id: Option<&str>,
     ) -> Result<Vec<ClientExtensionContribution>, RepositoryError> {
+        let mut connection = self.pool.acquire().await?;
+        self.unfiltered_client_contributions_on(&mut connection, extension_id)
+            .await
+    }
+
+    async fn unfiltered_client_contributions_on(
+        &self,
+        connection: &mut sqlx::PgConnection,
+        extension_id: Option<&str>,
+    ) -> Result<Vec<ClientExtensionContribution>, RepositoryError> {
         // Capability grants are aggregated in the same statement.
         let rows: Vec<ClientInstallationRow> = sqlx::query_as(
             "SELECT i.extension_id, i.installed_release_id, i.configuration, ARRAY(SELECT g.grant_id FROM extension_grants g WHERE g.installation_id = i.id AND g.grant_kind = 'capability' ORDER BY g.grant_id) AS capabilities, d.revision AS dev_revision FROM extension_installations i JOIN workspaces w ON w.id = i.workspace_id LEFT JOIN extension_dev_artifacts d ON d.installed_release_id = i.installed_release_id WHERE i.workspace_id = $1 AND i.state = 'enabled' AND w.extensions_enabled AND ($2::text IS NULL OR i.extension_id = $2) ORDER BY i.extension_id",
         )
         .bind(self.workspace_id())
         .bind(extension_id)
-        .fetch_all(&self.pool)
+        .fetch_all(&mut *connection)
         .await?;
         let mut contributions = Vec::new();
         for ClientInstallationRow {
@@ -697,7 +726,10 @@ impl AttricatRepository {
             } else {
                 json!({})
             };
-            let manifest = match self.cached_release_manifest(installed_release_id).await {
+            let manifest = match self
+                .cached_release_manifest_on(&mut *connection, installed_release_id)
+                .await
+            {
                 Ok(manifest) => manifest,
                 // A defective release loses its own contributions, not everyone's.
                 Err(RepositoryError::InvalidExtension(reason)) => {

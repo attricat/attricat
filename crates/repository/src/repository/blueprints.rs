@@ -586,7 +586,7 @@ impl AttricatRepository {
             }
             self.validate_publication_roles(&mut transaction, &blueprint.definition)
                 .await?;
-            self.validate_publication_extension_layout(&blueprint.definition)
+            self.validate_publication_extension_layout(&mut transaction, &blueprint.definition)
                 .await?;
             let includes_published = sqlx::query_scalar::<_, bool>(
                 r#"SELECT NOT EXISTS (
@@ -681,7 +681,7 @@ impl AttricatRepository {
             compile_definition(transaction, self.workspace_id.0, &blueprint.definition).await?;
             self.validate_publication_roles(transaction, &blueprint.definition)
                 .await?;
-            self.validate_publication_extension_layout(&blueprint.definition)
+            self.validate_publication_extension_layout(&mut *transaction, &blueprint.definition)
                 .await?;
             let includes_published = sqlx::query_scalar::<_, bool>(
                 r#"SELECT NOT EXISTS (
@@ -740,6 +740,7 @@ impl AttricatRepository {
     /// an incompatible host surface at publication time.
     async fn validate_publication_extension_layout(
         &self,
+        connection: &mut sqlx::PgConnection,
         definition: &str,
     ) -> Result<(), RepositoryError> {
         let blueprint = parse(definition).map_err(RepositoryError::invalid_blueprint_definition)?;
@@ -748,7 +749,9 @@ impl AttricatRepository {
         else {
             return Ok(());
         };
-        let contributions = self.enabled_client_extension_contributions().await?;
+        let contributions = self
+            .enabled_client_extension_contributions_on(connection)
+            .await?;
         for (outlet, layout) in outlets {
             for key in layout.order.iter().chain(&layout.hidden) {
                 if let Some(contribution) = contributions
