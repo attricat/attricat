@@ -190,6 +190,11 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
             .bind(token_user_id)
             .execute(&mut *tx)
             .await?;
+        // Recovering an account must also lock out a token an attacker made.
+        sqlx::query("UPDATE personal_api_tokens SET revoked_at = clock_timestamp() WHERE user_id = $1 AND revoked_at IS NULL")
+            .bind(token_user_id)
+            .execute(&mut *tx)
+            .await?;
         self.commit_mutation(tx).await
     }
 

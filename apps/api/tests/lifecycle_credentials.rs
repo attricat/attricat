@@ -265,3 +265,56 @@ async fn revoking_workspace_access_keeps_other_workspaces_and_account_tokens(poo
         .await
         .unwrap();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_password_reset_revokes_personal_tokens_in_every_workspace(pool: PgPool) {
+    let repository = AttricatRepository::system(pool.clone());
+    let user = create_user(&pool, "token-reset@example.test", true).await;
+    sqlx::query(
+        "INSERT INTO local_password_credentials (user_id, password_hash) VALUES ($1, 'old')",
+    )
+    .bind(user)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let (_, first, second) = two_owned_workspaces(&pool, "token-reset").await;
+    for (workspace, fill) in [(first, 21u8), (second, 22)] {
+        sqlx::query("INSERT INTO personal_api_tokens (id, user_id, workspace_id, label, token_digest) VALUES ($1, $2, $3, 'cli', $4)")
+            .bind(Uuid::new_v4())
+            .bind(user)
+            .bind(workspace)
+            .bind(vec![fill; 32])
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+    let reset = [23u8; 32];
+    repository
+        .issue_lifecycle_token(
+            Uuid::new_v4(),
+            user,
+            "password_reset",
+            &reset,
+            Utc::now() + Duration::hours(1),
+        )
+        .await
+        .unwrap();
+
+    repository
+        .consume_password_reset(
+            &api::account::ActionTokenDigest::from_slice(&reset).unwrap(),
+            &api::account::hash_password(&api::account::Password::new("a new password value"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let live: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM personal_api_tokens WHERE user_id = $1 AND revoked_at IS NULL",
+    )
+    .bind(user)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(live, 0);
+}

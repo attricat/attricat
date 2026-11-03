@@ -193,7 +193,8 @@ token and a new password, hashes it with Argon2id, and atomically consumes the
 link. Invalid, expired, revoked, or replayed links produce the same generic
 validation error. Reset never creates a browser session; users sign in normally
 afterward. The credential/security version changes revoke existing sessions and
-outstanding lifecycle links.
+outstanding lifecycle links, and the reset also revokes the user's personal API
+tokens in every workspace.
 
 Custom domains, SAML, SCIM/JIT provisioning, MFA, passkeys, provider-initiated
 sign-in and logout, and switching workspaces after login are explicitly deferred.
