@@ -380,6 +380,17 @@ async fn existing_user_accepts_ownership_with_their_current_password(pool: PgPoo
         .workspace_invitation_url(BOOTSTRAP_OWNER_EMAIL)
         .await
         .unwrap();
+    // So the invitation sends them to the workspace they can sign in to.
+    let options: Value = Client::new()
+        .post(format!("{base_url}/auth/oidc/invitation"))
+        .json(&json!({ "secret": query_value(&url, "secret") }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(options["login_identifier"], "default.local");
     let (cookie, csrf) = sign_in(&base_url, "default.local", BOOTSTRAP_OWNER_EMAIL).await;
     let accepted = Client::new()
         .post(format!("{base_url}/workspace/invitations/accept"))

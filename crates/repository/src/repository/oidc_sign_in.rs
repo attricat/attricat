@@ -8,9 +8,12 @@ use serde_json::{Value, json};
 use sqlx::{Postgres, Row, Transaction};
 use uuid::Uuid;
 
-use attricat_domain::{permissions::Permission, states::SessionAuthMethod};
+use attricat_domain::{
+    permissions::Permission,
+    states::{PasswordSignIn, SessionAuthMethod},
+};
 
-use super::{AttricatRepository, AuditContext, RepositoryError};
+use super::{AttricatRepository, AuditContext, RepositoryError, roles::OWNER_ROLE_ID};
 use crate::account::SessionDigest;
 
 /// Outstanding requests a workspace keeps. Anonymous callers can start sign-ins
@@ -352,6 +355,24 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
             "SELECT w.id, w.login_identifier FROM workspace_invitations i JOIN workspaces w ON w.id = i.workspace_id WHERE i.token_digest = $1 AND i.accepted_at IS NULL AND i.revoked_at IS NULL AND i.expires_at > clock_timestamp() AND w.deleted_at IS NULL",
         )
         .bind(invitation_digest)
+        .fetch_optional(&self.pool)
+        .await?)
+    }
+
+    /// Where an invitee can sign in with a password to accept. Sign-in needs an
+    /// active membership, so someone not yet in the invited workspace must use
+    /// another of theirs. Falls back to the invited workspace, which also covers
+    /// someone with no account yet.
+    pub async fn invitation_password_login_identifier(
+        &self,
+        invitation_digest: &[u8],
+    ) -> Result<Option<String>, RepositoryError> {
+        Ok(sqlx::query_scalar(
+            "SELECT w.login_identifier FROM workspace_invitations i JOIN users u ON u.email = i.invitee_email JOIN workspace_memberships m ON m.user_id = u.id AND m.state = 'active' JOIN workspaces w ON w.id = m.workspace_id AND w.deleted_at IS NULL WHERE i.token_digest = $1 AND u.kind = 'person' AND (NOT EXISTS (SELECT 1 FROM workspace_identity_providers p WHERE p.workspace_id = w.id AND p.enabled AND p.password_sign_in = $2) OR EXISTS (SELECT 1 FROM role_grants g WHERE g.membership_id = m.id AND g.role_id = $3 AND g.scope_type = 'workspace')) ORDER BY m.workspace_id = i.workspace_id DESC, m.created_at, w.id LIMIT 1",
+        )
+        .bind(invitation_digest)
+        .bind(PasswordSignIn::Owners.as_str())
+        .bind(OWNER_ROLE_ID)
         .fetch_optional(&self.pool)
         .await?)
     }
