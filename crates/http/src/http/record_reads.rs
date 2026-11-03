@@ -217,6 +217,21 @@ pub(super) async fn search_record_previews(
             return Err(ApiError::invalid_input("invalid connection key".to_owned()));
         }
     }
+    // Export status is data health: only principals who may read it filter by it.
+    if input.export_status.is_some()
+        && !state
+            .repository
+            .principal_may(
+                principal.actor(),
+                workspace.0,
+                Permission::DataHealthRead,
+                None,
+                None,
+            )
+            .await?
+    {
+        return Err(ApiError::forbidden());
+    }
     // Findings belong to rules: only principals who may read rules filter by
     // them.
     if input.data_quality.is_some()

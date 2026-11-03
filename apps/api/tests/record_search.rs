@@ -1569,3 +1569,40 @@ async fn percent_and_underscore_in_a_term_are_literal(pool: PgPool) {
     assert_eq!(found["items"].as_array().unwrap().len(), 1, "{found}");
     server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn filtering_by_export_status_needs_data_health_read(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let owner = authenticated_client();
+    create_blueprint(
+        &owner,
+        &base_url,
+        "format_version: 1\ncode: export_item\nname: Export item\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string\n",
+    )
+    .await;
+    let role = create_role(&pool, "plain_reader", &["records.read"]).await;
+    let (reader, membership) = add_workspace_user(&pool).await;
+    grant_role(&pool, membership, role, GrantScope::Workspace).await;
+    let search = |client: Client| {
+        client
+            .post(format!("{base_url}/v1/records/search"))
+            .json(&json!({
+                "blueprint": { "code": "export_item" },
+                "query": "",
+                "filters": [],
+                "export_status": { "status": "failed" },
+                "page": { "size": 10 },
+            }))
+            .send()
+    };
+
+    assert_eq!(
+        search(client_for(reader)).await.unwrap().status(),
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        search(owner.clone()).await.unwrap().status(),
+        StatusCode::OK
+    );
+    server.abort();
+}
