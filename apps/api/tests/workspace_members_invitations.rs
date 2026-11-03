@@ -63,3 +63,32 @@ async fn revoked_or_expired_invitations_never_activate_a_member(pool: PgPool) {
     assert_eq!(count, 0);
     server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn adding_a_role_to_a_member_by_invitation_needs_roles_grant(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let workspace = bootstrap_workspace_id();
+    let inviter_role = create_role(&pool, "inviter", &["members.manage", "records.read"]).await;
+    let offered_role = create_role(&pool, "reader", &["records.read"]).await;
+    let (inviter, membership) = add_workspace_user(&pool).await;
+    grant_role(&pool, membership, inviter_role, GrantScope::Workspace).await;
+    let (member, _) = add_workspace_user(&pool).await;
+    let invite = |email: String| {
+        client_for(inviter)
+            .post(format!("{base_url}/workspace/invitations"))
+            .json(&json!({
+                "email": email,
+                "role_id": offered_role,
+                "scope_type": "workspace",
+                "scope_target_id": workspace,
+                "expires_at": "2099-01-01T00:00:00Z",
+            }))
+            .send()
+    };
+
+    let refused = invite(format!("{member}@example.test")).await.unwrap();
+    assert_eq!(refused.status(), StatusCode::FORBIDDEN);
+    let invited = invite("someone-new@example.test".to_owned()).await.unwrap();
+    assert_eq!(invited.status(), StatusCode::CREATED);
+    server.abort();
+}

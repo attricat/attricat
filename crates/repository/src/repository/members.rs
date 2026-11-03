@@ -116,6 +116,8 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
                 needs_password_setup: !user.credential_exists,
             });
         };
+        self.ensure_may_grant_to_member_on(&mut tx, actor_id, workspace_id, email)
+            .await?;
         self.ensure_token_can_delegate_role_on(&mut tx, actor_id, workspace_id, role_id)
             .await?;
         if invitation_digest.len() != TOKEN_DIGEST_BYTES
@@ -321,6 +323,46 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         .await?
         .ok_or(RepositoryError::InvitationInvalid)?;
         Self::lock_invitation_changes_on(tx, workspace_id).await
+    }
+
+    /// Inviting an active member adds a role to them when they accept, so it
+    /// needs the same authority as granting one directly.
+    async fn ensure_may_grant_to_member_on(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        actor_id: Uuid,
+        workspace_id: Uuid,
+        email: &str,
+    ) -> Result<(), RepositoryError> {
+        let member: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM workspace_memberships m JOIN users u ON u.id = m.user_id WHERE m.workspace_id = $1 AND m.state = 'active' AND u.email = $2)",
+        )
+        .bind(workspace_id)
+        .bind(email)
+        .fetch_one(&mut **tx)
+        .await?;
+        if !member {
+            return Ok(());
+        }
+        if !Self::is_authorized_on(
+            tx,
+            actor_id,
+            workspace_id,
+            Permission::RolesGrant,
+            None,
+            None,
+        )
+        .await?
+        {
+            return Err(RepositoryError::ActorNotAuthorized);
+        }
+        self.ensure_token_can_delegate_on(
+            tx,
+            actor_id,
+            workspace_id,
+            &[Permission::RolesGrant.as_str().to_owned()],
+        )
+        .await
     }
 
     async fn require_member_permission(
@@ -662,6 +704,8 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
             Permission::MembersManage,
         )
         .await?;
+        self.ensure_may_grant_to_member_on(&mut tx, actor_id, workspace_id, email)
+            .await?;
         self.ensure_token_can_delegate_role_on(&mut tx, actor_id, workspace_id, role_id)
             .await?;
         if !Self::scope_is_valid_on(&mut tx, workspace_id, role_id, scope_type, scope_target_id)
