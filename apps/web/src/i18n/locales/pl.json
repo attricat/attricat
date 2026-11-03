@@ -965,7 +965,7 @@
       "showAll": "Wszystkie rozmowy o tym rekordzie",
       "startHint": "Zapytaj agenta o ten rekord. Rozmowa rozpocznie się po wysłaniu pierwszej wiadomości.",
       "empty": "Brak rozmów",
-      "emptyDescription": "Zapytaj agenta o ten rekord, aby rozpocząć rozmowę. Rozmowy o rekordzie widzi każdy, kto może go odczytać.",
+      "emptyDescription": "Zapytaj agenta o ten rekord, aby rozpocząć rozmowę. Rozmowy o rekordzie widzi każdy, kto może go odczytać i korzystać z agentów.",
       "openPage": "Otwórz na stronie Agenci"
     },
     "coreSystemTags": {

@@ -909,7 +909,7 @@
       "showAll": "All conversations about this record",
       "startHint": "Ask the agent about this record. The conversation starts when you send your first message.",
       "empty": "No conversations yet",
-      "emptyDescription": "Ask the agent about this record to start one. Everyone who can read the record sees its conversations.",
+      "emptyDescription": "Ask the agent about this record to start one. Everyone who can read the record and use agents sees its conversations.",
       "openPage": "Open on the Agents page"
     },
     "coreSystemTags": {
