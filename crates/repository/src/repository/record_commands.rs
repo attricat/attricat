@@ -1074,11 +1074,15 @@ impl AttricatRepository {
             // Relationship writes are set operations; sorting target IDs gives
             // every concurrent writer the same target-lock order.
             let targets: BTreeSet<_> = relationship.target_record_ids.into_iter().collect();
-            self.validate_relationship_targets(&mut transaction, &targets, &target_blueprint_codes)
-                .await?;
-
             let current = self
                 .current_relationship_targets(&mut transaction, record.id, attribute_id, context_id)
+                .await?;
+            // Removing a link needs no access to the record it points at.
+            if replace {
+                self.ensure_new_targets_readable(&mut transaction, &targets, &current)
+                    .await?;
+            }
+            self.validate_relationship_targets(&mut transaction, &targets, &target_blueprint_codes)
                 .await?;
             let removals: Vec<_> = if replace {
                 current.difference(&targets).copied().collect()
@@ -1151,10 +1155,12 @@ impl AttricatRepository {
                 Self::relationship_attribute(write, &relationship)?;
             write.ensure_editable(context_id, context_editable)?;
             let targets: BTreeSet<_> = relationship.target_record_ids.into_iter().collect();
-            self.validate_relationship_targets(transaction, &targets, &target_blueprint_codes)
-                .await?;
             let current = self
                 .current_relationship_targets(transaction, record.id, attribute_id, context_id)
+                .await?;
+            self.ensure_new_targets_readable(transaction, &targets, &current)
+                .await?;
+            self.validate_relationship_targets(transaction, &targets, &target_blueprint_codes)
                 .await?;
             for target_id in current.difference(&targets) {
                 self.insert_relationship_value(
@@ -1804,6 +1810,8 @@ impl AttricatRepository {
         target_record_id: Uuid,
         allowed_target_blueprints: &[String],
     ) -> Result<(), RepositoryError> {
+        self.ensure_actor_may(transaction, Permission::RecordsRead, &[target_record_id])
+            .await?;
         let target = sqlx::query_scalar::<_, String>(
             r#"SELECT b.code FROM records e JOIN blueprints b ON b.id = e.blueprint_id AND b.version = e.blueprint_version
                WHERE e.id = $1 AND e.workspace_id = $2 AND e.deleted_at IS NULL"#,
@@ -1818,6 +1826,21 @@ impl AttricatRepository {
             return Err(RepositoryError::RelationshipTargetTypeMismatch);
         }
         Ok(())
+    }
+
+    /// Refuses a link to a record the actor can't read. A target already
+    /// linked stays allowed, so saving a record keeps links its editor can't
+    /// see. This runs before the existence check, or the two answers would
+    /// tell whether an unreadable record exists.
+    async fn ensure_new_targets_readable(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        targets: &BTreeSet<Uuid>,
+        current: &BTreeSet<Uuid>,
+    ) -> Result<(), RepositoryError> {
+        let added: Vec<Uuid> = targets.difference(current).copied().collect();
+        self.ensure_actor_may(transaction, Permission::RecordsRead, &added)
+            .await
     }
 
     /// [`Self::validate_relationship_target`] for a set of targets in one

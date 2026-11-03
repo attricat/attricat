@@ -663,3 +663,71 @@ async fn access_checks_report_scoped_grants_per_target(pool: PgPool) {
     );
     server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn linking_a_record_needs_read_access_to_the_target(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let owner = authenticated_client();
+    let definition = |code: &str| {
+        format!(
+            "format_version: 1\ncode: {code}\nname: {code}\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string\n  - code: related\n    value_type: relationship\n    cardinality: many\n"
+        )
+    };
+    let writable = create_blueprint(&owner, &base_url, &definition("link_writable")).await;
+    let hidden = create_blueprint(&owner, &base_url, &definition("link_hidden")).await;
+    let source = create_record(&owner, &base_url, &writable).await;
+    let visible_target = create_record(&owner, &base_url, &writable).await;
+    let hidden_target = create_record(&owner, &base_url, &hidden).await;
+    let (user, membership) = add_workspace_user(&pool).await;
+    grant_role(
+        &pool,
+        membership,
+        EDITOR_ROLE_ID,
+        GrantScope::BlueprintFamily(
+            writable["blueprint"]["id"]
+                .as_str()
+                .unwrap()
+                .parse()
+                .unwrap(),
+        ),
+    )
+    .await;
+    let editor = client_for(user);
+    let link = |client: &Client, targets: Value| {
+        client
+            .post(format!(
+                "{base_url}/records/{}/relationships/replace",
+                source["id"].as_str().unwrap()
+            ))
+            .json(&json!({ "relationships": [{ "attribute_code": "related", "target_record_ids": targets }] }))
+            .send()
+    };
+
+    let refused = link(&editor, json!([hidden_target["id"]])).await.unwrap();
+    assert_eq!(refused.status(), StatusCode::FORBIDDEN);
+    assert!(
+        link(&editor, json!([visible_target["id"]]))
+            .await
+            .unwrap()
+            .status()
+            .is_success()
+    );
+
+    // A link the editor can't see survives their saving the same set with it.
+    assert!(
+        link(&owner, json!([visible_target["id"], hidden_target["id"]]))
+            .await
+            .unwrap()
+            .status()
+            .is_success()
+    );
+    assert!(
+        link(&editor, json!([visible_target["id"], hidden_target["id"]]))
+            .await
+            .unwrap()
+            .status()
+            .is_success()
+    );
+    server.abort();
+}
+

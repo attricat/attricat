@@ -90,10 +90,11 @@ pub(super) async fn delete_record(
 }
 pub(super) async fn create_record_form(
     State(state): State<AppState>,
-    super::auth::AuthenticatedPrincipal(user_id, _): super::auth::AuthenticatedPrincipal,
+    principal @ super::auth::AuthenticatedPrincipal(user_id, _): super::auth::AuthenticatedPrincipal,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiJson(input): ApiJson<CreateRecordFormRequest>,
 ) -> Result<(StatusCode, Json<Record>), ApiError> {
+    let repository = repository.with_authorization_actor(principal.actor());
     let record = AttricatMutationService::new(&repository)
         .create_record(input, Some(user_id))
         .await?;
@@ -105,11 +106,12 @@ pub(super) async fn create_record_form(
 /// its own record before anything runs.
 pub(super) async fn apply_record_batch(
     State(state): State<AppState>,
-    super::auth::AuthenticatedPrincipal(user, token): super::auth::AuthenticatedPrincipal,
+    principal @ super::auth::AuthenticatedPrincipal(user, token): super::auth::AuthenticatedPrincipal,
     super::auth::ActiveWorkspace(workspace_id): super::auth::ActiveWorkspace,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiJson(input): ApiJson<RecordBatchRequest>,
 ) -> Result<Json<RecordBatchResponse>, ApiError> {
+    let repository = repository.with_authorization_actor(principal.actor());
     if !repository
         .is_authorized_for_record_batch(user, workspace_id, token, &input)
         .await?
@@ -124,9 +126,11 @@ pub(super) async fn apply_record_batch(
 }
 pub(super) async fn duplicate_record(
     State(state): State<AppState>,
+    principal: super::auth::AuthenticatedPrincipal,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(record_id): ApiPath<Uuid>,
 ) -> Result<(StatusCode, Json<Record>), ApiError> {
+    let repository = repository.with_authorization_actor(principal.actor());
     let record = AttricatMutationService::new(&repository)
         .duplicate_record(record_id)
         .await?;
@@ -183,10 +187,12 @@ pub(super) async fn get_record_form(
 }
 pub(super) async fn update_record_form(
     State(state): State<AppState>,
+    principal: super::auth::AuthenticatedPrincipal,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(record_id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<UpdateRecordFormRequest>,
 ) -> Result<Json<Record>, ApiError> {
+    let repository = repository.with_authorization_actor(principal.actor());
     let record = AttricatMutationService::new(&repository)
         .update_record(record_id, input)
         .await?;
@@ -282,11 +288,13 @@ pub(super) async fn preview_record_migration(
 }
 pub(super) async fn migrate_record_to_latest(
     State(state): State<AppState>,
+    principal: super::auth::AuthenticatedPrincipal,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(record_id): ApiPath<Uuid>,
     ApiQuery(version): ApiQuery<RecordVersionQuery>,
     ApiJson(input): ApiJson<MigrateRecordRequest>,
 ) -> Result<Json<Record>, ApiError> {
+    let repository = repository.with_authorization_actor(principal.actor());
     let record = AttricatMutationService::new(&repository)
         .migrate_record_checked(record_id, input, version.expected_updated_at)
         .await?;
@@ -295,10 +303,12 @@ pub(super) async fn migrate_record_to_latest(
 }
 pub(super) async fn append_values(
     State(state): State<AppState>,
+    principal: super::auth::AuthenticatedPrincipal,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(record_id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<AppendAttributeValues>,
 ) -> Result<(StatusCode, Json<Vec<AttributeValue>>), ApiError> {
+    let repository = repository.with_authorization_actor(principal.actor());
     let values = AttricatMutationService::new(&repository)
         .append_values(record_id, input)
         .await?;
@@ -378,10 +388,12 @@ pub(super) struct RecordVersionQuery {
 
 pub(super) async fn restore_value(
     State(state): State<AppState>,
+    principal: super::auth::AuthenticatedPrincipal,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath((record_id, history_id)): ApiPath<(Uuid, Uuid)>,
     ApiQuery(input): ApiQuery<RecordVersionQuery>,
 ) -> Result<(StatusCode, Json<AttributeValue>), ApiError> {
+    let repository = repository.with_authorization_actor(principal.actor());
     let value = AttricatMutationService::new(&repository)
         .restore_value_checked(record_id, history_id, input.expected_updated_at)
         .await?;
@@ -390,10 +402,12 @@ pub(super) async fn restore_value(
 }
 pub(super) async fn replace_relationships(
     State(state): State<AppState>,
+    principal: super::auth::AuthenticatedPrincipal,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(record_id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<RelationshipMutation>,
 ) -> Result<(StatusCode, Json<Vec<AttributeValue>>), ApiError> {
+    let repository = repository.with_authorization_actor(principal.actor());
     let values = AttricatMutationService::new(&repository)
         .replace_relationships(record_id, input)
         .await?;
