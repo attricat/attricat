@@ -92,6 +92,8 @@ A burst of edits to one record can produce many events. Add `debounce_ms` to the
 { "id": "push", "event_types": ["record.updated.v1"], "handler": "handle-event", "debounce_ms": 30000 }
 ```
 
+`record.updated.v1` alone misses values edited outside a save. See [Events](/reference/events/) for which write emits what, and add `attribute_value.changed.v1` if you need every value change.
+
 A debounced event waits until its record has been quiet for `debounce_ms` (up to one hour). Events that a newer event of the same record supersedes are skipped. An `export.retry_requested.v1` event concerns one connection, so it supersedes only an earlier retry request for the same connection. `max_wait_ms` (default ten times `debounce_ms`, at most 24 hours) caps how long an event can wait while new ones keep arriving.
 
 ### Typed outcomes

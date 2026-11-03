@@ -12,7 +12,7 @@ Zdarzenia napędzają [przepływy pracy](/pl/builders/workflows/), [reguły](/pl
 | Typ | Rejestrowane, gdy |
 | --- | --- |
 | `record.created.v1` | Rekord zostaje utworzony. |
-| `record.updated.v1` | Zapis zmienia wartości, relacje, tagi systemowe lub metadane systemowe rekordu. |
+| `record.updated.v1` | Zapis (`PUT /v1/records/{id}`) zmienia wartości, relacje, tagi systemowe lub metadane systemowe rekordu. Edycja wartości przez `POST /records/{id}/values` lub `acli value` emituje zamiast tego `attribute_value.changed.v1`, a sama zmiana plików lub relacji ma własne zdarzenie, więc aby otrzymywać każdą zmianę wartości, subskrybuj także je. |
 | `record.annotations_changed.v1` | Rozszerzenie zmienia tagi lub metadane rekordu we własnej przestrzeni nazw. |
 | `record.deleted.v1` | Rekord zostaje usunięty. |
 | `record.migrated.v1` | Rekord przechodzi na nowszą wersję schematu. |

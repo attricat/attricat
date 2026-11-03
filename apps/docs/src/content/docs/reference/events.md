@@ -12,7 +12,7 @@ Events drive [workflows](/builders/workflows/), [rules](/builders/rules/), and [
 | Type | Recorded when |
 | --- | --- |
 | `record.created.v1` | A record is created. |
-| `record.updated.v1` | A record's values, relationships, system tags, or system metadata change in a save. |
+| `record.updated.v1` | A record's values, relationships, system tags, or system metadata change in a save (`PUT /v1/records/{id}`). Editing values through `POST /records/{id}/values` or `acli value` emits `attribute_value.changed.v1` instead, and a change to files or relationships alone has its own event, so to hear about every value change subscribe to those too. |
 | `record.annotations_changed.v1` | An extension changes the record tags or metadata in its own namespace. |
 | `record.deleted.v1` | A record is deleted. |
 | `record.migrated.v1` | A record moves to a newer blueprint revision. |

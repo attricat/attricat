@@ -92,6 +92,8 @@ Seria edycji jednego rekordu może wygenerować wiele zdarzeń. Dodaj do procedu
 { "id": "push", "event_types": ["record.updated.v1"], "handler": "handle-event", "debounce_ms": 30000 }
 ```
 
+Samo `record.updated.v1` pomija wartości edytowane poza zapisem. Zobacz [Zdarzenia](/pl/reference/events/), aby sprawdzić, który zapis co emituje, i dodaj `attribute_value.changed.v1`, jeśli potrzebujesz każdej zmiany wartości.
+
 Zdarzenie czeka, aż jego rekord przez `debounce_ms` (do godziny) nie będzie się zmieniał. Zdarzenia zastąpione nowszym zdarzeniem tego samego rekordu są pomijane. Zdarzenie `export.retry_requested.v1` dotyczy jednego połączenia, więc zastępuje tylko wcześniejsze żądanie ponowienia dla tego samego połączenia. `max_wait_ms` (domyślnie dziesięciokrotność `debounce_ms`, najwyżej 24 godziny) ogranicza, jak długo zdarzenie może czekać, gdy wciąż nadchodzą nowe.
 
 ### Typowane wyniki
