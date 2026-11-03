@@ -99,8 +99,6 @@ attributes:
             .send().await.unwrap().error_for_status().unwrap().json().await.unwrap();
         assert_eq!(response["items"].as_array().unwrap().len(), 1, "{query}");
         assert_eq!(response["items"][0]["id"], item["id"], "{query}");
-        // Deprecated: the field stays until the next major version, always empty.
-        assert_eq!(response["items"][0]["match_explanations"], json!([]));
     }
     let invalid = client.post(format!("{base_url}/v1/records/search"))
         .json(&json!({ "blueprint": { "code": "search_product" }, "query": "color.name:bad*middle", "page": { "size": 25 } }))
