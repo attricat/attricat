@@ -52,6 +52,7 @@ describe('answeredMigrationRelationships', () => {
   const retargeted = [
     {
       attribute_code: 'brand',
+      context_id: null,
       kind: 'relationship_target_changed',
       message: '',
     },
@@ -79,9 +80,15 @@ describe('answeredMigrationRelationships', () => {
 
 describe('requiredMigrationAttributes', () => {
   const issues = [
-    { attribute_code: 'sku', kind: 'missing_required', message: '' },
+    {
+      attribute_code: 'sku',
+      context_id: null,
+      kind: 'missing_required',
+      message: '',
+    },
     {
       attribute_code: 'brand',
+      context_id: null,
       kind: 'relationship_target_changed',
       message: '',
     },
