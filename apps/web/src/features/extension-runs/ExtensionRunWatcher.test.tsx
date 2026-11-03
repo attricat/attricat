@@ -44,17 +44,22 @@ describe('ExtensionRunWatcher', () => {
 
   it('keeps watching through a brief outage and announces the finish', async () => {
     vi.mocked(getExtensionRun).mockResolvedValueOnce(
-      run('outage', extensionRunStatuses.running),
+      run('66666666-6666-4666-8666-666666666666', extensionRunStatuses.running),
     );
-    const { refetch } = renderWatcher('outage');
+    const { refetch } = renderWatcher('66666666-6666-4666-8666-666666666666');
     await waitFor(() => expect(getExtensionRun).toHaveBeenCalledTimes(1));
 
     vi.mocked(getExtensionRun).mockRejectedValueOnce(new TypeError('offline'));
     await refetch();
-    expect(useRunWatchStore.getState().runIds).toEqual(['outage']);
+    expect(useRunWatchStore.getState().runIds).toEqual([
+      '66666666-6666-4666-8666-666666666666',
+    ]);
 
     vi.mocked(getExtensionRun).mockResolvedValueOnce(
-      run('outage', extensionRunStatuses.completed),
+      run(
+        '66666666-6666-4666-8666-666666666666',
+        extensionRunStatuses.completed,
+      ),
     );
     await refetch();
     await waitFor(() => expect(notifyRunFinished).toHaveBeenCalledTimes(1));

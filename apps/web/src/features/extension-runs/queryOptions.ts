@@ -1,4 +1,8 @@
 import { queryOptions } from '@tanstack/react-query';
+import { z } from 'zod';
+import { notFoundErrorCode } from '../../api/errors';
+import { httpStatus } from '../../api/httpStatus';
+import { ApiRequestError } from '../../api/request';
 import { getExtensionRun, listExtensionRuns } from './api';
 import { extensionRunQueryKeys } from './queryKeys';
 import {
@@ -10,7 +14,16 @@ import {
 export const extensionRunDetailOptions = (runId: string) =>
   queryOptions({
     queryKey: extensionRunQueryKeys.detail(runId),
-    queryFn: () => getExtensionRun(runId),
+    queryFn: () => {
+      // A malformed ID in the address names no run, which must not be polled.
+      if (!z.uuid().safeParse(runId).success)
+        throw new ApiRequestError(
+          httpStatus.notFound,
+          'Not found',
+          notFoundErrorCode,
+        );
+      return getExtensionRun(runId);
+    },
     refetchInterval: ({ state: { data, error } }) =>
       extensionRunRefetchInterval(!data || isActiveExtensionRun(data), error),
   });
