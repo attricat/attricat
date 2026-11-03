@@ -316,8 +316,9 @@ installed release, configuration, and required grants before each invocation.
 Deliveries are at-least-once, may be reordered, and handlers must therefore be
 idempotent. Component traps, fuel or
 memory exhaustion, timeouts, and returned handler failures of a 1.0 `handler`
-are traced, metered, and quarantine the installation before the delivery is
-retried/dead-lettered. A 1.1 `event-handler` distinguishes record rejections,
+are traced, metered, and quarantine the installation. The delivery's retry then
+finds no enabled handler and ends, so the event isn't redelivered after the
+extension is enabled again. A 1.1 `event-handler` distinguishes record rejections,
 temporary failures and faults instead; see
 [Handler outcomes](#handler-and-batch-outcomes).
 
@@ -502,8 +503,7 @@ A server component calls `api.call("events.emit.v1", json)` with:
 The host derives type, source, correlation ID, and causation ID; extensions
 cannot forge them. Events use the existing transactional outbox and
 at-least-once dispatcher. They can be reordered or retried, so handlers must
-be idempotent. Failed components are quarantined and deliveries retry or dead
-letter under dispatcher policy. Consumers only receive declared provider
+be idempotent. A faulted component is quarantined, which ends its delivery. Consumers only receive declared provider
 contracts; core Attricat event subscriptions are unchanged. A handler that
 writes in response to an event should skip its own source (1.1) or converge
 (1.0); see

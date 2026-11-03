@@ -92,7 +92,7 @@ pub(crate) enum ExtensionCommand {
         once: bool,
     },
     /// Upgrade to a newer registry release, or with --file to a newer local
-    /// archive. Either clears grants and configuration.
+    /// archive. Grants that still apply are kept; the rest need granting again.
     Upgrade {
         extension_id: String,
         #[arg(long, conflicts_with = "file", required_unless_present = "file")]
