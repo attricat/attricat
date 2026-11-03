@@ -2146,6 +2146,7 @@
     "setPassword": "Ustaw hasło i dołącz do obszaru roboczego",
     "invitationAccepted": "Zaproszenie zostało zaakceptowane. Możesz teraz korzystać z obszaru roboczego.",
     "acceptTitle": "Zaakceptuj zaproszenie do obszaru roboczego",
+    "acceptWithExistingAccount": "Przyjmij za pomocą istniejącego konta",
     "acceptWithPasswordHint": "Masz już konto Attricat? Użyj jego adresu e-mail i hasła. Zaproszenie działa tylko dla adresu, na który zostało wysłane.",
     "acceptInvitation": "Zaakceptuj zaproszenie",
     "teams": "Zespoły",

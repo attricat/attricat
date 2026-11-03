@@ -3,7 +3,10 @@ import { useForm } from '@tanstack/react-form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
+import type { ApiErrorCode } from '../../api/errors';
+import { ApiRequestError } from '../../api/request';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { RouterButton } from '../../components/RouterLink';
 import { AuthFormShell, AuthFormTitle } from '../auth/AuthFormShell';
 import { getInvitationOptions } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
@@ -11,6 +14,7 @@ import { SingleSignOnButton } from '../auth/SingleSignOnButton';
 import { completeOnboarding } from './api';
 
 const minimumPasswordLength = 5;
+const invitationInvalidCode = 'invitation_invalid' satisfies ApiErrorCode;
 
 type PasswordSetupValues = {
   confirmPassword: string;
@@ -127,6 +131,19 @@ export const PasswordSetupPage = ({
         )}
       </form.Field>
       <ApiErrorAlert error={setup.error} />
+      {/* Another invitation's link set this account's password. This invitation
+          still stands, and accepting it only needs that password. */}
+      {setup.error instanceof ApiRequestError &&
+        setup.error.code === invitationInvalidCode &&
+        options.data && (
+          <RouterButton
+            search={{ secret: initialInvitationSecret }}
+            to="/invitations/accept"
+            variant="outlined"
+          >
+            {t('workspace.acceptWithExistingAccount')}
+          </RouterButton>
+        )}
       <Button disabled={setup.isPending} type="submit" variant="contained">
         {t('workspace.setPassword')}
       </Button>

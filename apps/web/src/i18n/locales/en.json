@@ -2056,6 +2056,7 @@
     "setPassword": "Set password and join workspace",
     "invitationAccepted": "Invitation accepted. You can now use the workspace.",
     "acceptTitle": "Accept workspace invitation",
+    "acceptWithExistingAccount": "Accept with your existing account",
     "acceptWithPasswordHint": "Already have an Attricat account? Use its email and password. The invitation only works for the address it was sent to.",
     "acceptInvitation": "Accept invitation",
     "teams": "Teams",
