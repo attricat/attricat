@@ -3051,11 +3051,7 @@ impl AttricatRepository {
         match_blueprint: Option<Uuid>,
         attribute: Option<String>,
     ) -> Result<Vec<(Uuid, Option<String>)>, RepositoryError> {
-        let pattern = if term.prefix {
-            format!("{}%", term.value)
-        } else {
-            format!("%{}%", term.value)
-        };
+        let pattern = search_pattern(term);
         // Alphabetic terms other than booleans cannot match the canonical native
         // renderings of non-text values. Start these searches from the trigram-indexed
         // text values and materialize them so PostgreSQL does not repeat that scan for
@@ -3118,11 +3114,7 @@ impl AttricatRepository {
             .execute(&mut *transaction)
             .await
             .map_err(global_search_error)?;
-        let pattern = if term.prefix {
-            format!("{}%", term.value)
-        } else {
-            format!("%{}%", term.value)
-        };
+        let pattern = search_pattern(&term);
         let sql = if text_only_search(&term.value) {
             r#"WITH matching_values AS MATERIALIZED (
                     SELECT record_id, attribute_id FROM attribute_values
@@ -3430,6 +3422,21 @@ fn parse_search_terms(query: &str) -> Result<Vec<SearchTerm>, RepositoryError> {
         })
         .collect()
 }
+/// The ILIKE pattern of a term: its text is literal, so `%` and `_` in it are
+/// ordinary characters.
+fn search_pattern(term: &SearchTerm) -> String {
+    let literal = term
+        .value
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_");
+    if term.prefix {
+        format!("{literal}%")
+    } else {
+        format!("%{literal}%")
+    }
+}
+
 fn text_only_search(value: &str) -> bool {
     let normalized = value.to_ascii_lowercase();
     normalized != "true"

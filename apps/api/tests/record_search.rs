@@ -1525,3 +1525,47 @@ attributes:
 
     server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn percent_and_underscore_in_a_term_are_literal(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    let blueprint = create_blueprint(
+        &client,
+        &base_url,
+        "format_version: 1\ncode: literal_item\nname: Literal item\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string\n",
+    )
+    .await;
+    let code = blueprint["blueprint"]["code"].as_str().unwrap();
+    let save = |title: &'static str| {
+        client
+            .post(format!("{base_url}/v1/records"))
+            .json(&json!({
+                "blueprint": { "code": code },
+                "values": [{ "kind": "scalar", "attribute_code": "title", "value": title }],
+            }))
+            .send()
+    };
+    save("AB_12").await.unwrap().error_for_status().unwrap();
+    save("ABX12").await.unwrap().error_for_status().unwrap();
+
+    let found: Value = client
+        .post(format!("{base_url}/v1/records/search"))
+        .json(&json!({
+            "blueprint": { "code": code },
+            "query": "AB_12",
+            "filters": [],
+            "page": { "size": 10 },
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+
+    assert_eq!(found["items"].as_array().unwrap().len(), 1, "{found}");
+    server.abort();
+}
