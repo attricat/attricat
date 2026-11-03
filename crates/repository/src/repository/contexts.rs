@@ -203,6 +203,31 @@ impl AttricatRepository {
         if !parent_exists {
             return Err(RepositoryError::InvalidContext);
         }
+        // A move changes values resolved under the destination too, so a
+        // subtree grant on the moved context alone doesn't cover it.
+        if let Some(actor) = self.authorization_actor {
+            let moved = sqlx::query_scalar::<_, Option<Uuid>>(
+                "SELECT parent_id FROM attribute_contexts WHERE id = $1 AND workspace_id = $2",
+            )
+            .bind(id)
+            .bind(self.workspace_id.0)
+            .fetch_one(&mut *transaction)
+            .await?
+                != Some(input.parent_id);
+            if moved
+                && !Self::principal_may_on(
+                    &mut transaction,
+                    actor,
+                    self.workspace_id.0,
+                    Permission::ContextsWrite,
+                    Some(input.parent_id),
+                    None,
+                )
+                .await?
+            {
+                return Err(RepositoryError::ActorNotAuthorized);
+            }
+        }
         let result = query_as::<_, Db<AttributeContext>>(r#"WITH RECURSIVE descendants AS (
                 SELECT id FROM attribute_contexts WHERE id = $1 AND workspace_id = $4
                 UNION ALL SELECT c.id FROM attribute_contexts c JOIN descendants d ON c.parent_id = d.id AND c.workspace_id = $4

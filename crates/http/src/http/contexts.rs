@@ -64,10 +64,12 @@ pub(super) async fn get_context(
 }
 pub(super) async fn update_context(
     State(state): State<AppState>,
+    principal: super::auth::AuthenticatedPrincipal,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<UpdateAttributeContext>,
 ) -> Result<Json<AttributeContext>, ApiError> {
+    let repository = repository.with_authorization_actor(principal.actor());
     let context = AttricatMutationService::new(&repository)
         .update_context(id, input)
         .await?;

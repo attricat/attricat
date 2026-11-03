@@ -731,3 +731,48 @@ async fn linking_a_record_needs_read_access_to_the_target(pool: PgPool) {
     server.abort();
 }
 
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn moving_a_context_needs_access_to_its_destination(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let owner = authenticated_client();
+    let context = |code: &str| {
+        let request = owner
+            .post(format!("{base_url}/contexts"))
+            .json(&json!({ "code": code, "data": {} }));
+        async move { request.send().await.unwrap().json::<Value>().await.unwrap() }
+    };
+    let granted = context("move-granted").await;
+    let inside = context("move-inside").await;
+    let other = context("move-other").await;
+    let id = |value: &Value| value["id"].as_str().unwrap().parse::<Uuid>().unwrap();
+    let (user, membership) = add_workspace_user(&pool).await;
+    for scope in [id(&granted), id(&inside)] {
+        grant_role(
+            &pool,
+            membership,
+            EDITOR_ROLE_ID,
+            GrantScope::ContextSubtree(scope),
+        )
+        .await;
+    }
+    let editor = client_for(user);
+    let move_to = |parent: &Value| {
+        editor
+            .put(format!(
+                "{base_url}/contexts/id/{}",
+                inside["id"].as_str().unwrap()
+            ))
+            .json(&json!({ "parent_id": parent["id"], "data": {} }))
+            .send()
+    };
+
+    assert_eq!(
+        move_to(&other).await.unwrap().status(),
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(move_to(&granted).await.unwrap().status(), StatusCode::OK);
+    // Editing a context in place needs no access to its parent's siblings.
+    assert_eq!(move_to(&granted).await.unwrap().status(), StatusCode::OK);
+    server.abort();
+}
+
