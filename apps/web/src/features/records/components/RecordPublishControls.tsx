@@ -44,7 +44,7 @@ export const RecordPublishControls = ({
   ) : published && publication.published_at ? (
     t('records.publication.publishedDetails', {
       publishedAt: formatWithUtc(publication.published_at),
-      publishedBy: publication.published_by_user_id ?? emptyValuePlaceholder,
+      publishedBy: publication.published_by_name ?? emptyValuePlaceholder,
     })
   ) : published ? null : (
     t('records.publication.notPublishedDescription')

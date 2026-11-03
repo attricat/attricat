@@ -237,6 +237,8 @@ pub struct RecordPublicationStatus {
     pub status: String,
     pub published_at: Option<DateTime<Utc>>,
     pub published_by_user_id: Option<Uuid>,
+    /// The publisher's name or, without one, email, for people to read.
+    pub published_by_name: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]

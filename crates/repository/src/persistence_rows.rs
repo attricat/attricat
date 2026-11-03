@@ -296,6 +296,7 @@ domain_row!(RecordPublicationStatus {
     status,
     published_at,
     published_by_user_id,
+    published_by_name,
 });
 domain_row!(RecordAuditChange {
     audit_event_id,

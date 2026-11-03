@@ -152,6 +152,7 @@ export const recordPublicationStatusSchema = z.object({
   status: z.enum(publicationStatuses),
   published_at: z.string().datetime().nullable(),
   published_by_user_id: uuidSchema.nullable(),
+  published_by_name: z.string().nullable().optional(),
 });
 export const recordPublicationReadinessSchema = z.object({
   context_id: uuidSchema,

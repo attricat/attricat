@@ -365,7 +365,7 @@ impl AttricatRepository {
         }
         let workspace_id = self.workspace_id.0;
         Ok(sqlx::query_as::<_, Db<RecordPublicationStatus>>(
-            "SELECT c.context_id, a.code AS context_code, CASE WHEN p.published_at IS NULL THEN 'not_published' ELSE 'published' END AS status, p.published_at, p.published_by_user_id FROM publication_channels c JOIN attribute_contexts a ON a.workspace_id = c.workspace_id AND a.id = c.context_id LEFT JOIN record_channel_publications p ON p.workspace_id = c.workspace_id AND p.record_id = $2 AND p.context_id = c.context_id WHERE c.workspace_id = $1 AND c.enabled ORDER BY a.code",
+            "SELECT c.context_id, a.code AS context_code, CASE WHEN p.published_at IS NULL THEN 'not_published' ELSE 'published' END AS status, p.published_at, p.published_by_user_id, (SELECT COALESCE(NULLIF(u.display_name, ''), u.email) FROM users u WHERE u.id = p.published_by_user_id) AS published_by_name FROM publication_channels c JOIN attribute_contexts a ON a.workspace_id = c.workspace_id AND a.id = c.context_id LEFT JOIN record_channel_publications p ON p.workspace_id = c.workspace_id AND p.record_id = $2 AND p.context_id = c.context_id WHERE c.workspace_id = $1 AND c.enabled ORDER BY a.code",
         )
         .bind(workspace_id)
         .bind(record_id)
@@ -392,9 +392,10 @@ impl AttricatRepository {
                 Option<String>,
                 Option<DateTime<Utc>>,
                 Option<Uuid>,
+                Option<String>,
             ),
         >(
-            "SELECT r.id, c.context_id, a.code, p.published_at, p.published_by_user_id FROM records r LEFT JOIN (publication_channels c JOIN attribute_contexts a ON a.workspace_id = c.workspace_id AND a.id = c.context_id) ON c.workspace_id = r.workspace_id AND c.enabled LEFT JOIN record_channel_publications p ON p.workspace_id = c.workspace_id AND p.record_id = r.id AND p.context_id = c.context_id WHERE r.workspace_id = $1 AND r.id = ANY($2) AND r.deleted_at IS NULL ORDER BY r.id, a.code",
+            "SELECT r.id, c.context_id, a.code, p.published_at, p.published_by_user_id, (SELECT COALESCE(NULLIF(u.display_name, ''), u.email) FROM users u WHERE u.id = p.published_by_user_id) FROM records r LEFT JOIN (publication_channels c JOIN attribute_contexts a ON a.workspace_id = c.workspace_id AND a.id = c.context_id) ON c.workspace_id = r.workspace_id AND c.enabled LEFT JOIN record_channel_publications p ON p.workspace_id = c.workspace_id AND p.record_id = r.id AND p.context_id = c.context_id WHERE r.workspace_id = $1 AND r.id = ANY($2) AND r.deleted_at IS NULL ORDER BY r.id, a.code",
         )
         .bind(self.workspace_id.0)
         .bind(record_ids)
@@ -402,7 +403,15 @@ impl AttricatRepository {
         .await?;
         // A live record without enabled channels answers with no statuses.
         let mut statuses: HashMap<Uuid, Vec<RecordPublicationStatus>> = HashMap::new();
-        for (record_id, context_id, context_code, published_at, published_by_user_id) in rows {
+        for (
+            record_id,
+            context_id,
+            context_code,
+            published_at,
+            published_by_user_id,
+            published_by_name,
+        ) in rows
+        {
             let record = statuses.entry(record_id).or_default();
             if let (Some(context_id), Some(context_code)) = (context_id, context_code) {
                 record.push(RecordPublicationStatus {
@@ -416,6 +425,7 @@ impl AttricatRepository {
                     .to_owned(),
                     published_at,
                     published_by_user_id,
+                    published_by_name,
                 });
             }
         }
@@ -826,12 +836,19 @@ impl AttricatRepository {
         let published_at = chrono::Utc::now();
         sqlx::query("INSERT INTO record_channel_publications (workspace_id, record_id, context_id, published_at, published_by_user_id) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (workspace_id, record_id, context_id) DO UPDATE SET published_at = EXCLUDED.published_at, published_by_user_id = EXCLUDED.published_by_user_id")
             .bind(workspace_id).bind(record_id).bind(context_id).bind(published_at).bind(actor).execute(&mut **tx).await?;
+        let published_by_name = sqlx::query_scalar(
+            "SELECT COALESCE(NULLIF(display_name, ''), email) FROM users WHERE id = $1",
+        )
+        .bind(actor)
+        .fetch_optional(&mut **tx)
+        .await?;
         Ok(RecordPublicationStatus {
             context_id,
             context_code: channel.context_code,
             status: "published".to_owned(),
             published_at: Some(published_at),
             published_by_user_id: Some(actor),
+            published_by_name,
         })
     }
 
