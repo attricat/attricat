@@ -684,3 +684,36 @@ attributes:
     );
     server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_required_file_attribute_cannot_be_emptied(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let blueprint = required_image_blueprint(&client, &base_url, "kept_image").await;
+    let file_id = stage_png(&client, &base_url, &blueprint, "image").await;
+    let record = expect_status(
+        create_with_files(
+            &client,
+            &base_url,
+            &blueprint,
+            json!([{"attribute_code": "image", "file_ids": [file_id]}]),
+        )
+        .await,
+        StatusCode::CREATED,
+    )
+    .await;
+    let record_id = record["id"].as_str().unwrap();
+
+    let refused = client
+        .put(format!(
+            "{base_url}/records/{record_id}/file-attributes/image/references"
+        ))
+        .json(&json!({"expected_file_ids": [file_id], "file_ids": []}))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(refused.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(linked_files(&pool, record_id).await.len(), 1);
+    server.abort();
+}

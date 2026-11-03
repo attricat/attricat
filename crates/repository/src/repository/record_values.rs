@@ -233,6 +233,14 @@ impl RecordValues {
             .filter_map(|(code, attribute)| {
                 attribute
                     .resolve(path)
+                    // An emptied file attribute has no value to satisfy `required`.
+                    .filter(|direct| {
+                        attribute.value_type != ValueType::File
+                            || direct
+                                .value
+                                .as_array()
+                                .is_none_or(|files| !files.is_empty())
+                    })
                     .map(|direct| (code.clone(), direct.value.clone()))
             })
             .collect()
