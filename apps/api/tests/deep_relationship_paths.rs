@@ -420,6 +420,119 @@ attributes:
 }
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
+async fn relationship_sort_handles_no_matches_and_deleted_targets(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    let leaf = create_blueprint(
+        &client,
+        &base_url,
+        r#"format_version: 1
+code: sort_target
+name: Sort target
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string"#,
+    )
+    .await;
+    let source = create_blueprint(
+        &client,
+        &base_url,
+        r#"format_version: 1
+code: sort_source
+name: Sort source
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+  table:
+    type: table
+    columns:
+      - {field: target.name, label: Target}
+attributes:
+  - code: name
+    value_type: string
+  - code: target
+    value_type: relationship
+    target_blueprint: sort_target
+    cardinality: one"#,
+    )
+    .await;
+    let search = async || -> Vec<String> {
+        let page: Value = client
+            .post(format!("{base_url}/v1/records/search"))
+            .json(&json!({
+                "blueprint": {"code": "sort_source"},
+                "sort": {"field": "target.name", "direction": "asc"},
+                "page": {"size": 25}
+            }))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        page["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| item["id"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    assert!(search().await.is_empty());
+
+    let mut sources = Vec::new();
+    let mut targets = Vec::new();
+    for name in ["Alpha", "Beta"] {
+        let target = create_record(&client, &base_url, &leaf).await;
+        client
+            .post(format!(
+                "{base_url}/records/{}/values",
+                target["id"].as_str().unwrap()
+            ))
+            .json(&json!({"values": [{"kind": "scalar", "attribute_code": "name", "value": name}]}))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+        let linked = create_record(&client, &base_url, &source).await;
+        client
+            .post(format!("{base_url}/records/{}/relationships/replace", linked["id"].as_str().unwrap()))
+            .json(&json!({"relationships": [{"attribute_code": "target", "target_record_ids": [target["id"]]}]}))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+        sources.push(linked["id"].as_str().unwrap().to_owned());
+        targets.push(target);
+    }
+    assert_eq!(search().await, sources);
+
+    client
+        .delete(format!(
+            "{base_url}/records/{}",
+            targets[0]["id"].as_str().unwrap()
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    // A source whose target is gone sorts as having no value, and appears once.
+    assert_eq!(search().await, [sources[1].clone(), sources[0].clone()]);
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn relationship_sort_requires_one_effective_source_version(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
