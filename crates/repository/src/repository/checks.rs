@@ -651,6 +651,7 @@ pub(crate) async fn enabled_rules(
     .await?;
     Ok(rule_sets(conn, workspace_id, rows)
         .await?
+        .0
         .remove(&(blueprint_id, blueprint_version))
         .unwrap_or_default())
 }
@@ -677,7 +678,7 @@ async fn rule_sets(
     workspace_id: Uuid,
     rows: Vec<(Uuid, String, Option<Uuid>, Value)>,
 ) -> Result<super::generations::EnabledRuleSets, RepositoryError> {
-    let mut sets = super::generations::EnabledRuleSets::new();
+    let mut sets = super::generations::EnabledRuleSets::default();
     if rows.is_empty() {
         return Ok(sets);
     }
@@ -696,7 +697,8 @@ async fn rule_sets(
             if revision_blueprint == blueprint_id
                 && attricat_rules::applicability(&rule.compiled, attributes).is_ok()
             {
-                sets.entry((blueprint_id, version))
+                sets.0
+                    .entry((blueprint_id, version))
                     .or_default()
                     .push(rule.clone());
             }

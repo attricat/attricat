@@ -144,6 +144,7 @@ impl WriteContext {
         let enabled_rules = prefetch.map(|prefetch| {
             prefetch
                 .rules
+                .0
                 .get(&(record.blueprint_id, record.blueprint_version))
                 .cloned()
                 .unwrap_or_default()

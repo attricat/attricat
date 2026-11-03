@@ -97,7 +97,24 @@ pub(crate) struct WritePrefetch {
 }
 
 /// Enabled rules per blueprint revision.
-pub(crate) type EnabledRuleSets = HashMap<(Uuid, i64), Vec<EnabledRule>>;
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+#[serde(from = "Vec<RevisionRules>", into = "Vec<RevisionRules>")]
+pub(crate) struct EnabledRuleSets(pub HashMap<(Uuid, i64), Vec<EnabledRule>>);
+
+/// JSON maps can't have tuple keys, and the shared cache stores JSON.
+type RevisionRules = ((Uuid, i64), Vec<EnabledRule>);
+
+impl From<Vec<RevisionRules>> for EnabledRuleSets {
+    fn from(rules: Vec<RevisionRules>) -> Self {
+        Self(rules.into_iter().collect())
+    }
+}
+
+impl From<EnabledRuleSets> for Vec<RevisionRules> {
+    fn from(rules: EnabledRuleSets) -> Self {
+        rules.0.into_iter().collect()
+    }
+}
 
 impl AttricatRepository<SystemScope> {
     /// This database's random identity, created on first use. Shared cache
@@ -186,5 +203,19 @@ impl AttricatRepository {
             tree,
             rules,
         }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn enabled_rule_sets_survive_the_shared_cache_encoding() {
+        let revision = (Uuid::from_u128(1), 2);
+        let sets = EnabledRuleSets(HashMap::from([(revision, Vec::new())]));
+        let encoded = serde_json::to_vec(&sets).unwrap();
+        let decoded: EnabledRuleSets = serde_json::from_slice(&encoded).unwrap();
+        assert!(decoded.0.contains_key(&revision));
     }
 }
