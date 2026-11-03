@@ -614,3 +614,84 @@ async fn safe_batch_archives_explicitly_approved_removed_values(pool: PgPool) {
         json!(["obsolete"])
     );
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_retry_finishes_a_policy_covered_record_left_at_needs_input(pool: PgPool) {
+    let workspace = uuid::Uuid::from_u128(0x00000000000040008000000000000002);
+    let repository = AttricatRepository::new(pool.clone(), workspace);
+    let source = repository
+        .create_blueprint(CreateBlueprint {
+            definition: format!("{DEFINITION}  - code: obsolete\n    value_type: string\n"),
+        })
+        .await
+        .unwrap();
+    repository
+        .publish_blueprint_revision(source.blueprint.id, 1)
+        .await
+        .unwrap();
+    let record = repository
+        .create_record_with_values(
+            source.blueprint.id,
+            1,
+            vec![NewAttributeValue::Scalar {
+                attribute_id: None,
+                attribute_code: Some("obsolete".to_owned()),
+                context_id: None,
+                value: json!("archive me"),
+            }],
+            Vec::new(),
+            json!({}),
+        )
+        .await
+        .unwrap();
+    repository
+        .create_blueprint_revision(
+            source.blueprint.id,
+            CreateBlueprint {
+                definition: format!("{DEFINITION}\n# obsolete removed\n"),
+            },
+        )
+        .await
+        .unwrap();
+    repository
+        .publish_blueprint_revision(source.blueprint.id, 2)
+        .await
+        .unwrap();
+    let batch = repository
+        .start_safe_blueprint_migration_batch_with_removal_disposition(
+            source.blueprint.id,
+            2,
+            Some("archive"),
+        )
+        .await
+        .unwrap();
+    // What a crash between the preview and the migration leaves behind.
+    sqlx::query("INSERT INTO record_blueprint_migrations (id, batch_id, workspace_id, record_id, blueprint_id, source_version, target_version, status, issues, task_owned) VALUES ($1, $2, $3, $4, $5, 1, 2, 'needs_input', '[]', true)")
+        .bind(uuid::Uuid::new_v4())
+        .bind(batch.id)
+        .bind(workspace)
+        .bind(record.id)
+        .bind(source.blueprint.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let task = repository
+        .claim_task("retry-worker", std::time::Duration::from_secs(30))
+        .await
+        .unwrap()
+        .unwrap();
+
+    BlueprintMigrationBatchTaskHandler::new(repository.clone())
+        .handle(task)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT blueprint_version FROM records WHERE id = $1")
+            .bind(record.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        2
+    );
+}

@@ -295,6 +295,11 @@ impl AttricatRepository {
                 _ => Err(RepositoryError::NotFound("blueprint migration batch")),
             };
         };
+        // A crash can come between a policy-covered preview, which commits
+        // `needs_input`, and its migration, so a retry looks at those again.
+        let retry_needs_input =
+            serde_json::from_value::<BlueprintMigrationRemovalPolicy>(batch.removal_policy.clone())
+                .is_ok();
         let mut cursor: Option<(DateTime<Utc>, Uuid)> = None;
         // Read on the first candidate page; see `preview_record_migration_against`.
         let mut target = None;
@@ -314,6 +319,7 @@ impl AttricatRepository {
                                  WHERE m.batch_id = $6 AND m.record_id = e.id
                                    AND m.workspace_id = $3
                                    AND m.status IN ('migrated', 'needs_input', 'blocked', 'failed', 'skipped', 'superseded')
+                                   AND NOT (m.status = 'needs_input' AND $8)
                              )
                            ORDER BY e.created_at DESC, e.id DESC
                            LIMIT $7"#,
@@ -325,6 +331,7 @@ impl AttricatRepository {
                     .bind(id)
                     .bind(batch.id)
                     .bind(page_size as i64)
+                    .bind(retry_needs_input)
                     .fetch_all(&self.pool)
                     .await?
                 }
@@ -341,6 +348,7 @@ impl AttricatRepository {
                                  WHERE m.batch_id = $4 AND m.record_id = e.id
                                    AND m.workspace_id = $3
                                    AND m.status IN ('migrated', 'needs_input', 'blocked', 'failed', 'skipped', 'superseded')
+                                   AND NOT (m.status = 'needs_input' AND $6)
                              )
                            ORDER BY e.created_at DESC, e.id DESC
                            LIMIT $5"#,
@@ -350,6 +358,7 @@ impl AttricatRepository {
                     .bind(workspace_id)
                     .bind(batch.id)
                     .bind(page_size as i64)
+                    .bind(retry_needs_input)
                     .fetch_all(&self.pool)
                     .await?
                 }
@@ -416,37 +425,41 @@ impl AttricatRepository {
     ) -> Result<&'static str, RepositoryError> {
         let migration = self.reserve_batch_migration(batch, record_id).await?;
         match migration.status {
-            RecordMigrationStatus::Migrated
-            | RecordMigrationStatus::NeedsInput
-            | RecordMigrationStatus::Blocked
-            | RecordMigrationStatus::Failed
-            | RecordMigrationStatus::Skipped
-            | RecordMigrationStatus::Superseded => {
-                return Ok("already_terminal");
-            }
-            RecordMigrationStatus::Pending => match self
-                .preview_record_migration_against(record_id, Some(migration.id), target)
-                .await
+            // A crash can come between a policy-covered preview, which commits
+            // `needs_input`, and its migration; a retry looks at it again.
+            status
+                if status == RecordMigrationStatus::Pending
+                    || (status == RecordMigrationStatus::NeedsInput
+                        && serde_json::from_value::<BlueprintMigrationRemovalPolicy>(
+                            batch.removal_policy.clone(),
+                        )
+                        .is_ok()) =>
             {
-                Ok(preview)
-                    if preview.status == RecordMigrationStatus::Ready
-                        || removal_policy_covers_preview(
-                            &batch.removal_policy,
-                            &preview.issues,
-                        ) => {}
-                Ok(_) => return Ok("needs_input"),
-                Err(error) => {
-                    if retryable_batch_error(&error) {
-                        // Preserve this reservation so the task queue can retry
-                        // after transient database failures.
-                        return Err(error);
+                match self
+                    .preview_record_migration_against(record_id, Some(migration.id), target)
+                    .await
+                {
+                    Ok(preview)
+                        if preview.status == RecordMigrationStatus::Ready
+                            || removal_policy_covers_preview(
+                                &batch.removal_policy,
+                                &preview.issues,
+                            ) => {}
+                    Ok(_) => return Ok("needs_input"),
+                    Err(error) => {
+                        if retryable_batch_error(&error) {
+                            // Preserve this reservation so the task queue can retry
+                            // after transient database failures.
+                            return Err(error);
+                        }
+                        self.record_batch_failure(migration.id, &error.to_string())
+                            .await?;
+                        return Ok("failed");
                     }
-                    self.record_batch_failure(migration.id, &error.to_string())
-                        .await?;
-                    return Ok("failed");
                 }
-            },
+            }
             RecordMigrationStatus::Ready | RecordMigrationStatus::Migrating => {}
+            _ => return Ok("already_terminal"),
         }
         self.begin_batch_migration(migration.id).await?;
         match self

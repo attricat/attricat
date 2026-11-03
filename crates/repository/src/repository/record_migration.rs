@@ -378,7 +378,7 @@ impl AttricatRepository {
         let mut transaction = self.pool.begin().await?;
         if reserved_for_batch {
             let updated = sqlx::query(
-                "UPDATE record_blueprint_migrations SET source_version = $2, target_version = $3, status = $4, issues = $5 WHERE id = $1 AND workspace_id = $6 AND status = 'pending'",
+                "UPDATE record_blueprint_migrations SET source_version = $2, target_version = $3, status = $4, issues = $5 WHERE id = $1 AND workspace_id = $6 AND status IN ('pending', 'needs_input')",
             )
             .bind(migration_id)
             .bind(record.blueprint_version)
