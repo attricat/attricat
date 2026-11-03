@@ -1170,3 +1170,81 @@ async fn migration_removes_a_value_in_one_context_only(pool: PgPool) {
     .unwrap();
     assert_eq!(remaining, vec![(Some(other_context),)]);
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn migration_issues_name_the_context_of_the_value(pool: PgPool) {
+    let repository = AttricatRepository::new(
+        pool.clone(),
+        support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
+    );
+    let other_context = uuid::Uuid::new_v4();
+    sqlx::query("INSERT INTO attribute_contexts (id, code, data) VALUES ($1, 'issue-other', '{}')")
+        .bind(other_context)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let definition = format!(
+        "{SCALAR_DEFINITION}  - code: rating\n    value_type: string\n    context_editable: all\n"
+    );
+    let blueprint = repository
+        .create_blueprint(CreateBlueprint {
+            definition: definition.clone(),
+        })
+        .await
+        .unwrap();
+    repository
+        .publish_blueprint_revision(blueprint.blueprint.id, 1)
+        .await
+        .unwrap();
+    let record = repository
+        .create_record_with_values(
+            blueprint.blueprint.id,
+            1,
+            vec![
+                NewAttributeValue::Scalar {
+                    attribute_id: None,
+                    attribute_code: Some("title".into()),
+                    context_id: None,
+                    value: json!("name"),
+                },
+                NewAttributeValue::Scalar {
+                    attribute_id: None,
+                    attribute_code: Some("rating".into()),
+                    context_id: Some(other_context),
+                    value: json!("two"),
+                },
+            ],
+            Vec::new(),
+            json!({}),
+        )
+        .await
+        .unwrap();
+    repository
+        .create_blueprint_revision(
+            blueprint.blueprint.id,
+            CreateBlueprint {
+                definition: definition.replace(
+                    "value_type: string\n    context_editable: all",
+                    "value_type: integer\n    context_editable: all",
+                ),
+            },
+        )
+        .await
+        .unwrap();
+    repository
+        .publish_blueprint_revision(blueprint.blueprint.id, 2)
+        .await
+        .unwrap();
+
+    let preview = repository
+        .preview_record_migration(record.id)
+        .await
+        .unwrap();
+
+    let issue = preview
+        .issues
+        .iter()
+        .find(|issue| issue.attribute_code.as_deref() == Some("rating"))
+        .unwrap();
+    assert_eq!(issue.context_id, Some(other_context));
+}

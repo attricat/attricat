@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import '../../i18n';
@@ -86,6 +86,74 @@ vi.mock('./components/RecordForm', () => ({
     </>
   ),
 }));
+
+it('asks about a value outside the default context and submits the answer', async () => {
+  const defaultId = '00000000-0000-4000-8000-000000000001';
+  const polandId = '00000000-0000-4000-8000-000000000002';
+  const attributes = [{ code: 'weight', name: 'Weight', value_type: 'number' }];
+  const blueprint = {
+    id: 'blueprint-1',
+    code: 'product',
+    name: 'Product',
+    version: 1,
+  };
+  vi.mocked(listContexts).mockResolvedValue([
+    { id: defaultId, code: 'default' },
+    { id: polandId, code: 'poland' },
+  ] as unknown as Awaited<ReturnType<typeof listContexts>>);
+  vi.mocked(getBlueprintByCode).mockResolvedValue({
+    blueprint,
+    attributes,
+  } as unknown as Awaited<ReturnType<typeof getBlueprintByCode>>);
+  vi.mocked(previewRecordMigration).mockResolvedValue({
+    migration_id: 'migration-1',
+    source_version: 1,
+    target: { blueprint: { ...blueprint, version: 2 }, attributes },
+    values: [
+      {
+        kind: 'scalar',
+        attribute_code: 'weight',
+        context_id: polandId,
+        value: 'ok. 2 kg',
+      },
+    ],
+    status: 'needs_input',
+    issues: [
+      {
+        attribute_code: 'weight',
+        context_id: polandId,
+        kind: 'value_type_changed',
+        message: 'Type changed',
+      },
+    ],
+  } as unknown as Awaited<ReturnType<typeof previewRecordMigration>>);
+  vi.mocked(migrateRecord).mockImplementation(() => new Promise(() => {}));
+  render(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      <MigrateRecordPage recordId="record-1" />
+    </QueryClientProvider>,
+  );
+
+  expect(await screen.findByText('1 to confirm')).toBeTruthy();
+  expect(screen.getByText('Previous value: ok. 2 kg')).toBeTruthy();
+  const user = userEvent.setup();
+  await user.type(screen.getByRole('textbox', { name: /Replacement in/ }), '2');
+  expect(await screen.findByText('0 to confirm')).toBeTruthy();
+  await user.click(screen.getByRole('button', { name: 'Submit migration' }));
+
+  await waitFor(() =>
+    expect(migrateRecord).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        values: [expect.objectContaining({ context_id: polandId, value: 2 })],
+      }),
+    ),
+  );
+});
 
 it('freezes removal confirmations and submits their snapshot while migrating', async () => {
   vi.mocked(listContexts).mockResolvedValue([]);

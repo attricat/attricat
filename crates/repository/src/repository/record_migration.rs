@@ -192,12 +192,14 @@ impl AttricatRepository {
             match target_attributes.get(source.code.as_str()) {
                 None => issues.push(MigrationIssue {
                     attribute_code: Some(source.code.clone()),
+                    context_id: None,
                     kind: "removed".to_owned(),
                     message: "The attribute was removed in the target revision".to_owned(),
                 }),
                 Some(target) if target.value_type != source.value_type => {
                     issues.push(MigrationIssue {
                         attribute_code: Some(source.code.clone()),
+                        context_id: *context_id,
                         kind: "value_type_changed".to_owned(),
                         message: "The attribute value type changed in the target revision"
                             .to_owned(),
@@ -209,6 +211,7 @@ impl AttricatRepository {
                 {
                     issues.push(MigrationIssue {
                         attribute_code: Some(source.code.clone()),
+                        context_id: *context_id,
                         kind: "relationship_target_changed".to_owned(),
                         message: "The relationship target blueprint changed in the target revision"
                             .to_owned(),
@@ -221,6 +224,7 @@ impl AttricatRepository {
                 {
                     issues.push(MigrationIssue {
                         attribute_code: Some(source.code.clone()),
+                        context_id: *context_id,
                         kind: "relationship_cardinality_changed".to_owned(),
                         message: "The relationship cardinality changed in the target revision"
                             .to_owned(),
@@ -233,6 +237,7 @@ impl AttricatRepository {
                 {
                     issues.push(MigrationIssue {
                         attribute_code: Some(source.code.clone()),
+                        context_id: *context_id,
                         kind: "file_contract_changed".to_owned(),
                         message: "The file policy or cardinality changed in the target revision"
                             .to_owned(),
@@ -244,6 +249,7 @@ impl AttricatRepository {
                 {
                     issues.push(MigrationIssue {
                         attribute_code: Some(source.code.clone()),
+                        context_id: *context_id,
                         kind: "context_not_editable".to_owned(),
                         message: "The stored value context is not editable in the target revision"
                             .to_owned(),
@@ -258,6 +264,7 @@ impl AttricatRepository {
                     {
                         issues.push(MigrationIssue {
                             attribute_code: Some(source.code.clone()),
+                            context_id: *context_id,
                             kind: "attribute_schema_mismatch".to_owned(),
                             message: "The stored value does not meet the target attribute schema"
                                 .to_owned(),
@@ -288,6 +295,7 @@ impl AttricatRepository {
             if targets.len() > 1 {
                 issues.push(MigrationIssue {
                     attribute_code: Some(attribute_code),
+                    context_id: None,
                     kind: "relationship_cardinality_conflict".to_owned(),
                     message:
                         "The target revision permits only one relationship target per source in each context"
@@ -350,6 +358,7 @@ impl AttricatRepository {
                 {
                     issues.push(MigrationIssue {
                         attribute_code: Some(field),
+                        context_id: None,
                         kind: "missing_required".to_owned(),
                         message: "A value is required by the target record schema".to_owned(),
                     });

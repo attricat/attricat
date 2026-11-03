@@ -349,6 +349,7 @@ const recordFormResponseSchema = z.object({
 });
 const migrationIssueSchema = z.object({
   attribute_code: z.string().nullable(),
+  context_id: uuidSchema.nullable(),
   // The kinds the API reports; an unknown one is shown with its message.
   kind: z.string(),
   message: z.string(),

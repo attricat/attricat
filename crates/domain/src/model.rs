@@ -1061,6 +1061,8 @@ pub struct BlueprintMigrationImpact {
 #[derive(Clone, Debug, Serialize)]
 pub struct MigrationIssue {
     pub attribute_code: Option<String>,
+    /// The context of the stored value at issue, for an incompatible value.
+    pub context_id: Option<Uuid>,
     pub kind: String,
     pub message: String,
 }

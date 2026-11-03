@@ -5,16 +5,20 @@ import { ArrowLeftIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RouterButton } from '../../components/RouterLink';
-import { findDefaultContextId } from '../contexts/defaultContext';
+import { contextLabel, findDefaultContextId } from '../contexts/defaultContext';
 import { migrateRecord, previewRecordMigration } from './api';
 import { RecordForm } from './components/RecordForm';
 import { RecordPage } from './components/RecordPage';
+import { MigrationContextValues } from './components/MigrationContextValues';
 import { MigrationIssueList } from './components/MigrationIssueList';
+import { scalarValueForField } from './attributeValues';
 import { attributeLabel } from './recordDisplay';
 import { valuesForForm } from './recordForm';
 import {
   describeMigrationValues,
   migrationFormValues,
+  contextValueAnswered,
+  migrationContextValues,
   migrationIssueMessage,
   migrationLayout,
   answeredMigrationRelationships,
@@ -22,6 +26,7 @@ import {
   removalFieldCode,
   removedAttributeIssues,
   requiredMigrationAttributes,
+  type MigrationContextAnswer,
   type MigrationFieldReview,
 } from './migrationReview';
 import { recordQueryKeys } from './queryKeys';
@@ -37,6 +42,9 @@ export const MigrateRecordPage = ({ recordId }: { recordId: string }) => {
   const client = useQueryClient();
   const navigate = useNavigate({ from: '/records/$recordId/migrate' });
   const [discardAttributes, setDiscardAttributes] = useState<string[]>([]);
+  const [contextAnswers, setContextAnswers] = useState<
+    Record<string, MigrationContextAnswer>
+  >({});
   const preview = useQuery({
     queryKey: recordQueryKeys.migrationPreview(recordId),
     queryFn: () => previewRecordMigration(recordId),
@@ -58,16 +66,22 @@ export const MigrateRecordPage = ({ recordId }: { recordId: string }) => {
     ),
   );
   const defaultContextId = findDefaultContextId(contexts.data);
-  const { inlineIssues, standaloneIssues } = partitionMigrationIssues(
-    preview.data,
-  );
+  const { inlineIssues, contextIssues, standaloneIssues } =
+    partitionMigrationIssues(preview.data, defaultContextId);
   const migrationValues = migrationFormValues(preview.data, inlineIssues);
-  const previousValue = (attributeCode: string) =>
+  const describeValues = (stored: typeof values, attributeCode: string) =>
     describeMigrationValues(
-      values,
+      stored,
       attributeCode,
       (count) => t('records.fileCount', { count }),
       (id) => recordLabels.get(id) ?? id,
+    );
+  const previousValue = (attributeCode: string) =>
+    describeValues(values, attributeCode);
+  const contextPreviousValue = (attributeCode: string, contextId: string) =>
+    describeValues(
+      values.filter((value) => value.context_id === contextId),
+      attributeCode,
     );
   const sourceAttributeLabel = (attributeCode: string) => {
     const attribute = [
@@ -85,7 +99,12 @@ export const MigrateRecordPage = ({ recordId }: { recordId: string }) => {
   for (const issue of inlineIssues) {
     const code = issue.attribute_code!;
     const message = migrationIssueMessage(issue, t);
-    const stored = previousValue(code) || undefined;
+    // Other contexts' values are asked about apart from this field.
+    const stored =
+      describeValues(
+        values.filter((value) => value.context_id === defaultContextId),
+        code,
+      ) || undefined;
     migrationReviews[code] = {
       message: migrationReviews[code]
         ? `${migrationReviews[code].message} ${message}`
@@ -102,13 +121,58 @@ export const MigrateRecordPage = ({ recordId }: { recordId: string }) => {
   }
   const reviewCodes = new Set(Object.keys(migrationReviews));
   const removals = removedAttributeIssues(standaloneIssues);
-  const pendingConfirmations = removals
-    .filter((issue) => !discardAttributes.includes(issue.attribute_code))
-    .map((issue) => ({
-      id: removalFieldCode(issue.attribute_code),
-      label: sourceAttributeLabel(issue.attribute_code),
-      message: t('records.confirmDiscard'),
-    }));
+  // Discarding an attribute archives its values in every context too.
+  const contextValues = migrationContextValues(
+    contextIssues,
+    preview.data?.target.attributes ?? [],
+    t,
+  ).filter((value) => !discardAttributes.includes(value.attributeCode));
+  const contextName = (contextId: string) => {
+    const code = contexts.data?.find(({ id }) => id === contextId)?.code;
+    return code ? contextLabel(t, code) : contextId;
+  };
+  const pendingConfirmations = [
+    ...removals
+      .filter((issue) => !discardAttributes.includes(issue.attribute_code))
+      .map((issue) => ({
+        id: removalFieldCode(issue.attribute_code),
+        label: sourceAttributeLabel(issue.attribute_code),
+        message: t('records.confirmDiscard'),
+      })),
+    ...contextValues
+      .filter(
+        (value) => !contextValueAnswered(value, contextAnswers[value.key]),
+      )
+      .map((value) => ({
+        id: value.key,
+        label: t('records.migrationContextValue', {
+          attribute: sourceAttributeLabel(value.attributeCode),
+          context: contextName(value.contextId),
+        }),
+        message: t('records.migrationContextValuePending'),
+      })),
+  ];
+  const contextSubmission = () => {
+    const replacements: Parameters<typeof migrateRecord>[1]['values'] = [];
+    const removed: { attribute_code: string; context_id: string }[] = [];
+    for (const value of contextValues) {
+      const answer = contextAnswers[value.key];
+      if (answer?.remove) {
+        removed.push({
+          attribute_code: value.attributeCode,
+          context_id: value.contextId,
+        });
+        continue;
+      }
+      const attribute = preview.data?.target.attributes.find(
+        (candidate) => candidate.code === value.attributeCode,
+      );
+      const scalar =
+        attribute && scalarValueForField(attribute, answer?.text ?? '');
+      if (scalar) replacements.push({ ...scalar, context_id: value.contextId });
+    }
+    return { replacements, removed };
+  };
   const setDiscarded = (attributeCode: string, discard: boolean) =>
     setDiscardAttributes((attributes) =>
       discard
@@ -127,7 +191,7 @@ export const MigrateRecordPage = ({ recordId }: { recordId: string }) => {
       values: Parameters<typeof migrateRecord>[1]['values'];
       relationships: Parameters<typeof migrateRecord>[1]['relationships'];
       discardAttributes: string[];
-      removeValues: string[];
+      removeValues: { attribute_code: string; context_id: string | null }[];
     }) => {
       if (!preview.data) throw new Error(t('records.loadMigrationFirst'));
       return migrateRecord(recordId, {
@@ -137,10 +201,7 @@ export const MigrateRecordPage = ({ recordId }: { recordId: string }) => {
         values,
         relationships,
         discard_attributes: discardAttributes,
-        remove_values: removeValues.map((attribute_code) => ({
-          attribute_code,
-          context_id: defaultContextId,
-        })),
+        remove_values: removeValues,
       });
     },
     onSuccess: async (record) => {
@@ -222,20 +283,27 @@ export const MigrateRecordPage = ({ recordId }: { recordId: string }) => {
             relationships,
             clearedAttributes,
             expected_updated_at,
-          }) =>
+          }) => {
+            const { replacements, removed } = contextSubmission();
             migrate.mutate({
               expected_updated_at,
-              values,
+              values: [...values, ...replacements],
               relationships: answeredMigrationRelationships(
                 relationships,
                 inlineIssues,
               ),
               discardAttributes: [...discardAttributes],
-              removeValues: clearedAttributes.filter(
-                (code) => !discardAttributes.includes(code),
-              ),
-            })
-          }
+              removeValues: [
+                ...clearedAttributes
+                  .filter((code) => !discardAttributes.includes(code))
+                  .map((attribute_code) => ({
+                    attribute_code,
+                    context_id: defaultContextId,
+                  })),
+                ...removed,
+              ],
+            });
+          }}
           submitLabel={t('records.upgradeRecord')}
         >
           <Box>
@@ -259,6 +327,17 @@ export const MigrateRecordPage = ({ recordId }: { recordId: string }) => {
             onDiscardChange={setDiscarded}
             previousValue={previousValue}
             targetVersion={preview.data.target.blueprint.version}
+          />
+          <MigrationContextValues
+            answers={contextAnswers}
+            attributeLabel={sourceAttributeLabel}
+            contextLabel={contextName}
+            disabled={migrate.isPending}
+            onAnswer={(key, answer) =>
+              setContextAnswers((answers) => ({ ...answers, [key]: answer }))
+            }
+            previousValue={contextPreviousValue}
+            values={contextValues}
           />
         </RecordForm>
       )}

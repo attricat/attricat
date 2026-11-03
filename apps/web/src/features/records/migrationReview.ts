@@ -2,29 +2,102 @@ import type { TFunction } from 'i18next';
 import type { Attribute, RecordMigrationPreview, ViewDefinition } from './api';
 import { valueForField } from './attributeValues';
 import { migrationIssueKinds } from './constants';
-import { attributeValueKinds } from './valueTypes';
+import { attributeValueKinds, attributeValueTypes } from './valueTypes';
 
 export type MigrationIssue = RecordMigrationPreview['issues'][number];
 type MigrationValue = RecordMigrationPreview['values'][number];
 
-/** Splits migration issues into those shown on target fields and the rest. */
+/**
+ * Splits migration issues into those shown on target fields, those about a value
+ * in another context, which the form's fields can't answer, and the rest.
+ */
 export const partitionMigrationIssues = (
   preview: RecordMigrationPreview | undefined,
+  defaultContextId: string | null | undefined,
 ) => {
   const targetAttributeCodes = new Set(
     preview?.target.attributes.map((attribute) => attribute.code) ?? [],
   );
   const issues = preview?.issues ?? [];
-  const inlineIssues = issues.filter(
+  const contextIssues = issues.filter(
+    (issue) =>
+      issue.attribute_code !== null &&
+      targetAttributeCodes.has(issue.attribute_code) &&
+      Boolean(issue.context_id) &&
+      issue.context_id !== defaultContextId,
+  );
+  const fieldIssues = issues.filter((issue) => !contextIssues.includes(issue));
+  const inlineIssues = fieldIssues.filter(
     (issue) =>
       issue.attribute_code !== null &&
       targetAttributeCodes.has(issue.attribute_code),
   );
   return {
     inlineIssues,
-    standaloneIssues: issues.filter((issue) => !inlineIssues.includes(issue)),
+    contextIssues,
+    standaloneIssues: fieldIssues.filter(
+      (issue) => !inlineIssues.includes(issue),
+    ),
   };
 };
+
+/** A stored value outside the default context that needs an answer. */
+export type MigrationContextValue = {
+  key: string;
+  attributeCode: string;
+  contextId: string;
+  message: string;
+  /** Only a scalar still editable in that context can be replaced. */
+  replaceable: boolean;
+};
+
+/** The answer to one such value: a replacement, or removing it. */
+export type MigrationContextAnswer = { remove: boolean; text: string };
+
+/** The `data-field-code` of such a value, so an error can lead to it. */
+export const contextValueFieldCode = (
+  attributeCode: string,
+  contextId: string,
+) => `context:${attributeCode}:${contextId}`;
+
+/** One entry per attribute and context, however many issues it has. */
+export const migrationContextValues = (
+  issues: readonly MigrationIssue[],
+  attributes: readonly Attribute[],
+  t: TFunction,
+): MigrationContextValue[] => {
+  const byKey = new Map<string, MigrationContextValue>();
+  for (const issue of issues) {
+    const attributeCode = issue.attribute_code!;
+    const contextId = issue.context_id!;
+    const key = contextValueFieldCode(attributeCode, contextId);
+    const message = migrationIssueMessage(issue, t);
+    const seen = byKey.get(key);
+    const valueType = attributes.find(
+      (attribute) => attribute.code === attributeCode,
+    )?.value_type;
+    const replaceable =
+      issue.kind !== migrationIssueKinds.contextNotEditable &&
+      valueType !== attributeValueTypes.relationship &&
+      valueType !== attributeValueTypes.file;
+    byKey.set(key, {
+      key,
+      attributeCode,
+      contextId,
+      message: seen ? `${seen.message} ${message}` : message,
+      replaceable: (seen?.replaceable ?? true) && replaceable,
+    });
+  }
+  return [...byKey.values()];
+};
+
+/** Whether the user has said what happens to a value. */
+export const contextValueAnswered = (
+  value: MigrationContextValue,
+  answer: MigrationContextAnswer | undefined,
+) =>
+  Boolean(answer?.remove) ||
+  (value.replaceable && Boolean(answer?.text.trim()));
 
 /** Values carried into the migration form, excluding retargeted relationships. */
 export const migrationFormValues = (
