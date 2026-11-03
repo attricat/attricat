@@ -3450,12 +3450,7 @@ async fn packaged_csv_connector_exports_through_the_real_host(pool: sqlx::PgPool
         .install("test", &archive)
         .await
         .unwrap();
-    for capability in [
-        "attricat.read",
-        "attricat.write",
-        "artifacts.read",
-        "artifacts.write",
-    ] {
+    for capability in support::CSV_CONNECTOR_CAPABILITIES {
         repository
             .grant_extension("attricat-connector-csv", "capability", capability)
             .await
@@ -3533,13 +3528,14 @@ async fn packaged_csv_connector_exports_through_the_real_host(pool: sqlx::PgPool
     assert!(outputs[0].get("object_key").is_none());
     server.abort();
 
-    // A real packaged import spans two worker leases, reopens the durable
-    // input, and commits two independently deduplicated Attricat upsert batches.
+    // A real packaged import spans two worker leases (the connector writes 40
+    // rows a batch), reopens the durable input, and commits two independently
+    // deduplicated Attricat upsert batches.
     use api::{storage::StoredObject, task_worker::TaskOutcome};
     use sha2::{Digest, Sha256};
     let csv = format!(
         "ID,Title\n{}",
-        (1..=17)
+        (1..=41)
             .map(|n| format!("SKU-{n},Name {n}\n"))
             .collect::<String>()
     );
@@ -3616,7 +3612,7 @@ async fn packaged_csv_connector_exports_through_the_real_host(pool: sqlx::PgPool
     assert_eq!(batches, 2);
     let created: i64 = sqlx::query_scalar("SELECT count(*) FROM records WHERE workspace_id=$1 AND blueprint_id=$2 AND deleted_at IS NULL")
         .bind(Uuid::from_u128(0x00000000000040008000000000000002)).bind(blueprint.blueprint.id).fetch_one(&pool).await.unwrap();
-    assert_eq!(created, 17);
+    assert_eq!(created, 41);
     let second_profile = json!({"version":1,"blueprint_id":blueprint.blueprint.id.to_string(),"blueprint_version":blueprint.blueprint.version,"context_id":context.id.to_string(),"columns":[{"header":"ID","attribute":"external_id","kind":"string"}]});
     let paged_export = repository
         .start_extension_operation(StartExtensionOperation {
@@ -3632,7 +3628,7 @@ async fn packaged_csv_connector_exports_through_the_real_host(pool: sqlx::PgPool
         })
         .await
         .unwrap();
-    for batch in 0..2 {
+    for batch in 0..3 {
         let task = repository
             .claim_task_for_kinds(
                 "csv-export-restart",
@@ -3649,8 +3645,10 @@ async fn packaged_csv_connector_exports_through_the_real_host(pool: sqlx::PgPool
             .handle(task.clone())
             .await
             .unwrap();
-        if batch == 0 {
+        if batch < 2 {
             assert!(matches!(result, TaskOutcome::Reschedule { .. }));
+        }
+        if batch == 0 {
             // The next page must read values as of the first page's cursor,
             // even if a Attricat write lands between worker leases.
             let key_attribute = blueprint
@@ -3664,7 +3662,7 @@ async fn packaged_csv_connector_exports_through_the_real_host(pool: sqlx::PgPool
                     blueprint.blueprint.id,
                     blueprint.blueprint.version,
                     key_attribute,
-                    "SKU-17",
+                    "SKU-41",
                 )
                 .await
                 .unwrap()
@@ -3678,12 +3676,14 @@ async fn packaged_csv_connector_exports_through_the_real_host(pool: sqlx::PgPool
                             attribute_id: None,
                             attribute_code: Some("external_id".into()),
                             context_id: Some(context.id),
-                            value: json!("SKU-17-CHANGED"),
+                            value: json!("SKU-41-CHANGED"),
                         }],
                     },
                 )
                 .await
                 .unwrap();
+        }
+        if batch < 2 {
             repository
                 .reschedule_task_at(
                     task.id,
@@ -3704,14 +3704,14 @@ async fn packaged_csv_connector_exports_through_the_real_host(pool: sqlx::PgPool
             .await
             .unwrap();
     assert_eq!(status, "completed");
-    assert_eq!(batches, 2);
+    assert_eq!(batches, 3);
     let paged_key: String = sqlx::query_scalar("SELECT object_key FROM extension_operation_artifacts WHERE operation_run_id=$1 AND state='completed' AND direction='output'")
         .bind(paged_export).fetch_one(&pool).await.unwrap();
     let csv = String::from_utf8(store.get(&paged_key).await.unwrap().bytes.to_vec()).unwrap();
-    assert_eq!(csv.lines().count(), 18);
+    assert_eq!(csv.lines().count(), 42);
     assert!(csv.starts_with("ID\n"));
-    assert!(csv.lines().any(|line| line == "SKU-17"));
-    assert!(!csv.contains("SKU-17-CHANGED"));
+    assert!(csv.lines().any(|line| line == "SKU-41"));
+    assert!(!csv.contains("SKU-41-CHANGED"));
     sqlx::query("UPDATE extension_operation_runs SET completed_at=clock_timestamp()-interval '31 days' WHERE id=$1")
         .bind(run).execute(&pool).await.unwrap();
     repository
