@@ -215,7 +215,10 @@ impl AttricatRepository {
         // Fence the marker before it can become visible. The same transaction
         // later fences the catalog effect and outbox/audit writes as well.
         self.ensure_task_fence(transaction).await?;
-        if enabled_version != Some(run.run.workflow_version) {
+        // Disabling is what cancels. A run queued before a newer version was
+        // enabled finishes on the version it was created for, which handles
+        // only the events before the new version's boundary.
+        if enabled_version.is_none() {
             sqlx::query("UPDATE workflow_runs SET status='cancelled',cancelled_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1 AND status='pending'")
                 .bind(run.run.id)
                 .execute(&mut **transaction)

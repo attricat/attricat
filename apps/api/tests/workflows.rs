@@ -1622,3 +1622,60 @@ attributes:
     );
     server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn enabling_a_newer_version_lets_a_queued_run_finish(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let blueprint = create_blueprint(
+        &client,
+        &base_url,
+        "format_version: 1\ncode: queued_item\nname: Queued item\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [title]\nattributes:\n  - code: title\n    value_type: string\n",
+    )
+    .await;
+    let definition = |name: &str, tag: &str| {
+        format!(
+            "format_version: 2\ncode: queued_tagger\nname: {name}\ntriggers:\n  - event_type: record.created.v1\nactions:\n  - type: system_tags_add\n    tags: [{tag}]\n"
+        )
+    };
+    let workflow = enabled_workflow(&client, &base_url, &definition("First", "first")).await;
+    let record = create_record(&client, &base_url, &blueprint).await;
+    let record_id = record["id"].as_str().unwrap();
+    assert_eq!(fan_out_latest_event(&pool, record_id).await.1, 1);
+
+    client
+        .post(format!("{base_url}/workflows/{workflow}/versions"))
+        .json(&json!({ "definition": definition("Second", "second") }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    for step in ["publish", "enable"] {
+        client
+            .post(format!("{base_url}/workflows/{workflow}/versions/2/{step}"))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+    }
+
+    let repository = AttricatRepository::system(pool.clone())
+        .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
+    assert!(handle_workflow_task_once(&repository).await);
+    let cancelled_at: Option<chrono::DateTime<chrono::Utc>> =
+        sqlx::query_scalar("SELECT cancelled_at FROM workflow_runs WHERE workflow_id = $1")
+            .bind(workflow)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(cancelled_at.is_none());
+    let tags: Vec<String> = sqlx::query_scalar("SELECT system_tags FROM records WHERE id = $1")
+        .bind(Uuid::parse_str(record_id).unwrap())
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(tags, ["first"]);
+    server.abort();
+}
