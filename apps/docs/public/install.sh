@@ -125,6 +125,11 @@ x-app: &app
   read_only: true
   tmpfs:
     - /tmp:size=256m,mode=1777
+  volumes:
+    - /var/tmp/attricat
+  # Longer than the API's request timeout and drain margin, or Docker kills it
+  # mid-request at its default of 10 seconds.
+  stop_grace_period: 45s
   security_opt:
     - no-new-privileges:true
   secrets:
@@ -134,6 +139,7 @@ x-app: &app
   restart: unless-stopped
 
 x-environment: &environment
+  TMPDIR: /var/tmp/attricat
   ATTRICAT_AUTO_MIGRATE: "false"
   ATTRICAT_BOOTSTRAP_OWNER_EMAIL: ${ATTRICAT_OWNER_EMAIL:-owner@example.com}
   SESSION_COOKIE_SECURE: "false"
