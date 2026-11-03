@@ -328,7 +328,12 @@ impl AttricatRepository {
             .execute(&mut *transaction)
             .await?;
         let result = sqlx::query("DELETE FROM attribute_contexts c WHERE c.id = $1 AND c.workspace_id = $2 AND NOT EXISTS (SELECT 1 FROM attribute_contexts child WHERE child.parent_id = c.id AND child.workspace_id = c.workspace_id) AND NOT EXISTS (SELECT 1 FROM attribute_values value WHERE value.context_id = c.id AND value.workspace_id = c.workspace_id)")
-            .bind(id).bind(self.workspace_id.0).execute(&mut *transaction).await?;
+            .bind(id).bind(self.workspace_id.0).execute(&mut *transaction).await
+            // Conversations and history keep their reference to the context.
+            .map_err(|error| match error.as_database_error() {
+                Some(database) if database.is_foreign_key_violation() => RepositoryError::ContextInUse,
+                _ => error.into(),
+            })?;
         if result.rows_affected() == 0 {
             return Err(RepositoryError::ContextInUse);
         }
