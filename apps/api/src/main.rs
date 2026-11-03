@@ -58,7 +58,11 @@ async fn serve() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         task_worker: task_worker_config,
         blueprint_migration: blueprint_migration_config,
         file_worker: _,
-    } = Config::load()?;
+    } = {
+        let config = Config::load()?;
+        config.ensure_mail_configured()?;
+        config
+    };
     init_tracing(
         "attricat-api",
         telemetry.log_filter.as_deref(),

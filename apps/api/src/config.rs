@@ -62,6 +62,14 @@ const DEFAULT_MAIL_FROM: &str = "Attricat <no-reply@attricat.local>";
 const DEFAULT_PASSWORD_RESET_URL: &str = "http://127.0.0.1:5173/password-reset/confirm";
 const DEFAULT_WORKSPACE_INVITATION_URL: &str = "http://127.0.0.1:5173/invitations/accept";
 const DEFAULT_WORKSPACE_ONBOARDING_URL: &str = "http://127.0.0.1:5173/onboarding";
+/// Settings whose development defaults can't deliver a real email.
+const REQUIRED_MAIL_SETTINGS: [&str; 5] = [
+    "SMTP_HOST",
+    "MAIL_FROM",
+    "PASSWORD_RESET_URL",
+    "WORKSPACE_INVITATION_URL",
+    "WORKSPACE_ONBOARDING_URL",
+];
 /// The operator token can create workspaces, so a short one is refused.
 const OPERATOR_API_TOKEN_MIN_BYTES: usize = 32;
 
@@ -213,6 +221,8 @@ pub struct MailConfig {
     pub password_reset_url: String,
     pub workspace_invitation_url: String,
     pub workspace_onboarding_url: String,
+    /// Which of [`REQUIRED_MAIL_SETTINGS`] fell back to a development default.
+    unset_settings: Vec<&'static str>,
 }
 
 pub struct ExtensionsConfig {
@@ -291,6 +301,23 @@ impl From<&str> for ConfigError {
 impl Config {
     /// Loads `.env` when present, then reads the process environment and the
     /// secrets directory.
+    /// Refuses to serve with development mail defaults outside development:
+    /// invitations and password resets would otherwise fail, or carry links to
+    /// localhost, only once someone needs them. A demo sends no mail.
+    pub fn ensure_mail_configured(&self) -> Result<(), ConfigError> {
+        if self.http.devtools_enabled
+            || self.bootstrap.demo_mode
+            || self.mail.unset_settings.is_empty()
+        {
+            return Ok(());
+        }
+        Err(format!(
+            "set {} to send email; only ATTRICAT_DEVTOOLS may use the development defaults",
+            self.mail.unset_settings.join(", ")
+        )
+        .into())
+    }
+
     pub fn load() -> Result<Self, ConfigError> {
         dotenvy::dotenv().ok();
         let vars = std::env::vars_os()
@@ -407,6 +434,10 @@ impl Config {
                 smtp_username: get("SMTP_USERNAME"),
                 smtp_password: source.secret(secret::SMTP_PASSWORD)?,
                 from: source.var("MAIL_FROM").unwrap_or(DEFAULT_MAIL_FROM).to_owned(),
+                unset_settings: REQUIRED_MAIL_SETTINGS
+                    .into_iter()
+                    .filter(|name| source.var(name).is_none())
+                    .collect(),
             },
             cache: CacheConfig::parse(
                 source.var("CACHE_BACKEND"),
@@ -848,6 +879,29 @@ mod tests {
             (secret::DATABASE_URL, "postgres://u:p@db/attricat\n"),
             (secret::S3_SECRET_ACCESS_KEY, "s3-secret"),
         ])
+    }
+
+    #[test]
+    fn production_refuses_development_mail_defaults() {
+        let secrets = required_secrets();
+        let error = load(&secrets, &[("SMTP_HOST", "smtp.example.com")])
+            .unwrap()
+            .ensure_mail_configured()
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("MAIL_FROM") && !error.contains("SMTP_HOST"));
+        load(&secrets, &[("ATTRICAT_DEVTOOLS", "true")])
+            .unwrap()
+            .ensure_mail_configured()
+            .unwrap();
+        let mail: Vec<_> = REQUIRED_MAIL_SETTINGS
+            .into_iter()
+            .map(|name| (name, "http://mail.example.com/x"))
+            .collect();
+        load(&secrets, &mail)
+            .unwrap()
+            .ensure_mail_configured()
+            .unwrap();
     }
 
     fn load(secrets: &Secrets, vars: &[(&str, &str)]) -> Result<Config, ConfigError> {

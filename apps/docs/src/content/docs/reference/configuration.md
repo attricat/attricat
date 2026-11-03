@@ -217,7 +217,7 @@ Attricat sends password-reset, invitation, and onboarding email over SMTP.
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `SMTP_HOST` | `127.0.0.1` | SMTP server host. |
+| `SMTP_HOST` | `127.0.0.1` | SMTP server host. Outside `ATTRICAT_DEVTOOLS` and `ATTRICAT_DEMO_MODE`, the API refuses to start unless `SMTP_HOST`, `MAIL_FROM`, `PASSWORD_RESET_URL`, `WORKSPACE_INVITATION_URL` and `WORKSPACE_ONBOARDING_URL` are set. |
 | `SMTP_PORT` | `1025` | SMTP server port. Normally `587` for `starttls` and `465` for `implicit`. |
 | `SMTP_TLS_MODE` | `starttls` | `starttls` or `implicit`. `disabled` is accepted only for an unauthenticated local relay such as Mailpit; startup rejects credentials combined with `disabled`. |
 | `SMTP_USERNAME` | Unset | SMTP username. Set both it and the `smtp_password` [secret](#secrets), or neither. |

@@ -83,7 +83,7 @@ or inaccessible configured bucket.
 | `POSTGRES_PASSWORD` | `postgres` | Docker Compose | Local PostgreSQL password. |
 | `POSTGRES_PORT` | `5432` | Docker Compose | Host port mapped to PostgreSQL. |
 | `WEB_PORT` | `5173` | Vite | Listener port for the development web app. |
-| `SMTP_HOST` | `127.0.0.1` | API local development | Mailpit SMTP host. |
+| `SMTP_HOST` | `127.0.0.1` | API local development | Mailpit SMTP host. Outside `ATTRICAT_DEVTOOLS` and `ATTRICAT_DEMO_MODE`, the API refuses to start unless `SMTP_HOST`, `MAIL_FROM`, `PASSWORD_RESET_URL`, `WORKSPACE_INVITATION_URL` and `WORKSPACE_ONBOARDING_URL` are set. |
 | `SMTP_PORT` | `1025` | API local development | Mailpit SMTP port; `just setup` sets it to the worktree-specific port. |
 | `SMTP_TLS_MODE` | `starttls` | API | Required SMTP encryption mode: `starttls` or `implicit` in production. `disabled` is only for the trusted local Mailpit relay. Opportunistic TLS is rejected. |
 | `SMTP_USERNAME` | Unset | API | Optional SMTP username; requires the `smtp_password` secret, and the password requires it. |

@@ -217,7 +217,7 @@ Attricat wysyła przez SMTP wiadomości z resetowaniem hasła, zaproszeniami i l
 
 | Zmienna | Domyślnie | Opis |
 | --- | --- | --- |
-| `SMTP_HOST` | `127.0.0.1` | Host serwera SMTP. |
+| `SMTP_HOST` | `127.0.0.1` | Host serwera SMTP. Poza trybami `ATTRICAT_DEVTOOLS` i `ATTRICAT_DEMO_MODE` API nie uruchomi się bez ustawienia `SMTP_HOST`, `MAIL_FROM`, `PASSWORD_RESET_URL`, `WORKSPACE_INVITATION_URL` i `WORKSPACE_ONBOARDING_URL`. |
 | `SMTP_PORT` | `1025` | Port serwera SMTP. Zwykle `587` dla `starttls` i `465` dla `implicit`. |
 | `SMTP_TLS_MODE` | `starttls` | `starttls` lub `implicit`. `disabled` jest akceptowane tylko dla lokalnego przekaźnika bez uwierzytelniania, takiego jak Mailpit; start odrzuca dane uwierzytelniające w połączeniu z `disabled`. |
 | `SMTP_USERNAME` | Nieustawiona | Nazwa użytkownika SMTP. Ustaw jednocześnie ją i [sekret](#sekrety) `smtp_password` albo żadne z nich. |
