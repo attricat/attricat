@@ -1,9 +1,11 @@
 import { useAcknowledgeFinding } from './useAcknowledgeFinding';
 import { useAcknowledgeFindings } from './useAcknowledgeFindings';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { NextPageButton } from '../../components/LoadMoreButton';
 import { useNavigate } from '@tanstack/react-router';
 import { Box, Tabs } from '@mui/material';
 import { PlusIcon } from 'lucide-react';
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { PageContainer } from '../../components/PageContainer';
@@ -90,17 +92,21 @@ export const RuleInspectionPage = ({
     ...contextListOptions(),
     enabled: findingsShown,
   });
-  const runs = useQuery({
+  const runs = useInfiniteQuery({
     ...ruleRunsOptions(runsSearch),
     enabled: section === RULE_SECTION_RUNS,
   });
-  useRefreshFindingsAfterRuns(runs.data, runs.isSuccess);
+  const loadedRuns = useMemo(
+    () => runs.data?.pages.flatMap((page) => page.items),
+    [runs.data],
+  );
+  useRefreshFindingsAfterRuns(loadedRuns, runs.isSuccess);
   // Name the records the visible findings and runs refer to.
   const recordLabels = useRecordLabels(
     findingsShown
       ? (findingItems ?? []).map((finding) => finding.record_id)
       : section === RULE_SECTION_RUNS
-        ? (runs.data ?? []).flatMap((run) =>
+        ? (loadedRuns ?? []).flatMap((run) =>
             run.scope_record_id ? [run.scope_record_id] : [],
           )
         : [],
@@ -235,19 +241,22 @@ export const RuleInspectionPage = ({
           />
         )}
         {section === RULE_SECTION_RUNS && (
-          <RunsSection
-            recordLabels={recordLabels}
-            error={runs.error}
-            onRetry={() => void runs.refetch()}
-            rulesById={rulesByIdMap}
-            runs={runs.data}
-            filters={{
-              rules: rules.data ?? [],
-              search: runsSearch,
-              onChange: (search) =>
-                void navigate({ to: ruleRoutes.runs, search }),
-            }}
-          />
+          <>
+            <RunsSection
+              recordLabels={recordLabels}
+              error={runs.error}
+              onRetry={() => void runs.refetch()}
+              rulesById={rulesByIdMap}
+              runs={loadedRuns}
+              filters={{
+                rules: rules.data ?? [],
+                search: runsSearch,
+                onChange: (search) =>
+                  void navigate({ to: ruleRoutes.runs, search }),
+              }}
+            />
+            <NextPageButton query={runs} sx={{ mt: 2 }} />
+          </>
         )}
       </Box>
       <DryRunDialog dryRun={dryRun} onClose={closeDryRun} />

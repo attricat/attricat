@@ -22,11 +22,15 @@ import { RULE_RUN_POLL_MS } from './constants';
 /** The workspace's rule runs that match `search`, newest first, refreshed
  * while one has not finished. */
 export const ruleRunsOptions = (search: RunsSearch = {}) =>
-  queryOptions({
+  infiniteQueryOptions({
     queryKey: ruleQueryKeys.runsPage(search),
-    queryFn: () => listRuleRuns(search),
+    queryFn: ({ pageParam }) => listRuleRuns(search, pageParam),
+    initialPageParam: undefined as number | undefined,
+    getNextPageParam: (page) => page.nextOffset,
     refetchInterval: (query) =>
-      query.state.data?.some(isActiveRun) ? RULE_RUN_POLL_MS : false,
+      query.state.data?.pages.some((page) => page.items.some(isActiveRun))
+        ? RULE_RUN_POLL_MS
+        : false,
   });
 
 /** A rule's most recent runs, refreshed while one has not finished. */

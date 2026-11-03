@@ -81,12 +81,13 @@ export const updateRule = (ruleId: string, input: UpdateRule) =>
 export const getRuleRun = (runId: string) =>
   request(`/api/rule-runs/${uuidSegment(runId)}`, ruleRunDetailsSchema);
 /** The workspace's runs that match the run history's filters. */
-export const listRuleRuns = (search: RunsSearch = {}) => {
+export const listRuleRuns = (search: RunsSearch = {}, offset?: number) => {
   const params = new URLSearchParams();
+  if (offset !== undefined) params.set('offset', String(offset));
   if (search.rule) params.set('rule_id', z.uuid().parse(search.rule));
   const scope = search.scope ?? runScopeFilters.allRecords;
   if (scope !== runScopeFilters.any) params.set('scope', scope);
-  return request(`/api/rule-runs?${params}`, z.array(ruleRunSchema));
+  return requestOffsetPage(`/api/rule-runs?${params}`, z.array(ruleRunSchema));
 };
 /** A rule's most recent runs, newest first. */
 export const listRecentRuleRuns = (ruleId: string) =>

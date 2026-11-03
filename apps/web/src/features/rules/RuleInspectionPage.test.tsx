@@ -421,48 +421,50 @@ describe('RuleInspectionPage', () => {
 
   it('names the rule revision and scope of each run', async () => {
     vi.mocked(currentSession).mockResolvedValue(manager);
-    vi.mocked(listRuleRuns).mockResolvedValue([
-      {
-        id,
-        rule_id: id,
-        rule_version: 1,
-        definition_hash: '',
-        source: 'manual',
-        dry_run: false,
-        scope_record_id: null,
-        status: 'completed',
-        candidate_cursor: null,
-        candidates_evaluated: 3,
-        candidates_skipped: 1,
-        findings_created: 1,
-        findings_resolved: 0,
-        attempts: 1,
-        last_error: null,
-        truncated: false,
-        completed_at: null,
-        created_at: '',
-      },
-      {
-        id: '323e4567-e89b-42d3-a456-426614174000',
-        rule_id: '423e4567-e89b-42d3-a456-426614174000',
-        rule_version: 4,
-        definition_hash: '',
-        source: 'event',
-        dry_run: false,
-        scope_record_id: id,
-        status: 'completed',
-        candidate_cursor: null,
-        candidates_evaluated: 1,
-        candidates_skipped: 0,
-        findings_created: 0,
-        findings_resolved: 0,
-        attempts: 1,
-        last_error: null,
-        truncated: false,
-        completed_at: null,
-        created_at: '',
-      },
-    ]);
+    vi.mocked(listRuleRuns).mockResolvedValue({
+      items: [
+        {
+          id,
+          rule_id: id,
+          rule_version: 1,
+          definition_hash: '',
+          source: 'manual',
+          dry_run: false,
+          scope_record_id: null,
+          status: 'completed',
+          candidate_cursor: null,
+          candidates_evaluated: 3,
+          candidates_skipped: 1,
+          findings_created: 1,
+          findings_resolved: 0,
+          attempts: 1,
+          last_error: null,
+          truncated: false,
+          completed_at: null,
+          created_at: '',
+        },
+        {
+          id: '323e4567-e89b-42d3-a456-426614174000',
+          rule_id: '423e4567-e89b-42d3-a456-426614174000',
+          rule_version: 4,
+          definition_hash: '',
+          source: 'event',
+          dry_run: false,
+          scope_record_id: id,
+          status: 'completed',
+          candidate_cursor: null,
+          candidates_evaluated: 1,
+          candidates_skipped: 0,
+          findings_created: 0,
+          findings_resolved: 0,
+          attempts: 1,
+          last_error: null,
+          truncated: false,
+          completed_at: null,
+          created_at: '',
+        },
+      ],
+    });
     renderPage('runs');
     await screen.findByText('Check v1');
     const [, manual, scoped] = screen.getAllByRole('row');
@@ -530,17 +532,19 @@ describe('RuleInspectionPage', () => {
       completed_at: '2026-10-24T12:00:00Z',
       created_at: '2026-10-24T11:59:00Z',
     };
-    vi.mocked(listRuleRuns).mockResolvedValue([
-      run,
-      {
-        ...run,
-        id: crypto.randomUUID(),
-        source: 'event',
-        dry_run: false,
-        completed_at: null,
-        created_at: '2026-10-26T09:00:00Z',
-      },
-    ]);
+    vi.mocked(listRuleRuns).mockResolvedValue({
+      items: [
+        run,
+        {
+          ...run,
+          id: crypto.randomUUID(),
+          source: 'event',
+          dry_run: false,
+          completed_at: null,
+          created_at: '2026-10-26T09:00:00Z',
+        },
+      ],
+    });
     renderPage('runs');
     await screen.findAllByText('Check v1');
     const [, scheduled, queued] = screen.getAllByRole('row');

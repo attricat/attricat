@@ -8,7 +8,6 @@ vi.mock('../../api/request', () => ({
   request: vi.fn(),
   requestOffsetPage: vi.fn(() => Promise.resolve({ items: [] })),
 }));
-import { request } from '../../api/request';
 
 const id = '123e4567-e89b-42d3-a456-426614174000';
 const requestedQuery = () =>
@@ -59,8 +58,10 @@ describe('listRuleRuns', () => {
 
   it('lists runs over every record unless another scope is chosen', async () => {
     const query = () =>
-      new URL(vi.mocked(request).mock.calls.at(-1)![0], 'http://localhost')
-        .searchParams;
+      new URL(
+        vi.mocked(requestOffsetPage).mock.calls.at(-1)![0],
+        'http://localhost',
+      ).searchParams;
     await listRuleRuns({});
     expect(Object.fromEntries(query())).toEqual({ scope: 'all_records' });
     await listRuleRuns({ rule: id, scope: 'record' });
