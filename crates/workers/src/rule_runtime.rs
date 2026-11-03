@@ -184,8 +184,15 @@ async fn evaluate_page(
     let compiled: attricat_rules::CompiledRule =
         serde::Deserialize::deserialize(&run.compiled_plan)
             .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))?;
-    let remaining =
-        (attricat_rules::MAX_CANDIDATES_PER_RUN as i64 - run.candidates_evaluated).max(0);
+    // Only a dry run stops at the cap. Editing or re-enabling a rule resolves its
+    // findings and relies on a full run to restore them for every record, and
+    // this worker yields the queue after each page anyway.
+    let candidate_limit = if run.dry_run {
+        attricat_rules::MAX_CANDIDATES_PER_RUN as i64
+    } else {
+        i64::MAX
+    };
+    let remaining = (candidate_limit - run.candidates_evaluated).max(0);
     if remaining == 0 {
         let truncated = run.scope_record_id.is_none()
             && candidates_remain(repo, run, run.candidate_cursor).await?;
@@ -212,8 +219,7 @@ async fn evaluate_page(
         .evaluate_rule_candidates(run.blueprint_id, run.context_id, &compiled, &candidates)
         .await?;
     let exhausted = candidates.len() < page_size as usize || run.scope_record_id.is_some();
-    let capped = run.candidates_evaluated + candidates.len() as i64
-        >= attricat_rules::MAX_CANDIDATES_PER_RUN as i64;
+    let capped = run.candidates_evaluated + candidates.len() as i64 >= candidate_limit;
     let next_cursor = candidates.last().copied();
     // A run that reaches the cap with a full page may have missed candidates;
     // an enforcing rule cannot be enabled on such a dry run.
