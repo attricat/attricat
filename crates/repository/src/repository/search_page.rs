@@ -20,11 +20,10 @@ pub use attricat_validation::saved_search::MAX_SYSTEM_TAG_FILTERS;
 /// Totals and hidden-outdated counts stop at this many records.
 pub const SEARCH_TOTAL_COUNT_CAP: i64 = 500;
 
-/// Filter matches a search page loads, which is as many as its capped total can
-/// use. A filter matching no more than this scans once and every query of the page
-/// then reads those IDs; one matching more stops scanning here and runs inside
-/// each query, where the page and the total stop as soon as they have enough.
-pub const MAX_LOADED_FILTER_MATCHES: i64 = SEARCH_TOTAL_COUNT_CAP;
+/// Matches a search page loads. A search matching no more than this scans once and
+/// every statement of the page reads those IDs, about 320 KB at most. One matching
+/// more runs inside each statement, per record, and stops once it has enough.
+pub const MAX_LOADED_FILTER_MATCHES: i64 = 20_000;
 
 pub struct SearchPageRequest<'a> {
     /// The blueprint code the scope was resolved for.
@@ -102,8 +101,12 @@ impl AttricatRepository {
             Some(ids) => RecordMatching {
                 ids: Some(ids),
                 filters: None,
+                broad: false,
             },
-            None => scope.matching(),
+            None => RecordMatching {
+                broad: limit > 0,
+                ..scope.matching()
+            },
         };
         let records = RecordSearchScope {
             blueprint_id: current.blueprint.id,

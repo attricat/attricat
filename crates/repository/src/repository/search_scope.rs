@@ -4,7 +4,7 @@
 use attricat_domain::attribute_options::Cardinality;
 use attricat_domain::value_type::ValueType;
 use attricat_validation::predicate::MAX_TAG_LENGTH;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use attricat_validation::saved_search::{
     FILTER_OPERATOR_IS_SET, MAX_RELATIONSHIP_HOPS, SYSTEM_TAG_SORT_PREFIX, system_tag_sort,
@@ -90,10 +90,9 @@ pub struct SearchScope {
     /// The revision filters and the query resolve against.
     pub search_blueprint: BlueprintWithAttributes,
     pub context: SearchContext,
-    /// The records a text query, and in the records API tree facets, resolved
-    /// to; `None` when neither narrows the blueprint.
+    /// The records global `*:` terms reach; `None` without any.
     pub matching_ids: Option<Vec<Uuid>>,
-    /// `None` without attribute or relationship filters.
+    /// `None` when nothing else narrows the blueprint.
     pub filters: Option<ResolvedRecordFilters>,
 }
 
@@ -103,17 +102,7 @@ impl SearchScope {
         RecordMatching {
             ids: self.matching_ids.as_deref(),
             filters: self.filters.as_ref(),
-        }
-    }
-}
-
-/// The IDs in both lists, keeping `current`'s order; `None` means unrestricted.
-pub fn intersect_record_ids(current: Option<Vec<Uuid>>, next: Vec<Uuid>) -> Vec<Uuid> {
-    match current {
-        None => next,
-        Some(current) => {
-            let next: HashSet<_> = next.into_iter().collect();
-            current.into_iter().filter(|id| next.contains(id)).collect()
+            broad: false,
         }
     }
 }
@@ -181,42 +170,40 @@ impl AttricatRepository {
                     .await?,
             );
         }
-        // Filters run inside each statement. Only a search term materializes
-        // record IDs, because the application resolves its terms.
+        // Filters and text terms run inside each statement. Only global `*:` terms
+        // materialize record IDs, under their budgets.
         let query = request
             .query
             .map(str::trim)
             .filter(|query| !query.is_empty());
-        let resolved = match query {
-            Some(query) => Some(
-                self.resolve_search(&search_blueprint, selected, query)
-                    .instrument(tracing::info_span!(
-                        "sql.operation",
-                        label = "search-resolve"
-                    ))
-                    .await
-                    .map_err(|error| SearchScopeError::Query {
-                        error,
-                        blueprint: Box::new(search_blueprint.clone()),
-                    })?,
-            ),
-            None => None,
+        let (text_terms, global_ids) = match query {
+            Some(query) => self
+                .resolve_text_query(&search_blueprint, selected, query)
+                .instrument(tracing::info_span!(
+                    "sql.operation",
+                    label = "search-resolve"
+                ))
+                .await
+                .map_err(|error| SearchScopeError::Query {
+                    error,
+                    blueprint: Box::new(search_blueprint.clone()),
+                })?,
+            None => (Vec::new(), None),
         };
-        let matching_ids = resolved.map(|ids| ids.into_iter().collect());
-        let filters = (!filters.is_empty() || !relationship_filters.is_empty()).then(|| {
-            ResolvedRecordFilters {
-                context: context.clone(),
-                filters,
-                relationship_filters,
-            }
-        });
+        let matching_ids = global_ids.map(|ids| ids.into_iter().collect());
+        let filters = ResolvedRecordFilters {
+            filters,
+            relationship_filters,
+            text_terms,
+            ..ResolvedRecordFilters::in_context(context.clone())
+        };
         Ok(SearchScope {
             current,
             selected,
             search_blueprint,
             context,
             matching_ids,
-            filters,
+            filters: (!filters.is_empty()).then_some(filters),
         })
     }
 
@@ -665,23 +652,4 @@ pub(super) fn has_extension_table_renderer(blueprint: &BlueprintWithAttributes) 
                     .is_some_and(|id| !id.starts_with("attricat."))
             })
         })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn intersection_keeps_the_current_order_and_treats_none_as_unrestricted() {
-        let [first, second, third] = [Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4()];
-        assert_eq!(
-            intersect_record_ids(None, vec![second, first]),
-            [second, first]
-        );
-        assert_eq!(
-            intersect_record_ids(Some(vec![first, second, third]), vec![third, first]),
-            [first, third]
-        );
-        assert!(intersect_record_ids(Some(vec![first]), vec![second]).is_empty());
-    }
 }

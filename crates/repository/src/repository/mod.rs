@@ -283,7 +283,7 @@ pub use presentation_assets::{MAX_PRESENTATION_ASSET_PAGE_SIZE, PresentationAsse
 pub use record_search::{
     RecordMatching, RecordRelationshipFilter, RecordSearchFilter, RecordSearchScope,
     RecordSearchSort, RelationshipFacetHop, RelationshipTargetGroups, ResolvedRecordFilters,
-    SEARCH_FILTER_EQ_ANY, SearchContext, decode_search_cursor,
+    ResolvedTextTerm, ResolvedTreeFacet, SEARCH_FILTER_EQ_ANY, SearchContext, decode_search_cursor,
 };
 pub use retention::RetentionDays;
 pub use retention_holds::FileRetentionHold;
@@ -294,7 +294,7 @@ pub use search_page::{
     SearchPhase,
 };
 pub use search_scope::{
-    MAX_SEARCH_FILTERS, SearchScope, SearchScopeError, SearchScopeRequest, intersect_record_ids,
+    MAX_SEARCH_FILTERS, SearchScope, SearchScopeError, SearchScopeRequest,
     table_relationship_targets, table_value_paths,
 };
 pub use solution_packs::SolutionPackCheckResult;

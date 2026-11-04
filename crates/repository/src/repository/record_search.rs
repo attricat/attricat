@@ -10,6 +10,7 @@ use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
+    fmt::Write as _,
     time::Duration,
 };
 use tokio::sync::OnceCell;
@@ -135,16 +136,16 @@ const FACET_CONTEXT_PATH_SQL: &str = r#"context_path AS (
     )"#;
 
 /// SQL selecting the records of blueprint `blueprint` whose relationship
-/// `field`, resolved along `context_path`, targets a record in `allowed`. A
+/// `field`, resolved along `context_path`, targets a record in the CTE `allowed`. A
 /// value counts only when no nearer context on the path has one for its
 /// record, and only in the requested context without fallback. It joins
 /// through the target-side relationship indexes, so its cost follows the
 /// size of `allowed` rather than the whole relationship.
-fn facet_sources_sql(blueprint: &str, field: &str) -> String {
+fn facet_sources_sql(allowed: &str, blueprint: &str, field: &str) -> String {
     format!(
         r#"SELECT source.id
-           FROM allowed
-           JOIN attribute_values av ON av.relationship_target_record_id = allowed.id
+           FROM {allowed}
+           JOIN attribute_values av ON av.relationship_target_record_id = {allowed}.id
             AND av.active AND av.relationship_target_record_id IS NOT NULL
            JOIN attributes a ON a.id = av.attribute_id AND a.blueprint_id = {blueprint} AND a.code = {field}
            JOIN context_path path ON path.id = av.context_id
@@ -203,6 +204,9 @@ pub struct RecordMatching<'a> {
     pub ids: Option<&'a [Uuid]>,
     /// Evaluated inside each statement, so their matches never load into the API.
     pub filters: Option<&'a ResolvedRecordFilters>,
+    /// The filters are known to match many records, so a statement can stop early
+    /// and shouldn't start from their values.
+    pub broad: bool,
 }
 
 impl RecordMatching<'_> {
@@ -210,6 +214,7 @@ impl RecordMatching<'_> {
     pub const ALL: Self = Self {
         ids: None,
         filters: None,
+        broad: false,
     };
 }
 
@@ -219,6 +224,59 @@ pub struct ResolvedRecordFilters {
     pub context: SearchContext,
     pub filters: Vec<RecordSearchFilter>,
     pub relationship_filters: Vec<RecordRelationshipFilter>,
+    pub text_terms: Vec<ResolvedTextTerm>,
+    pub tree_facets: Vec<ResolvedTreeFacet>,
+}
+
+/// One text query term a statement can test on each record: its scalar values or
+/// listed IDs, directly or through a relationship path. Global `*:` terms aren't
+/// among these, as they traverse under their own budgets.
+#[derive(Clone, Debug)]
+pub struct ResolvedTextTerm {
+    pattern: String,
+    /// Whether only text values can match, so the trigram index applies.
+    text_only: bool,
+    attribute: Option<String>,
+    /// Relationship codes from the selected blueprint to the matched records.
+    fields: Vec<String>,
+    /// The blueprint at each level of the path, ending with the matched records'.
+    levels: Vec<Uuid>,
+    /// Path levels on the selected blueprint, whose records are results too.
+    selected_levels: Vec<usize>,
+    /// Set for an `@id` term, which matches these records instead of a value.
+    ids: Option<Vec<Uuid>>,
+}
+
+/// A tree facet's selection: records reaching a selected node or its descendants.
+#[derive(Clone, Debug)]
+pub struct ResolvedTreeFacet {
+    context_id: Uuid,
+    selected_target_ids: Vec<Uuid>,
+    target_blueprint_id: Uuid,
+    hierarchy_field: Option<String>,
+    /// The blueprint each hop of the source path starts from, with its field.
+    hop_blueprints: Vec<Uuid>,
+    hop_fields: Vec<String>,
+}
+
+impl ResolvedRecordFilters {
+    /// Filters in `context` that nothing has narrowed yet.
+    pub fn in_context(context: SearchContext) -> Self {
+        Self {
+            context,
+            filters: Vec::new(),
+            relationship_filters: Vec::new(),
+            text_terms: Vec::new(),
+            tree_facets: Vec::new(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.filters.is_empty()
+            && self.relationship_filters.is_empty()
+            && self.text_terms.is_empty()
+            && self.tree_facets.is_empty()
+    }
 }
 
 /// Binds the parameters of a [`record_filters_clause`] to any query, after all
@@ -239,6 +297,23 @@ macro_rules! bind_record_filters {
                 query = query
                     .bind(&filter.relationship_path)
                     .bind(&filter.selected_target_ids);
+            }
+            for term in &filters.text_terms {
+                query = query
+                    .bind(&term.pattern)
+                    .bind(&term.attribute)
+                    .bind(&term.fields)
+                    .bind(&term.levels)
+                    .bind(&term.ids);
+            }
+            for facet in &filters.tree_facets {
+                query = query
+                    .bind(facet.context_id)
+                    .bind(&facet.selected_target_ids)
+                    .bind(facet.target_blueprint_id)
+                    .bind(&facet.hierarchy_field)
+                    .bind(&facet.hop_blueprints)
+                    .bind(&facet.hop_fields);
             }
         }
         query
@@ -362,33 +437,44 @@ const PRESENCE_VALUE_TYPES: &str = "'string','number','integer','boolean','date'
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum FilterPlan {
     /// A semi-join, which can start from the value's index. It's far faster when
-    /// few records match, but much slower when a filter has to scan anyway.
+    /// few records match, but reads every match when many do.
     FromValue,
     /// Once per candidate record, which `OFFSET 0` forces. A page stops as soon
     /// as it's full, and candidates a text query already narrowed stay cheap.
     PerRecord,
 }
 
-/// An `EXISTS` subquery over tables with their conditions. Every condition sits
-/// in `WHERE`, because PostgreSQL only considers a semi-join when outer
-/// references appear nowhere else.
+/// An `EXISTS` subquery over tables with their conditions. A semi-join needs every
+/// condition in `WHERE`, because PostgreSQL only considers one when outer references
+/// appear nowhere else. Per record, explicit joins keep the walk in path order; left
+/// to choose among this many tables, PostgreSQL finds a far slower one.
 fn exists_sql(tables: &[(String, String)], condition: &str, plan: FilterPlan) -> String {
-    let from = tables
-        .iter()
-        .map(|(table, _)| table.as_str())
-        .collect::<Vec<_>>()
-        .join(", ");
-    let conditions = tables
-        .iter()
-        .map(|(_, condition)| condition.as_str())
-        .collect::<Vec<_>>()
-        .join(" AND ");
-    let offset = if plan == FilterPlan::PerRecord {
-        "OFFSET 0"
-    } else {
-        ""
-    };
-    format!("EXISTS (SELECT 1 FROM {from} WHERE {conditions} AND {condition} {offset})")
+    let (first, first_condition) = &tables[0];
+    match plan {
+        FilterPlan::FromValue => {
+            let from = tables
+                .iter()
+                .map(|(table, _)| table.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
+            let conditions = tables
+                .iter()
+                .map(|(_, condition)| condition.as_str())
+                .collect::<Vec<_>>()
+                .join(" AND ");
+            format!("EXISTS (SELECT 1 FROM {from} WHERE {conditions} AND {condition})")
+        }
+        FilterPlan::PerRecord => {
+            let joins = tables[1..]
+                .iter()
+                .map(|(table, on)| format!("JOIN {table} ON {on}"))
+                .collect::<Vec<_>>()
+                .join(" ");
+            format!(
+                "EXISTS (SELECT 1 FROM {first} {joins} WHERE {first_condition} AND {condition} OFFSET 0)"
+            )
+        }
+    }
 }
 
 /// The tables walking `hops` relationships from `e`, with the alias of the
@@ -544,9 +630,12 @@ fn attribute_filter_sql(
         tables
     };
     let absence = presence && filter.value == "false";
+    // Walking several hops per record costs more than one pass over the edges.
+    const MANY_HOPS: usize = 2;
     let from_value = filter.operator == "eq"
         || filter.operator == SEARCH_FILTER_EQ_ANY
-        || (filter.reusable && !absence);
+        || (filter.reusable && !absence)
+        || (filter.relationship_path.len() >= MANY_HOPS && !absence);
     let plan = if from_value && !narrowed {
         FilterPlan::FromValue
     } else {
@@ -560,6 +649,138 @@ fn attribute_filter_sql(
     }
 }
 
+/// One text term over `e`, from parameter `parameter`: pattern, attribute, path
+/// codes, path blueprints and IDs. A path walks every active edge, in any context,
+/// and each level on the selected blueprint counts as a result.
+fn text_term_sql(
+    term: &ResolvedTextTerm,
+    workspace: usize,
+    parameter: usize,
+    plan: FilterPlan,
+) -> String {
+    let (pattern, attribute, fields, levels, ids) = (
+        parameter,
+        parameter + 1,
+        parameter + 2,
+        parameter + 3,
+        parameter + 4,
+    );
+    let branches = term
+        .selected_levels
+        .iter()
+        .map(|&start| {
+            let mut tables = Vec::new();
+            let mut leaf = "e".to_owned();
+            for level in start..term.fields.len() {
+                let (edge, relationship, target) = (
+                    format!("term_edge_{level}"),
+                    format!("term_relationship_{level}"),
+                    format!("term_target_{level}"),
+                );
+                tables.push((
+                    format!("attribute_values {edge}"),
+                    format!(
+                        "{edge}.record_id = {leaf}.id AND {edge}.workspace_id = ${workspace} \
+                         AND {edge}.active AND {edge}.relationship_target_record_id IS NOT NULL"
+                    ),
+                ));
+                tables.push((
+                    format!("attributes {relationship}"),
+                    format!(
+                        "{relationship}.id = {edge}.attribute_id \
+                         AND {relationship}.workspace_id = ${workspace} \
+                         AND {relationship}.deleted_at IS NULL \
+                         AND {relationship}.value_type = 'relationship' \
+                         AND {relationship}.code = ${fields}[{}]",
+                        level + 1
+                    ),
+                ));
+                tables.push((
+                    format!("records {target}"),
+                    format!(
+                        "{target}.id = {edge}.relationship_target_record_id \
+                         AND {target}.workspace_id = ${workspace} \
+                         AND {target}.deleted_at IS NULL \
+                         AND {target}.blueprint_id = ${levels}[{}]",
+                        level + 2
+                    ),
+                ));
+                leaf = target;
+            }
+            if term.ids.is_some() {
+                let matches = format!("{leaf}.id = ANY(${ids}::uuid[])");
+                return if tables.is_empty() {
+                    matches
+                } else {
+                    exists_sql(&tables, &matches, plan)
+                };
+            }
+            tables.push((
+                "attribute_values term_value".to_owned(),
+                format!(
+                    "term_value.record_id = {leaf}.id AND term_value.workspace_id = ${workspace} \
+                     AND term_value.active AND term_value.relationship_target_record_id IS NULL"
+                ),
+            ));
+            tables.push((
+                "attributes term_attribute".to_owned(),
+                format!(
+                    "term_attribute.id = term_value.attribute_id \
+                     AND term_attribute.workspace_id = ${workspace} \
+                     AND term_attribute.deleted_at IS NULL \
+                     AND (${attribute}::text IS NULL OR term_attribute.code = ${attribute})"
+                ),
+            ));
+            let matches = if term.text_only {
+                format!("term_value.value_text ILIKE ${pattern}")
+            } else {
+                format!(
+                    "COALESCE(term_value.value_text, term_value.value_number::text, \
+                     term_value.value_integer::text, term_value.value_boolean::text, \
+                     term_value.value_date::text, term_value.value_datetime::text, \
+                     term_value.value_time::text) ILIKE ${pattern}"
+                )
+            };
+            exists_sql(&tables, &matches, plan)
+        })
+        .collect::<Vec<_>>()
+        .join(" OR ");
+    format!("({branches})")
+}
+
+/// One tree facet selection over `e`, from parameter `parameter`: context, selected
+/// nodes, target blueprint, hierarchy field, hop blueprints and hop fields. It walks
+/// down from the selection and back along the path through the target-side indexes,
+/// so its cost follows the size of the selected subtrees.
+fn tree_facet_sql(facet: &ResolvedTreeFacet, parameter: usize) -> String {
+    let (context, selected, target, hierarchy, blueprints, fields) = (
+        parameter,
+        parameter + 1,
+        parameter + 2,
+        parameter + 3,
+        parameter + 4,
+        parameter + 5,
+    );
+    let context_path = FACET_CONTEXT_PATH_SQL.replace("$4", &format!("${context}"));
+    let subtree = facet_sources_sql("allowed", &format!("${target}"), &format!("${hierarchy}"));
+    let mut reached = "allowed".to_owned();
+    let mut hops = String::new();
+    for hop in (0..facet.hop_fields.len()).rev() {
+        let sources = facet_sources_sql(
+            &reached,
+            &format!("${blueprints}[{}]", hop + 1),
+            &format!("${fields}[{}]", hop + 1),
+        );
+        write!(hops, ", hop_{hop} AS ({sources})").expect("writing to a string");
+        reached = format!("hop_{hop}");
+    }
+    format!(
+        "e.id IN (WITH RECURSIVE {context_path}, allowed AS (\
+           SELECT unnest(${selected}::uuid[]) AS id UNION {subtree}\
+         ){hops} SELECT id FROM {reached})"
+    )
+}
+
 /// One `AND` condition per filter restricting `e`, or nothing without filters.
 /// Each stays correlated to `e`, so PostgreSQL can start from whichever side is
 /// smaller and a page can stop early. Parameters start at `first_parameter`,
@@ -569,7 +790,10 @@ fn record_filters_clause(matching: RecordMatching<'_>, first_parameter: usize) -
     let Some(filters) = matching.filters else {
         return String::new();
     };
-    let narrowed = matching.ids.is_some();
+    let narrowed = matching.broad
+        || matching.ids.is_some()
+        || !filters.text_terms.is_empty()
+        || !filters.tree_facets.is_empty();
     let (workspace, context) = (first_parameter, first_parameter + 1);
     let mut next = first_parameter + 2;
     let mut conditions = Vec::new();
@@ -596,6 +820,19 @@ fn record_filters_clause(matching: RecordMatching<'_>, first_parameter: usize) -
             },
         ));
         next += 2;
+    }
+    for term in &filters.text_terms {
+        let plan = if matching.broad {
+            FilterPlan::PerRecord
+        } else {
+            FilterPlan::FromValue
+        };
+        conditions.push(text_term_sql(term, workspace, next, plan));
+        next += 5;
+    }
+    for facet in &filters.tree_facets {
+        conditions.push(tree_facet_sql(facet, next));
+        next += 6;
     }
     conditions
         .iter()
@@ -2137,14 +2374,11 @@ impl AttricatRepository {
         Ok(Some(related))
     }
 
-    // Facet traversal inputs are explicit to keep query scope auditable.
-    #[allow(clippy::too_many_arguments)]
-    /// Source records whose relationship path, resolved in `context_id` hop
-    /// by hop, reaches a selected node or one of its descendants, or `None`
-    /// without a selection. With an empty `source_path`, the nodes are the
-    /// source blueprint's own records and each record is attached to itself,
-    /// so a selection matches the selected nodes and their descendants.
-    pub async fn relationship_tree_facet_matches(
+    /// Checks a tree facet's selection, or `None` without one. With an empty
+    /// `source_path`, the nodes are the source blueprint's own records and each
+    /// record is attached to itself, so a selection matches the selected nodes and
+    /// their descendants.
+    pub async fn resolve_tree_facet_selection(
         &self,
         source_blueprint_id: Uuid,
         source_path: &[RelationshipFacetHop],
@@ -2152,88 +2386,48 @@ impl AttricatRepository {
         hierarchy_field: Option<&str>,
         context_id: Uuid,
         selected_target_ids: &[Uuid],
-        source_record_ids: Option<&HashSet<Uuid>>,
-    ) -> Result<Option<Vec<Uuid>>, RepositoryError> {
+    ) -> Result<Option<ResolvedTreeFacet>, RepositoryError> {
         if self.get_context_by_id(context_id).await?.is_none() {
             return Err(RepositoryError::InvalidContext);
         }
         if selected_target_ids.is_empty() {
             return Ok(None);
         }
-        let selected: HashSet<_> = selected_target_ids.iter().copied().collect();
+        let selected: Vec<_> = selected_target_ids
+            .iter()
+            .copied()
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect();
         let selected_nodes: i64 = sqlx::query_scalar(
             "SELECT count(*) FROM records WHERE blueprint_id = $1 AND id = ANY($2) AND deleted_at IS NULL",
         )
         .bind(target_blueprint_id)
-        .bind(selected.iter().copied().collect::<Vec<_>>())
+        .bind(&selected)
         .fetch_one(&self.pool)
         .await?;
         if selected_nodes as usize != selected.len() {
             return Err(RepositoryError::RelationshipTargetTypeMismatch);
         }
-        // The blueprint each hop starts from.
-        let hop_sources: Vec<Uuid> = std::iter::once(source_blueprint_id)
-            .chain(source_path.iter().map(|hop| hop.target_blueprint_id))
-            .collect();
-        let last = source_path.len().checked_sub(1);
-        // Walks down from the selection and then back over the last hop
-        // through the target-side relationship indexes, so the cost follows
-        // the size of the selected subtrees rather than the whole relationship.
-        let mut matches = sqlx::query_scalar::<_, Uuid>(&format!(
-            r#"WITH RECURSIVE {FACET_CONTEXT_PATH_SQL}, allowed AS (
-                    SELECT unnest($5::uuid[]) AS id
-                    UNION
-                    {hierarchy}
-                )
-                SELECT id FROM allowed WHERE $2::text IS NULL
-                UNION
-                {sources}"#,
-            hierarchy = facet_sources_sql("$3", "$6"),
-            sources = facet_sources_sql("$1", "$2"),
-        ))
-        .bind(last.map_or(source_blueprint_id, |last| hop_sources[last]))
-        .bind(last.map(|last| source_path[last].field.as_str()))
-        .bind(target_blueprint_id)
-        .bind(context_id)
-        .bind(selected.into_iter().collect::<Vec<_>>())
-        .bind(hierarchy_field)
-        .fetch_all(&self.pool)
-        .await?;
-        // Earlier hops step back the same way from the records reached so far.
-        for (index, hop) in source_path.iter().enumerate().rev().skip(1) {
-            if matches.is_empty() {
-                break;
-            }
-            matches = sqlx::query_scalar::<_, Uuid>(&format!(
-                r#"WITH RECURSIVE {FACET_CONTEXT_PATH_SQL}, allowed AS (
-                        SELECT unnest($3::uuid[]) AS id
-                    )
-                    {sources}"#,
-                sources = facet_sources_sql("$1", "$2"),
-            ))
-            .bind(hop_sources[index])
-            .bind(&hop.field)
-            .bind(&matches)
-            .bind(context_id)
-            .fetch_all(&self.pool)
-            .await?;
-        }
-        Ok(Some(
-            matches
-                .into_iter()
-                .collect::<HashSet<_>>()
-                .into_iter()
-                .filter(|id| source_record_ids.is_none_or(|ids| ids.contains(id)))
+        Ok(Some(ResolvedTreeFacet {
+            context_id,
+            selected_target_ids: selected,
+            target_blueprint_id,
+            hierarchy_field: hierarchy_field.map(str::to_owned),
+            hop_blueprints: std::iter::once(source_blueprint_id)
+                .chain(source_path.iter().map(|hop| hop.target_blueprint_id))
+                .take(source_path.len())
                 .collect(),
-        ))
+            hop_fields: source_path.iter().map(|hop| hop.field.clone()).collect(),
+        }))
     }
 
-    // Facet traversal inputs are explicit to keep query scope auditable.
-    #[allow(clippy::too_many_arguments)]
     /// One page of a tree facet's roots, or of `parent_id`'s children, with
     /// the distinct sources attached to each node or its descendants through
     /// `source_path`. With an empty path, each source record is its own node;
-    /// see [`Self::relationship_tree_facet_matches`].
+    /// see [`Self::resolve_tree_facet_selection`].
+    // Facet traversal inputs are explicit to keep query scope auditable.
+    #[allow(clippy::too_many_arguments)]
     pub async fn relationship_tree_facet_children(
         &self,
         source_blueprint_id: Uuid,
@@ -2767,48 +2961,100 @@ impl AttricatRepository {
         Ok(query.fetch_all(&self.pool).await?)
     }
 
-    /// Resolves the application-owned relationship-aware query plan. SQL only reads
-    /// one scalar-match set or one incoming-edge frontier at a time.
+    /// Every record of `selected` matching a text query. Most callers want a scope
+    /// instead; this is for those that need the whole set.
     pub async fn resolve_search(
         &self,
         selected: &BlueprintWithAttributes,
         selected_version: Option<i64>,
         query: &str,
     ) -> Result<HashSet<Uuid>, RepositoryError> {
+        Ok(self
+            .text_query_record_ids(selected, selected_version, query, i64::MAX)
+            .await?
+            .into_iter()
+            .collect())
+    }
+
+    /// Up to `limit` of the records of `selected` matching a text query, lowest IDs
+    /// first.
+    pub async fn text_query_record_ids(
+        &self,
+        selected: &BlueprintWithAttributes,
+        selected_version: Option<i64>,
+        query: &str,
+        limit: i64,
+    ) -> Result<Vec<Uuid>, RepositoryError> {
+        let (text_terms, global_ids) = self
+            .resolve_text_query(selected, selected_version, query)
+            .await?;
+        // No context applies to text terms, which match in any context.
+        let context = SearchContext {
+            ids: Vec::new(),
+            codes: Vec::new(),
+        };
+        let filters = ResolvedRecordFilters {
+            text_terms,
+            ..ResolvedRecordFilters::in_context(context)
+        };
+        let ids = global_ids.map(|ids| ids.into_iter().collect::<Vec<_>>());
+        self.matching_record_ids(
+            selected.blueprint.id,
+            selected_version,
+            RecordMatching {
+                ids: ids.as_deref(),
+                filters: (!filters.is_empty()).then_some(&filters),
+                broad: false,
+            },
+            limit,
+        )
+        .await
+    }
+
+    /// Compiles a text query into the terms statements test themselves, and the
+    /// records its global `*:` terms reach, which traverse under a shared budget.
+    pub async fn resolve_text_query(
+        &self,
+        selected: &BlueprintWithAttributes,
+        selected_version: Option<i64>,
+        query: &str,
+    ) -> Result<(Vec<ResolvedTextTerm>, Option<HashSet<Uuid>>), RepositoryError> {
         let terms = parse_search_terms(query)?;
-        let mut per_term = Vec::with_capacity(terms.len());
-        // Global `*:` terms share one request budget. Explicit and bare selectors
-        // retain their established, independently-resolved semantics.
+        let mut text_terms = Vec::with_capacity(terms.len());
+        let mut global_ids: Option<HashSet<Uuid>> = None;
+        // Global `*:` terms share one request budget.
         let mut global_budget = GlobalSearchBudget::default();
         for term in terms {
             let plan = self.compile_search_term(selected, &term).await?;
-            let global = matches!(plan, TermPlan::Reachable);
-            let result = self
-                .resolve_search_term(selected, selected_version, term, plan, &mut global_budget)
-                .await;
-            if global {
-                match &result {
-                    Ok(_) => metrics::counter!(GLOBAL_SEARCH_TOTAL_METRIC, "outcome" => "success")
-                        .increment(1),
-                    Err(RepositoryError::RelationshipSearchBudgetExceeded { dimension }) => {
-                        metrics::counter!(GLOBAL_SEARCH_TOTAL_METRIC, "outcome" => "budget_exceeded", "dimension" => *dimension).increment(1);
-                        tracing::warn!(dimension, "global relationship search budget exceeded");
-                    }
-                    Err(RepositoryError::RelationshipSearchTimedOut) => {
-                        metrics::counter!(GLOBAL_SEARCH_TOTAL_METRIC, "outcome" => "timed_out")
-                            .increment(1);
-                        tracing::warn!("global relationship search statement timed out");
-                    }
-                    Err(_) => metrics::counter!(GLOBAL_SEARCH_TOTAL_METRIC, "outcome" => "failed")
-                        .increment(1),
-                }
+            if !matches!(plan, TermPlan::Reachable) {
+                text_terms.push(resolved_text_term(selected.blueprint.id, &term, plan));
+                continue;
             }
-            per_term.push(result?);
+            let result = self
+                .resolve_global_search_term(selected, selected_version, term, &mut global_budget)
+                .await;
+            match &result {
+                Ok(_) => metrics::counter!(GLOBAL_SEARCH_TOTAL_METRIC, "outcome" => "success")
+                    .increment(1),
+                Err(RepositoryError::RelationshipSearchBudgetExceeded { dimension }) => {
+                    metrics::counter!(GLOBAL_SEARCH_TOTAL_METRIC, "outcome" => "budget_exceeded", "dimension" => *dimension).increment(1);
+                    tracing::warn!(dimension, "global relationship search budget exceeded");
+                }
+                Err(RepositoryError::RelationshipSearchTimedOut) => {
+                    metrics::counter!(GLOBAL_SEARCH_TOTAL_METRIC, "outcome" => "timed_out")
+                        .increment(1);
+                    tracing::warn!("global relationship search statement timed out");
+                }
+                Err(_) => metrics::counter!(GLOBAL_SEARCH_TOTAL_METRIC, "outcome" => "failed")
+                    .increment(1),
+            }
+            let ids = result?;
+            global_ids = Some(match global_ids {
+                Some(existing) => existing.intersection(&ids).copied().collect(),
+                None => ids,
+            });
         }
-        Ok(per_term
-            .into_iter()
-            .reduce(|candidates, ids| candidates.intersection(&ids).copied().collect())
-            .unwrap_or_default())
+        Ok((text_terms, global_ids))
     }
 
     async fn compile_search_term(
@@ -2995,174 +3241,6 @@ impl AttricatRepository {
             )));
         }
         Ok(())
-    }
-
-    async fn resolve_search_term(
-        &self,
-        selected: &BlueprintWithAttributes,
-        selected_version: Option<i64>,
-        term: SearchTerm,
-        plan: TermPlan,
-        global_budget: &mut GlobalSearchBudget,
-    ) -> Result<HashSet<Uuid>, RepositoryError> {
-        if matches!(plan, TermPlan::Reachable) {
-            return self
-                .resolve_global_search_term(selected, selected_version, term, global_budget)
-                .await;
-        }
-        let (match_blueprint, attribute, direct_field) = match &plan {
-            // Bare terms only search scalar values on the selected blueprint.
-            TermPlan::Any => (Some(selected.blueprint.id), None, None),
-            TermPlan::Reachable => {
-                unreachable!("global terms are resolved in a bounded transaction")
-            }
-            TermPlan::SelectedAttribute(attribute) => (
-                Some(selected.blueprint.id),
-                attribute.clone(),
-                Some(String::new()),
-            ),
-            TermPlan::Relationship {
-                fields,
-                target,
-                attribute,
-                ..
-            } => (
-                Some(target.blueprint.id),
-                attribute.clone(),
-                fields.first().cloned(),
-            ),
-            TermPlan::Ids {
-                target_blueprint_id,
-                ..
-            } => (Some(*target_blueprint_id), None, None),
-        };
-        let rows = match &plan {
-            TermPlan::Ids { ids, .. } => {
-                sqlx::query_scalar::<_, Uuid>(
-                    "SELECT id FROM records WHERE id = ANY($1) AND blueprint_id = $2 AND workspace_id = $3 AND deleted_at IS NULL",
-                )
-                .bind(ids)
-                .bind(match_blueprint)
-                .bind(self.workspace_id.0)
-                .fetch_all(&self.pool)
-                .await?
-            }
-            _ => {
-                self.scalar_search_matches(&term, match_blueprint, attribute)
-                    .await?
-            }
-        };
-        let mut visited: HashSet<Uuid> = rows.into_iter().collect();
-        let mut frontier: Vec<Uuid> = visited.iter().copied().collect();
-        let (path_fields, path_source_blueprints) = match &plan {
-            TermPlan::Relationship {
-                fields,
-                source_blueprint_ids,
-                ..
-            }
-            | TermPlan::Ids {
-                fields,
-                source_blueprint_ids,
-                ..
-            } => (
-                Some(fields.as_slice()),
-                Some(source_blueprint_ids.as_slice()),
-            ),
-            _ => (None, None),
-        };
-        let max_depth = match path_fields {
-            Some(fields) => fields.len(),
-            None => 0,
-        };
-        for depth in 1..=max_depth {
-            if frontier.is_empty() {
-                break;
-            }
-            let sources = sqlx::query_scalar::<_, Uuid>(
-                r#"SELECT DISTINCT source.id
-                FROM records source JOIN attribute_values av ON av.record_id = source.id
-                JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
-                JOIN records target ON target.id = av.relationship_target_record_id
-                WHERE source.deleted_at IS NULL AND target.deleted_at IS NULL AND av.active
-                  AND source.workspace_id = $4 AND target.workspace_id = $4
-                  AND av.workspace_id = $4 AND a.workspace_id = $4
-                  AND av.relationship_target_record_id = ANY($1) AND a.value_type = 'relationship'
-                  AND ($2::uuid IS NULL OR source.blueprint_id = $2)
-                  AND ($3::text IS NULL OR a.code = $3)"#,
-            )
-            .bind(&frontier)
-            .bind(path_source_blueprints.and_then(|ids| ids.get(ids.len() - depth)))
-            .bind(
-                path_fields
-                    .and_then(|fields| fields.get(fields.len() - depth))
-                    .or_else(|| direct_field.as_ref().filter(|v| !v.is_empty())),
-            )
-            .bind(self.workspace_id.0)
-            .fetch_all(&self.pool)
-            .await?;
-            frontier = sources
-                .into_iter()
-                .filter(|source| visited.insert(*source))
-                .collect();
-        }
-        // Explicit selected-blueprint value queries and all traversals only return selected records.
-        // The version restriction is applied here because scalar matches may start on old revisions.
-        let selected_ids = sqlx::query_scalar::<_, Uuid>("SELECT id FROM records WHERE blueprint_id = $1 AND ($2::bigint IS NULL OR blueprint_version = $2) AND deleted_at IS NULL AND id = ANY($3) AND workspace_id = $4")
-            .bind(selected.blueprint.id)
-            .bind(selected_version)
-            .bind(visited.into_iter().collect::<Vec<_>>())
-            .bind(self.workspace_id.0)
-            .fetch_all(&self.pool)
-            .await?;
-        Ok(selected_ids.into_iter().collect())
-    }
-
-    /// Records of `match_blueprint` whose scalar values match a term.
-    async fn scalar_search_matches(
-        &self,
-        term: &SearchTerm,
-        match_blueprint: Option<Uuid>,
-        attribute: Option<String>,
-    ) -> Result<Vec<Uuid>, RepositoryError> {
-        let pattern = search_pattern(term);
-        // Alphabetic terms other than booleans cannot match the canonical native
-        // renderings of non-text values. Start these searches from the trigram-indexed
-        // text values and materialize them so PostgreSQL does not repeat that scan for
-        // every attribute.
-        let sql = if text_only_search(&term.value) {
-            r#"WITH matching_values AS MATERIALIZED (
-                    SELECT record_id, attribute_id
-                    FROM attribute_values
-                    WHERE workspace_id = $4 AND active
-                      AND relationship_target_record_id IS NULL
-                      AND value_text ILIKE $3
-                )
-                SELECT DISTINCT e.id
-                FROM matching_values av
-                JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
-                JOIN records e ON e.id = av.record_id
-                WHERE e.deleted_at IS NULL AND e.workspace_id = $4
-                  AND a.workspace_id = $4
-                  AND ($1::uuid IS NULL OR e.blueprint_id = $1)
-                  AND ($2::text IS NULL OR a.code = $2)"#
-        } else {
-            r#"SELECT DISTINCT e.id
-                FROM records e JOIN attribute_values av ON av.record_id = e.id
-                JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
-                WHERE e.deleted_at IS NULL AND e.workspace_id = $4
-                  AND av.workspace_id = $4 AND a.workspace_id = $4
-                  AND av.relationship_target_record_id IS NULL
-                  AND ($1::uuid IS NULL OR e.blueprint_id = $1)
-                  AND ($2::text IS NULL OR a.code = $2)
-                  AND COALESCE(av.value_text, av.value_number::text, av.value_integer::text, av.value_boolean::text, av.value_date::text, av.value_datetime::text, av.value_time::text) ILIKE $3"#
-        };
-        Ok(sqlx::query_scalar::<_, Uuid>(sql)
-            .bind(match_blueprint)
-            .bind(attribute)
-            .bind(pattern)
-            .bind(self.workspace_id.0)
-            .fetch_all(&self.pool)
-            .await?)
     }
 
     /// Global traversal is deliberately isolated from qualified selector search:
@@ -3465,6 +3543,52 @@ fn search_pattern(term: &SearchTerm) -> String {
         format!("{literal}%")
     } else {
         format!("%{literal}%")
+    }
+}
+
+/// A compiled term other than a global one, for statements to test.
+fn resolved_text_term(selected: Uuid, term: &SearchTerm, plan: TermPlan) -> ResolvedTextTerm {
+    let (fields, sources, target, attribute, ids) = match plan {
+        TermPlan::Any | TermPlan::Reachable => (Vec::new(), Vec::new(), selected, None, None),
+        TermPlan::SelectedAttribute(attribute) => {
+            (Vec::new(), Vec::new(), selected, attribute, None)
+        }
+        TermPlan::Relationship {
+            fields,
+            source_blueprint_ids,
+            target,
+            attribute,
+        } => (
+            fields,
+            source_blueprint_ids,
+            target.blueprint.id,
+            attribute,
+            None,
+        ),
+        TermPlan::Ids {
+            fields,
+            source_blueprint_ids,
+            target_blueprint_id,
+            ids,
+        } => (
+            fields,
+            source_blueprint_ids,
+            target_blueprint_id,
+            None,
+            Some(ids),
+        ),
+    };
+    let levels: Vec<Uuid> = sources.into_iter().chain([target]).collect();
+    ResolvedTextTerm {
+        pattern: search_pattern(term),
+        text_only: text_only_search(&term.value),
+        attribute,
+        fields,
+        selected_levels: (0..levels.len())
+            .filter(|&level| levels[level] == selected)
+            .collect(),
+        levels,
+        ids,
     }
 }
 

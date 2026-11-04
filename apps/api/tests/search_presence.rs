@@ -707,9 +707,8 @@ async fn absence_is_scoped_and_paginated_and_requires_no_reachable_value(pool: P
         };
         let blueprint_id = Uuid::parse_str(blueprint["blueprint"]["id"].as_str().unwrap()).unwrap();
         let filters = api::repository::ResolvedRecordFilters {
-            context: context.clone(),
             filters: vec![filter],
-            relationship_filters: Vec::new(),
+            ..api::repository::ResolvedRecordFilters::in_context(context.clone())
         };
         let ids = other
             .matching_record_ids(
@@ -718,6 +717,7 @@ async fn absence_is_scoped_and_paginated_and_requires_no_reachable_value(pool: P
                 api::repository::RecordMatching {
                     ids: None,
                     filters: Some(&filters),
+                    broad: false,
                 },
                 i64::MAX,
             )
@@ -1133,66 +1133,88 @@ async fn filters_resolve_contexts_pinned_revisions_and_deleted_targets(pool: PgP
 }
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
-async fn filters_past_the_loaded_limit_keep_totals_and_pages(pool: PgPool) {
+async fn searches_past_the_loaded_limit_keep_totals_and_pages(pool: PgPool) {
+    const LOADED: i64 = 3;
     let (base, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     create_blueprint(&client, &base, ITEM).await;
-    // One past the limit, so a page can't read loaded IDs.
-    for index in 0..=api::repository::MAX_LOADED_FILTER_MATCHES {
-        create_record_with(
+    let mut expected = Vec::new();
+    for index in 0..=LOADED + 2 {
+        let record = create_record_with(
             &client,
             &base,
             "presence_item",
-            json!([scalar("name", format!("Item {index}")), scalar("amount", 1)]),
+            json!([
+                scalar("name", format!("Wanted {index}")),
+                scalar("amount", 1)
+            ]),
         )
         .await;
+        expected.push(record["id"].as_str().unwrap().parse::<Uuid>().unwrap());
     }
-    let other = create_record_with(
+    expected.sort();
+    create_record_with(
         &client,
         &base,
         "presence_item",
         json!([scalar("name", "Other"), scalar("amount", 2)]),
     )
     .await;
-    let filters = json!([{"field": "amount", "operator": "eq", "value": 1}]);
-    let mut seen = std::collections::HashSet::new();
-    let mut cursor = Value::Null;
-    loop {
-        let page = expect_status(
-            client
-                .post(format!("{base}/v1/records/search"))
-                .json(&json!({
-                    "blueprint": {"code": "presence_item"},
-                    "filters": filters,
-                    "include_total": true,
-                    "page": {"size": 100, "cursor": cursor},
-                }))
-                .send()
+    let actor: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
+    let repository =
+        api::repository::AttricatRepository::system(pool).for_workspace(bootstrap_workspace_id());
+    let blueprint = api::model::SearchBlueprint {
+        code: "presence_item".to_owned(),
+        version: None,
+    };
+    let filters: Vec<api::model::SearchFilter> =
+        serde_json::from_value(json!([{"field": "amount", "operator": "eq", "value": 1}])).unwrap();
+    for (query, filters) in [(None, &filters[..]), (Some("Wanted"), &[][..])] {
+        let scope = repository
+            .resolve_search_scope(api::repository::SearchScopeRequest {
+                blueprint: &blueprint,
+                query,
+                filters,
+                relationship_filters: &[],
+                context_code: "default",
+                actor,
+            })
+            .await
+            .unwrap();
+        let mut ids = Vec::new();
+        let mut cursor: Option<String> = None;
+        loop {
+            let page = repository
+                .search_page(
+                    &scope,
+                    api::repository::SearchPageRequest {
+                        code: "presence_item",
+                        system_tags: &[],
+                        outdated: false,
+                        export_status: None,
+                        data_quality: None,
+                        sort: None,
+                        cursor: cursor.as_deref(),
+                        limit: 2,
+                        loaded_filter_matches: LOADED,
+                        include_total: true,
+                        include_previews: false,
+                    },
+                    &|_| {},
+                )
                 .await
-                .unwrap(),
-            StatusCode::OK,
-        )
-        .await;
-        if cursor.is_null() {
-            assert_eq!(
-                page["total_count"],
-                api::repository::MAX_LOADED_FILTER_MATCHES
-            );
-            assert_eq!(page["total_count_capped"], true);
-            assert_eq!(page["result_version_scope"]["kind"], "single");
+                .unwrap();
+            if cursor.is_none() {
+                assert_eq!(page.total_count, Some(expected.len() as i64));
+            }
+            ids.extend(page.items.iter().map(|row| row.id));
+            cursor = page.next_cursor;
+            if cursor.is_none() {
+                break;
+            }
         }
-        for row in page["items"].as_array().unwrap() {
-            assert!(seen.insert(row["id"].as_str().unwrap().to_owned()));
-        }
-        cursor = page["next_cursor"].clone();
-        if cursor.is_null() {
-            break;
-        }
+        ids.sort();
+        assert_eq!(ids, expected, "{query:?}");
     }
-    assert_eq!(
-        seen.len() as i64,
-        api::repository::MAX_LOADED_FILTER_MATCHES + 1
-    );
-    assert!(!seen.contains(other["id"].as_str().unwrap()));
     server.abort();
 }

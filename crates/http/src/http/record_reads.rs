@@ -13,9 +13,8 @@ use crate::{
     },
     repository::{
         DEFAULT_SYSTEM_TAG_FACET_LIMIT, MAX_LOADED_FILTER_MATCHES, MAX_SEARCH_FILTERS,
-        MAX_SYSTEM_TAG_FACET_LIMIT, RelationshipFacetHop, RepositoryError, SearchPageRequest,
-        SearchPhase, SearchScopeError, SearchScopeRequest, intersect_record_ids,
-        valid_connection_key,
+        MAX_SYSTEM_TAG_FACET_LIMIT, RelationshipFacetHop, RepositoryError, ResolvedRecordFilters,
+        SearchPageRequest, SearchPhase, SearchScopeError, SearchScopeRequest, valid_connection_key,
     },
 };
 use attricat_domain::permissions::Permission;
@@ -29,7 +28,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde::Deserialize;
-use std::{collections::HashSet, time::Instant};
+use std::time::Instant;
 use tracing::Instrument;
 use uuid::Uuid;
 
@@ -276,30 +275,27 @@ pub(super) async fn search_record_previews(
             "relationship_tree_facets.",
         )
         .await?;
-        let facet_candidates = scope
-            .matching_ids
-            .as_ref()
-            .map(|ids| ids.iter().copied().collect::<HashSet<_>>());
-        let facet_matching = repository
-            .relationship_tree_facet_matches(
+        let selection = repository
+            .resolve_tree_facet_selection(
                 scope.current.blueprint.id,
                 &source_path,
                 target.blueprint.id,
                 facet.hierarchy_field.as_deref(),
                 facet.context_id,
                 &facet.selected_target_ids,
-                facet_candidates.as_ref(),
             )
             .instrument(tracing::info_span!(
                 "sql.operation",
                 label = "relationship-facet"
             ))
             .await?;
-        if let Some(facet_matching) = facet_matching {
-            scope.matching_ids = Some(intersect_record_ids(
-                scope.matching_ids.take(),
-                facet_matching,
-            ));
+        if let Some(selection) = selection {
+            let context = scope.context.clone();
+            scope
+                .filters
+                .get_or_insert_with(|| ResolvedRecordFilters::in_context(context))
+                .tree_facets
+                .push(selection);
         }
     }
     let mut response = repository

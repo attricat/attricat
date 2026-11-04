@@ -402,7 +402,39 @@ async fn relationship_tree_facet_latency(pool: PgPool) {
         }
         (path, body)
     };
+    let text = |query: &str| with(filtered(Vec::new(), json!([])), json!({"query": query}));
     let scenarios = [
+        ("text: rare value", text("12345")),
+        ("text: rare word", text("Value 12345")),
+        ("text: short number", text("12")),
+        ("text: common number", text("7")),
+        ("text: every record", text("Product")),
+        ("text: two broad terms", text("Product 1")),
+        ("text: one attribute", text("sku:12345")),
+        ("text: relationship path", text("line.name:999")),
+        ("text: relationship, every record", text("line.name:Line")),
+        ("text: global term", text("*:12345")),
+        (
+            "text: every record, sorted",
+            with(
+                text("Product"),
+                json!({"sort": {"field": "sku", "direction": "asc"}}),
+            ),
+        ),
+        (
+            "search: root selected and a filter",
+            with(
+                search("category", default_context, Some(root), None),
+                json!({"filters": [filter("sku", "starts_with", json!("Value"))]}),
+            ),
+        ),
+        (
+            "search: root selected and a text term",
+            with(
+                search("category", default_context, Some(root), None),
+                json!({"query": "12"}),
+            ),
+        ),
         ("reference: no filter", filtered(Vec::new(), json!([]))),
         (
             "reference: text query",

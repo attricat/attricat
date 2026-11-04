@@ -2272,12 +2272,12 @@ pub async fn execute_read(
                 let Some(blueprint) = repository.get_blueprint_by_code(&summary.code).await? else {
                     continue;
                 };
-                let resolved = repository
-                    .resolve_search(&blueprint, None, &query)
+                // One past what's left is enough to tell the list was truncated.
+                let room = MAX_FIND_RECORDS_CANDIDATES - candidates.len() + 1;
+                let ids = repository
+                    .text_query_record_ids(&blueprint, None, &query, room as i64)
                     .await
                     .map_err(|error| ToolError::InvalidArguments(error.to_string()))?;
-                let mut ids = resolved.into_iter().collect::<Vec<_>>();
-                ids.sort_unstable();
                 for id in ids {
                     if candidates.len() == MAX_FIND_RECORDS_CANDIDATES {
                         truncated = true;

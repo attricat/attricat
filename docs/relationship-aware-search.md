@@ -23,9 +23,8 @@ values on records of the selected blueprint (depth 0). It does not traverse
 relationships.
 
 A relationship-qualified term, such as `color.name:red` or
-`family.product_type.name:graphics`, first finds matching scalar values on the
-path's target blueprint, then traverses up to three named **incoming active
-relationship edges** in batched steps:
+`family.product_type.name:graphics`, follows up to three named **active
+relationship edges** to matching scalar values on the path's target blueprint:
 an edge from Product to Color allows a matching Color value to select that
 Product. Deleted records and inactive edges are excluded.
 
@@ -39,7 +38,6 @@ Every query term independently produces a candidate set. Multiple whitespace-
 separated terms are intersected (implicit `AND`). Relationship-tree facet
 counts, selected-facet filtering, and paginated result pages consume that same
 candidate set, so they cannot disagree about which source records match.
-
 
 ## Query Language
 
@@ -101,12 +99,15 @@ CLI client.
 
 ## Implementation Boundaries
 
-The backend parses typed query terms, compiles validated terms using blueprint
-metadata, and invokes a shared candidate-ID resolver. Main record search and
-relationship-tree facet child/count paths use that resolver so their text-query
-semantics agree.
+The backend parses typed query terms and compiles validated terms using blueprint
+metadata into conditions each statement tests, alongside attribute filters and
+selected tree facets. A search page loads up to 20,000 matching IDs
+(`MAX_LOADED_FILTER_MATCHES`) and reads them from then on. A search matching more
+runs its conditions inside each statement, per record, so a page and its capped
+total stop as soon as they have enough. Relationship-tree facet children with a
+search term read every match, because their counts are exact.
 
-No migration is required. Only `*:` global traversal is resource-bounded: all
+No migration is required. Only `*:` global traversal loads its matches: all
 such terms in one request share caps for matching scalar rows, discovered
 records, and relationship edges. Traversal is an ordered, three-level BFS;
 exhausting any cap fails the whole request with a typed `422` response (never a

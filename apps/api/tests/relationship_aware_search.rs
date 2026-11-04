@@ -248,3 +248,43 @@ attributes:
     }
     server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn numeric_search_terms_ignore_replaced_values(pool: sqlx::PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    create_blueprint(
+        &client,
+        &base_url,
+        "format_version: 1\ncode: replaced_item\nname: Replaced item\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [amount]\nattributes:\n  - code: amount\n    value_type: number",
+    )
+    .await;
+    let record = create_record_with(
+        &client,
+        &base_url,
+        "replaced_item",
+        json!([scalar("amount", 7777)]),
+    )
+    .await;
+    set_values(&client, &base_url, &record, json!([scalar("amount", 8888)])).await;
+    let found = |query: &'static str| {
+        let request = client.post(format!("{base_url}/v1/records/search")).json(
+            &json!({"blueprint": {"code": "replaced_item"}, "query": query, "page": {"size": 25}}),
+        );
+        async move {
+            let response: Value = request
+                .send()
+                .await
+                .unwrap()
+                .error_for_status()
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+            response["items"].as_array().unwrap().len()
+        }
+    };
+    assert_eq!(found("8888").await, 1);
+    assert_eq!(found("7777").await, 0);
+    server.abort();
+}
