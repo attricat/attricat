@@ -221,10 +221,11 @@ impl AttricatRepository {
         let page = async {
             match sort.as_ref() {
                 Some(sort) => {
-                    // A sort reads every match, so nothing can stop early.
+                    // A sort reads every match, so nothing can stop early, except one
+                    // through a relationship, which walks its indexed leaves in order.
                     let page_scope = RecordSearchScope {
                         matching: RecordMatching {
-                            broad: false,
+                            broad: matching.broad && sort_uses_relationship,
                             ..matching
                         },
                         blueprint_version: if sort_uses_relationship {

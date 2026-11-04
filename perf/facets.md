@@ -129,68 +129,78 @@ a root through `listing` reaches about 10,000 listings and products, about
 
 `FACET_BENCH_SCENARIOS=text,search:,filter,reference` runs the attribute filter,
 relationship filter, text query and selected facet searches, and two searches
-without any.
+without any. Run them with `jit = off` on the server, because the benchmark's pool
+doesn't go through `disable_jit`.
 
 Filters, text terms and selected facets are conditions on each statement's
-records. Only `*:` terms load their matches, under their own budgets. A page first
-loads up to 20,000 matches (`MAX_LOADED_FILTER_MATCHES`):
+records. Only `*:` terms load their matches, under their own budgets. A page takes
+one of two paths:
 
-- With no more than that, one scan answers the whole page and the other statements
-  read those IDs.
-- With more, each statement runs the conditions per record (`OFFSET 0`), so a page
-  and its capped total stop as soon as they have enough.
+- **Broad:** it checks its first 100 records one by one. If at least 5% match, its
+  statements run the conditions per record (`OFFSET 0`, explicit joins), so a page
+  and its capped total stop within a few thousand records.
+- **Narrow:** otherwise it loads up to 20,000 matches (`MAX_LOADED_FILTER_MATCHES`)
+  in one scan, planned afresh each time. Those IDs answer the version scope and
+  total and drive the page. A search that matches more than that runs per record
+  like a broad one.
 
-While the first scan runs, a filter that can start from an index (`eq`, `@me`,
-relationship and reusable attribute filters, paths of two or more hops) and every
-text term may become a semi-join. All its conditions must sit in the subquery's
-`WHERE`, or PostgreSQL runs it once per record. Per-record subqueries use explicit
-joins, because PostgreSQL finds a far slower order among this many tables.
+A sorted page reads every match, so it uses a semi-join, except a relationship
+sort, which walks its indexed leaves in order. A semi-join needs all its conditions
+in the subquery's `WHERE`, or PostgreSQL runs it once per record. A relationship
+text term walks back from its matching values, because PostgreSQL can't estimate
+a pattern.
 
-Medians at 100,000 products on a local PostgreSQL (Linux, release build). The
-test process's peak memory across these scenarios fell from 174 MB to 79 MB.
+JIT compilation was the largest single cost of a broad search: hundreds of
+milliseconds to compile a plan that reads 500 rows, because the estimate can't
+reflect stopping early. API connections turn it off.
 
-| Scenario | Before | Now |
-| --- | ---: | ---: |
-| No filter | 32 ms | 9 ms |
-| Selective scalar | 98 ms | 8 ms |
-| Twenty selective scalars | 9,756 ms | 90 ms |
-| Relationship filter | 702 ms | 10 ms |
-| One hop | 775 ms | 22 ms |
-| One hop, child context | 1,238 ms | 19 ms |
-| Three hops | 2,801 ms | 1,658 ms |
-| Reusable attribute | 10 ms | 9 ms |
-| Broad scalar | 747 ms | 541 ms |
-| Twenty broad scalars | 19,216 ms | 10,415 ms |
-| Broad, sorted through a relationship | 4,326 ms | 526 ms |
-| Broad, sorted by a column | 1,169 ms | 1,443 ms |
-| Contains, rare value | 488 ms | 511 ms |
-| Absence, few matches | 502 ms | 444 ms |
-| Absence, no matches | 451 ms | 403 ms |
-| Text: rare value | 70 ms | 77 ms |
-| Text: rare word | 769 ms | 694 ms |
-| Text: short number | 110 ms | 87 ms |
-| Text: common number | 364 ms | 218 ms |
-| Text: every record | 791 ms | 531 ms |
-| Text: two broad terms | 793 ms | 880 ms |
-| Text: every record, sorted | 969 ms | 1,368 ms |
-| Text: one attribute | 70 ms | 77 ms |
-| Text: relationship path | 74 ms | 348 ms |
-| Text: relationship, every record | 956 ms | 1,081 ms |
-| Text: global term | 220 ms | 219 ms |
-| Text and broad scalar | 755 ms | 106 ms |
-| Root selected | 146 ms | 156 ms |
-| Root selected and a filter | 811 ms | 202 ms |
-| Root selected and a text term | 220 ms | 205 ms |
-| Level 2 selected | 15 ms | 14 ms |
-| Root selected through a large hop | 284 ms | 281 ms |
+Medians on a local PostgreSQL (Linux, release build), with JIT off on both sides.
+The test process's peak memory fell from 194 MB to 83 MB at 100,000 products, and
+from 271 MB to 96 MB at 120,000.
 
-With `plan_cache_mode=force_generic_plan`, no search timed out, but selected roots
-took about 2.2 s and a broad filter under a selected root 2.4 s. PostgreSQL's
-default mode didn't choose those plans across the repeated samples.
+| Scenario | Before, 100k | Now, 100k | Before, 120k | Now, 120k |
+| --- | ---: | ---: | ---: | ---: |
+| No filter | 33 ms | 10 ms | 42 ms | 11 ms |
+| Selective scalar | 64 ms | 8 ms | 73 ms | 8 ms |
+| Twenty selective scalars | 1,091 ms | 103 ms | 1,342 ms | 98 ms |
+| Relationship filter | 643 ms | 10 ms | 815 ms | 11 ms |
+| One hop | 703 ms | 27 ms | 861 ms | 28 ms |
+| One hop, child context | 961 ms | 27 ms | 1,203 ms | 26 ms |
+| Three hops | 2,799 ms | 583 ms | 3,303 ms | 470 ms |
+| Reusable attribute | 9 ms | 10 ms | 8 ms | 10 ms |
+| Broad scalar | 693 ms | 12 ms | 844 ms | 13 ms |
+| Twenty broad scalars | 11,835 ms | 81 ms | 14,488 ms | 82 ms |
+| Broad, sorted through a relationship | 4,319 ms | 16 ms | 6,408 ms | 19 ms |
+| Broad, sorted by a column | 1,081 ms | 955 ms | 1,341 ms | 649 ms |
+| Contains, rare value | 416 ms | 86 ms | 465 ms | 100 ms |
+| Absence, few matches | 403 ms | 324 ms | 517 ms | 349 ms |
+| Absence, no matches | 426 ms | 302 ms | 515 ms | 331 ms |
+| Text: rare value | 69 ms | 69 ms | 79 ms | 79 ms |
+| Text: rare word | 556 ms | 69 ms | 900 ms | 79 ms |
+| Text: short number | 100 ms | 81 ms | 125 ms | 100 ms |
+| Text: common number | 369 ms | 21 ms | 419 ms | 17 ms |
+| Text: every record | 686 ms | 15 ms | 974 ms | 14 ms |
+| Text: two broad terms | 768 ms | 30 ms | 1,057 ms | 29 ms |
+| Text: every record, sorted | 922 ms | 1,031 ms | 1,149 ms | 379 ms |
+| Text: one attribute | 62 ms | 52 ms | 76 ms | 56 ms |
+| Text: relationship path | 70 ms | 15 ms | 79 ms | 15 ms |
+| Text: relationship, every record | 943 ms | 22 ms | 1,161 ms | 22 ms |
+| Text and broad scalar | 544 ms | 105 ms | 838 ms | 133 ms |
+| Root selected | 148 ms | 95 ms | 172 ms | 111 ms |
+| Root selected and a filter | 786 ms | 202 ms | 996 ms | 244 ms |
+| Root selected and a text term | 205 ms | 214 ms | 239 ms | 254 ms |
+| Level 2 selected | 15 ms | 15 ms | 14 ms | 14 ms |
+| Root selected through a large hop | 288 ms | 181 ms | 351 ms | 245 ms |
 
-A relationship path term with a rare numeric value starts from the edges, because
-PostgreSQL can't estimate its pattern. Tree facet children with a search term still
-read every match, because their counts are exact.
+Global `*:` terms didn't change: repeated runs took about 220 ms on both, though a
+single run can differ widely.
+
+With `plan_cache_mode=force_generic_plan`, no search timed out. Broad searches
+stayed far ahead (a broad scalar took 5 ms against 11,470 ms). Selected roots took
+about 2.2 s on both, and a selective scalar took 647 ms against 345 ms.
+
+Tree facet children with a search term still read every match, because their
+counts are exact.
 
 ## Remaining cost
 

@@ -903,13 +903,17 @@ fn text_term_from_matches(
         format!("SELECT unnest(${}::uuid[]) AS record_id", parameters.ids)
     } else {
         format!(
-            "SELECT term_value.record_id FROM attribute_values term_value \
+            "SELECT term_value.record_id FROM records term_record \
+             JOIN attribute_values term_value ON term_value.record_id = term_record.id \
              JOIN attributes term_attribute ON term_attribute.id = term_value.attribute_id \
               AND term_attribute.workspace_id = ${workspace} AND term_attribute.deleted_at IS NULL{} \
-             WHERE term_value.workspace_id = ${workspace} AND term_value.active \
+             WHERE term_record.workspace_id = ${workspace} AND term_record.deleted_at IS NULL \
+               AND term_record.blueprint_id = ANY(${}::uuid[]) \
+               AND term_value.workspace_id = ${workspace} AND term_value.active \
                AND term_value.relationship_target_record_id IS NULL \
                AND {}",
             text_term_attribute(term, &parameters),
+            parameters.level(term.fields.len()),
             text_term_value_matches(term, &parameters)
         )
     };
@@ -1589,7 +1593,10 @@ impl AttricatRepository {
             matching_records_from(matching)
         );
         Ok(bind_record_filters!(
+            // Planned for its values each time: a cached generic plan can't see that a
+            // pattern is rare.
             sqlx::query_as::<_, (Uuid, i64)>(AssertSqlSafe(sql.as_str()))
+                .persistent(false)
                 .bind(blueprint_id)
                 .bind(blueprint_version)
                 .bind(matching.ids)
