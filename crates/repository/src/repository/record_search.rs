@@ -630,13 +630,8 @@ fn attribute_filter_sql(
         tables
     };
     let absence = presence && filter.value == "false";
-    // Walking several hops per record costs more than one pass over the edges.
-    const MANY_HOPS: usize = 2;
-    let from_value = filter.operator == "eq"
-        || filter.operator == SEARCH_FILTER_EQ_ANY
-        || (filter.reusable && !absence)
-        || (filter.relationship_path.len() >= MANY_HOPS && !absence);
-    let plan = if from_value && !narrowed {
+    // An anti-join reads every value, where checking per record stops at the first.
+    let plan = if !absence && !narrowed {
         FilterPlan::FromValue
     } else {
         FilterPlan::PerRecord
@@ -715,6 +710,9 @@ fn text_term_sql(
                     exists_sql(&tables, &matches, plan)
                 };
             }
+            if plan == FilterPlan::FromValue && start < term.fields.len() {
+                return text_term_from_matches(term, start, workspace, parameter);
+            }
             tables.push((
                 "attribute_values term_value".to_owned(),
                 format!(
@@ -731,21 +729,86 @@ fn text_term_sql(
                      AND (${attribute}::text IS NULL OR term_attribute.code = ${attribute})"
                 ),
             ));
-            let matches = if term.text_only {
-                format!("term_value.value_text ILIKE ${pattern}")
-            } else {
-                format!(
-                    "COALESCE(term_value.value_text, term_value.value_number::text, \
-                     term_value.value_integer::text, term_value.value_boolean::text, \
-                     term_value.value_date::text, term_value.value_datetime::text, \
-                     term_value.value_time::text) ILIKE ${pattern}"
-                )
-            };
+            let matches = format!("{} ILIKE ${pattern}", text_term_value(term));
             exists_sql(&tables, &matches, plan)
         })
         .collect::<Vec<_>>()
         .join(" OR ");
     format!("({branches})")
+}
+
+/// A text term's path from level `start`, walked backwards from the matching values
+/// or listed IDs. PostgreSQL can't estimate a pattern, so left to choose it would
+/// start from the far larger set of edges.
+fn text_term_from_matches(
+    term: &ResolvedTextTerm,
+    start: usize,
+    workspace: usize,
+    parameter: usize,
+) -> String {
+    let (pattern, attribute, fields, levels, ids) = (
+        parameter,
+        parameter + 1,
+        parameter + 2,
+        parameter + 3,
+        parameter + 4,
+    );
+    let matches = if term.ids.is_some() {
+        format!("SELECT unnest(${ids}::uuid[]) AS record_id")
+    } else {
+        format!(
+            "SELECT term_value.record_id FROM attribute_values term_value \
+             JOIN attributes term_attribute ON term_attribute.id = term_value.attribute_id \
+              AND term_attribute.workspace_id = ${workspace} AND term_attribute.deleted_at IS NULL \
+              AND (${attribute}::text IS NULL OR term_attribute.code = ${attribute}) \
+             WHERE term_value.workspace_id = ${workspace} AND term_value.active \
+               AND term_value.relationship_target_record_id IS NULL \
+               AND {} ILIKE ${pattern}",
+            text_term_value(term)
+        )
+    };
+    let mut reached = "term_matches.record_id".to_owned();
+    let mut joins = String::new();
+    for level in (start..term.fields.len()).rev() {
+        let (target, edge, relationship) = (
+            format!("term_target_{level}"),
+            format!("term_edge_{level}"),
+            format!("term_relationship_{level}"),
+        );
+        write!(
+            joins,
+            " JOIN records {target} ON {target}.id = {reached} \
+              AND {target}.workspace_id = ${workspace} AND {target}.deleted_at IS NULL \
+              AND {target}.blueprint_id = ${levels}[{target_level}] \
+             JOIN attribute_values {edge} ON {edge}.relationship_target_record_id = {target}.id \
+              AND {edge}.workspace_id = ${workspace} AND {edge}.active \
+             JOIN attributes {relationship} ON {relationship}.id = {edge}.attribute_id \
+              AND {relationship}.workspace_id = ${workspace} \
+              AND {relationship}.deleted_at IS NULL \
+              AND {relationship}.value_type = 'relationship' \
+              AND {relationship}.code = ${fields}[{field}]",
+            target_level = level + 2,
+            field = level + 1,
+        )
+        .expect("writing to a string");
+        reached = format!("{edge}.record_id");
+    }
+    format!(
+        "e.id IN (WITH term_matches AS MATERIALIZED ({matches}) \
+         SELECT {reached} FROM term_matches{joins})"
+    )
+}
+
+/// The value of `term_value` a text term compares.
+fn text_term_value(term: &ResolvedTextTerm) -> &'static str {
+    if term.text_only {
+        "term_value.value_text"
+    } else {
+        "COALESCE(term_value.value_text, term_value.value_number::text, \
+         term_value.value_integer::text, term_value.value_boolean::text, \
+         term_value.value_date::text, term_value.value_datetime::text, \
+         term_value.value_time::text)"
+    }
 }
 
 /// One tree facet selection over `e`, from parameter `parameter`: context, selected
@@ -1343,18 +1406,55 @@ impl AttricatRepository {
         Ok(count)
     }
 
-    /// Up to `limit` of a blueprint's matching records, in no particular order, so
-    /// a broad search stops as soon as it has them.
-    pub async fn first_matching_record_ids(
+    /// How many of a blueprint's first `sample` records match, checked one by one.
+    /// It tells a broad search from a narrow one for the cost of a few lookups.
+    pub async fn sampled_match_count(
+        &self,
+        blueprint_id: Uuid,
+        blueprint_version: Option<i64>,
+        matching: RecordMatching<'_>,
+        sample: i64,
+    ) -> Result<i64, RepositoryError> {
+        let matching = RecordMatching {
+            broad: true,
+            ..matching
+        };
+        let sql = format!(
+            "SELECT COUNT(*) FROM (SELECT e.* FROM records e \
+              WHERE e.blueprint_id = $1 AND ($2::bigint IS NULL OR e.blueprint_version = $2) \
+                AND e.workspace_id = $3 AND e.deleted_at IS NULL LIMIT $4) e \
+              WHERE ($5::uuid[] IS NULL OR e.id = ANY($5)) {}",
+            record_filters_clause(matching, 6)
+        );
+        Ok(bind_record_filters!(
+            sqlx::query_scalar::<_, i64>(&sql)
+                .bind(blueprint_id)
+                .bind(blueprint_version)
+                .bind(self.workspace_id.0)
+                .bind(sample)
+                .bind(matching.ids),
+            matching.filters,
+            self.workspace_id.0
+        )
+        .fetch_one(&self.pool)
+        .await?)
+    }
+
+    /// Up to `limit` of a blueprint's matching records with their versions, in no
+    /// particular order, so a broad search stops as soon as it has them.
+    pub async fn first_matching_records(
         &self,
         blueprint_id: Uuid,
         blueprint_version: Option<i64>,
         matching: RecordMatching<'_>,
         limit: i64,
-    ) -> Result<Vec<Uuid>, RepositoryError> {
-        let sql = format!("SELECT e.id {} LIMIT $5", matching_records_from(matching));
+    ) -> Result<Vec<(Uuid, i64)>, RepositoryError> {
+        let sql = format!(
+            "SELECT e.id, e.blueprint_version {} LIMIT $5",
+            matching_records_from(matching)
+        );
         Ok(bind_record_filters!(
-            sqlx::query_scalar::<_, Uuid>(&sql)
+            sqlx::query_as::<_, (Uuid, i64)>(&sql)
                 .bind(blueprint_id)
                 .bind(blueprint_version)
                 .bind(matching.ids)
