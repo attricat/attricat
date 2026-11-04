@@ -1138,21 +1138,6 @@ async fn searches_past_the_loaded_limit_keep_totals_and_pages(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     create_blueprint(&client, &base, ITEM).await;
-    let mut expected = Vec::new();
-    for index in 0..=LOADED + 2 {
-        let record = create_record_with(
-            &client,
-            &base,
-            "presence_item",
-            json!([
-                scalar("name", format!("Wanted {index}")),
-                scalar("amount", 1)
-            ]),
-        )
-        .await;
-        expected.push(record["id"].as_str().unwrap().parse::<Uuid>().unwrap());
-    }
-    expected.sort();
     create_record_with(
         &client,
         &base,
@@ -1169,52 +1154,81 @@ async fn searches_past_the_loaded_limit_keep_totals_and_pages(pool: PgPool) {
     };
     let filters: Vec<api::model::SearchFilter> =
         serde_json::from_value(json!([{"field": "amount", "operator": "eq", "value": 1}])).unwrap();
-    for (query, filters) in [(None, &filters[..]), (Some("Wanted"), &[][..])] {
-        let scope = repository
-            .resolve_search_scope(api::repository::SearchScopeRequest {
-                blueprint: &blueprint,
-                query,
-                filters,
-                relationship_filters: &[],
-                context_code: "default",
-                actor,
-            })
-            .await
-            .unwrap();
-        let mut ids = Vec::new();
-        let mut cursor: Option<String> = None;
-        loop {
-            let page = repository
-                .search_page(
-                    &scope,
-                    api::repository::SearchPageRequest {
-                        code: "presence_item",
-                        system_tags: &[],
-                        outdated: false,
-                        export_status: None,
-                        data_quality: None,
-                        sort: None,
-                        cursor: cursor.as_deref(),
-                        limit: 2,
-                        loaded_filter_matches: LOADED,
-                        include_total: true,
-                        include_previews: false,
-                    },
-                    &|_| {},
-                )
+    let mut expected = Vec::new();
+    // Past the limit alone, then enough matches for the sample to call it broad.
+    for matches in [LOADED + 3, LOADED + 15] {
+        for index in expected.len() as i64..matches {
+            let record = create_record_with(
+                &client,
+                &base,
+                "presence_item",
+                json!([
+                    scalar("name", format!("Wanted {index}")),
+                    scalar("amount", 1)
+                ]),
+            )
+            .await;
+            expected.push(record["id"].as_str().unwrap().parse::<Uuid>().unwrap());
+        }
+        expected.sort();
+        for (query, filters) in [(None, &filters[..]), (Some("Wanted"), &[][..])] {
+            let scope = repository
+                .resolve_search_scope(api::repository::SearchScopeRequest {
+                    blueprint: &blueprint,
+                    query,
+                    filters,
+                    relationship_filters: &[],
+                    context_code: "default",
+                    actor,
+                })
                 .await
                 .unwrap();
-            if cursor.is_none() {
-                assert_eq!(page.total_count, Some(expected.len() as i64));
+            let mut ids = Vec::new();
+            let mut cursor: Option<String> = None;
+            loop {
+                let page = repository
+                    .search_page(
+                        &scope,
+                        api::repository::SearchPageRequest {
+                            code: "presence_item",
+                            system_tags: &[],
+                            outdated: false,
+                            export_status: None,
+                            data_quality: None,
+                            sort: None,
+                            cursor: cursor.as_deref(),
+                            limit: 2,
+                            loaded_filter_matches: LOADED,
+                            include_total: true,
+                            include_previews: false,
+                        },
+                        &|_| {},
+                    )
+                    .await
+                    .unwrap();
+                if cursor.is_none() {
+                    assert_eq!(page.total_count, Some(expected.len() as i64));
+                }
+                ids.extend(page.items.iter().map(|row| row.id));
+                cursor = page.next_cursor;
+                if cursor.is_none() {
+                    break;
+                }
             }
-            ids.extend(page.items.iter().map(|row| row.id));
-            cursor = page.next_cursor;
-            if cursor.is_none() {
-                break;
-            }
+            ids.sort();
+            assert_eq!(ids, expected, "{query:?}");
         }
-        ids.sort();
-        assert_eq!(ids, expected, "{query:?}");
     }
     server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn disabling_jit_lasts_for_the_connection(pool: PgPool) {
+    let mut connection = pool.acquire().await.unwrap();
+    api::disable_jit(&mut connection).await.unwrap();
+    let setting: String = sqlx::query_scalar("SHOW jit")
+        .fetch_one(&mut *connection)
+        .await
+        .unwrap();
+    assert_eq!(setting, "off");
 }

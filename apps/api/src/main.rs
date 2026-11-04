@@ -217,15 +217,16 @@ async fn serve() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             Box::pin(async move {
                 sqlx::query("SELECT set_config('statement_timeout', $1, false)")
                     .bind(timeout)
-                    .execute(connection)
-                    .await
-                    .map(|_| ())
+                    .execute(&mut *connection)
+                    .await?;
+                api::disable_jit(connection).await
             })
         })
         .connect(database_url)
         .await?;
     let task_pool = PgPoolOptions::new()
         .max_connections(task_pool_connections)
+        .after_connect(|connection, _| Box::pin(api::disable_jit(connection)))
         .connect(database_url)
         .await?;
 
