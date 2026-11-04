@@ -725,8 +725,8 @@ fn text_term_sql(
                 format!(
                     "term_attribute.id = term_value.attribute_id \
                      AND term_attribute.workspace_id = ${workspace} \
-                     AND term_attribute.deleted_at IS NULL \
-                     AND (${attribute}::text IS NULL OR term_attribute.code = ${attribute})"
+                     AND term_attribute.deleted_at IS NULL{}",
+                    text_term_attribute(term, attribute)
                 ),
             ));
             let matches = format!("{} ILIKE ${pattern}", text_term_value(term));
@@ -757,13 +757,17 @@ fn text_term_from_matches(
         format!("SELECT unnest(${ids}::uuid[]) AS record_id")
     } else {
         format!(
-            "SELECT term_value.record_id FROM attribute_values term_value \
+            "SELECT term_value.record_id FROM records term_record \
+             JOIN attribute_values term_value ON term_value.record_id = term_record.id \
              JOIN attributes term_attribute ON term_attribute.id = term_value.attribute_id \
-              AND term_attribute.workspace_id = ${workspace} AND term_attribute.deleted_at IS NULL \
-              AND (${attribute}::text IS NULL OR term_attribute.code = ${attribute}) \
-             WHERE term_value.workspace_id = ${workspace} AND term_value.active \
+              AND term_attribute.workspace_id = ${workspace} AND term_attribute.deleted_at IS NULL{} \
+             WHERE term_record.workspace_id = ${workspace} AND term_record.deleted_at IS NULL \
+               AND term_record.blueprint_id = ${levels}[{}] \
+               AND term_value.workspace_id = ${workspace} AND term_value.active \
                AND term_value.relationship_target_record_id IS NULL \
                AND {} ILIKE ${pattern}",
+            text_term_attribute(term, attribute),
+            term.fields.len() + 1,
             text_term_value(term)
         )
     };
@@ -797,6 +801,14 @@ fn text_term_from_matches(
         "e.id IN (WITH term_matches AS MATERIALIZED ({matches}) \
          SELECT {reached} FROM term_matches{joins})"
     )
+}
+
+/// The condition limiting a text term to the attribute it names, if any.
+fn text_term_attribute(term: &ResolvedTextTerm, attribute: usize) -> String {
+    match term.attribute {
+        Some(_) => format!(" AND term_attribute.code = ${attribute}"),
+        None => String::new(),
+    }
 }
 
 /// The value of `term_value` a text term compares.
@@ -1454,7 +1466,10 @@ impl AttricatRepository {
             matching_records_from(matching)
         );
         Ok(bind_record_filters!(
+            // Planned for its values each time: a cached generic plan can't see that a
+            // pattern is rare.
             sqlx::query_as::<_, (Uuid, i64)>(&sql)
+                .persistent(false)
                 .bind(blueprint_id)
                 .bind(blueprint_version)
                 .bind(matching.ids)
