@@ -29,10 +29,10 @@ pub const SEARCH_TOTAL_COUNT_CAP: i64 = 500;
 pub const MAX_LOADED_FILTER_MATCHES: i64 = 20_000;
 
 /// Records a search page checks one by one to tell how broad it is.
-const SEARCH_MATCH_SAMPLE: i64 = 100;
+pub(super) const SEARCH_MATCH_SAMPLE: i64 = 100;
 /// Sampled matches from which a search counts as broad, 5% of the sample. A page and
 /// its capped total then stop within about 10,000 records.
-const BROAD_SEARCH_SAMPLE_MATCHES: i64 = 5;
+pub(super) const BROAD_SEARCH_SAMPLE_MATCHES: i64 = 5;
 
 pub struct SearchPageRequest<'a> {
     /// The blueprint code the scope was resolved for.

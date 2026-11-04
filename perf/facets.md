@@ -199,8 +199,42 @@ With `plan_cache_mode=force_generic_plan`, no search timed out. Broad searches
 stayed far ahead (a broad scalar took 5 ms against 11,470 ms). Selected roots took
 about 2.2 s on both, and a selective scalar took 647 ms against 345 ms.
 
-Tree facet children with a search term still read every match, because their
-counts are exact.
+## Browse rail and agent counts
+
+`FACET_BENCH_SCENARIOS=browse,agent` runs the Browse rail's pages and
+`count_records`. With a search term, a page samples like a search page. A narrow
+term loads up to 20,000 source IDs and follows the hops in turn. A broad term, and a
+reload of the cached counts, count in one statement that hash joins each hop's whole
+relationship. PostgreSQL underestimates a resolved edge list as one row, and the
+nested loops it then picks take minutes, so these statements turn them off with
+`SET LOCAL enable_nestloop = off`.
+
+Medians at 100,000 products with JIT off on both sides. The test process's peak
+memory across the Browse scenarios fell from 192 MB to 68 MB.
+
+| Scenario | Before | Now |
+| --- | ---: | ---: |
+| Root level, cached | 19 ms | 18 ms |
+| Root level, first request | 458 ms | 516 ms |
+| Two-hop path, first request | 291 ms | 631 ms |
+| Large middle hop, first request | 544 ms | 832 ms |
+| Three-hop path, first request | 468 ms | 992 ms |
+| Query "Product 1" | 1,151 ms | 449 ms |
+| Query "12" | 112 ms | 148 ms |
+| Large middle hop, query "Product 1" | 1,164 ms | 705 ms |
+| Large middle hop, query "7" | 711 ms | 610 ms |
+| Large middle hop, query "12" | 136 ms | 147 ms |
+| Three-hop path, query "12" | 141 ms | 153 ms |
+| `count_records`, all | 33 ms | 3 ms |
+| `count_records`, broad filter | 643 ms | 127 ms |
+| `count_records`, relationship filter | 722 ms | 6 ms |
+| `count_records`, per category | 455 ms | 324 ms |
+| `count_records`, per line | 285 ms | 315 ms |
+| `count_records`, per line, broad filter | 905 ms | 451 ms |
+
+A first request reloads the cached counts, which then serve the workspace for 30
+seconds. Counting in the database costs more there than reading the edges into the
+API, in exchange for not holding them in memory.
 
 ## Remaining cost
 
