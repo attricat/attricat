@@ -678,6 +678,59 @@ async fn relationship_tree_facet_latency(pool: PgPool) {
         );
         slowest.push(format!("{name}: {max_timing}"));
     }
+    if selected.split(',').any(|entry| entry == "agent") {
+        let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
+        let actor: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
+        let repository =
+            api::repository::AttricatRepository::system(pool.clone()).for_workspace(workspace);
+        let one_line = json!([{"field": "line", "selected_target_ids": [line_node]}]);
+        for (name, arguments) in [
+            ("agent count: all", json!({})),
+            (
+                "agent count: broad filter",
+                json!({"filters": [filter("sku", "starts_with", json!("Value"))]}),
+            ),
+            (
+                "agent count: relationship filter",
+                json!({"relationship_filters": one_line}),
+            ),
+            ("agent count: per category", json!({"group_by": "category"})),
+            ("agent count: per line", json!({"group_by": "line"})),
+            (
+                "agent count: per line, broad filter",
+                json!({"group_by": "line", "filters": [filter("sku", "starts_with", json!("Value"))]}),
+            ),
+            (
+                "agent count: per line, text query",
+                json!({"group_by": "line", "query": "12"}),
+            ),
+        ] {
+            let mut arguments = arguments;
+            arguments["blueprint"] = json!({"code": "bench_product"});
+            let mut samples = Vec::new();
+            for _ in 0..5 {
+                let started = Instant::now();
+                api::agent_tools::execute_read(
+                    &repository,
+                    actor,
+                    workspace,
+                    "count_records",
+                    arguments.clone(),
+                )
+                .await
+                .unwrap();
+                samples.push(started.elapsed());
+            }
+            samples.sort();
+            println!(
+                "| {name} | {} | {} | {} | {} |",
+                millis(samples[0]),
+                millis(samples[2]),
+                millis(samples[0]),
+                millis(samples[4])
+            );
+        }
+    }
     println!("\nServer-Timing of each scenario's slowest sample:");
     for line in slowest {
         println!("  {line}");

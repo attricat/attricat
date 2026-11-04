@@ -1,4 +1,5 @@
 use super::authorization::{GrantCodes, RECORD_GRANTED_SQL};
+use super::search_page::{BROAD_SEARCH_SAMPLE_MATCHES, SEARCH_MATCH_SAMPLE};
 use super::*;
 use super::{record_projection::display_label, system_annotations::validate_system_tag_filter};
 use crate::model::ExportStatusFilter;
@@ -183,6 +184,11 @@ pub const SEARCH_FILTER_EQ_ANY: &str = "eq_any";
 /// with no statement timeout of its own.
 const SCOPE_STATEMENT_TIMEOUT: &str = "SET LOCAL statement_timeout = '30s'";
 
+/// Applied in a transaction to statements joining a whole relationship. PostgreSQL
+/// underestimates a resolved edge list as a single row and would pick nested loops
+/// over it, one comparison per pair of sources and nodes.
+const HASH_JOINS_ONLY: &str = "SET LOCAL enable_nestloop = off";
+
 /// A blueprint's matching records grouped by relationship target; see
 /// [`AttricatRepository::relationship_target_groups`].
 #[derive(Clone, Debug)]
@@ -268,6 +274,18 @@ impl ResolvedRecordFilters {
             relationship_filters: Vec::new(),
             text_terms: Vec::new(),
             tree_facets: Vec::new(),
+        }
+    }
+
+    /// Filters holding only text terms, which match in any context.
+    pub fn for_text_terms(text_terms: Vec<ResolvedTextTerm>) -> Self {
+        let context = SearchContext {
+            ids: Vec::new(),
+            codes: Vec::new(),
+        };
+        Self {
+            text_terms,
+            ..Self::in_context(context)
         }
     }
 
@@ -916,38 +934,64 @@ fn record_filters_clause(matching: RecordMatching<'_>, first_parameter: usize) -
         .join(" ")
 }
 
-/// The `context_path`, `chosen` and `edges(source_id, target_id)` CTEs of one
-/// relationship field: `$1` source blueprint, `$2` field, `$4` context, `$5`
-/// optional source version. `{sources}` narrows the sources with a join on
-/// `av.record_id`, and `{target}` selects targets. Choosing each source's context
-/// in one sorted pass, rather than with a per-source LATERAL subquery, keeps this
-/// a few index scans and hash joins whose row counts the planner estimates well.
-const RESOLVED_EDGES_SQL: &str = r#"context_path AS (
-                    SELECT id, parent_id, 0 AS depth FROM attribute_contexts WHERE id = $4
-                    UNION ALL
-                    SELECT c.id, c.parent_id, path.depth + 1
-                    FROM attribute_contexts c JOIN context_path path ON c.id = path.parent_id
-                ), chosen AS (
+/// The CTEs `{chosen}` and `{edges}(source_id, target_id)` of one relationship field,
+/// after a `context_path` CTE. `sources` narrows the sources with a join on
+/// `av.record_id`, `version` adds a condition on `source`, and `target` selects
+/// targets. Choosing each source's context in one sorted pass, rather than with a
+/// per-source LATERAL subquery, keeps this a few index scans and hash joins whose row
+/// counts the planner estimates well.
+fn resolved_edges_sql(
+    [chosen, edges]: [&str; 2],
+    blueprint: &str,
+    field: &str,
+    sources: &str,
+    version: &str,
+    target: &str,
+) -> String {
+    format!(
+        r#"{chosen} AS (
                     SELECT DISTINCT ON (av.record_id) av.record_id, av.attribute_id, av.context_id
                     FROM attributes a
                     JOIN context_path path ON path.depth = 0 OR a.context_fallback <> 'none'
                     JOIN attribute_values av ON av.attribute_id = a.id AND av.context_id = path.id
                      AND av.active AND av.relationship_target_record_id IS NOT NULL
                     {sources}
-                    JOIN records source ON source.id = av.record_id AND source.blueprint_id = $1
+                    JOIN records source ON source.id = av.record_id AND source.blueprint_id = {blueprint}
                      AND source.blueprint_version = a.blueprint_version AND source.deleted_at IS NULL
-                    WHERE a.blueprint_id = $1 AND a.code = $2
-                      AND ($5::bigint IS NULL OR source.blueprint_version = $5)
+                    WHERE a.blueprint_id = {blueprint} AND a.code = {field}
+                      {version}
                     ORDER BY av.record_id, path.depth
-                ), edges(source_id, target_id) AS (
-                    SELECT DISTINCT chosen.record_id, av.relationship_target_record_id
-                    FROM chosen
-                    JOIN attribute_values av ON av.record_id = chosen.record_id
-                     AND av.attribute_id = chosen.attribute_id AND av.context_id = chosen.context_id
+                ), {edges}(source_id, target_id) AS (
+                    SELECT DISTINCT {chosen}.record_id, av.relationship_target_record_id
+                    FROM {chosen}
+                    JOIN attribute_values av ON av.record_id = {chosen}.record_id
+                     AND av.attribute_id = {chosen}.attribute_id AND av.context_id = {chosen}.context_id
                      AND av.active AND av.relationship_target_record_id IS NOT NULL
                     JOIN records target ON target.id = av.relationship_target_record_id
                     WHERE {target} AND target.deleted_at IS NULL
-                )"#;
+                )"#
+    )
+}
+
+/// `(node, member)` pairs of each node and everything under it, once each even when
+/// the hierarchy has several parents or a cycle.
+fn subtree_pairs(
+    nodes: &[Uuid],
+    children_by_parent: &HashMap<Uuid, Vec<Uuid>>,
+) -> Vec<(Uuid, Uuid)> {
+    let mut pairs = Vec::new();
+    for &node in nodes {
+        let mut visited = HashSet::new();
+        let mut pending = vec![node];
+        while let Some(member) = pending.pop() {
+            if visited.insert(member) {
+                pairs.push((node, member));
+                pending.extend(children_by_parent.get(&member).into_iter().flatten());
+            }
+        }
+    }
+    pairs
+}
 
 /// The IDs from a root down to `node`'s parent, along the shortest way up and
 /// the lowest parent IDs among equally short ones. A node that reaches no
@@ -2547,7 +2591,7 @@ impl AttricatRepository {
         &self,
         source_blueprint_id: Uuid,
         source_blueprint_version: Option<i64>,
-        matching_record_ids: Option<&HashSet<Uuid>>,
+        matching: Option<RecordMatching<'_>>,
         source_path: &[RelationshipFacetHop],
         target_blueprint_id: Uuid,
         hierarchy_field: Option<&str>,
@@ -2588,7 +2632,7 @@ impl AttricatRepository {
             .map_err(RepositoryError::from)
         };
         let cached_counts = async {
-            if matching_record_ids.is_some() {
+            if matching.is_some() {
                 return Ok(None);
             }
             self.cached_tree_facet_counts(
@@ -2603,26 +2647,8 @@ impl AttricatRepository {
             .await
             .map(Some)
         };
-        let sources = async {
-            let Some(matching) = matching_record_ids else {
-                return Ok(Vec::new());
-            };
-            self.tree_facet_sources(
-                source_blueprint_id,
-                source_blueprint_version,
-                Some(matching),
-                source_path,
-                context_id,
-            )
-            .await
-        };
-        let (parents, nodes, cached_counts, sources) =
-            tokio::try_join!(parents, roots, cached_counts, sources)?;
+        let (parents, nodes, cached_counts) = tokio::try_join!(parents, roots, cached_counts)?;
 
-        let mut sources_by_target: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
-        for (source, target) in sources {
-            sources_by_target.entry(target).or_default().push(source);
-        }
         let mut children_by_parent: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
         let mut parents_by_child: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
         for &(child, parent) in parents {
@@ -2709,35 +2735,63 @@ impl AttricatRepository {
             return Err(RepositoryError::RelationshipTargetTypeMismatch);
         }
 
+        let searched_counts = match (&cached_counts, matching) {
+            (None, Some(matching)) => {
+                let members = subtree_pairs(&page, &children_by_parent);
+                // A broad search skips loading matches it would only discard.
+                let broad = self
+                    .sampled_match_count(
+                        source_blueprint_id,
+                        source_blueprint_version,
+                        matching,
+                        SEARCH_MATCH_SAMPLE,
+                    )
+                    .await?
+                    >= BROAD_SEARCH_SAMPLE_MATCHES;
+                let sources = if broad {
+                    Vec::new()
+                } else {
+                    self.first_matching_records(
+                        source_blueprint_id,
+                        source_blueprint_version,
+                        matching,
+                        MAX_LOADED_FILTER_MATCHES + 1,
+                    )
+                    .await?
+                };
+                if broad || sources.len() as i64 > MAX_LOADED_FILTER_MATCHES {
+                    self.tree_node_source_counts(
+                        &members,
+                        source_blueprint_id,
+                        source_blueprint_version,
+                        source_path,
+                        context_id,
+                        matching,
+                    )
+                    .await?
+                } else {
+                    let sources: Vec<_> = sources.into_iter().map(|(id, _)| id).collect();
+                    self.listed_tree_node_counts(
+                        &members,
+                        &sources,
+                        source_blueprint_id,
+                        source_blueprint_version,
+                        source_path,
+                        context_id,
+                    )
+                    .await?
+                }
+            }
+            _ => HashMap::new(),
+        };
+        let counts = cached_counts.as_deref().unwrap_or(&searched_counts);
         let items = page
             .into_iter()
-            .map(|id| {
-                if let Some(counts) = &cached_counts {
-                    return RelationshipTreeFacetChildItem {
-                        id,
-                        display: labels.get(&id).cloned().unwrap_or_default(),
-                        count: counts.get(&id).copied().unwrap_or_default(),
-                        has_children: children_by_parent.contains_key(&id),
-                    };
-                }
-                // A source counts once per node even when it reaches several
-                // of the node's descendants or one through several parents.
-                let mut visited = HashSet::new();
-                let mut counted: HashSet<Uuid> = HashSet::new();
-                let mut pending = vec![id];
-                while let Some(node) = pending.pop() {
-                    if !visited.insert(node) {
-                        continue;
-                    }
-                    counted.extend(sources_by_target.get(&node).into_iter().flatten());
-                    pending.extend(children_by_parent.get(&node).into_iter().flatten());
-                }
-                RelationshipTreeFacetChildItem {
-                    id,
-                    display: labels.get(&id).cloned().unwrap_or_default(),
-                    count: counted.len() as i64,
-                    has_children: children_by_parent.contains_key(&id),
-                }
+            .map(|id| RelationshipTreeFacetChildItem {
+                id,
+                display: labels.get(&id).cloned().unwrap_or_default(),
+                count: counts.get(&id).copied().unwrap_or_default(),
+                has_children: children_by_parent.contains_key(&id),
             })
             .collect();
         let mut selected_items: Vec<_> = selected
@@ -2769,15 +2823,8 @@ impl AttricatRepository {
             .get_or_try_init(|| async {
                 match hierarchy_field {
                     Some(field) => {
-                        self.resolved_relationship_edges(
-                            target_blueprint_id,
-                            None,
-                            None,
-                            field,
-                            target_blueprint_id,
-                            context_id,
-                        )
-                        .await
+                        self.resolved_relationship_edges(target_blueprint_id, field, context_id)
+                            .await
                     }
                     None => Ok(Vec::new()),
                 }
@@ -2786,57 +2833,46 @@ impl AttricatRepository {
             .map(Vec::as_slice)
     }
 
-    /// The `(source, node)` pairs a tree facet counts, for `source_ids` only
-    /// when given. With an empty `source_path`, each source record is its own
-    /// node. Otherwise each hop's edges are resolved in one query and joined
-    /// here. Up to [`TREE_FACET_LISTED_SOURCES`] sources are followed one hop
-    /// after another, each hop reading only the records the one before
-    /// reached, so the cost follows the sources rather than the size of a
-    /// large middle hop. Past that, or when every source counts, reading
-    /// every hop's whole relationship at once is cheaper.
-    async fn tree_facet_sources(
+    /// Distinct sources per node for a short list of them, followed one hop after
+    /// another. Each hop reads only the records the one before reached, so the cost
+    /// follows the sources rather than the size of a large middle hop.
+    async fn listed_tree_node_counts(
         &self,
+        members: &[(Uuid, Uuid)],
+        sources: &[Uuid],
         source_blueprint_id: Uuid,
         source_blueprint_version: Option<i64>,
-        source_ids: Option<&HashSet<Uuid>>,
         source_path: &[RelationshipFacetHop],
         context_id: Uuid,
-    ) -> Result<Vec<(Uuid, Uuid)>, RepositoryError> {
-        if source_path.is_empty() {
-            return Ok(sqlx::query_scalar::<_, Uuid>(
-                "SELECT id FROM records WHERE blueprint_id = $1 AND ($2::bigint IS NULL OR blueprint_version = $2) AND deleted_at IS NULL",
-            )
-            .bind(source_blueprint_id)
-            .bind(source_blueprint_version)
-            .fetch_all(&self.pool)
-            .await?
-            .into_iter()
-            .filter(|id| source_ids.is_none_or(|ids| ids.contains(id)))
-            .map(|id| (id, id))
-            .collect());
-        }
-        let hop_sources: Vec<_> = std::iter::once(source_blueprint_id)
-            .chain(source_path.iter().map(|hop| hop.target_blueprint_id))
-            .collect();
-        let hop_sources = &hop_sources;
-        // Only the searched records are limited to one revision.
-        let hop_edges = |index: usize, from: Option<Vec<Uuid>>| async move {
-            self.resolved_relationship_edges(
-                hop_sources[index],
-                source_blueprint_version.filter(|_| index == 0),
-                from.as_deref(),
-                &source_path[index].field,
-                source_path[index].target_blueprint_id,
-                context_id,
-            )
-            .await
-        };
-        let join = |pairs: Vec<(Uuid, Uuid)>, edges: Vec<(Uuid, Uuid)>| {
+    ) -> Result<HashMap<Uuid, i64>, RepositoryError> {
+        let mut pairs: Vec<(Uuid, Uuid)> = sources.iter().map(|&id| (id, id)).collect();
+        let mut hop_source = source_blueprint_id;
+        for (index, hop) in source_path.iter().enumerate() {
+            let reached: Vec<_> = pairs
+                .iter()
+                .map(|(_, reached)| *reached)
+                .collect::<HashSet<_>>()
+                .into_iter()
+                .collect();
+            if reached.is_empty() {
+                break;
+            }
+            let edges = self
+                .listed_relationship_edges(
+                    hop_source,
+                    // Only the searched records are limited to one revision.
+                    source_blueprint_version.filter(|_| index == 0),
+                    &reached,
+                    &hop.field,
+                    hop.target_blueprint_id,
+                    context_id,
+                )
+                .await?;
             let mut targets: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
             for (source, target) in edges {
                 targets.entry(source).or_default().push(target);
             }
-            pairs
+            pairs = pairs
                 .into_iter()
                 .flat_map(|(source, reached)| {
                     targets
@@ -2846,34 +2882,157 @@ impl AttricatRepository {
                         .map(move |target| (source, *target))
                         .collect::<Vec<_>>()
                 })
-                .collect::<Vec<_>>()
-        };
-        let Some(source_ids) = source_ids.filter(|ids| ids.len() <= TREE_FACET_LISTED_SOURCES)
-        else {
-            let mut hops = futures_util::future::try_join_all(
-                (0..source_path.len()).map(|index| hop_edges(index, None)),
-            )
-            .await?
-            .into_iter();
-            let first = hops.next().expect("the path has a first hop");
-            let mut pairs = hops.fold(first, join);
-            if let Some(source_ids) = source_ids {
-                pairs.retain(|(source, _)| source_ids.contains(source));
-            }
-            return Ok(pairs);
-        };
-        // Each hop holds one value, so it reaches no more records than the
-        // sources: the later lists stay within the limit too.
-        let mut pairs = hop_edges(0, Some(source_ids.iter().copied().collect())).await?;
-        for index in 1..source_path.len() {
-            let reached: HashSet<_> = pairs.iter().map(|(_, reached)| *reached).collect();
-            if reached.is_empty() {
-                break;
-            }
-            let edges = hop_edges(index, Some(reached.into_iter().collect())).await?;
-            pairs = join(pairs, edges);
+                .collect();
+            hop_source = hop.target_blueprint_id;
         }
-        Ok(pairs)
+        let mut sources_by_member: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
+        for (source, member) in pairs {
+            sources_by_member.entry(member).or_default().push(source);
+        }
+        let mut counted: HashMap<Uuid, HashSet<Uuid>> = HashMap::new();
+        for (node, member) in members {
+            counted
+                .entry(*node)
+                .or_default()
+                .extend(sources_by_member.get(member).into_iter().flatten());
+        }
+        Ok(counted
+            .into_iter()
+            .map(|(node, sources)| (node, sources.len() as i64))
+            .collect())
+    }
+
+    /// `(source, target)` pairs of one relationship field for the listed sources, read
+    /// through the source-side index, as [`Self::resolved_relationship_edges`] resolves
+    /// them.
+    async fn listed_relationship_edges(
+        &self,
+        source_blueprint_id: Uuid,
+        source_blueprint_version: Option<i64>,
+        sources: &[Uuid],
+        field: &str,
+        target_blueprint_id: Uuid,
+        context_id: Uuid,
+    ) -> Result<Vec<(Uuid, Uuid)>, RepositoryError> {
+        let query = format!(
+            "WITH RECURSIVE {FACET_CONTEXT_PATH_SQL}, {} SELECT source_id, target_id FROM edges",
+            resolved_edges_sql(
+                ["chosen", "edges"],
+                "$1",
+                "$2",
+                "JOIN unnest($6::uuid[]) AS listed(id) ON listed.id = av.record_id",
+                "AND ($5::bigint IS NULL OR source.blueprint_version = $5)",
+                "target.blueprint_id = $3",
+            )
+        );
+        Ok(sqlx::query_as::<_, (Uuid, Uuid)>(&query)
+            .bind(source_blueprint_id)
+            .bind(field)
+            .bind(target_blueprint_id)
+            .bind(context_id)
+            .bind(source_blueprint_version)
+            .bind(sources)
+            .fetch_all(&self.pool)
+            .await?)
+    }
+
+    /// Distinct matching sources per node, for `(node, member)` pairs naming the tree
+    /// nodes each node covers. A source counts once per node even when it reaches
+    /// several members or one through several parents. This suits many sources: each
+    /// hop reads its whole relationship and hash joins it, because PostgreSQL has no
+    /// estimate for the records a hop before reached and picks nested loops that scan
+    /// the relationship repeatedly. With an empty `source_path`, each source record is
+    /// its own node.
+    async fn tree_node_source_counts(
+        &self,
+        members: &[(Uuid, Uuid)],
+        source_blueprint_id: Uuid,
+        source_blueprint_version: Option<i64>,
+        source_path: &[RelationshipFacetHop],
+        context_id: Uuid,
+        matching: RecordMatching<'_>,
+    ) -> Result<HashMap<Uuid, i64>, RepositoryError> {
+        let (nodes, member_ids): (Vec<_>, Vec<_>) = members.iter().copied().unzip();
+        let hop_blueprints: Vec<_> = std::iter::once(source_blueprint_id)
+            .chain(source_path.iter().map(|hop| hop.target_blueprint_id))
+            .take(source_path.len())
+            .collect();
+        let hop_fields: Vec<_> = source_path.iter().map(|hop| hop.field.as_str()).collect();
+        let hop_targets: Vec<_> = source_path
+            .iter()
+            .map(|hop| hop.target_blueprint_id)
+            .collect();
+        let mut reached = "sources".to_owned();
+        let mut hops = String::new();
+        for hop in 0..source_path.len() {
+            let number = hop + 1;
+            let (chosen, edges, next) = (
+                format!("chosen_{hop}"),
+                format!("edges_{hop}"),
+                format!("reached_{hop}"),
+            );
+            let hop_edges = resolved_edges_sql(
+                [&chosen, &edges],
+                &format!("$4[{number}]"),
+                &format!("$5[{number}]"),
+                "",
+                "",
+                &format!("target.blueprint_id = $10[{number}]"),
+            );
+            write!(
+                hops,
+                ", {hop_edges}, {next}(source_id, id) AS (\
+                   SELECT {reached}.source_id, {edges}.target_id FROM {reached} \
+                   JOIN {edges} ON {edges}.source_id = {reached}.id)"
+            )
+            .expect("writing to a string");
+            reached = next;
+        }
+        let context_path = FACET_CONTEXT_PATH_SQL.replace("$4", "$3");
+        let filters_sql = record_filters_clause(matching, 11);
+        let sql = format!(
+            r#"WITH RECURSIVE {context_path},
+                    sources(source_id, id) AS MATERIALIZED (
+                        SELECT e.id, e.id
+                          FROM records e
+                         WHERE e.blueprint_id = $6
+                           AND ($7::bigint IS NULL OR e.blueprint_version = $7)
+                           AND e.workspace_id = $8 AND e.deleted_at IS NULL
+                           AND ($9::uuid[] IS NULL OR e.id = ANY($9))
+                           {filters_sql}
+                    ){hops}
+               SELECT node, COUNT(*)
+                 FROM (
+                     SELECT DISTINCT members.node, {reached}.source_id
+                       FROM {reached}
+                       JOIN unnest($1::uuid[], $2::uuid[]) AS members(node, id)
+                         ON members.id = {reached}.id
+                 ) counted
+                GROUP BY node"#
+        );
+        let mut transaction = self.pool.begin().await?;
+        sqlx::query(HASH_JOINS_ONLY)
+            .execute(&mut *transaction)
+            .await?;
+        let counts = bind_record_filters!(
+            sqlx::query_as::<_, (Uuid, i64)>(&sql)
+                .bind(&nodes)
+                .bind(&member_ids)
+                .bind(context_id)
+                .bind(&hop_blueprints)
+                .bind(&hop_fields)
+                .bind(source_blueprint_id)
+                .bind(source_blueprint_version)
+                .bind(self.workspace_id.0)
+                .bind(matching.ids)
+                .bind(&hop_targets),
+            matching.filters,
+            self.workspace_id.0
+        )
+        .fetch_all(&mut *transaction)
+        .await?;
+        transaction.commit().await?;
+        Ok(counts.into_iter().collect())
     }
 
     /// Distinct sources per tree node, including the node's descendants, for
@@ -2918,36 +3077,30 @@ impl AttricatRepository {
                     hierarchy_field,
                     context_id,
                 );
-                let sources = self.tree_facet_sources(
-                    source_blueprint_id,
-                    source_blueprint_version,
-                    None,
-                    source_path,
-                    context_id,
-                );
-                let (parents, sources) = tokio::try_join!(parents, sources)?;
-                let mut parents_by_child: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
+                let nodes = async {
+                    sqlx::query_scalar::<_, Uuid>(
+                        "SELECT id FROM records WHERE blueprint_id = $1 AND deleted_at IS NULL",
+                    )
+                    .bind(target_blueprint_id)
+                    .fetch_all(&self.pool)
+                    .await
+                    .map_err(RepositoryError::from)
+                };
+                let (parents, nodes) = tokio::try_join!(parents, nodes)?;
+                let mut children_by_parent: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
                 for &(child, parent) in parents {
-                    parents_by_child.entry(child).or_default().push(parent);
+                    children_by_parent.entry(parent).or_default().push(child);
                 }
-                let mut targets_by_source: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
-                for (source, target) in sources {
-                    targets_by_source.entry(source).or_default().push(target);
-                }
-                // Each source adds one to every node it reaches upwards, once
-                // even through several targets or parents.
-                let mut counts: HashMap<Uuid, i64> = HashMap::new();
-                let mut visited = HashSet::new();
-                for targets in targets_by_source.into_values() {
-                    visited.clear();
-                    let mut pending = targets;
-                    while let Some(node) = pending.pop() {
-                        if visited.insert(node) {
-                            *counts.entry(node).or_default() += 1;
-                            pending.extend(parents_by_child.get(&node).into_iter().flatten());
-                        }
-                    }
-                }
+                let counts = self
+                    .tree_node_source_counts(
+                        &subtree_pairs(&nodes, &children_by_parent),
+                        source_blueprint_id,
+                        source_blueprint_version,
+                        source_path,
+                        context_id,
+                        RecordMatching::ALL,
+                    )
+                    .await?;
                 Ok::<_, RepositoryError>(counts)
             })
             .await
@@ -2980,11 +3133,17 @@ impl AttricatRepository {
         let granted = RECORD_GRANTED_SQL.replace("$2", "$9");
         let (records, matching_sql) = matching_records(matching.ids.is_some(), 11);
         let filters_sql = record_filters_clause(matching, 12);
-        let edges = RESOLVED_EDGES_SQL
-            .replace("{sources}", "JOIN matched ON matched.id = av.record_id")
-            .replace("{target}", "target.blueprint_id = ANY($3)");
+        let edges = resolved_edges_sql(
+            ["chosen", "edges"],
+            "$1",
+            "$2",
+            "JOIN matched ON matched.id = av.record_id",
+            "",
+            "target.blueprint_id = ANY($3)",
+        );
+        let context_path = FACET_CONTEXT_PATH_SQL;
         let sql = format!(
-            r#"WITH RECURSIVE {grants}, matched AS MATERIALIZED (
+            r#"WITH RECURSIVE {grants}, {context_path}, matched AS MATERIALIZED (
                     SELECT e.id
                       FROM {records}
                      WHERE e.blueprint_id = $1
@@ -3007,6 +3166,9 @@ impl AttricatRepository {
         );
         let mut transaction = self.pool.begin().await?;
         sqlx::query(SCOPE_STATEMENT_TIMEOUT)
+            .execute(&mut *transaction)
+            .await?;
+        sqlx::query(HASH_JOINS_ONLY)
             .execute(&mut *transaction)
             .await?;
         let (total, linked, targets, counts) = bind_record_filters!(
@@ -3039,56 +3201,33 @@ impl AttricatRepository {
         })
     }
 
-    /// `(source, target)` pairs of one relationship field as resolved in
-    /// `context_id`: each source reads its values from the nearest context on
-    /// the path to the root that has any, unless the field has no fallback.
-    /// `source_blueprint_version` limits the sources to one revision, and
-    /// `source_ids` to those records, read through the source-side index.
+    /// `(source, target)` pairs of a blueprint's self-referencing relationship field
+    /// as resolved in `context_id`: each source reads its values from the nearest
+    /// context on the path to the root that has any, unless the field has no fallback.
     async fn resolved_relationship_edges(
         &self,
-        source_blueprint_id: Uuid,
-        source_blueprint_version: Option<i64>,
-        source_ids: Option<&[Uuid]>,
+        blueprint_id: Uuid,
         field: &str,
-        target_blueprint_id: Uuid,
         context_id: Uuid,
     ) -> Result<Vec<(Uuid, Uuid)>, RepositoryError> {
-        let sources = if source_ids.is_some() {
-            "JOIN unnest($6::uuid[]) AS listed(id) ON listed.id = av.record_id"
-        } else {
-            ""
-        };
         let query = format!(
-            "WITH RECURSIVE {} SELECT source_id, target_id FROM edges",
-            RESOLVED_EDGES_SQL
-                .replace("{sources}", sources)
-                .replace("{target}", "target.blueprint_id = $3")
+            "WITH RECURSIVE {}, {} SELECT source_id, target_id FROM edges",
+            FACET_CONTEXT_PATH_SQL.replace("$4", "$3"),
+            resolved_edges_sql(
+                ["chosen", "edges"],
+                "$1",
+                "$2",
+                "",
+                "",
+                "target.blueprint_id = $1",
+            )
         );
-        let mut query = sqlx::query_as::<_, (Uuid, Uuid)>(&query)
-            .bind(source_blueprint_id)
+        Ok(sqlx::query_as::<_, (Uuid, Uuid)>(&query)
+            .bind(blueprint_id)
             .bind(field)
-            .bind(target_blueprint_id)
             .bind(context_id)
-            .bind(source_blueprint_version);
-        if let Some(source_ids) = source_ids {
-            query = query.bind(source_ids);
-        }
-        Ok(query.fetch_all(&self.pool).await?)
-    }
-
-    /// Every record of `selected` matching a text query. Most callers want a scope
-    /// instead; this is for those that need the whole set.
-    pub async fn resolve_search(
-        &self,
-        selected: &BlueprintWithAttributes,
-        selected_version: Option<i64>,
-        query: &str,
-    ) -> Result<HashSet<Uuid>, RepositoryError> {
-        Ok(self
-            .text_query_record_ids(selected, selected_version, query, i64::MAX)
-            .await?
-            .into_iter()
-            .collect())
+            .fetch_all(&self.pool)
+            .await?)
     }
 
     /// Up to `limit` of the records of `selected` matching a text query, lowest IDs
@@ -3103,15 +3242,7 @@ impl AttricatRepository {
         let (text_terms, global_ids) = self
             .resolve_text_query(selected, selected_version, query)
             .await?;
-        // No context applies to text terms, which match in any context.
-        let context = SearchContext {
-            ids: Vec::new(),
-            codes: Vec::new(),
-        };
-        let filters = ResolvedRecordFilters {
-            text_terms,
-            ..ResolvedRecordFilters::in_context(context)
-        };
+        let filters = ResolvedRecordFilters::for_text_terms(text_terms);
         let ids = global_ids.map(|ids| ids.into_iter().collect::<Vec<_>>());
         self.matching_record_ids(
             selected.blueprint.id,
@@ -3946,12 +4077,6 @@ fn encode_sorted_search_cursor(sort: &RecordSearchSort, row: &SortedRecordPrevie
     };
     URL_SAFE_NO_PAD.encode(serde_json::to_vec(&cursor).expect("cursor serializes"))
 }
-
-/// Most matching sources a tree facet reads by listing them, hop by hop. With
-/// 100,000 sources behind a path, listing 11,000 of them reads each hop about
-/// four times faster than its whole relationship, while listing all of them
-/// is slower than reading everything at once (see `perf/facets.md`).
-const TREE_FACET_LISTED_SOURCES: usize = 20_000;
 
 /// How long cached tree facet counts are served before a reload.
 const TREE_FACET_COUNTS_FRESH: Duration = Duration::from_secs(30);

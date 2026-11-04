@@ -13,8 +13,9 @@ use crate::{
     },
     repository::{
         DEFAULT_SYSTEM_TAG_FACET_LIMIT, MAX_LOADED_FILTER_MATCHES, MAX_SEARCH_FILTERS,
-        MAX_SYSTEM_TAG_FACET_LIMIT, RelationshipFacetHop, RepositoryError, ResolvedRecordFilters,
-        SearchPageRequest, SearchPhase, SearchScopeError, SearchScopeRequest, valid_connection_key,
+        MAX_SYSTEM_TAG_FACET_LIMIT, RecordMatching, RelationshipFacetHop, RepositoryError,
+        ResolvedRecordFilters, SearchPageRequest, SearchPhase, SearchScopeError,
+        SearchScopeRequest, valid_connection_key,
     },
 };
 use attricat_domain::permissions::Permission;
@@ -484,23 +485,35 @@ pub(super) async fn relationship_tree_facet_children(
         .map(str::trim)
         .filter(|v| !v.is_empty());
     let search_blueprint = published.unwrap_or_else(|| source.clone());
-    // Without a search term, the facet query already scopes its source blueprint
-    // and does not need a materialized set of every source record ID.
-    let resolved = match query {
+    // Without a search term, the facet's counts come from its cache. With one, the
+    // counting statement tests the terms itself.
+    let text_query = match query {
         Some(query) => Some(
             repository
-                .resolve_search(&search_blueprint, version, query)
+                .resolve_text_query(&search_blueprint, version, query)
                 .await
                 .map_err(map_search_error)?,
         ),
         None => None,
     };
+    let (filters, global_ids) = match text_query {
+        Some((text_terms, global_ids)) => (
+            Some(ResolvedRecordFilters::for_text_terms(text_terms)),
+            global_ids.map(|ids| ids.into_iter().collect::<Vec<_>>()),
+        ),
+        None => (None, None),
+    };
+    let matching = filters.as_ref().map(|filters| RecordMatching {
+        ids: global_ids.as_deref(),
+        filters: (!filters.is_empty()).then_some(filters),
+        broad: false,
+    });
     Ok(Json(
         repository
             .relationship_tree_facet_children(
                 source.blueprint.id,
                 version,
-                resolved.as_ref(),
+                matching,
                 &source_path,
                 target.blueprint.id,
                 input.hierarchy_field.as_deref(),
