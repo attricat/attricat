@@ -13,8 +13,9 @@
 //! `line.category`; every tenth product and line overrides its hop in the
 //! child context. Each product also has its own listing, in the product's
 //! category and line, for paths whose middle hop is as large as the source:
-//! `listing.category` and `listing.line.category`. See `perf/facets.md` for
-//! results.
+//! `listing.category` and `listing.line.category`. `FACET_BENCH_SCENARIOS`, a
+//! comma-separated list such as `filter,reference`, runs only the scenarios
+//! whose name contains one of its entries. See `perf/facets.md` for results.
 
 use crate::support;
 
@@ -55,6 +56,11 @@ views:
   dropdown_option:
     type: dropdown_option
     fields: [name]
+  table:
+    type: table
+    columns:
+      - {field: sku, label: SKU}
+      - {field: line.name, label: Line}
 attributes:
   - code: name
     value_type: string
@@ -143,7 +149,8 @@ FROM bench_product;
 INSERT INTO attribute_values (id, record_id, attribute_id, context_id, value_text)
 SELECT gen_random_uuid(), p.id, a.id, $8,
        CASE a.id WHEN $5 THEN 'Product ' || p.i ELSE 'Value ' || p.i END
-FROM bench_product p, unnest(ARRAY[$5, $6, $7]::uuid[]) a(id);
+FROM bench_product p, unnest(ARRAY[$5, $6, $7]::uuid[]) a(id)
+WHERE a.id <> $7 OR p.i % 10000 <> 0;
 INSERT INTO attribute_values (id, record_id, attribute_id, context_id, relationship_target_record_id)
 SELECT gen_random_uuid(), id, $11, $8, category FROM bench_product;
 INSERT INTO attribute_values (id, record_id, attribute_id, context_id, relationship_target_record_id)
@@ -262,6 +269,49 @@ async fn relationship_tree_facet_latency(pool: PgPool) {
         query.execute(&mut *connection).await.unwrap();
     }
     drop(connection);
+    // A few products carry a searchable reusable attribute.
+    let draft: Value = client
+        .post(format!("{base_url}/reusable-attributes"))
+        .json(&json!({"definition": "code: weight\nname: Weight\nvalue_type: number\nsearchable: true\ndefault_value: 0"}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let revision: Value = client
+        .post(format!(
+            "{base_url}/reusable-attribute-revisions/{}/publish",
+            draft["id"].as_str().unwrap()
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let attached: Vec<Uuid> =
+        sqlx::query_scalar("SELECT id FROM records WHERE blueprint_id = $1 ORDER BY id LIMIT 20")
+            .bind(product_id)
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    for record in attached {
+        client
+            .post(format!(
+                "{base_url}/v1/records/{record}/reusable-attributes"
+            ))
+            .json(&json!({"reusable_attribute_revision_id": revision["id"]}))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+    }
     sqlx::query("VACUUM ANALYZE").execute(&pool).await.unwrap();
     println!("seeded {products} products in {:?}", seeded.elapsed());
 
@@ -325,7 +375,162 @@ async fn relationship_tree_facet_latency(pool: PgPool) {
         }
         ("/v1/records/search", body)
     };
+    let line_node: Uuid = sqlx::query_scalar(
+        "SELECT id FROM records WHERE blueprint_id = $1 AND projections -> 'preview' ->> 'name' = 'Line 1'",
+    )
+    .bind(line_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let filter = |field: &str, operator: &str, value: Value| json!({"field": field, "operator": operator, "value": value});
+    let filtered = |filters: Vec<Value>, relationship_filters: Value| {
+        (
+            "/v1/records/search",
+            json!({
+                "blueprint": {"code": "bench_product"},
+                "filters": filters,
+                "relationship_filters": relationship_filters,
+                "include_total": true,
+            }),
+        )
+    };
+    let every_sku = filter("sku", "starts_with", json!("Value"));
+    let one_sku = filter("sku", "eq", json!("Value 12"));
+    let with = |(path, mut body): (&'static str, Value), extra: Value| {
+        for (key, value) in extra.as_object().unwrap() {
+            body[key] = value.clone();
+        }
+        (path, body)
+    };
+    let text = |query: &str| with(filtered(Vec::new(), json!([])), json!({"query": query}));
     let scenarios = [
+        ("text: rare value", text("12345")),
+        ("text: rare word", text("Value 12345")),
+        ("text: short number", text("12")),
+        ("text: common number", text("7")),
+        ("text: every record", text("Product")),
+        ("text: two broad terms", text("Product 1")),
+        ("text: one attribute", text("sku:12345")),
+        ("text: relationship path", text("line.name:999")),
+        ("text: relationship, every record", text("line.name:Line")),
+        ("text: global term", text("*:12345")),
+        (
+            "text: every record, sorted",
+            with(
+                text("Product"),
+                json!({"sort": {"field": "sku", "direction": "asc"}}),
+            ),
+        ),
+        (
+            "search: root selected and a filter",
+            with(
+                search("category", default_context, Some(root), None),
+                json!({"filters": [filter("sku", "starts_with", json!("Value"))]}),
+            ),
+        ),
+        (
+            "search: root selected and a text term",
+            with(
+                search("category", default_context, Some(root), None),
+                json!({"query": "12"}),
+            ),
+        ),
+        ("reference: no filter", filtered(Vec::new(), json!([]))),
+        (
+            "reference: text query",
+            with(filtered(Vec::new(), json!([])), json!({"query": "12"})),
+        ),
+        (
+            "filter: contains, rare value",
+            filtered(
+                vec![filter("sku", "contains", json!("Value 12345"))],
+                json!([]),
+            ),
+        ),
+        (
+            "filter: absence, few matches",
+            filtered(
+                vec![filter("description", "is_set", json!(false))],
+                json!([]),
+            ),
+        ),
+        (
+            "filter: reusable attribute",
+            filtered(
+                vec![filter("default:weight", "is_set", json!(true))],
+                json!([]),
+            ),
+        ),
+        (
+            "filter: broad, sorted by a column",
+            with(
+                filtered(vec![every_sku.clone()], json!([])),
+                json!({"sort": {"field": "sku", "direction": "asc"}}),
+            ),
+        ),
+        (
+            "filter: broad, sorted through a relationship",
+            with(
+                filtered(vec![every_sku.clone()], json!([])),
+                json!({"sort": {"field": "line.name", "direction": "asc"}}),
+            ),
+        ),
+        (
+            "filter: one hop, child context",
+            with(
+                filtered(vec![filter("line.name", "eq", json!("Line 1"))], json!([])),
+                json!({"context_code": "bench_child"}),
+            ),
+        ),
+        (
+            "filter: text query and broad scalar",
+            with(
+                filtered(vec![every_sku.clone()], json!([])),
+                json!({"query": "12"}),
+            ),
+        ),
+        (
+            "filter: twenty selective scalars",
+            filtered(vec![one_sku; 20], json!([])),
+        ),
+        (
+            "filter: selective scalar",
+            filtered(vec![filter("sku", "eq", json!("Value 12"))], json!([])),
+        ),
+        (
+            "filter: broad scalar",
+            filtered(vec![every_sku.clone()], json!([])),
+        ),
+        (
+            "filter: absence, no matches",
+            filtered(vec![filter("sku", "is_set", json!(false))], json!([])),
+        ),
+        (
+            "filter: one hop",
+            filtered(vec![filter("line.name", "eq", json!("Line 1"))], json!([])),
+        ),
+        (
+            "filter: three hops",
+            filtered(
+                vec![filter(
+                    "listing.line.category.name",
+                    "starts_with",
+                    json!("Category 2"),
+                )],
+                json!([]),
+            ),
+        ),
+        (
+            "filter: relationship",
+            filtered(
+                Vec::new(),
+                json!([{"field": "line", "selected_target_ids": [line_node]}]),
+            ),
+        ),
+        (
+            "filter: twenty broad scalars",
+            filtered(vec![every_sku; 20], json!([])),
+        ),
         (
             "browse: root level",
             children("category", default_context, None, None),
@@ -448,7 +653,11 @@ async fn relationship_tree_facet_latency(pool: PgPool) {
     // query share cached counts, so only the first of them misses the cache.
     println!("| Scenario | First | Median | Min | Max |\n| --- | ---: | ---: | ---: | ---: |");
     let mut slowest = Vec::new();
-    for (name, (path, body)) in scenarios {
+    let selected = std::env::var("FACET_BENCH_SCENARIOS").unwrap_or_default();
+    for (name, (path, body)) in scenarios
+        .into_iter()
+        .filter(|(name, _)| selected.split(',').any(|entry| name.contains(entry)))
+    {
         let started = Instant::now();
         post(&client, &base_url, path, &body).await;
         let first = started.elapsed();
@@ -469,9 +678,68 @@ async fn relationship_tree_facet_latency(pool: PgPool) {
         );
         slowest.push(format!("{name}: {max_timing}"));
     }
+    if selected.split(',').any(|entry| entry == "agent") {
+        let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
+        let actor: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
+        let repository =
+            api::repository::AttricatRepository::system(pool.clone()).for_workspace(workspace);
+        let one_line = json!([{"field": "line", "selected_target_ids": [line_node]}]);
+        for (name, arguments) in [
+            ("agent count: all", json!({})),
+            (
+                "agent count: broad filter",
+                json!({"filters": [filter("sku", "starts_with", json!("Value"))]}),
+            ),
+            (
+                "agent count: relationship filter",
+                json!({"relationship_filters": one_line}),
+            ),
+            ("agent count: per category", json!({"group_by": "category"})),
+            ("agent count: per line", json!({"group_by": "line"})),
+            (
+                "agent count: per line, broad filter",
+                json!({"group_by": "line", "filters": [filter("sku", "starts_with", json!("Value"))]}),
+            ),
+            (
+                "agent count: per line, text query",
+                json!({"group_by": "line", "query": "12"}),
+            ),
+        ] {
+            let mut arguments = arguments;
+            arguments["blueprint"] = json!({"code": "bench_product"});
+            let mut samples = Vec::new();
+            for _ in 0..5 {
+                let started = Instant::now();
+                api::agent_tools::execute_read(
+                    &repository,
+                    actor,
+                    workspace,
+                    "count_records",
+                    arguments.clone(),
+                )
+                .await
+                .unwrap();
+                samples.push(started.elapsed());
+            }
+            samples.sort();
+            println!(
+                "| {name} | {} | {} | {} | {} |",
+                millis(samples[0]),
+                millis(samples[2]),
+                millis(samples[0]),
+                millis(samples[4])
+            );
+        }
+    }
     println!("\nServer-Timing of each scenario's slowest sample:");
     for line in slowest {
         println!("  {line}");
+    }
+    // Linux only: the highest memory the test process, server included, reached.
+    if let Ok(status) = std::fs::read_to_string("/proc/self/status")
+        && let Some(peak) = status.lines().find(|line| line.starts_with("VmHWM"))
+    {
+        println!("\n{peak}");
     }
     server.abort();
 }
@@ -509,16 +777,18 @@ fn renumber_parameters(statement: &str) -> (String, Vec<usize>) {
     (renumbered, parameters)
 }
 
-/// Sends one request and returns its `server-timing` header.
+/// Sends one request and returns its `server-timing` header, or its failure.
 async fn post(client: &Client, base_url: &str, path: &str, body: &Value) -> String {
     let response = client
         .post(format!("{base_url}{path}"))
         .json(body)
         .send()
         .await
-        .unwrap()
-        .error_for_status()
         .unwrap();
+    // A scenario past the request timeout is a result to report.
+    if !response.status().is_success() {
+        return format!("status {}", response.status());
+    }
     let timing = response
         .headers()
         .get("server-timing")

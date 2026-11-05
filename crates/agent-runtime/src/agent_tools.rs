@@ -33,9 +33,10 @@ use crate::{
     },
     file_access::{AllowFileAccess, FileAccessOperation, authorize_file_read},
     repository::{
-        AttricatRepository, AuthorizationActor, FileTextOutcome, MAX_SEARCH_FILTERS,
-        RepositoryError, RuleFindingFilter, RuleRunFilter, SearchPageRequest, SearchScope,
-        SearchScopeError, SearchScopeRequest,
+        AttricatRepository, AuthorizationActor, FileTextOutcome, MAX_LOADED_FILTER_MATCHES,
+        MAX_SEARCH_FILTERS, RelationshipTargetGroups, RepositoryError, RuleFindingFilter,
+        RuleRunFilter, SEARCH_TOTAL_COUNT_CAP, SearchPageRequest, SearchScope, SearchScopeError,
+        SearchScopeRequest,
     },
     search_filters::{check_selected_ids, resolve_agent_relationship_filter},
 };
@@ -651,7 +652,7 @@ pub fn definitions() -> Vec<ToolDefinition> {
         ),
         definition(
             "search_records",
-            "Search records of a blueprint by scalar values, attribute filters, relationship filters, and system tags. filters use {field, operator, value} with a scalar or file leaf, including is_set presence checks such as records without an attached file (see the filters parameter for operators per attribute type); relationship_filters use {field, selected_target_ids} with a relationship path and target record UUIDs. All filters combine with AND. Filters, sorting and table values read the context_code context (default: default), falling back through its parent contexts per attribute; free text matches values in every context. Query terms are whitespace-separated AND terms. Bare free text searches scalar values on the selected blueprint only. Use *:value for global relationship-aware discovery through up to three incoming edges. Use attribute:value for a selected-blueprint attribute; use relationship:value or an explicit path with up to three relationship hops and a scalar leaf; and use blueprint:value or blueprint.attribute:value for the selected blueprint (code or name). Use @id:uuid1,uuid2 for selected-blueprint record IDs or relationship.@id:uuid1,uuid2 for records linked to those IDs (at most 100 IDs per term). A trailing * means prefix matching. Results include match_explanations with deterministic match witnesses and relationship paths. Omit blueprint.version to include every published revision; set outdated to true to return only records that are not on the latest published revision. Use sort with a configured scalar table-column field, blueprint_version, or publication_status and asc or desc direction; ascending blueprint_version puts older schemas first, ascending publication_status puts unpublished records first and requires sort.context_code for an enabled channel. Relationship table columns use paths of up to three hops. A relationship-path sort without blueprint.version is accepted only when the complete matching result uses one source version. Without sort, results are paginated in ascending creation order.",
+            "Search records of a blueprint by scalar values, attribute filters, relationship filters, and system tags. filters use {field, operator, value} with a scalar or file leaf, including is_set presence checks such as records without an attached file (see the filters parameter for operators per attribute type); relationship_filters use {field, selected_target_ids} with a relationship path and target record UUIDs. All filters combine with AND. Filters, sorting and table values read the context_code context (default: default), falling back through its parent contexts per attribute; free text matches values in every context. Query terms are whitespace-separated AND terms. Bare free text searches scalar values on the selected blueprint only. Use *:value for global relationship-aware discovery through up to three incoming edges. Use attribute:value for a selected-blueprint attribute; use relationship:value or an explicit path with up to three relationship hops and a scalar leaf; and use blueprint:value or blueprint.attribute:value for the selected blueprint (code or name). Use @id:uuid1,uuid2 for selected-blueprint record IDs or relationship.@id:uuid1,uuid2 for records linked to those IDs (at most 100 IDs per term). A trailing * means prefix matching. Omit blueprint.version to include every published revision; set outdated to true to return only records that are not on the latest published revision. Use sort with a configured scalar table-column field, blueprint_version, or publication_status and asc or desc direction; ascending blueprint_version puts older schemas first, ascending publication_status puts unpublished records first and requires sort.context_code for an enabled channel. Relationship table columns use paths of up to three hops. A relationship-path sort without blueprint.version is accepted only when the complete matching result uses one source version. Without sort, results are paginated in ascending creation order.",
             json!({"type":"object","required":["blueprint"],"properties":{"blueprint":{"type":"object","required":["code"],"properties":{"code":{"type":"string"},"version":{"type":"integer","minimum":1}},"additionalProperties":false},"query":{"type":"string"},"filters":attribute_filter_parameters(),"relationship_filters":relationship_filter_parameters(),"system_tags":{"type":"array","maxItems":MAX_SYSTEM_TAG_FILTERS,"items":{"type":"string"}},"outdated":{"type":"boolean"},"context_code":{"type":"string"},"sort":{"type":"object","required":["field","direction"],"properties":{"field":{"type":"string"},"direction":{"type":"string","enum":["asc","desc"]},"context_code":{"type":"string"}},"additionalProperties":false},"page":{"type":"object","properties":{"size":{"type":"integer","minimum":1,"maximum":DEFAULT_RECORD_PAGE_SIZE},"cursor":{"type":"string"}},"additionalProperties":false}},"additionalProperties":false}),
         ),
         definition(
@@ -661,7 +662,7 @@ pub fn definitions() -> Vec<ToolDefinition> {
         ),
         definition(
             "count_records",
-            "Count the records of a blueprint that match an optional query, filters and relationship_filters (the same as search_records), without listing them. group_by names a relationship field of the blueprint to count matching records per linked record instead, such as products per category; groups come largest first with each linked record's display label, up to group_limit, and ungrouped_count is the matching records that link to nothing. Use it for questions about how many records there are or which has the most.",
+            "Count the records of a blueprint that match an optional query, filters and relationship_filters (the same as search_records), without listing them. Without group_by, total_count stops at 500 and total_count_capped is true when more match, so report that as more than 500. group_by names a relationship field of the blueprint to count matching records per linked record instead, such as products per category; groups come largest first with each linked record's display label, up to group_limit, and ungrouped_count is the matching records that link to nothing. Use it for questions about how many records there are or which has the most.",
             json!({"type":"object","required":["blueprint"],"properties":{"blueprint":{"type":"object","required":["code"],"properties":{"code":{"type":"string"},"version":{"type":"integer","minimum":1}},"additionalProperties":false},"query":{"type":"string"},"filters":attribute_filter_parameters(),"relationship_filters":relationship_filter_parameters(),"context_code":{"type":"string"},"group_by":{"type":"string","description":"A relationship field of the blueprint."},"group_limit":{"type":"integer","minimum":1,"maximum":MAX_COUNT_GROUP_LIMIT}},"additionalProperties":false}),
         ),
         definition(
@@ -2115,14 +2116,7 @@ pub async fn execute_read(
                     "group_limit must be between 1 and {MAX_COUNT_GROUP_LIMIT}"
                 )));
             }
-            let SearchScope {
-                current,
-                selected,
-                search_blueprint,
-                context,
-                matching,
-                ..
-            } = agent_search_scope(
+            let scope = agent_search_scope(
                 repository,
                 actor,
                 &input.blueprint,
@@ -2132,19 +2126,28 @@ pub async fn execute_read(
                 input.context_code.as_deref(),
             )
             .await?;
-            // Grouping needs the matching records, not only how many there are.
-            let matching = match matching {
-                Some(ids) => ids.into_iter().collect::<std::collections::HashSet<_>>(),
-                None => {
-                    repository
-                        .resolve_search(&search_blueprint, selected, None)
-                        .await?
-                        .ids
-                }
-            };
-            let total_count = matching.len();
+            let SearchScope {
+                current,
+                selected,
+                search_blueprint,
+                context,
+                ..
+            } = &scope;
             let Some(field) = input.group_by else {
-                return Ok(json!({"blueprint": current.blueprint.code, "total_count": total_count}));
+                // Like the Explorer, count only so far.
+                let count = repository
+                    .count_matching_records(
+                        current.blueprint.id,
+                        *selected,
+                        scope.matching(),
+                        SEARCH_TOTAL_COUNT_CAP + 1,
+                    )
+                    .await?;
+                return Ok(json!({
+                    "blueprint": current.blueprint.code,
+                    "total_count": count.min(SEARCH_TOTAL_COUNT_CAP),
+                    "total_count_capped": count > SEARCH_TOTAL_COUNT_CAP,
+                }));
             };
             let relationship_fields = search_blueprint
                 .attributes
@@ -2187,28 +2190,24 @@ pub async fn execute_read(
                     target_blueprint_ids.push(target.blueprint.id);
                 }
             }
-            let (counts, linked) = repository
-                .relationship_target_counts(
+            let RelationshipTargetGroups {
+                total,
+                linked,
+                groups,
+                truncated,
+            } = repository
+                .relationship_target_groups(
                     current.blueprint.id,
+                    *selected,
+                    scope.matching(),
                     &field,
                     &target_blueprint_ids,
                     context.requested_id(),
-                    Some(&matching),
+                    actor,
+                    workspace,
+                    group_limit as i64,
                 )
                 .await?;
-            let target_ids = counts.keys().copied().collect::<Vec<_>>();
-            let readable = repository
-                .authorized_record_ids(actor, workspace, Permission::RecordsRead, &target_ids)
-                .await?;
-            let mut groups = counts
-                .into_iter()
-                .filter(|(target, _)| readable.contains(target))
-                .collect::<Vec<_>>();
-            groups.sort_by(|(left_id, left), (right_id, right)| {
-                right.cmp(left).then(left_id.cmp(right_id))
-            });
-            let groups_truncated = groups.len() > group_limit;
-            groups.truncate(group_limit);
             let labels = repository
                 .record_labels(&groups.iter().map(|(id, _)| *id).collect::<Vec<_>>())
                 .await?
@@ -2217,7 +2216,8 @@ pub async fn execute_read(
                 .collect::<HashMap<_, _>>();
             json!({
                 "blueprint": current.blueprint.code,
-                "total_count": total_count,
+                "total_count": total,
+                "total_count_capped": false,
                 "group_by": field,
                 "groups": groups
                     .into_iter()
@@ -2231,8 +2231,8 @@ pub async fn execute_read(
                         })
                     })
                     .collect::<Vec<_>>(),
-                "groups_truncated": groups_truncated,
-                "ungrouped_count": total_count - linked.len(),
+                "groups_truncated": truncated,
+                "ungrouped_count": total - linked,
             })
         }
         "find_records" => {
@@ -2272,12 +2272,12 @@ pub async fn execute_read(
                 let Some(blueprint) = repository.get_blueprint_by_code(&summary.code).await? else {
                     continue;
                 };
-                let resolved = repository
-                    .resolve_search(&blueprint, None, Some(&query))
+                // One past what's left is enough to tell the list was truncated.
+                let room = MAX_FIND_RECORDS_CANDIDATES - candidates.len() + 1;
+                let ids = repository
+                    .text_query_record_ids(&blueprint, None, &query, room as i64)
                     .await
                     .map_err(|error| ToolError::InvalidArguments(error.to_string()))?;
-                let mut ids = resolved.ids.into_iter().collect::<Vec<_>>();
-                ids.sort_unstable();
                 for id in ids {
                     if candidates.len() == MAX_FIND_RECORDS_CANDIDATES {
                         truncated = true;
@@ -2379,6 +2379,7 @@ pub async fn execute_read(
                         sort: input.sort.as_ref(),
                         cursor: input.page.cursor.as_deref(),
                         limit: limit.into(),
+                        loaded_filter_matches: MAX_LOADED_FILTER_MATCHES,
                         include_total: true,
                         include_previews: true,
                     },

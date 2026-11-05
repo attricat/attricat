@@ -98,17 +98,7 @@ attributes:
             .json(&json!({ "blueprint": { "code": "search_product" }, "query": query, "page": { "size": 25 } }))
             .send().await.unwrap().error_for_status().unwrap().json().await.unwrap();
         assert_eq!(response["items"].as_array().unwrap().len(), 1, "{query}");
-        let witness = &response["items"][0]["match_explanations"][0];
-        assert_eq!(witness["term"], query);
-        if query.contains("Crimson") {
-            assert_eq!(witness["matching_record_id"], red["id"]);
-            assert_eq!(witness["traversal_depth"], 1);
-            assert_eq!(witness["relationship_path"][0]["attribute_code"], "color");
-        } else {
-            assert_eq!(witness["matching_record_id"], item["id"]);
-            assert_eq!(witness["traversal_depth"], 0);
-            assert!(witness["relationship_path"].as_array().unwrap().is_empty());
-        }
+        assert_eq!(response["items"][0]["id"], item["id"], "{query}");
     }
     let invalid = client.post(format!("{base_url}/v1/records/search"))
         .json(&json!({ "blueprint": { "code": "search_product" }, "query": "color.name:bad*middle", "page": { "size": 25 } }))
@@ -209,9 +199,6 @@ attributes:
         .await
         .unwrap();
     assert_eq!(ids(direct.clone()), sorted(vec![id(&first), id(&third)]));
-    let witness = &direct["items"][0]["match_explanations"][0];
-    assert_eq!(witness["traversal_depth"], 0);
-    assert!(witness["matching_attribute_code"].is_null());
 
     // IDs of other blueprints never match the selected blueprint directly.
     let foreign: Value = search(format!("id_product.@ID:{}", id(&red)))
@@ -227,9 +214,6 @@ attributes:
         .await
         .unwrap();
     assert_eq!(ids(related.clone()), sorted(vec![id(&first), id(&second)]));
-    let witness = &related["items"][0]["match_explanations"][0];
-    assert_eq!(witness["traversal_depth"], 1);
-    assert_eq!(witness["relationship_path"][0]["attribute_code"], "color");
 
     let intersected: Value = search(format!(
         "color.@id:{},{} @id:{}",
@@ -262,5 +246,45 @@ attributes:
             "{query}"
         );
     }
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn numeric_search_terms_ignore_replaced_values(pool: sqlx::PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    create_blueprint(
+        &client,
+        &base_url,
+        "format_version: 1\ncode: replaced_item\nname: Replaced item\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [amount]\nattributes:\n  - code: amount\n    value_type: number",
+    )
+    .await;
+    let record = create_record_with(
+        &client,
+        &base_url,
+        "replaced_item",
+        json!([scalar("amount", 7777)]),
+    )
+    .await;
+    set_values(&client, &base_url, &record, json!([scalar("amount", 8888)])).await;
+    let found = |query: &'static str| {
+        let request = client.post(format!("{base_url}/v1/records/search")).json(
+            &json!({"blueprint": {"code": "replaced_item"}, "query": query, "page": {"size": 25}}),
+        );
+        async move {
+            let response: Value = request
+                .send()
+                .await
+                .unwrap()
+                .error_for_status()
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+            response["items"].as_array().unwrap().len()
+        }
+    };
+    assert_eq!(found("8888").await, 1);
+    assert_eq!(found("7777").await, 0);
     server.abort();
 }

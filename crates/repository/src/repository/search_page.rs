@@ -2,14 +2,17 @@
 //! by the records API and the agent's search tool: version scoping, the
 //! capped totals, sort and cursor resolution, the page itself and table
 //! value hydration.
-use std::{collections::HashMap, time::Instant};
+use std::{
+    collections::{BTreeSet, HashMap},
+    time::Instant,
+};
 
 use tracing::Instrument;
 
 use super::{
-    AttricatRepository, RecordSearchScope, RepositoryError, SearchScope, SearchScopeError,
-    decode_search_cursor, search_scope::has_extension_table_renderer, table_relationship_targets,
-    table_value_paths,
+    AttricatRepository, RecordMatching, RecordSearchScope, RepositoryError, SearchScope,
+    SearchScopeError, decode_search_cursor, search_scope::has_extension_table_renderer,
+    table_relationship_targets, table_value_paths,
 };
 use crate::model::{
     ExportStatusFilter, RecordSearchResponse, SearchResultVersionScope, SearchSort,
@@ -19,6 +22,17 @@ pub use attricat_validation::saved_search::MAX_SYSTEM_TAG_FILTERS;
 
 /// Totals and hidden-outdated counts stop at this many records.
 pub const SEARCH_TOTAL_COUNT_CAP: i64 = 500;
+
+/// Matches a search page loads. A search matching no more than this scans once and
+/// every statement of the page reads those IDs, about 320 KB at most. One matching
+/// more runs inside each statement, per record, and stops once it has enough.
+pub const MAX_LOADED_FILTER_MATCHES: i64 = 20_000;
+
+/// Records a search page checks one by one to tell how broad it is.
+pub(super) const SEARCH_MATCH_SAMPLE: i64 = 100;
+/// Sampled matches from which a search counts as broad, 5% of the sample. A page and
+/// its capped total then stop within about 10,000 records.
+pub(super) const BROAD_SEARCH_SAMPLE_MATCHES: i64 = 5;
 
 pub struct SearchPageRequest<'a> {
     /// The blueprint code the scope was resolved for.
@@ -30,6 +44,8 @@ pub struct SearchPageRequest<'a> {
     pub sort: Option<&'a SearchSort>,
     pub cursor: Option<&'a str>,
     pub limit: i64,
+    /// Filter matches to load; see [`MAX_LOADED_FILTER_MATCHES`].
+    pub loaded_filter_matches: i64,
     /// Count the matching records, up to [`SEARCH_TOTAL_COUNT_CAP`]. Cursor
     /// pages never count; clients keep the first page's total.
     pub include_total: bool,
@@ -69,14 +85,60 @@ impl AttricatRepository {
             selected,
             search_blueprint,
             context,
-            explanations,
-            matching,
+            ..
         } = scope;
         let selected = *selected;
+        let limit = request.loaded_filter_matches;
+        // A selected facet costs the same however few records are checked.
+        let sampled = scope
+            .filters
+            .as_ref()
+            .is_some_and(|filters| filters.tree_facets.is_empty());
+        let broad = limit > 0
+            && sampled
+            && self
+                .sampled_match_count(
+                    current.blueprint.id,
+                    selected,
+                    scope.matching(),
+                    SEARCH_MATCH_SAMPLE,
+                )
+                .instrument(tracing::info_span!(
+                    "sql.operation",
+                    label = "attribute-filter"
+                ))
+                .await?
+                >= BROAD_SEARCH_SAMPLE_MATCHES;
+        let loaded = if scope.filters.is_some() && limit > 0 && !broad {
+            let records = self
+                .first_matching_records(current.blueprint.id, selected, scope.matching(), limit + 1)
+                .instrument(tracing::info_span!(
+                    "sql.operation",
+                    label = "attribute-filter"
+                ))
+                .await?;
+            (records.len() as i64 <= limit).then_some(records)
+        } else {
+            None
+        };
+        let loaded_ids: Option<Vec<_>> = loaded
+            .as_ref()
+            .map(|records| records.iter().map(|(id, _)| *id).collect());
+        let matching = match &loaded_ids {
+            Some(ids) => RecordMatching {
+                ids: Some(ids),
+                filters: None,
+                broad: false,
+            },
+            None => RecordMatching {
+                broad: limit > 0 && scope.filters.is_some(),
+                ..scope.matching()
+            },
+        };
         let records = RecordSearchScope {
             blueprint_id: current.blueprint.id,
             blueprint_version: selected,
-            matching_record_ids: matching.as_deref(),
+            matching,
             system_tags: request.system_tags,
             outdated: request.outdated,
             export_status: request.export_status,
@@ -84,16 +146,32 @@ impl AttricatRepository {
             current_blueprint_version: current.blueprint.version,
         };
         let include_total = request.include_total && request.cursor.is_none();
-        let (matching_versions, total_count) = self
-            .search_result_versions_and_count(
-                records,
-                include_total.then_some(SEARCH_TOTAL_COUNT_CAP + 1),
-            )
-            .instrument(tracing::info_span!(
-                "sql.operation",
-                label = "result-version-scope"
-            ))
-            .await?;
+        // Loaded matches already answer the version scope and the total, unless
+        // something narrows them further.
+        let unnarrowed = request.system_tags.is_empty()
+            && !request.outdated
+            && request.export_status.is_none()
+            && request.data_quality.is_none();
+        let (matching_versions, total_count) = match loaded.as_ref().filter(|_| unnarrowed) {
+            Some(loaded) => {
+                let versions: BTreeSet<i64> = loaded.iter().map(|(_, version)| *version).collect();
+                (
+                    versions.into_iter().rev().take(2).collect(),
+                    include_total.then_some(loaded.len() as i64),
+                )
+            }
+            None => {
+                self.search_result_versions_and_count(
+                    records,
+                    include_total.then_some(SEARCH_TOTAL_COUNT_CAP + 1),
+                )
+                .instrument(tracing::info_span!(
+                    "sql.operation",
+                    label = "result-version-scope"
+                ))
+                .await?
+            }
+        };
         let effective_source_version = match matching_versions.as_slice() {
             [version] => Some(*version),
             _ => selected,
@@ -143,7 +221,13 @@ impl AttricatRepository {
         let page = async {
             match sort.as_ref() {
                 Some(sort) => {
+                    // A sort reads every match, so nothing can stop early, except one
+                    // through a relationship, which walks its indexed leaves in order.
                     let page_scope = RecordSearchScope {
+                        matching: RecordMatching {
+                            broad: matching.broad && sort_uses_relationship,
+                            ..matching
+                        },
                         blueprint_version: if sort_uses_relationship {
                             effective_source_version
                         } else {
@@ -174,7 +258,7 @@ impl AttricatRepository {
             self.count_record_previews(
                 RecordSearchScope {
                     blueprint_version: None,
-                    matching_record_ids: None,
+                    matching: RecordMatching::ALL,
                     system_tags: &[],
                     outdated: true,
                     export_status: None,
@@ -191,7 +275,6 @@ impl AttricatRepository {
         on_phase(SearchPhase::Page(page_started));
         for item in &mut items {
             item.schema_outdated = item.blueprint_version != current.blueprint.version;
-            item.match_explanations = explanations.get(&item.id).cloned().unwrap_or_default();
         }
         let related_started = Instant::now();
         let previews = request.include_previews || has_extension_table_renderer(&result_blueprint);

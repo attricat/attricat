@@ -705,12 +705,21 @@ async fn absence_is_scoped_and_paginated_and_requires_no_reachable_value(pool: P
             value_type: ValueType::Number,
             value: value.into(),
         };
+        let blueprint_id = Uuid::parse_str(blueprint["blueprint"]["id"].as_str().unwrap()).unwrap();
+        let filters = api::repository::ResolvedRecordFilters {
+            filters: vec![filter],
+            ..api::repository::ResolvedRecordFilters::in_context(context.clone())
+        };
         let ids = other
-            .filter_record_ids(
-                Uuid::parse_str(blueprint["blueprint"]["id"].as_str().unwrap()).unwrap(),
+            .matching_record_ids(
+                blueprint_id,
                 None,
-                &[filter],
-                &context,
+                api::repository::RecordMatching {
+                    ids: None,
+                    filters: Some(&filters),
+                    broad: false,
+                },
+                i64::MAX,
             )
             .await
             .unwrap();
@@ -737,4 +746,489 @@ async fn absence_is_scoped_and_paginated_and_requires_no_reachable_value(pool: P
         &[&absent, &mixed, &empty],
     );
     server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn filters_narrow_every_sort_and_cursor_page_without_narrowing_outdated_counts(pool: PgPool) {
+    let (base, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    // A table column through `parent` needs its target published first.
+    let blueprint = create_blueprint(&client, &base, ITEM).await;
+    let id = blueprint["blueprint"]["id"].as_str().unwrap();
+    let publish = |definition: String| {
+        let client = &client;
+        let base = &base;
+        async move {
+            let revision = expect_status(
+                client
+                    .post(format!("{base}/blueprints/{id}/versions"))
+                    .json(&json!({"definition": definition}))
+                    .send()
+                    .await
+                    .unwrap(),
+                StatusCode::CREATED,
+            )
+            .await;
+            let version = revision["blueprint"]["version"].as_i64().unwrap();
+            expect_status(
+                client
+                    .post(format!("{base}/blueprints/{id}/versions/{version}/publish"))
+                    .send()
+                    .await
+                    .unwrap(),
+                StatusCode::OK,
+            )
+            .await;
+            version
+        }
+    };
+    let definition = ITEM.replacen(
+        "attributes:",
+        "  table:\n    type: table\n    columns:\n      - {field: name, label: Name}\n      - {field: amount, label: Amount}\n      - {field: parent.name, label: Parent}\nattributes:",
+        1,
+    );
+    let filtered_version = publish(definition.clone()).await;
+    let create = |values: Value| create_record_with(&client, &base, "presence_item", values);
+    let root = create(json!([scalar("name", "Root"), scalar("amount", 1)])).await;
+    let apple = create(json!([
+        scalar("name", "Apple"),
+        scalar("amount", 5),
+        relationship("parent", &root)
+    ]))
+    .await;
+    let banana = create(json!([
+        scalar("name", "Banana"),
+        scalar("amount", 7),
+        relationship("parent", &root)
+    ]))
+    .await;
+    let cherry = create(json!([scalar("name", "Cherry"), scalar("amount", 9)])).await;
+    let date = create(json!([
+        scalar("name", "Date"),
+        relationship("parent", &root)
+    ]))
+    .await;
+
+    let at_least_five = json!({"field": "amount", "operator": "gte", "value": 5});
+    let under_root = json!({"field": "parent.name", "operator": "eq", "value": "Root"});
+    let linked_to_root =
+        json!({"field": "parent", "selected_target_ids": [root["id"].as_str().unwrap()]});
+    let cases = [
+        (
+            json!({"filters": [at_least_five]}),
+            vec![&apple, &banana, &cherry],
+        ),
+        (
+            json!({"filters": [{"field": "amount", "operator": "is_set", "value": false}]}),
+            vec![&date],
+        ),
+        (
+            json!({"filters": [under_root]}),
+            vec![&apple, &banana, &date],
+        ),
+        (
+            json!({"relationship_filters": [linked_to_root]}),
+            vec![&apple, &banana, &date],
+        ),
+        // Every branch's parameters line up, and all of them must match.
+        (
+            json!({"filters": [at_least_five, under_root], "relationship_filters": [linked_to_root]}),
+            vec![&apple, &banana],
+        ),
+        // A text query and filters narrow each other.
+        (
+            json!({"query": "Apple", "filters": [at_least_five]}),
+            vec![&apple],
+        ),
+        (json!({"query": "Date", "filters": [at_least_five]}), vec![]),
+    ];
+    let sorts = [
+        Value::Null,
+        json!({"field": "name", "direction": "asc"}),
+        json!({"field": "amount", "direction": "desc"}),
+        json!({"field": "parent.name", "direction": "asc"}),
+        json!({"field": "blueprint_version", "direction": "desc"}),
+        json!({"field": "system_tag:attricat.sample", "direction": "asc"}),
+    ];
+    let actor: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
+    let repository = api::repository::AttricatRepository::system(pool.clone())
+        .for_workspace(bootstrap_workspace_id());
+    let blueprint_code = api::model::SearchBlueprint {
+        code: "presence_item".to_owned(),
+        version: None,
+    };
+    for (request, expected) in &cases {
+        let field = |name: &str| request.get(name).cloned().unwrap_or_else(|| json!([]));
+        let filters: Vec<api::model::SearchFilter> =
+            serde_json::from_value(field("filters")).unwrap();
+        let relationship_filters: Vec<api::model::RelationshipFilter> =
+            serde_json::from_value(field("relationship_filters")).unwrap();
+        let scope = repository
+            .resolve_search_scope(api::repository::SearchScopeRequest {
+                blueprint: &blueprint_code,
+                query: request["query"].as_str(),
+                filters: &filters,
+                relationship_filters: &relationship_filters,
+                context_code: "default",
+                actor,
+            })
+            .await
+            .unwrap();
+        let mut expected: Vec<_> = expected
+            .iter()
+            .map(|row| row["id"].as_str().unwrap().parse::<Uuid>().unwrap())
+            .collect();
+        expected.sort();
+        for sort in &sorts {
+            let sort: Option<api::model::SearchSort> =
+                serde_json::from_value(sort.clone()).unwrap();
+            // Matches few enough to load, and more than that, inside each statement.
+            for loaded_filter_matches in [api::repository::MAX_LOADED_FILTER_MATCHES, 0] {
+                let mut ids = Vec::new();
+                let mut cursor: Option<String> = None;
+                loop {
+                    assert!(ids.len() <= expected.len(), "{request} {sort:?}: {ids:?}");
+                    let page = repository
+                        .search_page(
+                            &scope,
+                            api::repository::SearchPageRequest {
+                                code: "presence_item",
+                                system_tags: &[],
+                                outdated: false,
+                                export_status: None,
+                                data_quality: None,
+                                sort: sort.as_ref(),
+                                cursor: cursor.as_deref(),
+                                limit: 1,
+                                loaded_filter_matches,
+                                include_total: true,
+                                include_previews: false,
+                            },
+                            &|_| {},
+                        )
+                        .await
+                        .unwrap();
+                    if cursor.is_none() {
+                        assert_eq!(
+                            page.total_count,
+                            Some(expected.len() as i64),
+                            "{request} {sort:?}"
+                        );
+                    }
+                    ids.extend(page.items.iter().map(|row| row.id));
+                    cursor = page.next_cursor;
+                    if cursor.is_none() {
+                        break;
+                    }
+                }
+                ids.sort();
+                assert_eq!(ids, expected, "{request} {sort:?} {loaded_filter_matches}");
+            }
+        }
+    }
+
+    // A tree facet's selection applies together with a filter.
+    let context: Uuid =
+        sqlx::query_scalar("SELECT id FROM attribute_contexts WHERE code = 'default'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let faceted = expect_status(
+        client
+            .post(format!("{base}/v1/records/search"))
+            .json(&json!({
+                "blueprint": {"code": "presence_item"},
+                "filters": [at_least_five],
+                "relationship_tree_facets": [{
+                    "hierarchy_field": "parent",
+                    "context_id": context,
+                    "selected_target_ids": [root["id"]],
+                }],
+                "include_total": true,
+                "page": {"size": 100},
+            }))
+            .send()
+            .await
+            .unwrap(),
+        StatusCode::OK,
+    )
+    .await;
+    assert_ids(&faceted, &[&apple, &banana]);
+
+    // The hidden-outdated count covers every older record, not only the filter's.
+    let version = publish(format!(
+        "{definition}  - code: extra\n    value_type: string\n"
+    ))
+    .await;
+    let current = search(&client, &base, json!([at_least_five]), Some(version)).await;
+    assert_ids(&current, &[]);
+    assert_eq!(current["hidden_outdated_count"], 5);
+    assert_ids(
+        &search(
+            &client,
+            &base,
+            json!([at_least_five]),
+            Some(filtered_version),
+        )
+        .await,
+        &[&apple, &banana, &cherry],
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn filters_resolve_contexts_pinned_revisions_and_deleted_targets(pool: PgPool) {
+    let (base, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let definition = ITEM.replacen(
+        "  - code: text\n    value_type: string\n    context_editable: all\n",
+        "  - code: text\n    value_type: string\n    context_editable: all\n  - code: strict\n    value_type: string\n    context_editable: all\n    context_fallback: none\n",
+        1,
+    );
+    let blueprint = create_blueprint(&client, &base, &definition).await;
+    let context = expect_status(
+        client
+            .post(format!("{base}/contexts"))
+            .json(&json!({"code": "presence_child", "data": {}}))
+            .send()
+            .await
+            .unwrap(),
+        StatusCode::CREATED,
+    )
+    .await;
+    let in_child = |code: &str, value: &str| json!({"kind": "scalar", "attribute_code": code, "context_id": context["id"], "value": value});
+    let create = |values: Value| create_record_with(&client, &base, "presence_item", values);
+    let inherited = create(json!([
+        scalar("name", "Inherited"),
+        scalar("text", "base"),
+        scalar("strict", "base")
+    ]))
+    .await;
+    let overridden = create(json!([
+        scalar("name", "Overridden"),
+        scalar("text", "base"),
+        scalar("strict", "base"),
+        in_child("text", "child"),
+        in_child("strict", "child")
+    ]))
+    .await;
+    let search_in = |filters: Value, context_code: &'static str| {
+        let request = client
+            .post(format!("{base}/v1/records/search"))
+            .json(&json!({
+                "blueprint": {"code": "presence_item"},
+                "context_code": context_code,
+                "filters": filters,
+                "include_total": true,
+                "page": {"size": 100},
+            }));
+        async move { expect_status(request.send().await.unwrap(), StatusCode::OK).await }
+    };
+    let eq = |field: &str, value: &str| json!([{"field": field, "operator": "eq", "value": value}]);
+
+    // The nearest context with a value wins, so an override hides the value it
+    // replaced, and a record without one falls back.
+    assert_ids(
+        &search_in(eq("text", "base"), "default").await,
+        &[&inherited, &overridden],
+    );
+    assert_ids(
+        &search_in(eq("text", "base"), "presence_child").await,
+        &[&inherited],
+    );
+    assert_ids(
+        &search_in(eq("text", "child"), "presence_child").await,
+        &[&overridden],
+    );
+    // Without fallback, only the requested context's own value counts.
+    assert_ids(
+        &search_in(eq("strict", "base"), "presence_child").await,
+        &[],
+    );
+    assert_ids(
+        &search_in(eq("strict", "child"), "presence_child").await,
+        &[&overridden],
+    );
+    assert_ids(
+        &search_in(presence("strict", false), "presence_child").await,
+        &[&inherited],
+    );
+
+    // Each hop reads the revision its record is pinned to.
+    let old_target = create(json!([scalar("name", "Target"), scalar("text", "old")])).await;
+    let old_source = create(json!([
+        scalar("name", "Old"),
+        relationship("parent", &old_target)
+    ]))
+    .await;
+    let id = blueprint["blueprint"]["id"].as_str().unwrap();
+    let revision = expect_status(
+        client
+            .post(format!("{base}/blueprints/{id}/versions"))
+            .json(&json!({"definition": format!("{definition}  - code: extra\n    value_type: string\n")}))
+            .send()
+            .await
+            .unwrap(),
+        StatusCode::CREATED,
+    )
+    .await;
+    let version = revision["blueprint"]["version"].as_i64().unwrap();
+    expect_status(
+        client
+            .post(format!("{base}/blueprints/{id}/versions/{version}/publish"))
+            .send()
+            .await
+            .unwrap(),
+        StatusCode::OK,
+    )
+    .await;
+    let new_target = create(json!([scalar("name", "Target"), scalar("text", "new")])).await;
+    let new_source = create(json!([
+        scalar("name", "New"),
+        relationship("parent", &new_target)
+    ]))
+    .await;
+    assert_ids(
+        &search_in(eq("parent.name", "Target"), "default").await,
+        &[&old_source, &new_source],
+    );
+    assert_ids(
+        &search_in(eq("parent.text", "old"), "default").await,
+        &[&old_source],
+    );
+    assert_ids(
+        &search_in(eq("parent.text", "new"), "default").await,
+        &[&new_source],
+    );
+    let current = search(&client, &base, eq("parent.name", "Target"), Some(version)).await;
+    assert_ids(&current, &[&new_source]);
+
+    // A deleted target no longer matches, and the path then counts as absent.
+    expect_status(
+        client
+            .delete(format!(
+                "{base}/records/{}",
+                old_target["id"].as_str().unwrap()
+            ))
+            .send()
+            .await
+            .unwrap(),
+        StatusCode::NO_CONTENT,
+    )
+    .await;
+    assert_ids(
+        &search_in(eq("parent.name", "Target"), "default").await,
+        &[&new_source],
+    );
+    let absent = search_in(presence("parent.name", false), "default").await;
+    assert!(
+        absent["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row["id"] == old_source["id"]),
+        "{absent}"
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn searches_past_the_loaded_limit_keep_totals_and_pages(pool: PgPool) {
+    const LOADED: i64 = 3;
+    let (base, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    create_blueprint(&client, &base, ITEM).await;
+    create_record_with(
+        &client,
+        &base,
+        "presence_item",
+        json!([scalar("name", "Other"), scalar("amount", 2)]),
+    )
+    .await;
+    let actor: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
+    let repository =
+        api::repository::AttricatRepository::system(pool).for_workspace(bootstrap_workspace_id());
+    let blueprint = api::model::SearchBlueprint {
+        code: "presence_item".to_owned(),
+        version: None,
+    };
+    let filters: Vec<api::model::SearchFilter> =
+        serde_json::from_value(json!([{"field": "amount", "operator": "eq", "value": 1}])).unwrap();
+    let mut expected = Vec::new();
+    // Past the limit alone, then enough matches for the sample to call it broad.
+    for matches in [LOADED + 3, LOADED + 15] {
+        for index in expected.len() as i64..matches {
+            let record = create_record_with(
+                &client,
+                &base,
+                "presence_item",
+                json!([
+                    scalar("name", format!("Wanted {index}")),
+                    scalar("amount", 1)
+                ]),
+            )
+            .await;
+            expected.push(record["id"].as_str().unwrap().parse::<Uuid>().unwrap());
+        }
+        expected.sort();
+        for (query, filters) in [(None, &filters[..]), (Some("Wanted"), &[][..])] {
+            let scope = repository
+                .resolve_search_scope(api::repository::SearchScopeRequest {
+                    blueprint: &blueprint,
+                    query,
+                    filters,
+                    relationship_filters: &[],
+                    context_code: "default",
+                    actor,
+                })
+                .await
+                .unwrap();
+            let mut ids = Vec::new();
+            let mut cursor: Option<String> = None;
+            loop {
+                let page = repository
+                    .search_page(
+                        &scope,
+                        api::repository::SearchPageRequest {
+                            code: "presence_item",
+                            system_tags: &[],
+                            outdated: false,
+                            export_status: None,
+                            data_quality: None,
+                            sort: None,
+                            cursor: cursor.as_deref(),
+                            limit: 2,
+                            loaded_filter_matches: LOADED,
+                            include_total: true,
+                            include_previews: false,
+                        },
+                        &|_| {},
+                    )
+                    .await
+                    .unwrap();
+                if cursor.is_none() {
+                    assert_eq!(page.total_count, Some(expected.len() as i64));
+                }
+                ids.extend(page.items.iter().map(|row| row.id));
+                cursor = page.next_cursor;
+                if cursor.is_none() {
+                    break;
+                }
+            }
+            ids.sort();
+            assert_eq!(ids, expected, "{query:?}");
+        }
+    }
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn disabling_jit_lasts_for_the_connection(pool: PgPool) {
+    let mut connection = pool.acquire().await.unwrap();
+    api::disable_jit(&mut connection).await.unwrap();
+    let setting: String = sqlx::query_scalar("SHOW jit")
+        .fetch_one(&mut *connection)
+        .await
+        .unwrap();
+    assert_eq!(setting, "off");
 }

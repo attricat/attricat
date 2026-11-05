@@ -384,21 +384,6 @@ describe('record API client', () => {
           is_sample: false,
           display: { default: 'Red product' },
           preview: { default: { title: 'Red product' } },
-          match_explanations: [
-            {
-              term: 'color.name:red',
-              matching_record_id: recordId,
-              matching_attribute_code: 'name',
-              traversal_depth: 1,
-              relationship_path: [
-                {
-                  source_record_id: recordId,
-                  attribute_code: 'color',
-                  target_record_id: recordId,
-                },
-              ],
-            },
-          ],
         },
       ],
       next_cursor: null,
@@ -407,7 +392,7 @@ describe('record API client', () => {
       blueprint: 'product',
       query: 'color.name:red',
     });
-    expect(result.items[0].match_explanations[0]?.term).toBe('color.name:red');
+    expect(result.items[0].id).toBe(recordId);
     expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/records/search', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

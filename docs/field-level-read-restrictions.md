@@ -60,7 +60,7 @@ return.
 | Related and incoming lists | `GET /records?related_from=`, `POST /v1/records/{id}/incoming-relationships` (`record_search.rs`) | workspace grant / record target | Previews of the target or source records. Incoming sources are filtered by record read authority; a page may be empty while still carrying a continuation cursor. |
 | Display labels | `record_projection.rs` `display_label` | wherever a label is returned | Built at read time from `views.dropdown_option.fields` over the stored preview projection. A sensitive field listed there appears in pickers, facets, related columns, hierarchy and incoming lists. |
 | Write responses | update, append, duplicate, restore, migration preview | `records.write` | The full record or values. |
-| Search | `POST /v1/records/search` (`record_reads.rs`, `record_search.rs`) | `records.read`, workspace grant | Preview, display, table values, related values, and `match_explanations[].matching_attribute_code`. |
+| Search | `POST /v1/records/search` (`record_reads.rs`, `record_search.rs`) | `records.read`, workspace grant | Preview, display, table values and related values. |
 | Record labels | `POST /v1/records/labels` (`record_reads.rs`, `record_search.rs`) | `records.read` per record | Display labels per context: the `dropdown_option` view's fields. |
 | Facets | relationship-tree facet routes | workspace grant | Target display labels. |
 | Saved searches | `/saved-views`, `/view-state-links` | workspace grant | Stored filter values and query text, shared across the workspace. |
@@ -165,8 +165,7 @@ remain:
    - reject filters and sorts on restricted attributes with
      `403 restricted_attribute`, in `resolve_search_filter` and
      `resolve_table_sort` (HTTP and agent);
-   - leave restricted attribute IDs out of the free-text SQL and
-     `match_explanations`;
+   - leave restricted attribute IDs out of the free-text SQL;
    - redact table columns per row.
 
    Saved searches whose filters use a restricted attribute show the filter as

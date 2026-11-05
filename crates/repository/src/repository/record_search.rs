@@ -1,13 +1,17 @@
+use super::authorization::{GrantCodes, RECORD_GRANTED_SQL};
+use super::search_page::{BROAD_SEARCH_SAMPLE_MATCHES, SEARCH_MATCH_SAMPLE};
 use super::*;
 use super::{record_projection::display_label, system_annotations::validate_system_tag_filter};
 use crate::model::ExportStatusFilter;
 use attricat_domain::constants::DEFAULT_CONTEXT_CODE;
+use attricat_domain::permissions::Permission;
 use attricat_domain::states::{DataQualityFilter, RuleFindingState};
 use attricat_validation::saved_search::MAX_RELATIONSHIP_HOPS;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
+    fmt::Write as _,
     time::Duration,
 };
 use tokio::sync::OnceCell;
@@ -133,16 +137,16 @@ const FACET_CONTEXT_PATH_SQL: &str = r#"context_path AS (
     )"#;
 
 /// SQL selecting the records of blueprint `blueprint` whose relationship
-/// `field`, resolved along `context_path`, targets a record in `allowed`. A
+/// `field`, resolved along `context_path`, targets a record in the CTE `allowed`. A
 /// value counts only when no nearer context on the path has one for its
 /// record, and only in the requested context without fallback. It joins
 /// through the target-side relationship indexes, so its cost follows the
 /// size of `allowed` rather than the whole relationship.
-fn facet_sources_sql(blueprint: &str, field: &str) -> String {
+fn facet_sources_sql(allowed: &str, blueprint: &str, field: &str) -> String {
     format!(
         r#"SELECT source.id
-           FROM allowed
-           JOIN attribute_values av ON av.relationship_target_record_id = allowed.id
+           FROM {allowed}
+           JOIN attribute_values av ON av.relationship_target_record_id = {allowed}.id
             AND av.active AND av.relationship_target_record_id IS NOT NULL
            JOIN attributes a ON a.id = av.attribute_id AND a.blueprint_id = {blueprint} AND a.code = {field}
            JOIN context_path path ON path.id = av.context_id
@@ -176,14 +180,171 @@ fn facet_path_key(source_path: &[RelationshipFacetHop]) -> String {
 /// clients cannot send it.
 pub const SEARCH_FILTER_EQ_ANY: &str = "eq_any";
 
+/// Applied in a transaction to the counts that run outside a request, on a pool
+/// with no statement timeout of its own.
+const SCOPE_STATEMENT_TIMEOUT: &str = "SET LOCAL statement_timeout = '30s'";
+
+/// Applied in a transaction to statements joining a whole relationship. PostgreSQL
+/// underestimates a resolved edge list as a single row and would pick nested loops
+/// over it, one comparison per pair of sources and nodes.
+const HASH_JOINS_ONLY: &str = "SET LOCAL enable_nestloop = off";
+
+/// A blueprint's matching records grouped by relationship target; see
+/// [`AttricatRepository::relationship_target_groups`].
+#[derive(Clone, Debug)]
+pub struct RelationshipTargetGroups {
+    /// Every matching record.
+    pub total: i64,
+    /// Matching records that link to any target.
+    pub linked: i64,
+    pub groups: Vec<(Uuid, i64)>,
+    /// More readable targets exist than `groups` holds.
+    pub truncated: bool,
+}
+
+/// What narrows a search within its blueprint and version. IDs and filters
+/// apply together.
+#[derive(Clone, Copy)]
+pub struct RecordMatching<'a> {
+    /// The records a text query or tree facet resolved to, if either applies.
+    pub ids: Option<&'a [Uuid]>,
+    /// Evaluated inside each statement, so their matches never load into the API.
+    pub filters: Option<&'a ResolvedRecordFilters>,
+    /// The filters are known to match many records, so a statement can stop early
+    /// and shouldn't start from their values.
+    pub broad: bool,
+}
+
+impl RecordMatching<'_> {
+    /// Nothing narrows the search.
+    pub const ALL: Self = Self {
+        ids: None,
+        filters: None,
+        broad: false,
+    };
+}
+
+/// A search's attribute and relationship filters, resolved against its blueprint.
+#[derive(Clone, Debug)]
+pub struct ResolvedRecordFilters {
+    pub context: SearchContext,
+    pub filters: Vec<RecordSearchFilter>,
+    pub relationship_filters: Vec<RecordRelationshipFilter>,
+    pub text_terms: Vec<ResolvedTextTerm>,
+    pub tree_facets: Vec<ResolvedTreeFacet>,
+}
+
+/// One text query term a statement can test on each record: its scalar values or
+/// listed IDs, directly or through a relationship path. Global `*:` terms aren't
+/// among these, as they traverse under their own budgets.
+#[derive(Clone, Debug)]
+pub struct ResolvedTextTerm {
+    pattern: String,
+    /// Whether only text values can match, so the trigram index applies.
+    text_only: bool,
+    attribute: Option<String>,
+    /// Relationship codes from the selected blueprint to the matched records.
+    fields: Vec<String>,
+    /// The blueprint at each level of the path, ending with the matched records'.
+    levels: Vec<Uuid>,
+    /// Path levels on the selected blueprint, whose records are results too.
+    selected_levels: Vec<usize>,
+    /// Set for an `@id` term, which matches these records instead of a value.
+    ids: Option<Vec<Uuid>>,
+}
+
+/// A tree facet's selection: records reaching a selected node or its descendants.
+#[derive(Clone, Debug)]
+pub struct ResolvedTreeFacet {
+    context_id: Uuid,
+    selected_target_ids: Vec<Uuid>,
+    target_blueprint_id: Uuid,
+    hierarchy_field: Option<String>,
+    /// The blueprint each hop of the source path starts from, with its field.
+    hop_blueprints: Vec<Uuid>,
+    hop_fields: Vec<String>,
+}
+
+impl ResolvedRecordFilters {
+    /// Filters in `context` that nothing has narrowed yet.
+    pub fn in_context(context: SearchContext) -> Self {
+        Self {
+            context,
+            filters: Vec::new(),
+            relationship_filters: Vec::new(),
+            text_terms: Vec::new(),
+            tree_facets: Vec::new(),
+        }
+    }
+
+    /// Filters holding only text terms, which match in any context.
+    pub fn for_text_terms(text_terms: Vec<ResolvedTextTerm>) -> Self {
+        let context = SearchContext {
+            ids: Vec::new(),
+            codes: Vec::new(),
+        };
+        Self {
+            text_terms,
+            ..Self::in_context(context)
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.filters.is_empty()
+            && self.relationship_filters.is_empty()
+            && self.text_terms.is_empty()
+            && self.tree_facets.is_empty()
+    }
+}
+
+/// Binds the parameters of a [`record_filters_clause`] to any query, after all
+/// of the statement's own.
+macro_rules! bind_record_filters {
+    ($query:expr, $filters:expr, $workspace_id:expr) => {{
+        let mut query = $query;
+        let filters: Option<&ResolvedRecordFilters> = $filters;
+        if let Some(filters) = filters {
+            query = query.bind($workspace_id).bind(&filters.context.ids);
+            for filter in &filters.filters {
+                query = query
+                    .bind(&filter.relationship_path)
+                    .bind(&filter.leaf_field)
+                    .bind(&filter.value);
+            }
+            for filter in &filters.relationship_filters {
+                query = query
+                    .bind(&filter.relationship_path)
+                    .bind(&filter.selected_target_ids);
+            }
+            for term in &filters.text_terms {
+                query = query
+                    .bind(&term.pattern)
+                    .bind(&term.attribute)
+                    .bind(&term.fields)
+                    .bind(&term.levels)
+                    .bind(&term.ids);
+            }
+            for facet in &filters.tree_facets {
+                query = query
+                    .bind(facet.context_id)
+                    .bind(&facet.selected_target_ids)
+                    .bind(facet.target_blueprint_id)
+                    .bind(&facet.hierarchy_field)
+                    .bind(&facet.hop_blueprints)
+                    .bind(&facet.hop_fields);
+            }
+        }
+        query
+    }};
+}
+
 /// Which records of a blueprint a search page, count or version scope covers.
 #[derive(Clone, Copy)]
 pub struct RecordSearchScope<'a> {
     pub blueprint_id: Uuid,
     /// `None` covers every version.
     pub blueprint_version: Option<i64>,
-    /// `None` when no query or filter narrowed the blueprint.
-    pub matching_record_ids: Option<&'a [Uuid]>,
+    pub matching: RecordMatching<'a>,
     /// Records must carry every one of these system tags.
     pub system_tags: &'a [String],
     /// Only records on an older version than `current_blueprint_version`.
@@ -287,134 +448,549 @@ struct IncomingRelationshipRow {
     blueprint_context_fallback: Value,
 }
 
-/// Walks the relationship path `$3` from every record of blueprint `$1`
-/// (optional version `$2`) as `reached(root_id, current_id, depth)`, for the
-/// filter statements below. `{workspace}` is replaced with the statement's
-/// workspace parameter; `{edge_context}` stays for [`resolved_context`].
-const REACHED_SQL: &str = r#"WITH RECURSIVE reached(root_id, current_id, depth) AS (
-                       SELECT e.id, e.id, 0
-                         FROM records e
-                        WHERE e.blueprint_id = $1
-                          AND ($2::bigint IS NULL OR e.blueprint_version = $2)
-                          AND e.workspace_id = {workspace} AND e.deleted_at IS NULL
-                       UNION ALL
-                       SELECT reached.root_id, av.relationship_target_record_id, reached.depth + 1
-                         FROM reached
-                         JOIN records source ON source.id = reached.current_id
-                          AND source.workspace_id = {workspace} AND source.deleted_at IS NULL
-                         JOIN attributes relationship ON relationship.blueprint_id = source.blueprint_id
-                          AND relationship.blueprint_version = source.blueprint_version
-                          AND relationship.workspace_id = {workspace}
-                          AND relationship.code = $3[reached.depth + 1]
-                          AND relationship.value_type = 'relationship'
-                         JOIN attribute_values av ON av.record_id = source.id
-                          AND av.workspace_id = {workspace}
-                          AND av.attribute_id = relationship.id AND av.active
-                          AND {edge_context}
-                          AND av.relationship_target_record_id IS NOT NULL
-                         JOIN records target ON target.id = av.relationship_target_record_id
-                          AND target.workspace_id = {workspace} AND target.deleted_at IS NULL
-                         JOIN blueprints target_blueprint ON target_blueprint.id = target.blueprint_id
-                          AND target_blueprint.version = target.blueprint_version
-                          AND target_blueprint.code = relationship.target_blueprint_code
-                        WHERE reached.depth < cardinality($3)
-                   )"#;
+/// The scalar value types `is_set` tests besides a filter's own type.
+const PRESENCE_VALUE_TYPES: &str = "'string','number','integer','boolean','date','datetime','time'";
 
-/// A filter statement with its `{reached}` walk expanded for `workspace`.
-fn with_reached(statement: &str, workspace: &str) -> String {
-    statement.replace("{reached}", &REACHED_SQL.replace("{workspace}", workspace))
+/// How PostgreSQL may run a filter's `EXISTS` subquery.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum FilterPlan {
+    /// A semi-join, which can start from the value's index. It's far faster when
+    /// few records match, but reads every match when many do.
+    FromValue,
+    /// Once per candidate record, which `OFFSET 0` forces. A page stops as soon
+    /// as it's full, and candidates a text query already narrowed stay cheap.
+    PerRecord,
 }
 
-/// Root records whose active relationships, resolved for the context path
-/// `$6`, reach one of `$4` at exactly the path `$3`. `$1` blueprint, `$2`
-/// optional version, `$5` workspace. `{edge_context}` is replaced with
-/// [`resolved_context`].
-const RELATIONSHIP_FILTER_SQL: &str = r#"{reached}
-                   SELECT DISTINCT root_id
-                     FROM reached
-                    WHERE depth = cardinality($3) AND current_id = ANY($4)"#;
-
-/// Root records whose value of a (possibly dotted) field, resolved for the
-/// context path `$9`, satisfies one typed filter. `$1` blueprint, `$2`
-/// optional version, `$3` relationship path, `$4` leaf field, `$5` value type,
-/// `$6` operator, `$7` value, `$8` workspace. `{edge_context}` and
-/// `{value_context}` are replaced with [`resolved_context`].
-const SCALAR_FILTER_SQL: &str = r#"{reached}
-                   SELECT DISTINCT reached.root_id
-                     FROM reached
-                     JOIN records leaf ON leaf.id = reached.current_id
-                      AND leaf.workspace_id = $8 AND leaf.deleted_at IS NULL
-                     JOIN attributes a ON a.blueprint_id = leaf.blueprint_id
-                      AND a.blueprint_version = leaf.blueprint_version
-                      AND a.workspace_id = $8
-                      AND a.code = $4 AND a.deleted_at IS NULL
-                      AND (a.value_type = $5 OR ($6 = 'is_set' AND a.value_type IN
-                          ('string','number','integer','boolean','date','datetime','time')))
-                     JOIN attribute_values av ON av.record_id = leaf.id AND av.attribute_id = a.id
-                      AND av.workspace_id = $8
-                      AND av.active AND av.relationship_target_record_id IS NULL
-                      AND {value_context}
-                    WHERE reached.depth = cardinality($3)
-                      AND (a.value_type <> 'file' OR EXISTS (
-                          SELECT 1 FROM attribute_file_references r
-                           WHERE r.attribute_value_id = av.id AND r.workspace_id = $8))
-                      AND CASE
-                          WHEN $6 = 'is_set' THEN TRUE
-                          WHEN $5 = 'string' AND $6 = 'eq' THEN av.value_text = $7
-                          WHEN $5 = 'string' AND $6 = 'eq_any' THEN $7::jsonb ? av.value_text
-                          WHEN $5 = 'string' AND $6 = 'contains' THEN strpos(lower(av.value_text), lower($7)) > 0
-                          WHEN $5 = 'string' AND $6 = 'starts_with' THEN left(lower(av.value_text), char_length($7)) = lower($7)
-                          WHEN $5 = 'number' AND $6 = 'eq' THEN av.value_number = $7::numeric
-                          WHEN $5 = 'number' AND $6 = 'gt' THEN av.value_number > $7::numeric
-                          WHEN $5 = 'number' AND $6 = 'gte' THEN av.value_number >= $7::numeric
-                          WHEN $5 = 'number' AND $6 = 'lt' THEN av.value_number < $7::numeric
-                          WHEN $5 = 'number' AND $6 = 'lte' THEN av.value_number <= $7::numeric
-                          WHEN $5 = 'integer' AND $6 = 'eq' THEN av.value_integer = $7::bigint
-                          WHEN $5 = 'integer' AND $6 = 'gt' THEN av.value_integer > $7::bigint
-                          WHEN $5 = 'integer' AND $6 = 'gte' THEN av.value_integer >= $7::bigint
-                          WHEN $5 = 'integer' AND $6 = 'lt' THEN av.value_integer < $7::bigint
-                          WHEN $5 = 'integer' AND $6 = 'lte' THEN av.value_integer <= $7::bigint
-                          WHEN $5 = 'boolean' AND $6 = 'eq' THEN av.value_boolean = $7::boolean
-                          WHEN $5 = 'date' AND $6 = 'eq' THEN av.value_date = $7::date
-                          WHEN $5 = 'date' AND $6 = 'gt' THEN av.value_date > $7::date
-                          WHEN $5 = 'date' AND $6 = 'gte' THEN av.value_date >= $7::date
-                          WHEN $5 = 'date' AND $6 = 'lt' THEN av.value_date < $7::date
-                          WHEN $5 = 'date' AND $6 = 'lte' THEN av.value_date <= $7::date
-                          WHEN $5 = 'datetime' AND $6 = 'eq' THEN av.value_datetime = $7::timestamptz
-                          WHEN $5 = 'datetime' AND $6 = 'gt' THEN av.value_datetime > $7::timestamptz
-                          WHEN $5 = 'datetime' AND $6 = 'gte' THEN av.value_datetime >= $7::timestamptz
-                          WHEN $5 = 'datetime' AND $6 = 'lt' THEN av.value_datetime < $7::timestamptz
-                          WHEN $5 = 'datetime' AND $6 = 'lte' THEN av.value_datetime <= $7::timestamptz
-                          WHEN $5 = 'time' AND $6 = 'eq' THEN av.value_time = $7::time
-                          WHEN $5 = 'time' AND $6 = 'gt' THEN av.value_time > $7::time
-                          WHEN $5 = 'time' AND $6 = 'gte' THEN av.value_time >= $7::time
-                          WHEN $5 = 'time' AND $6 = 'lt' THEN av.value_time < $7::time
-                          WHEN $5 = 'time' AND $6 = 'lte' THEN av.value_time <= $7::time
-                          ELSE FALSE
-                      END"#;
-
-/// Absence is the complement of presence within the same live root family and
-/// version scope. This also includes roots with no reached relationship leaf,
-/// older revisions without the field, or no attached reusable attribute.
-/// An active scalar row counts as present even for empty text, zero or false;
-/// a file value is present only while it references at least one file.
-fn presence_filter_query(
-    sql: &str,
-    filter: &RecordSearchFilter,
-    workspace_parameter: usize,
-) -> String {
-    if filter.operator == attricat_validation::saved_search::FILTER_OPERATOR_IS_SET
-        && filter.value == "false"
-    {
-        format!(
-            "SELECT e.id FROM records e WHERE e.blueprint_id = $1
-             AND ($2::bigint IS NULL OR e.blueprint_version = $2)
-             AND e.workspace_id = ${workspace_parameter} AND e.deleted_at IS NULL
-             EXCEPT ({sql})"
-        )
-    } else {
-        sql.to_owned()
+/// An `EXISTS` subquery over tables with their conditions. A semi-join needs every
+/// condition in `WHERE`, because PostgreSQL only considers one when outer references
+/// appear nowhere else. Per record, explicit joins keep the walk in path order; left
+/// to choose among this many tables, PostgreSQL finds a far slower one.
+fn exists_sql(tables: &[(String, String)], condition: &str, plan: FilterPlan) -> String {
+    let (first, first_condition) = &tables[0];
+    match plan {
+        FilterPlan::FromValue => {
+            let from = tables
+                .iter()
+                .map(|(table, _)| table.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
+            let conditions = tables
+                .iter()
+                .map(|(_, condition)| condition.as_str())
+                .collect::<Vec<_>>()
+                .join(" AND ");
+            format!("EXISTS (SELECT 1 FROM {from} WHERE {conditions} AND {condition})")
+        }
+        FilterPlan::PerRecord => {
+            let joins = tables[1..]
+                .iter()
+                .map(|(table, on)| format!("JOIN {table} ON {on}"))
+                .collect::<Vec<_>>()
+                .join(" ");
+            format!(
+                "EXISTS (SELECT 1 FROM {first} {joins} WHERE {first_condition} AND {condition} OFFSET 0)"
+            )
+        }
     }
+}
+
+/// The tables walking `hops` relationships from `e`, with the alias of the
+/// record they reach. Codes come from the array parameter `path`. Each hop reads
+/// its source record's pinned blueprint revision and resolves its edges for the
+/// context path `context`.
+fn relationship_hop_tables(
+    hops: usize,
+    path: usize,
+    workspace: usize,
+    context: usize,
+) -> (Vec<(String, String)>, String) {
+    let mut tables = Vec::with_capacity(hops * 4 + 2);
+    let mut source = "e".to_owned();
+    for hop in 1..=hops {
+        let (relationship, edge, target, blueprint) = (
+            format!("relationship_{hop}"),
+            format!("edge_{hop}"),
+            format!("target_{hop}"),
+            format!("target_blueprint_{hop}"),
+        );
+        tables.push((
+            format!("attributes {relationship}"),
+            format!(
+                "{relationship}.blueprint_id = {source}.blueprint_id \
+                 AND {relationship}.blueprint_version = {source}.blueprint_version \
+                 AND {relationship}.workspace_id = ${workspace} \
+                 AND {relationship}.code = ${path}[{hop}] \
+                 AND {relationship}.value_type = 'relationship'"
+            ),
+        ));
+        tables.push((
+            format!("attribute_values {edge}"),
+            format!(
+                "{edge}.record_id = {source}.id AND {edge}.workspace_id = ${workspace} \
+                 AND {edge}.attribute_id = {relationship}.id AND {edge}.active \
+                 AND {edge}.relationship_target_record_id IS NOT NULL AND {}",
+                resolved_context(&edge, &relationship, &format!("${context}"))
+            ),
+        ));
+        tables.push((
+            format!("records {target}"),
+            format!(
+                "{target}.id = {edge}.relationship_target_record_id \
+                 AND {target}.workspace_id = ${workspace} AND {target}.deleted_at IS NULL"
+            ),
+        ));
+        tables.push((
+            format!("blueprints {blueprint}"),
+            format!(
+                "{blueprint}.id = {target}.blueprint_id \
+                 AND {blueprint}.version = {target}.blueprint_version \
+                 AND {blueprint}.code = {relationship}.target_blueprint_code"
+            ),
+        ));
+        source = target;
+    }
+    (tables, source)
+}
+
+/// One filter's test of the leaf value `av`, against the text parameter `value`.
+/// Columns and operators come from closed lists, never from the request.
+fn value_comparison(filter: &RecordSearchFilter, value: usize) -> String {
+    const NEVER: &str = "FALSE";
+    if filter.operator == attricat_validation::saved_search::FILTER_OPERATOR_IS_SET {
+        return format!(
+            "(a.value_type <> '{file}' OR EXISTS (SELECT 1 FROM attribute_file_references file_reference \
+              WHERE file_reference.attribute_value_id = av.id \
+                AND file_reference.workspace_id = av.workspace_id))",
+            file = ValueType::File.as_str()
+        );
+    }
+    let Ok((column, column_type)) = native_sort_column(filter.value_type) else {
+        return NEVER.to_owned();
+    };
+    let text = filter.value_type == ValueType::String;
+    let ordered = !text && filter.value_type != ValueType::Boolean;
+    match filter.operator.as_str() {
+        "eq" if text => format!("av.{column} = ${value}"),
+        "eq" => format!("av.{column} = ${value}::{column_type}"),
+        SEARCH_FILTER_EQ_ANY if text => format!("${value}::jsonb ? av.{column}"),
+        "contains" if text => format!("strpos(lower(av.{column}), lower(${value})) > 0"),
+        "starts_with" if text => {
+            format!("left(lower(av.{column}), char_length(${value})) = lower(${value})")
+        }
+        "gt" if ordered => format!("av.{column} > ${value}::{column_type}"),
+        "gte" if ordered => format!("av.{column} >= ${value}::{column_type}"),
+        "lt" if ordered => format!("av.{column} < ${value}::{column_type}"),
+        "lte" if ordered => format!("av.{column} <= ${value}::{column_type}"),
+        _ => NEVER.to_owned(),
+    }
+}
+
+/// One attribute filter over `e`. Absence is the complement of presence, so it
+/// also holds for records with no reached leaf, older revisions without the
+/// field, or no attached reusable attribute. An active scalar row counts as
+/// present even for empty text, zero or false; a file value is present only
+/// while it references at least one file.
+fn attribute_filter_sql(
+    filter: &RecordSearchFilter,
+    workspace: usize,
+    context: usize,
+    parameter: usize,
+    narrowed: bool,
+) -> String {
+    let (path, leaf_code, value) = (parameter, parameter + 1, parameter + 2);
+    let presence = filter.operator == attricat_validation::saved_search::FILTER_OPERATOR_IS_SET;
+    let value_type = filter.value_type.as_str();
+    let type_matches = if presence {
+        format!("(a.value_type = '{value_type}' OR a.value_type IN ({PRESENCE_VALUE_TYPES}))")
+    } else {
+        format!("a.value_type = '{value_type}'")
+    };
+    let current_value = |leaf: &str| {
+        (
+            "attribute_values av".to_owned(),
+            format!(
+                "av.record_id = {leaf}.id AND av.attribute_id = a.id \
+                 AND av.workspace_id = ${workspace} AND av.active \
+                 AND av.relationship_target_record_id IS NULL AND {}",
+                resolved_context("av", "a", &format!("${context}"))
+            ),
+        )
+    };
+    let tables = if filter.reusable {
+        vec![
+            (
+                "attributes a".to_owned(),
+                format!(
+                    "a.record_id = e.id AND a.code = ${leaf_code} AND {type_matches} \
+                     AND a.workspace_id = ${workspace} AND a.deleted_at IS NULL"
+                ),
+            ),
+            (
+                "reusable_attribute_revisions revision".to_owned(),
+                "revision.id = a.reusable_attribute_revision_id AND revision.searchable".to_owned(),
+            ),
+            current_value("e"),
+        ]
+    } else {
+        let (mut tables, leaf) =
+            relationship_hop_tables(filter.relationship_path.len(), path, workspace, context);
+        tables.push((
+            "attributes a".to_owned(),
+            format!(
+                "a.blueprint_id = {leaf}.blueprint_id \
+                 AND a.blueprint_version = {leaf}.blueprint_version \
+                 AND a.workspace_id = ${workspace} AND a.code = ${leaf_code} \
+                 AND a.deleted_at IS NULL AND {type_matches}"
+            ),
+        ));
+        tables.push(current_value(&leaf));
+        tables
+    };
+    let absence = presence && filter.value == "false";
+    // An anti-join reads every value, where checking per record stops at the first.
+    let plan = if !absence && !narrowed {
+        FilterPlan::FromValue
+    } else {
+        FilterPlan::PerRecord
+    };
+    let exists = exists_sql(&tables, &value_comparison(filter, value), plan);
+    if absence {
+        format!("NOT {exists}")
+    } else {
+        exists
+    }
+}
+
+/// One text term over `e`, from parameter `parameter`: pattern, attribute, path
+/// codes, path blueprints and IDs. A path walks every active edge, in any context,
+/// and each level on the selected blueprint counts as a result.
+fn text_term_sql(
+    term: &ResolvedTextTerm,
+    workspace: usize,
+    parameter: usize,
+    plan: FilterPlan,
+) -> String {
+    let (pattern, attribute, fields, levels, ids) = (
+        parameter,
+        parameter + 1,
+        parameter + 2,
+        parameter + 3,
+        parameter + 4,
+    );
+    let branches = term
+        .selected_levels
+        .iter()
+        .map(|&start| {
+            let mut tables = Vec::new();
+            let mut leaf = "e".to_owned();
+            for level in start..term.fields.len() {
+                let (edge, relationship, target) = (
+                    format!("term_edge_{level}"),
+                    format!("term_relationship_{level}"),
+                    format!("term_target_{level}"),
+                );
+                tables.push((
+                    format!("attribute_values {edge}"),
+                    format!(
+                        "{edge}.record_id = {leaf}.id AND {edge}.workspace_id = ${workspace} \
+                         AND {edge}.active AND {edge}.relationship_target_record_id IS NOT NULL"
+                    ),
+                ));
+                tables.push((
+                    format!("attributes {relationship}"),
+                    format!(
+                        "{relationship}.id = {edge}.attribute_id \
+                         AND {relationship}.workspace_id = ${workspace} \
+                         AND {relationship}.deleted_at IS NULL \
+                         AND {relationship}.value_type = 'relationship' \
+                         AND {relationship}.code = ${fields}[{}]",
+                        level + 1
+                    ),
+                ));
+                tables.push((
+                    format!("records {target}"),
+                    format!(
+                        "{target}.id = {edge}.relationship_target_record_id \
+                         AND {target}.workspace_id = ${workspace} \
+                         AND {target}.deleted_at IS NULL \
+                         AND {target}.blueprint_id = ${levels}[{}]",
+                        level + 2
+                    ),
+                ));
+                leaf = target;
+            }
+            if term.ids.is_some() {
+                let matches = format!("{leaf}.id = ANY(${ids}::uuid[])");
+                return if tables.is_empty() {
+                    matches
+                } else {
+                    exists_sql(&tables, &matches, plan)
+                };
+            }
+            if plan == FilterPlan::FromValue && start < term.fields.len() {
+                return text_term_from_matches(term, start, workspace, parameter);
+            }
+            tables.push((
+                "attribute_values term_value".to_owned(),
+                format!(
+                    "term_value.record_id = {leaf}.id AND term_value.workspace_id = ${workspace} \
+                     AND term_value.active AND term_value.relationship_target_record_id IS NULL"
+                ),
+            ));
+            tables.push((
+                "attributes term_attribute".to_owned(),
+                format!(
+                    "term_attribute.id = term_value.attribute_id \
+                     AND term_attribute.workspace_id = ${workspace} \
+                     AND term_attribute.deleted_at IS NULL{}",
+                    text_term_attribute(term, attribute)
+                ),
+            ));
+            let matches = format!("{} ILIKE ${pattern}", text_term_value(term));
+            exists_sql(&tables, &matches, plan)
+        })
+        .collect::<Vec<_>>()
+        .join(" OR ");
+    format!("({branches})")
+}
+
+/// A text term's path from level `start`, walked backwards from the matching values
+/// or listed IDs. PostgreSQL can't estimate a pattern, so left to choose it would
+/// start from the far larger set of edges.
+fn text_term_from_matches(
+    term: &ResolvedTextTerm,
+    start: usize,
+    workspace: usize,
+    parameter: usize,
+) -> String {
+    let (pattern, attribute, fields, levels, ids) = (
+        parameter,
+        parameter + 1,
+        parameter + 2,
+        parameter + 3,
+        parameter + 4,
+    );
+    let matches = if term.ids.is_some() {
+        format!("SELECT unnest(${ids}::uuid[]) AS record_id")
+    } else {
+        format!(
+            "SELECT term_value.record_id FROM records term_record \
+             JOIN attribute_values term_value ON term_value.record_id = term_record.id \
+             JOIN attributes term_attribute ON term_attribute.id = term_value.attribute_id \
+              AND term_attribute.workspace_id = ${workspace} AND term_attribute.deleted_at IS NULL{} \
+             WHERE term_record.workspace_id = ${workspace} AND term_record.deleted_at IS NULL \
+               AND term_record.blueprint_id = ${levels}[{}] \
+               AND term_value.workspace_id = ${workspace} AND term_value.active \
+               AND term_value.relationship_target_record_id IS NULL \
+               AND {} ILIKE ${pattern}",
+            text_term_attribute(term, attribute),
+            term.fields.len() + 1,
+            text_term_value(term)
+        )
+    };
+    let mut reached = "term_matches.record_id".to_owned();
+    let mut joins = String::new();
+    for level in (start..term.fields.len()).rev() {
+        let (target, edge, relationship) = (
+            format!("term_target_{level}"),
+            format!("term_edge_{level}"),
+            format!("term_relationship_{level}"),
+        );
+        write!(
+            joins,
+            " JOIN records {target} ON {target}.id = {reached} \
+              AND {target}.workspace_id = ${workspace} AND {target}.deleted_at IS NULL \
+              AND {target}.blueprint_id = ${levels}[{target_level}] \
+             JOIN attribute_values {edge} ON {edge}.relationship_target_record_id = {target}.id \
+              AND {edge}.workspace_id = ${workspace} AND {edge}.active \
+             JOIN attributes {relationship} ON {relationship}.id = {edge}.attribute_id \
+              AND {relationship}.workspace_id = ${workspace} \
+              AND {relationship}.deleted_at IS NULL \
+              AND {relationship}.value_type = 'relationship' \
+              AND {relationship}.code = ${fields}[{field}]",
+            target_level = level + 2,
+            field = level + 1,
+        )
+        .expect("writing to a string");
+        reached = format!("{edge}.record_id");
+    }
+    format!(
+        "e.id IN (WITH term_matches AS MATERIALIZED ({matches}) \
+         SELECT {reached} FROM term_matches{joins})"
+    )
+}
+
+/// The condition limiting a text term to the attribute it names, if any.
+fn text_term_attribute(term: &ResolvedTextTerm, attribute: usize) -> String {
+    match term.attribute {
+        Some(_) => format!(" AND term_attribute.code = ${attribute}"),
+        None => String::new(),
+    }
+}
+
+/// The value of `term_value` a text term compares.
+fn text_term_value(term: &ResolvedTextTerm) -> &'static str {
+    if term.text_only {
+        "term_value.value_text"
+    } else {
+        "COALESCE(term_value.value_text, term_value.value_number::text, \
+         term_value.value_integer::text, term_value.value_boolean::text, \
+         term_value.value_date::text, term_value.value_datetime::text, \
+         term_value.value_time::text)"
+    }
+}
+
+/// One tree facet selection over `e`, from parameter `parameter`: context, selected
+/// nodes, target blueprint, hierarchy field, hop blueprints and hop fields. It walks
+/// down from the selection and back along the path through the target-side indexes,
+/// so its cost follows the size of the selected subtrees.
+fn tree_facet_sql(facet: &ResolvedTreeFacet, parameter: usize) -> String {
+    let (context, selected, target, hierarchy, blueprints, fields) = (
+        parameter,
+        parameter + 1,
+        parameter + 2,
+        parameter + 3,
+        parameter + 4,
+        parameter + 5,
+    );
+    let context_path = FACET_CONTEXT_PATH_SQL.replace("$4", &format!("${context}"));
+    let subtree = facet_sources_sql("allowed", &format!("${target}"), &format!("${hierarchy}"));
+    let mut reached = "allowed".to_owned();
+    let mut hops = String::new();
+    for hop in (0..facet.hop_fields.len()).rev() {
+        let sources = facet_sources_sql(
+            &reached,
+            &format!("${blueprints}[{}]", hop + 1),
+            &format!("${fields}[{}]", hop + 1),
+        );
+        write!(hops, ", hop_{hop} AS ({sources})").expect("writing to a string");
+        reached = format!("hop_{hop}");
+    }
+    format!(
+        "e.id IN (WITH RECURSIVE {context_path}, allowed AS (\
+           SELECT unnest(${selected}::uuid[]) AS id UNION {subtree}\
+         ){hops} SELECT id FROM {reached})"
+    )
+}
+
+/// One `AND` condition per filter restricting `e`, or nothing without filters.
+/// Each stays correlated to `e`, so PostgreSQL can start from whichever side is
+/// smaller and a page can stop early. Parameters start at `first_parameter`,
+/// past the statement's own, and are bound with [`bind_record_filters`]:
+/// workspace and context path, then each filter's own in order.
+fn record_filters_clause(matching: RecordMatching<'_>, first_parameter: usize) -> String {
+    let Some(filters) = matching.filters else {
+        return String::new();
+    };
+    let narrowed = matching.broad
+        || matching.ids.is_some()
+        || !filters.text_terms.is_empty()
+        || !filters.tree_facets.is_empty();
+    let (workspace, context) = (first_parameter, first_parameter + 1);
+    let mut next = first_parameter + 2;
+    let mut conditions = Vec::new();
+    for filter in &filters.filters {
+        conditions.push(attribute_filter_sql(
+            filter, workspace, context, next, narrowed,
+        ));
+        next += 3;
+    }
+    for filter in &filters.relationship_filters {
+        let (tables, _) =
+            relationship_hop_tables(filter.relationship_path.len(), next, workspace, context);
+        let last_edge = format!("edge_{}", filter.relationship_path.len());
+        conditions.push(exists_sql(
+            &tables,
+            &format!(
+                "{last_edge}.relationship_target_record_id = ANY(${}::uuid[])",
+                next + 1
+            ),
+            if narrowed {
+                FilterPlan::PerRecord
+            } else {
+                FilterPlan::FromValue
+            },
+        ));
+        next += 2;
+    }
+    for term in &filters.text_terms {
+        let plan = if matching.broad {
+            FilterPlan::PerRecord
+        } else {
+            FilterPlan::FromValue
+        };
+        conditions.push(text_term_sql(term, workspace, next, plan));
+        next += 5;
+    }
+    for facet in &filters.tree_facets {
+        conditions.push(tree_facet_sql(facet, next));
+        next += 6;
+    }
+    conditions
+        .iter()
+        .map(|condition| format!("AND {condition}"))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// The CTEs `{chosen}` and `{edges}(source_id, target_id)` of one relationship field,
+/// after a `context_path` CTE. `sources` narrows the sources with a join on
+/// `av.record_id`, `version` adds a condition on `source`, and `target` selects
+/// targets. Choosing each source's context in one sorted pass, rather than with a
+/// per-source LATERAL subquery, keeps this a few index scans and hash joins whose row
+/// counts the planner estimates well.
+fn resolved_edges_sql(
+    [chosen, edges]: [&str; 2],
+    blueprint: &str,
+    field: &str,
+    sources: &str,
+    version: &str,
+    target: &str,
+) -> String {
+    format!(
+        r#"{chosen} AS (
+                    SELECT DISTINCT ON (av.record_id) av.record_id, av.attribute_id, av.context_id
+                    FROM attributes a
+                    JOIN context_path path ON path.depth = 0 OR a.context_fallback <> 'none'
+                    JOIN attribute_values av ON av.attribute_id = a.id AND av.context_id = path.id
+                     AND av.active AND av.relationship_target_record_id IS NOT NULL
+                    {sources}
+                    JOIN records source ON source.id = av.record_id AND source.blueprint_id = {blueprint}
+                     AND source.blueprint_version = a.blueprint_version AND source.deleted_at IS NULL
+                    WHERE a.blueprint_id = {blueprint} AND a.code = {field}
+                      {version}
+                    ORDER BY av.record_id, path.depth
+                ), {edges}(source_id, target_id) AS (
+                    SELECT DISTINCT {chosen}.record_id, av.relationship_target_record_id
+                    FROM {chosen}
+                    JOIN attribute_values av ON av.record_id = {chosen}.record_id
+                     AND av.attribute_id = {chosen}.attribute_id AND av.context_id = {chosen}.context_id
+                     AND av.active AND av.relationship_target_record_id IS NOT NULL
+                    JOIN records target ON target.id = av.relationship_target_record_id
+                    WHERE {target} AND target.deleted_at IS NULL
+                )"#
+    )
+}
+
+/// `(node, member)` pairs of each node and everything under it, once each even when
+/// the hierarchy has several parents or a cycle.
+fn subtree_pairs(
+    nodes: &[Uuid],
+    children_by_parent: &HashMap<Uuid, Vec<Uuid>>,
+) -> Vec<(Uuid, Uuid)> {
+    let mut pairs = Vec::new();
+    for &node in nodes {
+        let mut visited = HashSet::new();
+        let mut pending = vec![node];
+        while let Some(member) = pending.pop() {
+            if visited.insert(member) {
+                pairs.push((node, member));
+                pending.extend(children_by_parent.get(&member).into_iter().flatten());
+            }
+        }
+    }
+    pairs
 }
 
 /// The IDs from a root down to `node`'s parent, along the shortest way up and
@@ -730,228 +1306,6 @@ impl AttricatRepository {
         })
     }
 
-    /// Resolves roots whose active relationship values, resolved for `context`, reach a
-    /// selected target at the exact requested relationship path depth.
-    pub async fn filter_relationship_record_ids(
-        &self,
-        blueprint_id: Uuid,
-        blueprint_version: Option<i64>,
-        filters: &[RecordRelationshipFilter],
-        context: &SearchContext,
-    ) -> Result<Vec<Uuid>, RepositoryError> {
-        let filters: Vec<&RecordRelationshipFilter> = filters
-            .iter()
-            .filter(|filter| !filter.selected_target_ids.is_empty())
-            .collect();
-        if filters.is_empty() {
-            return Ok(Vec::new());
-        }
-        // One INTERSECT branch per filter. Shared parameters: $1 blueprint,
-        // $2 version, $3 workspace, $4 context path; each filter binds a path
-        // and targets.
-        let statement = with_reached(RELATIONSHIP_FILTER_SQL, "$5").replace(
-            "{edge_context}",
-            &resolved_context("av", "relationship", "$6"),
-        );
-        let sql = filters
-            .iter()
-            .enumerate()
-            .map(|(index, _)| {
-                let base = 5 + index * 2;
-                format!(
-                    "({})",
-                    renumber_parameters(&statement, |parameter| match parameter {
-                        1 => 1,
-                        2 => 2,
-                        5 => 3,
-                        6 => 4,
-                        3 | 4 => base + parameter - 3,
-                        _ => unreachable!("the filter statement has six parameters"),
-                    })
-                )
-            })
-            .collect::<Vec<_>>()
-            .join(" INTERSECT ");
-        let mut query = sqlx::query_scalar::<_, Uuid>(&sql)
-            .bind(blueprint_id)
-            .bind(blueprint_version)
-            .bind(self.workspace_id.0)
-            .bind(&context.ids);
-        for filter in &filters {
-            query = query
-                .bind(&filter.relationship_path)
-                .bind(&filter.selected_target_ids);
-        }
-        Ok(query
-            .fetch_all(&self.pool)
-            .await?
-            .into_iter()
-            .collect::<HashSet<_>>()
-            .into_iter()
-            .collect())
-    }
-
-    /// Resolves records which satisfy every typed scalar filter with values resolved for
-    /// `context`. Dotted fields traverse at most three relationship hops using each
-    /// source record's pinned blueprint revision.
-    pub async fn filter_record_ids(
-        &self,
-        blueprint_id: Uuid,
-        blueprint_version: Option<i64>,
-        filters: &[RecordSearchFilter],
-        context: &SearchContext,
-    ) -> Result<Vec<Uuid>, RepositoryError> {
-        let mut matching: Option<HashSet<Uuid>> = None;
-        for filter in filters.iter().filter(|filter| filter.reusable) {
-            let ids = self
-                .filter_reusable_attribute_ids(blueprint_id, blueprint_version, filter, context)
-                .await?;
-            let current = match matching {
-                Some(current) => current.intersection(&ids).copied().collect(),
-                None => ids,
-            };
-            // Nothing can match every filter once the intersection is empty.
-            if current.is_empty() {
-                return Ok(Vec::new());
-            }
-            matching = Some(current);
-        }
-        let scalar: Vec<&RecordSearchFilter> =
-            filters.iter().filter(|filter| !filter.reusable).collect();
-        if !scalar.is_empty() {
-            // Every scalar filter becomes one INTERSECT branch of a single
-            // statement. Shared parameters: $1 blueprint, $2 version,
-            // $3 workspace, $4 context path; each filter binds five more.
-            let statement = with_reached(SCALAR_FILTER_SQL, "$8")
-                .replace(
-                    "{edge_context}",
-                    &resolved_context("av", "relationship", "$9"),
-                )
-                .replace("{value_context}", &resolved_context("av", "a", "$9"));
-            let sql = scalar
-                .iter()
-                .enumerate()
-                .map(|(index, filter)| {
-                    let base = 5 + index * 5;
-                    format!(
-                        "({})",
-                        renumber_parameters(
-                            &presence_filter_query(&statement, filter, 8),
-                            |parameter| match parameter {
-                                1 => 1,
-                                2 => 2,
-                                8 => 3,
-                                9 => 4,
-                                3..=7 => base + parameter - 3,
-                                _ => unreachable!("the filter statement has nine parameters"),
-                            }
-                        )
-                    )
-                })
-                .collect::<Vec<_>>()
-                .join(" INTERSECT ");
-            let mut query = sqlx::query_scalar::<_, Uuid>(&sql)
-                .bind(blueprint_id)
-                .bind(blueprint_version)
-                .bind(self.workspace_id.0)
-                .bind(&context.ids);
-            for filter in &scalar {
-                query = query
-                    .bind(&filter.relationship_path)
-                    .bind(&filter.leaf_field)
-                    .bind(filter.value_type.as_str())
-                    .bind(&filter.operator)
-                    .bind(&filter.value);
-            }
-            let ids = query
-                .fetch_all(&self.pool)
-                .await?
-                .into_iter()
-                .collect::<HashSet<_>>();
-            matching = Some(match matching {
-                Some(current) => current.intersection(&ids).copied().collect(),
-                None => ids,
-            });
-        }
-        Ok(matching.unwrap_or_default().into_iter().collect())
-    }
-
-    async fn filter_reusable_attribute_ids(
-        &self,
-        blueprint_id: Uuid,
-        blueprint_version: Option<i64>,
-        filter: &RecordSearchFilter,
-        context: &SearchContext,
-    ) -> Result<HashSet<Uuid>, RepositoryError> {
-        let sql = presence_filter_query(
-            &r#"SELECT DISTINCT e.id
-                 FROM records e
-                 JOIN attributes a ON a.record_id = e.id AND a.code = $3
-                  AND (a.value_type = $4 OR ($5 = 'is_set' AND a.value_type IN
-                      ('string','number','integer','boolean','date','datetime','time')))
-                 JOIN reusable_attribute_revisions r ON r.id = a.reusable_attribute_revision_id
-                 JOIN attribute_values av ON av.record_id = e.id AND av.attribute_id = a.id
-                WHERE e.blueprint_id = $1
-                  AND ($2::bigint IS NULL OR e.blueprint_version = $2)
-                  AND e.workspace_id = $7 AND e.deleted_at IS NULL
-                  AND a.workspace_id = $7 AND a.deleted_at IS NULL AND r.searchable
-                  AND av.workspace_id = $7 AND av.active AND av.relationship_target_record_id IS NULL
-                  AND {value_context}
-                  AND (a.value_type <> 'file' OR EXISTS (
-                      SELECT 1 FROM attribute_file_references fr
-                       WHERE fr.attribute_value_id = av.id AND fr.workspace_id = $7))
-                  AND CASE
-                    WHEN $5 = 'is_set' THEN TRUE
-                    WHEN $4 = 'string' AND $5 = 'eq' THEN av.value_text = $6
-                    WHEN $4 = 'string' AND $5 = 'eq_any' THEN $6::jsonb ? av.value_text
-                    WHEN $4 = 'string' AND $5 = 'contains' THEN strpos(lower(av.value_text), lower($6)) > 0
-                    WHEN $4 = 'string' AND $5 = 'starts_with' THEN left(lower(av.value_text), char_length($6)) = lower($6)
-                    WHEN $4 = 'number' AND $5 = 'eq' THEN av.value_number = $6::numeric
-                    WHEN $4 = 'number' AND $5 = 'gt' THEN av.value_number > $6::numeric
-                    WHEN $4 = 'number' AND $5 = 'gte' THEN av.value_number >= $6::numeric
-                    WHEN $4 = 'number' AND $5 = 'lt' THEN av.value_number < $6::numeric
-                    WHEN $4 = 'number' AND $5 = 'lte' THEN av.value_number <= $6::numeric
-                    WHEN $4 = 'integer' AND $5 = 'eq' THEN av.value_integer = $6::bigint
-                    WHEN $4 = 'integer' AND $5 = 'gt' THEN av.value_integer > $6::bigint
-                    WHEN $4 = 'integer' AND $5 = 'gte' THEN av.value_integer >= $6::bigint
-                    WHEN $4 = 'integer' AND $5 = 'lt' THEN av.value_integer < $6::bigint
-                    WHEN $4 = 'integer' AND $5 = 'lte' THEN av.value_integer <= $6::bigint
-                    WHEN $4 = 'boolean' AND $5 = 'eq' THEN av.value_boolean = $6::boolean
-                    WHEN $4 = 'date' AND $5 = 'eq' THEN av.value_date = $6::date
-                    WHEN $4 = 'date' AND $5 = 'gt' THEN av.value_date > $6::date
-                    WHEN $4 = 'date' AND $5 = 'gte' THEN av.value_date >= $6::date
-                    WHEN $4 = 'date' AND $5 = 'lt' THEN av.value_date < $6::date
-                    WHEN $4 = 'date' AND $5 = 'lte' THEN av.value_date <= $6::date
-                    WHEN $4 = 'datetime' AND $5 = 'eq' THEN av.value_datetime = $6::timestamptz
-                    WHEN $4 = 'datetime' AND $5 = 'gt' THEN av.value_datetime > $6::timestamptz
-                    WHEN $4 = 'datetime' AND $5 = 'gte' THEN av.value_datetime >= $6::timestamptz
-                    WHEN $4 = 'datetime' AND $5 = 'lt' THEN av.value_datetime < $6::timestamptz
-                    WHEN $4 = 'datetime' AND $5 = 'lte' THEN av.value_datetime <= $6::timestamptz
-                    WHEN $4 = 'time' AND $5 = 'eq' THEN av.value_time = $6::time
-                    WHEN $4 = 'time' AND $5 = 'gt' THEN av.value_time > $6::time
-                    WHEN $4 = 'time' AND $5 = 'gte' THEN av.value_time >= $6::time
-                    WHEN $4 = 'time' AND $5 = 'lt' THEN av.value_time < $6::time
-                    WHEN $4 = 'time' AND $5 = 'lte' THEN av.value_time <= $6::time
-                    ELSE FALSE END"#
-                .replace("{value_context}", &resolved_context("av", "a", "$8")),
-            filter,
-            7,
-        );
-        Ok(sqlx::query_scalar::<_, Uuid>(&sql)
-            .bind(blueprint_id)
-            .bind(blueprint_version)
-            .bind(&filter.leaf_field)
-            .bind(filter.value_type.as_str())
-            .bind(&filter.operator)
-            .bind(&filter.value)
-            .bind(self.workspace_id.0)
-            .bind(&context.ids)
-            .fetch_all(&self.pool)
-            .await?
-            .into_iter()
-            .collect())
-    }
-
     pub async fn search_record_previews(
         &self,
         scope: RecordSearchScope<'_>,
@@ -962,7 +1316,7 @@ impl AttricatRepository {
         let RecordSearchScope {
             blueprint_id,
             blueprint_version,
-            matching_record_ids,
+            matching,
             system_tags,
             outdated,
             export_status,
@@ -971,6 +1325,7 @@ impl AttricatRepository {
         } = scope;
         validate_system_tag_filter(system_tags)?;
         let export_status_sql = record_filter_clauses(11, export_status, data_quality);
+        let filters_sql = record_filters_clause(matching, 12);
         let sql = format!(
             r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.system_tags, e.created_at, e.projections -> 'preview' AS preview,
                       b.views AS blueprint_views,
@@ -986,6 +1341,7 @@ impl AttricatRepository {
                       OR (e.created_at, e.id) > ($3, $4)
                    )
                   AND ($5::uuid[] IS NULL OR e.id = ANY($5))
+                  {filters_sql}
                   AND ($6::text[] IS NULL OR e.system_tags @> $6)
                   {export_status_sql}
                   AND (NOT $7 OR e.blueprint_version <> $8)
@@ -993,20 +1349,24 @@ impl AttricatRepository {
                  LIMIT $9"#
         );
         let (cursor_created_at, cursor_id) = cursor.unzip();
-        let rows = sqlx::query_as::<_, RecordPreviewRow>(&sql)
-            .bind(blueprint_id)
-            .bind(blueprint_version)
-            .bind(cursor_created_at)
-            .bind(cursor_id)
-            .bind(matching_record_ids)
-            .bind((!system_tags.is_empty()).then_some(system_tags))
-            .bind(outdated)
-            .bind(current_blueprint_version)
-            .bind(limit + 1)
-            .bind(self.workspace_id.0)
-            .bind(export_status_param(export_status))
-            .fetch_all(&self.pool)
-            .await?;
+        let rows = bind_record_filters!(
+            sqlx::query_as::<_, RecordPreviewRow>(&sql)
+                .bind(blueprint_id)
+                .bind(blueprint_version)
+                .bind(cursor_created_at)
+                .bind(cursor_id)
+                .bind(matching.ids)
+                .bind((!system_tags.is_empty()).then_some(system_tags))
+                .bind(outdated)
+                .bind(current_blueprint_version)
+                .bind(limit + 1)
+                .bind(self.workspace_id.0)
+                .bind(export_status_param(export_status)),
+            matching.filters,
+            self.workspace_id.0
+        )
+        .fetch_all(&self.pool)
+        .await?;
         let mut items: Vec<_> = rows.into_iter().map(record_preview).collect();
         let next_cursor = next_page_cursor(&mut items, limit, |item| {
             encode_search_cursor(item.created_at, item.id)
@@ -1023,7 +1383,7 @@ impl AttricatRepository {
         let RecordSearchScope {
             blueprint_id,
             blueprint_version,
-            matching_record_ids,
+            matching,
             system_tags,
             outdated,
             export_status,
@@ -1031,9 +1391,10 @@ impl AttricatRepository {
             current_blueprint_version,
         } = scope;
         validate_system_tag_filter(system_tags)?;
-        let (records, matching) = matching_records(matching_record_ids.is_some(), 3);
+        let (records, matching_sql) = matching_records(matching.ids.is_some(), 3);
         let export_status_sql = record_filter_clauses(9, export_status, data_quality);
-        Ok(sqlx::query_scalar::<_, i64>(&format!(
+        let filters_sql = record_filters_clause(matching, 10);
+        let sql = format!(
             r#"SELECT COUNT(*)
                  FROM (
                     SELECT 1
@@ -1042,23 +1403,152 @@ impl AttricatRepository {
                        AND e.blueprint_id = $1
                        AND ($2::bigint IS NULL OR e.blueprint_version = $2)
                        AND e.deleted_at IS NULL
-                       {matching}
+                       {matching_sql}
+                       {filters_sql}
                        AND ($4::text[] IS NULL OR e.system_tags @> $4)
                        {export_status_sql}
                        AND (NOT $5 OR e.blueprint_version <> $6)
                      LIMIT $7
                  ) matches"#,
-        ))
-        .bind(blueprint_id)
-        .bind(blueprint_version)
-        .bind(matching_record_ids)
-        .bind((!system_tags.is_empty()).then_some(system_tags))
-        .bind(outdated)
-        .bind(current_blueprint_version)
-        .bind(limit)
-        .bind(self.workspace_id.0)
-        .bind(export_status_param(export_status))
+        );
+        Ok(bind_record_filters!(
+            sqlx::query_scalar::<_, i64>(&sql)
+                .bind(blueprint_id)
+                .bind(blueprint_version)
+                .bind(matching.ids)
+                .bind((!system_tags.is_empty()).then_some(system_tags))
+                .bind(outdated)
+                .bind(current_blueprint_version)
+                .bind(limit)
+                .bind(self.workspace_id.0)
+                .bind(export_status_param(export_status)),
+            matching.filters,
+            self.workspace_id.0
+        )
         .fetch_one(&self.pool)
+        .await?)
+    }
+
+    /// Counts up to `limit` of a blueprint's matching records, within
+    /// [`SCOPE_STATEMENT_TIMEOUT`] for callers without a request's time limit.
+    pub async fn count_matching_records(
+        &self,
+        blueprint_id: Uuid,
+        blueprint_version: Option<i64>,
+        matching: RecordMatching<'_>,
+        limit: i64,
+    ) -> Result<i64, RepositoryError> {
+        let sql = format!(
+            "SELECT COUNT(*) FROM (SELECT 1 {} LIMIT $5) matches",
+            matching_records_from(matching)
+        );
+        let mut transaction = self.pool.begin().await?;
+        sqlx::query(SCOPE_STATEMENT_TIMEOUT)
+            .execute(&mut *transaction)
+            .await?;
+        let count = bind_record_filters!(
+            sqlx::query_scalar::<_, i64>(&sql)
+                .bind(blueprint_id)
+                .bind(blueprint_version)
+                .bind(matching.ids)
+                .bind(self.workspace_id.0)
+                .bind(limit),
+            matching.filters,
+            self.workspace_id.0
+        )
+        .fetch_one(&mut *transaction)
+        .await?;
+        transaction.commit().await?;
+        Ok(count)
+    }
+
+    /// How many of a blueprint's first `sample` records match, checked one by one.
+    /// It tells a broad search from a narrow one for the cost of a few lookups.
+    pub async fn sampled_match_count(
+        &self,
+        blueprint_id: Uuid,
+        blueprint_version: Option<i64>,
+        matching: RecordMatching<'_>,
+        sample: i64,
+    ) -> Result<i64, RepositoryError> {
+        let matching = RecordMatching {
+            broad: true,
+            ..matching
+        };
+        let sql = format!(
+            "SELECT COUNT(*) FROM (SELECT e.* FROM records e \
+              WHERE e.blueprint_id = $1 AND ($2::bigint IS NULL OR e.blueprint_version = $2) \
+                AND e.workspace_id = $3 AND e.deleted_at IS NULL LIMIT $4) e \
+              WHERE ($5::uuid[] IS NULL OR e.id = ANY($5)) {}",
+            record_filters_clause(matching, 6)
+        );
+        Ok(bind_record_filters!(
+            sqlx::query_scalar::<_, i64>(&sql)
+                .bind(blueprint_id)
+                .bind(blueprint_version)
+                .bind(self.workspace_id.0)
+                .bind(sample)
+                .bind(matching.ids),
+            matching.filters,
+            self.workspace_id.0
+        )
+        .fetch_one(&self.pool)
+        .await?)
+    }
+
+    /// Up to `limit` of a blueprint's matching records with their versions, in no
+    /// particular order, so a broad search stops as soon as it has them.
+    pub async fn first_matching_records(
+        &self,
+        blueprint_id: Uuid,
+        blueprint_version: Option<i64>,
+        matching: RecordMatching<'_>,
+        limit: i64,
+    ) -> Result<Vec<(Uuid, i64)>, RepositoryError> {
+        let sql = format!(
+            "SELECT e.id, e.blueprint_version {} LIMIT $5",
+            matching_records_from(matching)
+        );
+        Ok(bind_record_filters!(
+            // Planned for its values each time: a cached generic plan can't see that a
+            // pattern is rare.
+            sqlx::query_as::<_, (Uuid, i64)>(&sql)
+                .persistent(false)
+                .bind(blueprint_id)
+                .bind(blueprint_version)
+                .bind(matching.ids)
+                .bind(self.workspace_id.0)
+                .bind(limit),
+            matching.filters,
+            self.workspace_id.0
+        )
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
+    /// Up to `limit` of a blueprint's matching records, lowest IDs first.
+    pub async fn matching_record_ids(
+        &self,
+        blueprint_id: Uuid,
+        blueprint_version: Option<i64>,
+        matching: RecordMatching<'_>,
+        limit: i64,
+    ) -> Result<Vec<Uuid>, RepositoryError> {
+        let sql = format!(
+            "SELECT e.id {} ORDER BY e.id LIMIT $5",
+            matching_records_from(matching)
+        );
+        Ok(bind_record_filters!(
+            sqlx::query_scalar::<_, Uuid>(&sql)
+                .bind(blueprint_id)
+                .bind(blueprint_version)
+                .bind(matching.ids)
+                .bind(self.workspace_id.0)
+                .bind(limit),
+            matching.filters,
+            self.workspace_id.0
+        )
+        .fetch_all(&self.pool)
         .await?)
     }
 
@@ -1069,7 +1559,7 @@ impl AttricatRepository {
         let RecordSearchScope {
             blueprint_id,
             blueprint_version,
-            matching_record_ids,
+            matching,
             system_tags,
             outdated,
             export_status,
@@ -1077,37 +1567,38 @@ impl AttricatRepository {
             current_blueprint_version,
         } = scope;
         validate_system_tag_filter(system_tags)?;
-        let (records, matching) = matching_records(matching_record_ids.is_some(), 4);
         let export_status_sql = record_filter_clauses(8, export_status, data_quality);
-        Ok(sqlx::query_scalar::<_, i64>(&format!(
-            r#"SELECT e.blueprint_version
-                 FROM {records}
-                WHERE e.blueprint_id = $1
-                  AND ($2::bigint IS NULL OR e.blueprint_version = $2)
-                  AND e.workspace_id = $3
-                  AND e.deleted_at IS NULL
-                  {matching}
-                  AND ($5::text[] IS NULL OR e.system_tags @> $5)
-                  {export_status_sql}
-                  AND (NOT $6 OR e.blueprint_version <> $7)
-                GROUP BY e.blueprint_version
-                ORDER BY e.blueprint_version DESC
-                LIMIT 2"#,
-        ))
-        .bind(blueprint_id)
-        .bind(blueprint_version)
-        .bind(self.workspace_id.0)
-        .bind(matching_record_ids)
-        .bind((!system_tags.is_empty()).then_some(system_tags))
-        .bind(outdated)
-        .bind(current_blueprint_version)
-        .bind(export_status_param(export_status))
+        let matches = result_version_matches(matching, &export_status_sql, 9);
+        let sql = format!(
+            r#"SELECT version.version
+                 FROM blueprints version
+                WHERE version.id = $1
+                  AND ($2::bigint IS NULL OR version.version = $2)
+                  AND version.workspace_id = $3
+                  AND EXISTS (SELECT 1 {matches} AND e.blueprint_version = version.version)
+                ORDER BY version.version DESC
+                LIMIT {MAX_RESULT_VERSIONS}"#,
+        );
+        Ok(bind_record_filters!(
+            sqlx::query_scalar::<_, i64>(&sql)
+                .bind(blueprint_id)
+                .bind(blueprint_version)
+                .bind(self.workspace_id.0)
+                .bind(matching.ids)
+                .bind((!system_tags.is_empty()).then_some(system_tags))
+                .bind(outdated)
+                .bind(current_blueprint_version)
+                .bind(export_status_param(export_status)),
+            matching.filters,
+            self.workspace_id.0
+        )
         .fetch_all(&self.pool)
         .await?)
     }
 
     /// [`Self::search_result_versions`] and, with `count_limit`,
-    /// [`Self::count_record_previews`] over the same matches in one scan.
+    /// [`Self::count_record_previews`] over the same matches in one statement,
+    /// each stopping as soon as it has its answer.
     pub async fn search_result_versions_and_count(
         &self,
         scope: RecordSearchScope<'_>,
@@ -1116,7 +1607,7 @@ impl AttricatRepository {
         let RecordSearchScope {
             blueprint_id,
             blueprint_version,
-            matching_record_ids,
+            matching,
             system_tags,
             outdated,
             export_status,
@@ -1128,7 +1619,7 @@ impl AttricatRepository {
                 self.search_result_versions(RecordSearchScope {
                     blueprint_id,
                     blueprint_version,
-                    matching_record_ids,
+                    matching,
                     system_tags,
                     outdated,
                     export_status,
@@ -1140,38 +1631,35 @@ impl AttricatRepository {
             ));
         };
         validate_system_tag_filter(system_tags)?;
-        let (records, matching) = matching_records(matching_record_ids.is_some(), 4);
         let export_status_sql = record_filter_clauses(9, export_status, data_quality);
-        let (versions, count) = sqlx::query_as::<_, (Vec<i64>, i64)>(&format!(
-            r#"WITH matches AS MATERIALIZED (
-                   SELECT e.blueprint_version
-                     FROM {records}
-                    WHERE e.blueprint_id = $1
-                      AND ($2::bigint IS NULL OR e.blueprint_version = $2)
-                      AND e.workspace_id = $3
-                      AND e.deleted_at IS NULL
-                      {matching}
-                      AND ($5::text[] IS NULL OR e.system_tags @> $5)
-                      {export_status_sql}
-                      AND (NOT $6 OR e.blueprint_version <> $7)
-               )
-               SELECT ARRAY(
-                          SELECT blueprint_version FROM matches
-                           GROUP BY blueprint_version
-                           ORDER BY blueprint_version DESC
-                           LIMIT 2
+        let matches = result_version_matches(matching, &export_status_sql, 10);
+        let sql = format!(
+            r#"SELECT ARRAY(
+                          SELECT version.version
+                            FROM blueprints version
+                           WHERE version.id = $1
+                             AND ($2::bigint IS NULL OR version.version = $2)
+                             AND version.workspace_id = $3
+                             AND EXISTS (SELECT 1 {matches} AND e.blueprint_version = version.version)
+                           ORDER BY version.version DESC
+                           LIMIT {MAX_RESULT_VERSIONS}
                       ),
-                      (SELECT COUNT(*) FROM (SELECT 1 FROM matches LIMIT $8) capped)"#,
-        ))
-        .bind(blueprint_id)
-        .bind(blueprint_version)
-        .bind(self.workspace_id.0)
-        .bind(matching_record_ids)
-        .bind((!system_tags.is_empty()).then_some(system_tags))
-        .bind(outdated)
-        .bind(current_blueprint_version)
-        .bind(count_limit)
-        .bind(export_status_param(export_status))
+                      (SELECT COUNT(*) FROM (SELECT 1 {matches} LIMIT $8) capped)"#,
+        );
+        let (versions, count) = bind_record_filters!(
+            sqlx::query_as::<_, (Vec<i64>, i64)>(&sql)
+                .bind(blueprint_id)
+                .bind(blueprint_version)
+                .bind(self.workspace_id.0)
+                .bind(matching.ids)
+                .bind((!system_tags.is_empty()).then_some(system_tags))
+                .bind(outdated)
+                .bind(current_blueprint_version)
+                .bind(count_limit)
+                .bind(export_status_param(export_status)),
+            matching.filters,
+            self.workspace_id.0
+        )
         .fetch_one(&self.pool)
         .await?;
         Ok((versions, Some(count)))
@@ -1191,7 +1679,7 @@ impl AttricatRepository {
         let RecordSearchScope {
             blueprint_id,
             blueprint_version,
-            matching_record_ids,
+            matching,
             system_tags,
             outdated,
             export_status,
@@ -1230,7 +1718,7 @@ impl AttricatRepository {
                     RecordSearchScope {
                         blueprint_id,
                         blueprint_version,
-                        matching_record_ids,
+                        matching,
                         system_tags,
                         outdated,
                         export_status,
@@ -1249,7 +1737,7 @@ impl AttricatRepository {
                     RecordSearchScope {
                         blueprint_id,
                         blueprint_version,
-                        matching_record_ids,
+                        matching,
                         system_tags,
                         outdated,
                         export_status,
@@ -1285,6 +1773,7 @@ impl AttricatRepository {
                     &resolved_context("sort_value", "sort_attribute", "$14"),
                 );
         let export_status_sql = record_filter_clauses(15, export_status, data_quality);
+        let filters_sql = record_filters_clause(matching, 16);
         let sql = format!(
             r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.system_tags, e.created_at, e.projections -> 'preview' AS preview,
                       b.views AS blueprint_views,
@@ -1297,6 +1786,7 @@ impl AttricatRepository {
                 WHERE e.blueprint_id = $1 AND ($2::bigint IS NULL OR e.blueprint_version = $2)
                   AND e.workspace_id = $13 AND e.deleted_at IS NULL
                   AND ($3::uuid[] IS NULL OR e.id = ANY($3))
+                  {filters_sql}
                   AND ($4::text[] IS NULL OR e.system_tags @> $4)
                   {export_status_sql}
                   AND (NOT $5 OR e.blueprint_version <> $6)
@@ -1320,24 +1810,28 @@ impl AttricatRepository {
             nulls_first = nulls_first,
             null_order = null_order,
         );
-        let mut rows = sqlx::query_as::<_, SortedRecordPreviewRow>(&sql)
-            .bind(blueprint_id)
-            .bind(blueprint_version)
-            .bind(matching_record_ids)
-            .bind((!system_tags.is_empty()).then_some(system_tags))
-            .bind(outdated)
-            .bind(current_blueprint_version)
-            .bind(cursor_value)
-            .bind(cursor_is_null)
-            .bind(cursor_id)
-            .bind(&sort.leaf_field)
-            .bind(sort.value_type.as_str())
-            .bind(limit + 1)
-            .bind(self.workspace_id.0)
-            .bind(&sort.context.ids)
-            .bind(export_status_param(export_status))
-            .fetch_all(&self.pool)
-            .await?;
+        let mut rows = bind_record_filters!(
+            sqlx::query_as::<_, SortedRecordPreviewRow>(&sql)
+                .bind(blueprint_id)
+                .bind(blueprint_version)
+                .bind(matching.ids)
+                .bind((!system_tags.is_empty()).then_some(system_tags))
+                .bind(outdated)
+                .bind(current_blueprint_version)
+                .bind(cursor_value)
+                .bind(cursor_is_null)
+                .bind(cursor_id)
+                .bind(&sort.leaf_field)
+                .bind(sort.value_type.as_str())
+                .bind(limit + 1)
+                .bind(self.workspace_id.0)
+                .bind(&sort.context.ids)
+                .bind(export_status_param(export_status)),
+            matching.filters,
+            self.workspace_id.0
+        )
+        .fetch_all(&self.pool)
+        .await?;
         let next_cursor = next_page_cursor(&mut rows, limit, |row| {
             encode_sorted_search_cursor(sort, row)
         });
@@ -1360,7 +1854,7 @@ impl AttricatRepository {
         let RecordSearchScope {
             blueprint_id,
             blueprint_version,
-            matching_record_ids,
+            matching,
             system_tags,
             outdated,
             export_status,
@@ -1401,6 +1895,9 @@ impl AttricatRepository {
             ("e.blueprint_version", String::new())
         };
         let export_status_sql = record_filter_clauses(11, export_status, data_quality);
+        let binds_sort_parameter = sort.system_tag.is_some() || sort.field == "publication_status";
+        let filters_sql =
+            record_filters_clause(matching, if binds_sort_parameter { 13 } else { 12 });
         let sql = format!(
             r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.system_tags, e.created_at, e.projections -> 'preview' AS preview,
                          b.views AS blueprint_views,
@@ -1412,6 +1909,7 @@ impl AttricatRepository {
                   WHERE e.blueprint_id = $1 AND ($2::bigint IS NULL OR e.blueprint_version = $2)
                     AND e.workspace_id = $10 AND e.deleted_at IS NULL
                     AND ($3::uuid[] IS NULL OR e.id = ANY($3))
+                    {filters_sql}
                     AND ($4::text[] IS NULL OR e.system_tags @> $4)
                     {export_status_sql}
                     AND (NOT $5 OR e.blueprint_version <> $6)
@@ -1423,7 +1921,7 @@ impl AttricatRepository {
         let query = sqlx::query_as::<_, SortedRecordPreviewRow>(&sql)
             .bind(blueprint_id)
             .bind(blueprint_version)
-            .bind(matching_record_ids)
+            .bind(matching.ids)
             .bind((!system_tags.is_empty()).then_some(system_tags))
             .bind(outdated)
             .bind(current_blueprint_version)
@@ -1433,14 +1931,21 @@ impl AttricatRepository {
             .bind(self.workspace_id.0)
             .bind(export_status_param(export_status));
         let mut rows = if let Some(tag) = &sort.system_tag {
-            query.bind(tag).fetch_all(&self.pool).await?
-        } else if sort.field == "publication_status" {
-            query
-                .bind(sort.publication_context_id)
+            bind_record_filters!(query.bind(tag), matching.filters, self.workspace_id.0)
                 .fetch_all(&self.pool)
                 .await?
+        } else if sort.field == "publication_status" {
+            bind_record_filters!(
+                query.bind(sort.publication_context_id),
+                matching.filters,
+                self.workspace_id.0
+            )
+            .fetch_all(&self.pool)
+            .await?
         } else {
-            query.fetch_all(&self.pool).await?
+            bind_record_filters!(query, matching.filters, self.workspace_id.0)
+                .fetch_all(&self.pool)
+                .await?
         };
         let next_cursor = next_page_cursor(&mut rows, limit, |row| {
             encode_sorted_search_cursor(sort, row)
@@ -1469,7 +1974,7 @@ impl AttricatRepository {
         let RecordSearchScope {
             blueprint_id,
             blueprint_version,
-            matching_record_ids,
+            matching,
             system_tags,
             outdated,
             export_status,
@@ -1492,6 +1997,8 @@ impl AttricatRepository {
         let mut rows = Vec::new();
         let leaf_export_status = record_filter_clauses(18, export_status, data_quality);
         let null_export_status = record_filter_clauses(16, export_status, data_quality);
+        let leaf_filters = record_filters_clause(matching, 19);
+        let null_filters = record_filters_clause(matching, 17);
 
         if !cursor_is_null {
             let reverse_joins = relationship_sort_reverse_joins(sort.relationship_path.len())?;
@@ -1519,6 +2026,7 @@ impl AttricatRepository {
                     WHERE e.blueprint_id = $1 AND ($2::bigint IS NULL OR e.blueprint_version = $2)
                       AND e.workspace_id = $14 AND e.deleted_at IS NULL
                       AND ($3::uuid[] IS NULL OR e.id = ANY($3))
+                      {leaf_filters}
                       AND ($4::text[] IS NULL OR e.system_tags @> $4)
                       {leaf_export_status}
                       AND (NOT $5 OR e.blueprint_version <> $6)
@@ -1530,27 +2038,31 @@ impl AttricatRepository {
                     ORDER BY sort_value.{column} {direction}, sort_value.record_id ASC, e.id ASC
                     LIMIT $13"#,
             );
-            rows = sqlx::query_as::<_, SortedRecordPreviewRow>(&sql)
-                .bind(blueprint_id)
-                .bind(blueprint_version)
-                .bind(matching_record_ids)
-                .bind((!system_tags.is_empty()).then_some(system_tags))
-                .bind(outdated)
-                .bind(current_blueprint_version)
-                .bind(cursor_value.as_deref())
-                .bind(false)
-                .bind(cursor_id)
-                .bind(&sort.relationship_path)
-                .bind(&sort.leaf_field)
-                .bind(sort.value_type.as_str())
-                .bind(limit + 1)
-                .bind(workspace_id)
-                .bind(&sort.context.ids)
-                .bind(cursor_target_id)
-                .bind(&leaf_attribute_ids)
-                .bind(export_status_param(export_status))
-                .fetch_all(&self.pool)
-                .await?;
+            rows = bind_record_filters!(
+                sqlx::query_as::<_, SortedRecordPreviewRow>(&sql)
+                    .bind(blueprint_id)
+                    .bind(blueprint_version)
+                    .bind(matching.ids)
+                    .bind((!system_tags.is_empty()).then_some(system_tags))
+                    .bind(outdated)
+                    .bind(current_blueprint_version)
+                    .bind(cursor_value.as_deref())
+                    .bind(false)
+                    .bind(cursor_id)
+                    .bind(&sort.relationship_path)
+                    .bind(&sort.leaf_field)
+                    .bind(sort.value_type.as_str())
+                    .bind(limit + 1)
+                    .bind(workspace_id)
+                    .bind(&sort.context.ids)
+                    .bind(cursor_target_id)
+                    .bind(&leaf_attribute_ids)
+                    .bind(export_status_param(export_status)),
+                matching.filters,
+                workspace_id
+            )
+            .fetch_all(&self.pool)
+            .await?;
         }
 
         if rows.len() <= limit as usize {
@@ -1570,6 +2082,7 @@ impl AttricatRepository {
                       AND e.workspace_id = $14 AND e.deleted_at IS NULL
                       AND sort_value.id IS NULL
                       AND ($3::uuid[] IS NULL OR e.id = ANY($3))
+                      {null_filters}
                       AND ($4::text[] IS NULL OR e.system_tags @> $4)
                       {null_export_status}
                       AND (NOT $5 OR e.blueprint_version <> $6)
@@ -1578,25 +2091,29 @@ impl AttricatRepository {
                     ORDER BY e.id ASC
                     LIMIT $13"#,
             );
-            let mut null_rows = sqlx::query_as::<_, SortedRecordPreviewRow>(&sql)
-                .bind(blueprint_id)
-                .bind(blueprint_version)
-                .bind(matching_record_ids)
-                .bind((!system_tags.is_empty()).then_some(system_tags))
-                .bind(outdated)
-                .bind(current_blueprint_version)
-                .bind(Option::<String>::None)
-                .bind(true)
-                .bind(null_cursor_id)
-                .bind(&sort.relationship_path)
-                .bind(&sort.leaf_field)
-                .bind(sort.value_type.as_str())
-                .bind(remaining)
-                .bind(workspace_id)
-                .bind(&sort.context.ids)
-                .bind(export_status_param(export_status))
-                .fetch_all(&self.pool)
-                .await?;
+            let mut null_rows = bind_record_filters!(
+                sqlx::query_as::<_, SortedRecordPreviewRow>(&sql)
+                    .bind(blueprint_id)
+                    .bind(blueprint_version)
+                    .bind(matching.ids)
+                    .bind((!system_tags.is_empty()).then_some(system_tags))
+                    .bind(outdated)
+                    .bind(current_blueprint_version)
+                    .bind(Option::<String>::None)
+                    .bind(true)
+                    .bind(null_cursor_id)
+                    .bind(&sort.relationship_path)
+                    .bind(&sort.leaf_field)
+                    .bind(sort.value_type.as_str())
+                    .bind(remaining)
+                    .bind(workspace_id)
+                    .bind(&sort.context.ids)
+                    .bind(export_status_param(export_status)),
+                matching.filters,
+                workspace_id
+            )
+            .fetch_all(&self.pool)
+            .await?;
             rows.append(&mut null_rows);
         }
 
@@ -2016,14 +2533,11 @@ impl AttricatRepository {
         Ok(Some(related))
     }
 
-    // Facet traversal inputs are explicit to keep query scope auditable.
-    #[allow(clippy::too_many_arguments)]
-    /// Source records whose relationship path, resolved in `context_id` hop
-    /// by hop, reaches a selected node or one of its descendants, or `None`
-    /// without a selection. With an empty `source_path`, the nodes are the
-    /// source blueprint's own records and each record is attached to itself,
-    /// so a selection matches the selected nodes and their descendants.
-    pub async fn relationship_tree_facet_matches(
+    /// Checks a tree facet's selection, or `None` without one. With an empty
+    /// `source_path`, the nodes are the source blueprint's own records and each
+    /// record is attached to itself, so a selection matches the selected nodes and
+    /// their descendants.
+    pub async fn resolve_tree_facet_selection(
         &self,
         source_blueprint_id: Uuid,
         source_path: &[RelationshipFacetHop],
@@ -2031,93 +2545,53 @@ impl AttricatRepository {
         hierarchy_field: Option<&str>,
         context_id: Uuid,
         selected_target_ids: &[Uuid],
-        source_record_ids: Option<&HashSet<Uuid>>,
-    ) -> Result<Option<Vec<Uuid>>, RepositoryError> {
+    ) -> Result<Option<ResolvedTreeFacet>, RepositoryError> {
         if self.get_context_by_id(context_id).await?.is_none() {
             return Err(RepositoryError::InvalidContext);
         }
         if selected_target_ids.is_empty() {
             return Ok(None);
         }
-        let selected: HashSet<_> = selected_target_ids.iter().copied().collect();
+        let selected: Vec<_> = selected_target_ids
+            .iter()
+            .copied()
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect();
         let selected_nodes: i64 = sqlx::query_scalar(
             "SELECT count(*) FROM records WHERE blueprint_id = $1 AND id = ANY($2) AND deleted_at IS NULL",
         )
         .bind(target_blueprint_id)
-        .bind(selected.iter().copied().collect::<Vec<_>>())
+        .bind(&selected)
         .fetch_one(&self.pool)
         .await?;
         if selected_nodes as usize != selected.len() {
             return Err(RepositoryError::RelationshipTargetTypeMismatch);
         }
-        // The blueprint each hop starts from.
-        let hop_sources: Vec<Uuid> = std::iter::once(source_blueprint_id)
-            .chain(source_path.iter().map(|hop| hop.target_blueprint_id))
-            .collect();
-        let last = source_path.len().checked_sub(1);
-        // Walks down from the selection and then back over the last hop
-        // through the target-side relationship indexes, so the cost follows
-        // the size of the selected subtrees rather than the whole relationship.
-        let mut matches = sqlx::query_scalar::<_, Uuid>(&format!(
-            r#"WITH RECURSIVE {FACET_CONTEXT_PATH_SQL}, allowed AS (
-                    SELECT unnest($5::uuid[]) AS id
-                    UNION
-                    {hierarchy}
-                )
-                SELECT id FROM allowed WHERE $2::text IS NULL
-                UNION
-                {sources}"#,
-            hierarchy = facet_sources_sql("$3", "$6"),
-            sources = facet_sources_sql("$1", "$2"),
-        ))
-        .bind(last.map_or(source_blueprint_id, |last| hop_sources[last]))
-        .bind(last.map(|last| source_path[last].field.as_str()))
-        .bind(target_blueprint_id)
-        .bind(context_id)
-        .bind(selected.into_iter().collect::<Vec<_>>())
-        .bind(hierarchy_field)
-        .fetch_all(&self.pool)
-        .await?;
-        // Earlier hops step back the same way from the records reached so far.
-        for (index, hop) in source_path.iter().enumerate().rev().skip(1) {
-            if matches.is_empty() {
-                break;
-            }
-            matches = sqlx::query_scalar::<_, Uuid>(&format!(
-                r#"WITH RECURSIVE {FACET_CONTEXT_PATH_SQL}, allowed AS (
-                        SELECT unnest($3::uuid[]) AS id
-                    )
-                    {sources}"#,
-                sources = facet_sources_sql("$1", "$2"),
-            ))
-            .bind(hop_sources[index])
-            .bind(&hop.field)
-            .bind(&matches)
-            .bind(context_id)
-            .fetch_all(&self.pool)
-            .await?;
-        }
-        Ok(Some(
-            matches
-                .into_iter()
-                .collect::<HashSet<_>>()
-                .into_iter()
-                .filter(|id| source_record_ids.is_none_or(|ids| ids.contains(id)))
+        Ok(Some(ResolvedTreeFacet {
+            context_id,
+            selected_target_ids: selected,
+            target_blueprint_id,
+            hierarchy_field: hierarchy_field.map(str::to_owned),
+            hop_blueprints: std::iter::once(source_blueprint_id)
+                .chain(source_path.iter().map(|hop| hop.target_blueprint_id))
+                .take(source_path.len())
                 .collect(),
-        ))
+            hop_fields: source_path.iter().map(|hop| hop.field.clone()).collect(),
+        }))
     }
 
-    // Facet traversal inputs are explicit to keep query scope auditable.
-    #[allow(clippy::too_many_arguments)]
     /// One page of a tree facet's roots, or of `parent_id`'s children, with
     /// the distinct sources attached to each node or its descendants through
     /// `source_path`. With an empty path, each source record is its own node;
-    /// see [`Self::relationship_tree_facet_matches`].
+    /// see [`Self::resolve_tree_facet_selection`].
+    // Facet traversal inputs are explicit to keep query scope auditable.
+    #[allow(clippy::too_many_arguments)]
     pub async fn relationship_tree_facet_children(
         &self,
         source_blueprint_id: Uuid,
         source_blueprint_version: Option<i64>,
-        matching_record_ids: Option<&HashSet<Uuid>>,
+        matching: Option<RecordMatching<'_>>,
         source_path: &[RelationshipFacetHop],
         target_blueprint_id: Uuid,
         hierarchy_field: Option<&str>,
@@ -2158,7 +2632,7 @@ impl AttricatRepository {
             .map_err(RepositoryError::from)
         };
         let cached_counts = async {
-            if matching_record_ids.is_some() {
+            if matching.is_some() {
                 return Ok(None);
             }
             self.cached_tree_facet_counts(
@@ -2173,26 +2647,8 @@ impl AttricatRepository {
             .await
             .map(Some)
         };
-        let sources = async {
-            let Some(matching) = matching_record_ids else {
-                return Ok(Vec::new());
-            };
-            self.tree_facet_sources(
-                source_blueprint_id,
-                source_blueprint_version,
-                Some(matching),
-                source_path,
-                context_id,
-            )
-            .await
-        };
-        let (parents, nodes, cached_counts, sources) =
-            tokio::try_join!(parents, roots, cached_counts, sources)?;
+        let (parents, nodes, cached_counts) = tokio::try_join!(parents, roots, cached_counts)?;
 
-        let mut sources_by_target: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
-        for (source, target) in sources {
-            sources_by_target.entry(target).or_default().push(source);
-        }
         let mut children_by_parent: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
         let mut parents_by_child: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
         for &(child, parent) in parents {
@@ -2279,35 +2735,63 @@ impl AttricatRepository {
             return Err(RepositoryError::RelationshipTargetTypeMismatch);
         }
 
+        let searched_counts = match (&cached_counts, matching) {
+            (None, Some(matching)) => {
+                let members = subtree_pairs(&page, &children_by_parent);
+                // A broad search skips loading matches it would only discard.
+                let broad = self
+                    .sampled_match_count(
+                        source_blueprint_id,
+                        source_blueprint_version,
+                        matching,
+                        SEARCH_MATCH_SAMPLE,
+                    )
+                    .await?
+                    >= BROAD_SEARCH_SAMPLE_MATCHES;
+                let sources = if broad {
+                    Vec::new()
+                } else {
+                    self.first_matching_records(
+                        source_blueprint_id,
+                        source_blueprint_version,
+                        matching,
+                        MAX_LOADED_FILTER_MATCHES + 1,
+                    )
+                    .await?
+                };
+                if broad || sources.len() as i64 > MAX_LOADED_FILTER_MATCHES {
+                    self.tree_node_source_counts(
+                        &members,
+                        source_blueprint_id,
+                        source_blueprint_version,
+                        source_path,
+                        context_id,
+                        matching,
+                    )
+                    .await?
+                } else {
+                    let sources: Vec<_> = sources.into_iter().map(|(id, _)| id).collect();
+                    self.listed_tree_node_counts(
+                        &members,
+                        &sources,
+                        source_blueprint_id,
+                        source_blueprint_version,
+                        source_path,
+                        context_id,
+                    )
+                    .await?
+                }
+            }
+            _ => HashMap::new(),
+        };
+        let counts = cached_counts.as_deref().unwrap_or(&searched_counts);
         let items = page
             .into_iter()
-            .map(|id| {
-                if let Some(counts) = &cached_counts {
-                    return RelationshipTreeFacetChildItem {
-                        id,
-                        display: labels.get(&id).cloned().unwrap_or_default(),
-                        count: counts.get(&id).copied().unwrap_or_default(),
-                        has_children: children_by_parent.contains_key(&id),
-                    };
-                }
-                // A source counts once per node even when it reaches several
-                // of the node's descendants or one through several parents.
-                let mut visited = HashSet::new();
-                let mut counted: HashSet<Uuid> = HashSet::new();
-                let mut pending = vec![id];
-                while let Some(node) = pending.pop() {
-                    if !visited.insert(node) {
-                        continue;
-                    }
-                    counted.extend(sources_by_target.get(&node).into_iter().flatten());
-                    pending.extend(children_by_parent.get(&node).into_iter().flatten());
-                }
-                RelationshipTreeFacetChildItem {
-                    id,
-                    display: labels.get(&id).cloned().unwrap_or_default(),
-                    count: counted.len() as i64,
-                    has_children: children_by_parent.contains_key(&id),
-                }
+            .map(|id| RelationshipTreeFacetChildItem {
+                id,
+                display: labels.get(&id).cloned().unwrap_or_default(),
+                count: counts.get(&id).copied().unwrap_or_default(),
+                has_children: children_by_parent.contains_key(&id),
             })
             .collect();
         let mut selected_items: Vec<_> = selected
@@ -2339,15 +2823,8 @@ impl AttricatRepository {
             .get_or_try_init(|| async {
                 match hierarchy_field {
                     Some(field) => {
-                        self.resolved_relationship_edges(
-                            target_blueprint_id,
-                            None,
-                            None,
-                            field,
-                            target_blueprint_id,
-                            context_id,
-                        )
-                        .await
+                        self.resolved_relationship_edges(target_blueprint_id, field, context_id)
+                            .await
                     }
                     None => Ok(Vec::new()),
                 }
@@ -2356,57 +2833,46 @@ impl AttricatRepository {
             .map(Vec::as_slice)
     }
 
-    /// The `(source, node)` pairs a tree facet counts, for `source_ids` only
-    /// when given. With an empty `source_path`, each source record is its own
-    /// node. Otherwise each hop's edges are resolved in one query and joined
-    /// here. Up to [`TREE_FACET_LISTED_SOURCES`] sources are followed one hop
-    /// after another, each hop reading only the records the one before
-    /// reached, so the cost follows the sources rather than the size of a
-    /// large middle hop. Past that, or when every source counts, reading
-    /// every hop's whole relationship at once is cheaper.
-    async fn tree_facet_sources(
+    /// Distinct sources per node for a short list of them, followed one hop after
+    /// another. Each hop reads only the records the one before reached, so the cost
+    /// follows the sources rather than the size of a large middle hop.
+    async fn listed_tree_node_counts(
         &self,
+        members: &[(Uuid, Uuid)],
+        sources: &[Uuid],
         source_blueprint_id: Uuid,
         source_blueprint_version: Option<i64>,
-        source_ids: Option<&HashSet<Uuid>>,
         source_path: &[RelationshipFacetHop],
         context_id: Uuid,
-    ) -> Result<Vec<(Uuid, Uuid)>, RepositoryError> {
-        if source_path.is_empty() {
-            return Ok(sqlx::query_scalar::<_, Uuid>(
-                "SELECT id FROM records WHERE blueprint_id = $1 AND ($2::bigint IS NULL OR blueprint_version = $2) AND deleted_at IS NULL",
-            )
-            .bind(source_blueprint_id)
-            .bind(source_blueprint_version)
-            .fetch_all(&self.pool)
-            .await?
-            .into_iter()
-            .filter(|id| source_ids.is_none_or(|ids| ids.contains(id)))
-            .map(|id| (id, id))
-            .collect());
-        }
-        let hop_sources: Vec<_> = std::iter::once(source_blueprint_id)
-            .chain(source_path.iter().map(|hop| hop.target_blueprint_id))
-            .collect();
-        let hop_sources = &hop_sources;
-        // Only the searched records are limited to one revision.
-        let hop_edges = |index: usize, from: Option<Vec<Uuid>>| async move {
-            self.resolved_relationship_edges(
-                hop_sources[index],
-                source_blueprint_version.filter(|_| index == 0),
-                from.as_deref(),
-                &source_path[index].field,
-                source_path[index].target_blueprint_id,
-                context_id,
-            )
-            .await
-        };
-        let join = |pairs: Vec<(Uuid, Uuid)>, edges: Vec<(Uuid, Uuid)>| {
+    ) -> Result<HashMap<Uuid, i64>, RepositoryError> {
+        let mut pairs: Vec<(Uuid, Uuid)> = sources.iter().map(|&id| (id, id)).collect();
+        let mut hop_source = source_blueprint_id;
+        for (index, hop) in source_path.iter().enumerate() {
+            let reached: Vec<_> = pairs
+                .iter()
+                .map(|(_, reached)| *reached)
+                .collect::<HashSet<_>>()
+                .into_iter()
+                .collect();
+            if reached.is_empty() {
+                break;
+            }
+            let edges = self
+                .listed_relationship_edges(
+                    hop_source,
+                    // Only the searched records are limited to one revision.
+                    source_blueprint_version.filter(|_| index == 0),
+                    &reached,
+                    &hop.field,
+                    hop.target_blueprint_id,
+                    context_id,
+                )
+                .await?;
             let mut targets: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
             for (source, target) in edges {
                 targets.entry(source).or_default().push(target);
             }
-            pairs
+            pairs = pairs
                 .into_iter()
                 .flat_map(|(source, reached)| {
                     targets
@@ -2416,34 +2882,157 @@ impl AttricatRepository {
                         .map(move |target| (source, *target))
                         .collect::<Vec<_>>()
                 })
-                .collect::<Vec<_>>()
-        };
-        let Some(source_ids) = source_ids.filter(|ids| ids.len() <= TREE_FACET_LISTED_SOURCES)
-        else {
-            let mut hops = futures_util::future::try_join_all(
-                (0..source_path.len()).map(|index| hop_edges(index, None)),
-            )
-            .await?
-            .into_iter();
-            let first = hops.next().expect("the path has a first hop");
-            let mut pairs = hops.fold(first, join);
-            if let Some(source_ids) = source_ids {
-                pairs.retain(|(source, _)| source_ids.contains(source));
-            }
-            return Ok(pairs);
-        };
-        // Each hop holds one value, so it reaches no more records than the
-        // sources: the later lists stay within the limit too.
-        let mut pairs = hop_edges(0, Some(source_ids.iter().copied().collect())).await?;
-        for index in 1..source_path.len() {
-            let reached: HashSet<_> = pairs.iter().map(|(_, reached)| *reached).collect();
-            if reached.is_empty() {
-                break;
-            }
-            let edges = hop_edges(index, Some(reached.into_iter().collect())).await?;
-            pairs = join(pairs, edges);
+                .collect();
+            hop_source = hop.target_blueprint_id;
         }
-        Ok(pairs)
+        let mut sources_by_member: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
+        for (source, member) in pairs {
+            sources_by_member.entry(member).or_default().push(source);
+        }
+        let mut counted: HashMap<Uuid, HashSet<Uuid>> = HashMap::new();
+        for (node, member) in members {
+            counted
+                .entry(*node)
+                .or_default()
+                .extend(sources_by_member.get(member).into_iter().flatten());
+        }
+        Ok(counted
+            .into_iter()
+            .map(|(node, sources)| (node, sources.len() as i64))
+            .collect())
+    }
+
+    /// `(source, target)` pairs of one relationship field for the listed sources, read
+    /// through the source-side index, as [`Self::resolved_relationship_edges`] resolves
+    /// them.
+    async fn listed_relationship_edges(
+        &self,
+        source_blueprint_id: Uuid,
+        source_blueprint_version: Option<i64>,
+        sources: &[Uuid],
+        field: &str,
+        target_blueprint_id: Uuid,
+        context_id: Uuid,
+    ) -> Result<Vec<(Uuid, Uuid)>, RepositoryError> {
+        let query = format!(
+            "WITH RECURSIVE {FACET_CONTEXT_PATH_SQL}, {} SELECT source_id, target_id FROM edges",
+            resolved_edges_sql(
+                ["chosen", "edges"],
+                "$1",
+                "$2",
+                "JOIN unnest($6::uuid[]) AS listed(id) ON listed.id = av.record_id",
+                "AND ($5::bigint IS NULL OR source.blueprint_version = $5)",
+                "target.blueprint_id = $3",
+            )
+        );
+        Ok(sqlx::query_as::<_, (Uuid, Uuid)>(&query)
+            .bind(source_blueprint_id)
+            .bind(field)
+            .bind(target_blueprint_id)
+            .bind(context_id)
+            .bind(source_blueprint_version)
+            .bind(sources)
+            .fetch_all(&self.pool)
+            .await?)
+    }
+
+    /// Distinct matching sources per node, for `(node, member)` pairs naming the tree
+    /// nodes each node covers. A source counts once per node even when it reaches
+    /// several members or one through several parents. This suits many sources: each
+    /// hop reads its whole relationship and hash joins it, because PostgreSQL has no
+    /// estimate for the records a hop before reached and picks nested loops that scan
+    /// the relationship repeatedly. With an empty `source_path`, each source record is
+    /// its own node.
+    async fn tree_node_source_counts(
+        &self,
+        members: &[(Uuid, Uuid)],
+        source_blueprint_id: Uuid,
+        source_blueprint_version: Option<i64>,
+        source_path: &[RelationshipFacetHop],
+        context_id: Uuid,
+        matching: RecordMatching<'_>,
+    ) -> Result<HashMap<Uuid, i64>, RepositoryError> {
+        let (nodes, member_ids): (Vec<_>, Vec<_>) = members.iter().copied().unzip();
+        let hop_blueprints: Vec<_> = std::iter::once(source_blueprint_id)
+            .chain(source_path.iter().map(|hop| hop.target_blueprint_id))
+            .take(source_path.len())
+            .collect();
+        let hop_fields: Vec<_> = source_path.iter().map(|hop| hop.field.as_str()).collect();
+        let hop_targets: Vec<_> = source_path
+            .iter()
+            .map(|hop| hop.target_blueprint_id)
+            .collect();
+        let mut reached = "sources".to_owned();
+        let mut hops = String::new();
+        for hop in 0..source_path.len() {
+            let number = hop + 1;
+            let (chosen, edges, next) = (
+                format!("chosen_{hop}"),
+                format!("edges_{hop}"),
+                format!("reached_{hop}"),
+            );
+            let hop_edges = resolved_edges_sql(
+                [&chosen, &edges],
+                &format!("$4[{number}]"),
+                &format!("$5[{number}]"),
+                "",
+                "",
+                &format!("target.blueprint_id = $10[{number}]"),
+            );
+            write!(
+                hops,
+                ", {hop_edges}, {next}(source_id, id) AS (\
+                   SELECT {reached}.source_id, {edges}.target_id FROM {reached} \
+                   JOIN {edges} ON {edges}.source_id = {reached}.id)"
+            )
+            .expect("writing to a string");
+            reached = next;
+        }
+        let context_path = FACET_CONTEXT_PATH_SQL.replace("$4", "$3");
+        let filters_sql = record_filters_clause(matching, 11);
+        let sql = format!(
+            r#"WITH RECURSIVE {context_path},
+                    sources(source_id, id) AS MATERIALIZED (
+                        SELECT e.id, e.id
+                          FROM records e
+                         WHERE e.blueprint_id = $6
+                           AND ($7::bigint IS NULL OR e.blueprint_version = $7)
+                           AND e.workspace_id = $8 AND e.deleted_at IS NULL
+                           AND ($9::uuid[] IS NULL OR e.id = ANY($9))
+                           {filters_sql}
+                    ){hops}
+               SELECT node, COUNT(*)
+                 FROM (
+                     SELECT DISTINCT members.node, {reached}.source_id
+                       FROM {reached}
+                       JOIN unnest($1::uuid[], $2::uuid[]) AS members(node, id)
+                         ON members.id = {reached}.id
+                 ) counted
+                GROUP BY node"#
+        );
+        let mut transaction = self.pool.begin().await?;
+        sqlx::query(HASH_JOINS_ONLY)
+            .execute(&mut *transaction)
+            .await?;
+        let counts = bind_record_filters!(
+            sqlx::query_as::<_, (Uuid, i64)>(&sql)
+                .bind(&nodes)
+                .bind(&member_ids)
+                .bind(context_id)
+                .bind(&hop_blueprints)
+                .bind(&hop_fields)
+                .bind(source_blueprint_id)
+                .bind(source_blueprint_version)
+                .bind(self.workspace_id.0)
+                .bind(matching.ids)
+                .bind(&hop_targets),
+            matching.filters,
+            self.workspace_id.0
+        )
+        .fetch_all(&mut *transaction)
+        .await?;
+        transaction.commit().await?;
+        Ok(counts.into_iter().collect())
     }
 
     /// Distinct sources per tree node, including the node's descendants, for
@@ -2488,208 +3077,230 @@ impl AttricatRepository {
                     hierarchy_field,
                     context_id,
                 );
-                let sources = self.tree_facet_sources(
-                    source_blueprint_id,
-                    source_blueprint_version,
-                    None,
-                    source_path,
-                    context_id,
-                );
-                let (parents, sources) = tokio::try_join!(parents, sources)?;
-                let mut parents_by_child: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
+                let nodes = async {
+                    sqlx::query_scalar::<_, Uuid>(
+                        "SELECT id FROM records WHERE blueprint_id = $1 AND deleted_at IS NULL",
+                    )
+                    .bind(target_blueprint_id)
+                    .fetch_all(&self.pool)
+                    .await
+                    .map_err(RepositoryError::from)
+                };
+                let (parents, nodes) = tokio::try_join!(parents, nodes)?;
+                let mut children_by_parent: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
                 for &(child, parent) in parents {
-                    parents_by_child.entry(child).or_default().push(parent);
+                    children_by_parent.entry(parent).or_default().push(child);
                 }
-                let mut targets_by_source: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
-                for (source, target) in sources {
-                    targets_by_source.entry(source).or_default().push(target);
-                }
-                // Each source adds one to every node it reaches upwards, once
-                // even through several targets or parents.
-                let mut counts: HashMap<Uuid, i64> = HashMap::new();
-                let mut visited = HashSet::new();
-                for targets in targets_by_source.into_values() {
-                    visited.clear();
-                    let mut pending = targets;
-                    while let Some(node) = pending.pop() {
-                        if visited.insert(node) {
-                            *counts.entry(node).or_default() += 1;
-                            pending.extend(parents_by_child.get(&node).into_iter().flatten());
-                        }
-                    }
-                }
+                let counts = self
+                    .tree_node_source_counts(
+                        &subtree_pairs(&nodes, &children_by_parent),
+                        source_blueprint_id,
+                        source_blueprint_version,
+                        source_path,
+                        context_id,
+                        RecordMatching::ALL,
+                    )
+                    .await?;
                 Ok::<_, RepositoryError>(counts)
             })
             .await
     }
 
-    /// Records of `source_blueprint_id` per target of one relationship field,
-    /// as resolved in `context_id`, counting only `source_record_ids` when
-    /// given, and the sources that link to any of `target_blueprint_ids`.
-    pub async fn relationship_target_counts(
+    /// A blueprint's matching records per target of one relationship field, as
+    /// resolved in `context_id`, within [`SCOPE_STATEMENT_TIMEOUT`]. Holds the
+    /// first `group_limit` targets `user_id` may read, largest first; `linked`
+    /// still counts the records linking only to targets they may not.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn relationship_target_groups(
         &self,
-        source_blueprint_id: Uuid,
+        blueprint_id: Uuid,
+        blueprint_version: Option<i64>,
+        matching: RecordMatching<'_>,
         field: &str,
         target_blueprint_ids: &[Uuid],
         context_id: Uuid,
-        source_record_ids: Option<&HashSet<Uuid>>,
-    ) -> Result<(HashMap<Uuid, i64>, HashSet<Uuid>), RepositoryError> {
-        let mut sources_by_target: HashMap<Uuid, HashSet<Uuid>> = HashMap::new();
-        let mut linked = HashSet::new();
-        for target_blueprint_id in target_blueprint_ids {
-            for (source, target) in self
-                .resolved_relationship_edges(
-                    source_blueprint_id,
-                    None,
-                    None,
-                    field,
-                    *target_blueprint_id,
-                    context_id,
+        user_id: Uuid,
+        workspace_id: Uuid,
+        group_limit: i64,
+    ) -> Result<RelationshipTargetGroups, RepositoryError> {
+        let codes = GrantCodes::Permission(Permission::RecordsRead);
+        let grants = renumber_parameters(&codes.grant_set_sql(), |parameter| match parameter {
+            1 => 8,
+            2 => 9,
+            3 => 10,
+            _ => unreachable!("the grant set has three parameters"),
+        });
+        let granted = RECORD_GRANTED_SQL.replace("$2", "$9");
+        let (records, matching_sql) = matching_records(matching.ids.is_some(), 11);
+        let filters_sql = record_filters_clause(matching, 12);
+        let edges = resolved_edges_sql(
+            ["chosen", "edges"],
+            "$1",
+            "$2",
+            "JOIN matched ON matched.id = av.record_id",
+            "",
+            "target.blueprint_id = ANY($3)",
+        );
+        let context_path = FACET_CONTEXT_PATH_SQL;
+        let sql = format!(
+            r#"WITH RECURSIVE {grants}, {context_path}, matched AS MATERIALIZED (
+                    SELECT e.id
+                      FROM {records}
+                     WHERE e.blueprint_id = $1
+                       AND ($5::bigint IS NULL OR e.blueprint_version = $5)
+                       AND e.workspace_id = $7 AND e.deleted_at IS NULL
+                       {matching_sql}
+                       {filters_sql}
+                ), {edges}, readable AS (
+                    SELECT counted.target_id, counted.sources
+                      FROM (SELECT target_id, COUNT(*) AS sources FROM edges GROUP BY target_id) counted
+                      JOIN records e ON e.id = counted.target_id AND e.workspace_id = $7
+                     WHERE {granted}
+                     ORDER BY counted.sources DESC, counted.target_id
+                     LIMIT $6::bigint
                 )
-                .await?
-            {
-                if source_record_ids.is_some_and(|ids| !ids.contains(&source)) {
-                    continue;
-                }
-                linked.insert(source);
-                sources_by_target.entry(target).or_default().insert(source);
-            }
-        }
-        Ok((
-            sources_by_target
-                .into_iter()
-                .map(|(target, sources)| (target, sources.len() as i64))
-                .collect(),
+                SELECT (SELECT COUNT(*) FROM matched),
+                       (SELECT COUNT(DISTINCT source_id) FROM edges),
+                       ARRAY(SELECT target_id FROM readable ORDER BY sources DESC, target_id),
+                       ARRAY(SELECT sources FROM readable ORDER BY sources DESC, target_id)"#
+        );
+        let mut transaction = self.pool.begin().await?;
+        sqlx::query(SCOPE_STATEMENT_TIMEOUT)
+            .execute(&mut *transaction)
+            .await?;
+        sqlx::query(HASH_JOINS_ONLY)
+            .execute(&mut *transaction)
+            .await?;
+        let (total, linked, targets, counts) = bind_record_filters!(
+            sqlx::query_as::<_, (i64, i64, Vec<Uuid>, Vec<i64>)>(&sql)
+                .bind(blueprint_id)
+                .bind(field)
+                .bind(target_blueprint_ids)
+                .bind(context_id)
+                .bind(blueprint_version)
+                .bind(group_limit + 1)
+                .bind(self.workspace_id.0)
+                .bind(user_id)
+                .bind(workspace_id)
+                .bind(codes.codes())
+                .bind(matching.ids),
+            matching.filters,
+            self.workspace_id.0
+        )
+        .fetch_one(&mut *transaction)
+        .await?;
+        transaction.commit().await?;
+        let mut groups: Vec<_> = targets.into_iter().zip(counts).collect();
+        let truncated = groups.len() as i64 > group_limit;
+        groups.truncate(group_limit as usize);
+        Ok(RelationshipTargetGroups {
+            total,
             linked,
-        ))
+            groups,
+            truncated,
+        })
     }
 
-    /// `(source, target)` pairs of one relationship field as resolved in
-    /// `context_id`: each source reads its values from the nearest context on
-    /// the path to the root that has any, unless the field has no fallback.
-    /// `source_blueprint_version` limits the sources to one revision, and
-    /// `source_ids` to those records, read through the source-side index.
+    /// `(source, target)` pairs of a blueprint's self-referencing relationship field
+    /// as resolved in `context_id`: each source reads its values from the nearest
+    /// context on the path to the root that has any, unless the field has no fallback.
     async fn resolved_relationship_edges(
         &self,
-        source_blueprint_id: Uuid,
-        source_blueprint_version: Option<i64>,
-        source_ids: Option<&[Uuid]>,
+        blueprint_id: Uuid,
         field: &str,
-        target_blueprint_id: Uuid,
         context_id: Uuid,
     ) -> Result<Vec<(Uuid, Uuid)>, RepositoryError> {
-        let sources = if source_ids.is_some() {
-            "JOIN unnest($6::uuid[]) AS listed(id) ON listed.id = av.record_id"
-        } else {
-            ""
-        };
-        // Choosing each source's context in one sorted pass, rather than with a
-        // per-source LATERAL subquery, keeps this a few index scans and hash
-        // joins whose row counts the planner estimates well.
         let query = format!(
-            r#"WITH RECURSIVE context_path AS (
-                    SELECT id, parent_id, 0 AS depth FROM attribute_contexts WHERE id = $4
-                    UNION ALL
-                    SELECT c.id, c.parent_id, path.depth + 1
-                    FROM attribute_contexts c JOIN context_path path ON c.id = path.parent_id
-                ), chosen AS (
-                    SELECT DISTINCT ON (av.record_id) av.record_id, av.attribute_id, av.context_id
-                    FROM attributes a
-                    JOIN context_path path ON path.depth = 0 OR a.context_fallback <> 'none'
-                    JOIN attribute_values av ON av.attribute_id = a.id AND av.context_id = path.id
-                     AND av.active AND av.relationship_target_record_id IS NOT NULL
-                    {sources}
-                    JOIN records source ON source.id = av.record_id AND source.blueprint_id = $1
-                     AND source.blueprint_version = a.blueprint_version AND source.deleted_at IS NULL
-                    WHERE a.blueprint_id = $1 AND a.code = $2
-                      AND ($5::bigint IS NULL OR source.blueprint_version = $5)
-                    ORDER BY av.record_id, path.depth
-                )
-                SELECT DISTINCT chosen.record_id, av.relationship_target_record_id
-                FROM chosen
-                JOIN attribute_values av ON av.record_id = chosen.record_id
-                 AND av.attribute_id = chosen.attribute_id AND av.context_id = chosen.context_id
-                 AND av.active AND av.relationship_target_record_id IS NOT NULL
-                JOIN records target ON target.id = av.relationship_target_record_id
-                WHERE target.blueprint_id = $3 AND target.deleted_at IS NULL"#
+            "WITH RECURSIVE {}, {} SELECT source_id, target_id FROM edges",
+            FACET_CONTEXT_PATH_SQL.replace("$4", "$3"),
+            resolved_edges_sql(
+                ["chosen", "edges"],
+                "$1",
+                "$2",
+                "",
+                "",
+                "target.blueprint_id = $1",
+            )
         );
-        let mut query = sqlx::query_as::<_, (Uuid, Uuid)>(&query)
-            .bind(source_blueprint_id)
+        Ok(sqlx::query_as::<_, (Uuid, Uuid)>(&query)
+            .bind(blueprint_id)
             .bind(field)
-            .bind(target_blueprint_id)
             .bind(context_id)
-            .bind(source_blueprint_version);
-        if let Some(source_ids) = source_ids {
-            query = query.bind(source_ids);
-        }
-        Ok(query.fetch_all(&self.pool).await?)
+            .fetch_all(&self.pool)
+            .await?)
     }
 
-    /// Resolves the application-owned relationship-aware query plan. SQL only reads
-    /// one scalar-match set or one incoming-edge frontier at a time.
-    pub async fn resolve_search(
+    /// Up to `limit` of the records of `selected` matching a text query, lowest IDs
+    /// first.
+    pub async fn text_query_record_ids(
         &self,
         selected: &BlueprintWithAttributes,
         selected_version: Option<i64>,
-        query: Option<&str>,
-    ) -> Result<ResolvedSearch, RepositoryError> {
-        let Some(query) = query else {
-            let ids = sqlx::query_scalar::<_, Uuid>("SELECT id FROM records WHERE blueprint_id = $1 AND ($2::bigint IS NULL OR blueprint_version = $2) AND workspace_id = $3 AND deleted_at IS NULL")
-                .bind(selected.blueprint.id)
-                .bind(selected_version)
-                .bind(self.workspace_id.0)
-                .fetch_all(&self.pool)
-                .await?;
-            return Ok(ResolvedSearch {
-                ids: ids.into_iter().collect(),
-                explanations: HashMap::new(),
-            });
-        };
+        query: &str,
+        limit: i64,
+    ) -> Result<Vec<Uuid>, RepositoryError> {
+        let (text_terms, global_ids) = self
+            .resolve_text_query(selected, selected_version, query)
+            .await?;
+        let filters = ResolvedRecordFilters::for_text_terms(text_terms);
+        let ids = global_ids.map(|ids| ids.into_iter().collect::<Vec<_>>());
+        self.matching_record_ids(
+            selected.blueprint.id,
+            selected_version,
+            RecordMatching {
+                ids: ids.as_deref(),
+                filters: (!filters.is_empty()).then_some(&filters),
+                broad: false,
+            },
+            limit,
+        )
+        .await
+    }
+
+    /// Compiles a text query into the terms statements test themselves, and the
+    /// records its global `*:` terms reach, which traverse under a shared budget.
+    pub async fn resolve_text_query(
+        &self,
+        selected: &BlueprintWithAttributes,
+        selected_version: Option<i64>,
+        query: &str,
+    ) -> Result<(Vec<ResolvedTextTerm>, Option<HashSet<Uuid>>), RepositoryError> {
         let terms = parse_search_terms(query)?;
-        let mut per_term = Vec::with_capacity(terms.len());
-        // Global `*:` terms share one request budget. Explicit and bare selectors
-        // retain their established, independently-resolved semantics.
+        let mut text_terms = Vec::with_capacity(terms.len());
+        let mut global_ids: Option<HashSet<Uuid>> = None;
+        // Global `*:` terms share one request budget.
         let mut global_budget = GlobalSearchBudget::default();
         for term in terms {
             let plan = self.compile_search_term(selected, &term).await?;
-            let global = matches!(plan, TermPlan::Reachable);
-            let result = self
-                .resolve_search_term(selected, selected_version, term, plan, &mut global_budget)
-                .await;
-            if global {
-                match &result {
-                    Ok(_) => metrics::counter!(GLOBAL_SEARCH_TOTAL_METRIC, "outcome" => "success")
-                        .increment(1),
-                    Err(RepositoryError::RelationshipSearchBudgetExceeded { dimension }) => {
-                        metrics::counter!(GLOBAL_SEARCH_TOTAL_METRIC, "outcome" => "budget_exceeded", "dimension" => *dimension).increment(1);
-                        tracing::warn!(dimension, "global relationship search budget exceeded");
-                    }
-                    Err(RepositoryError::RelationshipSearchTimedOut) => {
-                        metrics::counter!(GLOBAL_SEARCH_TOTAL_METRIC, "outcome" => "timed_out")
-                            .increment(1);
-                        tracing::warn!("global relationship search statement timed out");
-                    }
-                    Err(_) => metrics::counter!(GLOBAL_SEARCH_TOTAL_METRIC, "outcome" => "failed")
-                        .increment(1),
-                }
+            if !matches!(plan, TermPlan::Reachable) {
+                text_terms.push(resolved_text_term(selected.blueprint.id, &term, plan));
+                continue;
             }
-            per_term.push(result?);
-        }
-        let mut candidates: Option<HashSet<Uuid>> = None;
-        let mut explanations: HashMap<Uuid, Vec<MatchExplanation>> = HashMap::new();
-        for matches in per_term {
-            let ids: HashSet<_> = matches.keys().copied().collect();
-            candidates = Some(match candidates {
+            let result = self
+                .resolve_global_search_term(selected, selected_version, term, &mut global_budget)
+                .await;
+            match &result {
+                Ok(_) => metrics::counter!(GLOBAL_SEARCH_TOTAL_METRIC, "outcome" => "success")
+                    .increment(1),
+                Err(RepositoryError::RelationshipSearchBudgetExceeded { dimension }) => {
+                    metrics::counter!(GLOBAL_SEARCH_TOTAL_METRIC, "outcome" => "budget_exceeded", "dimension" => *dimension).increment(1);
+                    tracing::warn!(dimension, "global relationship search budget exceeded");
+                }
+                Err(RepositoryError::RelationshipSearchTimedOut) => {
+                    metrics::counter!(GLOBAL_SEARCH_TOTAL_METRIC, "outcome" => "timed_out")
+                        .increment(1);
+                    tracing::warn!("global relationship search statement timed out");
+                }
+                Err(_) => metrics::counter!(GLOBAL_SEARCH_TOTAL_METRIC, "outcome" => "failed")
+                    .increment(1),
+            }
+            let ids = result?;
+            global_ids = Some(match global_ids {
                 Some(existing) => existing.intersection(&ids).copied().collect(),
                 None => ids,
             });
-            for (id, explanation) in matches {
-                explanations.entry(id).or_default().push(explanation);
-            }
         }
-        let ids = candidates.unwrap_or_default();
-        explanations.retain(|id, _| ids.contains(id));
-        Ok(ResolvedSearch { ids, explanations })
+        Ok((text_terms, global_ids))
     }
 
     async fn compile_search_term(
@@ -2878,226 +3489,6 @@ impl AttricatRepository {
         Ok(())
     }
 
-    async fn resolve_search_term(
-        &self,
-        selected: &BlueprintWithAttributes,
-        selected_version: Option<i64>,
-        term: SearchTerm,
-        plan: TermPlan,
-        global_budget: &mut GlobalSearchBudget,
-    ) -> Result<HashMap<Uuid, MatchExplanation>, RepositoryError> {
-        if matches!(plan, TermPlan::Reachable) {
-            return self
-                .resolve_global_search_term(selected, selected_version, term, global_budget)
-                .await;
-        }
-        let (match_blueprint, attribute, direct_field) = match &plan {
-            // Bare terms only search scalar values on the selected blueprint.
-            TermPlan::Any => (Some(selected.blueprint.id), None, None),
-            TermPlan::Reachable => {
-                unreachable!("global terms are resolved in a bounded transaction")
-            }
-            TermPlan::SelectedAttribute(attribute) => (
-                Some(selected.blueprint.id),
-                attribute.clone(),
-                Some(String::new()),
-            ),
-            TermPlan::Relationship {
-                fields,
-                target,
-                attribute,
-                ..
-            } => (
-                Some(target.blueprint.id),
-                attribute.clone(),
-                fields.first().cloned(),
-            ),
-            TermPlan::Ids {
-                target_blueprint_id,
-                ..
-            } => (Some(*target_blueprint_id), None, None),
-        };
-        let rows = match &plan {
-            TermPlan::Ids { ids, .. } => sqlx::query_scalar::<_, Uuid>(
-                "SELECT id FROM records WHERE id = ANY($1) AND blueprint_id = $2 AND workspace_id = $3 AND deleted_at IS NULL ORDER BY id",
-            )
-            .bind(ids)
-            .bind(match_blueprint)
-            .bind(self.workspace_id.0)
-            .fetch_all(&self.pool)
-            .await?
-            .into_iter()
-            .map(|id| (id, None))
-            .collect(),
-            _ => {
-                self.scalar_search_matches(&term, match_blueprint, attribute)
-                    .await?
-            }
-        };
-        let mut witnesses: HashMap<Uuid, MatchExplanation> = HashMap::new();
-        let mut frontier = VecDeque::new();
-        for (id, attribute) in rows {
-            if let std::collections::hash_map::Entry::Vacant(e) = witnesses.entry(id) {
-                e.insert(MatchExplanation {
-                    term: term.original.clone(),
-                    matching_record_id: id,
-                    matching_attribute_code: attribute,
-                    traversal_depth: 0,
-                    relationship_path: vec![],
-                });
-                frontier.push_back(id);
-            }
-        }
-        let mut visited: HashSet<_> = witnesses.keys().copied().collect();
-        let (path_fields, path_source_blueprints) = match &plan {
-            TermPlan::Relationship {
-                fields,
-                source_blueprint_ids,
-                ..
-            }
-            | TermPlan::Ids {
-                fields,
-                source_blueprint_ids,
-                ..
-            } => (
-                Some(fields.as_slice()),
-                Some(source_blueprint_ids.as_slice()),
-            ),
-            _ => (None, None),
-        };
-        let max_depth = match path_fields {
-            Some(fields) => fields.len(),
-            None => 0,
-        };
-        for depth in 1..=max_depth {
-            let level: Vec<_> = frontier.drain(..).collect();
-            if level.is_empty() {
-                break;
-            }
-            let edges = sqlx::query_as::<_, (Uuid, String, Uuid)>(
-                r#"SELECT DISTINCT source.id, a.code, av.relationship_target_record_id
-                FROM records source JOIN attribute_values av ON av.record_id = source.id
-                JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
-                JOIN records target ON target.id = av.relationship_target_record_id
-                WHERE source.deleted_at IS NULL AND target.deleted_at IS NULL AND av.active
-                  AND source.workspace_id = $4 AND target.workspace_id = $4
-                  AND av.workspace_id = $4 AND a.workspace_id = $4
-                  AND av.relationship_target_record_id = ANY($1) AND a.value_type = 'relationship'
-                  AND ($2::uuid IS NULL OR source.blueprint_id = $2)
-                  AND ($3::text IS NULL OR a.code = $3)
-                ORDER BY source.id, a.code, av.relationship_target_record_id"#,
-            )
-            .bind(&level)
-            .bind(path_source_blueprints.and_then(|ids| ids.get(ids.len() - depth)))
-            .bind(
-                path_fields
-                    .and_then(|fields| fields.get(fields.len() - depth))
-                    .or_else(|| direct_field.as_ref().filter(|v| !v.is_empty())),
-            )
-            .bind(self.workspace_id.0)
-            .fetch_all(&self.pool)
-            .await?;
-            for (source, field, target) in edges {
-                if !visited.insert(source) {
-                    continue;
-                }
-                let parent = witnesses.get(&target).expect("frontier has a witness");
-                let mut path = Vec::with_capacity(parent.relationship_path.len() + 1);
-                path.push(MatchPathEdge {
-                    source_record_id: source,
-                    attribute_code: field,
-                    target_record_id: target,
-                });
-                path.extend(parent.relationship_path.clone());
-                witnesses.insert(
-                    source,
-                    MatchExplanation {
-                        term: term.original.clone(),
-                        matching_record_id: parent.matching_record_id,
-                        matching_attribute_code: parent.matching_attribute_code.clone(),
-                        traversal_depth: depth as u8,
-                        relationship_path: path,
-                    },
-                );
-                frontier.push_back(source);
-            }
-        }
-        let ids = witnesses
-            .into_iter()
-            .filter(|(id, _)| {
-                // Explicit selected-blueprint value queries and all traversals only return selected records.
-                // The version restriction is applied here because scalar matches may start on old revisions.
-                *id != Uuid::nil()
-            })
-            .collect::<HashMap<_, _>>();
-        let selected_ids = sqlx::query_scalar::<_, Uuid>("SELECT id FROM records WHERE blueprint_id = $1 AND ($2::bigint IS NULL OR blueprint_version = $2) AND deleted_at IS NULL AND id = ANY($3) AND workspace_id = $4")
-            .bind(selected.blueprint.id)
-            .bind(selected_version)
-            .bind(ids.keys().copied().collect::<Vec<_>>())
-            .bind(self.workspace_id.0)
-            .fetch_all(&self.pool)
-            .await?;
-        Ok(selected_ids
-            .into_iter()
-            .filter_map(|id| ids.get(&id).cloned().map(|w| (id, w)))
-            .collect())
-    }
-
-    /// Records of `match_blueprint` whose scalar values match a term, with the
-    /// matching attribute code.
-    async fn scalar_search_matches(
-        &self,
-        term: &SearchTerm,
-        match_blueprint: Option<Uuid>,
-        attribute: Option<String>,
-    ) -> Result<Vec<(Uuid, Option<String>)>, RepositoryError> {
-        let pattern = search_pattern(term);
-        // Alphabetic terms other than booleans cannot match the canonical native
-        // renderings of non-text values. Start these searches from the trigram-indexed
-        // text values and materialize them so PostgreSQL does not repeat that scan for
-        // every attribute.
-        let sql = if text_only_search(&term.value) {
-            r#"WITH matching_values AS MATERIALIZED (
-                    SELECT record_id, attribute_id
-                    FROM attribute_values
-                    WHERE workspace_id = $4 AND active
-                      AND relationship_target_record_id IS NULL
-                      AND value_text ILIKE $3
-                )
-                SELECT DISTINCT e.id, a.code
-                FROM matching_values av
-                JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
-                JOIN records e ON e.id = av.record_id
-                WHERE e.deleted_at IS NULL AND e.workspace_id = $4
-                  AND a.workspace_id = $4
-                  AND ($1::uuid IS NULL OR e.blueprint_id = $1)
-                  AND ($2::text IS NULL OR a.code = $2)
-                ORDER BY e.id, a.code"#
-        } else {
-            r#"SELECT DISTINCT e.id, a.code
-                FROM records e JOIN attribute_values av ON av.record_id = e.id
-                JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
-                WHERE e.deleted_at IS NULL AND e.workspace_id = $4
-                  AND av.workspace_id = $4 AND a.workspace_id = $4
-                  AND av.relationship_target_record_id IS NULL
-                  AND ($1::uuid IS NULL OR e.blueprint_id = $1)
-                  AND ($2::text IS NULL OR a.code = $2)
-                  AND COALESCE(av.value_text, av.value_number::text, av.value_integer::text, av.value_boolean::text, av.value_date::text, av.value_datetime::text, av.value_time::text) ILIKE $3
-                ORDER BY e.id, a.code"#
-        };
-        let rows = sqlx::query_as::<_, (Uuid, String)>(sql)
-            .bind(match_blueprint)
-            .bind(attribute)
-            .bind(pattern)
-            .bind(self.workspace_id.0)
-            .fetch_all(&self.pool)
-            .await?;
-        Ok(rows
-            .into_iter()
-            .map(|(id, code)| (id, Some(code)))
-            .collect())
-    }
-
     /// Global traversal is deliberately isolated from qualified selector search:
     /// it has a request-shared cardinality budget and runs every read under a
     /// short transaction-local PostgreSQL timeout. A rejected traversal returns
@@ -3108,7 +3499,7 @@ impl AttricatRepository {
         selected_version: Option<i64>,
         term: SearchTerm,
         budget: &mut GlobalSearchBudget,
-    ) -> Result<HashMap<Uuid, MatchExplanation>, RepositoryError> {
+    ) -> Result<HashSet<Uuid>, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
         sqlx::query("SET LOCAL statement_timeout = '250ms'")
             .execute(&mut *transaction)
@@ -3146,25 +3537,18 @@ impl AttricatRepository {
             .map_err(global_search_error)?;
         budget.consume_matches(rows.len())?;
 
-        let mut witnesses = HashMap::new();
+        let mut visited = HashSet::new();
         let mut frontier = VecDeque::new();
-        for (id, attribute) in rows {
-            if let std::collections::hash_map::Entry::Vacant(entry) = witnesses.entry(id) {
+        for (id, _) in rows {
+            if visited.insert(id) {
                 budget.consume_records(1)?;
-                entry.insert(MatchExplanation {
-                    term: term.original.clone(),
-                    matching_record_id: id,
-                    matching_attribute_code: Some(attribute),
-                    traversal_depth: 0,
-                    relationship_path: vec![],
-                });
                 frontier.push_back(id);
             }
         }
 
-        // Each level is read as one ordered batch. Ordering makes the first
-        // discovered witness stable even when several incoming paths converge.
-        for depth in 1..=MAX_RELATIONSHIP_HOPS as u8 {
+        // Each level is read as one ordered batch, so the budgets stop at the
+        // same edge every time.
+        for _ in 1..=MAX_RELATIONSHIP_HOPS {
             let level: Vec<_> = frontier.drain(..).collect();
             if level.is_empty() {
                 break;
@@ -3193,41 +3577,20 @@ impl AttricatRepository {
             // oversized frontier and make that independent guard unreachable.
             let next_frontier: HashSet<_> = edges
                 .iter()
-                .filter_map(|(source, _, _)| (!witnesses.contains_key(source)).then_some(*source))
+                .filter_map(|(source, _, _)| (!visited.contains(source)).then_some(*source))
                 .collect();
             budget.consume_frontier(next_frontier.len())?;
-            for (source, field, target) in edges {
-                if !witnesses.contains_key(&source) {
+            for (source, _, _) in edges {
+                if visited.insert(source) {
                     budget.consume_records(1)?;
-                    let parent = witnesses
-                        .get(&target)
-                        .expect("edge target belongs to frontier");
-                    let mut path = Vec::with_capacity(parent.relationship_path.len() + 1);
-                    path.push(MatchPathEdge {
-                        source_record_id: source,
-                        attribute_code: field,
-                        target_record_id: target,
-                    });
-                    path.extend(parent.relationship_path.clone());
-                    witnesses.insert(
-                        source,
-                        MatchExplanation {
-                            term: term.original.clone(),
-                            matching_record_id: parent.matching_record_id,
-                            matching_attribute_code: parent.matching_attribute_code.clone(),
-                            traversal_depth: depth,
-                            relationship_path: path,
-                        },
-                    );
                     frontier.push_back(source);
                 }
             }
         }
-        let ids: Vec<_> = witnesses.keys().copied().collect();
         let selected_ids = sqlx::query_scalar::<_, Uuid>(
             "SELECT id FROM records WHERE blueprint_id = $1 AND ($2::bigint IS NULL OR blueprint_version = $2) AND deleted_at IS NULL AND id = ANY($3) AND workspace_id = $4",
         )
-        .bind(selected.blueprint.id).bind(selected_version).bind(ids)
+        .bind(selected.blueprint.id).bind(selected_version).bind(visited.into_iter().collect::<Vec<_>>())
         .bind(self.workspace_id.0)
         .fetch_all(&mut *transaction).await.map_err(global_search_error)?;
         transaction.commit().await.map_err(global_search_error)?;
@@ -3243,10 +3606,7 @@ impl AttricatRepository {
             edges = budget.edges,
             "global relationship search resolved"
         );
-        Ok(selected_ids
-            .into_iter()
-            .filter_map(|id| witnesses.remove(&id).map(|w| (id, w)))
-            .collect())
+        Ok(selected_ids.into_iter().collect())
     }
 }
 
@@ -3328,11 +3688,6 @@ fn global_search_error(error: sqlx::Error) -> RepositoryError {
     }
 }
 
-#[derive(Default)]
-pub struct ResolvedSearch {
-    pub ids: HashSet<Uuid>,
-    pub explanations: HashMap<Uuid, Vec<MatchExplanation>>,
-}
 #[derive(Clone)]
 struct SearchTerm {
     original: String,
@@ -3434,6 +3789,52 @@ fn search_pattern(term: &SearchTerm) -> String {
         format!("{literal}%")
     } else {
         format!("%{literal}%")
+    }
+}
+
+/// A compiled term other than a global one, for statements to test.
+fn resolved_text_term(selected: Uuid, term: &SearchTerm, plan: TermPlan) -> ResolvedTextTerm {
+    let (fields, sources, target, attribute, ids) = match plan {
+        TermPlan::Any | TermPlan::Reachable => (Vec::new(), Vec::new(), selected, None, None),
+        TermPlan::SelectedAttribute(attribute) => {
+            (Vec::new(), Vec::new(), selected, attribute, None)
+        }
+        TermPlan::Relationship {
+            fields,
+            source_blueprint_ids,
+            target,
+            attribute,
+        } => (
+            fields,
+            source_blueprint_ids,
+            target.blueprint.id,
+            attribute,
+            None,
+        ),
+        TermPlan::Ids {
+            fields,
+            source_blueprint_ids,
+            target_blueprint_id,
+            ids,
+        } => (
+            fields,
+            source_blueprint_ids,
+            target_blueprint_id,
+            None,
+            Some(ids),
+        ),
+    };
+    let levels: Vec<Uuid> = sources.into_iter().chain([target]).collect();
+    ResolvedTextTerm {
+        pattern: search_pattern(term),
+        text_only: text_only_search(&term.value),
+        attribute,
+        fields,
+        selected_levels: (0..levels.len())
+            .filter(|&level| levels[level] == selected)
+            .collect(),
+        levels,
+        ids,
     }
 }
 
@@ -3677,12 +4078,6 @@ fn encode_sorted_search_cursor(sort: &RecordSearchSort, row: &SortedRecordPrevie
     URL_SAFE_NO_PAD.encode(serde_json::to_vec(&cursor).expect("cursor serializes"))
 }
 
-/// Most matching sources a tree facet reads by listing them, hop by hop. With
-/// 100,000 sources behind a path, listing 11,000 of them reads each hop about
-/// four times faster than its whole relationship, while listing all of them
-/// is slower than reading everything at once (see `perf/facets.md`).
-const TREE_FACET_LISTED_SOURCES: usize = 20_000;
-
 /// How long cached tree facet counts are served before a reload.
 const TREE_FACET_COUNTS_FRESH: Duration = Duration::from_secs(30);
 /// How long expired counts are kept after that, so requests arriving while
@@ -3781,6 +4176,49 @@ fn matching_records(matching: bool, parameter: usize) -> (String, String) {
     }
 }
 
+/// Result version scopes tell one version from several, so two is enough.
+const MAX_RESULT_VERSIONS: i64 = 2;
+
+/// `FROM ... WHERE` over a page's matches for the version and total statements:
+/// `$1` blueprint, `$2` optional version, `$3` workspace, `$4` matching IDs, `$5`
+/// system tags, `$6` outdated, `$7` current version.
+fn result_version_matches(
+    matching: RecordMatching<'_>,
+    export_status_sql: &str,
+    filters_parameter: usize,
+) -> String {
+    let (records, matching_sql) = matching_records(matching.ids.is_some(), 4);
+    let filters_sql = record_filters_clause(matching, filters_parameter);
+    format!(
+        "FROM {records}
+          WHERE e.blueprint_id = $1
+            AND ($2::bigint IS NULL OR e.blueprint_version = $2)
+            AND e.workspace_id = $3
+            AND e.deleted_at IS NULL
+            {matching_sql}
+            {filters_sql}
+            AND ($5::text[] IS NULL OR e.system_tags @> $5)
+            {export_status_sql}
+            AND (NOT $6 OR e.blueprint_version <> $7)"
+    )
+}
+
+/// `FROM ... WHERE` over a blueprint's matching records: `$1` blueprint, `$2`
+/// optional version, `$3` matching IDs, `$4` workspace. `$5` is left for the
+/// statement's limit, and [`record_filters_clause`] follows it.
+fn matching_records_from(matching: RecordMatching<'_>) -> String {
+    let (records, matching_sql) = matching_records(matching.ids.is_some(), 3);
+    let filters_sql = record_filters_clause(matching, 6);
+    format!(
+        "FROM {records}
+          WHERE e.blueprint_id = $1
+            AND ($2::bigint IS NULL OR e.blueprint_version = $2)
+            AND e.workspace_id = $4 AND e.deleted_at IS NULL
+            {matching_sql}
+            {filters_sql}"
+    )
+}
+
 pub fn decode_search_cursor(cursor: &str) -> Option<(DateTime<Utc>, Uuid)> {
     let decoded = URL_SAFE_NO_PAD.decode(cursor).ok()?;
     let value = String::from_utf8(decoded).ok()?;
@@ -3832,7 +4270,6 @@ fn record_preview(row: RecordPreviewRow) -> RecordPreview {
         preview: row.preview,
         table_values: HashMap::new(),
         related: HashMap::new(),
-        match_explanations: Vec::new(),
     }
 }
 

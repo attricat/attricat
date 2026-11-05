@@ -32,12 +32,6 @@ test('searches a record and opens its preview', async ({ page }) => {
   await expect(
     page.getByRole('button', { name: `View record ID ${record.id}` }),
   ).toBeVisible();
-  await page.getByRole('button', { name: /^Record actions for / }).click();
-  await page.getByRole('menuitem', { name: 'Search info' }).click();
-  await expect(page.getByRole('dialog', { name: 'Search info' })).toContainText(
-    'red in title',
-  );
-  await page.keyboard.press('Escape');
   // On desktop a result opens in the record panel beside the results.
   await page.getByRole('link', { name: title }).click();
   await expect(page).toHaveURL(new RegExp(`record=${record.id}`));

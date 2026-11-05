@@ -23,9 +23,8 @@ values on records of the selected blueprint (depth 0). It does not traverse
 relationships.
 
 A relationship-qualified term, such as `color.name:red` or
-`family.product_type.name:graphics`, first finds matching scalar values on the
-path's target blueprint, then traverses up to three named **incoming active
-relationship edges** in batched steps:
+`family.product_type.name:graphics`, follows up to three named **active
+relationship edges** to matching scalar values on the path's target blueprint:
 an edge from Product to Color allows a matching Color value to select that
 Product. Deleted records and inactive edges are excluded.
 
@@ -39,14 +38,6 @@ Every query term independently produces a candidate set. Multiple whitespace-
 separated terms are intersected (implicit `AND`). Relationship-tree facet
 counts, selected-facet filtering, and paginated result pages consume that same
 candidate set, so they cannot disagree about which source records match.
-
-The resolver retains a match witness for every accepted result and term. The
-search response includes `match_explanations` to each item: an array
-with one deterministic witness per matched term containing the original term,
-the matching record ID, matching attribute code when applicable, traversal
-depth, and the relationship-edge path from the returned record to that match.
-Depth `0` has an empty path. This data lets clients show why a record matched
-without rerunning the search; it is explanatory metadata, not ranking input.
 
 ## Query Language
 
@@ -98,11 +89,8 @@ are out of scope. `*:` remains the only global multi-hop mode.
 ## API and UI Contract
 
 `POST /v1/records/search` continues to take the query in its existing `query`
-string field. An empty or absent query preserves current browse behavior. Each
-non-empty-query result additionally returns `match_explanations` as described
-above. The Explore query field and URL query parameter preserve the supplied
-query text. The UI shows selector and wildcard examples; the API returns
-explanation metadata for clients to display why a result matched. API errors
+string field. An empty or absent query preserves current browse behavior. The Explore query field and URL query parameter preserve the supplied
+query text. The UI shows selector and wildcard examples. API errors
 are rendered in the Explore error alert.
 
 There is no client-selected traversal depth. The server owns the
@@ -111,12 +99,15 @@ CLI client.
 
 ## Implementation Boundaries
 
-The backend parses typed query terms, compiles validated terms using blueprint
-metadata, and invokes a shared candidate-ID resolver. Main record search and
-relationship-tree facet child/count paths use that resolver so their text-query
-semantics agree.
+The backend parses typed query terms and compiles validated terms using blueprint
+metadata into conditions each statement tests, alongside attribute filters and
+selected tree facets. A search page loads up to 20,000 matching IDs
+(`MAX_LOADED_FILTER_MATCHES`) and reads them from then on. A search matching more
+runs its conditions inside each statement, per record, so a page and its capped
+total stop as soon as they have enough. Relationship-tree facet children with a
+search term read every match, because their counts are exact.
 
-No migration is required. Only `*:` global traversal is resource-bounded: all
+No migration is required. Only `*:` global traversal loads its matches: all
 such terms in one request share caps for matching scalar rows, discovered
 records, and relationship edges. Traversal is an ordered, three-level BFS;
 exhausting any cap fails the whole request with a typed `422` response (never a
@@ -133,6 +124,5 @@ traverse relationships, `*:` global traversal, explicit relationship matches,
 deleted records, inactive relationships, structured selectors (including
 selected-blueprint code and user-specified-name aliases in both `blueprint:term`
 and `blueprint.attribute:term` forms), wildcard matching, invalid or ambiguous
-syntax/selectors, AND intersections, pagination, facet counts/filtering, and
-deterministic per-term match explanations. Frontend coverage should verify URL parsing/submission, forwarding structured
-query text, and displaying returned match rationale.
+syntax/selectors, AND intersections, pagination, and facet counts/filtering. Frontend coverage should verify URL parsing/submission and forwarding structured
+query text.

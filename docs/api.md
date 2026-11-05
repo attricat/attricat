@@ -1150,8 +1150,9 @@ names up to 100 records, omitting those the initiating user cannot read;
 `find_records` finds records by name across every published record blueprint,
 ranking exact display-label matches first and omitting records the initiating
 user cannot read; `count_records` counts the records matching the same query
-and filters as `search_records`, optionally per target of one relationship
-field (labelled, largest first, unreadable targets omitted); and
+and filters as `search_records`, capped at 500 with `total_count_capped`, or
+exactly per target of one relationship field (labelled, largest first,
+unreadable targets omitted); and
 `list_reusable_attributes` lists reusable attribute definitions and groups. `search_records` reports `total_count`, capped at 500,
 on its first page. Each run's system prompt also carries a catalog map: every
 published record blueprint the user can read with the blueprints its

@@ -53,3 +53,13 @@ const MIGRATION_LOCK_TIMEOUT: &str = "15s";
 pub fn migration_connect_options(options: PgConnectOptions) -> PgConnectOptions {
     options.options([("lock_timeout", MIGRATION_LOCK_TIMEOUT)])
 }
+
+/// Compiling a plan takes hundreds of milliseconds, which only pays off for queries
+/// far longer than this application runs. A search that stops after 500 rows can
+/// still have a high estimate, because PostgreSQL can't tell how soon it will stop.
+pub async fn disable_jit(connection: &mut sqlx::PgConnection) -> Result<(), sqlx::Error> {
+    sqlx::query("SELECT set_config('jit', 'off', false)")
+        .execute(connection)
+        .await
+        .map(|_| ())
+}

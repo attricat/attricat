@@ -251,7 +251,7 @@ POST /api/v1/records/search
 - `context_code` (domyślnie `default`) to kontekst, w którym rozstrzygane są filtry, sortowanie i `table_values`, z dziedziczeniem z kontekstów nadrzędnych zależnie od atrybutu. `query` dopasowuje wartości we wszystkich kontekstach.
 - `sort.field` musi być kolumną skalarną w widoku tabeli schematu, `blueprint_version`, `system_tag:<tag>` lub `publication_status` (z `sort.context_code` wskazującym kanał). `system_tag:<tag>` oddziela rekordy z tym tagiem od pozostałych, w każdej grupie według ID rekordu.
 - `system_tags` (najwyżej 20) zostawia rekordy, które mają wszystkie podane tagi, także [tagi Core](#tagi-systemowe), takie jak `attricat.needs_attention`.
-- Odpowiedzi zawierają `items`, `next_cursor`, `result_version_scope`, a dla każdego elementu `system_tags`, `table_values` i `match_explanations`. Przekaż `next_cursor` z powrotem jako `page.cursor` przy tym samym sortowaniu.
+- Odpowiedzi zawierają `items`, `next_cursor`, `result_version_scope`, a dla każdego elementu `system_tags` i `table_values`. Przekaż `next_cursor` z powrotem jako `page.cursor` przy tym samym sortowaniu.
 - `include_total` zwraca w `total_count` łączną liczbę wyników dla pierwszej strony, ograniczoną do 500; `total_count_capped` informuje o osiągnięciu limitu.
 - `include_blueprint: false` pomija `blueprint` w odpowiedzi, na przykład na kolejnych stronach, gdy klient ma już blueprint z pierwszej strony.
 - `include_previews: false` pomija `preview` i rekordy `related` każdego elementu, chyba że kolumna tabeli używa renderera z rozszerzenia. `display` i `table_values` są zwracane zawsze.
