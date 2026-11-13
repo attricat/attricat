@@ -75,12 +75,7 @@ async fn scoped_export_fans_out_to_channels_via_existing_task_queue(pool: sqlx::
         .install("test", &archive)
         .await
         .unwrap();
-    for capability in [
-        "attricat.read",
-        "attricat.write",
-        "artifacts.read",
-        "artifacts.write",
-    ] {
+    for capability in support::CSV_CONNECTOR_CAPABILITIES {
         repository
             .grant_extension("attricat-connector-csv", "capability", capability)
             .await
