@@ -8,6 +8,12 @@ ignore = [
   # uses only to verify provider signatures with public keys; Attricat holds no
   # RSA private key. Only the test provider signs with rsa, using a throwaway key.
   { id = "RUSTSEC-2023-0071", reason = "only public-key verification in production" },
+  # chrono and chrono-tz are unmaintained, with no fixed release; neither advisory
+  # reports a vulnerability. sqlx, calamine, cron, oauth2 and openidconnect also
+  # depend on chrono, so leaving it means moving those dependencies too, not only
+  # Attricat's own date code. Revisit when the ecosystem moves to jiff or time.
+  { id = "RUSTSEC-2026-0543", reason = "chrono unmaintained; no vulnerability, required by sqlx and others" },
+  { id = "RUSTSEC-2026-0555", reason = "chrono-tz unmaintained; no vulnerability, no maintained drop-in" },
 ]
 
 [bans]
