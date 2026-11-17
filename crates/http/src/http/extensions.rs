@@ -1344,7 +1344,7 @@ pub(super) async fn dev_artifact(
         )));
     }
     let (release_id, _) = repository.extension_native_artifact(&extension_id).await?;
-    let revision = format!("{:x}", Sha256::digest(&bundle));
+    let revision = hex::encode(Sha256::digest(&bundle));
     state
         .object_store
         .put(
@@ -1384,7 +1384,7 @@ pub(super) async fn dev_server_artifact(
         ));
     }
     let release_id = repository.extension_server_release(&extension_id).await?;
-    let revision = format!("{:x}", Sha256::digest(&component));
+    let revision = hex::encode(Sha256::digest(&component));
     state
         .object_store
         .put(

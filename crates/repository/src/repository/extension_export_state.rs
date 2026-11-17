@@ -15,6 +15,7 @@ use chrono::{DateTime, Duration, Utc};
 use serde::Serialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
+use sqlx::AssertSqlSafe;
 use sqlx::{FromRow, Postgres, Transaction};
 use uuid::Uuid;
 
@@ -433,7 +434,7 @@ impl AttricatRepository {
         check_connection(connection)?;
         let ws = self.workspace_id();
         Ok(match key {
-            MappingKey::Record(record_id) => sqlx::query_as(&format!("SELECT {MAPPING_FIELDS} FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4", connection_is("connection", "$3", connection)))
+            MappingKey::Record(record_id) => sqlx::query_as(AssertSqlSafe(format!("SELECT {MAPPING_FIELDS} FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4", connection_is("connection", "$3", connection))))
                 .bind(ws).bind(extension_id).bind(connection).bind(record_id)
                 .fetch_optional(&self.pool).await?,
             MappingKey::ExternalId(external_id) => {
@@ -442,7 +443,7 @@ impl AttricatRepository {
                 }
                 // External IDs are unique per destination in practice; the
                 // oldest mapping wins if an exporter reused one.
-                sqlx::query_as(&format!("SELECT {MAPPING_FIELDS} FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND external_id=$4 ORDER BY created_at,id LIMIT 1", connection_is("connection", "$3", connection)))
+                sqlx::query_as(AssertSqlSafe(format!("SELECT {MAPPING_FIELDS} FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND external_id=$4 ORDER BY created_at,id LIMIT 1", connection_is("connection", "$3", connection))))
                     .bind(ws).bind(extension_id).bind(connection).bind(external_id)
                     .fetch_optional(&self.pool).await?
             }
@@ -471,7 +472,7 @@ impl AttricatRepository {
         if status.is_some_and(|status| ExportStatus::parse(status).is_none()) {
             return Err(invalid("unknown export status"));
         }
-        let mut rows: Vec<ExportMapping> = sqlx::query_as(&format!("SELECT {MAPPING_FIELDS} FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND ($4::text IS NULL OR status=$4) AND ($5::uuid IS NULL OR record_id>$5) AND (NOT $7 OR ((status='withdrawn' OR EXISTS(SELECT 1 FROM records r WHERE r.workspace_id=extension_export_mappings.workspace_id AND r.id=extension_export_mappings.record_id AND r.deleted_at IS NULL)) AND {})) ORDER BY record_id LIMIT $6", connection_is("connection", "$3", connection), current_destination("extension_export_mappings")))
+        let mut rows: Vec<ExportMapping> = sqlx::query_as(AssertSqlSafe(format!("SELECT {MAPPING_FIELDS} FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND ($4::text IS NULL OR status=$4) AND ($5::uuid IS NULL OR record_id>$5) AND (NOT $7 OR ((status='withdrawn' OR EXISTS(SELECT 1 FROM records r WHERE r.workspace_id=extension_export_mappings.workspace_id AND r.id=extension_export_mappings.record_id AND r.deleted_at IS NULL)) AND {})) ORDER BY record_id LIMIT $6", connection_is("connection", "$3", connection), current_destination("extension_export_mappings"))))
             .bind(self.workspace_id()).bind(extension_id).bind(connection).bind(status)
             .bind(after).bind(i64::from(limit) + 1).bind(live_only)
             .fetch_all(&self.pool).await?;
@@ -512,7 +513,7 @@ impl AttricatRepository {
         let created = sqlx::query("INSERT INTO extension_export_mappings(id,workspace_id,extension_id,connection,record_id,status) VALUES($1,$2,$3,$4,$5,'pending') ON CONFLICT DO NOTHING")
             .bind(Uuid::new_v4()).bind(ws).bind(extension_id).bind(connection).bind(record_id)
             .execute(&mut **transaction).await?.rows_affected() == 1;
-        let mapping = sqlx::query_as(&format!("SELECT {MAPPING_FIELDS} FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4 FOR UPDATE", connection_is("connection", "$3", connection)))
+        let mapping = sqlx::query_as(AssertSqlSafe(format!("SELECT {MAPPING_FIELDS} FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4 FOR UPDATE", connection_is("connection", "$3", connection))))
             .bind(ws).bind(extension_id).bind(connection).bind(record_id)
             .fetch_one(&mut **transaction).await?;
         Ok(LockedMapping {
@@ -531,7 +532,7 @@ impl AttricatRepository {
         connection: Option<&str>,
         record_id: Uuid,
     ) -> Result<(), RepositoryError> {
-        sqlx::query(&format!("UPDATE extension_export_mappings SET {CLEAR_LEASE},updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4", connection_is("connection", "$3", connection)))
+        sqlx::query(AssertSqlSafe(format!("UPDATE extension_export_mappings SET {CLEAR_LEASE},updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4", connection_is("connection", "$3", connection))))
             .bind(self.workspace_id()).bind(extension_id).bind(connection).bind(record_id)
             .execute(&mut **transaction).await?;
         Ok(())
@@ -653,7 +654,7 @@ impl AttricatRepository {
                 && mapping.lease_holder.as_deref() == holder
                 && mapping.lease_until.is_some_and(|until| until > now);
             let mapping = if own_lease {
-                sqlx::query_as(&format!("UPDATE extension_export_mappings SET {CLEAR_LEASE},updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4 RETURNING {MAPPING_FIELDS}", connection_is("connection", "$3", connection)))
+                sqlx::query_as(AssertSqlSafe(format!("UPDATE extension_export_mappings SET {CLEAR_LEASE},updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4 RETURNING {MAPPING_FIELDS}", connection_is("connection", "$3", connection))))
                     .bind(self.workspace_id()).bind(extension_id).bind(connection).bind(record_id)
                     .fetch_one(&mut *transaction).await?
             } else {
@@ -678,7 +679,7 @@ impl AttricatRepository {
             }
             _ => (Uuid::new_v4(), record_revision),
         };
-        let mapping: ExportMapping = sqlx::query_as(&format!("UPDATE extension_export_mappings SET lease_token=$5,lease_until=$6,leased_at=clock_timestamp(),lease_holder=$7,leased_revision=$8,updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4 RETURNING {MAPPING_FIELDS}", connection_is("connection", "$3", connection)))
+        let mapping: ExportMapping = sqlx::query_as(AssertSqlSafe(format!("UPDATE extension_export_mappings SET lease_token=$5,lease_until=$6,leased_at=clock_timestamp(),lease_holder=$7,leased_revision=$8,updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4 RETURNING {MAPPING_FIELDS}", connection_is("connection", "$3", connection))))
             .bind(self.workspace_id()).bind(extension_id).bind(connection).bind(record_id)
             .bind(token).bind(now + lease).bind(holder).bind(leased_revision)
             .fetch_one(&mut *transaction).await?;
@@ -861,7 +862,7 @@ impl AttricatRepository {
             status,
             ExportStatus::Synced | ExportStatus::Withdrawn | ExportStatus::Rejected
         );
-        let committed: ExportMapping = sqlx::query_as(&format!(
+        let committed: ExportMapping = sqlx::query_as(AssertSqlSafe(format!(
             "UPDATE extension_export_mappings SET status=$5,record_revision=$6,\
              external_id=CASE WHEN $7 THEN $8 ELSE external_id END,\
              external_ids=COALESCE($9,external_ids),\
@@ -874,7 +875,7 @@ impl AttricatRepository {
              WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4 \
              RETURNING {MAPPING_FIELDS}",
             connection_is("connection", "$3", connection)
-        ))
+        )))
         .bind(self.workspace_id())
         .bind(extension_id)
         .bind(connection)
@@ -910,7 +911,7 @@ impl AttricatRepository {
         lease_token: Uuid,
     ) -> Result<bool, RepositoryError> {
         check_connection(connection)?;
-        Ok(sqlx::query(&format!("UPDATE extension_export_mappings SET {CLEAR_LEASE},updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4 AND lease_token=$5", connection_is("connection", "$3", connection)))
+        Ok(sqlx::query(AssertSqlSafe(format!("UPDATE extension_export_mappings SET {CLEAR_LEASE},updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4 AND lease_token=$5", connection_is("connection", "$3", connection))))
             .bind(self.workspace_id()).bind(extension_id).bind(connection).bind(record_id).bind(lease_token)
             .execute(&self.pool).await?.rows_affected() == 1)
     }
@@ -926,11 +927,11 @@ impl AttricatRepository {
         lease_token: Option<Uuid>,
     ) -> Result<bool, RepositoryError> {
         check_connection(connection)?;
-        let deleted = sqlx::query(&format!("DELETE FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4 AND (lease_until IS NULL OR lease_until<=clock_timestamp() OR lease_token=$5)", connection_is("connection", "$3", connection)))
+        let deleted = sqlx::query(AssertSqlSafe(format!("DELETE FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4 AND (lease_until IS NULL OR lease_until<=clock_timestamp() OR lease_token=$5)", connection_is("connection", "$3", connection))))
             .bind(self.workspace_id()).bind(extension_id).bind(connection).bind(record_id).bind(lease_token)
             .execute(&self.pool).await?.rows_affected() == 1;
         if !deleted {
-            let leased: bool = sqlx::query_scalar(&format!("SELECT EXISTS(SELECT 1 FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4)", connection_is("connection", "$3", connection)))
+            let leased: bool = sqlx::query_scalar(AssertSqlSafe(format!("SELECT EXISTS(SELECT 1 FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4)", connection_is("connection", "$3", connection))))
                 .bind(self.workspace_id()).bind(extension_id).bind(connection).bind(record_id)
                 .fetch_one(&self.pool).await?;
             if leased {
@@ -951,10 +952,10 @@ impl AttricatRepository {
         at: DateTime<Utc>,
         channel: Option<Uuid>,
     ) -> Result<i64, RepositoryError> {
-        Ok(sqlx::query_scalar(&format!(
+        Ok(sqlx::query_scalar(AssertSqlSafe(format!(
             "SELECT {} FROM records r WHERE r.workspace_id=$1 AND r.id=$2",
             super::extension_attricat_data::content_revision_sql("r", Some("$3"), Some("$4"))
-        ))
+        )))
         .bind(self.workspace_id())
         .bind(record_id)
         .bind(at)
@@ -1019,7 +1020,7 @@ impl AttricatRepository {
             // A refused rejection is busy when another worker's lease is
             // live now, by the database's clock, and outdated otherwise.
             Err(RepositoryError::ExportMappingConflict(_)) => {
-                let until: Option<DateTime<Utc>> = sqlx::query_scalar(&format!("SELECT lease_until FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4 AND lease_until>clock_timestamp() AND lease_holder IS DISTINCT FROM $5", connection_is("connection", "$3", connection)))
+                let until: Option<DateTime<Utc>> = sqlx::query_scalar(AssertSqlSafe(format!("SELECT lease_until FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND record_id=$4 AND lease_until>clock_timestamp() AND lease_holder IS DISTINCT FROM $5", connection_is("connection", "$3", connection))))
                     .bind(self.workspace_id()).bind(extension_id).bind(connection).bind(record_id).bind(holder)
                     .fetch_optional(&self.pool).await?;
                 Ok(match until {
@@ -1041,7 +1042,7 @@ impl AttricatRepository {
         extension_id: &str,
         holder: &str,
     ) -> Result<u64, RepositoryError> {
-        Ok(sqlx::query(&format!("UPDATE extension_export_mappings SET {CLEAR_LEASE},updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND lease_holder=$3"))
+        Ok(sqlx::query(AssertSqlSafe(format!("UPDATE extension_export_mappings SET {CLEAR_LEASE},updated_at=clock_timestamp() WHERE workspace_id=$1 AND extension_id=$2 AND lease_holder=$3")))
             .bind(self.workspace_id()).bind(extension_id).bind(holder)
             .execute(&self.pool).await?.rows_affected())
     }
@@ -1060,7 +1061,7 @@ impl AttricatRepository {
     ) -> Result<u64, RepositoryError> {
         // A deleted record's lease only ends: its mapping accepts nothing
         // but a withdrawal, so a retrying status would never clear.
-        Ok(sqlx::query(&format!("UPDATE extension_export_mappings m SET status=CASE WHEN r.deleted_at IS NULL THEN 'retrying' ELSE m.status END,error=CASE WHEN r.deleted_at IS NULL THEN jsonb_build_object('code',$4::text,'message',$5::text) ELSE m.error END,attempts=CASE WHEN r.deleted_at IS NULL THEN m.attempts+1 ELSE m.attempts END,{CLEAR_LEASE},updated_at=clock_timestamp() FROM records r WHERE r.workspace_id=m.workspace_id AND r.id=m.record_id AND m.workspace_id=$1 AND m.extension_id=$2 AND m.lease_holder=$3"))
+        Ok(sqlx::query(AssertSqlSafe(format!("UPDATE extension_export_mappings m SET status=CASE WHEN r.deleted_at IS NULL THEN 'retrying' ELSE m.status END,error=CASE WHEN r.deleted_at IS NULL THEN jsonb_build_object('code',$4::text,'message',$5::text) ELSE m.error END,attempts=CASE WHEN r.deleted_at IS NULL THEN m.attempts+1 ELSE m.attempts END,{CLEAR_LEASE},updated_at=clock_timestamp() FROM records r WHERE r.workspace_id=m.workspace_id AND r.id=m.record_id AND m.workspace_id=$1 AND m.extension_id=$2 AND m.lease_holder=$3")))
             .bind(self.workspace_id()).bind(extension_id).bind(holder).bind(code)
             .bind(message.chars().take(MAX_LEASE_FAILURE_CHARS).collect::<String>())
             .execute(&self.pool).await?.rows_affected())
@@ -1074,7 +1075,7 @@ impl AttricatRepository {
         &self,
         record_id: Uuid,
     ) -> Result<Vec<ExportMapping>, RepositoryError> {
-        Ok(sqlx::query_as(&format!("SELECT {MAPPING_FIELDS} FROM extension_export_mappings WHERE workspace_id=$1 AND record_id=$2 AND {} ORDER BY extension_id,connection NULLS FIRST", current_destination("extension_export_mappings")))
+        Ok(sqlx::query_as(AssertSqlSafe(format!("SELECT {MAPPING_FIELDS} FROM extension_export_mappings WHERE workspace_id=$1 AND record_id=$2 AND {} ORDER BY extension_id,connection NULLS FIRST", current_destination("extension_export_mappings"))))
             .bind(self.workspace_id()).bind(record_id)
             .fetch_all(&self.pool).await?)
     }
@@ -1084,7 +1085,7 @@ impl AttricatRepository {
         &self,
         record_id: Uuid,
     ) -> Result<Vec<ExportConnectionLabel>, RepositoryError> {
-        Ok(sqlx::query_as(&format!("SELECT c.extension_id,c.connection,c.kind,c.display_name FROM extension_export_mappings m JOIN extension_connections c ON c.workspace_id=m.workspace_id AND c.extension_id=m.extension_id AND c.connection=m.connection WHERE m.workspace_id=$1 AND m.record_id=$2 AND {} ORDER BY c.extension_id,c.connection", current_destination("m")))
+        Ok(sqlx::query_as(AssertSqlSafe(format!("SELECT c.extension_id,c.connection,c.kind,c.display_name FROM extension_export_mappings m JOIN extension_connections c ON c.workspace_id=m.workspace_id AND c.extension_id=m.extension_id AND c.connection=m.connection WHERE m.workspace_id=$1 AND m.record_id=$2 AND {} ORDER BY c.extension_id,c.connection", current_destination("m"))))
             .bind(self.workspace_id()).bind(record_id)
             .fetch_all(&self.pool).await?)
     }
@@ -1096,7 +1097,7 @@ impl AttricatRepository {
         &self,
         extension_id: Option<&str>,
     ) -> Result<Vec<ExportStatusCount>, RepositoryError> {
-        Ok(sqlx::query_as(&format!("SELECT extension_id,connection,status,count(*)::bigint AS count FROM extension_export_mappings WHERE workspace_id=$1 AND ($2::text IS NULL OR extension_id=$2) AND {} AND (status='withdrawn' OR EXISTS(SELECT 1 FROM records r WHERE r.workspace_id=extension_export_mappings.workspace_id AND r.id=extension_export_mappings.record_id AND r.deleted_at IS NULL)) GROUP BY extension_id,connection,status ORDER BY extension_id,connection NULLS FIRST,status", current_destination("extension_export_mappings")))
+        Ok(sqlx::query_as(AssertSqlSafe(format!("SELECT extension_id,connection,status,count(*)::bigint AS count FROM extension_export_mappings WHERE workspace_id=$1 AND ($2::text IS NULL OR extension_id=$2) AND {} AND (status='withdrawn' OR EXISTS(SELECT 1 FROM records r WHERE r.workspace_id=extension_export_mappings.workspace_id AND r.id=extension_export_mappings.record_id AND r.deleted_at IS NULL)) GROUP BY extension_id,connection,status ORDER BY extension_id,connection NULLS FIRST,status", current_destination("extension_export_mappings"))))
             .bind(self.workspace_id()).bind(extension_id)
             .fetch_all(&self.pool).await?)
     }
@@ -1116,7 +1117,7 @@ impl AttricatRepository {
         if ExportStatus::parse(status).is_none() {
             return Err(invalid("unknown export status"));
         }
-        let ids: Vec<Uuid> = sqlx::query_scalar(&format!("SELECT m.record_id FROM extension_export_mappings m JOIN records r ON r.workspace_id=m.workspace_id AND r.id=m.record_id WHERE m.workspace_id=$1 AND m.extension_id=$2 AND {} AND m.status=$4 AND r.blueprint_id=$5 AND r.deleted_at IS NULL AND {} ORDER BY m.record_id LIMIT $6", connection_is("m.connection", "$3", connection), current_destination("m")))
+        let ids: Vec<Uuid> = sqlx::query_scalar(AssertSqlSafe(format!("SELECT m.record_id FROM extension_export_mappings m JOIN records r ON r.workspace_id=m.workspace_id AND r.id=m.record_id WHERE m.workspace_id=$1 AND m.extension_id=$2 AND {} AND m.status=$4 AND r.blueprint_id=$5 AND r.deleted_at IS NULL AND {} ORDER BY m.record_id LIMIT $6", connection_is("m.connection", "$3", connection), current_destination("m"))))
             .bind(self.workspace_id()).bind(extension_id).bind(connection).bind(status).bind(blueprint_id).bind(limit.saturating_add(1))
             .fetch_all(&self.pool).await?;
         Ok((ids.len() as i64 <= limit).then_some(ids))
@@ -1146,10 +1147,9 @@ impl AttricatRepository {
             .as_ref()
             .zip(selection.as_ref())
             .map(|(key, selection)| {
-                format!(
-                    "{:x}",
-                    Sha256::digest(format!("{extension_id}\0{key}\0{selection}").as_bytes())
-                )
+                hex::encode(Sha256::digest(
+                    format!("{extension_id}\0{key}\0{selection}").as_bytes(),
+                ))
             });
         let record_ids = self
             .request_export_retry(
@@ -1307,7 +1307,7 @@ impl AttricatRepository {
                 .bind(self.workspace_id()).bind(extension_id).bind(&selection.connection).bind(record_ids).bind(handles_retries)
                 .execute(&mut *transaction).await?;
         }
-        let ids: Vec<Uuid> = sqlx::query_scalar(&format!("WITH selected AS (SELECT id FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND ($4::uuid[] IS NULL OR record_id=ANY($4)) AND ($5::text IS NULL OR status=$5) AND status<>'withdrawn' AND EXISTS(SELECT 1 FROM records r WHERE r.workspace_id=$1 AND r.id=record_id AND r.deleted_at IS NULL) AND {} ORDER BY record_id LIMIT $6 FOR UPDATE) UPDATE extension_export_mappings m SET status='pending',retry_requested_at=clock_timestamp(),attempts=0,updated_at=clock_timestamp() FROM selected s WHERE m.id=s.id RETURNING m.record_id", connection_is("connection", "$3", selection.connection.as_deref()), current_destination("extension_export_mappings")))
+        let ids: Vec<Uuid> = sqlx::query_scalar(AssertSqlSafe(format!("WITH selected AS (SELECT id FROM extension_export_mappings WHERE workspace_id=$1 AND extension_id=$2 AND {} AND ($4::uuid[] IS NULL OR record_id=ANY($4)) AND ($5::text IS NULL OR status=$5) AND status<>'withdrawn' AND EXISTS(SELECT 1 FROM records r WHERE r.workspace_id=$1 AND r.id=record_id AND r.deleted_at IS NULL) AND {} ORDER BY record_id LIMIT $6 FOR UPDATE) UPDATE extension_export_mappings m SET status='pending',retry_requested_at=clock_timestamp(),attempts=0,updated_at=clock_timestamp() FROM selected s WHERE m.id=s.id RETURNING m.record_id", connection_is("connection", "$3", selection.connection.as_deref()), current_destination("extension_export_mappings"))))
             .bind(self.workspace_id()).bind(extension_id).bind(&selection.connection)
             .bind(&selection.record_ids).bind(&selection.status).bind(MAX_EXPORT_RETRY_RECORDS + 1)
             .fetch_all(&mut *transaction).await?;

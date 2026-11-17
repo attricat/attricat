@@ -4,6 +4,7 @@
 use chrono::{DateTime, Duration, Utc};
 use serde::Serialize;
 use serde_json::Value;
+use sqlx::AssertSqlSafe;
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
@@ -163,7 +164,7 @@ impl AttricatRepository {
             )
             .await?;
         }
-        let schedule = sqlx::query_as(&format!("INSERT INTO extension_operation_schedules(id,workspace_id,extension_id,installed_release_id,operation_id,input,configuration_snapshot,source_reference,destination_reference,interval_seconds,next_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,clock_timestamp()+($10*interval '1 second')) RETURNING {PROJECTION}"))
+        let schedule = sqlx::query_as(AssertSqlSafe(format!("INSERT INTO extension_operation_schedules(id,workspace_id,extension_id,installed_release_id,operation_id,input,configuration_snapshot,source_reference,destination_reference,interval_seconds,next_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,clock_timestamp()+($10*interval '1 second')) RETURNING {PROJECTION}")))
             .bind(id).bind(self.workspace_id()).bind(&input.extension_id).bind(input.release_id)
             .bind(&input.operation_id).bind(input.input).bind(installation.configuration).bind(input.source_reference).bind(input.destination_reference)
             .bind(input.interval_seconds).fetch_one(&mut *transaction).await?;
@@ -192,7 +193,7 @@ impl AttricatRepository {
     pub async fn list_extension_operation_schedules(
         &self,
     ) -> Result<Vec<ExtensionOperationSchedule>, RepositoryError> {
-        sqlx::query_as(&format!("SELECT {PROJECTION} FROM extension_operation_schedules WHERE workspace_id=$1 ORDER BY created_at DESC LIMIT 500"))
+        sqlx::query_as(AssertSqlSafe(format!("SELECT {PROJECTION} FROM extension_operation_schedules WHERE workspace_id=$1 ORDER BY created_at DESC LIMIT 500")))
             .bind(self.workspace_id()).fetch_all(&self.pool).await.map_err(Into::into)
     }
 
@@ -203,7 +204,7 @@ impl AttricatRepository {
         interval_seconds: i32,
     ) -> Result<Option<ExtensionOperationSchedule>, RepositoryError> {
         validate_interval(interval_seconds)?;
-        sqlx::query_as(&format!("UPDATE extension_operation_schedules SET enabled=$3,interval_seconds=$4,next_at=CASE WHEN $3 AND NOT enabled THEN clock_timestamp()+($4*interval '1 second') ELSE next_at END,paused_reason=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 RETURNING {PROJECTION}"))
+        sqlx::query_as(AssertSqlSafe(format!("UPDATE extension_operation_schedules SET enabled=$3,interval_seconds=$4,next_at=CASE WHEN $3 AND NOT enabled THEN clock_timestamp()+($4*interval '1 second') ELSE next_at END,paused_reason=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 RETURNING {PROJECTION}")))
             .bind(id).bind(self.workspace_id()).bind(enabled).bind(interval_seconds)
             .fetch_optional(&self.pool).await.map_err(Into::into)
     }

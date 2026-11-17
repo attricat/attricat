@@ -1,6 +1,7 @@
 use super::*;
 use attricat_validation::status::MAX_RETENTION_DAYS;
 use chrono::Utc;
+use sqlx::AssertSqlSafe;
 
 /// A retention hold keeps a file's exact bytes: storage reclamation skips the
 /// file while any hold is active.
@@ -34,9 +35,9 @@ impl AttricatRepository {
         &self,
         file_id: Uuid,
     ) -> Result<Vec<FileRetentionHold>, RepositoryError> {
-        Ok(sqlx::query_as::<_, FileRetentionHold>(&format!(
+        Ok(sqlx::query_as::<_, FileRetentionHold>(AssertSqlSafe(format!(
             "SELECT {HOLD_COLUMNS} FROM file_retention_holds WHERE workspace_id = $1 AND file_id = $2 ORDER BY created_at DESC, id DESC LIMIT 200"
-        ))
+        )))
         .bind(self.workspace_id.0)
         .bind(file_id)
         .fetch_all(&self.pool)
@@ -53,9 +54,9 @@ impl AttricatRepository {
         limit: i64,
     ) -> Result<Vec<FileRetentionHold>, RepositoryError> {
         let (time, id) = before.map_or((None, None), |(time, id)| (Some(time), Some(id)));
-        Ok(sqlx::query_as::<_, FileRetentionHold>(&format!(
+        Ok(sqlx::query_as::<_, FileRetentionHold>(AssertSqlSafe(format!(
             "SELECT {HOLD_COLUMNS} FROM file_retention_holds h WHERE workspace_id = $1 AND (record_id = $2 OR file_id IN (SELECT r.file_id FROM attribute_file_references r JOIN attribute_values v ON v.id = r.attribute_value_id AND v.workspace_id = r.workspace_id WHERE v.record_id = $2 AND v.workspace_id = $1)) AND ($3::timestamptz IS NULL OR (created_at, id) < ($3, $4::uuid)) ORDER BY created_at DESC, id DESC LIMIT $5"
-        ))
+        )))
         .bind(self.workspace_id.0)
         .bind(record_id)
         .bind(time)
@@ -97,9 +98,9 @@ impl AttricatRepository {
         if live.is_none() {
             return Err(RepositoryError::NotFound("file"));
         }
-        let hold = sqlx::query_as::<_, FileRetentionHold>(&format!(
+        let hold = sqlx::query_as::<_, FileRetentionHold>(AssertSqlSafe(format!(
             "INSERT INTO file_retention_holds (id, workspace_id, file_id, source, reason, held_until, created_by_user_id) VALUES ($1, $2, $3, 'explicit', $4, now() + make_interval(days => $5), $6) RETURNING {HOLD_COLUMNS}"
-        ))
+        )))
         .bind(Uuid::new_v4())
         .bind(self.workspace_id.0)
         .bind(file_id)
@@ -138,9 +139,9 @@ impl AttricatRepository {
                 ));
             }
         }
-        let hold = sqlx::query_as::<_, FileRetentionHold>(&format!(
+        let hold = sqlx::query_as::<_, FileRetentionHold>(AssertSqlSafe(format!(
             "UPDATE file_retention_holds SET released_at = now(), released_by_user_id = $2 WHERE id = $1 RETURNING {HOLD_COLUMNS}"
-        ))
+        )))
         .bind(hold_id)
         .bind(actor_user_id)
         .fetch_one(&mut *transaction)

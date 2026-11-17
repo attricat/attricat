@@ -423,7 +423,7 @@ impl FileWorker {
             )
             .await
             .map_err(WorkerError::Storage)?;
-        let hash = format!("{:x}", sha2::Sha256::digest(&bytes));
+        let hash = hex::encode(sha2::Sha256::digest(&bytes));
         let changed = sqlx::query(r#"INSERT INTO file_variants (id, workspace_id, file_id, kind, mime_type, width, height, byte_size, object_key, sha256)
             SELECT $1,$2,$3,$4,'image/webp',$5,$6,$7,$8,$9 WHERE EXISTS (SELECT 1 FROM file_processing_jobs WHERE id = $10 AND status = 'running' AND lease_token = $11)
             ON CONFLICT (file_id, kind) DO UPDATE SET mime_type = EXCLUDED.mime_type, width = EXCLUDED.width, height = EXCLUDED.height, byte_size = EXCLUDED.byte_size, object_key = EXCLUDED.object_key, sha256 = EXCLUDED.sha256, updated_at = now()"#)
@@ -466,7 +466,7 @@ impl FileWorker {
             Ok(document) => {
                 let bytes = serde_json::to_vec(document).expect("documents serialize");
                 let byte_size = bytes.len() as i64;
-                let hash = format!("{:x}", sha2::Sha256::digest(&bytes));
+                let hash = hex::encode(sha2::Sha256::digest(&bytes));
                 self.store
                     .put(
                         &text_key,

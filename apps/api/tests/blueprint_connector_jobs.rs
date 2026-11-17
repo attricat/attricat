@@ -189,7 +189,7 @@ async fn scoped_export_fans_out_to_channels_via_existing_task_queue(pool: sqlx::
         .await
         .unwrap();
     sqlx::query("INSERT INTO files(id,workspace_id,original_filename,display_filename,mime_type,byte_size,sha256,original_key,status) VALUES($1,$2,'source.csv','source.csv','text/csv',$3,$4,$5,'ready')")
-        .bind(file).bind(workspace).bind(csv.len() as i64).bind(format!("{:x}",Sha256::digest(csv))).bind(&key)
+        .bind(file).bind(workspace).bind(csv.len() as i64).bind(hex::encode(Sha256::digest(csv))).bind(&key)
         .execute(&pool).await.unwrap();
     let context_code: String =
         sqlx::query_scalar("SELECT code FROM attribute_contexts WHERE id=$1")

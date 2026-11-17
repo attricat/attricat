@@ -6,6 +6,7 @@ use attricat_domain::states::{DataQualityFilter, RuleFindingState};
 use attricat_validation::saved_search::MAX_RELATIONSHIP_HOPS;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
+use sqlx::AssertSqlSafe;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     time::Duration,
@@ -539,7 +540,7 @@ impl AttricatRepository {
         validate_code(blueprint_code)?;
         validate_code(relationship)?;
         let rows = sqlx::query_as::<_, RecordPreviewRow>(
-            &format!(r#"SELECT target.id, target.blueprint_version, ('attricat.sample'=ANY(target.system_tags)) AS is_sample, target.system_tags, target.created_at, target.projections -> 'preview' AS preview,
+            AssertSqlSafe(format!(r#"SELECT target.id, target.blueprint_version, ('attricat.sample'=ANY(target.system_tags)) AS is_sample, target.system_tags, target.created_at, target.projections -> 'preview' AS preview,
                       b.views AS blueprint_views,
                       {context_fallback_target} AS blueprint_context_fallback
                FROM attribute_values av
@@ -559,7 +560,7 @@ impl AttricatRepository {
                  AND target.workspace_id = $6 AND target.deleted_at IS NULL
                  AND b.workspace_id = $6 AND b.code = $4
                ORDER BY target.id
-               LIMIT $5"#),
+               LIMIT $5"#)),
         )
         .bind(related_from)
         .bind(relationship)
@@ -584,7 +585,7 @@ impl AttricatRepository {
         if record_ids.is_empty() {
             return Ok(Vec::new());
         }
-        let rows = sqlx::query_as::<_, RecordLabelRow>(&format!(
+        let rows = sqlx::query_as::<_, RecordLabelRow>(AssertSqlSafe(format!(
             r#"SELECT e.id, b.code AS blueprint_code, e.projections -> 'preview' AS preview,
                       b.views AS blueprint_views,
                       {context_fallback_e} AS blueprint_context_fallback
@@ -593,7 +594,7 @@ impl AttricatRepository {
                 AND b.workspace_id = $2
                WHERE e.workspace_id = $2 AND e.deleted_at IS NULL AND e.id = ANY($1)
                ORDER BY e.id"#
-        ))
+        )))
         .bind(record_ids)
         .bind(self.workspace_id.0)
         .fetch_all(&self.pool)
@@ -671,7 +672,7 @@ impl AttricatRepository {
             .map_err(|error| RepositoryError::InvalidBlueprintDefinition(error.to_string()))?;
         let (cursor_created_at, cursor_id) = cursor.unzip();
         let rows = sqlx::query_as::<_, IncomingRelationshipRow>(
-            &format!(r#"SELECT source.id, b.code AS blueprint_code, source.blueprint_version,
+            AssertSqlSafe(format!(r#"SELECT source.id, b.code AS blueprint_code, source.blueprint_version,
                       ('attricat.sample'=ANY(source.system_tags)) AS is_sample, source.created_at, source.projections -> 'preview' AS preview,
                       b.views AS blueprint_views,
                       {context_fallback_source} AS blueprint_context_fallback
@@ -695,7 +696,7 @@ impl AttricatRepository {
                  )
                  AND ($3::timestamptz IS NULL OR (source.created_at, source.id) > ($3, $4))
                ORDER BY source.created_at, source.id
-               LIMIT $5"#),
+               LIMIT $5"#)),
         )
         .bind(record_id)
         .bind(selectors)
@@ -772,7 +773,7 @@ impl AttricatRepository {
             })
             .collect::<Vec<_>>()
             .join(" INTERSECT ");
-        let mut query = sqlx::query_scalar::<_, Uuid>(&sql)
+        let mut query = sqlx::query_scalar::<_, Uuid>(AssertSqlSafe(sql.as_str()))
             .bind(blueprint_id)
             .bind(blueprint_version)
             .bind(self.workspace_id.0)
@@ -850,7 +851,7 @@ impl AttricatRepository {
                 })
                 .collect::<Vec<_>>()
                 .join(" INTERSECT ");
-            let mut query = sqlx::query_scalar::<_, Uuid>(&sql)
+            let mut query = sqlx::query_scalar::<_, Uuid>(AssertSqlSafe(sql.as_str()))
                 .bind(blueprint_id)
                 .bind(blueprint_version)
                 .bind(self.workspace_id.0)
@@ -937,7 +938,7 @@ impl AttricatRepository {
             filter,
             7,
         );
-        Ok(sqlx::query_scalar::<_, Uuid>(&sql)
+        Ok(sqlx::query_scalar::<_, Uuid>(AssertSqlSafe(sql.as_str()))
             .bind(blueprint_id)
             .bind(blueprint_version)
             .bind(&filter.leaf_field)
@@ -993,7 +994,7 @@ impl AttricatRepository {
                  LIMIT $9"#
         );
         let (cursor_created_at, cursor_id) = cursor.unzip();
-        let rows = sqlx::query_as::<_, RecordPreviewRow>(&sql)
+        let rows = sqlx::query_as::<_, RecordPreviewRow>(AssertSqlSafe(sql.as_str()))
             .bind(blueprint_id)
             .bind(blueprint_version)
             .bind(cursor_created_at)
@@ -1033,7 +1034,7 @@ impl AttricatRepository {
         validate_system_tag_filter(system_tags)?;
         let (records, matching) = matching_records(matching_record_ids.is_some(), 3);
         let export_status_sql = record_filter_clauses(9, export_status, data_quality);
-        Ok(sqlx::query_scalar::<_, i64>(&format!(
+        Ok(sqlx::query_scalar::<_, i64>(AssertSqlSafe(format!(
             r#"SELECT COUNT(*)
                  FROM (
                     SELECT 1
@@ -1048,7 +1049,7 @@ impl AttricatRepository {
                        AND (NOT $5 OR e.blueprint_version <> $6)
                      LIMIT $7
                  ) matches"#,
-        ))
+        )))
         .bind(blueprint_id)
         .bind(blueprint_version)
         .bind(matching_record_ids)
@@ -1079,7 +1080,7 @@ impl AttricatRepository {
         validate_system_tag_filter(system_tags)?;
         let (records, matching) = matching_records(matching_record_ids.is_some(), 4);
         let export_status_sql = record_filter_clauses(8, export_status, data_quality);
-        Ok(sqlx::query_scalar::<_, i64>(&format!(
+        Ok(sqlx::query_scalar::<_, i64>(AssertSqlSafe(format!(
             r#"SELECT e.blueprint_version
                  FROM {records}
                 WHERE e.blueprint_id = $1
@@ -1093,7 +1094,7 @@ impl AttricatRepository {
                 GROUP BY e.blueprint_version
                 ORDER BY e.blueprint_version DESC
                 LIMIT 2"#,
-        ))
+        )))
         .bind(blueprint_id)
         .bind(blueprint_version)
         .bind(self.workspace_id.0)
@@ -1142,7 +1143,7 @@ impl AttricatRepository {
         validate_system_tag_filter(system_tags)?;
         let (records, matching) = matching_records(matching_record_ids.is_some(), 4);
         let export_status_sql = record_filter_clauses(9, export_status, data_quality);
-        let (versions, count) = sqlx::query_as::<_, (Vec<i64>, i64)>(&format!(
+        let (versions, count) = sqlx::query_as::<_, (Vec<i64>, i64)>(AssertSqlSafe(format!(
             r#"WITH matches AS MATERIALIZED (
                    SELECT e.blueprint_version
                      FROM {records}
@@ -1162,7 +1163,7 @@ impl AttricatRepository {
                            LIMIT 2
                       ),
                       (SELECT COUNT(*) FROM (SELECT 1 FROM matches LIMIT $8) capped)"#,
-        ))
+        )))
         .bind(blueprint_id)
         .bind(blueprint_version)
         .bind(self.workspace_id.0)
@@ -1320,7 +1321,7 @@ impl AttricatRepository {
             nulls_first = nulls_first,
             null_order = null_order,
         );
-        let mut rows = sqlx::query_as::<_, SortedRecordPreviewRow>(&sql)
+        let mut rows = sqlx::query_as::<_, SortedRecordPreviewRow>(AssertSqlSafe(sql.as_str()))
             .bind(blueprint_id)
             .bind(blueprint_version)
             .bind(matching_record_ids)
@@ -1420,7 +1421,7 @@ impl AttricatRepository {
                   ORDER BY {expression} {direction}, e.id ASC
                   LIMIT $9"#
         );
-        let query = sqlx::query_as::<_, SortedRecordPreviewRow>(&sql)
+        let query = sqlx::query_as::<_, SortedRecordPreviewRow>(AssertSqlSafe(sql.as_str()))
             .bind(blueprint_id)
             .bind(blueprint_version)
             .bind(matching_record_ids)
@@ -1530,7 +1531,7 @@ impl AttricatRepository {
                     ORDER BY sort_value.{column} {direction}, sort_value.record_id ASC, e.id ASC
                     LIMIT $13"#,
             );
-            rows = sqlx::query_as::<_, SortedRecordPreviewRow>(&sql)
+            rows = sqlx::query_as::<_, SortedRecordPreviewRow>(AssertSqlSafe(sql.as_str()))
                 .bind(blueprint_id)
                 .bind(blueprint_version)
                 .bind(matching_record_ids)
@@ -1578,25 +1579,26 @@ impl AttricatRepository {
                     ORDER BY e.id ASC
                     LIMIT $13"#,
             );
-            let mut null_rows = sqlx::query_as::<_, SortedRecordPreviewRow>(&sql)
-                .bind(blueprint_id)
-                .bind(blueprint_version)
-                .bind(matching_record_ids)
-                .bind((!system_tags.is_empty()).then_some(system_tags))
-                .bind(outdated)
-                .bind(current_blueprint_version)
-                .bind(Option::<String>::None)
-                .bind(true)
-                .bind(null_cursor_id)
-                .bind(&sort.relationship_path)
-                .bind(&sort.leaf_field)
-                .bind(sort.value_type.as_str())
-                .bind(remaining)
-                .bind(workspace_id)
-                .bind(&sort.context.ids)
-                .bind(export_status_param(export_status))
-                .fetch_all(&self.pool)
-                .await?;
+            let mut null_rows =
+                sqlx::query_as::<_, SortedRecordPreviewRow>(AssertSqlSafe(sql.as_str()))
+                    .bind(blueprint_id)
+                    .bind(blueprint_version)
+                    .bind(matching_record_ids)
+                    .bind((!system_tags.is_empty()).then_some(system_tags))
+                    .bind(outdated)
+                    .bind(current_blueprint_version)
+                    .bind(Option::<String>::None)
+                    .bind(true)
+                    .bind(null_cursor_id)
+                    .bind(&sort.relationship_path)
+                    .bind(&sort.leaf_field)
+                    .bind(sort.value_type.as_str())
+                    .bind(remaining)
+                    .bind(workspace_id)
+                    .bind(&sort.context.ids)
+                    .bind(export_status_param(export_status))
+                    .fetch_all(&self.pool)
+                    .await?;
             rows.append(&mut null_rows);
         }
 
@@ -1660,8 +1662,8 @@ impl AttricatRepository {
             .map(|(path, leaf_type)| (path.as_str(), leaf_type.as_str()))
             .unzip();
         if !direct_files.is_empty() {
-            let files = sqlx::query_as::<_, (Uuid, String, Value)>(
-                &r#"SELECT av.record_id, a.code,
+            let files = sqlx::query_as::<_, (Uuid, String, Value)>(AssertSqlSafe(
+                r#"SELECT av.record_id, a.code,
                           jsonb_build_object(
                             'id', f.id,
                             'filename', f.display_filename,
@@ -1696,7 +1698,7 @@ impl AttricatRepository {
                            f.sha256, f.status, r.position
                   ORDER BY av.record_id, a.code, r.position"#
                     .replace("{value_context}", &resolved_context("av", "a", "$4")),
-            )
+            ))
             .bind(&roots)
             .bind(&direct_files)
             .bind(self.workspace_id.0)
@@ -1787,8 +1789,8 @@ impl AttricatRepository {
                 break;
             }
             let (sources, codes): (Vec<Uuid>, Vec<&str>) = requested.into_iter().unzip();
-            let edges = sqlx::query_as::<_, TablePathEdgeRow>(
-                &r#"SELECT av.record_id AS source_id, a.code, target.id AS target_id
+            let edges = sqlx::query_as::<_, TablePathEdgeRow>(AssertSqlSafe(
+                r#"SELECT av.record_id AS source_id, a.code, target.id AS target_id
                    FROM UNNEST($1::uuid[], $2::text[]) AS hop(source_id, code)
                    JOIN attribute_values av ON av.record_id = hop.source_id
                     AND av.workspace_id = $3 AND av.active
@@ -1807,7 +1809,7 @@ impl AttricatRepository {
                     AND target_blueprint.code = a.target_blueprint_code
                   WHERE {edge_context}"#
                     .replace("{edge_context}", &resolved_context("av", "a", "$4")),
-            )
+            ))
             .bind(&sources)
             .bind(&codes)
             .bind(self.workspace_id.0)
@@ -1957,7 +1959,7 @@ impl AttricatRepository {
         )
         .map_err(|error| RepositoryError::InvalidBlueprintDefinition(error.to_string()))?;
         let rows = sqlx::query_as::<_, RelatedTablePreviewRow>(
-            &format!(r#"SELECT source.id AS source_id, a.code AS attribute_code,
+            AssertSqlSafe(format!(r#"SELECT source.id AS source_id, a.code AS attribute_code,
                       context.id AS relationship_context_id,
                       context.code AS relationship_context_code,
                       target.id, target.blueprint_id, target.blueprint_version, ('attricat.sample'=ANY(target.system_tags)) AS is_sample,
@@ -1985,7 +1987,7 @@ impl AttricatRepository {
                 WHERE source.id = ANY($1)
                   AND source.deleted_at IS NULL
                 ORDER BY source.id, a.code, context.code, av.id"#)
-                .replace("{edge_context}", &resolved_context("av", "a", "$3")),
+                .replace("{edge_context}", &resolved_context("av", "a", "$3"))),
         )
         .bind(items.iter().map(|item| item.id).collect::<Vec<_>>())
         .bind(requested)
@@ -2058,7 +2060,7 @@ impl AttricatRepository {
         // Walks down from the selection and then back over the last hop
         // through the target-side relationship indexes, so the cost follows
         // the size of the selected subtrees rather than the whole relationship.
-        let mut matches = sqlx::query_scalar::<_, Uuid>(&format!(
+        let mut matches = sqlx::query_scalar::<_, Uuid>(AssertSqlSafe(format!(
             r#"WITH RECURSIVE {FACET_CONTEXT_PATH_SQL}, allowed AS (
                     SELECT unnest($5::uuid[]) AS id
                     UNION
@@ -2069,7 +2071,7 @@ impl AttricatRepository {
                 {sources}"#,
             hierarchy = facet_sources_sql("$3", "$6"),
             sources = facet_sources_sql("$1", "$2"),
-        ))
+        )))
         .bind(last.map_or(source_blueprint_id, |last| hop_sources[last]))
         .bind(last.map(|last| source_path[last].field.as_str()))
         .bind(target_blueprint_id)
@@ -2083,13 +2085,13 @@ impl AttricatRepository {
             if matches.is_empty() {
                 break;
             }
-            matches = sqlx::query_scalar::<_, Uuid>(&format!(
+            matches = sqlx::query_scalar::<_, Uuid>(AssertSqlSafe(format!(
                 r#"WITH RECURSIVE {FACET_CONTEXT_PATH_SQL}, allowed AS (
                         SELECT unnest($3::uuid[]) AS id
                     )
                     {sources}"#,
                 sources = facet_sources_sql("$1", "$2"),
-            ))
+            )))
             .bind(hop_sources[index])
             .bind(&hop.field)
             .bind(&matches)
@@ -2613,7 +2615,7 @@ impl AttricatRepository {
                 JOIN records target ON target.id = av.relationship_target_record_id
                 WHERE target.blueprint_id = $3 AND target.deleted_at IS NULL"#
         );
-        let mut query = sqlx::query_as::<_, (Uuid, Uuid)>(&query)
+        let mut query = sqlx::query_as::<_, (Uuid, Uuid)>(AssertSqlSafe(query.as_str()))
             .bind(source_blueprint_id)
             .bind(field)
             .bind(target_blueprint_id)

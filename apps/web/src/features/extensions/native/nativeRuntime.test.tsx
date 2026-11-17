@@ -10,7 +10,7 @@ import {
   type RemoteElementSerialization,
 } from '@remote-dom/core';
 import { render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
 import type { ExtensionContribution } from '../api';
 import { handleBrokerRequest } from '../extensionBroker';
 import { nativeAdapters } from './adapterMap';
@@ -122,8 +122,8 @@ const isolation = (
   onWorker: (host: {
     request: (...args: unknown[]) => Promise<unknown>;
   }) => void = () => {},
-): NativeIsolation & { stop: ReturnType<typeof vi.fn> } => ({
-  stop: vi.fn(),
+): NativeIsolation & { stop: Mock<NativeIsolation['stop']> } => ({
+  stop: vi.fn<NativeIsolation['stop']>(),
   start: async (_key, _artifact, port) => {
     const thread = new ThreadMessagePort<
       {

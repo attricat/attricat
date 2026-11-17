@@ -11,6 +11,7 @@ use super::record_commands::{ChosenIdRecordCreate, writes_relationship_values};
 use super::*;
 use crate::model::UpdateRecordFormRequest;
 use attricat_domain::permissions::Permission;
+use sqlx::AssertSqlSafe;
 use sqlx::{Postgres, Transaction};
 use std::collections::BTreeSet;
 
@@ -385,11 +386,11 @@ impl AttricatRepository {
                 .resolve_context_id(transaction, None)
                 .await?
                 .ok_or(RepositoryError::InvalidContext)?;
-            sqlx::query_scalar(&format!(
+            sqlx::query_scalar(AssertSqlSafe(format!(
                 "SELECT e.id FROM record_unique_key_values k JOIN records e ON e.id = k.record_id AND e.workspace_id = k.workspace_id \
                  WHERE k.workspace_id = $1 AND k.blueprint_id = $2 AND k.key_code = $3 AND k.context_id = $4 AND k.key_hash = $5 AND e.deleted_at IS NULL \
                  ORDER BY e.id{row_lock} LIMIT 2",
-            ))
+            )))
             .bind(workspace_id)
             .bind(blueprint_id)
             .bind(&key.code)
@@ -407,13 +408,13 @@ impl AttricatRepository {
                     .execute(&mut **transaction)
                     .await?;
             }
-            sqlx::query_scalar(&format!(
+            sqlx::query_scalar(AssertSqlSafe(format!(
                 "SELECT e.id FROM records e \
                  WHERE e.workspace_id=$1 AND e.deleted_at IS NULL AND e.blueprint_id=$2 AND e.blueprint_version=$3 \
                    AND EXISTS (SELECT 1 FROM attribute_values v WHERE v.record_id=e.id AND v.workspace_id=e.workspace_id AND v.active \
                      AND v.attribute_id=$4 AND v.relationship_target_record_id IS NULL AND v.value_text=$5) \
                  ORDER BY e.id{row_lock} LIMIT 2",
-            ))
+            )))
             .bind(workspace_id)
             .bind(blueprint_id)
             .bind(blueprint_version)

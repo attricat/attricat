@@ -1,5 +1,6 @@
 //! Workspace teams and the user-or-team directory that assignment attributes
 //! reference (`x-attricat-principal`).
+use sqlx::AssertSqlSafe;
 use std::collections::HashSet;
 
 use attricat_validation::principal::{
@@ -107,13 +108,13 @@ fn validate_team_input(code: Option<&str>, name: &str) -> Result<(), RepositoryE
 
 impl AttricatRepository {
     pub async fn list_teams(&self) -> Result<Vec<Team>, RepositoryError> {
-        Ok(sqlx::query_as::<_, Team>(&format!(
+        Ok(sqlx::query_as::<_, Team>(AssertSqlSafe(format!(
             "SELECT {TEAM_FIELDS} FROM teams t
              LEFT JOIN team_members tm ON tm.team_id = t.id
              LEFT JOIN workspace_memberships m ON m.id = tm.membership_id
              WHERE t.workspace_id = $1 AND t.deleted_at IS NULL
              GROUP BY t.id ORDER BY t.name, t.code"
-        ))
+        )))
         .bind(self.workspace_id.0)
         .fetch_all(&self.pool)
         .await?)
@@ -124,13 +125,13 @@ impl AttricatRepository {
         workspace_id: Uuid,
         id: Uuid,
     ) -> Result<Team, RepositoryError> {
-        sqlx::query_as::<_, Team>(&format!(
+        sqlx::query_as::<_, Team>(AssertSqlSafe(format!(
             "SELECT {TEAM_FIELDS} FROM teams t
              LEFT JOIN team_members tm ON tm.team_id = t.id
              LEFT JOIN workspace_memberships m ON m.id = tm.membership_id
              WHERE t.workspace_id = $1 AND t.id = $2 AND t.deleted_at IS NULL
              GROUP BY t.id"
-        ))
+        )))
         .bind(workspace_id)
         .bind(id)
         .fetch_optional(&mut **transaction)

@@ -355,7 +355,7 @@ fn validate_record_schema_attributes(
 
 pub fn raw_hash(source: &str) -> String {
     let hash = Sha256::digest(source.as_bytes());
-    format!("{hash:x}")
+    hex::encode(hash)
 }
 
 /// Digest of what a definition says rather than how it is written: comments,

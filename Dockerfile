@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-FROM node:22-bookworm-slim AS web-builder
+FROM node:26-trixie-slim AS web-builder
 ENV NODE_OPTIONS=--max-old-space-size=1536
 RUN npm install --global pnpm@11.25.0
 WORKDIR /src
@@ -13,7 +13,7 @@ COPY scripts/ui-kit scripts/ui-kit
 COPY apps/web apps/web
 RUN pnpm --dir apps/web build
 
-FROM rust:bookworm AS rust-builder
+FROM rust:trixie AS rust-builder
 # Wasmtime/Cranelift is memory-intensive under full dependency optimization.
 # Level 1 still produces an optimized runtime while keeping release builds viable
 # on ordinary CI runners; one cargo job prevents parallel compiler spikes.
@@ -33,7 +33,7 @@ ARG VCS_BRANCH=unknown
 ENV ATTRICAT_BUILD_COMMIT=$VCS_REF ATTRICAT_BUILD_BRANCH=$VCS_BRANCH
 RUN cargo build --locked --release -p api --bins -p acli --bin acli
 
-FROM debian:bookworm-slim AS runtime
+FROM debian:trixie-slim AS runtime
 ARG VCS_REF=unknown
 ARG VERSION=dev
 LABEL org.opencontainers.image.source="https://github.com/attricat/attricat" \

@@ -1138,7 +1138,7 @@ pub(super) async fn public_file(
     if token.is_empty() || token.len() > MAX_OPAQUE_TOKEN_BYTES {
         return Err(ApiError::not_found("file"));
     }
-    let digest = format!("{:x}", Sha256::digest(token.as_bytes()));
+    let digest = hex::encode(Sha256::digest(token.as_bytes()));
     let Some((workspace_id, file_id, extension_id, record_id)) = state
         .repository
         .resolve_extension_file_link(&digest)

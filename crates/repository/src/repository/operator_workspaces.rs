@@ -5,6 +5,7 @@
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::{Value, json};
+use sqlx::AssertSqlSafe;
 use uuid::Uuid;
 
 use super::{
@@ -161,9 +162,9 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         &self,
         workspace_id: Uuid,
     ) -> Result<Option<OperatorWorkspace>, RepositoryError> {
-        Ok(sqlx::query_as(&format!(
+        Ok(sqlx::query_as(AssertSqlSafe(format!(
             "SELECT {OPERATOR_WORKSPACE_COLUMNS} FROM workspaces w WHERE w.id = $2 AND w.deleted_at IS NULL"
-        ))
+        )))
         .bind(OWNER_ROLE_ID)
         .bind(workspace_id)
         .fetch_optional(&self.pool)
@@ -176,9 +177,9 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         limit: i64,
         offset: i64,
     ) -> Result<(Vec<OperatorWorkspace>, bool), RepositoryError> {
-        let mut workspaces: Vec<OperatorWorkspace> = sqlx::query_as(&format!(
+        let mut workspaces: Vec<OperatorWorkspace> = sqlx::query_as(AssertSqlSafe(format!(
             "SELECT {OPERATOR_WORKSPACE_COLUMNS} FROM workspaces w WHERE w.deleted_at IS NULL ORDER BY w.created_at, w.id LIMIT $2 OFFSET $3"
-        ))
+        )))
         .bind(OWNER_ROLE_ID)
         .bind(limit + 1)
         .bind(offset)

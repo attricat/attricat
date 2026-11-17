@@ -1,6 +1,7 @@
 //! Whether a principal may act: live role grants, scoped targets and personal
 //! API token permissions.
 use super::*;
+use sqlx::AssertSqlSafe;
 
 impl<S: RepositoryScope> AttricatRepository<S> {
     /// Checks the durable membership/grant graph in one database operation so
@@ -262,7 +263,7 @@ impl<S: RepositoryScope> AttricatRepository<S> {
             "WITH {} SELECT requested.id FROM unnest($4::uuid[]) AS requested(id) LEFT JOIN records e ON e.id = requested.id AND e.workspace_id = $2 WHERE EXISTS (SELECT 1 FROM grants g WHERE (g.scope_type = 'workspace' AND g.scope_target_id = $2) OR (e.id IS NOT NULL AND ((g.scope_type = 'record' AND g.scope_target_id = e.id) OR (g.scope_type = 'blueprint_family' AND g.scope_target_id = e.blueprint_id))))",
             GrantCodes::Permission(permission).grant_set_sql()
         );
-        let rows: Vec<Uuid> = sqlx::query_scalar(&sql)
+        let rows: Vec<Uuid> = sqlx::query_scalar(AssertSqlSafe(sql.as_str()))
             .bind(user_id)
             .bind(workspace_id)
             .bind(GrantCodes::Permission(permission).codes())
@@ -290,7 +291,7 @@ impl<S: RepositoryScope> AttricatRepository<S> {
             "WITH RECURSIVE {}, requested AS (SELECT DISTINCT code FROM unnest($4::text[]) AS requested(code)), ancestors AS (SELECT r.code, c.id, c.parent_id FROM requested r JOIN attribute_contexts c ON c.workspace_id = $2 AND c.code = r.code UNION ALL SELECT a.code, p.id, p.parent_id FROM attribute_contexts p JOIN ancestors a ON a.parent_id = p.id WHERE p.workspace_id = $2) SELECT r.code FROM requested r WHERE EXISTS (SELECT 1 FROM grants g WHERE (g.scope_type = 'workspace' AND g.scope_target_id = $2) OR (g.scope_type = 'blueprint_family' AND EXISTS (SELECT 1 FROM blueprints b WHERE b.workspace_id = $2 AND b.code = r.code AND b.id = g.scope_target_id)) OR (g.scope_type = 'context_subtree' AND EXISTS (SELECT 1 FROM ancestors a WHERE a.code = r.code AND a.id = g.scope_target_id)) OR (r.code = '__context_list__' AND g.scope_type = 'context_subtree'))",
             codes.grant_set_sql()
         );
-        let rows: Vec<String> = sqlx::query_scalar(&sql)
+        let rows: Vec<String> = sqlx::query_scalar(AssertSqlSafe(sql.as_str()))
             .bind(user_id)
             .bind(workspace_id)
             .bind(codes.codes())
@@ -334,7 +335,7 @@ impl<S: RepositoryScope> AttricatRepository<S> {
             "WITH RECURSIVE {}, requested AS (SELECT DISTINCT id FROM unnest($4::uuid[]) AS requested(id)), ancestors AS (SELECT r.id AS requested_id, c.id, c.parent_id FROM requested r JOIN attribute_contexts c ON c.workspace_id = $2 AND c.id = r.id UNION ALL SELECT a.requested_id, p.id, p.parent_id FROM attribute_contexts p JOIN ancestors a ON a.parent_id = p.id WHERE p.workspace_id = $2) SELECT r.id FROM requested r WHERE EXISTS (SELECT 1 FROM grants g WHERE (g.scope_type = 'workspace' AND g.scope_target_id = $2) OR ({scoped}))",
             codes.grant_set_sql()
         );
-        let rows: Vec<Uuid> = sqlx::query_scalar(&sql)
+        let rows: Vec<Uuid> = sqlx::query_scalar(AssertSqlSafe(sql.as_str()))
             .bind(user_id)
             .bind(workspace_id)
             .bind(codes.codes())
@@ -403,7 +404,7 @@ impl<S: RepositoryScope> AttricatRepository<S> {
             "WITH RECURSIVE {}, target AS (SELECT 'blueprint'::text kind, id FROM blueprints WHERE workspace_id = $2 AND (id = $4 OR code = $5) UNION ALL SELECT 'record', id FROM records WHERE workspace_id = $2 AND id = $4 UNION ALL SELECT 'context', id FROM attribute_contexts WHERE workspace_id = $2 AND (id = $4 OR code = $5)), ancestors AS (SELECT c.id, c.parent_id FROM attribute_contexts c JOIN target t ON t.kind = 'context' AND t.id = c.id UNION ALL SELECT p.id, p.parent_id FROM attribute_contexts p JOIN ancestors a ON a.parent_id = p.id WHERE p.workspace_id = $2) SELECT EXISTS (SELECT 1 FROM grants g WHERE (g.scope_type = 'workspace' AND g.scope_target_id = $2) OR (($4 IS NOT NULL OR $5 IS NOT NULL) AND ((g.scope_type = 'blueprint_family' AND EXISTS (SELECT 1 FROM target WHERE kind = 'blueprint' AND id = g.scope_target_id)) OR (g.scope_type = 'record' AND EXISTS (SELECT 1 FROM target WHERE kind = 'record' AND id = g.scope_target_id)) OR (g.scope_type = 'blueprint_family' AND EXISTS (SELECT 1 FROM records e JOIN target t ON t.kind = 'record' AND t.id = e.id WHERE e.workspace_id = $2 AND e.blueprint_id = g.scope_target_id)) OR (g.scope_type = 'context_subtree' AND EXISTS (SELECT 1 FROM ancestors WHERE id = g.scope_target_id)) OR ($5 = '__context_list__' AND g.scope_type = 'context_subtree'))))",
             codes.grant_set_sql()
         );
-        Ok(sqlx::query_scalar(&sql)
+        Ok(sqlx::query_scalar(AssertSqlSafe(sql.as_str()))
             .bind(user_id)
             .bind(workspace_id)
             .bind(codes.codes())

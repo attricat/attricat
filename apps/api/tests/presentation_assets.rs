@@ -137,7 +137,7 @@ fn asset_archive_with_requirement(
                 "required": required,
                 "purpose": purpose,
                 "media_type": "image/svg+xml",
-                "sha256": format!("{:x}", Sha256::digest(bytes)),
+                "sha256": hex::encode(Sha256::digest(bytes)),
             })
         })
         .collect::<Vec<_>>();

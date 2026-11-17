@@ -279,7 +279,7 @@ async fn uploads_files_to_the_fake_store_and_persists_derived_metadata(pool: PgP
     assert_eq!(response["files"][0]["status"], "queued");
     assert_eq!(
         response["files"][0]["sha256"],
-        format!("{:x}", Sha256::digest(PNG))
+        hex::encode(Sha256::digest(PNG))
     );
     assert_eq!(store.object_count().await, 1);
     assert_eq!(
@@ -618,7 +618,7 @@ async fn reads_file_metadata_and_downloads_with_safe_range_headers(pool: PgPool)
     assert_eq!(response.headers()["cache-control"], "private, no-cache");
     assert_eq!(
         response.headers()["etag"],
-        format!("\"{:x}\"", Sha256::digest(PNG))
+        format!("\"{}\"", hex::encode(Sha256::digest(PNG)))
     );
     assert_eq!(
         response.headers()["content-disposition"],
@@ -627,7 +627,10 @@ async fn reads_file_metadata_and_downloads_with_safe_range_headers(pool: PgPool)
     assert_eq!(response.bytes().await.unwrap(), &PNG[2..6]);
     let revalidated = client
         .get(format!("{base_url}/files/{file_id}/download"))
-        .header("if-none-match", format!("\"{:x}\"", Sha256::digest(PNG)))
+        .header(
+            "if-none-match",
+            format!("\"{}\"", hex::encode(Sha256::digest(PNG))),
+        )
         .send()
         .await
         .unwrap();
@@ -637,7 +640,10 @@ async fn reads_file_metadata_and_downloads_with_safe_range_headers(pool: PgPool)
     // Revalidation is authorized like a download.
     let anonymous = reqwest::Client::new()
         .get(format!("{base_url}/files/{file_id}/download"))
-        .header("if-none-match", format!("\"{:x}\"", Sha256::digest(PNG)))
+        .header(
+            "if-none-match",
+            format!("\"{}\"", hex::encode(Sha256::digest(PNG))),
+        )
         .send()
         .await
         .unwrap();

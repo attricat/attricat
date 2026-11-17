@@ -7,6 +7,7 @@
 //! older than the generation it is filed under. Correctness never depends on
 //! cache invalidation messages.
 
+use sqlx::AssertSqlSafe;
 use std::{collections::HashMap, sync::Arc};
 
 use attricat_cache::{CacheKey, Policy};
@@ -76,9 +77,9 @@ pub(crate) async fn advance_generation(
     generation: Generation,
 ) -> Result<(), RepositoryError> {
     let column = generation.column();
-    sqlx::query(&format!(
+    sqlx::query(AssertSqlSafe(format!(
         "UPDATE workspaces SET {column} = {column} + 1 WHERE id = $1"
-    ))
+    )))
     .bind(workspace_id)
     .execute(connection)
     .await?;

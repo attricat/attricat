@@ -3,6 +3,7 @@ use crate::model::{CreateWorkflow, Workflow};
 use crate::persistence_rows::{Db, IntoDomain};
 use attricat_domain::states::RevisionStatus;
 use chrono::Utc;
+use sqlx::AssertSqlSafe;
 use uuid::Uuid;
 
 const WORKFLOW_FIELDS: &str = "w.id, w.code, w.name, w.version, w.status, w.definition, w.definition_hash, w.compiled_plan, w.published_at, w.created_at, l.enabled_version, (w.compiled_plan @> '{\"triggers\":[{\"type\":\"manual\"}]}'::jsonb) AS manual_enabled";
@@ -12,7 +13,7 @@ impl AttricatRepository {
         let q = format!(
             "SELECT {WORKFLOW_FIELDS} FROM workflows w LEFT JOIN workflow_lifecycles l ON l.workflow_id=w.id WHERE w.workspace_id=$1 ORDER BY w.created_at DESC, w.version DESC"
         );
-        Ok(sqlx::query_as::<_, Db<Workflow>>(&q)
+        Ok(sqlx::query_as::<_, Db<Workflow>>(AssertSqlSafe(q.as_str()))
             .bind(self.workspace_id.0)
             .fetch_all(&self.pool)
             .await?
@@ -25,7 +26,7 @@ impl AttricatRepository {
         let q = format!(
             "SELECT {WORKFLOW_FIELDS} FROM workflows w LEFT JOIN workflow_lifecycles l ON l.workflow_id=w.id WHERE w.id=$1 AND w.workspace_id=$2 ORDER BY w.version DESC"
         );
-        Ok(sqlx::query_as::<_, Db<Workflow>>(&q)
+        Ok(sqlx::query_as::<_, Db<Workflow>>(AssertSqlSafe(q.as_str()))
             .bind(id)
             .bind(self.workspace_id.0)
             .fetch_all(&self.pool)
@@ -40,7 +41,7 @@ impl AttricatRepository {
         let q = format!(
             "SELECT {WORKFLOW_FIELDS} FROM workflows w LEFT JOIN workflow_lifecycles l ON l.workflow_id=w.id WHERE w.id=$1 AND w.version=$2 AND w.workspace_id=$3"
         );
-        Ok(sqlx::query_as::<_, Db<Workflow>>(&q)
+        Ok(sqlx::query_as::<_, Db<Workflow>>(AssertSqlSafe(q.as_str()))
             .bind(id)
             .bind(version)
             .bind(self.workspace_id.0)
@@ -52,7 +53,7 @@ impl AttricatRepository {
         let q = format!(
             "SELECT {WORKFLOW_FIELDS} FROM workflows w LEFT JOIN workflow_lifecycles l ON l.workflow_id=w.id WHERE w.id=$1 AND w.workspace_id=$2 ORDER BY w.version DESC LIMIT 1"
         );
-        Ok(sqlx::query_as::<_, Db<Workflow>>(&q)
+        Ok(sqlx::query_as::<_, Db<Workflow>>(AssertSqlSafe(q.as_str()))
             .bind(id)
             .bind(self.workspace_id.0)
             .fetch_optional(&self.pool)

@@ -434,13 +434,7 @@ pub(super) fn sanitize_svg(source: &[u8], key: &str) -> Result<Vec<u8>, Solution
         let empty = matches!(&event, Event::Empty(_));
         match event {
             Event::Start(start) | Event::Empty(start) => {
-                let name = std::str::from_utf8(start.name().as_ref())
-                    .map_err(|_| {
-                        SolutionPackError::Invalid(format!(
-                            "presentation asset '{key}' SVG has an invalid element"
-                        ))
-                    })?
-                    .to_owned();
+                let name = start.name().as_ref().to_owned();
                 if name.contains(':')
                     || !ELEMENTS.contains(&name.as_str())
                     || (depth == 0 && (name != "svg" || elements != 0))
@@ -460,11 +454,7 @@ pub(super) fn sanitize_svg(source: &[u8], key: &str) -> Result<Vec<u8>, Solution
                             "presentation asset '{key}' SVG has malformed attributes"
                         ))
                     })?;
-                    let attr_name = std::str::from_utf8(attribute.key.as_ref()).map_err(|_| {
-                        SolutionPackError::Invalid(format!(
-                            "presentation asset '{key}' SVG has an invalid attribute"
-                        ))
-                    })?;
+                    let attr_name: &str = attribute.key.as_ref();
                     if attr_name.starts_with("on") || !ATTRIBUTES.contains(&attr_name) {
                         return invalid(format!(
                             "presentation asset '{key}' SVG contains forbidden attributes"
@@ -535,8 +525,8 @@ pub(super) fn sanitize_svg(source: &[u8], key: &str) -> Result<Vec<u8>, Solution
                     })?;
             }
             Event::Text(text) => {
-                let text_bytes: &[u8] = text.as_ref();
-                if depth == 0 && !text_bytes.iter().all(|byte| byte.is_ascii_whitespace()) {
+                let text_content: &str = text.as_ref();
+                if depth == 0 && !text_content.bytes().all(|byte| byte.is_ascii_whitespace()) {
                     return invalid(format!(
                         "presentation asset '{key}' SVG has text outside its root"
                     ));

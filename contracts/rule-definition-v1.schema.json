@@ -99,6 +99,10 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "type": {
+              "type": "string",
+              "const": "schedule"
+            },
             "cron": {
               "type": "string",
               "description": "Six-field cron expression, including seconds: `sec min hour day month weekday`.",
@@ -110,10 +114,6 @@
               "enum": [
                 "UTC"
               ]
-            },
-            "type": {
-              "type": "string",
-              "const": "schedule"
             }
           },
           "required": [
@@ -127,6 +127,10 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "type": {
+              "type": "string",
+              "const": "event"
+            },
             "event_type": {
               "type": "string",
               "description": "Record event that evaluates the rule.",
@@ -138,10 +142,6 @@
                 "attribute_value.restored.v1",
                 "relationship.changed.v1"
               ]
-            },
-            "type": {
-              "type": "string",
-              "const": "event"
             }
           },
           "required": [
@@ -173,14 +173,14 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "type": {
+              "type": "string",
+              "const": "required"
+            },
             "attribute_code": {
               "type": "string",
               "pattern": "^[A-Za-z0-9_-]+$",
               "x-attricat-reference": "attribute"
-            },
-            "type": {
-              "type": "string",
-              "const": "required"
             }
           },
           "required": [
@@ -193,6 +193,10 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "type": {
+              "type": "string",
+              "const": "stale"
+            },
             "attribute_code": {
               "type": "string",
               "pattern": "^[A-Za-z0-9_-]+$",
@@ -204,10 +208,6 @@
               "minimum": 1,
               "description": "Maximum value age in seconds, from 1 to 31536000 (one year).",
               "maximum": 31536000
-            },
-            "type": {
-              "type": "string",
-              "const": "stale"
             }
           },
           "required": [
@@ -221,15 +221,15 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "type": {
+              "type": "string",
+              "const": "has_tag"
+            },
             "tag": {
               "type": "string",
               "description": "System tag. The parser limits it to `maxLength` UTF-8 bytes, which\nJSON Schema can only bound in characters.",
               "minLength": 1,
               "maxLength": 128
-            },
-            "type": {
-              "type": "string",
-              "const": "has_tag"
             }
           },
           "required": [
@@ -242,15 +242,15 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "type": {
+              "type": "string",
+              "const": "missing_tag"
+            },
             "tag": {
               "type": "string",
               "description": "System tag. The parser limits it to `maxLength` UTF-8 bytes, which\nJSON Schema can only bound in characters.",
               "minLength": 1,
               "maxLength": 128
-            },
-            "type": {
-              "type": "string",
-              "const": "missing_tag"
             }
           },
           "required": [
@@ -263,6 +263,10 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "type": {
+              "type": "string",
+              "const": "compare"
+            },
             "attribute_code": {
               "type": "string",
               "pattern": "^[A-Za-z0-9_-]+$",
@@ -289,10 +293,6 @@
             },
             "value": {
               "description": "A literal string, number or boolean. Write dates as `\"2026-01-31\"` strings."
-            },
-            "type": {
-              "type": "string",
-              "const": "compare"
             }
           },
           "required": [
@@ -306,6 +306,10 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "type": {
+              "type": "string",
+              "const": "one_of"
+            },
             "attribute_code": {
               "type": "string",
               "pattern": "^[A-Za-z0-9_-]+$",
@@ -316,10 +320,6 @@
               "items": true,
               "minItems": 1,
               "maxItems": 100
-            },
-            "type": {
-              "type": "string",
-              "const": "one_of"
             }
           },
           "required": [
@@ -333,6 +333,10 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "type": {
+              "type": "string",
+              "const": "relative_date"
+            },
             "attribute_code": {
               "type": "string",
               "pattern": "^[A-Za-z0-9_-]+$",
@@ -349,10 +353,6 @@
               "minimum": -36500,
               "maximum": 36500,
               "default": 0
-            },
-            "type": {
-              "type": "string",
-              "const": "relative_date"
             }
           },
           "required": [
@@ -366,6 +366,10 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "type": {
+              "type": "string",
+              "const": "unique"
+            },
             "attribute_codes": {
               "type": "array",
               "items": {
@@ -373,10 +377,6 @@
               },
               "minItems": 1,
               "maxItems": 4
-            },
-            "type": {
-              "type": "string",
-              "const": "unique"
             }
           },
           "required": [
@@ -389,6 +389,10 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "type": {
+              "type": "string",
+              "const": "linked"
+            },
             "relationship_code": {
               "type": "string",
               "pattern": "^[A-Za-z0-9_-]+$",
@@ -401,10 +405,6 @@
             "predicate": {
               "$ref": "#/$defs/Predicate",
               "description": "Evaluated on each linked record. Cannot follow further links."
-            },
-            "type": {
-              "type": "string",
-              "const": "linked"
             }
           },
           "required": [
@@ -418,6 +418,10 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "type": {
+              "type": "string",
+              "const": "referenced_by"
+            },
             "blueprint_code": {
               "type": "string",
               "pattern": "^[A-Za-z0-9_-]+$"
@@ -453,10 +457,6 @@
               "format": "uint32",
               "minimum": 0,
               "maximum": 1000
-            },
-            "type": {
-              "type": "string",
-              "const": "referenced_by"
             }
           },
           "required": [
@@ -470,14 +470,14 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "type": {
+              "type": "string",
+              "const": "acyclic"
+            },
             "relationship_code": {
               "type": "string",
               "pattern": "^[A-Za-z0-9_-]+$",
               "x-attricat-reference": "attribute"
-            },
-            "type": {
-              "type": "string",
-              "const": "acyclic"
             }
           },
           "required": [
@@ -490,6 +490,10 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "type": {
+              "type": "string",
+              "const": "all_of"
+            },
             "predicates": {
               "type": "array",
               "items": {
@@ -497,10 +501,6 @@
               },
               "minItems": 1,
               "maxItems": 16
-            },
-            "type": {
-              "type": "string",
-              "const": "all_of"
             }
           },
           "required": [
@@ -513,6 +513,10 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "type": {
+              "type": "string",
+              "const": "any_of"
+            },
             "predicates": {
               "type": "array",
               "items": {
@@ -520,10 +524,6 @@
               },
               "minItems": 1,
               "maxItems": 16
-            },
-            "type": {
-              "type": "string",
-              "const": "any_of"
             }
           },
           "required": [

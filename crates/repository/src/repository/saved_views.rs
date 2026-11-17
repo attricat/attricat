@@ -3,6 +3,7 @@ use attricat_domain::canonical_json::canonical_json_sha256;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::Value;
+use sqlx::AssertSqlSafe;
 use sqlx::FromRow;
 use uuid::Uuid;
 
@@ -46,7 +47,7 @@ impl AttricatRepository {
         let query = format!(
             "SELECT {FIELDS} FROM saved_views WHERE workspace_id=$1 AND deleted_at IS NULL AND (owner_user_id=$2 OR visibility='workspace') AND visibility<>'link' AND ($3 = '' OR position(lower($3) in lower(coalesce(name,''))) > 0 OR position(lower($3) in lower(coalesce(description,''))) > 0) ORDER BY updated_at DESC LIMIT 100"
         );
-        Ok(sqlx::query_as(&query)
+        Ok(sqlx::query_as(AssertSqlSafe(query.as_str()))
             .bind(self.workspace_id())
             .bind(actor)
             .bind(search)
@@ -63,7 +64,7 @@ impl AttricatRepository {
         let query = format!(
             "SELECT {FIELDS} FROM saved_views WHERE workspace_id=$1 AND id=$2 AND deleted_at IS NULL AND ((visibility='link' AND $3) OR (visibility<>'link' AND NOT $3 AND (owner_user_id=$4 OR visibility='workspace')))"
         );
-        Ok(sqlx::query_as(&query)
+        Ok(sqlx::query_as(AssertSqlSafe(query.as_str()))
             .bind(self.workspace_id())
             .bind(id)
             .bind(link)
@@ -86,7 +87,7 @@ impl AttricatRepository {
             let query = format!(
                 "SELECT {FIELDS} FROM saved_views WHERE workspace_id=$1 AND state_hash=$2 AND state=$3 AND visibility='link' AND deleted_at IS NULL LIMIT 1"
             );
-            if let Some(view) = sqlx::query_as(&query)
+            if let Some(view) = sqlx::query_as(AssertSqlSafe(query.as_str()))
                 .bind(workspace)
                 .bind(&hash)
                 .bind(state)
@@ -129,7 +130,7 @@ impl AttricatRepository {
         let query = format!(
             "INSERT INTO saved_views (id,workspace_id,owner_user_id,kind,name,description,visibility,state,state_hash) VALUES ($1,$2,$3,'explorer_search',$4,$5,$6,$7,$8) RETURNING {FIELDS}"
         );
-        Ok(sqlx::query_as(&query)
+        Ok(sqlx::query_as(AssertSqlSafe(query.as_str()))
             .bind(id)
             .bind(self.workspace_id())
             .bind(view.owner_user_id)
@@ -158,7 +159,7 @@ impl AttricatRepository {
         let mut tx = self.pool.begin().await?;
         Self::ensure_saved_view_name_free(&mut tx, self.workspace_id(), actor, name, Some(id))
             .await?;
-        let view = sqlx::query_as(&query)
+        let view = sqlx::query_as(AssertSqlSafe(query.as_str()))
             .bind(self.workspace_id())
             .bind(id)
             .bind(actor)

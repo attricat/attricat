@@ -1,3 +1,4 @@
+use sqlx::AssertSqlSafe;
 use std::{fs, path::PathBuf};
 
 use sqlx::PgPool;
@@ -12,7 +13,10 @@ const PRESENTATION_ASSET_MIGRATION: &str = "20261027000000_presentation_assets.s
 
 async fn apply_migration(pool: &PgPool, path: &PathBuf) {
     let sql = fs::read_to_string(path).unwrap();
-    sqlx::raw_sql(&sql).execute(pool).await.unwrap();
+    sqlx::raw_sql(AssertSqlSafe(sql.as_str()))
+        .execute(pool)
+        .await
+        .unwrap();
 }
 
 #[sqlx::test(migrations = false)]

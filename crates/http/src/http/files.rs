@@ -884,7 +884,7 @@ async fn stage_field(
         declared_mime,
         path,
         byte_size: size,
-        sha256: format!("{:x}", digest.finalize()),
+        sha256: hex::encode(digest.finalize()),
         signature,
         valid_text: text.valid(),
     })

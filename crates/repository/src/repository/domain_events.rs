@@ -1,5 +1,6 @@
 use crate::persistence_rows::{Db, IntoDomain};
 use async_trait::async_trait;
+use sqlx::AssertSqlSafe;
 use std::time::Duration;
 
 const EVENT_DELIVERY_MATERIALIZATION_BATCH_SIZE: i64 = 100;
@@ -322,7 +323,7 @@ impl AttricatRepository {
     ) -> Result<Option<i64>, RepositoryError> {
         let workspace_id = self.workspace_id.0;
         let mut transaction = self.pool.begin().await?;
-        sqlx::query(&format!("SET LOCAL lock_timeout = '{wait}'"))
+        sqlx::query(AssertSqlSafe(format!("SET LOCAL lock_timeout = '{wait}'")))
             .execute(&mut *transaction)
             .await?;
         match lock_outbox_boundary(&mut transaction, workspace_id).await {

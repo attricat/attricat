@@ -18,6 +18,8 @@ const languageStorageKey = 'attricat.language';
 // lexicon namespaces come from the lexicon backend.
 const backend: BackendModule = {
   type: 'backend',
+  // `read` answers through its callback.
+  callbackApi: true,
   init: () => undefined,
   read: (language, namespace, callback) =>
     (isLexiconNamespace(namespace) ? lexiconBackend : localeBackend).read(

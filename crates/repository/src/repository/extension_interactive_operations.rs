@@ -7,6 +7,7 @@
 
 use attricat_domain::canonical_json::canonical_json_sha256;
 use attricat_domain::states::RunStatus;
+use sqlx::AssertSqlSafe;
 use std::collections::{HashMap, HashSet, hash_map::Entry};
 
 use attricat_domain::model::{Attribute, Record};
@@ -542,9 +543,9 @@ impl AttricatRepository {
         actor: AuthorizationActor,
         extension_id: Option<&str>,
     ) -> Result<Vec<InteractiveRun>, RepositoryError> {
-        let rows: Vec<InteractiveRunRow> = sqlx::query_as(&format!(
+        let rows: Vec<InteractiveRunRow> = sqlx::query_as(AssertSqlSafe(format!(
             "SELECT {RUN_COLUMNS} FROM extension_operation_runs r WHERE r.workspace_id=$1 AND r.invocation='interactive' AND r.actor_user_id=$2 AND ($3::text IS NULL OR r.extension_id=$3) ORDER BY r.created_at DESC, r.id DESC LIMIT $4"
-        ))
+        )))
         .bind(self.workspace_id.0)
         .bind(actor.user_id)
         .bind(extension_id)
@@ -593,9 +594,9 @@ impl AttricatRepository {
         &self,
         run_id: Uuid,
     ) -> Result<Option<InteractiveRun>, RepositoryError> {
-        let row: Option<InteractiveRunRow> = sqlx::query_as(&format!(
+        let row: Option<InteractiveRunRow> = sqlx::query_as(AssertSqlSafe(format!(
             "SELECT {RUN_COLUMNS} FROM extension_operation_runs r WHERE r.id=$1 AND r.workspace_id=$2 AND r.invocation='interactive'"
-        ))
+        )))
         .bind(run_id)
         .bind(self.workspace_id.0)
         .fetch_optional(&self.pool)

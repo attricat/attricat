@@ -14,6 +14,7 @@ pub use members::*;
 pub use mock_tls::*;
 pub use requests::*;
 
+use sqlx::AssertSqlSafe;
 use std::{net::SocketAddr, sync::Arc};
 
 use tokio::sync::Mutex;
@@ -623,9 +624,9 @@ async fn query_domain_event(
     id: Uuid,
     text: Option<&str>,
 ) -> api::domain_events::DomainEvent {
-    let row: Value = sqlx::query_scalar(&format!(
+    let row: Value = sqlx::query_scalar(AssertSqlSafe(format!(
         "SELECT to_jsonb(e) FROM (SELECT id,sequence,workspace_id,occurred_at,event_type,aggregate_kind,aggregate_id,correlation_id,causation_id,source_kind,source_name,metadata,payload FROM domain_events WHERE {condition}) e"
-    ))
+    )))
     .bind(id)
     .bind(text)
     .fetch_one(pool)

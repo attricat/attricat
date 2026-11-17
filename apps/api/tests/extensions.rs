@@ -2550,7 +2550,7 @@ async fn operation_artifacts_are_run_scoped_quota_bound_cleaned_and_downloadable
     // crosses operation creation and the component reads it incrementally.
     let input = vec![b'x'; 64 * 1024 + 1];
     sqlx::query("INSERT INTO files(id,workspace_id,original_filename,display_filename,mime_type,byte_size,sha256,original_key,status) VALUES($1,$2,'input.csv','input.csv','text/csv',$3,$4,'files/approved-input','ready')")
-        .bind(file_id).bind(workspace).bind(input.len() as i64).bind(format!("{:x}", Sha256::digest(&input))).execute(&pool).await.unwrap();
+        .bind(file_id).bind(workspace).bind(input.len() as i64).bind(hex::encode(Sha256::digest(&input))).execute(&pool).await.unwrap();
     let run_id = repository
         .start_extension_operation(StartExtensionOperation {
             extension_id: "acme.artifact-operation".into(),
@@ -2732,7 +2732,7 @@ async fn operation_artifacts_are_run_scoped_quota_bound_cleaned_and_downloadable
         .reserve_extension_operation_artifact_bytes(completed.id, run_id, body.len() as i64)
         .await
         .unwrap();
-    let checksum = format!("{:x}", Sha256::digest(body));
+    let checksum = hex::encode(Sha256::digest(body));
     let key = format!("extension-operation-artifacts/v1/{}", completed.id);
     store
         .put(
@@ -2896,7 +2896,7 @@ async fn artifact_wit_component_copies_a_large_approved_input_in_bounded_chunks(
         .bind(file_id)
         .bind(workspace)
         .bind(input.len() as i64)
-        .bind(format!("{:x}", Sha256::digest(&input)))
+        .bind(hex::encode(Sha256::digest(&input)))
         .bind(source_key)
         .execute(&pool)
         .await
@@ -2949,7 +2949,7 @@ async fn artifact_wit_component_copies_a_large_approved_input_in_bounded_chunks(
     .await
     .unwrap();
     assert_eq!(length, input.len() as i64);
-    assert_eq!(checksum, format!("{:x}", Sha256::digest(&input)));
+    assert_eq!(checksum, hex::encode(Sha256::digest(&input)));
     assert_eq!(
         store.get(&key).await.unwrap().bytes.as_ref(),
         input.as_slice()
@@ -3557,7 +3557,7 @@ async fn packaged_csv_connector_exports_through_the_real_host(pool: sqlx::PgPool
         .unwrap();
     sqlx::query("INSERT INTO files(id,workspace_id,original_filename,display_filename,mime_type,byte_size,sha256,original_key,status) VALUES($1,$2,'input.csv','input.csv','text/csv',$3,$4,$5,'ready')")
         .bind(file_id).bind(Uuid::from_u128(0x00000000000040008000000000000002))
-        .bind(csv.len() as i64).bind(format!("{:x}", Sha256::digest(csv.as_bytes()))).bind(&input_key)
+        .bind(csv.len() as i64).bind(hex::encode(Sha256::digest(csv.as_bytes()))).bind(&input_key)
         .execute(&pool).await.unwrap();
     let import_profile = json!({"version":1,"blueprint_id":blueprint.blueprint.id.to_string(),"blueprint_version":blueprint.blueprint.version,"context_id":context.id.to_string(),"business_key":"external_id","columns":[{"header":"ID","attribute":"external_id","kind":"string"},{"header":"Title","attribute":"title","kind":"string"}]});
     let import_run = repository
@@ -3820,7 +3820,7 @@ async fn artifact_completion_faults_abort_metadata_and_delete_orphans(pool: sqlx
         .await
         .unwrap();
     sqlx::query("INSERT INTO files(id,workspace_id,original_filename,display_filename,mime_type,byte_size,sha256,original_key,status) VALUES($1,$2,'fault.bin','fault.bin','application/octet-stream',$3,$4,'files/fault-input','ready')")
-        .bind(file_id).bind(workspace).bind(input.len() as i64).bind(format!("{:x}", Sha256::digest(&input))).execute(&pool).await.unwrap();
+        .bind(file_id).bind(workspace).bind(input.len() as i64).bind(hex::encode(Sha256::digest(&input))).execute(&pool).await.unwrap();
 
     let retained_before_failures = inner.object_count().await;
     for (idempotency_key, fault) in [

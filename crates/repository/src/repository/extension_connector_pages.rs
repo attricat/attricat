@@ -9,6 +9,7 @@
 //! channel since a cursor, so an exporter can close them out on the destination.
 
 use attricat_domain::value_type::ValueType;
+use sqlx::AssertSqlSafe;
 use std::collections::{HashMap, HashSet};
 
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -227,11 +228,11 @@ impl AttricatRepository {
         if record_ids.is_empty() {
             return Ok(HashMap::new());
         }
-        let records: Vec<Record> = sqlx::query_as::<_, Db<Record>>(&format!(
+        let records: Vec<Record> = sqlx::query_as::<_, Db<Record>>(AssertSqlSafe(format!(
             "SELECT r.id, r.blueprint_id, r.blueprint_version, r.projections, r.system_tags, r.system_metadata, ('attricat.sample'=ANY(r.system_tags)) AS is_sample, r.created_at, r.updated_at, r.deleted_at, {} AS content_revision \
              FROM records r WHERE r.id = ANY($1) AND r.workspace_id = $2 AND r.deleted_at IS NULL",
             super::extension_attricat_data::content_revision_sql("r", Some("$3"), Some("$4"))
-        ))
+        )))
         .bind(record_ids)
         .bind(self.workspace_id.0)
         .bind(snapshot_at)
@@ -257,10 +258,10 @@ impl AttricatRepository {
         if record_ids.is_empty() {
             return Ok(HashMap::new());
         }
-        let rows: Vec<(Uuid, Option<i64>)> = sqlx::query_as(&format!(
+        let rows: Vec<(Uuid, Option<i64>)> = sqlx::query_as(AssertSqlSafe(format!(
             "SELECT r.id, {} FROM records r WHERE r.id = ANY($1) AND r.workspace_id = $2",
             super::extension_attricat_data::content_revision_sql("r", Some("$3"), Some("$4"))
-        ))
+        )))
         .bind(record_ids)
         .bind(self.workspace_id.0)
         .bind(snapshot_at)
@@ -534,7 +535,7 @@ impl AttricatRepository {
                  FROM domain_events e WHERE {filter} ORDER BY e.sequence LIMIT $5"
             )
         };
-        let events: Vec<WithdrawalEvent> = sqlx::query_as(&sql)
+        let events: Vec<WithdrawalEvent> = sqlx::query_as(AssertSqlSafe(sql.as_str()))
             .bind(self.workspace_id.0)
             .bind(if selective { 0 } else { after_sequence })
             .bind(channel_id)

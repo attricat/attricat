@@ -1,4 +1,5 @@
 use crate::support;
+use sqlx::AssertSqlSafe;
 
 use api::states::AgentRunStatus;
 use std::{sync::Arc, time::Duration};
@@ -2223,7 +2224,7 @@ async fn reconciliation_first_rejects_deleted_and_cross_tenant_attachments(pool:
         (deleted_file_id, "now() - interval '1 second'"),
         (live_file_id, "now() + interval '1 hour'"),
     ] {
-        sqlx::query(&format!("INSERT INTO files (id, workspace_id, original_filename, display_filename, mime_type, byte_size, sha256, original_key, status, attachment_expires_at) VALUES ($1, $2, 'report.pdf', 'report.pdf', 'application/pdf', 7, $3, 'files/{id}', 'ready', {expires_at})"))
+        sqlx::query(AssertSqlSafe(format!("INSERT INTO files (id, workspace_id, original_filename, display_filename, mime_type, byte_size, sha256, original_key, status, attachment_expires_at) VALUES ($1, $2, 'report.pdf', 'report.pdf', 'application/pdf', 7, $3, 'files/{id}', 'ready', {expires_at})")))
             .bind(id).bind(workspace_id).bind("0".repeat(64)).execute(&pool).await.unwrap();
     }
     let worker = FileWorker::new(

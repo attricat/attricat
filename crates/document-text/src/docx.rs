@@ -84,12 +84,12 @@ fn relationship_target(
             .map_err(|_| ExtractError::Malformed)?
         {
             Event::Start(element) | Event::Empty(element)
-                if element.local_name().as_ref() == b"Relationship"
-                    && attribute(&element, b"Type")
+                if element.local_name().as_ref() == "Relationship"
+                    && attribute(&element, "Type")
                         .is_some_and(|kind| kind.ends_with(type_suffix))
-                    && attribute(&element, b"TargetMode").is_none_or(|mode| mode != "External") =>
+                    && attribute(&element, "TargetMode").is_none_or(|mode| mode != "External") =>
             {
-                return Ok(attribute(&element, b"Target").map(|target| {
+                return Ok(attribute(&element, "Target").map(|target| {
                     match target.strip_prefix('/') {
                         Some(absolute) => absolute.to_owned(),
                         None => join_part(base_directory, &target),
@@ -123,12 +123,12 @@ fn heading_styles(styles: &[u8]) -> Result<HashMap<String, usize>, ExtractError>
             .read_event_into(&mut buffer)
             .map_err(|_| ExtractError::Malformed)?
         {
-            Event::Start(element) if element.local_name().as_ref() == b"style" => {
-                style_id = attribute(&element, b"styleId");
+            Event::Start(element) if element.local_name().as_ref() == "style" => {
+                style_id = attribute(&element, "styleId");
             }
-            Event::End(element) if element.local_name().as_ref() == b"style" => style_id = None,
-            Event::Empty(element) if element.local_name().as_ref() == b"name" => {
-                if let (Some(id), Some(name)) = (&style_id, attribute(&element, b"val")) {
+            Event::End(element) if element.local_name().as_ref() == "style" => style_id = None,
+            Event::Empty(element) if element.local_name().as_ref() == "name" => {
+                if let (Some(id), Some(name)) = (&style_id, attribute(&element, "val")) {
                     let name = name.to_ascii_lowercase();
                     let level = if name == "title" {
                         Some(1)
@@ -173,7 +173,7 @@ fn body_text(
     let mut tables: Vec<Table> = Vec::new();
     let mut in_text = false;
     // An element whose content is not read, and how deeply it is nested.
-    let mut skipped: Option<(Vec<u8>, usize)> = None;
+    let mut skipped: Option<(String, usize)> = None;
     loop {
         if blocks.full {
             break;
@@ -183,10 +183,10 @@ fn body_text(
             .map_err(|_| ExtractError::Malformed)?;
         if let Some((name, depth)) = &mut skipped {
             match event {
-                Event::Start(element) if element.local_name().as_ref() == name.as_slice() => {
+                Event::Start(element) if element.local_name().as_ref() == name.as_str() => {
                     *depth += 1
                 }
-                Event::End(element) if element.local_name().as_ref() == name.as_slice() => {
+                Event::End(element) if element.local_name().as_ref() == name.as_str() => {
                     *depth -= 1;
                     if *depth == 0 {
                         skipped = None;
@@ -203,16 +203,16 @@ fn body_text(
                 // Alternate content repeats a text box as a legacy fallback,
                 // and tracked formatting changes hold a paragraph's former
                 // style and numbering; neither describes the current text.
-                name @ (b"Fallback" | b"pPrChange") => skipped = Some((name.to_vec(), 1)),
-                b"p" => paragraphs.push(Paragraph::default()),
-                b"t" => in_text = true,
-                b"tbl" => tables.push(Vec::new()),
-                b"tr" => {
+                name @ ("Fallback" | "pPrChange") => skipped = Some((name.to_owned(), 1)),
+                "p" => paragraphs.push(Paragraph::default()),
+                "t" => in_text = true,
+                "tbl" => tables.push(Vec::new()),
+                "tr" => {
                     if let Some(table) = tables.last_mut() {
                         table.push(Vec::new());
                     }
                 }
-                b"tc" => {
+                "tc" => {
                     if let Some(row) = tables.last_mut().and_then(|table| table.last_mut()) {
                         row.push(String::new());
                     }
@@ -220,24 +220,21 @@ fn body_text(
                 _ => {}
             },
             Event::Empty(element) => match element.local_name().as_ref() {
-                b"pStyle" => {
+                "pStyle" => {
                     if let Some(paragraph) = paragraphs.last_mut() {
-                        paragraph.style = attribute(&element, b"val");
+                        paragraph.style = attribute(&element, "val");
                     }
                 }
                 // Numbering ID 0 removes numbering a style would apply.
-                b"numId" if attribute(&element, b"val").is_some_and(|id| id != "0") => {
+                "numId" if attribute(&element, "val").is_some_and(|id| id != "0") => {
                     set_list_item(&mut paragraphs)
                 }
-                b"tab" => push_text(&mut paragraphs, "\t"),
-                b"br" | b"cr" => push_text(&mut paragraphs, "\n"),
+                "tab" => push_text(&mut paragraphs, "\t"),
+                "br" | "cr" => push_text(&mut paragraphs, "\n"),
                 _ => {}
             },
             Event::Text(text) if in_text => {
-                push_text(
-                    &mut paragraphs,
-                    &text.decode().map_err(|_| ExtractError::Malformed)?,
-                );
+                push_text(&mut paragraphs, &text);
             }
             Event::GeneralRef(reference) if in_text => {
                 let character = match reference
@@ -246,8 +243,8 @@ fn body_text(
                 {
                     Some(character) => character.to_string(),
                     None => {
-                        let name = reference.decode().map_err(|_| ExtractError::Malformed)?;
-                        resolve_predefined_entity(&name)
+                        let name: &str = &reference;
+                        resolve_predefined_entity(name)
                             .unwrap_or_default()
                             .to_owned()
                     }
@@ -255,8 +252,8 @@ fn body_text(
                 push_text(&mut paragraphs, &character);
             }
             Event::End(element) => match element.local_name().as_ref() {
-                b"t" => in_text = false,
-                b"p" => {
+                "t" => in_text = false,
+                "p" => {
                     let paragraph = paragraphs.pop().unwrap_or_default();
                     let cell = tables
                         .last_mut()
@@ -275,7 +272,7 @@ fn body_text(
                         None => blocks.push(paragraph_block(paragraph, headings)),
                     }
                 }
-                b"tbl" => {
+                "tbl" => {
                     let table = tables.pop().unwrap_or_default();
                     let cell = tables
                         .last_mut()
@@ -398,7 +395,7 @@ impl Blocks {
     }
 }
 
-fn attribute(element: &BytesStart<'_>, local_name: &[u8]) -> Option<String> {
+fn attribute(element: &BytesStart<'_>, local_name: &str) -> Option<String> {
     element
         .attributes()
         .flatten()

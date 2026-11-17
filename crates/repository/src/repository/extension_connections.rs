@@ -9,6 +9,7 @@
 //! management API, logs, traces or audit records.
 
 use attricat_domain::states::ConnectionStatus;
+use sqlx::AssertSqlSafe;
 use std::sync::OnceLock;
 
 use chrono::{DateTime, Utc};
@@ -508,7 +509,7 @@ impl AttricatRepository {
         &self,
         extension_id: &str,
     ) -> Result<Vec<ExtensionConnection>, RepositoryError> {
-        Ok(sqlx::query_as(&format!("SELECT {CONNECTION_FIELDS} FROM extension_connections WHERE workspace_id=$1 AND extension_id=$2 ORDER BY connection"))
+        Ok(sqlx::query_as(AssertSqlSafe(format!("SELECT {CONNECTION_FIELDS} FROM extension_connections WHERE workspace_id=$1 AND extension_id=$2 ORDER BY connection")))
             .bind(self.workspace_id()).bind(extension_id)
             .fetch_all(&self.pool).await?)
     }
@@ -518,7 +519,7 @@ impl AttricatRepository {
         extension_id: &str,
         connection: &str,
     ) -> Result<ExtensionConnection, RepositoryError> {
-        sqlx::query_as(&format!("SELECT {CONNECTION_FIELDS} FROM extension_connections WHERE workspace_id=$1 AND extension_id=$2 AND connection=$3"))
+        sqlx::query_as(AssertSqlSafe(format!("SELECT {CONNECTION_FIELDS} FROM extension_connections WHERE workspace_id=$1 AND extension_id=$2 AND connection=$3")))
             .bind(self.workspace_id()).bind(extension_id).bind(connection)
             .fetch_optional(&self.pool).await?
             .ok_or(RepositoryError::NotFound("extension connection"))
@@ -548,7 +549,7 @@ impl AttricatRepository {
             _ => ConnectionStatus::PendingAuthorization,
         };
         let mut transaction = self.pool.begin().await?;
-        let created = sqlx::query_as(&format!("INSERT INTO extension_connections(id,workspace_id,extension_id,connection,kind,display_name,grant_type,host_permission_id,token_url,device_authorization_url,client_id,scope,parameters,client_secret_ciphertext,refresh_token_ciphertext,status,authorization_url) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING {CONNECTION_FIELDS}"))
+        let created = sqlx::query_as(AssertSqlSafe(format!("INSERT INTO extension_connections(id,workspace_id,extension_id,connection,kind,display_name,grant_type,host_permission_id,token_url,device_authorization_url,client_id,scope,parameters,client_secret_ciphertext,refresh_token_ciphertext,status,authorization_url) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING {CONNECTION_FIELDS}")))
             .bind(id).bind(self.workspace_id()).bind(&input.extension_id).bind(&input.connection)
             .bind(&input.kind).bind(&input.display_name).bind(&input.grant_type).bind(&input.host_permission_id)
             .bind(&input.token_url).bind(&input.device_authorization_url).bind(&input.client_id)
@@ -577,7 +578,7 @@ impl AttricatRepository {
         // The row is locked while the change is judged against it, so two
         // concurrent changes cannot both pass checks made on the old row.
         let mut transaction = self.pool.begin().await?;
-        let current: ExtensionConnection = sqlx::query_as(&format!("SELECT {CONNECTION_FIELDS} FROM extension_connections WHERE workspace_id=$1 AND extension_id=$2 AND connection=$3 FOR UPDATE"))
+        let current: ExtensionConnection = sqlx::query_as(AssertSqlSafe(format!("SELECT {CONNECTION_FIELDS} FROM extension_connections WHERE workspace_id=$1 AND extension_id=$2 AND connection=$3 FOR UPDATE")))
             .bind(self.workspace_id()).bind(extension_id).bind(connection)
             .fetch_optional(&mut *transaction).await?
             .ok_or(RepositoryError::NotFound("extension connection"))?;
@@ -637,7 +638,7 @@ impl AttricatRepository {
                 "enter the client secret again to move the token endpoint to another host".into(),
             ));
         }
-        let updated = sqlx::query_as(&format!(
+        let updated = sqlx::query_as(AssertSqlSafe(format!(
             "UPDATE extension_connections SET display_name=COALESCE($3,display_name),token_url=COALESCE($4,token_url),\
              device_authorization_url=CASE WHEN $5 THEN $6 ELSE device_authorization_url END,\
              scope=CASE WHEN $7 THEN $8 ELSE scope END,parameters=COALESCE($9,parameters),\
@@ -661,7 +662,7 @@ impl AttricatRepository {
              last_error=CASE WHEN $12 THEN NULL ELSE last_error END,\
              updated_at=clock_timestamp() \
              WHERE workspace_id=$1 AND id=$2 RETURNING {CONNECTION_FIELDS}"
-        ))
+        )))
         .bind(self.workspace_id())
         .bind(id)
         .bind(&patch.display_name)
@@ -754,7 +755,7 @@ impl AttricatRepository {
             self.extension_connection(extension_id, connection).await?;
             return Ok(None);
         }
-        let row: CredentialRow = sqlx::query_as(&format!("SELECT {CREDENTIAL_FIELDS} FROM extension_connections WHERE workspace_id=$1 AND extension_id=$2 AND connection=$3"))
+        let row: CredentialRow = sqlx::query_as(AssertSqlSafe(format!("SELECT {CREDENTIAL_FIELDS} FROM extension_connections WHERE workspace_id=$1 AND extension_id=$2 AND connection=$3")))
             .bind(self.workspace_id()).bind(extension_id).bind(connection)
             .fetch_one(&mut *transaction).await?;
         let basis = RefreshBasis {
@@ -813,7 +814,7 @@ impl AttricatRepository {
         let current = self.extension_connection(extension_id, connection).await?;
         let device_code = seal(current.id, "device_code", &authorization.device_code)?;
         let mut transaction = self.pool.begin().await?;
-        let updated = sqlx::query_as(&format!("UPDATE extension_connections SET device_code_ciphertext=$3,device_user_code=$4,device_verification_uri=$5,device_expires_at=$6,device_interval_seconds=$7,device_polled_at=NULL,status=CASE WHEN status='active' AND (access_token_ciphertext IS NOT NULL OR refresh_token_ciphertext IS NOT NULL) THEN 'active' ELSE 'pending_authorization' END,last_error=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 RETURNING {CONNECTION_FIELDS}"))
+        let updated = sqlx::query_as(AssertSqlSafe(format!("UPDATE extension_connections SET device_code_ciphertext=$3,device_user_code=$4,device_verification_uri=$5,device_expires_at=$6,device_interval_seconds=$7,device_polled_at=NULL,status=CASE WHEN status='active' AND (access_token_ciphertext IS NOT NULL OR refresh_token_ciphertext IS NOT NULL) THEN 'active' ELSE 'pending_authorization' END,last_error=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 RETURNING {CONNECTION_FIELDS}")))
             .bind(self.workspace_id()).bind(current.id).bind(device_code)
             .bind(&authorization.user_code).bind(&authorization.verification_uri)
             .bind(authorization.expires_at).bind(authorization.interval_seconds.clamp(*DEVICE_INTERVAL_SECONDS.start(), *DEVICE_INTERVAL_SECONDS.end()))
@@ -841,7 +842,7 @@ impl AttricatRepository {
         let current = self.extension_connection(extension_id, connection).await?;
         let verifier = seal(current.id, "authorization_verifier", code_verifier)?;
         let mut transaction = self.pool.begin().await?;
-        let updated = sqlx::query_as(&format!("UPDATE extension_connections SET authorization_state_sha256=$3,authorization_verifier_ciphertext=$4,authorization_expires_at=$5,authorization_session_sha256=$6,status=CASE WHEN status='active' AND (access_token_ciphertext IS NOT NULL OR refresh_token_ciphertext IS NOT NULL) THEN 'active' ELSE 'pending_authorization' END,last_error=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 RETURNING {CONNECTION_FIELDS}"))
+        let updated = sqlx::query_as(AssertSqlSafe(format!("UPDATE extension_connections SET authorization_state_sha256=$3,authorization_verifier_ciphertext=$4,authorization_expires_at=$5,authorization_session_sha256=$6,status=CASE WHEN status='active' AND (access_token_ciphertext IS NOT NULL OR refresh_token_ciphertext IS NOT NULL) THEN 'active' ELSE 'pending_authorization' END,last_error=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 RETURNING {CONNECTION_FIELDS}")))
             .bind(self.workspace_id()).bind(current.id).bind(state_sha256).bind(verifier).bind(expires_at)
             .bind(session_sha256.as_slice())
             .fetch_one(&mut *transaction).await?;

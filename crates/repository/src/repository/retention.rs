@@ -10,6 +10,7 @@
 //! No batch touches a row that is pending, leased or running, or one that a
 //! live row still needs.
 
+use sqlx::AssertSqlSafe;
 use std::{num::NonZeroI64, str::FromStr};
 
 use sqlx::{Postgres, Transaction};
@@ -56,7 +57,7 @@ impl<S: RepositoryScope> AttricatRepository<S> {
     /// Runs one single-statement purge in its own bounded transaction.
     async fn purge_with(
         &self,
-        sql: &str,
+        sql: impl sqlx::SqlSafeStr,
         days: Option<RetentionDays>,
         limit: i64,
     ) -> Result<u64, RepositoryError> {
@@ -197,7 +198,7 @@ impl<S: RepositoryScope> AttricatRepository<S> {
             "extension_operation_artifacts",
             "extension_operation_run_records",
         ] {
-            sqlx::query(&format!("DELETE FROM {table} c USING unnest($1::uuid[], $2::uuid[]) AS e(workspace_id, id) WHERE c.workspace_id = e.workspace_id AND c.operation_run_id = e.id"))
+            sqlx::query(AssertSqlSafe(format!("DELETE FROM {table} c USING unnest($1::uuid[], $2::uuid[]) AS e(workspace_id, id) WHERE c.workspace_id = e.workspace_id AND c.operation_run_id = e.id")))
                 .bind(&workspaces)
                 .bind(&ids)
                 .execute(&mut *tx)
@@ -268,7 +269,7 @@ impl<S: RepositoryScope> AttricatRepository<S> {
         limit: i64,
     ) -> Result<u64, RepositoryError> {
         let mut tx = self.begin_purge().await?;
-        let examined: Vec<(Uuid, Uuid, i64, bool)> = sqlx::query_as(&format!(
+        let examined: Vec<(Uuid, Uuid, i64, bool)> = sqlx::query_as(AssertSqlSafe(format!(
             "WITH window_start AS (SELECT COALESCE((SELECT sequence FROM domain_events WHERE occurred_at >= now() - ($2 * interval '1 day') ORDER BY occurred_at, id LIMIT 1), 9223372036854775807) AS sequence) \
              SELECT w.id, x.id, x.sequence, x.deletable FROM workspaces w \
              LEFT JOIN domain_event_retention r ON r.workspace_id = w.id \
@@ -282,7 +283,7 @@ impl<S: RepositoryScope> AttricatRepository<S> {
                  FROM domain_events e \
                  WHERE e.workspace_id = w.id AND e.sequence > COALESCE(r.scan_after_sequence, 0) AND e.sequence <= ceiling.sequence \
                  ORDER BY e.sequence LIMIT $1) x"
-        ))
+        )))
         .bind(limit)
         .bind(days.get())
         .fetch_all(&mut *tx)
@@ -293,9 +294,9 @@ impl<S: RepositoryScope> AttricatRepository<S> {
             .map(|(_, id, _, _)| *id)
             .collect();
         // A delivery may have been added since the scan; check again under the lock.
-        let locked: Vec<(Uuid, Uuid, i64)> = sqlx::query_as(&format!(
+        let locked: Vec<(Uuid, Uuid, i64)> = sqlx::query_as(AssertSqlSafe(format!(
             "SELECT e.workspace_id, e.id, e.sequence FROM domain_events e WHERE e.id = ANY($1) AND {UNHELD_EVENT} FOR UPDATE OF e SKIP LOCKED"
-        ))
+        )))
         .bind(&candidates)
         .fetch_all(&mut *tx)
         .await?;
@@ -431,7 +432,7 @@ impl<S: RepositoryScope> AttricatRepository<S> {
         ] {
             deleted += self
                 .purge_with(
-                    &format!("WITH expired AS (SELECT key_digest FROM {table} WHERE window_started_at <= clock_timestamp() - interval '15 minutes' ORDER BY window_started_at LIMIT $1 FOR UPDATE SKIP LOCKED) DELETE FROM {table} t USING expired e WHERE t.key_digest = e.key_digest"),
+                    AssertSqlSafe(format!("WITH expired AS (SELECT key_digest FROM {table} WHERE window_started_at <= clock_timestamp() - interval '15 minutes' ORDER BY window_started_at LIMIT $1 FOR UPDATE SKIP LOCKED) DELETE FROM {table} t USING expired e WHERE t.key_digest = e.key_digest")),
                     None,
                     limit,
                 )
@@ -586,7 +587,7 @@ async fn delete_runs_with_tasks(
         .bind(task_kind)
         .execute(&mut **tx)
         .await?;
-    Ok(sqlx::query(&format!("DELETE FROM {table} r USING unnest($1::uuid[], $2::uuid[]) AS e(workspace_id, id) WHERE r.workspace_id = e.workspace_id AND r.id = e.id"))
+    Ok(sqlx::query(AssertSqlSafe(format!("DELETE FROM {table} r USING unnest($1::uuid[], $2::uuid[]) AS e(workspace_id, id) WHERE r.workspace_id = e.workspace_id AND r.id = e.id")))
         .bind(&workspaces)
         .bind(&ids)
         .execute(&mut **tx)

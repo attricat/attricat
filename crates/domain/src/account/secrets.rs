@@ -1,5 +1,5 @@
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-use rand::{RngCore, rngs::OsRng};
+use rand::{TryRng as _, rngs::SysRng};
 use secrecy::{ExposeSecret, SecretString};
 use sha2::{Digest as _, Sha256};
 use subtle::ConstantTimeEq;
@@ -16,7 +16,9 @@ pub struct OpaqueSecret(SecretString);
 impl OpaqueSecret {
     pub fn generate() -> Self {
         let mut bytes = [0_u8; OPAQUE_SECRET_BYTES];
-        OsRng.fill_bytes(&mut bytes);
+        SysRng
+            .try_fill_bytes(&mut bytes)
+            .expect("the operating system random generator is available");
         Self(SecretString::from(URL_SAFE_NO_PAD.encode(bytes)))
     }
 

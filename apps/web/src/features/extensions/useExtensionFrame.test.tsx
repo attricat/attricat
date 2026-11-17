@@ -62,7 +62,7 @@ const loadFrame = () => {
   return { frame, postMessage };
 };
 
-const inits = (postMessage: ReturnType<typeof vi.spyOn>) =>
+const inits = (postMessage: ReturnType<typeof loadFrame>['postMessage']) =>
   postMessage.mock.calls.filter(
     ([message]) =>
       (message as { type?: string }).type === extensionMessageTypes.init,

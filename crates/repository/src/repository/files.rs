@@ -14,6 +14,7 @@ use attricat_domain::states::{
 use attricat_validation::files::{TEXT_EXTRACTION_MIME_TYPES, is_text_extraction_mime};
 use chrono::Utc;
 use serde::Serialize;
+use sqlx::AssertSqlSafe;
 use sqlx::Transaction;
 use std::collections::{HashMap, HashSet};
 
@@ -1216,18 +1217,18 @@ impl SystemRepository {
         grace_seconds: i64,
     ) -> Result<u64, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
-        let candidates: Vec<Uuid> = sqlx::query_scalar(&format!(
+        let candidates: Vec<Uuid> = sqlx::query_scalar(AssertSqlSafe(format!(
             "SELECT f.id FROM files f WHERE f.deleted_at IS NULL AND {FILE_UNREFERENCED} ORDER BY f.id LIMIT $1 FOR UPDATE OF f SKIP LOCKED"
-        ))
+        )))
         .bind(RECONCILE_BATCH)
         .fetch_all(&mut *transaction)
         .await?;
         if candidates.is_empty() {
             return Ok(0);
         }
-        let marked = sqlx::query(&format!(
+        let marked = sqlx::query(AssertSqlSafe(format!(
             "UPDATE files f SET status = 'deleted', deleted_at = now(), purge_after = now() + make_interval(secs => $1), updated_at = now() WHERE f.id = ANY($2) AND f.deleted_at IS NULL AND {FILE_UNREFERENCED}"
-        ))
+        )))
         .bind(grace_seconds)
         .bind(&candidates)
         .execute(&mut *transaction)
@@ -1342,9 +1343,9 @@ impl SystemRepository {
         workspace_id: Uuid,
         file_id: Uuid,
     ) -> Result<Option<Vec<String>>, RepositoryError> {
-        let original: Option<String> = sqlx::query_scalar(&format!(
+        let original: Option<String> = sqlx::query_scalar(AssertSqlSafe(format!(
             "SELECT f.original_key FROM files f WHERE f.id = $1 AND f.workspace_id = $2 AND f.deleted_at IS NOT NULL AND f.purge_after <= now() AND {FILE_UNREFERENCED}"
-        ))
+        )))
         .bind(file_id)
         .bind(workspace_id)
         .fetch_optional(&self.pool)

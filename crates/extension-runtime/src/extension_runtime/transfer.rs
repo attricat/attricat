@@ -564,7 +564,7 @@ impl OperationState {
                         request_digest: digest,
                         source_etag: etag,
                         length: length as i64,
-                        sha256: &format!("{:x}", hash.finalize()),
+                        sha256: &hex::encode(hash.finalize()),
                     },
                 )
                 .await
@@ -598,7 +598,7 @@ impl OperationState {
         host.run_facts = self.run_facts.clone();
         host.require_active("network.request").await?;
         let url = transfer_url(&input.url)?;
-        let digest = format!("{:x}", Sha256::digest(request.as_bytes()));
+        let digest = hex::encode(Sha256::digest(request.as_bytes()));
         if let Some(replayed) =
             Self::replayed_fetch(&self.repository, self.run_id, &input.transfer_key, &digest)
                 .await?
@@ -653,7 +653,7 @@ impl OperationState {
             &input.secret_headers,
             input.headers,
         )?;
-        let digest = format!("{:x}", Sha256::digest(request.as_bytes()));
+        let digest = hex::encode(Sha256::digest(request.as_bytes()));
         if let Some(replayed) =
             Self::replayed_fetch(&self.repository, self.run_id, &input.transfer_key, &digest)
                 .await?
@@ -692,16 +692,13 @@ impl OperationState {
     ) -> Result<String, String> {
         let input: TransferDelivery = parse_host_request(&request, "delivery request")?;
         let url = transfer_url(&input.url)?;
-        let digest = format!(
-            "{:x}",
-            Sha256::digest(
-                format!(
-                    "{}:{}:{}:{}",
-                    input.host_permission_id, input.url, input.method, input.artifact_id
-                )
-                .as_bytes()
+        let digest = hex::encode(Sha256::digest(
+            format!(
+                "{}:{}:{}:{}",
+                input.host_permission_id, input.url, input.method, input.artifact_id
             )
-        );
+            .as_bytes(),
+        ));
         // The released contract always sends a stable Idempotency-Key.
         let idempotency = format!("{}:{}", self.run_id, input.delivery_key);
         self.deliver(Delivery {
@@ -728,7 +725,7 @@ impl OperationState {
         let input: TransferDeliveryV2 = parse_host_request(&request, "delivery request")?;
         let url = https_url(&input.url)?;
         // Query strings are presigned credentials; only their digest is kept.
-        let digest = format!("{:x}", Sha256::digest(request.as_bytes()));
+        let digest = hex::encode(Sha256::digest(request.as_bytes()));
         if input
             .idempotency_key
             .as_ref()
@@ -1020,7 +1017,7 @@ impl OperationState {
         );
         // The artifact holds the file's bytes whichever record referenced
         // it, so another record of the run sharing the file reuses it.
-        let digest = format!("{:x}", Sha256::digest(transfer_key.as_bytes()));
+        let digest = hex::encode(Sha256::digest(transfer_key.as_bytes()));
         if let Some((id, _)) = self
             .repository
             .previous_extension_http_input(self.run_id, &transfer_key, &digest)

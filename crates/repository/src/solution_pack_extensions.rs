@@ -481,7 +481,7 @@ fn registry_error(_: RegistryError) -> SolutionPackExtensionError {
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
+    hex::encode(Sha256::digest(bytes))
 }
 
 /// Decompresses and validates an archive off the async executor.

@@ -12,7 +12,7 @@ pub fn canonical_json_sha256<T: Serialize + ?Sized>(
 ) -> Result<String, serde_json::Error> {
     let mut value = serde_json::to_value(value)?;
     value.sort_all_objects();
-    Ok(format!("{:x}", Sha256::digest(serde_json::to_vec(&value)?)))
+    Ok(hex::encode(Sha256::digest(serde_json::to_vec(&value)?)))
 }
 
 #[cfg(test)]

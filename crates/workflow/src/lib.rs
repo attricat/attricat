@@ -836,7 +836,7 @@ pub fn compile(source: &str) -> Result<CompiledWorkflow, WorkflowError> {
     })
 }
 pub fn raw_hash(source: &str) -> String {
-    format!("{:x}", Sha256::digest(source.as_bytes()))
+    hex::encode(Sha256::digest(source.as_bytes()))
 }
 const RECORD_TRIGGER_EVENTS: &[&str] = attricat_events::RECORD_TRIGGER_EVENT_TYPES_V1;
 /// Record events whose payload reports added system tags.

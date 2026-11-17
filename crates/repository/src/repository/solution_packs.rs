@@ -6,6 +6,7 @@ use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+use sqlx::AssertSqlSafe;
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
@@ -323,7 +324,7 @@ const PLAN_MAPPING_COLUMNS: &str =
 
 /// Whether a stored object has exactly `size` bytes with SHA-256 `sha256`.
 fn object_matches(stored: &StoredObject, size: usize, sha256: &str) -> bool {
-    stored.bytes.len() == size && format!("{:x}", Sha256::digest(&stored.bytes)) == sha256
+    stored.bytes.len() == size && hex::encode(Sha256::digest(&stored.bytes)) == sha256
 }
 
 /// Reads a staged or existing object and checks it against its recorded
@@ -1008,7 +1009,7 @@ impl AttricatRepository {
                     filename: file.filename.clone(),
                     media_type: file.media_type.clone(),
                     byte_size: bytes.len() as i64,
-                    sha256: format!("{:x}", Sha256::digest(bytes)),
+                    sha256: hex::encode(Sha256::digest(bytes)),
                 }
             })
             .collect::<Vec<_>>();
@@ -1135,9 +1136,9 @@ impl AttricatRepository {
             // Preparation and cleanup lock the same plan row. Cleanup skips a plan
             // while preparation owns it, then rechecks application absence while
             // holding the lock, so expiry cannot strand a started application.
-            let expired_plan_ids = sqlx::query_scalar::<_, Uuid>(&format!(
+            let expired_plan_ids = sqlx::query_scalar::<_, Uuid>(AssertSqlSafe(format!(
                 "SELECT p.id FROM solution_pack_plans p WHERE p.workspace_id=$1 AND p.expires_at <= now() AND EXISTS (SELECT 1 FROM solution_pack_plan_sample_records s WHERE s.workspace_id=p.workspace_id AND s.plan_id=p.id) AND NOT EXISTS (SELECT 1 FROM solution_pack_applications a WHERE a.workspace_id=p.workspace_id AND a.plan_id=p.id) ORDER BY p.expires_at,p.id FOR UPDATE OF p SKIP LOCKED LIMIT {SAMPLE_STAGING_CLEANUP_BATCH}",
-            ))
+            )))
             .bind(workspace_id)
             .fetch_all(&mut *tx)
             .await?;
@@ -1157,9 +1158,9 @@ impl AttricatRepository {
         // Each application is independently locked so an active step either commits
         // before abandonment or observes the terminal state before beginning.
         loop {
-            let expired = sqlx::query_scalar::<_, Uuid>(&format!(
+            let expired = sqlx::query_scalar::<_, Uuid>(AssertSqlSafe(format!(
                 "SELECT id FROM solution_pack_applications WHERE workspace_id=$1 AND resumable_until <= now() AND state IN ('running','failed') ORDER BY resumable_until LIMIT {SAMPLE_STAGING_CLEANUP_BATCH}",
-            )).bind(workspace_id).fetch_all(&self.pool).await?;
+            ))).bind(workspace_id).fetch_all(&self.pool).await?;
             if expired.is_empty() {
                 break;
             }
@@ -1703,9 +1704,9 @@ impl AttricatRepository {
         plan_id: Uuid,
     ) -> Result<Option<SolutionPackPlan>, RepositoryError> {
         let workspace_id = self.workspace_id.0;
-        let Some(mut plan) = sqlx::query_as::<_, SolutionPackPlan>(&format!(
+        let Some(mut plan) = sqlx::query_as::<_, SolutionPackPlan>(AssertSqlSafe(format!(
             "SELECT {PLAN_COLUMNS} FROM solution_pack_plans WHERE workspace_id = $1 AND id = $2"
-        ))
+        )))
         .bind(workspace_id)
         .bind(plan_id)
         .fetch_optional(&self.pool)
@@ -1714,7 +1715,7 @@ impl AttricatRepository {
             return Ok(None);
         };
         plan.mappings = sqlx::query_as::<_, SolutionPackPlanMapping>(
-            &format!("SELECT {PLAN_MAPPING_COLUMNS}, CASE WHEN mapping_kind='existing' THEN snapshot END AS snapshot FROM solution_pack_plan_mappings WHERE workspace_id = $1 AND plan_id = $2 ORDER BY position"),
+            AssertSqlSafe(format!("SELECT {PLAN_MAPPING_COLUMNS}, CASE WHEN mapping_kind='existing' THEN snapshot END AS snapshot FROM solution_pack_plan_mappings WHERE workspace_id = $1 AND plan_id = $2 ORDER BY position")),
         )
         .bind(workspace_id)
         .bind(plan_id)
@@ -2132,7 +2133,7 @@ fn presentation_asset_object_key(workspace_id: Uuid, plan_id: Uuid, target_id: U
     hasher.update(workspace_id.as_bytes());
     hasher.update(plan_id.as_bytes());
     hasher.update(target_id.as_bytes());
-    format!("presentation-assets/{:x}", hasher.finalize())
+    format!("presentation-assets/{}", hex::encode(hasher.finalize()))
 }
 
 async fn validate_sample_staging_integrity(
@@ -2243,7 +2244,7 @@ async fn plan_resource_evidence_sha256(
     .fetch_one(&mut **tx)
     .await?;
     let mappings = sqlx::query_as::<_, PlanEvidenceMapping>(
-        &format!("SELECT {PLAN_MAPPING_COLUMNS},snapshot FROM solution_pack_plan_mappings WHERE workspace_id=$1 AND plan_id=$2 ORDER BY position"),
+        AssertSqlSafe(format!("SELECT {PLAN_MAPPING_COLUMNS},snapshot FROM solution_pack_plan_mappings WHERE workspace_id=$1 AND plan_id=$2 ORDER BY position")),
     )
     .bind(workspace_id)
     .bind(plan_id)
@@ -2745,7 +2746,7 @@ impl AttricatRepository {
     ) -> Result<(), RepositoryError> {
         let workspace_id = self.workspace_id.0;
         let mappings = sqlx::query_as::<_, SolutionPackPlanMapping>(
-            &format!("SELECT {PLAN_MAPPING_COLUMNS},snapshot FROM solution_pack_plan_mappings WHERE workspace_id=$1 AND plan_id=$2 ORDER BY position"),
+            AssertSqlSafe(format!("SELECT {PLAN_MAPPING_COLUMNS},snapshot FROM solution_pack_plan_mappings WHERE workspace_id=$1 AND plan_id=$2 ORDER BY position")),
         )
         .bind(workspace_id)
         .bind(plan_id)
@@ -3145,7 +3146,7 @@ impl AttricatRepository {
         let workspace_id = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         let plan = sqlx::query_as::<_, SolutionPackPlan>(
-            &format!("SELECT {PLAN_COLUMNS} FROM solution_pack_plans WHERE workspace_id = $1 AND id = $2 FOR UPDATE"),
+            AssertSqlSafe(format!("SELECT {PLAN_COLUMNS} FROM solution_pack_plans WHERE workspace_id = $1 AND id = $2 FOR UPDATE")),
         )
         .bind(workspace_id)
         .bind(plan_id)
@@ -3258,7 +3259,7 @@ impl AttricatRepository {
         let application_id = match inserted {
             Some(id) => {
                 if plan.sample_data_selected {
-                    sqlx::query(&format!("UPDATE solution_pack_applications SET resumable_until=started_at + interval '{SAMPLE_APPLICATION_RESUMABLE_DAYS} days' WHERE workspace_id=$1 AND id=$2"))
+                    sqlx::query(AssertSqlSafe(format!("UPDATE solution_pack_applications SET resumable_until=started_at + interval '{SAMPLE_APPLICATION_RESUMABLE_DAYS} days' WHERE workspace_id=$1 AND id=$2")))
                         .bind(workspace_id).bind(id).execute(&mut *tx).await?;
                 }
                 sqlx::query(
@@ -6000,7 +6001,7 @@ mod tests {
             .bind(workspace_id)
             .bind(Uuid::new_v4())
             .bind(&object_key)
-            .bind(format!("{:x}", Sha256::digest(b"x")))
+            .bind(hex::encode(Sha256::digest(b"x")))
             .execute(&pool)
             .await
             .unwrap();

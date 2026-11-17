@@ -511,7 +511,7 @@ pub fn compile(source: &str) -> Result<CompiledRule, RuleError> {
     })
 }
 pub fn raw_hash(source: &str) -> String {
-    format!("{:x}", Sha256::digest(source.as_bytes()))
+    hex::encode(Sha256::digest(source.as_bytes()))
 }
 pub fn parse_six_field_cron(value: &str) -> Result<Schedule, RuleError> {
     let invalid =

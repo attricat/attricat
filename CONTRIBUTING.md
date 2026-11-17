@@ -8,7 +8,7 @@ You need:
 
 - Docker or another compatible container runtime
 - Rust
-- Node.js 24 and `pnpm` 11
+- Node.js 26 and `pnpm` 11
 - `just`, `process-compose`, and `watchexec`
 
 From the repository root:

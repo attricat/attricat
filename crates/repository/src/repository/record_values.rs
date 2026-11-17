@@ -25,6 +25,7 @@ use attricat_domain::value_type::ValueType;
 use attricat_validation::predicate::ResolvedRecord;
 use chrono::{DateTime, Utc};
 use serde_json::{Map, Value};
+use sqlx::AssertSqlSafe;
 use sqlx::PgConnection;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use uuid::Uuid;
@@ -345,7 +346,7 @@ pub(crate) async fn load_records(
         return Ok(records);
     }
     let live: Vec<Uuid> = records.keys().copied().collect();
-    let rows = sqlx::query_as::<_, ValueRow>(&value_query(state))
+    let rows = sqlx::query_as::<_, ValueRow>(AssertSqlSafe(value_query(state)))
         .bind(workspace_id)
         .bind(&live)
         .bind(codes)

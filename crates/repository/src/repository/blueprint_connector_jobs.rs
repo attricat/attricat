@@ -1,6 +1,7 @@
 use chrono::{DateTime, Duration, Utc};
 use serde::Serialize;
 use serde_json::{Value, json};
+use sqlx::AssertSqlSafe;
 use uuid::Uuid;
 
 use super::{AttricatRepository, RepositoryError, StartExtensionOperation};
@@ -245,7 +246,7 @@ impl AttricatRepository {
         &self,
         blueprint_id: Uuid,
     ) -> Result<Vec<BlueprintConnectorJob>, RepositoryError> {
-        sqlx::query_as(&format!("SELECT {FIELDS} FROM blueprint_connector_jobs WHERE workspace_id=$1 AND blueprint_id=$2 AND code IS NOT NULL ORDER BY id"))
+        sqlx::query_as(AssertSqlSafe(format!("SELECT {FIELDS} FROM blueprint_connector_jobs WHERE workspace_id=$1 AND blueprint_id=$2 AND code IS NOT NULL ORDER BY id")))
             .bind(self.workspace_id()).bind(blueprint_id).fetch_all(&self.pool).await.map_err(Into::into)
     }
 
@@ -254,7 +255,7 @@ impl AttricatRepository {
         &self,
         extension_id: &str,
     ) -> Result<Vec<BlueprintConnectorJob>, RepositoryError> {
-        Ok(sqlx::query_as(&format!("SELECT {FIELDS} FROM blueprint_connector_jobs WHERE workspace_id=$1 AND extension_id=$2 AND direction='export' AND enabled AND code IS NOT NULL ORDER BY id"))
+        Ok(sqlx::query_as(AssertSqlSafe(format!("SELECT {FIELDS} FROM blueprint_connector_jobs WHERE workspace_id=$1 AND extension_id=$2 AND direction='export' AND enabled AND code IS NOT NULL ORDER BY id")))
             .bind(self.workspace_id()).bind(extension_id).fetch_all(&self.pool).await?)
     }
 
@@ -262,7 +263,7 @@ impl AttricatRepository {
         &self,
         id: Uuid,
     ) -> Result<Option<BlueprintConnectorJob>, RepositoryError> {
-        Ok(sqlx::query_as(&format!("SELECT {FIELDS} FROM blueprint_connector_jobs WHERE workspace_id=$1 AND id=$2 AND code IS NOT NULL"))
+        Ok(sqlx::query_as(AssertSqlSafe(format!("SELECT {FIELDS} FROM blueprint_connector_jobs WHERE workspace_id=$1 AND id=$2 AND code IS NOT NULL")))
             .bind(self.workspace_id()).bind(id).fetch_optional(&self.pool).await?)
     }
 
@@ -272,7 +273,7 @@ impl AttricatRepository {
         limit: i64,
         offset: i64,
     ) -> Result<(Vec<BlueprintConnectorJob>, bool), RepositoryError> {
-        let mut rows = sqlx::query_as(&format!("SELECT {FIELDS} FROM blueprint_connector_jobs WHERE workspace_id=$1 AND blueprint_id=$2 AND code IS NOT NULL ORDER BY id LIMIT $3 OFFSET $4"))
+        let mut rows = sqlx::query_as(AssertSqlSafe(format!("SELECT {FIELDS} FROM blueprint_connector_jobs WHERE workspace_id=$1 AND blueprint_id=$2 AND code IS NOT NULL ORDER BY id LIMIT $3 OFFSET $4")))
             .bind(self.workspace_id()).bind(blueprint_id).bind(limit + 1).bind(offset)
             .fetch_all(&self.pool).await?;
         let has_more = rows.len() as i64 > limit;
@@ -323,7 +324,7 @@ impl AttricatRepository {
         {
             return Err(invalid("a run selects 1-10000 records"));
         }
-        let job: BlueprintConnectorJob = sqlx::query_as(&format!("SELECT {FIELDS} FROM blueprint_connector_jobs WHERE workspace_id=$1 AND id=$2 AND enabled AND code IS NOT NULL"))
+        let job: BlueprintConnectorJob = sqlx::query_as(AssertSqlSafe(format!("SELECT {FIELDS} FROM blueprint_connector_jobs WHERE workspace_id=$1 AND id=$2 AND enabled AND code IS NOT NULL")))
             .bind(self.workspace_id()).bind(id).fetch_optional(&self.pool).await?
             .ok_or_else(|| RepositoryError::NotFound("blueprint connector job"))?;
         if mode != ConnectorRunMode::Incremental && job.direction != "export" {
@@ -486,7 +487,7 @@ impl AttricatRepository {
         let Some(high_water) = self.committed_event_high_water("2s").await? else {
             return Ok(0);
         };
-        sqlx::query(&format!(
+        sqlx::query(AssertSqlSafe(format!(
             "UPDATE blueprint_connector_jobs j SET trigger_watermark=$2 \
              WHERE j.workspace_id=$1 AND j.enabled AND j.code IS NOT NULL AND j.trigger_events IS NOT NULL \
                AND j.trigger_watermark IS NOT NULL AND j.trigger_watermark<$2 \
@@ -498,7 +499,7 @@ impl AttricatRepository {
                 "j.trigger_events",
                 "j.blueprint_id"
             )
-        ))
+        )))
         .bind(self.workspace_id())
         .bind(high_water)
         .execute(&self.pool)
@@ -521,7 +522,7 @@ impl AttricatRepository {
                 if newest { "DESC" } else { "ASC" }
             )
         };
-        let jobs: Vec<(Uuid, Uuid, Vec<String>, i64)> = sqlx::query_as(&format!(
+        let jobs: Vec<(Uuid, Uuid, Vec<String>, i64)> = sqlx::query_as(AssertSqlSafe(format!(
             "SELECT j.id,j.blueprint_id,j.trigger_events,j.trigger_watermark FROM blueprint_connector_jobs j \
              CROSS JOIN LATERAL (SELECT {} AS oldest,{} AS newest) p \
              WHERE j.workspace_id=$1 AND j.enabled AND j.code IS NOT NULL AND j.trigger_events IS NOT NULL AND j.trigger_watermark IS NOT NULL \
@@ -532,7 +533,7 @@ impl AttricatRepository {
              ORDER BY j.trigger_watermark,j.id LIMIT $2",
             pending_change(false),
             pending_change(true)
-        ))
+        )))
         .bind(self.workspace_id())
         .bind(TRIGGERED_JOBS_PER_TICK)
         .bind(high_water)
@@ -547,7 +548,7 @@ impl AttricatRepository {
             trigger_changes_sql("$1", "$2", Some("$5"), "$3", "$4")
         );
         for (id, blueprint_id, events, watermark) in jobs {
-            let mut changes: Vec<(i64, Uuid)> = sqlx::query_as(&window_sql)
+            let mut changes: Vec<(i64, Uuid)> = sqlx::query_as(AssertSqlSafe(window_sql.as_str()))
                 .bind(self.workspace_id())
                 .bind(watermark)
                 .bind(&events)
@@ -712,7 +713,7 @@ impl AttricatRepository {
               WHERE p.workspace_id=r.workspace_id AND p.record_id=e.id AND p.context_id=r.connector_channel_id AND p.published_at IS NOT NULL))";
         // A served record, or a live record one links to, which page-v2
         // expands with its files.
-        Ok(sqlx::query_scalar(&format!(
+        Ok(sqlx::query_scalar(AssertSqlSafe(format!(
             "SELECT EXISTS(SELECT 1 FROM extension_operation_runs r \
                JOIN records e ON e.workspace_id=r.workspace_id AND e.id=$3 \
              WHERE r.id=$1 AND r.workspace_id=$2 AND {served}) \
@@ -721,7 +722,7 @@ impl AttricatRepository {
                JOIN extension_operation_runs r ON r.id=$1 AND r.workspace_id=av.workspace_id \
                JOIN records e ON e.workspace_id=av.workspace_id AND e.id=av.record_id \
              WHERE av.workspace_id=$2 AND av.relationship_target_record_id=$3 AND av.active AND {served})"
-        ))
+        )))
         .bind(run_id)
         .bind(self.workspace_id())
         .bind(record_id)

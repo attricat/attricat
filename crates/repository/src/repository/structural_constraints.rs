@@ -112,7 +112,7 @@ struct KeyRow {
 
 /// The SHA-256 stored in `record_unique_key_values.key_hash`.
 pub(crate) fn key_hash(key_values: &Value) -> String {
-    format!("{:x}", Sha256::digest(key_values.to_string().as_bytes()))
+    hex::encode(Sha256::digest(key_values.to_string().as_bytes()))
 }
 
 /// The latest published revision's `unique_keys`, as stored.

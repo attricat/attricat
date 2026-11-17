@@ -16,6 +16,7 @@ use crate::{
 use attricat_domain::states::{RevisionStatus, RuleFindingSeverity, RuleFindingState, RunStatus};
 use attricat_rules::CompiledRule;
 use chrono::Utc;
+use sqlx::AssertSqlSafe;
 use uuid::Uuid;
 
 /// How many of the records a dry run flags it names. The rest are counted.
@@ -131,9 +132,9 @@ impl AttricatRepository {
         blueprint_id: Option<Uuid>,
     ) -> Result<Vec<RuleDetails>, RepositoryError> {
         let ws = self.workspace_id.0;
-        let rules: Vec<Rule> = sqlx::query_as::<_, Db<Rule>>(&format!(
+        let rules: Vec<Rule> = sqlx::query_as::<_, Db<Rule>>(AssertSqlSafe(format!(
             "SELECT {RULE_FIELDS} FROM {CURRENT_RULES} WHERE l.workspace_id=$1 AND ($2::uuid IS NULL OR r.blueprint_id=$2) ORDER BY r.name,r.id"
-        ))
+        )))
         .bind(ws)
         .bind(blueprint_id)
         .fetch_all(&self.pool)
@@ -169,9 +170,9 @@ impl AttricatRepository {
     }
 
     pub async fn get_rule(&self, id: Uuid) -> Result<Option<Rule>, RepositoryError> {
-        Ok(sqlx::query_as::<_, Db<Rule>>(&format!(
+        Ok(sqlx::query_as::<_, Db<Rule>>(AssertSqlSafe(format!(
             "SELECT {RULE_FIELDS} FROM {CURRENT_RULES} WHERE l.workspace_id=$1 AND l.rule_id=$2"
-        ))
+        )))
         .bind(self.workspace_id.0)
         .bind(id)
         .fetch_optional(&self.pool)
@@ -197,9 +198,9 @@ impl AttricatRepository {
         &self,
         id: Uuid,
     ) -> Result<Vec<RuleRevision>, RepositoryError> {
-        let revisions: Vec<RuleRevision> = sqlx::query_as::<_, Db<RuleRevision>>(&format!(
+        let revisions: Vec<RuleRevision> = sqlx::query_as::<_, Db<RuleRevision>>(AssertSqlSafe(format!(
             "SELECT {REVISION_FIELDS} FROM rules WHERE workspace_id=$1 AND id=$2 ORDER BY version DESC"
-        ))
+        )))
         .bind(self.workspace_id.0)
         .bind(id)
         .fetch_all(&self.pool)
@@ -216,9 +217,9 @@ impl AttricatRepository {
         id: Uuid,
         version: i64,
     ) -> Result<Option<RuleRevision>, RepositoryError> {
-        Ok(sqlx::query_as::<_, Db<RuleRevision>>(&format!(
+        Ok(sqlx::query_as::<_, Db<RuleRevision>>(AssertSqlSafe(format!(
             "SELECT {REVISION_FIELDS} FROM rules WHERE workspace_id=$1 AND id=$2 AND version=$3"
-        ))
+        )))
         .bind(self.workspace_id.0)
         .bind(id)
         .bind(version)
@@ -329,9 +330,9 @@ impl AttricatRepository {
         let compiled = compile_rule(&input.definition)?;
         let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
-        let current: Option<(i64, String, Uuid, String, bool)> = sqlx::query_as(&format!(
+        let current: Option<(i64, String, Uuid, String, bool)> = sqlx::query_as(AssertSqlSafe(format!(
             "SELECT r.version,r.code,r.blueprint_id,r.definition_hash,l.enabled FROM {CURRENT_RULES} WHERE l.workspace_id=$1 AND l.rule_id=$2 FOR UPDATE OF l"
-        ))
+        )))
         .bind(ws)
         .bind(id)
         .fetch_optional(&mut *tx)
@@ -430,9 +431,9 @@ impl AttricatRepository {
         accept_existing_violations: bool,
     ) -> Result<(), RepositoryError> {
         let ws = self.workspace_id.0;
-        let current: Option<(i64, Uuid, serde_json::Value, bool)> = sqlx::query_as(&format!(
+        let current: Option<(i64, Uuid, serde_json::Value, bool)> = sqlx::query_as(AssertSqlSafe(format!(
             "SELECT r.version,r.blueprint_id,r.compiled_plan,(NOT l.enabled AND l.disabled_at IS NOT NULL) FROM {CURRENT_RULES} WHERE l.workspace_id=$1 AND l.rule_id=$2 FOR UPDATE OF l"
-        ))
+        )))
         .bind(ws)
         .bind(id)
         .fetch_optional(&mut **tx)
@@ -576,9 +577,9 @@ impl AttricatRepository {
         }
         let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
-        let current: Option<(i64, String, Uuid, String, bool)> = sqlx::query_as(&format!(
+        let current: Option<(i64, String, Uuid, String, bool)> = sqlx::query_as(AssertSqlSafe(format!(
             "SELECT r.version,r.code,r.blueprint_id,r.definition_hash,l.enabled FROM {CURRENT_RULES} WHERE l.workspace_id=$1 AND l.rule_id=$2 FOR SHARE OF l"
-        ))
+        )))
         .bind(ws)
         .bind(rule_id)
         .fetch_optional(&mut *tx)
@@ -655,7 +656,7 @@ impl AttricatRepository {
         if !exists {
             return Err(RepositoryError::NotFound("record"));
         }
-        let rules: Vec<(Uuid, i64, String)> = sqlx::query_as(&format!("SELECT r.id,r.version,r.definition_hash FROM {CURRENT_RULES} JOIN records e ON e.id=$2 AND e.workspace_id=l.workspace_id AND e.blueprint_id=r.blueprint_id WHERE l.workspace_id=$1 AND l.enabled ORDER BY r.id FOR SHARE OF l"))
+        let rules: Vec<(Uuid, i64, String)> = sqlx::query_as(AssertSqlSafe(format!("SELECT r.id,r.version,r.definition_hash FROM {CURRENT_RULES} JOIN records e ON e.id=$2 AND e.workspace_id=l.workspace_id AND e.blueprint_id=r.blueprint_id WHERE l.workspace_id=$1 AND l.enabled ORDER BY r.id FOR SHARE OF l")))
             .bind(ws).bind(record_id).fetch_all(&mut *tx).await?;
         let mut ids = Vec::with_capacity(rules.len());
         let mut created = false;
@@ -688,7 +689,7 @@ impl AttricatRepository {
         let mut tx = self.pool.begin().await?;
         // Every enabled rule in one read: whether it is a rule of the event
         // record's blueprint, and that record's blueprint code.
-        let rows: Vec<EventRuleRow> = sqlx::query_as(&format!("SELECT r.id, r.version, r.definition_hash, r.compiled_plan, r.blueprint_id, (e.id IS NOT NULL) AS direct, (SELECT b.code FROM records x JOIN blueprints b ON b.id=x.blueprint_id AND b.version=x.blueprint_version WHERE x.workspace_id=$1 AND x.id=$3) AS event_blueprint FROM {CURRENT_RULES} LEFT JOIN records e ON e.id=$3 AND e.workspace_id=l.workspace_id AND e.blueprint_id=r.blueprint_id AND e.deleted_at IS NULL WHERE l.workspace_id=$1 AND l.enabled AND $2 > COALESCE(l.activation_sequence,0) FOR SHARE OF l")).bind(ws).bind(event.sequence).bind(event.aggregate_id).fetch_all(&mut *tx).await?;
+        let rows: Vec<EventRuleRow> = sqlx::query_as(AssertSqlSafe(format!("SELECT r.id, r.version, r.definition_hash, r.compiled_plan, r.blueprint_id, (e.id IS NOT NULL) AS direct, (SELECT b.code FROM records x JOIN blueprints b ON b.id=x.blueprint_id AND b.version=x.blueprint_version WHERE x.workspace_id=$1 AND x.id=$3) AS event_blueprint FROM {CURRENT_RULES} LEFT JOIN records e ON e.id=$3 AND e.workspace_id=l.workspace_id AND e.blueprint_id=r.blueprint_id AND e.deleted_at IS NULL WHERE l.workspace_id=$1 AND l.enabled AND $2 > COALESCE(l.activation_sequence,0) FOR SHARE OF l"))).bind(ws).bind(event.sequence).bind(event.aggregate_id).fetch_all(&mut *tx).await?;
         // A change to the record re-evaluates it for every enabled rule of its
         // blueprint; dependents re-run only for rules triggered by the event.
         let record_changed = attricat_rules::is_record_change_event(&event.event_type);
@@ -838,7 +839,7 @@ impl AttricatRepository {
         let ws = self.workspace_id.0;
         let now = Utc::now();
         let mut tx = self.pool.begin().await?;
-        let rows: Vec<(Uuid, i64, String, serde_json::Value)> = sqlx::query_as(&format!("SELECT r.id,r.version,r.definition_hash,r.compiled_plan FROM {CURRENT_RULES} WHERE l.workspace_id=$1 AND l.enabled FOR SHARE OF l")).bind(ws).fetch_all(&mut *tx).await?;
+        let rows: Vec<(Uuid, i64, String, serde_json::Value)> = sqlx::query_as(AssertSqlSafe(format!("SELECT r.id,r.version,r.definition_hash,r.compiled_plan FROM {CURRENT_RULES} WHERE l.workspace_id=$1 AND l.enabled FOR SHARE OF l"))).bind(ws).fetch_all(&mut *tx).await?;
         let mut created = 0;
         for (rule_id, version, definition_hash, plan) in rows {
             let compiled = stored_rule(plan)?;
@@ -899,9 +900,9 @@ impl AttricatRepository {
         blueprint: &crate::model::Blueprint,
     ) -> Result<Vec<RuleWarning>, RepositoryError> {
         let ws = self.workspace_id.0;
-        let rules: Vec<(Uuid, String, String, serde_json::Value)> = sqlx::query_as(&format!(
+        let rules: Vec<(Uuid, String, String, serde_json::Value)> = sqlx::query_as(AssertSqlSafe(format!(
             "SELECT r.id,r.code,r.name,r.compiled_plan FROM {CURRENT_RULES} WHERE l.workspace_id=$1 AND l.enabled AND r.blueprint_id=$2 ORDER BY r.name,r.id"
-        ))
+        )))
         .bind(ws)
         .bind(blueprint.id)
         .fetch_all(&mut **tx)
@@ -1006,13 +1007,16 @@ impl AttricatRepository {
         let query = format!(
             "SELECT f.id,f.rule_id,f.rule_version,f.record_id,f.context_id,f.severity,f.message,f.evidence,f.state,f.acknowledged_at,f.resolved_at,f.created_at,f.updated_at FROM rule_findings f WHERE {FINDING_FILTER} ORDER BY array_position($12::text[],f.severity),f.created_at DESC,f.id DESC LIMIT $10 OFFSET $11"
         );
-        let mut rows =
-            bind_finding_filter!(sqlx::query_as::<_, Db<RuleFinding>>(&query), ws, filter)
-                .bind(limit + 1)
-                .bind(offset)
-                .bind(severities_most_severe_first())
-                .fetch_all(&self.pool)
-                .await?;
+        let mut rows = bind_finding_filter!(
+            sqlx::query_as::<_, Db<RuleFinding>>(AssertSqlSafe(query.as_str())),
+            ws,
+            filter
+        )
+        .bind(limit + 1)
+        .bind(offset)
+        .bind(severities_most_severe_first())
+        .fetch_all(&self.pool)
+        .await?;
         let has_more = rows.len() as i64 > limit;
         rows.truncate(limit as usize);
         Ok((rows.into_domain(), has_more))
@@ -1024,11 +1028,13 @@ impl AttricatRepository {
         filter: &RuleFindingFilter,
     ) -> Result<i64, RepositoryError> {
         let query = format!("SELECT count(*) FROM rule_findings f WHERE {FINDING_FILTER}");
-        Ok(
-            bind_finding_filter!(sqlx::query_scalar(&query), self.workspace_id.0, filter)
-                .fetch_one(&self.pool)
-                .await?,
+        Ok(bind_finding_filter!(
+            sqlx::query_scalar(AssertSqlSafe(query.as_str())),
+            self.workspace_id.0,
+            filter
         )
+        .fetch_one(&self.pool)
+        .await?)
     }
 
     /// Acknowledges the open findings `selection` names, at most
@@ -1052,10 +1058,14 @@ impl AttricatRepository {
                 let query = format!(
                     "SELECT f.id FROM rule_findings f WHERE {FINDING_FILTER} ORDER BY f.id LIMIT $10"
                 );
-                bind_finding_filter!(sqlx::query_scalar(&query), ws, &filter)
-                    .bind(MAX_BULK_ACKNOWLEDGE)
-                    .fetch_all(&mut *tx)
-                    .await?
+                bind_finding_filter!(
+                    sqlx::query_scalar(AssertSqlSafe(query.as_str())),
+                    ws,
+                    &filter
+                )
+                .bind(MAX_BULK_ACKNOWLEDGE)
+                .fetch_all(&mut *tx)
+                .await?
             }
         };
         let record_ids: Vec<Uuid> = sqlx::query_scalar("UPDATE rule_findings SET state=$4,acknowledged_at=COALESCE(acknowledged_at,clock_timestamp()),acknowledged_by_user_id=COALESCE(acknowledged_by_user_id,$3),updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=ANY($2) AND state=$5 RETURNING record_id")

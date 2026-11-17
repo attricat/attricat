@@ -13,6 +13,7 @@ use attricat_domain::attribute_options::Cardinality;
 use attricat_domain::states::RevisionStatus;
 use attricat_validation::validate_json_schema;
 use serde_json::json;
+use sqlx::AssertSqlSafe;
 use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -68,12 +69,12 @@ impl AttricatRepository {
         &self,
         blueprint_id: Uuid,
     ) -> Result<Vec<Blueprint>, RepositoryError> {
-        Ok(sqlx::query_as::<_, Db<Blueprint>>(&format!(
+        Ok(sqlx::query_as::<_, Db<Blueprint>>(AssertSqlSafe(format!(
             r#"SELECT {BLUEPRINT_COLUMNS}
                FROM blueprints
                WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL
                ORDER BY version DESC"#
-        ))
+        )))
         .bind(blueprint_id)
         .bind(self.workspace_id.0)
         .fetch_all(&self.pool)
@@ -308,9 +309,9 @@ impl AttricatRepository {
             ))
         })?;
         let blueprint = sqlx::query_as::<_, Db<Blueprint>>(
-            &format!(r#"INSERT INTO blueprints (id, workspace_id, code, name, kind, version, includes, views, record_schema, status, definition, definition_hash, unique_keys)
+            AssertSqlSafe(format!(r#"INSERT INTO blueprints (id, workspace_id, code, name, kind, version, includes, views, record_schema, status, definition, definition_hash, unique_keys)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'draft', $10, $11, $12)
-               RETURNING {BLUEPRINT_COLUMNS}"#),
+               RETURNING {BLUEPRINT_COLUMNS}"#)),
         )
         .bind(blueprint_id)
         .bind(self.workspace_id.0)
@@ -390,13 +391,13 @@ impl AttricatRepository {
                 None => Ok(None),
             };
         }
-        let blueprint = sqlx::query_as::<_, Db<Blueprint>>(&format!(
+        let blueprint = sqlx::query_as::<_, Db<Blueprint>>(AssertSqlSafe(format!(
             r#"SELECT {BLUEPRINT_COLUMNS}
                FROM blueprints
                WHERE id = $1 AND workspace_id = $2 AND status = 'published' AND deleted_at IS NULL
                ORDER BY version DESC
                LIMIT 1"#
-        ))
+        )))
         .bind(blueprint_id)
         .bind(self.workspace_id.0)
         .fetch_optional(&self.pool)
@@ -417,11 +418,11 @@ impl AttricatRepository {
         {
             return Ok(Some(revision));
         }
-        let blueprint = sqlx::query_as::<_, Db<Blueprint>>(&format!(
+        let blueprint = sqlx::query_as::<_, Db<Blueprint>>(AssertSqlSafe(format!(
             r#"SELECT {BLUEPRINT_COLUMNS}
                FROM blueprints
                WHERE id = $1 AND version = $2 AND workspace_id = $3 AND deleted_at IS NULL"#
-        ))
+        )))
         .bind(blueprint_id)
         .bind(version)
         .bind(self.workspace_id.0)
@@ -443,13 +444,13 @@ impl AttricatRepository {
                 None => Ok(None),
             };
         }
-        let blueprint = sqlx::query_as::<_, Db<Blueprint>>(&format!(
+        let blueprint = sqlx::query_as::<_, Db<Blueprint>>(AssertSqlSafe(format!(
             r#"SELECT {BLUEPRINT_COLUMNS}
                FROM blueprints
                WHERE code = $1 AND status = 'published' AND workspace_id = $2 AND deleted_at IS NULL
                ORDER BY version DESC
                LIMIT 1"#
-        ))
+        )))
         .bind(code)
         .bind(self.workspace_id.0)
         .fetch_optional(&self.pool)
@@ -464,13 +465,13 @@ impl AttricatRepository {
         code: &str,
     ) -> Result<Option<BlueprintWithAttributes>, RepositoryError> {
         validate_code(code)?;
-        let blueprint = sqlx::query_as::<_, Db<Blueprint>>(&format!(
+        let blueprint = sqlx::query_as::<_, Db<Blueprint>>(AssertSqlSafe(format!(
             r#"SELECT {BLUEPRINT_COLUMNS}
                FROM blueprints
                WHERE code = $1 AND workspace_id = $2 AND deleted_at IS NULL
                ORDER BY version DESC
                LIMIT 1"#
-        ))
+        )))
         .bind(code)
         .bind(self.workspace_id.0)
         .fetch_optional(&self.pool)
@@ -491,11 +492,11 @@ impl AttricatRepository {
         {
             return Ok(Some(revision));
         }
-        let blueprint = sqlx::query_as::<_, Db<Blueprint>>(&format!(
+        let blueprint = sqlx::query_as::<_, Db<Blueprint>>(AssertSqlSafe(format!(
             r#"SELECT {BLUEPRINT_COLUMNS}
                FROM blueprints
                WHERE code = $1 AND version = $2 AND workspace_id = $3 AND deleted_at IS NULL"#
-        ))
+        )))
         .bind(code)
         .bind(version)
         .bind(self.workspace_id.0)
@@ -519,9 +520,9 @@ impl AttricatRepository {
             return Ok(Some(revision));
         }
         let blueprint = sqlx::query_as::<_, Db<Blueprint>>(
-            &format!(r#"SELECT {BLUEPRINT_COLUMNS}
+            AssertSqlSafe(format!(r#"SELECT {BLUEPRINT_COLUMNS}
                FROM blueprints
-               WHERE code = $1 AND version = $2 AND status = 'published' AND workspace_id = $3 AND deleted_at IS NULL"#),
+               WHERE code = $1 AND version = $2 AND status = 'published' AND workspace_id = $3 AND deleted_at IS NULL"#)),
         )
         .bind(code)
         .bind(version)
@@ -540,12 +541,12 @@ impl AttricatRepository {
         version: i64,
     ) -> Result<PublishedBlueprint, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
-        let blueprint = sqlx::query_as::<_, Db<Blueprint>>(&format!(
+        let blueprint = sqlx::query_as::<_, Db<Blueprint>>(AssertSqlSafe(format!(
             r#"SELECT {BLUEPRINT_COLUMNS}
                FROM blueprints
                WHERE id = $1 AND version = $2 AND workspace_id = $3 AND deleted_at IS NULL
                FOR UPDATE"#
-        ))
+        )))
         .bind(blueprint_id)
         .bind(version)
         .bind(self.workspace_id.0)
@@ -664,12 +665,12 @@ impl AttricatRepository {
         blueprint_id: Uuid,
         version: i64,
     ) -> Result<Blueprint, RepositoryError> {
-        let mut blueprint = sqlx::query_as::<_, Db<Blueprint>>(&format!(
+        let mut blueprint = sqlx::query_as::<_, Db<Blueprint>>(AssertSqlSafe(format!(
             r#"SELECT {BLUEPRINT_COLUMNS}
                FROM blueprints
                WHERE id = $1 AND version = $2 AND workspace_id = $3 AND deleted_at IS NULL
                FOR UPDATE"#
-        ))
+        )))
         .bind(blueprint_id)
         .bind(version)
         .bind(self.workspace_id.0)
@@ -706,9 +707,9 @@ impl AttricatRepository {
                 .enforced_structural_constraints(transaction, blueprint_id)
                 .await?;
             blueprint = sqlx::query_as::<_, Db<Blueprint>>(
-                &format!(r#"UPDATE blueprints SET status = 'published', published_at = now(), updated_at = now()
+                AssertSqlSafe(format!(r#"UPDATE blueprints SET status = 'published', published_at = now(), updated_at = now()
                    WHERE id = $1 AND version = $2 AND workspace_id = $3
-                   RETURNING {BLUEPRINT_COLUMNS}"#),
+                   RETURNING {BLUEPRINT_COLUMNS}"#)),
             )
             .bind(blueprint_id)
             .bind(version)

@@ -9,6 +9,7 @@ use crate::domain_events::{RECORD_PUBLISHED_V1, RECORD_UNPUBLISHED_V1, RecordPub
 use crate::persistence_rows::{Db, IntoDomain};
 use attricat_validation::predicate::Predicate;
 use chrono::Utc;
+use sqlx::AssertSqlSafe;
 use sqlx::{PgConnection, Postgres, Transaction};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -197,13 +198,15 @@ impl AttricatRepository {
         &self,
     ) -> Result<Vec<PublicationChannel>, RepositoryError> {
         let workspace_id = self.workspace_id.0;
-        Ok(sqlx::query_as::<_, Db<PublicationChannel>>(&format!(
-            "{CHANNEL_SELECT} ORDER BY a.code"
-        ))
-        .bind(workspace_id)
-        .fetch_all(&self.pool)
-        .await?
-        .into_domain())
+        Ok(
+            sqlx::query_as::<_, Db<PublicationChannel>>(AssertSqlSafe(format!(
+                "{CHANNEL_SELECT} ORDER BY a.code"
+            )))
+            .bind(workspace_id)
+            .fetch_all(&self.pool)
+            .await?
+            .into_domain(),
+        )
     }
 
     pub async fn set_publication_channel(
@@ -315,9 +318,9 @@ impl AttricatRepository {
             .execute(&mut *tx)
             .await?;
         let workspace_id = self.workspace_id.0;
-        let channels = sqlx::query_as::<_, Db<PublicationChannel>>(&format!(
+        let channels = sqlx::query_as::<_, Db<PublicationChannel>>(AssertSqlSafe(format!(
             "{CHANNEL_SELECT} AND c.enabled ORDER BY a.code"
-        ))
+        )))
         .bind(workspace_id)
         .fetch_all(&mut *tx)
         .await?
@@ -689,9 +692,9 @@ impl AttricatRepository {
         revision: (Uuid, i64),
     ) -> Result<Vec<Uuid>, RepositoryError> {
         let workspace_id = self.workspace_id.0;
-        let channels = sqlx::query_as::<_, Db<PublicationChannel>>(&format!(
+        let channels = sqlx::query_as::<_, Db<PublicationChannel>>(AssertSqlSafe(format!(
             "{CHANNEL_SELECT} AND EXISTS (SELECT 1 FROM record_channel_publications p WHERE p.workspace_id = c.workspace_id AND p.record_id = $2 AND p.context_id = c.context_id AND p.published_at IS NOT NULL) ORDER BY c.context_id"
-        ))
+        )))
         .bind(workspace_id)
         .bind(record_id)
         .fetch_all(&mut **tx)
@@ -810,9 +813,9 @@ impl AttricatRepository {
         context_id: Uuid,
     ) -> Result<RecordPublicationStatus, RepositoryError> {
         let workspace_id = self.workspace_id.0;
-        let channel = sqlx::query_as::<_, Db<PublicationChannel>>(&format!(
+        let channel = sqlx::query_as::<_, Db<PublicationChannel>>(AssertSqlSafe(format!(
             "{CHANNEL_SELECT} AND c.context_id = $2 FOR UPDATE OF c"
-        ))
+        )))
         .bind(workspace_id)
         .bind(context_id)
         .fetch_optional(&mut **tx)
@@ -886,9 +889,9 @@ impl AttricatRepository {
         channel_ids: &[Uuid],
     ) -> Result<(), RepositoryError> {
         let workspace_id = self.workspace_id.0;
-        let channels = sqlx::query_as::<_, Db<PublicationChannel>>(&format!(
+        let channels = sqlx::query_as::<_, Db<PublicationChannel>>(AssertSqlSafe(format!(
             "{CHANNEL_SELECT} AND c.context_id = ANY($2) ORDER BY c.context_id"
-        ))
+        )))
         .bind(workspace_id)
         .bind(channel_ids)
         .fetch_all(&mut **tx)

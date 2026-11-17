@@ -383,7 +383,7 @@ impl HostState {
                 &self.installation.extension_id,
                 input.file_id,
                 input.record_id,
-                &format!("{:x}", Sha256::digest(token.as_bytes())),
+                &hex::encode(Sha256::digest(token.as_bytes())),
                 expires_at,
             )
             .await

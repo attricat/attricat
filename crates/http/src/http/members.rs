@@ -3,7 +3,7 @@ use attricat_domain::states::MembershipState;
 use axum::{Json, extract::State, http::StatusCode, response::Response};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
-use rand::RngCore;
+use rand::{TryRng as _, rngs::SysRng};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use url::Url;
@@ -315,7 +315,9 @@ const ONBOARDING_SECRET_PREFIX: &str = "cat_onb_";
 /// A random URL-safe secret; only its SHA-256 digest is ever stored.
 pub(super) fn opaque_secret(prefix: &str) -> String {
     let mut bytes = [0u8; OPAQUE_SECRET_BYTES];
-    rand::rngs::OsRng.fill_bytes(&mut bytes);
+    SysRng
+        .try_fill_bytes(&mut bytes)
+        .expect("the operating system random generator is available");
     format!("{prefix}{}", URL_SAFE_NO_PAD.encode(bytes))
 }
 

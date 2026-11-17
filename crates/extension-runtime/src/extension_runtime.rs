@@ -3039,7 +3039,7 @@ mod tests {
     fn artifact_stream_contract_keeps_chunks_and_checksums_bounded() {
         assert_eq!(MAX_ARTIFACT_CHUNK_BYTES, 64 * 1024);
         assert_eq!(
-            format!("{:x}", Sha256::digest(b"bounded output")),
+            hex::encode(Sha256::digest(b"bounded output")),
             "d047501029296dac4c1be5e22f05ff7229244184357ac63424d75339009a77e3"
         );
     }
@@ -3519,7 +3519,7 @@ impl OperationState {
         ensure_operation_artifact_access(repository, extension_id, release_id, "artifacts.write")
             .await?;
         require_operation_batch_key(&batch_key, &self.batch_key)?;
-        let hash = format!("{:x}", Sha256::digest(&bytes));
+        let hash = hex::encode(Sha256::digest(&bytes));
         let chunk = self
             .repository
             .reserve_extension_output_chunk(
@@ -3617,7 +3617,7 @@ impl OperationState {
                     .await
                     .map_err(|_| "staged output unavailable".to_owned())?;
                 if object.bytes.len() != chunk.content_length as usize
-                    || format!("{:x}", Sha256::digest(&object.bytes)) != chunk.checksum_sha256
+                    || hex::encode(Sha256::digest(&object.bytes)) != chunk.checksum_sha256
                 {
                     return Err("staged output checksum mismatch".into());
                 }
@@ -3643,7 +3643,7 @@ impl OperationState {
                 .put_file(&key, &path, Some(&media_type))
                 .await
                 .map_err(|_| "output storage unavailable".to_owned())?;
-            let checksum = format!("{:x}", hasher.finalize());
+            let checksum = hex::encode(hasher.finalize());
             self.repository
                 .complete_extension_operation_artifact(artifact.id, self.run_id, &checksum, &key)
                 .await
@@ -3827,7 +3827,7 @@ impl OperationState {
             .artifacts
             .delete(handle)
             .map_err(|_| "invalid artifact handle".to_owned())?;
-        let actual = format!("{:x}", output.hasher.clone().finalize());
+        let actual = hex::encode(output.hasher.clone().finalize());
         if checksum_sha256 != actual {
             let _ = self
                 .repository

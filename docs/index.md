@@ -2,7 +2,7 @@
 
 ## Getting Started
 
-1. Install a Docker-compatible runtime, Rust, Node.js 24 (the CI version),
+1. Install a Docker-compatible runtime, Rust, Node.js 26 (the CI version),
    `pnpm` 11, `just`, `process-compose`, and `watchexec`.
 2. Run `just setup` once. It installs frontend dependencies, creates `.env`
    from `.env.example`, and assigns persistent ports for this worktree.

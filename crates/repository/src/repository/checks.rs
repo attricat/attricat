@@ -25,6 +25,7 @@ use attricat_validation::predicate::{
 use attricat_validation::unique_key::{UNIQUE_PREDICATE_CASE_SENSITIVE, normalize_key_component};
 use chrono::Utc;
 use serde::Serialize;
+use sqlx::AssertSqlSafe;
 use sqlx::PgConnection;
 use std::collections::BTreeMap;
 
@@ -447,7 +448,7 @@ async fn duplicates(
     let mut others = Vec::new();
     let mut after = Uuid::nil();
     loop {
-        let batch: Vec<Uuid> = sqlx::query_scalar(&query)
+        let batch: Vec<Uuid> = sqlx::query_scalar(AssertSqlSafe(query.as_str()))
             .bind(scope.workspace_id)
             .bind(subject.blueprint_id)
             .bind(subject.id)

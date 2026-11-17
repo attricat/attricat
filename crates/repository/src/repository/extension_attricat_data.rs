@@ -10,6 +10,7 @@ use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sqlx::AssertSqlSafe;
 
 pub const MAX_EXTENSION_ATTRICAT_PAGE_SIZE: u32 = 100;
 pub const MAX_EXTENSION_LOOKUP_VALUE_BYTES: usize = 512;
@@ -305,7 +306,7 @@ impl AttricatRepository {
         // live revision paired with older values would let an exporter mark
         // an edit synced that it never pushed. Content events are stamped
         // after their values, so the revision never runs ahead of the values.
-        let rows = sqlx::query_as::<_, Db<Record>>(&format!(
+        let rows = sqlx::query_as::<_, Db<Record>>(AssertSqlSafe(format!(
             "SELECT e.id,e.blueprint_id,e.blueprint_version,e.projections,e.system_tags,e.system_metadata,('attricat.sample'=ANY(e.system_tags)) AS is_sample,e.created_at,e.updated_at,e.deleted_at, \
                {} AS content_revision \
              FROM records e \
@@ -316,7 +317,7 @@ impl AttricatRepository {
                AND ($9::uuid[] IS NULL OR e.id=ANY($9)) \
              ORDER BY e.created_at,e.id LIMIT $8",
             content_revision_sql("e", Some("$4"), Some("$7"))
-        ))
+        )))
         .bind(workspace_id).bind(request.blueprint_id).bind(request.blueprint_version)
         .bind(snapshot_at).bind(created_at).bind(record_id).bind(request.publication_context_id)
         .bind(i64::from(request.limit) + 1).bind(record_ids).fetch_all(&self.pool).await?;
@@ -461,10 +462,10 @@ impl AttricatRepository {
         else {
             return Ok(None);
         };
-        let record = sqlx::query_as::<_, Db<Record>>(&format!(
+        let record = sqlx::query_as::<_, Db<Record>>(AssertSqlSafe(format!(
             "SELECT r.id,r.blueprint_id,r.blueprint_version,r.projections,r.system_tags,r.system_metadata,('attricat.sample'=ANY(r.system_tags)) AS is_sample,r.created_at,r.updated_at,r.deleted_at,{} AS content_revision FROM records r WHERE r.id=$1 AND r.workspace_id=$2 AND r.deleted_at IS NULL",
             content_revision_sql("r", None, None)
-        ))
+        )))
         .bind(record_id)
         .bind(self.workspace_id.0)
         .fetch_optional(&mut *transaction)

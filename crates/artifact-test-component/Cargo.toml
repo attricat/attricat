@@ -10,5 +10,6 @@ publish.workspace = true
 crate-type = ["cdylib"]
 
 [dependencies]
+hex.workspace = true
 sha2.workspace = true
 wit-bindgen.workspace = true

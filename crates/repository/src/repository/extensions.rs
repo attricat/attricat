@@ -1,3 +1,4 @@
+use sqlx::AssertSqlSafe;
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
     sync::Arc,
@@ -1837,9 +1838,9 @@ impl AttricatRepository {
             "extension_handler_attempts",
             "extension_export_retry_requests",
         ] {
-            sqlx::query(&format!(
+            sqlx::query(AssertSqlSafe(format!(
                 "DELETE FROM {table} WHERE workspace_id = $1 AND extension_id = $2"
-            ))
+            )))
             .bind(self.workspace_id.0)
             .bind(&current.extension_id)
             .execute(&mut *transaction)

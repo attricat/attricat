@@ -17,6 +17,7 @@
 //! results.
 
 use crate::support;
+use sqlx::AssertSqlSafe;
 
 use std::time::{Duration, Instant};
 
@@ -234,7 +235,7 @@ async fn relationship_tree_facet_latency(pool: PgPool) {
     let mut connection = pool.acquire().await.unwrap();
     for statement in SEED.split(";\n").map(str::trim).filter(|s| !s.is_empty()) {
         let (statement, parameters) = renumber_parameters(statement);
-        let mut query = sqlx::query(&statement);
+        let mut query = sqlx::query(AssertSqlSafe(statement.as_str()));
         for parameter in parameters {
             query = match parameter {
                 1 => query.bind(category_id),

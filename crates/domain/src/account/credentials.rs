@@ -1,10 +1,7 @@
 use argon2::{
     Algorithm, Argon2, Params, Version,
-    password_hash::{
-        PasswordHash as ParsedPasswordHash, PasswordHasher, PasswordVerifier, SaltString,
-    },
+    password_hash::{PasswordHasher, PasswordVerifier, phc::PasswordHash as ParsedPasswordHash},
 };
-use rand::rngs::OsRng;
 use secrecy::{ExposeSecret, SecretString};
 use thiserror::Error;
 
@@ -98,9 +95,9 @@ pub enum PasswordHashError {
 
 /// Creates a salted Argon2id PHC password hash.
 pub fn hash_password(password: &Password) -> Result<PasswordHash, PasswordHashError> {
-    let salt = SaltString::generate(&mut OsRng);
+    // Draws a fresh salt from the operating system's generator.
     let hash = argon2id()
-        .hash_password(password.0.expose_secret().as_bytes(), &salt)
+        .hash_password(password.0.expose_secret().as_bytes())
         .map_err(|_| PasswordHashError::InvalidPhc)?;
     PasswordHash::from_phc(hash.to_string())
 }
@@ -109,7 +106,7 @@ fn argon2id() -> Argon2<'static> {
     Argon2::new(Algorithm::Argon2id, Version::V0x13, Params::default())
 }
 
-fn validate_argon2id_phc(value: &str) -> Result<ParsedPasswordHash<'_>, PasswordHashError> {
+fn validate_argon2id_phc(value: &str) -> Result<ParsedPasswordHash, PasswordHashError> {
     let parsed = ParsedPasswordHash::new(value).map_err(|_| PasswordHashError::InvalidPhc)?;
     if parsed.algorithm.as_str() != "argon2id" {
         return Err(PasswordHashError::InvalidPhc);

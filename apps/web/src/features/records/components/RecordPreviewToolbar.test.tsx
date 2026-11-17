@@ -117,8 +117,10 @@ describe('RecordPreviewToolbar readiness', () => {
       if (document.activeElement === document.body) break;
     }
     expect(document.activeElement).toBe(chip);
-    // Closed, the tooltip describes the focused chip through its title.
-    expect(chip?.getAttribute('title')).toBe('SKU is required.');
+    // Keyboard focus opens the tooltip, which then describes the chip.
+    const tooltip = await screen.findByRole('tooltip');
+    expect(tooltip.textContent).toBe('SKU is required.');
+    expect(chip?.getAttribute('aria-describedby')).toBe(tooltip.id);
   });
 
   it('shows the publication status as an icon', () => {

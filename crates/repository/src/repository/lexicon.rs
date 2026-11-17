@@ -2,6 +2,7 @@ use attricat_lexicon::{Entry, EntryIdentity, Report, UsedReference};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sqlx::AssertSqlSafe;
 use sqlx::{FromRow, Postgres, Transaction};
 use uuid::Uuid;
 
@@ -89,9 +90,9 @@ impl AttricatRepository {
         &self,
         language: Option<&str>,
     ) -> Result<Vec<LexiconEntry>, RepositoryError> {
-        Ok(sqlx::query_as(&format!(
+        Ok(sqlx::query_as(AssertSqlSafe(format!(
             "SELECT {FIELDS} FROM lexicon_entries WHERE workspace_id = $1 AND ($2::text IS NULL OR language = $2) {ORDER}"
-        ))
+        )))
         .bind(self.workspace_id())
         .bind(language)
         .fetch_all(&self.pool)
@@ -106,13 +107,13 @@ impl AttricatRepository {
     ) -> Result<LexiconEntry, RepositoryError> {
         let entry = entry.validated()?;
         let mut transaction = self.pool.begin().await?;
-        let stored = sqlx::query_as(&format!(
+        let stored = sqlx::query_as(AssertSqlSafe(format!(
             "INSERT INTO lexicon_entries (id, workspace_id, key, context, language, plural_category, text, source)
              VALUES ($1, $2, $3, $4, $5, $6, $7, 'workspace')
              ON CONFLICT (workspace_id, key, context, language, plural_category) DO UPDATE
              SET text = EXCLUDED.text, source = 'workspace', solution_pack_id = NULL, updated_at = now()
              RETURNING {FIELDS}"
-        ))
+        )))
         .bind(Uuid::new_v4())
         .bind(self.workspace_id())
         .bind(&entry.key)

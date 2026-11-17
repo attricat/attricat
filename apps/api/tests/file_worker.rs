@@ -41,7 +41,7 @@ async fn insert_file(pool: &PgPool, file_id: Uuid, original_key: &str, retain: b
     .bind(file_id)
     .bind(WORKSPACE_ID.parse::<Uuid>().unwrap())
     .bind(png().len() as i64)
-    .bind(format!("{:x}", Sha256::digest(png())))
+    .bind(hex::encode(Sha256::digest(png())))
     .bind(original_key)
     .bind(retain)
     .execute(pool)

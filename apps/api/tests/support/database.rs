@@ -9,7 +9,10 @@ use super::bootstrap_workspace_id;
 
 /// Runs a `SELECT count(*)`-style query and returns its single value.
 pub async fn count(pool: &PgPool, sql: &str) -> i64 {
-    sqlx::query_scalar(sql).fetch_one(pool).await.unwrap()
+    sqlx::query_scalar(sqlx::AssertSqlSafe(sql))
+        .fetch_one(pool)
+        .await
+        .unwrap()
 }
 
 /// Polls `condition` until it holds, returning false if it still does not

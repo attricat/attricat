@@ -283,7 +283,7 @@ fn values(seed: usize) -> Value {
 async fn wait_until(pool: &PgPool, sql: &str, timeout: Duration) -> bool {
     let started = Instant::now();
     while started.elapsed() < timeout {
-        if sqlx::query_scalar::<_, bool>(sql)
+        if sqlx::query_scalar::<_, bool>(sqlx::AssertSqlSafe(sql))
             .fetch_one(pool)
             .await
             .unwrap()

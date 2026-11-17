@@ -328,9 +328,7 @@ async fn read_capped(mut response: Response, limit: usize) -> Result<Vec<u8>, Re
 fn matches_digest(bytes: &[u8], digest: Option<&str>) -> bool {
     digest
         .and_then(|digest| digest.strip_prefix(SHA256_DIGEST_PREFIX))
-        .is_none_or(|expected| {
-            format!("{:x}", Sha256::digest(bytes)).eq_ignore_ascii_case(expected)
-        })
+        .is_none_or(|expected| hex::encode(Sha256::digest(bytes)).eq_ignore_ascii_case(expected))
 }
 
 /// Parses and validates a `registry.json` document. Any invalid entry rejects
@@ -739,8 +737,8 @@ mod tests {
 
     #[test]
     fn a_listed_release_is_checked_against_the_reviewed_digest_not_githubs() {
-        let reviewed = format!("{:x}", Sha256::digest(b"reviewed"));
-        let replaced = format!("sha256:{:x}", Sha256::digest(b"replaced"));
+        let reviewed = hex::encode(Sha256::digest(b"reviewed"));
+        let replaced = format!("sha256:{}", hex::encode(Sha256::digest(b"replaced")));
         let mut extension = listing(&[("1.0.1", "^1.1")]);
         extension.versions[0].sha256 = reviewed;
         let mut offered = release("v1.0.1");
@@ -772,7 +770,7 @@ mod tests {
 
     #[test]
     fn a_release_asset_must_match_the_digest_github_reports() {
-        let good = format!("sha256:{:x}", Sha256::digest(b"archive"));
+        let good = format!("sha256:{}", hex::encode(Sha256::digest(b"archive")));
         assert!(matches_digest(b"archive", Some(&good)));
         assert!(!matches_digest(b"tampered", Some(&good)));
         assert!(matches_digest(b"archive", None));

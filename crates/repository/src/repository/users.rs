@@ -1,5 +1,6 @@
 //! The authenticated user's own account fields.
 use super::*;
+use sqlx::AssertSqlSafe;
 
 #[derive(Debug, sqlx::FromRow)]
 pub struct UserAccount {
@@ -96,7 +97,7 @@ impl AttricatRepository {
         let sql = format!(
             "UPDATE users SET {column} = $2, updated_at = clock_timestamp() WHERE id = $1 AND state = 'active'"
         );
-        let updated = sqlx::query(&sql)
+        let updated = sqlx::query(AssertSqlSafe(sql.as_str()))
             .bind(user_id)
             .bind(value)
             .execute(&mut *transaction)

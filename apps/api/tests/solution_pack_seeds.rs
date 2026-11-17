@@ -89,7 +89,7 @@ const UNNAMED_SEARCH: &[u8] = br#"{"format_version":1,"kind":"solution_pack_save
 const PDF_BYTES: &[u8] = b"%PDF-1.7\nsynthetic evidence";
 
 fn digest(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
+    hex::encode(Sha256::digest(bytes))
 }
 
 fn resource(key: &str, path: &str, bytes: &[u8]) -> Value {

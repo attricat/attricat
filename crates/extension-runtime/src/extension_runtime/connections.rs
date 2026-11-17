@@ -743,7 +743,7 @@ fn random_token() -> Result<String, TokenError> {
 
 /// The SHA-256 under which a browser authorization's `state` is stored.
 pub fn authorization_state_digest(state: &str) -> String {
-    format!("{:x}", Sha256::digest(state.as_bytes()))
+    hex::encode(Sha256::digest(state.as_bytes()))
 }
 
 /// What a browser authorization stores of the session that started it:

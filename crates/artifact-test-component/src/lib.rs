@@ -29,7 +29,7 @@ impl Guest for Component {
             hasher.update(&chunk);
             attricat::host::artifacts::write(&output, &chunk)?;
         }
-        let checksum = format!("{:x}", hasher.finalize());
+        let checksum = hex::encode(hasher.finalize());
         let completed = attricat::host::artifacts::complete(output, &checksum)?;
         Ok(BatchResult {
             checkpoint: format!("{{\"artifact_id\":\"{}\"}}", completed.artifact_id),
