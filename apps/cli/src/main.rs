@@ -75,7 +75,9 @@ async fn main() -> ExitCode {
         Ok(body) => print_output(&body),
         Err(error) => {
             if let Some(output) = error.output() {
-                print_output(output);
+                // The command's own failure decides the exit code, not
+                // whether its partial output could be written.
+                let _ = print_output(output);
             }
             eprintln!("{}", error.json());
             ExitCode::from(error.exit_code())
