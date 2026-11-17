@@ -1968,9 +1968,10 @@ impl AttricatRepository {
                       {context_fallback_target} AS blueprint_context_fallback
                  FROM records source
                  JOIN attribute_values av ON av.record_id = source.id
-                  AND av.active
+                  AND av.workspace_id = $4 AND av.active
                   AND av.relationship_target_record_id IS NOT NULL
                  JOIN attributes a ON a.id = av.attribute_id
+                  AND a.workspace_id = $4
                   AND a.blueprint_id = source.blueprint_id
                   AND a.blueprint_version = source.blueprint_version
                   AND a.deleted_at IS NULL
@@ -1980,18 +1981,21 @@ impl AttricatRepository {
                     ON requested.attribute_code = a.code
                    AND requested.target_blueprint_code = a.target_blueprint_code
                  JOIN attribute_contexts context ON context.id = av.context_id
+                  AND context.workspace_id = $4
                  JOIN records target ON target.id = av.relationship_target_record_id
-                  AND target.deleted_at IS NULL
+                  AND target.workspace_id = $4 AND target.deleted_at IS NULL
                  JOIN blueprints target_blueprint ON target_blueprint.id = target.blueprint_id
+                  AND target_blueprint.workspace_id = $4
                   AND target_blueprint.version = target.blueprint_version
                 WHERE source.id = ANY($1)
-                  AND source.deleted_at IS NULL
+                  AND source.workspace_id = $4 AND source.deleted_at IS NULL
                 ORDER BY source.id, a.code, context.code, av.id"#)
                 .replace("{edge_context}", &resolved_context("av", "a", "$3"))),
         )
         .bind(items.iter().map(|item| item.id).collect::<Vec<_>>())
         .bind(requested)
         .bind(&context.ids)
+        .bind(self.workspace_id.0)
         .fetch_all(&self.pool)
         .await?;
         for row in rows {
