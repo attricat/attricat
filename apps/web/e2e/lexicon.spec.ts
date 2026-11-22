@@ -37,10 +37,13 @@ test('translates a blueprint name reference and falls back after deleting it', a
   await entry
     .getByRole('button', { name: `Delete translation of ${key}` })
     .click();
-  await page
-    .getByRole('dialog')
+  const deleteDialog = page.getByRole('dialog');
+  await deleteDialog
     .getByRole('button', { name: 'Delete', exact: true })
     .click();
+  // The open dialog hides the table from the accessibility tree, so the row
+  // only counts as gone once the dialog closes after the delete succeeds.
+  await expect(deleteDialog).toBeHidden();
   await expect(entry).toBeHidden();
   await page.goto(blueprintUrl);
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(key);

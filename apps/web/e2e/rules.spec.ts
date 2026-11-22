@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import {
   fieldByLabel,
   commitField,
@@ -6,6 +6,7 @@ import {
   createRecordBlueprint,
   createRule,
   enableRule,
+  runNowResponse,
   scalar,
   suffix,
 } from './helpers';
@@ -30,6 +31,17 @@ const expectLatestRun = async (page: Page, ruleName: string, run: string) => {
       { timeout: 10_000 },
     );
   }).toPass();
+};
+
+// Navigating away before the run request returns would abort it.
+const startRun = async (
+  page: Page,
+  ruleRow: Locator,
+  button: 'Dry run' | 'Run now',
+) => {
+  const started = runNowResponse(page);
+  await ruleRow.getByRole('button', { name: button }).click();
+  expect((await started).ok()).toBe(true);
 };
 
 const openFindings = async (page: Page) => {
@@ -93,7 +105,7 @@ predicate:
   await expect(ruleRow).toContainText('Enabled');
   await page.reload();
   await expect(toggle).toBeChecked();
-  await ruleRow.getByRole('button', { name: 'Dry run' }).click();
+  await startRun(page, ruleRow, 'Dry run');
   await expectLatestRun(
     page,
     ruleName,
@@ -103,7 +115,7 @@ predicate:
   await expect(page.getByRole('cell', { name: finding })).toBeHidden();
 
   await page.goto('/manage/rules');
-  await ruleRow.getByRole('button', { name: 'Run now' }).click();
+  await startRun(page, ruleRow, 'Run now');
   await expectLatestRun(
     page,
     ruleName,
@@ -134,7 +146,7 @@ predicate:
   // Saving the record re-checks it alone, which resolves its finding, so the
   // next run over every record has nothing left to resolve.
   await page.goto('/manage/rules');
-  await ruleRow.getByRole('button', { name: 'Run now' }).click();
+  await startRun(page, ruleRow, 'Run now');
   await expectLatestRun(
     page,
     ruleName,

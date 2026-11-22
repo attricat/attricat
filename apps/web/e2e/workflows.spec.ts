@@ -3,6 +3,7 @@ import {
   createRecord,
   createRecordBlueprint,
   replaceDefinition,
+  runNowResponse,
   scalar,
   suffix,
 } from './helpers';
@@ -65,7 +66,9 @@ actions:
   ).toBeVisible();
 
   await page.getByLabel('Manual run record ID').fill(record.id);
+  const started = runNowResponse(page);
   await page.getByRole('button', { name: 'Run now' }).click();
+  expect((await started).ok()).toBe(true);
   await expect(async () => {
     await page.reload();
     await page.getByRole('tab', { name: 'Run diagnostics' }).click();

@@ -304,6 +304,17 @@ export const signInAsMember = async (browser: Browser, roleCode: string) => {
   return page;
 };
 
+/**
+ * Resolves with the next rule or workflow run request's response. Navigating
+ * before it arrives aborts the request, so no run starts.
+ */
+export const runNowResponse = (page: Page) =>
+  page.waitForResponse(
+    (response) =>
+      response.request().method() === 'POST' &&
+      new URL(response.url()).pathname.endsWith('/run-now'),
+  );
+
 /** Resolves with the record page's next inline field save of `recordId`. */
 export const recordSave = (page: Page, recordId: string) =>
   page.waitForResponse(

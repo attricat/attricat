@@ -303,13 +303,6 @@ test('hovers and follows attributes named in the record schema', async ({
     page.locator('.monaco-hover').filter({ hasText: 'title — string' }),
   ).toBeVisible();
 
-  await page.keyboard.down('Control');
-  await page.mouse.click(reference.x, reference.y);
-  await page.keyboard.up('Control');
-  await expect(
-    preview(page).getByRole('tab', { name: 'Edit' }),
-  ).toHaveAttribute('aria-selected', 'true');
-
   const checks = await textPosition(page, '"x-attricat-checks"', 3);
   await page.mouse.move(checks.x, checks.y);
   await expect(
@@ -317,6 +310,16 @@ test('hovers and follows attributes named in the record schema', async ({
       .locator('.monaco-hover')
       .filter({ hasText: 'Named checks that reject' }),
   ).toBeVisible();
+
+  // Following a definition comes last: the emulated Desktop Chrome device makes
+  // Monaco take Ctrl+click, which macOS also turns into a context menu that
+  // stops further hovers.
+  await page.keyboard.down('Control');
+  await page.mouse.click(reference.x, reference.y);
+  await page.keyboard.up('Control');
+  await expect(
+    preview(page).getByRole('tab', { name: 'Edit' }),
+  ).toHaveAttribute('aria-selected', 'true');
 });
 
 test('checks, previews and inserts into a reusable attribute definition', async ({
