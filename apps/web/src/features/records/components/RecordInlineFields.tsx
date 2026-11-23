@@ -151,9 +151,9 @@ export const RecordInlineFields = ({
     statusParentContextIds,
   );
   const movements = form.blueprint.blueprint.movements;
-  const movementInputs = movementInputCodes(movements);
+  const movementInputs = movementInputCodes(movements, form.applied_movements);
   const movementManaged = movementManagedCodes(movements);
-  // A movement applied once, when the record was created.
+  // A movement applies once; what it read stays as it was.
   const changeable = editable.filter(
     (attribute) =>
       locks[attribute.code] === undefined &&

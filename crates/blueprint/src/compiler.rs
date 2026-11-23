@@ -155,6 +155,7 @@ pub fn compile(
     validate_unique_key_attributes(&definition.unique_keys, &attributes)?;
     validate_selected_hierarchies(&definition.code, &definition.kind, &attributes)?;
     crate::movements::validate_target_scopes(&attributes)?;
+    crate::movements::validate_reserved_balances(&attributes)?;
     crate::movements::validate_movement_attributes(
         &definition.code,
         &definition.movements,

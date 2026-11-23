@@ -60,7 +60,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `generated_reset_changed` | 409 | Wersja schematu zmienia `reset` atrybutu generowanego we wcześniejszej wersji, co powtórzyłoby numery. `details` zawiera `attribute`, `previous` i `requested`. |
 | `generated_sequence_not_raised` | 409 | Podniesienie licznika podało `next_value` niższe od bieżącego. Liczniki można tylko podnosić. `details` zawiera `current` i `requested`. |
 | `balance_attribute_readonly` | 422 | Żądanie próbuje zapisać [saldo](/pl/reference/blueprint/#atrybuty-sald), które zmieniają tylko przesunięcia. `details.attribute` je wskazuje. |
-| `balance_below_minimum` | 409 | Przesunięcie obniżyłoby saldo poniżej `min`. `details` zawiera `attribute`, `record_id`, `available`, `requested` i `minimum` jako napisy dziesiętne. |
+| `balance_below_minimum` | 409 | Przesunięcie obniżyłoby saldo poniżej `min`. `details` zawiera `attribute`, `record_id`, `available`, `requested` i `minimum` jako napisy dziesiętne oraz `reserved`, gdy saldo ma rezerwacje; `available` to wtedy wolna ilość. |
 | `balance_record_not_empty` | 409 | Rekord nadal ma saldo i nie można go usunąć. `details` zawiera `attribute` i `balance`. |
 | `movement_attribute_readonly` | 422 | Żądanie próbuje zapisać cel lub wynik, które serwer ustawia w rekordzie [przesunięcia](/pl/reference/blueprint/#jak-działa-przesunięcie). `details.attribute` go wskazuje. |
 | `movement_quantity_invalid` | 422 | Ilości przesunięcia brakuje albo nie jest większa od zera. `details.attribute` ją wskazuje. |
@@ -71,6 +71,9 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `movement_record_undeletable` | 409 | Rekordów przesunięć nie można usuwać. Zamiast tego wycofaj rekord. |
 | `movement_already_reversed` | 409 | Rekord jest już wycofany. `details` zawiera `record_id` i `reversed_by`. |
 | `movement_reversal_of_reversal` | 409 | Rekord wycofuje inny rekord i sam nie może zostać wycofany. `details.record_id` go wskazuje. |
+| `movement_not_applied` | 409 | Żadne przesunięcie rekordu nie zostało jeszcze zaksięgowane, więc nie ma czego wycofać. `details.record_id` go wskazuje. |
+| `movement_lines_locked` | 409 | Przesunięcia pozycji zlecenia są zaksięgowane, więc nie można dodawać, przenosić ani usuwać jego pozycji. `details.order_id` wskazuje zlecenie. |
+| `movement_lines_exceeded` | 422 | Zmiana statusu zaksięgowałaby przesunięcia większej liczby pozycji, niż pozwala `details.limit`. |
 | `movement_reversal_mismatch` | 422 | Wartość przesłana w wycofaniu różni się od wycofywanego rekordu. `details.attribute` ją wskazuje. |
 | `stale_record` | 409 | `expected_updated_at` nie odpowiada już rekordowi. Wczytaj go ponownie i spróbuj jeszcze raz. |
 | `stale_rule` | 409 | `expected_version` nie odpowiada już regule. `details.version` wskazuje jej bieżącą rewizję. |

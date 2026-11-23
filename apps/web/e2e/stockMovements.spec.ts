@@ -211,7 +211,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
     await page.getByRole('button', { name: 'Create record' }).click();
     await expect(
       page.getByText(
-        "Not enough available: 24 left, 30 requested. The balance can't go below 0.",
+        "Not enough available: 24 free, 30 requested. The balance can't go below 0.",
       ),
     ).toBeVisible();
     await expect(page).toHaveURL(/\/records\/new/);

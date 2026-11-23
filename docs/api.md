@@ -801,7 +801,7 @@ results report the same `code`, `message` and `details`.
 | `409` | `generated_reset_changed` | `attribute`, and the `previous` and `requested` `reset`; a blueprint revision cannot change the `reset` of an attribute an earlier revision generated |
 | `422` | `balance_attribute_readonly` | `attribute`: a [balance](blueprints.md#balances-and-movements), which only movements change |
 | `422` | `movement_attribute_readonly` | `attribute`: the target link or result a movement sets |
-| `409` | `balance_below_minimum` | `attribute`, target `record_id`, and `available`, `requested`, `minimum` as decimal strings |
+| `409` | `balance_below_minimum` | `attribute`, target `record_id`, and `available`, `requested`, `minimum` as decimal strings; `reserved` when the balance has reservations, with `available` the free amount |
 | `409` | `balance_record_not_empty` | `attribute` and its `balance` (decimal string) |
 | `409` | `movement_target_missing` | target `blueprint` and `key` |
 | `422` | `movement_quantity_invalid` | `attribute`: the quantity, missing or not greater than zero |
@@ -811,6 +811,9 @@ results report the same `code`, `message` and `details`.
 | `409` | `movement_record_undeletable` | none |
 | `409` | `movement_already_reversed` | `record_id` and the existing reversal `reversed_by` |
 | `409` | `movement_reversal_of_reversal` | `record_id` of the reversal that was to be reversed |
+| `409` | `movement_not_applied` | `record_id` of a record with no applied movement to reverse |
+| `409` | `movement_lines_locked` | `order_id` whose lines' movements applied |
+| `422` | `movement_lines_exceeded` | `limit` of lines one transition applies |
 | `422` | `movement_reversal_mismatch` | `attribute` of the reversal that differs from the original |
 | `409` | `annotation_revision_conflict` | `expected`, `actual` revisions |
 | `409` | `rule_dry_run_required` | none when no completed full dry run of the definition exists; run `run-now` with `"dry_run": true` first, and the unsaved `definition` when saving a change. When the latest one was truncated: `truncated: true` and `existing_violations` (found among the candidates it checked), with a distinct message; pass `accept_existing_violations` |

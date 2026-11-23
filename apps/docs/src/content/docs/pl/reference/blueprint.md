@@ -759,6 +759,7 @@ Przyjęcie towaru wygląda tak samo, z `direction: in` i `create_missing: true`,
 | Klucz | Typ | Domyślnie | Opis |
 | --- | --- | --- | --- |
 | `balance.min` | liczba | Bez minimum | Najniższa wartość, jaką może zostawić przesunięcie, np. `0` dla stanu, który nie może być ujemny. Dla salda `integer` musi być liczbą całkowitą. |
+| `balance.reserved` | kod atrybutu | Brak | Inne saldo tego samego rekordu, które trzyma część tego salda, np. stan zarezerwowany. `min` dotyczy wtedy tego salda pomniejszonego o rezerwację. Zobacz [Rezerwacje](#rezerwacje). |
 
 - `balance` jest dozwolone tylko w lokalnym atrybucie `number` lub `integer` schematu rekordów. Jest odrzucane w mixinie, z `from`, razem z `generated` lub `default_value` oraz w statusie lub przypisaniu użytkownika lub zespołu.
 - Saldo jest zawsze tylko do odczytu i tylko w kontekście domyślnym (`context_editable: default`). Rekord bez wartości ma saldo zero.
@@ -783,12 +784,14 @@ Przyjęcie towaru wygląda tak samo, z `direction: in` i `create_missing: true`,
 | `target.values` | mapowanie | Tak | Każdy atrybut klucza przypisany do atrybutu tego rekordu z jego wartością, np. `{product: product}`. Typy muszą się zgadzać. |
 | `target.create_missing` | wartość logiczna | `false` | Utwórz cel z wartościami klucza, gdy żaden rekord ich nie ma. W przeciwnym razie przesunięcie się nie powiedzie. |
 | `reversal.relationship` | kod atrybutu | Nie | Relacja z `cardinality: one` do tego samego schematu. Rekord, który ją ustawia, wycofuje powiązany rekord. Zobacz [Wycofania](#wycofania). |
+| `apply_on` | lista | Przy utworzeniu | Do 8 zmian statusu, które księgują przesunięcie zamiast utworzenia rekordu: `{attribute, to, from?}`, opcjonalnie z `relationship`. Zobacz [Przesunięcia wyzwalane statusem](#przesunięcia-wyzwalane-statusem). |
+| `requires` | lista kodów | Brak | Wcześniej zadeklarowane przesunięcia tego schematu, które muszą być już zaksięgowane na rekordzie; w przeciwnym razie to przesunięcie jest pomijane. |
 
-Atrybuty odczytywane przez przesunięcie (ilość, relacja przelicznika, wartości klucza i relacja wycofania) muszą mieć `context_editable: default`. Publikacja sprawdza schematy celu i przelicznika w ich najnowszych opublikowanych wersjach, więc najpierw opublikuj schematy pozycji magazynowej i przelicznika jednostek.
+Atrybuty odczytywane przez przesunięcie (ilość, relacja przelicznika, wartości klucza, relacja wycofania i relacja wyzwalacza) muszą mieć `context_editable: default`. Publikacja sprawdza schematy celu i przelicznika w ich najnowszych opublikowanych wersjach, więc najpierw opublikuj schematy pozycji magazynowej i przelicznika jednostek.
 
 ### Jak działa przesunięcie
 
-Gdy powstaje rekord z przesunięciami:
+Gdy przesunięcie jest księgowane (przy utworzeniu rekordu, chyba że ma `apply_on`):
 
 1. Ilość musi być większa od zera, inaczej zapis zwraca `422 movement_quantity_invalid`. Powiązany przelicznik musi być większy od zera, inaczej zapis zwraca `409 movement_factor_invalid`.
 2. Serwer odnajduje cel przez `target.key` i wartości klucza rekordu. Z `create_missing: true` brakujący cel zostaje utworzony; w przeciwnym razie zapis zwraca `409 movement_target_missing` z `blueprint` i `key`. Równoczesne pierwsze przyjęcia jednego produktu tworzą jeden cel.
@@ -797,11 +800,81 @@ Gdy powstaje rekord z przesunięciami:
 
 Zmiana celu jest zwykłą aktualizacją. Obowiązują jego blokady statusów, jest audytowana jako `attricat.records.movement.balance_update` z rekordem przesunięcia w metadanych i emituje `record.updated.v1`.
 
-Przesunięcie działa raz. Po utworzeniu rekordu atrybuty, które przesunięcie odczytało lub ustawiło, nie mogą się zmienić, a zapis, który próbuje je zmienić, zwraca `409 movement_immutable`. Pozostałe atrybuty rekordu można edytować. Rekordu przesunięcia nie można usunąć (`409 movement_record_undeletable`); zamiast tego go wycofaj. Duplikat rekordu przesunięcia tworzy nowe przesunięcie.
+Przesunięcie jest księgowane raz. Po zaksięgowaniu atrybuty, które odczytało lub ustawiło, nie mogą się zmienić, a zapis, który próbuje je zmienić, zwraca `409 movement_immutable`. Pozostałe atrybuty rekordu można edytować, podobnie jak dane przesunięć jeszcze niezaksięgowanych, np. w zleceniu w wersji roboczej. Rekordu z zaksięgowanym przesunięciem nie można usunąć (`409 movement_record_undeletable`); zamiast tego go wycofaj. Odpowiedź formularza rekordu podaje jego zaksięgowane przesunięcia w `applied_movements`. Duplikat rekordu przesunięcia tworzy nowe przesunięcie.
+
+### Przesunięcia wyzwalane statusem
+
+Z `apply_on` przesunięcie jest księgowane przy zmianie statusu, a nie przy utworzeniu rekordu, np. rezerwacja materiału przy zatwierdzeniu zlecenia produkcyjnego i jego zużycie przy zakończeniu.
+
+```yaml
+# production_order: jeden materiał, rezerwowany przy zatwierdzeniu
+movements:
+  - code: reserve
+    direction: in
+    quantity: quantity
+    target: {relationship: stock_item, blueprint: stock_item, balance: reserved,
+             key: product, values: {product: material}}
+    apply_on: [{attribute: status, to: approved}]
+  - code: release
+    direction: out
+    quantity: quantity
+    target: {relationship: stock_item, blueprint: stock_item, balance: reserved,
+             key: product, values: {product: material}}
+    apply_on: [{attribute: status, to: completed}, {attribute: status, to: cancelled}]
+    requires: [reserve]
+  - code: consume
+    direction: out
+    quantity: quantity
+    target: {relationship: stock_item, blueprint: stock_item, balance: quantity,
+             key: product, values: {product: material}}
+    apply_on: [{attribute: status, to: completed}]
+    requires: [reserve]
+```
+
+- `attribute` to atrybut statusu, a `to` (i opcjonalne `from`) to kody jego opcji. Przejście do `to` z `from` albo z dowolnej opcji księguje przesunięcie.
+- Każde przesunięcie jest księgowane raz na rekord, przy pierwszym pasującym przejściu. Ponowne wejście w status niczego nie zmienia.
+- Z `requires` przesunięcie jest księgowane dopiero po wskazanych przesunięciach. Anulowanie zlecenia w wersji roboczej niczego nie zwalnia, bo nic nie zostało zarezerwowane.
+- Przesunięcia, które odnajdują ten sam rekord, mogą dzielić relację celu, jak `stock_item` powyżej.
+- Przesunięcia są księgowane w transakcji zapisu, który zmienia status, w kolejności deklaracji, niezależnie od tego, co zmienia status: formularz, partia rekordów, przepływ pracy, agent czy rozszerzenie. Jeśli któreś się nie powiedzie, np. z `409 balance_below_minimum`, zapis się nie udaje, a status pozostaje bez zmian.
+
+#### Pozycje zlecenia
+
+Wyzwalacz z `relationship` księguje przesunięcie rekordu pozycji, gdy rekord, który ona wskazuje, przechodzi zmianę statusu. Zlecenie produkcyjne z kilkoma materiałami ma swój status, a każda pozycja materiałowa rezerwuje i zużywa własny materiał:
+
+```yaml
+# production_order_line
+movements:
+  - code: reserve
+    # ...
+    apply_on: [{relationship: production_order, attribute: status, to: approved}]
+```
+
+- Relacja ma `cardinality: one`, jeden schemat docelowy i `context_editable: default`. Publikacja sprawdza, czy status i jego opcje istnieją w tym schemacie.
+- Jedna zmiana statusu księguje przesunięcia najwyżej 200 pozycji; więcej zwraca `422 movement_lines_exceeded`. Jeśli którakolwiek pozycja się nie powiedzie, cała zmiana statusu się nie udaje.
+- Gdy pozycje zlecenia są zaksięgowane, nie można już dodać pozycji do zlecenia, przenieść jej do innego ani jej usunąć: `409 movement_lines_locked` z `order_id`.
+
+### Rezerwacje
+
+Saldo z `reserved` odkłada część siebie na bok. `min` dotyczy salda pomniejszonego o saldo rezerwacji, po każdej zmianie któregokolwiek z nich:
+
+```yaml
+# stock_item
+attributes:
+  - code: quantity
+    value_type: number
+    balance: {min: 0, reserved: reserved}
+  - code: reserved
+    value_type: number
+    balance: {min: 0}
+```
+
+- Wydanie nie może zabrać zarezerwowanego stanu, a rezerwacja nie może przekroczyć wolnego stanu.
+- W `409 balance_below_minimum` pole `available` to wtedy wolna ilość, a `details.reserved` zawiera ilość zarezerwowaną.
+- `reserved` wskazuje inne saldo tego samego schematu, które nie ma własnego `reserved`.
 
 ### Wycofania
 
-Rekord, który ustawia `reversal.relationship`, wycofuje rekord, który wskazuje. Przesuwa `result` oryginału z powrotem w przeciwnym kierunku, na celu oryginału.
+Rekord, który ustawia `reversal.relationship`, wycofuje rekord, który wskazuje. Cofa każde przesunięcie zaksięgowane na oryginale, od najpóźniejszego, na celach oryginału. Przesunięcia niezaksięgowane są pomijane; rekordu bez zaksięgowanych przesunięć nie można wycofać (`409 movement_not_applied`). Wycofanie jest księgowane przy utworzeniu, a jego własny status nigdy nie księguje przesunięć ponownie.
 
 - Wycofanie przejmuje ilość, powiązanie przelicznika i wartości klucza oryginału. Przesłane wartości muszą się z nimi zgadzać, inaczej zapis zwraca `422 movement_reversal_mismatch`; liczby są porównywane według wartości.
 - Rekord można wycofać raz. Drugie wycofanie zwraca `409 movement_already_reversed` z `record_id` i istniejącym wycofaniem w `reversed_by`. Wycofania nie można wycofać: `409 movement_reversal_of_reversal`.

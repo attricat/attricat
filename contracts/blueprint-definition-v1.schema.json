@@ -1291,6 +1291,21 @@
             }
           ],
           "description": "A relationship to another record of this blueprint that this record\nreverses. A reversal moves the original's amount the other way."
+        },
+        "apply_on": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MovementTrigger"
+          },
+          "description": "Status transitions that apply the movement, the first time one of\nthem happens. Without them the movement applies when the record is\ncreated.",
+          "maxItems": 8
+        },
+        "requires": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Movements of this blueprint, declared before this one, that must have\napplied to the record first; otherwise this one is skipped, such as a\nrelease without a reservation."
         }
       },
       "required": [
@@ -1383,6 +1398,41 @@
         "relationship"
       ],
       "description": "`reversal: { … }` of a movement."
+    },
+    "MovementTrigger": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "relationship": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Single-target relationship to the record whose status triggers the\nmovement. Absent for the record's own status.",
+          "x-attricat-reference": "relationship_attribute"
+        },
+        "attribute": {
+          "type": "string",
+          "description": "Status attribute whose transition applies the movement.",
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "to": {
+          "type": "string",
+          "description": "Status option the transition ends in."
+        },
+        "from": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Status option the transition starts from; any when absent."
+        }
+      },
+      "required": [
+        "attribute",
+        "to"
+      ],
+      "description": "A status transition that applies a movement: of the record itself, or,\nwith `relationship`, of the record it links to, such as the production\norder of an order line."
     },
     "RawAttributeDeclaration": {
       "type": "object",
@@ -1746,6 +1796,15 @@
           ],
           "format": "double",
           "description": "The lowest value a movement may leave, such as 0 for stock that\ncannot go negative. No limit when absent."
+        },
+        "reserved": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Another balance of this record that holds part of this one, such as\nreserved stock: `min` then applies to this balance minus that one.",
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "x-attricat-reference": "attribute"
         }
       },
       "description": "`balance: { … }` on an attribute."

@@ -759,6 +759,7 @@ A goods receipt is the same with `direction: in` and `create_missing: true`, so 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
 | `balance.min` | number | No minimum | The lowest value a movement may leave, such as `0` for stock that cannot go negative. On an `integer` balance it must be a whole number. |
+| `balance.reserved` | attribute code | None | Another balance of the same record that holds part of this one, such as reserved stock. `min` then applies to this balance minus the reserved one. See [Reservations](#reservations). |
 
 - `balance` is allowed only on a local `number` or `integer` attribute of a record blueprint. It is rejected on a mixin, with `from`, with `generated` or `default_value`, and on a status or a user or team assignment.
 - A balance is always read-only and default-context only (`context_editable: default`). A record without a value counts as zero.
@@ -783,12 +784,14 @@ A goods receipt is the same with `direction: in` and `create_missing: true`, so 
 | `target.values` | mapping | Yes | Every attribute of the key, mapped to the attribute of this record holding its value, such as `{product: product}`. The types must match. |
 | `target.create_missing` | boolean | `false` | Create the target with the key values when no record has them. Otherwise the movement fails. |
 | `reversal.relationship` | attribute code | No | Relationship with `cardinality: one` to this same blueprint. A record that sets it reverses the linked record. See [Reversals](#reversals). |
+| `apply_on` | list | Apply on create | Up to 8 status transitions that apply the movement instead of the create: `{attribute, to, from?}`, optionally with `relationship`. See [Status-triggered movements](#status-triggered-movements). |
+| `requires` | list of codes | None | Movements of this blueprint, declared earlier, that must have applied to the record first; otherwise this one is skipped. |
 
-The attributes a movement reads (the quantity, the factor relationship, the key values and the reversal relationship) must be `context_editable: default`. Publication checks the target and factor blueprints at their latest published revisions, so publish the stock item and unit conversion blueprints first.
+The attributes a movement reads (the quantity, the factor relationship, the key values, the reversal relationship and a trigger's relationship) must be `context_editable: default`. Publication checks the target and factor blueprints at their latest published revisions, so publish the stock item and unit conversion blueprints first.
 
 ### How a movement applies
 
-When a record with movements is created:
+When a movement applies (when its record is created, unless it has `apply_on`):
 
 1. The quantity must be greater than zero, or the save returns `422 movement_quantity_invalid`. A linked factor must be greater than zero, or it returns `409 movement_factor_invalid`.
 2. The server finds the target through `target.key` and the record's key values. With `create_missing: true` a missing target is created; otherwise the save returns `409 movement_target_missing` with the `blueprint` and `key`. Concurrent first receipts of one product create one target.
@@ -797,11 +800,81 @@ When a record with movements is created:
 
 The target's change is an ordinary update. Its status locks apply, it is audited as `attricat.records.movement.balance_update` with the movement record in the metadata, and it emits `record.updated.v1`.
 
-A movement applies once. After the record is created, the attributes the movement read or set cannot change, and a save that tries returns `409 movement_immutable`. The record's other attributes stay editable. A movement record cannot be deleted (`409 movement_record_undeletable`); reverse it instead. Duplicating a movement record creates a new movement.
+A movement applies once. After it applies, the attributes it read or set cannot change, and a save that tries returns `409 movement_immutable`. The record's other attributes stay editable, and so do the inputs of movements that have not applied yet, such as those of a draft order. A record with an applied movement cannot be deleted (`409 movement_record_undeletable`); reverse it instead. The record form response lists the record's `applied_movements`. Duplicating a movement record creates a new movement.
+
+### Status-triggered movements
+
+With `apply_on`, a movement applies at a status transition instead of when its record is created, such as reserving material when a production order is approved and consuming it when the order is completed.
+
+```yaml
+# production_order: one material, reserved on approval
+movements:
+  - code: reserve
+    direction: in
+    quantity: quantity
+    target: {relationship: stock_item, blueprint: stock_item, balance: reserved,
+             key: product, values: {product: material}}
+    apply_on: [{attribute: status, to: approved}]
+  - code: release
+    direction: out
+    quantity: quantity
+    target: {relationship: stock_item, blueprint: stock_item, balance: reserved,
+             key: product, values: {product: material}}
+    apply_on: [{attribute: status, to: completed}, {attribute: status, to: cancelled}]
+    requires: [reserve]
+  - code: consume
+    direction: out
+    quantity: quantity
+    target: {relationship: stock_item, blueprint: stock_item, balance: quantity,
+             key: product, values: {product: material}}
+    apply_on: [{attribute: status, to: completed}]
+    requires: [reserve]
+```
+
+- `attribute` is a status attribute and `to` (and the optional `from`) its option codes. A transition into `to` from `from`, or from any option, applies the movement.
+- Each movement applies once per record, at the first matching transition. Re-entering the status does nothing.
+- With `requires`, a movement applies only after the movements it names. Cancelling a draft order releases nothing, because nothing was reserved.
+- Movements that find the same record may share a target relationship, such as `stock_item` above.
+- The movements apply in the transaction of the save that changes the status, in declaration order, whichever way the status changes: a form, a record batch, a workflow, an agent or an extension. If one fails, for example on `409 balance_below_minimum`, the save fails and the status stays as it was.
+
+#### Order lines
+
+A trigger with `relationship` applies a movement of a line record when the record it links to makes the transition. A production order with several materials keeps its status, while each material line reserves and consumes its own material:
+
+```yaml
+# production_order_line
+movements:
+  - code: reserve
+    # ...
+    apply_on: [{relationship: production_order, attribute: status, to: approved}]
+```
+
+- The relationship has `cardinality: one`, one target blueprint and `context_editable: default`. Publication checks that the status and options exist on that blueprint.
+- One transition applies the movements of at most 200 lines; more returns `422 movement_lines_exceeded`. If any line fails, the whole transition fails.
+- Once the order's lines have been applied, they are settled: adding a line to the order, moving one to another order or deleting one returns `409 movement_lines_locked`, with the `order_id`.
+
+### Reservations
+
+A balance with `reserved` keeps part of itself aside. `min` applies to the balance minus the reserved balance, after every change to either:
+
+```yaml
+# stock_item
+attributes:
+  - code: quantity
+    value_type: number
+    balance: {min: 0, reserved: reserved}
+  - code: reserved
+    value_type: number
+    balance: {min: 0}
+```
+
+- An issue cannot take reserved stock, and a reservation cannot hold more than is free.
+- In `409 balance_below_minimum`, `available` is then the free amount, and `details.reserved` holds the reserved amount.
+- `reserved` names another balance of the same blueprint, which has no `reserved` of its own.
 
 ### Reversals
 
-A record that sets `reversal.relationship` reverses the record it links to. It moves the original's `result` back the other way, on the original's target.
+A record that sets `reversal.relationship` reverses the record it links to. It moves back every movement that applied to the original, latest first, on the original's targets. Movements that have not applied are skipped; a record with nothing applied cannot be reversed (`409 movement_not_applied`). A reversal applies when it is created, and its own status never applies its movements again.
 
 - The reversal takes the original's quantity, factor link and key values. Values submitted for them must match, or the save returns `422 movement_reversal_mismatch`; numbers compare by value.
 - A record can be reversed once. A second reversal returns `409 movement_already_reversed`, with the `record_id` and the reversal that already exists in `reversed_by`. A reversal cannot be reversed: `409 movement_reversal_of_reversal`.

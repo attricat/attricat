@@ -1034,6 +1034,9 @@ pub struct RecordFormResponse {
     pub reusable_attributes: Vec<RecordReusableAttribute>,
     pub reusable_values: Vec<FormAttributeValue>,
     pub context: Value,
+    /// Codes of the blueprint's movements that applied to the record; their
+    /// inputs no longer change.
+    pub applied_movements: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

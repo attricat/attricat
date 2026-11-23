@@ -181,18 +181,13 @@ pub enum RepositoryError {
     #[error("attribute '{attribute}' is set by the record's movement and cannot be written")]
     MovementAttributeReadonly { attribute: String },
     #[error(
-        "the movement would leave balance '{attribute}' at {} on record {record_id}, below its minimum {minimum}",
-        available - requested
+        "the movement would leave balance '{}' at {} on record {}, below its minimum {}",
+        .0.attribute,
+        .0.available - .0.requested,
+        .0.record_id,
+        .0.minimum
     )]
-    BalanceBelowMinimum {
-        attribute: String,
-        record_id: Uuid,
-        /// The balance before the movement.
-        available: rust_decimal::Decimal,
-        /// What the movement subtracts.
-        requested: rust_decimal::Decimal,
-        minimum: rust_decimal::Decimal,
-    },
+    BalanceBelowMinimum(Box<BalanceShortage>),
     #[error("no '{blueprint}' record has the movement's '{key}' key values")]
     MovementTargetMissing { blueprint: String, key: String },
     #[error("movement quantity '{attribute}' must be a number greater than zero")]
@@ -216,6 +211,12 @@ pub enum RepositoryError {
         attribute: String,
         balance: rust_decimal::Decimal,
     },
+    #[error("record {record_id} has no applied movement to reverse")]
+    MovementNotApplied { record_id: Uuid },
+    #[error("record {order_id} already applied its lines' movements, so its lines cannot change")]
+    MovementLinesLocked { order_id: Uuid },
+    #[error("a transition applies the movements of at most {limit} lines")]
+    MovementLinesExceeded { limit: usize },
     #[error("record {record_id} is already reversed by record {reversed_by}")]
     MovementAlreadyReversed { record_id: Uuid, reversed_by: Uuid },
     #[error("record {record_id} reverses another record and cannot itself be reversed")]
@@ -464,4 +465,19 @@ impl RepositoryError {
     pub fn invalid_blueprint_definition(error: impl std::fmt::Display) -> Self {
         Self::InvalidBlueprintDefinition(error.to_string())
     }
+}
+
+/// A movement refused because it would take a balance below its minimum.
+#[derive(Debug)]
+pub struct BalanceShortage {
+    pub attribute: String,
+    pub record_id: Uuid,
+    /// The free balance before the movement: the balance less what its
+    /// reservations hold.
+    pub available: rust_decimal::Decimal,
+    /// What the movement subtracts, or reserves.
+    pub requested: rust_decimal::Decimal,
+    pub minimum: rust_decimal::Decimal,
+    /// The part of the balance reservations hold, when it has one.
+    pub reserved: Option<rust_decimal::Decimal>,
 }

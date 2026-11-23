@@ -111,7 +111,8 @@ fn balances_compile_read_only_in_the_default_context() {
     assert_eq!(
         quantity.balance,
         Some(BalancePolicy {
-            min: Some(Decimal::ZERO)
+            min: Some(Decimal::ZERO),
+            reserved: None,
         })
     );
     assert_eq!(
@@ -124,7 +125,10 @@ fn balances_compile_read_only_in_the_default_context() {
     );
     assert_eq!(
         compiled_attribute_balance(&unbounded, "level"),
-        Some(BalancePolicy { min: None })
+        Some(BalancePolicy {
+            min: None,
+            reserved: None,
+        })
     );
 }
 
@@ -337,4 +341,190 @@ fn target_scopes_compare_single_target_relationships() {
         "attributes:\n  - code: number\n    value_type: string\n    target_scope: {attribute: a, equals: b}\n",
     );
     assert!(parse(&on_string).is_err());
+}
+
+const ORDER_STATUS: &str = r#"'{"type":"string","enum":["draft","approved","completed","cancelled"],"x-attricat-status":{"version":1,"options":[{"code":"draft","label":"Draft"},{"code":"approved","label":"Approved"},{"code":"completed","label":"Completed"},{"code":"cancelled","label":"Cancelled"}],"transitions":[{"from":null,"to":"draft"},{"from":"draft","to":"approved"},{"from":"approved","to":"completed"},{"from":"approved","to":"cancelled"}]}}'"#;
+
+/// A production order whose movements reserve on approval, and release and
+/// consume on completion; `movements` replaces them.
+fn production_order(movements: &str) -> String {
+    record(
+        "production_order",
+        &format!(
+            r#"attributes:
+  - code: number
+    value_type: string
+  - code: status
+    value_type: string
+    value_schema: {ORDER_STATUS}
+  - code: item
+    value_type: relationship
+    target_blueprint: material
+    cardinality: one
+    context_editable: default
+  - code: quantity
+    value_type: number
+    context_editable: default
+  - code: stock_item
+    value_type: relationship
+    target_blueprint: stock_item
+    cardinality: one
+movements:
+{movements}"#
+        ),
+    )
+}
+
+fn stock_movement(code: &str, direction: &str, balance: &str, extra: &str) -> String {
+    format!(
+        r#"  - code: {code}
+    direction: {direction}
+    quantity: quantity
+    target:
+      relationship: stock_item
+      blueprint: stock_item
+      balance: {balance}
+      key: item
+      values: {{item: item}}
+{extra}"#
+    )
+}
+
+#[test]
+fn movements_apply_on_status_transitions_once_required_ones_applied() {
+    // Reserving, releasing and consuming share the stock item's link.
+    let movements = [
+        stock_movement(
+            "reserve",
+            "in",
+            "reserved",
+            "    apply_on: [{attribute: status, to: approved}]\n",
+        ),
+        stock_movement(
+            "release",
+            "out",
+            "reserved",
+            "    apply_on: [{attribute: status, to: completed}, {attribute: status, from: approved, to: cancelled}]\n    requires: [reserve]\n",
+        ),
+        stock_movement(
+            "consume",
+            "out",
+            "quantity",
+            "    apply_on: [{attribute: status, to: completed}]\n    requires: [reserve]\n",
+        ),
+    ]
+    .concat();
+    let compiled = compiled(&production_order(&movements)).unwrap();
+    let release = &compiled.movements[1];
+    assert_eq!(release.requires, ["reserve"]);
+    assert_eq!(release.apply_on.len(), 2);
+    assert_eq!(release.apply_on[1].from.as_deref(), Some("approved"));
+    assert!(!release.applies_on_create());
+    assert!(
+        compiled
+            .attributes
+            .iter()
+            .any(|attribute| attribute.code == "stock_item" && attribute.readonly)
+    );
+
+    // A link shared by movements that find different records is refused.
+    let different = production_order(
+        &[
+            stock_movement("reserve", "in", "reserved", ""),
+            stock_movement("consume", "out", "quantity", "").replace("key: item", "key: other"),
+        ]
+        .concat(),
+    );
+    assert!(movement_error_any(&different).contains("cannot be used twice"));
+}
+
+fn movement_error_any(source: &str) -> String {
+    match compiled(source) {
+        Err(BlueprintError::InvalidMovement { message, .. }) => message,
+        other => panic!("expected an invalid movement, got {other:?}"),
+    }
+}
+
+#[test]
+fn movement_triggers_name_status_options_and_earlier_movements() {
+    for (extra, expected) in [
+        (
+            "    apply_on: [{attribute: number, to: approved}]\n",
+            "must be a status attribute",
+        ),
+        (
+            "    apply_on: [{attribute: status, to: shipped}]\n",
+            "'shipped' is not an option",
+        ),
+        (
+            "    apply_on: [{attribute: status, from: sent, to: approved}]\n",
+            "'sent' is not an option",
+        ),
+        (
+            "    apply_on: [{attribute: missing, to: approved}]\n",
+            "unknown status attribute",
+        ),
+        (
+            "    requires: [consume]\n",
+            "must be a movement declared before it",
+        ),
+        (
+            "    requires: [reserve]\n",
+            "must be a movement declared before it",
+        ),
+        (
+            "    apply_on: [{relationship: number, attribute: status, to: approved}]\n",
+            "must be a relationship",
+        ),
+    ] {
+        let source = production_order(&stock_movement("reserve", "in", "reserved", extra));
+        let message = match compiled(&source) {
+            Err(BlueprintError::InvalidMovement { message, .. }) => message,
+            other => panic!("expected an invalid movement for {extra}, got {other:?}"),
+        };
+        assert!(message.contains(expected), "{message} lacks {expected}");
+    }
+}
+
+#[test]
+fn a_reserved_balance_names_another_balance() {
+    let stock = |quantity: &str, reserved: &str| {
+        record(
+            "stock_item",
+            &format!(
+                "attributes:\n  - code: number\n    value_type: string\n  - code: quantity\n    value_type: number\n    balance: {quantity}\n  - code: reserved\n    value_type: number\n    {reserved}\n"
+            ),
+        )
+    };
+    let ok = compiled(&stock("{min: 0, reserved: reserved}", "balance: {min: 0}")).unwrap();
+    assert_eq!(
+        ok.attributes[1]
+            .balance
+            .as_ref()
+            .unwrap()
+            .reserved
+            .as_deref(),
+        Some("reserved")
+    );
+    for (quantity, reserved, expected) in [
+        ("{reserved: missing}", "balance: {}", "is not an attribute"),
+        ("{reserved: quantity}", "balance: {}", "another balance"),
+        (
+            "{reserved: reserved}",
+            "context_editable: default",
+            "another balance",
+        ),
+        (
+            "{reserved: reserved}",
+            "balance: {reserved: quantity}",
+            "another balance",
+        ),
+    ] {
+        match compiled(&stock(quantity, reserved)) {
+            Err(BlueprintError::InvalidBalanceAttribute { message, .. }) => {
+                assert!(message.contains(expected), "{message} lacks {expected}")
+            }
+            other => panic!("expected an invalid balance for {quantity}, got {other:?}"),
+        }
+    }
 }

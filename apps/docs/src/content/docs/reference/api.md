@@ -60,7 +60,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `generated_reset_changed` | 409 | A blueprint revision changes the `reset` of an attribute that an earlier revision generated, which would repeat numbers. `details` has `attribute`, `previous`, and `requested`. |
 | `generated_sequence_not_raised` | 409 | A counter advance asked for a `next_value` lower than the current one. Counters can only be raised. `details` has `current` and `requested`. |
 | `balance_attribute_readonly` | 422 | The request tries to write a [balance](/reference/blueprint/#balance-attributes), which only movements change. `details.attribute` names it. |
-| `balance_below_minimum` | 409 | The movement would take the balance below its `min`. `details` has `attribute`, `record_id`, `available`, `requested`, and `minimum`, as decimal strings. |
+| `balance_below_minimum` | 409 | The movement would take the balance below its `min`. `details` has `attribute`, `record_id`, `available`, `requested`, and `minimum`, as decimal strings, plus `reserved` when the balance has reservations; `available` is then the free amount. |
 | `balance_record_not_empty` | 409 | The record still holds a balance and cannot be deleted. `details` has `attribute` and `balance`. |
 | `movement_attribute_readonly` | 422 | The request tries to write the target or result that the server sets on a [movement](/reference/blueprint/#how-a-movement-applies) record. `details.attribute` names it. |
 | `movement_quantity_invalid` | 422 | A movement's quantity is missing or not greater than zero. `details.attribute` names it. |
@@ -71,6 +71,9 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `movement_record_undeletable` | 409 | Movement records cannot be deleted. Reverse the record instead. |
 | `movement_already_reversed` | 409 | The record is already reversed. `details` has `record_id` and `reversed_by`. |
 | `movement_reversal_of_reversal` | 409 | The record reverses another record and cannot be reversed itself. `details.record_id` names it. |
+| `movement_not_applied` | 409 | None of the record's movements has applied yet, so there is nothing to reverse. `details.record_id` names it. |
+| `movement_lines_locked` | 409 | The order's line movements have applied, so its lines cannot be added, moved or deleted. `details.order_id` names the order. |
+| `movement_lines_exceeded` | 422 | A status change would apply the movements of more lines than `details.limit` allows. |
 | `movement_reversal_mismatch` | 422 | A value submitted on a reversal differs from the record it reverses. `details.attribute` names it. |
 | `stale_record` | 409 | `expected_updated_at` no longer matches the record. Reload it and try again. |
 | `stale_rule` | 409 | `expected_version` no longer matches the rule. `details.version` is its current revision. |

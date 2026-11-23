@@ -15,7 +15,10 @@
 //! 4. Record rows. A transaction that locks several takes them in ID order.
 //!    A movement locks its target row, or creates the target, before it
 //!    inserts its own record, so the target's counters and unique keys come
-//!    before the movement record's (see `movements`).
+//!    before the movement record's (see `movements`). A client write of a
+//!    status that applies movements locks the record, its lines and their
+//!    existing targets together, in ID order, before the update seam locks
+//!    the record (`pre_lock_movement_rows`).
 //! 5. Extension annotation namespace locks, in sorted name order.
 //!
 //! Record writers take the workspace's record-writer advisory lock shared

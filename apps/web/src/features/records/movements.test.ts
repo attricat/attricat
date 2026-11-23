@@ -45,7 +45,22 @@ describe('movements', () => {
     ]);
     expect(reversalRelationship([issue])).toBe('reverses');
     expect(movementInputCodes().size).toBe(0);
+    // Before a movement applies, its inputs stay editable.
+    expect(movementInputCodes([issue], []).size).toBe(0);
+    expect(movementInputCodes([issue], ['stock']).has('quantity')).toBe(true);
     expect(reversalRelationship()).toBeUndefined();
+  });
+
+  it('counts the link to the record whose status applies a movement', () => {
+    const line: Movement = {
+      ...issue,
+      code: 'reserve',
+      reversal: undefined,
+      apply_on: [
+        { relationship: 'order', attribute: 'status', to: 'approved' },
+      ],
+    };
+    expect(movementInputCodes([line], ['reserve']).has('order')).toBe(true);
   });
 
   it('filters a scoped picker by the selected record', () => {

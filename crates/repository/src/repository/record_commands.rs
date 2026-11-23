@@ -304,10 +304,8 @@ impl AttricatRepository {
         self.insert_values_in(transaction, &write, &record, values)
             .await?;
         if !movements.is_empty() {
-            let movement_values = movements
-                .iter()
-                .flat_map(|movement| movement.record_values(default_context_id))
-                .collect();
+            let movement_values =
+                super::movements::movement_record_values(&movements, default_context_id);
             self.insert_values_with(
                 transaction,
                 &write,
@@ -701,6 +699,15 @@ impl AttricatRepository {
         }
         if !relationships.is_empty() || writes_relationship_values(&values) {
             self.lock_relationship_cardinality_writes(transaction)
+                .await?;
+        }
+        // A status write may apply movements: their rows are locked first,
+        // in ID order, with this record among them.
+        if origin == ValueOrigin::Client {
+            let written = self
+                .written_status_codes(transaction, record_id, &values)
+                .await?;
+            self.pre_lock_movement_rows(transaction, record_id, &written)
                 .await?;
         }
         // The row lock serializes writers for a record. It protects both the
@@ -1807,6 +1814,13 @@ impl AttricatRepository {
         }
         self.ensure_movement_values_unchanged(transaction, write, record)
             .await?;
+        self.ensure_movement_lines_open(transaction, write, record)
+            .await?;
+        if mode == Revalidation::Write {
+            // Movements a transition applies change other records through
+            // this same seam, so the call is boxed.
+            Box::pin(self.apply_status_movements_in(transaction, write, record, &changes)).await?;
+        }
         // Every value write validates here, so unique keys stay current.
         self.sync_record_unique_keys(transaction, record).await?;
         let record_schema = match self

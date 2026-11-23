@@ -26,19 +26,27 @@ export const movementManagedCodes = (
   );
 
 /**
- * Attributes a movement reads when its record is created. The movement
- * applies once, so the server refuses to change them afterwards.
+ * Attributes a movement reads when it applies: on create, or at a status
+ * change such as an order's approval. It applies once, so the server
+ * refuses to change them afterwards. With `applied`, only the inputs of
+ * those movements.
  */
 export const movementInputCodes = (
   movements: readonly Movement[] = noMovements,
+  applied?: readonly string[],
 ): ReadonlySet<string> =>
   new Set(
-    movements.flatMap((movement) => [
-      movement.quantity,
-      ...(movement.factor ? [movement.factor.relationship] : []),
-      ...Object.values(movement.target.values),
-      ...(movement.reversal ? [movement.reversal.relationship] : []),
-    ]),
+    movements
+      .filter((movement) => !applied || applied.includes(movement.code))
+      .flatMap((movement) => [
+        movement.quantity,
+        ...(movement.factor ? [movement.factor.relationship] : []),
+        ...Object.values(movement.target.values),
+        ...(movement.reversal ? [movement.reversal.relationship] : []),
+        ...(movement.apply_on ?? []).flatMap((trigger) =>
+          trigger.relationship ? [trigger.relationship] : [],
+        ),
+      ]),
   );
 
 /** The relationship through which a record reverses another, if any. */

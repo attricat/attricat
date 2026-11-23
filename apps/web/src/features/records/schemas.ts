@@ -118,6 +118,17 @@ export const movementSchema = z.object({
     create_missing: z.boolean(),
   }),
   reversal: z.object({ relationship: z.string() }).optional(),
+  apply_on: z
+    .array(
+      z.object({
+        relationship: z.string().optional(),
+        attribute: z.string(),
+        to: z.string(),
+        from: z.string().optional(),
+      }),
+    )
+    .optional(),
+  requires: z.array(z.string()).optional(),
 });
 export const blueprintSchema = z
   .object({
@@ -381,6 +392,7 @@ const recordFormResponseSchema = z.object({
   reusable_attributes: z.array(reusableRecordAttributeSchema).default([]),
   reusable_values: z.array(formAttributeValueSchema).default([]),
   context: recordContextSchema,
+  applied_movements: z.array(z.string()).default([]),
 });
 const migrationIssueSchema = z.object({
   attribute_code: z.string().nullable(),

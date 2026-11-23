@@ -87,6 +87,9 @@ error_codes! {
     MovementRecordUndeletable = "movement_record_undeletable",
     BalanceRecordNotEmpty = "balance_record_not_empty",
     MovementAlreadyReversed = "movement_already_reversed",
+    MovementNotApplied = "movement_not_applied",
+    MovementLinesLocked = "movement_lines_locked",
+    MovementLinesExceeded = "movement_lines_exceeded",
     MovementReversalOfReversal = "movement_reversal_of_reversal",
     MovementReversalMismatch = "movement_reversal_mismatch",
     GeneratedResetChanged = "generated_reset_changed",
@@ -439,19 +442,27 @@ impl RepositoryError {
                 plain(Unprocessable, Code::MovementAttributeReadonly)
                     .with_details(json!({ "attribute": attribute }))
             }
-            Self::BalanceBelowMinimum {
-                attribute,
-                record_id,
-                available,
-                requested,
-                minimum,
-            } => plain(Conflict, Code::BalanceBelowMinimum).with_details(json!({
-                "attribute": attribute,
-                "record_id": record_id,
-                "available": available.normalize().to_string(),
-                "requested": requested.normalize().to_string(),
-                "minimum": minimum.normalize().to_string(),
-            })),
+            Self::BalanceBelowMinimum(shortage) => {
+                let super::error::BalanceShortage {
+                    attribute,
+                    record_id,
+                    available,
+                    requested,
+                    minimum,
+                    reserved,
+                } = shortage.as_ref();
+                let mut details = json!({
+                    "attribute": attribute,
+                    "record_id": record_id,
+                    "available": available.normalize().to_string(),
+                    "requested": requested.normalize().to_string(),
+                    "minimum": minimum.normalize().to_string(),
+                });
+                if let Some(reserved) = reserved {
+                    details["reserved"] = json!(reserved.normalize().to_string());
+                }
+                plain(Conflict, Code::BalanceBelowMinimum).with_details(details)
+            }
             Self::MovementTargetMissing { blueprint, key } => {
                 plain(Conflict, Code::MovementTargetMissing)
                     .with_details(json!({ "blueprint": blueprint, "key": key }))
@@ -484,6 +495,14 @@ impl RepositoryError {
                 "record_id": record_id,
                 "reversed_by": reversed_by,
             })),
+            Self::MovementNotApplied { record_id } => plain(Conflict, Code::MovementNotApplied)
+                .with_details(json!({ "record_id": record_id })),
+            Self::MovementLinesLocked { order_id } => plain(Conflict, Code::MovementLinesLocked)
+                .with_details(json!({ "order_id": order_id })),
+            Self::MovementLinesExceeded { limit } => {
+                plain(Unprocessable, Code::MovementLinesExceeded)
+                    .with_details(json!({ "limit": limit }))
+            }
             Self::MovementReversalOfReversal { record_id } => {
                 plain(Conflict, Code::MovementReversalOfReversal)
                     .with_details(json!({ "record_id": record_id }))

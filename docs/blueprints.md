@@ -630,6 +630,102 @@ sample records are exempt. A duplicate leaves out every core-assigned value
 Numbers cross the API as JSON (f64) numbers, while values, the arithmetic and
 error details are exact decimals; `error.details` carries decimal strings.
 
+### Applied movements
+
+Every movement applies to its record at most once. Each application is a row
+of `record_movement_applications` (migration
+`20261109035974_record_movement_applications`): the record, the movement code,
+the target, the balance, the amount and the direction. The record form
+response lists the record's `applied_movements`. The rules above read those
+rows rather than the blueprint:
+
+- `ensure_movement_values_unchanged` guards the inputs and managed values of
+  the movements that applied before this transaction (`applied_at < now()`),
+  so a draft stays editable until its movements apply.
+- Deletion is refused once any movement applied (`movement_record_undeletable`);
+  a record with nothing applied may be deleted.
+- A reversal moves back every applied movement of the original, latest first
+  and in reverse declaration order within one save, on the recorded targets
+  and amounts. Reversing a record with nothing applied fails with
+  `409 movement_not_applied`. A reversal applies on create; its own status
+  never applies its movements again.
+
+### Status-triggered movements
+
+`apply_on` lists status transitions that apply a movement instead of the
+create; `requires` names earlier-declared movements that must have applied
+first, or the movement is skipped. `MAX_MOVEMENT_TRIGGERS` is 8.
+
+```yaml
+movements:
+  - code: reserve
+    direction: in
+    quantity: quantity
+    target: {relationship: stock_item, blueprint: stock_item, balance: reserved,
+             key: item, values: {item: item}}
+    apply_on: [{attribute: status, to: approved}]
+  - code: release
+    direction: out
+    quantity: quantity
+    target: {relationship: stock_item, blueprint: stock_item, balance: reserved,
+             key: item, values: {item: item}}
+    apply_on: [{attribute: status, to: completed}, {attribute: status, from: approved, to: cancelled}]
+    requires: [reserve]
+  - code: consume
+    direction: out
+    quantity: quantity
+    target: {relationship: stock_item, blueprint: stock_item, balance: quantity,
+             key: item, values: {item: item}}
+    apply_on: [{attribute: status, to: completed}]
+    requires: [reserve]
+```
+
+- The compiler checks that `attribute` is a status attribute of the blueprint
+  and that `to` and `from` are its options. A trigger with `relationship` is
+  checked at publication against the linked blueprint's status.
+- Movements may share a target link when they find the same record (same
+  blueprint, key, values and `create_missing`); core writes it once.
+- `validate_record_schema_in` calls `apply_status_movements_in` with the
+  save's default-context `StatusChange`s, so every write path (forms,
+  batches, workflows, agents, extensions) applies them in the save's
+  transaction. Matching movements apply in declaration order, skipping those
+  already applied or whose `requires` have not applied. A failure, such as a
+  shortage, fails the whole save and leaves the status unchanged.
+- Lock order: before the update seam locks the record, `pre_lock_movement_rows`
+  (only for client writes of a status attribute some movement triggers on)
+  takes the relationship lock and locks the record, the existing targets of
+  its triggered movements and its lines with theirs, in ID order.
+
+### Reservations
+
+`balance: {min, reserved}` names another balance of the same record that holds
+part of this one. `min` then applies to the balance minus the reserved one,
+after a change to either: an issue cannot take reserved stock, and a
+reservation cannot hold more than is free. `balance_below_minimum` details
+then report the free amount as `available` and add `reserved`. The compiler
+requires `reserved` to name another balance without a reservation of its own
+(`validate_reserved_balances`).
+
+### Line triggers
+
+A trigger with `relationship` applies a movement of a *line* record when the
+record it links to makes the transition, such as the material lines of a
+production order:
+
+```yaml
+apply_on: [{relationship: production, attribute: status, to: approved}]
+```
+
+The relationship must be single-target and `context_editable: default`.
+`apply_line_movements_in` finds the published blueprints whose triggers link
+to the saved record's blueprint, then the lines linking to it in ID order, at
+most `MAX_MOVEMENT_LINES` (200; more fails with `422 movement_lines_exceeded`).
+Each line is locked, its movements apply as above and the line is updated with
+audit action `attricat.records.movement.line_apply`. One failing line fails
+the whole transition. Once any line's movement applied, the order's lines are
+settled: adding, moving or deleting one fails with `409 movement_lines_locked`
+(`ensure_movement_lines_open`).
+
 ## Record Schema
 
 Record blueprints may define an `record_schema` JSON Schema contract. Root

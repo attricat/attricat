@@ -76,6 +76,7 @@ mod record_system_metadata;
 mod relationship_aware_search;
 mod relationship_constraints;
 mod relationships;
+mod reservations;
 mod retention_sweep;
 mod reusable_attributes;
 mod role_delegation_races;

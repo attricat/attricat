@@ -262,6 +262,10 @@ struct RawBalance {
     /// cannot go negative. No limit when absent.
     #[schemars(with = "Option<f64>")]
     min: Option<serde_json::Number>,
+    /// Another balance of this record that holds part of this one, such as
+    /// reserved stock: `min` then applies to this balance minus that one.
+    #[schemars(regex(pattern = CODE_PATTERN), extend("x-attricat-reference" = "attribute"))]
+    reserved: Option<String>,
 }
 
 /// The JSON Schema for blueprint definition YAML, published as
@@ -931,7 +935,7 @@ fn parse_balance(
             "a balance cannot be a status or an assignment".into(),
         ));
     }
-    crate::BalancePolicy::new(value_type, balance.min.as_ref())
+    crate::BalancePolicy::new(value_type, balance.min.as_ref(), balance.reserved)
         .map(Some)
         .map_err(invalid)
 }

@@ -26,7 +26,7 @@ pub use generated::{
 };
 pub use lexicon_text::{LexiconText, lexicon_references, lexicon_texts, option_label_texts};
 pub use movements::{
-    BalancePolicy, MAX_MOVEMENTS, MovementDefinition, MovementFactor, MovementReversal,
-    MovementTarget, TargetScope,
+    BalancePolicy, MAX_MOVEMENT_TRIGGERS, MAX_MOVEMENTS, MovementDefinition, MovementFactor,
+    MovementReversal, MovementTarget, MovementTrigger, TargetScope,
 };
 pub use parser::{ONE_TO_ONE_CARDINALITY, definition_json_schema, parse};

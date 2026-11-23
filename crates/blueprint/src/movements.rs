@@ -19,6 +19,8 @@ use crate::{BlueprintError, BlueprintKind, EffectiveAttribute, MAX_UNIQUE_KEY_AT
 
 /// Movements a record blueprint may declare.
 pub const MAX_MOVEMENTS: usize = 4;
+/// Status transitions one movement may apply on.
+pub const MAX_MOVEMENT_TRIGGERS: usize = 8;
 
 /// A compiled `balance: { … }` declaration, stored as JSON on the attribute
 /// row. Only movements write the attribute; it starts at zero.
@@ -27,12 +29,20 @@ pub struct BalancePolicy {
     /// The lowest value a movement may leave. No limit when absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub min: Option<Decimal>,
+    /// Another balance of the record that holds part of this one, such as
+    /// reserved stock: `min` then applies to this balance minus that one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reserved: Option<String>,
 }
 
 impl BalancePolicy {
     /// Validates a declaration for an attribute of `value_type`; the error
     /// says what is wrong in words for the blueprint author.
-    pub fn new(value_type: ValueType, min: Option<&serde_json::Number>) -> Result<Self, String> {
+    pub fn new(
+        value_type: ValueType,
+        min: Option<&serde_json::Number>,
+        reserved: Option<String>,
+    ) -> Result<Self, String> {
         if !matches!(value_type, ValueType::Number | ValueType::Integer) {
             return Err("only number and integer attributes can be balances".into());
         }
@@ -46,7 +56,12 @@ impl BalancePolicy {
         if value_type == ValueType::Integer && min.is_some_and(|min| !min.fract().is_zero()) {
             return Err("an integer balance needs a whole-number min".into());
         }
-        Ok(Self { min })
+        if let Some(reserved) = &reserved
+            && !attricat_validation::is_valid_code(reserved)
+        {
+            return Err(format!("reserved '{reserved}' is not an attribute code"));
+        }
+        Ok(Self { min, reserved })
     }
 }
 
@@ -80,6 +95,38 @@ pub struct MovementDefinition {
     /// reverses. A reversal moves the original's amount the other way.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reversal: Option<MovementReversal>,
+    /// Status transitions that apply the movement, the first time one of
+    /// them happens. Without them the movement applies when the record is
+    /// created.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[schemars(length(max = MAX_MOVEMENT_TRIGGERS))]
+    pub apply_on: Vec<MovementTrigger>,
+    /// Movements of this blueprint, declared before this one, that must have
+    /// applied to the record first; otherwise this one is skipped, such as a
+    /// release without a reservation.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub requires: Vec<String>,
+}
+
+/// A status transition that applies a movement: of the record itself, or,
+/// with `relationship`, of the record it links to, such as the production
+/// order of an order line.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Eq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct MovementTrigger {
+    /// Single-target relationship to the record whose status triggers the
+    /// movement. Absent for the record's own status.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("x-attricat-reference" = "relationship_attribute"))]
+    pub relationship: Option<String>,
+    /// Status attribute whose transition applies the movement.
+    #[schemars(regex(pattern = attricat_validation::CODE_PATTERN))]
+    pub attribute: String,
+    /// Status option the transition ends in.
+    pub to: String,
+    /// Status option the transition starts from; any when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<String>,
 }
 
 /// `factor: { … }` of a movement.
@@ -171,7 +218,26 @@ impl MovementDefinition {
                     .iter()
                     .map(|reversal| reversal.relationship.as_str()),
             )
+            .chain(
+                self.apply_on
+                    .iter()
+                    .filter_map(|trigger| trigger.relationship.as_deref()),
+            )
     }
+
+    /// Whether the movement applies when its record is created rather than
+    /// on a status transition.
+    pub fn applies_on_create(&self) -> bool {
+        self.apply_on.is_empty()
+    }
+}
+
+/// Whether two movements find the same record, so they can share its link.
+fn same_record(first: &MovementTarget, second: &MovementTarget) -> bool {
+    first.blueprint == second.blueprint
+        && first.key == second.key
+        && first.values == second.values
+        && first.create_missing == second.create_missing
 }
 
 /// Structural checks that need only the declaration: codes, limits and that
@@ -198,6 +264,7 @@ pub(crate) fn validate_movement_declarations(
     }
     let mut movement_codes = HashSet::new();
     let mut managed = HashSet::new();
+    let mut targets: HashMap<&str, &MovementTarget> = HashMap::new();
     for movement in movements {
         let invalid = |message: String| BlueprintError::InvalidMovement {
             movement: movement.code.clone(),
@@ -212,6 +279,29 @@ pub(crate) fn validate_movement_declarations(
         crate::parser::validate_code(&movement.target.key, "movement target key")?;
         if let Some(factor) = &movement.factor {
             crate::parser::validate_code(&factor.attribute, "movement factor attribute")?;
+        }
+        if movement.apply_on.len() > MAX_MOVEMENT_TRIGGERS {
+            return Err(invalid(format!(
+                "a movement applies on at most {MAX_MOVEMENT_TRIGGERS} transitions"
+            )));
+        }
+        for trigger in &movement.apply_on {
+            crate::parser::validate_code(&trigger.attribute, "movement trigger attribute")?;
+            if trigger.relationship.is_none() && !attribute_codes.contains(&trigger.attribute) {
+                return Err(invalid(format!(
+                    "unknown status attribute '{}'",
+                    trigger.attribute
+                )));
+            }
+        }
+        // A required movement is declared earlier, so requirements never
+        // form a cycle and apply in declaration order.
+        for required in &movement.requires {
+            if required == &movement.code || !movement_codes.contains(required.as_str()) {
+                return Err(invalid(format!(
+                    "requires '{required}', which must be a movement declared before it"
+                )));
+            }
         }
         if movement.target.values.is_empty()
             || movement.target.values.len() > MAX_UNIQUE_KEY_ATTRIBUTES
@@ -232,16 +322,29 @@ pub(crate) fn validate_movement_declarations(
             }
         }
         for attribute in movement.managed_attributes() {
-            // One writer per managed attribute, and never an input: a value
-            // core writes cannot also be what the movement reads.
-            if !managed.insert(attribute.to_owned())
-                || movement.input_attributes().any(|input| input == attribute)
-            {
+            // Never an input: a value core writes cannot also be what the
+            // movement reads.
+            if movement.input_attributes().any(|input| input == attribute) {
+                return Err(invalid(format!(
+                    "attribute '{attribute}' is written by core and cannot be used twice"
+                )));
+            }
+            // Movements may share a target link when they find the same
+            // record, such as reserving, releasing and consuming one stock
+            // item; a result has one writer.
+            let shared_target = attribute == movement.target.relationship
+                && targets
+                    .get(attribute)
+                    .is_some_and(|other: &&MovementTarget| same_record(other, &movement.target));
+            if !managed.insert(attribute.to_owned()) && !shared_target {
                 return Err(invalid(format!(
                     "attribute '{attribute}' is written by core and cannot be used twice"
                 )));
             }
         }
+        targets
+            .entry(movement.target.relationship.as_str())
+            .or_insert(&movement.target);
     }
     for movement in movements {
         if let Some(input) = movement
@@ -356,6 +459,53 @@ pub(crate) fn validate_movement_attributes(
             }
             default_context_only(source)?;
         }
+        for trigger in &movement.apply_on {
+            match &trigger.relationship {
+                // The record's own status: its options are known here.
+                None => {
+                    let status = attribute(&trigger.attribute)?;
+                    let options: Vec<&str> = status
+                        .value_schema
+                        .as_ref()
+                        .filter(|schema| {
+                            schema
+                                .get(attricat_validation::status::STATUS_KEY)
+                                .is_some()
+                        })
+                        .map(|schema| {
+                            attricat_validation::status::status_option_labels(schema)
+                                .into_iter()
+                                .map(|(code, _)| code)
+                                .collect()
+                        })
+                        .ok_or_else(|| {
+                            invalid(format!(
+                                "trigger attribute '{}' must be a status attribute",
+                                trigger.attribute
+                            ))
+                        })?;
+                    for option in std::iter::once(&trigger.to).chain(&trigger.from) {
+                        if !options.contains(&option.as_str()) {
+                            return Err(invalid(format!(
+                                "'{option}' is not an option of status '{}'",
+                                trigger.attribute
+                            )));
+                        }
+                    }
+                }
+                // Another record's status: publication checks it against
+                // that record's blueprint.
+                Some(relationship) => {
+                    let link = single_relationship(relationship, "trigger relationship")?;
+                    if link.target_blueprints.len() != 1 {
+                        return Err(invalid(format!(
+                            "trigger relationship '{relationship}' must target exactly one blueprint"
+                        )));
+                    }
+                    default_context_only(link)?;
+                }
+            }
+        }
         if let Some(reversal) = &movement.reversal {
             // A reversal moves back what the original moved, which it reads
             // from the original's result.
@@ -373,6 +523,41 @@ pub(crate) fn validate_movement_attributes(
                 )));
             }
             default_context_only(relationship)?;
+        }
+    }
+    Ok(())
+}
+
+/// A balance's `reserved` names another balance of the same record, which
+/// holds no reservation of its own.
+pub(crate) fn validate_reserved_balances(
+    attributes: &[EffectiveAttribute],
+) -> Result<(), BlueprintError> {
+    for attribute in attributes {
+        let Some(reserved) = attribute
+            .balance
+            .as_ref()
+            .and_then(|balance| balance.reserved.as_ref())
+        else {
+            continue;
+        };
+        let invalid = |message: String| BlueprintError::InvalidBalanceAttribute {
+            code: attribute.code.clone(),
+            message,
+        };
+        let held = attributes
+            .iter()
+            .find(|candidate| &candidate.code == reserved)
+            .ok_or_else(|| invalid(format!("reserved '{reserved}' is not an attribute")))?;
+        if held.code == attribute.code
+            || held
+                .balance
+                .as_ref()
+                .is_none_or(|balance| balance.reserved.is_some())
+        {
+            return Err(invalid(format!(
+                "reserved '{reserved}' must be another balance without a reservation of its own"
+            )));
         }
     }
     Ok(())
