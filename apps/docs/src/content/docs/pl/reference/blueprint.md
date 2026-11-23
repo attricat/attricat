@@ -45,7 +45,7 @@ Schematy rekordów mają `kind: record`.
 | `publication` | mapowanie | Nie | Zasady ponownego zatwierdzania publikacji. Zobacz [Publikacja](#publikacja). |
 | `unique_keys` | lista mapowań | Nie | Klucze biznesowe, których wartości muszą być unikalne. Tylko schematy rekordów. Zobacz [Klucze unikalne](#klucze-unikalne). |
 | `connector_jobs` | lista mapowań | Nie | Zaplanowane lub ręczne zadania importu i eksportu wykonywane przez rozszerzenie konektora. Tylko schematy rekordów. Zobacz [Zadania konektorów](#zadania-konektorów). |
-| `movements` | lista mapowań | Nie | Jak utworzenie rekordu zmienia saldo innego rekordu, np. wydanie towaru obniża stan magazynowy. Najwyżej 4. Tylko schematy rekordów. Zobacz [Salda i ruchy](#salda-i-ruchy). |
+| `movements` | lista mapowań | Nie | Jak utworzenie rekordu zmienia saldo innego rekordu, np. wydanie towaru obniża stan magazynowy. Najwyżej 4. Tylko schematy rekordów. Zobacz [Salda i przesunięcia](#salda-i-przesunięcia). |
 | `extensions` | mapowanie | Nie | Dowolne dane dla rozszerzeń, w przestrzeniach nazw `extensions.<extension-id>`. Kompilator rdzenia je ignoruje; rozszerzenia odczytują je z zapisanej definicji. |
 
 ## Atrybuty
@@ -75,7 +75,7 @@ attributes:
 | `default_value` | zgodny z typem | Nieustawiony | Wartość zapisywana w kontekście domyślnym, gdy rekord zostaje utworzony bez niej. Tylko typy skalarne. |
 | `value_schema` | ciąg znaków (JSON) | Nieustawiony | JSON Schema dla jednej wartości. Tylko typy skalarne. Schemat atrybutu `string` może uczynić go [statusem](#statusy) lub [przypisaniem użytkownika lub zespołu](#przypisania-użytkowników-i-zespołów). Zobacz [Walidacja](/pl/builders/validation/). |
 | `generated` | mapowanie | Nieustawiony | Serwer numeruje nowe rekordy, np. numerami faktur lub zamówień. Tylko atrybuty `string` i `integer` w schematach rekordów. Zobacz [Wartości generowane](#wartości-generowane). |
-| `balance` | mapowanie | Nieustawiony | Suma bieżąca, którą zmieniają tylko [ruchy](#salda-i-ruchy), np. stan magazynowy. Tylko atrybuty `number` i `integer` w schematach rekordów. |
+| `balance` | mapowanie | Nieustawiony | Suma bieżąca, którą zmieniają tylko [przesunięcia](#salda-i-przesunięcia), np. stan magazynowy. Tylko atrybuty `number` i `integer` w schematach rekordów. |
 
 ### Typy wartości
 
@@ -689,9 +689,9 @@ Zapis, który nadałby drugiemu rekordowi tę samą wartość klucza, zwraca `40
 
 Publikacja wersji, która dodaje lub zmienia klucze unikalne, najpierw sprawdza istniejące rekordy. Jeśli niektóre już współdzielą wartość, publikacja kończy się błędem `409 unique_key_duplicates`, a `error.details.duplicates` wymienia do 20 grup z kluczem, kontekstem, wartościami i identyfikatorami rekordów (`error.details.total` podaje liczbę wszystkich grup). Zmień lub usuń duplikaty i opublikuj ponownie.
 
-## Salda i ruchy
+## Salda i przesunięcia
 
-Niektóre rekordy prowadzą sumę bieżącą, którą zmieniają inne rekordy, np. stan magazynowy, który przyjęcia towaru zwiększają, a wydania zmniejszają. Sumę przechowuje atrybut **salda**. **Ruch** w innym schemacie określa, jak utworzenie jego rekordu zmienia tę sumę. Serwer stosuje ruch w tej samej transakcji, w której tworzy rekord, więc suma zawsze zgadza się z dokumentami, a dwie osoby zapisujące w tej samej chwili nie zejdą poniżej minimum.
+Niektóre rekordy prowadzą sumę bieżącą, którą zmieniają inne rekordy, np. stan magazynowy, który przyjęcia towaru zwiększają, a wydania zmniejszają. Sumę przechowuje atrybut **salda**. **Przesunięcie** w innym schemacie określa, jak utworzenie jego rekordu zmienia tę sumę. Serwer stosuje przesunięcie w tej samej transakcji, w której tworzy rekord, więc suma zawsze zgadza się z dokumentami, a dwie osoby zapisujące w tej samej chwili nie zejdą poniżej minimum.
 
 ```yaml
 # stock_item: jeden rekord na produkt
@@ -758,15 +758,15 @@ Przyjęcie towaru wygląda tak samo, z `direction: in` i `create_missing: true`,
 
 | Klucz | Typ | Domyślnie | Opis |
 | --- | --- | --- | --- |
-| `balance.min` | liczba | Bez minimum | Najniższa wartość, jaką może zostawić ruch, np. `0` dla stanu, który nie może być ujemny. Dla salda `integer` musi być liczbą całkowitą. |
+| `balance.min` | liczba | Bez minimum | Najniższa wartość, jaką może zostawić przesunięcie, np. `0` dla stanu, który nie może być ujemny. Dla salda `integer` musi być liczbą całkowitą. |
 
 - `balance` jest dozwolone tylko w lokalnym atrybucie `number` lub `integer` schematu rekordów. Jest odrzucane w mixinie, z `from`, razem z `generated` lub `default_value` oraz w statusie lub przypisaniu użytkownika lub zespołu.
 - Saldo jest zawsze tylko do odczytu i tylko w kontekście domyślnym (`context_editable: default`). Rekord bez wartości ma saldo zero.
-- Saldo zmieniają tylko ruchy. Tworzenie, aktualizacje, czyszczenie wartości, przywracanie z historii, partie rekordów, przepływy pracy, agenci i rozszerzenia, które próbują je zapisać, są odrzucane z `422 balance_attribute_readonly`.
+- Saldo zmieniają tylko przesunięcia. Tworzenie, aktualizacje, czyszczenie wartości, przywracanie z historii, partie rekordów, przepływy pracy, agenci i rozszerzenia, które próbują je zapisać, są odrzucane z `422 balance_attribute_readonly`.
 - Rekordu z niezerowym saldem nie można usunąć: `409 balance_record_not_empty` z `attribute` i jego `balance`. Rekordy przykładowe pakietów rozwiązań są wyjątkiem.
-- Atrybuty klucza unikalnego, po którym ruch odnajduje rekord, np. produkt pozycji magazynowej, nie mogą się zmienić, gdy mają już wartość: `409 movement_target_key_immutable`. Ruchy zostały już zastosowane do rekordu według tego klucza.
+- Atrybuty klucza unikalnego, po którym przesunięcie odnajduje rekord, np. produkt pozycji magazynowej, nie mogą się zmienić, gdy mają już wartość: `409 movement_target_key_immutable`. Przesunięcia zostały już zastosowane do rekordu według tego klucza.
 
-### Klucze ruchu
+### Klucze przesunięcia
 
 | Klucz | Typ | Wymagany | Opis |
 | --- | --- | --- | --- |
@@ -781,23 +781,23 @@ Przyjęcie towaru wygląda tak samo, z `direction: in` i `create_missing: true`,
 | `target.balance` | kod | Tak | Atrybut salda schematu docelowego. |
 | `target.key` | kod | Tak | Klucz unikalny schematu docelowego z `scope: workspace`, który odnajduje cel. |
 | `target.values` | mapowanie | Tak | Każdy atrybut klucza przypisany do atrybutu tego rekordu z jego wartością, np. `{product: product}`. Typy muszą się zgadzać. |
-| `target.create_missing` | wartość logiczna | `false` | Utwórz cel z wartościami klucza, gdy żaden rekord ich nie ma. W przeciwnym razie ruch się nie powiedzie. |
+| `target.create_missing` | wartość logiczna | `false` | Utwórz cel z wartościami klucza, gdy żaden rekord ich nie ma. W przeciwnym razie przesunięcie się nie powiedzie. |
 | `reversal.relationship` | kod atrybutu | Nie | Relacja z `cardinality: one` do tego samego schematu. Rekord, który ją ustawia, wycofuje powiązany rekord. Zobacz [Wycofania](#wycofania). |
 
-Atrybuty odczytywane przez ruch (ilość, relacja przelicznika, wartości klucza i relacja wycofania) muszą mieć `context_editable: default`. Publikacja sprawdza schematy celu i przelicznika w ich najnowszych opublikowanych wersjach, więc najpierw opublikuj schematy pozycji magazynowej i przelicznika jednostek.
+Atrybuty odczytywane przez przesunięcie (ilość, relacja przelicznika, wartości klucza i relacja wycofania) muszą mieć `context_editable: default`. Publikacja sprawdza schematy celu i przelicznika w ich najnowszych opublikowanych wersjach, więc najpierw opublikuj schematy pozycji magazynowej i przelicznika jednostek.
 
-### Jak działa ruch
+### Jak działa przesunięcie
 
-Gdy powstaje rekord z ruchami:
+Gdy powstaje rekord z przesunięciami:
 
 1. Ilość musi być większa od zera, inaczej zapis zwraca `422 movement_quantity_invalid`. Powiązany przelicznik musi być większy od zera, inaczej zapis zwraca `409 movement_factor_invalid`.
 2. Serwer odnajduje cel przez `target.key` i wartości klucza rekordu. Z `create_missing: true` brakujący cel zostaje utworzony; w przeciwnym razie zapis zwraca `409 movement_target_missing` z `blueprint` i `key`. Równoczesne pierwsze przyjęcia jednego produktu tworzą jeden cel.
 3. Saldo celu zmienia się o `quantity × factor`. Jeśli spadłoby poniżej `min`, zapis zwraca `409 balance_below_minimum`, a `error.details` zawiera `attribute`, `record_id` celu, dostępne saldo `available`, żądaną ilość `requested` i `minimum`. Nic nie zostaje zapisane: ani rekord, ani zmiana.
 4. Serwer zapisuje cel w `target.relationship`, a ilość w `result`. Klienci nie mogą ich zapisać: `422 movement_attribute_readonly`.
 
-Zmiana celu jest zwykłą aktualizacją. Obowiązują jego blokady statusów, jest audytowana jako `attricat.records.movement.balance_update` z rekordem ruchu w metadanych i emituje `record.updated.v1`.
+Zmiana celu jest zwykłą aktualizacją. Obowiązują jego blokady statusów, jest audytowana jako `attricat.records.movement.balance_update` z rekordem przesunięcia w metadanych i emituje `record.updated.v1`.
 
-Ruch działa raz. Po utworzeniu rekordu atrybuty, które ruch odczytał lub ustawił, nie mogą się zmienić, a zapis, który próbuje je zmienić, zwraca `409 movement_immutable`. Pozostałe atrybuty rekordu można edytować. Rekordu ruchu nie można usunąć (`409 movement_record_undeletable`); zamiast tego go wycofaj. Duplikat rekordu ruchu tworzy nowy ruch.
+Przesunięcie działa raz. Po utworzeniu rekordu atrybuty, które przesunięcie odczytało lub ustawiło, nie mogą się zmienić, a zapis, który próbuje je zmienić, zwraca `409 movement_immutable`. Pozostałe atrybuty rekordu można edytować. Rekordu przesunięcia nie można usunąć (`409 movement_record_undeletable`); zamiast tego go wycofaj. Duplikat rekordu przesunięcia tworzy nowe przesunięcie.
 
 ### Wycofania
 
@@ -869,5 +869,5 @@ Kilka reguł kompilacji, które łatwo przeoczyć:
 - `unique_keys` w mixinie, klucz wskazujący nieznany atrybut, atrybut `json`, plikowy lub relację z wieloma celami, a także klucz wymieniający atrybut dwa razy są odrzucane.
 - `from` musi mieć postać `alias.code`, gdzie `code` odpowiada kodowi samego atrybutu.
 - `balance` w mixinie, w atrybucie wybranym przez `from`, w typie innym niż `number` lub `integer` albo razem z `generated` lub `default_value` jest odrzucane.
-- Ruch wskazujący nieznany atrybut, używający atrybutu w dwóch rolach, odczytujący atrybut bez `context_editable: default` albo deklarujący `reversal` bez `result` jest odrzucany. Publikacja odrzuca ruch, którego schemat docelowy nie jest opublikowany albo nie ma salda lub klucza, oraz przelicznik, który nie jest liczbą.
+- Przesunięcie wskazujące nieznany atrybut, używające atrybutu w dwóch rolach, odczytujące atrybut bez `context_editable: default` albo deklarujące `reversal` bez `result` jest odrzucane. Publikacja odrzuca przesunięcie, którego schemat docelowy nie jest opublikowany albo nie ma salda lub klucza, oraz przelicznik, który nie jest liczbą.
 - `generated` w mixinie, w atrybucie wybranym przez `from`, w `extension_type`, w statusie lub w przypisaniu użytkownika lub zespołu, w typie innym niż `string` lub `integer` albo razem z `default_value` jest odrzucany. Odrzucany jest też `format` bez dokładnie jednego `{n}`, z nieznanym symbolem zastępczym lub dłuższy niż 100 znaków, a także `reset`, którego okresu `format` nie identyfikuje.

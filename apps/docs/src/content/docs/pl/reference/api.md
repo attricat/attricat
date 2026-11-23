@@ -59,16 +59,16 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `generated_attribute_readonly` | 422 | Żądanie próbuje zapisać [atrybut generowany](/pl/reference/blueprint/#wartości-generowane), który przypisuje wyłącznie serwer. `details.attribute` go wskazuje. |
 | `generated_reset_changed` | 409 | Wersja schematu zmienia `reset` atrybutu generowanego we wcześniejszej wersji, co powtórzyłoby numery. `details` zawiera `attribute`, `previous` i `requested`. |
 | `generated_sequence_not_raised` | 409 | Podniesienie licznika podało `next_value` niższe od bieżącego. Liczniki można tylko podnosić. `details` zawiera `current` i `requested`. |
-| `balance_attribute_readonly` | 422 | Żądanie próbuje zapisać [saldo](/pl/reference/blueprint/#atrybuty-sald), które zmieniają tylko ruchy. `details.attribute` je wskazuje. |
-| `balance_below_minimum` | 409 | Ruch obniżyłby saldo poniżej `min`. `details` zawiera `attribute`, `record_id`, `available`, `requested` i `minimum` jako napisy dziesiętne. |
+| `balance_attribute_readonly` | 422 | Żądanie próbuje zapisać [saldo](/pl/reference/blueprint/#atrybuty-sald), które zmieniają tylko przesunięcia. `details.attribute` je wskazuje. |
+| `balance_below_minimum` | 409 | Przesunięcie obniżyłoby saldo poniżej `min`. `details` zawiera `attribute`, `record_id`, `available`, `requested` i `minimum` jako napisy dziesiętne. |
 | `balance_record_not_empty` | 409 | Rekord nadal ma saldo i nie można go usunąć. `details` zawiera `attribute` i `balance`. |
-| `movement_attribute_readonly` | 422 | Żądanie próbuje zapisać cel lub wynik, które serwer ustawia w rekordzie [ruchu](/pl/reference/blueprint/#jak-działa-ruch). `details.attribute` go wskazuje. |
-| `movement_quantity_invalid` | 422 | Ilości ruchu brakuje albo nie jest większa od zera. `details.attribute` ją wskazuje. |
+| `movement_attribute_readonly` | 422 | Żądanie próbuje zapisać cel lub wynik, które serwer ustawia w rekordzie [przesunięcia](/pl/reference/blueprint/#jak-działa-przesunięcie). `details.attribute` go wskazuje. |
+| `movement_quantity_invalid` | 422 | Ilości przesunięcia brakuje albo nie jest większa od zera. `details.attribute` ją wskazuje. |
 | `movement_factor_invalid` | 409 | Przelicznika powiązanego rekordu brakuje albo nie jest większy od zera. `details.attribute` go wskazuje. |
-| `movement_target_missing` | 409 | Żaden rekord nie ma wartości klucza ruchu, a ruch go nie tworzy. `details` zawiera `blueprint` i `key`. |
-| `movement_immutable` | 409 | Wartość odczytana lub ustawiona przez ruch rekordu nie może się zmienić. Zamiast tego wycofaj rekord. `details.attribute` ją wskazuje. |
-| `movement_target_key_immutable` | 409 | Atrybut należy do klucza unikalnego, po którym ruchy odnajdują ten rekord, np. produkt pozycji magazynowej, i nie może się zmienić. `details.attribute` go wskazuje. |
-| `movement_record_undeletable` | 409 | Rekordów ruchów nie można usuwać. Zamiast tego wycofaj rekord. |
+| `movement_target_missing` | 409 | Żaden rekord nie ma wartości klucza przesunięcia, a przesunięcie go nie tworzy. `details` zawiera `blueprint` i `key`. |
+| `movement_immutable` | 409 | Wartość odczytana lub ustawiona przez przesunięcie rekordu nie może się zmienić. Zamiast tego wycofaj rekord. `details.attribute` ją wskazuje. |
+| `movement_target_key_immutable` | 409 | Atrybut należy do klucza unikalnego, po którym przesunięcia odnajdują ten rekord, np. produkt pozycji magazynowej, i nie może się zmienić. `details.attribute` go wskazuje. |
+| `movement_record_undeletable` | 409 | Rekordów przesunięć nie można usuwać. Zamiast tego wycofaj rekord. |
 | `movement_already_reversed` | 409 | Rekord jest już wycofany. `details` zawiera `record_id` i `reversed_by`. |
 | `movement_reversal_of_reversal` | 409 | Rekord wycofuje inny rekord i sam nie może zostać wycofany. `details.record_id` go wskazuje. |
 | `movement_reversal_mismatch` | 422 | Wartość przesłana w wycofaniu różni się od wycofywanego rekordu. `details.attribute` ją wskazuje. |
@@ -157,7 +157,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `POST` | `/v1/records/batch` | Tworzy, aktualizuje i usuwa kilka rekordów naraz: zapisują się wszystkie zmiany albo żadna. Zobacz [Zmiany wsadowe](#zmiany-wsadowe). |
 | `GET`, `PUT` | `/v1/records/{id}` | Odczytuje lub aktualizuje formularz rekordu: wartości, relacje, usunięcia, adnotacje. |
 | `GET`, `DELETE` | `/records/{id}` | Odczytuje lub usuwa rekord. |
-| `POST` | `/v1/records/{id}/duplicate` | Tworzy kopię rekordu z jego wartościami, relacjami i plikami. Wartości kluczy unikalnych, wartości generowane, salda i wartości ustawiane przez ruch nie są kopiowane; kopia rekordu ruchu stosuje własny ruch. |
+| `POST` | `/v1/records/{id}/duplicate` | Tworzy kopię rekordu z jego wartościami, relacjami i plikami. Wartości kluczy unikalnych, wartości generowane, salda i wartości ustawiane przez przesunięcie nie są kopiowane; kopia rekordu przesunięcia stosuje własne przesunięcie. |
 | `POST` | `/v1/records/search` | Wyszukiwanie. Zobacz poniżej. |
 | `POST` | `/v1/records/labels` | Etykiety wyświetlane dla maksymalnie 100 identyfikatorów rekordów: `{"record_ids": [...]}`. Zwraca tylko istniejące rekordy, które możesz odczytać; pozostałe identyfikatory są pomijane. |
 | `POST` | `/v1/records/facets/relationship-tree/children` | Jedna strona elementów podrzędnych fasety relacji, z liczebnościami. |

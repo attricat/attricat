@@ -153,7 +153,7 @@
     "movement_reversal_mismatch": "Atrybut {{attribute}} wycofania musi być taki sam jak w wycofywanym rekordzie.",
     "movement_reversal_of_reversal": "Ten rekord wycofuje inny rekord i sam nie może zostać wycofany.",
     "movement_target_key_immutable": "Przyjęcia i wydania odnajdują ten rekord po atrybucie {{attribute}}, więc nie można go zmienić.",
-    "movement_target_missing": "Żaden rekord {{blueprint}} nie pasuje do tego ruchu.",
+    "movement_target_missing": "Żaden rekord {{blueprint}} nie pasuje do tego przesunięcia.",
     "not_found": "Nie istnieje lub nie masz do niego dostępu.",
     "oidc_email_mismatch": "To zaproszenie wysłano na inny adres e-mail niż ten używany przez Twoje konto logowania.",
     "oidc_email_missing": "Dostawca tożsamości nie udostępnił zweryfikowanego adresu e-mail.",

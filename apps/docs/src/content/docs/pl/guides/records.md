@@ -38,7 +38,7 @@ Każde pole informuje, skąd pochodzi jego wartość:
 - **Dziedziczone z kontekstu *X*** oznacza, że ten kontekst nie ma wartości i pokazuje wartość przodka. Wpisanie wartości tworzy nadpisanie tylko dla tego kontekstu. Wyczyszczenie nadpisania przywraca wartość dziedziczoną.
 - **Zarządzane w kontekście domyślnym** oznacza, że atrybut można edytować tylko w kontekście domyślnym.
 - **Zarządzane przez działania systemowe** oznacza, że atrybut jest `readonly`: utrzymuje go integracja, przepływ pracy lub agent.
-- **Zmieniają je tylko rekordy ruchów** oznacza, że atrybut jest saldem, np. stanem magazynowym. Zobacz [Stany magazynowe i inne salda](#stany-magazynowe-i-inne-salda).
+- **Zmienia się tylko przez dokumenty, takie jak przyjęcia i wydania** oznacza, że atrybut jest saldem, np. stanem magazynowym. Zobacz [Stany magazynowe i inne salda](#stany-magazynowe-i-inne-salda).
 - **Zablokowane, gdy rekord ma status *X*** oznacza, że status rekordu zamraża to pole. Zobacz [Rekordy kontrolowane](#rekordy-kontrolowane).
 
 Każdy zapis waliduje cały rekord w każdym kontekście. Jeśli zmiana unieważniłaby którykolwiek kontekst, nie zostaje zapisana: pozostaje w polu wraz z błędem, a strona pokazuje, ile zmian nie jest jeszcze zapisanych. Odrzucone zmiany są wysyłane ponownie z następnym zapisywanym polem, więc kilka brakujących wymaganych wartości możesz uzupełniać po kolei. Escape w polu porzuca jego odrzuconą zmianę. Zobacz [Walidacja](/pl/builders/validation/).
@@ -94,14 +94,14 @@ Karta **Kontrola rekordu** wyświetla, od najnowszych, zatwierdzenia wraz z info
 
 ## Stany magazynowe i inne salda
 
-Niektóre schematy prowadzą sumę bieżącą, którą zmieniają inne rekordy, np. stan magazynowy, który przyjęcia towaru zwiększają, a wydania zmniejszają. O tym, które rekordy to robią, decyduje [schemat](/pl/reference/blueprint/#salda-i-ruchy).
+Niektóre schematy prowadzą sumę bieżącą, którą zmieniają inne rekordy, np. stan magazynowy, który przyjęcia towaru zwiększają, a wydania zmniejszają. O tym, które rekordy to robią, decyduje [schemat](/pl/reference/blueprint/#salda-i-przesunięcia).
 
-- Suma jest pokazywana jako wartość, nigdy jako pole do edycji: zmieniają ją tylko przyjęcia, wydania i inne rekordy ruchów.
+- Suma jest pokazywana jako wartość, nigdy jako pole do edycji: zmieniają ją tylko przyjęcia, wydania i inne rekordy przesunięć.
 - Zapisanie przyjęcia lub wydania od razu zmienia sumę. Wydanie, które obniżyłoby ją poniżej minimum, zwykle zera, nie zostaje zapisane, a komunikat podaje, ile jest dostępne.
 - W przyjęciu lub wydaniu relacja taka jak **Przelicznik jednostek** może pokazywać tylko cele pasujące do innego pola, np. przeliczniki wybranego produktu. Dopóki to pole nie ma wartości, pokazywane są wszystkie cele.
 - Zapisane przyjęcie lub wydanie jest zaksięgowane: jego ilość i powiązania są pokazywane jako wartości, a komunikat nad polami wyjaśnia, że nie można ich zmienić. Pozostałe pola można dalej edytować.
 - Aby poprawić zapisane przyjęcie lub wydanie, wybierz **Wycofaj rekord** w menu **Akcje**. Nowy rekord przesuwa tę samą ilość z powrotem i zostaje otwarty. Rekord można wycofać raz, wycofania nie można wycofać, a przyjęcie można wycofać tylko wtedy, gdy jego towar nadal jest na stanie. Następnie zapisz poprawny dokument.
-- Przyjęć i wydań nie można usuwać, podobnie jak pozycji magazynowej, która nadal ma stan. **Duplikuj rekord** na przyjęciu lub wydaniu tworzy nowy ruch, który ponownie zmienia sumę.
+- Przyjęć i wydań nie można usuwać, podobnie jak pozycji magazynowej, która nadal ma stan. **Duplikuj rekord** na przyjęciu lub wydaniu tworzy nowe przesunięcie, które ponownie zmienia sumę.
 
 ## Komentarze
 
@@ -167,7 +167,7 @@ Rekord może mieć dowolnie wiele rozmów. Karta **Agenci** wyświetla je od naj
 
 ## Usuwanie rekordu
 
-**Usuń rekord** jest dostępne z uprawnieniem `records.delete` w menu **Akcje** rekordu lub w menu wiersza w Przeglądarce i wymaga potwierdzenia. Usunięty rekord znika z wyszukiwania, podglądów i okien wyboru relacji. Jego historia zostaje zachowana. Nie można usunąć rekordu w zablokowanym statusie, rekordu ruchu ani rekordu, który nadal ma saldo; zobacz [Stany magazynowe i inne salda](#stany-magazynowe-i-inne-salda).
+**Usuń rekord** jest dostępne z uprawnieniem `records.delete` w menu **Akcje** rekordu lub w menu wiersza w Przeglądarce i wymaga potwierdzenia. Usunięty rekord znika z wyszukiwania, podglądów i okien wyboru relacji. Jego historia zostaje zachowana. Nie można usunąć rekordu w zablokowanym statusie, rekordu przesunięcia ani rekordu, który nadal ma saldo; zobacz [Stany magazynowe i inne salda](#stany-magazynowe-i-inne-salda).
 
 ## Z wiersza poleceń
 
