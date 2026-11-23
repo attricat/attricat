@@ -82,6 +82,7 @@
     "movement_record_undeletable",
     "movement_reversal_mismatch",
     "movement_reversal_of_reversal",
+    "movement_target_key_immutable",
     "movement_target_missing",
     "not_found",
     "oidc_email_mismatch",

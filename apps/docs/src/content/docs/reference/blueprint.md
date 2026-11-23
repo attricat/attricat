@@ -764,6 +764,7 @@ A goods receipt is the same with `direction: in` and `create_missing: true`, so 
 - A balance is always read-only and default-context only (`context_editable: default`). A record without a value counts as zero.
 - Only movements change a balance. Creates, updates, clearing the value, restores from history, record batches, workflows, agents, and extensions that try are rejected with `422 balance_attribute_readonly`.
 - A record whose balance is not zero cannot be deleted: `409 balance_record_not_empty`, with the `attribute` and its `balance`. Solution-pack sample records are exempt.
+- The attributes of the unique key a movement finds the record by, such as a stock item's product, cannot change once they have a value: `409 movement_target_key_immutable`. Movements already applied to the record by that key.
 
 ### Movement keys
 

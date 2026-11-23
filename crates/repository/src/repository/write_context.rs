@@ -61,6 +61,10 @@ pub(super) struct WriteAttribute {
     /// link, key values or reversal link). A movement applies once, when the
     /// record is created, so the value never changes afterwards.
     pub movement_input: bool,
+    /// Part of a unique key some movement finds its target by, such as a
+    /// stock item's product. Movements already applied to the record by that
+    /// key, so the value never changes after the record is created.
+    pub movement_key: bool,
     /// Attached to the record itself rather than a blueprint column.
     pub record_scoped: bool,
 }
@@ -290,6 +294,18 @@ impl WriteContext {
                                  OR EXISTS (SELECT 1 FROM jsonb_each_text(movement -> 'target' -> 'values') source
                                             WHERE source.value = attributes.code))
                       ) AS movement_input,
+                      record_id IS NULL AND EXISTS (
+                          SELECT 1 FROM blueprints own
+                          CROSS JOIN jsonb_array_elements(own.unique_keys) unique_key
+                          JOIN blueprints document ON document.workspace_id = own.workspace_id
+                           AND document.deleted_at IS NULL AND document.movements <> '[]'::jsonb
+                          CROSS JOIN jsonb_array_elements(document.movements) movement
+                          WHERE own.workspace_id = attributes.workspace_id
+                            AND own.id = attributes.blueprint_id AND own.version = attributes.blueprint_version
+                            AND movement -> 'target' ->> 'blueprint' = own.code
+                            AND unique_key ->> 'code' = movement -> 'target' ->> 'key'
+                            AND unique_key -> 'attributes' ? attributes.code
+                      ) AS movement_key,
                       record_id IS NOT NULL AS record_scoped
                FROM attributes
                WHERE ((blueprint_id = $1 AND blueprint_version = $2) OR record_id = $3)

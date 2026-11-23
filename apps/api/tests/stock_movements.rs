@@ -1071,3 +1071,55 @@ async fn movements_and_held_balances_are_not_deleted(pool: PgPool) {
 
     server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_movement_target_keeps_the_key_movements_find_it_by(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let bolt = inventory(&client, &base_url).await;
+    let nut = product(&client, &base_url, "Nut").await;
+    let receipt = success(
+        movement(
+            &client,
+            &base_url,
+            "sm_goods_receipt",
+            &bolt,
+            json!(5),
+            None,
+        )
+        .await,
+    )
+    .await;
+    let stock_item = stock_item_of(&pool, &receipt).await;
+
+    let body = expect_error(
+        client
+            .put(format!("{base_url}/v1/records/{stock_item}"))
+            .json(&json!({
+                "relationships": [{"attribute_code": "product", "target_record_ids": [nut["id"]]}]
+            }))
+            .send()
+            .await
+            .unwrap(),
+        StatusCode::CONFLICT,
+        "movement_target_key_immutable",
+    )
+    .await;
+    assert_eq!(body["error"]["details"]["attribute"], "product");
+    // Other fields of the stock item stay editable.
+    success(
+        client
+            .put(format!("{base_url}/v1/records/{stock_item}"))
+            .json(&json!({"values": [scalar("label", "Bolts")]}))
+            .send()
+            .await
+            .unwrap(),
+    )
+    .await;
+    // The issue still finds the stock item by its product.
+    let issue =
+        success(movement(&client, &base_url, "sm_goods_issue", &bolt, json!(2), None).await).await;
+    assert_eq!(balance_after(&pool, &issue).await, "3");
+
+    server.abort();
+}

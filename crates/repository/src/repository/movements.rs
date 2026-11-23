@@ -714,8 +714,9 @@ impl AttricatRepository {
 
     /// Rejects a change to a value a movement read or set when its record
     /// was created: the movement applied once, so the balance would no
-    /// longer match. Values are compared in the default context, the only
-    /// one movement values are editable in.
+    /// longer match. A movement target's key values are kept the same way:
+    /// movements found the target by them. Values are compared in the
+    /// default context, the only one these values are editable in.
     pub(super) async fn ensure_movement_values_unchanged(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -725,15 +726,25 @@ impl AttricatRepository {
         if write.new_record {
             return Ok(());
         }
-        let codes: Vec<&str> = write
+        let guarded: Vec<(&str, bool)> = write
             .attributes()
             .iter()
             .filter(|attribute| {
-                !attribute.record_scoped && (attribute.movement_input || attribute.movement_managed)
+                !attribute.record_scoped
+                    && (attribute.movement_input
+                        || attribute.movement_managed
+                        || attribute.movement_key)
             })
-            .map(|attribute| attribute.code.as_str())
+            .map(|attribute| {
+                (
+                    attribute.code.as_str(),
+                    attribute.movement_key
+                        && !attribute.movement_input
+                        && !attribute.movement_managed,
+                )
+            })
             .collect();
-        if codes.is_empty() {
+        if guarded.is_empty() {
             return Ok(());
         }
         let default_context_id = write.default_context_id()?;
@@ -756,12 +767,17 @@ impl AttricatRepository {
                 .and_then(|attribute| attribute.by_context.get(&default_context_id))
                 .map(DirectValue::key_input)
         };
-        if let Some(code) = codes
-            .into_iter()
-            .find(|code| input(&before, code) != input(&after, code))
-        {
-            return Err(RepositoryError::MovementImmutable {
-                attribute: code.to_owned(),
+        // A target key may be set when it has no value yet, as a target
+        // created earlier in this transaction is, but never changed.
+        if let Some((code, target_key)) = guarded.into_iter().find(|(code, target_key)| {
+            let previous = input(&before, code);
+            (previous.is_some() || !target_key) && previous != input(&after, code)
+        }) {
+            let attribute = code.to_owned();
+            return Err(if target_key {
+                RepositoryError::MovementTargetKeyImmutable { attribute }
+            } else {
+                RepositoryError::MovementImmutable { attribute }
             });
         }
         Ok(())

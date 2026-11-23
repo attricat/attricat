@@ -205,6 +205,10 @@ pub enum RepositoryError {
         "attribute '{attribute}' was applied by the record's movement and cannot change; reverse the record instead"
     )]
     MovementImmutable { attribute: String },
+    #[error(
+        "attribute '{attribute}' is part of the key movements find this record by and cannot change"
+    )]
+    MovementTargetKeyImmutable { attribute: String },
     #[error("a movement record cannot be deleted; reverse it instead")]
     MovementRecordUndeletable,
     #[error("the record still holds {balance} in balance '{attribute}' and cannot be deleted")]

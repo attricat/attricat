@@ -614,7 +614,9 @@ Afterwards the values a movement read or set never change:
 `ensure_movement_values_unchanged`, called from `validate_record_schema_in`,
 compares their default-context values before and after every write except the
 record's own create (`WriteContext::new_record`) and fails with
-`409 movement_immutable`. `WriteAttribute::ensure_client_writable` rejects
+`409 movement_immutable`. The same check keeps the attributes of a unique key
+that some published movement finds its target by (`WriteAttribute::movement_key`):
+once such a key value is set it cannot change (`409 movement_target_key_immutable`). `WriteAttribute::ensure_client_writable` rejects
 client writes of balances (`balance_attribute_readonly`) and of the values a
 movement sets (`movement_attribute_readonly`) on every value and relationship
 path. Deleting a movement record fails with `movement_record_undeletable`, and

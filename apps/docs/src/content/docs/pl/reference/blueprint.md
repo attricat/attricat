@@ -764,6 +764,7 @@ Przyjęcie towaru wygląda tak samo, z `direction: in` i `create_missing: true`,
 - Saldo jest zawsze tylko do odczytu i tylko w kontekście domyślnym (`context_editable: default`). Rekord bez wartości ma saldo zero.
 - Saldo zmieniają tylko ruchy. Tworzenie, aktualizacje, czyszczenie wartości, przywracanie z historii, partie rekordów, przepływy pracy, agenci i rozszerzenia, które próbują je zapisać, są odrzucane z `422 balance_attribute_readonly`.
 - Rekordu z niezerowym saldem nie można usunąć: `409 balance_record_not_empty` z `attribute` i jego `balance`. Rekordy przykładowe pakietów rozwiązań są wyjątkiem.
+- Atrybuty klucza unikalnego, po którym ruch odnajduje rekord, np. produkt pozycji magazynowej, nie mogą się zmienić, gdy mają już wartość: `409 movement_target_key_immutable`. Ruchy zostały już zastosowane do rekordu według tego klucza.
 
 ### Klucze ruchu
 

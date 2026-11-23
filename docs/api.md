@@ -807,6 +807,7 @@ results report the same `code`, `message` and `details`.
 | `422` | `movement_quantity_invalid` | `attribute`: the quantity, missing or not greater than zero |
 | `409` | `movement_factor_invalid` | `attribute`: the linked record's factor, missing or not greater than zero |
 | `409` | `movement_immutable` | `attribute` a movement read or set; reverse the record instead |
+| `409` | `movement_target_key_immutable` | `attribute` of the unique key movements find the record by |
 | `409` | `movement_record_undeletable` | none |
 | `409` | `movement_already_reversed` | `record_id` and the existing reversal `reversed_by` |
 | `409` | `movement_reversal_of_reversal` | `record_id` of the reversal that was to be reversed |

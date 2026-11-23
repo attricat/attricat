@@ -67,6 +67,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `movement_factor_invalid` | 409 | The linked record's conversion factor is missing or not greater than zero. `details.attribute` names it. |
 | `movement_target_missing` | 409 | No record has the movement's key values, and the movement does not create one. `details` has `blueprint` and `key`. |
 | `movement_immutable` | 409 | A value the record's movement read or set cannot change. Reverse the record instead. `details.attribute` names it. |
+| `movement_target_key_immutable` | 409 | The attribute is part of the unique key movements find this record by, such as a stock item's product, and cannot change. `details.attribute` names it. |
 | `movement_record_undeletable` | 409 | Movement records cannot be deleted. Reverse the record instead. |
 | `movement_already_reversed` | 409 | The record is already reversed. `details` has `record_id` and `reversed_by`. |
 | `movement_reversal_of_reversal` | 409 | The record reverses another record and cannot be reversed itself. `details.record_id` names it. |

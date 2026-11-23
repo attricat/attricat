@@ -67,6 +67,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `movement_factor_invalid` | 409 | Przelicznika powiązanego rekordu brakuje albo nie jest większy od zera. `details.attribute` go wskazuje. |
 | `movement_target_missing` | 409 | Żaden rekord nie ma wartości klucza ruchu, a ruch go nie tworzy. `details` zawiera `blueprint` i `key`. |
 | `movement_immutable` | 409 | Wartość odczytana lub ustawiona przez ruch rekordu nie może się zmienić. Zamiast tego wycofaj rekord. `details.attribute` ją wskazuje. |
+| `movement_target_key_immutable` | 409 | Atrybut należy do klucza unikalnego, po którym ruchy odnajdują ten rekord, np. produkt pozycji magazynowej, i nie może się zmienić. `details.attribute` go wskazuje. |
 | `movement_record_undeletable` | 409 | Rekordów ruchów nie można usuwać. Zamiast tego wycofaj rekord. |
 | `movement_already_reversed` | 409 | Rekord jest już wycofany. `details` zawiera `record_id` i `reversed_by`. |
 | `movement_reversal_of_reversal` | 409 | Rekord wycofuje inny rekord i sam nie może zostać wycofany. `details.record_id` go wskazuje. |

@@ -150,6 +150,7 @@
     "movement_record_undeletable": "Movement records can't be deleted. Reverse the record instead.",
     "movement_reversal_mismatch": "{{attribute}} of a reversal must match the record it reverses.",
     "movement_reversal_of_reversal": "This record reverses another one and can't be reversed itself.",
+    "movement_target_key_immutable": "{{attribute}} is how receipts and issues find this record, so it can't change.",
     "movement_target_missing": "No {{blueprint}} record matches this movement.",
     "not_found": "It doesn't exist, or you can't access it.",
     "oidc_email_mismatch": "This invitation was sent to a different email address than your sign-on account uses.",

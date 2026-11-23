@@ -83,6 +83,7 @@ error_codes! {
     MovementQuantityInvalid = "movement_quantity_invalid",
     MovementFactorInvalid = "movement_factor_invalid",
     MovementImmutable = "movement_immutable",
+    MovementTargetKeyImmutable = "movement_target_key_immutable",
     MovementRecordUndeletable = "movement_record_undeletable",
     BalanceRecordNotEmpty = "balance_record_not_empty",
     MovementAlreadyReversed = "movement_already_reversed",
@@ -465,6 +466,10 @@ impl RepositoryError {
             }
             Self::MovementImmutable { attribute } => plain(Conflict, Code::MovementImmutable)
                 .with_details(json!({ "attribute": attribute })),
+            Self::MovementTargetKeyImmutable { attribute } => {
+                plain(Conflict, Code::MovementTargetKeyImmutable)
+                    .with_details(json!({ "attribute": attribute }))
+            }
             Self::MovementRecordUndeletable => plain(Conflict, Code::MovementRecordUndeletable),
             Self::BalanceRecordNotEmpty { attribute, balance } => {
                 plain(Conflict, Code::BalanceRecordNotEmpty).with_details(json!({
