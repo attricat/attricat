@@ -878,7 +878,8 @@ listed on every allowed target blueprint.
 `display: table` lists one relationship's records on the page instead, such
 as an order's lines; `columns` names the source attributes it shows (every
 attribute but the link back when empty) and `editable: true` lets people who
-can write records add, open and delete them in place:
+can write records edit their values in the table's cells, and add and delete
+them in place:
 
 ```yaml
       - type: incoming_relationship_list
@@ -894,11 +895,16 @@ can write records add, open and delete them in place:
 The web app (`IncomingRelationshipTable`, loaded lazily because it uses the
 record editors that register into the view registry) searches the source
 blueprint with a relationship filter on this record and reads each row's
-resolved default-context values. **Add** opens the create form with the link
-fixed; **Open** shows the row in the record panel, with the usual inline
-editing and locks; **Delete** asks first. Once the record's status applied
-the rows' movements, the record form's `settled_lines` names the
-`{blueprint, relationship}` pair and the table offers only **Open**; the
+resolved default-context values. In an editable table each row
+(`IncomingEditableRow`) also loads its record form and edits the cells it may
+change with the same `InlineFieldEditor`, `useRecordFieldSaves` and
+`changeableInlineAttributes` the record page uses, so saves, conflicts, status
+locks and applied-movement locks behave alike; `CompactFieldsContext` makes
+choices a list and leaves out relationship previews in cells. **Add** opens
+the create form with the link fixed; **Open** shows the row in the record
+panel; **Delete** asks first. Once the record's status applied the rows'
+movements, the record form's `settled_lines` names the
+`{blueprint, relationship}` pair and the table only shows and opens rows; the
 server refuses the changes anyway (`movement_lines_locked`, `movement_immutable`).
 The compiler requires exactly one relationship for a table, and `editable`
 and `columns` only with it.

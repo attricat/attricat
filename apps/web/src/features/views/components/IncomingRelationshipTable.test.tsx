@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../../i18n';
 import { listContexts } from '../../contexts/api';
@@ -8,6 +14,7 @@ import {
   getRecordForm,
   getResolvedRecordPreview,
   searchRecords,
+  updateRecord,
 } from '../../records/api';
 import { IncomingRelationshipTable } from './IncomingRelationshipTable';
 import { incomingTableColumns } from './incomingTableColumns';
@@ -21,6 +28,7 @@ vi.mock('../../records/api', async (importOriginal) => ({
   getRecordForm: vi.fn(),
   getResolvedRecordPreview: vi.fn(),
   searchRecords: vi.fn(),
+  updateRecord: vi.fn(),
 }));
 
 const orderId = '0190a6f2-7c1e-7b3a-9c4d-2e5f6a7b8c9d';
@@ -53,14 +61,43 @@ const node = {
   editable: true,
 };
 
+const lineForm = {
+  can_write: true,
+  record: {
+    id: lineId,
+    blueprint_id: lineBlueprint.blueprint.id,
+    blueprint_version: 1,
+    updated_at: '2026-11-23T10:00:00Z',
+  },
+  blueprint: lineBlueprint,
+  values: [
+    {
+      kind: 'scalar',
+      attribute_code: 'quantity',
+      context_id: defaultContextId,
+      value: 6,
+    },
+  ],
+  reusable_attributes: [],
+  reusable_values: [],
+  applied_movements: [],
+  settled_lines: [],
+  context: {},
+};
+
 const renderTable = (settled: boolean, canWrite = true) => {
-  vi.mocked(getRecordForm).mockResolvedValue({
-    blueprint: lineBlueprint,
-    can_write: canWrite,
-    settled_lines: settled
-      ? [{ blueprint: 'order_line', relationship: 'order' }]
-      : [],
-  } as never);
+  vi.mocked(getRecordForm).mockImplementation(
+    async (id: string) =>
+      (id === lineId
+        ? lineForm
+        : {
+            blueprint: lineBlueprint,
+            can_write: canWrite,
+            settled_lines: settled
+              ? [{ blueprint: 'order_line', relationship: 'order' }]
+              : [],
+          }) as never,
+  );
   render(
     <QueryClientProvider
       client={
@@ -113,7 +150,9 @@ describe('IncomingRelationshipTable', () => {
         .getAllByRole('columnheader')
         .map((header) => header.textContent),
     ).toEqual(['Quantity', 'Note', 'Actions']);
-    expect(await within(table).findByText('6')).toBeTruthy();
+    expect(
+      await within(table).findByRole('spinbutton', { name: 'Quantity' }),
+    ).toHaveProperty('value', '6');
     expect(searchRecords).toHaveBeenCalledWith(
       expect.objectContaining({
         blueprint: 'order_line',
@@ -130,6 +169,26 @@ describe('IncomingRelationshipTable', () => {
     expect(screen.getByRole('button', { name: 'Open Line 1' })).toBeTruthy();
   });
 
+  it('saves a changed cell on its own', async () => {
+    vi.mocked(updateRecord).mockResolvedValue({
+      updated_at: '2026-11-23T10:01:00Z',
+    } as never);
+    renderTable(false);
+
+    const quantity = await screen.findByRole('spinbutton', {
+      name: 'Quantity',
+    });
+    fireEvent.focus(quantity);
+    fireEvent.change(quantity, { target: { value: '8' } });
+    fireEvent.blur(quantity);
+
+    await waitFor(() => expect(updateRecord).toHaveBeenCalled());
+    expect(vi.mocked(updateRecord).mock.calls[0][0]).toBe(lineId);
+    expect(JSON.stringify(vi.mocked(updateRecord).mock.calls[0])).toContain(
+      '"quantity"',
+    );
+  });
+
   it('only opens settled records', async () => {
     renderTable(true);
 
@@ -141,6 +200,8 @@ describe('IncomingRelationshipTable', () => {
     ).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Add Order line' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Delete Line 1' })).toBeNull();
+    expect(await screen.findByText('6')).toBeTruthy();
+    expect(screen.queryByRole('spinbutton')).toBeNull();
   });
 
   it('offers no changes without write access', async () => {

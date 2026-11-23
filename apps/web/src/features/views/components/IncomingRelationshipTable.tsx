@@ -27,83 +27,56 @@ import { findDefaultContextId } from '../../contexts/defaultContext';
 import { contextListOptions } from '../../contexts/queryOptions';
 import { ExplorerRecordPanel } from '../../explorer/ExplorerRecordPanel';
 import { lexiconText } from '../../lexicon/lexicon';
-import { createRecord, searchRecords, type Attribute } from '../../records/api';
+import { createRecord, searchRecords } from '../../records/api';
 import { DeleteRecordDialog } from '../../records/components/DeleteRecordDialog';
 import { RecordForm } from '../../records/components/RecordForm';
 import { invalidateRecordSearches } from '../../records/invalidateRecord';
 import {
   blueprintByCodeOptions,
   recordFormOptions,
-  resolvedRecordPreviewOptions,
 } from '../../records/queryOptions';
 import { recordQueryKeys } from '../../records/queryKeys';
 import { attributeLabel } from '../../records/recordDisplay';
 import { attributeValueKinds } from '../../records/valueTypes';
 import type { ViewNode } from '../schemas';
-import { AttributeValue } from './values/AttributeValue';
+import { IncomingEditableRow } from './IncomingEditableRow';
 import { incomingTableColumns } from './incomingTableColumns';
-import { NotSetValue } from './values/NotSetValue';
 
 type Node = Extract<ViewNode, { type: 'incoming_relationship_list' }>;
 type Relationship = Node['relationships'][number];
 
-/** One record linking to the page's record, with its values in the default context. */
-const IncomingRow = ({
-  columns,
-  contextId,
+/** Opens a linked record in the side panel, or deletes it. */
+const RowActions = ({
   editable,
   label,
   onDelete,
   onOpen,
-  rowId,
 }: {
-  columns: readonly Attribute[];
-  contextId: string | null;
   editable: boolean;
   label: string;
   onDelete: () => void;
   onOpen: () => void;
-  rowId: string;
 }) => {
   const { t } = useTranslation();
-  const preview = useQuery(resolvedRecordPreviewOptions(rowId, contextId));
   return (
-    <TableRow hover>
-      {columns.map((attribute) => {
-        const value = preview.data?.values[attribute.code]?.value;
-        return (
-          <TableCell key={attribute.code}>
-            {value === undefined || value === null ? (
-              <NotSetValue />
-            ) : (
-              <AttributeValue
-                attribute={attribute}
-                recordId={rowId}
-                value={value}
-              />
-            )}
-          </TableCell>
-        );
-      })}
-      <TableCell align="right" sx={{ whiteSpace: 'nowrap', width: '1%' }}>
+    <>
+      <LabeledIconButton
+        label={t('views.incomingTable.open', { label })}
+        onClick={onOpen}
+        size="small"
+      >
+        <PanelRightOpenIcon size={compactIconSize} />
+      </LabeledIconButton>
+      {editable && (
         <LabeledIconButton
-          label={t('views.incomingTable.open', { label })}
-          onClick={onOpen}
+          label={t('views.incomingTable.delete', { label })}
+          onClick={onDelete}
           size="small"
         >
-          <PanelRightOpenIcon size={compactIconSize} />
+          <Trash2Icon size={compactIconSize} />
         </LabeledIconButton>
-        {editable && (
-          <LabeledIconButton
-            label={t('views.incomingTable.delete', { label })}
-            onClick={onDelete}
-            size="small"
-          >
-            <Trash2Icon size={compactIconSize} />
-          </LabeledIconButton>
-        )}
-      </TableCell>
-    </TableRow>
+      )}
+    </>
   );
 };
 
@@ -225,8 +198,9 @@ const AddIncomingRecordDialog = ({
 
 /**
  * The records linking to this one through one relationship, as a table on
- * the record's page, such as an order's lines. An editable table adds,
- * opens and deletes them in place until the record's status settles them.
+ * the record's page, such as an order's lines. An editable table edits their
+ * values in its cells, and adds and deletes them, until the record's status
+ * settles them.
  */
 export const IncomingRelationshipTable = ({
   recordId,
@@ -327,19 +301,24 @@ export const IncomingRelationshipTable = ({
             </TableHead>
             <TableBody>
               {items.map((item) => (
-                <IncomingRow
+                <IncomingEditableRow
+                  actions={
+                    <RowActions
+                      editable={editable}
+                      // A record without a label is named by its blueprint.
+                      label={
+                        item.display.default ||
+                        Object.values(item.display).find(Boolean) ||
+                        name
+                      }
+                      onDelete={() => setDeleting(item.id)}
+                      onOpen={() => setOpened(item.id)}
+                    />
+                  }
                   columns={columns}
                   contextId={defaultContextId}
                   editable={editable}
                   key={item.id}
-                  // A record without a label is named by its blueprint.
-                  label={
-                    item.display.default ||
-                    Object.values(item.display).find(Boolean) ||
-                    name
-                  }
-                  onDelete={() => setDeleting(item.id)}
-                  onOpen={() => setOpened(item.id)}
                   rowId={item.id}
                 />
               ))}

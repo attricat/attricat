@@ -1,7 +1,11 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { MovementAppliedNotice } from './MovementAppliedNotice';
 import { RelationshipScopeContext } from './relationshipScope';
-import { movementInputCodes, movementManagedCodes } from '../movements';
+import { movementManagedCodes } from '../movements';
+import {
+  changeableInlineAttributes,
+  commitsImmediately,
+} from '../inlineFields';
 import { Box, Button, Stack } from '@mui/material';
 import { useEffect, useImperativeHandle, useState, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -10,7 +14,6 @@ import { checkViolationError } from '../../../api/checkViolations';
 import { ApiErrorAlert } from '../../../components/ApiErrorAlert';
 import { useViolationText } from '../../../components/useViolationText';
 import { useBeforeUnloadWarning } from '../../drafts/useBeforeUnloadWarning';
-import { principalConfiguration } from '../../principals/principal';
 import {
   EditableRecordLayout,
   EditableRecordSection,
@@ -41,7 +44,6 @@ import {
   valuesForForm,
 } from '../recordForm';
 import {
-  editableFormAttributes,
   recordSchemaRequiredAttributes,
   headingEditableAttributes,
   smartFillFormFields,
@@ -49,10 +51,8 @@ import {
 } from '../recordFormAttributes';
 import { schemaMismatchField } from '../recordFieldSaves';
 import { recordFormOptions } from '../queryOptions';
-import { choiceEditorOptions } from '../choices';
-import { savedStatusLocks, statusConfiguration, statusLocks } from '../status';
+import { savedStatusLocks } from '../status';
 import { useRecordFieldSaves } from '../useRecordFieldSaves';
-import { attributeValueTypes } from '../valueTypes';
 import { RecordFormAttributeEditor } from './RecordFormAttributeEditor';
 import { StatusLockNotice } from './StatusLockNotice';
 import { FieldValueAtRest } from './FieldValueAtRest';
@@ -99,18 +99,6 @@ export type RecordInlineFieldsHandle = {
   applySmartFillValues: (values: Record<string, string>) => void;
 };
 
-/** Changes of these kinds are final choices rather than typing. */
-const commitsImmediately = (
-  attribute: Attribute,
-  component: ComponentReference | undefined,
-) =>
-  attribute.value_type === attributeValueTypes.relationship ||
-  attribute.value_type === attributeValueTypes.boolean ||
-  attribute.value_type === attributeValueTypes.file ||
-  statusConfiguration(attribute) !== undefined ||
-  choiceEditorOptions(attribute, component) !== undefined ||
-  principalConfiguration(attribute) !== undefined;
-
 /**
  * The record's detail view with every field the user may change rendered as
  * an always-editable control. Each committed field saves on its own.
@@ -138,27 +126,13 @@ export const RecordInlineFields = ({
   const violationText = useViolationText();
   const allAttributes = [...attributes, ...form.reusable_attributes];
   const existingValues = [...form.values, ...form.reusable_values];
-  const editable = form.can_write
-    ? editableFormAttributes(allAttributes, {
-        contextId,
-        defaultContextId,
-      })
-    : [];
-  const locks = statusLocks(
+  const { changeable, locks, movementInputs } = changeableInlineAttributes(
+    form,
     allAttributes,
-    existingValues,
-    contextId,
-    statusParentContextIds,
+    { contextId, defaultContextId, statusParentContextIds },
   );
   const movements = form.blueprint.blueprint.movements;
-  const movementInputs = movementInputCodes(movements, form.applied_movements);
   const movementManaged = movementManagedCodes(movements);
-  // A movement applies once; what it read stays as it was.
-  const changeable = editable.filter(
-    (attribute) =>
-      locks[attribute.code] === undefined &&
-      !movementInputs.has(attribute.code),
-  );
   const changeableCodes = changeable.map((attribute) => attribute.code);
   const editComponents = viewFieldEditComponents(view);
   const fieldRules = viewFieldEditors(editComponents, changeable);

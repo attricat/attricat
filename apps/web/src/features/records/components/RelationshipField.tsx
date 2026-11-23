@@ -37,6 +37,7 @@ import {
   RelatedRecordPreviewToggle,
 } from './RelatedRecordPreview';
 import { RelationshipPickerDialog } from './RelationshipPickerDialog';
+import { CompactFieldsContext } from './compactFields';
 import { RelationshipScopeContext } from './relationshipScope';
 import { relationshipScopeFilters } from '../movements';
 import { useRecentlyPreviewedRecords } from './useRecentlyPreviewedRecords';
@@ -158,9 +159,10 @@ export const RelationshipField = ({
   const selectorDisabled = disabled || allowedTargets.length === 0;
   const selectorOpen = open && !selectorDisabled;
   const selectionLabels = useRelationshipSelectionLabels(selectedIds);
+  const compact = useContext(CompactFieldsContext);
   const preview = useRelatedRecordPreview(
     attribute,
-    selectedIds.length === 1 ? selectedIds[0] : undefined,
+    selectedIds.length === 1 && !compact ? selectedIds[0] : undefined,
   );
 
   const previewLabel = preview

@@ -496,7 +496,7 @@ Może go zdefiniować tylko schemat rekordów i tylko pod nazwą `explorer`. Bez
 | `accordion` | `sections`: lista `{label, children}` | Zwijane sekcje. |
 | `field` | `field`; opcjonalnie `editor` | Jeden atrybut skalarny lub plikowy. W `detail` klucz `editor` wskazuje edytor atrybutu z rozszerzenia przez `extension_id`, `id`, `version` i `props`; zobacz [Edytory atrybutów](/pl/extensions/manifest/#edytory-atrybutów). |
 | `relationship_list` | `field` | Jeden atrybut relacji i jego cele. |
-| `incoming_relationship_list` | `label`, `relationships`, `page_size`, `display`, `editable`, `columns` | Link otwierający Przeglądarkę rekordów w nowej karcie, przefiltrowaną do rekordów wskazujących na ten rekord; osobny link dla każdej relacji. `relationships` to lista `{source_blueprint, field}`. `page_size` jest ograniczane przez `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE` serwera. Z `display: table` (domyślnie `links`) rekordy dokładnie jednej relacji są zamiast tego wyświetlane w tabeli na stronie, najwyżej `page_size`, z atrybutami źródła wskazanymi w `columns` (bez niego ze wszystkimi poza relacją zwrotną). `editable: true` dodaje do tabeli **Dodaj**, **Otwórz** i **Usuń**; zobacz [Pozycje zlecenia](#pozycje-zlecenia). Dozwolone tylko w `detail`. |
+| `incoming_relationship_list` | `label`, `relationships`, `page_size`, `display`, `editable`, `columns` | Link otwierający Przeglądarkę rekordów w nowej karcie, przefiltrowaną do rekordów wskazujących na ten rekord; osobny link dla każdej relacji. `relationships` to lista `{source_blueprint, field}`. `page_size` jest ograniczane przez `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE` serwera. Z `display: table` (domyślnie `links`) rekordy dokładnie jednej relacji są zamiast tego wyświetlane w tabeli na stronie, najwyżej `page_size`, z atrybutami źródła wskazanymi w `columns` (bez niego ze wszystkimi poza relacją zwrotną). `editable: true` pozwala edytować komórki tabeli i dodaje do niej **Dodaj** oraz **Usuń**; zobacz [Pozycje zlecenia](#pozycje-zlecenia). Dozwolone tylko w `detail`. |
 | `heading` | `text` | Statyczny nagłówek. |
 | `text` | `text` | Statyczny akapit. |
 | `divider` | | Linia pozioma. |
@@ -867,7 +867,7 @@ Aby pracować na pozycjach ze strony zlecenia, pokaż je w edytowalnej tabeli:
     - {source_blueprint: production_order_line, field: production_order}
 ```
 
-**Dodaj** otwiera formularz nowej pozycji z już ustawionym zleceniem, **Otwórz** pokazuje pozycję obok zlecenia do edycji, a **Usuń** ją usuwa. Gdy pozycje są zaksięgowane, tabela pozwala je tylko otwierać.
+Komórki tabeli edytują każdą pozycję na miejscu, a zmieniona komórka zapisuje się po jej opuszczeniu, tak jak pola na stronie rekordu. Komórki, których pozycja nie pozwala zmienić, pokazują jej wartość. **Dodaj** otwiera formularz nowej pozycji z już ustawionym zleceniem, **Otwórz** pokazuje cały rekord pozycji obok zlecenia, a **Usuń** ją usuwa. Gdy pozycje są zaksięgowane, tabela pozwala je tylko wyświetlać i otwierać.
 
 ### Rezerwacje
 

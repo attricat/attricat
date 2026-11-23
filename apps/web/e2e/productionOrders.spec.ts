@@ -370,7 +370,7 @@ movements:
 };
 
 for (const colorScheme of ['light', 'dark'] as const) {
-  test(`adds an order's lines on its page until approval in ${colorScheme} mode`, async ({
+  test(`adds and edits an order's lines on its page until approval in ${colorScheme} mode`, async ({
     page,
   }) => {
     await page.emulateMedia({ colorScheme });
@@ -403,7 +403,13 @@ for (const colorScheme of ['light', 'dark'] as const) {
     await addLine('4', false);
     await addLine('9', false);
     await expect(lines.getByRole('row')).toHaveCount(3);
-    await expect(lines.getByText('9', { exact: true })).toBeVisible();
+    const quantities = lines.getByRole('spinbutton', { name: 'quantity' });
+    await expect(quantities).toHaveCount(2);
+
+    // A cell edits its line in place and saves when it is left.
+    await quantities.first().fill('5');
+    await quantities.first().press('Enter');
+    await expect(lines.getByText('Saved')).toBeVisible();
 
     // A draft's line can still be removed.
     await lines
@@ -416,9 +422,9 @@ for (const colorScheme of ['light', 'dark'] as const) {
       .click();
     await expect(lines.getByRole('row')).toHaveCount(2);
 
-    // Approval reserves the remaining line and settles the table.
+    // Approval reserves the edited line and settles the table.
     expect((await chooseStatus(page, order.id, 'Approved')).ok()).toBe(true);
-    await expect.poll(() => stock(stockItemId)).toEqual([10, 4]);
+    await expect.poll(() => stock(stockItemId)).toEqual([10, 5]);
     await expect(
       page.getByText(/were posted with the record's status/),
     ).toBeVisible();
@@ -428,6 +434,8 @@ for (const colorScheme of ['light', 'dark'] as const) {
     await expect(lines.getByRole('button', { name: /^Delete / })).toHaveCount(
       0,
     );
+    await expect(lines.getByRole('spinbutton')).toHaveCount(0);
+    await expect(lines.getByText('5', { exact: true })).toBeVisible();
 
     // The line still opens beside the order, with its applied values locked.
     await lines.getByRole('button', { name: /^Open / }).click();

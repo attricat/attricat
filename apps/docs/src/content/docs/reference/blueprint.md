@@ -496,7 +496,7 @@ Only a record blueprint can define it, and only under the name `explorer`. Witho
 | `accordion` | `sections`: list of `{label, children}` | Collapsible sections. |
 | `field` | `field`; optional `editor` | One scalar or file attribute. In `detail`, `editor` names an extension's attribute editor by `extension_id`, `id`, `version` and `props`; see [Attribute editors](/extensions/manifest/#attribute-editors). |
 | `relationship_list` | `field` | One relationship attribute and its targets. |
-| `incoming_relationship_list` | `label`, `relationships`, `page_size`, `display`, `editable`, `columns` | A link that opens the Explorer in a new tab, filtered to records linking to this one; one link per relationship. `relationships` is a list of `{source_blueprint, field}`. `page_size` is capped by the server's `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE`. With `display: table` (default `links`), the records of exactly one relationship are listed in a table on the page instead, up to `page_size` of them, with the source attributes `columns` names (every attribute but the link back when omitted). `editable: true` adds **Add**, **Open** and **Delete** to the table; see [Order lines](#order-lines). Allowed only in `detail`. |
+| `incoming_relationship_list` | `label`, `relationships`, `page_size`, `display`, `editable`, `columns` | A link that opens the Explorer in a new tab, filtered to records linking to this one; one link per relationship. `relationships` is a list of `{source_blueprint, field}`. `page_size` is capped by the server's `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE`. With `display: table` (default `links`), the records of exactly one relationship are listed in a table on the page instead, up to `page_size` of them, with the source attributes `columns` names (every attribute but the link back when omitted). `editable: true` makes the table's cells editable and adds **Add** and **Delete** to it; see [Order lines](#order-lines). Allowed only in `detail`. |
 | `heading` | `text` | Static heading. |
 | `text` | `text` | Static paragraph. |
 | `divider` | | Horizontal rule. |
@@ -867,7 +867,7 @@ To work on the lines from the order's page, list them in an editable table:
     - {source_blueprint: production_order_line, field: production_order}
 ```
 
-**Add** opens a form for a new line with the order already set, **Open** shows a line beside the order to edit it, and **Delete** removes one. Once the lines are settled, the table only opens them.
+The table's cells edit each line in place, and every changed cell saves when you leave it, as fields do on a record's page. Cells a line doesn't let you change show its value. **Add** opens a form for a new line with the order already set, **Open** shows a line's whole record beside the order, and **Delete** removes one. Once the lines are settled, the table only shows and opens them.
 
 ### Reservations
 

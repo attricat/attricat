@@ -10,9 +10,10 @@ import {
   ToggleButton,
   ToggleButtonGroup,
 } from '@mui/material';
-import { useId, type ReactNode } from 'react';
+import { useContext, useId, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ChoiceOption } from '../../records/choices';
+import { CompactFieldsContext } from '../../records/components/compactFields';
 import { booleanFieldValues } from '../../records/constants';
 import { attributeLabel } from '../../records/recordDisplay';
 import type { ValueEditorProps } from '../components/componentTypes';
@@ -107,7 +108,7 @@ export const BooleanEditor = ({
 
 /**
  * An `enum` attribute's values, labelled where configured: radio buttons for a
- * short list, a searchable list for a long one. A stored value that is no
+ * short list, a searchable list for a long one or in a tight space. A stored value that is no
  * longer allowed stays visible as an error.
  */
 export const ChoiceEditor = ({
@@ -121,13 +122,14 @@ export const ChoiceEditor = ({
   onChange,
 }: ValueEditorProps & { options: readonly ChoiceOption[] }) => {
   const { t } = useTranslation();
+  const compact = useContext(CompactFieldsContext);
   const known = !value || options.some((option) => option.code === value);
   const problem =
     error ?? (known ? undefined : t('records.choiceUnknown', { value }));
   const change = (next: string) => {
     if (!disabled) onChange(next);
   };
-  if (options.length > RADIO_CHOICE_LIMIT)
+  if (compact || options.length > RADIO_CHOICE_LIMIT)
     return (
       <Autocomplete
         disabled={disabled}
