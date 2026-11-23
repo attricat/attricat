@@ -19,6 +19,7 @@ pub struct BlueprintDefinition {
     /// stored revision may; saving such a definition is refused.
     pub embedded_rules: bool,
     pub unique_keys: Vec<UniqueKeyDefinition>,
+    pub movements: Vec<crate::MovementDefinition>,
     pub attributes: Vec<AttributeDeclaration>,
 }
 
@@ -536,6 +537,8 @@ pub struct LocalAttributeDeclaration {
     pub context_editable: attricat_domain::attribute_options::ContextEditable,
     pub readonly: bool,
     pub generated: Option<crate::GeneratedValue>,
+    pub balance: Option<crate::BalancePolicy>,
+    pub target_scope: Option<crate::TargetScope>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -582,6 +585,11 @@ pub struct EffectiveAttribute {
     /// Set only on the record blueprint that declares it: a `from` selection
     /// never generates.
     pub generated: Option<crate::GeneratedValue>,
+    /// Set only on the record blueprint that declares it, like `generated`:
+    /// only that blueprint's movements write it.
+    pub balance: Option<crate::BalancePolicy>,
+    /// Filters the record picker; carried over by `from` selections.
+    pub target_scope: Option<crate::TargetScope>,
     pub position: i64,
 }
 
@@ -599,5 +607,6 @@ pub struct CompiledBlueprint {
     /// stored revision may; saving such a definition is refused.
     pub embedded_rules: bool,
     pub unique_keys: Vec<UniqueKeyDefinition>,
+    pub movements: Vec<crate::MovementDefinition>,
     pub attributes: Vec<EffectiveAttribute>,
 }

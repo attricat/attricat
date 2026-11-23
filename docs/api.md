@@ -275,7 +275,10 @@ file references, and its audit event commit in one transaction; each file list
 is written once, so the copy starts with no value history.
 
 [Generated](blueprints.md#generated-values) values are not copied; the copy
-is numbered like any new record.
+is numbered like any new record. Balances and the values a
+[movement](blueprints.md#balances-and-movements) sets are not copied either: a
+copied balance record starts at zero, and a copied movement record applies its
+own movement.
 
 Values of the family's enforced `unique_keys` attributes are left out,
 because the copy could never share them with its source: the default-context
@@ -796,6 +799,18 @@ results report the same `code`, `message` and `details`.
 | `422` | `generated_attribute_readonly` | `attribute`: a generated attribute, which no client can write |
 | `409` | `generated_sequence_not_raised` | `current` next value and the lower `requested` one; counters can only be raised |
 | `409` | `generated_reset_changed` | `attribute`, and the `previous` and `requested` `reset`; a blueprint revision cannot change the `reset` of an attribute an earlier revision generated |
+| `422` | `balance_attribute_readonly` | `attribute`: a [balance](blueprints.md#balances-and-movements), which only movements change |
+| `422` | `movement_attribute_readonly` | `attribute`: the target link or result a movement sets |
+| `409` | `balance_below_minimum` | `attribute`, target `record_id`, and `available`, `requested`, `minimum` as decimal strings |
+| `409` | `balance_record_not_empty` | `attribute` and its `balance` (decimal string) |
+| `409` | `movement_target_missing` | target `blueprint` and `key` |
+| `422` | `movement_quantity_invalid` | `attribute`: the quantity, missing or not greater than zero |
+| `409` | `movement_factor_invalid` | `attribute`: the linked record's factor, missing or not greater than zero |
+| `409` | `movement_immutable` | `attribute` a movement read or set; reverse the record instead |
+| `409` | `movement_record_undeletable` | none |
+| `409` | `movement_already_reversed` | `record_id` and the existing reversal `reversed_by` |
+| `409` | `movement_reversal_of_reversal` | `record_id` of the reversal that was to be reversed |
+| `422` | `movement_reversal_mismatch` | `attribute` of the reversal that differs from the original |
 | `409` | `annotation_revision_conflict` | `expected`, `actual` revisions |
 | `409` | `rule_dry_run_required` | none when no completed full dry run of the definition exists; run `run-now` with `"dry_run": true` first, and the unsaved `definition` when saving a change. When the latest one was truncated: `truncated: true` and `existing_violations` (found among the candidates it checked), with a distinct message; pass `accept_existing_violations` |
 | `409` | `rule_has_existing_violations` | `existing_violations` (a count); fix the records or pass `accept_existing_violations` |

@@ -1,4 +1,6 @@
 import { VIEW_EDIT_LAYOUT_SPACING } from '../../views/constants';
+import { movementManagedCodes } from '../movements';
+import { RelationshipScopeContext } from './relationshipScope';
 import { useForm, useStore } from '@tanstack/react-form';
 import {
   Alert,
@@ -546,6 +548,7 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
       existingValues,
       statusSavedValues: savedValues,
       lockedAttributes,
+      movementManaged: movementManagedCodes(blueprint?.blueprint.movements),
       statusTransitions: noStatusTransitions,
       fieldErrors: allFieldErrors,
       migrationReviews,
@@ -785,28 +788,32 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
                   );
                 };
                 return (
-                  <FieldDiagnosticsContext value={diagnostics}>
-                    <RevealFieldContext value={revealField}>
-                      <FieldRevealContext value={revealRequest}>
-                        <EditableRecordLayout
-                          attributes={blueprint.attributes}
-                          fallbackVisibilityScope={
-                            showAllAttributes
-                              ? undefined
-                              : detailView
-                                ? 'detail'
-                                : 'form'
-                          }
-                          headingAttributes={headingFields}
-                          invalidFields={new Set(Object.keys(allFieldErrors))}
-                          otherAttributes={otherAttributes}
-                          renderEditor={renderEditor}
-                          values={noResolvedValues}
-                          view={shownView}
-                        />
-                      </FieldRevealContext>
-                    </RevealFieldContext>
-                  </FieldDiagnosticsContext>
+                  // A relationship with a target scope filters its picker
+                  // by another field of this form.
+                  <RelationshipScopeContext value={field.state.value}>
+                    <FieldDiagnosticsContext value={diagnostics}>
+                      <RevealFieldContext value={revealField}>
+                        <FieldRevealContext value={revealRequest}>
+                          <EditableRecordLayout
+                            attributes={blueprint.attributes}
+                            fallbackVisibilityScope={
+                              showAllAttributes
+                                ? undefined
+                                : detailView
+                                  ? 'detail'
+                                  : 'form'
+                            }
+                            headingAttributes={headingFields}
+                            invalidFields={new Set(Object.keys(allFieldErrors))}
+                            otherAttributes={otherAttributes}
+                            renderEditor={renderEditor}
+                            values={noResolvedValues}
+                            view={shownView}
+                          />
+                        </FieldRevealContext>
+                      </RevealFieldContext>
+                    </FieldDiagnosticsContext>
+                  </RelationshipScopeContext>
                 );
               }}
             </form.Field>

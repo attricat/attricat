@@ -1066,6 +1066,9 @@ fn plan_blueprint_actions(
                 );
                 if publication == BlueprintPublication::Publish {
                     dependencies.extend(blueprint.table_path_dependencies().iter().cloned());
+                    // Publishing checks a movement's target and factor
+                    // blueprints, which must be published already.
+                    dependencies.extend(blueprint.movement_dependencies().iter().cloned());
                 }
             }
             ((*key).to_owned(), dependencies)
@@ -1626,6 +1629,13 @@ pub(super) fn normalized_blueprint_payload(
                         *target = Value::String(mappings[&key].target_code.clone());
                     }
                 }
+            }
+        }
+    }
+    if let Some(movements) = table.get_mut("movements").and_then(Value::as_array_mut) {
+        for movement in movements {
+            if let Some(target) = movement.get_mut("target").and_then(Value::as_object_mut) {
+                normalize_reference(target, "blueprint", mappings);
             }
         }
     }

@@ -33,6 +33,7 @@ export const blueprintSchema = z.object({
   deleted_at: z.string().nullable(),
   definition: z.string(),
   definition_hash: z.string(),
+  movements: recordBlueprintSchema.shape.movements,
 });
 
 const attributeSchema = recordAttributeSchema.extend({

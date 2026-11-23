@@ -1,4 +1,11 @@
-import { forwardRef, useId, useRef, useState, type ReactNode } from 'react';
+import {
+  forwardRef,
+  useContext,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -30,6 +37,8 @@ import {
   RelatedRecordPreviewToggle,
 } from './RelatedRecordPreview';
 import { RelationshipPickerDialog } from './RelationshipPickerDialog';
+import { RelationshipScopeContext } from './relationshipScope';
+import { relationshipScopeFilters } from '../movements';
 import { useRecentlyPreviewedRecords } from './useRecentlyPreviewedRecords';
 import { RelationshipSelectionPills } from './RelationshipSelectionPills';
 import { useRelationshipSelectionLabels } from './useRelationshipSelectionLabels';
@@ -137,6 +146,10 @@ export const RelationshipField = ({
     ? (recordBlueprints.data ?? []).map((blueprint) => blueprint.code)
     : restrictedTargets;
   const selectedIds = relationshipIdsForField(value);
+  const targetFilters = relationshipScopeFilters(
+    attribute,
+    useContext(RelationshipScopeContext),
+  );
   const isSingle = attribute.cardinality === attributeCardinalities.one;
   const selectorDisabled = disabled || allowedTargets.length === 0;
   const selectorOpen = open && !selectorDisabled;
@@ -245,6 +258,7 @@ export const RelationshipField = ({
         previewSelectRef={previewSelectRef}
         recentPreviews={recentPreviews}
         selectionLabels={selectionLabels}
+        targetFilters={targetFilters}
       />
     </>
   );

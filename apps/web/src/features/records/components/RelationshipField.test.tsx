@@ -18,6 +18,7 @@ import {
   type RecordSearchResponse,
 } from '../api';
 import { RelationshipField } from './RelationshipField';
+import { RelationshipScopeContext } from './relationshipScope';
 import { relationshipPickerMessageType } from './useRecentlyPreviewedRecords';
 
 vi.mock('../api', () => ({
@@ -128,6 +129,44 @@ const openSelector = async (user: ReturnType<typeof userEvent.setup>) => {
 };
 
 describe('RelationshipField', () => {
+  it('offers only the targets a target scope allows', async () => {
+    vi.mocked(searchRecords).mockResolvedValue(
+      page([{ id: firstId, label: 'Box of 12' }], null),
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RelationshipScopeContext value={{ product: laterId }}>
+          <RelationshipField
+            attribute={{
+              ...attribute,
+              cardinality: 'one',
+              target_scope: { attribute: 'product', equals: 'product' },
+            }}
+            onChange={vi.fn()}
+            value=""
+          />
+        </RelationshipScopeContext>
+      </QueryClientProvider>,
+    );
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole('button', { name: 'Choose related products' }),
+    );
+    await waitFor(() =>
+      expect(searchRecords).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          blueprint: 'product',
+          relationshipFilters: [
+            { field: 'product', selected_target_ids: [laterId] },
+          ],
+        }),
+      ),
+    );
+  });
+
   it('labels selected records of different blueprints in one lookup', async () => {
     mockLabels({ [firstId]: 'Oak chair', [laterId]: 'Walnut veneer' });
 

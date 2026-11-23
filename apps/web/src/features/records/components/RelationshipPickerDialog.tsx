@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type RefObject } from 'react';
+import type { RelationshipTargetFilter } from '../movements';
 import { useTranslation } from 'react-i18next';
 import { MenuItem, Stack, TextField, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
@@ -39,6 +40,7 @@ export const RelationshipPickerDialog = ({
   previewSelectRef,
   recentPreviews,
   selectionLabels,
+  targetFilters,
 }: {
   /** Blueprints the relationship may link to; the first is searched first. */
   allowedTargets: readonly string[];
@@ -54,6 +56,8 @@ export const RelationshipPickerDialog = ({
   recentPreviews: RecentlyPreviewedRecords;
   /** Labels of the records already selected in the field. */
   selectionLabels: ReadonlyMap<string, string>;
+  /** Narrows the offered targets, such as a relationship's `target_scope`. */
+  targetFilters?: readonly RelationshipTargetFilter[];
 }) => {
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
@@ -81,6 +85,7 @@ export const RelationshipPickerDialog = ({
     targetBlueprint,
     query,
     open,
+    targetFilters,
   );
   const blueprints = useQuery({ ...recordBlueprintsOptions(), enabled: open });
   const blueprintName = (code: string) => {

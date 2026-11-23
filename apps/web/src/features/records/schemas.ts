@@ -13,6 +13,7 @@ import {
   attributeFilterOperators,
   attributeHierarchies,
   generatedSequenceResets,
+  movementDirections,
   publicationStatuses,
   resultVersionScopeKinds,
   approvalEndReasons,
@@ -60,6 +61,18 @@ export const attributeSchema = z
         time_zone: z.string(),
       })
       .nullish(),
+    /**
+     * A number only movement records change, such as a stock level. `min` is
+     * a decimal string; clients never write the attribute.
+     */
+    balance: z.object({ min: z.string().optional() }).nullish(),
+    /**
+     * The record picker offers only targets whose `attribute` links to the
+     * record this record's `equals` links to.
+     */
+    target_scope: z
+      .object({ attribute: z.string(), equals: z.string() })
+      .nullish(),
     tags: z.array(z.string()).optional(),
     value_schema: jsonSchemaSchema.nullish(),
     extension_type: z
@@ -87,6 +100,25 @@ export const attributeSchema = z
       .optional(),
   })
   .passthrough();
+/** How creating a record changes a balance on the record it finds. */
+export const movementSchema = z.object({
+  code: z.string(),
+  direction: z.enum(movementDirections),
+  quantity: z.string(),
+  factor: z
+    .object({ relationship: z.string(), attribute: z.string() })
+    .optional(),
+  result: z.string().optional(),
+  target: z.object({
+    relationship: z.string(),
+    blueprint: z.string(),
+    balance: z.string(),
+    key: z.string(),
+    values: z.record(z.string(), z.string()),
+    create_missing: z.boolean(),
+  }),
+  reversal: z.object({ relationship: z.string() }).optional(),
+});
 export const blueprintSchema = z
   .object({
     id: uuidSchema,
@@ -96,6 +128,7 @@ export const blueprintSchema = z
     status: revisionStatusSchema,
     views: viewsSchema.default({}),
     record_schema: jsonSchemaSchema.nullish(),
+    movements: z.array(movementSchema).optional(),
   })
   .passthrough();
 export const blueprintWithAttributesSchema = z.object({

@@ -93,6 +93,7 @@ mod solution_pack_seeds;
 mod solution_packs;
 mod staged_file_uploads;
 mod status_control;
+mod stock_movements;
 mod system_users;
 mod tag_colors;
 mod tasks;

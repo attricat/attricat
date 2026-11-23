@@ -176,6 +176,48 @@ pub enum RepositoryError {
         "attribute '{attribute}' is generated when the record is created and cannot be written"
     )]
     GeneratedAttributeReadonly { attribute: String },
+    #[error("attribute '{attribute}' is a balance that only movement records change")]
+    BalanceAttributeReadonly { attribute: String },
+    #[error("attribute '{attribute}' is set by the record's movement and cannot be written")]
+    MovementAttributeReadonly { attribute: String },
+    #[error(
+        "the movement would leave balance '{attribute}' at {} on record {record_id}, below its minimum {minimum}",
+        available - requested
+    )]
+    BalanceBelowMinimum {
+        attribute: String,
+        record_id: Uuid,
+        /// The balance before the movement.
+        available: rust_decimal::Decimal,
+        /// What the movement subtracts.
+        requested: rust_decimal::Decimal,
+        minimum: rust_decimal::Decimal,
+    },
+    #[error("no '{blueprint}' record has the movement's '{key}' key values")]
+    MovementTargetMissing { blueprint: String, key: String },
+    #[error("movement quantity '{attribute}' must be a number greater than zero")]
+    MovementQuantityInvalid { attribute: String },
+    #[error(
+        "movement factor '{attribute}' of the linked record must be a number greater than zero"
+    )]
+    MovementFactorInvalid { attribute: String },
+    #[error(
+        "attribute '{attribute}' was applied by the record's movement and cannot change; reverse the record instead"
+    )]
+    MovementImmutable { attribute: String },
+    #[error("a movement record cannot be deleted; reverse it instead")]
+    MovementRecordUndeletable,
+    #[error("the record still holds {balance} in balance '{attribute}' and cannot be deleted")]
+    BalanceRecordNotEmpty {
+        attribute: String,
+        balance: rust_decimal::Decimal,
+    },
+    #[error("record {record_id} is already reversed by record {reversed_by}")]
+    MovementAlreadyReversed { record_id: Uuid, reversed_by: Uuid },
+    #[error("record {record_id} reverses another record and cannot itself be reversed")]
+    MovementReversalOfReversal { record_id: Uuid },
+    #[error("attribute '{attribute}' of a reversal must match the record it reverses")]
+    MovementReversalMismatch { attribute: String },
     #[error(
         "the sequence's next value is already {current}; it can only be raised, not set to {requested}"
     )]

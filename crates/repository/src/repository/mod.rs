@@ -10,8 +10,12 @@
 //!    ([`AttricatRepository::lock_relationship_cardinality_writes`]), taken
 //!    by every write that changes relationship values and by context
 //!    reparenting.
-//! 3. A legacy extension upsert's lookup lock.
+//! 3. A legacy extension upsert's lookup lock, or a movement's target key
+//!    lock (one per movement of the record being created).
 //! 4. Record rows. A transaction that locks several takes them in ID order.
+//!    A movement locks its target row, or creates the target, before it
+//!    inserts its own record, so the target's counters and unique keys come
+//!    before the movement record's (see `movements`).
 //! 5. Extension annotation namespace locks, in sorted name order.
 //!
 //! Record writers take the workspace's record-writer advisory lock shared
@@ -118,6 +122,7 @@ mod identity_providers;
 mod leadership;
 mod lexicon;
 mod members;
+mod movements;
 mod notifications;
 mod oidc_sign_in;
 mod operator_workspaces;

@@ -38,6 +38,7 @@ Each field tells you where its value comes from:
 - **Inherited from *X* context** means this context has no value and shows its ancestor's. Typing a value creates an override for this context only. Clearing an override brings the inherited value back.
 - **Managed in Default** means the attribute can only be edited in the default context.
 - **Managed by system actions** means the attribute is `readonly`: an integration, workflow, or agent maintains it.
+- **Changed only by movement records** means the attribute is a balance, such as a stock level. See [Stock levels and other balances](#stock-levels-and-other-balances).
 - **Locked while the record is *X*** means the record's status freezes this field. See [Controlled records](#controlled-records).
 
 Every save validates the whole record in every context. If a change would make any context invalid, it is not saved: it stays in the field with the error, and the page shows how many changes are not saved yet. Rejected changes are sent again with the next field you save, so you can fill several missing required values one after another. Escape in a field drops its rejected change. See [Validation](/builders/validation/).
@@ -86,6 +87,17 @@ Some blueprints use statuses to control a record's lifecycle. Then:
 - Files of finalized records can be kept under a retention hold until a set date.
 
 The **Record control** tab lists approvals, newest first, with who approved, when, and whether they are still valid, and the retention holds on the record's files.
+
+## Stock levels and other balances
+
+Some blueprints keep a running total that other records change, such as a stock level that goods receipts raise and goods issues lower. The [blueprint](/reference/blueprint/#balances-and-movements) decides which records do this.
+
+- The total is shown as a value, never as an editable field: only receipts, issues, and other movement records change it.
+- Saving a receipt or issue changes the total at once. An issue that would take it below its minimum, usually zero, is not saved, and the message says how much is available.
+- On a receipt or issue, a relationship such as **Unit conversion** may offer only the targets that fit another field, such as the conversions of the selected product. Until that field has a value, every target is offered.
+- After a receipt or issue is saved, the quantity and the links its movement used are shown as values, with a notice above the fields. Its other fields stay editable.
+- To correct a saved receipt or issue, choose **Reverse record** in its **Actions** menu. A new record moves the same amount back and opens. A record can be reversed once, a reversal cannot be reversed, and a receipt can be reversed only while its goods are still in stock. Then record the correct one.
+- Receipts and issues cannot be deleted, and a stock item that still holds stock cannot be deleted either. **Duplicate record** on a receipt or issue creates a new movement that changes the total again.
 
 ## Comments
 
@@ -151,7 +163,7 @@ A record can have any number of conversations. The **Agents** tab lists them, ne
 
 ## Delete a record
 
-**Delete record** is available with the `records.delete` permission, from the record's **Actions** menu or the Explorer row menu, and asks for confirmation. A deleted record disappears from search, previews, and relationship pickers. Its history is kept. A record in a locked status cannot be deleted.
+**Delete record** is available with the `records.delete` permission, from the record's **Actions** menu or the Explorer row menu, and asks for confirmation. A deleted record disappears from search, previews, and relationship pickers. Its history is kept. A record in a locked status cannot be deleted, and neither can a movement record or a record that still holds a balance; see [Stock levels and other balances](#stock-levels-and-other-balances).
 
 ## From the command line
 

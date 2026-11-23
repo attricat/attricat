@@ -1,4 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { MovementAppliedNotice } from './MovementAppliedNotice';
+import { RelationshipScopeContext } from './relationshipScope';
+import { movementInputCodes, movementManagedCodes } from '../movements';
 import { Box, Button, Stack } from '@mui/material';
 import { useEffect, useImperativeHandle, useState, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -147,8 +150,14 @@ export const RecordInlineFields = ({
     contextId,
     statusParentContextIds,
   );
+  const movements = form.blueprint.blueprint.movements;
+  const movementInputs = movementInputCodes(movements);
+  const movementManaged = movementManagedCodes(movements);
+  // A movement applied once, when the record was created.
   const changeable = editable.filter(
-    (attribute) => locks[attribute.code] === undefined,
+    (attribute) =>
+      locks[attribute.code] === undefined &&
+      !movementInputs.has(attribute.code),
   );
   const changeableCodes = changeable.map((attribute) => attribute.code);
   const editComponents = viewFieldEditComponents(view);
@@ -358,6 +367,7 @@ export const RecordInlineFields = ({
               existingValues={existingValues}
               fieldErrors={error ? { [attribute.code]: error } : fieldErrors}
               lockedAttributes={locks}
+              movementManaged={movementManaged}
               onChange={onChange}
               onRecordUpdated={saves.noteRecordUpdated}
               required={required}
@@ -496,40 +506,49 @@ export const RecordInlineFields = ({
             updatedAt={form.record.updated_at}
           />
         )}
+        {form.can_write && (
+          <MovementAppliedNotice
+            attributes={attributes}
+            inputs={movementInputs}
+            saved={new Set(existingValues.map((value) => value.attribute_code))}
+          />
+        )}
         <InlineSaveStatus
           pendingCodes={Object.keys(saves.pending)}
           savedAny={saves.savedAny}
           saving={saves.saving}
         />
-        <Box>
-          <EditableRecordLayout
-            {...viewProps}
-            attributes={attributes}
-            fallbackVisibilityScope="detail"
-            headingAttributes={headingEditableAttributes(
-              blueprintChangeable,
-              view,
+        <RelationshipScopeContext value={saves.fields}>
+          <Box>
+            <EditableRecordLayout
+              {...viewProps}
+              attributes={attributes}
+              fallbackVisibilityScope="detail"
+              headingAttributes={headingEditableAttributes(
+                blueprintChangeable,
+                view,
+              )}
+              otherAttributes={unplacedEditableAttributes(
+                blueprintChangeable,
+                view,
+              )}
+              values={resolvedValues}
+              view={view}
+            />
+            {form.reusable_attributes.length > 0 && (
+              <EditableRecordSection
+                headingLevel="h2"
+                title={t('records.additionalAttributes')}
+              >
+                <RecordView
+                  {...viewProps}
+                  attributes={form.reusable_attributes}
+                  values={reusableResolvedValues}
+                />
+              </EditableRecordSection>
             )}
-            otherAttributes={unplacedEditableAttributes(
-              blueprintChangeable,
-              view,
-            )}
-            values={resolvedValues}
-            view={view}
-          />
-          {form.reusable_attributes.length > 0 && (
-            <EditableRecordSection
-              headingLevel="h2"
-              title={t('records.additionalAttributes')}
-            >
-              <RecordView
-                {...viewProps}
-                attributes={form.reusable_attributes}
-                values={reusableResolvedValues}
-              />
-            </EditableRecordSection>
-          )}
-        </Box>
+          </Box>
+        </RelationshipScopeContext>
         {form.can_write && (
           <Box sx={{ mt: 3 }}>
             {/* Attaching changes the record; wait for field saves first. */}

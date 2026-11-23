@@ -4,6 +4,7 @@ mod component_manifest;
 mod error;
 mod generated;
 mod lexicon_text;
+mod movements;
 mod parser;
 mod view_validation;
 
@@ -24,4 +25,8 @@ pub use generated::{
     MAX_GENERATED_FORMAT_CHARS, MAX_GENERATED_NUMBER, MAX_GENERATED_WIDTH, UNPERIODIC,
 };
 pub use lexicon_text::{LexiconText, lexicon_references, lexicon_texts, option_label_texts};
+pub use movements::{
+    BalancePolicy, MAX_MOVEMENTS, MovementDefinition, MovementFactor, MovementReversal,
+    MovementTarget, TargetScope,
+};
 pub use parser::{ONE_TO_ONE_CARDINALITY, definition_json_schema, parse};

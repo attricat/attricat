@@ -19,7 +19,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 /// The `blueprints` columns a [`Blueprint`] row is read from.
-const BLUEPRINT_COLUMNS: &str = "id, code, name, kind, version, includes, views, record_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash";
+const BLUEPRINT_COLUMNS: &str = "id, code, name, kind, version, includes, views, record_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash, movements";
 
 #[derive(sqlx::FromRow)]
 struct LatestBlueprint {
@@ -36,7 +36,7 @@ impl AttricatRepository {
         Ok(sqlx::query_as::<_, Db<Blueprint>>(
             r#"SELECT DISTINCT ON (id)
                      id, code, name, kind, version, views, includes, record_schema, status, published_at, created_at, updated_at,
-                    deleted_at, definition, definition_hash
+                    deleted_at, definition, definition_hash, movements
                FROM blueprints
                WHERE kind = 'record' AND deleted_at IS NULL
                  AND ($1 OR status = 'published')
@@ -54,7 +54,7 @@ impl AttricatRepository {
         Ok(sqlx::query_as::<_, Db<Blueprint>>(
             r#"SELECT DISTINCT ON (id)
                      id, code, name, kind, version, views, includes, record_schema, status, published_at, created_at, updated_at,
-                    deleted_at, definition, definition_hash
+                    deleted_at, definition, definition_hash, movements
                FROM blueprints
                WHERE deleted_at IS NULL AND workspace_id = $1
                ORDER BY id, version DESC"#,
@@ -308,9 +308,14 @@ impl AttricatRepository {
                 "could not serialize unique keys: {error}"
             ))
         })?;
+        let movements = serde_json::to_value(&compiled.movements).map_err(|error| {
+            RepositoryError::InvalidBlueprintDefinition(format!(
+                "could not serialize movements: {error}"
+            ))
+        })?;
         let blueprint = sqlx::query_as::<_, Db<Blueprint>>(
-            AssertSqlSafe(format!(r#"INSERT INTO blueprints (id, workspace_id, code, name, kind, version, includes, views, record_schema, status, definition, definition_hash, unique_keys)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'draft', $10, $11, $12)
+            AssertSqlSafe(format!(r#"INSERT INTO blueprints (id, workspace_id, code, name, kind, version, includes, views, record_schema, status, definition, definition_hash, unique_keys, movements)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'draft', $10, $11, $12, $13)
                RETURNING {BLUEPRINT_COLUMNS}"#)),
         )
         .bind(blueprint_id)
@@ -325,6 +330,7 @@ impl AttricatRepository {
         .bind(definition)
         .bind(compiled.raw_definition_hash)
         .bind(unique_keys)
+        .bind(movements)
         .fetch_one(&mut **transaction)
         .await?
         .into_domain();
@@ -334,9 +340,9 @@ impl AttricatRepository {
             validate_attribute_default_value(&attribute)?;
             attributes.push(
                 sqlx::query_as::<_, Db<Attribute>>(
-                    r#"INSERT INTO attributes (id, workspace_id, blueprint_id, blueprint_version, code, name, value_type, value_schema, extension_type, default_value, file_policy, target_blueprint_code, cardinality, target_cardinality, tags, context_fallback, context_editable, readonly, position, target_blueprint_codes, hierarchy, generated)
-                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
-                       RETURNING id, blueprint_id, blueprint_version, code, name, value_type, value_schema, extension_type, default_value, file_policy, target_blueprint_code, target_blueprint_codes, cardinality, target_cardinality, hierarchy, tags, context_fallback, context_editable, readonly, generated, position, created_at, updated_at, deleted_at"#,
+                    r#"INSERT INTO attributes (id, workspace_id, blueprint_id, blueprint_version, code, name, value_type, value_schema, extension_type, default_value, file_policy, target_blueprint_code, cardinality, target_cardinality, tags, context_fallback, context_editable, readonly, position, target_blueprint_codes, hierarchy, generated, balance, target_scope)
+                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+                       RETURNING id, blueprint_id, blueprint_version, code, name, value_type, value_schema, extension_type, default_value, file_policy, target_blueprint_code, target_blueprint_codes, cardinality, target_cardinality, hierarchy, tags, context_fallback, context_editable, readonly, generated, balance, target_scope, position, created_at, updated_at, deleted_at"#,
                 )
                 .bind(Uuid::new_v4())
                 .bind(self.workspace_id.0)
@@ -364,6 +370,8 @@ impl AttricatRepository {
                 })
                 .bind(attribute.hierarchy)
                 .bind(attribute.generated.map(|generated| serde_json::to_value(generated).expect("generated value serializes")))
+                .bind(attribute.balance.map(|balance| serde_json::to_value(balance).expect("balance policy serializes")))
+                .bind(attribute.target_scope.map(|scope| serde_json::to_value(scope).expect("target scope serializes")))
                 .fetch_one(&mut **transaction)
                 .await?
                 .into_domain(),
@@ -587,6 +595,8 @@ impl AttricatRepository {
             }
             self.validate_publication_roles(&mut transaction, &blueprint.definition)
                 .await?;
+            self.validate_publication_movements(&mut transaction, &compiled)
+                .await?;
             self.validate_publication_extension_layout(&mut transaction, &blueprint.definition)
                 .await?;
             let includes_published = sqlx::query_scalar::<_, bool>(
@@ -679,8 +689,11 @@ impl AttricatRepository {
         .into_domain()
         .ok_or(RepositoryError::NotFound("blueprint version"))?;
         if blueprint.status == RevisionStatus::Draft {
-            compile_definition(transaction, self.workspace_id.0, &blueprint.definition).await?;
+            let compiled =
+                compile_definition(transaction, self.workspace_id.0, &blueprint.definition).await?;
             self.validate_publication_roles(transaction, &blueprint.definition)
+                .await?;
+            self.validate_publication_movements(transaction, &compiled)
                 .await?;
             self.validate_publication_extension_layout(&mut *transaction, &blueprint.definition)
                 .await?;
@@ -818,7 +831,7 @@ impl AttricatRepository {
             return Ok(revision.1.clone());
         }
         Ok(sqlx::query_as::<_, Db<Attribute>>(
-            r#"SELECT id, blueprint_id, blueprint_version, code, name, value_type, value_schema, extension_type, default_value, file_policy, target_blueprint_code, target_blueprint_codes, cardinality, target_cardinality, hierarchy, tags, context_fallback, context_editable, readonly, generated, position, created_at, updated_at, deleted_at
+            r#"SELECT id, blueprint_id, blueprint_version, code, name, value_type, value_schema, extension_type, default_value, file_policy, target_blueprint_code, target_blueprint_codes, cardinality, target_cardinality, hierarchy, tags, context_fallback, context_editable, readonly, generated, balance, target_scope, position, created_at, updated_at, deleted_at
                FROM attributes
                WHERE blueprint_id = $1 AND blueprint_version = $2 AND workspace_id = $3 AND deleted_at IS NULL
                ORDER BY position"#,
@@ -915,7 +928,7 @@ impl AttricatRepository {
                     r#"SELECT a.id, a.blueprint_id, a.blueprint_version, a.code, a.name, a.value_type,
                               a.value_schema, a.extension_type, a.default_value, a.file_policy, a.target_blueprint_code,
                               a.target_blueprint_codes, a.cardinality, a.target_cardinality, a.hierarchy, a.tags, a.context_fallback,
-                              a.context_editable, a.readonly, a.generated, a.position, a.created_at, a.updated_at,
+                              a.context_editable, a.readonly, a.generated, a.balance, a.target_scope, a.position, a.created_at, a.updated_at,
                               a.deleted_at
                          FROM blueprints b
                          JOIN attributes a ON a.blueprint_id = b.id AND a.blueprint_version = b.version

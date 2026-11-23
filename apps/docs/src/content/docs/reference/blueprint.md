@@ -45,6 +45,7 @@ Record blueprints use `kind: record`.
 | `publication` | mapping | No | Publication reapproval policy. See [Publication](#publication). |
 | `unique_keys` | list of mappings | No | Business keys whose values must be unique. Record blueprints only. See [Unique keys](#unique-keys). |
 | `connector_jobs` | list of mappings | No | Scheduled or manual import and export jobs run by a connector extension. Record blueprints only. See [Connector jobs](#connector-jobs). |
+| `movements` | list of mappings | No | How creating a record changes a balance on another record, such as a goods issue lowering a stock level. Up to 4. Record blueprints only. See [Balances and movements](#balances-and-movements). |
 | `extensions` | mapping | No | Free-form data for extensions, namespaced under `extensions.<extension-id>`. The core compiler ignores it; extensions read it from the stored definition. |
 
 ## Attributes
@@ -74,6 +75,7 @@ attributes:
 | `default_value` | matches the type | Unset | Value stored in the default context when a record is created without one. Scalar types only. |
 | `value_schema` | string (JSON) | Unset | JSON Schema for one value. Scalar types only. A `string` attribute's schema can make it a [status](#statuses) or a [user or team assignment](#user-or-team-assignments). See [Validation](/builders/validation/). |
 | `generated` | mapping | Unset | Lets the server number new records, such as invoice or order numbers. `string` and `integer` attributes of record blueprints only. See [Generated values](#generated-values). |
+| `balance` | mapping | Unset | A running total that only [movements](#balances-and-movements) change, such as a stock level. `number` and `integer` attributes of record blueprints only. |
 
 ### Value types
 
@@ -201,6 +203,7 @@ attributes:
 | `target_cardinality` | `"one"` or `"many"` | `"many"` | How many records may link to the same target through this attribute in one context. |
 | `acyclic` | boolean | `false` | Rejects links that would form a cycle through this attribute. Requires `context_editable: default`, and the targets must include the blueprint itself. See [Hierarchies](#hierarchies). |
 | `tree` | boolean | `false` | An acyclic hierarchy in which every record has at most one target (its parent). Implies `acyclic: true` and defaults `cardinality` to `"one"`; `cardinality: many` is rejected. |
+| `target_scope` | mapping | Unset | `{attribute, equals}`: the record picker offers only targets whose `attribute` links to the same record as this record's `equals`. See [Target scope](#target-scope). |
 
 `cardinality: one` gives a single-select field whose options can be shared, such as a brand. Add `target_cardinality: one` only for an exclusive pairing, where each target can be claimed once. A write that breaks either limit returns `409 relationship_cardinality_conflict`.
 
@@ -224,6 +227,26 @@ attributes:
 - Checks see links of every revision of the blueprint and run inside the write's transaction. Two concurrent writes cannot each add half of a cycle.
 - The hierarchy applies to the whole blueprint family as declared by its latest published revision, including records still pinned to older revisions.
 - Publishing a revision that adds `acyclic` or `tree` checks the existing links first. If they contain cycles, or a tree has records with more than one target, publication fails with `409 relationship_hierarchy_violations`; `error.details` lists up to 20 cycles and records with extra targets. Fix the links and publish again.
+
+#### Target scope
+
+```yaml
+attributes:
+  - code: product
+    value_type: relationship
+    target_blueprint: product
+    cardinality: one
+  - code: conversion
+    value_type: relationship
+    target_blueprint: unit_conversion
+    cardinality: one
+    target_scope: {attribute: product, equals: product}
+```
+
+With `target_scope`, the record picker of `conversion` lists only the unit conversions whose `product` is the product selected on the same form. Until a product is selected, the picker lists every conversion.
+
+- The attribute must be a relationship with exactly one target blueprint. `equals` must be another relationship of this blueprint with `cardinality: one`, and `attribute` a relationship of the target blueprint with `cardinality: one`. Publication checks `attribute` when the target blueprint has a published revision.
+- The scope only filters the picker. To refuse a mismatching link on save, add a [record check](#record-checks) such as `{"type": "linked", "relationship_code": "conversion", "predicate": {"type": "compare", "attribute_code": "product", "op": "eq", "subject_attribute_code": "product"}}`.
 
 Relationships cannot have `value_schema` or `default_value`. Constrain them with `record_schema` instead.
 
@@ -666,6 +689,123 @@ A write that would give a second record the same key value returns `409 unique_k
 
 Publishing a revision that adds or changes unique keys checks existing records first. If some already share a value, publication fails with `409 unique_key_duplicates`, and `error.details.duplicates` lists up to 20 groups with the key, context, values, and record IDs (`error.details.total` counts all groups). Change or delete the duplicates and publish again.
 
+## Balances and movements
+
+Some records keep a running total that other records change, such as a stock level that goods receipts raise and goods issues lower. A **balance** attribute holds the total. A **movement** on another blueprint says how creating one of its records changes the total. The server applies the movement in the same transaction that creates the record, so the total always matches its documents, and two people saving at the same moment cannot take it below its minimum.
+
+```yaml
+# stock_item: one record per product
+unique_keys:
+  - code: product
+    attributes: [product]
+attributes:
+  - code: product
+    value_type: relationship
+    target_blueprint: product
+    cardinality: one
+    context_editable: default
+  - code: quantity
+    value_type: number
+    balance: {min: 0}
+```
+
+```yaml
+# goods_issue: lowers the stock level of its product
+attributes:
+  - code: product
+    value_type: relationship
+    target_blueprint: product
+    cardinality: one
+    context_editable: default
+  - code: quantity
+    value_type: number
+    context_editable: default
+  - code: conversion
+    value_type: relationship
+    target_blueprint: unit_conversion
+    cardinality: one
+    context_editable: default
+    target_scope: {attribute: product, equals: product}
+  - code: stock_item
+    value_type: relationship
+    target_blueprint: stock_item
+    cardinality: one
+  - code: base_quantity
+    value_type: number
+  - code: reverses
+    value_type: relationship
+    target_blueprint: goods_issue
+    cardinality: one
+    context_editable: default
+movements:
+  - code: stock
+    direction: out
+    quantity: quantity
+    factor: {relationship: conversion, attribute: factor}
+    result: base_quantity
+    target:
+      relationship: stock_item
+      blueprint: stock_item
+      balance: quantity
+      key: product
+      values: {product: product}
+    reversal: {relationship: reverses}
+```
+
+A goods receipt is the same with `direction: in` and `create_missing: true`, so the first receipt of a product creates its stock item.
+
+### Balance attributes
+
+| Key | Type | Default | Description |
+| --- | --- | --- | --- |
+| `balance.min` | number | No minimum | The lowest value a movement may leave, such as `0` for stock that cannot go negative. On an `integer` balance it must be a whole number. |
+
+- `balance` is allowed only on a local `number` or `integer` attribute of a record blueprint. It is rejected on a mixin, with `from`, with `generated` or `default_value`, and on a status or a user or team assignment.
+- A balance is always read-only and default-context only (`context_editable: default`). A record without a value counts as zero.
+- Only movements change a balance. Creates, updates, clearing the value, restores from history, record batches, workflows, agents, and extensions that try are rejected with `422 balance_attribute_readonly`.
+- A record whose balance is not zero cannot be deleted: `409 balance_record_not_empty`, with the `attribute` and its `balance`. Solution-pack sample records are exempt.
+
+### Movement keys
+
+| Key | Type | Required | Description |
+| --- | --- | --- | --- |
+| `code` | code | Yes | Unique within the blueprint. |
+| `direction` | `"in"` or `"out"` | Yes | `in` adds the moved amount to the balance; `out` subtracts it. |
+| `quantity` | attribute code | Yes | `number` or `integer` attribute holding the quantity. It must be greater than zero. |
+| `factor.relationship` | attribute code | No | Relationship with `cardinality: one` and one target blueprint, to the record holding a conversion factor. |
+| `factor.attribute` | code | With `factor` | `number` or `integer` attribute of the linked record. The moved amount is `quantity × factor`; without a link it is the quantity. |
+| `result` | attribute code | For `reversal` | `number` attribute in which the server stores the moved amount, in the balance's unit. `integer` only for an integer quantity without a factor. |
+| `target.relationship` | attribute code | Yes | Relationship with `cardinality: one` and `target_blueprint: <target.blueprint>`, in which the server stores the target. |
+| `target.blueprint` | code | Yes | Record blueprint of the target. |
+| `target.balance` | code | Yes | Balance attribute of the target blueprint. |
+| `target.key` | code | Yes | Unique key of the target blueprint, with `scope: workspace`, that finds the target. |
+| `target.values` | mapping | Yes | Every attribute of the key, mapped to the attribute of this record holding its value, such as `{product: product}`. The types must match. |
+| `target.create_missing` | boolean | `false` | Create the target with the key values when no record has them. Otherwise the movement fails. |
+| `reversal.relationship` | attribute code | No | Relationship with `cardinality: one` to this same blueprint. A record that sets it reverses the linked record. See [Reversals](#reversals). |
+
+The attributes a movement reads (the quantity, the factor relationship, the key values and the reversal relationship) must be `context_editable: default`. Publication checks the target and factor blueprints at their latest published revisions, so publish the stock item and unit conversion blueprints first.
+
+### How a movement applies
+
+When a record with movements is created:
+
+1. The quantity must be greater than zero, or the save returns `422 movement_quantity_invalid`. A linked factor must be greater than zero, or it returns `409 movement_factor_invalid`.
+2. The server finds the target through `target.key` and the record's key values. With `create_missing: true` a missing target is created; otherwise the save returns `409 movement_target_missing` with the `blueprint` and `key`. Concurrent first receipts of one product create one target.
+3. The target's balance changes by `quantity × factor`. If it would go below `min`, the save returns `409 balance_below_minimum`, and `error.details` has the `attribute`, the target `record_id`, the `available` balance, the `requested` amount, and the `minimum`. Nothing is saved: neither the record nor the change.
+4. The server stores the target in `target.relationship` and the amount in `result`. Clients cannot write them: `422 movement_attribute_readonly`.
+
+The target's change is an ordinary update. Its status locks apply, it is audited as `attricat.records.movement.balance_update` with the movement record in the metadata, and it emits `record.updated.v1`.
+
+A movement applies once. After the record is created, the attributes the movement read or set cannot change, and a save that tries returns `409 movement_immutable`. The record's other attributes stay editable. A movement record cannot be deleted (`409 movement_record_undeletable`); reverse it instead. Duplicating a movement record creates a new movement.
+
+### Reversals
+
+A record that sets `reversal.relationship` reverses the record it links to. It moves the original's `result` back the other way, on the original's target.
+
+- The reversal takes the original's quantity, factor link and key values. Values submitted for them must match, or the save returns `422 movement_reversal_mismatch`; numbers compare by value.
+- A record can be reversed once. A second reversal returns `409 movement_already_reversed`, with the `record_id` and the reversal that already exists in `reversed_by`. A reversal cannot be reversed: `409 movement_reversal_of_reversal`.
+- The reversal is subject to the balance's minimum. Reversing a receipt whose goods were already issued returns `409 balance_below_minimum`; reverse the issues first.
+
 ## Connector jobs
 
 Connector jobs run an operation of an installed connector extension, such as a CSV import or export, against this blueprint.
@@ -727,4 +867,6 @@ A few compile-time rules that are easy to miss:
 - `target_blueprint`, `target_blueprints`, `acyclic`, and `tree` on a non-relationship attribute are rejected.
 - `unique_keys` on a mixin, a key naming an unknown, `json`, file, or many-target relationship attribute, or a key listing an attribute twice is rejected.
 - `from` must be `alias.code` where `code` matches the attribute's own code.
+- `balance` on a mixin, a `from` selection, a type other than `number` or `integer`, or together with `generated` or `default_value` is rejected.
+- A movement naming an unknown attribute, using an attribute in two roles, reading an attribute that is not `context_editable: default`, or declaring `reversal` without `result` is rejected. Publication rejects a movement whose target blueprint is not published or lacks the balance or key, and a factor that is not a number.
 - `generated` on a mixin, a `from` selection, an `extension_type`, a status, or a user or team assignment, on a type other than `string` or `integer`, or together with `default_value` is rejected. So is a `format` without exactly one `{n}`, with an unknown placeholder, or longer than 100 characters, and a `reset` whose period the `format` does not identify.

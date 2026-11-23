@@ -1,3 +1,4 @@
+import type { RelationshipTargetFilter } from './movements';
 import type { DataQualityFilter } from '../rules/constants';
 import { ruleQueryKeys } from '../rules/queryKeys';
 import type {
@@ -47,8 +48,11 @@ export const recordQueryKeys = {
   /** Under searches, so record changes that refresh results refresh it too. */
   systemTagFacet: (input: SystemTagFacetRequest) =>
     [...recordQueryKeys.searches(), 'system-tag-facet', input] as const,
-  relationshipTargets: (blueprint: string | null | undefined, query: string) =>
-    ['relationship-targets', blueprint, query] as const,
+  relationshipTargets: (
+    blueprint: string | null | undefined,
+    query: string,
+    filters?: readonly RelationshipTargetFilter[],
+  ) => ['relationship-targets', blueprint, query, filters ?? []] as const,
   forms: () => ['record-form'] as const,
   form: (recordId: string) => [...recordQueryKeys.forms(), recordId] as const,
   allLabels: () => ['record-labels'] as const,

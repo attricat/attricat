@@ -32,6 +32,14 @@ pub struct Blueprint {
     pub deleted_at: Option<DateTime<Utc>>,
     pub definition: String,
     pub definition_hash: String,
+    /// The revision's compiled `movements`; see
+    /// `attricat_blueprint::MovementDefinition`. Empty for most blueprints.
+    #[serde(default = "empty_json_array")]
+    pub movements: Value,
+}
+
+fn empty_json_array() -> Value {
+    Value::Array(Vec::new())
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -67,6 +75,15 @@ pub struct Attribute {
     /// How core numbers the attribute on record creation; see
     /// `attricat_blueprint::GeneratedValue`. Clients cannot write it.
     pub generated: Option<Value>,
+    /// The lowest value movements may leave on a balance; see
+    /// `attricat_blueprint::BalancePolicy`. Only movements write a balance.
+    #[serde(default)]
+    pub balance: Option<Value>,
+    /// The record picker offers only targets whose `attribute` links to the
+    /// record this record's `equals` links to; see
+    /// `attricat_blueprint::TargetScope`.
+    #[serde(default)]
+    pub target_scope: Option<Value>,
     pub position: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,

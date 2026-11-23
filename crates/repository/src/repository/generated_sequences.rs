@@ -153,16 +153,24 @@ impl AttricatRepository {
         Ok(())
     }
 
-    /// Codes of the generated attributes of one blueprint revision.
-    pub(super) async fn generated_attribute_codes(
+    /// Codes of the revision's attributes only core writes: generated
+    /// values, balances and the values the blueprint's movements set. A
+    /// duplicate leaves them out and gets its own.
+    pub(super) async fn core_assigned_attribute_codes(
         &self,
         blueprint_id: Uuid,
         blueprint_version: i64,
     ) -> Result<HashSet<String>, RepositoryError> {
         Ok(sqlx::query_scalar::<_, String>(
-            r#"SELECT code FROM attributes
-               WHERE blueprint_id = $1 AND blueprint_version = $2 AND workspace_id = $3
-                 AND generated IS NOT NULL AND deleted_at IS NULL"#,
+            r#"SELECT a.code FROM attributes a
+               JOIN blueprints b ON b.workspace_id = a.workspace_id
+                AND b.id = a.blueprint_id AND b.version = a.blueprint_version
+               WHERE a.blueprint_id = $1 AND a.blueprint_version = $2 AND a.workspace_id = $3
+                 AND a.deleted_at IS NULL
+                 AND (a.generated IS NOT NULL OR a.balance IS NOT NULL
+                      OR EXISTS (
+                          SELECT 1 FROM jsonb_array_elements(b.movements) movement
+                          WHERE a.code IN (movement -> 'target' ->> 'relationship', movement ->> 'result')))"#,
         )
         .bind(blueprint_id)
         .bind(blueprint_version)

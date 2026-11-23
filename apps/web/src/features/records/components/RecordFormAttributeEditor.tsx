@@ -39,6 +39,8 @@ const protectedValueSx: SxProps<Theme> = {
   '& .MuiChip-root.Mui-disabled': { opacity: 1 },
 };
 
+const noCodes: ReadonlySet<string> = new Set();
+
 type RecordFormAttributeEditorContext = {
   contextId: string | null;
   statusParentContextIds?: readonly string[];
@@ -49,6 +51,8 @@ type RecordFormAttributeEditorContext = {
   statusSavedValues?: readonly FormAttributeValue[];
   /** Locked attribute codes mapped to the label of the status that locks them. */
   lockedAttributes?: Readonly<Record<string, string>>;
+  /** Attributes the server sets on the record's movement. */
+  movementManaged?: ReadonlySet<string>;
   statusTransitions?: readonly StatusTransitionAccess[];
   fieldErrors: Record<string, string>;
   migrationReviews?: Readonly<Record<string, MigrationFieldReview>>;
@@ -77,6 +81,7 @@ export const RecordFormAttributeEditor = ({
   existingValues,
   statusSavedValues = existingValues,
   lockedAttributes = {},
+  movementManaged = noCodes,
   statusTransitions = [],
   fieldErrors,
   migrationReviews = {},
@@ -101,6 +106,7 @@ export const RecordFormAttributeEditor = ({
   );
   const readonly = attribute.readonly === true;
   const lockedBy = lockedAttributes[attribute.code];
+  const setByMovement = movementManaged.has(attribute.code);
   const protectedValue = readonly || defaultOnly || lockedBy !== undefined;
   // Clearing a scalar's own value in a context lets it inherit again; an
   // empty relationship or file list would replace the inherited one instead.
@@ -144,9 +150,13 @@ export const RecordFormAttributeEditor = ({
   const helperText =
     [
       readonly
-        ? attribute.generated && recordId === undefined
-          ? t('records.assignedWhenSaved')
-          : t('records.managedBySystem')
+        ? attribute.balance
+          ? t('records.balanceManagedByMovements')
+          : (attribute.generated || setByMovement) && recordId === undefined
+            ? t('records.assignedWhenSaved')
+            : setByMovement
+              ? t('records.setByMovement')
+              : t('records.managedBySystem')
         : lockedBy !== undefined
           ? t('records.lockedByStatus', { status: lockedBy })
           : defaultOnly

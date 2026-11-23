@@ -84,6 +84,12 @@ struct RawBlueprintDefinition {
     /// blueprint family. Record blueprints only.
     #[serde(default)]
     unique_keys: Vec<UniqueKeyDefinition>,
+    /// How creating a record changes a `balance` attribute of another
+    /// record, such as a goods issue lowering a stock level. Applied in the
+    /// create transaction. Record blueprints only.
+    #[serde(default)]
+    #[schemars(length(max = crate::MAX_MOVEMENTS))]
+    movements: Vec<crate::MovementDefinition>,
     /// Attributes in display order. Each declares exactly one of `value_type`,
     /// `extension_type`, or `from`.
     #[schemars(length(min = 1))]
@@ -211,6 +217,16 @@ struct RawAttributeDeclaration {
     /// Record blueprints only.
     #[schemars(extend("x-attricat-value-types" = ["string", "integer"]))]
     generated: Option<RawGeneratedValue>,
+    /// A number only movements change, such as a stock level. It starts at
+    /// zero and is editable in the default context only. Clients cannot write
+    /// it. Record blueprints only.
+    #[schemars(extend("x-attricat-value-types" = ["number", "integer"]))]
+    balance: Option<RawBalance>,
+    /// Offer only targets whose `attribute` links to the same record as this
+    /// record's `equals`, such as the unit conversions of the selected
+    /// product. A picker filter; record checks guard saved values.
+    #[schemars(extend("x-attricat-value-types" = ["relationship"]))]
+    target_scope: Option<crate::TargetScope>,
     /// Selects `<include alias>.<attribute code>` from an include. The
     /// attribute code must match `code`.
     #[schemars(extend("x-attricat-reference" = "include_attribute"))]
@@ -236,6 +252,16 @@ struct RawGeneratedValue {
     reset: Option<String>,
     /// IANA time zone for date tokens and periods. Defaults to `UTC`.
     time_zone: Option<String>,
+}
+
+/// `balance: { … }` on an attribute.
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct RawBalance {
+    /// The lowest value a movement may leave, such as 0 for stock that
+    /// cannot go negative. No limit when absent.
+    #[schemars(with = "Option<f64>")]
+    min: Option<serde_json::Number>,
 }
 
 /// The JSON Schema for blueprint definition YAML, published as
@@ -530,6 +556,26 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                             return Err(BlueprintError::InvalidAttributeTag(attribute.code));
                         }
                     }
+                    if attribute.target_scope.is_some() && value_type != ValueType::Relationship {
+                        return Err(BlueprintError::InvalidTargetScope {
+                            code: attribute.code,
+                            message: "only relationship attributes can be scoped".into(),
+                        });
+                    }
+                    if attribute.generated.is_some() && attribute.balance.is_some() {
+                        return Err(BlueprintError::InvalidBalanceAttribute {
+                            code: attribute.code,
+                            message: "a balance cannot also be generated".into(),
+                        });
+                    }
+                    let balance = parse_balance(
+                        &attribute.code,
+                        attribute.balance,
+                        value_type,
+                        &raw.kind,
+                        attribute.default_value.is_some(),
+                        value_schema.as_ref(),
+                    )?;
                     let generated = parse_generated(
                         &attribute.code,
                         attribute.generated,
@@ -538,9 +584,10 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                         attribute.default_value.is_some(),
                         value_schema.as_ref(),
                     )?;
-                    // Generated values exist only in the default context and
-                    // are never edited, so the UI shows them read-only.
-                    let (context_editable, readonly) = if generated.is_some() {
+                    // Generated values and balances exist only in the default
+                    // context and only core writes them, so the UI shows them
+                    // read-only.
+                    let (context_editable, readonly) = if generated.is_some() || balance.is_some() {
                         (ContextEditable::Default, true)
                     } else {
                         (context_editable, attribute.readonly)
@@ -565,11 +612,15 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                         context_editable,
                         readonly,
                         generated,
+                        balance,
+                        target_scope: attribute.target_scope,
                     }))
                 }
                 (None, None, Some(source))
                     if !attribute.declares_relationship_targets()
                         && attribute.generated.is_none()
+                        && attribute.balance.is_none()
+                        && attribute.target_scope.is_none()
                         && attribute.name.is_none()
                         && attribute.description.is_none() =>
                 {
@@ -584,6 +635,8 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                 (None, Some(extension_type), None) => {
                     if extension_type.trim().is_empty()
                         || attribute.generated.is_some()
+                        || attribute.balance.is_some()
+                        || attribute.target_scope.is_some()
                         || attribute.value_schema.is_some()
                         || attribute.declares_relationship_targets()
                         || attribute.cardinality.is_some()
@@ -637,6 +690,8 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                         context_editable,
                         readonly: attribute.readonly,
                         generated: None,
+                        balance: None,
+                        target_scope: None,
                     }))
                 }
                 _ => return Err(BlueprintError::InvalidAttributeDeclaration(attribute.code)),
@@ -645,6 +700,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
     }
 
     validate_unique_keys(&raw.unique_keys, &raw.kind, &codes)?;
+    crate::movements::validate_movement_declarations(&raw.movements, &raw.kind, &codes)?;
 
     let definition = BlueprintDefinition {
         format_version: raw.format_version,
@@ -659,6 +715,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
         connector_jobs: raw.connector_jobs,
         embedded_rules: raw.rules.is_some(),
         unique_keys: raw.unique_keys,
+        movements: raw.movements,
         attributes,
     };
     crate::lexicon_text::validate_lexicon_references(&definition)?;
@@ -832,6 +889,51 @@ fn parse_generated(
     )
     .map(Some)
     .map_err(invalid)
+}
+
+/// Validates `balance` on a local attribute. Only movements write a balance,
+/// starting from zero, so mixins, defaults, statuses and assignments cannot
+/// be combined with it.
+fn parse_balance(
+    code: &str,
+    balance: Option<RawBalance>,
+    value_type: ValueType,
+    kind: &BlueprintKind,
+    has_default_value: bool,
+    value_schema: Option<&serde_json::Value>,
+) -> Result<Option<crate::BalancePolicy>, BlueprintError> {
+    let Some(balance) = balance else {
+        return Ok(None);
+    };
+    let invalid = |message: String| BlueprintError::InvalidBalanceAttribute {
+        code: code.to_owned(),
+        message,
+    };
+    if *kind != BlueprintKind::Record {
+        return Err(invalid(
+            "only record blueprints can declare balances".into(),
+        ));
+    }
+    if has_default_value {
+        return Err(invalid(
+            "a balance starts at zero and cannot have a default_value".into(),
+        ));
+    }
+    if value_schema.is_some_and(|schema| {
+        schema
+            .get(attricat_validation::status::STATUS_KEY)
+            .is_some()
+            || schema
+                .get(attricat_validation::principal::PRINCIPAL_KEY)
+                .is_some()
+    }) {
+        return Err(invalid(
+            "a balance cannot be a status or an assignment".into(),
+        ));
+    }
+    crate::BalancePolicy::new(value_type, balance.min.as_ref())
+        .map(Some)
+        .map_err(invalid)
 }
 
 fn parse_file_policy(

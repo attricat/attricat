@@ -5056,3 +5056,160 @@ fn saved_search_state_is_validated_with_physical_codes_while_planning() {
     assert!(search.normalized_payload.is_none());
     assert!(!long.ready);
 }
+
+const INVENTORY_ISSUE: &[u8] = br#"
+format_version: 1
+code: a_issue
+name: Goods issue
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [number]
+attributes:
+  - code: number
+    value_type: string
+  - code: product
+    value_type: relationship
+    target_blueprint: blueprints/product
+    cardinality: one
+    context_editable: default
+  - code: quantity
+    value_type: number
+    context_editable: default
+  - code: conversion
+    value_type: relationship
+    target_blueprint: blueprints/y_conversion
+    cardinality: one
+    context_editable: default
+  - code: stock_item
+    value_type: relationship
+    target_blueprint: blueprints/z_stock
+    cardinality: one
+movements:
+  - code: stock
+    direction: out
+    quantity: quantity
+    factor: {relationship: conversion, attribute: factor}
+    target:
+      relationship: stock_item
+      blueprint: blueprints/z_stock
+      balance: quantity
+      key: product
+      values: {product: product}
+"#;
+const INVENTORY_CONVERSION: &[u8] = br#"
+format_version: 1
+code: y_conversion
+name: Unit conversion
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [unit]
+attributes:
+  - code: unit
+    value_type: string
+  - code: factor
+    value_type: number
+"#;
+const INVENTORY_STOCK: &[u8] = br#"
+format_version: 1
+code: z_stock
+name: Stock item
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [label]
+unique_keys:
+  - code: product
+    attributes: [product]
+attributes:
+  - code: label
+    value_type: string
+  - code: product
+    value_type: relationship
+    target_blueprint: blueprints/product
+    cardinality: one
+    context_editable: default
+  - code: quantity
+    value_type: number
+    balance: {min: 0}
+"#;
+
+#[test]
+fn planner_publishes_movement_targets_first_and_rewrites_them() {
+    let mut manifest = manifest_value();
+    let blueprints = manifest["resources"]["blueprints"].as_array_mut().unwrap();
+    blueprints.push(resource(
+        "blueprints/a_issue",
+        "blueprints/a_issue.yaml",
+        INVENTORY_ISSUE,
+    ));
+    blueprints.push(resource(
+        "blueprints/y_conversion",
+        "blueprints/y_conversion.yaml",
+        INVENTORY_CONVERSION,
+    ));
+    blueprints.push(resource(
+        "blueprints/z_stock",
+        "blueprints/z_stock.yaml",
+        INVENTORY_STOCK,
+    ));
+    let mut files = valid_files();
+    files.extend([
+        ("blueprints/a_issue.yaml", INVENTORY_ISSUE),
+        ("blueprints/y_conversion.yaml", INVENTORY_CONVERSION),
+        ("blueprints/z_stock.yaml", INVENTORY_STOCK),
+    ]);
+    let pack = ValidatedSolutionPack::from_tar_zst(&archive(&manifest, &files)).unwrap();
+    let plan = build_solution_pack_plan(
+        &pack,
+        "inv",
+        BlueprintPublication::Publish,
+        &PlanningWorkspaceSnapshot {
+            workspace_id: uuid::Uuid::nil(),
+            physical_codes: BTreeSet::from(["default".to_owned()]),
+            existing_blueprints: BTreeMap::new(),
+            existing_presentation_assets: BTreeMap::new(),
+            installed_extensions: BTreeMap::new(),
+            explore_navigation: Vec::new(),
+            explore_navigation_valid: true,
+            extension_layout: serde_json::json!({"version":1,"outlets":{}}),
+            extension_layout_valid: true,
+            role_codes: BTreeSet::new(),
+            published_record_codes: BTreeSet::new(),
+            seed: Default::default(),
+        },
+    )
+    .unwrap();
+    assert!(plan.ready);
+    let order: Vec<&str> = plan
+        .actions
+        .iter()
+        .map(|action| action.logical_key.as_str())
+        .collect();
+    let position = |key: &str| order.iter().position(|item| *item == key).unwrap();
+    // Publishing the issue checks its target and factor blueprints.
+    assert!(
+        position("blueprints/z_stock") < position("blueprints/a_issue"),
+        "{order:?}"
+    );
+    assert!(
+        position("blueprints/y_conversion") < position("blueprints/a_issue"),
+        "{order:?}"
+    );
+    let issue = plan
+        .actions
+        .iter()
+        .find(|action| action.logical_key == "blueprints/a_issue")
+        .unwrap();
+    let definition = issue.normalized_payload.as_ref().unwrap()["definition"]
+        .as_str()
+        .unwrap();
+    assert!(
+        definition.contains("blueprint: inv_z_stock"),
+        "{definition}"
+    );
+}

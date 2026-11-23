@@ -59,6 +59,18 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `generated_attribute_readonly` | 422 | The request tries to write a [generated attribute](/reference/blueprint/#generated-values), which only the server assigns. `details.attribute` names it. |
 | `generated_reset_changed` | 409 | A blueprint revision changes the `reset` of an attribute that an earlier revision generated, which would repeat numbers. `details` has `attribute`, `previous`, and `requested`. |
 | `generated_sequence_not_raised` | 409 | A counter advance asked for a `next_value` lower than the current one. Counters can only be raised. `details` has `current` and `requested`. |
+| `balance_attribute_readonly` | 422 | The request tries to write a [balance](/reference/blueprint/#balance-attributes), which only movements change. `details.attribute` names it. |
+| `balance_below_minimum` | 409 | The movement would take the balance below its `min`. `details` has `attribute`, `record_id`, `available`, `requested`, and `minimum`, as decimal strings. |
+| `balance_record_not_empty` | 409 | The record still holds a balance and cannot be deleted. `details` has `attribute` and `balance`. |
+| `movement_attribute_readonly` | 422 | The request tries to write the target or result that the server sets on a [movement](/reference/blueprint/#how-a-movement-applies) record. `details.attribute` names it. |
+| `movement_quantity_invalid` | 422 | A movement's quantity is missing or not greater than zero. `details.attribute` names it. |
+| `movement_factor_invalid` | 409 | The linked record's conversion factor is missing or not greater than zero. `details.attribute` names it. |
+| `movement_target_missing` | 409 | No record has the movement's key values, and the movement does not create one. `details` has `blueprint` and `key`. |
+| `movement_immutable` | 409 | A value the record's movement read or set cannot change. Reverse the record instead. `details.attribute` names it. |
+| `movement_record_undeletable` | 409 | Movement records cannot be deleted. Reverse the record instead. |
+| `movement_already_reversed` | 409 | The record is already reversed. `details` has `record_id` and `reversed_by`. |
+| `movement_reversal_of_reversal` | 409 | The record reverses another record and cannot be reversed itself. `details.record_id` names it. |
+| `movement_reversal_mismatch` | 422 | A value submitted on a reversal differs from the record it reverses. `details.attribute` names it. |
 | `stale_record` | 409 | `expected_updated_at` no longer matches the record. Reload it and try again. |
 | `stale_rule` | 409 | `expected_version` no longer matches the rule. `details.version` is its current revision. |
 | `status_precondition_required` | 428 | A write to a status attribute did not send `expected_updated_at`. Read the record and send its `updated_at`. |
@@ -144,7 +156,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `POST` | `/v1/records/batch` | Create, update, and delete several records at once: all changes are saved, or none are. See [Batch changes](#batch-changes). |
 | `GET`, `PUT` | `/v1/records/{id}` | Read or update a record's form: values, relationships, removals, annotations. |
 | `GET`, `DELETE` | `/records/{id}` | Read or delete a record. |
-| `POST` | `/v1/records/{id}/duplicate` | Create a copy of a record with its values, relationships, and files. Unique-key values are left out. |
+| `POST` | `/v1/records/{id}/duplicate` | Create a copy of a record with its values, relationships, and files. Unique-key values, generated values, balances and the values a movement sets are left out; a copied movement record applies its own movement. |
 | `POST` | `/v1/records/search` | Search. See below. |
 | `POST` | `/v1/records/labels` | Display labels for up to 100 record IDs: `{"record_ids": [...]}`. Returns only live records you can read; other IDs are left out. |
 | `POST` | `/v1/records/facets/relationship-tree/children` | One page of a relationship facet's children, with counts. |

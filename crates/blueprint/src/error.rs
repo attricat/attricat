@@ -66,6 +66,12 @@ pub enum BlueprintError {
     DefaultValueOnNonScalarAttribute { code: String },
     #[error("attribute '{code}' has an invalid generated value: {message}")]
     InvalidGeneratedAttribute { code: String, message: String },
+    #[error("attribute '{code}' has an invalid balance: {message}")]
+    InvalidBalanceAttribute { code: String, message: String },
+    #[error("movement '{movement}' is invalid: {message}")]
+    InvalidMovement { movement: String, message: String },
+    #[error("relationship attribute '{code}' has an invalid target_scope: {message}")]
+    InvalidTargetScope { code: String, message: String },
     #[error("file attribute '{0}' has an invalid file policy")]
     InvalidFilePolicy(String),
     #[error("relationship attribute '{0}' has an invalid cardinality")]

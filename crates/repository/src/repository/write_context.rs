@@ -9,7 +9,7 @@
 //! Published blueprint attributes are immutable, and record-scoped attributes
 //! change only under the record lock the writer already holds.
 
-use attricat_blueprint::GeneratedValue;
+use attricat_blueprint::{BalancePolicy, GeneratedValue};
 use attricat_domain::attribute_options::{Cardinality, ContextEditable, ContextFallback};
 use attricat_domain::constants::DEFAULT_CONTEXT_CODE;
 use attricat_domain::value_type::ValueType;
@@ -52,6 +52,15 @@ pub(super) struct WriteAttribute {
     pub default_value: Option<Value>,
     /// Numbered by core on record creation; clients never write it.
     pub generated: Option<sqlx::types::Json<GeneratedValue>>,
+    /// A balance only movements change; clients never write it.
+    pub balance: Option<sqlx::types::Json<BalancePolicy>>,
+    /// Set by a movement of the record's own blueprint (its target or
+    /// result); clients never write it.
+    pub movement_managed: bool,
+    /// Read by a movement of the record's own blueprint (its quantity, factor
+    /// link, key values or reversal link). A movement applies once, when the
+    /// record is created, so the value never changes afterwards.
+    pub movement_input: bool,
     /// Attached to the record itself rather than a blueprint column.
     pub record_scoped: bool,
 }
@@ -72,13 +81,19 @@ impl WriteAttribute {
         ))
     }
 
-    /// Rejects a value write that does not come from the sequence
-    /// allocator: generated values are system-owned on every surface.
+    /// Rejects a value write that does not come from core: generated
+    /// values, balances and the values a movement sets are system-owned on
+    /// every surface.
     pub(super) fn ensure_client_writable(&self) -> Result<(), RepositoryError> {
+        let attribute = self.code.clone();
         if self.generated.is_some() {
-            return Err(RepositoryError::GeneratedAttributeReadonly {
-                attribute: self.code.clone(),
-            });
+            return Err(RepositoryError::GeneratedAttributeReadonly { attribute });
+        }
+        if self.balance.is_some() {
+            return Err(RepositoryError::BalanceAttributeReadonly { attribute });
+        }
+        if self.movement_managed {
+            return Err(RepositoryError::MovementAttributeReadonly { attribute });
         }
         Ok(())
     }
@@ -101,6 +116,9 @@ pub(super) struct WriteContext {
     /// State derived from the record's values, shared by the validators of
     /// one write. Every value write through this context clears it.
     derived: Mutex<Derived>,
+    /// The record is created by this transaction, so a movement's values
+    /// are still being set rather than changed.
+    pub new_record: bool,
 }
 
 #[derive(Debug, Default)]
@@ -156,6 +174,7 @@ impl WriteContext {
             attributes,
             family: OnceCell::new(),
             derived: Mutex::default(),
+            new_record: false,
         })
     }
 
@@ -254,7 +273,24 @@ impl WriteContext {
             r#"SELECT id, code, value_type, value_schema,
                       CASE WHEN cardinality(target_blueprint_codes) > 0 THEN target_blueprint_codes WHEN target_blueprint_code IS NULL THEN '{}'::text[] ELSE ARRAY[target_blueprint_code] END AS target_blueprint_codes,
                       cardinality, target_cardinality, context_editable, context_fallback, default_value,
-                      generated, record_id IS NOT NULL AS record_scoped
+                      generated, balance,
+                      record_id IS NULL AND EXISTS (
+                          SELECT 1 FROM blueprints b, jsonb_array_elements(b.movements) movement
+                          WHERE b.workspace_id = attributes.workspace_id
+                            AND b.id = attributes.blueprint_id AND b.version = attributes.blueprint_version
+                            AND attributes.code IN (movement -> 'target' ->> 'relationship', movement ->> 'result')
+                      ) AS movement_managed,
+                      record_id IS NULL AND EXISTS (
+                          SELECT 1 FROM blueprints b, jsonb_array_elements(b.movements) movement
+                          WHERE b.workspace_id = attributes.workspace_id
+                            AND b.id = attributes.blueprint_id AND b.version = attributes.blueprint_version
+                            AND (attributes.code IN (movement ->> 'quantity',
+                                                     movement -> 'factor' ->> 'relationship',
+                                                     movement -> 'reversal' ->> 'relationship')
+                                 OR EXISTS (SELECT 1 FROM jsonb_each_text(movement -> 'target' -> 'values') source
+                                            WHERE source.value = attributes.code))
+                      ) AS movement_input,
+                      record_id IS NOT NULL AS record_scoped
                FROM attributes
                WHERE ((blueprint_id = $1 AND blueprint_version = $2) OR record_id = $3)
                  AND deleted_at IS NULL

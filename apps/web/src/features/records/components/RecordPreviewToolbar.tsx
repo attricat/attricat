@@ -25,6 +25,8 @@ type Props = {
   /** Why agents cannot run; disables asking and says so in its tooltip. */
   agentsUnavailableReason?: string;
   onDuplicate: () => void;
+  /** Reverses a movement record; given when the record can be reversed. */
+  onReverse?: () => void;
   canDelete: boolean;
   onDelete: () => void;
   canPublish: boolean;
@@ -45,6 +47,7 @@ export const RecordPreviewToolbar = ({
   canAskAgent,
   agentsUnavailableReason,
   onDuplicate,
+  onReverse,
   canDelete,
   onDelete,
   canPublish,
@@ -63,6 +66,7 @@ export const RecordPreviewToolbar = ({
         extensionActions={extensionActions}
         onDelete={onDelete}
         onDuplicate={onDuplicate}
+        onReverse={onReverse}
         publications={canPublish ? publications : undefined}
         recordId={recordId}
         schemaOutdated={schemaOutdated}

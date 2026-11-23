@@ -60,6 +60,8 @@ import { RecordExportStatusChip } from '../../extension-exports/RecordExportStat
 import { RecordExportStatusPanel } from '../../extension-exports/RecordExportStatusPanel';
 import { DeleteRecordDialog } from './DeleteRecordDialog';
 import { DuplicateRecordDialog } from './DuplicateRecordDialog';
+import { ReverseRecordDialog } from './ReverseRecordDialog';
+import { reversalRelationship } from '../movements';
 import { RecordAgentDrawer } from './RecordAgentDrawer';
 import { RecordConversationsPanel } from '../../agents/RecordConversationsPanel';
 import { useAgentsUnavailableReason } from '../../agents/useAgentsUnavailableReason';
@@ -157,6 +159,7 @@ export const RecordPreview = ({
   const { t } = useTranslation();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [duplicateOpen, setDuplicateOpen] = useState(false);
+  const [reverseOpen, setReverseOpen] = useState(false);
   const [agentPanelOpen, setAgentPanelOpen] = useState(false);
   // The conversation in the agent panel, or `null` to start a new one.
   const [agentConversationId, setAgentConversationId] = useState<string | null>(
@@ -238,6 +241,19 @@ export const RecordPreview = ({
   const publications = useRecordPublications(recordId, contextId, canPublish);
   const { blueprint, recordForm, resolved, statusTransitions } =
     useRecordPreviewData(recordId, contextId);
+  const reversalAttribute = reversalRelationship(
+    blueprint.data?.blueprint.movements ??
+      recordForm.data?.blueprint.blueprint.movements,
+  );
+  // A reversal itself cannot be reversed; the server refuses a second one.
+  const isReversal = Boolean(
+    reversalAttribute &&
+    recordForm.data?.values.some(
+      (value) => value.attribute_code === reversalAttribute,
+    ),
+  );
+  const canReverse =
+    canCreateRecords && Boolean(reversalAttribute) && !isReversal;
   useRecordReadAhead(
     recordId,
     showComments,
@@ -499,6 +515,7 @@ export const RecordPreview = ({
                 canAskAgent={canAskAgent}
                 agentsUnavailableReason={agentsUnavailableReason}
                 onDuplicate={() => setDuplicateOpen(true)}
+                onReverse={canReverse ? () => setReverseOpen(true) : undefined}
                 canDelete={canDeleteRecords && Boolean(resolved.data)}
                 onDelete={() => setDeleteOpen(true)}
                 canPublish={canPublish}
@@ -698,6 +715,19 @@ export const RecordPreview = ({
           onDuplicated={(copy) => {
             setDuplicateOpen(false);
             onDuplicated(copy);
+          }}
+        />
+      )}
+      {reverseOpen && blueprint.data && reversalAttribute && (
+        <ReverseRecordDialog
+          blueprintCode={blueprint.data.blueprint.code}
+          recordId={recordId}
+          reversalAttribute={reversalAttribute}
+          onClose={() => setReverseOpen(false)}
+          onReversed={(reversal) => {
+            setReverseOpen(false);
+            // Opens the new record, as a duplicate does.
+            onDuplicated(reversal);
           }}
         />
       )}

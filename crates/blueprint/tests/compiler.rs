@@ -56,6 +56,8 @@ attributes:
                     context_editable: ContextEditable::All,
                     readonly: false,
                     generated: None,
+                    balance: None,
+                    target_scope: None,
                     position: 0,
                 },
                 EffectiveAttribute {
@@ -76,6 +78,8 @@ attributes:
                     context_editable: ContextEditable::All,
                     readonly: false,
                     generated: None,
+                    balance: None,
+                    target_scope: None,
                     position: 1,
                 },
             ],

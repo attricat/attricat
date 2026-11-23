@@ -14,6 +14,7 @@ attricat-lexicon = { path = "../lexicon" }
 attricat-validation = { path = "../validation" }
 chrono.workspace = true
 chrono-tz.workspace = true
+rust_decimal.workspace = true
 schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true

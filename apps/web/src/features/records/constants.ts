@@ -101,6 +101,12 @@ export const generatedSequenceResets = {
   daily: 'daily',
 } as const;
 
+/** Which way a movement record changes the balance of its target. */
+export const movementDirections = {
+  in: 'in',
+  out: 'out',
+} as const;
+
 export const attributeContextFallbacks = {
   default: 'default',
   none: 'none',

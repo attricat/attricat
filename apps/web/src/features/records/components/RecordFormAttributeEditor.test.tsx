@@ -168,4 +168,42 @@ describe('RecordFormAttributeEditor', () => {
       screen.getByText('Assigned automatically when the record is saved.'),
     ).toBeTruthy();
   });
+
+  it('explains that only movements change a balance', () => {
+    renderEditor({
+      attribute: {
+        ...title,
+        value_type: 'number',
+        readonly: true,
+        balance: { min: '0' },
+      },
+      contextId: defaultContextId,
+      existingValues: [],
+      value: '12',
+    });
+    expect(
+      screen.getByText(
+        'Changed only by movement records, such as receipts and issues.',
+      ),
+    ).toBeTruthy();
+  });
+
+  it('says a movement sets its target when the record is saved', () => {
+    renderEditor({
+      attribute: {
+        ...title,
+        code: 'base_quantity',
+        value_type: 'number',
+        readonly: true,
+      },
+      contextId: defaultContextId,
+      existingValues: [],
+      movementManaged: new Set(['base_quantity']),
+      recordId: '123e4567-e89b-12d3-a456-426614174009',
+      value: '24',
+    });
+    expect(
+      screen.getByText("Set by this record's movement when it was saved."),
+    ).toBeTruthy();
+  });
 });

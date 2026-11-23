@@ -91,6 +91,15 @@
       "description": "Business keys whose normalized values must be unique across the\nblueprint family. Record blueprints only.",
       "default": []
     },
+    "movements": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/MovementDefinition"
+      },
+      "description": "How creating a record changes a `balance` attribute of another\nrecord, such as a goods issue lowering a stock level. Applied in the\ncreate transaction. Record blueprints only.",
+      "maxItems": 4,
+      "default": []
+    },
     "attributes": {
       "type": "array",
       "items": {
@@ -1227,6 +1236,154 @@
       ],
       "description": "A business key: no two records of the blueprint family may share the\nnormalized values of these attributes."
     },
+    "MovementDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "description": "Stable movement identifier, unique within the blueprint.",
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "direction": {
+          "type": "string",
+          "description": "`in` adds the moved amount to the target balance; `out` subtracts it.",
+          "enum": [
+            "in",
+            "out"
+          ]
+        },
+        "quantity": {
+          "type": "string",
+          "description": "Number or integer attribute of this record holding the quantity. It\nmust be greater than zero.",
+          "x-attricat-reference": "attribute"
+        },
+        "factor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MovementFactor"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Multiplies the quantity by a number on a linked record, such as a unit\nconversion. Without a link the factor is 1."
+        },
+        "result": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Number attribute of this record in which core stores the moved\namount, in the balance's unit. Clients cannot write it.",
+          "x-attricat-reference": "attribute"
+        },
+        "target": {
+          "$ref": "#/$defs/MovementTarget",
+          "description": "The record whose balance changes."
+        },
+        "reversal": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MovementReversal"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "A relationship to another record of this blueprint that this record\nreverses. A reversal moves the original's amount the other way."
+        }
+      },
+      "required": [
+        "code",
+        "direction",
+        "quantity",
+        "target"
+      ],
+      "description": "How creating a record of this blueprint changes a balance on another\nrecord."
+    },
+    "MovementFactor": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "relationship": {
+          "type": "string",
+          "description": "Single-target relationship of this record to the record holding the\nfactor.",
+          "x-attricat-reference": "relationship_attribute"
+        },
+        "attribute": {
+          "type": "string",
+          "description": "Number or integer attribute of the linked record. It must be greater\nthan zero.",
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "relationship",
+        "attribute"
+      ],
+      "description": "`factor: { … }` of a movement."
+    },
+    "MovementTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "relationship": {
+          "type": "string",
+          "description": "Single-target relationship of this record in which core stores the\ntarget. Clients cannot write it.",
+          "x-attricat-reference": "relationship_attribute"
+        },
+        "blueprint": {
+          "type": "string",
+          "description": "Record blueprint of the target.",
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "x-attricat-reference": "blueprint"
+        },
+        "balance": {
+          "type": "string",
+          "description": "Balance attribute of the target blueprint that the movement changes.",
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "key": {
+          "type": "string",
+          "description": "Unique key of the target blueprint that finds the target.",
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "values": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Every attribute of the key, mapped to the attribute of this record\nthat holds its value."
+        },
+        "create_missing": {
+          "type": "boolean",
+          "description": "Create the target, with a zero balance, when no record has the key\nvalues. Otherwise the movement fails.",
+          "default": false
+        }
+      },
+      "required": [
+        "relationship",
+        "blueprint",
+        "balance",
+        "key",
+        "values"
+      ],
+      "description": "`target: { … }` of a movement."
+    },
+    "MovementReversal": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "relationship": {
+          "type": "string",
+          "description": "Single-target relationship of this record to the record of this\nblueprint it reverses.",
+          "x-attricat-reference": "relationship_attribute"
+        }
+      },
+      "required": [
+        "relationship"
+      ],
+      "description": "`reversal: { … }` of a movement."
+    },
     "RawAttributeDeclaration": {
       "type": "object",
       "additionalProperties": false,
@@ -1489,6 +1646,35 @@
             "integer"
           ]
         },
+        "balance": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RawBalance"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "A number only movements change, such as a stock level. It starts at\nzero and is editable in the default context only. Clients cannot write\nit. Record blueprints only.",
+          "x-attricat-value-types": [
+            "number",
+            "integer"
+          ]
+        },
+        "target_scope": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TargetScope"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Offer only targets whose `attribute` links to the same record as this\nrecord's `equals`, such as the unit conversions of the selected\nproduct. A picker filter; record checks guard saved values.",
+          "x-attricat-value-types": [
+            "relationship"
+          ]
+        },
         "from": {
           "type": [
             "string",
@@ -1548,6 +1734,42 @@
         }
       },
       "description": "`generated: { … }` on an attribute."
+    },
+    "RawBalance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "min": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double",
+          "description": "The lowest value a movement may leave, such as 0 for stock that\ncannot go negative. No limit when absent."
+        }
+      },
+      "description": "`balance: { … }` on an attribute."
+    },
+    "TargetScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "attribute": {
+          "type": "string",
+          "description": "Single-target relationship attribute of the target blueprint.",
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "equals": {
+          "type": "string",
+          "description": "Single-target relationship attribute of this record.",
+          "x-attricat-reference": "relationship_attribute"
+        }
+      },
+      "required": [
+        "attribute",
+        "equals"
+      ],
+      "description": "`target_scope: { … }` on a relationship attribute: the record picker\noffers only targets whose `attribute` links to the same record as this\nrecord's `equals`. Record checks, not the scope, guard saved values."
     }
   }
 }

@@ -47,6 +47,26 @@ crate::code_enum! {
     }
 }
 
+crate::code_enum! {
+    /// Which way a movement record changes the balance of its target.
+    pub enum MovementDirection (UnknownMovementDirection: "movement direction") {
+        /// Adds the moved amount, as a goods receipt does.
+        In => "in",
+        /// Subtracts the moved amount, as a goods issue does.
+        Out => "out",
+    }
+}
+
+impl MovementDirection {
+    /// The direction that undoes this one, as a reversal applies it.
+    pub const fn reversed(self) -> Self {
+        match self {
+            Self::In => Self::Out,
+            Self::Out => Self::In,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -72,6 +92,11 @@ mod tests {
             SequenceReset::ALL,
             SequenceReset::as_str,
             SequenceReset::parse,
+        );
+        crate::codes::assert_codes_round_trip(
+            MovementDirection::ALL,
+            MovementDirection::as_str,
+            MovementDirection::parse,
         );
     }
 }

@@ -76,6 +76,18 @@ error_codes! {
     FileTooLarge = "file_too_large",
     Forbidden = "forbidden",
     GeneratedAttributeReadonly = "generated_attribute_readonly",
+    BalanceAttributeReadonly = "balance_attribute_readonly",
+    MovementAttributeReadonly = "movement_attribute_readonly",
+    BalanceBelowMinimum = "balance_below_minimum",
+    MovementTargetMissing = "movement_target_missing",
+    MovementQuantityInvalid = "movement_quantity_invalid",
+    MovementFactorInvalid = "movement_factor_invalid",
+    MovementImmutable = "movement_immutable",
+    MovementRecordUndeletable = "movement_record_undeletable",
+    BalanceRecordNotEmpty = "balance_record_not_empty",
+    MovementAlreadyReversed = "movement_already_reversed",
+    MovementReversalOfReversal = "movement_reversal_of_reversal",
+    MovementReversalMismatch = "movement_reversal_mismatch",
     GeneratedResetChanged = "generated_reset_changed",
     GeneratedSequenceNotRaised = "generated_sequence_not_raised",
     GlobalRelationshipSearchBudgetExceeded = "global_relationship_search_budget_exceeded",
@@ -416,6 +428,63 @@ impl RepositoryError {
             Self::FileAttributeReadonly => plain(Unprocessable, Code::FileAttributeReadonly),
             Self::GeneratedAttributeReadonly { attribute } => {
                 plain(Unprocessable, Code::GeneratedAttributeReadonly)
+                    .with_details(json!({ "attribute": attribute }))
+            }
+            Self::BalanceAttributeReadonly { attribute } => {
+                plain(Unprocessable, Code::BalanceAttributeReadonly)
+                    .with_details(json!({ "attribute": attribute }))
+            }
+            Self::MovementAttributeReadonly { attribute } => {
+                plain(Unprocessable, Code::MovementAttributeReadonly)
+                    .with_details(json!({ "attribute": attribute }))
+            }
+            Self::BalanceBelowMinimum {
+                attribute,
+                record_id,
+                available,
+                requested,
+                minimum,
+            } => plain(Conflict, Code::BalanceBelowMinimum).with_details(json!({
+                "attribute": attribute,
+                "record_id": record_id,
+                "available": available.normalize().to_string(),
+                "requested": requested.normalize().to_string(),
+                "minimum": minimum.normalize().to_string(),
+            })),
+            Self::MovementTargetMissing { blueprint, key } => {
+                plain(Conflict, Code::MovementTargetMissing)
+                    .with_details(json!({ "blueprint": blueprint, "key": key }))
+            }
+            Self::MovementQuantityInvalid { attribute } => {
+                plain(Unprocessable, Code::MovementQuantityInvalid)
+                    .with_details(json!({ "attribute": attribute }))
+            }
+            Self::MovementFactorInvalid { attribute } => {
+                plain(Conflict, Code::MovementFactorInvalid)
+                    .with_details(json!({ "attribute": attribute }))
+            }
+            Self::MovementImmutable { attribute } => plain(Conflict, Code::MovementImmutable)
+                .with_details(json!({ "attribute": attribute })),
+            Self::MovementRecordUndeletable => plain(Conflict, Code::MovementRecordUndeletable),
+            Self::BalanceRecordNotEmpty { attribute, balance } => {
+                plain(Conflict, Code::BalanceRecordNotEmpty).with_details(json!({
+                    "attribute": attribute,
+                    "balance": balance.normalize().to_string(),
+                }))
+            }
+            Self::MovementAlreadyReversed {
+                record_id,
+                reversed_by,
+            } => plain(Conflict, Code::MovementAlreadyReversed).with_details(json!({
+                "record_id": record_id,
+                "reversed_by": reversed_by,
+            })),
+            Self::MovementReversalOfReversal { record_id } => {
+                plain(Conflict, Code::MovementReversalOfReversal)
+                    .with_details(json!({ "record_id": record_id }))
+            }
+            Self::MovementReversalMismatch { attribute } => {
+                plain(Unprocessable, Code::MovementReversalMismatch)
                     .with_details(json!({ "attribute": attribute }))
             }
             Self::GeneratedResetChanged {

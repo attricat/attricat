@@ -5,6 +5,7 @@ import {
   GlobeIcon,
   PlusIcon,
   RefreshCwIcon,
+  RotateCcwIcon,
   SendIcon,
   Trash2Icon,
   Undo2Icon,
@@ -38,6 +39,7 @@ export const RecordActionsMenu = ({
   extensionActions,
   onDelete,
   onDuplicate,
+  onReverse,
   publications,
   recordId,
   schemaOutdated,
@@ -51,6 +53,8 @@ export const RecordActionsMenu = ({
   canWrite: boolean;
   onDelete: () => void;
   onDuplicate: () => void;
+  /** Reverses a movement record; given when the record can be reversed. */
+  onReverse?: () => void;
   /** Extension header actions, rendered as menu items. */
   extensionActions?: ReactNode;
   /** Publishes or withdraws the record; given when the caller may publish. */
@@ -112,6 +116,16 @@ export const RecordActionsMenu = ({
         {canCreate && (
           <ActionMenuItem icon={CopyIcon} onClick={choose(onDuplicate)}>
             {t('records.duplicateRecord')}
+          </ActionMenuItem>
+        )}
+        {/* A reversal is a new record that moves the amount back. */}
+        {canCreate && onReverse && (
+          <ActionMenuItem
+            icon={RotateCcwIcon}
+            onClick={choose(onReverse)}
+            tone="reversal"
+          >
+            {t('records.reverseRecord')}
           </ActionMenuItem>
         )}
         {canCreate && blueprint && (

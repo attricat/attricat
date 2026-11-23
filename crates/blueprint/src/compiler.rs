@@ -55,6 +55,8 @@ pub fn compile(
             context_editable,
             readonly,
             generated,
+            balance,
+            target_scope,
         ) = match declaration {
             AttributeDeclaration::Local(local) => (
                 local.code.clone(),
@@ -79,6 +81,8 @@ pub fn compile(
                 local.context_editable,
                 local.readonly,
                 local.generated.clone(),
+                local.balance.clone(),
+                local.target_scope.clone(),
             ),
             AttributeDeclaration::Selection {
                 code,
@@ -114,6 +118,8 @@ pub fn compile(
                     attribute.context_editable,
                     attribute.readonly,
                     None,
+                    None,
+                    attribute.target_scope.clone(),
                 )
             }
         };
@@ -135,6 +141,8 @@ pub fn compile(
             context_editable,
             readonly,
             generated,
+            balance,
+            target_scope,
             position: position as i64,
         });
     }
@@ -146,6 +154,13 @@ pub fn compile(
     validate_declarative_checks(&definition, &attributes)?;
     validate_unique_key_attributes(&definition.unique_keys, &attributes)?;
     validate_selected_hierarchies(&definition.code, &definition.kind, &attributes)?;
+    crate::movements::validate_target_scopes(&attributes)?;
+    crate::movements::validate_movement_attributes(
+        &definition.code,
+        &definition.movements,
+        &attributes,
+    )?;
+    crate::movements::protect_managed_attributes(&definition.movements, &mut attributes);
     if definition.kind == BlueprintKind::Record && !definition.views.contains_key("dropdown_option")
     {
         return Err(BlueprintError::MissingDropdownOptionView);
@@ -173,6 +188,7 @@ pub fn compile(
         record_schema: definition.record_schema,
         embedded_rules: definition.embedded_rules,
         unique_keys: definition.unique_keys,
+        movements: definition.movements,
         attributes,
     })
 }

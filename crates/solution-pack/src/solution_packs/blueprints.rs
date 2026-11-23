@@ -215,6 +215,52 @@ fn prepare_blueprint(
         }
     }
 
+    // A movement's target and factor blueprints are published before the
+    // blueprint, by logical key; the factor's is its relationship's target.
+    let logical_targets: HashMap<String, String> = table
+        .get("attributes")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|attribute| {
+            Some((
+                attribute.get("code")?.as_str()?.to_owned(),
+                attribute.get("target_blueprint")?.as_str()?.to_owned(),
+            ))
+        })
+        .collect();
+    let mut movement_dependencies = BTreeSet::new();
+    if let Some(movements) = table.get_mut("movements").and_then(Value::as_array_mut) {
+        for movement in movements {
+            let Some(movement) = movement.as_object_mut() else {
+                continue;
+            };
+            if let Some(factor) = movement
+                .get("factor")
+                .and_then(|factor| factor.get("relationship"))
+                .and_then(Value::as_str)
+                .and_then(|relationship| logical_targets.get(relationship))
+            {
+                movement_dependencies.insert(factor.clone());
+            }
+            if let Some(target) = movement.get_mut("target").and_then(Value::as_object_mut) {
+                if let Some(logical_key) = target.get("blueprint").and_then(Value::as_str) {
+                    movement_dependencies.insert(logical_key.to_owned());
+                }
+                rewrite_blueprint_reference(
+                    key,
+                    target,
+                    "blueprint",
+                    "movement target",
+                    blueprint_codes,
+                    Some(&mut dependencies),
+                )?;
+            }
+        }
+    }
+    // A movement never depends on its own blueprint for ordering.
+    movement_dependencies.remove(key);
+
     if let Some(attributes) = table.get_mut("attributes").and_then(Value::as_array_mut) {
         for attribute in attributes {
             if let Some(attribute) = attribute.as_object_mut() {
@@ -325,6 +371,7 @@ fn prepare_blueprint(
             includes: portable_includes,
             dependencies,
             table_path_dependencies: BTreeSet::new(),
+            movement_dependencies,
             kind: definition.kind.clone(),
             effective_attributes: Vec::new(),
             unique_keys: Vec::new(),

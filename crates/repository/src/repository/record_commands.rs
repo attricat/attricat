@@ -53,11 +53,13 @@ struct PreparedRelationship {
 }
 
 /// Who supplied a value write. Only the sequence allocator may write a
-/// generated attribute.
+/// generated attribute, and only a movement a balance or the values it sets
+/// on its own record.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum ValueOrigin {
+pub(super) enum ValueOrigin {
     Client,
     Generated,
+    Movement,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -211,12 +213,31 @@ impl AttricatRepository {
         } else {
             validate_system_annotations(&system_tags, &system_metadata)?;
         }
+        let movements = self
+            .revision_movements(transaction, blueprint_id, blueprint_version)
+            .await?;
         // Do not expose a record before its initial values and derived preview
         // agree; otherwise a concurrent reader can observe a partial create.
-        if writes_relationship_values(&values) {
+        // A movement links its record to the target it changes.
+        if writes_relationship_values(&values) || !movements.is_empty() {
             self.lock_relationship_cardinality_writes(transaction)
                 .await?;
         }
+        // Movement targets are record rows, locked (or created) before this
+        // record's counters and unique keys.
+        let movements = if movements.is_empty() {
+            Vec::new()
+        } else {
+            self.prepare_movements_in(
+                transaction,
+                blueprint_id,
+                blueprint_version,
+                &values,
+                movements,
+                host_sample_marker,
+            )
+            .await?
+        };
         // Namespace locks come after the relationship lock, as on updates.
         self.ensure_annotation_namespaces_unchanged(
             transaction,
@@ -236,7 +257,8 @@ impl AttricatRepository {
                 system_metadata,
             )
             .await?;
-        let write = WriteContext::load(transaction, self.workspace_id.0, &record).await?;
+        let mut write = WriteContext::load(transaction, self.workspace_id.0, &record).await?;
+        write.new_record = true;
         let default_context_id = write.default_context_id()?;
         let defaults = write
             .attributes()
@@ -281,6 +303,20 @@ impl AttricatRepository {
             .await?;
         self.insert_values_in(transaction, &write, &record, values)
             .await?;
+        if !movements.is_empty() {
+            let movement_values = movements
+                .iter()
+                .flat_map(|movement| movement.record_values(default_context_id))
+                .collect();
+            self.insert_values_with(
+                transaction,
+                &write,
+                &record,
+                movement_values,
+                ValueOrigin::Movement,
+            )
+            .await?;
+        }
         // Files are linked before validation, so the record schema sees them.
         let file_changes = self
             .write_created_file_values(transaction, &record, files)
@@ -289,6 +325,8 @@ impl AttricatRepository {
             write.values_changed();
         }
         self.validate_record_schema_in(transaction, &write, &record, Revalidation::Write)
+            .await?;
+        self.apply_movements_in(transaction, &record, &movements, default_context_id)
             .await?;
         let preview = write.preview(transaction, record.id).await?;
         let record = self.store_preview(transaction, record.id, preview).await?;
@@ -370,8 +408,9 @@ impl AttricatRepository {
     /// references into a new record. Values of enforced `unique_keys`
     /// attributes are left out, because the copy could never share them with
     /// its source: default-context values for workspace-scoped keys and every
-    /// context's values for context-scoped keys. Generated values are left
-    /// out too; the copy is numbered like any new record.
+    /// context's values for context-scoped keys. Values only core writes are
+    /// left out too: the copy is numbered like any new record, a balance
+    /// starts at zero, and a movement record's copy applies its own movement.
     pub async fn duplicate_record(&self, record_id: Uuid) -> Result<Record, RepositoryError> {
         let source = self
             .get_record(record_id)
@@ -379,8 +418,8 @@ impl AttricatRepository {
             .ok_or(RepositoryError::NotFound("record"))?;
         let (default_context_id, key_codes) =
             self.unique_key_attributes(source.blueprint_id).await?;
-        let generated_codes = self
-            .generated_attribute_codes(source.blueprint_id, source.blueprint_version)
+        let core_assigned = self
+            .core_assigned_attribute_codes(source.blueprint_id, source.blueprint_version)
             .await?;
         // A copy without a value the record schema requires could never be
         // saved, so name the attributes rather than fail the schema check.
@@ -399,7 +438,7 @@ impl AttricatRepository {
             .into_iter()
             .flatten()
             .filter_map(Value::as_str)
-            .filter(|code| key_codes.contains_key(*code) && !generated_codes.contains(*code))
+            .filter(|code| key_codes.contains_key(*code) && !core_assigned.contains(*code))
             .map(str::to_owned)
             .collect::<Vec<_>>();
         if !required_keys.is_empty() {
@@ -409,7 +448,7 @@ impl AttricatRepository {
             });
         }
         let copied = |attribute_code: &str, context_id: Option<Uuid>| {
-            !generated_codes.contains(attribute_code)
+            !core_assigned.contains(attribute_code)
                 && key_codes
                     .get(attribute_code)
                     .is_none_or(|scope| match scope {
@@ -561,6 +600,7 @@ impl AttricatRepository {
                     system_metadata,
                 },
                 prefetch.as_ref(),
+                ValueOrigin::Client,
             )
             .await?;
         self.commit_record_mutation(transaction, changes, event)
@@ -595,6 +635,7 @@ impl AttricatRepository {
                     system_metadata: annotations.system_metadata,
                 },
                 prefetch.as_ref(),
+                ValueOrigin::Client,
             )
             .await?;
         self.commit_record_mutation(transaction, changes, event)
@@ -611,8 +652,32 @@ impl AttricatRepository {
         record_id: Uuid,
         input: UpdateRecordFormRequest,
     ) -> Result<(Record, Vec<AuditEventChange>, NewDomainEvent), RepositoryError> {
-        self.update_record_in_transaction_with(transaction, record_id, input, None)
-            .await
+        self.update_record_in_transaction_with(
+            transaction,
+            record_id,
+            input,
+            None,
+            ValueOrigin::Client,
+        )
+        .await
+    }
+
+    /// [`Self::update_record_in_transaction`] for a movement changing its
+    /// target's balance: the only writer of a balance attribute.
+    pub(super) async fn update_record_from_movement_in(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        record_id: Uuid,
+        input: UpdateRecordFormRequest,
+    ) -> Result<(Record, Vec<AuditEventChange>, NewDomainEvent), RepositoryError> {
+        self.update_record_in_transaction_with(
+            transaction,
+            record_id,
+            input,
+            None,
+            ValueOrigin::Movement,
+        )
+        .await
     }
 
     async fn update_record_in_transaction_with(
@@ -621,6 +686,7 @@ impl AttricatRepository {
         record_id: Uuid,
         input: UpdateRecordFormRequest,
         prefetch: Option<&WritePrefetch>,
+        origin: ValueOrigin,
     ) -> Result<(Record, Vec<AuditEventChange>, NewDomainEvent), RepositoryError> {
         let UpdateRecordFormRequest {
             expected_updated_at,
@@ -681,7 +747,7 @@ impl AttricatRepository {
             .execute(&mut **transaction)
             .await?;
         }
-        self.insert_values_in(transaction, &write, &record, values)
+        self.insert_values_with(transaction, &write, &record, values, origin)
             .await?;
         for selector in remove_values {
             self.remove_scalar_value(transaction, &write, &record, selector)
@@ -882,6 +948,7 @@ impl AttricatRepository {
             return Err(RepositoryError::StaleRecord);
         }
         self.ensure_record_deletable(transaction, &record).await?;
+        self.ensure_movement_deletable(transaction, &record).await?;
         // Withdraw live publications through the shared helper so consumers
         // receive `record.unpublished`, then drop the record's rows.
         self.clear_record_publications(transaction, record_id, "record_deleted")
@@ -1223,7 +1290,7 @@ impl AttricatRepository {
             .await
     }
 
-    async fn insert_values_with(
+    pub(super) async fn insert_values_with(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         write: &WriteContext,
@@ -1738,6 +1805,8 @@ impl AttricatRepository {
             self.notify_assignments_on(transaction, record.id, &assigned)
                 .await?;
         }
+        self.ensure_movement_values_unchanged(transaction, write, record)
+            .await?;
         // Every value write validates here, so unique keys stay current.
         self.sync_record_unique_keys(transaction, record).await?;
         let record_schema = match self
@@ -1800,6 +1869,7 @@ impl AttricatRepository {
         if attribute.value_type != ValueType::Relationship {
             return Err(RepositoryError::AttributeKindMismatch);
         }
+        attribute.ensure_client_writable()?;
         Ok((
             attribute.id,
             attribute.target_blueprint_codes.clone(),

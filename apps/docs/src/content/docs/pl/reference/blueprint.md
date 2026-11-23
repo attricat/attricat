@@ -45,6 +45,7 @@ Schematy rekordów mają `kind: record`.
 | `publication` | mapowanie | Nie | Zasady ponownego zatwierdzania publikacji. Zobacz [Publikacja](#publikacja). |
 | `unique_keys` | lista mapowań | Nie | Klucze biznesowe, których wartości muszą być unikalne. Tylko schematy rekordów. Zobacz [Klucze unikalne](#klucze-unikalne). |
 | `connector_jobs` | lista mapowań | Nie | Zaplanowane lub ręczne zadania importu i eksportu wykonywane przez rozszerzenie konektora. Tylko schematy rekordów. Zobacz [Zadania konektorów](#zadania-konektorów). |
+| `movements` | lista mapowań | Nie | Jak utworzenie rekordu zmienia saldo innego rekordu, np. wydanie towaru obniża stan magazynowy. Najwyżej 4. Tylko schematy rekordów. Zobacz [Salda i ruchy](#salda-i-ruchy). |
 | `extensions` | mapowanie | Nie | Dowolne dane dla rozszerzeń, w przestrzeniach nazw `extensions.<extension-id>`. Kompilator rdzenia je ignoruje; rozszerzenia odczytują je z zapisanej definicji. |
 
 ## Atrybuty
@@ -74,6 +75,7 @@ attributes:
 | `default_value` | zgodny z typem | Nieustawiony | Wartość zapisywana w kontekście domyślnym, gdy rekord zostaje utworzony bez niej. Tylko typy skalarne. |
 | `value_schema` | ciąg znaków (JSON) | Nieustawiony | JSON Schema dla jednej wartości. Tylko typy skalarne. Schemat atrybutu `string` może uczynić go [statusem](#statusy) lub [przypisaniem użytkownika lub zespołu](#przypisania-użytkowników-i-zespołów). Zobacz [Walidacja](/pl/builders/validation/). |
 | `generated` | mapowanie | Nieustawiony | Serwer numeruje nowe rekordy, np. numerami faktur lub zamówień. Tylko atrybuty `string` i `integer` w schematach rekordów. Zobacz [Wartości generowane](#wartości-generowane). |
+| `balance` | mapowanie | Nieustawiony | Suma bieżąca, którą zmieniają tylko [ruchy](#salda-i-ruchy), np. stan magazynowy. Tylko atrybuty `number` i `integer` w schematach rekordów. |
 
 ### Typy wartości
 
@@ -201,6 +203,7 @@ attributes:
 | `target_cardinality` | `"one"` lub `"many"` | `"many"` | Ile rekordów może wskazywać ten sam cel przez ten atrybut w jednym kontekście. |
 | `acyclic` | wartość logiczna | `false` | Odrzuca powiązania, które utworzyłyby cykl przez ten atrybut. Wymaga `context_editable: default`, a cele muszą obejmować sam schemat. Zobacz [Hierarchie](#hierarchie). |
 | `tree` | wartość logiczna | `false` | Hierarchia acykliczna, w której każdy rekord ma co najwyżej jeden cel (rodzica). Oznacza `acyclic: true` i domyślnie ustawia `cardinality` na `"one"`; `cardinality: many` jest odrzucane. |
+| `target_scope` | mapowanie | Nieustawiony | `{attribute, equals}`: wybór rekordu pokazuje tylko cele, których `attribute` wskazuje ten sam rekord co `equals` tego rekordu. Zobacz [Zakres celu](#zakres-celu). |
 
 `cardinality: one` daje pole jednokrotnego wyboru, którego opcje mogą być współdzielone, np. marka. Dodaj `target_cardinality: one` tylko dla wyłącznego powiązania, w którym każdy cel może zostać zajęty raz. Zapis naruszający którykolwiek limit zwraca `409 relationship_cardinality_conflict`.
 
@@ -224,6 +227,26 @@ attributes:
 - Sprawdzenia uwzględniają powiązania ze wszystkich wersji schematu i działają w transakcji zapisu. Dwa równoczesne zapisy nie mogą każdy dodać połowy cyklu.
 - Hierarchia dotyczy całej rodziny schematów zgodnie z jej najnowszą opublikowaną wersją, także rekordów przypiętych do starszych wersji.
 - Publikacja wersji, która dodaje `acyclic` lub `tree`, najpierw sprawdza istniejące powiązania. Jeśli zawierają cykle albo drzewo ma rekordy z więcej niż jednym celem, publikacja kończy się błędem `409 relationship_hierarchy_violations`; `error.details` wymienia do 20 cykli i rekordów z nadmiarowymi celami. Popraw powiązania i opublikuj ponownie.
+
+#### Zakres celu
+
+```yaml
+attributes:
+  - code: product
+    value_type: relationship
+    target_blueprint: product
+    cardinality: one
+  - code: conversion
+    value_type: relationship
+    target_blueprint: unit_conversion
+    cardinality: one
+    target_scope: {attribute: product, equals: product}
+```
+
+Z `target_scope` wybór rekordu w polu `conversion` pokazuje tylko przeliczniki jednostek, których `product` jest produktem wybranym w tym samym formularzu. Dopóki produkt nie jest wybrany, wybór pokazuje wszystkie przeliczniki.
+
+- Atrybut musi być relacją z dokładnie jednym schematem docelowym. `equals` musi być inną relacją tego schematu z `cardinality: one`, a `attribute` relacją schematu docelowego z `cardinality: one`. Publikacja sprawdza `attribute`, gdy schemat docelowy ma opublikowaną wersję.
+- Zakres tylko filtruje wybór. Aby odrzucić niepasujące powiązanie przy zapisie, dodaj [kontrolę rekordu](#kontrole-rekordów), np. `{"type": "linked", "relationship_code": "conversion", "predicate": {"type": "compare", "attribute_code": "product", "op": "eq", "subject_attribute_code": "product"}}`.
 
 Relacje nie mogą mieć `value_schema` ani `default_value`. Ograniczaj je zamiast tego przez `record_schema`.
 
@@ -666,6 +689,123 @@ Zapis, który nadałby drugiemu rekordowi tę samą wartość klucza, zwraca `40
 
 Publikacja wersji, która dodaje lub zmienia klucze unikalne, najpierw sprawdza istniejące rekordy. Jeśli niektóre już współdzielą wartość, publikacja kończy się błędem `409 unique_key_duplicates`, a `error.details.duplicates` wymienia do 20 grup z kluczem, kontekstem, wartościami i identyfikatorami rekordów (`error.details.total` podaje liczbę wszystkich grup). Zmień lub usuń duplikaty i opublikuj ponownie.
 
+## Salda i ruchy
+
+Niektóre rekordy prowadzą sumę bieżącą, którą zmieniają inne rekordy, np. stan magazynowy, który przyjęcia towaru zwiększają, a wydania zmniejszają. Sumę przechowuje atrybut **salda**. **Ruch** w innym schemacie określa, jak utworzenie jego rekordu zmienia tę sumę. Serwer stosuje ruch w tej samej transakcji, w której tworzy rekord, więc suma zawsze zgadza się z dokumentami, a dwie osoby zapisujące w tej samej chwili nie zejdą poniżej minimum.
+
+```yaml
+# stock_item: jeden rekord na produkt
+unique_keys:
+  - code: product
+    attributes: [product]
+attributes:
+  - code: product
+    value_type: relationship
+    target_blueprint: product
+    cardinality: one
+    context_editable: default
+  - code: quantity
+    value_type: number
+    balance: {min: 0}
+```
+
+```yaml
+# goods_issue: zmniejsza stan magazynowy swojego produktu
+attributes:
+  - code: product
+    value_type: relationship
+    target_blueprint: product
+    cardinality: one
+    context_editable: default
+  - code: quantity
+    value_type: number
+    context_editable: default
+  - code: conversion
+    value_type: relationship
+    target_blueprint: unit_conversion
+    cardinality: one
+    context_editable: default
+    target_scope: {attribute: product, equals: product}
+  - code: stock_item
+    value_type: relationship
+    target_blueprint: stock_item
+    cardinality: one
+  - code: base_quantity
+    value_type: number
+  - code: reverses
+    value_type: relationship
+    target_blueprint: goods_issue
+    cardinality: one
+    context_editable: default
+movements:
+  - code: stock
+    direction: out
+    quantity: quantity
+    factor: {relationship: conversion, attribute: factor}
+    result: base_quantity
+    target:
+      relationship: stock_item
+      blueprint: stock_item
+      balance: quantity
+      key: product
+      values: {product: product}
+    reversal: {relationship: reverses}
+```
+
+Przyjęcie towaru wygląda tak samo, z `direction: in` i `create_missing: true`, więc pierwsze przyjęcie produktu tworzy jego pozycję magazynową.
+
+### Atrybuty sald
+
+| Klucz | Typ | Domyślnie | Opis |
+| --- | --- | --- | --- |
+| `balance.min` | liczba | Bez minimum | Najniższa wartość, jaką może zostawić ruch, np. `0` dla stanu, który nie może być ujemny. Dla salda `integer` musi być liczbą całkowitą. |
+
+- `balance` jest dozwolone tylko w lokalnym atrybucie `number` lub `integer` schematu rekordów. Jest odrzucane w mixinie, z `from`, razem z `generated` lub `default_value` oraz w statusie lub przypisaniu użytkownika lub zespołu.
+- Saldo jest zawsze tylko do odczytu i tylko w kontekście domyślnym (`context_editable: default`). Rekord bez wartości ma saldo zero.
+- Saldo zmieniają tylko ruchy. Tworzenie, aktualizacje, czyszczenie wartości, przywracanie z historii, partie rekordów, przepływy pracy, agenci i rozszerzenia, które próbują je zapisać, są odrzucane z `422 balance_attribute_readonly`.
+- Rekordu z niezerowym saldem nie można usunąć: `409 balance_record_not_empty` z `attribute` i jego `balance`. Rekordy przykładowe pakietów rozwiązań są wyjątkiem.
+
+### Klucze ruchu
+
+| Klucz | Typ | Wymagany | Opis |
+| --- | --- | --- | --- |
+| `code` | kod | Tak | Unikalny w obrębie schematu. |
+| `direction` | `"in"` lub `"out"` | Tak | `in` dodaje przesuniętą ilość do salda, `out` ją odejmuje. |
+| `quantity` | kod atrybutu | Tak | Atrybut `number` lub `integer` z ilością. Musi być większa od zera. |
+| `factor.relationship` | kod atrybutu | Nie | Relacja z `cardinality: one` i jednym schematem docelowym do rekordu z przelicznikiem. |
+| `factor.attribute` | kod | Z `factor` | Atrybut `number` lub `integer` powiązanego rekordu. Przesunięta ilość to `quantity × factor`; bez powiązania jest równa ilości. |
+| `result` | kod atrybutu | Dla `reversal` | Atrybut `number`, w którym serwer zapisuje przesuniętą ilość w jednostce salda. `integer` tylko dla ilości całkowitej bez przelicznika. |
+| `target.relationship` | kod atrybutu | Tak | Relacja z `cardinality: one` i `target_blueprint: <target.blueprint>`, w której serwer zapisuje cel. |
+| `target.blueprint` | kod | Tak | Schemat rekordów celu. |
+| `target.balance` | kod | Tak | Atrybut salda schematu docelowego. |
+| `target.key` | kod | Tak | Klucz unikalny schematu docelowego z `scope: workspace`, który odnajduje cel. |
+| `target.values` | mapowanie | Tak | Każdy atrybut klucza przypisany do atrybutu tego rekordu z jego wartością, np. `{product: product}`. Typy muszą się zgadzać. |
+| `target.create_missing` | wartość logiczna | `false` | Utwórz cel z wartościami klucza, gdy żaden rekord ich nie ma. W przeciwnym razie ruch się nie powiedzie. |
+| `reversal.relationship` | kod atrybutu | Nie | Relacja z `cardinality: one` do tego samego schematu. Rekord, który ją ustawia, wycofuje powiązany rekord. Zobacz [Wycofania](#wycofania). |
+
+Atrybuty odczytywane przez ruch (ilość, relacja przelicznika, wartości klucza i relacja wycofania) muszą mieć `context_editable: default`. Publikacja sprawdza schematy celu i przelicznika w ich najnowszych opublikowanych wersjach, więc najpierw opublikuj schematy pozycji magazynowej i przelicznika jednostek.
+
+### Jak działa ruch
+
+Gdy powstaje rekord z ruchami:
+
+1. Ilość musi być większa od zera, inaczej zapis zwraca `422 movement_quantity_invalid`. Powiązany przelicznik musi być większy od zera, inaczej zapis zwraca `409 movement_factor_invalid`.
+2. Serwer odnajduje cel przez `target.key` i wartości klucza rekordu. Z `create_missing: true` brakujący cel zostaje utworzony; w przeciwnym razie zapis zwraca `409 movement_target_missing` z `blueprint` i `key`. Równoczesne pierwsze przyjęcia jednego produktu tworzą jeden cel.
+3. Saldo celu zmienia się o `quantity × factor`. Jeśli spadłoby poniżej `min`, zapis zwraca `409 balance_below_minimum`, a `error.details` zawiera `attribute`, `record_id` celu, dostępne saldo `available`, żądaną ilość `requested` i `minimum`. Nic nie zostaje zapisane: ani rekord, ani zmiana.
+4. Serwer zapisuje cel w `target.relationship`, a ilość w `result`. Klienci nie mogą ich zapisać: `422 movement_attribute_readonly`.
+
+Zmiana celu jest zwykłą aktualizacją. Obowiązują jego blokady statusów, jest audytowana jako `attricat.records.movement.balance_update` z rekordem ruchu w metadanych i emituje `record.updated.v1`.
+
+Ruch działa raz. Po utworzeniu rekordu atrybuty, które ruch odczytał lub ustawił, nie mogą się zmienić, a zapis, który próbuje je zmienić, zwraca `409 movement_immutable`. Pozostałe atrybuty rekordu można edytować. Rekordu ruchu nie można usunąć (`409 movement_record_undeletable`); zamiast tego go wycofaj. Duplikat rekordu ruchu tworzy nowy ruch.
+
+### Wycofania
+
+Rekord, który ustawia `reversal.relationship`, wycofuje rekord, który wskazuje. Przesuwa `result` oryginału z powrotem w przeciwnym kierunku, na celu oryginału.
+
+- Wycofanie przejmuje ilość, powiązanie przelicznika i wartości klucza oryginału. Przesłane wartości muszą się z nimi zgadzać, inaczej zapis zwraca `422 movement_reversal_mismatch`; liczby są porównywane według wartości.
+- Rekord można wycofać raz. Drugie wycofanie zwraca `409 movement_already_reversed` z `record_id` i istniejącym wycofaniem w `reversed_by`. Wycofania nie można wycofać: `409 movement_reversal_of_reversal`.
+- Wycofanie podlega minimum salda. Wycofanie przyjęcia, którego towar został już wydany, zwraca `409 balance_below_minimum`; najpierw wycofaj wydania.
+
 ## Zadania konektorów
 
 Zadania konektorów uruchamiają operację zainstalowanego rozszerzenia konektora, np. import lub eksport CSV, dla tego schematu.
@@ -727,4 +867,6 @@ Kilka reguł kompilacji, które łatwo przeoczyć:
 - `target_blueprint`, `target_blueprints`, `acyclic` i `tree` w atrybucie innym niż relacja są odrzucane.
 - `unique_keys` w mixinie, klucz wskazujący nieznany atrybut, atrybut `json`, plikowy lub relację z wieloma celami, a także klucz wymieniający atrybut dwa razy są odrzucane.
 - `from` musi mieć postać `alias.code`, gdzie `code` odpowiada kodowi samego atrybutu.
+- `balance` w mixinie, w atrybucie wybranym przez `from`, w typie innym niż `number` lub `integer` albo razem z `generated` lub `default_value` jest odrzucane.
+- Ruch wskazujący nieznany atrybut, używający atrybutu w dwóch rolach, odczytujący atrybut bez `context_editable: default` albo deklarujący `reversal` bez `result` jest odrzucany. Publikacja odrzuca ruch, którego schemat docelowy nie jest opublikowany albo nie ma salda lub klucza, oraz przelicznik, który nie jest liczbą.
 - `generated` w mixinie, w atrybucie wybranym przez `from`, w `extension_type`, w statusie lub w przypisaniu użytkownika lub zespołu, w typie innym niż `string` lub `integer` albo razem z `default_value` jest odrzucany. Odrzucany jest też `format` bez dokładnie jednego `{n}`, z nieznanym symbolem zastępczym lub dłuższy niż 100 znaków, a także `reset`, którego okresu `format` nie identyfikuje.

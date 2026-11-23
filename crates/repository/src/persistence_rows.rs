@@ -156,6 +156,7 @@ domain_row!(Blueprint {
     deleted_at,
     definition,
     definition_hash,
+    movements,
 });
 impl DomainRow for Attribute {
     fn from_pg_row(row: &PgRow) -> Result<Self, sqlx::Error> {
@@ -190,6 +191,8 @@ impl DomainRow for Attribute {
             context_editable: decode_code(row, "context_editable")?,
             readonly: row.try_get("readonly")?,
             generated: row.try_get("generated")?,
+            balance: row.try_get("balance")?,
+            target_scope: row.try_get("target_scope")?,
             position: row.try_get("position")?,
             created_at: row.try_get("created_at")?,
             updated_at: row.try_get("updated_at")?,
