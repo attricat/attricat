@@ -97,7 +97,7 @@ Niektóre schematy prowadzą sumę bieżącą, którą zmieniają inne rekordy, 
 - Suma jest pokazywana jako wartość, nigdy jako pole do edycji: zmieniają ją tylko przyjęcia, wydania i inne rekordy ruchów.
 - Zapisanie przyjęcia lub wydania od razu zmienia sumę. Wydanie, które obniżyłoby ją poniżej minimum, zwykle zera, nie zostaje zapisane, a komunikat podaje, ile jest dostępne.
 - W przyjęciu lub wydaniu relacja taka jak **Przelicznik jednostek** może pokazywać tylko cele pasujące do innego pola, np. przeliczniki wybranego produktu. Dopóki to pole nie ma wartości, pokazywane są wszystkie cele.
-- Po zapisaniu przyjęcia lub wydania ilość i powiązania użyte przez jego ruch są pokazywane jako wartości, z komunikatem nad polami. Pozostałe pola można dalej edytować.
+- Zapisane przyjęcie lub wydanie jest zaksięgowane: jego ilość i powiązania są pokazywane jako wartości, a komunikat nad polami wyjaśnia, że nie można ich zmienić. Pozostałe pola można dalej edytować.
 - Aby poprawić zapisane przyjęcie lub wydanie, wybierz **Wycofaj rekord** w menu **Akcje**. Nowy rekord przesuwa tę samą ilość z powrotem i zostaje otwarty. Rekord można wycofać raz, wycofania nie można wycofać, a przyjęcie można wycofać tylko wtedy, gdy jego towar nadal jest na stanie. Następnie zapisz poprawny dokument.
 - Przyjęć i wydań nie można usuwać, podobnie jak pozycji magazynowej, która nadal ma stan. **Duplikuj rekord** na przyjęciu lub wydaniu tworzy nowy ruch, który ponownie zmienia sumę.
 
