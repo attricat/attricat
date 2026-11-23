@@ -123,6 +123,40 @@ for (const colorScheme of ['light', 'dark'] as const) {
   });
 }
 
+test('links relationship changes to the linked record in a new tab', async ({
+  page,
+}) => {
+  const run = suffix();
+  const brand = await createRecordBlueprint(
+    `history_brand_${run}`,
+    'History brands',
+    'attributes:\n  - code: title\n    value_type: string',
+  );
+  const acme = await createRecord(brand, [scalar('title', 'Acme')]);
+  const item = await createRecordBlueprint(
+    `history_item_${run}`,
+    'History items',
+    `attributes:\n  - code: title\n    value_type: string\n  - code: brand\n    value_type: relationship\n    target_blueprint: history_brand_${run}\n    cardinality: one`,
+  );
+  const hammer = await createRecord(item, [
+    scalar('title', 'Hammer'),
+    relationship('brand', acme.id),
+  ]);
+
+  await page.goto(`/records/${hammer.id}/changes`);
+  const link = page.getByRole('link', { name: /Acme$/ });
+  await expect(link).toHaveAttribute('href', `/records/${acme.id}`);
+  await expect(link).toHaveAttribute('target', '_blank');
+  const [opened] = await Promise.all([
+    page.context().waitForEvent('page'),
+    link.click(),
+  ]);
+  await expect(opened).toHaveURL(new RegExp(`/records/${acme.id}$`));
+  await opened.close();
+  // The history stays open in its own tab.
+  await expect(page).toHaveURL(new RegExp(`/records/${hammer.id}/changes$`));
+});
+
 test('opens the full page when the record in the panel is clicked again', async ({
   page,
 }) => {

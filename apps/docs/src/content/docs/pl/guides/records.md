@@ -117,7 +117,7 @@ Gdy agenci są włączeni i możesz edytować rekord, otwórz **Zapytaj o ten re
 
 ## Historia
 
-**Zmiany**, w menu **Akcje** rekordu, zawierają listę wszystkich zmian rekordu: co się zmieniło, w którym kontekście, kiedy i kto to zrobił. Zmiany wprowadzone przez agenta pokazują agenta i osobę, która je zatwierdziła.
+**Zmiany**, w menu **Akcje** rekordu, zawierają listę wszystkich zmian rekordu: co się zmieniło, w którym kontekście, kiedy i kto to zrobił. Zmiany wprowadzone przez agenta pokazują agenta i osobę, która je zatwierdziła. Zmiana, która powiązuje lub odłącza rekord, podaje jego nazwę; kliknij ją, aby otworzyć ten rekord w nowej karcie.
 
 Poprzednie wartości atrybutów są domyślnie przechowywane przez 90 dni. Strona **Zmiany** tylko je wyświetla. Aby przywrócić wcześniejszą wartość, użyj [CLI](/pl/reference/cli/), [API](/pl/reference/api/) lub [agenta](/pl/guides/agents/); przywrócenie jest zapisywane jako nowa zmiana.
 

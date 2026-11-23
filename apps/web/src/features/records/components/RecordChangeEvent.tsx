@@ -1,5 +1,6 @@
 import { personName } from '../../../components/personName';
-import { Box, Paper, Typography } from '@mui/material';
+import { Box, Chip, Paper, Stack, Typography } from '@mui/material';
+import { Link } from '@tanstack/react-router';
 import { Trans, useTranslation } from 'react-i18next';
 import { JsonInline } from '../../../components/JsonValue';
 import { UserLabel } from '../../../components/UserLabel';
@@ -9,6 +10,8 @@ import { attributeValueTypes } from '../valueTypes';
 import { relationshipChangeKinds } from '../recordChanges';
 import { executorTypes } from '../../audit/constants';
 import { Timestamp } from '../../../time/Timestamp';
+import { NewTabIcon } from '../../../components/NewTabIcon';
+import { relatedRecordLinkProps } from '../linkedRecord';
 
 // Value types whose values are objects that the attribute formats itself.
 const objectValueTypes: ReadonlySet<string> = new Set([
@@ -114,15 +117,36 @@ export const RecordChangeEvent = ({
           </Typography>
           <Typography component="div" variant="body2">
             {relationshipChangeKinds.has(change.change_kind) ? (
-              // A link names the record, not the ID the change stores.
-              [change.before_value, change.after_value]
-                .filter((value) => value !== null)
-                .map((value) =>
-                  typeof value === 'string'
-                    ? (recordLabels?.get(value) ?? value)
-                    : JSON.stringify(value),
-                )
-                .join(', ')
+              // The linked or unlinked record, named and opened in a new tab
+              // so the history stays where it is.
+              <Stack
+                direction="row"
+                spacing={1}
+                sx={{ alignItems: 'center', flexWrap: 'wrap', mt: 0.5 }}
+                useFlexGap
+              >
+                {[change.before_value, change.after_value]
+                  .filter((value) => value !== null)
+                  .map((value, valueIndex) =>
+                    typeof value === 'string' ? (
+                      <Link
+                        key={`${value}-${valueIndex}`}
+                        params={{ recordId: value }}
+                        to="/records/$recordId"
+                        {...relatedRecordLinkProps}
+                      >
+                        <Chip
+                          clickable
+                          icon={<NewTabIcon />}
+                          label={recordLabels?.get(value) ?? value}
+                          size="small"
+                        />
+                      </Link>
+                    ) : (
+                      <JsonInline key={valueIndex} value={value} />
+                    ),
+                  )}
+              </Stack>
             ) : (
               <>
                 <ChangeValue

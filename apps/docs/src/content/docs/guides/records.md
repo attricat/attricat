@@ -117,7 +117,7 @@ When agents are enabled and you can edit the record, open **Ask about this recor
 
 ## History
 
-**Changes**, in the record's **Actions** menu, lists every change to the record: what changed, in which context, when, and by whom. Changes made by an agent show the agent and the person who approved them.
+**Changes**, in the record's **Actions** menu, lists every change to the record: what changed, in which context, when, and by whom. Changes made by an agent show the agent and the person who approved them. A change that links or unlinks a record names that record; select it to open it in a new tab.
 
 Previous attribute values are kept for 90 days by default. The **Changes** page only lists them. To restore an earlier value, use the [CLI](/reference/cli/), the [API](/reference/api/), or an [agent](/guides/agents/); the restore is recorded as a new change.
 
