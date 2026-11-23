@@ -607,6 +607,40 @@ attributes:
     ] {
         assert!(compile(parse(&invalid).unwrap(), &[], &invalid).is_err());
     }
+
+    // A table lists one relationship's records, editable or not.
+    let table = source.replace(
+        "page_size: 10",
+        "page_size: 10\n        display: table\n        editable: true\n        columns: [name, price]",
+    );
+    let compiled = compile(parse(&table).unwrap(), &[], &table).unwrap();
+    let detail = serde_json::to_value(&compiled.views["detail"]).unwrap();
+    assert_eq!(detail["children"][0]["display"], "table");
+    assert_eq!(detail["children"][0]["editable"], true);
+    assert_eq!(
+        detail["children"][0]["columns"],
+        serde_json::json!(["name", "price"])
+    );
+    // Links are the default and serialize as before.
+    let links = serde_json::to_value(
+        &compile(parse(source).unwrap(), &[], source).unwrap().views["detail"],
+    )
+    .unwrap();
+    assert!(links["children"][0].get("display").is_none());
+    assert!(links["children"][0].get("editable").is_none());
+    for (invalid, expected) in [
+        (
+            table.replace(
+                "          - {source_blueprint: product, field: categories}",
+                "          - {source_blueprint: product, field: categories}\n          - {source_blueprint: offer, field: category}",
+            ),
+            "exactly one relationship",
+        ),
+        (source.replace("page_size: 10", "page_size: 10\n        editable: true"), "need display: table"),
+    ] {
+        let error = compile(parse(&invalid).unwrap(), &[], &invalid).unwrap_err();
+        assert!(error.to_string().contains(expected), "{error}");
+    }
 }
 
 #[test]

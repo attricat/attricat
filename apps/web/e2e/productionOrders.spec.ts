@@ -197,9 +197,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
     await expect(page.getByText(/already (used|posted)/)).toHaveCount(0);
 
     expect((await chooseStatus(page, order.id, 'Approved')).ok()).toBe(true);
-    await expect
-      .poll(() => stock(stockItemId))
-      .toEqual([10, 6]);
+    await expect.poll(() => stock(stockItemId)).toEqual([10, 6]);
     // The approval reserved the quantity, so it no longer changes.
     await expect(
       page.getByText(/^This record's movement already used .*quantity/),
@@ -228,13 +226,214 @@ for (const colorScheme of ['light', 'dark'] as const) {
     // Completion releases the reservation and consumes the material.
     await page.goto(`/records/${order.id}`);
     expect((await chooseStatus(page, order.id, 'Completed')).ok()).toBe(true);
-    await expect
-      .poll(() => stock(stockItemId))
-      .toEqual([4, 0]);
+    await expect.poll(() => stock(stockItemId)).toEqual([4, 0]);
     expect((await recordForm(order.id)).applied_movements).toEqual([
       'consume',
       'release',
       'reserve',
     ]);
+  });
+}
+
+/**
+ * Publishes a production order whose material lines reserve stock on
+ * approval, listed on the order's page as an editable table, and receives
+ * 10 of a material.
+ */
+const productionWithLines = async () => {
+  const run = suffix();
+  const codes = {
+    material: `pl_material_${run}`,
+    stockItem: `pl_stock_item_${run}`,
+    receipt: `pl_receipt_${run}`,
+    production: `pl_production_${run}`,
+    line: `pl_line_${run}`,
+  };
+  const material = await createRecordBlueprint(
+    codes.material,
+    `Line materials ${run}`,
+    'attributes:\n  - code: title\n    value_type: string\n    tags: [searchable]',
+  );
+  await createRecordBlueprint(
+    codes.stockItem,
+    `Line stock items ${run}`,
+    `unique_keys:
+  - code: material
+    attributes: [material]
+attributes:
+  - code: title
+    value_type: string
+  - code: material
+    value_type: relationship
+    target_blueprint: ${codes.material}
+    cardinality: one
+    context_editable: default
+  - code: quantity
+    value_type: number
+    balance: {min: 0, reserved: reserved}
+  - code: reserved
+    value_type: number
+    balance: {min: 0}`,
+  );
+  const receipt = await createRecordBlueprint(
+    codes.receipt,
+    `Line receipts ${run}`,
+    `attributes:
+  - code: title
+    value_type: string
+  - code: material
+    value_type: relationship
+    target_blueprint: ${codes.material}
+    cardinality: one
+    context_editable: default
+  - code: quantity
+    value_type: number
+    context_editable: default
+  - code: stock_item
+    value_type: relationship
+    target_blueprint: ${codes.stockItem}
+    cardinality: one
+movements:
+  - code: stock
+    direction: in
+    quantity: quantity
+    target: {relationship: stock_item, blueprint: ${codes.stockItem}, balance: quantity, key: material, values: {material: material}, create_missing: true}`,
+  );
+  const production = await createRecordBlueprint(
+    codes.production,
+    `Productions ${run}`,
+    `views:
+  detail:
+    type: stack
+    children:
+      - {type: field, field: title}
+      - {type: field, field: status}
+      - type: incoming_relationship_list
+        label: Material lines
+        display: table
+        editable: true
+        columns: [material, quantity]
+        relationships:
+          - {source_blueprint: ${codes.line}, field: production}
+        page_size: 50
+attributes:
+  - code: title
+    value_type: string
+  - code: status
+    value_type: string
+    value_schema: '${orderStatus}'`,
+  );
+  await createRecordBlueprint(
+    codes.line,
+    `Material lines ${run}`,
+    `attributes:
+  - code: title
+    value_type: string
+  - code: production
+    value_type: relationship
+    target_blueprint: ${codes.production}
+    cardinality: one
+    context_editable: default
+  - code: material
+    value_type: relationship
+    target_blueprint: ${codes.material}
+    cardinality: one
+    context_editable: default
+  - code: quantity
+    value_type: number
+    context_editable: default
+  - code: stock_item
+    value_type: relationship
+    target_blueprint: ${codes.stockItem}
+    cardinality: one
+movements:
+  - code: reserve
+    direction: in
+    quantity: quantity
+    target: {relationship: stock_item, blueprint: ${codes.stockItem}, balance: reserved, key: material, values: {material: material}}
+    apply_on: [{relationship: production, attribute: status, to: approved}]`,
+  );
+  const steel = await createRecord(material, [scalar('title', 'Steel')]);
+  const received = await createRecord(receipt, [
+    scalar('title', 'PZ/1'),
+    relationship('material', steel.id),
+    scalar('quantity', 10),
+  ]);
+  const stockItemId = (await recordForm(received.id)).values.find(
+    (value) => value.attribute_code === 'stock_item',
+  )!.target_record_id!;
+  const order = await createRecord(production, [
+    scalar('title', 'ZP/1'),
+    scalar('status', 'draft'),
+  ]);
+  return { order, run, stockItemId };
+};
+
+for (const colorScheme of ['light', 'dark'] as const) {
+  test(`adds an order's lines on its page until approval in ${colorScheme} mode`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme });
+    const { order, run, stockItemId } = await productionWithLines();
+    await page.goto(`/records/${order.id}`);
+    const lines = page.getByRole('table', { name: 'Material lines' });
+    await expect(lines.getByText('Nothing here yet.')).toBeVisible();
+
+    // Two lines added in place; the order is set and cannot be changed.
+    const addLine = async (quantity: string, another: boolean) => {
+      const dialog = page.getByRole('dialog', {
+        name: `Add Material lines ${run}`,
+      });
+      await page
+        .getByRole('button', { name: `Add Material lines ${run}` })
+        .click();
+      await dialog.getByRole('button', { name: 'Choose material' }).click();
+      const picker = page.getByRole('dialog', { name: /^Select / });
+      await picker.getByRole('radio', { name: 'Steel' }).check();
+      await picker.getByRole('button', { name: 'Apply' }).click();
+      await dialog.getByLabel('quantity', { exact: true }).fill(quantity);
+      await dialog
+        .getByRole('button', {
+          name: another ? 'Add and add another' : 'Add',
+          exact: true,
+        })
+        .click();
+      if (!another) await expect(dialog).toBeHidden();
+    };
+    await addLine('4', false);
+    await addLine('9', false);
+    await expect(lines.getByRole('row')).toHaveCount(3);
+    await expect(lines.getByText('9', { exact: true })).toBeVisible();
+
+    // A draft's line can still be removed.
+    await lines
+      .getByRole('button', { name: /^Delete / })
+      .last()
+      .click();
+    await page
+      .getByRole('dialog')
+      .getByRole('button', { name: 'Delete record' })
+      .click();
+    await expect(lines.getByRole('row')).toHaveCount(2);
+
+    // Approval reserves the remaining line and settles the table.
+    expect((await chooseStatus(page, order.id, 'Approved')).ok()).toBe(true);
+    await expect.poll(() => stock(stockItemId)).toEqual([10, 4]);
+    await expect(
+      page.getByText(/were posted with the record's status/),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: `Add Material lines ${run}` }),
+    ).toHaveCount(0);
+    await expect(lines.getByRole('button', { name: /^Delete / })).toHaveCount(
+      0,
+    );
+
+    // The line still opens beside the order, with its applied values locked.
+    await lines.getByRole('button', { name: /^Open / }).click();
+    const panel = page.getByRole('complementary');
+    await expect(
+      panel.getByText(/^This record's movement already used .*quantity/),
+    ).toBeVisible();
   });
 }

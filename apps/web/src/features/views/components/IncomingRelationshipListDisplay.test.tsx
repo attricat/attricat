@@ -15,7 +15,10 @@ import { listBlueprints } from '../../blueprints/api';
 import { parseExplorerRouteSearch } from '../../explorer/search';
 import { IncomingRelationshipListDisplay } from './IncomingRelationshipListDisplay';
 
-vi.mock('../../blueprints/api', () => ({ listBlueprints: vi.fn() }));
+vi.mock('../../blueprints/api', async (importOriginal) => ({
+  ...(await importOriginal()),
+  listBlueprints: vi.fn(),
+}));
 
 const recordId = '0190a6f2-7c1e-7b3a-9c4d-2e5f6a7b8c9d';
 

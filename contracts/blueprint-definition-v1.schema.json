@@ -927,6 +927,21 @@
               "minimum": 1,
               "description": "Records requested per page."
             },
+            "display": {
+              "$ref": "#/$defs/IncomingDisplay",
+              "description": "`links` opens the records in the Explorer; `table` lists them on\nthe page with the source blueprint's table columns, for one\nrelationship."
+            },
+            "editable": {
+              "type": "boolean",
+              "description": "With `display: table`, people who can write records add, open,\nedit and delete them from the table, such as an order's lines."
+            },
+            "columns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "With `display: table`, the source blueprint's attributes the\ntable shows, in order. Every attribute but the relationship back\nto this record when empty."
+            },
             "component": {
               "anyOf": [
                 {
@@ -1044,6 +1059,21 @@
         "source_blueprint",
         "field"
       ]
+    },
+    "IncomingDisplay": {
+      "oneOf": [
+        {
+          "type": "string",
+          "const": "links",
+          "description": "A link per relationship that opens the records in the Explorer."
+        },
+        {
+          "type": "string",
+          "const": "table",
+          "description": "A table of the records on the record's page."
+        }
+      ],
+      "description": "How an `incoming_relationship_list` shows the records linking to a record."
     },
     "ExtensionOutletLayout": {
       "type": "object",

@@ -1037,6 +1037,17 @@ pub struct RecordFormResponse {
     /// Codes of the blueprint's movements that applied to the record; their
     /// inputs no longer change.
     pub applied_movements: Vec<String>,
+    /// Records linking to this one, such as an order's lines, whose
+    /// movements this record's status applied: they can no longer be added,
+    /// moved or deleted.
+    pub settled_lines: Vec<SettledLines>,
+}
+
+/// Lines of one blueprint, linking through `relationship`, that are settled.
+#[derive(Clone, Debug, Serialize, PartialEq, Eq, PartialOrd, Ord)]
+pub struct SettledLines {
+    pub blueprint: String,
+    pub relationship: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

@@ -228,6 +228,9 @@ fn validate_view_nodes(
                 label,
                 relationships,
                 page_size,
+                display,
+                editable,
+                columns,
                 component,
             } => {
                 if view != "detail" {
@@ -251,6 +254,23 @@ fn validate_view_nodes(
                 for relationship in relationships {
                     validate_code(&relationship.source_blueprint, "source_blueprint")?;
                     validate_code(&relationship.field, "field")?;
+                }
+                if *display == crate::ast::IncomingDisplay::Table && relationships.len() != 1 {
+                    return Err(BlueprintError::InvalidIncomingRelationshipTable {
+                        view: view.to_owned(),
+                        message: "display: table lists exactly one relationship".to_owned(),
+                    });
+                }
+                if (*editable || !columns.is_empty())
+                    && *display != crate::ast::IncomingDisplay::Table
+                {
+                    return Err(BlueprintError::InvalidIncomingRelationshipTable {
+                        view: view.to_owned(),
+                        message: "editable and columns need display: table".to_owned(),
+                    });
+                }
+                for column in columns {
+                    validate_code(column, "column")?;
                 }
                 validate_component(component.as_ref(), view, "incoming_relationship_list", None)?;
             }

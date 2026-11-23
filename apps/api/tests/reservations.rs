@@ -470,6 +470,20 @@ impl Fixture {
             .unwrap_or(Value::Null)
     }
 
+    /// The record form's settled line relationships.
+    async fn settled_lines(&self, record: &Value) -> Value {
+        get_json(
+            &self.client,
+            format!(
+                "{}/v1/records/{}",
+                self.base_url,
+                record["id"].as_str().unwrap()
+            ),
+        )
+        .await["settled_lines"]
+            .clone()
+    }
+
     async fn applied(&self, record: &Value) -> Vec<String> {
         sqlx::query_scalar(
             r#"SELECT movement_code FROM record_movement_applications
@@ -727,6 +741,7 @@ async fn a_production_order_applies_its_lines(pool: PgPool) {
     assert_eq!(fixture.stock(&steel).await, stock("10", "0"));
     assert!(fixture.applied(&steel_line).await.is_empty());
     assert_eq!(fixture.status_of(&production).await, "draft");
+    assert_eq!(fixture.settled_lines(&production).await, json!([]));
 
     // Lines of a draft stay editable.
     ok(fixture
@@ -737,6 +752,10 @@ async fn a_production_order_applies_its_lines(pool: PgPool) {
     assert_eq!(fixture.stock(&steel).await, stock("10", "8"));
     assert_eq!(fixture.stock(&copper).await, stock("2", "2"));
     assert_eq!(fixture.applied(&steel_line).await, ["reserve"]);
+    assert_eq!(
+        fixture.settled_lines(&production).await,
+        json!([{"blueprint": "po_material_line", "relationship": "production"}])
+    );
 
     // An approved order's lines are settled.
     expect_error(
@@ -760,12 +779,32 @@ async fn a_production_order_applies_its_lines(pool: PgPool) {
     )
     .await;
 
+    // Outputs settle at completion: an approved order still takes them.
+    let offcut = fixture.create("po_output_line", line(&scrap, 1)).await;
+    ok(fixture
+        .put(&offcut, json!({"values": [scalar("quantity", 2)]}))
+        .await)
+    .await;
+
     // Completion consumes the material and receives the outputs.
     ok(fixture.set_status(&production, "completed").await).await;
     assert_eq!(fixture.stock(&steel).await, stock("2", "0"));
     assert_eq!(fixture.stock(&copper).await, stock("0", "0"));
     assert_eq!(fixture.stock(&frame).await, stock("1", "0"));
-    assert_eq!(fixture.stock(&scrap).await, stock("2", "0"));
+    assert_eq!(fixture.stock(&scrap).await, stock("4", "0"));
+    expect_error(
+        fixture.post("po_output_line", line(&frame, 1)).await,
+        StatusCode::CONFLICT,
+        "movement_lines_locked",
+    )
+    .await;
+    assert_eq!(
+        fixture.settled_lines(&production).await,
+        json!([
+            {"blueprint": "po_material_line", "relationship": "production"},
+            {"blueprint": "po_output_line", "relationship": "production"}
+        ])
+    );
     server.abort();
 }
 

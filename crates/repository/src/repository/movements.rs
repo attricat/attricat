@@ -982,6 +982,49 @@ impl AttricatRepository {
         .await?)
     }
 
+    /// The line relationships to `record_id` whose lines' movements its
+    /// status applied, such as a production order's approved material lines.
+    pub async fn settled_lines(
+        &self,
+        record_id: Uuid,
+    ) -> Result<Vec<attricat_domain::model::SettledLines>, RepositoryError> {
+        let rows: Vec<(String, String, Value)> = sqlx::query_as(
+            r#"SELECT DISTINCT b.code, a.code, b.movements
+               FROM record_movement_applications m
+               JOIN records r ON r.id = m.record_id AND r.workspace_id = m.workspace_id
+                AND r.deleted_at IS NULL
+               JOIN blueprints b ON b.id = r.blueprint_id AND b.version = r.blueprint_version
+                AND b.workspace_id = r.workspace_id
+               JOIN attribute_values av ON av.record_id = m.record_id
+                AND av.workspace_id = m.workspace_id AND av.active
+                AND av.relationship_target_record_id = $2
+               JOIN attributes a ON a.id = av.attribute_id AND a.workspace_id = av.workspace_id
+               WHERE m.workspace_id = $1"#,
+        )
+        .bind(self.workspace_id.0)
+        .bind(record_id)
+        .fetch_all(&self.pool)
+        .await?;
+        let mut settled = BTreeSet::new();
+        for (blueprint, relationship, movements) in rows {
+            let movements: Vec<MovementDefinition> = serde_json::from_value(movements)
+                .map_err(|error| RepositoryError::InvalidBlueprintDefinition(error.to_string()))?;
+            // Only the link the movements trigger through settles them.
+            if movements.iter().any(|movement| {
+                movement
+                    .apply_on
+                    .iter()
+                    .any(|trigger| trigger.relationship.as_deref() == Some(relationship.as_str()))
+            }) {
+                settled.insert(attricat_domain::model::SettledLines {
+                    blueprint,
+                    relationship,
+                });
+            }
+        }
+        Ok(settled.into_iter().collect())
+    }
+
     /// Codes of the record's movements that applied before this transaction.
     async fn applied_movements_before(
         &self,
@@ -1673,18 +1716,26 @@ impl AttricatRepository {
                 continue;
             }
             for order_id in [previous, current].into_iter().flatten() {
-                self.ensure_lines_open_for(transaction, relationship, order_id)
-                    .await?;
+                self.ensure_lines_open_for(
+                    transaction,
+                    record.blueprint_id,
+                    relationship,
+                    order_id,
+                )
+                .await?;
             }
         }
         Ok(())
     }
 
-    /// Refuses a change to the lines of `order_id` once its status applied
-    /// any of its lines' movements before this transaction.
+    /// Refuses a change to the lines of `order_id` of one blueprint once
+    /// its status applied any of their movements before this transaction.
+    /// Lines of another blueprint settle separately, so an approved order's
+    /// output lines stay open until its completion applies them.
     async fn ensure_lines_open_for(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
+        line_blueprint_id: Uuid,
         relationship: &str,
         order_id: Uuid,
     ) -> Result<(), RepositoryError> {
@@ -1696,11 +1747,14 @@ impl AttricatRepository {
                     AND av.relationship_target_record_id = $2
                    JOIN attributes a ON a.id = av.attribute_id AND a.workspace_id = av.workspace_id
                     AND a.code = $3
+                   JOIN records line ON line.id = m.record_id AND line.workspace_id = m.workspace_id
+                    AND line.blueprint_id = $4 AND line.deleted_at IS NULL
                    WHERE m.workspace_id = $1 AND m.applied_at < now())"#,
         )
         .bind(self.workspace_id.0)
         .bind(order_id)
         .bind(relationship)
+        .bind(line_blueprint_id)
         .fetch_one(&mut **transaction)
         .await?;
         if settled {
@@ -1742,8 +1796,13 @@ impl AttricatRepository {
             let inputs = SubmittedValues::saved(&values, default_context_id);
             for relationship in relationships {
                 if let Some(order_id) = inputs.relationship(relationship) {
-                    self.ensure_lines_open_for(transaction, relationship, order_id)
-                        .await?;
+                    self.ensure_lines_open_for(
+                        transaction,
+                        record.blueprint_id,
+                        relationship,
+                        order_id,
+                    )
+                    .await?;
                 }
             }
         }

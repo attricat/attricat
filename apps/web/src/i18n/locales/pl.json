@@ -2353,7 +2353,20 @@
     "inheritedFromDefaultContext": "Dziedziczone z kontekstu domyślnego",
     "unableToRenderAttribute": "Nie można wyświetlić {{attribute}}.",
     "unableToRenderComponent": "Nie można wyświetlić komponentu.",
-    "unableToRenderRecordHeading": "Nie można wyświetlić nagłówka rekordu."
+    "unableToRenderRecordHeading": "Nie można wyświetlić nagłówka rekordu.",
+    "incomingTable": {
+      "open": "Otwórz {{label}}",
+      "delete": "Usuń {{label}}",
+      "add": "Dodaj: {{name}}",
+      "addTitle": "Dodaj: {{name}}",
+      "addAnother": "Dodaj i dodaj kolejny",
+      "addSubmit": "Dodaj",
+      "added": "Dodano: {{name}}.",
+      "settled": "Te pozycje zostały zaksięgowane wraz ze statusem rekordu, więc nie można ich dodawać, zmieniać ani usuwać.",
+      "actions": "Akcje",
+      "empty": "Nic tu jeszcze nie ma.",
+      "more": "Wyświetlono {{shown}} z {{total}}."
+    }
   },
   "common": {
     "actions": "Akcje",

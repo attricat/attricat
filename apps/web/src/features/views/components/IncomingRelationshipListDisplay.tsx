@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Stack } from '@mui/material';
+import { lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import { NewTabIcon } from '../../../components/NewTabIcon';
 import { RouterButton } from '../../../components/RouterLink';
@@ -9,22 +10,42 @@ import { relatedRecordLinkProps } from '../../records/linkedRecord';
 import type { ViewComponentDefinition } from './componentTypes';
 import { VIEW_COMPONENT_IDS, VIEW_COMPONENT_VERSION } from '../constants';
 import { blueprintCatalogueOptions } from '../../blueprints/queryOptions';
+import { incomingDisplays } from '../schemas';
+import type { ViewNode } from '../schemas';
+
+// Loaded on demand: the table reaches the record editors, which use the view
+// registry this display is registered in.
+const IncomingRelationshipTable = lazy(() =>
+  import('./IncomingRelationshipTable').then(
+    ({ IncomingRelationshipTable }) => ({ default: IncomingRelationshipTable }),
+  ),
+);
+
+type IncomingNode = Extract<ViewNode, { type: 'incoming_relationship_list' }>;
 
 /**
  * Opens the records linking to this one in the Explorer. The Explorer searches
- * one blueprint at a time, so each relationship gets its own link.
+ * one blueprint at a time, so each relationship gets its own link. With
+ * `display: table` they are listed on the page instead.
  */
-export const IncomingRelationshipListDisplay = ({
+export const IncomingRelationshipListDisplay = (props: {
+  recordId: string;
+  node: IncomingNode;
+}) =>
+  props.node.display === incomingDisplays.table ? (
+    <Suspense fallback={null}>
+      <IncomingRelationshipTable {...props} />
+    </Suspense>
+  ) : (
+    <IncomingRelationshipLinks {...props} />
+  );
+
+const IncomingRelationshipLinks = ({
   recordId,
   node,
 }: {
   recordId: string;
-  node: {
-    type: 'incoming_relationship_list';
-    label: string;
-    relationships: { source_blueprint: string; field: string }[];
-    page_size: number;
-  };
+  node: IncomingNode;
 }) => {
   const { t } = useTranslation();
   const several = node.relationships.length > 1;

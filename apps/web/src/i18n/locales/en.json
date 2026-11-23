@@ -2259,7 +2259,20 @@
     "inheritedFromDefaultContext": "Inherited from default context",
     "unableToRenderAttribute": "Unable to render {{attribute}}.",
     "unableToRenderComponent": "Unable to render component.",
-    "unableToRenderRecordHeading": "Unable to render record heading."
+    "unableToRenderRecordHeading": "Unable to render record heading.",
+    "incomingTable": {
+      "open": "Open {{label}}",
+      "delete": "Delete {{label}}",
+      "add": "Add {{name}}",
+      "addTitle": "Add {{name}}",
+      "addAnother": "Add and add another",
+      "addSubmit": "Add",
+      "added": "{{name}} added.",
+      "settled": "These lines were posted with the record's status, so they can't be added, changed or removed.",
+      "actions": "Actions",
+      "empty": "Nothing here yet.",
+      "more": "Showing {{shown}} of {{total}}."
+    }
   },
   "common": {
     "actions": "Actions",

@@ -167,4 +167,6 @@ pub enum BlueprintError {
     },
     #[error("incoming_relationship_list can only be used in views.detail")]
     IncomingRelationshipListOutsideDetail,
+    #[error("view '{view}' incoming_relationship_list is invalid: {message}")]
+    InvalidIncomingRelationshipTable { view: String, message: String },
 }

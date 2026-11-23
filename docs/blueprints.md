@@ -636,7 +636,8 @@ Every movement applies to its record at most once. Each application is a row
 of `record_movement_applications` (migration
 `20261109035974_record_movement_applications`): the record, the movement code,
 the target, the balance, the amount and the direction. The record form
-response lists the record's `applied_movements`. The rules above read those
+response lists the record's `applied_movements`, and an order's form its
+`settled_lines`. The rules above read those
 rows rather than the blueprint:
 
 - `ensure_movement_values_unchanged` guards the inputs and managed values of
@@ -722,9 +723,11 @@ to the saved record's blueprint, then the lines linking to it in ID order, at
 most `MAX_MOVEMENT_LINES` (200; more fails with `422 movement_lines_exceeded`).
 Each line is locked, its movements apply as above and the line is updated with
 audit action `attricat.records.movement.line_apply`. One failing line fails
-the whole transition. Once any line's movement applied, the order's lines are
-settled: adding, moving or deleting one fails with `409 movement_lines_locked`
-(`ensure_movement_lines_open`).
+the whole transition. Once a line's movement applied, the order's lines of that
+blueprint are settled: adding, moving or deleting one fails with
+`409 movement_lines_locked` (`ensure_movement_lines_open`). Lines of another
+blueprint settle with their own movements, so output lines stay open until
+completion.
 
 ## Record Schema
 
@@ -871,6 +874,34 @@ Each selector names a source blueprint and one of its relationship fields. A
 source record matched by multiple selectors appears once. Selecting an item
 opens that source record. A field with several `target_blueprints` can be
 listed on every allowed target blueprint.
+
+`display: table` lists one relationship's records on the page instead, such
+as an order's lines; `columns` names the source attributes it shows (every
+attribute but the link back when empty) and `editable: true` lets people who
+can write records add, open and delete them in place:
+
+```yaml
+      - type: incoming_relationship_list
+        label: Materials
+        display: table
+        editable: true
+        columns: [item, quantity, conversion]
+        page_size: 50
+        relationships:
+          - {source_blueprint: production_material, field: production_order}
+```
+
+The web app (`IncomingRelationshipTable`, loaded lazily because it uses the
+record editors that register into the view registry) searches the source
+blueprint with a relationship filter on this record and reads each row's
+resolved default-context values. **Add** opens the create form with the link
+fixed; **Open** shows the row in the record panel, with the usual inline
+editing and locks; **Delete** asks first. Once the record's status applied
+the rows' movements, the record form's `settled_lines` names the
+`{blueprint, relationship}` pair and the table offers only **Open**; the
+server refuses the changes anyway (`movement_lines_locked`, `movement_immutable`).
+The compiler requires exactly one relationship for a table, and `editable`
+and `columns` only with it.
 
 `views.detail` lays out both display and editing: the record page renders
 every field the user may change as an editor in its place, and the create and

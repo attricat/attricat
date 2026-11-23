@@ -496,7 +496,7 @@ Only a record blueprint can define it, and only under the name `explorer`. Witho
 | `accordion` | `sections`: list of `{label, children}` | Collapsible sections. |
 | `field` | `field`; optional `editor` | One scalar or file attribute. In `detail`, `editor` names an extension's attribute editor by `extension_id`, `id`, `version` and `props`; see [Attribute editors](/extensions/manifest/#attribute-editors). |
 | `relationship_list` | `field` | One relationship attribute and its targets. |
-| `incoming_relationship_list` | `label`, `relationships`, `page_size` | A link that opens the Explorer in a new tab, filtered to records linking to this one; one link per relationship. `relationships` is a list of `{source_blueprint, field}`. `page_size` is capped by the server's `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE`; the web app does not use it. Allowed only in `detail`. |
+| `incoming_relationship_list` | `label`, `relationships`, `page_size`, `display`, `editable`, `columns` | A link that opens the Explorer in a new tab, filtered to records linking to this one; one link per relationship. `relationships` is a list of `{source_blueprint, field}`. `page_size` is capped by the server's `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE`. With `display: table` (default `links`), the records of exactly one relationship are listed in a table on the page instead, up to `page_size` of them, with the source attributes `columns` names (every attribute but the link back when omitted). `editable: true` adds **Add**, **Open** and **Delete** to the table; see [Order lines](#order-lines). Allowed only in `detail`. |
 | `heading` | `text` | Static heading. |
 | `text` | `text` | Static paragraph. |
 | `divider` | | Horizontal rule. |
@@ -851,7 +851,23 @@ movements:
 
 - The relationship has `cardinality: one`, one target blueprint and `context_editable: default`. Publication checks that the status and options exist on that blueprint.
 - One transition applies the movements of at most 200 lines; more returns `422 movement_lines_exceeded`. If any line fails, the whole transition fails.
-- Once the order's lines have been applied, they are settled: adding a line to the order, moving one to another order or deleting one returns `409 movement_lines_locked`, with the `order_id`.
+- Once an order's lines of one blueprint have been applied, those lines are settled: adding one to the order, moving one to another order or deleting one returns `409 movement_lines_locked`, with the `order_id`. Lines of another blueprint settle when their own movements apply, so an approved order still takes output lines until its completion. The order's record form lists them in `settled_lines` as `{blueprint, relationship}`.
+
+To work on the lines from the order's page, list them in an editable table:
+
+```yaml
+# production_order: views.detail
+- type: incoming_relationship_list
+  label: Materials
+  display: table
+  editable: true
+  columns: [item, quantity, conversion]
+  page_size: 50
+  relationships:
+    - {source_blueprint: production_order_line, field: production_order}
+```
+
+**Add** opens a form for a new line with the order already set, **Open** shows a line beside the order to edit it, and **Delete** removes one. Once the lines are settled, the table only opens them.
 
 ### Reservations
 

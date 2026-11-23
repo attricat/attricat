@@ -496,7 +496,7 @@ Może go zdefiniować tylko schemat rekordów i tylko pod nazwą `explorer`. Bez
 | `accordion` | `sections`: lista `{label, children}` | Zwijane sekcje. |
 | `field` | `field`; opcjonalnie `editor` | Jeden atrybut skalarny lub plikowy. W `detail` klucz `editor` wskazuje edytor atrybutu z rozszerzenia przez `extension_id`, `id`, `version` i `props`; zobacz [Edytory atrybutów](/pl/extensions/manifest/#edytory-atrybutów). |
 | `relationship_list` | `field` | Jeden atrybut relacji i jego cele. |
-| `incoming_relationship_list` | `label`, `relationships`, `page_size` | Link otwierający Przeglądarkę rekordów w nowej karcie, przefiltrowaną do rekordów wskazujących na ten rekord; osobny link dla każdej relacji. `relationships` to lista `{source_blueprint, field}`. `page_size` jest ograniczane przez `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE` serwera; aplikacja webowa go nie używa. Dozwolone tylko w `detail`. |
+| `incoming_relationship_list` | `label`, `relationships`, `page_size`, `display`, `editable`, `columns` | Link otwierający Przeglądarkę rekordów w nowej karcie, przefiltrowaną do rekordów wskazujących na ten rekord; osobny link dla każdej relacji. `relationships` to lista `{source_blueprint, field}`. `page_size` jest ograniczane przez `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE` serwera. Z `display: table` (domyślnie `links`) rekordy dokładnie jednej relacji są zamiast tego wyświetlane w tabeli na stronie, najwyżej `page_size`, z atrybutami źródła wskazanymi w `columns` (bez niego ze wszystkimi poza relacją zwrotną). `editable: true` dodaje do tabeli **Dodaj**, **Otwórz** i **Usuń**; zobacz [Pozycje zlecenia](#pozycje-zlecenia). Dozwolone tylko w `detail`. |
 | `heading` | `text` | Statyczny nagłówek. |
 | `text` | `text` | Statyczny akapit. |
 | `divider` | | Linia pozioma. |
@@ -851,7 +851,23 @@ movements:
 
 - Relacja ma `cardinality: one`, jeden schemat docelowy i `context_editable: default`. Publikacja sprawdza, czy status i jego opcje istnieją w tym schemacie.
 - Jedna zmiana statusu księguje przesunięcia najwyżej 200 pozycji; więcej zwraca `422 movement_lines_exceeded`. Jeśli którakolwiek pozycja się nie powiedzie, cała zmiana statusu się nie udaje.
-- Gdy pozycje zlecenia są zaksięgowane, nie można już dodać pozycji do zlecenia, przenieść jej do innego ani jej usunąć: `409 movement_lines_locked` z `order_id`.
+- Gdy pozycje zlecenia jednego schematu są zaksięgowane, nie można już dodać takiej pozycji do zlecenia, przenieść jej do innego ani jej usunąć: `409 movement_lines_locked` z `order_id`. Pozycje innego schematu są zamykane, gdy zaksięgują się ich własne przesunięcia, więc zatwierdzone zlecenie nadal przyjmuje pozycje wyrobów aż do zakończenia. Formularz rekordu zlecenia podaje je w `settled_lines` jako `{blueprint, relationship}`.
+
+Aby pracować na pozycjach ze strony zlecenia, pokaż je w edytowalnej tabeli:
+
+```yaml
+# production_order: views.detail
+- type: incoming_relationship_list
+  label: Materials
+  display: table
+  editable: true
+  columns: [item, quantity, conversion]
+  page_size: 50
+  relationships:
+    - {source_blueprint: production_order_line, field: production_order}
+```
+
+**Dodaj** otwiera formularz nowej pozycji z już ustawionym zleceniem, **Otwórz** pokazuje pozycję obok zlecenia do edycji, a **Usuń** ją usuwa. Gdy pozycje są zaksięgowane, tabela pozwala je tylko otwierać.
 
 ### Rezerwacje
 

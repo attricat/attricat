@@ -393,6 +393,10 @@ const recordFormResponseSchema = z.object({
   reusable_values: z.array(formAttributeValueSchema).default([]),
   context: recordContextSchema,
   applied_movements: z.array(z.string()).default([]),
+  /** Lines linking to the record that its status settled. */
+  settled_lines: z
+    .array(z.object({ blueprint: z.string(), relationship: z.string() }))
+    .default([]),
 });
 const migrationIssueSchema = z.object({
   attribute_code: z.string().nullable(),

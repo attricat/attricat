@@ -438,10 +438,41 @@ pub enum ViewNode {
         /// Records requested per page.
         #[schemars(range(min = 1))]
         page_size: u32,
+        /// `links` opens the records in the Explorer; `table` lists them on
+        /// the page with the source blueprint's table columns, for one
+        /// relationship.
+        #[serde(default, skip_serializing_if = "IncomingDisplay::is_links")]
+        display: IncomingDisplay,
+        /// With `display: table`, people who can write records add, open,
+        /// edit and delete them from the table, such as an order's lines.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        editable: bool,
+        /// With `display: table`, the source blueprint's attributes the
+        /// table shows, in order. Every attribute but the relationship back
+        /// to this record when empty.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        columns: Vec<String>,
         /// Registered component that renders this block.
         #[serde(default)]
         component: Option<ComponentReference>,
     },
+}
+
+/// How an `incoming_relationship_list` shows the records linking to a record.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, JsonSchema, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IncomingDisplay {
+    /// A link per relationship that opens the records in the Explorer.
+    #[default]
+    Links,
+    /// A table of the records on the record's page.
+    Table,
+}
+
+impl IncomingDisplay {
+    fn is_links(&self) -> bool {
+        *self == Self::Links
+    }
 }
 
 fn default_display_separator() -> String {

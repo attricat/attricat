@@ -148,7 +148,14 @@ pub(super) async fn get_record_form(
         .record_with_values(record_id)
         .await?;
     // The remaining reads are independent of each other.
-    let (blueprint, reusable_attributes, reusable_values, can_write, applied_movements) = tokio::try_join!(
+    let (
+        blueprint,
+        reusable_attributes,
+        reusable_values,
+        can_write,
+        applied_movements,
+        settled_lines,
+    ) = tokio::try_join!(
         async {
             repository
                 .get_blueprint_revision(record.blueprint_id, record.blueprint_version)
@@ -169,6 +176,7 @@ pub(super) async fn get_record_form(
                 .await?)
         },
         async { Ok(repository.applied_movement_codes(record_id).await?) },
+        async { Ok(repository.settled_lines(record_id).await?) },
     )?;
     Ok(Json(RecordFormResponse {
         can_write,
@@ -185,6 +193,7 @@ pub(super) async fn get_record_form(
         reusable_attributes,
         reusable_values,
         applied_movements,
+        settled_lines,
     }))
 }
 pub(super) async fn update_record_form(

@@ -20,6 +20,12 @@ export const viewBlockTypes = {
   explorer: 'explorer',
 } as const;
 
+/** How an `incoming_relationship_list` shows the records linking to a record. */
+export const incomingDisplays = {
+  links: 'links',
+  table: 'table',
+} as const;
+
 export type ComponentReference = {
   id: string;
   version: number;
@@ -65,6 +71,9 @@ export type ViewNode =
       label: string;
       relationships: { source_blueprint: string; field: string }[];
       page_size: number;
+      display?: (typeof incomingDisplays)[keyof typeof incomingDisplays];
+      editable?: boolean;
+      columns?: string[];
       component?: ComponentReference | null;
     };
 export type ViewDefinition =
@@ -190,6 +199,11 @@ const viewNodeSchema: z.ZodType<ViewNode> = z.lazy(() =>
         z.object({ source_blueprint: z.string(), field: z.string() }),
       ),
       page_size: z.number().int().positive(),
+      display: z
+        .enum([incomingDisplays.links, incomingDisplays.table])
+        .optional(),
+      editable: z.boolean().optional(),
+      columns: z.array(z.string()).optional(),
       component: componentReferenceSchema.nullish(),
     }),
   ]),
