@@ -49,6 +49,24 @@ light and dark modes.
 - Bound and sanitize data before writing it to a shared store; do not store sensitive API responses in diagnostic state.
 - Keep unsaved values of editors with an explicit Save button across refreshes with `src/features/drafts/useEditorDraft` and its `DraftRestoreDialog`. Drafts live in tab-scoped session storage keyed by workspace, user, editor, and resource/version/context; they are only applied when the user chooses **Restore draft**, and are cleared after a confirmed save or discard. Never pass passwords, tokens, secrets, or file inputs to a draft. The record page saves each field as it is committed and does not use drafts.
 
+## Cross-tab relationship picking
+
+The relationship picker (`RelationshipPickerDialog`) opens other tabs that
+choose records for it: a record preview (`/records/{id}?relationshipPicker=`)
+and the Explorer in picker mode (`/?blueprint=&locked=true&relationshipPicker=&relationshipPickerMode=one|many`).
+Each opening of a field shares one random token. The other tab posts
+`attricat.relationship-picker.select` (one `recordId`) or
+`attricat.relationship-picker.select-many` (`recordIds`, at most
+`MAX_RELATIONSHIP_PICKER_SELECTION`, and their `labels`) to `window.opener`
+and closes; `useRecentlyPreviewedRecords` accepts only same-origin messages
+with the field's token and UUID IDs, and the dialog adds them to its draft,
+which the user still applies. Links that open these tabs need `rel="opener"`.
+The picker parameters are route-only (`explorerRouteSearchSchema`) and never
+reach saved views. In picker mode the Explorer starts and stays in selection
+mode (one record for `one`), hides selection and row actions, and shows
+`RelationshipPickerSelectionBar`. The server still validates every
+relationship write.
+
 ## Components
 
 - Keep route files thin and compose feature page components from

@@ -1,9 +1,11 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, retainSearchParams } from '@tanstack/react-router';
 import { SavedExplorer } from '../features/saved-views/SavedExplorer';
 import {
   parseExplorerRouteSearch,
+  relationshipPickerSession,
   withoutPanelRecord,
 } from '../features/explorer/search';
+import { RelationshipPickerSessionContext } from '../features/explorer/relationshipPickerSession';
 import { PanelRecordProvider } from '../features/explorer/PanelRecordProvider';
 import { WorkspaceOnboardingGate } from '../features/onboarding/WorkspaceOnboardingGate';
 
@@ -15,18 +17,31 @@ const IndexRouteComponent = () => {
     structuralSharing: true,
   });
   const record = Route.useSearch({ select: ({ record }) => record });
+  const picker = Route.useSearch({
+    select: relationshipPickerSession,
+    structuralSharing: true,
+  });
   return (
     <WorkspaceOnboardingGate
-      disabled={Boolean(search.savedView ?? search.viewState)}
+      disabled={Boolean(search.savedView ?? search.viewState ?? picker)}
     >
-      <PanelRecordProvider recordId={record}>
-        <SavedExplorer search={search} />
-      </PanelRecordProvider>
+      <RelationshipPickerSessionContext value={picker}>
+        <PanelRecordProvider recordId={record}>
+          <SavedExplorer search={search} />
+        </PanelRecordProvider>
+      </RelationshipPickerSessionContext>
     </WorkspaceOnboardingGate>
   );
 };
 
 export const Route = createFileRoute('/')({
   validateSearch: parseExplorerRouteSearch,
+  // A relationship picker tab keeps its picker while the search changes, so
+  // the selection can still be sent back after filtering or searching.
+  search: {
+    middlewares: [
+      retainSearchParams(['relationshipPicker', 'relationshipPickerMode']),
+    ],
+  },
   component: IndexRouteComponent,
 });

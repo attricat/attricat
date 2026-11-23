@@ -132,8 +132,12 @@ export const RelationshipField = ({
   const [openings, setOpenings] = useState(0);
   // Kept across openings, so a preview tab opened earlier can still select.
   const previewSelectRef = useRef<((id: string) => void) | null>(null);
-  const recentPreviews = useRecentlyPreviewedRecords((id) =>
-    previewSelectRef.current?.(id),
+  const previewSelectManyRef = useRef<
+    ((ids: string[], labels: Record<string, string>) => void) | null
+  >(null);
+  const recentPreviews = useRecentlyPreviewedRecords(
+    (id) => previewSelectRef.current?.(id),
+    (ids, labels) => previewSelectManyRef.current?.(ids, labels),
   );
   const restrictedTargets = allowedTargetBlueprints(attribute);
   // A relationship that names no target blueprint may link to any of them.
@@ -256,6 +260,7 @@ export const RelationshipField = ({
         onClose={() => setOpen(false)}
         open={selectorOpen}
         previewSelectRef={previewSelectRef}
+        previewSelectManyRef={previewSelectManyRef}
         recentPreviews={recentPreviews}
         selectionLabels={selectionLabels}
         targetFilters={targetFilters}

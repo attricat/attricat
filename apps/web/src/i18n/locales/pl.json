@@ -988,7 +988,8 @@
     },
     "coreSystemTags": {
       "needsAttention": "Wymaga uwagi"
-    }
+    },
+    "chooseInExplorer": "Wybierz w Przeglądarce"
   },
   "exports": {
     "title": "Eksporty",
@@ -1642,7 +1643,18 @@
       "acknowledged": "Tylko potwierdzone problemy",
       "clean": "Bez problemów"
     },
-    "removeDataQualityFilter": "Usuń filtr {{filter}}"
+    "removeDataQualityFilter": "Usuń filtr {{filter}}",
+    "relationshipPicker": {
+      "title": "Wybór rekordów do relacji",
+      "chooseOne": "Zaznacz w tabeli rekord do powiązania, a potem go użyj.",
+      "chooseMany": "Zaznacz w tabeli rekordy do powiązania, a potem ich użyj.",
+      "cancel": "Anuluj",
+      "use_one": "Użyj {{count}} zaznaczonego rekordu",
+      "use_few": "Użyj {{count}} zaznaczonych rekordów",
+      "use_many": "Użyj {{count}} zaznaczonych rekordów",
+      "use_other": "Użyj {{count}} zaznaczonego rekordu",
+      "openerClosed": "Formularz rekordu, który otworzył tę kartę, został zamknięty, więc nie można przekazać wyboru."
+    }
   },
   "audit": {
     "title": "Aktywność / dziennik audytu",

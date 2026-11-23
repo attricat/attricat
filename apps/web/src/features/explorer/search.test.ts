@@ -5,6 +5,8 @@ import {
   inlineExplorerSearchParams,
   parseExplorerRouteSearch,
   parseExplorerSearch,
+  relationshipPickerSession,
+  withoutPanelRecord,
 } from './search';
 
 describe('parseExplorerSearch', () => {
@@ -185,6 +187,38 @@ describe('parseExplorerRouteSearch', () => {
     expect(parseExplorerSearch({ blueprint: 'product', record })).toEqual({
       blueprint: 'product',
     });
+  });
+
+  it('keeps the relationship picker outside the Explorer search', () => {
+    const token = '4f0c8e3c-9b0d-4f5a-8f6e-2a1b3c4d5e6f';
+    const route = parseExplorerRouteSearch({
+      blueprint: 'product',
+      locked: true,
+      relationshipPicker: token,
+      relationshipPickerMode: 'one',
+    });
+    expect(relationshipPickerSession(route)).toEqual({ token, mode: 'one' });
+    expect(withoutPanelRecord(route)).toEqual({
+      blueprint: 'product',
+      locked: true,
+    });
+    expect(
+      parseExplorerSearch({ blueprint: 'product', relationshipPicker: token }),
+    ).toEqual({ blueprint: 'product' });
+    // A picker without a mode chooses many; a malformed token is no picker.
+    expect(
+      relationshipPickerSession(
+        parseExplorerRouteSearch({ relationshipPicker: token }),
+      ),
+    ).toEqual({ token, mode: 'many' });
+    expect(
+      relationshipPickerSession(
+        parseExplorerRouteSearch({
+          relationshipPicker: 'not-a-token',
+          relationshipPickerMode: 'sideways',
+        }),
+      ),
+    ).toBeNull();
   });
 
   it('drops a malformed panel record', () => {

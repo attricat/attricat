@@ -128,6 +128,8 @@ The **Actions** menu works on the selection:
 - **Create saved search** saves a search that matches exactly these records.
 - Installed extensions can add their own bulk actions.
 
+A record page's relationship picker can open the Explorer in a new tab to choose its targets; see [Relationships](/guides/records/#relationships). That tab starts in selection mode for the target blueprint, and a bar above the table sends the selected records back with **Use selected records**. Saving the selection as a search, sending it to an agent, and other selection actions are not offered there.
+
 ## Extension actions and runs
 
 An extension can offer an action, such as generating documents, from a record preview, from a row's menu, or for the current selection. These actions always use saved data. If you have unsaved edits for a selected record in the same browser tab, the dialog tells you and links to the editor so you can save first.

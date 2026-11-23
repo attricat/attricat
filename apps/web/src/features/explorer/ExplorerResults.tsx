@@ -13,6 +13,9 @@ import type { OpenRecordPanel } from './ExplorerTableCells';
 import type { ExplorerSearch } from './search';
 import type { ExplorerData } from './useExplorerData';
 import { useExplorerSelection } from './useExplorerSelection';
+import { useRelationshipPickerSession } from './relationshipPickerSession';
+import { RelationshipPickerSelectionBar } from './RelationshipPickerSelectionBar';
+import { relationshipPickerModes } from '../records/constants';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import {
@@ -87,7 +90,20 @@ export const ExplorerResults = ({
   const [shownSearch, setShownSearch] = useState(searchKey);
   if (shownSearch !== searchKey && !results.isPlaceholderData)
     setShownSearch(searchKey);
-  const selection = useExplorerSelection(search.blueprint, items);
+  // A tab a relationship picker opened only chooses records for it.
+  const picker = useRelationshipPickerSession();
+  const selection = useExplorerSelection(
+    search.blueprint,
+    items,
+    picker
+      ? {
+          alwaysSelecting: true,
+          ...(picker.mode === relationshipPickerModes.one
+            ? { maximum: 1 }
+            : {}),
+        }
+      : {},
+  );
   const [savedSearchSelection, setSavedSearchSelection] = useState<
     RecordItem[] | null
   >(null);
@@ -111,6 +127,14 @@ export const ExplorerResults = ({
       />
       {results.data && (
         <Box sx={{ mt: 3 }}>
+          {picker && (
+            <RelationshipPickerSelectionBar
+              onClear={selection.clearSelection}
+              onRemove={selection.removeRecord}
+              selectedItems={selection.selectedItems}
+              session={picker}
+            />
+          )}
           {!search.allVersions &&
             effectiveVersion === currentBlueprint?.version &&
             hiddenOutdatedCount > 0 && (
@@ -141,7 +165,9 @@ export const ExplorerResults = ({
               relationshipSortAvailable={
                 !search.allVersions || Boolean(singleVersionScope)
               }
-              showExplorerActions={resultsShowBlueprintRevision(firstPage)}
+              showExplorerActions={
+                !picker && resultsShowBlueprintRevision(firstPage)
+              }
               onFilterCell={onFilterCell}
               onFilterSystemTag={onFilterSystemTag}
               onOpenPanel={onOpenPanel}

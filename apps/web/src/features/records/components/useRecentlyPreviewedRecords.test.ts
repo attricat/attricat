@@ -79,4 +79,39 @@ describe('useRecentlyPreviewedRecords', () => {
     act(() => vi.advanceTimersByTime(1));
     expect(result.current.isPreviewed('record-id')).toBe(false);
   });
+
+  it('accepts records chosen in an Explorer tab, checking each one', () => {
+    const onSelect = vi.fn();
+    const onSelectMany = vi.fn();
+    const { result } = renderHook(() =>
+      useRecentlyPreviewedRecords(onSelect, onSelectMany),
+    );
+    const token = result.current.pickerToken;
+    const first = '8d6f1c2a-1b2c-4d3e-8f4a-5b6c7d8e9f01';
+    const second = '8d6f1c2a-1b2c-4d3e-8f4a-5b6c7d8e9f02';
+    const send = (data: unknown, origin = window.location.origin) =>
+      act(() => {
+        window.dispatchEvent(new MessageEvent('message', { data, origin }));
+      });
+    const many = (extra: Record<string, unknown>) => ({
+      type: 'attricat.relationship-picker.select-many',
+      token,
+      recordIds: [first, second],
+      labels: { [first]: 'Bolt', [second]: 7 },
+      ...extra,
+    });
+
+    send(many({ token: 'another-picker' }));
+    send(many({}), 'https://elsewhere.example');
+    send(many({ recordIds: ['not-a-record'] }));
+    send(many({ recordIds: Array.from({ length: 51 }, () => first) }));
+    expect(onSelectMany).not.toHaveBeenCalled();
+
+    send(many({}));
+    // Labels that are not text are left out.
+    expect(onSelectMany).toHaveBeenCalledWith([first, second], {
+      [first]: 'Bolt',
+    });
+    expect(onSelect).not.toHaveBeenCalled();
+  });
 });

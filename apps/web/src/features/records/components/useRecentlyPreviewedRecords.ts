@@ -7,6 +7,13 @@ const previewHighlightDuration = 5_000;
 const relationshipPickerSearchParameter = 'relationshipPicker';
 export const relationshipPickerMessageType =
   'attricat.relationship-picker.select';
+/** Records chosen in an Explorer tab the picker opened. */
+export const relationshipPickerManyMessageType =
+  'attricat.relationship-picker.select-many';
+/** Most records one Explorer choice may return, as the Explorer selects. */
+export const MAX_RELATIONSHIP_PICKER_SELECTION = 50;
+const uuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const scrollRelationshipPickerToTop = (element: Element | null) => {
   const content = element?.closest('.MuiDialogContent-root');
@@ -17,6 +24,32 @@ type RelationshipPickerMessage = {
   type: typeof relationshipPickerMessageType;
   token: string;
   recordId: string;
+};
+
+export type RelationshipPickerManyMessage = {
+  type: typeof relationshipPickerManyMessageType;
+  token: string;
+  recordIds: string[];
+  /** Display labels of the records, so the picker can name them at once. */
+  labels: Record<string, string>;
+};
+
+const isRelationshipPickerManyMessage = (
+  value: unknown,
+): value is RelationshipPickerManyMessage => {
+  if (!value || typeof value !== 'object') return false;
+  const message = value as Partial<RelationshipPickerManyMessage>;
+  return (
+    message.type === relationshipPickerManyMessageType &&
+    typeof message.token === 'string' &&
+    Array.isArray(message.recordIds) &&
+    message.recordIds.length <= MAX_RELATIONSHIP_PICKER_SELECTION &&
+    message.recordIds.every(
+      (id) => typeof id === 'string' && uuidPattern.test(id),
+    ) &&
+    typeof message.labels === 'object' &&
+    message.labels !== null
+  );
 };
 
 const isRelationshipPickerMessage = (
@@ -33,10 +66,15 @@ const isRelationshipPickerMessage = (
 
 export const useRecentlyPreviewedRecords = (
   onSelect?: (recordId: string) => void,
+  onSelectMany?: (recordIds: string[], labels: Record<string, string>) => void,
 ) => {
   const [previewedIds, setPreviewedIds] = useState<Set<string>>(new Set());
   const [pickerToken] = useState(randomUuid);
   const select = useLatestCallback((id: string) => onSelect?.(id));
+  const selectMany = useLatestCallback(
+    (ids: string[], labels: Record<string, string>) =>
+      onSelectMany?.(ids, labels),
+  );
   const leftPicker = useRef(false);
   const resetTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
@@ -56,8 +94,23 @@ export const useRecentlyPreviewedRecords = (
       );
     };
     const handleMessage = (event: MessageEvent<unknown>) => {
+      if (event.origin !== window.location.origin) return;
       if (
-        event.origin !== window.location.origin ||
+        isRelationshipPickerManyMessage(event.data) &&
+        event.data.token === pickerToken
+      ) {
+        const labels = Object.fromEntries(
+          event.data.recordIds.flatMap((id) => {
+            const label = (event.data as RelationshipPickerManyMessage).labels[
+              id
+            ];
+            return typeof label === 'string' ? [[id, label]] : [];
+          }),
+        );
+        selectMany(event.data.recordIds, labels);
+        return;
+      }
+      if (
         !isRelationshipPickerMessage(event.data) ||
         event.data.token !== pickerToken
       )
@@ -73,7 +126,7 @@ export const useRecentlyPreviewedRecords = (
       window.removeEventListener('message', handleMessage);
       clearTimeout(resetTimer.current);
     };
-  }, [pickerToken, select]);
+  }, [pickerToken, select, selectMany]);
 
   const markPreviewed = useCallback((id: string) => {
     setPreviewedIds((current) => new Set(current).add(id));
@@ -87,6 +140,7 @@ export const useRecentlyPreviewedRecords = (
   return {
     isPreviewed: (id: string) => previewedIds.has(id),
     markPreviewed,
+    pickerToken,
     previewHref,
   };
 };

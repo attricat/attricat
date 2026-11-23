@@ -1,13 +1,26 @@
 import { useEffect, useId, useRef, useState, type RefObject } from 'react';
 import type { RelationshipTargetFilter } from '../movements';
 import { useTranslation } from 'react-i18next';
-import { MenuItem, Stack, TextField, Typography } from '@mui/material';
+import {
+  Box,
+  Button,
+  MenuItem,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material';
+import { defaultStringifySearch } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { EmptyState } from '../../../components/EmptyState';
 import { IconLabel } from '../../../components/IconLabel';
 import { LoadMoreButton } from '../../../components/LoadMoreButton';
 import { RelationshipSelectorDialog } from '../../../components/RelationshipSelectorDialog';
-import { BlueprintIcon, RecordIcon } from '../../../components/systemIcons';
+import {
+  BlueprintIcon,
+  ExplorerIcon,
+  RecordIcon,
+} from '../../../components/systemIcons';
+import { relationshipPickerModes } from '../constants';
 import { lexiconText } from '../../lexicon/lexicon';
 import { recordBlueprintsOptions } from '../queryOptions';
 import { RelationshipDraftSelection } from './RelationshipDraftSelection';
@@ -38,6 +51,7 @@ export const RelationshipPickerDialog = ({
   onClose,
   open,
   previewSelectRef,
+  previewSelectManyRef,
   recentPreviews,
   selectionLabels,
   targetFilters,
@@ -53,6 +67,10 @@ export const RelationshipPickerDialog = ({
   open: boolean;
   /** Where the picker takes a record selected from its preview tab. */
   previewSelectRef: RefObject<((id: string) => void) | null>;
+  /** Where the picker takes records chosen in an Explorer tab it opened. */
+  previewSelectManyRef: RefObject<
+    ((ids: string[], labels: Record<string, string>) => void) | null
+  >;
   recentPreviews: RecentlyPreviewedRecords;
   /** Labels of the records already selected in the field. */
   selectionLabels: ReadonlyMap<string, string>;
@@ -69,7 +87,8 @@ export const RelationshipPickerDialog = ({
   const optionName = useId();
   // A relationship may allow several blueprints; the picker searches one at a time.
   const [targetBlueprint, setTargetBlueprint] = useState(allowedTargets[0]);
-  const { isPreviewed, markPreviewed, previewHref } = recentPreviews;
+  const { isPreviewed, markPreviewed, pickerToken, previewHref } =
+    recentPreviews;
   useEffect(() => {
     previewSelectRef.current = (id) => {
       setDraftIds((current) =>
@@ -81,6 +100,21 @@ export const RelationshipPickerDialog = ({
       previewSelectRef.current = null;
     };
   }, [isSingle, previewSelectRef]);
+  useEffect(() => {
+    previewSelectManyRef.current = (ids, labels) => {
+      if (ids.length === 0) return;
+      setKnownLabels((current) => ({ ...current, ...labels }));
+      setDraftIds((current) =>
+        isSingle
+          ? ids.slice(0, 1)
+          : [...current, ...ids.filter((id) => !current.includes(id))],
+      );
+      scrollRelationshipPickerToTop(contentRoot.current);
+    };
+    return () => {
+      previewSelectManyRef.current = null;
+    };
+  }, [isSingle, previewSelectManyRef]);
   const { labelById, options, targetLabel, targets } = useRelationshipTargets(
     targetBlueprint,
     query,
@@ -88,6 +122,26 @@ export const RelationshipPickerDialog = ({
     targetFilters,
   );
   const blueprints = useQuery({ ...recordBlueprintsOptions(), enabled: open });
+  // The Explorer, in a new tab, picks records of the searched blueprint with
+  // its table selection and sends them back; see RelationshipPickerSelectionBar.
+  const explorerHref = targetBlueprint
+    ? `/${defaultStringifySearch({
+        blueprint: targetBlueprint,
+        locked: true,
+        ...(targetFilters?.length
+          ? {
+              relationshipFacets: targetFilters.map((filter) => ({
+                field: filter.field,
+                selectedIds: filter.selected_target_ids,
+              })),
+            }
+          : {}),
+        relationshipPicker: pickerToken,
+        relationshipPickerMode: isSingle
+          ? relationshipPickerModes.one
+          : relationshipPickerModes.many,
+      })}`
+    : undefined;
   const blueprintName = (code: string) => {
     const name = blueprints.data?.find(
       (blueprint) => blueprint.code === code,
@@ -160,6 +214,22 @@ export const RelationshipPickerDialog = ({
           onChange={(event) => setQuery(event.target.value)}
           value={query}
         />
+        {explorerHref && (
+          <Box>
+            <Button
+              component="a"
+              href={explorerHref}
+              // The Explorer tab sends its selection back to this window.
+              rel="opener"
+              size="small"
+              startIcon={<ExplorerIcon />}
+              target="_blank"
+              variant="outlined"
+            >
+              {t('records.chooseInExplorer')}
+            </Button>
+          </Box>
+        )}
         <RelationshipDraftSelection
           ids={draftIds}
           labelForId={labelForId}

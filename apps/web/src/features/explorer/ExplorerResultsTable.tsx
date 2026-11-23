@@ -25,6 +25,7 @@ import {
 import { ExplorerSortContext } from './explorerSortContext';
 import { prefetchRecordPanel } from './prefetchRecordPanel';
 import { RecordActionsMenu } from './RecordActionsMenu';
+import { useRelationshipPickerSession } from './relationshipPickerSession';
 import {
   ExplorerBulkExtensionActions,
   ExplorerExtensionActions,
@@ -140,6 +141,7 @@ export const ExplorerResultsTable = ({
   totalCountCapped,
 }: Props) => {
   const { t } = useTranslation();
+  const picking = useRelationshipPickerSession() !== null;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [deleteRecordId, setDeleteRecordId] = useState<string | null>(null);
@@ -435,9 +437,10 @@ export const ExplorerResultsTable = ({
         {actionMenu && activeActionRecord && (
           <RecordActionsMenu
             blueprintId={blueprint.blueprint.id}
-            canPublish={canPublish}
-            canDelete={canDelete}
-            canDuplicate={canCreateRecords}
+            // A relationship picker tab only chooses records.
+            canPublish={canPublish && !picking}
+            canDelete={canDelete && !picking}
+            canDuplicate={canCreateRecords && !picking}
             record={activeActionRecord}
             onClose={() => setActionMenu(null)}
             onDelete={() => setDeleteRecordId(activeActionRecord.id)}

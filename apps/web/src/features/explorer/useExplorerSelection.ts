@@ -8,9 +8,19 @@ type SelectionState = {
   records: RecordItem[];
 };
 
-const emptySelection = (scope: string | undefined): SelectionState => ({
+type SelectionOptions = {
+  /** Start, and stay, in selection mode, as a relationship picker tab does. */
+  alwaysSelecting?: boolean;
+  /** Most records selected at once; selecting another replaces a single one. */
+  maximum?: number;
+};
+
+const emptySelection = (
+  scope: string | undefined,
+  selectionMode = false,
+): SelectionState => ({
   scope,
-  selectionMode: false,
+  selectionMode,
   records: [],
 });
 
@@ -22,10 +32,15 @@ const emptySelection = (scope: string | undefined): SelectionState => ({
 export const useExplorerSelection = (
   scope: string | undefined,
   items: RecordItem[],
+  {
+    alwaysSelecting = false,
+    maximum = maximumAgentSelection,
+  }: SelectionOptions = {},
 ) => {
-  const [state, setState] = useState(() => emptySelection(scope));
-  if (state.scope !== scope) setState(emptySelection(scope));
-  const current = state.scope === scope ? state : emptySelection(scope);
+  const fresh = () => emptySelection(scope, alwaysSelecting);
+  const [state, setState] = useState(fresh);
+  if (state.scope !== scope) setState(fresh());
+  const current = state.scope === scope ? state : fresh();
 
   const selectedIds = new Set(current.records.map((record) => record.id));
   const loadedById = new Map(items.map((item) => [item.id, item]));
@@ -37,10 +52,13 @@ export const useExplorerSelection = (
     selectedIds.has(item.id),
   ).length;
   const canAddLoaded =
-    selectedIds.size < maximumAgentSelection &&
-    loadedSelectedCount < items.length;
-  const allLoadedSelected = loadedSelectedCount > 0 && !canAddLoaded;
-  const someLoadedSelected = loadedSelectedCount > 0 && canAddLoaded;
+    selectedIds.size < maximum && loadedSelectedCount < items.length;
+  // Choosing one record replaces it, so there is nothing to select at once.
+  const canSelectLoaded = maximum > 1;
+  const allLoadedSelected =
+    canSelectLoaded && loadedSelectedCount > 0 && !canAddLoaded;
+  const someLoadedSelected =
+    canSelectLoaded && loadedSelectedCount > 0 && canAddLoaded;
 
   const updateRecords = (change: (records: RecordItem[]) => RecordItem[]) =>
     setState((previous) => ({
@@ -48,15 +66,16 @@ export const useExplorerSelection = (
       records: change(previous.records),
     }));
   const clearSelection = () => updateRecords(() => []);
-  const exitSelectionMode = () => setState(emptySelection(scope));
+  const exitSelectionMode = () => setState(fresh());
   const toggleSelectionMode = () =>
     current.selectionMode
       ? exitSelectionMode()
       : setState({ ...current, selectionMode: true });
   const toggleLoaded = () =>
+    canSelectLoaded &&
     updateRecords((records) => {
       const ids = new Set(records.map((record) => record.id));
-      const room = maximumAgentSelection - ids.size;
+      const room = maximum - ids.size;
       const addable = items.filter((item) => !ids.has(item.id));
       if (room > 0 && addable.length > 0) {
         return [...records, ...addable.slice(0, room)];
@@ -68,9 +87,8 @@ export const useExplorerSelection = (
       if (records.some((selected) => selected.id === record.id)) {
         return records.filter((selected) => selected.id !== record.id);
       }
-      return records.length < maximumAgentSelection
-        ? [...records, record]
-        : records;
+      if (maximum === 1) return [record];
+      return records.length < maximum ? [...records, record] : records;
     });
   const removeRecord = (recordId: string) =>
     updateRecords((records) =>
@@ -82,6 +100,7 @@ export const useExplorerSelection = (
     selectedItems,
     allLoadedSelected,
     someLoadedSelected,
+    canSelectLoaded,
     isSelected: (recordId: string) => selectedIds.has(recordId),
     clearSelection,
     exitSelectionMode,

@@ -67,6 +67,8 @@ Integrations can ask which statuses are available without trying to save; see [C
 
 **Choose** on a relationship field opens a picker. Search for targets, select them, and choose **Apply**. Single-select relationships replace the current target. Each option can be previewed in a new tab.
 
+To find targets with filters, sorting or browsing, choose **Choose in Explorer** in the picker. The [Explorer](/guides/explore/) opens in a new tab with the target blueprint and its table in selection mode; a relationship limited to the targets of another field, such as the unit conversions of the selected product, opens with that filter. Select up to 50 records in the table, or one for a single-select relationship, and choose **Use selected records** in the bar above the table. The tab closes, and the records are added to the picker's selection; a single-select relationship takes the one you chose. Review them and choose **Apply**. If you close the record form first, the Explorer tab can no longer send the selection back.
+
 Relationship values are contextual, like any other value: a product can have a different set of categories in one market.
 
 ## Files

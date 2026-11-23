@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -129,6 +130,47 @@ const openSelector = async (user: ReturnType<typeof userEvent.setup>) => {
 };
 
 describe('RelationshipField', () => {
+  it('chooses records in an Explorer tab and adds them to the draft', async () => {
+    // The picker scrolls to the top when records arrive; jsdom cannot scroll.
+    Element.prototype.scrollTo = vi.fn();
+    vi.mocked(searchRecords).mockResolvedValue(
+      page([{ id: firstId, label: 'First option' }], null),
+    );
+    mockLabels({});
+    const onChange = renderField(vi.fn(), attribute, firstId);
+    const user = userEvent.setup();
+    const dialog = await openSelector(user);
+    const link = within(dialog).getByRole('link', {
+      name: 'Choose in Explorer',
+    });
+    expect(link.getAttribute('rel')).toBe('opener');
+    expect(link.getAttribute('target')).toBe('_blank');
+    const href = new URL(link.getAttribute('href')!, window.location.origin);
+    expect(href.pathname).toBe('/');
+    expect(href.searchParams.get('blueprint')).toBe('product');
+    expect(href.searchParams.get('locked')).toBe('true');
+    expect(href.searchParams.get('relationshipPickerMode')).toBe('many');
+    const token = href.searchParams.get('relationshipPicker');
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'attricat.relationship-picker.select-many',
+            token,
+            recordIds: [firstId, laterId],
+            labels: { [firstId]: 'First option', [laterId]: 'Later option' },
+          },
+          origin: window.location.origin,
+        }),
+      );
+    });
+    // The record already selected is kept once; the new one is named at once.
+    expect(await within(dialog).findByText('Later option')).toBeTruthy();
+    await user.click(within(dialog).getByRole('button', { name: 'Apply' }));
+    expect(onChange).toHaveBeenLastCalledWith(`${firstId}, ${laterId}`);
+  });
+
   it('offers only the targets a target scope allows', async () => {
     vi.mocked(searchRecords).mockResolvedValue(
       page([{ id: firstId, label: 'Box of 12' }], null),

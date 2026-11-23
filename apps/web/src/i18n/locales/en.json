@@ -932,7 +932,8 @@
     },
     "coreSystemTags": {
       "needsAttention": "Needs attention"
-    }
+    },
+    "chooseInExplorer": "Choose in Explorer"
   },
   "exports": {
     "title": "Exports",
@@ -1566,7 +1567,16 @@
       "acknowledged": "Only acknowledged findings",
       "clean": "No findings"
     },
-    "removeDataQualityFilter": "Remove filter {{filter}}"
+    "removeDataQualityFilter": "Remove filter {{filter}}",
+    "relationshipPicker": {
+      "title": "Choose records for a relationship",
+      "chooseOne": "Select the record to link in the table, then use it.",
+      "chooseMany": "Select the records to link in the table, then use them.",
+      "cancel": "Cancel",
+      "use_one": "Use {{count}} selected record",
+      "use_other": "Use {{count}} selected records",
+      "openerClosed": "The record form that opened this tab is closed, so the selection cannot be sent back."
+    }
   },
   "audit": {
     "title": "Activity / Audit log",

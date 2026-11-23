@@ -89,7 +89,8 @@ export const VirtualizedExplorerTable = ({
 }: Props) => {
   const { t } = useTranslation();
   const rows = table.getRowModel().rows;
-  const selectionHeader = (
+  // Choosing a single record has no "select all loaded".
+  const selectionHeader = selection.canSelectLoaded && (
     <Checkbox
       checked={selection.allLoadedSelected}
       disabled={items.length === 0}

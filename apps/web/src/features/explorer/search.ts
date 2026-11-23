@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { exportStatuses } from '../extension-exports/constants';
 import { dataQualityFilters } from '../rules/constants';
 import { recordSearchFilterSchema } from '../records/schemas';
+import { relationshipPickerModes } from '../records/constants';
 import {
   maximumAttributeFilters,
   maximumSystemTagFilters,
@@ -112,6 +113,15 @@ export const parseExplorerSearch = (
  */
 const explorerRouteSearchSchema = explorerSearchSchema.extend({
   record: z.uuid().optional().catch(undefined),
+  /**
+   * The token of a relationship picker that opened this tab to choose
+   * records; never part of a saved search. See RelationshipPickerSelectionBar.
+   */
+  relationshipPicker: z.uuid().optional().catch(undefined),
+  relationshipPickerMode: z
+    .enum(relationshipPickerModes)
+    .optional()
+    .catch(undefined),
 });
 
 type ExplorerRouteSearch = z.infer<typeof explorerRouteSearchSchema>;
@@ -120,14 +130,36 @@ export const parseExplorerRouteSearch = (
   input: Record<string, unknown>,
 ): ExplorerRouteSearch => explorerRouteSearchSchema.parse(input);
 
-/** The search itself, without the record open in the panel. */
+/**
+ * The search itself, without the record open in the panel or the
+ * relationship picker the tab serves.
+ */
 export const withoutPanelRecord = (
   routeSearch: ExplorerRouteSearch,
 ): ExplorerSearch => {
   const search = { ...routeSearch };
   delete search.record;
+  delete search.relationshipPicker;
+  delete search.relationshipPickerMode;
   return search;
 };
+
+/** The relationship picker an Explorer tab chooses records for, if any. */
+export type RelationshipPickerSession = {
+  token: string;
+  mode: (typeof relationshipPickerModes)[keyof typeof relationshipPickerModes];
+};
+
+export const relationshipPickerSession = ({
+  relationshipPicker,
+  relationshipPickerMode,
+}: ExplorerRouteSearch): RelationshipPickerSession | null =>
+  relationshipPicker
+    ? {
+        token: relationshipPicker,
+        mode: relationshipPickerMode ?? relationshipPickerModes.many,
+      }
+    : null;
 
 export type ExplorerSort = NonNullable<ExplorerSearch['sort']>;
 

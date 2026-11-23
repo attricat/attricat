@@ -101,6 +101,12 @@ export const generatedSequenceResets = {
   daily: 'daily',
 } as const;
 
+/** How many records an Explorer tab opened from a relationship picker returns. */
+export const relationshipPickerModes = {
+  one: 'one',
+  many: 'many',
+} as const;
+
 /** Which way a movement record changes the balance of its target. */
 export const movementDirections = {
   in: 'in',

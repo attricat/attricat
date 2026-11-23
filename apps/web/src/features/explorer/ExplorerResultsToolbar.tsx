@@ -8,6 +8,7 @@ import { maximumAgentSelection } from './agentSelection';
 import { ExplorerSelectionActionsMenu } from './ExplorerSelectionActionsMenu';
 import { ExplorerSelectionSummary } from './ExplorerSelectionSummary';
 import { LabeledIconButton } from '../../components/LabeledIconButton';
+import { useRelationshipPickerSession } from './relationshipPickerSession';
 
 type Props = {
   /** Authored blueprint name; a `{{…}}` reference with plural forms names the count. */
@@ -46,6 +47,8 @@ export const ExplorerResultsToolbar = ({
   selectionExtensionActions,
 }: Props) => {
   const { t } = useTranslation();
+  // A relationship picker tab only selects; its bar sends the selection.
+  const picking = useRelationshipPickerSession() !== null;
   const resultCount = (count: number, capped: boolean) => {
     const noun = lexiconCountNoun(blueprintName, count);
     if (noun)
@@ -85,7 +88,7 @@ export const ExplorerResultsToolbar = ({
             ? resultCount(itemCount, false)
             : resultCount(totalCount, totalCountCapped)}
         </Typography>
-        {selectionMode && (
+        {selectionMode && !picking && (
           <ExplorerSelectionSummary
             onClear={onClearSelection}
             onRemove={onRemoveSelected}
@@ -107,7 +110,7 @@ export const ExplorerResultsToolbar = ({
           ml: 'auto',
         }}
       >
-        {selectionMode && (
+        {selectionMode && !picking && (
           <ExplorerSelectionActionsMenu
             disabled={selectedItems.length === 0}
             extensionActions={selectionExtensionActions}
@@ -115,11 +118,15 @@ export const ExplorerResultsToolbar = ({
             onSendToAgent={onSendSelection}
           />
         )}
-        <Button onClick={onToggleSelection} size="small">
-          {t(
-            selectionMode ? 'explorer.exitSelection' : 'explorer.selectRecords',
-          )}
-        </Button>
+        {!picking && (
+          <Button onClick={onToggleSelection} size="small">
+            {t(
+              selectionMode
+                ? 'explorer.exitSelection'
+                : 'explorer.selectRecords',
+            )}
+          </Button>
+        )}
         {extensionActions}
         <LabeledIconButton
           label={t('explorer.columnPreferences')}

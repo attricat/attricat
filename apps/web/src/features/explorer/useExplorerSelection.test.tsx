@@ -42,4 +42,32 @@ describe('useExplorerSelection', () => {
     rerender({ scope: 'product' });
     expect(result.current.selectedItems).toEqual([]);
   });
+
+  it('starts and stays selecting for a relationship picker', () => {
+    const { result } = renderHook(() =>
+      useExplorerSelection('product', [first, second], {
+        alwaysSelecting: true,
+      }),
+    );
+    expect(result.current.selectionMode).toBe(true);
+    act(() => result.current.toggleRecord(first));
+    act(() => result.current.exitSelectionMode());
+    expect(result.current.selectionMode).toBe(true);
+    expect(result.current.selectedItems).toEqual([]);
+  });
+
+  it('replaces the selected record when only one may be selected', () => {
+    const { result } = renderHook(() =>
+      useExplorerSelection('product', [first, second], {
+        alwaysSelecting: true,
+        maximum: 1,
+      }),
+    );
+    act(() => result.current.toggleRecord(first));
+    act(() => result.current.toggleRecord(second));
+    expect(result.current.selectedItems).toEqual([second]);
+    expect(result.current.allLoadedSelected).toBe(false);
+    act(() => result.current.toggleLoaded());
+    expect(result.current.selectedItems).toEqual([second]);
+  });
 });
