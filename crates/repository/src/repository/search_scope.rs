@@ -426,7 +426,8 @@ impl AttricatRepository {
         }
         let mut current = blueprint.clone();
         let mut relationship_path = Vec::with_capacity(path.len());
-        for name in path {
+        let hops = path.len();
+        for (hop, name) in path.into_iter().enumerate() {
             let relationship = current
                 .attributes
                 .iter()
@@ -441,6 +442,13 @@ impl AttricatRepository {
                         &current,
                     )
                 })?;
+            relationship_path.push(relationship.code.clone());
+            // The last hop matches the selected records directly, so it may
+            // link to several blueprints; a hop followed by another needs one
+            // blueprint to continue in.
+            if hop + 1 == hops {
+                break;
+            }
             let target = relationship
                 .target_blueprint_code
                 .as_deref()
@@ -449,7 +457,6 @@ impl AttricatRepository {
                         "relationship_filters.field relationship '{name}' has no target blueprint"
                     ))
                 })?;
-            relationship_path.push(relationship.code.clone());
             current = self
                 .get_blueprint_by_code(target)
                 .await?

@@ -1225,5 +1225,31 @@ movements:
     assert_eq!(balance_after(&pool, &bolts).await, "4");
     assert_eq!(balance_after(&pool, &steel_in).await, "2.5");
 
+    // A relationship filter can end in a relationship to several blueprints,
+    // as a picker scoped by the item does.
+    let found: Value = client
+        .post(format!("{base_url}/v1/records/search"))
+        .json(&json!({
+            "blueprint": {"code": "sm_stock_item"},
+            "query": "",
+            "filters": [],
+            "relationship_filters": [{"field": "product", "selected_target_ids": [steel["id"]]}],
+            "page": {"size": 10, "cursor": null},
+        }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let ids: Vec<&str> = found["items"]
+        .as_array()
+        .unwrap_or_else(|| panic!("{found}"))
+        .iter()
+        .map(|item| item["id"].as_str().unwrap())
+        .collect();
+    let steel_item = stock_item_of(&pool, &steel_in).await.to_string();
+    assert_eq!(ids, [steel_item.as_str()]);
+
     server.abort();
 }

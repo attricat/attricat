@@ -317,7 +317,12 @@ const REACHED_SQL: &str = r#"WITH RECURSIVE reached(root_id, current_id, depth) 
                           AND target.workspace_id = {workspace} AND target.deleted_at IS NULL
                          JOIN blueprints target_blueprint ON target_blueprint.id = target.blueprint_id
                           AND target_blueprint.version = target.blueprint_version
-                          AND target_blueprint.code = relationship.target_blueprint_code
+                          -- One of the relationship's allowed targets: its single
+                          -- target, any of several, or any blueprint when it names none.
+                          AND (target_blueprint.code = relationship.target_blueprint_code
+                               OR target_blueprint.code = ANY(relationship.target_blueprint_codes)
+                               OR (relationship.target_blueprint_code IS NULL
+                                   AND cardinality(relationship.target_blueprint_codes) = 0))
                         WHERE reached.depth < cardinality($3)
                    )"#;
 

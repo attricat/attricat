@@ -289,9 +289,12 @@ A write linking a record of any other blueprint returns
 `422 relationship_target_type_mismatch`. Compiled attributes expose the complete
 allowed set as `target_blueprint_codes` (empty means any blueprint);
 `target_blueprint_code` is set only when exactly one target is allowed, so
-single-target consumers such as table column paths, Explorer relationship
-filters, and tree facets treat a multi-target relationship like an unrestricted
-one. The record relationship picker searches one allowed blueprint at a time with a
+single-target consumers such as table column paths and tree facets treat a
+multi-target relationship like an unrestricted one. A relationship filter
+(`relationship_filters`, and a picker's `target_scope`) may end in a
+multi-target or unrestricted relationship, since its last hop only matches the
+selected records; a hop it passes through needs a single target. Path walks
+(`REACHED_SQL`) follow links to any of a relationship's allowed targets. The record relationship picker searches one allowed blueprint at a time with a
 **Target blueprint** selector, offering every record blueprint when the
 relationship names no target, and an `incoming_relationship_list` on any
 allowed target can list the field. A migration preview reports
