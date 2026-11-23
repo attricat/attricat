@@ -1123,3 +1123,107 @@ async fn a_movement_target_keeps_the_key_movements_find_it_by(pool: PgPool) {
 
     server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn movements_accept_items_of_several_blueprints(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    create_blueprint(&client, &base_url, PRODUCT).await;
+    create_blueprint(
+        &client,
+        &base_url,
+        &PRODUCT
+            .replace("sm_product", "sm_material")
+            .replace("name: Product", "name: Material"),
+    )
+    .await;
+    // The stock item and the receipt list the item's targets in different
+    // orders; publication compares them as sets.
+    create_blueprint(
+        &client,
+        &base_url,
+        &STOCK_ITEM.replace(
+            "    target_blueprint: sm_product\n",
+            "    target_blueprints: [sm_product, sm_material]\n",
+        ),
+    )
+    .await;
+    let receipt = r#"
+format_version: 1
+code: sm_mixed_receipt
+name: Mixed receipt
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [number]
+attributes:
+  - code: number
+    value_type: string
+  - code: product
+    value_type: relationship
+    target_blueprints: [sm_material, sm_product]
+    cardinality: one
+    context_editable: default
+  - code: quantity
+    value_type: number
+    context_editable: default
+  - code: stock_item
+    value_type: relationship
+    target_blueprint: sm_stock_item
+    cardinality: one
+movements:
+  - code: stock
+    direction: in
+    quantity: quantity
+    target:
+      relationship: stock_item
+      blueprint: sm_stock_item
+      balance: quantity
+      key: product
+      values: {product: product}
+      create_missing: true
+"#;
+    create_blueprint(&client, &base_url, receipt).await;
+
+    let bolt = product(&client, &base_url, "Bolt").await;
+    let steel = create_record_with(
+        &client,
+        &base_url,
+        "sm_material",
+        json!([scalar("name", "Steel")]),
+    )
+    .await;
+    let bolts = success(
+        movement(
+            &client,
+            &base_url,
+            "sm_mixed_receipt",
+            &bolt,
+            json!(4),
+            None,
+        )
+        .await,
+    )
+    .await;
+    let steel_in = success(
+        movement(
+            &client,
+            &base_url,
+            "sm_mixed_receipt",
+            &steel,
+            json!(2.5),
+            None,
+        )
+        .await,
+    )
+    .await;
+    assert_ne!(
+        stock_item_of(&pool, &bolts).await,
+        stock_item_of(&pool, &steel_in).await
+    );
+    assert_eq!(balance_after(&pool, &bolts).await, "4");
+    assert_eq!(balance_after(&pool, &steel_in).await, "2.5");
+
+    server.abort();
+}

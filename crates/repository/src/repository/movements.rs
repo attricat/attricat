@@ -175,7 +175,9 @@ impl AttricatRepository {
                 return Err(invalid(format!("unknown key attribute '{key_attribute}'")));
             };
             let same_targets = source.value_type != ValueType::Relationship
-                || target_attribute.targets() == source.target_blueprints;
+                // Target lists compare as sets: their order is not meaningful.
+                || target_attribute.targets().iter().collect::<BTreeSet<_>>()
+                    == source.target_blueprints.iter().collect::<BTreeSet<_>>();
             if target_attribute.value_type() != Some(source.value_type) || !same_targets {
                 return Err(invalid(format!(
                     "'{}' and key attribute '{key_attribute}' of '{target_code}' must have the same type and targets",
