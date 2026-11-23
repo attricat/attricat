@@ -140,4 +140,4 @@ Twoje uruchomienia widzisz tylko Ty oraz członkowie zarządzający rozszerzenia
 
 ## Otwieranie rekordu
 
-Kliknij wynik, aby otworzyć jego podgląd. Stamtąd możesz edytować rekord, zobaczyć jego historię lub otworzyć powiązane rekordy. Zobacz [Praca z rekordami](/pl/guides/records/).
+Kliknij wynik, aby otworzyć jego podgląd. Stamtąd możesz edytować rekord, zobaczyć jego historię lub otworzyć powiązane rekordy; **Szczegóły** obok relacji jednokrotnego wyboru pokazują wartości powiązanego rekordu także w podglądzie. Zobacz [Praca z rekordami](/pl/guides/records/).

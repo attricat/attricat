@@ -140,4 +140,4 @@ Only you, and workspace members who manage extensions, can see your runs. You ca
 
 ## Open a record
 
-Click a result to open its preview. From there you can edit it, see its history, or open related records. See [Work with records](/guides/records/).
+Click a result to open its preview. From there you can edit it, see its history, or open related records; **Details** next to a single-select relationship shows the linked record's values in the preview too. See [Work with records](/guides/records/).

@@ -257,13 +257,10 @@ export const RecordPreview = ({
   useRecordReadAhead(
     recordId,
     showComments,
-    // A panel beside another page keeps related records to links.
     // The form arrives first and carries the same revision.
-    compact
-      ? []
-      : previewedRelationshipBlueprints(
-          blueprint.data?.attributes ?? recordForm.data?.blueprint.attributes,
-        ),
+    previewedRelationshipBlueprints(
+      blueprint.data?.attributes ?? recordForm.data?.blueprint.attributes,
+    ),
   );
   // The comments chunk downloads while the record loads.
   useEffect(() => {
@@ -569,12 +566,12 @@ export const RecordPreview = ({
                       content: resolved.data &&
                         blueprint.data &&
                         contexts.data && (
-                          // A single relationship shows its record on the full page;
-                          // a panel beside another page keeps to links.
+                          // A single relationship shows its record within the
+                          // field, on the record page and in the Explorer panel.
                           <Box ref={fieldsRef}>
                             <KnownRecordLabelsContext value={knownLabels}>
                               <RelatedRecordPreviewContext.Provider
-                                value={compact ? null : (contextId ?? null)}
+                                value={contextId ?? null}
                               >
                                 <RecordPreviewContent
                                   changeContextRef={changeContextRef}

@@ -82,6 +82,47 @@ test('closes the record panel on a click outside it', async ({ page }) => {
   await expect(panel).toHaveCount(0);
 });
 
+for (const colorScheme of ['light', 'dark'] as const) {
+  test(`shows a linked record's details in the record panel in ${colorScheme} mode`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme });
+    const run = suffix();
+    const brand = await createRecordBlueprint(
+      `panel_brand_${run}`,
+      'Panel brands',
+      'attributes:\n  - code: title\n    value_type: string\n  - code: country\n    value_type: string',
+    );
+    const acme = await createRecord(brand, [
+      scalar('title', 'Acme'),
+      scalar('country', 'Poland'),
+    ]);
+    const code = `panel_item_${run}`;
+    const item = await createRecordBlueprint(
+      code,
+      'Panel items',
+      `attributes:\n  - code: title\n    value_type: string\n  - code: brand\n    value_type: relationship\n    target_blueprint: panel_brand_${run}\n    cardinality: one`,
+    );
+    await createRecord(item, [
+      scalar('title', 'Hammer'),
+      relationship('brand', acme.id),
+    ]);
+
+    await page.goto(`/?blueprint=${code}`);
+    await page.getByRole('link', { name: 'Hammer' }).click();
+    const panel = page.getByRole('complementary', {
+      name: 'Panel items record',
+    });
+    const details = panel.getByRole('button', { name: 'Details of Acme' });
+    await expect(details).toHaveText('Details');
+    await details.click();
+    const region = panel.getByRole('region', { name: 'Details of Acme' });
+    await expect(region.getByText('Poland')).toBeVisible();
+    await panel.getByRole('button', { name: 'Hide details of Acme' }).click();
+    await expect(region).toHaveCount(0);
+  });
+}
+
 test('opens the full page when the record in the panel is clicked again', async ({
   page,
 }) => {
