@@ -28,7 +28,7 @@ const openExplorerPicker = async (page: Page, field: string) => {
   const dialog = page.getByRole('dialog', { name: /^Select / });
   const [explorer] = await Promise.all([
     page.context().waitForEvent('page'),
-    dialog.getByRole('link', { name: 'Choose in Explorer' }).click(),
+    dialog.getByRole('link', { name: 'Browse' }).click(),
   ]);
   await expect(
     explorer.getByRole('complementary', { name: barName }),

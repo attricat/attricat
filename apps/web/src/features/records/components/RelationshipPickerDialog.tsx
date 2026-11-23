@@ -1,14 +1,7 @@
 import { useEffect, useId, useRef, useState, type RefObject } from 'react';
 import type { RelationshipTargetFilter } from '../movements';
 import { useTranslation } from 'react-i18next';
-import {
-  Box,
-  Button,
-  MenuItem,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
+import { Button, MenuItem, Stack, TextField, Typography } from '@mui/material';
 import { defaultStringifySearch } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { EmptyState } from '../../../components/EmptyState';
@@ -208,28 +201,30 @@ export const RelationshipPickerDialog = ({
             ))}
           </TextField>
         )}
-        <SearchField
-          fullWidth
-          label={t('records.searchRelationshipOptions')}
-          onChange={(event) => setQuery(event.target.value)}
-          value={query}
-        />
-        {explorerHref && (
-          <Box>
+        {/* The Explorer is the other way to find targets, so it sits beside
+            the search. */}
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+          <SearchField
+            fullWidth
+            label={t('records.searchRelationshipOptions')}
+            onChange={(event) => setQuery(event.target.value)}
+            value={query}
+          />
+          {explorerHref && (
             <Button
               component="a"
               href={explorerHref}
               // The Explorer tab sends its selection back to this window.
               rel="opener"
-              size="small"
               startIcon={<ExplorerIcon />}
+              sx={{ alignSelf: 'stretch', flexShrink: 0, whiteSpace: 'nowrap' }}
               target="_blank"
               variant="outlined"
             >
               {t('records.chooseInExplorer')}
             </Button>
-          </Box>
-        )}
+          )}
+        </Stack>
         <RelationshipDraftSelection
           ids={draftIds}
           labelForId={labelForId}
@@ -240,9 +235,6 @@ export const RelationshipPickerDialog = ({
           }
         />
         <Stack spacing={0.5}>
-          <Typography variant="subtitle2">
-            {t('records.relationshipOptions')}
-          </Typography>
           <RelationshipTargetList
             isSingle={isSingle}
             label={t('records.relationshipOptions')}

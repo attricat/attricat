@@ -141,7 +141,7 @@ describe('RelationshipField', () => {
     const user = userEvent.setup();
     const dialog = await openSelector(user);
     const link = within(dialog).getByRole('link', {
-      name: 'Choose in Explorer',
+      name: 'Browse',
     });
     expect(link.getAttribute('rel')).toBe('opener');
     expect(link.getAttribute('target')).toBe('_blank');
@@ -279,8 +279,9 @@ describe('RelationshipField', () => {
     expect(
       screen
         .getByText('Selected')
-        .compareDocumentPosition(screen.getByText('Options')) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
+        .compareDocumentPosition(
+          screen.getByRole('group', { name: 'Options' }),
+        ) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Apply' }));
 
