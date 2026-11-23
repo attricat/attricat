@@ -812,6 +812,7 @@
     "requiredFieldsLeft_other": "{{count}} required fields left to fill",
     "createAndAddAnother": "Create and add another",
     "recordCreated": "Record created.",
+    "recordCreatedForPicker": "Record created and selected for the relationship.",
     "openRecord": "Open",
     "unsavedFormTitle": "Discard the values you entered?",
     "unsavedFormDescription": "They are not saved yet. If you leave, they will be discarded.",
@@ -1568,8 +1569,8 @@
     "removeDataQualityFilter": "Remove filter {{filter}}",
     "relationshipPicker": {
       "title": "Choose records for a relationship",
-      "chooseOne": "Select the record to link in the table, then use it.",
-      "chooseMany": "Select the records to link in the table, then use them.",
+      "chooseOne": "Select one record in the table, or create a new one.",
+      "chooseMany": "Select records in the table, or create new ones.",
       "cancel": "Cancel",
       "use_one": "Use {{count}} selected record",
       "use_other": "Use {{count}} selected records",

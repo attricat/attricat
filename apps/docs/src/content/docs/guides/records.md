@@ -69,6 +69,8 @@ Integrations can ask which statuses are available without trying to save; see [C
 
 To find targets with filters, sorting or browsing, choose **Browse** next to the picker's search field. The [Explorer](/guides/explore/) opens in a new tab with the target blueprint and its table in selection mode; a relationship limited to the targets of another field, such as the unit conversions of the selected product, opens with that filter. Select up to 50 records in the table, or one for a single-select relationship, and choose **Use selected records** in the bar above the table. The tab closes, and the records are added to the picker's selection; a single-select relationship takes the one you chose. Review them and choose **Apply**. If you close the record form first, the Explorer tab can no longer send the selection back.
 
+If the record you need does not exist yet, choose **Create** at the top of that Explorer tab. The new record's form starts with the values of the tab's relationship filters, such as the selected product, so the record fits the relationship. After you save it, the tab returns to the Explorer with the new record selected, next to the records you had already selected; **Create and add another** selects every record you create. Then choose **Use selected records** as usual. **Cancel** on the form returns to the Explorer without losing the selection.
+
 Relationship values are contextual, like any other value: a product can have a different set of categories in one market.
 
 ## Files

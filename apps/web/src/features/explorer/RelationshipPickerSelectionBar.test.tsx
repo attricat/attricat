@@ -58,7 +58,7 @@ describe('RelationshipPickerSelectionBar', () => {
     vi.stubGlobal('opener', { closed: false, postMessage: vi.fn() });
     renderBar([], 'one');
     expect(
-      screen.getByText('Select the record to link in the table, then use it.'),
+      screen.getByText('Select one record in the table, or create a new one.'),
     ).toBeTruthy();
     expect(
       screen.getByRole('button', { name: 'Use 0 selected records' }),

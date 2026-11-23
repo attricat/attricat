@@ -67,6 +67,14 @@ mode (one record for `one`), hides selection and row actions, and shows
 `RelationshipPickerSelectionBar`. The server still validates every
 relationship write.
 
+The picker tab's selection is kept in its session storage, keyed by the token
+(`relationshipPickerStorage`), so it survives creating a record: the Explorer's
+**Create** passes `relationshipPicker`, `relationshipPickerMode` and `values`
+(the plain relationship facets, such as a target scope) to `/records/new`,
+which starts the form from `values`, remembers each created record for the
+token and goes back to the Explorer. The Explorer adds the created records to
+the selection and forgets them only once added.
+
 ## Components
 
 - Keep route files thin and compose feature page components from

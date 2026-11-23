@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@mui/material';
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useCanGoBack, useNavigate, useRouter } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { findDefaultContextId } from '../contexts/defaultContext';
@@ -20,11 +20,19 @@ import { invalidFileReferencesCode } from '../files/constants';
 import { useToast } from '../../components/useToast';
 import { blueprintByCodeOptions } from './queryOptions';
 import { contextListOptions } from '../contexts/queryOptions';
+import { RELATIONSHIP_ID_JOINER, relationshipPickerModes } from './constants';
+import { addPickerCreatedRecord } from '../explorer/relationshipPickerStorage';
 
 export const CreateRecordPage = ({
   search,
 }: {
-  search: { blueprint?: string; locked?: boolean };
+  search: {
+    blueprint?: string;
+    locked?: boolean;
+    relationshipPicker?: string;
+    relationshipPickerMode?: (typeof relationshipPickerModes)[keyof typeof relationshipPickerModes];
+    values?: Record<string, string[]>;
+  };
 }) => {
   const { t } = useTranslation();
   const client = useQueryClient();
@@ -38,6 +46,35 @@ export const CreateRecordPage = ({
   // The chosen blueprint lives in the URL so a refresh reloads the same form
   // and can offer its saved draft.
   const blueprintCode = search.blueprint;
+  // Opened from a relationship picker's Explorer tab: the new record is
+  // selected there, and the form starts from the picker's facet values.
+  const pickerToken = search.relationshipPicker;
+  const initialValues = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(search.values ?? {}).map(([code, ids]) => [
+          code,
+          ids.join(RELATIONSHIP_ID_JOINER),
+        ]),
+      ),
+    [search.values],
+  );
+  const returnToPicker = () => {
+    if (canGoBack) {
+      router.history.back();
+      return;
+    }
+    void navigate({
+      to: '/',
+      search: {
+        blueprint: blueprintCode,
+        locked: true,
+        relationshipPicker: pickerToken,
+        relationshipPickerMode:
+          search.relationshipPickerMode ?? relationshipPickerModes.many,
+      },
+    });
+  };
   const blueprint = useQuery({
     ...blueprintByCodeOptions(blueprintCode ?? ''),
     enabled: Boolean(blueprintCode),
@@ -121,6 +158,18 @@ export const CreateRecordPage = ({
     onSuccess: (record, { addAnother }) => {
       recordFormRef.current?.clearDraft();
       void invalidateRecordSearches(client);
+      if (pickerToken) {
+        addPickerCreatedRecord(pickerToken, record.id);
+        show({
+          message: t('records.recordCreatedForPicker'),
+          severity: 'success',
+        });
+        if (addAnother) {
+          queuedFiles.clear();
+          setFormKey((key) => key + 1);
+        } else returnToPicker();
+        return;
+      }
       const openRecord = () =>
         void navigate({
           to: '/records/$recordId',
@@ -165,6 +214,7 @@ export const CreateRecordPage = ({
           defaultContextId={defaultContextId}
           error={blueprint.error ?? create.error}
           guardUnsavedChanges
+          initialValues={initialValues}
           key={formKey}
           // A background refresh must not disable the fields being filled in.
           isLoadingBlueprint={blueprint.isLoading}
@@ -180,7 +230,11 @@ export const CreateRecordPage = ({
             });
           }}
           onCancel={() =>
-            canGoBack ? router.history.back() : void navigate({ to: '/' })
+            pickerToken
+              ? returnToPicker()
+              : canGoBack
+                ? router.history.back()
+                : void navigate({ to: '/' })
           }
           onLoadBlueprint={(code) =>
             void navigate({

@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import {
   createRecord,
   createRecordBlueprint,
+  fieldByLabel,
   relationship,
   request,
   scalar,
@@ -186,4 +187,130 @@ test('a scoped relationship opens the Explorer with its scope filter', async ({
     explorer.getByRole('checkbox', { name: 'Select Rake' }),
   ).toHaveCount(0);
   await explorer.getByRole('button', { name: 'Cancel' }).click();
+});
+
+test('creates relationship targets from the Explorer tab', async ({ page }) => {
+  const run = suffix();
+  const category = await createRecordBlueprint(
+    `picker_new_category_${run}`,
+    `New categories ${run}`,
+    'attributes:\n  - code: title\n    value_type: string\n    tags: [searchable]',
+  );
+  const sale = await createRecord(category, [scalar('title', 'Sale')]);
+  const product = await createRecordBlueprint(
+    `picker_new_product_${run}`,
+    `New products ${run}`,
+    `attributes:
+  - code: title
+    value_type: string
+  - code: categories
+    value_type: relationship
+    target_blueprint: picker_new_category_${run}`,
+  );
+  const record = await createRecord(product, [scalar('title', 'Shirt')]);
+  await page.goto(`/records/${record.id}`);
+
+  const { dialog, explorer } = await openExplorerPicker(page, 'categories');
+  await selectRow(explorer, 'Sale');
+  await explorer
+    .getByRole('link', { name: `Create New categories ${run}` })
+    .click();
+  await expect(explorer).toHaveURL(/\/records\/new\?.*relationshipPicker=/);
+  // Create and add another selects every record created for the picker.
+  await fieldByLabel(explorer, 'title').fill('Autumn');
+  await explorer
+    .getByRole('button', { name: 'Create and add another' })
+    .click();
+  await expect(
+    explorer.getByText('Record created and selected for the relationship.'),
+  ).toBeVisible();
+  await fieldByLabel(explorer, 'title').fill('Spring');
+  await explorer.getByRole('button', { name: 'Create record' }).click();
+
+  // Back in the Explorer, the earlier selection and the new records wait.
+  await expect(
+    explorer.getByRole('complementary', { name: barName }),
+  ).toBeVisible();
+  await Promise.all([
+    explorer.waitForEvent('close'),
+    explorer.getByRole('button', { name: 'Use 3 selected records' }).click(),
+  ]);
+  for (const title of ['Sale', 'Autumn', 'Spring'])
+    await expect(dialog.getByRole('checkbox', { name: title })).toBeChecked();
+  await dialog.getByRole('button', { name: 'Apply' }).click();
+  await expect
+    .poll(async () => (await linked(record.id, 'categories')).length)
+    .toBe(3);
+  expect(await linked(record.id, 'categories')).toContain(sale.id);
+});
+
+test('a record created for a scoped relationship starts in its scope', async ({
+  page,
+}) => {
+  const run = suffix();
+  const group = await createRecordBlueprint(
+    `picker_scope_group_${run}`,
+    `Scope groups ${run}`,
+    'attributes:\n  - code: title\n    value_type: string\n    tags: [searchable]',
+  );
+  const tools = await createRecord(group, [scalar('title', 'Tools')]);
+  const option = await createRecordBlueprint(
+    `picker_scope_option_${run}`,
+    `Scope options ${run}`,
+    `attributes:
+  - code: title
+    value_type: string
+    tags: [searchable]
+  - code: group
+    value_type: relationship
+    target_blueprint: picker_scope_group_${run}
+    cardinality: one`,
+  );
+  const hammer = await createRecord(option, [
+    scalar('title', 'Hammer'),
+    relationship('group', tools.id),
+  ]);
+  const item = await createRecordBlueprint(
+    `picker_scope_item_${run}`,
+    `Scope items ${run}`,
+    `attributes:
+  - code: title
+    value_type: string
+  - code: group
+    value_type: relationship
+    target_blueprint: picker_scope_group_${run}
+    cardinality: one
+  - code: option
+    value_type: relationship
+    target_blueprint: picker_scope_option_${run}
+    cardinality: one
+    target_scope: {attribute: group, equals: group}`,
+  );
+  const record = await createRecord(item, [
+    scalar('title', 'Kit'),
+    relationship('group', tools.id),
+  ]);
+  await page.goto(`/records/${record.id}`);
+
+  const { dialog, explorer } = await openExplorerPicker(page, 'option');
+  await selectRow(explorer, 'Hammer');
+  await explorer
+    .getByRole('link', { name: `Create Scope options ${run}` })
+    .click();
+  // The scope's group is filled in already.
+  await expect(explorer.getByText('Tools')).toBeVisible();
+  await fieldByLabel(explorer, 'title').fill('Saw');
+  await explorer.getByRole('button', { name: 'Create record' }).click();
+
+  // A single-target picker replaces its earlier choice with the new record.
+  await Promise.all([
+    explorer.waitForEvent('close'),
+    explorer.getByRole('button', { name: 'Use 1 selected record' }).click(),
+  ]);
+  await expect(dialog.getByRole('radio', { name: 'Saw' })).toBeChecked();
+  await dialog.getByRole('button', { name: 'Apply' }).click();
+  await expect
+    .poll(async () => (await linked(record.id, 'option')).length)
+    .toBe(1);
+  expect(await linked(record.id, 'option')).not.toContain(hammer.id);
 });

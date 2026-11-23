@@ -17,6 +17,7 @@ import { relationshipPickerModes } from '../constants';
 import { lexiconText } from '../../lexicon/lexicon';
 import { recordBlueprintsOptions } from '../queryOptions';
 import { RelationshipDraftSelection } from './RelationshipDraftSelection';
+import { useLatestCallback } from '../../../components/useLatestCallback';
 import {
   RelationshipTargetList,
   RelationshipTargetOption,
@@ -82,6 +83,13 @@ export const RelationshipPickerDialog = ({
   const [targetBlueprint, setTargetBlueprint] = useState(allowedTargets[0]);
   const { isPreviewed, markPreviewed, pickerToken, previewHref } =
     recentPreviews;
+  const { labelById, options, targetLabel, targets } = useRelationshipTargets(
+    targetBlueprint,
+    query,
+    open,
+    targetFilters,
+  );
+  const refetchTargets = useLatestCallback(() => targets.refetch());
   useEffect(() => {
     previewSelectRef.current = (id) => {
       setDraftIds((current) =>
@@ -96,6 +104,8 @@ export const RelationshipPickerDialog = ({
   useEffect(() => {
     previewSelectManyRef.current = (ids, labels) => {
       if (ids.length === 0) return;
+      // Records created in the Explorer tab are not in the loaded options.
+      void refetchTargets();
       setKnownLabels((current) => ({ ...current, ...labels }));
       setDraftIds((current) =>
         isSingle
@@ -107,13 +117,8 @@ export const RelationshipPickerDialog = ({
     return () => {
       previewSelectManyRef.current = null;
     };
-  }, [isSingle, previewSelectManyRef]);
-  const { labelById, options, targetLabel, targets } = useRelationshipTargets(
-    targetBlueprint,
-    query,
-    open,
-    targetFilters,
-  );
+  }, [isSingle, previewSelectManyRef, refetchTargets]);
+
   const blueprints = useQuery({ ...recordBlueprintsOptions(), enabled: open });
   // The Explorer, in a new tab, picks records of the searched blueprint with
   // its table selection and sends them back; see RelationshipPickerSelectionBar.

@@ -2,7 +2,14 @@ import { Box, Button } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { ApiRequestError } from '../../api/request';
 import { isClientErrorStatus } from '../../api/httpStatus';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { searchRecords } from '../records/api';
+import { recordIdsQuery } from './queryLanguage';
+import {
+  forgetPickerCreatedRecords,
+  readPickerCreatedRecords,
+} from './relationshipPickerStorage';
+import { useLatestCallback } from '../../components/useLatestCallback';
 import { useCan } from '../auth/useCan';
 import type { RecordItem } from '../records/api';
 import { SaveSelectionAsSearchDialog } from '../saved-views/SaveSelectionAsSearchDialog';
@@ -98,12 +105,40 @@ export const ExplorerResults = ({
     picker
       ? {
           alwaysSelecting: true,
+          storageToken: picker.token,
           ...(picker.mode === relationshipPickerModes.one
             ? { maximum: 1 }
             : {}),
         }
       : {},
   );
+  // Records created from this picker tab join its selection when it returns.
+  // They are forgotten only once added, so an interrupted lookup retries.
+  const addCreated = useLatestCallback(
+    (token: string, ids: string[], items: RecordItem[]) => {
+      selection.addRecords(items);
+      forgetPickerCreatedRecords(token, ids);
+    },
+  );
+  const pickerToken = picker?.token;
+  const blueprintCode = search.blueprint;
+  useEffect(() => {
+    if (!pickerToken || !blueprintCode) return;
+    const created = readPickerCreatedRecords(pickerToken);
+    if (created.length === 0) return;
+    const controller = new AbortController();
+    void searchRecords({
+      blueprint: blueprintCode,
+      query: recordIdsQuery(created),
+      pageSize: created.length,
+      signal: controller.signal,
+    })
+      .then((page) => addCreated(pickerToken, created, page.items))
+      .catch(() => {
+        // An aborted or failed lookup leaves the selection as it was.
+      });
+    return () => controller.abort();
+  }, [addCreated, blueprintCode, pickerToken]);
   const [savedSearchSelection, setSavedSearchSelection] = useState<
     RecordItem[] | null
   >(null);

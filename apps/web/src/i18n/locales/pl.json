@@ -848,6 +848,7 @@
     "requiredFieldsLeft_other": "Pozostało {{count}} wymaganego pola do uzupełnienia",
     "createAndAddAnother": "Utwórz i dodaj kolejny",
     "recordCreated": "Utworzono rekord.",
+    "recordCreatedForPicker": "Rekord utworzony i zaznaczony do relacji.",
     "openRecord": "Otwórz",
     "unsavedFormTitle": "Odrzucić wprowadzone wartości?",
     "unsavedFormDescription": "Nie zostały jeszcze zapisane. Jeśli wyjdziesz, zostaną odrzucone.",
@@ -1642,14 +1643,14 @@
     "removeDataQualityFilter": "Usuń filtr {{filter}}",
     "relationshipPicker": {
       "title": "Wybór rekordów do relacji",
-      "chooseOne": "Zaznacz w tabeli rekord do powiązania, a potem go użyj.",
-      "chooseMany": "Zaznacz w tabeli rekordy do powiązania, a potem ich użyj.",
+      "chooseOne": "Zaznacz w tabeli jeden rekord albo utwórz nowy.",
+      "chooseMany": "Zaznacz w tabeli rekordy albo utwórz nowe.",
       "cancel": "Anuluj",
-      "use_one": "Użyj {{count}} zaznaczonego rekordu",
-      "use_few": "Użyj {{count}} zaznaczonych rekordów",
-      "use_many": "Użyj {{count}} zaznaczonych rekordów",
-      "use_other": "Użyj {{count}} zaznaczonego rekordu",
-      "openerClosed": "Formularz rekordu, który otworzył tę kartę, został zamknięty, więc nie można przekazać wyboru."
+      "use_one": "Dodaj zaznaczony rekord",
+      "use_few": "Dodaj {{count}} zaznaczone rekordy",
+      "use_many": "Dodaj {{count}} zaznaczonych rekordów",
+      "use_other": "Dodaj {{count}} zaznaczonego rekordu",
+      "openerClosed": "Formularz, z którego otwarto tę kartę, jest już zamknięty, więc nie można przekazać wyboru."
     }
   },
   "audit": {

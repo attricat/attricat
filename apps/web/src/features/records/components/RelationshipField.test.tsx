@@ -151,6 +151,8 @@ describe('RelationshipField', () => {
     expect(href.searchParams.get('locked')).toBe('true');
     expect(href.searchParams.get('relationshipPickerMode')).toBe('many');
     const token = href.searchParams.get('relationshipPicker');
+    await waitFor(() => expect(searchRecords).toHaveBeenCalled());
+    const searchesBefore = vi.mocked(searchRecords).mock.calls.length;
 
     act(() => {
       window.dispatchEvent(
@@ -167,6 +169,12 @@ describe('RelationshipField', () => {
     });
     // The record already selected is kept once; the new one is named at once.
     expect(await within(dialog).findByText('Later option')).toBeTruthy();
+    // Records created in the Explorer tab are not loaded yet: options reload.
+    await waitFor(() =>
+      expect(vi.mocked(searchRecords).mock.calls.length).toBeGreaterThan(
+        searchesBefore,
+      ),
+    );
     await user.click(within(dialog).getByRole('button', { name: 'Apply' }));
     expect(onChange).toHaveBeenLastCalledWith(`${firstId}, ${laterId}`);
   });

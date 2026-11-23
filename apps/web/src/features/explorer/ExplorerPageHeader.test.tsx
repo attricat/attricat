@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { ExplorerPageHeader } from './ExplorerPageHeader';
+import { RelationshipPickerSessionContext } from './relationshipPickerSession';
 
 vi.mock('../auth/useCan', () => ({
   useAccess: () => ({ can: () => true, isPending: false }),
@@ -37,6 +38,32 @@ const createSearch = () =>
   JSON.parse(screen.getByRole('button').getAttribute('data-search')!);
 
 describe('ExplorerPageHeader', () => {
+  it('creates a record for the relationship picker the tab chooses for', () => {
+    const token = '4f0c8e3c-9b0d-4f5a-8f6e-2a1b3c4d5e6f';
+    const tools = '8d6f1c2a-1b2c-4d3e-8f4a-5b6c7d8e9f01';
+    render(
+      <RelationshipPickerSessionContext value={{ token, mode: 'one' }}>
+        <ExplorerPageHeader
+          blueprint="option"
+          blueprintName="Option"
+          locked
+          relationshipFacets={[
+            { field: 'group', selectedIds: [tools] },
+            // Hierarchy facets match descendants and are not values.
+            { field: 'parent', selectedIds: [tools], ownTree: true },
+          ]}
+        />
+      </RelationshipPickerSessionContext>,
+    );
+    expect(createSearch()).toEqual({
+      blueprint: 'option',
+      locked: true,
+      relationshipPicker: token,
+      relationshipPickerMode: 'one',
+      values: { group: [tools] },
+    });
+  });
+
   it('preselects the explored blueprint in the create form', () => {
     render(
       <ExplorerPageHeader

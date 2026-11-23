@@ -144,6 +144,23 @@ export const withoutPanelRecord = (
   return search;
 };
 
+/**
+ * Values a record created from a relationship picker's Explorer starts with:
+ * the records its plain relationship facets select, such as the product a
+ * scoped picker filters by, so the new record fits the scope.
+ */
+export const pickerCreateValues = (
+  facets: ExplorerSearch['relationshipFacets'],
+): Record<string, string[]> =>
+  Object.fromEntries(
+    (facets ?? [])
+      .filter(
+        (facet) =>
+          facet.selectedIds?.length && !facet.hierarchyField && !facet.ownTree,
+      )
+      .map((facet) => [facet.field, facet.selectedIds ?? []]),
+  );
+
 /** The relationship picker an Explorer tab chooses records for, if any. */
 export type RelationshipPickerSession = {
   token: string;

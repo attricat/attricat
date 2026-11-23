@@ -70,4 +70,51 @@ describe('useExplorerSelection', () => {
     act(() => result.current.toggleLoaded());
     expect(result.current.selectedItems).toEqual([second]);
   });
+
+  it('keeps a relationship picker selection across remounts and adds records', () => {
+    const token = '4f0c8e3c-9b0d-4f5a-8f6e-2a1b3c4d5e6f';
+    const options = { alwaysSelecting: true, storageToken: token };
+    const record = (id: string) =>
+      ({
+        id,
+        blueprint_version: 1,
+        schema_outdated: false,
+        system_tags: [],
+        is_sample: false,
+        display: { default: id },
+        match_explanations: [],
+        preview: {},
+        table_values: {},
+      }) as unknown as RecordItem;
+    const bolt = record('8d6f1c2a-1b2c-4d3e-8f4a-5b6c7d8e9f01');
+    const nut = record('8d6f1c2a-1b2c-4d3e-8f4a-5b6c7d8e9f02');
+    const first = renderHook(() =>
+      useExplorerSelection('product', [bolt], options),
+    );
+    act(() => first.result.current.toggleRecord(bolt));
+    first.unmount();
+
+    // Coming back from the create form restores the selection.
+    const second = renderHook(() =>
+      useExplorerSelection('product', [], options),
+    );
+    expect(second.result.current.selectedItems.map((item) => item.id)).toEqual([
+      bolt.id,
+    ]);
+    act(() => second.result.current.addRecords([nut, bolt]));
+    expect(second.result.current.selectedItems.map((item) => item.id)).toEqual([
+      bolt.id,
+      nut.id,
+    ]);
+    second.unmount();
+
+    const single = renderHook(() =>
+      useExplorerSelection('product', [], { ...options, maximum: 1 }),
+    );
+    act(() => single.result.current.addRecords([nut]));
+    expect(single.result.current.selectedItems.map((item) => item.id)).toEqual([
+      nut.id,
+    ]);
+    window.sessionStorage.clear();
+  });
 });

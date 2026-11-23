@@ -5,6 +5,7 @@ import {
   inlineExplorerSearchParams,
   parseExplorerRouteSearch,
   parseExplorerSearch,
+  pickerCreateValues,
   relationshipPickerSession,
   withoutPanelRecord,
 } from './search';
@@ -223,5 +224,19 @@ describe('parseExplorerRouteSearch', () => {
 
   it('drops a malformed panel record', () => {
     expect(parseExplorerRouteSearch({ record: 'invalid' })).toEqual({});
+  });
+});
+
+describe('pickerCreateValues', () => {
+  it('starts a picker record from the plain relationship facets', () => {
+    const id = '8d6f1c2a-1b2c-4d3e-8f4a-5b6c7d8e9f01';
+    expect(
+      pickerCreateValues([
+        { field: 'product', selectedIds: [id] },
+        { field: 'empty', selectedIds: [] },
+        { field: 'category', selectedIds: [id], hierarchyField: 'parent' },
+      ]),
+    ).toEqual({ product: [id] });
+    expect(pickerCreateValues(undefined)).toEqual({});
   });
 });

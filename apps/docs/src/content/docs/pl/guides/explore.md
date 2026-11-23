@@ -128,7 +128,7 @@ Menu **Akcje** działa na zaznaczeniu:
 - **Utwórz zapisane wyszukiwanie** zapisuje wyszukiwanie obejmujące dokładnie te rekordy.
 - Zainstalowane rozszerzenia mogą dodać własne działania zbiorcze.
 
-Okno wyboru relacji na stronie rekordu może otworzyć Przeglądarkę w nowej karcie, aby wybrać cele; zobacz [Relacje](/pl/guides/records/#relacje). Ta karta zaczyna w trybie zaznaczania dla schematu docelowego, a pasek nad tabelą przekazuje zaznaczone rekordy przyciskiem **Użyj zaznaczonych rekordów**. Zapisywanie zaznaczenia jako wyszukiwania, wysyłanie go do agenta i inne akcje na zaznaczeniu nie są tam dostępne.
+Okno wyboru relacji na stronie rekordu może otworzyć Przeglądarkę w nowej karcie, aby wybrać cele; zobacz [Relacje](/pl/guides/records/#relacje). Ta karta zaczyna w trybie zaznaczania dla schematu docelowego, a pasek nad tabelą przekazuje zaznaczone rekordy przyciskiem **Dodaj zaznaczone rekordy**, a **Utwórz** dodaje do zaznaczenia nowy rekord. Zapisywanie zaznaczenia jako wyszukiwania, wysyłanie go do agenta i inne akcje na zaznaczeniu nie są tam dostępne.
 
 ## Akcje i uruchomienia rozszerzeń
 

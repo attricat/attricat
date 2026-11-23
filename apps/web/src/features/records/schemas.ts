@@ -206,7 +206,7 @@ export const recordSchema = recordIdentitySchema
     system_metadata: jsonObjectSchema.optional(),
   })
   .passthrough();
-const recordItemSchema = z.object({
+export const recordItemSchema = z.object({
   id: uuidSchema,
   blueprint_version: z.number().int().positive(),
   schema_outdated: z.boolean(),

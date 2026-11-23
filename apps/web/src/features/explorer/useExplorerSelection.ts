@@ -1,4 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import {
+  readPickerSelection,
+  writePickerSelection,
+} from './relationshipPickerStorage';
 import type { RecordItem } from '../records/api';
 import { maximumAgentSelection } from './agentSelection';
 
@@ -13,6 +17,11 @@ type SelectionOptions = {
   alwaysSelecting?: boolean;
   /** Most records selected at once; selecting another replaces a single one. */
   maximum?: number;
+  /**
+   * A relationship picker's token: the selection is kept in the tab's
+   * session storage, so it survives creating a record and coming back.
+   */
+  storageToken?: string;
 };
 
 const emptySelection = (
@@ -35,10 +44,20 @@ export const useExplorerSelection = (
   {
     alwaysSelecting = false,
     maximum = maximumAgentSelection,
+    storageToken,
   }: SelectionOptions = {},
 ) => {
   const fresh = () => emptySelection(scope, alwaysSelecting);
-  const [state, setState] = useState(fresh);
+  const [state, setState] = useState(() => ({
+    ...fresh(),
+    records: storageToken
+      ? readPickerSelection(storageToken).slice(0, maximum)
+      : [],
+  }));
+  useEffect(() => {
+    if (storageToken && state.scope === scope)
+      writePickerSelection(storageToken, state.records);
+  }, [scope, state, storageToken]);
   if (state.scope !== scope) setState(fresh());
   const current = state.scope === scope ? state : fresh();
 
@@ -90,6 +109,15 @@ export const useExplorerSelection = (
       if (maximum === 1) return [record];
       return records.length < maximum ? [...records, record] : records;
     });
+  /** Adds records, such as ones created for a picker; a single one replaces. */
+  const addRecords = (added: RecordItem[]) =>
+    updateRecords((records) => {
+      if (added.length === 0) return records;
+      if (maximum === 1) return added.slice(-1);
+      const ids = new Set(records.map((record) => record.id));
+      const additions = added.filter((record) => !ids.has(record.id));
+      return [...records, ...additions].slice(0, maximum);
+    });
   const removeRecord = (recordId: string) =>
     updateRecords((records) =>
       records.filter((record) => record.id !== recordId),
@@ -107,6 +135,7 @@ export const useExplorerSelection = (
     toggleSelectionMode,
     toggleLoaded,
     toggleRecord,
+    addRecords,
     removeRecord,
   };
 };

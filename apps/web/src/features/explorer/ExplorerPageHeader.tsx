@@ -1,4 +1,10 @@
 import { useTranslation } from 'react-i18next';
+import { useRelationshipPickerSession } from './relationshipPickerSession';
+import {
+  pickerCreateValues,
+  type ExplorerSearch,
+  type RelationshipPickerSession,
+} from './search';
 import { PageHeader } from '../../components/PageHeader';
 import { RouterButton } from '../../components/RouterLink';
 import { ExplorerIcon } from '../../components/systemIcons';
@@ -15,10 +21,27 @@ type Props = {
   /** The selected blueprint, linked from the eyebrow once it has loaded. */
   blueprintRecord?: { id: string; name: string };
   locked: boolean;
+  /** The search's relationship facets; a picker's new record starts from them. */
+  relationshipFacets?: ExplorerSearch['relationshipFacets'];
 };
 
-const createSearch = (blueprint: string | undefined, locked: boolean) => {
+const createSearch = (
+  blueprint: string | undefined,
+  locked: boolean,
+  picker: RelationshipPickerSession | null,
+  relationshipFacets: ExplorerSearch['relationshipFacets'],
+) => {
   if (!blueprint) return {};
+  // A relationship picker tab creates a record for the picker: the form
+  // returns to this Explorer with it selected, starting from the facets.
+  if (picker)
+    return {
+      blueprint,
+      locked: true,
+      relationshipPicker: picker.token,
+      relationshipPickerMode: picker.mode,
+      values: pickerCreateValues(relationshipFacets),
+    };
   // A locked Explorer keeps the create form on its blueprint; otherwise the
   // selected blueprint only preselects the form.
   return locked ? { blueprint, locked: true } : { blueprint };
@@ -29,15 +52,17 @@ export const ExplorerPageHeader = ({
   blueprintName,
   blueprintRecord,
   locked,
+  relationshipFacets,
 }: Props) => {
   const { t } = useTranslation();
   const canCreate = useCan(capabilities.recordsWrite);
+  const picker = useRelationshipPickerSession();
   return (
     <PageHeader
       actions={
         canCreate && (
           <RouterButton
-            search={createSearch(blueprint, locked)}
+            search={createSearch(blueprint, locked, picker, relationshipFacets)}
             to="/records/new"
             variant="contained"
           >

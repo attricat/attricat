@@ -172,6 +172,7 @@ export const Explorer = ({ search: urlSearch, savedView }: Props) => {
               blueprintMissing ? undefined : selectedBlueprint.data?.blueprint
             }
             locked={Boolean(search.locked)}
+            relationshipFacets={search.relationshipFacets}
           />
           <ExplorerLoadErrors
             blueprintMissing={blueprintMissing}
