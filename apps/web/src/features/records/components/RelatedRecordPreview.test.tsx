@@ -156,9 +156,15 @@ describe('a single relationship value on the record page', () => {
     expect(
       within(region).getByText('color').parentElement?.querySelector('svg'),
     ).toBeNull();
-    expect(screen.getAllByRole('button', { name: /^Details of/ })).toHaveLength(
-      1,
-    );
+    // Only this field toggles a preview: the linked record's own
+    // relationships are plain links. Open, it offers to hide the details.
+    expect(
+      screen.getAllByRole('button', { name: /^(Details|Hide details) of/ }),
+    ).toHaveLength(1);
+    expect(
+      screen.getByRole('button', { name: 'Hide details of Red shirt' })
+        .textContent,
+    ).toBe('Hide details');
   });
 
   it('opens the linked record in a new tab', () => {

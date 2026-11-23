@@ -1,5 +1,6 @@
 import {
   Box,
+  Button,
   Collapse,
   Divider,
   Skeleton,
@@ -20,9 +21,7 @@ import {
 import { useResolvedRecordPreview } from '../useRecordContexts';
 import { useRecordBlueprintRevision } from '../useRecordPreviewData';
 import { fieldSkeletons } from '../constants';
-import { LabeledIconButton } from '../../../components/LabeledIconButton';
-
-const previewToggleSize = 24;
+import { compactOutlinedActionButtonSx } from '../../../components/CompactOutlinedActionButton';
 
 const LinkedRecordValues = ({
   contextId,
@@ -83,25 +82,43 @@ export const RelatedRecordPreviewToggle = ({
 }) => {
   const { t } = useTranslation();
   const { transitions } = useTheme();
+  // A worded button beside the pill: an icon alone at the field's edge read
+  // as the field's own dropdown arrow and was easy to miss.
   return (
-    <LabeledIconButton
+    <Button
       aria-controls={preview.detailsId}
       aria-expanded={preview.expanded}
-      label={t('records.relatedRecordPreview', { record: label })}
+      aria-label={t(
+        preview.expanded
+          ? 'records.hideRelatedRecordPreview'
+          : 'records.relatedRecordPreview',
+        { record: label },
+      )}
+      color="primary"
+      endIcon={
+        <ChevronDownIcon
+          size={compactIconSize}
+          style={{
+            transform: preview.expanded ? 'rotate(180deg)' : undefined,
+            transition: transitions.create('transform', {
+              duration: transitions.duration.shortest,
+            }),
+          }}
+        />
+      }
       onClick={preview.toggle}
       size="small"
-      sx={{ height: previewToggleSize, ml: 'auto', width: previewToggleSize }}
+      sx={{
+        ...compactOutlinedActionButtonSx,
+        '& .MuiButton-endIcon': { ml: 0.5 },
+      }}
     >
-      <ChevronDownIcon
-        size={compactIconSize}
-        style={{
-          transform: preview.expanded ? 'rotate(180deg)' : undefined,
-          transition: transitions.create('transform', {
-            duration: transitions.duration.shortest,
-          }),
-        }}
-      />
-    </LabeledIconButton>
+      {t(
+        preview.expanded
+          ? 'records.hideRecordDetails'
+          : 'records.showRecordDetails',
+      )}
+    </Button>
   );
 };
 

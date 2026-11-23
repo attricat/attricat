@@ -191,6 +191,12 @@ export const RelationshipField = ({
                 <RelationshipSelectionPills
                   action={
                     <>
+                      {preview && (
+                        <RelatedRecordPreviewToggle
+                          label={previewLabel}
+                          preview={preview}
+                        />
+                      )}
                       <Button
                         aria-label={t('records.openRelationshipSelectorFor', {
                           field: attributeLabel(attribute),
@@ -207,12 +213,6 @@ export const RelationshipField = ({
                       >
                         {t('records.openRelationshipSelector')}
                       </Button>
-                      {preview && (
-                        <RelatedRecordPreviewToggle
-                          label={previewLabel}
-                          preview={preview}
-                        />
-                      )}
                     </>
                   }
                   gap={1}
