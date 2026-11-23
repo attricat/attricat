@@ -398,7 +398,11 @@ describe('ExplorerFilterBar', () => {
       }),
     );
 
-    await waitFor(() => expect(dialog.textContent).toContain('1 selected'));
+    await waitFor(() =>
+      expect(
+        within(dialog).getByRole('checkbox', { name: 'Acme' }),
+      ).toHaveProperty('checked', true),
+    );
     await user.click(screen.getByRole('button', { name: 'Done' }));
     expect(
       await screen.findByRole('button', { name: /^brand: Acme/ }),

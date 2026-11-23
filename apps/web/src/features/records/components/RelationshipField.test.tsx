@@ -455,7 +455,11 @@ describe('RelationshipField', () => {
         origin: window.location.origin,
       }),
     );
-    await waitFor(() => expect(dialog.textContent).toContain('1 selected'));
+    await waitFor(() =>
+      expect(
+        within(dialog).getByRole('checkbox', { name: 'First product' }),
+      ).toHaveProperty('checked', true),
+    );
   });
 
   it('names the blueprint whose records could not be loaded', async () => {

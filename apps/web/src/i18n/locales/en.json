@@ -655,8 +655,6 @@
     "relationshipTargetBlueprint": "Target blueprint",
     "selectedRelationships": "Selected",
     "relationshipOptions": "Options",
-    "relationshipSelected_one": "{{count}} selected",
-    "relationshipSelected_other": "{{count}} selected",
     "noRelationshipOptions": "No matching records",
     "applyRelationshipSelection": "Apply",
     "cancelRelationshipSelection": "Cancel",

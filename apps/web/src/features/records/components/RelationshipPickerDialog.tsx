@@ -165,9 +165,6 @@ export const RelationshipPickerDialog = ({
       closeLabel={t('records.closeRelationshipSelector')}
       onClose={onClose}
       open={open}
-      selectedLabel={t('records.relationshipSelected', {
-        count: draftIds.length,
-      })}
       title={
         anyBlueprint
           ? t(

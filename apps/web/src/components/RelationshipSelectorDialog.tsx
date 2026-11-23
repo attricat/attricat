@@ -28,7 +28,8 @@ type Props = {
   closeLabel: string;
   onClose: () => void;
   open: boolean;
-  selectedLabel: string;
+  /** A line under the title, such as what a filter does. */
+  selectedLabel?: string;
   title: string;
   topAction?: {
     label: string;
@@ -75,13 +76,15 @@ export const RelationshipSelectorDialog = ({
             <Typography component="span" variant="h6">
               {title}
             </Typography>
-            <Typography
-              color="text.secondary"
-              sx={{ display: 'block' }}
-              variant="body2"
-            >
-              {selectedLabel}
-            </Typography>
+            {selectedLabel && (
+              <Typography
+                color="text.secondary"
+                sx={{ display: 'block' }}
+                variant="body2"
+              >
+                {selectedLabel}
+              </Typography>
+            )}
           </Box>
           {topAction && (
             <Button

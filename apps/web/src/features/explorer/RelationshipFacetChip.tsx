@@ -70,9 +70,6 @@ export const RelationshipFacetChip = ({
         closeLabel={t('records.closeRelationshipSelector')}
         onClose={onClose}
         open={open}
-        selectedLabel={t('records.relationshipSelected', {
-          count: facet.selectedIds.length,
-        })}
         title={t('records.selectRelationships', { blueprint: label })}
         topAction={{ label: t('explorer.done'), onClick: onClose }}
       >
