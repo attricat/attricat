@@ -128,6 +128,12 @@ pub struct RelationshipFacetHop {
     pub target_blueprint_ids: Vec<Uuid>,
 }
 
+/// The blueprint whose hierarchy a tree facet walks: a hierarchy belongs to
+/// the single blueprint of a tree facet, so it is the first of its targets.
+fn hierarchy_blueprint(target_blueprint_ids: &[Uuid]) -> Uuid {
+    target_blueprint_ids[0]
+}
+
 impl RelationshipFacetHop {
     /// The blueprint the next hop starts from.
     fn next_source(&self) -> Uuid {
@@ -1707,7 +1713,8 @@ impl AttricatRepository {
                 let text = context
                     .codes
                     .iter()
-                    .chain(std::iter::once(&DEFAULT_CONTEXT_CODE.to_owned()))
+                    .map(String::as_str)
+                    .chain(std::iter::once(DEFAULT_CONTEXT_CODE))
                     .find_map(|code| label.display.get(code).and_then(Value::as_str))
                     .map(str::to_owned)
                     .unwrap_or_else(|| label.id.to_string());
@@ -2204,8 +2211,7 @@ impl AttricatRepository {
         )))
         .bind(last.map_or(source_blueprint_id, |last| hop_sources[last]))
         .bind(last.map(|last| source_path[last].field.as_str()))
-        // A hierarchy belongs to the single blueprint of a tree facet.
-        .bind(target_blueprint_ids[0])
+        .bind(hierarchy_blueprint(target_blueprint_ids))
         .bind(context_id)
         .bind(selected.into_iter().collect::<Vec<_>>())
         .bind(hierarchy_field)
@@ -2276,7 +2282,7 @@ impl AttricatRepository {
         // facet may list the records of several blueprints.
         let parents = self.hierarchy_edges(
             &hierarchy_edges,
-            target_blueprint_ids[0],
+            hierarchy_blueprint(target_blueprint_ids),
             hierarchy_field,
             context_id,
         );
@@ -2630,7 +2636,7 @@ impl AttricatRepository {
             .fetch(key, &[], policy, || async {
                 let parents = self.hierarchy_edges(
                     hierarchy_edges,
-                    target_blueprint_ids[0],
+                    hierarchy_blueprint(target_blueprint_ids),
                     hierarchy_field,
                     context_id,
                 );
@@ -2987,10 +2993,7 @@ impl AttricatRepository {
                 })?;
             fields.push(relationship.code.clone());
             source_blueprint_ids.push(current.blueprint.id);
-            let codes = match &relationship.target_blueprint_code {
-                Some(code) => vec![code.clone()],
-                None => relationship.target_blueprint_codes.clone(),
-            };
+            let codes = relationship.declared_target_codes();
             if codes.is_empty() {
                 return Err(RepositoryError::InvalidBlueprintDefinition(format!(
                     "relationship '{}' names no target blueprint, so a search path cannot follow it",

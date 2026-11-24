@@ -284,6 +284,10 @@ impl RepositoryError {
         use ErrorCode as Code;
         let message = self.to_string();
         let plain = |class, code| ErrorDescription::new(class, code, message.clone());
+        // A failure about one attribute names it in its details.
+        let about_attribute = |class, code, attribute: &str| {
+            plain(class, code).with_details(json!({ "attribute": attribute }))
+        };
         match self {
             Self::RecordCheckFailed(violations) => {
                 check_failure(Code::RecordCheckFailed, message, violations, None)
@@ -431,16 +435,13 @@ impl RepositoryError {
             Self::InvalidSystemTags => plain(Unprocessable, Code::InvalidSystemTags),
             Self::FileAttributeReadonly => plain(Unprocessable, Code::FileAttributeReadonly),
             Self::GeneratedAttributeReadonly { attribute } => {
-                plain(Unprocessable, Code::GeneratedAttributeReadonly)
-                    .with_details(json!({ "attribute": attribute }))
+                about_attribute(Unprocessable, Code::GeneratedAttributeReadonly, attribute)
             }
             Self::BalanceAttributeReadonly { attribute } => {
-                plain(Unprocessable, Code::BalanceAttributeReadonly)
-                    .with_details(json!({ "attribute": attribute }))
+                about_attribute(Unprocessable, Code::BalanceAttributeReadonly, attribute)
             }
             Self::MovementAttributeReadonly { attribute } => {
-                plain(Unprocessable, Code::MovementAttributeReadonly)
-                    .with_details(json!({ "attribute": attribute }))
+                about_attribute(Unprocessable, Code::MovementAttributeReadonly, attribute)
             }
             Self::BalanceBelowMinimum(shortage) => {
                 let super::error::BalanceShortage {
@@ -468,18 +469,16 @@ impl RepositoryError {
                     .with_details(json!({ "blueprint": blueprint, "key": key }))
             }
             Self::MovementQuantityInvalid { attribute } => {
-                plain(Unprocessable, Code::MovementQuantityInvalid)
-                    .with_details(json!({ "attribute": attribute }))
+                about_attribute(Unprocessable, Code::MovementQuantityInvalid, attribute)
             }
             Self::MovementFactorInvalid { attribute } => {
-                plain(Conflict, Code::MovementFactorInvalid)
-                    .with_details(json!({ "attribute": attribute }))
+                about_attribute(Conflict, Code::MovementFactorInvalid, attribute)
             }
-            Self::MovementImmutable { attribute } => plain(Conflict, Code::MovementImmutable)
-                .with_details(json!({ "attribute": attribute })),
+            Self::MovementImmutable { attribute } => {
+                about_attribute(Conflict, Code::MovementImmutable, attribute)
+            }
             Self::MovementTargetKeyImmutable { attribute } => {
-                plain(Conflict, Code::MovementTargetKeyImmutable)
-                    .with_details(json!({ "attribute": attribute }))
+                about_attribute(Conflict, Code::MovementTargetKeyImmutable, attribute)
             }
             Self::MovementRecordUndeletable => plain(Conflict, Code::MovementRecordUndeletable),
             Self::BalanceRecordNotEmpty { attribute, balance } => {
@@ -508,8 +507,7 @@ impl RepositoryError {
                     .with_details(json!({ "record_id": record_id }))
             }
             Self::MovementReversalMismatch { attribute } => {
-                plain(Unprocessable, Code::MovementReversalMismatch)
-                    .with_details(json!({ "attribute": attribute }))
+                about_attribute(Unprocessable, Code::MovementReversalMismatch, attribute)
             }
             Self::GeneratedResetChanged {
                 attribute,

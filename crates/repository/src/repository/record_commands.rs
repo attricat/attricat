@@ -53,8 +53,8 @@ struct PreparedRelationship {
 }
 
 /// Who supplied a value write. Only the sequence allocator may write a
-/// generated attribute, and only a movement a balance or the values it sets
-/// on its own record.
+/// generated attribute, and only a movement may write a balance or the
+/// values it sets on its own record.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum ValueOrigin {
     Client,

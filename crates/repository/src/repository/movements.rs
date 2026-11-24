@@ -1,5 +1,6 @@
-//! Movements: records whose creation changes a balance on another record,
-//! such as goods receipts and issues changing a stock level.
+//! Movements: records whose creation or status change changes a balance on
+//! another record, such as goods receipts and issues changing a stock level
+//! or an approved production order reserving its material lines' stock.
 //!
 //! The blueprint compiler checks a movement against its own blueprint's
 //! attributes. Publication checks it against the blueprints it names, at
@@ -7,9 +8,10 @@
 //! and the unique key that finds it, with key values of matching types, and
 //! the factor's blueprint must hold a number.
 //!
-//! A movement applies inside the create transaction of its record
-//! ([`AttricatRepository::create_record_in_transaction`]), which every
-//! create path shares, so the balance and its documents never disagree:
+//! A movement without `apply_on` applies inside the create transaction of
+//! its record ([`AttricatRepository::create_record_in_transaction`]), which
+//! every create path shares, so the balance and its documents never
+//! disagree:
 //!
 //! 1. Before the record is inserted, [`AttricatRepository::prepare_movements_in`]
 //!    reads the quantity and factor from the submitted default-context
@@ -23,6 +25,14 @@
 //!    changes each target's balance through the ordinary update seam
 //!    (validation, status locks, audit and `record.updated.v1`) and refuses
 //!    a result below the balance's `min`, which rolls back the whole create.
+//!
+//! A movement with `apply_on` applies in the transaction of the status
+//! change that triggers it, on its own record
+//! ([`AttricatRepository::apply_status_movements_in`]) or, through a trigger
+//! relationship, on the lines linked to that record
+//! ([`AttricatRepository::apply_line_movements_in`]). Each movement applies
+//! once, recorded in `record_movement_applications`, and a reversal
+//! ([`AttricatRepository::prepare_reversal_in`]) moves back what applied.
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
@@ -46,15 +56,47 @@ use super::write_context::WriteContext;
 use super::{AttricatRepository, Record, RepositoryError};
 use crate::model::{NewAttributeValue, UpdateRecordFormRequest};
 
+/// The latest published revision of a record blueprint, after the selected
+/// columns: workspace `$1`, blueprint code `$2`.
+macro_rules! latest_published_record_blueprint_sql {
+    () => {
+        r#" FROM blueprints
+               WHERE workspace_id = $1 AND code = $2 AND kind = 'record'
+                 AND status = 'published' AND deleted_at IS NULL
+               ORDER BY version DESC LIMIT 1"#
+    };
+}
+
+/// The codes of a record's applied movements: workspace `$1`, record `$2`.
+macro_rules! applied_movements_sql {
+    () => {
+        r#"SELECT movement_code FROM record_movement_applications
+               WHERE workspace_id = $1 AND record_id = $2"#
+    };
+}
+
+/// The live record a unique key finds in a context: workspace `$1`,
+/// blueprint `$2`, key `$3`, context `$4` and key hash `$5`.
+macro_rules! target_by_key_sql {
+    () => {
+        r#"SELECT e.id FROM record_unique_key_values k
+               JOIN records e ON e.id = k.record_id AND e.workspace_id = k.workspace_id
+               WHERE k.workspace_id = $1 AND k.blueprint_id = $2 AND k.key_code = $3
+                 AND k.context_id = $4 AND k.key_hash = $5 AND e.deleted_at IS NULL"#
+    };
+}
+
 /// Audit action of a target's balance change, audited against the target
 /// with the movement record in its metadata.
-pub(super) const MOVEMENT_BALANCE_AUDIT_ACTION: &str = "attricat.records.movement.balance_update";
+const MOVEMENT_BALANCE_AUDIT_ACTION: &str = "attricat.records.movement.balance_update";
 /// Audit action of a target a movement created because none had its key.
-pub(super) const MOVEMENT_TARGET_AUDIT_ACTION: &str = "attricat.records.movement.target_create";
+const MOVEMENT_TARGET_AUDIT_ACTION: &str = "attricat.records.movement.target_create";
 /// Audit action of a line whose movements its order's status applied.
-pub(super) const MOVEMENT_LINE_AUDIT_ACTION: &str = "attricat.records.movement.line_apply";
+const MOVEMENT_LINE_AUDIT_ACTION: &str = "attricat.records.movement.line_apply";
+/// Metadata key naming the movement in its audit entries.
+const MOVEMENT_AUDIT_METADATA_KEY: &str = "movement";
 /// Lines one status transition applies the movements of.
-pub(super) const MAX_MOVEMENT_LINES: usize = 200;
+const MAX_MOVEMENT_LINES: usize = 200;
 
 /// What publication needs from an attribute of another blueprint.
 #[derive(sqlx::FromRow)]
@@ -333,12 +375,10 @@ impl AttricatRepository {
         code: &str,
     ) -> Result<Option<PublishedBlueprint>, RepositoryError> {
         let Some((blueprint_id, version, unique_keys)) =
-            sqlx::query_as::<_, (Uuid, i64, serde_json::Value)>(
-                r#"SELECT id, version, unique_keys FROM blueprints
-                   WHERE workspace_id = $1 AND code = $2 AND kind = 'record'
-                     AND status = 'published' AND deleted_at IS NULL
-                   ORDER BY version DESC LIMIT 1"#,
-            )
+            sqlx::query_as::<_, (Uuid, i64, serde_json::Value)>(concat!(
+                "SELECT id, version, unique_keys",
+                latest_published_record_blueprint_sql!()
+            ))
             .bind(self.workspace_id.0)
             .bind(code)
             .fetch_optional(&mut **transaction)
@@ -347,7 +387,7 @@ impl AttricatRepository {
             return Ok(None);
         };
         let unique_keys = serde_json::from_value(unique_keys)
-            .map_err(|error| RepositoryError::InvalidBlueprintDefinition(error.to_string()))?;
+            .map_err(RepositoryError::invalid_blueprint_definition)?;
         let attributes = sqlx::query_as::<_, ReferencedAttribute>(
             r#"SELECT code, value_type, cardinality, target_blueprint_code,
                       target_blueprint_codes, balance, value_schema
@@ -389,19 +429,17 @@ impl PreparedMovement {
     /// The values core sets on the movement record: its target and, when
     /// declared, the moved amount.
     fn record_values(&self, default_context_id: Uuid) -> Vec<NewAttributeValue> {
-        let mut values = vec![NewAttributeValue::Relationship {
-            attribute_id: None,
-            attribute_code: Some(self.target_relationship.clone()),
-            context_id: Some(default_context_id),
-            target_record_id: self.target_id,
-        }];
+        let mut values = vec![relationship_value(
+            &self.target_relationship,
+            default_context_id,
+            self.target_id,
+        )];
         if let Some(result) = &self.result {
-            values.push(NewAttributeValue::Scalar {
-                attribute_id: None,
-                attribute_code: Some(result.clone()),
-                context_id: Some(default_context_id),
-                value: decimal_json(self.amount),
-            });
+            values.push(scalar_value(
+                result,
+                default_context_id,
+                decimal_json(self.amount),
+            ));
         }
         values.extend(self.copied.iter().cloned());
         values
@@ -623,8 +661,7 @@ impl AttricatRepository {
         .fetch_optional(&mut **transaction)
         .await?;
         match movements {
-            Some(movements) => serde_json::from_value(movements)
-                .map_err(|error| RepositoryError::InvalidBlueprintDefinition(error.to_string())),
+            Some(movements) => parse_movements(movements),
             None => Ok(Vec::new()),
         }
     }
@@ -828,21 +865,20 @@ impl AttricatRepository {
                 record_id: original_id,
             });
         }
-        let mut rows: Vec<Uuid> = std::iter::once(original_id)
+        // A set iterates in ID order, the order rows are locked in.
+        let rows: BTreeSet<Uuid> = std::iter::once(original_id)
             .chain(
                 applications
                     .iter()
                     .map(|application| application.target_record_id),
             )
-            .collect::<BTreeSet<_>>()
-            .into_iter()
             .collect();
-        rows.sort();
         for row in rows {
             self.lock_record(transaction, row).await?;
         }
-        let original = self.saved_record_values(transaction, original_id).await?;
-        let original_inputs = SubmittedValues::saved(&original, default_context_id);
+        let original_inputs = self
+            .saved_inputs(transaction, original_id, default_context_id)
+            .await?;
         if original_inputs.relationship(reversal).is_some() {
             return Err(RepositoryError::MovementReversalOfReversal {
                 record_id: original_id,
@@ -911,19 +947,13 @@ impl AttricatRepository {
                     None if copied_codes.insert(code.to_owned()) => {
                         copied.push(match original_value.clone() {
                             Submitted::Relationship(target_record_id) => {
-                                NewAttributeValue::Relationship {
-                                    attribute_id: None,
-                                    attribute_code: Some(code.to_owned()),
-                                    context_id: Some(default_context_id),
-                                    target_record_id,
-                                }
+                                relationship_value(code, default_context_id, target_record_id)
                             }
-                            Submitted::Scalar(value) => NewAttributeValue::Scalar {
-                                attribute_id: None,
-                                attribute_code: Some(code.to_owned()),
-                                context_id: Some(default_context_id),
+                            Submitted::Scalar(value) => scalar_value(
+                                code,
+                                default_context_id,
                                 // Exact decimal text goes back as a number.
-                                value: match &value {
+                                match &value {
                                     Value::String(text) => text
                                         .parse::<Decimal>()
                                         .ok()
@@ -931,7 +961,7 @@ impl AttricatRepository {
                                         .map_or(value.clone(), decimal_json),
                                     _ => value,
                                 },
-                            },
+                            ),
                         });
                     }
                     None => {}
@@ -952,19 +982,46 @@ impl AttricatRepository {
         Ok(prepared)
     }
 
-    async fn saved_record_values(
+    /// A record's values before this transaction and as this write leaves
+    /// them; a record without values reads as empty.
+    async fn before_and_after(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        write: &WriteContext,
+        record_id: Uuid,
+    ) -> Result<(RecordValues, RecordValues), RepositoryError> {
+        let before = load_record(
+            transaction,
+            self.workspace_id.0,
+            record_id,
+            RecordState::Before,
+        )
+        .await?
+        .unwrap_or_default();
+        let after = write
+            .after_record(transaction, self.workspace_id.0, record_id)
+            .await?
+            .unwrap_or_default();
+        Ok((before, after))
+    }
+
+    /// The movement inputs `record_id` holds in the default context, as
+    /// saved in this transaction.
+    async fn saved_inputs(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         record_id: Uuid,
-    ) -> Result<RecordValues, RepositoryError> {
-        load_record(
+        default_context_id: Uuid,
+    ) -> Result<SubmittedValues, RepositoryError> {
+        let values = load_record(
             transaction,
             self.workspace_id.0,
             record_id,
             RecordState::After,
         )
         .await?
-        .ok_or(RepositoryError::NotFound("record"))
+        .ok_or(RepositoryError::NotFound("record"))?;
+        Ok(SubmittedValues::saved(&values, default_context_id))
     }
 
     /// Codes of the movements that applied to `record_id`, sorted.
@@ -972,14 +1029,13 @@ impl AttricatRepository {
         &self,
         record_id: Uuid,
     ) -> Result<Vec<String>, RepositoryError> {
-        Ok(sqlx::query_scalar(
-            r#"SELECT movement_code FROM record_movement_applications
-               WHERE workspace_id = $1 AND record_id = $2 ORDER BY movement_code"#,
+        Ok(
+            sqlx::query_scalar(concat!(applied_movements_sql!(), " ORDER BY movement_code"))
+                .bind(self.workspace_id.0)
+                .bind(record_id)
+                .fetch_all(&self.pool)
+                .await?,
         )
-        .bind(self.workspace_id.0)
-        .bind(record_id)
-        .fetch_all(&self.pool)
-        .await?)
     }
 
     /// The line relationships to `record_id` whose lines' movements its
@@ -1007,8 +1063,7 @@ impl AttricatRepository {
         .await?;
         let mut settled = BTreeSet::new();
         for (blueprint, relationship, movements) in rows {
-            let movements: Vec<MovementDefinition> = serde_json::from_value(movements)
-                .map_err(|error| RepositoryError::InvalidBlueprintDefinition(error.to_string()))?;
+            let movements = parse_movements(movements)?;
             // Only the link the movements trigger through settles them.
             if movements.iter().any(|movement| {
                 movement
@@ -1031,16 +1086,12 @@ impl AttricatRepository {
         transaction: &mut Transaction<'_, Postgres>,
         record_id: Uuid,
     ) -> Result<HashSet<String>, RepositoryError> {
-        Ok(sqlx::query_scalar::<_, String>(
-            r#"SELECT movement_code FROM record_movement_applications
-               WHERE workspace_id = $1 AND record_id = $2 AND applied_at < now()"#,
+        self.applied_movements_where(
+            transaction,
+            record_id,
+            concat!(applied_movements_sql!(), " AND applied_at < now()"),
         )
-        .bind(self.workspace_id.0)
-        .bind(record_id)
-        .fetch_all(&mut **transaction)
-        .await?
-        .into_iter()
-        .collect())
+        .await
     }
 
     /// Codes of the record's movements that applied, in any transaction.
@@ -1049,16 +1100,25 @@ impl AttricatRepository {
         transaction: &mut Transaction<'_, Postgres>,
         record_id: Uuid,
     ) -> Result<HashSet<String>, RepositoryError> {
-        Ok(sqlx::query_scalar::<_, String>(
-            r#"SELECT movement_code FROM record_movement_applications
-               WHERE workspace_id = $1 AND record_id = $2"#,
-        )
-        .bind(self.workspace_id.0)
-        .bind(record_id)
-        .fetch_all(&mut **transaction)
-        .await?
-        .into_iter()
-        .collect())
+        self.applied_movements_where(transaction, record_id, applied_movements_sql!())
+            .await
+    }
+
+    /// Codes the applications `sql`, a filter of `applied_movements_sql!`,
+    /// selects for the record.
+    async fn applied_movements_where(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        record_id: Uuid,
+        sql: &'static str,
+    ) -> Result<HashSet<String>, RepositoryError> {
+        Ok(sqlx::query_scalar::<_, String>(sql)
+            .bind(self.workspace_id.0)
+            .bind(record_id)
+            .fetch_all(&mut **transaction)
+            .await?
+            .into_iter()
+            .collect())
     }
 
     /// Applies the movements a save's status transitions trigger: the
@@ -1092,8 +1152,9 @@ impl AttricatRepository {
             })
             .collect();
         if !triggered.is_empty() {
-            let values = self.saved_record_values(transaction, record.id).await?;
-            let inputs = SubmittedValues::saved(&values, default_context_id);
+            let inputs = self
+                .saved_inputs(transaction, record.id, default_context_id)
+                .await?;
             // A reversal applies its movements when it is created; its own
             // status never applies them again.
             let reverses = movements.iter().any(|movement| {
@@ -1199,13 +1260,8 @@ impl AttricatRepository {
         .await?;
         let mut lines = Vec::new();
         for (blueprint_id, version, movements) in candidates {
-            let movements: Vec<MovementDefinition> = serde_json::from_value(movements)
-                .map_err(|error| RepositoryError::InvalidBlueprintDefinition(error.to_string()))?;
-            let relationships: BTreeSet<&str> = movements
-                .iter()
-                .flat_map(|movement| &movement.apply_on)
-                .filter_map(|trigger| trigger.relationship.as_deref())
-                .collect();
+            let movements = parse_movements(movements)?;
+            let relationships = trigger_relationships(&movements);
             if relationships.is_empty() {
                 continue;
             }
@@ -1324,8 +1380,9 @@ impl AttricatRepository {
                     .await?
                 {
                     let line_record = self.lock_record(transaction, line_id).await?;
-                    let values = self.saved_record_values(transaction, line_id).await?;
-                    let inputs = SubmittedValues::saved(&values, default_context_id);
+                    let inputs = self
+                        .saved_inputs(transaction, line_id, default_context_id)
+                        .await?;
                     let prepared = self
                         .prepare_triggered_in(
                             transaction,
@@ -1494,11 +1551,7 @@ impl AttricatRepository {
                         .any(|trigger| trigger.relationship.is_some())
                 })
                 .collect();
-            let relationships: BTreeSet<&str> = triggered
-                .iter()
-                .flat_map(|movement| &movement.apply_on)
-                .filter_map(|trigger| trigger.relationship.as_deref())
-                .collect();
+            let relationships = trigger_relationships(triggered.iter().copied());
             for relationship in relationships {
                 for line_id in self
                     .linked_lines(
@@ -1551,8 +1604,9 @@ impl AttricatRepository {
         if movements.is_empty() {
             return Ok(());
         }
-        let values = self.saved_record_values(transaction, owner_id).await?;
-        let inputs = SubmittedValues::saved(&values, default_context_id);
+        let inputs = self
+            .saved_inputs(transaction, owner_id, default_context_id)
+            .await?;
         let (_, value_types) = self
             .revision_value_types(transaction, blueprint_id, blueprint_version)
             .await?;
@@ -1588,17 +1642,17 @@ impl AttricatRepository {
         if write.new_record {
             return Ok(());
         }
-        let has_movements = write.attributes().iter().any(|attribute| {
-            !attribute.record_scoped && (attribute.movement_input || attribute.movement_managed)
-        });
+        // Movement flags are only ever set on blueprint attributes, never
+        // record-scoped ones.
+        let has_movements = write
+            .attributes()
+            .iter()
+            .any(|attribute| attribute.movement_input || attribute.movement_managed);
         let mut guarded: Vec<(String, bool)> = write
             .attributes()
             .iter()
             .filter(|attribute| {
-                !attribute.record_scoped
-                    && attribute.movement_key
-                    && !attribute.movement_input
-                    && !attribute.movement_managed
+                attribute.movement_key && !attribute.movement_input && !attribute.movement_managed
             })
             .map(|attribute| (attribute.code.clone(), true))
             .collect();
@@ -1628,24 +1682,9 @@ impl AttricatRepository {
             return Ok(());
         }
         let default_context_id = write.default_context_id()?;
-        let before = load_record(
-            transaction,
-            self.workspace_id.0,
-            record.id,
-            RecordState::Before,
-        )
-        .await?
-        .unwrap_or_default();
-        let after = write
-            .after_record(transaction, self.workspace_id.0, record.id)
-            .await?
-            .unwrap_or_default();
+        let (before, after) = self.before_and_after(transaction, write, record.id).await?;
         let input = |values: &RecordValues, code: &str| {
-            values
-                .attributes
-                .get(code)
-                .and_then(|attribute| attribute.by_context.get(&default_context_id))
-                .map(DirectValue::key_input)
+            default_value(values, code, default_context_id).map(DirectValue::key_input)
         };
         // A target key may be set when it has no value yet, as a target
         // created earlier in this transaction is, but never changed.
@@ -1675,40 +1714,22 @@ impl AttricatRepository {
         if !write
             .attributes()
             .iter()
-            .any(|attribute| attribute.movement_input && !attribute.record_scoped)
+            .any(|attribute| attribute.movement_input)
         {
             return Ok(());
         }
         let movements = self
             .revision_movements(transaction, record.blueprint_id, record.blueprint_version)
             .await?;
-        let relationships: BTreeSet<&str> = movements
-            .iter()
-            .flat_map(|movement| &movement.apply_on)
-            .filter_map(|trigger| trigger.relationship.as_deref())
-            .collect();
+        let relationships = trigger_relationships(&movements);
         if relationships.is_empty() {
             return Ok(());
         }
         let default_context_id = write.default_context_id()?;
-        let before = load_record(
-            transaction,
-            self.workspace_id.0,
-            record.id,
-            RecordState::Before,
-        )
-        .await?
-        .unwrap_or_default();
-        let after = write
-            .after_record(transaction, self.workspace_id.0, record.id)
-            .await?
-            .unwrap_or_default();
+        let (before, after) = self.before_and_after(transaction, write, record.id).await?;
         for relationship in relationships {
             let linked = |values: &RecordValues| {
-                values
-                    .attributes
-                    .get(relationship)
-                    .and_then(|attribute| attribute.by_context.get(&default_context_id))
+                default_value(values, relationship, default_context_id)
                     .and_then(|value| linked_ids(value).first().copied())
             };
             let (previous, current) = (linked(&before), linked(&after));
@@ -1785,15 +1806,12 @@ impl AttricatRepository {
         let movements = self
             .revision_movements(transaction, record.blueprint_id, record.blueprint_version)
             .await?;
-        let relationships: BTreeSet<&str> = movements
-            .iter()
-            .flat_map(|movement| &movement.apply_on)
-            .filter_map(|trigger| trigger.relationship.as_deref())
-            .collect();
+        let relationships = trigger_relationships(&movements);
         if !relationships.is_empty() {
             let default_context_id = self.default_movement_context(transaction).await?;
-            let values = self.saved_record_values(transaction, record.id).await?;
-            let inputs = SubmittedValues::saved(&values, default_context_id);
+            let inputs = self
+                .saved_inputs(transaction, record.id, default_context_id)
+                .await?;
             for relationship in relationships {
                 if let Some(order_id) = inputs.relationship(relationship) {
                     self.ensure_lines_open_for(
@@ -1849,12 +1867,10 @@ impl AttricatRepository {
             blueprint: blueprint.clone(),
             key: movement.target.key.clone(),
         };
-        let (blueprint_id, version): (Uuid, i64) = sqlx::query_as(
-            r#"SELECT id, version FROM blueprints
-               WHERE workspace_id = $1 AND code = $2 AND kind = 'record'
-                 AND status = 'published' AND deleted_at IS NULL
-               ORDER BY version DESC LIMIT 1"#,
-        )
+        let (blueprint_id, version): (Uuid, i64) = sqlx::query_as(concat!(
+            "SELECT id, version",
+            latest_published_record_blueprint_sql!()
+        ))
         .bind(workspace_id)
         .bind(blueprint)
         .fetch_optional(&mut **transaction)
@@ -1891,21 +1907,11 @@ impl AttricatRepository {
             let (input, create_value) = match inputs.get(source).ok_or_else(missing)? {
                 Submitted::Relationship(target) => (
                     Value::String(target.to_string()),
-                    NewAttributeValue::Relationship {
-                        attribute_id: None,
-                        attribute_code: Some(key_attribute.clone()),
-                        context_id: Some(default_context_id),
-                        target_record_id: *target,
-                    },
+                    relationship_value(key_attribute, default_context_id, *target),
                 ),
                 Submitted::Scalar(value) => (
                     value.clone(),
-                    NewAttributeValue::Scalar {
-                        attribute_id: None,
-                        attribute_code: Some(key_attribute.clone()),
-                        context_id: Some(default_context_id),
-                        value: value.clone(),
-                    },
+                    scalar_value(key_attribute, default_context_id, value.clone()),
                 ),
             };
             components.push(
@@ -1949,19 +1955,32 @@ impl AttricatRepository {
             // Missing inputs fail later, when the movement applies.
             return Ok(None);
         };
-        Ok(sqlx::query_scalar(
-            r#"SELECT e.id FROM record_unique_key_values k
-               JOIN records e ON e.id = k.record_id AND e.workspace_id = k.workspace_id
-               WHERE k.workspace_id = $1 AND k.blueprint_id = $2 AND k.key_code = $3
-                 AND k.context_id = $4 AND k.key_hash = $5 AND e.deleted_at IS NULL"#,
-        )
-        .bind(self.workspace_id.0)
-        .bind(key.blueprint_id)
-        .bind(&key.key_code)
-        .bind(default_context_id)
-        .bind(&key.hash)
-        .fetch_optional(&mut **transaction)
-        .await?)
+        self.target_by_key(transaction, &key, default_context_id, false)
+            .await
+    }
+
+    /// The live record `key` finds in the default context, locked for
+    /// update when `lock` is set.
+    async fn target_by_key(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        key: &TargetKey,
+        default_context_id: Uuid,
+        lock: bool,
+    ) -> Result<Option<Uuid>, RepositoryError> {
+        let sql = if lock {
+            concat!(target_by_key_sql!(), " FOR UPDATE OF e")
+        } else {
+            target_by_key_sql!()
+        };
+        Ok(sqlx::query_scalar(sql)
+            .bind(self.workspace_id.0)
+            .bind(key.blueprint_id)
+            .bind(&key.key_code)
+            .bind(default_context_id)
+            .bind(&key.hash)
+            .fetch_optional(&mut **transaction)
+            .await?)
     }
 
     /// Finds the movement's target by its unique key and locks it, or
@@ -1996,20 +2015,9 @@ impl AttricatRepository {
             ))
             .execute(&mut **transaction)
             .await?;
-        let found: Option<Uuid> = sqlx::query_scalar(
-            r#"SELECT e.id FROM record_unique_key_values k
-               JOIN records e ON e.id = k.record_id AND e.workspace_id = k.workspace_id
-               WHERE k.workspace_id = $1 AND k.blueprint_id = $2 AND k.key_code = $3
-                 AND k.context_id = $4 AND k.key_hash = $5 AND e.deleted_at IS NULL
-               FOR UPDATE OF e"#,
-        )
-        .bind(workspace_id)
-        .bind(key.blueprint_id)
-        .bind(&key.key_code)
-        .bind(default_context_id)
-        .bind(&key.hash)
-        .fetch_optional(&mut **transaction)
-        .await?;
+        let found = self
+            .target_by_key(transaction, &key, default_context_id, true)
+            .await?;
         if let Some(target_id) = found {
             return Ok(target_id);
         }
@@ -2189,12 +2197,11 @@ impl AttricatRepository {
                 movement.target_id,
                 UpdateRecordFormRequest {
                     expected_updated_at: None,
-                    values: vec![NewAttributeValue::Scalar {
-                        attribute_id: None,
-                        attribute_code: Some(movement.balance.clone()),
-                        context_id: Some(default_context_id),
-                        value: decimal_json(balance),
-                    }],
+                    values: vec![scalar_value(
+                        &movement.balance,
+                        default_context_id,
+                        decimal_json(balance),
+                    )],
                     relationships: Vec::new(),
                     remove_values: Vec::new(),
                     system_tags: None,
@@ -2211,7 +2218,7 @@ impl AttricatRepository {
             && let Value::Object(metadata) = &mut audit.metadata
         {
             metadata.insert(
-                "movement".to_owned(),
+                MOVEMENT_AUDIT_METADATA_KEY.to_owned(),
                 json!({
                     "code": movement.code,
                     "record_id": record.id,
@@ -2259,7 +2266,10 @@ impl AttricatRepository {
             audit.action = action.to_owned();
             audit.target = json!({ "type": "record", "id": target_id });
             if let Value::Object(metadata) = &mut audit.metadata {
-                metadata.insert("movement".to_owned(), json!({ "code": movement }));
+                metadata.insert(
+                    MOVEMENT_AUDIT_METADATA_KEY.to_owned(),
+                    json!({ "code": movement }),
+                );
             }
         }
         repository
@@ -2273,4 +2283,56 @@ struct TargetKey {
     key_code: String,
     hash: String,
     create_values: Vec<NewAttributeValue>,
+}
+
+/// Decodes a revision's stored movements.
+fn parse_movements(movements: Value) -> Result<Vec<MovementDefinition>, RepositoryError> {
+    serde_json::from_value(movements).map_err(RepositoryError::invalid_blueprint_definition)
+}
+
+/// The relationships whose records' statuses trigger `movements`.
+fn trigger_relationships<'a>(
+    movements: impl IntoIterator<Item = &'a MovementDefinition>,
+) -> BTreeSet<&'a str> {
+    movements
+        .into_iter()
+        .flat_map(|movement| &movement.apply_on)
+        .filter_map(|trigger| trigger.relationship.as_deref())
+        .collect()
+}
+
+/// The value `values` hold for attribute `code` in the default context.
+fn default_value<'a>(
+    values: &'a RecordValues,
+    code: &str,
+    default_context_id: Uuid,
+) -> Option<&'a DirectValue> {
+    values
+        .attributes
+        .get(code)
+        .and_then(|attribute| attribute.by_context.get(&default_context_id))
+}
+
+/// A scalar value core writes for attribute `code` in the default context.
+fn scalar_value(code: &str, default_context_id: Uuid, value: Value) -> NewAttributeValue {
+    NewAttributeValue::Scalar {
+        attribute_id: None,
+        attribute_code: Some(code.to_owned()),
+        context_id: Some(default_context_id),
+        value,
+    }
+}
+
+/// A link core writes for relationship `code` in the default context.
+fn relationship_value(
+    code: &str,
+    default_context_id: Uuid,
+    target_record_id: Uuid,
+) -> NewAttributeValue {
+    NewAttributeValue::Relationship {
+        attribute_id: None,
+        attribute_code: Some(code.to_owned()),
+        context_id: Some(default_context_id),
+        target_record_id,
+    }
 }

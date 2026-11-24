@@ -283,7 +283,7 @@ pub(super) async fn search_record_previews(
             .relationship_tree_facet_matches(
                 scope.current.blueprint.id,
                 &source_path,
-                &targets.iter().map(|t| t.blueprint.id).collect::<Vec<_>>(),
+                &targets,
                 facet.hierarchy_field.as_deref(),
                 facet.context_id,
                 &facet.selected_target_ids,
@@ -343,7 +343,7 @@ fn search_scope_error(error: SearchScopeError) -> ApiError {
     }
 }
 
-/// The blueprints whose records are a tree facet's nodes, and the hops its
+/// The IDs of the blueprints whose records are a tree facet's nodes, and the hops its
 /// sources reach them by: the source relationship or path's last targets, or
 /// `current` itself with no hops when the facet has no source relationship
 /// and walks the searched blueprint's own hierarchy. The last hop may link to
@@ -357,15 +357,9 @@ async fn resolve_tree_facet_target(
     source_field: Option<&str>,
     hierarchy_field: Option<&str>,
     prefix: &str,
-) -> Result<
-    (
-        Vec<crate::model::BlueprintWithAttributes>,
-        Vec<RelationshipFacetHop>,
-    ),
-    ApiError,
-> {
+) -> Result<(Vec<Uuid>, Vec<RelationshipFacetHop>), ApiError> {
     let invalid = |message: &str| ApiError::invalid_input(format!("{prefix}{message}"));
-    let (target, source_path) = match source_field {
+    let (targets, source_path) = match source_field {
         Some(source_field) => {
             // A dotted path follows relationships like table column paths.
             let hops: Vec<_> = source_field.split('.').collect();
@@ -386,10 +380,7 @@ async fn resolve_tree_facet_target(
                     .ok_or_else(|| {
                         invalid("source_relationship_field must be a relationship attribute")
                     })?;
-                let target_codes = match &relationship.target_blueprint_code {
-                    Some(code) => vec![code.clone()],
-                    None => relationship.target_blueprint_codes.clone(),
-                };
+                let target_codes = relationship.declared_target_codes();
                 if target_codes.is_empty() {
                     return Err(invalid("source_relationship_field has no target blueprint"));
                 }
@@ -422,7 +413,10 @@ async fn resolve_tree_facet_target(
                             .ok_or_else(|| ApiError::not_found("target blueprint"))?,
                     );
                 }
-                target = targets[0].clone();
+                // Only a hop another follows continues in its one target.
+                if index + 1 < hops.len() {
+                    target = targets[0].clone();
+                }
                 source_path.push(RelationshipFacetHop {
                     field,
                     target_blueprint_ids: targets.iter().map(|t| t.blueprint.id).collect(),
@@ -438,7 +432,7 @@ async fn resolve_tree_facet_target(
         None => (vec![current.clone()], Vec::new()),
     };
     if let Some(hierarchy_field) = hierarchy_field {
-        let [target] = target.as_slice() else {
+        let [target] = targets.as_slice() else {
             return Err(invalid(
                 "hierarchy_field needs a relationship to a single blueprint",
             ));
@@ -456,7 +450,10 @@ async fn resolve_tree_facet_target(
             ));
         }
     }
-    Ok((target, source_path))
+    Ok((
+        targets.iter().map(|target| target.blueprint.id).collect(),
+        source_path,
+    ))
 }
 
 pub(super) async fn relationship_tree_facet_children(
@@ -523,7 +520,7 @@ pub(super) async fn relationship_tree_facet_children(
                 version,
                 resolved.as_ref().map(|resolved| &resolved.ids),
                 &source_path,
-                &targets.iter().map(|t| t.blueprint.id).collect::<Vec<_>>(),
+                &targets,
                 input.hierarchy_field.as_deref(),
                 input.context_id,
                 input.parent_id,

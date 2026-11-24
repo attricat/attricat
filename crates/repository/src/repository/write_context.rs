@@ -58,12 +58,12 @@ pub(super) struct WriteAttribute {
     /// result); clients never write it.
     pub movement_managed: bool,
     /// Read by a movement of the record's own blueprint (its quantity, factor
-    /// link, key values or reversal link). A movement applies once, when the
-    /// record is created, so the value never changes afterwards.
+    /// link, key values or reversal link). A movement applies once, so the
+    /// value never changes after it has.
     pub movement_input: bool,
     /// Part of a unique key some movement finds its target by, such as a
-    /// stock item's product. Movements already applied to the record by that
-    /// key, so the value never changes after the record is created.
+    /// stock item's product. Movements already found the record by that key,
+    /// so the value never changes once it is set.
     pub movement_key: bool,
     /// Attached to the record itself rather than a blueprint column.
     pub record_scoped: bool,

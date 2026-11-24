@@ -90,6 +90,17 @@ pub struct Attribute {
     pub deleted_at: Option<DateTime<Utc>>,
 }
 
+impl Attribute {
+    /// The blueprints a relationship links to: its single target, or else
+    /// every allowed target (empty for any record blueprint).
+    pub fn declared_target_codes(&self) -> Vec<String> {
+        match &self.target_blueprint_code {
+            Some(code) => vec![code.clone()],
+            None => self.target_blueprint_codes.clone(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct ReusableAttribute {
     pub id: Uuid,
