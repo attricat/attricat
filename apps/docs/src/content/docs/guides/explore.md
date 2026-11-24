@@ -85,7 +85,7 @@ When the blueprint itself is a hierarchy, such as categories, the panel can list
 
 Pick another relationship attribute or path under **Browse by**, or hide the panel. The panel opens by default for the field the blueprint names in `views.explorer`, or else for the first relationship linked to a hierarchy. A blueprint can also keep it closed by default. Attricat remembers your choice for each blueprint in this browser, and saved and shared searches keep it.
 
-To select several targets of one attribute, use **Add filter** and pick the relationship attribute. Several selections in one attribute mean _any of these_. Selections in different attributes must all match. When the relationship links to several blueprints, such as products and materials, **Target blueprint** in the picker switches between their records. **Browse by** lists only relationships to a single blueprint.
+To select several targets of one attribute, use **Add filter** and pick the relationship attribute. Several selections in one attribute mean _any of these_. Selections in different attributes must all match. When the relationship links to several blueprints, such as products and materials, **Target blueprint** in the picker switches between their records. **Browse** opens that blueprint in a new Explorer tab, where you can search, filter and select records in the table; **Use *N* selected records** adds them to the filter. **Browse by** lists only relationships to a single blueprint.
 
 ## Context
 

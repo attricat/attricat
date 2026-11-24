@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import '../../i18n';
@@ -73,5 +73,46 @@ describe('RelationshipTargetPicker', () => {
     expect(vi.mocked(searchRecords)).toHaveBeenLastCalledWith(
       expect.objectContaining({ blueprint: 'material' }),
     );
+  });
+
+  it('adds the records chosen in an Explorer tab it opened', async () => {
+    vi.mocked(searchRecords).mockResolvedValue({
+      blueprint: { blueprint: { views: {} } },
+      items: [],
+      next_cursor: null,
+    } as never);
+    const onSelectedIdsChange = vi.fn();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <RelationshipTargetPicker
+          onSelectedIdsChange={onSelectedIdsChange}
+          selectedIds={[sampleId]}
+          targetBlueprints={['product']}
+        />
+      </QueryClientProvider>,
+    );
+
+    const link = screen.getByRole('link', { name: 'Browse' });
+    const href = new URL(link.getAttribute('href')!, window.location.origin);
+    expect(href.searchParams.get('blueprint')).toBe('product');
+    const token = href.searchParams.get('relationshipPicker');
+    expect(token).toBeTruthy();
+    expect(link.getAttribute('target')).toBe('_blank');
+
+    const chosen = '123e4567-e89b-12d3-a456-426614174002';
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          origin: window.location.origin,
+          data: {
+            type: 'attricat.relationship-picker.select-many',
+            token,
+            recordIds: [sampleId, chosen],
+            labels: {},
+          },
+        }),
+      );
+    });
+    expect(onSelectedIdsChange).toHaveBeenCalledWith([sampleId, chosen]);
   });
 });
