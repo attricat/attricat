@@ -24,6 +24,15 @@ language of the public docs site. Generic Core blueprint/extension documentation
 and runtime/conformance-test contracts remain in Core; do not remove validation
 or tests to hide the format.
 
+# No customer specifics
+
+Never store anything specific to a customer in this repository: names,
+domains, data, requirements, business rules, configuration, or notes about
+their deployments. That includes code, tests, fixtures, docs, comments, commit
+messages, and pull request descriptions. Core features stay generic; put
+customer-specific blueprints, rules and configuration in solution packs or
+extensions, and keep customer notes outside this repository.
+
 # Development
 
 The app's development server is already running through Process Compose.
