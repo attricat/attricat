@@ -378,7 +378,13 @@ impl AttricatRepository {
             );
         }
 
-        describe_attributes(&blueprint.definition, &mut attributes);
+        let selected = selected_descriptions(
+            &mut **transaction,
+            self.workspace_id.0,
+            &blueprint.definition,
+        )
+        .await?;
+        describe_attributes(&blueprint.definition, &mut attributes, &selected);
         Ok(BlueprintWithAttributes {
             blueprint,
             attributes,
@@ -1109,7 +1115,9 @@ impl AttricatRepository {
         blueprint: Blueprint,
         mut attributes: Vec<Attribute>,
     ) -> Result<BlueprintWithAttributes, RepositoryError> {
-        describe_attributes(&blueprint.definition, &mut attributes);
+        let selected =
+            selected_descriptions(&self.pool, self.workspace_id.0, &blueprint.definition).await?;
+        describe_attributes(&blueprint.definition, &mut attributes, &selected);
         // Availability is presentation-only metadata. The pinned
         // declaration remains in the revision even when its provider
         // is disabled, so ordinary blueprint/record reads cannot fail
@@ -1241,10 +1249,92 @@ pub(super) fn blueprint_event(
     }
 }
 
+/// The descriptions of the attributes a definition selects from its mixins,
+/// by selected code, read from the exact included mixin revisions.
+async fn selected_descriptions<'e>(
+    executor: impl sqlx::PgExecutor<'e>,
+    workspace_id: Uuid,
+    definition: &str,
+) -> Result<HashMap<String, String>, RepositoryError> {
+    let Ok(definition) = parse(definition) else {
+        return Ok(HashMap::new());
+    };
+    let selections: Vec<(&str, &str, &str)> = definition
+        .attributes
+        .iter()
+        .filter_map(|attribute| match attribute {
+            AttributeDeclaration::Selection {
+                code,
+                include_alias,
+                attribute_code,
+            } => Some((
+                code.as_str(),
+                include_alias.as_str(),
+                attribute_code.as_str(),
+            )),
+            _ => None,
+        })
+        .collect();
+    if selections.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let (codes, versions): (Vec<&str>, Vec<i64>) = definition
+        .includes
+        .iter()
+        .map(|include| (include.code.as_str(), include.version))
+        .unzip();
+    let mixins: Vec<(String, i64, String)> = sqlx::query_as(
+        r#"SELECT b.code, b.version, b.definition FROM blueprints b
+           JOIN UNNEST($2::text[], $3::bigint[]) AS include(code, version)
+             ON include.code = b.code AND include.version = b.version
+           WHERE b.workspace_id = $1 AND b.deleted_at IS NULL"#,
+    )
+    .bind(workspace_id)
+    .bind(codes)
+    .bind(versions)
+    .fetch_all(executor)
+    .await?;
+    let mixin_descriptions: HashMap<(String, i64), HashMap<String, String>> = mixins
+        .into_iter()
+        .filter_map(|(code, version, source)| {
+            let mixin = parse(&source).ok()?;
+            let descriptions = mixin
+                .attributes
+                .into_iter()
+                .filter_map(|attribute| match attribute {
+                    AttributeDeclaration::Local(attribute) => {
+                        let code = attribute.code;
+                        attribute.description.map(|description| (code, description))
+                    }
+                    _ => None,
+                })
+                .collect();
+            Some(((code, version), descriptions))
+        })
+        .collect();
+    Ok(selections
+        .into_iter()
+        .filter_map(|(code, alias, attribute_code)| {
+            let include = definition
+                .includes
+                .iter()
+                .find(|include| include.alias == alias)?;
+            let description = mixin_descriptions
+                .get(&(include.code.clone(), include.version))?
+                .get(attribute_code)?;
+            Some((code.to_owned(), description.clone()))
+        })
+        .collect())
+}
+
 /// Fills in attribute descriptions from the revision's definition, where they
-/// live; a stored definition always parses. Attributes selected from a mixin
-/// are not described here.
-fn describe_attributes(definition: &str, attributes: &mut [Attribute]) {
+/// live, and for attributes selected from a mixin from that mixin's revision
+/// (`selected`); a stored definition always parses.
+fn describe_attributes(
+    definition: &str,
+    attributes: &mut [Attribute],
+    selected: &HashMap<String, String>,
+) {
     let Ok(definition) = parse(definition) else {
         return;
     };
@@ -1262,7 +1352,8 @@ fn describe_attributes(definition: &str, attributes: &mut [Attribute]) {
     for attribute in attributes {
         attribute.description = descriptions
             .get(attribute.code.as_str())
-            .map(|description| (*description).to_owned());
+            .map(|description| (*description).to_owned())
+            .or_else(|| selected.get(&attribute.code).cloned());
     }
 }
 

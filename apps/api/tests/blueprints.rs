@@ -139,7 +139,7 @@ attributes:
 }
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
-async fn persists_attribute_names_through_includes(pool: PgPool) {
+async fn persists_attribute_names_and_descriptions_through_includes(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
     create_blueprint(
@@ -153,6 +153,7 @@ kind: mixin
 attributes:
   - code: meta_title
     name: SEO title
+    description: Shown in search results
     value_type: string
 "#,
     )
@@ -204,6 +205,12 @@ attributes:
             .map(|attribute| attribute["name"].clone())
             .collect();
         assert_eq!(names, [json!("Family"), Value::Null, json!("SEO title")]);
+        // A selected attribute is described as its mixin describes it.
+        assert_eq!(
+            response["attributes"][2]["description"],
+            "Shown in search results"
+        );
+        assert_eq!(response["attributes"][1]["description"], Value::Null);
     }
 
     server.abort();
