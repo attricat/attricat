@@ -51,9 +51,9 @@ use crate::{
         AttricatRepository, ClaimedExtensionOperationRun, ClaimedTask, CoordinatorLeadership,
         DeliveryState, ExtensionAttricatBatch, ExtensionAttricatIntent,
         ExtensionAttricatPageRequest, ExtensionConfigurationScope, ExtensionOperationArtifact,
-        ExtensionRuntimeInstallation, HandlerAttemptOutcome, MAX_EXTENSION_BATCH_INTENTS,
-        MAX_EXTENSION_LOOKUP_VALUE_BYTES, MAX_MOVEMENT_LEDGER_PAGE, RejectionRecord,
-        RepositoryError, SystemRepository,
+        ExtensionRuntimeInstallation, HandlerAttemptOutcome, MAX_EXTENSION_ATTRICAT_PAGE_SIZE,
+        MAX_EXTENSION_BATCH_INTENTS, MAX_EXTENSION_LOOKUP_VALUE_BYTES, MAX_MOVEMENT_LEDGER_PAGE,
+        RejectionRecord, RepositoryError, SystemRepository, decode_search_cursor,
     },
     storage::{ObjectStore, ObjectStoreError, StoredObject},
     task_queue::TaskKind,
@@ -1314,6 +1314,39 @@ impl HostState {
                     .map_err(|error| error.to_string())?;
                 bounded_serialize(&page)
             }
+            AttricatReadRequest::Incoming {
+                record_id,
+                relationships,
+                cursor,
+                limit,
+            } => {
+                if relationships.is_empty() {
+                    return Err("incoming relationships must name at least one field".into());
+                }
+                if limit == 0 || limit > MAX_EXTENSION_ATTRICAT_PAGE_SIZE {
+                    return Err(format!(
+                        "incoming relationship limit must be 1-{MAX_EXTENSION_ATTRICAT_PAGE_SIZE}"
+                    ));
+                }
+                let cursor = cursor
+                    .as_deref()
+                    .map(|cursor| {
+                        decode_search_cursor(cursor)
+                            .ok_or_else(|| "incoming relationship cursor is invalid".to_owned())
+                    })
+                    .transpose()?;
+                let page = self
+                    .repository
+                    .incoming_relationships(
+                        parse_uuid(&record_id, "record ID")?,
+                        relationships,
+                        i64::from(limit),
+                        cursor,
+                    )
+                    .await
+                    .map_err(|error| error.to_string())?;
+                bounded_serialize(&page)
+            }
         }
     }
 
@@ -1650,6 +1683,15 @@ enum AttricatReadRequest {
     Movements {
         record_id: String,
         after: Option<i64>,
+        limit: u32,
+    },
+    /// The live records whose named relationship fields link to a record,
+    /// such as an order's lines, as
+    /// `POST /v1/records/{id}/incoming-relationships` returns them.
+    Incoming {
+        record_id: String,
+        relationships: Vec<crate::model::IncomingRelationshipSelector>,
+        cursor: Option<String>,
         limit: u32,
     },
 }

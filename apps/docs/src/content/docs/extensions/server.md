@@ -132,9 +132,10 @@ A write made while handling an event is attributed to the user or token behind t
 { "operation": "changes", "blueprint_id": "…", "blueprint_version": 3, "cursor": null, "limit": 100 }
 { "operation": "lookup", "blueprint_id": "…", "blueprint_version": 3, "attribute_id": "…", "value": "ABC-1" }
 { "operation": "movements", "record_id": "…", "after": 0, "limit": 500 }
+{ "operation": "incoming", "record_id": "…", "relationships": [{ "source_blueprint": "order_line", "field": "order" }], "cursor": null, "limit": 100 }
 ```
 
-`page` returns `{records, next_cursor}`, with up to 100 records. Pass `next_cursor` back until it is `null`. `changes` pages through record changes of the blueprint in event order; save its cursor to resume later. `lookup` returns one record or `null`. `movements` returns a record's movement history after the sequence `after`, as [`GET /v1/records/{id}/movements`](/reference/api/) does, up to 500 entries a page. Every balance change also updates the record and publishes `record.updated.v1`, so a handler of that event can read the history after the last sequence it saw.
+`page` returns `{records, next_cursor}`, with up to 100 records. Pass `next_cursor` back until it is `null`. `changes` pages through record changes of the blueprint in event order; save its cursor to resume later. `lookup` returns one record or `null`. `movements` returns a record's movement history after the sequence `after`, as [`GET /v1/records/{id}/movements`](/reference/api/) does, up to 500 entries a page. Every balance change also updates the record and publishes `record.updated.v1`, so a handler of that event can read the history after the last sequence it saw. `incoming` returns `{items, next_cursor}`: the records whose named relationship fields link to the record, such as an order's lines, up to 100 a page.
 
 `attricat.command.v1` applies a batch of intents:
 
