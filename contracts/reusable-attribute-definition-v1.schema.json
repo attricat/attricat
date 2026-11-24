@@ -90,7 +90,7 @@
       "items": {
         "type": "string"
       },
-      "description": "Free-form metadata. `hidden`, `hidden:form`, `hidden:detail`,\n`hidden:explorer`, and `hidden:metadata` hide the attribute from default UI.",
+      "description": "Free-form metadata. `hidden`, `hidden:form`, `hidden:detail`,\n`hidden:explorer`, and `hidden:metadata` hide the attribute from default UI;\n`search:fuzzy` makes search also match text values similar to a term.",
       "default": [],
       "x-attricat-suggestions": [
         "hidden",
