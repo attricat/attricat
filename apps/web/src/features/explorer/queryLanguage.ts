@@ -1,7 +1,7 @@
 import type { Attribute } from '../records/api';
 import { attributeValueTypes } from '../records/valueTypes';
 import { relationshipPathSeparator } from './constants';
-import { allowedTargetBlueprints } from '../records/recordForm';
+import { allowedTargetBlueprints } from '../records/relationshipTargets';
 
 // Explorer query syntax; see apps/docs/src/content/docs/guides/search-syntax.md.
 export const querySelectorSeparator = ':';

@@ -1,4 +1,4 @@
-import { allowedTargetBlueprints } from '../records/recordForm';
+import { allowedTargetBlueprints } from '../records/relationshipTargets';
 import { Box, Button, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { PlusIcon } from 'lucide-react';

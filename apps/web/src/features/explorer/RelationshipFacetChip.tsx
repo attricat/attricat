@@ -7,7 +7,7 @@ import type {
   ExplorerRelationshipFacet,
   RelationshipFacetUpdate,
 } from './relationshipFilterTypes';
-import { allowedTargetBlueprints } from '../records/recordForm';
+import { allowedTargetBlueprints } from '../records/relationshipTargets';
 import { RelationshipTargetPicker } from './RelationshipTargetPicker';
 
 type Props = {

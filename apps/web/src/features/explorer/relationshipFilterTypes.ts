@@ -1,5 +1,5 @@
 import type { Attribute } from '../records/api';
-import { allowedTargetBlueprints } from '../records/recordForm';
+import { allowedTargetBlueprints } from '../records/relationshipTargets';
 import { attributeValueTypes } from '../records/valueTypes';
 
 /**

@@ -13,7 +13,7 @@ import {
   type QueryCursorContext,
   type QuerySchema,
 } from './queryLanguage';
-import { allowedTargetBlueprints } from '../records/recordForm';
+import { allowedTargetBlueprints } from '../records/relationshipTargets';
 
 /** Keeps the dropdown scannable; typing narrows longer lists. */
 const maximumQuerySuggestions = 50;

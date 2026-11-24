@@ -19,7 +19,6 @@ import { resolvedRecordPreviewOptions } from '../records/queryOptions';
 import { attributeLabel } from '../records/recordDisplay';
 import { blueprintRevisionOptions } from './queryOptions';
 import { relationshipPathSeparator } from '../explorer/constants';
-import { configuredColumnLabel } from '../explorer/explorerTableColumns';
 import { viewBlockTypes } from '../views/schemas';
 import { RecordView } from '../views/components/RecordView';
 import {
@@ -136,7 +135,7 @@ const TableViewPreview = ({
                   ? lexiconText(label)
                   : path
                     ? // Labelled like the Explorer's path columns.
-                      configuredColumnLabel({ field })
+                      field.replaceAll('_', ' ')
                     : attributeLabel(attribute)}
               </TableCell>
             ))}
