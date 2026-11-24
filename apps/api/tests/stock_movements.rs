@@ -1,5 +1,6 @@
 use crate::support;
 
+use attricat_domain::constants::DEFAULT_CONTEXT_CODE;
 use support::*;
 
 const PRODUCT: &str = r#"
@@ -171,29 +172,6 @@ movements:
 /// `GOODS_ISSUE` under another code, so each attempt is a new family.
 fn goods_issue_as(code: &str) -> String {
     GOODS_ISSUE.replace("sm_goods_issue", code)
-}
-
-/// Saves `definition` as a draft and asks to publish it.
-async fn publish_response(client: &Client, base_url: &str, definition: &str) -> reqwest::Response {
-    let draft = expect_status(
-        client
-            .post(format!("{base_url}/blueprints"))
-            .json(&json!({ "definition": definition }))
-            .send()
-            .await
-            .unwrap(),
-        StatusCode::CREATED,
-    )
-    .await;
-    client
-        .post(format!(
-            "{base_url}/blueprints/{}/versions/{}/publish",
-            draft["blueprint"]["id"].as_str().unwrap(),
-            draft["blueprint"]["version"].as_i64().unwrap(),
-        ))
-        .send()
-        .await
-        .unwrap()
 }
 
 fn attribute<'a>(blueprint: &'a Value, code: &str) -> &'a Value {
@@ -401,12 +379,13 @@ async fn stored_number(pool: &PgPool, record_id: Uuid, code: &str) -> Option<Str
     sqlx::query_scalar::<_, Option<String>>(
         r#"SELECT av.value_number::text FROM attribute_values av
            JOIN attributes a ON a.id = av.attribute_id
-           JOIN attribute_contexts c ON c.id = av.context_id AND c.code = 'default'
+           JOIN attribute_contexts c ON c.id = av.context_id AND c.code = $3
            WHERE av.record_id = $1 AND a.code = $2 AND av.active
              AND av.relationship_target_record_id IS NULL"#,
     )
     .bind(record_id)
     .bind(code)
+    .bind(DEFAULT_CONTEXT_CODE)
     .fetch_optional(pool)
     .await
     .unwrap()
@@ -420,7 +399,7 @@ async fn stock_item_of(pool: &PgPool, record: &Value) -> Uuid {
            JOIN attributes a ON a.id = av.attribute_id
            WHERE av.record_id = $1 AND a.code = 'stock_item' AND av.active"#,
     )
-    .bind(Uuid::parse_str(record["id"].as_str().unwrap()).unwrap())
+    .bind(record_uuid(record))
     .fetch_one(pool)
     .await
     .unwrap()
@@ -444,12 +423,6 @@ async fn record_count(pool: &PgPool, blueprint: &str) -> i64 {
     .unwrap()
 }
 
-async fn success(response: reqwest::Response) -> Value {
-    let (status, body) = status_json(response).await;
-    assert!(status.is_success(), "{status}: {body}");
-    body
-}
-
 #[sqlx::test(migrator = "api::MIGRATOR")]
 async fn receipts_create_and_add_to_the_stock_item_and_issues_subtract(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
@@ -457,7 +430,7 @@ async fn receipts_create_and_add_to_the_stock_item_and_issues_subtract(pool: PgP
     let bolt = inventory(&client, &base_url).await;
     let box_of_12 = conversion(&client, &base_url, &bolt, "box", json!(12)).await;
 
-    let first = success(
+    let first = expect_success(
         movement(
             &client,
             &base_url,
@@ -471,7 +444,7 @@ async fn receipts_create_and_add_to_the_stock_item_and_issues_subtract(pool: PgP
     .await;
     assert_eq!(record_count(&pool, "sm_stock_item").await, 1);
     assert_eq!(balance_after(&pool, &first).await, "24");
-    let first_id = Uuid::parse_str(first["id"].as_str().unwrap()).unwrap();
+    let first_id = record_uuid(&first);
     assert_eq!(
         stored_number(&pool, first_id, "base_quantity")
             .await
@@ -479,7 +452,7 @@ async fn receipts_create_and_add_to_the_stock_item_and_issues_subtract(pool: PgP
         Some("24")
     );
 
-    let second = success(
+    let second = expect_success(
         movement(
             &client,
             &base_url,
@@ -503,7 +476,8 @@ async fn receipts_create_and_add_to_the_stock_item_and_issues_subtract(pool: PgP
     assert_eq!(balance_after(&pool, &second).await, "25.5");
 
     let issue =
-        success(movement(&client, &base_url, "sm_goods_issue", &bolt, json!(5), None).await).await;
+        expect_success(movement(&client, &base_url, "sm_goods_issue", &bolt, json!(5), None).await)
+            .await;
     assert_eq!(balance_after(&pool, &issue).await, "20.5");
 
     // The stock item's change is an ordinary, audited update.
@@ -527,7 +501,7 @@ async fn issues_cannot_take_stock_below_its_minimum(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     let bolt = inventory(&client, &base_url).await;
-    let receipt = success(
+    let receipt = expect_success(
         movement(
             &client,
             &base_url,
@@ -565,8 +539,10 @@ async fn issues_cannot_take_stock_below_its_minimum(pool: PgPool) {
     assert_eq!(balance_after(&pool, &receipt).await, "10");
 
     // Issuing everything leaves exactly the minimum.
-    let issue =
-        success(movement(&client, &base_url, "sm_goods_issue", &bolt, json!(10), None).await).await;
+    let issue = expect_success(
+        movement(&client, &base_url, "sm_goods_issue", &bolt, json!(10), None).await,
+    )
+    .await;
     assert_eq!(balance_after(&pool, &issue).await, "0");
 
     // An issue needs an existing stock item; it never creates one.
@@ -587,7 +563,7 @@ async fn concurrent_issues_cannot_overdraw_stock(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     let bolt = inventory(&client, &base_url).await;
-    let receipt = success(
+    let receipt = expect_success(
         movement(
             &client,
             &base_url,
@@ -641,7 +617,7 @@ async fn movement_amounts_are_exact_and_validated(pool: PgPool) {
     let tenth = conversion(&client, &base_url, &bolt, "tenth", json!(0.1)).await;
     let mut last = Value::Null;
     for _ in 0..3 {
-        last = success(
+        last = expect_success(
             movement(
                 &client,
                 &base_url,
@@ -698,7 +674,7 @@ async fn clients_cannot_write_balances_or_movement_values(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     let bolt = inventory(&client, &base_url).await;
-    let receipt = success(
+    let receipt = expect_success(
         movement(
             &client,
             &base_url,
@@ -768,7 +744,7 @@ async fn duplicates_apply_their_own_movement(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     let bolt = inventory(&client, &base_url).await;
-    let receipt = success(
+    let receipt = expect_success(
         movement(
             &client,
             &base_url,
@@ -781,7 +757,7 @@ async fn duplicates_apply_their_own_movement(pool: PgPool) {
     )
     .await;
     let receipt_id = receipt["id"].as_str().unwrap();
-    let copy = success(
+    let copy = expect_success(
         client
             .post(format!("{base_url}/v1/records/{receipt_id}/duplicate"))
             .send()
@@ -797,7 +773,7 @@ async fn duplicates_apply_their_own_movement(pool: PgPool) {
 
     // A stock item's copy has no key value and no balance of its own.
     let stock_item = stock_item_of(&pool, &receipt).await;
-    let copy = success(
+    let copy = expect_success(
         client
             .post(format!("{base_url}/v1/records/{stock_item}/duplicate"))
             .send()
@@ -805,7 +781,7 @@ async fn duplicates_apply_their_own_movement(pool: PgPool) {
             .unwrap(),
     )
     .await;
-    let copy_id = Uuid::parse_str(copy["id"].as_str().unwrap()).unwrap();
+    let copy_id = record_uuid(&copy);
     assert_eq!(stored_number(&pool, copy_id, "quantity").await, None);
 
     server.abort();
@@ -830,7 +806,7 @@ async fn reversals_move_back_what_the_original_moved(pool: PgPool) {
     let client = authenticated_client();
     let bolt = inventory(&client, &base_url).await;
     let box_of_12 = conversion(&client, &base_url, &bolt, "box", json!(12)).await;
-    success(
+    expect_success(
         movement(
             &client,
             &base_url,
@@ -843,7 +819,8 @@ async fn reversals_move_back_what_the_original_moved(pool: PgPool) {
     )
     .await;
     let issue =
-        success(movement(&client, &base_url, "sm_goods_issue", &bolt, json!(5), None).await).await;
+        expect_success(movement(&client, &base_url, "sm_goods_issue", &bolt, json!(5), None).await)
+            .await;
     assert_eq!(balance_after(&pool, &issue).await, "19");
 
     // A mismatching input is refused; the reversal's inputs are the original's.
@@ -861,7 +838,7 @@ async fn reversals_move_back_what_the_original_moved(pool: PgPool) {
     )
     .await;
     assert_eq!(body["error"]["details"]["attribute"], "quantity");
-    let undo = success(
+    let undo = expect_success(
         reversal(
             &client,
             &base_url,
@@ -873,7 +850,7 @@ async fn reversals_move_back_what_the_original_moved(pool: PgPool) {
     )
     .await;
     assert_eq!(balance_after(&pool, &undo).await, "24");
-    let undo_id = Uuid::parse_str(undo["id"].as_str().unwrap()).unwrap();
+    let undo_id = record_uuid(&undo);
     assert_eq!(
         stored_number(&pool, undo_id, "base_quantity")
             .await
@@ -902,7 +879,8 @@ async fn reversals_move_back_what_the_original_moved(pool: PgPool) {
 
     // Concurrent reversals of one record: only one applies.
     let second =
-        success(movement(&client, &base_url, "sm_goods_issue", &bolt, json!(4), None).await).await;
+        expect_success(movement(&client, &base_url, "sm_goods_issue", &bolt, json!(4), None).await)
+            .await;
     let reversals = futures_util::future::join_all(
         (0..3).map(|_| reversal(&client, &base_url, "sm_goods_issue", &second, Vec::new())),
     )
@@ -924,7 +902,7 @@ async fn reversing_a_receipt_needs_its_stock(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     let bolt = inventory(&client, &base_url).await;
-    let receipt = success(
+    let receipt = expect_success(
         movement(
             &client,
             &base_url,
@@ -937,7 +915,8 @@ async fn reversing_a_receipt_needs_its_stock(pool: PgPool) {
     )
     .await;
     let issue =
-        success(movement(&client, &base_url, "sm_goods_issue", &bolt, json!(8), None).await).await;
+        expect_success(movement(&client, &base_url, "sm_goods_issue", &bolt, json!(8), None).await)
+            .await;
 
     let body = expect_error(
         reversal(&client, &base_url, "sm_goods_receipt", &receipt, Vec::new()).await,
@@ -948,9 +927,11 @@ async fn reversing_a_receipt_needs_its_stock(pool: PgPool) {
     assert_eq!(body["error"]["details"]["available"], "2");
     assert_eq!(body["error"]["details"]["requested"], "10");
 
-    success(reversal(&client, &base_url, "sm_goods_issue", &issue, Vec::new()).await).await;
-    let undo =
-        success(reversal(&client, &base_url, "sm_goods_receipt", &receipt, Vec::new()).await).await;
+    expect_success(reversal(&client, &base_url, "sm_goods_issue", &issue, Vec::new()).await).await;
+    let undo = expect_success(
+        reversal(&client, &base_url, "sm_goods_receipt", &receipt, Vec::new()).await,
+    )
+    .await;
     assert_eq!(balance_after(&pool, &undo).await, "0");
 
     server.abort();
@@ -962,7 +943,7 @@ async fn applied_movement_values_never_change(pool: PgPool) {
     let client = authenticated_client();
     let bolt = inventory(&client, &base_url).await;
     let nut = product(&client, &base_url, "Nut").await;
-    success(
+    expect_success(
         movement(
             &client,
             &base_url,
@@ -975,7 +956,8 @@ async fn applied_movement_values_never_change(pool: PgPool) {
     )
     .await;
     let issue =
-        success(movement(&client, &base_url, "sm_goods_issue", &bolt, json!(3), None).await).await;
+        expect_success(movement(&client, &base_url, "sm_goods_issue", &bolt, json!(3), None).await)
+            .await;
     let id = issue["id"].as_str().unwrap();
 
     for (request, attribute) in [
@@ -1006,7 +988,7 @@ async fn applied_movement_values_never_change(pool: PgPool) {
         );
     }
     // Other fields stay editable.
-    success(
+    expect_success(
         client
             .put(format!("{base_url}/v1/records/{id}"))
             .json(&json!({"values": [scalar("number", "WZ/1")]}))
@@ -1025,7 +1007,7 @@ async fn movements_and_held_balances_are_not_deleted(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     let bolt = inventory(&client, &base_url).await;
-    let receipt = success(
+    let receipt = expect_success(
         movement(
             &client,
             &base_url,
@@ -1061,7 +1043,8 @@ async fn movements_and_held_balances_are_not_deleted(pool: PgPool) {
     .await;
     assert_eq!(body["error"]["details"]["balance"], "3");
 
-    success(movement(&client, &base_url, "sm_goods_issue", &bolt, json!(3), None).await).await;
+    expect_success(movement(&client, &base_url, "sm_goods_issue", &bolt, json!(3), None).await)
+        .await;
     let response = client
         .delete(format!("{base_url}/records/{stock_item}"))
         .send()
@@ -1078,7 +1061,7 @@ async fn a_movement_target_keeps_the_key_movements_find_it_by(pool: PgPool) {
     let client = authenticated_client();
     let bolt = inventory(&client, &base_url).await;
     let nut = product(&client, &base_url, "Nut").await;
-    let receipt = success(
+    let receipt = expect_success(
         movement(
             &client,
             &base_url,
@@ -1107,7 +1090,7 @@ async fn a_movement_target_keeps_the_key_movements_find_it_by(pool: PgPool) {
     .await;
     assert_eq!(body["error"]["details"]["attribute"], "product");
     // Other fields of the stock item stay editable.
-    success(
+    expect_success(
         client
             .put(format!("{base_url}/v1/records/{stock_item}"))
             .json(&json!({"values": [scalar("label", "Bolts")]}))
@@ -1118,7 +1101,8 @@ async fn a_movement_target_keeps_the_key_movements_find_it_by(pool: PgPool) {
     .await;
     // The issue still finds the stock item by its product.
     let issue =
-        success(movement(&client, &base_url, "sm_goods_issue", &bolt, json!(2), None).await).await;
+        expect_success(movement(&client, &base_url, "sm_goods_issue", &bolt, json!(2), None).await)
+            .await;
     assert_eq!(balance_after(&pool, &issue).await, "3");
 
     server.abort();
@@ -1194,7 +1178,7 @@ movements:
         json!([scalar("name", "Steel")]),
     )
     .await;
-    let bolts = success(
+    let bolts = expect_success(
         movement(
             &client,
             &base_url,
@@ -1206,7 +1190,7 @@ movements:
         .await,
     )
     .await;
-    let steel_in = success(
+    let steel_in = expect_success(
         movement(
             &client,
             &base_url,

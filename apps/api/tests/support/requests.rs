@@ -2,6 +2,7 @@
 
 use reqwest::{Client, IntoUrl, Response, StatusCode};
 use serde_json::{Value, json};
+use uuid::Uuid;
 
 /// A scalar value write in the default context.
 pub fn scalar(code: &str, value: impl Into<Value>) -> Value {
@@ -32,6 +33,43 @@ pub async fn expect_error(response: Response, expected: StatusCode, code: &str) 
     let body = expect_status(response, expected).await;
     assert_eq!(body["error"]["code"], code, "{body}");
     body
+}
+
+/// Asserts a success status and returns the JSON body; the body is shown
+/// when the status is not a success.
+pub async fn expect_success(response: Response) -> Value {
+    let (status, body) = status_json(response).await;
+    assert!(status.is_success(), "{status}: {body}");
+    body
+}
+
+/// The ID of a record response body.
+pub fn record_uuid(record: &Value) -> Uuid {
+    Uuid::parse_str(record["id"].as_str().unwrap()).unwrap()
+}
+
+/// Saves `definition` as a draft, which must succeed, and asks to publish
+/// it, returning the publish response.
+pub async fn publish_response(client: &Client, base_url: &str, definition: &str) -> Response {
+    let draft = expect_status(
+        client
+            .post(format!("{base_url}/blueprints"))
+            .json(&json!({ "definition": definition }))
+            .send()
+            .await
+            .unwrap(),
+        StatusCode::CREATED,
+    )
+    .await;
+    client
+        .post(format!(
+            "{base_url}/blueprints/{}/versions/{}/publish",
+            draft["blueprint"]["id"].as_str().unwrap(),
+            draft["blueprint"]["version"].as_i64().unwrap(),
+        ))
+        .send()
+        .await
+        .unwrap()
 }
 
 /// GETs `url`, requiring a success status, and returns the JSON body.

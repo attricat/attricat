@@ -1,9 +1,7 @@
 use std::collections::HashSet;
 
 use attricat_domain::value_type::ValueType;
-use attricat_validation::saved_search::{
-    MAX_RELATIONSHIP_HOPS, browse_hop_target, browse_path_hop,
-};
+use attricat_validation::saved_search::{MAX_RELATIONSHIP_HOPS, browse_hop};
 
 use crate::{
     BlueprintError, BlueprintKind, BrowseBy, ComponentReference, EXTENSION_LAYOUT_OUTLETS,
@@ -426,12 +424,13 @@ fn validate_browse_by_path(
         .ok_or_else(invalid)?;
     // A single field may link to several blueprints, whose records the rail
     // lists together; a path continues through one.
-    let target = browse_hop_target(
+    if !browse_hop(
+        first.value_type,
         first.target_blueprint.as_deref(),
         &first.target_blueprints,
+        first.cardinality,
         hops.len(),
-    );
-    if !browse_path_hop(first.value_type, target, first.cardinality, hops.len()) {
+    ) {
         return Err(invalid());
     }
     Ok(())

@@ -233,6 +233,12 @@ impl MovementDefinition {
 }
 
 /// Whether two movements find the same record, so they can share its link.
+/// A relationship that holds one link, which a movement can read through.
+fn is_single_relationship(attribute: &EffectiveAttribute) -> bool {
+    attribute.value_type == ValueType::Relationship
+        && attribute.cardinality == Some(Cardinality::One)
+}
+
 fn same_record(first: &MovementTarget, second: &MovementTarget) -> bool {
     first.blueprint == second.blueprint
         && first.key == second.key
@@ -321,13 +327,16 @@ pub(crate) fn validate_movement_declarations(
                 return Err(invalid(format!("unknown attribute '{attribute}'")));
             }
         }
+        let used_twice = |attribute: &str| {
+            invalid(format!(
+                "attribute '{attribute}' is written by core and cannot be used twice"
+            ))
+        };
         for attribute in movement.managed_attributes() {
             // Never an input: a value core writes cannot also be what the
             // movement reads.
             if movement.input_attributes().any(|input| input == attribute) {
-                return Err(invalid(format!(
-                    "attribute '{attribute}' is written by core and cannot be used twice"
-                )));
+                return Err(used_twice(attribute));
             }
             // Movements may share a target link when they find the same
             // record, such as reserving, releasing and consuming one stock
@@ -337,9 +346,7 @@ pub(crate) fn validate_movement_declarations(
                     .get(attribute)
                     .is_some_and(|other: &&MovementTarget| same_record(other, &movement.target));
             if !managed.insert(attribute.to_owned()) && !shared_target {
-                return Err(invalid(format!(
-                    "attribute '{attribute}' is written by core and cannot be used twice"
-                )));
+                return Err(used_twice(attribute));
             }
         }
         targets
@@ -385,9 +392,7 @@ pub(crate) fn validate_movement_attributes(
         };
         let single_relationship = |code: &str, role: &str| {
             let attribute = attribute(code)?;
-            if attribute.value_type != ValueType::Relationship
-                || attribute.cardinality != Some(Cardinality::One)
-            {
+            if !is_single_relationship(attribute) {
                 return Err(invalid(format!(
                     "{role} '{code}' must be a relationship with cardinality: one"
                 )));
@@ -405,6 +410,17 @@ pub(crate) fn validate_movement_attributes(
             }
             Ok(())
         };
+        // A link the movement reads another record through, such as its
+        // unit conversion or the order whose status triggers it.
+        let single_target_link = |code: &str, role: &str| {
+            let link = single_relationship(code, role)?;
+            if link.target_blueprints.len() != 1 {
+                return Err(invalid(format!(
+                    "{role} '{code}' must target exactly one blueprint"
+                )));
+            }
+            default_context_only(link)
+        };
 
         let quantity = attribute(&movement.quantity)?;
         if !matches!(quantity.value_type, ValueType::Number | ValueType::Integer) {
@@ -415,14 +431,7 @@ pub(crate) fn validate_movement_attributes(
         }
         default_context_only(quantity)?;
         if let Some(factor) = &movement.factor {
-            let relationship = single_relationship(&factor.relationship, "factor relationship")?;
-            if relationship.target_blueprints.len() != 1 {
-                return Err(invalid(format!(
-                    "factor relationship '{}' must target exactly one blueprint",
-                    factor.relationship
-                )));
-            }
-            default_context_only(relationship)?;
+            single_target_link(&factor.relationship, "factor relationship")?;
         }
         if let Some(result) = &movement.result {
             let result = attribute(result)?;
@@ -449,8 +458,7 @@ pub(crate) fn validate_movement_attributes(
         for source in movement.target.values.values() {
             let source = attribute(source)?;
             if matches!(source.value_type, ValueType::Json | ValueType::File)
-                || (source.value_type == ValueType::Relationship
-                    && source.cardinality != Some(Cardinality::One))
+                || (source.value_type == ValueType::Relationship && !is_single_relationship(source))
             {
                 return Err(invalid(format!(
                     "key value '{}' must be a scalar or a relationship with cardinality: one",
@@ -496,13 +504,7 @@ pub(crate) fn validate_movement_attributes(
                 // Another record's status: publication checks it against
                 // that record's blueprint.
                 Some(relationship) => {
-                    let link = single_relationship(relationship, "trigger relationship")?;
-                    if link.target_blueprints.len() != 1 {
-                        return Err(invalid(format!(
-                            "trigger relationship '{relationship}' must target exactly one blueprint"
-                        )));
-                    }
-                    default_context_only(link)?;
+                    single_target_link(relationship, "trigger relationship")?;
                 }
             }
         }
@@ -605,10 +607,7 @@ pub(crate) fn validate_target_scopes(
             .iter()
             .find(|candidate| candidate.code == scope.equals)
             .ok_or_else(|| invalid(format!("unknown attribute '{}'", scope.equals)))?;
-        if equals.code == attribute.code
-            || equals.value_type != ValueType::Relationship
-            || equals.cardinality != Some(Cardinality::One)
-        {
+        if equals.code == attribute.code || !is_single_relationship(equals) {
             return Err(invalid(format!(
                 "equals '{}' must be another relationship with cardinality: one",
                 scope.equals

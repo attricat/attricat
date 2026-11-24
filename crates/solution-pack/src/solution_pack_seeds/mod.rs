@@ -950,13 +950,10 @@ fn validate_browse_path(
     for end in 1..=segments.len() {
         let attribute =
             walk_attribute_path(start, &segments[..end].join("."), by_code, referenced)?;
-        if !saved_search::browse_path_hop(
+        if !saved_search::browse_hop(
             attribute.value_type,
-            saved_search::browse_hop_target(
-                attribute.target_blueprint.as_deref(),
-                &attribute.target_blueprints,
-                segments.len(),
-            ),
+            attribute.target_blueprint.as_deref(),
+            &attribute.target_blueprints,
             attribute.cardinality,
             segments.len(),
         ) {

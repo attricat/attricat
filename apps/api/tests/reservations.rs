@@ -299,23 +299,8 @@ impl Fixture {
             material_line(),
             OUTPUT_LINE.to_owned(),
         ] {
-            let draft = client
-                .post(format!("{base_url}/blueprints"))
-                .json(&json!({ "definition": definition }))
-                .send()
-                .await
-                .unwrap();
-            let draft = expect_status(draft, StatusCode::CREATED).await;
             expect_status(
-                client
-                    .post(format!(
-                        "{base_url}/blueprints/{}/versions/{}/publish",
-                        draft["blueprint"]["id"].as_str().unwrap(),
-                        draft["blueprint"]["version"].as_i64().unwrap(),
-                    ))
-                    .send()
-                    .await
-                    .unwrap(),
+                publish_response(&client, &base_url, &definition).await,
                 StatusCode::OK,
             )
             .await;
@@ -377,13 +362,17 @@ impl Fixture {
         .await
     }
 
+    fn record_url(&self, record: &Value) -> String {
+        format!(
+            "{}/v1/records/{}",
+            self.base_url,
+            record["id"].as_str().unwrap()
+        )
+    }
+
     async fn put(&self, record: &Value, body: Value) -> reqwest::Response {
         self.client
-            .put(format!(
-                "{}/v1/records/{}",
-                self.base_url,
-                record["id"].as_str().unwrap()
-            ))
+            .put(self.record_url(record))
             .json(&body)
             .send()
             .await
@@ -391,15 +380,7 @@ impl Fixture {
     }
 
     async fn set_status(&self, record: &Value, status: &str) -> reqwest::Response {
-        let current = get_json(
-            &self.client,
-            format!(
-                "{}/v1/records/{}",
-                self.base_url,
-                record["id"].as_str().unwrap()
-            ),
-        )
-        .await;
+        let current = get_json(&self.client, self.record_url(record)).await;
         self.put(
             record,
             json!({
@@ -452,15 +433,7 @@ impl Fixture {
     }
 
     async fn status_of(&self, record: &Value) -> Value {
-        let body = get_json(
-            &self.client,
-            format!(
-                "{}/v1/records/{}",
-                self.base_url,
-                record["id"].as_str().unwrap()
-            ),
-        )
-        .await;
+        let body = get_json(&self.client, self.record_url(record)).await;
         body["values"]
             .as_array()
             .unwrap()
@@ -472,16 +445,7 @@ impl Fixture {
 
     /// The record form's settled line relationships.
     async fn settled_lines(&self, record: &Value) -> Value {
-        get_json(
-            &self.client,
-            format!(
-                "{}/v1/records/{}",
-                self.base_url,
-                record["id"].as_str().unwrap()
-            ),
-        )
-        .await["settled_lines"]
-            .clone()
+        get_json(&self.client, self.record_url(record)).await["settled_lines"].clone()
     }
 
     async fn applied(&self, record: &Value) -> Vec<String> {
@@ -494,12 +458,6 @@ impl Fixture {
         .await
         .unwrap()
     }
-}
-
-async fn ok(response: reqwest::Response) -> Value {
-    let (status, body) = status_json(response).await;
-    assert!(status.is_success(), "{status}: {body}");
-    body
 }
 
 fn stock(quantity: &str, reserved: &str) -> (String, String) {
@@ -516,7 +474,7 @@ async fn approval_reserves_stock_that_issues_cannot_take(pool: PgPool) {
     assert_eq!(fixture.stock(&steel).await, stock("10", "0"));
     assert!(fixture.applied(&order).await.is_empty());
 
-    ok(fixture.set_status(&order, "approved").await).await;
+    expect_success(fixture.set_status(&order, "approved").await).await;
     assert_eq!(fixture.stock(&steel).await, stock("10", "6"));
     assert_eq!(fixture.applied(&order).await, ["reserve"]);
 
@@ -531,7 +489,7 @@ async fn approval_reserves_stock_that_issues_cannot_take(pool: PgPool) {
     assert_eq!(details["available"], "4", "{body}");
     assert_eq!(details["reserved"], "6", "{body}");
     assert_eq!(details["requested"], "5", "{body}");
-    ok(fixture.issue(&steel, 4).await).await;
+    expect_success(fixture.issue(&steel, 4).await).await;
     assert_eq!(fixture.stock(&steel).await, stock("6", "6"));
 
     // Another approval finds nothing free: it fails and changes nothing.
@@ -548,7 +506,7 @@ async fn approval_reserves_stock_that_issues_cannot_take(pool: PgPool) {
     assert!(fixture.applied(&second).await.is_empty());
 
     // Completion releases the reservation and consumes the material.
-    ok(fixture.set_status(&order, "completed").await).await;
+    expect_success(fixture.set_status(&order, "completed").await).await;
     assert_eq!(fixture.stock(&steel).await, stock("0", "0"));
     assert_eq!(
         fixture.applied(&order).await,
@@ -565,19 +523,19 @@ async fn cancelling_releases_only_a_reservation_and_movements_apply_once(pool: P
 
     // A draft cancelled before approval has nothing to release.
     let draft = fixture.order(&steel, 3).await;
-    ok(fixture.set_status(&draft, "cancelled").await).await;
+    expect_success(fixture.set_status(&draft, "cancelled").await).await;
     assert!(fixture.applied(&draft).await.is_empty());
     assert_eq!(fixture.stock(&steel).await, stock("10", "0"));
 
     let order = fixture.order(&steel, 4).await;
-    ok(fixture.set_status(&order, "approved").await).await;
-    ok(fixture.set_status(&order, "cancelled").await).await;
+    expect_success(fixture.set_status(&order, "approved").await).await;
+    expect_success(fixture.set_status(&order, "cancelled").await).await;
     assert_eq!(fixture.stock(&steel).await, stock("10", "0"));
     assert_eq!(fixture.applied(&order).await, ["release", "reserve"]);
 
     // Approving again does not reserve again: each movement applies once.
-    ok(fixture.set_status(&order, "draft").await).await;
-    ok(fixture.set_status(&order, "approved").await).await;
+    expect_success(fixture.set_status(&order, "draft").await).await;
+    expect_success(fixture.set_status(&order, "approved").await).await;
     assert_eq!(fixture.stock(&steel).await, stock("10", "0"));
 
     // Another order reserves its own quantity.
@@ -591,7 +549,7 @@ async fn cancelling_releases_only_a_reservation_and_movements_apply_once(pool: P
             ]),
         )
         .await;
-    ok(fixture.set_status(&approved, "approved").await).await;
+    expect_success(fixture.set_status(&approved, "approved").await).await;
     assert_eq!(fixture.stock(&steel).await, stock("10", "2"));
     server.abort();
 }
@@ -605,7 +563,7 @@ async fn drafts_stay_editable_until_their_movements_apply(pool: PgPool) {
     fixture.receive(&copper, 10).await;
 
     let order = fixture.order(&steel, 6).await;
-    ok(fixture
+    expect_success(fixture
         .put(
             &order,
             json!({
@@ -617,9 +575,9 @@ async fn drafts_stay_editable_until_their_movements_apply(pool: PgPool) {
     .await;
     // A draft with nothing applied may be deleted.
     let scrapped = fixture.order(&steel, 1).await;
-    ok(fixture.delete(&scrapped).await).await;
+    expect_success(fixture.delete(&scrapped).await).await;
 
-    ok(fixture.set_status(&order, "approved").await).await;
+    expect_success(fixture.set_status(&order, "approved").await).await;
     assert_eq!(fixture.stock(&copper).await, stock("10", "3"));
     assert_eq!(fixture.stock(&steel).await, stock("10", "0"));
     for request in [
@@ -662,8 +620,8 @@ async fn a_reversal_moves_back_every_applied_movement(pool: PgPool) {
     )
     .await;
 
-    ok(fixture.set_status(&order, "approved").await).await;
-    ok(fixture.set_status(&order, "completed").await).await;
+    expect_success(fixture.set_status(&order, "approved").await).await;
+    expect_success(fixture.set_status(&order, "completed").await).await;
     assert_eq!(fixture.stock(&steel).await, stock("4", "0"));
 
     let reversal = fixture
@@ -678,7 +636,7 @@ async fn a_reversal_moves_back_every_applied_movement(pool: PgPool) {
         ["consume", "release", "reserve"]
     );
     // The reversal's own status never applies its movements again.
-    ok(fixture.set_status(&reversal, "approved").await).await;
+    expect_success(fixture.set_status(&reversal, "approved").await).await;
     assert_eq!(fixture.stock(&steel).await, stock("10", "0"));
     server.abort();
 }
@@ -744,11 +702,13 @@ async fn a_production_order_applies_its_lines(pool: PgPool) {
     assert_eq!(fixture.settled_lines(&production).await, json!([]));
 
     // Lines of a draft stay editable.
-    ok(fixture
-        .put(&copper_line, json!({"values": [scalar("quantity", 2)]}))
-        .await)
+    expect_success(
+        fixture
+            .put(&copper_line, json!({"values": [scalar("quantity", 2)]}))
+            .await,
+    )
     .await;
-    ok(fixture.set_status(&production, "approved").await).await;
+    expect_success(fixture.set_status(&production, "approved").await).await;
     assert_eq!(fixture.stock(&steel).await, stock("10", "8"));
     assert_eq!(fixture.stock(&copper).await, stock("2", "2"));
     assert_eq!(fixture.applied(&steel_line).await, ["reserve"]);
@@ -781,13 +741,15 @@ async fn a_production_order_applies_its_lines(pool: PgPool) {
 
     // Outputs settle at completion: an approved order still takes them.
     let offcut = fixture.create("po_output_line", line(&scrap, 1)).await;
-    ok(fixture
-        .put(&offcut, json!({"values": [scalar("quantity", 2)]}))
-        .await)
+    expect_success(
+        fixture
+            .put(&offcut, json!({"values": [scalar("quantity", 2)]}))
+            .await,
+    )
     .await;
 
     // Completion consumes the material and receives the outputs.
-    ok(fixture.set_status(&production, "completed").await).await;
+    expect_success(fixture.set_status(&production, "completed").await).await;
     assert_eq!(fixture.stock(&steel).await, stock("2", "0"));
     assert_eq!(fixture.stock(&copper).await, stock("0", "0"));
     assert_eq!(fixture.stock(&frame).await, stock("1", "0"));
@@ -814,29 +776,8 @@ async fn trigger_relationships_name_status_options_of_their_target(pool: PgPool)
     let invalid = OUTPUT_LINE
         .replace("po_output_line", "po_output_line_invalid")
         .replace("to: completed", "to: shipped");
-    let draft = expect_status(
-        fixture
-            .client
-            .post(format!("{}/blueprints", fixture.base_url))
-            .json(&json!({ "definition": invalid }))
-            .send()
-            .await
-            .unwrap(),
-        StatusCode::CREATED,
-    )
-    .await;
     let body = expect_error(
-        fixture
-            .client
-            .post(format!(
-                "{}/blueprints/{}/versions/{}/publish",
-                fixture.base_url,
-                draft["blueprint"]["id"].as_str().unwrap(),
-                draft["blueprint"]["version"].as_i64().unwrap(),
-            ))
-            .send()
-            .await
-            .unwrap(),
+        publish_response(&fixture.client, &fixture.base_url, &invalid).await,
         StatusCode::UNPROCESSABLE_ENTITY,
         "invalid_blueprint_definition",
     )

@@ -622,9 +622,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                 }
                 (None, None, Some(source))
                     if !attribute.declares_relationship_targets()
-                        && attribute.generated.is_none()
-                        && attribute.balance.is_none()
-                        && attribute.target_scope.is_none()
+                        && !attribute.declares_local_only_options()
                         && attribute.name.is_none()
                         && attribute.description.is_none() =>
                 {
@@ -638,9 +636,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                 }
                 (None, Some(extension_type), None) => {
                     if extension_type.trim().is_empty()
-                        || attribute.generated.is_some()
-                        || attribute.balance.is_some()
-                        || attribute.target_scope.is_some()
+                        || attribute.declares_local_only_options()
                         || attribute.value_schema.is_some()
                         || attribute.declares_relationship_targets()
                         || attribute.cardinality.is_some()
@@ -735,6 +731,23 @@ impl RawAttributeDeclaration {
             || self.acyclic.is_some()
             || self.tree.is_some()
     }
+
+    /// Whether the declaration sets options only a local attribute may have:
+    /// a generated value, a balance or a target scope.
+    fn declares_local_only_options(&self) -> bool {
+        self.generated.is_some() || self.balance.is_some() || self.target_scope.is_some()
+    }
+}
+
+/// Whether a value schema makes the attribute a status or a user or team
+/// assignment.
+fn is_status_or_assignment(schema: &serde_json::Value) -> bool {
+    schema
+        .get(attricat_validation::status::STATUS_KEY)
+        .is_some()
+        || schema
+            .get(attricat_validation::principal::PRINCIPAL_KEY)
+            .is_some()
 }
 
 /// Normalizes `target_blueprint`/`target_blueprints` into the single-target
@@ -872,14 +885,7 @@ fn parse_generated(
             "a generated attribute cannot have a default_value".into(),
         ));
     }
-    if value_schema.is_some_and(|schema| {
-        schema
-            .get(attricat_validation::status::STATUS_KEY)
-            .is_some()
-            || schema
-                .get(attricat_validation::principal::PRINCIPAL_KEY)
-                .is_some()
-    }) {
+    if value_schema.is_some_and(is_status_or_assignment) {
         return Err(invalid(
             "a generated attribute cannot be a status or an assignment".into(),
         ));
@@ -923,14 +929,7 @@ fn parse_balance(
             "a balance starts at zero and cannot have a default_value".into(),
         ));
     }
-    if value_schema.is_some_and(|schema| {
-        schema
-            .get(attricat_validation::status::STATUS_KEY)
-            .is_some()
-            || schema
-                .get(attricat_validation::principal::PRINCIPAL_KEY)
-                .is_some()
-    }) {
+    if value_schema.is_some_and(is_status_or_assignment) {
         return Err(invalid(
             "a balance cannot be a status or an assignment".into(),
         ));

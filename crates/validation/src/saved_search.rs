@@ -279,10 +279,6 @@ pub fn normalize_state(state: &Value) -> Value {
     state
 }
 
-/// Whether one hop of a relationship path of `hops` hops can be browsed: a
-/// relationship with one target blueprint and, on a path of several hops, a
-/// single value (`cardinality: one`), as for sortable table paths. Each
-/// source then reaches at most one node of the browsed blueprint.
 /// The target blueprint a browse hop is checked against: the relationship's
 /// single target or, for a path of one hop, the first of several targets,
 /// whose records the rail then lists together. A hop that another follows
@@ -300,6 +296,10 @@ pub fn browse_hop_target<'a>(
     })
 }
 
+/// Whether one hop of a relationship path of `hops` hops can be browsed: a
+/// relationship with one target blueprint and, on a path of several hops, a
+/// single value (`cardinality: one`), as for sortable table paths. Each
+/// source then reaches at most one node of the browsed blueprint.
 pub fn browse_path_hop(
     value_type: ValueType,
     target_blueprint: Option<&str>,
@@ -309,6 +309,24 @@ pub fn browse_path_hop(
     value_type == ValueType::Relationship
         && target_blueprint.is_some()
         && (hops == 1 || cardinality == Some(Cardinality::One))
+}
+
+/// Whether a relationship declared with `target_blueprint` and
+/// `target_blueprints` can be hop `hops` of a browse path: as
+/// [`browse_path_hop`] against its [`browse_hop_target`].
+pub fn browse_hop(
+    value_type: ValueType,
+    target_blueprint: Option<&str>,
+    target_blueprints: &[String],
+    cardinality: Option<Cardinality>,
+    hops: usize,
+) -> bool {
+    browse_path_hop(
+        value_type,
+        browse_hop_target(target_blueprint, target_blueprints, hops),
+        cardinality,
+        hops,
+    )
 }
 
 /// Splits an Explorer field path into relationship hops and the leaf, and

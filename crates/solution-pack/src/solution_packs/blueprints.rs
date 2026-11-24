@@ -8,7 +8,7 @@ use attricat_blueprint::{
     BlueprintDefinition, BlueprintError, BlueprintKind, BrowseBy, CompiledBlueprint,
     ResolvedInclude, ViewDefinition, ViewNode,
 };
-use attricat_validation::saved_search::browse_path_hop;
+use attricat_validation::saved_search::browse_hop;
 use serde_json::Value;
 
 use super::{
@@ -665,13 +665,10 @@ fn validate_table_paths(
                     .iter()
                     .find(|attribute| attribute.code == *hop)
                     .filter(|attribute| {
-                        browse_path_hop(
+                        browse_hop(
                             attribute.value_type,
-                            attricat_validation::saved_search::browse_hop_target(
-                                attribute.target_blueprint.as_deref(),
-                                &attribute.target_blueprints,
-                                hops.len(),
-                            ),
+                            attribute.target_blueprint.as_deref(),
+                            &attribute.target_blueprints,
                             attribute.cardinality,
                             hops.len(),
                         )

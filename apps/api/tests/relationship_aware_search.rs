@@ -462,12 +462,11 @@ attributes:
                 .unwrap()
         }
     };
-    let default_context = "00000000-0000-4000-8000-000000000001";
     for (query, counts) in [(None, [1, 1]), (Some("item:Steel"), [0, 1])] {
         let mut body = json!({
             "blueprint": { "code": "mt_stock" },
             "source_relationship_field": "item",
-            "context_id": default_context,
+            "context_id": DEFAULT_CONTEXT_ID,
             "selected_target_ids": [wire["id"]],
         });
         if let Some(query) = query {
@@ -504,9 +503,9 @@ attributes:
     // A tree needs a single blueprint, and a path can't continue past several.
     for body in [
         json!({ "blueprint": { "code": "mt_stock" }, "source_relationship_field": "item",
-                "hierarchy_field": "name", "context_id": default_context }),
+                "hierarchy_field": "name", "context_id": DEFAULT_CONTEXT_ID }),
         json!({ "blueprint": { "code": "mt_stock" }, "source_relationship_field": "item.name",
-                "context_id": default_context }),
+                "context_id": DEFAULT_CONTEXT_ID }),
     ] {
         let response = facet(body.clone()).await;
         assert_eq!(

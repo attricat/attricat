@@ -338,6 +338,8 @@ pub async fn start_session_server(pool: PgPool) -> (String, JoinHandle<()>) {
 
 pub const METRICS_TOKEN: &str = "test-metrics-token";
 pub const BOOTSTRAP_WORKSPACE_ID: &str = "00000000-0000-4000-8000-000000000002";
+/// The default context, seeded by migration `20260814000000_context_hierarchy.sql`.
+pub const DEFAULT_CONTEXT_ID: &str = "00000000-0000-4000-8000-000000000001";
 pub const BOOTSTRAP_OWNER_ID: &str = "00000000-0000-4000-8000-000000000201";
 
 pub fn bootstrap_workspace_id() -> Uuid {
