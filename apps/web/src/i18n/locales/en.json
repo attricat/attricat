@@ -1061,6 +1061,14 @@
     "productDescription": "Status transitions, Markdown, color and URL controls, image thumbnails, and tabbed previews.",
     "seoMixin": "SEO mixin",
     "seoMixinDescription": "Reusable SEO fields with length limits, locale-specific canonical URLs, and a search indexing default.",
+    "previewRecord": {
+      "choose": "Preview with a record…",
+      "change": "Choose another record…",
+      "showing": "Showing {{record}}",
+      "unpublished": "Publish the blueprint first: only a published blueprint has records to preview with.",
+      "unavailable": "The chosen record could not be loaded.",
+      "unfit": "These fields changed type in this version, so the record's values are left out: {{attributes}}."
+    },
     "sandboxDescription": "Sandbox values stay in this page and are never saved.",
     "sandboxEdit": "Edit",
     "relationshipSandboxUnavailable": "Relationship values are not available in the sandbox.",

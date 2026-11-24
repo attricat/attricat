@@ -212,6 +212,7 @@ const BlueprintEditor = ({
           check.result && (
             <BlueprintViewsPreview
               attributes={check.result.attributes}
+              blueprintCode={check.result.blueprint.code}
               definition={definition}
               recordSchema={check.result.blueprint.record_schema}
               views={check.result.blueprint.views}

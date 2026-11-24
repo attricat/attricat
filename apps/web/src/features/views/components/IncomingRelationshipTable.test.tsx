@@ -18,6 +18,7 @@ import {
   searchRecords,
   updateRecord,
 } from '../../records/api';
+import { RecordWritesContext } from '../recordWrites';
 import { IncomingRelationshipTable } from './IncomingRelationshipTable';
 import { incomingTableColumns } from './incomingTableColumns';
 
@@ -89,7 +90,7 @@ const lineForm = {
   context: {},
 };
 
-const renderTable = (settled: boolean, canWrite = true) => {
+const renderTable = (settled: boolean, canWrite = true, writes = true) => {
   vi.mocked(getRecordForm).mockImplementation(
     async (id: string) =>
       (id === lineId
@@ -108,7 +109,9 @@ const renderTable = (settled: boolean, canWrite = true) => {
         new QueryClient({ defaultOptions: { queries: { retry: false } } })
       }
     >
-      <IncomingRelationshipTable node={node} recordId={orderId} />
+      <RecordWritesContext value={writes}>
+        <IncomingRelationshipTable node={node} recordId={orderId} />
+      </RecordWritesContext>
     </QueryClientProvider>,
   );
 };
@@ -246,5 +249,15 @@ describe('IncomingRelationshipTable', () => {
       await screen.findByRole('button', { name: 'Open Line 1' }),
     ).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Add Order line' })).toBeNull();
+  });
+
+  it('offers no changes where views may not change records', async () => {
+    renderTable(false, true, false);
+
+    expect(
+      await screen.findByRole('button', { name: 'Open Line 1' }),
+    ).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Add Order line' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Delete Line 1' })).toBeNull();
   });
 });

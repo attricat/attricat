@@ -5,6 +5,17 @@ import { attributeValueTypes } from './valueTypes';
 
 type LinkedRecord = { id: string; display?: string };
 
+/** A relationship's resolved value: the linked records with their labels. */
+export type RelationshipValue = {
+  items?: LinkedRecord[];
+  truncated?: boolean;
+};
+
+export const isRelationshipValue = (
+  value: unknown,
+): value is RelationshipValue =>
+  typeof value === 'object' && value !== null && 'items' in value;
+
 /**
  * The one record a single relationship links to, or nothing for a list, an
  * empty value or another kind of attribute.

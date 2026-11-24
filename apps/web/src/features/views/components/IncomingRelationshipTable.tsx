@@ -13,7 +13,7 @@ import {
   Typography,
 } from '@mui/material';
 import { PanelRightOpenIcon, PlusIcon, Trash2Icon } from 'lucide-react';
-import { useState } from 'react';
+import { useContext, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ApiErrorAlert } from '../../../components/ApiErrorAlert';
 import { LabeledIconButton } from '../../../components/LabeledIconButton';
@@ -31,6 +31,7 @@ import { recordQueryKeys } from '../../records/queryKeys';
 import { attributeLabel } from '../../records/recordDisplay';
 import type { IncomingRelationshipListNode } from '../schemas';
 import { IncomingEditableRow } from './IncomingEditableRow';
+import { RecordWritesContext } from '../recordWrites';
 import { NewIncomingRow } from './NewIncomingRow';
 import { incomingTableColumns } from './incomingTableColumns';
 
@@ -122,7 +123,10 @@ export const IncomingRelationshipTable = ({
       lines.blueprint === relationship.source_blueprint &&
       lines.relationship === relationship.field,
   );
-  const editable = Boolean(node.editable && owner.data?.can_write && !settled);
+  const writes = useContext(RecordWritesContext);
+  const editable = Boolean(
+    node.editable && writes && owner.data?.can_write && !settled,
+  );
   const items = rows.data?.items ?? [];
   const total = rows.data?.total_count ?? items.length;
   const label = lexiconText(node.label);

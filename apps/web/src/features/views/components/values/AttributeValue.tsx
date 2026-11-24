@@ -17,6 +17,7 @@ import { principalConfiguration } from '../../../principals/principal';
 import { PrincipalValue } from '../../../principals/PrincipalValue';
 import {
   relatedRecordLinkProps,
+  isRelationshipValue,
   singleLinkedRecord,
   useRelatedRecordPreview,
 } from '../../../records/linkedRecord';
@@ -25,14 +26,6 @@ import {
   RelatedRecordPreviewToggle,
 } from '../../../records/components/RelatedRecordPreview';
 import { FileNotes } from '../../../extensions/fieldNotes';
-
-type RelationshipValue = {
-  items?: { id: string; display?: string }[];
-  truncated?: boolean;
-};
-
-const isRelationshipValue = (value: unknown): value is RelationshipValue =>
-  typeof value === 'object' && value !== null && 'items' in value;
 
 type FileValue = {
   id: string;

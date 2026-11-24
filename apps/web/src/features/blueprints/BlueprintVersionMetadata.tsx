@@ -95,6 +95,7 @@ export const BlueprintVersionMetadata = ({
         {tab === tabs.views && (
           <BlueprintViewsPreview
             attributes={blueprint.attributes}
+            blueprintCode={blueprint.blueprint.code}
             definition={blueprint.blueprint.definition}
             recordSchema={blueprint.blueprint.record_schema}
             revision={blueprint.blueprint}

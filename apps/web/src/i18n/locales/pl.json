@@ -1119,6 +1119,14 @@
     "productDescription": "Przejścia statusów, Markdown, kontrolki koloru i URL, miniatury obrazów oraz podgląd z kartami.",
     "seoMixin": "Mixin SEO",
     "seoMixinDescription": "Pola SEO wielokrotnego użytku z limitami długości, kanonicznymi adresami URL dla poszczególnych lokalizacji i domyślną opcją indeksowania.",
+    "previewRecord": {
+      "choose": "Podgląd z rekordem…",
+      "change": "Wybierz inny rekord…",
+      "showing": "Rekord: {{record}}",
+      "unpublished": "Najpierw opublikuj schemat: tylko opublikowany schemat ma rekordy do podglądu.",
+      "unavailable": "Nie udało się wczytać wybranego rekordu.",
+      "unfit": "Te pola zmieniły typ w tej wersji, więc ich wartości z rekordu pominięto: {{attributes}}."
+    },
     "sandboxDescription": "Wartości piaskownicy pozostają na tej stronie i nigdy nie są zapisywane.",
     "sandboxEdit": "Edycja",
     "relationshipSandboxUnavailable": "Wartości relacji nie są dostępne w piaskownicy.",

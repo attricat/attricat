@@ -10,6 +10,7 @@ import {
   Typography,
 } from '@mui/material';
 import { CodeXmlIcon } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { compactIconSize } from '../../components/iconSizes';
@@ -33,8 +34,13 @@ import type {
   ViewDefinition,
 } from '../records/api';
 import { FieldDiagnosticsContext } from '../records/fieldDiagnostics';
+import { resolvedRecordPreviewOptions } from '../records/queryOptions';
+import { attributeLabel } from '../records/recordDisplay';
+import { useRecordContextSelection } from '../records/useRecordContexts';
 import { useBlueprintFieldDiagnostics } from '../records/useBlueprintFieldDiagnostics';
 import { EditableRecordLayout } from '../views/components/EditableRecordLayout';
+import { RecordView } from '../views/components/RecordView';
+import { RecordWritesContext } from '../views/recordWrites';
 import {
   FieldRevealContext,
   RevealFieldContext,
@@ -46,6 +52,12 @@ import {
   unplacedEditableAttributes,
 } from '../records/recordFormAttributes';
 import { sandboxEditTab, sandboxEditView } from './constants';
+import { PreviewRecordPicker } from './PreviewRecordPicker';
+import {
+  isSandboxEditable,
+  mergePreviewValues,
+  previewRecordValues,
+} from './previewRecordValues';
 import { RenderedBlueprintView } from './RenderedBlueprintView';
 import { SandboxAttributeEditor } from './SandboxAttributeEditor';
 import { sandboxValidation, sandboxValuesForFields } from './sandboxValues';
@@ -60,12 +72,15 @@ const viewTabs = (views: Blueprint['views']): ViewTab[] => [
 
 export const BlueprintViewsPreview = ({
   attributes,
+  blueprintCode,
   definition,
   recordSchema,
   revision,
   views,
 }: {
   attributes: readonly Attribute[];
+  /** Offers the blueprint's existing records to preview the views with. */
+  blueprintCode?: string;
   /** The definition source, for what only it records, such as unique keys. */
   definition?: string;
   recordSchema?: JsonSchema | null;
@@ -83,7 +98,42 @@ export const BlueprintViewsPreview = ({
     tabs.findIndex(([name]) => name === selectedView),
   );
   const [activeViewName, activeView] = tabs[activeViewIndex];
-  const values = sandboxValuesForFields(attributes, fields);
+  // A chosen record fills the sandbox and lends its relationships and files.
+  const [recordId, setRecordId] = useState<string>();
+  const { contextId, contexts, setSelectedContext } =
+    useRecordContextSelection();
+  const record = useQuery(
+    resolvedRecordPreviewOptions(
+      recordId ?? '',
+      recordId ? (contextId ?? null) : null,
+    ),
+  );
+  const recordValues = useMemo(
+    () =>
+      record.data && recordId
+        ? previewRecordValues(attributes, record.data.values)
+        : undefined,
+    [attributes, record.data, recordId],
+  );
+  // Fills the sandbox once for each record and context it is shown in.
+  const recordKey = recordValues && `${recordId}:${contextId}`;
+  const [filledFrom, setFilledFrom] = useState<string>();
+  if (recordKey !== filledFrom) {
+    setFilledFrom(recordKey);
+    if (recordValues) setFields(recordValues.fields);
+  }
+  const chooseRecord = (id: string | undefined) => {
+    setRecordId(id);
+    if (!id) {
+      setFields({});
+      setFilledFrom(undefined);
+    }
+  };
+  const sandboxValues = sandboxValuesForFields(attributes, fields);
+  const values = recordValues
+    ? mergePreviewValues(attributes, sandboxValues, recordValues.linked)
+    : sandboxValues;
+  const previewRecordId = recordValues ? recordId : undefined;
   const validation = sandboxValidation(attributes, fields, recordSchema);
   const diagnostics = useBlueprintFieldDiagnostics({
     attributes,
@@ -153,13 +203,23 @@ export const BlueprintViewsPreview = ({
   ) => (
     // Marks where the field is, to lead to it from a connected field.
     <Box data-field-code={attribute.code}>
-      <SandboxAttributeEditor
-        attribute={attribute}
-        component={resolveEditComponent(component) ?? component}
-        error={validation.fieldErrors[attribute.code]}
-        onChange={(value) => updateField(attribute.code, value)}
-        value={fields[attribute.code] ?? ''}
-      />
+      {previewRecordId && !isSandboxEditable(attribute) ? (
+        // The sandbox cannot edit links; it shows the chosen record's.
+        <RecordView
+          attributes={[attribute]}
+          contextId={contextId ?? undefined}
+          recordId={previewRecordId}
+          values={values}
+        />
+      ) : (
+        <SandboxAttributeEditor
+          attribute={attribute}
+          component={resolveEditComponent(component) ?? component}
+          error={validation.fieldErrors[attribute.code]}
+          onChange={(value) => updateField(attribute.code, value)}
+          value={fields[attribute.code] ?? ''}
+        />
+      )}
     </Box>
   );
   const editable = attributes.filter((attribute) => !attribute.readonly);
@@ -169,6 +229,35 @@ export const BlueprintViewsPreview = ({
       <Typography color="text.secondary" sx={{ mt: 1 }}>
         {t('blueprints.sandboxDescription')}
       </Typography>
+      {blueprintCode && contextId && (
+        <PreviewRecordPicker
+          blueprintCode={blueprintCode}
+          contextId={contextId}
+          contexts={contexts.data ?? []}
+          onContextChange={setSelectedContext}
+          onRecordChange={chooseRecord}
+          recordId={recordId}
+        />
+      )}
+      {record.error && (
+        <Alert severity="error" sx={{ mt: 1 }}>
+          {t('blueprints.previewRecord.unavailable')}
+        </Alert>
+      )}
+      {recordValues && recordValues.unfit.length > 0 && (
+        <Alert severity="info" sx={{ mt: 1 }}>
+          {t('blueprints.previewRecord.unfit', {
+            attributes: recordValues.unfit
+              .map((code) => {
+                const attribute = attributes.find(
+                  (candidate) => candidate.code === code,
+                );
+                return attribute ? attributeLabel(attribute) : code;
+              })
+              .join(', '),
+          })}
+        </Alert>
+      )}
       <Stack direction="row" sx={{ alignItems: 'center', mt: 1 }}>
         <Tabs
           allowScrollButtonsMobile
@@ -223,43 +312,50 @@ export const BlueprintViewsPreview = ({
         }}
         variant="outlined"
       >
-        <FieldDiagnosticsContext value={fieldDiagnostics}>
-          <RevealFieldContext value={revealField}>
-            <FieldRevealContext value={revealRequest}>
-              {activeViewName === sandboxEditTab && validation.formError && (
-                <Alert severity="error" sx={{ mb: 2 }}>
-                  {validation.formError}
-                </Alert>
-              )}
-              {activeViewName === sandboxEditTab ? (
-                <EditableRecordLayout
-                  attributes={attributes}
-                  fallbackVisibilityScope="detail"
-                  headingAttributes={headingEditableAttributes(
-                    editable,
-                    views.detail,
-                  )}
-                  headingLevel="h3"
-                  otherAttributes={unplacedEditableAttributes(
-                    editable,
-                    views.detail,
-                  )}
-                  renderEditor={renderEditor}
-                  values={values}
-                  view={activeView}
-                />
-              ) : (
-                activeView && (
-                  <RenderedBlueprintView
+        {/* The preview never changes a chosen record, such as its lines. */}
+        <RecordWritesContext value={false}>
+          <FieldDiagnosticsContext value={fieldDiagnostics}>
+            <RevealFieldContext value={revealField}>
+              <FieldRevealContext value={revealRequest}>
+                {activeViewName === sandboxEditTab && validation.formError && (
+                  <Alert severity="error" sx={{ mb: 2 }}>
+                    {validation.formError}
+                  </Alert>
+                )}
+                {activeViewName === sandboxEditTab ? (
+                  <EditableRecordLayout
                     attributes={attributes}
+                    fallbackVisibilityScope="detail"
+                    headingAttributes={headingEditableAttributes(
+                      editable,
+                      views.detail,
+                    )}
+                    headingLevel="h3"
+                    otherAttributes={unplacedEditableAttributes(
+                      editable,
+                      views.detail,
+                    )}
+                    contextId={contextId ?? undefined}
+                    recordId={previewRecordId}
+                    renderEditor={renderEditor}
                     values={values}
                     view={activeView}
                   />
-                )
-              )}
-            </FieldRevealContext>
-          </RevealFieldContext>
-        </FieldDiagnosticsContext>
+                ) : (
+                  activeView && (
+                    <RenderedBlueprintView
+                      attributes={attributes}
+                      contextId={contextId ?? undefined}
+                      recordId={previewRecordId}
+                      values={values}
+                      view={activeView}
+                    />
+                  )
+                )}
+              </FieldRevealContext>
+            </RevealFieldContext>
+          </FieldDiagnosticsContext>
+        </RecordWritesContext>
       </Paper>
     </>
   );
