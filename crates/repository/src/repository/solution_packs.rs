@@ -2102,6 +2102,16 @@ async fn insert_extension_installs(
         else {
             continue;
         };
+        // The template resolved against this plan's blueprint mappings.
+        release
+            .manifest
+            .validate_configuration(&requirement.evaluation_template)
+            .map_err(|error| {
+                RepositoryError::InvalidSolutionPackPlan(format!(
+                    "extension requirement '{}' configuration template is not a valid configuration: {error}",
+                    requirement.logical_key
+                ))
+            })?;
         sqlx::query("INSERT INTO solution_pack_plan_extension_releases (plan_id,workspace_id,position,logical_key,extension_id,version,installed_release_id,repository,release_id,tag_name,asset_id,asset_name,download_url,archive_sha256,manifest_sha256,configuration,required_grants) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)")
             .bind(plan_id)
             .bind(workspace_id)
@@ -2118,7 +2128,7 @@ async fn insert_extension_installs(
             .bind(&release.release.asset.download_url)
             .bind(&release.archive_sha256)
             .bind(&release.manifest_sha256)
-            .bind(&release.configuration)
+            .bind(&requirement.evaluation_template)
             .bind(extension_install_grants(release))
             .execute(&mut **tx)
             .await?;

@@ -206,6 +206,16 @@ Workspace-added registries are never used. Planning therefore needs access to
 the official registry and fails with `503` while it is unreachable. Planning
 downloads and validates the release but installs nothing.
 
+A requirement's configuration template may name the pack's blueprints as
+`{"$ref": "blueprints/<key>"}`, an object with that one key. The plan writes in
+the code its mappings give that blueprint (the pack's prefix, or an existing
+blueprint it maps to), installs a new release with that configuration and
+compares an installed one against it. Pack validation refuses a `$ref` to a key
+the pack does not declare; the release's configuration schema is checked
+against the pack's own codes when planning resolves it, and against the
+plan's codes when the plan is saved
+(`resolve_configuration_template`, `CONFIGURATION_TEMPLATE_REF_KEY`).
+
 Before its other steps, apply downloads that exact release again and installs
 it. It applies the pack's configuration, grants the release's required
 permissions, and enables it. Optional permissions are not granted. Each

@@ -16,8 +16,9 @@ use super::{
     MAX_SOLUTION_PACK_PRESENTATION_ASSETS, SolutionPackBlueprint, SolutionPackError,
     SolutionPackExploreNavigation, SolutionPackExtensionLayout, SolutionPackExtensionRequirement,
     SolutionPackManifest, SolutionPackResource, ValidatedSolutionPack,
-    blueprints::visit_embedded_predicate_blueprint_codes, guidance::json_deep_contains, invalid,
-    is_valid_stable_code, parse_version_req, resource_code,
+    blueprints::visit_embedded_predicate_blueprint_codes,
+    guidance::{json_deep_contains, resolve_configuration_template},
+    invalid, is_valid_stable_code, parse_version_req, resource_code,
 };
 use crate::{
     extensions::{ExtensionLayoutPlacement, classify_extension_layout_placement},
@@ -346,8 +347,11 @@ pub fn evaluate_extension_requirement(
     template: Option<&Value>,
     installed: Option<&InstalledExtensionSnapshot>,
 ) -> PlannedExtensionRequirement {
+    // A release the plan installs receives the plan's template itself.
     let configuration_matches = installed.map(|installed| {
-        template.is_none_or(|template| json_deep_contains(&installed.configuration, template))
+        installed.pending_install
+            || template
+                .is_none_or(|template| json_deep_contains(&installed.configuration, template))
     });
     let reason_code = match installed {
         None => "missing",
@@ -626,9 +630,19 @@ pub fn build_solution_pack_plan(
         .extensions
         .iter()
         .map(|requirement| {
+            // Blueprint references become the codes this plan gives them.
+            let template = pack
+                .configuration_template(&requirement.key)
+                .map(|template| {
+                    resolve_configuration_template(template, &|key| {
+                        mappings_by_key
+                            .get(key)
+                            .map(|mapping| mapping.target_code.clone())
+                    })
+                });
             evaluate_extension_requirement(
                 requirement,
-                pack.configuration_template(&requirement.key),
+                template.as_ref(),
                 workspace.installed_extensions.get(&requirement.id),
             )
         })

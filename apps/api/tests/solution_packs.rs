@@ -312,7 +312,10 @@ fn archive_with_checklist(checklist: &[u8]) -> Vec<u8> {
 }
 
 fn archive_with_extension_requirement(required: bool) -> Vec<u8> {
-    const TEMPLATE: &[u8] = br#"{"endpoint":"TEMPLATE_VALUE_SENTINEL"}"#;
+    archive_with_extension_template(required, br#"{"endpoint":"TEMPLATE_VALUE_SENTINEL"}"#)
+}
+
+fn archive_with_extension_template(required: bool, template: &[u8]) -> Vec<u8> {
     let manifest = serde_json::to_vec(&json!({
         "manifest_version": 1,
         "id": "attricat.extensions",
@@ -335,7 +338,7 @@ fn archive_with_extension_requirement(required: bool) -> Vec<u8> {
             "required": required,
             "configuration_template": {
                 "path": "extensions/shopify.json",
-                "sha256": digest(TEMPLATE)
+                "sha256": digest(template)
             }
         }]
     }))
@@ -345,7 +348,7 @@ fn archive_with_extension_requirement(required: bool) -> Vec<u8> {
         let mut tar = tar::Builder::new(&mut tar_bytes);
         append_file(&mut tar, "solution-pack.json", &manifest);
         append_file(&mut tar, "blueprints/product.yaml", PRODUCT_BLUEPRINT);
-        append_file(&mut tar, "extensions/shopify.json", TEMPLATE);
+        append_file(&mut tar, "extensions/shopify.json", template);
         tar.finish().unwrap();
     }
     zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
@@ -5235,6 +5238,60 @@ async fn pack_installs_configures_grants_and_enables_an_official_extension(pool:
 }
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
+async fn an_installed_extension_is_configured_with_the_plans_blueprint_codes(pool: PgPool) {
+    let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    let (base_url, server, official) = start_server_with_official_extensions(pool.clone()).await;
+    official.publish(
+        "acme.shopify",
+        "v2.2.0",
+        official_extension_archive("acme.shopify", "2.2.0", "official release"),
+    );
+    let client = authenticated_client();
+    let archive =
+        archive_with_extension_template(true, br#"{"endpoint":{"$ref":"blueprints/product"}}"#);
+
+    let response = create_plan(&client, &base_url, archive.clone(), "shop").await;
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let plan: Value = response.json().await.unwrap();
+    let product_code = plan["mappings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|mapping| mapping["logical_key"] == "blueprints/product")
+        .unwrap()["target_code"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(
+        plan["extension_requirements"][0]["status"], "install",
+        "{plan}"
+    );
+    let applied = apply_plan(&client, &base_url, plan["id"].as_str().unwrap()).await;
+    assert_eq!(applied.status(), StatusCode::OK);
+    let configuration: Value = sqlx::query_scalar(
+        "SELECT configuration FROM extension_installations WHERE workspace_id=$1 AND extension_id='acme.shopify'",
+    )
+    .bind(workspace_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(configuration, json!({"endpoint": product_code}));
+
+    // Planning again under another prefix compares the installed
+    // configuration with that plan's codes, which differ.
+    let again: Value = create_plan(&client, &base_url, archive, "other")
+        .await
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        again["extension_requirements"][0]["reason_code"],
+        "configuration_mismatch"
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn interrupted_official_extension_install_resumes_without_reinstalling(pool: PgPool) {
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let (base_url, server, official) = start_server_with_official_extensions(pool.clone()).await;
@@ -5514,7 +5571,10 @@ async fn installed_official_extension_satisfies_the_packs_extension_layout(pool:
     .await
     .unwrap();
     assert_eq!(plan["ready"], true, "{plan}");
-    assert_eq!(plan["extension_requirements"][0]["status"], "install");
+    assert_eq!(
+        plan["extension_requirements"][0]["status"], "install",
+        "{plan}"
+    );
 
     let applied = apply_plan(&client, &base_url, plan["id"].as_str().unwrap()).await;
     assert_eq!(applied.status(), StatusCode::OK);

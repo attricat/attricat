@@ -44,7 +44,9 @@ use blueprints::validate_content;
 use guidance::{validate_configuration_templates, validate_guidance_and_checks};
 use presentation_assets::{validate_presentation_asset_resource, validate_presentation_assets};
 
-pub use guidance::json_deep_contains;
+pub use guidance::{
+    CONFIGURATION_TEMPLATE_REF_KEY, json_deep_contains, resolve_configuration_template,
+};
 pub use plan::*;
 pub use presentation_assets::validate_presentation_asset_bytes;
 
@@ -691,8 +693,23 @@ impl ValidatedSolutionPack {
         self.lexicon.as_deref()
     }
 
+    /// The configuration template as the pack declares it, references and
+    /// all; see [`resolve_configuration_template`].
     pub fn configuration_template(&self, key: &str) -> Option<&Value> {
         self.configuration_templates.get(key)
+    }
+
+    /// The configuration template with each blueprint reference replaced by
+    /// the code the pack itself gives that blueprint. Its shape is what a
+    /// plan writes, so it is what the extension's schema is checked against
+    /// before mappings are known.
+    pub fn configuration_template_with_pack_codes(&self, key: &str) -> Option<Value> {
+        self.configuration_template(key).map(|template| {
+            resolve_configuration_template(template, &|blueprint| {
+                self.blueprint(blueprint)
+                    .map(|blueprint| blueprint.code().to_owned())
+            })
+        })
     }
 
     pub fn presentation_asset(&self, key: &str) -> Option<&ValidatedPresentationAsset> {

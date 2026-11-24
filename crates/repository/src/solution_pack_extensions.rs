@@ -203,7 +203,9 @@ pub struct ResolvedExtensionRelease {
     pub archive_sha256: String,
     pub manifest: Manifest,
     pub manifest_sha256: String,
-    /// The pack's configuration template, or `{}` without one.
+    /// The pack's configuration template with its blueprint references
+    /// written as the pack's own codes, or `{}` without one. The plan
+    /// installs the template resolved against its mappings instead.
     pub configuration: Value,
 }
 
@@ -276,9 +278,10 @@ pub async fn resolve_official_extensions(
                 manifest.version
             )));
         }
+        // The plan writes the codes its mappings give the referenced
+        // blueprints; the pack's own codes have the same shape.
         let configuration = pack
-            .configuration_template(&requirement.key)
-            .cloned()
+            .configuration_template_with_pack_codes(&requirement.key)
             .unwrap_or_else(|| json!({}));
         manifest
             .validate_configuration(&configuration)

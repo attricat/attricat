@@ -300,6 +300,12 @@ pub(super) fn validate_configuration_templates(
     files: &BTreeMap<String, Vec<u8>>,
 ) -> Result<BTreeMap<String, Value>, SolutionPackError> {
     let mut templates = BTreeMap::new();
+    let blueprint_keys: HashSet<&str> = manifest
+        .resources
+        .blueprints
+        .iter()
+        .map(|resource| resource.key.as_str())
+        .collect();
     for requirement in &manifest.extensions {
         let Some(reference) = &requirement.configuration_template else {
             continue;
@@ -325,6 +331,7 @@ pub(super) fn validate_configuration_templates(
         }
         let mut items = 0;
         validate_configuration_template_value(&template, 1, &mut items, &requirement.key)?;
+        validate_configuration_template_refs(&template, &blueprint_keys, &requirement.key)?;
         templates.insert(requirement.key.clone(), template);
     }
     Ok(templates)
@@ -396,6 +403,78 @@ pub(super) fn validate_configuration_template_value(
         _ => {}
     }
     Ok(())
+}
+
+/// The key of a configuration template object that stands for a pack
+/// blueprint's code in the workspace: `{"$ref": "blueprints/goods_receipt"}`.
+/// Applying a pack gives its blueprints new codes (its prefix, or the
+/// existing blueprints a plan maps them to), so a template names them by
+/// resource key and the plan writes in the code.
+pub const CONFIGURATION_TEMPLATE_REF_KEY: &str = "$ref";
+
+/// The resource key a template value refers to, when it is a reference.
+fn configuration_template_ref(value: &Value) -> Option<Option<&str>> {
+    let object = value.as_object()?;
+    let reference = object.get(CONFIGURATION_TEMPLATE_REF_KEY)?;
+    Some(reference.as_str().filter(|_| object.len() == 1))
+}
+
+/// Every `$ref` object must hold exactly one string naming a blueprint
+/// resource of this pack.
+fn validate_configuration_template_refs(
+    value: &Value,
+    blueprint_keys: &HashSet<&str>,
+    requirement_key: &str,
+) -> Result<(), SolutionPackError> {
+    if let Some(reference) = configuration_template_ref(value) {
+        return match reference {
+            Some(key) if blueprint_keys.contains(key) => Ok(()),
+            Some(key) => invalid(format!(
+                "extension requirement '{requirement_key}' configuration template refers to '{key}', which is not a blueprint of this pack"
+            )),
+            None => invalid(format!(
+                "extension requirement '{requirement_key}' configuration template has a {CONFIGURATION_TEMPLATE_REF_KEY} that is not a lone blueprint key"
+            )),
+        };
+    }
+    match value {
+        Value::Object(object) => object.values().try_for_each(|value| {
+            validate_configuration_template_refs(value, blueprint_keys, requirement_key)
+        }),
+        Value::Array(array) => array.iter().try_for_each(|value| {
+            validate_configuration_template_refs(value, blueprint_keys, requirement_key)
+        }),
+        _ => Ok(()),
+    }
+}
+
+/// `template` with every `$ref` replaced by the code `code_of` gives its
+/// blueprint resource key. A key without a code stays a reference, which the
+/// extension's configuration schema then refuses.
+pub fn resolve_configuration_template(
+    template: &Value,
+    code_of: &dyn Fn(&str) -> Option<String>,
+) -> Value {
+    if let Some(Some(key)) = configuration_template_ref(template)
+        && let Some(code) = code_of(key)
+    {
+        return Value::String(code);
+    }
+    match template {
+        Value::Object(object) => Value::Object(
+            object
+                .iter()
+                .map(|(key, value)| (key.clone(), resolve_configuration_template(value, code_of)))
+                .collect(),
+        ),
+        Value::Array(array) => Value::Array(
+            array
+                .iter()
+                .map(|value| resolve_configuration_template(value, code_of))
+                .collect(),
+        ),
+        value => value.clone(),
+    }
 }
 
 pub fn json_deep_contains(actual: &Value, expected: &Value) -> bool {

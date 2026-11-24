@@ -1199,6 +1199,53 @@ fn planner_blocks_required_navigation_and_skips_optional_unmet_navigation() {
 }
 
 #[test]
+fn configuration_templates_refer_to_the_packs_blueprints() {
+    let template = br#"{"stock":{"$ref":"blueprints/product"},"lines":[{"$ref":"blueprints/category"}],"label":"x"}"#;
+    let pack = ValidatedSolutionPack::from_tar_zst(&archive_with_configuration_template(template))
+        .unwrap();
+    // Before a plan maps them, references read as the pack's own codes.
+    let own = pack
+        .configuration_template_with_pack_codes("extensions/shopify")
+        .unwrap();
+    let product = pack
+        .blueprint("blueprints/product")
+        .unwrap()
+        .code()
+        .to_owned();
+    let category = pack
+        .blueprint("blueprints/category")
+        .unwrap()
+        .code()
+        .to_owned();
+    assert_eq!(
+        own,
+        json!({"stock": product, "lines": [category], "label": "x"})
+    );
+    let mapped = resolve_configuration_template(
+        pack.configuration_template("extensions/shopify").unwrap(),
+        &|key| (key == "blueprints/product").then(|| "inv_product".to_owned()),
+    );
+    assert_eq!(
+        mapped,
+        json!({"stock": "inv_product", "lines": [{"$ref": "blueprints/category"}], "label": "x"})
+    );
+
+    for (template, message) in [
+        (
+            br#"{"stock":{"$ref":"blueprints/missing"}}"#.as_slice(),
+            "not a blueprint of this pack",
+        ),
+        (
+            br#"{"stock":{"$ref":"blueprints/product","x":1}}"#,
+            "lone blueprint key",
+        ),
+        (br#"{"stock":{"$ref":7}}"#, "lone blueprint key"),
+    ] {
+        assert_invalid(&archive_with_configuration_template(template), message);
+    }
+}
+
+#[test]
 fn validates_bounded_non_secret_extension_configuration_templates() {
     const TEMPLATE: &[u8] = br#"{"endpoint":"https://example.test","features":{"sync":true}}"#;
     let pack = ValidatedSolutionPack::from_tar_zst(&archive_with_configuration_template(TEMPLATE))
