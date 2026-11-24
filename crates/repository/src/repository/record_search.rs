@@ -1640,6 +1640,96 @@ impl AttricatRepository {
         Ok(())
     }
 
+    /// The records each root links to through the relationship columns
+    /// `codes`, as relationship values `{items: [{id, display}], truncated}`
+    /// with each target's label in `context`. A cell lists at most
+    /// `MAX_TABLE_RELATIONSHIP_ITEMS` targets, of any blueprint.
+    async fn table_relationship_values(
+        &self,
+        roots: &[Uuid],
+        codes: &[&str],
+        context: &SearchContext,
+    ) -> Result<Vec<(Uuid, String, Value)>, RepositoryError> {
+        let edges = sqlx::query_as::<_, (Uuid, String, Uuid)>(AssertSqlSafe(
+            r#"WITH edges AS (
+                   SELECT av.record_id AS source_id, a.code, target.id AS target_id,
+                          ROW_NUMBER() OVER (
+                              PARTITION BY av.record_id, a.code ORDER BY target.id
+                          ) AS position
+                     FROM attribute_values av
+                     JOIN records source ON source.id = av.record_id
+                      AND source.workspace_id = $3 AND source.deleted_at IS NULL
+                     JOIN attributes a ON a.id = av.attribute_id
+                      AND a.blueprint_id = source.blueprint_id
+                      AND a.blueprint_version = source.blueprint_version
+                      AND a.workspace_id = $3
+                      AND a.code = ANY($2) AND a.value_type = 'relationship'
+                     JOIN records target ON target.id = av.relationship_target_record_id
+                      AND target.workspace_id = $3 AND target.deleted_at IS NULL
+                    WHERE av.record_id = ANY($1) AND av.workspace_id = $3 AND av.active
+                      AND av.relationship_target_record_id IS NOT NULL
+                      AND {edge_context}
+               )
+               SELECT source_id, code, target_id FROM edges
+                WHERE position <= $5
+                ORDER BY source_id, code, position"#
+                .replace("{edge_context}", &resolved_context("av", "a", "$4")),
+        ))
+        .bind(roots)
+        .bind(codes)
+        .bind(self.workspace_id.0)
+        .bind(&context.ids)
+        // One more than shown tells a full cell from a truncated one.
+        .bind(MAX_TABLE_RELATIONSHIP_ITEMS as i64 + 1)
+        .fetch_all(&self.pool)
+        .await?;
+        let target_ids: Vec<Uuid> = edges
+            .iter()
+            .map(|(_, _, target)| *target)
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect();
+        let labels: HashMap<Uuid, String> = self
+            .record_labels(&target_ids)
+            .await?
+            .into_iter()
+            .map(|label| {
+                let text = context
+                    .codes
+                    .iter()
+                    .chain(std::iter::once(&DEFAULT_CONTEXT_CODE.to_owned()))
+                    .find_map(|code| label.display.get(code).and_then(Value::as_str))
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| label.id.to_string());
+                (label.id, text)
+            })
+            .collect();
+        let mut cells: Vec<(Uuid, String, Vec<Value>)> = Vec::new();
+        for (source, code, target) in edges {
+            if !matches!(cells.last(), Some((last_source, last_code, _)) if *last_source == source && *last_code == code)
+            {
+                cells.push((source, code, Vec::new()));
+            }
+            let items = &mut cells.last_mut().expect("a cell was pushed").2;
+            items.push(serde_json::json!({
+                "id": target,
+                "display": labels.get(&target),
+            }));
+        }
+        Ok(cells
+            .into_iter()
+            .map(|(source, code, mut items)| {
+                let truncated = items.len() > MAX_TABLE_RELATIONSHIP_ITEMS;
+                items.truncate(MAX_TABLE_RELATIONSHIP_ITEMS);
+                (
+                    source,
+                    code,
+                    serde_json::json!({ "items": items, "truncated": truncated }),
+                )
+            })
+            .collect())
+    }
+
     /// Resolves configured table paths in bounded, page-level batches. Relationship
     /// metadata is selected from every record's pinned blueprint revision and scalar
     /// leaves come from preview projections. Every hop and leaf is resolved for `context`.
@@ -1661,9 +1751,30 @@ impl AttricatRepository {
             .filter(|(path, leaf_type)| !path.contains('.') && **leaf_type == ValueType::File)
             .map(|(path, _)| path.as_str())
             .collect();
+        let direct_relationships: Vec<&str> = paths
+            .iter()
+            .filter(|(path, leaf_type)| {
+                !path.contains('.') && **leaf_type == ValueType::Relationship
+            })
+            .map(|(path, _)| path.as_str())
+            .collect();
+        if !direct_relationships.is_empty() {
+            for (record_id, code, value) in self
+                .table_relationship_values(&roots, &direct_relationships, context)
+                .await?
+            {
+                values_by_root
+                    .entry(record_id)
+                    .or_default()
+                    .insert(code, vec![value]);
+            }
+        }
         let (direct_codes, direct_types): (Vec<&str>, Vec<&str>) = paths
             .iter()
-            .filter(|(path, leaf_type)| !path.contains('.') && **leaf_type != ValueType::File)
+            .filter(|(path, leaf_type)| {
+                !path.contains('.')
+                    && !matches!(**leaf_type, ValueType::File | ValueType::Relationship)
+            })
             .map(|(path, leaf_type)| (path.as_str(), leaf_type.as_str()))
             .unzip();
         if !direct_files.is_empty() {
@@ -3390,6 +3501,8 @@ enum TermPlan {
         ids: Vec<Uuid>,
     },
 }
+/// Linked records one relationship cell of a table lists.
+const MAX_TABLE_RELATIONSHIP_ITEMS: usize = 5;
 /// Path leaf that matches records by ID instead of by attribute value.
 const ID_SELECTOR: &str = "@id";
 /// Bounds one `@id` term; saved-view queries are length-limited as well.

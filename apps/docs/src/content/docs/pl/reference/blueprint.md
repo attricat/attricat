@@ -461,7 +461,7 @@ views:
 | Klucz | Typ | Opis |
 | --- | --- | --- |
 | `columns` | lista mapowań | Definicje kolumn. Musi być niepusta, z unikalnymi wartościami `field`. |
-| `columns[].field` | ciąg znaków | Lokalny atrybut skalarny, lokalny atrybut plikowy ze zgodnym rendererem lub ścieżka o maksymalnie trzech krokach relacji zakończona atrybutem skalarnym, np. `family.product_type.name`. |
+| `columns[].field` | ciąg znaków | Lokalny atrybut skalarny, lokalna relacja (etykiety powiązanych rekordów, najwyżej pięć, dowolnego schematu docelowego), lokalny atrybut plikowy ze zgodnym rendererem lub ścieżka o maksymalnie trzech krokach relacji zakończona atrybutem skalarnym, np. `family.product_type.name`. |
 | `columns[].label` | ciąg znaków | Nagłówek kolumny. Domyślnie nazwa atrybutu. |
 | `columns[].renderer` | odwołanie do komponentu | `attricat.table_image@1`, komponent wyświetlania tekstu (`attricat.color_display@1`, `attricat.email_display@1`, `attricat.url_display@1` lub `attricat.phone_display@1`) albo komórka tabeli z rozszerzenia. |
 | `component` | odwołanie do komponentu | Opcjonalny komponent tabeli. |

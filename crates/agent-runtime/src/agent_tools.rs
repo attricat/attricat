@@ -46,15 +46,17 @@ const JSON_SCHEMA_GUIDE: &str = include_str!("../../../docs/json-schema-validati
 const STATUS_CONTROL_GUIDE: &str = include_str!("../../../docs/status-control.md");
 const RULES_GUIDE: &str = include_str!("../../../docs/rules.md");
 const WORKFLOWS_GUIDE: &str = include_str!("../../../docs/workflows.md");
+const MOVEMENTS_GUIDE: &str = include_str!("../../../docs/movements.md");
 /// Authoring documentation served one topic per call, so each result stays
 /// within the tool result bound as the documents grow.
-const AUTHORING_GUIDE_TOPICS: [(&str, &str); 6] = [
+const AUTHORING_GUIDE_TOPICS: [(&str, &str); 7] = [
     ("blueprints", BLUEPRINT_AUTHORING_GUIDE),
     ("views", VIEW_CONFIGURATION_GUIDE),
     ("json_schema", JSON_SCHEMA_GUIDE),
     ("status_control", STATUS_CONTROL_GUIDE),
     ("rules", RULES_GUIDE),
     ("workflows", WORKFLOWS_GUIDE),
+    ("movements", MOVEMENTS_GUIDE),
 ];
 /// Characters `read_file` returns when the call sets no limit.
 pub(crate) const DEFAULT_READ_FILE_CHARS: usize = 20_000;
@@ -3997,7 +3999,8 @@ mod tests {
                 "json_schema",
                 "status_control",
                 "rules",
-                "workflows"
+                "workflows",
+                "movements"
             ])
         );
         for (topic, markdown) in super::AUTHORING_GUIDE_TOPICS {

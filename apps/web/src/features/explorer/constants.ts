@@ -109,6 +109,8 @@ export const resultsTableHeight = {
   md: 'calc(100dvh - 165px)',
 };
 export const displayColumnMinWidth = 280;
+/** Keeps a relationship column's labels readable rather than wrapped word by word. */
+export const linkedRecordsColumnMinWidth = 220;
 export const browseRailWidth = 280;
 /** One nesting level of the browse rail tree. */
 export const browseRailIndent = 2;

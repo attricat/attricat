@@ -321,6 +321,11 @@ views:
   dropdown_option:
     type: dropdown_option
     fields: [number]
+  table:
+    type: table
+    columns:
+      - {field: number}
+      - {field: item}
 attributes:
   - code: number
     value_type: string
@@ -404,6 +409,43 @@ attributes:
             .collect();
         assert_eq!(ids, vec![expected.clone()], "{query}");
     }
+    // A table column on the relationship lists each row's linked record by
+    // its label, whichever blueprint it belongs to, and does not sort.
+    let listed: Value = search(String::new())
+        .await
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let column = listed["blueprint"]["table_path_attributes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|attribute| attribute["code"] == "item")
+        .unwrap();
+    assert_eq!(column["value_type"], "relationship");
+    assert_eq!(column["sortable"], false);
+    let mut cells: Vec<(Value, Value)> = listed["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| (item["id"].clone(), item["table_values"]["item"][0].clone()))
+        .collect();
+    cells.sort_by_key(|(id, _)| stocks.iter().position(|stock| stock == id));
+    assert_eq!(
+        cells,
+        vec![
+            (
+                stocks[0].clone(),
+                json!({ "items": [{ "id": nut["id"], "display": "Hex nut" }], "truncated": false })
+            ),
+            (
+                stocks[1].clone(),
+                json!({ "items": [{ "id": wire["id"], "display": "Steel wire" }], "truncated": false })
+            ),
+        ]
+    );
     for (query, message) in [
         ("item.color.name:red", "several blueprints"),
         (

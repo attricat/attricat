@@ -145,7 +145,7 @@ views:
       - {field: family.product_type.name, label: Product type}
 ```
 
-Kolumna to lokalny atrybut skalarny albo ścieżka przez maksymalnie trzy relacje, zakończona atrybutem skalarnym. Każdy krok jest rozstrzygany według wersji schematu powiązanego rekordu. Jeśli starszy powiązany rekord nie ma danego atrybutu, komórka jest pusta. Ścieżka o wielu wartościach może pokazać kilka wartości w jednej komórce.
+Kolumna to lokalny atrybut skalarny, lokalna relacja albo ścieżka przez maksymalnie trzy relacje, zakończona atrybutem skalarnym. Kolumna relacji pokazuje etykiety rekordów, z którymi wiersz jest powiązany, najwyżej pięć, niezależnie od tego, do którego ze schematów docelowych relacji należą; nie można jej sortować. Każdy krok jest rozstrzygany według wersji schematu powiązanego rekordu. Jeśli starszy powiązany rekord nie ma danego atrybutu, komórka jest pusta. Ścieżka o wielu wartościach może pokazać kilka wartości w jednej komórce.
 
 Kolumny można sortować, gdy prowadzą do wartości skalarnej, a każda relacja na ścieżce ma `cardinality: one`.
 

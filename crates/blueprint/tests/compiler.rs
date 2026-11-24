@@ -654,9 +654,10 @@ views:
   dropdown_option:
     type: dropdown_option
     fields: [title]
-  index:
+  table:
     type: table
     columns:
+      - {field: title}
       - {field: categories}
 attributes:
   - code: title
@@ -664,46 +665,30 @@ attributes:
   - code: categories
     value_type: relationship
 "#;
-    assert!(compile(parse(source).unwrap(), &[], source).is_err());
+    // A relationship column lists the linked records' labels.
+    assert!(compile(parse(source).unwrap(), &[], source).is_ok());
 
-    let invalid_component_id = source.replace(
-        "columns: [{field: categories}]",
-        "columns:\n  - field: title\ncomponent:\n  id: attricat.bad-id\n  version: 1",
-    );
-    assert!(
-        compile(
-            parse(&invalid_component_id).unwrap(),
-            &[],
-            &invalid_component_id
-        )
-        .is_err()
-    );
-
-    let invalid_component_version = source.replace(
-        "columns: [{field: categories}]",
-        "columns:\n  - field: title\ncomponent:\n  id: attricat.table\n  version: 0",
-    );
-    assert!(
-        compile(
-            parse(&invalid_component_version).unwrap(),
-            &[],
-            &invalid_component_version
-        )
-        .is_err()
-    );
-
-    let invalid_relationship_leaf = source.replace(
-        "type: table\ncolumns:\n  - field: categories",
-        "type: stack\nchildren:\n  - type: relationship_list\n    field: title",
-    );
-    assert!(
-        compile(
-            parse(&invalid_relationship_leaf).unwrap(),
-            &[],
-            &invalid_relationship_leaf
-        )
-        .is_err()
-    );
+    for invalid in [
+        source.replace(
+            "    type: table\n",
+            "    type: table\n    component: {id: attricat.bad-id, version: 1}\n",
+        ),
+        source.replace(
+            "    type: table\n",
+            "    type: table\n    component: {id: attricat.table, version: 0}\n",
+        ),
+        source.replace("{field: categories}", "{field: missing}"),
+        source.replace(
+            "  table:\n    type: table\n    columns:\n      - {field: title}\n      - {field: categories}\n",
+            "  detail:\n    type: stack\n    children:\n      - type: relationship_list\n        field: title\n",
+        ),
+    ] {
+        assert_ne!(invalid, source);
+        assert!(
+            compile(parse(&invalid).unwrap(), &[], &invalid).is_err(),
+            "{invalid}"
+        );
+    }
 }
 
 #[test]

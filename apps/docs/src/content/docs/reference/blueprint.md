@@ -461,7 +461,7 @@ views:
 | Key | Type | Description |
 | --- | --- | --- |
 | `columns` | list of mappings | Column definitions. Must be non-empty with unique `field` values. |
-| `columns[].field` | string | A local scalar attribute, a local file attribute with a compatible renderer, or a path of up to three relationship hops ending in a scalar attribute, such as `family.product_type.name`. |
+| `columns[].field` | string | A local scalar attribute, a local relationship (the linked records' labels, up to five, of any target blueprint), a local file attribute with a compatible renderer, or a path of up to three relationship hops ending in a scalar attribute, such as `family.product_type.name`. |
 | `columns[].label` | string | Column header. Defaults to the attribute name. |
 | `columns[].renderer` | component reference | `attricat.table_image@1`, a string display component (`attricat.color_display@1`, `attricat.email_display@1`, `attricat.url_display@1`, or `attricat.phone_display@1`), or an extension's table cell. |
 | `component` | component reference | Optional table component. |

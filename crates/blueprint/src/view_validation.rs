@@ -365,6 +365,13 @@ fn validate_table_columns(
             validate_code(part, "table column path segment")?;
         }
         if parts.len() == 1 {
+            // A relationship column lists the linked records' labels, whatever
+            // blueprints they belong to.
+            if attributes.iter().any(|attribute| {
+                attribute.code == parts[0] && attribute.value_type == ValueType::Relationship
+            }) {
+                continue;
+            }
             let attribute = validate_view_field("table", parts[0], attributes, false)?;
             // A local scalar column also checks the component's value type.
             validate_component(

@@ -145,7 +145,7 @@ views:
       - {field: family.product_type.name, label: Product type}
 ```
 
-A column is a local scalar attribute, or a path through up to three relationships that ends in a scalar attribute. Each hop is resolved with the linked record's own blueprint revision. If an older linked record does not have the attribute, the cell is empty. A many-valued path can show several values in one cell.
+A column is a local scalar attribute, a local relationship, or a path through up to three relationships that ends in a scalar attribute. A relationship column lists the labels of the records the row links to, up to five, whichever of the relationship's target blueprints they belong to; it can't be sorted. Each hop is resolved with the linked record's own blueprint revision. If an older linked record does not have the attribute, the cell is empty. A many-valued path can show several values in one cell.
 
 Columns can be sorted when they resolve to a scalar and every relationship in the path has `cardinality: one`.
 

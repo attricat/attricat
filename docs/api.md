@@ -276,7 +276,7 @@ is written once, so the copy starts with no value history.
 
 [Generated](blueprints.md#generated-values) values are not copied; the copy
 is numbered like any new record. Balances and the values a
-[movement](blueprints.md#balances-and-movements) sets are not copied either: a
+[movement](movements.md) sets are not copied either: a
 copied balance record starts at zero, and a copied movement record applies its
 own movement.
 
@@ -799,7 +799,7 @@ results report the same `code`, `message` and `details`.
 | `422` | `generated_attribute_readonly` | `attribute`: a generated attribute, which no client can write |
 | `409` | `generated_sequence_not_raised` | `current` next value and the lower `requested` one; counters can only be raised |
 | `409` | `generated_reset_changed` | `attribute`, and the `previous` and `requested` `reset`; a blueprint revision cannot change the `reset` of an attribute an earlier revision generated |
-| `422` | `balance_attribute_readonly` | `attribute`: a [balance](blueprints.md#balances-and-movements), which only movements change |
+| `422` | `balance_attribute_readonly` | `attribute`: a [balance](movements.md), which only movements change |
 | `422` | `movement_attribute_readonly` | `attribute`: the target link or result a movement sets |
 | `409` | `balance_below_minimum` | `attribute`, target `record_id`, and `available`, `requested`, `minimum` as decimal strings; `reserved` when the balance has reservations, with `available` the free amount |
 | `409` | `balance_record_not_empty` | `attribute` and its `balance` (decimal string) |

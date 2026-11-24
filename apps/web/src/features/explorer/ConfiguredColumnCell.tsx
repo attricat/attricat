@@ -6,6 +6,8 @@ import type { ExtensionContribution } from '../extensions/api';
 import { resolveValueRenderer } from '../views/components/registry';
 import { AttributeValue } from '../views/components/values/AttributeValue';
 import { NotSetValue } from '../views/components/values/NotSetValue';
+import { attributeValueTypes } from '../records/valueTypes';
+import { linkedRecordsColumnMinWidth } from './constants';
 import { DeclaredCell } from './DeclaredCell';
 import {
   isRelationshipPath,
@@ -29,6 +31,32 @@ const RelatedPathValue = ({ value }: { value: unknown }) => {
   );
 };
 
+type LinkedRecords = {
+  items: { id: string; display?: string | null }[];
+  truncated?: boolean;
+};
+
+const isLinkedRecords = (value: unknown): value is LinkedRecords =>
+  typeof value === 'object' &&
+  value !== null &&
+  Array.isArray((value as LinkedRecords).items);
+
+/**
+ * A relationship column: the labels of the records the row links to, of
+ * whichever blueprints they are, with an ellipsis when the server left some
+ * out.
+ */
+const LinkedRecordsValue = ({ value }: { value: unknown }) => {
+  if (!isLinkedRecords(value) || value.items.length === 0)
+    return <NotSetValue />;
+  const labels = value.items.map((item) => item.display || item.id);
+  return (
+    <Typography sx={{ minWidth: linkedRecordsColumnMinWidth }} variant="body2">
+      {[...labels, ...(value.truncated ? ['…'] : [])].join(', ')}
+    </Typography>
+  );
+};
+
 type Props = {
   attribute: Attribute;
   column: ExplorerTableColumn;
@@ -49,6 +77,8 @@ export const ConfiguredColumnCell = ({
   const primaryValue = pathValues.length > 1 ? pathValues : pathValues[0];
   const fallback = relatedPath ? (
     <RelatedPathValue value={primaryValue} />
+  ) : attribute.value_type === attributeValueTypes.relationship ? (
+    <LinkedRecordsValue value={primaryValue} />
   ) : (
     <AttributeValue attribute={attribute} compact value={primaryValue} />
   );

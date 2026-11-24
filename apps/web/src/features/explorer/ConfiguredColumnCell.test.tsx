@@ -126,4 +126,39 @@ describe('declared extension cells', () => {
     renderAmount(['n/a'], { precision: 2 });
     expect(screen.getByText('n/a')).toBeTruthy();
   });
+
+  it('lists the labels of the records a relationship column links to', () => {
+    render(
+      <ConfiguredColumnCell
+        attribute={{
+          code: 'item',
+          value_type: 'relationship',
+          target_blueprint_codes: ['product', 'material'],
+        }}
+        column={{
+          field: 'item',
+          relationshipSortBlocked: false,
+          sortable: false,
+        }}
+        record={{
+          ...record,
+          table_values: {
+            item: [
+              {
+                items: [
+                  { id: 'a', display: 'Steel wire 3 mm · MAT-0403' },
+                  { id: 'b', display: 'Hex nut M20' },
+                ],
+                truncated: true,
+              },
+            ],
+          },
+        }}
+        extension={undefined}
+      />,
+    );
+    expect(
+      screen.getByText('Steel wire 3 mm · MAT-0403, Hex nut M20, …'),
+    ).toBeTruthy();
+  });
 });

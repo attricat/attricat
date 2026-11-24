@@ -905,13 +905,16 @@ impl AttricatRepository {
                 continue;
             };
             if parts.len() == 1 {
-                if first.value_type != ValueType::Relationship {
-                    resolved.push(TablePathAttribute {
-                        code: path.to_owned(),
-                        value_type: first.value_type,
-                        sortable: !matches!(first.value_type, ValueType::File | ValueType::Json),
-                    });
-                }
+                // A relationship column shows its linked records' labels and
+                // does not sort.
+                resolved.push(TablePathAttribute {
+                    code: path.to_owned(),
+                    value_type: first.value_type,
+                    sortable: !matches!(
+                        first.value_type,
+                        ValueType::File | ValueType::Json | ValueType::Relationship
+                    ),
+                });
                 continue;
             }
             let mut attribute = first.clone();
