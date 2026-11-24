@@ -90,9 +90,12 @@ export const RelationshipPickerSelectionBar = ({
           size="small"
           variant="contained"
         >
-          {t('explorer.relationshipPicker.use', {
-            count: selectedItems.length,
-          })}
+          {t(
+            session.mode === relationshipPickerModes.filter
+              ? 'explorer.relationshipPicker.useInFilter'
+              : 'explorer.relationshipPicker.use',
+            { count: selectedItems.length },
+          )}
         </Button>
       </Box>
     </Paper>

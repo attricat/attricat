@@ -2,7 +2,7 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import '../../i18n';
+import i18n from '../../i18n';
 import type { RecordItem } from '../records/api';
 import { RelationshipPickerSelectionBar } from './RelationshipPickerSelectionBar';
 
@@ -14,7 +14,7 @@ const nut = record('8d6f1c2a-1b2c-4d3e-8f4a-5b6c7d8e9f02', 'Nut');
 
 const renderBar = (
   selectedItems: RecordItem[],
-  mode: 'one' | 'many' = 'many',
+  mode: 'one' | 'many' | 'filter' = 'many',
 ) =>
   render(
     <RelationshipPickerSelectionBar
@@ -73,5 +73,23 @@ describe('RelationshipPickerSelectionBar', () => {
     expect(
       screen.getByText(/The record form that opened this tab is closed/),
     ).toBeTruthy();
+  });
+
+  it('words the choice for a filter as using the records', async () => {
+    vi.stubGlobal('opener', { closed: false, postMessage: vi.fn() });
+    await i18n.changeLanguage('pl');
+    try {
+      renderBar([bolt, nut], 'filter');
+      expect(
+        screen.getByRole('button', { name: 'Użyj 2 zaznaczonych rekordów' }),
+      ).toBeTruthy();
+      cleanup();
+      renderBar([bolt, nut]);
+      expect(
+        screen.getByRole('button', { name: 'Dodaj 2 zaznaczone rekordy' }),
+      ).toBeTruthy();
+    } finally {
+      await i18n.changeLanguage('en');
+    }
   });
 });

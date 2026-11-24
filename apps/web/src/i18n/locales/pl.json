@@ -1656,6 +1656,10 @@
       "use_few": "Dodaj {{count}} zaznaczone rekordy",
       "use_many": "Dodaj {{count}} zaznaczonych rekordów",
       "use_other": "Dodaj {{count}} zaznaczonego rekordu",
+      "useInFilter_one": "Użyj zaznaczonego rekordu",
+      "useInFilter_few": "Użyj {{count}} zaznaczonych rekordów",
+      "useInFilter_many": "Użyj {{count}} zaznaczonych rekordów",
+      "useInFilter_other": "Użyj {{count}} zaznaczonych rekordów",
       "openerClosed": "Formularz, z którego otwarto tę kartę, jest już zamknięty, więc nie można przekazać wyboru."
     }
   },

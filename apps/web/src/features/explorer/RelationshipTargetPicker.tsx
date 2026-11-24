@@ -69,7 +69,7 @@ export const RelationshipTargetPicker = ({
         blueprint: targetBlueprint,
         locked: true,
         relationshipPicker: pickerToken,
-        relationshipPickerMode: relationshipPickerModes.many,
+        relationshipPickerMode: relationshipPickerModes.filter,
       })}`
     : undefined;
   const toggle = (id: string) =>
