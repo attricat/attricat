@@ -324,6 +324,10 @@ async fn validate_browse_by(
         return Ok(());
     };
     let hops: Vec<_> = path.split('.').collect();
+    // A single field, which may link to several blueprints, has no later hops.
+    if hops.len() == 1 {
+        return Ok(());
+    }
     let mut target = compiled
         .attributes
         .iter()

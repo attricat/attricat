@@ -952,7 +952,11 @@ fn validate_browse_path(
             walk_attribute_path(start, &segments[..end].join("."), by_code, referenced)?;
         if !saved_search::browse_path_hop(
             attribute.value_type,
-            attribute.target_blueprint.as_deref(),
+            saved_search::browse_hop_target(
+                attribute.target_blueprint.as_deref(),
+                &attribute.target_blueprints,
+                segments.len(),
+            ),
             attribute.cardinality,
             segments.len(),
         ) {

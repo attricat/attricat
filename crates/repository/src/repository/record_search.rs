@@ -122,7 +122,17 @@ pub struct RecordRelationshipFilter {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RelationshipFacetHop {
     pub field: String,
-    pub target_blueprint_id: Uuid,
+    /// The blueprints the hop reaches. Only the last hop of a path may reach
+    /// several, such as an item that is a product or a material; a hop that
+    /// another follows has one, which the next hop starts from.
+    pub target_blueprint_ids: Vec<Uuid>,
+}
+
+impl RelationshipFacetHop {
+    /// The blueprint the next hop starts from.
+    fn next_source(&self) -> Uuid {
+        self.target_blueprint_ids[0]
+    }
 }
 
 /// The `context_path` CTE of the context bound at `$4`, nearest first.
@@ -2149,7 +2159,7 @@ impl AttricatRepository {
         &self,
         source_blueprint_id: Uuid,
         source_path: &[RelationshipFacetHop],
-        target_blueprint_id: Uuid,
+        target_blueprint_ids: &[Uuid],
         hierarchy_field: Option<&str>,
         context_id: Uuid,
         selected_target_ids: &[Uuid],
@@ -2163,9 +2173,9 @@ impl AttricatRepository {
         }
         let selected: HashSet<_> = selected_target_ids.iter().copied().collect();
         let selected_nodes: i64 = sqlx::query_scalar(
-            "SELECT count(*) FROM records WHERE blueprint_id = $1 AND id = ANY($2) AND deleted_at IS NULL",
+            "SELECT count(*) FROM records WHERE blueprint_id = ANY($1) AND id = ANY($2) AND deleted_at IS NULL",
         )
-        .bind(target_blueprint_id)
+        .bind(target_blueprint_ids)
         .bind(selected.iter().copied().collect::<Vec<_>>())
         .fetch_one(&self.pool)
         .await?;
@@ -2174,7 +2184,7 @@ impl AttricatRepository {
         }
         // The blueprint each hop starts from.
         let hop_sources: Vec<Uuid> = std::iter::once(source_blueprint_id)
-            .chain(source_path.iter().map(|hop| hop.target_blueprint_id))
+            .chain(source_path.iter().map(RelationshipFacetHop::next_source))
             .collect();
         let last = source_path.len().checked_sub(1);
         // Walks down from the selection and then back over the last hop
@@ -2194,7 +2204,8 @@ impl AttricatRepository {
         )))
         .bind(last.map_or(source_blueprint_id, |last| hop_sources[last]))
         .bind(last.map(|last| source_path[last].field.as_str()))
-        .bind(target_blueprint_id)
+        // A hierarchy belongs to the single blueprint of a tree facet.
+        .bind(target_blueprint_ids[0])
         .bind(context_id)
         .bind(selected.into_iter().collect::<Vec<_>>())
         .bind(hierarchy_field)
@@ -2241,7 +2252,7 @@ impl AttricatRepository {
         source_blueprint_version: Option<i64>,
         matching_record_ids: Option<&HashSet<Uuid>>,
         source_path: &[RelationshipFacetHop],
-        target_blueprint_id: Uuid,
+        target_blueprint_ids: &[Uuid],
         hierarchy_field: Option<&str>,
         context_id: Uuid,
         parent_id: Option<Uuid>,
@@ -2261,9 +2272,11 @@ impl AttricatRepository {
         // Counting on a cache miss needs the same edges; whichever starts
         // first resolves them for both.
         let hierarchy_edges = OnceCell::new();
+        // A hierarchy belongs to the single blueprint of a tree facet; a flat
+        // facet may list the records of several blueprints.
         let parents = self.hierarchy_edges(
             &hierarchy_edges,
-            target_blueprint_id,
+            target_blueprint_ids[0],
             hierarchy_field,
             context_id,
         );
@@ -2272,9 +2285,9 @@ impl AttricatRepository {
                 return Ok(Vec::new());
             }
             sqlx::query_scalar::<_, Uuid>(
-                "SELECT id FROM records WHERE blueprint_id = $1 AND deleted_at IS NULL ORDER BY id",
+                "SELECT id FROM records WHERE blueprint_id = ANY($1) AND deleted_at IS NULL ORDER BY id",
             )
-            .bind(target_blueprint_id)
+            .bind(target_blueprint_ids)
             .fetch_all(&self.pool)
             .await
             .map_err(RepositoryError::from)
@@ -2287,7 +2300,7 @@ impl AttricatRepository {
                 source_blueprint_id,
                 source_blueprint_version,
                 source_path,
-                target_blueprint_id,
+                target_blueprint_ids,
                 hierarchy_field,
                 context_id,
                 &hierarchy_edges,
@@ -2375,11 +2388,11 @@ impl AttricatRepository {
                  FROM records record
                  JOIN blueprints blueprint ON blueprint.id = record.blueprint_id
                   AND blueprint.version = record.blueprint_version
-                WHERE record.blueprint_id = $1
+                WHERE record.blueprint_id = ANY($1)
                   AND record.id = ANY($2)
                   AND record.deleted_at IS NULL"#,
         )
-        .bind(target_blueprint_id)
+        .bind(target_blueprint_ids)
         .bind(labeled.into_iter().collect::<Vec<_>>())
         .fetch_all(&self.pool)
         .await?
@@ -2508,20 +2521,26 @@ impl AttricatRepository {
             .collect());
         }
         let hop_sources: Vec<_> = std::iter::once(source_blueprint_id)
-            .chain(source_path.iter().map(|hop| hop.target_blueprint_id))
+            .chain(source_path.iter().map(RelationshipFacetHop::next_source))
             .collect();
         let hop_sources = &hop_sources;
         // Only the searched records are limited to one revision.
         let hop_edges = |index: usize, from: Option<Vec<Uuid>>| async move {
-            self.resolved_relationship_edges(
-                hop_sources[index],
-                source_blueprint_version.filter(|_| index == 0),
-                from.as_deref(),
-                &source_path[index].field,
-                source_path[index].target_blueprint_id,
-                context_id,
-            )
-            .await
+            let mut edges = Vec::new();
+            for target in &source_path[index].target_blueprint_ids {
+                edges.extend(
+                    self.resolved_relationship_edges(
+                        hop_sources[index],
+                        source_blueprint_version.filter(|_| index == 0),
+                        from.as_deref(),
+                        &source_path[index].field,
+                        *target,
+                        context_id,
+                    )
+                    .await?,
+                );
+            }
+            Ok::<_, RepositoryError>(edges)
         };
         let join = |pairs: Vec<(Uuid, Uuid)>, edges: Vec<(Uuid, Uuid)>| {
             let mut targets: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
@@ -2581,11 +2600,16 @@ impl AttricatRepository {
         source_blueprint_id: Uuid,
         source_blueprint_version: Option<i64>,
         source_path: &[RelationshipFacetHop],
-        target_blueprint_id: Uuid,
+        target_blueprint_ids: &[Uuid],
         hierarchy_field: Option<&str>,
         context_id: Uuid,
         hierarchy_edges: &OnceCell<Vec<(Uuid, Uuid)>>,
     ) -> Result<Arc<HashMap<Uuid, i64>>, RepositoryError> {
+        let targets_key = target_blueprint_ids
+            .iter()
+            .map(Uuid::to_string)
+            .collect::<Vec<_>>()
+            .join(",");
         let key = CacheKey::new(
             "tree_facet_counts",
             &[
@@ -2593,7 +2617,7 @@ impl AttricatRepository {
                 &source_blueprint_id,
                 &source_blueprint_version.map_or_else(|| "all".to_owned(), |v| v.to_string()),
                 &facet_path_key(source_path),
-                &target_blueprint_id,
+                &targets_key,
                 &hierarchy_field.unwrap_or("-"),
                 &context_id,
             ],
@@ -2606,7 +2630,7 @@ impl AttricatRepository {
             .fetch(key, &[], policy, || async {
                 let parents = self.hierarchy_edges(
                     hierarchy_edges,
-                    target_blueprint_id,
+                    target_blueprint_ids[0],
                     hierarchy_field,
                     context_id,
                 );

@@ -667,7 +667,11 @@ fn validate_table_paths(
                     .filter(|attribute| {
                         browse_path_hop(
                             attribute.value_type,
-                            attribute.target_blueprint.as_deref(),
+                            attricat_validation::saved_search::browse_hop_target(
+                                attribute.target_blueprint.as_deref(),
+                                &attribute.target_blueprints,
+                                hops.len(),
+                            ),
                             attribute.cardinality,
                             hops.len(),
                         )

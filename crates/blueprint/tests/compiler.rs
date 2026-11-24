@@ -1127,7 +1127,7 @@ attributes:
 }
 
 #[test]
-fn explorer_view_browse_by_requires_a_single_target_relationship_or_path() {
+fn explorer_view_browse_by_requires_a_relationship_or_single_target_path() {
     let source = r#"
 format_version: 1
 code: product
@@ -1177,7 +1177,8 @@ attributes:
     );
 
     // Later hops resolve against published targets when the blueprint is saved.
-    for path in ["model.brand", "model.brand.group", "tags"] {
+    // A single field may link to several blueprints, listed together.
+    for path in ["model.brand", "model.brand.group", "tags", "related"] {
         let valid = source.replace("browse_by: categories", &format!("browse_by: '{path}'"));
         assert_eq!(
             compile(parse(&valid).unwrap(), &[], &valid)
@@ -1215,9 +1216,10 @@ attributes:
             source.replace("browse_by: categories", "browse_by: model..brand"),
             "model..brand",
         ),
+        // A path can't continue past a relationship to several blueprints.
         (
-            source.replace("browse_by: categories", "browse_by: related"),
-            "related",
+            source.replace("browse_by: categories", "browse_by: related.parent"),
+            "related.parent",
         ),
         (
             source.replace("browse_by: categories", "browse_by: missing"),

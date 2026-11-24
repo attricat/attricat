@@ -45,7 +45,7 @@ pub enum BlueprintError {
     #[error("views.edit is no longer supported; records are edited on the detail view")]
     EditViewRemoved,
     #[error(
-        "views.explorer browse_by '{0}' must be false, a relationship with a single target blueprint, or a path of up to three such relationships with cardinality: one"
+        "views.explorer browse_by '{0}' must be false, a relationship, or a path of up to three relationships to a single target blueprint with cardinality: one"
     )]
     InvalidBrowseByField(String),
     #[error("views.dropdown_option contains duplicate field '{0}'")]

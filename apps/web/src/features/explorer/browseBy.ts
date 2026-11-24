@@ -30,7 +30,7 @@ export type BrowseByField = {
    * The field, or for a path a stand-in coded like `model.brand`, named by
    * its hops and targeting the last hop's target.
    */
-  attribute: RelationshipFilterAttribute;
+  attribute: AnyRelationshipFilterAttribute;
   /** Self-targeting field that arranges the targets as a tree. */
   hierarchyField?: string;
   /** The relationships a path follows, from the browsed blueprint on. */
@@ -83,18 +83,21 @@ const isPathHop = (
   !isHiddenByDefault(attribute, explorerVisibilityScope);
 
 /**
- * Relationship fields with a single target blueprint. Fields that allow
- * several targets cannot supply one list of targets. The browsed blueprint's
- * own hierarchy field lists its own tree rather than its records' parents.
+ * The relationship fields the rail can list targets of. A field with several
+ * target blueprints, such as an item that is a product or a material, lists
+ * their records together without a tree. The browsed blueprint's own
+ * hierarchy field lists its own tree rather than its records' parents.
  */
 export const browseByFields = (
   blueprintCode: string | undefined,
   relationshipFields: AnyRelationshipFilterAttribute[],
   targetOf: BlueprintLookup,
 ): BrowseByField[] =>
-  relationshipFields.flatMap((attribute) => {
+  relationshipFields.flatMap((attribute): BrowseByField[] => {
     if (!hasSingleFilterTarget(attribute) || !singleTarget(attribute))
-      return [];
+      return isHiddenByDefault(attribute, explorerVisibilityScope)
+        ? []
+        : [{ attribute }];
     const target = targetOf(attribute.target_blueprint_code);
     if (!target) return [];
     const hierarchyField = hierarchyFieldOf(target);

@@ -1,7 +1,9 @@
 use std::collections::HashSet;
 
 use attricat_domain::value_type::ValueType;
-use attricat_validation::saved_search::{MAX_RELATIONSHIP_HOPS, browse_path_hop};
+use attricat_validation::saved_search::{
+    MAX_RELATIONSHIP_HOPS, browse_hop_target, browse_path_hop,
+};
 
 use crate::{
     BlueprintError, BlueprintKind, BrowseBy, ComponentReference, EXTENSION_LAYOUT_OUTLETS,
@@ -400,8 +402,9 @@ fn validate_table_columns(
 }
 
 /// Checks the local part of a browse path: one to three relationship hops,
-/// the first of which this blueprint declares. Each hop needs a single target
-/// blueprint and, on a multi-hop path, `cardinality: one`, as for sortable
+/// the first of which this blueprint declares. A one-hop path may link to
+/// several blueprints; on a longer path each hop needs a single target
+/// blueprint and `cardinality: one`, as for sortable
 /// relationship table paths. Hops past the first are resolved against the
 /// published target blueprints when the blueprint is saved.
 fn validate_browse_by_path(
@@ -421,12 +424,14 @@ fn validate_browse_by_path(
         .iter()
         .find(|attribute| attribute.code == hops[0])
         .ok_or_else(invalid)?;
-    if !browse_path_hop(
-        first.value_type,
+    // A single field may link to several blueprints, whose records the rail
+    // lists together; a path continues through one.
+    let target = browse_hop_target(
         first.target_blueprint.as_deref(),
-        first.cardinality,
+        &first.target_blueprints,
         hops.len(),
-    ) {
+    );
+    if !browse_path_hop(first.value_type, target, first.cardinality, hops.len()) {
         return Err(invalid());
     }
     Ok(())

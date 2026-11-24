@@ -66,7 +66,7 @@ describe('hierarchyFieldOf', () => {
 });
 
 describe('browseByFields', () => {
-  it('lists single-target fields once their targets load', () => {
+  it('lists fields once their targets load, and several-target fields flat', () => {
     const categories = relationship('categories', 'category');
     const brand = relationship('brand', 'brand');
     const related = relationship('related', 'any', {
@@ -87,6 +87,8 @@ describe('browseByFields', () => {
     expect(fields).toEqual([
       { attribute: categories, hierarchyField: 'parent' },
       { attribute: brand, hierarchyField: undefined },
+      // A product or an article: their records are listed together.
+      { attribute: related },
     ]);
   });
 

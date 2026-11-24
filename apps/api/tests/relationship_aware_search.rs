@@ -446,6 +446,76 @@ attributes:
             ),
         ]
     );
+    // The Browse by rail lists the products and materials stock links to
+    // together, with their counts, with and without a search query.
+    let facet = |body: Value| {
+        let client = client.clone();
+        let base_url = base_url.clone();
+        async move {
+            client
+                .post(format!(
+                    "{base_url}/v1/records/facets/relationship-tree/children"
+                ))
+                .json(&body)
+                .send()
+                .await
+                .unwrap()
+        }
+    };
+    let default_context = "00000000-0000-4000-8000-000000000001";
+    for (query, counts) in [(None, [1, 1]), (Some("item:Steel"), [0, 1])] {
+        let mut body = json!({
+            "blueprint": { "code": "mt_stock" },
+            "source_relationship_field": "item",
+            "context_id": default_context,
+            "selected_target_ids": [wire["id"]],
+        });
+        if let Some(query) = query {
+            body["query"] = json!(query);
+        }
+        let page: Value = facet(body)
+            .await
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let mut items: Vec<(Value, Value, Value)> = page["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| {
+                (
+                    item["id"].clone(),
+                    item["display"].clone(),
+                    item["count"].clone(),
+                )
+            })
+            .collect();
+        items.sort_by_key(|(id, _, _)| id.as_str().unwrap().to_owned());
+        let mut expected = vec![
+            (nut["id"].clone(), json!("Hex nut"), json!(counts[0])),
+            (wire["id"].clone(), json!("Steel wire"), json!(counts[1])),
+        ];
+        expected.sort_by_key(|(id, _, _)| id.as_str().unwrap().to_owned());
+        assert_eq!(items, expected, "{query:?}");
+        assert_eq!(page["selected_items"][0]["display"], "Steel wire");
+    }
+    // A tree needs a single blueprint, and a path can't continue past several.
+    for body in [
+        json!({ "blueprint": { "code": "mt_stock" }, "source_relationship_field": "item",
+                "hierarchy_field": "name", "context_id": default_context }),
+        json!({ "blueprint": { "code": "mt_stock" }, "source_relationship_field": "item.name",
+                "context_id": default_context }),
+    ] {
+        let response = facet(body.clone()).await;
+        assert_eq!(
+            response.status(),
+            reqwest::StatusCode::UNPROCESSABLE_ENTITY,
+            "{body}"
+        );
+    }
+
     for (query, message) in [
         ("item.color.name:red", "several blueprints"),
         (

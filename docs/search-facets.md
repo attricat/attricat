@@ -12,7 +12,12 @@ On `lg` screens the Explorer shows a **Browse by** rail beside the results
 selected blueprint, or of the last hop of a relationship path, through the
 children endpoint below, and loads a node's children when it is expanded.
 
-1. Candidate fields are relationships with a single target blueprint. A field
+1. Candidate fields are relationships. A field with several target
+   blueprints, such as an `item` that is a product or a material, is a
+   one-level list of their records together: the children endpoint takes
+   the last hop's `target_blueprint_ids` (`RelationshipFacetHop`), rejects a
+   `hierarchy_field` for it and a path that continues past it, and its
+   selection is a plain relationship filter. A single-target field
    is a tree when its target has a self-targeting relationship with
    `hierarchy` set (`tree` preferred over `acyclic`); otherwise the rail is a
    one-level list. Plain self-relationships are never treated as trees.

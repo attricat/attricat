@@ -283,6 +283,23 @@ pub fn normalize_state(state: &Value) -> Value {
 /// relationship with one target blueprint and, on a path of several hops, a
 /// single value (`cardinality: one`), as for sortable table paths. Each
 /// source then reaches at most one node of the browsed blueprint.
+/// The target blueprint a browse hop is checked against: the relationship's
+/// single target or, for a path of one hop, the first of several targets,
+/// whose records the rail then lists together. A hop that another follows
+/// needs a single target to continue in.
+pub fn browse_hop_target<'a>(
+    target_blueprint: Option<&'a str>,
+    target_blueprints: &'a [String],
+    hops: usize,
+) -> Option<&'a str> {
+    target_blueprint.or_else(|| {
+        (hops == 1)
+            .then(|| target_blueprints.first())
+            .flatten()
+            .map(String::as_str)
+    })
+}
+
 pub fn browse_path_hop(
     value_type: ValueType,
     target_blueprint: Option<&str>,
