@@ -379,29 +379,30 @@ for (const colorScheme of ['light', 'dark'] as const) {
     const lines = page.getByRole('table', { name: 'Material lines' });
     await expect(lines.getByText('Nothing here yet.')).toBeVisible();
 
-    // Two lines added in place; the order is set and cannot be changed.
-    const addLine = async (quantity: string, another: boolean) => {
-      const dialog = page.getByRole('dialog', {
-        name: `Add Material lines ${run}`,
-      });
-      await page
-        .getByRole('button', { name: `Add Material lines ${run}` })
-        .click();
-      await dialog.getByRole('button', { name: 'Choose material' }).click();
+    // Lines are typed into a new row; the order is set by the table.
+    const newRow = lines.getByRole('row', {
+      name: `New Material lines ${run}`,
+    });
+    const addLine = async (quantity: string) => {
+      await newRow.getByRole('button', { name: 'Choose material' }).click();
       const picker = page.getByRole('dialog', { name: /^Select / });
       await picker.getByRole('radio', { name: 'Steel' }).check();
       await picker.getByRole('button', { name: 'Apply' }).click();
-      await dialog.getByLabel('quantity', { exact: true }).fill(quantity);
-      await dialog
-        .getByRole('button', {
-          name: another ? 'Add and add another' : 'Add',
-          exact: true,
-        })
-        .click();
-      if (!another) await expect(dialog).toBeHidden();
+      await newRow.getByLabel('quantity', { exact: true }).fill(quantity);
+      await newRow.getByLabel('quantity', { exact: true }).press('Enter');
+      // The row empties for the next line once this one is saved.
+      await expect(newRow.getByLabel('quantity', { exact: true })).toHaveValue(
+        '',
+      );
     };
-    await addLine('4', false);
-    await addLine('9', false);
+    await page
+      .getByRole('button', { name: `Add Material lines ${run}` })
+      .click();
+    await addLine('4');
+    await addLine('9');
+    await newRow
+      .getByRole('button', { name: `Discard new Material lines ${run}` })
+      .click();
     await expect(lines.getByRole('row')).toHaveCount(3);
     const quantities = lines.getByRole('spinbutton', { name: 'quantity' });
     await expect(quantities).toHaveCount(2);

@@ -867,7 +867,7 @@ To work on the lines from the order's page, list them in an editable table:
     - {source_blueprint: production_order_line, field: production_order}
 ```
 
-The table's cells edit each line in place, and every changed cell saves when you leave it, as fields do on a record's page. Cells a line doesn't let you change show its value. **Add** opens a form for a new line with the order already set, **Open** shows a line's whole record beside the order, and **Delete** removes one. Once the lines are settled, the table only shows and opens them.
+The table's cells edit each line in place, and every changed cell saves when you leave it, as fields do on a record's page. Cells a line doesn't let you change show its value. **Add** opens a new row at the bottom of the table: fill in its cells and press Enter or its save button, and the line is created with the order already set while the row empties for the next one. Escape or its discard button closes it. Required values you didn't fill in are marked in their cells. **Open** shows a line's whole record beside the order, and **Delete** removes one. Once the lines are settled, the table only shows and opens them.
 
 ### Reservations
 

@@ -867,7 +867,7 @@ Aby pracować na pozycjach ze strony zlecenia, pokaż je w edytowalnej tabeli:
     - {source_blueprint: production_order_line, field: production_order}
 ```
 
-Komórki tabeli edytują każdą pozycję na miejscu, a zmieniona komórka zapisuje się po jej opuszczeniu, tak jak pola na stronie rekordu. Komórki, których pozycja nie pozwala zmienić, pokazują jej wartość. **Dodaj** otwiera formularz nowej pozycji z już ustawionym zleceniem, **Otwórz** pokazuje cały rekord pozycji obok zlecenia, a **Usuń** ją usuwa. Gdy pozycje są zaksięgowane, tabela pozwala je tylko wyświetlać i otwierać.
+Komórki tabeli edytują każdą pozycję na miejscu, a zmieniona komórka zapisuje się po jej opuszczeniu, tak jak pola na stronie rekordu. Komórki, których pozycja nie pozwala zmienić, pokazują jej wartość. **Dodaj** otwiera nowy wiersz na dole tabeli: wypełnij jego komórki i naciśnij Enter lub jego przycisk zapisu, a pozycja zostanie utworzona z już ustawionym zleceniem, a wiersz opróżni się na kolejną. Escape lub przycisk odrzucenia go zamyka. Niewypełnione wymagane wartości są oznaczane w komórkach. **Otwórz** pokazuje cały rekord pozycji obok zlecenia, a **Usuń** ją usuwa. Gdy pozycje są zaksięgowane, tabela pozwala je tylko wyświetlać i otwierać.
 
 ### Rezerwacje
 

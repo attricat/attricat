@@ -900,8 +900,12 @@ resolved default-context values. In an editable table each row
 change with the same `InlineFieldEditor`, `useRecordFieldSaves` and
 `changeableInlineAttributes` the record page uses, so saves, conflicts, status
 locks and applied-movement locks behave alike; `CompactFieldsContext` makes
-choices a list and leaves out relationship previews in cells. **Add** opens
-the create form with the link fixed; **Open** shows the row in the record
+choices a list and leaves out relationship previews in cells. **Add** opens a
+new row (`NewIncomingRow`) whose cells are the columns' editors; Enter or its
+save button validates them against the record schema and creates the record
+with the link set, then empties the row; Escape discards it. A required
+attribute outside `columns` fails that validation, so list every attribute a
+new row needs; **Open** shows the row in the record
 panel; **Delete** asks first. Once the record's status applied the rows'
 movements, the record form's `settled_lines` names the
 `{blueprint, relationship}` pair and the table only shows and opens rows; the

@@ -11,6 +11,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../../i18n';
 import { listContexts } from '../../contexts/api';
 import {
+  createRecord,
+  getBlueprintByCode,
   getRecordForm,
   getResolvedRecordPreview,
   searchRecords,
@@ -25,6 +27,8 @@ vi.mock('../../contexts/api', async (importOriginal) => ({
 }));
 vi.mock('../../records/api', async (importOriginal) => ({
   ...(await importOriginal()),
+  createRecord: vi.fn(),
+  getBlueprintByCode: vi.fn(),
   getRecordForm: vi.fn(),
   getResolvedRecordPreview: vi.fn(),
   searchRecords: vi.fn(),
@@ -187,6 +191,37 @@ describe('IncomingRelationshipTable', () => {
     expect(JSON.stringify(vi.mocked(updateRecord).mock.calls[0])).toContain(
       '"quantity"',
     );
+  });
+
+  it('adds a record as a new row with the link set', async () => {
+    vi.mocked(getBlueprintByCode).mockResolvedValue(lineBlueprint as never);
+    vi.mocked(createRecord).mockResolvedValue({ id: lineId } as never);
+    renderTable(false);
+
+    (await screen.findByRole('button', { name: 'Add Order line' })).click();
+    const row = await screen.findByRole('row', { name: 'New Order line' });
+    const quantity = await within(row).findByRole('spinbutton', {
+      name: 'Quantity',
+    });
+    await waitFor(() => expect(document.activeElement).toBe(quantity));
+    fireEvent.change(quantity, { target: { value: '3' } });
+    fireEvent.keyDown(quantity, { key: 'Enter' });
+
+    await waitFor(() => expect(createRecord).toHaveBeenCalled());
+    const { values } = vi.mocked(createRecord).mock.calls[0][0];
+    expect(values).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ attribute_code: 'quantity', value: 3 }),
+        expect.objectContaining({
+          attribute_code: 'order',
+          target_record_id: orderId,
+        }),
+      ]),
+    );
+    // The row empties for the next record; Escape closes it.
+    await waitFor(() => expect(quantity).toHaveProperty('value', ''));
+    fireEvent.keyDown(quantity, { key: 'Escape' });
+    expect(screen.queryByRole('row', { name: 'New Order line' })).toBeNull();
   });
 
   it('only opens settled records', async () => {

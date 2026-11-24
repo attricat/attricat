@@ -4,7 +4,6 @@ import { RotateCcwIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ApiErrorAlert } from '../../../components/ApiErrorAlert';
-import { visuallyHiddenSx } from '../../../components/VisuallyHidden';
 import type { Attribute } from '../../records/api';
 import type { ConflictResolution } from '../../records/constants';
 import { CompactFieldsContext } from '../../records/components/compactFields';
@@ -35,26 +34,11 @@ import {
   viewFieldEditors,
 } from '../viewFieldComponents';
 import { AttributeValue } from './values/AttributeValue';
+import { cellEditorSx } from './cellEditorSx';
 import { NotSetValue } from './values/NotSetValue';
 
 /** Lines are kept in the default context, which has no parent contexts. */
 const noParentContexts: readonly string[] = [];
-
-/**
- * Fits a form control into a table cell: the column header names it, so its
- * label is kept only for assistive technology, and hints give way to errors.
- */
-const cellEditorSx = {
-  minWidth: 120,
-  // A list keeps room for its chosen label beside the open button.
-  '&:has(.MuiAutocomplete-root)': { minWidth: 200 },
-  position: 'relative',
-  '& .MuiFormLabel-root': visuallyHiddenSx,
-  '& .MuiOutlinedInput-notchedOutline': { top: 0 },
-  '& .MuiOutlinedInput-notchedOutline legend': { display: 'none' },
-  '& .MuiInputBase-input': { py: 0.75 },
-  '& .MuiFormHelperText-root:not(.Mui-error)': visuallyHiddenSx,
-} as const;
 
 /**
  * One record linking to the page's record, as a table row whose cells edit
