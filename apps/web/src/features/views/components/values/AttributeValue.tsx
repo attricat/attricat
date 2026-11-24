@@ -1,6 +1,8 @@
 import { Box, Chip, Stack, Typography } from '@mui/material';
 import { Link } from '@tanstack/react-router';
+import { useContext } from 'react';
 import { useTranslation } from 'react-i18next';
+import { CompactFieldsContext } from '../../../records/components/compactFields';
 import type { Attribute } from '../../../records/api';
 import { fileDownloadUrl } from '../../../files/api';
 import { ImageGallery } from '../../../files/ImageGallery';
@@ -64,9 +66,10 @@ export const AttributeValue = ({
   recordId?: string;
 }) => {
   const { t } = useTranslation();
-  const linkedRecord = compact
-    ? undefined
-    : singleLinkedRecord(attribute, value);
+  // In a table cell links stay small and leave out the record's preview.
+  const tight = useContext(CompactFieldsContext);
+  const linkedRecord =
+    compact || tight ? undefined : singleLinkedRecord(attribute, value);
   const preview = useRelatedRecordPreview(attribute, linkedRecord?.id);
   const status = statusConfiguration(attribute);
   if (status) return <StatusValue config={status} value={value} />;
@@ -104,6 +107,7 @@ export const AttributeValue = ({
               clickable
               icon={<NewTabIcon />}
               label={item.display ?? item.id}
+              size={tight ? 'small' : undefined}
             />
           </Link>
         ))}

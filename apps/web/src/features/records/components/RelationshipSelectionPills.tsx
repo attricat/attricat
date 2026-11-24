@@ -12,6 +12,7 @@ export const RelationshipSelectionPills = ({
   labels,
   linkToRecords = false,
   onRemove,
+  singleLine = false,
 }: {
   action?: ReactNode;
   /** Spacing between pills, in theme units. */
@@ -21,13 +22,16 @@ export const RelationshipSelectionPills = ({
   /** Each pill opens its record in a new tab; removing one stays on the page. */
   linkToRecords?: boolean;
   onRemove?: (id: string) => void;
+  /** Keeps the pills on one line, shortening long labels. */
+  singleLine?: boolean;
 }) => {
   if (ids.length === 0 && !action) return null;
   return (
     <Box
       sx={{
+        alignItems: 'center',
         display: 'flex',
-        flexWrap: 'wrap',
+        flexWrap: singleLine ? 'nowrap' : 'wrap',
         gap,
         minWidth: 0,
       }}
@@ -50,7 +54,7 @@ export const RelationshipSelectionPills = ({
             }
             params={{ recordId: id }}
             size="small"
-            sx={{ maxWidth: '100%' }}
+            sx={{ maxWidth: '100%', minWidth: singleLine ? 0 : undefined }}
             to="/records/$recordId"
             {...relatedRecordLinkProps}
           />
@@ -60,7 +64,7 @@ export const RelationshipSelectionPills = ({
             label={labels.get(id) ?? id}
             onDelete={onRemove ? () => onRemove(id) : undefined}
             size="small"
-            sx={{ maxWidth: '100%' }}
+            sx={{ maxWidth: '100%', minWidth: singleLine ? 0 : undefined }}
           />
         ),
       )}

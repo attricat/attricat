@@ -13,5 +13,7 @@ export const cellEditorSx = {
   '& .MuiOutlinedInput-notchedOutline': { top: 0 },
   '& .MuiOutlinedInput-notchedOutline legend': { display: 'none' },
   '& .MuiInputBase-input': { py: 0.75 },
+  // A list's own padding would make it taller than the other inputs.
+  '& .MuiAutocomplete-inputRoot.MuiOutlinedInput-root': { py: 0 },
   '& .MuiFormHelperText-root:not(.Mui-error)': visuallyHiddenSx,
 } as const;

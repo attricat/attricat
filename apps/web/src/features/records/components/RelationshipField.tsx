@@ -11,9 +11,11 @@ import { useQuery } from '@tanstack/react-query';
 import {
   Box,
   Button,
+  IconButton,
   InputAdornment,
   Stack,
   TextField,
+  Tooltip,
   type InputBaseComponentProps,
   type SxProps,
   type Theme,
@@ -59,6 +61,17 @@ const pillRowHeight = '24px';
  * (MUI gives it 16.5px padding around a 1.4375em line).
  */
 const pillRowPadding = `calc(16.5px - (${pillRowHeight} - 1.4375em) / 2)`;
+
+/**
+ * One row of pills as tall as a table cell's text input, which has 6px
+ * padding around its line.
+ */
+const compactRelationshipInputSx = {
+  '& .MuiInputBase-input': {
+    height: 'auto',
+    py: `calc(6px - (${pillRowHeight} - 1.4375em) / 2)`,
+  },
+} satisfies SxProps<Theme>;
 
 /** Lets the pills grow the outlined field over several rows. */
 const relationshipInputSx = {
@@ -168,6 +181,9 @@ export const RelationshipField = ({
   const previewLabel = preview
     ? (selectionLabels.get(preview.recordId) ?? preview.recordId)
     : '';
+  const selectorLabel = t('records.openRelationshipSelectorFor', {
+    field: attributeLabel(attribute),
+  });
   const openSelector = () => {
     setOpenings((count) => count + 1);
     setOpen(true);
@@ -199,26 +215,44 @@ export const RelationshipField = ({
                           preview={preview}
                         />
                       )}
-                      <Button
-                        aria-label={t('records.openRelationshipSelectorFor', {
-                          field: attributeLabel(attribute),
-                        })}
-                        color="primary"
-                        disabled={selectorDisabled}
-                        onClick={openSelector}
-                        size="small"
-                        startIcon={
-                          <RelationshipPickerIcon size={smallIconSize} />
-                        }
-                        sx={compactOutlinedActionButtonSx}
-                        variant="outlined"
-                      >
-                        {t('records.openRelationshipSelector')}
-                      </Button>
+                      {compact ? (
+                        // A tooltip can't follow a disabled button, so a
+                        // span holds it.
+                        <Tooltip title={selectorLabel}>
+                          <span>
+                            <IconButton
+                              aria-label={selectorLabel}
+                              color="primary"
+                              disabled={selectorDisabled}
+                              onClick={openSelector}
+                              size="small"
+                              sx={{ p: 0.25 }}
+                            >
+                              <RelationshipPickerIcon size={smallIconSize} />
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                      ) : (
+                        <Button
+                          aria-label={selectorLabel}
+                          color="primary"
+                          disabled={selectorDisabled}
+                          onClick={openSelector}
+                          size="small"
+                          startIcon={
+                            <RelationshipPickerIcon size={smallIconSize} />
+                          }
+                          sx={compactOutlinedActionButtonSx}
+                          variant="outlined"
+                        >
+                          {t('records.openRelationshipSelector')}
+                        </Button>
+                      )}
                     </>
                   }
-                  gap={1}
+                  gap={compact ? 0.5 : 1}
                   ids={selectedIds}
+                  singleLine={compact}
                   labels={selectionLabels}
                   linkToRecords={linkToRecords}
                   onRemove={
@@ -243,8 +277,8 @@ export const RelationshipField = ({
           },
           input: {
             inputComponent: RelationshipFieldInput,
-            startAdornment: relationshipAdornment,
-            sx: relationshipInputSx,
+            startAdornment: compact ? undefined : relationshipAdornment,
+            sx: compact ? compactRelationshipInputSx : relationshipInputSx,
           },
           inputLabel: { shrink: true },
         }}
