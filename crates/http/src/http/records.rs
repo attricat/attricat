@@ -15,7 +15,7 @@ use crate::{
         PublicationContextRequest, Record, RecordBatchRequest, RecordBatchResponse,
         RecordFormResponse, RelationshipMutation, UpdateRecordFormRequest,
     },
-    repository::{MAX_MOVEMENT_LEDGER_PAGE, decode_search_cursor},
+    repository::decode_search_cursor,
 };
 use axum::{Json, extract::State, http::StatusCode};
 use chrono::DateTime;
@@ -385,22 +385,18 @@ const DEFAULT_MOVEMENT_LEDGER_PAGE: i64 = 100;
 /// A record's movement history: the movements that changed its balances, in
 /// the order they changed them, after `after`.
 pub(super) async fn get_movement_ledger(
+    principal: super::auth::AuthenticatedPrincipal,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(record_id): ApiPath<Uuid>,
     ApiQuery(query): ApiQuery<MovementLedgerQuery>,
 ) -> Result<Json<MovementLedgerPage>, ApiError> {
     let after = query.after.unwrap_or(0);
     let limit = query.limit.unwrap_or(DEFAULT_MOVEMENT_LEDGER_PAGE);
-    if after < 0 || !(1..=MAX_MOVEMENT_LEDGER_PAGE).contains(&limit) {
-        return Err(ApiError::invalid_input(format!(
-            "limit must be 1-{MAX_MOVEMENT_LEDGER_PAGE} and after must not be negative"
-        )));
-    }
-    if !repository.record_exists(record_id).await? {
-        return Err(ApiError::not_found("record"));
-    }
     Ok(Json(
-        repository.movement_ledger(record_id, after, limit).await?,
+        repository
+            .with_authorization_actor(principal.actor())
+            .movement_ledger(record_id, after, limit)
+            .await?,
     ))
 }
 pub(super) async fn get_value_history(

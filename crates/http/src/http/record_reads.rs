@@ -298,7 +298,9 @@ pub(super) async fn search_record_previews(
             scope.matching = Some(intersect_record_ids(scope.matching.take(), facet_matching));
         }
     }
+    // The page's table cells show only the related records the caller may read.
     let mut response = repository
+        .with_authorization_actor(principal.actor())
         .search_page(
             &scope,
             SearchPageRequest {

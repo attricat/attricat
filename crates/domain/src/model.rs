@@ -1069,10 +1069,12 @@ pub struct MovementLedgerEntry {
     /// the target's row lock.
     pub sequence: i64,
     /// The record whose movement applied, such as a goods receipt line.
-    pub record_id: Uuid,
+    /// Absent, with `record_blueprint` and `movement_code`, when the reader
+    /// may not read that record; the amount still counts toward the balance.
+    pub record_id: Option<Uuid>,
     /// The code of that record's blueprint.
-    pub record_blueprint: String,
-    pub movement_code: String,
+    pub record_blueprint: Option<String>,
+    pub movement_code: Option<String>,
     pub balance: String,
     /// The amount moved, always positive, as an exact decimal string.
     pub amount: String,

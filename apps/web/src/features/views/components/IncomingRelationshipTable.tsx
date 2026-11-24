@@ -34,8 +34,7 @@ import { IncomingEditableRow } from './IncomingEditableRow';
 import { NewIncomingRow } from './NewIncomingRow';
 import { incomingTableColumns } from './incomingTableColumns';
 
-type Node = IncomingRelationshipListNode;
-type Relationship = Node['relationships'][number];
+type Relationship = IncomingRelationshipListNode['relationships'][number];
 
 /** Opens a linked record in the side panel, or deletes it. */
 const RowActions = ({
@@ -83,7 +82,7 @@ export const IncomingRelationshipTable = ({
   node,
 }: {
   recordId: string;
-  node: Node;
+  node: IncomingRelationshipListNode;
 }) => {
   const { t } = useTranslation();
   const client = useQueryClient();
@@ -198,7 +197,7 @@ export const IncomingRelationshipTable = ({
               ))}
               {adding && editable && (
                 <NewIncomingRow
-                  blueprintCode={relationship.source_blueprint}
+                  blueprint={blueprint}
                   columns={columns}
                   contextId={defaultContextId}
                   field={relationship.field}

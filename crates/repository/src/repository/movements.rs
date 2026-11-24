@@ -648,7 +648,8 @@ struct LedgerRow {
     movement_code: String,
     balance_code: String,
     amount: Decimal,
-    direction: String,
+    #[sqlx(try_from = "String")]
+    direction: MovementDirection,
     applied_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -1055,7 +1056,8 @@ impl AttricatRepository {
 
     /// The movements that changed `target_id`'s balances after sequence
     /// `after`, in sequence order, at most `limit` (1 to
-    /// [`MAX_MOVEMENT_LEDGER_PAGE`]).
+    /// [`MAX_MOVEMENT_LEDGER_PAGE`]). A missing target is
+    /// [`RepositoryError::NotFound`], a bad page [`RepositoryError::InvalidPage`].
     /// Replaying them from the start rebuilds every balance of the target,
     /// which is what derived views such as stock valuation read.
     pub async fn movement_ledger(
@@ -1065,9 +1067,14 @@ impl AttricatRepository {
         limit: i64,
     ) -> Result<attricat_domain::model::MovementLedgerPage, RepositoryError> {
         use attricat_domain::model::{MovementLedgerEntry, MovementLedgerPage};
-        // Callers validate their input; this keeps a bad one bounded.
-        let limit = limit.clamp(1, MAX_MOVEMENT_LEDGER_PAGE);
-        let after = after.max(0);
+        if after < 0 || !(1..=MAX_MOVEMENT_LEDGER_PAGE).contains(&limit) {
+            return Err(RepositoryError::InvalidPage(format!(
+                "limit must be 1-{MAX_MOVEMENT_LEDGER_PAGE} and after must not be negative"
+            )));
+        }
+        if !self.record_exists(target_id).await? {
+            return Err(RepositoryError::NotFound("record"));
+        }
         let rows: Vec<LedgerRow> = sqlx::query_as(
             r#"SELECT m.sequence, m.record_id, b.code AS record_blueprint, m.movement_code,
                       m.balance_code, m.amount, m.direction, m.applied_at
@@ -1084,31 +1091,30 @@ impl AttricatRepository {
         .bind(limit + 1)
         .fetch_all(&self.pool)
         .await?;
-        let mut items = rows
+        // A reader who may read the target but not a movement record sees
+        // that entry without the record, so the history stays gapless and
+        // still rebuilds the balance.
+        let readable = self
+            .actor_readable_record_ids(&rows.iter().map(|row| row.record_id).collect::<Vec<_>>())
+            .await?;
+        let mut items: Vec<MovementLedgerEntry> = rows
             .into_iter()
             .map(|row| {
-                Ok(MovementLedgerEntry {
-                    direction: MovementDirection::parse(&row.direction).ok_or_else(|| {
-                        RepositoryError::InvalidBlueprintDefinition(format!(
-                            "unknown movement direction '{}'",
-                            row.direction
-                        ))
-                    })?,
+                let shown = Self::actor_may_read(&readable, &row.record_id);
+                MovementLedgerEntry {
                     sequence: row.sequence,
-                    record_id: row.record_id,
-                    record_blueprint: row.record_blueprint,
-                    movement_code: row.movement_code,
+                    record_id: shown.then_some(row.record_id),
+                    record_blueprint: shown.then_some(row.record_blueprint),
+                    movement_code: shown.then_some(row.movement_code),
                     balance: row.balance_code,
                     amount: row.amount.normalize().to_string(),
+                    direction: row.direction,
                     applied_at: row.applied_at,
-                })
+                }
             })
-            .collect::<Result<Vec<_>, RepositoryError>>()?;
-        let more = items.len() > limit as usize;
-        items.truncate(limit as usize);
-        let next_after = more
-            .then(|| items.last().map(|entry| entry.sequence))
-            .flatten();
+            .collect();
+        let next_after =
+            super::record_search::next_page_cursor(&mut items, limit, |entry| entry.sequence);
         Ok(MovementLedgerPage { items, next_after })
     }
 

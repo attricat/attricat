@@ -1322,6 +1322,27 @@ async fn a_targets_movement_history_lists_its_movements_in_order(pool: PgPool) {
     assert_eq!(rest["items"][0]["sequence"], 5);
     assert!(rest["next_after"].is_null());
 
+    // A reader of the stock item alone sees the whole history without the
+    // records they may not read.
+    let (user, membership) = add_workspace_user(&pool).await;
+    grant_role(
+        &pool,
+        membership,
+        VIEWER_ROLE_ID,
+        GrantScope::Record(stock_item),
+    )
+    .await;
+    let scoped = get_json(&client_for(user), &url).await;
+    let scoped_items = scoped["items"].as_array().unwrap();
+    assert_eq!(scoped_items.len(), 6, "{scoped}");
+    for (scoped, full) in scoped_items.iter().zip(items) {
+        assert!(scoped["record_id"].is_null(), "{scoped}");
+        assert!(scoped["record_blueprint"].is_null());
+        assert!(scoped["movement_code"].is_null());
+        assert_eq!(scoped["amount"], full["amount"]);
+        assert_eq!(scoped["direction"], full["direction"]);
+    }
+
     // A record no movement targets has an empty history.
     let empty = get_json(
         &client,

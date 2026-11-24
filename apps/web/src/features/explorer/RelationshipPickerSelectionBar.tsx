@@ -72,7 +72,11 @@ export const RelationshipPickerSelectionBar = ({
       </Typography>
       {!openerOpen && (
         <Alert severity="warning" sx={{ flexBasis: '100%', order: 1 }}>
-          {t('explorer.relationshipPicker.openerClosed')}
+          {t(
+            session.mode === relationshipPickerModes.filter
+              ? 'explorer.relationshipPicker.openerClosedFilter'
+              : 'explorer.relationshipPicker.openerClosed',
+          )}
         </Alert>
       )}
       <ExplorerSelectionSummary

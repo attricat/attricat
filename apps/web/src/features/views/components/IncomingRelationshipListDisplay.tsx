@@ -23,8 +23,6 @@ const IncomingRelationshipTable = lazy(() =>
   ),
 );
 
-type IncomingNode = IncomingRelationshipListNode;
-
 /**
  * Opens the records linking to this one in the Explorer. The Explorer searches
  * one blueprint at a time, so each relationship gets its own link. With
@@ -32,7 +30,7 @@ type IncomingNode = IncomingRelationshipListNode;
  */
 export const IncomingRelationshipListDisplay = (props: {
   recordId: string;
-  node: IncomingNode;
+  node: IncomingRelationshipListNode;
 }) =>
   props.node.display === incomingDisplays.table ? (
     <Suspense fallback={null}>
@@ -47,7 +45,7 @@ const IncomingRelationshipLinks = ({
   node,
 }: {
   recordId: string;
-  node: IncomingNode;
+  node: IncomingRelationshipListNode;
 }) => {
   const { t } = useTranslation();
   const several = node.relationships.length > 1;

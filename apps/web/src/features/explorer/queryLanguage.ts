@@ -1,7 +1,7 @@
 import type { Attribute } from '../records/api';
 import { attributeValueTypes } from '../records/valueTypes';
 import { relationshipPathSeparator } from './constants';
-import { relationshipFilterTargets } from './relationshipFilterTypes';
+import { allowedTargetBlueprints } from '../records/recordForm';
 
 // Explorer query syntax; see apps/docs/src/content/docs/guides/search-syntax.md.
 export const querySelectorSeparator = ':';
@@ -113,7 +113,7 @@ export const resolveRelationshipPath = (
   let targetCodes: string[] = [];
   for (const [index, name] of path.entries()) {
     const relationship = findAttribute(attributes, name, isRelationship);
-    const codes = relationship ? relationshipFilterTargets(relationship) : [];
+    const codes = relationship ? allowedTargetBlueprints(relationship) : [];
     if (codes.length === 0) return { status: 'error', part: index };
     if (codes.length > 1 && index < path.length - 1)
       return { status: 'error', part: index, severalTargets: true };

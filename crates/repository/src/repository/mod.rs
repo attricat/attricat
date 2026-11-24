@@ -821,6 +821,14 @@ impl AttricatRepository {
 
     /// Filters related-record hydration without changing unrestricted system
     /// reads. The caller still authorizes the root record separately.
+    /// Whether `record_id` is in a set [`Self::actor_readable_record_ids`]
+    /// returned; without an actor (`None`) every record is.
+    pub(crate) fn actor_may_read(readable: &Option<HashSet<Uuid>>, record_id: &Uuid) -> bool {
+        readable
+            .as_ref()
+            .is_none_or(|readable| readable.contains(record_id))
+    }
+
     pub(crate) async fn actor_readable_record_ids(
         &self,
         record_ids: &[Uuid],

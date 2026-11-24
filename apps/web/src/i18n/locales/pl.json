@@ -1660,7 +1660,8 @@
       "useInFilter_few": "Użyj {{count}} zaznaczonych rekordów",
       "useInFilter_many": "Użyj {{count}} zaznaczonych rekordów",
       "useInFilter_other": "Użyj {{count}} zaznaczonych rekordów",
-      "openerClosed": "Formularz, z którego otwarto tę kartę, jest już zamknięty, więc nie można przekazać wyboru."
+      "openerClosed": "Formularz, z którego otwarto tę kartę, jest już zamknięty, więc nie można przekazać wyboru.",
+      "openerClosedFilter": "Filtr, z którego otwarto tę kartę, jest już zamknięty, więc nie można przekazać wyboru."
     }
   },
   "audit": {

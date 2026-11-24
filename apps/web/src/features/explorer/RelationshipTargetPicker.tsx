@@ -43,19 +43,16 @@ export const RelationshipTargetPicker = ({
   const [targetBlueprint, setTargetBlueprint] = useState(targetBlueprints[0]);
   const pickerContentRoot = useRef<HTMLDivElement>(null);
   const optionName = useId();
+  const addIds = (ids: readonly string[]) => {
+    const added = ids.filter((id) => !selectedIds.includes(id));
+    if (added.length > 0) onSelectedIdsChange([...selectedIds, ...added]);
+    scrollRelationshipPickerToTop(pickerContentRoot.current);
+  };
   const { isPreviewed, markPreviewed, pickerToken, previewHref } =
     useRecentlyPreviewedRecords(
-      (id) => {
-        if (!selectedIds.includes(id))
-          onSelectedIdsChange([...selectedIds, id]);
-        scrollRelationshipPickerToTop(pickerContentRoot.current);
-      },
+      (id) => addIds([id]),
       // Records chosen in an Explorer tab this picker opened join the filter.
-      (ids) => {
-        const added = ids.filter((id) => !selectedIds.includes(id));
-        if (added.length > 0) onSelectedIdsChange([...selectedIds, ...added]);
-        scrollRelationshipPickerToTop(pickerContentRoot.current);
-      },
+      addIds,
     );
   const { options, targetLabel, targets } = useRelationshipTargets(
     targetBlueprint,

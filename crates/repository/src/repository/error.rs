@@ -247,6 +247,8 @@ pub enum RepositoryError {
     FileCardinality,
     #[error("provide exactly one of attribute_id or attribute_code")]
     InvalidAttributeSelector,
+    #[error("invalid page: {0}")]
+    InvalidPage(String),
     #[error("attribute kind does not match the supplied value")]
     AttributeKindMismatch,
     #[error("value does not match the attribute type")]

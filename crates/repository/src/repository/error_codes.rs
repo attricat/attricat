@@ -388,7 +388,8 @@ impl RepositoryError {
             | Self::InvalidContextData
             | Self::InvalidContext
             | Self::InvalidGeneratedSequence(_)
-            | Self::InvalidAttributeSelector => plain(Unprocessable, Code::InvalidInput),
+            | Self::InvalidAttributeSelector
+            | Self::InvalidPage(_) => plain(Unprocessable, Code::InvalidInput),
             Self::NotFound(_) => plain(NotFound, Code::NotFound),
             Self::ActorNotAuthorized | Self::TokenPermissionsUnavailable => ErrorDescription::new(
                 Forbidden,

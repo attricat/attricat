@@ -1705,10 +1705,16 @@ impl AttricatRepository {
             .collect::<HashSet<_>>()
             .into_iter()
             .collect();
-        let labels: HashMap<Uuid, String> = self
-            .record_labels(&target_ids)
-            .await?
+        // A reader sees only the targets they may read; `record_labels`
+        // leaves authorizing them to its callers, so unreadable labels are
+        // dropped below.
+        let (readable, labels) = tokio::try_join!(
+            self.actor_readable_record_ids(&target_ids),
+            self.record_labels(&target_ids),
+        )?;
+        let labels: HashMap<Uuid, String> = labels
             .into_iter()
+            .filter(|label| Self::actor_may_read(&readable, &label.id))
             .map(|label| {
                 let text = context
                     .codes
@@ -1721,22 +1727,28 @@ impl AttricatRepository {
                 (label.id, text)
             })
             .collect();
-        let mut cells: Vec<(Uuid, String, Vec<Value>)> = Vec::new();
+        // Each cell's items and whether it hid a target the reader may not read.
+        let mut cells: Vec<(Uuid, String, Vec<Value>, bool)> = Vec::new();
         for (source, code, target) in edges {
-            if !matches!(cells.last(), Some((last_source, last_code, _)) if *last_source == source && *last_code == code)
+            if !matches!(cells.last(), Some((last_source, last_code, _, _)) if *last_source == source && *last_code == code)
             {
-                cells.push((source, code, Vec::new()));
+                cells.push((source, code, Vec::new(), false));
             }
-            let items = &mut cells.last_mut().expect("a cell was pushed").2;
-            items.push(serde_json::json!({
+            let cell = cells.last_mut().expect("a cell was pushed");
+            if !Self::actor_may_read(&readable, &target) {
+                // Hidden, and the cell does not claim to be complete.
+                cell.3 = true;
+                continue;
+            }
+            cell.2.push(serde_json::json!({
                 "id": target,
                 "display": labels.get(&target),
             }));
         }
         Ok(cells
             .into_iter()
-            .map(|(source, code, mut items)| {
-                let truncated = items.len() > MAX_TABLE_RELATIONSHIP_ITEMS;
+            .map(|(source, code, mut items, hidden)| {
+                let truncated = hidden || items.len() > MAX_TABLE_RELATIONSHIP_ITEMS;
                 items.truncate(MAX_TABLE_RELATIONSHIP_ITEMS);
                 (
                     source,
@@ -1775,17 +1787,6 @@ impl AttricatRepository {
             })
             .map(|(path, _)| path.as_str())
             .collect();
-        if !direct_relationships.is_empty() {
-            for (record_id, code, value) in self
-                .table_relationship_values(&roots, &direct_relationships, context)
-                .await?
-            {
-                values_by_root
-                    .entry(record_id)
-                    .or_default()
-                    .insert(code, vec![value]);
-            }
-        }
         let (direct_codes, direct_types): (Vec<&str>, Vec<&str>) = paths
             .iter()
             .filter(|(path, leaf_type)| {
@@ -1794,8 +1795,19 @@ impl AttricatRepository {
             })
             .map(|(path, leaf_type)| (path.as_str(), leaf_type.as_str()))
             .unzip();
-        if !direct_files.is_empty() {
-            let files = sqlx::query_as::<_, (Uuid, String, Value)>(AssertSqlSafe(
+        // The three kinds of direct column are independent queries.
+        let relationship_cells = async {
+            if direct_relationships.is_empty() {
+                return Ok(Vec::new());
+            }
+            self.table_relationship_values(&roots, &direct_relationships, context)
+                .await
+        };
+        let files = async {
+            if direct_files.is_empty() {
+                return Ok(Vec::new());
+            }
+            sqlx::query_as::<_, (Uuid, String, Value)>(AssertSqlSafe(
                 r#"SELECT av.record_id, a.code,
                           jsonb_build_object(
                             'id', f.id,
@@ -1837,18 +1849,14 @@ impl AttricatRepository {
             .bind(self.workspace_id.0)
             .bind(&context.ids)
             .fetch_all(&self.pool)
-            .await?;
-            for (record_id, code, file) in files {
-                values_by_root
-                    .entry(record_id)
-                    .or_default()
-                    .entry(code)
-                    .or_default()
-                    .push(file);
+            .await
+            .map_err(RepositoryError::from)
+        };
+        let compatible = async {
+            if direct_codes.is_empty() {
+                return Ok(HashMap::new());
             }
-        }
-        if !direct_codes.is_empty() {
-            let compatible: HashMap<(Uuid, String), bool> =
+            Ok::<_, RepositoryError>(
                 sqlx::query_as::<_, (Uuid, String, bool)>(
                     r#"SELECT e.id, a.code, a.context_fallback <> 'none'
                      FROM records e
@@ -1867,18 +1875,35 @@ impl AttricatRepository {
                 .await?
                 .into_iter()
                 .map(|(id, code, inherit)| ((id, code), inherit))
-                .collect();
-            for item in items.iter() {
-                for code in &direct_codes {
-                    let Some(inherit) = compatible.get(&(item.id, (*code).to_owned())) else {
-                        continue;
-                    };
-                    if let Some(value) = context.resolve_preview(&item.preview, code, *inherit) {
-                        values_by_root
-                            .entry(item.id)
-                            .or_default()
-                            .insert((*code).to_owned(), vec![value.clone()]);
-                    }
+                .collect::<HashMap<(Uuid, String), bool>>(),
+            )
+        };
+        let (relationship_cells, files, compatible) =
+            tokio::try_join!(relationship_cells, files, compatible)?;
+        for (record_id, code, value) in relationship_cells {
+            values_by_root
+                .entry(record_id)
+                .or_default()
+                .insert(code, vec![value]);
+        }
+        for (record_id, code, file) in files {
+            values_by_root
+                .entry(record_id)
+                .or_default()
+                .entry(code)
+                .or_default()
+                .push(file);
+        }
+        for item in items.iter() {
+            for code in &direct_codes {
+                let Some(inherit) = compatible.get(&(item.id, (*code).to_owned())) else {
+                    continue;
+                };
+                if let Some(value) = context.resolve_preview(&item.preview, code, *inherit) {
+                    values_by_root
+                        .entry(item.id)
+                        .or_default()
+                        .insert((*code).to_owned(), vec![value.clone()]);
                 }
             }
         }
@@ -2131,7 +2156,14 @@ impl AttricatRepository {
         .bind(self.workspace_id.0)
         .fetch_all(&self.pool)
         .await?;
+        // A reader sees only the related records they may read.
+        let readable = self
+            .actor_readable_record_ids(&rows.iter().map(|row| row.id).collect::<Vec<_>>())
+            .await?;
         for row in rows {
+            if !Self::actor_may_read(&readable, &row.id) {
+                continue;
+            }
             if let Some(targets) = related
                 .get_mut(&row.source_id)
                 .and_then(|item| item.get_mut(&row.attribute_code))
@@ -2485,7 +2517,7 @@ impl AttricatRepository {
                             None,
                             None,
                             field,
-                            target_blueprint_id,
+                            &[target_blueprint_id],
                             context_id,
                         )
                         .await
@@ -2532,21 +2564,15 @@ impl AttricatRepository {
         let hop_sources = &hop_sources;
         // Only the searched records are limited to one revision.
         let hop_edges = |index: usize, from: Option<Vec<Uuid>>| async move {
-            let mut edges = Vec::new();
-            for target in &source_path[index].target_blueprint_ids {
-                edges.extend(
-                    self.resolved_relationship_edges(
-                        hop_sources[index],
-                        source_blueprint_version.filter(|_| index == 0),
-                        from.as_deref(),
-                        &source_path[index].field,
-                        *target,
-                        context_id,
-                    )
-                    .await?,
-                );
-            }
-            Ok::<_, RepositoryError>(edges)
+            self.resolved_relationship_edges(
+                hop_sources[index],
+                source_blueprint_version.filter(|_| index == 0),
+                from.as_deref(),
+                &source_path[index].field,
+                &source_path[index].target_blueprint_ids,
+                context_id,
+            )
+            .await
         };
         let join = |pairs: Vec<(Uuid, Uuid)>, edges: Vec<(Uuid, Uuid)>| {
             let mut targets: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
@@ -2688,24 +2714,22 @@ impl AttricatRepository {
     ) -> Result<(HashMap<Uuid, i64>, HashSet<Uuid>), RepositoryError> {
         let mut sources_by_target: HashMap<Uuid, HashSet<Uuid>> = HashMap::new();
         let mut linked = HashSet::new();
-        for target_blueprint_id in target_blueprint_ids {
-            for (source, target) in self
-                .resolved_relationship_edges(
-                    source_blueprint_id,
-                    None,
-                    None,
-                    field,
-                    *target_blueprint_id,
-                    context_id,
-                )
-                .await?
-            {
-                if source_record_ids.is_some_and(|ids| !ids.contains(&source)) {
-                    continue;
-                }
-                linked.insert(source);
-                sources_by_target.entry(target).or_default().insert(source);
+        for (source, target) in self
+            .resolved_relationship_edges(
+                source_blueprint_id,
+                None,
+                None,
+                field,
+                target_blueprint_ids,
+                context_id,
+            )
+            .await?
+        {
+            if source_record_ids.is_some_and(|ids| !ids.contains(&source)) {
+                continue;
             }
+            linked.insert(source);
+            sources_by_target.entry(target).or_default().insert(source);
         }
         Ok((
             sources_by_target
@@ -2727,7 +2751,7 @@ impl AttricatRepository {
         source_blueprint_version: Option<i64>,
         source_ids: Option<&[Uuid]>,
         field: &str,
-        target_blueprint_id: Uuid,
+        target_blueprint_ids: &[Uuid],
         context_id: Uuid,
     ) -> Result<Vec<(Uuid, Uuid)>, RepositoryError> {
         let sources = if source_ids.is_some() {
@@ -2763,12 +2787,12 @@ impl AttricatRepository {
                  AND av.attribute_id = chosen.attribute_id AND av.context_id = chosen.context_id
                  AND av.active AND av.relationship_target_record_id IS NOT NULL
                 JOIN records target ON target.id = av.relationship_target_record_id
-                WHERE target.blueprint_id = $3 AND target.deleted_at IS NULL"#
+                WHERE target.blueprint_id = ANY($3) AND target.deleted_at IS NULL"#
         );
         let mut query = sqlx::query_as::<_, (Uuid, Uuid)>(AssertSqlSafe(query.as_str()))
             .bind(source_blueprint_id)
             .bind(field)
-            .bind(target_blueprint_id)
+            .bind(target_blueprint_ids)
             .bind(context_id)
             .bind(source_blueprint_version);
         if let Some(source_ids) = source_ids {
@@ -3776,11 +3800,9 @@ fn relationship_sort_forward_joins(depth: usize) -> Result<String, RepositoryErr
     Ok(sql)
 }
 
-/// The `attribute_values` column a sortable value type is stored in, and the
-/// SQL type its cursor value is cast to.
 /// Drops the extra row a page query fetched to detect a next page, and
 /// returns the cursor of the last row kept when there is one.
-fn next_page_cursor<T, C>(
+pub(super) fn next_page_cursor<T, C>(
     rows: &mut Vec<T>,
     limit: i64,
     cursor: impl FnOnce(&T) -> C,
@@ -3806,6 +3828,8 @@ fn context_fallback_column(record: &str) -> String {
     )
 }
 
+/// The `attribute_values` column a sortable value type is stored in, and the
+/// SQL type its cursor value is cast to.
 fn native_sort_column(
     value_type: ValueType,
 ) -> Result<(&'static str, &'static str), RepositoryError> {

@@ -17,8 +17,8 @@ import {
 import {
   hasSingleFilterTarget,
   isRelationshipFilterAttribute,
-  type RelationshipFilterAttribute as AnyRelationshipFilterAttribute,
-  type SingleTargetRelationshipFilterAttribute as RelationshipFilterAttribute,
+  type RelationshipFilterAttribute,
+  type SingleTargetRelationshipFilterAttribute,
 } from './relationshipFilterTypes';
 import { browseBySchema, type BrowseBy } from './search';
 import { attributeValueTypes } from '../records/valueTypes';
@@ -30,11 +30,11 @@ export type BrowseByField = {
    * The field, or for a path a stand-in coded like `model.brand`, named by
    * its hops and targeting the last hop's target.
    */
-  attribute: AnyRelationshipFilterAttribute;
+  attribute: RelationshipFilterAttribute;
   /** Self-targeting field that arranges the targets as a tree. */
   hierarchyField?: string;
   /** The relationships a path follows, from the browsed blueprint on. */
-  hops?: RelationshipFilterAttribute[];
+  hops?: SingleTargetRelationshipFilterAttribute[];
   /**
    * `attribute` is the browsed blueprint's own hierarchy field, so the rail
    * lists the blueprint's records and a node matches itself and its subtree.
@@ -65,9 +65,6 @@ export const hierarchyFieldOf = (target: BlueprintWithAttributes) =>
         hierarchyPreference[right.hierarchy!],
     )[0]?.code;
 
-const singleTarget = (attribute: RelationshipFilterAttribute) =>
-  (attribute.target_blueprint_codes?.length ?? 1) <= 1;
-
 /**
  * Whether a path can follow `attribute`: a single-valued relationship with a
  * single target blueprint that Explorer shows, as the API requires of every
@@ -75,10 +72,9 @@ const singleTarget = (attribute: RelationshipFilterAttribute) =>
  */
 const isPathHop = (
   attribute: Attribute,
-): attribute is RelationshipFilterAttribute =>
+): attribute is SingleTargetRelationshipFilterAttribute =>
   isRelationshipFilterAttribute(attribute) &&
   hasSingleFilterTarget(attribute) &&
-  singleTarget(attribute) &&
   attribute.cardinality === attributeCardinalities.one &&
   !isHiddenByDefault(attribute, explorerVisibilityScope);
 
@@ -90,11 +86,11 @@ const isPathHop = (
  */
 export const browseByFields = (
   blueprintCode: string | undefined,
-  relationshipFields: AnyRelationshipFilterAttribute[],
+  relationshipFields: RelationshipFilterAttribute[],
   targetOf: BlueprintLookup,
 ): BrowseByField[] =>
   relationshipFields.flatMap((attribute): BrowseByField[] => {
-    if (!hasSingleFilterTarget(attribute) || !singleTarget(attribute))
+    if (!hasSingleFilterTarget(attribute))
       return isHiddenByDefault(attribute, explorerVisibilityScope)
         ? []
         : [{ attribute }];
@@ -117,9 +113,9 @@ export const browseByFields = (
  */
 export const extendBrowsePaths = (
   blueprintCode: string | undefined,
-  paths: RelationshipFilterAttribute[][],
+  paths: SingleTargetRelationshipFilterAttribute[][],
   targetOf: BlueprintLookup,
-): RelationshipFilterAttribute[][] =>
+): SingleTargetRelationshipFilterAttribute[][] =>
   paths.flatMap((path) => {
     const last = path.at(-1);
     if (!last || path.length >= maximumBrowsePathHops || !isPathHop(last))
@@ -140,7 +136,7 @@ export const extendBrowsePaths = (
  * the current choice) stay, so a long list cannot crowd out a saved choice.
  */
 export const browsePathFields = (
-  paths: RelationshipFilterAttribute[][],
+  paths: SingleTargetRelationshipFilterAttribute[][],
   targetOf: BlueprintLookup,
   kept: (BrowseBy | null | undefined)[] = [],
 ): BrowseByField[] =>

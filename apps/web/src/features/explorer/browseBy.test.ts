@@ -10,7 +10,7 @@ import {
   type BrowseByField,
 } from './browseBy';
 import { maximumBrowsePaths } from './constants';
-import type { SingleTargetRelationshipFilterAttribute as RelationshipFilterAttribute } from './relationshipFilterTypes';
+import type { SingleTargetRelationshipFilterAttribute } from './relationshipFilterTypes';
 
 const blueprint = (
   code: string,
@@ -35,7 +35,7 @@ const relationship = (
     Attribute,
     'cardinality' | 'hierarchy' | 'name' | 'tags' | 'target_blueprint_codes'
   > = {},
-): RelationshipFilterAttribute => ({
+): SingleTargetRelationshipFilterAttribute => ({
   ...extra,
   code,
   target_blueprint_code: target,

@@ -1582,7 +1582,8 @@
       "use_other": "Use {{count}} selected records",
       "useInFilter_one": "Use {{count}} selected record",
       "useInFilter_other": "Use {{count}} selected records",
-      "openerClosed": "The record form that opened this tab is closed, so the selection cannot be sent back."
+      "openerClosed": "The record form that opened this tab is closed, so the selection cannot be sent back.",
+      "openerClosedFilter": "The filter that opened this tab is closed, so the selection cannot be sent back."
     }
   },
   "audit": {

@@ -45,8 +45,10 @@ export const recordQueryKeys = {
   relationshipTreeFacetChildren: (
     input: Omit<RelationshipTreeFacetChildrenRequest, 'cursor'>,
   ) => ['relationship-tree-facet-children', input] as const,
-  /** Under searches, so record changes that refresh results refresh it too. */
-  /** The records linking to `recordId` an incoming relationship table lists. */
+  /**
+   * The records linking to `recordId` an incoming relationship table lists.
+   * Under searches, so record changes that refresh results refresh it too.
+   */
   incomingTable: (
     recordId: string,
     sourceBlueprint: string,
@@ -61,6 +63,7 @@ export const recordQueryKeys = {
       field,
       pageSize,
     ] as const,
+  /** Under searches, so record changes that refresh results refresh it too. */
   systemTagFacet: (input: SystemTagFacetRequest) =>
     [...recordQueryKeys.searches(), 'system-tag-facet', input] as const,
   relationshipTargets: (

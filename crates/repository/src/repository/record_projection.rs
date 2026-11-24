@@ -394,10 +394,7 @@ impl AttricatRepository {
                 let targets = related.iter().map(|row| row.target_id).collect::<Vec<_>>();
                 let readable = self.actor_readable_record_ids(&targets).await?;
                 for mut row in related {
-                    if readable
-                        .as_ref()
-                        .is_some_and(|ids| !ids.contains(&row.target_id))
-                    {
+                    if !Self::actor_may_read(&readable, &row.target_id) {
                         // Keep only a truncation marker. Never traverse or
                         // serialize this target, and do not claim the visible
                         // relationship set is complete after hiding a row.

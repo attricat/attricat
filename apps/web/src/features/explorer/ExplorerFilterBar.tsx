@@ -1,3 +1,4 @@
+import { allowedTargetBlueprints } from '../records/recordForm';
 import { Box, Button, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { PlusIcon } from 'lucide-react';
@@ -39,7 +40,6 @@ import { RelationshipFacetChip } from './RelationshipFacetChip';
 import { SystemTagFilterPicker } from './SystemTagFilterPicker';
 import {
   hasSingleFilterTarget,
-  relationshipFilterTargets,
   type ExplorerRelationshipFacet,
   type RelationshipFacetUpdate,
   type RelationshipFilterAttribute,
@@ -304,7 +304,7 @@ export const ExplorerFilterBar = ({
         const { code } = facet.sourceRelationship;
         // An own-tree selection is a subtree of the blueprint's records, not
         // a value of the hierarchy field.
-        const targetNames = relationshipFilterTargets(facet.sourceRelationship)
+        const targetNames = allowedTargetBlueprints(facet.sourceRelationship)
           .map(blueprintName)
           .join(', ');
         const fieldLabel = facet.ownTree

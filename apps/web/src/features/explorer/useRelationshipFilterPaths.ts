@@ -7,7 +7,7 @@ import {
 } from './constants';
 import {
   isRelationshipFilterAttribute,
-  type SingleTargetRelationshipFilterAttribute as RelationshipFilterAttribute,
+  type SingleTargetRelationshipFilterAttribute,
   hasSingleFilterTarget,
 } from './relationshipFilterTypes';
 import { blueprintByCodeOptions } from '../records/queryOptions';
@@ -17,7 +17,7 @@ import { blueprintByCodeOptions } from '../records/queryOptions';
  * relationships can share a target, which is read once.
  */
 const useTargetBlueprints = (
-  relationships: RelationshipFilterAttribute[],
+  relationships: SingleTargetRelationshipFilterAttribute[],
   enabled: boolean,
 ) => {
   const codes = [
@@ -38,8 +38,8 @@ const useTargetBlueprints = (
 
 const nestedRelationships = (
   targets: UseQueryResult<BlueprintWithAttributes>[],
-  parents: RelationshipFilterAttribute[],
-): RelationshipFilterAttribute[] =>
+  parents: SingleTargetRelationshipFilterAttribute[],
+): SingleTargetRelationshipFilterAttribute[] =>
   targets.flatMap((result, index) =>
     (result.data?.attributes ?? [])
       .filter(isRelationshipFilterAttribute)
@@ -58,7 +58,7 @@ const nestedRelationships = (
  * relationships of the current blueprint.
  */
 export const useRelationshipFilterPaths = (
-  directRelationships: RelationshipFilterAttribute[],
+  directRelationships: SingleTargetRelationshipFilterAttribute[],
   enabled: boolean,
 ) => {
   const firstTargets = useTargetBlueprints(directRelationships, enabled);

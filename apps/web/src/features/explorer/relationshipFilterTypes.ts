@@ -1,4 +1,5 @@
 import type { Attribute } from '../records/api';
+import { allowedTargetBlueprints } from '../records/recordForm';
 import { attributeValueTypes } from '../records/valueTypes';
 
 /**
@@ -10,19 +11,11 @@ export type RelationshipFilterAttribute = Attribute & {
   value_type: typeof attributeValueTypes.relationship;
 };
 
-/** The blueprints whose records a relationship filter selects. */
-export const relationshipFilterTargets = (
-  attribute: Attribute,
-): readonly string[] =>
-  attribute.target_blueprint_code
-    ? [attribute.target_blueprint_code]
-    : (attribute.target_blueprint_codes ?? []);
-
 export const isRelationshipFilterAttribute = (
   attribute: Attribute,
 ): attribute is RelationshipFilterAttribute =>
   attribute.value_type === attributeValueTypes.relationship &&
-  relationshipFilterTargets(attribute).length > 0;
+  allowedTargetBlueprints(attribute).length > 0;
 
 /** A relationship filter that leads to exactly one blueprint. */
 export type SingleTargetRelationshipFilterAttribute =
@@ -31,7 +24,8 @@ export type SingleTargetRelationshipFilterAttribute =
 export const hasSingleFilterTarget = (
   attribute: RelationshipFilterAttribute,
 ): attribute is SingleTargetRelationshipFilterAttribute =>
-  typeof attribute.target_blueprint_code === 'string';
+  typeof attribute.target_blueprint_code === 'string' &&
+  (attribute.target_blueprint_codes?.length ?? 1) <= 1;
 export type ExplorerRelationshipFacet = {
   /** Selects the browsed blueprint's own records and their descendants. */
   ownTree?: true;

@@ -283,15 +283,15 @@ pub fn normalize_state(state: &Value) -> Value {
 /// single target or, for a path of one hop, the first of several targets,
 /// whose records the rail then lists together. A hop that another follows
 /// needs a single target to continue in.
-pub fn browse_hop_target<'a>(
+fn browse_hop_target<'a>(
     target_blueprint: Option<&'a str>,
     target_blueprints: &'a [String],
     hops: usize,
 ) -> Option<&'a str> {
     target_blueprint.or_else(|| {
-        (hops == 1)
-            .then(|| target_blueprints.first())
-            .flatten()
+        target_blueprints
+            .first()
+            .filter(|_| hops == 1)
             .map(String::as_str)
     })
 }

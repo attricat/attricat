@@ -119,8 +119,11 @@ can disagree when two saves wait on one target.
 
 `movement_ledger` pages a target's applications by sequence (at most
 `MAX_MOVEMENT_LEDGER_PAGE`, 500) with each record's blueprint code and the
-amount as a decimal string. It backs `GET /v1/records/{id}/movements`
-(`records.read` on the target), `acli record movements` and the extension
+amount as a decimal string. For an authorization actor it leaves out the
+record, its blueprint and movement code of each entry whose record the actor
+may not read, keeping the entry, so the history stays gapless. It backs
+`GET /v1/records/{id}/movements` (`records.read` on the target, the caller as
+actor), `acli record movements` and the extension
 read `{"operation": "movements"}` of `attricat.read.v1`. Replaying a target's
 history rebuilds its balances; derived views such as stock valuation
 replay it rather than keep their own copy. There is no separate event: every

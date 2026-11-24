@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Alert, Box, TableCell, TableRow } from '@mui/material';
 import { CheckIcon, XIcon } from 'lucide-react';
 import { useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
@@ -6,12 +6,15 @@ import { useTranslation } from 'react-i18next';
 import { ApiErrorAlert } from '../../../components/ApiErrorAlert';
 import { LabeledIconButton } from '../../../components/LabeledIconButton';
 import { compactIconSize } from '../../../components/iconSizes';
-import { createRecord, type Attribute } from '../../records/api';
+import {
+  createRecord,
+  type Attribute,
+  type BlueprintWithAttributes,
+} from '../../records/api';
 import { CompactFieldsContext } from '../../records/components/compactFields';
 import { RecordFormAttributeEditor } from '../../records/components/RecordFormAttributeEditor';
 import { RelationshipScopeContext } from '../../records/components/relationshipScope';
 import { invalidateRecordSearches } from '../../records/invalidateRecord';
-import { blueprintByCodeOptions } from '../../records/queryOptions';
 import {
   formRecordSchema,
   entryValidationMessages,
@@ -38,7 +41,7 @@ const noValues: Readonly<Record<string, string>> = {};
  * the row empties for the next one; Escape or discard closes it.
  */
 export const NewIncomingRow = ({
-  blueprintCode,
+  blueprint,
   columns,
   contextId,
   field,
@@ -46,7 +49,8 @@ export const NewIncomingRow = ({
   onClose,
   recordId,
 }: {
-  blueprintCode: string;
+  /** The linking records' blueprint, as the table's rows were read with. */
+  blueprint: BlueprintWithAttributes;
   columns: readonly Attribute[];
   contextId: string | null;
   /** The relationship linking the new record to the page's record. */
@@ -58,13 +62,12 @@ export const NewIncomingRow = ({
   const { t } = useTranslation();
   const client = useQueryClient();
   const row = useRef<HTMLTableRowElement>(null);
-  const blueprint = useQuery(blueprintByCodeOptions(blueprintCode));
   const [fields, setFields] = useState(noValues);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string>();
   // Starts again in the first cell when the row opens and after each save.
   const [round, setRound] = useState(0);
-  const attributes = blueprint.data?.attributes ?? [];
+  const attributes = blueprint.attributes;
   const editable = editableFormAttributes(attributes, {
     contextId,
     defaultContextId: contextId,
@@ -78,34 +81,32 @@ export const NewIncomingRow = ({
   );
   const link = attributes.find((attribute) => attribute.code === field);
   const editComponents = viewFieldEditComponents(
-    blueprint.data?.blueprint.views.detail,
+    blueprint.blueprint.views.detail,
   );
   const fieldRules = viewFieldEditors(editComponents, editable);
   const requiredAttributes = recordSchemaRequiredAttributes(
-    blueprint.data?.blueprint.record_schema,
+    blueprint.blueprint.record_schema,
   ).filter(
     (code) =>
       !attributes.find((attribute) => attribute.code === code)?.generated,
   );
   const values = { ...fields, [field]: recordId };
-  const ready = Boolean(blueprint.data && link);
 
   useLayoutEffect(() => {
-    if (!ready) return;
     row.current
       ?.querySelector<HTMLElement>('input:not([type="hidden"]), button')
       ?.focus();
-  }, [ready, round]);
+  }, [round]);
 
   const create = useMutation({
     meta: { toast: false },
     mutationFn: () => {
-      if (!blueprint.data || !link) throw new Error('blueprint not loaded');
+      if (!link) throw new Error('the linking relationship is missing');
       const submitted = [...cells.values()];
       return createRecord({
         blueprint: {
-          code: blueprint.data.blueprint.code,
-          version: blueprint.data.blueprint.version,
+          code: blueprint.blueprint.code,
+          version: blueprint.blueprint.version,
         },
         values: [
           ...serializeAttributeValues(submitted, fields, contextId, fieldRules),
@@ -116,20 +117,21 @@ export const NewIncomingRow = ({
         ],
       });
     },
-    onSuccess: async () => {
+    onSuccess: () => {
       setFields(noValues);
       setRound((count) => count + 1);
-      await invalidateRecordSearches(client);
+      // The row is free for the next record while the searches refetch.
+      void invalidateRecordSearches(client);
     },
   });
 
   const save = () => {
-    if (!blueprint.data || !link || create.isPending) return;
+    if (!link || create.isPending) return;
     const validation = validateRecordForm(
       [...cells.values(), link],
       values,
       requiredAttributes,
-      formRecordSchema(blueprint.data.blueprint.record_schema, attributes),
+      formRecordSchema(blueprint.blueprint.record_schema, attributes),
       entryValidationMessages(attributes),
       fieldRules,
     );
@@ -220,13 +222,13 @@ export const NewIncomingRow = ({
           </TableRow>
         </CompactFieldsContext>
       </RelationshipScopeContext>
-      {(blueprint.error || create.error || formError) && (
+      {(create.error || formError) && (
         <TableRow>
           <TableCell colSpan={colSpan}>
             {formError ? (
               <Alert severity="error">{formError}</Alert>
             ) : (
-              <ApiErrorAlert error={blueprint.error ?? create.error} />
+              <ApiErrorAlert error={create.error} />
             )}
           </TableCell>
         </TableRow>

@@ -1061,21 +1061,29 @@ impl AttricatRepository {
             .map(Some)
     }
 
-    /// The revision's attributes. Published revisions never change, so their
-    /// row and attributes are cached; drafts are always read from the table.
+    /// The revision's attributes with their descriptions. Published revisions
+    /// and the mixin revisions they pin never change, so their row and
+    /// described attributes are cached; drafts are always read from the table.
     async fn revision_attributes(
         &self,
         blueprint: &Blueprint,
     ) -> Result<Vec<Attribute>, RepositoryError> {
         if blueprint.status != RevisionStatus::Published {
-            return self.list_attributes(blueprint.id, blueprint.version).await;
+            let attributes = self
+                .list_attributes(blueprint.id, blueprint.version)
+                .await?;
+            return self.describe(&blueprint.definition, attributes).await;
         }
         let key = self.revision_key(blueprint.id, blueprint.version);
         if let Some(revision) = self.cached_revision(&key).await {
             return Ok(revision.1.clone());
         }
         let attributes = self
-            .list_attributes(blueprint.id, blueprint.version)
+            .describe(
+                &blueprint.definition,
+                self.list_attributes(blueprint.id, blueprint.version)
+                    .await?,
+            )
             .await?;
         let revision = Arc::new((blueprint.clone(), attributes.clone()));
         self.cache
@@ -1107,17 +1115,26 @@ impl AttricatRepository {
         }
     }
 
-    /// Adds read-time state to a revision: attribute descriptions from its
-    /// definition, extension type availability, and table paths, which follow
-    /// other blueprints and enabled extensions.
+    /// Fills attribute descriptions from the definition, including those an
+    /// attribute selected from a mixin takes from the mixin.
+    async fn describe(
+        &self,
+        definition: &str,
+        mut attributes: Vec<Attribute>,
+    ) -> Result<Vec<Attribute>, RepositoryError> {
+        let selected = selected_descriptions(&self.pool, self.workspace_id.0, definition).await?;
+        describe_attributes(definition, &mut attributes, &selected);
+        Ok(attributes)
+    }
+
+    /// Adds read-time state to a revision of described attributes: extension
+    /// type availability and table paths, which follow other blueprints and
+    /// enabled extensions.
     async fn decorate_revision(
         &self,
         blueprint: Blueprint,
         mut attributes: Vec<Attribute>,
     ) -> Result<BlueprintWithAttributes, RepositoryError> {
-        let selected =
-            selected_descriptions(&self.pool, self.workspace_id.0, &blueprint.definition).await?;
-        describe_attributes(&blueprint.definition, &mut attributes, &selected);
         // Availability is presentation-only metadata. The pinned
         // declaration remains in the revision even when its provider
         // is disabled, so ordinary blueprint/record reads cannot fail

@@ -13,7 +13,7 @@ import {
   type QueryCursorContext,
   type QuerySchema,
 } from './queryLanguage';
-import { relationshipFilterTargets } from './relationshipFilterTypes';
+import { allowedTargetBlueprints } from '../records/recordForm';
 
 /** Keeps the dropdown scannable; typing narrows longer lists. */
 const maximumQuerySuggestions = 50;
@@ -112,7 +112,7 @@ const fieldSuggestions = (
   }
   for (const attribute of resolved.attributes) {
     if (attribute.value_type === attributeValueTypes.relationship) {
-      const targets = relationshipFilterTargets(attribute);
+      const targets = allowedTargetBlueprints(attribute);
       if (!allowRelationships || targets.length === 0) continue;
       suggestions.push({
         kind: 'relationship',
@@ -238,9 +238,7 @@ export const queryTargetCodes = (
         (attribute) =>
           attribute.value_type === attributeValueTypes.relationship,
       );
-      const targets = relationship
-        ? relationshipFilterTargets(relationship)
-        : [];
+      const targets = relationship ? allowedTargetBlueprints(relationship) : [];
       for (const code of targets) codes.add(code);
       // Only a hop to one blueprint can be followed further.
       attributes =

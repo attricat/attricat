@@ -232,13 +232,13 @@ impl MovementDefinition {
     }
 }
 
-/// Whether two movements find the same record, so they can share its link.
 /// A relationship that holds one link, which a movement can read through.
 fn is_single_relationship(attribute: &EffectiveAttribute) -> bool {
     attribute.value_type == ValueType::Relationship
         && attribute.cardinality == Some(Cardinality::One)
 }
 
+/// Whether two movements find the same record, so they can share its link.
 fn same_record(first: &MovementTarget, second: &MovementTarget) -> bool {
     first.blueprint == second.blueprint
         && first.key == second.key

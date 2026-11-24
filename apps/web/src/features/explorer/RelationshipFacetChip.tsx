@@ -7,7 +7,7 @@ import type {
   ExplorerRelationshipFacet,
   RelationshipFacetUpdate,
 } from './relationshipFilterTypes';
-import { relationshipFilterTargets } from './relationshipFilterTypes';
+import { allowedTargetBlueprints } from '../records/recordForm';
 import { RelationshipTargetPicker } from './RelationshipTargetPicker';
 
 type Props = {
@@ -41,7 +41,7 @@ export const RelationshipFacetChip = ({
   const { t } = useTranslation();
   const { code, target_blueprint_code: targetBlueprint } =
     facet.sourceRelationship;
-  const targetBlueprints = relationshipFilterTargets(facet.sourceRelationship);
+  const targetBlueprints = allowedTargetBlueprints(facet.sourceRelationship);
   const selectionLabels = useRelationshipSelectionLabels(facet.selectedIds);
   const [firstId] = facet.selectedIds;
   const chipLabel =
