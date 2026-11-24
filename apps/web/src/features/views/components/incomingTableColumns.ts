@@ -1,7 +1,7 @@
 import type { Attribute, BlueprintWithAttributes } from '../../records/api';
-import type { ViewNode } from '../schemas';
+import type { IncomingRelationshipListNode } from '../schemas';
 
-type Node = Extract<ViewNode, { type: 'incoming_relationship_list' }>;
+type Node = IncomingRelationshipListNode;
 
 /**
  * The columns of the table: the node's `columns`, or every attribute of the

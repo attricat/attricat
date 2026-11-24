@@ -20,7 +20,10 @@ import {
 } from '../api';
 import { RelationshipField } from './RelationshipField';
 import { RelationshipScopeContext } from './relationshipScope';
-import { relationshipPickerMessageType } from './useRecentlyPreviewedRecords';
+import {
+  relationshipPickerMessageType,
+  relationshipPickerManyMessageType,
+} from './useRecentlyPreviewedRecords';
 
 vi.mock('../api', () => ({
   getRecordLabels: vi.fn(),
@@ -158,7 +161,7 @@ describe('RelationshipField', () => {
       window.dispatchEvent(
         new MessageEvent('message', {
           data: {
-            type: 'attricat.relationship-picker.select-many',
+            type: relationshipPickerManyMessageType,
             token,
             recordIds: [firstId, laterId],
             labels: { [firstId]: 'First option', [laterId]: 'Later option' },

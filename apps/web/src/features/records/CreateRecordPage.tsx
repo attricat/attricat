@@ -15,7 +15,7 @@ import { createRecord } from './api';
 import { RecordForm, type RecordFormHandle } from './components/RecordForm';
 import { RecordPage } from './components/RecordPage';
 import { invalidateRecordSearches } from './invalidateRecord';
-import { attributeValueKinds } from './valueTypes';
+import { relationshipValueInputs } from './recordForm';
 import { invalidFileReferencesCode } from '../files/constants';
 import { useToast } from '../../components/useToast';
 import { blueprintByCodeOptions } from './queryOptions';
@@ -133,14 +133,7 @@ export const CreateRecordPage = ({
               ...value,
               context_id: defaultContextId,
             })),
-            ...relationships.flatMap((relationship) =>
-              relationship.target_record_ids.map((target_record_id) => ({
-                kind: attributeValueKinds.relationship,
-                attribute_code: relationship.attribute_code,
-                context_id: defaultContextId,
-                target_record_id,
-              })),
-            ),
+            ...relationshipValueInputs(relationships, defaultContextId),
           ],
           files: staged.staged,
         });

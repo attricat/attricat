@@ -17,3 +17,6 @@ export const cellEditorSx = {
   '& .MuiAutocomplete-inputRoot.MuiOutlinedInput-root': { py: 0 },
   '& .MuiFormHelperText-root:not(.Mui-error)': visuallyHiddenSx,
 } as const;
+
+/** The row's action buttons: as narrow as they are, on one line. */
+export const rowActionsCellSx = { whiteSpace: 'nowrap', width: '1%' } as const;

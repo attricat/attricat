@@ -14,8 +14,9 @@ import { invalidateRecordSearches } from '../../records/invalidateRecord';
 import { blueprintByCodeOptions } from '../../records/queryOptions';
 import {
   formRecordSchema,
-  recordFormValidationMessages,
+  entryValidationMessages,
   relationshipTargetsForForm,
+  relationshipValueInputs,
   serializeAttributeValues,
   validateRecordForm,
 } from '../../records/recordForm';
@@ -23,13 +24,11 @@ import {
   editableFormAttributes,
   recordSchemaRequiredAttributes,
 } from '../../records/recordFormAttributes';
-import { attributeLabel } from '../../records/recordDisplay';
-import { attributeValueKinds } from '../../records/valueTypes';
 import {
   viewFieldEditComponents,
   viewFieldEditors,
 } from '../viewFieldComponents';
-import { cellEditorSx } from './cellEditorSx';
+import { cellEditorSx, rowActionsCellSx } from './cellEditorSx';
 
 const noValues: Readonly<Record<string, string>> = {};
 
@@ -110,14 +109,9 @@ export const NewIncomingRow = ({
         },
         values: [
           ...serializeAttributeValues(submitted, fields, contextId, fieldRules),
-          ...relationshipTargetsForForm([...submitted, link], values).flatMap(
-            (relationship) =>
-              relationship.target_record_ids.map((target_record_id) => ({
-                kind: attributeValueKinds.relationship,
-                attribute_code: relationship.attribute_code,
-                context_id: contextId,
-                target_record_id,
-              })),
+          ...relationshipValueInputs(
+            relationshipTargetsForForm([...submitted, link], values),
+            contextId,
           ),
         ],
       });
@@ -136,18 +130,7 @@ export const NewIncomingRow = ({
       values,
       requiredAttributes,
       formRecordSchema(blueprint.data.blueprint.record_schema, attributes),
-      {
-        ...recordFormValidationMessages(),
-        required: t('records.valueRequired'),
-        uneditableRequired: (code) =>
-          t('records.uneditableRequiredValue', {
-            attribute: attributeLabel(
-              attributes.find((attribute) => attribute.code === code) ?? {
-                code,
-              },
-            ),
-          }),
-      },
+      entryValidationMessages(attributes),
       fieldRules,
     );
     setFieldErrors(validation.fieldErrors);
@@ -218,7 +201,7 @@ export const NewIncomingRow = ({
                 </TableCell>
               );
             })}
-            <TableCell align="right" sx={{ whiteSpace: 'nowrap', width: '1%' }}>
+            <TableCell align="right" sx={rowActionsCellSx}>
               <LabeledIconButton
                 label={t('views.incomingTable.saveNew', { name })}
                 onClick={save}

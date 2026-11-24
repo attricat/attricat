@@ -10,8 +10,10 @@ import { relatedRecordLinkProps } from '../../records/linkedRecord';
 import type { ViewComponentDefinition } from './componentTypes';
 import { VIEW_COMPONENT_IDS, VIEW_COMPONENT_VERSION } from '../constants';
 import { blueprintCatalogueOptions } from '../../blueprints/queryOptions';
-import { incomingDisplays } from '../schemas';
-import type { ViewNode } from '../schemas';
+import {
+  incomingDisplays,
+  type IncomingRelationshipListNode,
+} from '../schemas';
 
 // Loaded on demand: the table reaches the record editors, which use the view
 // registry this display is registered in.
@@ -21,7 +23,7 @@ const IncomingRelationshipTable = lazy(() =>
   ),
 );
 
-type IncomingNode = Extract<ViewNode, { type: 'incoming_relationship_list' }>;
+type IncomingNode = IncomingRelationshipListNode;
 
 /**
  * Opens the records linking to this one in the Explorer. The Explorer searches

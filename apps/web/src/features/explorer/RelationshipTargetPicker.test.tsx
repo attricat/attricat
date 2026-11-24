@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { searchRecords } from '../records/api';
 import { RelationshipTargetPicker } from './RelationshipTargetPicker';
+import { relationshipPickerManyMessageType } from '../records/components/useRecentlyPreviewedRecords';
 
 vi.mock('../records/api', () => ({
   getRecordLabels: vi.fn(() => new Promise(() => {})),
@@ -105,7 +106,7 @@ describe('RelationshipTargetPicker', () => {
         new MessageEvent('message', {
           origin: window.location.origin,
           data: {
-            type: 'attricat.relationship-picker.select-many',
+            type: relationshipPickerManyMessageType,
             token,
             recordIds: [sampleId, chosen],
             labels: {},

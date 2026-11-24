@@ -18,6 +18,7 @@ import {
 } from './jsonSchema';
 import { attributeValueKinds, attributeValueTypes } from './valueTypes';
 import { RELATIONSHIP_ID_JOINER, RELATIONSHIP_ID_SEPARATOR } from './constants';
+import { attributeLabel } from './recordDisplay';
 
 const ajvRequiredKeyword = 'required';
 
@@ -113,6 +114,26 @@ export const recordFormValidationMessages =
         attribute: attributeCode.replaceAll('_', ' '),
       }),
   });
+
+/**
+ * Messages for entering a new value in place, as in a table row: a missing
+ * value reads as required, as the server rejects it, and with `attributes`
+ * an uneditable required attribute is named by its label.
+ */
+export const entryValidationMessages = (
+  attributes?: readonly Attribute[],
+): RecordFormValidationMessages => ({
+  ...recordFormValidationMessages(),
+  required: i18n.t('records.valueRequired'),
+  ...(attributes && {
+    uneditableRequired: (code: string) =>
+      i18n.t('records.uneditableRequiredValue', {
+        attribute: attributeLabel(
+          attributes.find((attribute) => attribute.code === code) ?? { code },
+        ),
+      }),
+  }),
+});
 
 /**
  * How many files each file attribute will hold, by code, for a form that
@@ -306,6 +327,23 @@ export const relationshipIdsForField = (value: string): string[] =>
 
 const relationshipIdsAreValid = (ids: string[]): boolean =>
   z.array(z.uuid()).safeParse(ids).success;
+
+/** The value writes that link to a form's relationship targets in `contextId`. */
+export const relationshipValueInputs = (
+  relationships: readonly Pick<
+    RelationshipTargets,
+    'attribute_code' | 'target_record_ids'
+  >[],
+  contextId: string | null,
+) =>
+  relationships.flatMap((relationship) =>
+    relationship.target_record_ids.map((target_record_id) => ({
+      kind: attributeValueKinds.relationship,
+      attribute_code: relationship.attribute_code,
+      context_id: contextId,
+      target_record_id,
+    })),
+  );
 
 export const relationshipTargetsForForm = (
   attributes: readonly Attribute[],

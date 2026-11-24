@@ -1,4 +1,4 @@
-import type { RelationshipTargetFilter } from './movements';
+import type { RelationshipTargetFilter } from './components/relationshipScope';
 import type { DataQualityFilter } from '../rules/constants';
 import { ruleQueryKeys } from '../rules/queryKeys';
 import type {
@@ -46,6 +46,21 @@ export const recordQueryKeys = {
     input: Omit<RelationshipTreeFacetChildrenRequest, 'cursor'>,
   ) => ['relationship-tree-facet-children', input] as const,
   /** Under searches, so record changes that refresh results refresh it too. */
+  /** The records linking to `recordId` an incoming relationship table lists. */
+  incomingTable: (
+    recordId: string,
+    sourceBlueprint: string,
+    field: string,
+    pageSize: number,
+  ) =>
+    [
+      ...recordQueryKeys.searches(),
+      'incoming-table',
+      recordId,
+      sourceBlueprint,
+      field,
+      pageSize,
+    ] as const,
   systemTagFacet: (input: SystemTagFacetRequest) =>
     [...recordQueryKeys.searches(), 'system-tag-facet', input] as const,
   relationshipTargets: (

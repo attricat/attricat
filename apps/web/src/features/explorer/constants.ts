@@ -22,6 +22,9 @@ export const lastBlueprintStorageKey = 'attricat.explorer.last-blueprint';
 export const columnPreferencesStorageKeyPrefix =
   'attricat.explorer.column-preferences.';
 export const browseByStorageKeyPrefix = 'attricat.explorer.browse-by.';
+/** Session storage of a relationship picker tab, followed by its token. */
+export const relationshipPickerStorageKeyPrefix =
+  'attricat.relationshipPicker.';
 
 // Attribute visibility scope used to hide attributes from the Explorer.
 export const explorerVisibilityScope = 'explorer';

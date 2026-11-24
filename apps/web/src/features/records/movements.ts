@@ -1,16 +1,11 @@
 import type { z } from 'zod';
-import type { Attribute } from './api';
-import { relationshipIdsForField } from './recordForm';
 import type { movementSchema } from './schemas';
 
-/** How creating a record changes a balance on the record it finds. */
+/**
+ * How a record changes a balance on the record it finds, when it is created
+ * or when a status change triggers it.
+ */
 export type Movement = z.infer<typeof movementSchema>;
-
-/** A record search filter on a relationship field. */
-export type RelationshipTargetFilter = {
-  field: string;
-  selected_target_ids: string[];
-};
 
 const noMovements: readonly Movement[] = [];
 
@@ -54,20 +49,3 @@ export const reversalRelationship = (
   movements: readonly Movement[] = noMovements,
 ): string | undefined =>
   movements.find((movement) => movement.reversal)?.reversal?.relationship;
-
-/**
- * The picker filter of a relationship with a `target_scope`: targets whose
- * scoped attribute links to what this record's `equals` field holds. No
- * filter until that field has a value.
- */
-export const relationshipScopeFilters = (
-  attribute: Attribute,
-  formValues: Readonly<Record<string, string>> | null,
-): RelationshipTargetFilter[] | undefined => {
-  const scope = attribute.target_scope;
-  if (!scope || !formValues) return undefined;
-  const ids = relationshipIdsForField(formValues[scope.equals] ?? '');
-  return ids.length > 0
-    ? [{ field: scope.attribute, selected_target_ids: ids }]
-    : undefined;
-};

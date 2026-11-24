@@ -115,6 +115,12 @@ export type ViewDefinition =
       }
     >;
 
+/** A view's list of the records linking to the record, as links or a table. */
+export type IncomingRelationshipListNode = Extract<
+  ViewNode,
+  { type: typeof viewBlockTypes.incomingRelationshipList }
+>;
+
 export const jsonObjectSchema = z.record(z.string(), z.unknown());
 const componentReferenceSchema = z.object({
   id: z.string().regex(/^[a-z][a-z0-9_-]*(\.[a-z][a-z0-9_-]*)*$/),

@@ -18,7 +18,7 @@ import {
 } from '../../records/inlineFields';
 import { movementManagedCodes } from '../../records/movements';
 import {
-  recordFormValidationMessages,
+  entryValidationMessages,
   validateRecordForm,
   valuesForForm,
 } from '../../records/recordForm';
@@ -34,7 +34,7 @@ import {
   viewFieldEditors,
 } from '../viewFieldComponents';
 import { AttributeValue } from './values/AttributeValue';
-import { cellEditorSx } from './cellEditorSx';
+import { cellEditorSx, rowActionsCellSx } from './cellEditorSx';
 import { NotSetValue } from './values/NotSetValue';
 
 /** Lines are kept in the default context, which has no parent contexts. */
@@ -151,10 +151,7 @@ export const IncomingEditableRow = ({
               { [attribute.code]: value },
               requiredAttributes,
               undefined,
-              {
-                ...recordFormValidationMessages(),
-                required: t('records.valueRequired'),
-              },
+              entryValidationMessages(),
               rules ? new Map([[attribute.code, rules]]) : undefined,
             ).fieldErrors[attribute.code]
           }
@@ -201,7 +198,7 @@ export const IncomingEditableRow = ({
             {columns.map((column) => (
               <TableCell key={column.code}>{renderCell(column)}</TableCell>
             ))}
-            <TableCell align="right" sx={{ whiteSpace: 'nowrap', width: '1%' }}>
+            <TableCell align="right" sx={rowActionsCellSx}>
               {actions}
             </TableCell>
           </TableRow>

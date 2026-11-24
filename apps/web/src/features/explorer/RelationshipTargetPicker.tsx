@@ -1,9 +1,11 @@
-import { Box, Button, Chip, MenuItem, Stack, TextField } from '@mui/material';
-import { defaultStringifySearch } from '@tanstack/react-router';
+import { Box, Chip, Stack } from '@mui/material';
 import { useId, useRef, useState } from 'react';
-import { IconLabel } from '../../components/IconLabel';
-import { BlueprintIcon, ExplorerIcon } from '../../components/systemIcons';
 import { relationshipPickerModes } from '../records/constants';
+import {
+  RelationshipTargetSearchRow,
+  TargetBlueprintSelect,
+} from '../records/components/RelationshipTargetSearch';
+import { relationshipPickerExplorerHref } from '../records/relationshipPickerHref';
 import { useTranslation } from 'react-i18next';
 import { EmptyState } from '../../components/EmptyState';
 import { NextPageButton } from '../../components/LoadMoreButton';
@@ -20,7 +22,6 @@ import {
 import { useRelationshipTargets } from '../records/components/useRelationshipTargets';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { LoadingState } from '../../components/LoadingState';
-import { SearchField } from '../../components/SearchField';
 
 type Props = {
   /** Names a target blueprint in the switcher between several. */
@@ -62,15 +63,12 @@ export const RelationshipTargetPicker = ({
     true,
   );
   const selectedLabels = useRelationshipSelectionLabels(selectedIds);
-  // The Explorer, in a new tab, picks records of the shown blueprint with its
-  // table selection and sends them back; see RelationshipPickerSelectionBar.
   const explorerHref = targetBlueprint
-    ? `/${defaultStringifySearch({
+    ? relationshipPickerExplorerHref({
         blueprint: targetBlueprint,
-        locked: true,
-        relationshipPicker: pickerToken,
-        relationshipPickerMode: relationshipPickerModes.filter,
-      })}`
+        mode: relationshipPickerModes.filter,
+        token: pickerToken,
+      })
     : undefined;
   const toggle = (id: string) =>
     onSelectedIdsChange(
@@ -81,45 +79,17 @@ export const RelationshipTargetPicker = ({
 
   return (
     <Stack ref={pickerContentRoot} spacing={1.5}>
-      {targetBlueprints.length > 1 && (
-        <TextField
-          fullWidth
-          label={t('records.relationshipTargetBlueprint')}
-          onChange={(event) => setTargetBlueprint(event.target.value)}
-          select
-          value={targetBlueprint}
-        >
-          {targetBlueprints.map((code) => (
-            <MenuItem key={code} value={code}>
-              <IconLabel icon={BlueprintIcon}>{blueprintName(code)}</IconLabel>
-            </MenuItem>
-          ))}
-        </TextField>
-      )}
-      {/* The Explorer is the other way to find targets, so it sits beside
-          the search, as in the relationship field's picker. */}
-      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-        <SearchField
-          fullWidth
-          label={t('records.searchRelationshipOptions')}
-          onChange={(event) => setQuery(event.target.value)}
-          value={query}
-        />
-        {explorerHref && (
-          <Button
-            component="a"
-            href={explorerHref}
-            // The Explorer tab sends its selection back to this window.
-            rel="opener"
-            startIcon={<ExplorerIcon />}
-            sx={{ alignSelf: 'stretch', flexShrink: 0, whiteSpace: 'nowrap' }}
-            target="_blank"
-            variant="outlined"
-          >
-            {t('records.chooseInExplorer')}
-          </Button>
-        )}
-      </Stack>
+      <TargetBlueprintSelect
+        blueprintName={blueprintName}
+        onChange={setTargetBlueprint}
+        targets={targetBlueprints}
+        value={targetBlueprint}
+      />
+      <RelationshipTargetSearchRow
+        explorerHref={explorerHref}
+        onQueryChange={setQuery}
+        query={query}
+      />
       {selectedIds.length > 0 && (
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
           {selectedIds.map((id) => (

@@ -39,7 +39,7 @@ import {
 } from '../api';
 import { violationFieldErrors } from '../checkViolations';
 import {
-  recordFormValidationMessages,
+  entryValidationMessages,
   validateRecordForm,
   valuesForForm,
 } from '../recordForm';
@@ -320,11 +320,7 @@ export const RecordInlineFields = ({
             { [attribute.code]: value },
             requiredAttributes,
             undefined,
-            {
-              ...recordFormValidationMessages(),
-              // Matches a required value the server rejects.
-              required: t('records.valueRequired'),
-            },
+            entryValidationMessages(),
             rules ? new Map([[attribute.code, rules]]) : undefined,
           ).fieldErrors[attribute.code]
         }

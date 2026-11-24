@@ -3,31 +3,19 @@ import {
   createRecord,
   createRecordBlueprint,
   fieldByLabel,
+  formValue,
+  quantityField,
+  recordForm,
   relationship,
-  request,
   scalar,
   suffix,
 } from './helpers';
 
-type FormValue = {
-  kind: string;
-  attribute_code: string;
-  value?: unknown;
-  target_record_id?: string;
-};
-type RecordForm = { values: FormValue[] };
-
-const recordForm = (recordId: string) =>
-  request<RecordForm>(`/v1/records/${recordId}`);
-
-const valueOf = (form: RecordForm, code: string) =>
-  form.values.find((value) => value.attribute_code === code);
-
 /** The stock level of the stock item a receipt or issue changed. */
 const stockLevel = async (movementRecordId: string) => {
-  const stockItem = valueOf(await recordForm(movementRecordId), 'stock_item');
+  const stockItem = formValue(await recordForm(movementRecordId), 'stock_item');
   if (!stockItem?.target_record_id) throw new Error('no stock item linked');
-  return valueOf(await recordForm(stockItem.target_record_id), 'quantity')
+  return formValue(await recordForm(stockItem.target_record_id), 'quantity')
     ?.value;
 };
 
@@ -150,9 +138,6 @@ movements:
 };
 
 /** The quantity input; `base quantity` also contains the word. */
-const quantityField = (page: Page) =>
-  page.getByLabel('quantity', { exact: true });
-
 /** Opens the create form of a blueprint. */
 const newRecord = async (page: Page, name: string, code: string) => {
   await page.goto('/records/new');
@@ -224,7 +209,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
     expect(await stockLevel(issueId)).toBe(19);
 
     // The stock item shows the new level.
-    const stockItemId = valueOf(
+    const stockItemId = formValue(
       await recordForm(issueId),
       'stock_item',
     )!.target_record_id!;

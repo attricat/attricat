@@ -3,10 +3,10 @@ import type { Attribute } from './api';
 import {
   movementInputCodes,
   movementManagedCodes,
-  relationshipScopeFilters,
   reversalRelationship,
   type Movement,
 } from './movements';
+import { relationshipScopeFilters } from './components/relationshipScope';
 
 const issue: Movement = {
   code: 'stock',

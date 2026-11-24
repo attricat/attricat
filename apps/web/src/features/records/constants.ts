@@ -102,6 +102,12 @@ export const generatedSequenceResets = {
 } as const;
 
 /**
+ * Most records an Explorer tab opened from a relationship picker selects
+ * and returns at once.
+ */
+export const MAX_RELATIONSHIP_PICKER_SELECTION = 50;
+
+/**
  * How many records an Explorer tab opened from a relationship picker
  * returns, and what for: `filter` returns several for an Explorer filter
  * rather than a relationship field.

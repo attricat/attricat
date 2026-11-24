@@ -29,12 +29,12 @@ import { invalidateRecordSearches } from '../../records/invalidateRecord';
 import { recordFormOptions } from '../../records/queryOptions';
 import { recordQueryKeys } from '../../records/queryKeys';
 import { attributeLabel } from '../../records/recordDisplay';
-import type { ViewNode } from '../schemas';
+import type { IncomingRelationshipListNode } from '../schemas';
 import { IncomingEditableRow } from './IncomingEditableRow';
 import { NewIncomingRow } from './NewIncomingRow';
 import { incomingTableColumns } from './incomingTableColumns';
 
-type Node = Extract<ViewNode, { type: 'incoming_relationship_list' }>;
+type Node = IncomingRelationshipListNode;
 type Relationship = Node['relationships'][number];
 
 /** Opens a linked record in the side panel, or deletes it. */
@@ -96,14 +96,12 @@ export const IncomingRelationshipTable = ({
   const owner = useQuery(recordFormOptions(recordId));
   const rows = useQuery({
     // Under the record searches, so record changes refresh it.
-    queryKey: [
-      ...recordQueryKeys.searches(),
-      'incoming-table',
+    queryKey: recordQueryKeys.incomingTable(
       recordId,
       relationship.source_blueprint,
       relationship.field,
       node.page_size,
-    ],
+    ),
     queryFn: ({ signal }) =>
       searchRecords({
         blueprint: relationship.source_blueprint,

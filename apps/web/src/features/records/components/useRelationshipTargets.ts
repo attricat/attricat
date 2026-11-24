@@ -2,7 +2,7 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 import { searchRecords } from '../api';
 import { displayLabel, dropdownOptionLabel } from '../recordDisplay';
 import { recordQueryKeys } from '../queryKeys';
-import type { RelationshipTargetFilter } from '../movements';
+import type { RelationshipTargetFilter } from './relationshipScope';
 
 /**
  * Searches relationship targets and derives their display labels. `filters`

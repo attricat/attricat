@@ -2,25 +2,14 @@ import { expect, test, type Page } from '@playwright/test';
 import {
   createRecord,
   createRecordBlueprint,
+  formValue,
+  quantityField,
+  recordForm,
   recordSave,
   relationship,
-  request,
   scalar,
   suffix,
 } from './helpers';
-
-type FormValue = {
-  attribute_code: string;
-  value?: unknown;
-  target_record_id?: string;
-};
-type RecordForm = { values: FormValue[]; applied_movements: string[] };
-
-const recordForm = (recordId: string) =>
-  request<RecordForm>(`/v1/records/${recordId}`);
-
-const valueOf = (form: RecordForm, code: string) =>
-  form.values.find((value) => value.attribute_code === code)?.value;
 
 const orderStatus = JSON.stringify({
   type: 'string',
@@ -169,7 +158,10 @@ ${target('quantity')}
 /** The stock item's quantity and reserved balances. */
 const stock = async (stockItemId: string) => {
   const form = await recordForm(stockItemId);
-  return [valueOf(form, 'quantity'), valueOf(form, 'reserved') ?? 0];
+  return [
+    formValue(form, 'quantity')?.value,
+    formValue(form, 'reserved')?.value ?? 0,
+  ];
 };
 
 /** Chooses a status option on the record page, which saves at once. */
@@ -179,9 +171,6 @@ const chooseStatus = async (page: Page, recordId: string, label: string) => {
   await page.getByRole('option', { name: label, exact: true }).click();
   return saved;
 };
-
-const quantityField = (page: Page) =>
-  page.getByLabel('quantity', { exact: true });
 
 for (const colorScheme of ['light', 'dark'] as const) {
   test(`approving an order reserves stock and completing consumes it in ${colorScheme} mode`, async ({

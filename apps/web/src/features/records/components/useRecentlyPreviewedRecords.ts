@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { randomUuid } from '../../../components/randomUuid';
 import { useLatestCallback } from '../../../components/useLatestCallback';
+import { MAX_RELATIONSHIP_PICKER_SELECTION } from '../constants';
 
 const previewHighlightDuration = 5_000;
 
@@ -10,8 +11,6 @@ export const relationshipPickerMessageType =
 /** Records chosen in an Explorer tab the picker opened. */
 export const relationshipPickerManyMessageType =
   'attricat.relationship-picker.select-many';
-/** Most records one Explorer choice may return, as the Explorer selects. */
-export const MAX_RELATIONSHIP_PICKER_SELECTION = 50;
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -64,9 +63,15 @@ const isRelationshipPickerMessage = (
   );
 };
 
+/** Takes the records chosen in an Explorer tab a picker opened. */
+export type RelationshipPickerSelectMany = (
+  recordIds: string[],
+  labels: Record<string, string>,
+) => void;
+
 export const useRecentlyPreviewedRecords = (
   onSelect?: (recordId: string) => void,
-  onSelectMany?: (recordIds: string[], labels: Record<string, string>) => void,
+  onSelectMany?: RelationshipPickerSelectMany,
 ) => {
   const [previewedIds, setPreviewedIds] = useState<Set<string>>(new Set());
   const [pickerToken] = useState(randomUuid);

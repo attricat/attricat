@@ -22,7 +22,10 @@ import type { ExplorerData } from './useExplorerData';
 import { useExplorerSelection } from './useExplorerSelection';
 import { useRelationshipPickerSession } from './relationshipPickerSession';
 import { RelationshipPickerSelectionBar } from './RelationshipPickerSelectionBar';
-import { relationshipPickerModes } from '../records/constants';
+import {
+  MAX_RELATIONSHIP_PICKER_SELECTION,
+  relationshipPickerModes,
+} from '../records/constants';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import {
@@ -106,9 +109,10 @@ export const ExplorerResults = ({
       ? {
           alwaysSelecting: true,
           storageToken: picker.token,
-          ...(picker.mode === relationshipPickerModes.one
-            ? { maximum: 1 }
-            : {}),
+          maximum:
+            picker.mode === relationshipPickerModes.one
+              ? 1
+              : MAX_RELATIONSHIP_PICKER_SELECTION,
         }
       : {},
   );

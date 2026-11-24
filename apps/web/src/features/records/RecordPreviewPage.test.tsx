@@ -7,6 +7,7 @@ import '../../i18n';
 import { ToastProvider } from '../../components/ToastProvider';
 import { listContexts } from '../contexts/api';
 import { RecordPreviewPage } from './RecordPreviewPage';
+import { relationshipPickerMessageType } from './components/useRecentlyPreviewedRecords';
 
 const {
   actionsRender,
@@ -331,7 +332,7 @@ describe('RecordPreviewPage', () => {
 
     expect(postMessage).toHaveBeenCalledWith(
       {
-        type: 'attricat.relationship-picker.select',
+        type: relationshipPickerMessageType,
         token: 'picker-token',
         recordId: '00000000-0000-4000-8000-000000000001',
       },

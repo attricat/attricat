@@ -5,8 +5,8 @@ import { attributeLabel } from '../recordDisplay';
 
 /**
  * Explains why a movement record's quantity and links are shown read-only:
- * its movement applied them when the record was created, so correcting them
- * takes a reversal.
+ * its movement already applied them, when the record was created or its
+ * status changed, so correcting them takes a reversal.
  */
 export const MovementAppliedNotice = ({
   attributes,

@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   scrollRelationshipPickerToTop,
   useRecentlyPreviewedRecords,
+  relationshipPickerManyMessageType,
+  relationshipPickerMessageType,
 } from './useRecentlyPreviewedRecords';
 
 describe('useRecentlyPreviewedRecords', () => {
@@ -50,7 +52,7 @@ describe('useRecentlyPreviewedRecords', () => {
       window.dispatchEvent(
         new MessageEvent('message', {
           data: {
-            type: 'attricat.relationship-picker.select',
+            type: relationshipPickerMessageType,
             token,
             recordId: 'record-id',
           },
@@ -94,7 +96,7 @@ describe('useRecentlyPreviewedRecords', () => {
         window.dispatchEvent(new MessageEvent('message', { data, origin }));
       });
     const many = (extra: Record<string, unknown>) => ({
-      type: 'attricat.relationship-picker.select-many',
+      type: relationshipPickerManyMessageType,
       token,
       recordIds: [first, second],
       labels: { [first]: 'Bolt', [second]: 7 },

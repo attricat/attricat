@@ -269,6 +269,30 @@ export const createMember = async (roleCode: string) => {
  * A record field's input by its label. Each field also has a "Details of …"
  * button that a label lookup alone would match.
  */
+/** One saved value of a record, as the record form returns it. */
+export type FormValue = {
+  kind?: string;
+  attribute_code: string;
+  value?: unknown;
+  target_record_id?: string;
+};
+/** The parts of a record's form the movement tests read. */
+export type RecordFormResponse = {
+  values: FormValue[];
+  applied_movements: string[];
+};
+
+export const recordForm = (recordId: string) =>
+  request<RecordFormResponse>(`/v1/records/${recordId}`);
+
+/** A record form's saved value of `code`, if it has one. */
+export const formValue = (form: RecordFormResponse, code: string) =>
+  form.values.find((value) => value.attribute_code === code);
+
+/** The `quantity` field of a record form, named by its code. */
+export const quantityField = (page: Page) =>
+  page.getByLabel('quantity', { exact: true });
+
 export const fieldByLabel = (scope: Page | Locator, label: string) =>
   scope.getByLabel(label).and(scope.locator('input, textarea'));
 

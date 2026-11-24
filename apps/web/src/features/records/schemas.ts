@@ -100,7 +100,10 @@ export const attributeSchema = z
       .optional(),
   })
   .passthrough();
-/** How creating a record changes a balance on the record it finds. */
+/**
+ * How a record changes a balance on the record it finds, when it is created
+ * or when a status change triggers it.
+ */
 export const movementSchema = z.object({
   code: z.string(),
   direction: z.enum(movementDirections),

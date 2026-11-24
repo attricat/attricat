@@ -3,8 +3,8 @@ import type {
   Attribute,
   ComponentReference,
   ViewDefinition,
-  ViewNode,
 } from '../../records/api';
+import type { IncomingRelationshipListNode } from '../schemas';
 
 type Capability = 'display' | 'edit';
 type Placement =
@@ -45,7 +45,7 @@ export type HeadingRenderer = ComponentType<{
 
 export type IncomingRelationshipRenderer = ComponentType<{
   recordId: string;
-  node: Extract<ViewNode, { type: 'incoming_relationship_list' }>;
+  node: IncomingRelationshipListNode;
 }>;
 
 /** Value types the generic field and table components display and edit. */

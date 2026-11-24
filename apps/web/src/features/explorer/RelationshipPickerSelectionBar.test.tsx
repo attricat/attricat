@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../i18n';
 import type { RecordItem } from '../records/api';
 import { RelationshipPickerSelectionBar } from './RelationshipPickerSelectionBar';
+import { relationshipPickerManyMessageType } from '../records/components/useRecentlyPreviewedRecords';
 
 const token = '4f0c8e3c-9b0d-4f5a-8f6e-2a1b3c4d5e6f';
 const record = (id: string, label: string) =>
@@ -44,7 +45,7 @@ describe('RelationshipPickerSelectionBar', () => {
 
     expect(postMessage).toHaveBeenCalledWith(
       {
-        type: 'attricat.relationship-picker.select-many',
+        type: relationshipPickerManyMessageType,
         token,
         recordIds: [bolt.id, nut.id],
         labels: { [bolt.id]: 'Bolt', [nut.id]: 'Nut' },

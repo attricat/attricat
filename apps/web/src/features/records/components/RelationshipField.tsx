@@ -40,9 +40,14 @@ import {
 } from './RelatedRecordPreview';
 import { RelationshipPickerDialog } from './RelationshipPickerDialog';
 import { CompactFieldsContext } from './compactFields';
-import { RelationshipScopeContext } from './relationshipScope';
-import { relationshipScopeFilters } from '../movements';
-import { useRecentlyPreviewedRecords } from './useRecentlyPreviewedRecords';
+import {
+  RelationshipScopeContext,
+  relationshipScopeFilters,
+} from './relationshipScope';
+import {
+  useRecentlyPreviewedRecords,
+  type RelationshipPickerSelectMany,
+} from './useRecentlyPreviewedRecords';
 import { RelationshipSelectionPills } from './RelationshipSelectionPills';
 import { useRelationshipSelectionLabels } from './useRelationshipSelectionLabels';
 import { smallIconSize } from '../../../components/iconSizes';
@@ -146,9 +151,9 @@ export const RelationshipField = ({
   const [openings, setOpenings] = useState(0);
   // Kept across openings, so a preview tab opened earlier can still select.
   const previewSelectRef = useRef<((id: string) => void) | null>(null);
-  const previewSelectManyRef = useRef<
-    ((ids: string[], labels: Record<string, string>) => void) | null
-  >(null);
+  const previewSelectManyRef = useRef<RelationshipPickerSelectMany | null>(
+    null,
+  );
   const recentPreviews = useRecentlyPreviewedRecords(
     (id) => previewSelectRef.current?.(id),
     (ids, labels) => previewSelectManyRef.current?.(ids, labels),
