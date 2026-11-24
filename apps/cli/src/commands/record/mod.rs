@@ -283,6 +283,17 @@ pub(crate) enum RecordCommand {
         #[command(flatten)]
         page: PageArgs,
     },
+    /// The movements that changed a record's balances, such as a stock
+    /// item's receipts and issues, in the order they changed them.
+    Movements {
+        record_id: Uuid,
+        /// Only movements after this sequence.
+        #[arg(long)]
+        after: Option<i64>,
+        /// Movements per page (1-500, default 100).
+        #[arg(long)]
+        limit: Option<i64>,
+    },
     RestoreValue {
         record_id: Uuid,
         history_id: Uuid,
@@ -667,6 +678,20 @@ pub(crate) async fn record_command(api: &Api, command: RecordCommand) -> Result<
             api.get(&with_query(
                 &format!("/records/{}/values/history", segment(record_id)),
                 page.query(),
+            ))
+            .await
+        }
+        RecordCommand::Movements {
+            record_id,
+            after,
+            limit,
+        } => {
+            api.get(&with_query(
+                &format!("/v1/records/{}/movements", segment(record_id)),
+                [
+                    ("after", after.map(|after| after.to_string())),
+                    ("limit", limit.map(|limit| limit.to_string())),
+                ],
             ))
             .await
         }

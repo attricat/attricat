@@ -343,15 +343,17 @@ The component host ABI uses bounded JSON strings (64 KiB from a component,
 components with `storage.extension`. From the browser, reading storage needs
 `records.read` and changing it needs `records.write` across the workspace,
 because server components act on what they find there. The JSON
-`attricat.read.v1` surface additionally provides bounded `page`, `changes`, and
-single-attribute `lookup` requests; `page` cursors pin a database-clock snapshot
+`attricat.read.v1` surface additionally provides bounded `page`, `changes`,
+single-attribute `lookup` and `movements` requests; `page` cursors pin a database-clock snapshot
 and `changes` cursors pin a domain-event sequence high-water mark. Cursors are
 opaque and filter/workspace-bound. A `lookup` resolves exactly like an upsert's
 business key (below): a single-attribute unique key on a string attribute uses
 its normalized index
 across every revision of the blueprint family, and a value that matches more
 than one record fails with `lookup matched multiple records` rather than
-returning an arbitrary match. `attricat.command.v1` accepts a bounded,
+returning an arbitrary match. `movements` returns a record's
+[movement history](movements.md#movement-history) after a sequence, 1 to
+`MAX_MOVEMENT_LEDGER_PAGE` entries. `attricat.command.v1` accepts a bounded,
 idempotent batch of typed `create`, `update`, `relationships`, or `upsert`
 intents. Each intent runs the ordinary record create or update path (validation,
 checks, audit, publication reconciliation and its domain event). An upsert

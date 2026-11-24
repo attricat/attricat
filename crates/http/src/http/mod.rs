@@ -1312,6 +1312,10 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/v1/records/{record_id}/rule-runs", get(rules::record_runs))
         .route("/v1/records/{record_id}/rules", get(rules::record_rules))
+        .route(
+            "/v1/records/{record_id}/movements",
+            get(records::get_movement_ledger),
+        )
         .route("/records", get(record_reads::list_previews))
         .route(
             "/records/{record_id}",

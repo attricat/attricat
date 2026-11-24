@@ -190,6 +190,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `GET` | `/records/{id}/hierarchy` | Read the configured relationship hierarchy for a record. |
 | `GET` | `/records/{id}/changes` | Read record audit changes. |
 | `GET` | `/records/{id}/values/history` | Read retained attribute-value history. |
+| `GET` | `/v1/records/{id}/movements` | Read the movements that changed a record's balances, in order ([movement history](movements.md#movement-history)). |
 | `POST` | `/records/{id}/values/history/{history_id}/restore` | Restore one retained value-history entry. |
 | `GET` | `/records/{id}/resolved-preview` | Resolve values through a requested context's ancestors. |
 | `POST` | `/records/{id}/values` | Append value history. |

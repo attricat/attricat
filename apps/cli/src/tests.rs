@@ -2417,6 +2417,9 @@ async fn record_status_comment_and_history_commands_build_requests() {
     ])
     .await;
     assert_eq!(history["query"], "limit=10&offset=20");
+    let movements = echo(&["record", "movements", id, "--after", "4", "--limit", "50"]).await;
+    assert_eq!(movements["path"], format!("/v1/records/{id}/movements"));
+    assert_eq!(movements["query"], "after=4&limit=50");
     let edit = echo(&[
         "record",
         "comment",

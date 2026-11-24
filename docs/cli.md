@@ -113,6 +113,7 @@ acli record facet-children --blueprint <code> [--source-relationship-field <fiel
 acli record search --blueprint <code> [--version <version>] [--query <text>] [--size <size>] [--cursor <cursor>] [--system-tags <json>] [--filters <json-or-file>] [--outdated] [--include-total] [--relationship-tree-facets <json-or-file>] [--relationship-filters <json-or-file>] [--export-extension-id <id> [--export-connection <connection>] --export-status pending|retrying|uncertain|rejected|synced|withdrawn] [--data-quality open|acknowledged|clean] [--context-code <code>] [--omit-blueprint] [--omit-previews] [--sort-field <field> [--sort-direction asc|desc] [--sort-context-code <code>]]
 acli record update <record-id> [--values values.yaml] [--relationships relationships.yaml] [--remove-values removals.yaml] [--context-id <context-id>] [--system-tags <json>] [--system-metadata <json>] [--expected-updated-at <rfc3339>]
 acli record changes|value-history <record-id> [--limit <n>] [--offset <n>]
+acli record movements <record-id> [--after <sequence>] [--limit <n>]
 acli record restore-value <record-id> <history-id> [--expected-updated-at <rfc3339>]
 acli record transitions <record-id> [--context-id <context-id>]
 acli record transition <record-id> --attribute <status-code> --to <option-code> [--context-id <context-id>] [--expected-updated-at <rfc3339>]

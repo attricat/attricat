@@ -221,6 +221,7 @@ acli record list --blueprint <code> --related-from <record-id> --relationship <a
 acli record incoming-relationships <record-id> --relationships <json> [--size <n>] [--cursor <c>]
 acli record hierarchy <record-id> --context-id <id> --field <relationship>
 acli record changes | value-history <record-id> [--limit <n>] [--offset <n>]
+acli record movements <record-id> [--after <sequence>] [--limit <n>]
 acli record restore-value <record-id> <history-id> [--expected-updated-at <t>]
 acli record migrate <record-id> [--values <json-or-file>] [--relationships <json-or-file>] [--discard-attributes <json-or-file>] [--expected-updated-at <t>]
 acli record transitions <record-id> [--context-id <id>]

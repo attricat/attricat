@@ -52,7 +52,8 @@ use crate::{
         DeliveryState, ExtensionAttricatBatch, ExtensionAttricatIntent,
         ExtensionAttricatPageRequest, ExtensionConfigurationScope, ExtensionOperationArtifact,
         ExtensionRuntimeInstallation, HandlerAttemptOutcome, MAX_EXTENSION_BATCH_INTENTS,
-        MAX_EXTENSION_LOOKUP_VALUE_BYTES, RejectionRecord, RepositoryError, SystemRepository,
+        MAX_EXTENSION_LOOKUP_VALUE_BYTES, MAX_MOVEMENT_LEDGER_PAGE, RejectionRecord,
+        RepositoryError, SystemRepository,
     },
     storage::{ObjectStore, ObjectStoreError, StoredObject},
     task_queue::TaskKind,
@@ -1286,6 +1287,33 @@ impl HostState {
                     .map_err(|error| error.to_string())?;
                 bounded_serialize(&record)
             }
+            AttricatReadRequest::Movements {
+                record_id,
+                after,
+                limit,
+            } => {
+                let after = after.unwrap_or(0);
+                if after < 0 || limit == 0 || i64::from(limit) > MAX_MOVEMENT_LEDGER_PAGE {
+                    return Err(format!(
+                        "movement history limit must be 1-{MAX_MOVEMENT_LEDGER_PAGE} and after must not be negative"
+                    ));
+                }
+                let record_id = parse_uuid(&record_id, "record ID")?;
+                if !self
+                    .repository
+                    .record_exists(record_id)
+                    .await
+                    .map_err(|error| error.to_string())?
+                {
+                    return Err("record not found".into());
+                }
+                let page = self
+                    .repository
+                    .movement_ledger(record_id, after, i64::from(limit))
+                    .await
+                    .map_err(|error| error.to_string())?;
+                bounded_serialize(&page)
+            }
         }
     }
 
@@ -1616,6 +1644,13 @@ enum AttricatReadRequest {
         blueprint_version: i64,
         attribute_id: String,
         value: String,
+    },
+    /// A record's movement history after a sequence, as
+    /// `GET /v1/records/{id}/movements` returns it.
+    Movements {
+        record_id: String,
+        after: Option<i64>,
+        limit: u32,
     },
 }
 

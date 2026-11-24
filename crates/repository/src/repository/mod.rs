@@ -126,6 +126,7 @@ mod leadership;
 mod lexicon;
 mod members;
 mod movements;
+pub use movements::MAX_MOVEMENT_LEDGER_PAGE;
 mod notifications;
 mod oidc_sign_in;
 mod operator_workspaces;

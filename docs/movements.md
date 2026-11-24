@@ -108,6 +108,24 @@ rows rather than the blueprint:
   `409 movement_not_applied`. A reversal applies on create; its own status
   never applies its movements again.
 
+## Movement history
+
+`sequence` numbers a target's applications from 1, without gaps (migration
+`20261109035975_record_movement_application_sequence`, unique per target).
+`apply_movements_in` assigns `MAX(sequence) + 1` after the balance change,
+which holds the target's row lock until commit, so the sequence is the order
+the target's balances changed in. `applied_at` is the transaction's start and
+can disagree when two saves wait on one target.
+
+`movement_ledger` pages a target's applications by sequence (at most
+`MAX_MOVEMENT_LEDGER_PAGE`, 500) with each record's blueprint code and the
+amount as a decimal string. It backs `GET /v1/records/{id}/movements`
+(`records.read` on the target), `acli record movements` and the extension
+read `{"operation": "movements"}` of `attricat.read.v1`. Replaying a target's
+history rebuilds its balances; derived views such as stock valuation
+replay it rather than keep their own copy. There is no separate event: every
+application updates the target, which publishes `record.updated.v1`.
+
 ## Status-triggered movements
 
 `apply_on` lists status transitions that apply a movement instead of the

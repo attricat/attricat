@@ -97,6 +97,8 @@ const MOVEMENT_LINE_AUDIT_ACTION: &str = "attricat.records.movement.line_apply";
 const MOVEMENT_AUDIT_METADATA_KEY: &str = "movement";
 /// Lines one status transition applies the movements of.
 const MAX_MOVEMENT_LINES: usize = 200;
+/// Entries one page of a target's movement history holds.
+pub const MAX_MOVEMENT_LEDGER_PAGE: i64 = 500;
 
 /// What publication needs from an attribute of another blueprint.
 #[derive(sqlx::FromRow)]
@@ -637,6 +639,19 @@ struct Application {
     direction: String,
 }
 
+/// One row of a target's movement history.
+#[derive(sqlx::FromRow)]
+struct LedgerRow {
+    sequence: i64,
+    record_id: Uuid,
+    record_blueprint: String,
+    movement_code: String,
+    balance_code: String,
+    amount: Decimal,
+    direction: String,
+    applied_at: chrono::DateTime<chrono::Utc>,
+}
+
 /// A blueprint revision whose movements a related record's status applies,
 /// such as order lines applied by their order's approval.
 struct LineBlueprint {
@@ -1036,6 +1051,65 @@ impl AttricatRepository {
                 .fetch_all(&self.pool)
                 .await?,
         )
+    }
+
+    /// The movements that changed `target_id`'s balances after sequence
+    /// `after`, in sequence order, at most `limit` (1 to
+    /// [`MAX_MOVEMENT_LEDGER_PAGE`]).
+    /// Replaying them from the start rebuilds every balance of the target,
+    /// which is what derived views such as stock valuation read.
+    pub async fn movement_ledger(
+        &self,
+        target_id: Uuid,
+        after: i64,
+        limit: i64,
+    ) -> Result<attricat_domain::model::MovementLedgerPage, RepositoryError> {
+        use attricat_domain::model::{MovementLedgerEntry, MovementLedgerPage};
+        // Callers validate their input; this keeps a bad one bounded.
+        let limit = limit.clamp(1, MAX_MOVEMENT_LEDGER_PAGE);
+        let after = after.max(0);
+        let rows: Vec<LedgerRow> = sqlx::query_as(
+            r#"SELECT m.sequence, m.record_id, b.code AS record_blueprint, m.movement_code,
+                      m.balance_code, m.amount, m.direction, m.applied_at
+               FROM record_movement_applications m
+               JOIN records r ON r.id = m.record_id AND r.workspace_id = m.workspace_id
+               JOIN blueprints b ON b.id = r.blueprint_id AND b.version = r.blueprint_version
+                AND b.workspace_id = r.workspace_id
+               WHERE m.workspace_id = $1 AND m.target_record_id = $2 AND m.sequence > $3
+               ORDER BY m.sequence LIMIT $4"#,
+        )
+        .bind(self.workspace_id.0)
+        .bind(target_id)
+        .bind(after)
+        .bind(limit + 1)
+        .fetch_all(&self.pool)
+        .await?;
+        let mut items = rows
+            .into_iter()
+            .map(|row| {
+                Ok(MovementLedgerEntry {
+                    direction: MovementDirection::parse(&row.direction).ok_or_else(|| {
+                        RepositoryError::InvalidBlueprintDefinition(format!(
+                            "unknown movement direction '{}'",
+                            row.direction
+                        ))
+                    })?,
+                    sequence: row.sequence,
+                    record_id: row.record_id,
+                    record_blueprint: row.record_blueprint,
+                    movement_code: row.movement_code,
+                    balance: row.balance_code,
+                    amount: row.amount.normalize().to_string(),
+                    applied_at: row.applied_at,
+                })
+            })
+            .collect::<Result<Vec<_>, RepositoryError>>()?;
+        let more = items.len() > limit as usize;
+        items.truncate(limit as usize);
+        let next_after = more
+            .then(|| items.last().map(|entry| entry.sequence))
+            .flatten();
+        Ok(MovementLedgerPage { items, next_after })
     }
 
     /// The line relationships to `record_id` whose lines' movements its
@@ -2065,10 +2139,16 @@ impl AttricatRepository {
         for movement in movements {
             self.apply_balance_in(transaction, record, movement, default_context_id)
                 .await?;
+            // The balance change above holds the target's row lock until
+            // commit, so the target's next sequence is the order its
+            // balances changed in.
             sqlx::query(
                 r#"INSERT INTO record_movement_applications
-                       (workspace_id, record_id, movement_code, target_record_id, balance_code, amount, direction)
-                   VALUES ($1, $2, $3, $4, $5, $6, $7)"#,
+                       (workspace_id, record_id, movement_code, target_record_id, balance_code,
+                        amount, direction, sequence)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7,
+                           (SELECT COALESCE(MAX(sequence), 0) + 1 FROM record_movement_applications
+                            WHERE workspace_id = $1 AND target_record_id = $4))"#,
             )
             .bind(self.workspace_id.0)
             .bind(record.id)

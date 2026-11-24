@@ -1237,3 +1237,120 @@ movements:
 
     server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_targets_movement_history_lists_its_movements_in_order(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let bolt = inventory(&client, &base_url).await;
+    let box_of_12 = conversion(&client, &base_url, &bolt, "box", json!(12)).await;
+    let receipt = expect_success(
+        movement(
+            &client,
+            &base_url,
+            "sm_goods_receipt",
+            &bolt,
+            json!(2),
+            Some(&box_of_12),
+        )
+        .await,
+    )
+    .await;
+    // Saves that wait on the same stock item still get a gapless order.
+    let issues = futures_util::future::join_all((0..4).map(|_| {
+        movement(
+            &client,
+            &base_url,
+            "sm_goods_issue",
+            &bolt,
+            json!(1.5),
+            None,
+        )
+    }))
+    .await;
+    let mut issued = Vec::new();
+    for response in issues {
+        issued.push(expect_success(response).await);
+    }
+    expect_success(reversal(&client, &base_url, "sm_goods_issue", &issued[0], Vec::new()).await)
+        .await;
+    let stock_item = stock_item_of(&pool, &receipt).await;
+    let url = format!("{base_url}/v1/records/{stock_item}/movements");
+
+    let page = get_json(&client, &url).await;
+    let items = page["items"].as_array().unwrap();
+    assert_eq!(items.len(), 6, "{page}");
+    assert!(page["next_after"].is_null(), "{page}");
+    let sequences: Vec<i64> = items
+        .iter()
+        .map(|item| item["sequence"].as_i64().unwrap())
+        .collect();
+    assert_eq!(sequences, [1, 2, 3, 4, 5, 6]);
+    assert_eq!(items[0]["record_id"], receipt["id"]);
+    assert_eq!(items[0]["record_blueprint"], "sm_goods_receipt");
+    assert_eq!(items[0]["movement_code"], "stock");
+    assert_eq!(items[0]["balance"], "quantity");
+    assert_eq!(items[0]["amount"], "24");
+    assert_eq!(items[0]["direction"], "in");
+    assert_eq!(
+        items[1]["amount"], "1.5",
+        "amounts are exact decimal strings"
+    );
+    assert_eq!(items[1]["direction"], "out");
+    // The reversal of an issue moves its amount back in, last.
+    assert_eq!(items[5]["record_blueprint"], "sm_goods_issue");
+    assert_eq!(items[5]["direction"], "in");
+    // Replaying the history rebuilds the balance.
+    let replayed: rust_decimal::Decimal = items
+        .iter()
+        .map(|item| {
+            let amount: rust_decimal::Decimal = item["amount"].as_str().unwrap().parse().unwrap();
+            if item["direction"] == "in" {
+                amount
+            } else {
+                -amount
+            }
+        })
+        .sum();
+    assert_eq!(replayed.to_string(), balance_after(&pool, &receipt).await);
+
+    // Pages continue after the last sequence they returned.
+    let first = get_json(&client, format!("{url}?limit=4")).await;
+    assert_eq!(first["items"].as_array().unwrap().len(), 4);
+    assert_eq!(first["next_after"], 4);
+    let rest = get_json(&client, format!("{url}?after=4&limit=4")).await;
+    assert_eq!(rest["items"][0]["sequence"], 5);
+    assert!(rest["next_after"].is_null());
+
+    // A record no movement targets has an empty history.
+    let empty = get_json(
+        &client,
+        format!("{base_url}/v1/records/{}/movements", record_uuid(&bolt)),
+    )
+    .await;
+    assert_eq!(empty["items"], json!([]));
+
+    for query in ["limit=0", "limit=501", "after=-1"] {
+        expect_error(
+            client.get(format!("{url}?{query}")).send().await.unwrap(),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "invalid_input",
+        )
+        .await;
+    }
+    expect_error(
+        client
+            .get(format!(
+                "{base_url}/v1/records/{}/movements",
+                Uuid::new_v4()
+            ))
+            .send()
+            .await
+            .unwrap(),
+        StatusCode::NOT_FOUND,
+        "not_found",
+    )
+    .await;
+
+    server.abort();
+}

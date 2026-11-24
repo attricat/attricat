@@ -1061,6 +1061,33 @@ pub struct SettledLines {
     pub relationship: String,
 }
 
+/// One movement that changed a balance of a target record, in the order the
+/// target's balances changed.
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct MovementLedgerEntry {
+    /// Position in the target's history, from 1, gapless and assigned under
+    /// the target's row lock.
+    pub sequence: i64,
+    /// The record whose movement applied, such as a goods receipt line.
+    pub record_id: Uuid,
+    /// The code of that record's blueprint.
+    pub record_blueprint: String,
+    pub movement_code: String,
+    pub balance: String,
+    /// The amount moved, always positive, as an exact decimal string.
+    pub amount: String,
+    pub direction: crate::attribute_options::MovementDirection,
+    pub applied_at: DateTime<Utc>,
+}
+
+/// A page of a target's movement history after a sequence.
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct MovementLedgerPage {
+    pub items: Vec<MovementLedgerEntry>,
+    /// The `after` to pass for the next page; absent on the last one.
+    pub next_after: Option<i64>,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct MigrateRecordRequest {

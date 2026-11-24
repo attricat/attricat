@@ -11,11 +11,11 @@ use crate::{
     constants::DEFAULT_PAGE_SIZE,
     model::{
         AppendAttributeValues, AttributeValue, CreateRecordFormRequest, IncomingRelationshipsPage,
-        IncomingRelationshipsRequest, MigrateRecordRequest, PublicationContextRequest, Record,
-        RecordBatchRequest, RecordBatchResponse, RecordFormResponse, RelationshipMutation,
-        UpdateRecordFormRequest,
+        IncomingRelationshipsRequest, MigrateRecordRequest, MovementLedgerPage,
+        PublicationContextRequest, Record, RecordBatchRequest, RecordBatchResponse,
+        RecordFormResponse, RelationshipMutation, UpdateRecordFormRequest,
     },
-    repository::decode_search_cursor,
+    repository::{MAX_MOVEMENT_LEDGER_PAGE, decode_search_cursor},
 };
 use axum::{Json, extract::State, http::StatusCode};
 use chrono::DateTime;
@@ -370,6 +370,37 @@ pub(super) async fn get_record_changes(
         .await?;
     Ok(Json(
         json!({"items": items, "next_offset": next_offset(has_more, (limit, offset))}),
+    ))
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct MovementLedgerQuery {
+    after: Option<i64>,
+    limit: Option<i64>,
+}
+
+/// Entries a movement history page holds unless the caller asks otherwise.
+const DEFAULT_MOVEMENT_LEDGER_PAGE: i64 = 100;
+
+/// A record's movement history: the movements that changed its balances, in
+/// the order they changed them, after `after`.
+pub(super) async fn get_movement_ledger(
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ApiPath(record_id): ApiPath<Uuid>,
+    ApiQuery(query): ApiQuery<MovementLedgerQuery>,
+) -> Result<Json<MovementLedgerPage>, ApiError> {
+    let after = query.after.unwrap_or(0);
+    let limit = query.limit.unwrap_or(DEFAULT_MOVEMENT_LEDGER_PAGE);
+    if after < 0 || !(1..=MAX_MOVEMENT_LEDGER_PAGE).contains(&limit) {
+        return Err(ApiError::invalid_input(format!(
+            "limit must be 1-{MAX_MOVEMENT_LEDGER_PAGE} and after must not be negative"
+        )));
+    }
+    if !repository.record_exists(record_id).await? {
+        return Err(ApiError::not_found("record"));
+    }
+    Ok(Json(
+        repository.movement_ledger(record_id, after, limit).await?,
     ))
 }
 pub(super) async fn get_value_history(

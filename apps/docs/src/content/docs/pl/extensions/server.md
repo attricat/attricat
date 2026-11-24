@@ -131,9 +131,10 @@ Zapis wykonany podczas obsługi zdarzenia jest przypisywany użytkownikowi lub t
 { "operation": "page", "blueprint_id": "…", "blueprint_version": 3, "context_id": "…", "cursor": null, "limit": 100 }
 { "operation": "changes", "blueprint_id": "…", "blueprint_version": 3, "cursor": null, "limit": 100 }
 { "operation": "lookup", "blueprint_id": "…", "blueprint_version": 3, "attribute_id": "…", "value": "ABC-1" }
+{ "operation": "movements", "record_id": "…", "after": 0, "limit": 500 }
 ```
 
-`page` zwraca `{records, next_cursor}`, do 100 rekordów. Przekazuj `next_cursor` z powrotem, dopóki nie będzie `null`. `changes` przegląda zmiany rekordów Schematu w kolejności zdarzeń; zapisz jego kursor, aby wznowić później. `lookup` zwraca jeden rekord albo `null`.
+`page` zwraca `{records, next_cursor}`, do 100 rekordów. Przekazuj `next_cursor` z powrotem, dopóki nie będzie `null`. `changes` przegląda zmiany rekordów Schematu w kolejności zdarzeń; zapisz jego kursor, aby wznowić później. `lookup` zwraca jeden rekord albo `null`. `movements` zwraca historię przesunięć rekordu po numerze kolejnym `after`, tak jak [`GET /v1/records/{id}/movements`](/pl/reference/api/), do 500 pozycji na stronę. Każda zmiana salda aktualizuje też rekord i publikuje `record.updated.v1`, więc obsługa tego zdarzenia może odczytać historię od ostatniego numeru, który widziała.
 
 `attricat.command.v1` stosuje partię intencji:
 
