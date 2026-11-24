@@ -289,6 +289,17 @@ Some tags change where the web app shows an attribute when it builds a layout au
 | `hidden:explorer` | Explorer filter and facet choices |
 | `hidden:metadata` | The Attributes table on the blueprint page |
 
+### Search tags
+
+`search:fuzzy` on a text attribute makes Explorer search also find values similar to a term, such as another form of the same word or a value with a letter missing or added: `tarcze` finds "Tarcza tnąca". It applies to plain and qualified terms of four letters or more, not to terms ending in `*`. Untagged attributes still match only values that contain the term. See [Search syntax](/guides/search-syntax/#similar-words).
+
+```yaml
+attributes:
+  - code: name
+    value_type: string
+    tags: ['search:fuzzy']
+```
+
 ### Generated values
 
 `generated` makes the server give every new record the next number from a counter, such as an invoice, order, or document number:

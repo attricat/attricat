@@ -25,6 +25,10 @@ Termin bez dwukropka przeszukuje własne atrybuty skalarne wybranego schematu. P
 linen
 ```
 
+## Podobne słowa
+
+Atrybut tekstowy z tagiem [`search:fuzzy`](/pl/reference/blueprint/#tagi-wyszukiwania) pasuje też do wartości podobnych do terminu o długości co najmniej czterech liter, więc termin znajduje inne formy tego samego słowa i drobne literówki: `tarcze` znajduje „Tarcza tnąca 125 mm”. Wartość zawierająca termin pasuje jak zwykle. Informacje o wyszukiwaniu rekordu wskazują podobną wartość. Terminy zakończone `*` i terminy `*:` pasują dokładnie.
+
 ## Symbole wieloznaczne
 
 Końcowy `*` dopasowuje dowolne zakończenie:

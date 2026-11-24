@@ -438,6 +438,10 @@ pub struct MatchExplanation {
     pub term: String,
     pub matching_record_id: Uuid,
     pub matching_attribute_code: Option<String>,
+    /// The value that matched by similarity rather than containing the term,
+    /// on an attribute tagged for fuzzy search.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub similar_value: Option<String>,
     pub traversal_depth: u8,
     pub relationship_path: Vec<MatchPathEdge>,
 }

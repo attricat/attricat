@@ -25,6 +25,10 @@ A term without a colon searches the chosen blueprint's own scalar attributes. It
 linen
 ```
 
+## Similar words
+
+A text attribute tagged [`search:fuzzy`](/reference/blueprint/#search-tags) also matches values similar to a term of four letters or more, so a term finds other forms of the same word and small typos: `tarcze` finds "Tarcza tnąca 125 mm". A value that contains the term still matches as usual. The record's search info names the similar value. Terms ending in `*` and `*:` terms match exactly.
+
 ## Wildcards
 
 A trailing `*` matches any ending:

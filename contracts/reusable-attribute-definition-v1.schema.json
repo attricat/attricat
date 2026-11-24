@@ -97,7 +97,8 @@
         "hidden:form",
         "hidden:detail",
         "hidden:explorer",
-        "hidden:metadata"
+        "hidden:metadata",
+        "search:fuzzy"
       ]
     },
     "context_fallback": {

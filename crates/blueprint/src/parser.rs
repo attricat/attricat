@@ -190,14 +190,16 @@ struct RawAttributeDeclaration {
     #[schemars(extend("x-attricat-value-types" = ["relationship"]))]
     tree: Option<bool>,
     /// Free-form metadata. `hidden`, `hidden:form`, `hidden:detail`,
-    /// `hidden:explorer`, and `hidden:metadata` hide the attribute from default UI.
+    /// `hidden:explorer`, and `hidden:metadata` hide the attribute from default UI;
+    /// `search:fuzzy` makes search also match text values similar to a term.
     #[serde(default)]
     #[schemars(extend("x-attricat-suggestions" = [
         "hidden",
         "hidden:form",
         "hidden:detail",
         "hidden:explorer",
-        "hidden:metadata"
+        "hidden:metadata",
+        "search:fuzzy"
     ]))]
     tags: Vec<String>,
     /// Missing values in a non-default context: `default` inherits from the

@@ -1542,6 +1542,7 @@
     "agentConversationTitle": "Review {{count}} {{blueprint}} records",
     "matchViaRelationship_one": "{{term}} via {{count}} relationship",
     "matchViaRelationship_other": "{{term}} via {{count}} relationships",
+    "similarMatchInAttribute": "{{term}} ≈ “{{value}}” in {{attribute}}",
     "matchInAttribute": "{{term}} in {{attribute}}",
     "searchDetailsSeparator": "; ",
     "retry": "Retry",

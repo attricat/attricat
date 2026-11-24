@@ -47,6 +47,7 @@ mod extensions;
 mod facet_latency;
 mod file_uploads;
 mod file_worker;
+mod fuzzy_search;
 mod generated_sequences;
 mod generation_caches;
 mod global_relationship_search_budgets;

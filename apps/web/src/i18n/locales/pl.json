@@ -1614,6 +1614,7 @@
     "matchViaRelationship_few": "{{term}} przez {{count}} relacje",
     "matchViaRelationship_many": "{{term}} przez {{count}} relacji",
     "matchViaRelationship_other": "{{term}} przez {{count}} relacji",
+    "similarMatchInAttribute": "{{term}} ≈ „{{value}}” w {{attribute}}",
     "matchInAttribute": "{{term}} w {{attribute}}",
     "searchDetailsSeparator": "; ",
     "retry": "Ponów",

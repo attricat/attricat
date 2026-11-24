@@ -289,6 +289,17 @@ Niektóre tagi zmieniają miejsca, w których aplikacja webowa pokazuje atrybut,
 | `hidden:explorer` | Opcjach filtrów i faset przeglądarki rekordów |
 | `hidden:metadata` | Tabeli atrybutów na stronie schematu |
 
+### Tagi wyszukiwania
+
+`search:fuzzy` na atrybucie tekstowym sprawia, że wyszukiwanie w przeglądarce rekordów znajduje też wartości podobne do terminu, np. inną formę tego samego słowa albo wartość z brakującą lub dodatkową literą: `tarcze` znajduje „Tarcza tnąca”. Dotyczy zwykłych i kwalifikowanych terminów o długości co najmniej czterech liter, ale nie terminów zakończonych `*`. Atrybuty bez tego tagu nadal pasują tylko do wartości zawierających termin. Zobacz [Składnia wyszukiwania](/pl/guides/search-syntax/#podobne-słowa).
+
+```yaml
+attributes:
+  - code: name
+    value_type: string
+    tags: ['search:fuzzy']
+```
+
 ### Wartości generowane
 
 `generated` sprawia, że serwer nadaje każdemu nowemu rekordowi kolejny numer z licznika, np. numer faktury, zamówienia lub dokumentu:

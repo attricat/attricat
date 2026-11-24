@@ -3117,7 +3117,7 @@ impl AttricatRepository {
             .fetch_all(&self.pool)
             .await?
             .into_iter()
-            .map(|id| (id, None))
+            .map(|id| (id, None, None))
             .collect(),
             _ => {
                 self.scalar_search_matches(&term, &match_blueprints, attribute)
@@ -3126,12 +3126,13 @@ impl AttricatRepository {
         };
         let mut witnesses: HashMap<Uuid, MatchExplanation> = HashMap::new();
         let mut frontier = VecDeque::new();
-        for (id, attribute) in rows {
+        for (id, attribute, similar_value) in rows {
             if let std::collections::hash_map::Entry::Vacant(e) = witnesses.entry(id) {
                 e.insert(MatchExplanation {
                     term: term.original.clone(),
                     matching_record_id: id,
                     matching_attribute_code: attribute,
+                    similar_value,
                     traversal_depth: 0,
                     relationship_path: vec![],
                 });
@@ -3205,6 +3206,7 @@ impl AttricatRepository {
                         term: term.original.clone(),
                         matching_record_id: parent.matching_record_id,
                         matching_attribute_code: parent.matching_attribute_code.clone(),
+                        similar_value: None,
                         traversal_depth: depth as u8,
                         relationship_path: path,
                     },
@@ -3234,27 +3236,44 @@ impl AttricatRepository {
     }
 
     /// Records of `match_blueprints` whose scalar values match a term, with
-    /// the matching attribute code.
+    /// the matching attribute code and, for a match by similarity on an
+    /// attribute tagged [`FUZZY_SEARCH_TAG`], the value that matched.
     async fn scalar_search_matches(
         &self,
         term: &SearchTerm,
         match_blueprints: &[Uuid],
         attribute: Option<String>,
-    ) -> Result<Vec<(Uuid, Option<String>)>, RepositoryError> {
+    ) -> Result<Vec<(Uuid, Option<String>, Option<String>)>, RepositoryError> {
         let pattern = search_pattern(term);
+        let fuzzy = fuzzy_search_term(term);
         // Alphabetic terms other than booleans cannot match the canonical native
         // renderings of non-text values. Start these searches from the trigram-indexed
         // text values and materialize them so PostgreSQL does not repeat that scan for
-        // every attribute.
+        // every attribute. Tagged attributes also match values similar to the term,
+        // through the same index; a value that contains the term is a plain match.
+        let similar_values = if fuzzy.is_some() {
+            r#"UNION ALL
+                    SELECT av.record_id, av.attribute_id, av.value_text
+                    FROM attribute_values av
+                    JOIN attributes fuzzy ON fuzzy.id = av.attribute_id
+                     AND fuzzy.workspace_id = $4 AND fuzzy.tags ? $6
+                    WHERE av.workspace_id = $4 AND av.active
+                      AND av.relationship_target_record_id IS NULL
+                      AND $5 <% av.value_text AND av.value_text NOT ILIKE $3"#
+        } else {
+            ""
+        };
         let sql = if text_only_search(&term.value) {
-            r#"WITH matching_values AS MATERIALIZED (
-                    SELECT record_id, attribute_id
+            format!(
+                r#"WITH matching_values AS MATERIALIZED (
+                    SELECT record_id, attribute_id, NULL::text AS similar_value
                     FROM attribute_values
                     WHERE workspace_id = $4 AND active
                       AND relationship_target_record_id IS NULL
                       AND value_text ILIKE $3
+                    {similar_values}
                 )
-                SELECT DISTINCT e.id, a.code
+                SELECT DISTINCT ON (e.id, a.code) e.id, a.code, av.similar_value
                 FROM matching_values av
                 JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
                 JOIN records e ON e.id = av.record_id
@@ -3262,9 +3281,10 @@ impl AttricatRepository {
                   AND a.workspace_id = $4
                   AND e.blueprint_id = ANY($1)
                   AND ($2::text IS NULL OR a.code = $2)
-                ORDER BY e.id, a.code"#
+                ORDER BY e.id, a.code, av.similar_value NULLS FIRST"#
+            )
         } else {
-            r#"SELECT DISTINCT e.id, a.code
+            r#"SELECT DISTINCT e.id, a.code, NULL::text
                 FROM records e JOIN attribute_values av ON av.record_id = e.id
                 JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
                 WHERE e.deleted_at IS NULL AND e.workspace_id = $4
@@ -3274,17 +3294,30 @@ impl AttricatRepository {
                   AND ($2::text IS NULL OR a.code = $2)
                   AND COALESCE(av.value_text, av.value_number::text, av.value_integer::text, av.value_boolean::text, av.value_date::text, av.value_datetime::text, av.value_time::text) ILIKE $3
                 ORDER BY e.id, a.code"#
+                .to_owned()
         };
-        let rows = sqlx::query_as::<_, (Uuid, String)>(sql)
+        let mut transaction = self.pool.begin().await?;
+        if fuzzy.is_some() {
+            // `<%` matches at the word similarity threshold of this transaction.
+            sqlx::query("SELECT set_config('pg_trgm.word_similarity_threshold', $1, true)")
+                .bind(FUZZY_WORD_SIMILARITY.to_string())
+                .execute(&mut *transaction)
+                .await?;
+        }
+        let mut query = sqlx::query_as::<_, (Uuid, String, Option<String>)>(AssertSqlSafe(sql))
             .bind(match_blueprints)
             .bind(attribute)
             .bind(pattern)
-            .bind(self.workspace_id.0)
-            .fetch_all(&self.pool)
-            .await?;
+            .bind(self.workspace_id.0);
+        // Only the similar-values branch reads the term and tag.
+        if let Some(fuzzy) = fuzzy.filter(|_| !similar_values.is_empty()) {
+            query = query.bind(fuzzy).bind(FUZZY_SEARCH_TAG);
+        }
+        let rows = query.fetch_all(&mut *transaction).await?;
+        transaction.commit().await?;
         Ok(rows
             .into_iter()
-            .map(|(id, code)| (id, Some(code)))
+            .map(|(id, code, similar)| (id, Some(code), similar))
             .collect())
     }
 
@@ -3345,6 +3378,7 @@ impl AttricatRepository {
                     term: term.original.clone(),
                     matching_record_id: id,
                     matching_attribute_code: Some(attribute),
+                    similar_value: None,
                     traversal_depth: 0,
                     relationship_path: vec![],
                 });
@@ -3405,6 +3439,7 @@ impl AttricatRepository {
                             term: term.original.clone(),
                             matching_record_id: parent.matching_record_id,
                             matching_attribute_code: parent.matching_attribute_code.clone(),
+                            similar_value: None,
                             traversal_depth: depth,
                             relationship_path: path,
                         },
@@ -3630,6 +3665,25 @@ fn search_pattern(term: &SearchTerm) -> String {
     } else {
         format!("%{literal}%")
     }
+}
+
+/// The attribute tag that makes search also match values similar to a term,
+/// such as another inflection of the same word.
+pub const FUZZY_SEARCH_TAG: &str = "search:fuzzy";
+/// Shorter terms are too short to compare by trigrams without noise.
+const MIN_FUZZY_TERM_CHARS: usize = 4;
+/// The trigram word similarity a value needs to match a term: "tarcze"
+/// matches "tarcza" (0.56) and other inflections, and most typos that drop
+/// or add a letter, but not swapped letters such as "tracza".
+const FUZZY_WORD_SIMILARITY: f32 = 0.5;
+
+/// The term to match values similar to: a whole alphabetic word or phrase of
+/// at least [`MIN_FUZZY_TERM_CHARS`] characters. Prefix terms stay exact.
+fn fuzzy_search_term(term: &SearchTerm) -> Option<&str> {
+    (!term.prefix
+        && text_only_search(&term.value)
+        && term.value.chars().count() >= MIN_FUZZY_TERM_CHARS)
+        .then_some(term.value.as_str())
 }
 
 fn text_only_search(value: &str) -> bool {

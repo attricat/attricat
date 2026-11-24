@@ -23,12 +23,18 @@ export const SearchInfoDialog = ({ record, onClose }: Props) => {
             count: explanation.traversal_depth,
             term: explanation.term,
           })
-        : explanation.matching_attribute_code
-          ? t('explorer.matchInAttribute', {
+        : explanation.matching_attribute_code && explanation.similar_value
+          ? t('explorer.similarMatchInAttribute', {
               attribute: explanation.matching_attribute_code,
               term: explanation.term,
+              value: explanation.similar_value,
             })
-          : explanation.term,
+          : explanation.matching_attribute_code
+            ? t('explorer.matchInAttribute', {
+                attribute: explanation.matching_attribute_code,
+                term: explanation.term,
+              })
+            : explanation.term,
     )
     .join(t('explorer.searchDetailsSeparator'));
 

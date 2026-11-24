@@ -253,6 +253,8 @@ export const recordItemSchema = z.object({
         term: z.string(),
         matching_record_id: uuidSchema,
         matching_attribute_code: z.string().nullable(),
+        /** A value that matched by similarity, on a fuzzy-search attribute. */
+        similar_value: z.string().optional(),
         traversal_depth: z.number().int().nonnegative(),
         relationship_path: z.array(
           z.object({
