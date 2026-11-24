@@ -7,7 +7,8 @@ import {
 } from './constants';
 import {
   isRelationshipFilterAttribute,
-  type RelationshipFilterAttribute,
+  type SingleTargetRelationshipFilterAttribute as RelationshipFilterAttribute,
+  hasSingleFilterTarget,
 } from './relationshipFilterTypes';
 import { blueprintByCodeOptions } from '../records/queryOptions';
 
@@ -42,6 +43,7 @@ const nestedRelationships = (
   targets.flatMap((result, index) =>
     (result.data?.attributes ?? [])
       .filter(isRelationshipFilterAttribute)
+      .filter(hasSingleFilterTarget)
       .filter(
         (attribute) => !isHiddenByDefault(attribute, explorerVisibilityScope),
       )

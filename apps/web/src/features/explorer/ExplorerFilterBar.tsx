@@ -37,10 +37,12 @@ import {
 import { ExplorerFilterChip } from './ExplorerFilterChip';
 import { RelationshipFacetChip } from './RelationshipFacetChip';
 import { SystemTagFilterPicker } from './SystemTagFilterPicker';
-import type {
-  ExplorerRelationshipFacet,
-  RelationshipFacetUpdate,
-  RelationshipFilterAttribute,
+import {
+  hasSingleFilterTarget,
+  relationshipFilterTargets,
+  type ExplorerRelationshipFacet,
+  type RelationshipFacetUpdate,
+  type RelationshipFilterAttribute,
 } from './relationshipFilterTypes';
 import type { AttributeFilter } from './search';
 import { useRelationshipFilterPaths } from './useRelationshipFilterPaths';
@@ -186,8 +188,10 @@ export const ExplorerFilterBar = ({
       setOpen(true);
     }
   }
+  // A path continues through one target blueprint, so only single-target
+  // relationships lead to fields of their targets.
   const relationshipPaths = useRelationshipFilterPaths(
-    relationshipAttributes,
+    relationshipAttributes.filter(hasSingleFilterTarget),
     open && editor.editingIndex === null,
   );
   const reusableFields = useQuery(reusableFilterFieldOptions(blueprint));
@@ -300,20 +304,22 @@ export const ExplorerFilterBar = ({
         const { code } = facet.sourceRelationship;
         // An own-tree selection is a subtree of the blueprint's records, not
         // a value of the hierarchy field.
+        const targetNames = relationshipFilterTargets(facet.sourceRelationship)
+          .map(blueprintName)
+          .join(', ');
         const fieldLabel = facet.ownTree
-          ? blueprintName(facet.sourceRelationship.target_blueprint_code)
+          ? targetNames
           : attributeLabel(facet.sourceRelationship);
         return (
           <RelationshipFacetChip
+            blueprintName={blueprintName}
             chipRef={chipRef(code)}
             facet={facet}
             fieldLabel={fieldLabel}
             key={code}
             label={t('explorer.relationshipFacetLabel', {
               attribute: fieldLabel,
-              blueprint: blueprintName(
-                facet.sourceRelationship.target_blueprint_code,
-              ),
+              blueprint: targetNames,
             })}
             onClose={() => setRelationshipToOpen(undefined)}
             onOpen={() => setRelationshipToOpen(facet.sourceRelationship)}

@@ -288,3 +288,59 @@ describe('queryTargetCodes', () => {
     expect(queryTargetCodes(schema, 'colors.')).toEqual(['color']);
   });
 });
+
+describe('relationships to several blueprints', () => {
+  const stock: QuerySchema = {
+    blueprint: { code: 'stock_item', name: 'Stock item' },
+    attributes: [
+      scalar('number'),
+      {
+        code: 'item',
+        value_type: 'relationship',
+        target_blueprint_codes: ['product', 'material'],
+      },
+    ],
+    targets: new Map([
+      [
+        'product',
+        [scalar('sku'), scalar('name'), relationship('brand', 'brand')],
+      ],
+      ['material', [scalar('code'), scalar('name')]],
+    ]),
+  };
+  const errors = (query: string) =>
+    highlightQuery(query, stock)
+      .map((segment) => segment.error?.code)
+      .filter(Boolean);
+
+  it('accepts terms on any of the targets, like the server', () => {
+    for (const query of [
+      'item:steel',
+      'item.name:wire',
+      'item.sku:HK*',
+      'item.code:MAT*',
+    ])
+      expect(errors(query), query).toEqual([]);
+    expect(errors('item.missing:x')).toContain('unknownField');
+  });
+
+  it('does not continue a path past them', () => {
+    expect(errors('item.brand.name:x')).toContain('severalTargets');
+  });
+
+  it('loads every target and suggests their fields', () => {
+    expect(queryTargetCodes(stock, 'item.na').sort()).toEqual([
+      'material',
+      'product',
+    ]);
+    const codes = querySuggestions(
+      stock,
+      'item.',
+      5,
+      new Map(),
+    ).suggestions.map((suggestion) => suggestion.code);
+    expect(codes).toEqual(
+      expect.arrayContaining(['item.sku', 'item.code', 'item.name']),
+    );
+  });
+});

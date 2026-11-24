@@ -1484,6 +1484,7 @@
       "tooManyHops": "Ścieżka wyszukiwania może przejść przez najwyżej 3 relacje.",
       "unknownField": "„{{field}}” nie jest polem, które można przeszukać.",
       "unknownRelationship": "„{{field}}” nie jest relacją.",
+      "severalTargets": "„{{field}}” wskazuje na kilka schematów, więc ścieżka wyszukiwania nie może przez nią przejść dalej.",
       "notSearchableLeaf": "Pola „{{field}}” nie można przeszukiwać przez ścieżkę relacji."
     },
     "search": "Szukaj",

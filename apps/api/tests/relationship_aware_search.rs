@@ -264,3 +264,164 @@ attributes:
     }
     server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn qualified_search_follows_a_relationship_to_several_blueprints(pool: sqlx::PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    let product = create_blueprint(
+        &client,
+        &base_url,
+        r#"
+format_version: 1
+code: mt_product
+name: MT product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: sku
+    value_type: string
+  - code: name
+    value_type: string
+"#,
+    )
+    .await;
+    let material = create_blueprint(
+        &client,
+        &base_url,
+        r#"
+format_version: 1
+code: mt_material
+name: MT material
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: code
+    value_type: string
+  - code: name
+    value_type: string
+"#,
+    )
+    .await;
+    let stock = create_blueprint(
+        &client,
+        &base_url,
+        r#"
+format_version: 1
+code: mt_stock
+name: MT stock
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [number]
+attributes:
+  - code: number
+    value_type: string
+  - code: item
+    value_type: relationship
+    target_blueprints: [mt_product, mt_material]
+    cardinality: one
+"#,
+    )
+    .await;
+    let nut = create_record(&client, &base_url, &product).await;
+    set_values(
+        &client,
+        &base_url,
+        &nut,
+        json!([
+            { "kind": "scalar", "attribute_code": "sku", "value": "HK-0306" },
+            { "kind": "scalar", "attribute_code": "name", "value": "Hex nut" }
+        ]),
+    )
+    .await;
+    let wire = create_record(&client, &base_url, &material).await;
+    set_values(
+        &client,
+        &base_url,
+        &wire,
+        json!([
+            { "kind": "scalar", "attribute_code": "code", "value": "MAT-0403" },
+            { "kind": "scalar", "attribute_code": "name", "value": "Steel wire" }
+        ]),
+    )
+    .await;
+    let mut stocks = Vec::new();
+    for target in [&nut, &wire] {
+        let record = create_record(&client, &base_url, &stock).await;
+        client
+            .put(format!("{base_url}/v1/records/{}", record["id"].as_str().unwrap()))
+            .json(&json!({ "relationships": [{ "attribute_code": "item", "target_record_ids": [target["id"]] }] }))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+        stocks.push(record["id"].clone());
+    }
+    let search = |query: String| {
+        let client = client.clone();
+        let base_url = base_url.clone();
+        async move {
+            client
+                .post(format!("{base_url}/v1/records/search"))
+                .json(&json!({ "blueprint": { "code": "mt_stock" }, "query": query, "page": { "size": 25 } }))
+                .send()
+                .await
+                .unwrap()
+        }
+    };
+    let wire_id = wire["id"].as_str().unwrap();
+    // Each term finds the stock of the item it matches, whichever blueprint
+    // the item is; a leaf only one target has matches on that target.
+    for (query, expected) in [
+        ("item:Steel".to_owned(), &stocks[1]),
+        ("item:HK-03*".to_owned(), &stocks[0]),
+        ("item.name:nut".to_owned(), &stocks[0]),
+        ("item.sku:HK*".to_owned(), &stocks[0]),
+        ("item.code:MAT*".to_owned(), &stocks[1]),
+        (format!("item.@id:{wire_id}"), &stocks[1]),
+    ] {
+        let response: Value = search(query.clone())
+            .await
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let ids: Vec<_> = response["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| item["id"].clone())
+            .collect();
+        assert_eq!(ids, vec![expected.clone()], "{query}");
+    }
+    for (query, message) in [
+        ("item.color.name:red", "several blueprints"),
+        (
+            "item.missing:red",
+            "unknown scalar search-path leaf 'missing'",
+        ),
+    ] {
+        let response = search(query.to_owned()).await;
+        assert_eq!(
+            response.status(),
+            reqwest::StatusCode::BAD_REQUEST,
+            "{query}"
+        );
+        let body: Value = response.json().await.unwrap();
+        assert!(
+            body["error"]["message"].as_str().unwrap().contains(message),
+            "{query}: {body}"
+        );
+    }
+    server.abort();
+}

@@ -7,9 +7,11 @@ import type {
   ExplorerRelationshipFacet,
   RelationshipFacetUpdate,
 } from './relationshipFilterTypes';
+import { relationshipFilterTargets } from './relationshipFilterTypes';
 import { RelationshipTargetPicker } from './RelationshipTargetPicker';
 
 type Props = {
+  blueprintName?: (code: string) => string;
   chipRef: Ref<HTMLDivElement>;
   facet: ExplorerRelationshipFacet;
   /** Short field label shown on the chip. */
@@ -25,6 +27,7 @@ type Props = {
 
 /** A relationship filter chip that edits its selection in the picker dialog. */
 export const RelationshipFacetChip = ({
+  blueprintName,
   chipRef,
   facet,
   fieldLabel,
@@ -38,6 +41,7 @@ export const RelationshipFacetChip = ({
   const { t } = useTranslation();
   const { code, target_blueprint_code: targetBlueprint } =
     facet.sourceRelationship;
+  const targetBlueprints = relationshipFilterTargets(facet.sourceRelationship);
   const selectionLabels = useRelationshipSelectionLabels(facet.selectedIds);
   const [firstId] = facet.selectedIds;
   const chipLabel =
@@ -74,11 +78,17 @@ export const RelationshipFacetChip = ({
         topAction={{ label: t('explorer.done'), onClick: onClose }}
       >
         <RelationshipTargetPicker
+          blueprintName={blueprintName}
           onSelectedIdsChange={(ids) =>
-            onUpdate(code, { selectedIds: ids, targetBlueprint })
+            onUpdate(code, {
+              selectedIds: ids,
+              // Kept so a link can name the field's target; a field with
+              // several targets is always one the blueprint declares.
+              targetBlueprint: targetBlueprint ?? undefined,
+            })
           }
           selectedIds={facet.selectedIds}
-          targetBlueprint={targetBlueprint}
+          targetBlueprints={targetBlueprints}
         />
       </RelationshipSelectorDialog>
     </>

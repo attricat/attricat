@@ -15,8 +15,10 @@ import {
   relationshipPathSeparator,
 } from './constants';
 import {
+  hasSingleFilterTarget,
   isRelationshipFilterAttribute,
-  type RelationshipFilterAttribute,
+  type RelationshipFilterAttribute as AnyRelationshipFilterAttribute,
+  type SingleTargetRelationshipFilterAttribute as RelationshipFilterAttribute,
 } from './relationshipFilterTypes';
 import { browseBySchema, type BrowseBy } from './search';
 import { attributeValueTypes } from '../records/valueTypes';
@@ -75,6 +77,7 @@ const isPathHop = (
   attribute: Attribute,
 ): attribute is RelationshipFilterAttribute =>
   isRelationshipFilterAttribute(attribute) &&
+  hasSingleFilterTarget(attribute) &&
   singleTarget(attribute) &&
   attribute.cardinality === attributeCardinalities.one &&
   !isHiddenByDefault(attribute, explorerVisibilityScope);
@@ -86,11 +89,12 @@ const isPathHop = (
  */
 export const browseByFields = (
   blueprintCode: string | undefined,
-  relationshipFields: RelationshipFilterAttribute[],
+  relationshipFields: AnyRelationshipFilterAttribute[],
   targetOf: BlueprintLookup,
 ): BrowseByField[] =>
   relationshipFields.flatMap((attribute) => {
-    if (!singleTarget(attribute)) return [];
+    if (!hasSingleFilterTarget(attribute) || !singleTarget(attribute))
+      return [];
     const target = targetOf(attribute.target_blueprint_code);
     if (!target) return [];
     const hierarchyField = hierarchyFieldOf(target);

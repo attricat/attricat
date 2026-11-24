@@ -10,7 +10,7 @@ import {
   type BrowseByField,
 } from './browseBy';
 import { maximumBrowsePaths } from './constants';
-import type { RelationshipFilterAttribute } from './relationshipFilterTypes';
+import type { SingleTargetRelationshipFilterAttribute as RelationshipFilterAttribute } from './relationshipFilterTypes';
 
 const blueprint = (
   code: string,

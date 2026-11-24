@@ -1,6 +1,7 @@
 import type { Attribute } from '../records/api';
 import { attributeValueTypes } from '../records/valueTypes';
 import { relationshipPathSeparator } from './constants';
+import { relationshipFilterTargets } from './relationshipFilterTypes';
 
 // Explorer query syntax; see apps/docs/src/content/docs/guides/search-syntax.md.
 export const querySelectorSeparator = ':';
@@ -36,6 +37,7 @@ export type QueryError =
   | { code: 'tooManyHops' }
   | { code: 'unknownField'; field: string }
   | { code: 'unknownRelationship'; field: string }
+  | { code: 'severalTargets'; field: string }
   | { code: 'notSearchableLeaf'; field: string };
 
 /** Attribute schemas of the selected blueprint and of relationship targets. */
@@ -94,31 +96,48 @@ type Resolution =
   | { status: 'error'; error: QueryError; part: number };
 
 /**
- * Walks a relationship path, returning the attributes of the blueprint the
- * path ends on, `undefined` while a target is loading, or the index of the
- * first unknown relationship.
+ * Walks a relationship path, returning the attributes of the blueprints the
+ * path ends on, `pending` while a target is loading, or the index of the
+ * first relationship it cannot follow. The last hop may link to several
+ * blueprints, whose attributes are merged by code; a hop followed by another
+ * needs one blueprint to continue in (mirrors the API).
  */
 export const resolveRelationshipPath = (
   schema: QuerySchema,
   path: string[],
 ):
-  | { status: 'ok'; attributes: Attribute[]; targetCode?: string }
+  | { status: 'ok'; attributes: Attribute[]; targetCodes: string[] }
   | { status: 'pending' }
-  | { status: 'error'; part: number } => {
+  | { status: 'error'; part: number; severalTargets?: true } => {
   let attributes = schema.attributes;
-  let targetCode: string | undefined;
+  let targetCodes: string[] = [];
   for (const [index, name] of path.entries()) {
     const relationship = findAttribute(attributes, name, isRelationship);
-    if (!relationship?.target_blueprint_code) {
-      return { status: 'error', part: index };
-    }
-    targetCode = relationship.target_blueprint_code;
-    const target = schema.targets.get(targetCode);
-    if (!target) return { status: 'pending' };
-    attributes = target;
+    const codes = relationship ? relationshipFilterTargets(relationship) : [];
+    if (codes.length === 0) return { status: 'error', part: index };
+    if (codes.length > 1 && index < path.length - 1)
+      return { status: 'error', part: index, severalTargets: true };
+    const targets = codes.map((code) => schema.targets.get(code));
+    if (targets.some((target) => !target)) return { status: 'pending' };
+    const merged = new Map<string, Attribute>();
+    for (const target of targets)
+      for (const attribute of target!)
+        if (!merged.has(attribute.code.toLowerCase()))
+          merged.set(attribute.code.toLowerCase(), attribute);
+    attributes = [...merged.values()];
+    targetCodes = [...codes];
   }
-  return { status: 'ok', attributes, targetCode };
+  return { status: 'ok', attributes, targetCodes };
 };
+
+/** The error for a path `resolveRelationshipPath` could not follow. */
+const pathError = (
+  parts: string[],
+  resolved: { part: number; severalTargets?: true },
+): QueryError =>
+  resolved.severalTargets
+    ? { code: 'severalTargets', field: parts[resolved.part] }
+    : { code: 'unknownRelationship', field: parts[resolved.part] };
 
 /** Mirrors `compile_search_term` in the API's record search repository. */
 const resolveSelector = (schema: QuerySchema, parts: string[]): Resolution => {
@@ -151,7 +170,7 @@ const resolveSelector = (schema: QuerySchema, parts: string[]): Resolution => {
     return resolved.status === 'error'
       ? {
           status: 'error',
-          error: { code: 'unknownRelationship', field: parts[resolved.part] },
+          error: pathError(parts, resolved),
           part: resolved.part,
         }
       : { status: resolved.status };
@@ -186,7 +205,7 @@ const resolveSelector = (schema: QuerySchema, parts: string[]): Resolution => {
   if (path.status === 'error') {
     return {
       status: 'error',
-      error: { code: 'unknownRelationship', field: parts[path.part] },
+      error: pathError(parts, path),
       part: path.part,
     };
   }

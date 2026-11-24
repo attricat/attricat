@@ -1420,6 +1420,7 @@
       "tooManyHops": "A search path can follow at most 3 relationships.",
       "unknownField": "“{{field}}” is not a searchable field.",
       "unknownRelationship": "“{{field}}” is not a relationship.",
+      "severalTargets": "“{{field}}” links to several blueprints, so a search path can’t continue past it.",
       "notSearchableLeaf": "“{{field}}” cannot be searched through a relationship path."
     },
     "search": "Search",

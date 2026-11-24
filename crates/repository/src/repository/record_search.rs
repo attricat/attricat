@@ -2736,12 +2736,12 @@ impl AttricatRepository {
                 }
                 path => path,
             };
-            let (fields, source_blueprint_ids, target) =
+            let (fields, source_blueprint_ids, targets) =
                 self.search_relationship_path(selected, path).await?;
             return Ok(TermPlan::Ids {
                 fields,
                 source_blueprint_ids,
-                target_blueprint_id: target.blueprint.id,
+                target_blueprint_ids: targets.iter().map(|target| target.blueprint.id).collect(),
                 ids,
             });
         }
@@ -2771,76 +2771,72 @@ impl AttricatRepository {
             }) {
                 return Ok(TermPlan::SelectedAttribute(Some(attribute.code.clone())));
             }
-            let relationship = selected
-                .attributes
-                .iter()
-                .find(|a| {
-                    a.code.eq_ignore_ascii_case(parts[0]) && a.value_type == ValueType::Relationship
-                })
-                .ok_or_else(|| {
-                    RepositoryError::InvalidBlueprintDefinition(format!(
-                        "unknown search selector '{}'",
-                        parts[0]
-                    ))
-                })?;
-            let target = self
-                .get_blueprint_by_code(relationship.target_blueprint_code.as_deref().ok_or_else(
-                    || {
-                        RepositoryError::InvalidBlueprintDefinition(
-                            "relationship has no target blueprint".into(),
-                        )
-                    },
-                )?)
-                .await?
-                .ok_or(RepositoryError::NotFound("target blueprint"))?;
+            if !selected.attributes.iter().any(|a| {
+                a.code.eq_ignore_ascii_case(parts[0]) && a.value_type == ValueType::Relationship
+            }) {
+                return Err(RepositoryError::InvalidBlueprintDefinition(format!(
+                    "unknown search selector '{}'",
+                    parts[0]
+                )));
+            }
+            let (fields, source_blueprint_ids, targets) =
+                self.search_relationship_path(selected, &parts).await?;
             return Ok(TermPlan::Relationship {
-                fields: vec![relationship.code.clone()],
-                source_blueprint_ids: vec![selected.blueprint.id],
-                target: Box::new(target),
+                fields,
+                source_blueprint_ids,
+                target_blueprint_ids: targets.iter().map(|target| target.blueprint.id).collect(),
                 attribute: None,
             });
         }
-        let (fields, source_blueprint_ids, current) = self
+        let (fields, source_blueprint_ids, targets) = self
             .search_relationship_path(selected, &parts[..parts.len() - 1])
             .await?;
         let leaf = parts[parts.len() - 1];
-        let attribute = current
-            .attributes
+        // With several target blueprints the term matches on those that have
+        // the attribute, such as `item.sku` on products but not materials.
+        let matches: Vec<(Uuid, String)> = targets
             .iter()
-            .find(|a| {
-                a.code.eq_ignore_ascii_case(leaf)
-                    && !matches!(
-                        a.value_type,
-                        ValueType::Relationship | ValueType::File | ValueType::Json
-                    )
+            .filter_map(|target| {
+                target
+                    .attributes
+                    .iter()
+                    .find(|a| {
+                        a.code.eq_ignore_ascii_case(leaf)
+                            && !matches!(
+                                a.value_type,
+                                ValueType::Relationship | ValueType::File | ValueType::Json
+                            )
+                    })
+                    .map(|attribute| (target.blueprint.id, attribute.code.clone()))
             })
-            .map(|attribute| attribute.code.clone())
-            .ok_or_else(|| {
-                RepositoryError::InvalidBlueprintDefinition(format!(
-                    "unknown scalar search-path leaf '{}'",
-                    leaf
-                ))
-            })?;
+            .collect();
+        let Some((_, attribute)) = matches.first().cloned() else {
+            return Err(RepositoryError::InvalidBlueprintDefinition(format!(
+                "unknown scalar search-path leaf '{}'",
+                leaf
+            )));
+        };
         Ok(TermPlan::Relationship {
             fields,
             source_blueprint_ids,
-            target: Box::new(current),
+            target_blueprint_ids: matches.into_iter().map(|(id, _)| id).collect(),
             attribute: Some(attribute),
         })
     }
 
     /// Walks named relationships from the selected blueprint, returning the
-    /// relationship codes, the blueprint each hop starts from, and the blueprint
-    /// the path ends on.
+    /// relationship codes, the blueprint each hop starts from, and the
+    /// blueprints the path ends on. The last hop may link to several
+    /// blueprints; a hop followed by another needs one to continue in.
     async fn search_relationship_path(
         &self,
         selected: &BlueprintWithAttributes,
         path: &[&str],
-    ) -> Result<(Vec<String>, Vec<Uuid>, BlueprintWithAttributes), RepositoryError> {
+    ) -> Result<(Vec<String>, Vec<Uuid>, Vec<BlueprintWithAttributes>), RepositoryError> {
         let mut current = selected.clone();
         let mut fields = Vec::new();
         let mut source_blueprint_ids = Vec::new();
-        for relationship_name in path {
+        for (hop, relationship_name) in path.iter().enumerate() {
             let relationship = current
                 .attributes
                 .iter()
@@ -2856,18 +2852,39 @@ impl AttricatRepository {
                 })?;
             fields.push(relationship.code.clone());
             source_blueprint_ids.push(current.blueprint.id);
+            let codes = match &relationship.target_blueprint_code {
+                Some(code) => vec![code.clone()],
+                None => relationship.target_blueprint_codes.clone(),
+            };
+            if codes.is_empty() {
+                return Err(RepositoryError::InvalidBlueprintDefinition(format!(
+                    "relationship '{}' names no target blueprint, so a search path cannot follow it",
+                    relationship.code
+                )));
+            }
+            if hop + 1 == path.len() {
+                let mut targets = Vec::with_capacity(codes.len());
+                for code in &codes {
+                    targets.push(
+                        self.get_blueprint_by_code(code)
+                            .await?
+                            .ok_or(RepositoryError::NotFound("target blueprint"))?,
+                    );
+                }
+                return Ok((fields, source_blueprint_ids, targets));
+            }
+            let [code] = codes.as_slice() else {
+                return Err(RepositoryError::InvalidBlueprintDefinition(format!(
+                    "relationship '{}' links to several blueprints, so a search path cannot continue past it",
+                    relationship.code
+                )));
+            };
             current = self
-                .get_blueprint_by_code(relationship.target_blueprint_code.as_deref().ok_or_else(
-                    || {
-                        RepositoryError::InvalidBlueprintDefinition(
-                            "relationship has no target blueprint".into(),
-                        )
-                    },
-                )?)
+                .get_blueprint_by_code(code)
                 .await?
                 .ok_or(RepositoryError::NotFound("target blueprint"))?;
         }
-        Ok((fields, source_blueprint_ids, current))
+        Ok((fields, source_blueprint_ids, vec![current]))
     }
 
     async fn ensure_unambiguous_name(
@@ -2902,38 +2919,38 @@ impl AttricatRepository {
                 .resolve_global_search_term(selected, selected_version, term, global_budget)
                 .await;
         }
-        let (match_blueprint, attribute, direct_field) = match &plan {
+        let (match_blueprints, attribute, direct_field) = match &plan {
             // Bare terms only search scalar values on the selected blueprint.
-            TermPlan::Any => (Some(selected.blueprint.id), None, None),
+            TermPlan::Any => (vec![selected.blueprint.id], None, None),
             TermPlan::Reachable => {
                 unreachable!("global terms are resolved in a bounded transaction")
             }
             TermPlan::SelectedAttribute(attribute) => (
-                Some(selected.blueprint.id),
+                vec![selected.blueprint.id],
                 attribute.clone(),
                 Some(String::new()),
             ),
             TermPlan::Relationship {
                 fields,
-                target,
+                target_blueprint_ids,
                 attribute,
                 ..
             } => (
-                Some(target.blueprint.id),
+                target_blueprint_ids.clone(),
                 attribute.clone(),
                 fields.first().cloned(),
             ),
             TermPlan::Ids {
-                target_blueprint_id,
+                target_blueprint_ids,
                 ..
-            } => (Some(*target_blueprint_id), None, None),
+            } => (target_blueprint_ids.clone(), None, None),
         };
         let rows = match &plan {
             TermPlan::Ids { ids, .. } => sqlx::query_scalar::<_, Uuid>(
-                "SELECT id FROM records WHERE id = ANY($1) AND blueprint_id = $2 AND workspace_id = $3 AND deleted_at IS NULL ORDER BY id",
+                "SELECT id FROM records WHERE id = ANY($1) AND blueprint_id = ANY($2) AND workspace_id = $3 AND deleted_at IS NULL ORDER BY id",
             )
             .bind(ids)
-            .bind(match_blueprint)
+            .bind(&match_blueprints)
             .bind(self.workspace_id.0)
             .fetch_all(&self.pool)
             .await?
@@ -2941,7 +2958,7 @@ impl AttricatRepository {
             .map(|id| (id, None))
             .collect(),
             _ => {
-                self.scalar_search_matches(&term, match_blueprint, attribute)
+                self.scalar_search_matches(&term, &match_blueprints, attribute)
                     .await?
             }
         };
@@ -3054,12 +3071,12 @@ impl AttricatRepository {
             .collect())
     }
 
-    /// Records of `match_blueprint` whose scalar values match a term, with the
-    /// matching attribute code.
+    /// Records of `match_blueprints` whose scalar values match a term, with
+    /// the matching attribute code.
     async fn scalar_search_matches(
         &self,
         term: &SearchTerm,
-        match_blueprint: Option<Uuid>,
+        match_blueprints: &[Uuid],
         attribute: Option<String>,
     ) -> Result<Vec<(Uuid, Option<String>)>, RepositoryError> {
         let pattern = search_pattern(term);
@@ -3081,7 +3098,7 @@ impl AttricatRepository {
                 JOIN records e ON e.id = av.record_id
                 WHERE e.deleted_at IS NULL AND e.workspace_id = $4
                   AND a.workspace_id = $4
-                  AND ($1::uuid IS NULL OR e.blueprint_id = $1)
+                  AND e.blueprint_id = ANY($1)
                   AND ($2::text IS NULL OR a.code = $2)
                 ORDER BY e.id, a.code"#
         } else {
@@ -3091,13 +3108,13 @@ impl AttricatRepository {
                 WHERE e.deleted_at IS NULL AND e.workspace_id = $4
                   AND av.workspace_id = $4 AND a.workspace_id = $4
                   AND av.relationship_target_record_id IS NULL
-                  AND ($1::uuid IS NULL OR e.blueprint_id = $1)
+                  AND e.blueprint_id = ANY($1)
                   AND ($2::text IS NULL OR a.code = $2)
                   AND COALESCE(av.value_text, av.value_number::text, av.value_integer::text, av.value_boolean::text, av.value_date::text, av.value_datetime::text, av.value_time::text) ILIKE $3
                 ORDER BY e.id, a.code"#
         };
         let rows = sqlx::query_as::<_, (Uuid, String)>(sql)
-            .bind(match_blueprint)
+            .bind(match_blueprints)
             .bind(attribute)
             .bind(pattern)
             .bind(self.workspace_id.0)
@@ -3355,10 +3372,13 @@ enum TermPlan {
     Any,
     Reachable,
     SelectedAttribute(Option<String>),
+    /// A term matched on the records a relationship path reaches. The last
+    /// hop may link to several blueprints; `target_blueprint_ids` are those
+    /// the term is matched on (with `attribute`, the ones that have it).
     Relationship {
         fields: Vec<String>,
         source_blueprint_ids: Vec<Uuid>,
-        target: Box<BlueprintWithAttributes>,
+        target_blueprint_ids: Vec<Uuid>,
         attribute: Option<String>,
     },
     /// `@id:a,b` or `relationship.@id:a,b`: records with one of the listed IDs,
@@ -3366,7 +3386,7 @@ enum TermPlan {
     Ids {
         fields: Vec<String>,
         source_blueprint_ids: Vec<Uuid>,
-        target_blueprint_id: Uuid,
+        target_blueprint_ids: Vec<Uuid>,
         ids: Vec<Uuid>,
     },
 }

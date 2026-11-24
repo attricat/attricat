@@ -13,6 +13,7 @@ import {
   type QueryCursorContext,
   type QuerySchema,
 } from './queryLanguage';
+import { relationshipFilterTargets } from './relationshipFilterTypes';
 
 /** Keeps the dropdown scannable; typing narrows longer lists. */
 const maximumQuerySuggestions = 50;
@@ -90,14 +91,16 @@ const fieldSuggestions = (
   const prefix = context.path.map((part) => part + relationshipPathSeparator);
   const typedPath = prefix.join('');
   const suggestions: QuerySuggestion[] = [];
-  if (depth === 1 && resolved.targetCode && !context.partial) {
+  if (depth === 1 && resolved.targetCodes.length > 0 && !context.partial) {
     // `rel.` drills into a relationship; offer searching all of its fields
     // until the user starts typing a field name.
     suggestions.push({
       kind: 'allFields',
       code: context.path[0],
       insert: context.path[0] + querySelectorSeparator,
-      target: targetName(resolved.targetCode, blueprintNames),
+      target: resolved.targetCodes
+        .map((code) => targetName(code, blueprintNames))
+        .join(', '),
     });
   }
   if (!nested) {
@@ -109,13 +112,16 @@ const fieldSuggestions = (
   }
   for (const attribute of resolved.attributes) {
     if (attribute.value_type === attributeValueTypes.relationship) {
-      if (!allowRelationships || !attribute.target_blueprint_code) continue;
+      const targets = relationshipFilterTargets(attribute);
+      if (!allowRelationships || targets.length === 0) continue;
       suggestions.push({
         kind: 'relationship',
         code: attribute.code,
         insert: attribute.code + relationshipPathSeparator,
         attribute,
-        target: targetName(attribute.target_blueprint_code, blueprintNames),
+        target: targets
+          .map((code) => targetName(code, blueprintNames))
+          .join(', '),
       });
     } else if (
       attribute.value_type !== attributeValueTypes.file &&
@@ -232,10 +238,13 @@ export const queryTargetCodes = (
         (attribute) =>
           attribute.value_type === attributeValueTypes.relationship,
       );
-      const code = relationship?.target_blueprint_code;
-      if (!code) return;
-      codes.add(code);
-      attributes = schema.targets.get(code);
+      const targets = relationship
+        ? relationshipFilterTargets(relationship)
+        : [];
+      for (const code of targets) codes.add(code);
+      // Only a hop to one blueprint can be followed further.
+      attributes =
+        targets.length === 1 ? schema.targets.get(targets[0]) : undefined;
     }
   };
   for (const term of query.split(/\s+/)) {

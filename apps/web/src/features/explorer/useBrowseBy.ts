@@ -9,7 +9,11 @@ import {
   resolveBrowseBy,
   setStoredBrowseBy,
 } from './browseBy';
-import type { RelationshipFilterAttribute } from './relationshipFilterTypes';
+import {
+  hasSingleFilterTarget,
+  type RelationshipFilterAttribute,
+  type SingleTargetRelationshipFilterAttribute,
+} from './relationshipFilterTypes';
 import type { BrowseBy } from './search';
 import { blueprintByCodeOptions } from '../records/queryOptions';
 
@@ -20,7 +24,7 @@ const useBlueprints = (codes: string[]) =>
     queries: [...new Set(codes)].map((code) => blueprintByCodeOptions(code)),
   });
 
-const lastTargets = (paths: RelationshipFilterAttribute[][]) =>
+const lastTargets = (paths: SingleTargetRelationshipFilterAttribute[][]) =>
   paths.map((path) => path.at(-1)!.target_blueprint_code);
 
 /**
@@ -56,14 +60,16 @@ export const useBrowseBy = ({
     }
     return results;
   };
+  // Several target blueprints can't supply one list of targets to browse.
+  const singleTargetFields = relationshipFields.filter(hasSingleFilterTarget);
   const direct = collect(
     useBlueprints(
-      relationshipFields.map((attribute) => attribute.target_blueprint_code),
+      singleTargetFields.map((attribute) => attribute.target_blueprint_code),
     ),
   );
   const twoHops = extendBrowsePaths(
     blueprintCode,
-    relationshipFields.map((attribute) => [attribute]),
+    singleTargetFields.map((attribute) => [attribute]),
     targetOf,
   );
   const second = collect(useBlueprints(lastTargets(twoHops)));

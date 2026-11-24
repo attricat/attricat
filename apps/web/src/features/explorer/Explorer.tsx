@@ -270,7 +270,8 @@ export const Explorer = ({ search: urlSearch, savedView }: Props) => {
                     hierarchyField: field.hierarchyField,
                     ownTree: field.ownTree,
                     selectedIds,
-                    targetBlueprint: field.attribute.target_blueprint_code,
+                    targetBlueprint:
+                      field.attribute.target_blueprint_code ?? undefined,
                   });
                 }}
                 query={search.query}

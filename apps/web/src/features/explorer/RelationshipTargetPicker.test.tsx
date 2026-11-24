@@ -34,7 +34,7 @@ describe('RelationshipTargetPicker', () => {
         <RelationshipTargetPicker
           onSelectedIdsChange={onSelectedIdsChange}
           selectedIds={[sampleId]}
-          targetBlueprint="product"
+          targetBlueprints={['product']}
         />
       </QueryClientProvider>,
     );
@@ -42,5 +42,36 @@ describe('RelationshipTargetPicker', () => {
     expect(await screen.findByText('Sample')).toBeTruthy();
     await userEvent.click(screen.getByRole('checkbox', { checked: true }));
     expect(onSelectedIdsChange).toHaveBeenCalledWith([]);
+  });
+
+  it('switches between the target blueprints of a relationship', async () => {
+    vi.mocked(searchRecords).mockResolvedValue({
+      blueprint: { blueprint: { views: {} } },
+      items: [],
+      next_cursor: null,
+    } as never);
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <RelationshipTargetPicker
+          blueprintName={(code) =>
+            ({ product: 'Product', material: 'Material' })[code] ?? code
+          }
+          onSelectedIdsChange={vi.fn()}
+          selectedIds={[]}
+          targetBlueprints={['product', 'material']}
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(vi.mocked(searchRecords)).toHaveBeenLastCalledWith(
+      expect.objectContaining({ blueprint: 'product' }),
+    );
+    await userEvent.click(
+      screen.getByRole('combobox', { name: 'Target blueprint' }),
+    );
+    await userEvent.click(screen.getByRole('option', { name: 'Material' }));
+    expect(vi.mocked(searchRecords)).toHaveBeenLastCalledWith(
+      expect.objectContaining({ blueprint: 'material' }),
+    );
   });
 });
