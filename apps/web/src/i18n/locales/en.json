@@ -1373,7 +1373,6 @@
     "description": "Search and browse your catalog.",
     "create": "Create record",
     "blueprintTitle": "{{blueprint}}",
-    "blueprintDescription": "Search and browse {{blueprint}}.",
     "createBlueprint": "Create {{blueprint}}",
     "allBlueprints": "All blueprints",
     "showAll": "Show all",

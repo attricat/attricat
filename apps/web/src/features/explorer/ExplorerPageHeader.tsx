@@ -86,11 +86,8 @@ export const ExplorerPageHeader = ({
           </Box>
         )
       }
-      description={
-        blueprintName
-          ? t('explorer.blueprintDescription', { blueprint: blueprintName })
-          : t('explorer.description')
-      }
+      // A blueprint's title already names what the list holds.
+      description={blueprintName ? undefined : t('explorer.description')}
       icon={ExplorerIcon}
       title={
         blueprintName

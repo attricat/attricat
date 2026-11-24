@@ -1435,7 +1435,6 @@
     "description": "Wyszukuj i przeglądaj katalog.",
     "create": "Utwórz rekord",
     "blueprintTitle": "{{blueprint}}",
-    "blueprintDescription": "Wyszukuj i przeglądaj: {{blueprint}}.",
     "createBlueprint": "Utwórz: {{blueprint}}",
     "allBlueprints": "Wszystkie schematy",
     "showAll": "Pokaż wszystkie",
