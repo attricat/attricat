@@ -15,7 +15,7 @@ import {
 } from '../../views/controls/choiceControls';
 import { choiceEditorOptions } from '../choices';
 import { attributeLabel } from '../recordDisplay';
-import { attributeValueTypes } from '../valueTypes';
+import { attributeValueTypes, isNumericValueType } from '../valueTypes';
 import { JSON_EDITOR_MIN_ROWS, scalarValuePlaceholders } from '../constants';
 import { statusConfiguration } from '../status';
 import { principalConfiguration } from '../../principals/principal';
@@ -33,8 +33,7 @@ const isJson = (text: string) => {
 };
 
 const numeric = (attribute: Attribute) =>
-  attribute.value_type === attributeValueTypes.number ||
-  attribute.value_type === attributeValueTypes.integer;
+  isNumericValueType(attribute.value_type);
 
 /** Helper text with a count of the characters used against the limit. */
 const CountedHelperText = ({

@@ -1420,6 +1420,7 @@
       "global": "Search every blueprint, then follow links back up to 3 hops",
       "ids": "Match records by ID; separate several IDs with commas",
       "valueHint": "Type a value to find in {{field}}. End it with * to match the beginning.",
+      "numberValueHint": "Type a number for {{field}}: 4 matches exactly 4; also >4, >=4, <4, <=4, or a range such as 40..60.",
       "keyboardHint": "↑↓ to choose · Tab or Enter to insert · Esc to close · Ctrl+Space to reopen"
     },
     "queryErrors": {

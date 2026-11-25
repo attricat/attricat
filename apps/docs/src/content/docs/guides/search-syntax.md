@@ -19,7 +19,7 @@ There is no `OR`, `NOT`, grouping, or quoting, so a term cannot contain a space.
 
 ## Plain terms
 
-A term without a colon searches the chosen blueprint's own scalar attributes. It matches anywhere in a value and ignores case. Numbers, dates, and times match by their stored form, such as `2026-05`. It does not follow relationships.
+A term without a colon searches the chosen blueprint's own scalar attributes. It matches anywhere in a value and ignores case. Numbers, dates, and times match by their stored form, such as `2026-05`, so `4` also finds 40 and 14. To find an exact number, name its attribute: see [Numbers](#numbers). It does not follow relationships.
 
 ```text
 linen
@@ -37,7 +37,7 @@ A trailing `*` matches any ending:
 sku:ABC-12*
 ```
 
-`*` is only allowed at the end of a term.
+`*` is only allowed at the end of a term, and not in a term on a number or true/false attribute.
 
 ## Qualified terms
 
@@ -59,6 +59,27 @@ The last part of a longer path must be a scalar attribute, not a relationship, f
 A relationship can link to records of several blueprints, such as an `item` that is either a product or a material. A term through it matches the linked records of all of them: `item:steel` searches every attribute of the linked product or material, and `item.name:steel` searches `name` on those that have it. An attribute only one of them has, such as `item.sku:HK*`, matches only that blueprint's records. A path can continue through such a relationship into a relationship its blueprints declare alike: `item.brand.name:acme` follows `brand` on the products that have it. If the blueprints declare the next part differently, for example as a relationship to different blueprints, the term is rejected.
 
 When a one-part selector could be either the blueprint's name or one of its attributes or relationships, the blueprint wins.
+
+## Numbers
+
+A qualified term on a `number` or `integer` attribute compares the value as a number instead of matching its text. `width_mm:4` finds 4 and 4.0, but not 40 or 14.
+
+| Form | Example | Matches |
+| --- | --- | --- |
+| `attribute:n` | `width_mm:4` | Values equal to 4. `width_mm:=4` is the same. |
+| `attribute:>n` | `width_mm:>4` | Values greater than 4. |
+| `attribute:>=n` | `width_mm:>=4` | 4 and greater. |
+| `attribute:<n` | `width_mm:<4` | Values less than 4. |
+| `attribute:<=n` | `width_mm:<=4` | 4 and less. |
+| `attribute:from..to` | `width_mm:40..60` | 40 to 60, both included. |
+
+Write decimals with a point or a comma: `width_mm:2,5` is the same as `width_mm:2.5`. The forms also work at the end of a relationship path, such as `spec.width_mm:40..60`. Through a relationship to several blueprints, the term compares the values of those that have the attribute, which must all declare it with the same type.
+
+An `integer` attribute takes whole numbers only, so `qty:2,5` is rejected. A value that is not a number, such as `width_mm:abc`, a wildcard, such as `width_mm:4*`, or a range that starts after it ends, such as `width_mm:60..40`, is rejected too.
+
+A `boolean` attribute matches `true` or `false` exactly, in any case: `in_stock:true`.
+
+Plain terms and `*:` terms name no attribute, so they still match numbers by their text. Dates, times, and timestamps match by their text in every term, so `due:2026-05` finds dates in May 2026.
 
 ## Record IDs
 

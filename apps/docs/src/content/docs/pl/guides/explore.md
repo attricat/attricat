@@ -27,6 +27,7 @@ Aby wyszukiwać szerzej, dodaj kwalifikator do terminu:
 | --------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | `linen`                           | Rekordy, które mają „linen” w dowolnej ze swoich wartości tekstowych.                                      |
 | `sku:ABC*`                        | Rekordy, których `sku` zaczyna się od `ABC`.                                                               |
+| `width_mm:40..60`                 | Rekordy, których liczba `width_mm` wynosi od 40 do 60.                                                     |
 | `colors:red`                      | Rekordy powiązane przez `colors` z rekordem, który ma „red” w dowolnej wartości.                           |
 | `colors.name:red`                 | To samo, ale tylko w `name` powiązanego rekordu.                                                           |
 | `family.product_type.name:laptop` | Przechodzi przez dwie relacje, a następnie dopasowuje `name`.                                              |

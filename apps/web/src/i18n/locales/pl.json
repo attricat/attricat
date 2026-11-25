@@ -1484,6 +1484,7 @@
       "global": "Szukaj we wszystkich schematach i wróć po powiązaniach (do 3 relacji)",
       "ids": "Dopasuj rekordy po ID; kilka ID oddziel przecinkami",
       "valueHint": "Wpisz wartość do znalezienia w {{field}}. Zakończ ją znakiem *, aby dopasować początek.",
+      "numberValueHint": "Wpisz liczbę dla {{field}}: 4 dopasowuje dokładnie 4; możesz też użyć >4, >=4, <4, <=4 lub zakresu, np. 40..60.",
       "keyboardHint": "↑↓ wybór · Tab lub Enter wstawia · Esc zamyka · Ctrl+Spacja otwiera ponownie"
     },
     "queryErrors": {

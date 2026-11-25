@@ -19,7 +19,7 @@ Nie ma operatorów `OR` i `NOT`, grupowania ani cudzysłowów, więc termin nie 
 
 ## Zwykłe terminy
 
-Termin bez dwukropka przeszukuje własne atrybuty skalarne wybranego schematu. Pasuje w dowolnym miejscu wartości i nie rozróżnia wielkości liter. Liczby, daty i godziny pasują według zapisanej postaci, na przykład `2026-05`. Nie podąża za relacjami.
+Termin bez dwukropka przeszukuje własne atrybuty skalarne wybranego schematu. Pasuje w dowolnym miejscu wartości i nie rozróżnia wielkości liter. Liczby, daty i godziny pasują według zapisanej postaci, na przykład `2026-05`, więc `4` znajduje też 40 i 14. Aby znaleźć dokładną liczbę, podaj jej atrybut: zobacz [Liczby](#liczby). Nie podąża za relacjami.
 
 ```text
 linen
@@ -37,7 +37,7 @@ Końcowy `*` dopasowuje dowolne zakończenie:
 sku:ABC-12*
 ```
 
-`*` jest dozwolony tylko na końcu terminu.
+`*` jest dozwolony tylko na końcu terminu i nie w terminie na atrybucie liczbowym ani logicznym.
 
 ## Terminy kwalifikowane
 
@@ -59,6 +59,27 @@ Ostatni człon dłuższej ścieżki musi być atrybutem skalarnym, a nie relacj�
 Relacja może wskazywać rekordy kilku schematów, na przykład `item`, który jest produktem albo materiałem. Termin przez taką relację dopasowuje powiązane rekordy wszystkich tych schematów: `item:stal` przeszukuje wszystkie atrybuty powiązanego produktu lub materiału, a `item.name:stal` przeszukuje `name` w tych, które go mają. Atrybut, który ma tylko jeden z nich, na przykład `item.sku:HK*`, dopasowuje tylko rekordy tego schematu. Ścieżka może przejść przez taką relację dalej, do relacji, którą jej schematy deklarują tak samo: `item.brand.name:acme` podąża za `brand` w produktach, które ją mają. Jeśli schematy deklarują następną część różnie, na przykład jako relację do różnych schematów, termin jest odrzucany.
 
 Gdy jednoczłonowy selektor może oznaczać zarówno nazwę schematu, jak i jeden z jego atrybutów lub jedną z relacji, pierwszeństwo ma schemat.
+
+## Liczby
+
+Termin kwalifikowany na atrybucie `number` lub `integer` porównuje wartość jako liczbę, zamiast dopasowywać jej tekst. `width_mm:4` znajduje 4 i 4,0, ale nie 40 ani 14.
+
+| Postać | Przykład | Dopasowuje |
+| --- | --- | --- |
+| `attribute:n` | `width_mm:4` | Wartości równe 4. `width_mm:=4` oznacza to samo. |
+| `attribute:>n` | `width_mm:>4` | Wartości większe niż 4. |
+| `attribute:>=n` | `width_mm:>=4` | 4 i więcej. |
+| `attribute:<n` | `width_mm:<4` | Wartości mniejsze niż 4. |
+| `attribute:<=n` | `width_mm:<=4` | 4 i mniej. |
+| `attribute:od..do` | `width_mm:40..60` | Od 40 do 60, łącznie z oboma końcami. |
+
+Ułamki zapisuj z przecinkiem lub kropką: `width_mm:2,5` oznacza to samo co `width_mm:2.5`. Te postacie działają też na końcu ścieżki relacji, na przykład `spec.width_mm:40..60`. Przez relację do kilku schematów termin porównuje wartości w tych, które mają atrybut, a wszystkie muszą deklarować go z tym samym typem.
+
+Atrybut `integer` przyjmuje tylko liczby całkowite, więc `qty:2,5` jest odrzucany. Odrzucana jest też wartość, która nie jest liczbą, na przykład `width_mm:abc`, symbol wieloznaczny, na przykład `width_mm:4*`, oraz zakres, który zaczyna się po swoim końcu, na przykład `width_mm:60..40`.
+
+Atrybut `boolean` dopasowuje dokładnie `true` lub `false`, bez względu na wielkość liter: `in_stock:true`.
+
+Zwykłe terminy i terminy `*:` nie wskazują atrybutu, więc nadal dopasowują liczby według ich tekstu. Daty, godziny i znaczniki czasu w każdym terminie pasują według tekstu, więc `due:2026-05` znajduje daty z maja 2026.
 
 ## Identyfikatory rekordów
 

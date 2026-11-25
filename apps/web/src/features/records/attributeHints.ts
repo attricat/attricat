@@ -4,7 +4,7 @@ import { lexiconText } from '../lexicon/lexicon';
 import type { Attribute } from './api';
 import { attributeCardinalities } from './constants';
 import { patternHint } from './jsonSchema';
-import { attributeValueTypes } from './valueTypes';
+import { attributeValueTypes, isNumericValueType } from './valueTypes';
 import { limitNumberFormat } from './limitNumberFormat';
 
 const schemaNumber = (attribute: Attribute, key: string) => {
@@ -143,8 +143,7 @@ export const attributeHint = (attribute: Attribute, t: TFunction) => {
   const rules =
     attribute.value_type === attributeValueTypes.file
       ? fileHint(attribute, t)
-      : attribute.value_type === attributeValueTypes.number ||
-          attribute.value_type === attributeValueTypes.integer
+      : isNumericValueType(attribute.value_type)
         ? rangeHint(attribute, t)
         : [lengthHint(attribute, t), shapeHint(attribute, t)]
             .filter(Boolean)

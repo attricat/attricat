@@ -11,6 +11,11 @@ export const attributeValueTypes = {
   relationship: 'relationship',
 } as const;
 
+/** Whether a value type holds numbers: `number` or `integer`. */
+export const isNumericValueType = (valueType: string | undefined) =>
+  valueType === attributeValueTypes.number ||
+  valueType === attributeValueTypes.integer;
+
 export const attributeValueKinds = {
   scalar: 'scalar',
   relationship: 'relationship',

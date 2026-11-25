@@ -53,6 +53,8 @@ type QuerySuggestionResult = {
   suggestions: QuerySuggestion[];
   /** Relationship targets are still loading for this context. */
   loading: boolean;
+  /** The value type of the field a value is being typed for, once known. */
+  valueType?: string;
 };
 
 const rank = (code: string, partial: string) => {
@@ -173,10 +175,9 @@ const selectorAttribute = (schema: QuerySchema, selector: string) => {
 };
 
 const valueSuggestions = (
-  schema: QuerySchema,
+  attribute: Attribute | undefined,
   context: Extract<QueryCursorContext, { kind: 'value' }>,
 ): QuerySuggestion[] => {
-  const attribute = selectorAttribute(schema, context.selector);
   if (attribute?.value_type !== attributeValueTypes.boolean) return [];
   return byRank(
     booleanValues.map((value) => ({
@@ -196,10 +197,12 @@ export const querySuggestions = (
 ): QuerySuggestionResult => {
   const context = queryCursorContext(query, cursor);
   if (context.kind === 'value') {
+    const attribute = selectorAttribute(schema, context.selector);
     return {
       context,
-      suggestions: valueSuggestions(schema, context),
+      suggestions: valueSuggestions(attribute, context),
       loading: false,
+      valueType: attribute?.value_type,
     };
   }
   return { context, ...fieldSuggestions(schema, context, blueprintNames) };

@@ -306,6 +306,7 @@ const productSchema = {
   attributes: [
     { code: 'sku', value_type: 'string', name: 'SKU' },
     { code: 'title', value_type: 'string' },
+    { code: 'width_mm', value_type: 'number' },
   ],
   table_path_attributes: [],
 } satisfies BlueprintWithAttributes;
@@ -342,6 +343,18 @@ describe('ExplorerSearchForm query autocomplete', () => {
     await user.keyboard('{Tab}');
     expect((input as HTMLInputElement).value).toBe('sku:');
     expect(screen.getByText(/Type a value to find in sku/)).toBeTruthy();
+  });
+
+  it('shows the comparison forms for a number field', async () => {
+    const user = userEvent.setup();
+    renderQuery();
+    const input = screen.getByRole('combobox', { name: 'Query' });
+
+    await user.type(input, 'width_mm:');
+    expect(
+      screen.getByText(/Type a number for width_mm: 4 matches exactly 4/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Type a value to find/)).toBeNull();
   });
 
   it('submits on Enter unless a suggestion was chosen with the arrows', async () => {

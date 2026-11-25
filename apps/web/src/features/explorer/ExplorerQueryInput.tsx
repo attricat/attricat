@@ -24,6 +24,7 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { compactIconSize, smallIconSize } from '../../components/iconSizes';
 import type { Blueprint, BlueprintWithAttributes } from '../records/api';
+import { isNumericValueType } from '../records/valueTypes';
 import { querySuggestionListMaxHeight } from './constants';
 import {
   firstQueryError,
@@ -102,6 +103,8 @@ export const ExplorerQueryInput = ({
     completion?.context.kind === 'value'
       ? completion.context.selector
       : undefined;
+  // Number leaves compare by value, so their hint shows the comparison forms.
+  const numericHint = isNumericValueType(completion?.valueType);
   const loading = Boolean(completion?.loading && targetsLoading);
   const loadFailure =
     completion?.loading && !targetsLoading ? targetsError : undefined;
@@ -289,7 +292,12 @@ export const ExplorerQueryInput = ({
               sx={{ px: 3, pt: 2, pb: suggestions.length ? 1 : 2 }}
               variant="body2"
             >
-              {t('explorer.querySuggestions.valueHint', { field: valueHint })}
+              {t(
+                numericHint
+                  ? 'explorer.querySuggestions.numberValueHint'
+                  : 'explorer.querySuggestions.valueHint',
+                { field: valueHint },
+              )}
             </Typography>
           )}
           {loading && (

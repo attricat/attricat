@@ -27,6 +27,7 @@ To search further, qualify the term:
 | --------------------------------- | -------------------------------------------------------------------------- |
 | `linen`                           | Records with "linen" in any of their own text values.                      |
 | `sku:ABC*`                        | Records whose `sku` starts with `ABC`.                                     |
+| `width_mm:40..60`                 | Records whose `width_mm` number is from 40 to 60.                          |
 | `colors:red`                      | Records linked through `colors` to a record with "red" in any value.       |
 | `colors.name:red`                 | Same, but only the linked record's `name`.                                 |
 | `family.product_type.name:laptop` | Follows two relationships, then matches `name`.                            |

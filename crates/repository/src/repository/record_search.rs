@@ -4,10 +4,11 @@ use super::{record_projection::display_label, system_annotations::validate_syste
 use crate::model::ExportStatusFilter;
 use attricat_domain::constants::DEFAULT_CONTEXT_CODE;
 use attricat_domain::states::{DataQualityFilter, RuleFindingState};
-use attricat_validation::relationship_path::CodeMatch;
+use attricat_validation::relationship_path::{CodeMatch, resolve_in};
 use attricat_validation::saved_search::{FIELD_PATH_SEPARATOR, MAX_RELATIONSHIP_HOPS};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
+use rust_decimal::{Decimal, prelude::ToPrimitive};
 use sqlx::AssertSqlSafe;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -2934,13 +2935,21 @@ impl AttricatRepository {
                         parts[1]
                     ))
                 })?;
-            return Ok(TermPlan::SelectedAttribute(Some(attribute.code.clone())));
+            return Ok(TermPlan::SelectedAttribute(Some(SearchLeaf::new(
+                term,
+                &attribute.code,
+                attribute.value_type,
+            )?)));
         }
         if parts.len() == 1 {
             if let Some(attribute) = selected.attributes.iter().find(|a| {
                 a.code.eq_ignore_ascii_case(parts[0]) && a.value_type != ValueType::Relationship
             }) {
-                return Ok(TermPlan::SelectedAttribute(Some(attribute.code.clone())));
+                return Ok(TermPlan::SelectedAttribute(Some(SearchLeaf::new(
+                    term,
+                    &attribute.code,
+                    attribute.value_type,
+                )?)));
             }
             if !selected.attributes.iter().any(|a| {
                 a.code.eq_ignore_ascii_case(parts[0]) && a.value_type == ValueType::Relationship
@@ -2963,35 +2972,39 @@ impl AttricatRepository {
             .search_relationship_path(selected, &parts[..parts.len() - 1])
             .await?;
         let leaf = parts[parts.len() - 1];
+        let unknown_leaf = || {
+            RepositoryError::InvalidSearchQuery(format!("unknown scalar search-path leaf '{leaf}'"))
+        };
         // With several target blueprints the term matches on those that have
         // the attribute, such as `item.sku` on products but not materials.
-        let matches: Vec<(Uuid, String)> = targets
-            .iter()
-            .filter_map(|target| {
-                target
-                    .attributes
-                    .iter()
-                    .find(|a| {
-                        a.code.eq_ignore_ascii_case(leaf)
-                            && !matches!(
-                                a.value_type,
-                                ValueType::Relationship | ValueType::File | ValueType::Json
-                            )
-                    })
-                    .map(|attribute| (target.id, attribute.code.clone()))
-            })
-            .collect();
-        let Some((_, attribute)) = matches.first().cloned() else {
-            return Err(RepositoryError::InvalidSearchQuery(format!(
-                "unknown scalar search-path leaf '{}'",
-                leaf
-            )));
-        };
+        // They declare it with one value type, so one comparison suits all.
+        let segment = resolve_in(
+            selector,
+            leaf,
+            targets
+                .iter()
+                .map(|target| (target.code.as_str(), &*target.attributes)),
+            CodeMatch::IgnoreCase,
+        )
+        .map_err(|error| RepositoryError::from_path_error(error, |_| unknown_leaf()))?;
+        if !segment.value_type.is_scalar() {
+            return Err(unknown_leaf());
+        }
+        let leaf = SearchLeaf::new(term, &segment.first().code, segment.value_type)?;
         Ok(TermPlan::Relationship {
             fields,
             source_blueprint_ids,
-            target_blueprint_ids: matches.into_iter().map(|(id, _)| id).collect(),
-            attribute: Some(attribute),
+            target_blueprint_ids: targets
+                .iter()
+                .filter(|target| {
+                    segment
+                        .declarations
+                        .iter()
+                        .any(|(blueprint, _)| *blueprint == target.code)
+                })
+                .map(|target| target.id)
+                .collect(),
+            attribute: Some(leaf),
         })
     }
 
@@ -3088,7 +3101,7 @@ impl AttricatRepository {
             }
             TermPlan::SelectedAttribute(attribute) => (
                 vec![selected.blueprint.id],
-                attribute.clone(),
+                attribute.as_ref(),
                 Some(String::new()),
             ),
             TermPlan::Relationship {
@@ -3098,7 +3111,7 @@ impl AttricatRepository {
                 ..
             } => (
                 target_blueprint_ids.clone(),
-                attribute.clone(),
+                attribute.as_ref(),
                 fields.first().cloned(),
             ),
             TermPlan::Ids {
@@ -3241,8 +3254,18 @@ impl AttricatRepository {
         &self,
         term: &SearchTerm,
         match_blueprints: &[Uuid],
-        attribute: Option<String>,
+        leaf: Option<&SearchLeaf>,
     ) -> Result<Vec<(Uuid, Option<String>, Option<String>)>, RepositoryError> {
+        if let Some(SearchLeaf {
+            code,
+            typed: Some(typed),
+        }) = leaf
+        {
+            return self
+                .typed_search_matches(typed, match_blueprints, code)
+                .await;
+        }
+        let attribute = leaf.map(|leaf| leaf.code.as_str());
         let pattern = search_pattern(term);
         let fuzzy = fuzzy_search_term(term);
         // Alphabetic terms other than booleans cannot match the canonical native
@@ -3317,6 +3340,82 @@ impl AttricatRepository {
         Ok(rows
             .into_iter()
             .map(|(id, code, similar)| (id, Some(code), similar))
+            .collect())
+    }
+
+    /// Records of `match_blueprints` whose `attribute` value compares as a
+    /// number or boolean term asks: numbers by value rather than by their
+    /// text, so `width_mm:4` matches 4 and 4.0 but not 40.
+    async fn typed_search_matches(
+        &self,
+        typed: &TypedMatch,
+        match_blueprints: &[Uuid],
+        attribute: &str,
+    ) -> Result<Vec<(Uuid, Option<String>, Option<String>)>, RepositoryError> {
+        // Comparing the leaf's own column, with its non-null condition, lets
+        // the per-attribute value indexes serve the comparison. Operators
+        // come from the parsed bounds, and the bounds are parameters.
+        let (column, predicate) = match typed {
+            TypedMatch::Number {
+                column,
+                lower,
+                upper,
+            } => {
+                let column = column.sql();
+                let predicate = [(lower, ">=", ">"), (upper, "<=", "<")]
+                    .into_iter()
+                    .filter_map(|(bound, inclusive, exclusive)| {
+                        bound.map(|bound| {
+                            if bound.inclusive {
+                                inclusive
+                            } else {
+                                exclusive
+                            }
+                        })
+                    })
+                    .enumerate()
+                    .map(|(index, operator)| format!(" AND av.{column} {operator} ${}", index + 4))
+                    .collect();
+                (column, predicate)
+            }
+            TypedMatch::Boolean(_) => ("value_boolean", " AND av.value_boolean = $4".to_owned()),
+        };
+        let sql = format!(
+            r#"SELECT DISTINCT e.id, a.code
+                FROM records e JOIN attribute_values av ON av.record_id = e.id
+                JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
+                WHERE e.deleted_at IS NULL AND e.workspace_id = $3
+                  AND av.workspace_id = $3 AND a.workspace_id = $3 AND av.active
+                  AND av.relationship_target_record_id IS NULL
+                  AND e.blueprint_id = ANY($1) AND a.code = $2
+                  AND av.{column} IS NOT NULL{predicate}
+                ORDER BY e.id, a.code"#
+        );
+        let mut query = sqlx::query_as::<_, (Uuid, String)>(AssertSqlSafe(sql))
+            .bind(match_blueprints)
+            .bind(attribute)
+            .bind(self.workspace_id.0);
+        match typed {
+            TypedMatch::Number {
+                column,
+                lower,
+                upper,
+            } => {
+                for bound in [lower, upper].into_iter().flatten() {
+                    query = match column {
+                        // The parser keeps integer bounds whole and in range.
+                        NumberColumn::Integer => query.bind(bound.value.to_i64()),
+                        NumberColumn::Number => query.bind(bound.value),
+                    };
+                }
+            }
+            TypedMatch::Boolean(value) => query = query.bind(*value),
+        }
+        Ok(query
+            .fetch_all(&self.pool)
+            .await?
+            .into_iter()
+            .map(|(id, code)| (id, Some(code), None))
             .collect())
     }
 
@@ -3564,10 +3663,199 @@ struct SearchTerm {
     value: String,
     prefix: bool,
 }
+
+/// The attribute a qualified term matches on.
+#[derive(Clone, Debug)]
+struct SearchLeaf {
+    code: String,
+    /// How the term compares the leaf's values; `None` matches their text.
+    typed: Option<TypedMatch>,
+}
+
+impl SearchLeaf {
+    /// The leaf `code` of `value_type`, as `term` compares it.
+    fn new(term: &SearchTerm, code: &str, value_type: ValueType) -> Result<Self, RepositoryError> {
+        let typed = match value_type {
+            ValueType::Number => Some(parse_number_term(term, NumberColumn::Number)?),
+            ValueType::Integer => Some(parse_number_term(term, NumberColumn::Integer)?),
+            ValueType::Boolean => Some(parse_boolean_term(term)?),
+            _ => None,
+        };
+        Ok(Self {
+            code: code.to_owned(),
+            typed,
+        })
+    }
+}
+
+/// A term compared by value instead of by text.
+#[derive(Clone, Debug, PartialEq)]
+enum TypedMatch {
+    /// A `number` or `integer` leaf: values within the bounds.
+    Number {
+        column: NumberColumn,
+        lower: Option<NumberBound>,
+        upper: Option<NumberBound>,
+    },
+    /// A `boolean` leaf: exactly `true` or `false`.
+    Boolean(bool),
+}
+
+/// The `attribute_values` column a numeric leaf stores its values in.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum NumberColumn {
+    Number,
+    Integer,
+}
+
+impl NumberColumn {
+    const fn sql(self) -> &'static str {
+        match self {
+            Self::Number => "value_number",
+            Self::Integer => "value_integer",
+        }
+    }
+}
+
+/// One end of a numeric term's range.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct NumberBound {
+    value: Decimal,
+    inclusive: bool,
+}
+
+/// Which end of a range a comparison bounds.
+#[derive(Clone, Copy)]
+enum BoundSide {
+    Lower,
+    Upper,
+}
+
+/// Separates the ends of a closed numeric range, as in `width_mm:40..60`.
+const NUMBER_RANGE_SEPARATOR: &str = "..";
+/// An optional prefix of an exact numeric term, as in `width_mm:=4`.
+const NUMBER_EQUALS: char = '=';
+/// Leading comparison operators of a numeric term with the end they bound
+/// and whether it is included, longest first so `>=` is not read as `>`.
+const NUMBER_COMPARISONS: [(&str, BoundSide, bool); 4] = [
+    (">=", BoundSide::Lower, true),
+    ("<=", BoundSide::Upper, true),
+    (">", BoundSide::Lower, false),
+    ("<", BoundSide::Upper, false),
+];
+
+/// The canonical spellings of a boolean term.
+const TRUE_TERM: &str = "true";
+const FALSE_TERM: &str = "false";
+
+/// A term on a number or integer leaf: `4` (or `=4`), `>4`, `>=4`, `<4`,
+/// `<=4` or `40..60`, with a decimal point or comma. An integer leaf takes
+/// whole numbers only.
+fn parse_number_term(
+    term: &SearchTerm,
+    column: NumberColumn,
+) -> Result<TypedMatch, RepositoryError> {
+    if term.prefix {
+        return Err(RepositoryError::InvalidSearchQuery(format!(
+            "wildcards are not allowed in a number search term: '{}'",
+            term.original
+        )));
+    }
+    let number = |text: &str| parse_search_number(text, column, term);
+    let between = |lower, upper| TypedMatch::Number {
+        column,
+        lower,
+        upper,
+    };
+    let value = term.value.as_str();
+    if let Some((operator, side, inclusive)) = NUMBER_COMPARISONS
+        .iter()
+        .find(|(operator, ..)| value.starts_with(operator))
+    {
+        let bound = Some(NumberBound {
+            value: number(&value[operator.len()..])?,
+            inclusive: *inclusive,
+        });
+        return Ok(match side {
+            BoundSide::Lower => between(bound, None),
+            BoundSide::Upper => between(None, bound),
+        });
+    }
+    let value = value.strip_prefix(NUMBER_EQUALS).unwrap_or(value);
+    let (from, to) = match value.split_once(NUMBER_RANGE_SEPARATOR) {
+        Some((from, to)) => (number(from)?, number(to)?),
+        None => {
+            let exact = number(value)?;
+            (exact, exact)
+        }
+    };
+    if from > to {
+        return Err(RepositoryError::InvalidSearchQuery(format!(
+            "the range in search term '{}' starts after it ends",
+            term.original
+        )));
+    }
+    let inclusive = |value| {
+        Some(NumberBound {
+            value,
+            inclusive: true,
+        })
+    };
+    Ok(between(inclusive(from), inclusive(to)))
+}
+
+/// A plain decimal number: an optional sign, digits, and optionally a
+/// decimal point or comma followed by more digits. Exponents, `inf` and
+/// `NaN` are not numbers here.
+fn parse_search_number(
+    text: &str,
+    column: NumberColumn,
+    term: &SearchTerm,
+) -> Result<Decimal, RepositoryError> {
+    let digits = text.strip_prefix(['-', '+']).unwrap_or(text);
+    let (whole, fraction) = match digits.split_once(['.', ',']) {
+        Some((whole, fraction)) => (whole, Some(fraction)),
+        None => (digits, None),
+    };
+    let all_digits = |part: &str| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit());
+    let not_a_number = || {
+        RepositoryError::InvalidSearchQuery(format!(
+            "'{text}' is not a number in search term '{}'",
+            term.original
+        ))
+    };
+    if !all_digits(whole) || !fraction.is_none_or(all_digits) {
+        return Err(not_a_number());
+    }
+    let value: Decimal = text.replace(',', ".").parse().map_err(|_| not_a_number())?;
+    if column == NumberColumn::Integer && (!value.fract().is_zero() || value.to_i64().is_none()) {
+        return Err(RepositoryError::InvalidSearchQuery(format!(
+            "'{text}' is not a whole number in search term '{}', whose attribute holds integers",
+            term.original
+        )));
+    }
+    Ok(value.normalize())
+}
+
+/// A term on a boolean leaf: `true` or `false`, in any case.
+fn parse_boolean_term(term: &SearchTerm) -> Result<TypedMatch, RepositoryError> {
+    if !term.prefix {
+        if term.value.eq_ignore_ascii_case(TRUE_TERM) {
+            return Ok(TypedMatch::Boolean(true));
+        }
+        if term.value.eq_ignore_ascii_case(FALSE_TERM) {
+            return Ok(TypedMatch::Boolean(false));
+        }
+    }
+    Err(RepositoryError::InvalidSearchQuery(format!(
+        "search term '{}' must be {TRUE_TERM} or {FALSE_TERM}",
+        term.original
+    )))
+}
 enum TermPlan {
     Any,
     Reachable,
-    SelectedAttribute(Option<String>),
+    SelectedAttribute(Option<SearchLeaf>),
     /// A term matched on the records a relationship path reaches. The last
     /// hop may link to several blueprints; `target_blueprint_ids` are those
     /// the term is matched on (with `attribute`, the ones that have it).
@@ -3576,7 +3864,7 @@ enum TermPlan {
         /// The blueprints each hop starts from.
         source_blueprint_ids: Vec<Vec<Uuid>>,
         target_blueprint_ids: Vec<Uuid>,
-        attribute: Option<String>,
+        attribute: Option<SearchLeaf>,
     },
     /// `@id:a,b` or `relationship.@id:a,b`: records with one of the listed IDs,
     /// on the selected blueprint or reached through the relationship path.
@@ -3687,9 +3975,8 @@ fn fuzzy_search_term(term: &SearchTerm) -> Option<&str> {
 }
 
 fn text_only_search(value: &str) -> bool {
-    let normalized = value.to_ascii_lowercase();
-    normalized != "true"
-        && normalized != "false"
+    !value.eq_ignore_ascii_case(TRUE_TERM)
+        && !value.eq_ignore_ascii_case(FALSE_TERM)
         && value.chars().any(|character| character.is_alphabetic())
 }
 
@@ -3758,6 +4045,181 @@ mod global_search_budget_tests {
                 dimension: EDGES_DIMENSION
             })
         ));
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::items_after_test_module)]
+mod typed_search_term_tests {
+    use super::*;
+
+    fn term(raw: &str) -> SearchTerm {
+        parse_search_terms(raw).unwrap().remove(0)
+    }
+
+    fn number(raw: &str, column: NumberColumn) -> Result<TypedMatch, RepositoryError> {
+        parse_number_term(&term(raw), column)
+    }
+
+    fn parsed(raw: &str, column: NumberColumn) -> TypedMatch {
+        number(raw, column).unwrap()
+    }
+
+    fn bounds(lower: Option<(&str, bool)>, upper: Option<(&str, bool)>) -> TypedMatch {
+        bounds_in(NumberColumn::Number, lower, upper)
+    }
+
+    fn bounds_in(
+        column: NumberColumn,
+        lower: Option<(&str, bool)>,
+        upper: Option<(&str, bool)>,
+    ) -> TypedMatch {
+        let bound = |(value, inclusive): (&str, bool)| NumberBound {
+            value: value.parse().unwrap(),
+            inclusive,
+        };
+        TypedMatch::Number {
+            column,
+            lower: lower.map(bound),
+            upper: upper.map(bound),
+        }
+    }
+
+    fn message(result: Result<TypedMatch, RepositoryError>) -> String {
+        match result {
+            Err(RepositoryError::InvalidSearchQuery(message)) => message,
+            other => panic!("expected an invalid search query, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn an_exact_number_is_both_ends_of_a_closed_range() {
+        let four = bounds(Some(("4", true)), Some(("4", true)));
+        assert_eq!(parsed("width_mm:4", NumberColumn::Number), four);
+        assert_eq!(parsed("width_mm:=4", NumberColumn::Number), four);
+        assert_eq!(parsed("width_mm:4.00", NumberColumn::Number), four);
+        assert_eq!(
+            parsed("width_mm:-4", NumberColumn::Number),
+            bounds(Some(("-4", true)), Some(("-4", true)))
+        );
+    }
+
+    #[test]
+    fn comparisons_bound_one_end() {
+        assert_eq!(
+            parsed("w:>4", NumberColumn::Number),
+            bounds(Some(("4", false)), None)
+        );
+        assert_eq!(
+            parsed("w:>=4", NumberColumn::Number),
+            bounds(Some(("4", true)), None)
+        );
+        assert_eq!(
+            parsed("w:<4", NumberColumn::Number),
+            bounds(None, Some(("4", false)))
+        );
+        assert_eq!(
+            parsed("w:<=4", NumberColumn::Number),
+            bounds(None, Some(("4", true)))
+        );
+        assert_eq!(
+            parsed("w:>-0.5", NumberColumn::Number),
+            bounds(Some(("-0.5", false)), None)
+        );
+    }
+
+    #[test]
+    fn a_range_includes_both_ends() {
+        assert_eq!(
+            parsed("w:40..60", NumberColumn::Number),
+            bounds(Some(("40", true)), Some(("60", true)))
+        );
+        assert_eq!(
+            parsed("w:-1,5..2.5", NumberColumn::Number),
+            bounds(Some(("-1.5", true)), Some(("2.5", true)))
+        );
+        assert_eq!(
+            parsed("w:4..4", NumberColumn::Number),
+            bounds(Some(("4", true)), Some(("4", true)))
+        );
+        assert!(message(number("w:60..40", NumberColumn::Number)).contains("starts after it ends"));
+    }
+
+    #[test]
+    fn a_decimal_comma_reads_as_a_point() {
+        assert_eq!(
+            parsed("w:2,5", NumberColumn::Number),
+            parsed("w:2.5", NumberColumn::Number)
+        );
+        assert_eq!(
+            parsed("w:<=2,5", NumberColumn::Number),
+            bounds(None, Some(("2.5", true)))
+        );
+    }
+
+    #[test]
+    fn other_text_is_not_a_number() {
+        for raw in [
+            "w:abc", "w:4mm", "w:1e3", "w:NaN", "w:inf", "w:.5", "w:5.", "w:1.2.3", "w:>", "w:>>4",
+            "w:4..", "w:..4", "w:1...5", "w:--4", "w:4-",
+        ] {
+            assert!(
+                message(number(raw, NumberColumn::Number)).contains("is not a number"),
+                "{raw}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_number_term_takes_no_wildcard() {
+        assert!(
+            message(number("w:4*", NumberColumn::Number)).contains("wildcards are not allowed")
+        );
+    }
+
+    #[test]
+    fn an_integer_leaf_takes_whole_numbers_only() {
+        let integer = NumberColumn::Integer;
+        assert_eq!(
+            parsed("qty:4,0", integer),
+            bounds_in(integer, Some(("4", true)), Some(("4", true)))
+        );
+        assert_eq!(
+            parsed("qty:>=-2", integer),
+            bounds_in(integer, Some(("-2", true)), None)
+        );
+        assert!(message(number("qty:4,5", integer)).contains("is not a whole number"));
+        assert!(message(number("qty:1..2.5", integer)).contains("is not a whole number"));
+        assert!(
+            message(number("qty:99999999999999999999", integer)).contains("is not a whole number")
+        );
+    }
+
+    #[test]
+    fn a_boolean_term_is_true_or_false() {
+        assert_eq!(
+            parse_boolean_term(&term("active:TRUE")).unwrap(),
+            TypedMatch::Boolean(true)
+        );
+        assert_eq!(
+            parse_boolean_term(&term("active:false")).unwrap(),
+            TypedMatch::Boolean(false)
+        );
+        for raw in ["active:yes", "active:t", "active:tr*", "active:1"] {
+            assert!(
+                message(parse_boolean_term(&term(raw))).contains("must be true or false"),
+                "{raw}"
+            );
+        }
+    }
+
+    #[test]
+    fn other_leaves_keep_text_matching() {
+        for value_type in [ValueType::String, ValueType::Date, ValueType::Datetime] {
+            let leaf = SearchLeaf::new(&term("code:4*"), "code", value_type).unwrap();
+            assert_eq!(leaf.typed, None);
+        }
+        assert_eq!(search_pattern(&term("code:4")), "%4%");
     }
 }
 

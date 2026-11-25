@@ -6,7 +6,7 @@ import {
 } from './attributeFilterValues';
 import { cellFilterOperator, relationshipPathSeparator } from './constants';
 import type { AttributeFilter } from './search';
-import { attributeValueTypes } from '../records/valueTypes';
+import { attributeValueTypes, isNumericValueType } from '../records/valueTypes';
 
 type ValueType = Attribute['value_type'];
 
@@ -32,8 +32,7 @@ const matchesValueType = (
   valueType: ValueType,
   value: unknown,
 ): value is AttributeFilter['value'] =>
-  valueType === attributeValueTypes.number ||
-  valueType === attributeValueTypes.integer
+  isNumericValueType(valueType)
     ? typeof value === 'number' && Number.isFinite(value)
     : valueType === attributeValueTypes.boolean
       ? typeof value === 'boolean'

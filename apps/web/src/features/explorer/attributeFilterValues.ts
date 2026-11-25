@@ -8,7 +8,7 @@ import {
   zonedDateTimeToIso,
 } from '../../time/instantFormat';
 import type { AttributeFilter } from './search';
-import { attributeValueTypes } from '../records/valueTypes';
+import { attributeValueTypes, isNumericValueType } from '../records/valueTypes';
 
 type ValueType = Attribute['value_type'] | undefined;
 
@@ -86,8 +86,7 @@ export const isAttributeFilterValueValid = (
 };
 
 export const attributeFilterInputType = (valueType: ValueType) =>
-  valueType === attributeValueTypes.number ||
-  valueType === attributeValueTypes.integer
+  isNumericValueType(valueType)
     ? 'number'
     : valueType === attributeValueTypes.date
       ? 'date'

@@ -59,6 +59,7 @@ mod lifecycle_credentials;
 mod membership_revocation;
 mod multi_target_paths;
 mod notifications;
+mod numeric_search;
 mod oidc_sign_in;
 mod operator_workspaces;
 mod personal_api_tokens;
