@@ -27,7 +27,7 @@ linen
 
 ## Similar words
 
-A text attribute tagged [`search:fuzzy`](/reference/blueprint/#search-tags) also matches values similar to a term of four letters or more, so a term finds other forms of the same word and small typos: `tarcze` finds "Tarcza tnąca 125 mm". A value that contains the term still matches as usual. The record's search info names the similar value. Terms ending in `*` and `*:` terms match exactly.
+A text attribute tagged [`search:fuzzy`](/reference/blueprint/#search-tags) also matches values similar to a term of four letters or more, so a term finds other forms of the same word and small typos: `tarcze` finds "Tarcza tnąca 125 mm". A value that contains the term still matches as usual. Terms ending in `*` and `*:` terms match exactly.
 
 ## Wildcards
 
@@ -113,10 +113,6 @@ Because the list is part of the query, saving the search as a [saved search](/gu
 finds products that are red themselves, products linked to a color named red, and products linked to a family linked to something red.
 
 Global search is the most expensive query form. It has server-side limits on how many values, records, and links it will examine and a 250 ms time limit on each database read. If a query exceeds them, the request fails with `422` rather than returning partial results. Narrow the query with a qualified selector when that happens.
-
-## Why did this match?
-
-Each result includes a match explanation per term: the record and attribute that matched, and the relationship path from the result to it. In the Explorer, open **Search info** on a result.
 
 ## Combining with filters and facets
 

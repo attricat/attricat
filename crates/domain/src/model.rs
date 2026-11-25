@@ -441,26 +441,6 @@ pub struct TablePathAttribute {
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct MatchPathEdge {
-    pub source_record_id: Uuid,
-    pub attribute_code: String,
-    pub target_record_id: Uuid,
-}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct MatchExplanation {
-    pub term: String,
-    pub matching_record_id: Uuid,
-    pub matching_attribute_code: Option<String>,
-    /// The value that matched by similarity rather than containing the term,
-    /// on an attribute tagged for fuzzy search.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub similar_value: Option<String>,
-    pub traversal_depth: u8,
-    pub relationship_path: Vec<MatchPathEdge>,
-}
-
-#[derive(Clone, Debug, Serialize)]
 pub struct RecordPreview {
     pub id: Uuid,
     pub blueprint_version: i64,
@@ -483,8 +463,6 @@ pub struct RecordPreview {
     /// attribute code. Each target is loaded once for the page and carries scalar cache only.
     #[serde(default)]
     pub related: HashMap<String, Vec<RelatedRecordPreview>>,
-    #[serde(default)]
-    pub match_explanations: Vec<MatchExplanation>,
 }
 
 #[derive(Clone, Debug, Serialize)]

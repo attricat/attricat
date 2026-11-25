@@ -12,9 +12,9 @@ use crate::{
         SystemTagFacetResponse,
     },
     repository::{
-        DEFAULT_SYSTEM_TAG_FACET_LIMIT, MAX_SEARCH_FILTERS, MAX_SYSTEM_TAG_FACET_LIMIT,
-        RelationshipFacetHop, SearchPageRequest, SearchPhase, SearchScopeError, SearchScopeRequest,
-        intersect_record_ids, valid_connection_key,
+        DEFAULT_SYSTEM_TAG_FACET_LIMIT, MAX_LOADED_FILTER_MATCHES, MAX_SEARCH_FILTERS,
+        MAX_SYSTEM_TAG_FACET_LIMIT, RecordMatching, RelationshipFacetHop, ResolvedRecordFilters,
+        SearchPageRequest, SearchPhase, SearchScopeError, SearchScopeRequest, valid_connection_key,
     },
 };
 use attricat_domain::permissions::Permission;
@@ -28,7 +28,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde::Deserialize;
-use std::{collections::HashSet, time::Instant};
+use std::time::Instant;
 use tracing::Instrument;
 use uuid::Uuid;
 
@@ -258,27 +258,27 @@ pub(super) async fn search_record_previews(
             "relationship_tree_facets.",
         )
         .await?;
-        let facet_candidates = scope
-            .matching
-            .as_ref()
-            .map(|ids| ids.iter().copied().collect::<HashSet<_>>());
-        let facet_matching = repository
-            .relationship_tree_facet_matches(
+        let selection = repository
+            .resolve_tree_facet_selection(
                 scope.current.blueprint.id,
                 &source_path,
                 &targets,
                 facet.hierarchy_field.as_deref(),
                 facet.context_id,
                 &facet.selected_target_ids,
-                facet_candidates.as_ref(),
             )
             .instrument(tracing::info_span!(
                 "sql.operation",
                 label = "relationship-facet"
             ))
             .await?;
-        if let Some(facet_matching) = facet_matching {
-            scope.matching = Some(intersect_record_ids(scope.matching.take(), facet_matching));
+        if let Some(selection) = selection {
+            let context = scope.context.clone();
+            scope
+                .filters
+                .get_or_insert_with(|| ResolvedRecordFilters::in_context(context))
+                .tree_facets
+                .push(selection);
         }
     }
     // The page's table cells show only the related records the caller may read.
@@ -295,6 +295,7 @@ pub(super) async fn search_record_previews(
                 sort: input.sort.as_ref(),
                 cursor: input.page.cursor.as_deref(),
                 limit: limit.into(),
+                loaded_filter_matches: MAX_LOADED_FILTER_MATCHES,
                 include_total: input.include_total,
                 include_previews: input.include_previews,
             },
@@ -487,23 +488,35 @@ pub(super) async fn relationship_tree_facet_children(
         .map(str::trim)
         .filter(|v| !v.is_empty());
     let search_blueprint = published.unwrap_or_else(|| source.clone());
-    // Without a search term, the facet query already scopes its source blueprint
-    // and does not need a materialized set of every source record ID.
-    let resolved = match query {
+    // Without a search term, the facet's counts come from its cache. With one, the
+    // counting statement tests the terms itself.
+    let text_query = match query {
         Some(query) => Some(
             repository
-                .resolve_search(&search_blueprint, version, Some(query))
+                .resolve_text_query(&search_blueprint, version, query)
                 .await
                 .map_err(ApiError::from)?,
         ),
         None => None,
     };
+    let (filters, global_ids) = match text_query {
+        Some((text_terms, global_ids)) => (
+            Some(ResolvedRecordFilters::for_text_terms(text_terms)),
+            global_ids.map(|ids| ids.into_iter().collect::<Vec<_>>()),
+        ),
+        None => (None, None),
+    };
+    let matching = filters.as_ref().map(|filters| RecordMatching {
+        ids: global_ids.as_deref(),
+        filters: (!filters.is_empty()).then_some(filters),
+        broad: false,
+    });
     Ok(Json(
         repository
             .relationship_tree_facet_children(
                 source.blueprint.id,
                 version,
-                resolved.as_ref().map(|resolved| &resolved.ids),
+                matching,
                 &source_path,
                 &targets,
                 input.hierarchy_field.as_deref(),

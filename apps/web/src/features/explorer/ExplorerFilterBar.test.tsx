@@ -72,7 +72,6 @@ const targetPage: RecordSearchResponse = {
       id: targetId,
       is_sample: false,
       system_tags: [],
-      match_explanations: [],
       preview: {},
       schema_outdated: false,
       table_values: {},

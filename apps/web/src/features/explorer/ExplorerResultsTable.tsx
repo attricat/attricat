@@ -44,7 +44,6 @@ import {
 } from './explorerTableColumns';
 import type { AttributeFilterDraft } from './attributeFilterValues';
 import type { ExplorerSort } from './search';
-import { SearchInfoDialog } from './SearchInfoDialog';
 import { SendSelectedToAgentDialog } from './SendSelectedToAgentDialog';
 import { useRecordPublicationActions } from './useRecordPublicationActions';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
@@ -149,9 +148,6 @@ export const ExplorerResultsTable = ({
     null,
   );
   const [agentSelection, setAgentSelection] = useState<RecordItem[] | null>(
-    null,
-  );
-  const [searchInfoRecord, setSearchInfoRecord] = useState<RecordItem | null>(
     null,
   );
   const [actionMenu, setActionMenu] = useState<{
@@ -444,7 +440,6 @@ export const ExplorerResultsTable = ({
             record={activeActionRecord}
             onClose={() => setActionMenu(null)}
             onDelete={() => setDeleteRecordId(activeActionRecord.id)}
-            onSearchInfo={setSearchInfoRecord}
             position={actionMenu.position}
             publication={publicationsByRecordId.get(activeActionRecord.id)}
             publicationContextId={publicationContextId}
@@ -503,10 +498,6 @@ export const ExplorerResultsTable = ({
             />
           </Suspense>
         )}
-        <SearchInfoDialog
-          record={searchInfoRecord}
-          onClose={() => setSearchInfoRecord(null)}
-        />
       </Paper>
     </ExplorerFieldNotesProvider>
   );

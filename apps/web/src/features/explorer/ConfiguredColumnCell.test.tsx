@@ -15,7 +15,6 @@ const record: RecordItem = {
   display: {},
   preview: {},
   table_values: {},
-  match_explanations: [],
 };
 
 const renderCell = (field: string, values: unknown[], version = 1) =>

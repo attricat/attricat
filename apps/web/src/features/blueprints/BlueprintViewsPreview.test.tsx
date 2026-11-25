@@ -63,7 +63,6 @@ const carPage: RecordSearchResponse = {
       system_tags: [],
       is_sample: false,
       display: { default: 'Golf' },
-      match_explanations: [],
       preview: {},
       table_values: {},
     },

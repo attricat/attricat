@@ -19,7 +19,6 @@ const item = {
   system_tags: [],
   is_sample: false,
   display: { default: 'Bolt' },
-  match_explanations: [],
   preview: {},
   table_values: {},
 } as unknown as RecordItem;

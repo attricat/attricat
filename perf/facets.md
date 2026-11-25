@@ -125,6 +125,117 @@ hop's whole relationship: about 380 ms for `listing.category` against about
 a root through `listing` reaches about 10,000 listings and products, about
 200 ms against 100 ms through the 1,000 product lines.
 
+## Filter and text scenarios
+
+`FACET_BENCH_SCENARIOS=text,search:,filter,reference` runs the attribute filter,
+relationship filter, text query and selected facet searches, and two searches
+without any. Run them with `jit = off` on the server, because the benchmark's pool
+doesn't go through `disable_jit`.
+
+Filters, text terms and selected facets are conditions on each statement's
+records. Only `*:` terms load their matches, under their own budgets. A page takes
+one of two paths:
+
+- **Broad:** it checks its first 100 records one by one. If at least 5% match, its
+  statements run the conditions per record (`OFFSET 0`, explicit joins), so a page
+  and its capped total stop within a few thousand records.
+- **Narrow:** otherwise it loads up to 20,000 matches (`MAX_LOADED_FILTER_MATCHES`)
+  in one scan, planned afresh each time. Those IDs answer the version scope and
+  total and drive the page. A search that matches more than that runs per record
+  like a broad one.
+
+A sorted page reads every match, so it uses a semi-join, except a relationship
+sort, which walks its indexed leaves in order. A semi-join needs all its conditions
+in the subquery's `WHERE`, or PostgreSQL runs it once per record. A relationship
+text term walks back from its matching values, because PostgreSQL can't estimate
+a pattern.
+
+JIT compilation was the largest single cost of a broad search: hundreds of
+milliseconds to compile a plan that reads 500 rows, because the estimate can't
+reflect stopping early. API connections turn it off.
+
+Medians on a local PostgreSQL (Linux, release build), with JIT off on both sides.
+The test process's peak memory fell from 194 MB to 83 MB at 100,000 products, and
+from 271 MB to 96 MB at 120,000.
+
+| Scenario | Before, 100k | Now, 100k | Before, 120k | Now, 120k |
+| --- | ---: | ---: | ---: | ---: |
+| No filter | 33 ms | 10 ms | 42 ms | 11 ms |
+| Selective scalar | 64 ms | 8 ms | 73 ms | 8 ms |
+| Twenty selective scalars | 1,091 ms | 103 ms | 1,342 ms | 98 ms |
+| Relationship filter | 643 ms | 10 ms | 815 ms | 11 ms |
+| One hop | 703 ms | 27 ms | 861 ms | 28 ms |
+| One hop, child context | 961 ms | 27 ms | 1,203 ms | 26 ms |
+| Three hops | 2,799 ms | 583 ms | 3,303 ms | 470 ms |
+| Reusable attribute | 9 ms | 10 ms | 8 ms | 10 ms |
+| Broad scalar | 693 ms | 12 ms | 844 ms | 13 ms |
+| Twenty broad scalars | 11,835 ms | 81 ms | 14,488 ms | 82 ms |
+| Broad, sorted through a relationship | 4,319 ms | 16 ms | 6,408 ms | 19 ms |
+| Broad, sorted by a column | 1,081 ms | 955 ms | 1,341 ms | 649 ms |
+| Contains, rare value | 416 ms | 86 ms | 465 ms | 100 ms |
+| Absence, few matches | 403 ms | 324 ms | 517 ms | 349 ms |
+| Absence, no matches | 426 ms | 302 ms | 515 ms | 331 ms |
+| Text: rare value | 69 ms | 69 ms | 79 ms | 79 ms |
+| Text: rare word | 556 ms | 69 ms | 900 ms | 79 ms |
+| Text: short number | 100 ms | 81 ms | 125 ms | 100 ms |
+| Text: common number | 369 ms | 21 ms | 419 ms | 17 ms |
+| Text: every record | 686 ms | 15 ms | 974 ms | 14 ms |
+| Text: two broad terms | 768 ms | 30 ms | 1,057 ms | 29 ms |
+| Text: every record, sorted | 922 ms | 1,031 ms | 1,149 ms | 379 ms |
+| Text: one attribute | 62 ms | 52 ms | 76 ms | 56 ms |
+| Text: relationship path | 70 ms | 15 ms | 79 ms | 15 ms |
+| Text: relationship, every record | 943 ms | 22 ms | 1,161 ms | 22 ms |
+| Text and broad scalar | 544 ms | 105 ms | 838 ms | 133 ms |
+| Root selected | 148 ms | 95 ms | 172 ms | 111 ms |
+| Root selected and a filter | 786 ms | 202 ms | 996 ms | 244 ms |
+| Root selected and a text term | 205 ms | 214 ms | 239 ms | 254 ms |
+| Level 2 selected | 15 ms | 15 ms | 14 ms | 14 ms |
+| Root selected through a large hop | 288 ms | 181 ms | 351 ms | 245 ms |
+
+Global `*:` terms didn't change: repeated runs took about 220 ms on both, though a
+single run can differ widely.
+
+With `plan_cache_mode=force_generic_plan`, no search timed out. Broad searches
+stayed far ahead (a broad scalar took 5 ms against 11,470 ms). Selected roots took
+about 2.2 s on both, and a selective scalar took 647 ms against 345 ms.
+
+## Browse rail and agent counts
+
+`FACET_BENCH_SCENARIOS=browse,agent` runs the Browse rail's pages and
+`count_records`. With a search term, a page samples like a search page. A narrow
+term loads up to 20,000 source IDs and follows the hops in turn. A broad term, and a
+reload of the cached counts, count in one statement that hash joins each hop's whole
+relationship. PostgreSQL underestimates a resolved edge list as one row, and the
+nested loops it then picks take minutes, so these statements turn them off with
+`SET LOCAL enable_nestloop = off`.
+
+Medians at 100,000 products with JIT off on both sides. The test process's peak
+memory across the Browse scenarios fell from 192 MB to 68 MB.
+
+| Scenario | Before | Now |
+| --- | ---: | ---: |
+| Root level, cached | 19 ms | 18 ms |
+| Root level, first request | 458 ms | 516 ms |
+| Two-hop path, first request | 291 ms | 631 ms |
+| Large middle hop, first request | 544 ms | 832 ms |
+| Three-hop path, first request | 468 ms | 992 ms |
+| Query "Product 1" | 1,151 ms | 449 ms |
+| Query "12" | 112 ms | 148 ms |
+| Large middle hop, query "Product 1" | 1,164 ms | 705 ms |
+| Large middle hop, query "7" | 711 ms | 610 ms |
+| Large middle hop, query "12" | 136 ms | 147 ms |
+| Three-hop path, query "12" | 141 ms | 153 ms |
+| `count_records`, all | 33 ms | 3 ms |
+| `count_records`, broad filter | 643 ms | 127 ms |
+| `count_records`, relationship filter | 722 ms | 6 ms |
+| `count_records`, per category | 455 ms | 324 ms |
+| `count_records`, per line | 285 ms | 315 ms |
+| `count_records`, per line, broad filter | 905 ms | 451 ms |
+
+A first request reloads the cached counts, which then serve the workspace for 30
+seconds. Counting in the database costs more there than reading the edges into the
+API, in exchange for not holding them in memory.
+
 ## Remaining cost
 
 The first Browse rail page for a tree, and the first after its counts expire,

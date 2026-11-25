@@ -229,10 +229,6 @@ async fn number_terms_compare_values_not_text(pool: sqlx::PgPool) {
         let response = search(&client, &base_url, "ns_part_a", query).await;
         assert_eq!(found(&response), sorted(expected), "{query}: {response}");
     }
-    let response = search(&client, &base_url, "ns_part_a", "width_mm:4").await;
-    let witness = &response["items"][0]["match_explanations"][0];
-    assert_eq!(witness["matching_attribute_code"], "width_mm");
-    assert_eq!(witness["traversal_depth"], 0);
 
     // Through a hop to several blueprints: the term compares numbers on
     // those that declare the leaf, and skips the one that does not.
@@ -260,13 +256,6 @@ async fn number_terms_compare_values_not_text(pool: sqlx::PgPool) {
     ] {
         let response = search(&client, &base_url, "ns_line", query).await;
         assert_eq!(found(&response), sorted(expected), "{query}: {response}");
-    }
-    let response = search(&client, &base_url, "ns_line", "spec.width_mm:4").await;
-    for item in response["items"].as_array().unwrap() {
-        let witness = &item["match_explanations"][0];
-        assert_eq!(witness["matching_attribute_code"], "width_mm", "{witness}");
-        assert_eq!(witness["traversal_depth"], 1, "{witness}");
-        assert_eq!(witness["relationship_path"][0]["attribute_code"], "spec");
     }
 
     for (blueprint, query, message) in [

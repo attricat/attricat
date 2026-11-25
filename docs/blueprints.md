@@ -194,8 +194,7 @@ hints:
 `search:fuzzy` on a text attribute makes scalar search terms (plain and
 qualified, at least `MIN_FUZZY_TERM_CHARS` characters, not prefix terms) also
 match its values by trigram word similarity (`FUZZY_WORD_SIMILARITY`, through
-the `pg_trgm` index on `value_text`). Such matches carry `similar_value` in
-their match explanation; global `*:` terms stay exact.
+the `pg_trgm` index on `value_text`). Global `*:` terms stay exact.
 
 Tags compose: `hidden` applies to every surface, while a scoped tag applies only
 to its named surface. They affect automatic/fallback discovery only; an
