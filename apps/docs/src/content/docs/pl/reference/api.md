@@ -17,7 +17,7 @@ Trasy API są dostępne pod `/api`, np. `GET https://attricat.example.com/api/bl
 
 Klienci nigdy nie wysyłają identyfikatora obszaru roboczego; zawsze pochodzi on z tokenu lub sesji.
 
-Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/health/live`, `/health/ready`, `POST /auth/discover`, `GET /auth/sample-logins`, `POST /auth/login`, `POST /auth/password-reset`, `POST /auth/password-reset/confirm`, `POST /onboarding/complete`, `POST /auth/oidc/start`, `POST /auth/oidc/invitation`, `GET /auth/oidc/callback/{workspace_id}`, `GET /public/extension-oauth/callback`, gdzie danymi uwierzytelniającymi jest jednorazowy stan OAuth, oraz `GET /public/extension-files/{token}`, gdzie danymi uwierzytelniającymi jest token z linku.
+Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/health/live`, `/health/ready`, `POST /auth/discover`, `GET /auth/sample-logins`, `POST /auth/login`, `POST /auth/password-reset`, `POST /auth/password-reset/confirm`, `POST /onboarding/complete`, `POST /auth/oidc/start`, `POST /auth/oidc/invitation`, `GET /auth/oidc/callback/{workspace_id}`, `GET /public/extension-oauth/callback`, gdzie danymi uwierzytelniającymi jest jednorazowy stan OAuth, `GET /public/extension-files/{token}`, gdzie danymi uwierzytelniającymi jest token z linku, oraz `GET`/`POST /public/extension-webhooks/{token}`, gdzie danymi uwierzytelniającymi jest token w adresie URL, a nadawcę sprawdza rozszerzenie.
 
 ## Konwencje
 
@@ -38,11 +38,11 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `csrf_failed` | 403 | Niebezpieczne żądanie uwierzytelnione plikiem cookie nie ma nagłówka `X-Attricat-Csrf` albo ma w nim złą wartość. |
 | `not_found` | 404 | Zasób nie istnieje lub nie jest dla Ciebie widoczny. |
 | `payload_too_large` | 413 | Treść żądania przekracza limit. |
-| `rate_limited` | 429 | Zbyt wiele prób logowania. Spróbuj ponownie później. |
+| `rate_limited` | 429 | Zbyt wiele prób logowania albo zbyt wiele żądań do jednego punktu końcowego webhooka. Spróbuj ponownie później. |
 | `request_timeout` | 503 | Żądanie przekroczyło `HTTP_REQUEST_TIMEOUT_SECONDS`. Zapis mógł się mimo to wykonać, więc sprawdź to przed ponowieniem. |
 | `invalid_input` | 422 | Treść żądania zawiera nieprawidłową wartość, na przykład powtórzony lub nieznany kod. Komunikat wskazuje, którą. Zapytanie `query` wyszukiwania, którego nie da się przetworzyć, zwraca ten kod ze statusem `400`. |
 | `invalid_code` | 422 | Kod zawiera znaki inne niż litery ASCII, cyfry, łączniki i podkreślenia. |
-| `code_taken` | 409 | Kod lub nazwa są już używane. `details.resource` to `blueprint`, `context`, `workflow`, `rule`, `team`, `reusable_attribute`, `reusable_attribute_group` lub `connection`. |
+| `code_taken` | 409 | Kod lub nazwa są już używane. `details.resource` to `blueprint`, `context`, `workflow`, `rule`, `team`, `reusable_attribute`, `reusable_attribute_group`, `connection` lub `webhook_endpoint`. |
 | `default_context_protected` | 422 | Kontekstu domyślnego nie można zmienić ani usunąć. |
 | `default_context_only` | 422 | Atrybut można zapisywać tylko w kontekście domyślnym. |
 | `context_cycle` | 422 | Kontekst nie może stać się własnym potomkiem. |
@@ -522,6 +522,10 @@ Trasy `GET` reguł, wykonań i ustaleń wymagają `rules.read`; pozostałe trasy
 | `GET`, `POST` | `/extensions/{id}/annotation-namespace` | [Przestrzeń nazw adnotacji](#tagi-systemowe) rozszerzenia: czy jest zajęta i ile rekordów ma jej tagi lub metadane. `POST` przejmuje tagi i metadane zapisane już pod nazwą rozszerzenia; nic nie jest zmieniane ani usuwane. |
 | `POST` | `/extensions/{id}/annotation-namespace/records/{record_id}` | Naprawia lub porządkuje przestrzeń nazw w jednym rekordzie: `{"add_tags", "remove_tags", "set_metadata", "remove_metadata", "expected_revision"?}`, z nazwami lokalnymi. Wymaga też `records.write` dla rekordu. |
 | `GET` | `/public/extension-files/{token}` | Plik udostępniony publicznym linkiem wydanym przez rozszerzenie. Bez danych uwierzytelniających; działa, dopóki link nie wygasł, a rozszerzenie jest włączone i ma `attricat.files.public_links` oraz `attricat.files.read`. |
+| `GET`, `POST` | `/extensions/{id}/webhook-endpoints` | Lista [punktów końcowych webhooków](/pl/builders/extensions/#webhooki) rozszerzenia z `last_request_at` i `last_reply_status`, nigdy z ich adresami URL; albo utworzenie punktu końcowego przez `{"webhook", "endpoint"}` dla webhooka, który deklaruje zainstalowane wydanie. Utworzenie zwraca `201` z punktem końcowym, jego ścieżką `path` i, gdy ustawiono `EXTENSION_WEBHOOK_BASE_URL`, adresem `url`; żadne z nich nie jest pokazywane ponownie. Zajęta nazwa daje `409 code_taken` z `details.resource` równym `webhook_endpoint`. Do 64 punktów końcowych na rozszerzenie. |
+| `POST` | `/extensions/{id}/webhook-endpoints/{endpoint}/rotate` | Wydanie nowego adresu URL, zwracanego raz, jak przy utworzeniu. Poprzedni adres natychmiast przestaje działać. |
+| `DELETE` | `/extensions/{id}/webhook-endpoints/{endpoint}` | Usunięcie punktu końcowego (`204`). Ładunki, które już zachował, są nadal przetwarzane. |
+| `GET`, `POST` | `/public/extension-webhooks/{token}` | Adres, pod który nadawca dostarcza webhook. Bez danych uwierzytelniających: komponent rozszerzenia sprawdza żądanie i wybiera odpowiedź, zwracaną bez zmian, z `Cache-Control: no-store`. Attricat odpowiada `404 not_found` dla nieznanego tokenu, `429 rate_limited` powyżej 600 żądań na minutę do punktu końcowego, `503 service_unavailable`, gdy rozszerzenie nie jest włączone z `webhooks.receive` lub nie deklaruje już webhooka, `413 payload_too_large` dla treści ponad limit webhooka i `500 internal_error`, gdy komponent zawiedzie. Zobacz [Odbieraj webhooki](/pl/extensions/server/#odbieraj-webhooki). |
 
 ### Pakiety rozwiązań
 

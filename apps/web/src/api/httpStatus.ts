@@ -15,3 +15,6 @@ export const isSuccessStatus = (status: number) =>
 /** A 4xx response: the request itself was refused, so repeating it will not help. */
 export const isClientErrorStatus = (status: number) =>
   status >= 400 && status < 500;
+
+/** A 5xx response: the server failed to handle the request. */
+export const isServerErrorStatus = (status: number) => status >= 500;

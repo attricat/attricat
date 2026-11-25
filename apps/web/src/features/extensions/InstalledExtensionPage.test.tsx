@@ -44,6 +44,9 @@ vi.mock('../extension-exports/ExtensionExportStatusSection', () => ({
 vi.mock('../extension-exports/ExtensionConnectionsSection', () => ({
   ExtensionConnectionsSection: () => <p>connections</p>,
 }));
+vi.mock('../extension-webhooks/ExtensionWebhooksSection', () => ({
+  ExtensionWebhooksSection: () => <p>webhooks</p>,
+}));
 
 const detail = (manifest: Record<string, unknown>) => ({
   grants: [],
@@ -134,6 +137,21 @@ describe('InstalledExtensionPage', () => {
       'Permissions',
       'Exports',
       'Connections',
+      'Lifecycle',
+    ]);
+  });
+
+  it('adds the webhooks tab when the manifest declares webhooks', async () => {
+    await renderPage({
+      server: {
+        webhooks: [{ id: 'orders', title: 'Orders', max_body_bytes: 1024 }],
+      },
+    });
+    expect(tabNames()).toEqual([
+      'Overview',
+      'Configuration',
+      'Permissions',
+      'Webhooks',
       'Lifecycle',
     ]);
   });

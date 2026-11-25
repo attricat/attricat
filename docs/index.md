@@ -52,8 +52,8 @@ runs the ignored RustFS compatibility test.
   events that notify people, and how to add a producer.
 - [Workflows](workflows.md): versioned triggers and bounded record actions.
 - [Rules](rules.md): blueprint checks and finding lifecycles.
-- [Extensions](extensions.md): manifest, permissions, runtime, and lifecycle contracts;
-  webhook delivery is not implemented.
+- [Extensions](extensions.md): manifest, permissions, runtime, lifecycle and
+  inbound webhook contracts; outbound webhook delivery is not implemented.
 - [Authentication and identity adapters](authentication.md): local password
   management and the interface for external identity providers.
 - [Field-level read restrictions](field-level-read-restrictions.md): audit of

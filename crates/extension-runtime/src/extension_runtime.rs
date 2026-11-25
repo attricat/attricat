@@ -73,6 +73,7 @@ mod operation_batch;
 mod outcomes;
 mod transfer;
 mod unified;
+mod webhooks;
 pub use compilation::{COMPILE_COMPONENT_COMMAND, ComponentCompiler, run_compile_command};
 
 use unified::host_unified::attricat::host as wit;
@@ -82,6 +83,11 @@ pub use network_v2::forget_lowered_budget;
 use operation_batch::{BatchError, BatchResult, run_operation_batch};
 use outcomes::retry_backoff;
 pub use outcomes::{InvocationFailure, Rejection};
+pub use webhooks::{
+    KeptPayload, MAX_WEBHOOK_REPLY_BYTES, WEBHOOK_RATE_LIMIT, WEBHOOK_RATE_WINDOW,
+    WEBHOOK_RECEIVE_TIMEOUT, WEBHOOK_ROUTE_PREFIX, WebhookOutcome, WebhookReply, WebhookRequest,
+    allow_webhook_request, use_webhook_base_url, webhook_path, webhook_url,
+};
 
 const MAX_HOST_MESSAGE_BYTES: usize = 16 * 1024;
 /// Bounds JSON an extension sends the host: requests, stored values, results.
@@ -870,6 +876,9 @@ struct HostState {
     /// The run's scope, loaded on first use.
     run_facts: Arc<tokio::sync::OnceCell<transfer::RunFacts>>,
     network_wait: NetworkWait,
+    /// Set while the component answers a webhook request, which reaches only
+    /// read operations.
+    receiving_webhook: bool,
 }
 
 /// The export lease holder of an operation run.
@@ -900,6 +909,7 @@ impl HostState {
             run_id: None,
             run_facts: Arc::default(),
             network_wait: NetworkWait::default(),
+            receiving_webhook: false,
         }
     }
 
@@ -923,6 +933,9 @@ impl HostState {
     async fn call(&mut self, operation: String, request: String) -> Result<String, String> {
         if request.len() > MAX_HOST_JSON_BYTES {
             return Err("request exceeds host JSON limit".into());
+        }
+        if self.receiving_webhook {
+            Self::allow_during_receive(&operation)?;
         }
         let required = match operation.as_str() {
             "configuration.get.v1" => "configuration.read",
@@ -956,6 +969,7 @@ impl HostState {
             | "mappings.delete.v1" => "exports.mappings",
             "connections.get.v1" | "connections.list.v1" => "connections.use",
             "files.link.v1" => "attricat.files.public_links",
+            "webhooks.receipt.get.v1" => crate::extensions::WEBHOOKS_RECEIVE_CAPABILITY,
             _ => return Err("unknown host operation".into()),
         };
         // The invocation was selected from a snapshot, but grants, configuration,
@@ -1021,6 +1035,9 @@ impl HostState {
         }
         if operation == "files.link.v1" {
             return self.file_link_call(&request).await;
+        }
+        if operation == "webhooks.receipt.get.v1" {
+            return self.webhook_receipt_call(&request).await;
         }
         self.storage_call(&operation, &request).await
     }

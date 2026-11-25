@@ -258,6 +258,9 @@ acli extension export preview <extension-id> <export-id> --record-id <id> [--con
 acli extension budget list <extension-id>
 acli extension budget set <extension-id> <host-permission-id> --requests <n> --per-seconds <n>
 acli extension budget reset <extension-id> <host-permission-id>
+acli extension webhook list <extension-id>
+acli extension webhook create <extension-id> --webhook <webhook-id> --endpoint <name>
+acli extension webhook rotate | delete <extension-id> <endpoint>
 acli extension secret list
 acli extension secret set <name> --value-stdin
 acli extension secret delete <name>

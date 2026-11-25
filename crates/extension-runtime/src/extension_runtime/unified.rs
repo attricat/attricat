@@ -1,4 +1,4 @@
-//! Host implementation of the `attricat:host` ABI, currently 1.1.0.
+//! Host implementation of the `attricat:host` ABI, currently 1.2.0.
 //!
 //! Every import is linked for every invocation; the host instantiates the
 //! component once and loads only the export the invocation needs, so a
@@ -26,8 +26,8 @@ pub(super) mod host_unified {
         inline: "
             package attricat:host-bindings;
             world host {
-                include attricat:host/attricat-extension@1.1.0;
-                include attricat:host/outcome-extension@1.1.0;
+                include attricat:host/attricat-extension@1.2.0;
+                include attricat:host/webhook-extension@1.2.0;
             }
         ",
         world: "attricat:host-bindings/host",
@@ -44,11 +44,13 @@ use host_unified::attricat::host as v16;
 use host_unified::exports::attricat::host::{
     command_handler as v11_command_handler, deferrable_operations as v11_operations,
     event_handler as v11_event_handler, handler as v16_handler, operations as v16_operations,
+    webhook_receiver as v12_webhook_receiver,
 };
 
 const RUN_ONLY_ERROR: &str = "this interface is available only during an operation run";
 const RUN_ATTRICAT_ERROR: &str =
     "operation runs access catalog data through their run-scoped interfaces";
+const RECEIVE_ERROR: &str = "this interface is not available while receiving a webhook";
 
 pub(super) struct UnifiedState {
     host: HostState,
@@ -66,6 +68,14 @@ impl UnifiedState {
     fn deny_in_run(&self) -> Result<(), String> {
         if self.operation.is_some() {
             Err(RUN_ATTRICAT_ERROR.into())
+        } else {
+            self.deny_in_receive()
+        }
+    }
+
+    fn deny_in_receive(&self) -> Result<(), String> {
+        if self.host.receiving_webhook {
+            Err(RECEIVE_ERROR.into())
         } else {
             Ok(())
         }
@@ -100,6 +110,7 @@ impl v16::api::Host for UnifiedState {
         &mut self,
         request: v16::api::ScopedConfigurationUpdate,
     ) -> Result<(), String> {
+        self.deny_in_receive()?;
         self.host.scoped_configuration_set(request).await
     }
 
@@ -628,6 +639,67 @@ impl ExtensionRuntime {
                 run_operation_batch(&mut store, &operations, run, cancelling).await,
             ),
         }
+    }
+}
+
+impl ExtensionRuntime {
+    /// Calls the 1.2 `webhook-receiver` export with tighter fuel and time
+    /// than other invocations. Every failure is the component's, answered by
+    /// the caller with a 500; none quarantines.
+    pub(super) async fn invoke_unified_webhook(
+        &self,
+        installation: &ExtensionRuntimeInstallation,
+        repository: AttricatRepository,
+        request: super::WebhookRequest,
+        fuel: u64,
+        timeout: Duration,
+    ) -> Result<super::WebhookOutcome, ExtensionRuntimeError> {
+        let (mut store, pre, instance) = self
+            .instantiate_unified(installation, repository, None, None)
+            .await?;
+        store.data_mut().host.receiving_webhook = true;
+        store.set_fuel(fuel).map_err(runtime_error)?;
+        limit_invocation_time(&mut store, timeout, NetworkWait::default());
+        let guest = v12_webhook_receiver::GuestIndices::new(&pre)
+            .and_then(|indices| indices.load(&mut store, &instance))
+            .map_err(|error| {
+                runtime_error(format!(
+                    "component does not export attricat:host/webhook-receiver: {error}"
+                ))
+            })?;
+        let request = v12_webhook_receiver::WebhookRequest {
+            webhook: request.webhook,
+            endpoint: request.endpoint,
+            method: request.method,
+            query: request.query,
+            headers: request
+                .headers
+                .into_iter()
+                .map(|(name, value)| v12_webhook_receiver::WebhookHeader { name, value })
+                .collect(),
+            body: request.body,
+        };
+        let outcome = guest
+            .call_receive(&mut store, &request)
+            .await
+            .map_err(runtime_error)?
+            .map_err(ExtensionRuntimeError::Runtime)?;
+        Ok(super::WebhookOutcome {
+            reply: super::WebhookReply {
+                status: outcome.reply.status,
+                headers: outcome
+                    .reply
+                    .headers
+                    .into_iter()
+                    .map(|header| (header.name, header.value))
+                    .collect(),
+                body: outcome.reply.body,
+            },
+            keep: outcome.keep.map(|kept| super::KeptPayload {
+                payload: kept.payload,
+                dedupe_key: kept.dedupe_key,
+            }),
+        })
     }
 }
 

@@ -225,6 +225,11 @@
     "workspace_conflict": "This workspace already exists with different values.",
     "workspace_owner_exists": "This workspace already has an owner."
   },
+  "apiErrorResources": {
+    "code_taken": {
+      "webhook_endpoint": "An endpoint with this name already exists."
+    }
+  },
   "drafts": {
     "restoreTitle": "Restore unsaved draft?",
     "restoreDescription": "This tab has an unsaved draft from <timestamp/>. Restore it to replace the loaded form, or discard it to keep the form as loaded.",
@@ -1940,6 +1945,7 @@
       "permissions": "Permissions",
       "exports": "Exports",
       "connections": "Connections",
+      "webhooks": "Webhooks",
       "lifecycle": "Lifecycle"
     },
     "lifecycle": "Lifecycle and health",
@@ -3054,6 +3060,36 @@
     "filterByExport": "Export status",
     "filterChip": "{{destination}}: {{status}}",
     "removeFilter": "Remove filter {{filter}}"
+  },
+  "extensionWebhooks": {
+    "title": "Webhooks",
+    "description": "Public endpoints that external systems send events to. The extension answers each request; Attricat only forwards it.",
+    "addEndpoint": "Add endpoint",
+    "addEndpointDescription": "Each endpoint gets its own secret URL, so you can give every sending system a separate one and rotate or delete it on its own.",
+    "create": "Create",
+    "webhook": "Webhook",
+    "endpointName": "Name",
+    "endpointNameHelp": "Letters, digits, '.', '_' or '-', up to 128 characters.",
+    "endpointNameInvalid": "Use 1 to 128 letters, digits, '.', '_' or '-'.",
+    "lastRequest": "Last request",
+    "lastReply": "Last reply",
+    "neverRequested": "No requests yet",
+    "noEndpoints": "No webhook endpoints",
+    "noEndpointsDescription": "Webhook endpoints let external systems push events to this extension. Add one for each system that should send them.",
+    "rotateUrl": "Rotate URL",
+    "rotateTitle": "Rotate the URL of {{name}}?",
+    "rotateExplanation": "The current URL stops working at once. Configure the sending system with the new URL.",
+    "delete": "Delete",
+    "deleteTitle": "Delete {{name}}?",
+    "deleteExplanation": "Its URL stops working at once and cannot be restored.",
+    "urlTitle": "Copy the URL of {{name}} now",
+    "urlWarning": "This URL is shown only once and contains a secret. Store it securely before closing this dialog; it cannot be retrieved again.",
+    "url": "Webhook URL",
+    "path": "Webhook path",
+    "pathExplanation": "This server does not know its public address. Prefix the path with the public address of this Attricat deployment, for example https://attricat.example.com.",
+    "urlInstructions": "Configure the sending system with this URL. Attricat does not verify signatures: the extension checks each request itself, and its documentation says which secret or signature to set up.",
+    "copyUrl": "Copy URL",
+    "copyPath": "Copy path"
   },
   "validation": {
     "required": "This field is required.",

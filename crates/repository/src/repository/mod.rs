@@ -117,6 +117,7 @@ mod extension_operations;
 mod extension_registries;
 mod extension_scoped_configuration;
 mod extension_storage;
+mod extension_webhooks;
 mod extensions;
 mod files;
 mod generated_sequences;
@@ -277,6 +278,11 @@ pub use extension_scoped_configuration::ExtensionConfigurationScope;
 pub use extension_storage::{
     ExtensionStorageEntry, ExtensionStorageError, ExtensionStoragePage,
     MAX_EXTENSION_STORAGE_LIST_LIMIT,
+};
+pub use extension_webhooks::{
+    ExtensionWebhookEndpoint, ExtensionWebhookReceipt, IssuedWebhookEndpoint, KeptWebhookPayload,
+    MAX_WEBHOOK_DEDUPE_KEY_BYTES, MAX_WEBHOOK_ENDPOINTS, ResolvedWebhookEndpoint,
+    WEBHOOK_RECEIPT_AGGREGATE, WEBHOOK_RECEIPT_RETENTION_DAYS, webhook_token_digest,
 };
 pub use extensions::{
     ClientExtensionContribution, ExportDestinationDescriptor, ExtensionGrant,

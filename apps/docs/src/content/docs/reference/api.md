@@ -17,7 +17,7 @@ API routes are served below `/api`, for example `GET https://attricat.example.co
 
 Clients never send a workspace ID; it always comes from the token or session.
 
-Public routes that need no credentials: `/health`, `/health/live`, `/health/ready`, `POST /auth/discover`, `GET /auth/sample-logins`, `POST /auth/login`, `POST /auth/password-reset`, `POST /auth/password-reset/confirm`, `POST /onboarding/complete`, `POST /auth/oidc/start`, `POST /auth/oidc/invitation`, `GET /auth/oidc/callback/{workspace_id}`, `GET /public/extension-oauth/callback`, where the single-use OAuth state is the credential, and `GET /public/extension-files/{token}`, where the token in the link is the credential.
+Public routes that need no credentials: `/health`, `/health/live`, `/health/ready`, `POST /auth/discover`, `GET /auth/sample-logins`, `POST /auth/login`, `POST /auth/password-reset`, `POST /auth/password-reset/confirm`, `POST /onboarding/complete`, `POST /auth/oidc/start`, `POST /auth/oidc/invitation`, `GET /auth/oidc/callback/{workspace_id}`, `GET /public/extension-oauth/callback`, where the single-use OAuth state is the credential, `GET /public/extension-files/{token}`, where the token in the link is the credential, and `GET`/`POST /public/extension-webhooks/{token}`, where the token in the URL is the credential and the extension checks the sender.
 
 ## Conventions
 
@@ -38,11 +38,11 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `csrf_failed` | 403 | A cookie-authenticated unsafe request has a missing or wrong `X-Attricat-Csrf` header. |
 | `not_found` | 404 | The resource does not exist or is not visible to you. |
 | `payload_too_large` | 413 | The request body is over its limit. |
-| `rate_limited` | 429 | Too many sign-in attempts. Try again later. |
+| `rate_limited` | 429 | Too many sign-in attempts, or too many requests to one webhook endpoint. Try again later. |
 | `request_timeout` | 503 | The request exceeded `HTTP_REQUEST_TIMEOUT_SECONDS`. A write may still have happened, so check before retrying it. |
 | `invalid_input` | 422 | The request body has an invalid value, such as a repeated or unknown code. The message says which. A search `query` that cannot be parsed returns this code with `400`. |
 | `invalid_code` | 422 | A code contains characters other than ASCII letters, digits, hyphens, and underscores. |
-| `code_taken` | 409 | The code or name is already in use. `details.resource` is `blueprint`, `context`, `workflow`, `rule`, `team`, `reusable_attribute`, `reusable_attribute_group`, or `connection`. |
+| `code_taken` | 409 | The code or name is already in use. `details.resource` is `blueprint`, `context`, `workflow`, `rule`, `team`, `reusable_attribute`, `reusable_attribute_group`, `connection`, or `webhook_endpoint`. |
 | `default_context_protected` | 422 | The default context cannot be changed or deleted. |
 | `default_context_only` | 422 | The attribute can only be written in the default context. |
 | `context_cycle` | 422 | A context cannot become its own descendant. |
@@ -522,6 +522,10 @@ See [Translate labels](/builders/translations/).
 | `GET`, `POST` | `/extensions/{id}/annotation-namespace` | The extension's [annotation namespace](#system-tags): whether it is claimed and how many records carry its tags or metadata. `POST` adopts tags and metadata already stored under the extension's name; nothing is renamed or deleted. |
 | `POST` | `/extensions/{id}/annotation-namespace/records/{record_id}` | Repair or clean up the namespace on one record: `{"add_tags", "remove_tags", "set_metadata", "remove_metadata", "expected_revision"?}`, with local names. Needs `records.write` on the record too. |
 | `GET` | `/public/extension-files/{token}` | A file behind a public link an extension issued. No credentials; it works while the link is unexpired and the extension is enabled with `attricat.files.public_links` and `attricat.files.read`. |
+| `GET`, `POST` | `/extensions/{id}/webhook-endpoints` | List the extension's [webhook endpoints](/builders/extensions/#webhooks) with `last_request_at` and `last_reply_status`, never their URLs; or create one with `{"webhook", "endpoint"}` for a webhook the installed release declares. Creating returns `201` with the endpoint, its `path`, and its `url` when `EXTENSION_WEBHOOK_BASE_URL` is set; neither is shown again. A name in use is `409 code_taken` with `details.resource` `webhook_endpoint`. Up to 64 endpoints per extension. |
+| `POST` | `/extensions/{id}/webhook-endpoints/{endpoint}/rotate` | Issue a new URL, returned once like on creation. The previous URL stops working at once. |
+| `DELETE` | `/extensions/{id}/webhook-endpoints/{endpoint}` | Delete an endpoint (`204`). Payloads it already kept are still processed. |
+| `GET`, `POST` | `/public/extension-webhooks/{token}` | Where a sender delivers a webhook. No credentials: the extension's component checks the request and chooses the response, which is returned as it is, with `Cache-Control: no-store`. Attricat answers `404 not_found` for an unknown token, `429 rate_limited` above 600 requests a minute to the endpoint, `503 service_unavailable` when the extension is not enabled with `webhooks.receive` or no longer declares the webhook, `413 payload_too_large` for a body over the webhook's limit, and `500 internal_error` when the component fails. See [Receive webhooks](/extensions/server/#receive-webhooks). |
 
 ### Solution packs
 

@@ -14,6 +14,8 @@ attricat_domain::code_enum! {
         ReusableAttributeGroup => "reusable_attribute_group",
         /// An extension connection, named by its connection key.
         Connection => "connection",
+        /// An extension webhook endpoint, named by its endpoint name.
+        WebhookEndpoint => "webhook_endpoint",
     }
 }
 

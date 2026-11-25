@@ -458,6 +458,9 @@ acli extension export preview <extension-id> <export-id> --record-id <id> [--con
 acli extension budget list <extension-id>
 acli extension budget set <extension-id> <host-permission-id> --requests <n> --per-seconds <n>
 acli extension budget reset <extension-id> <host-permission-id>
+acli extension webhook list <extension-id>
+acli extension webhook create <extension-id> --webhook <webhook-id> --endpoint <name>
+acli extension webhook rotate | delete <extension-id> <endpoint>
 acli extension secret list
 acli extension secret set <name> --value-stdin
 acli extension secret delete <name>
@@ -468,6 +471,8 @@ acli extension layout set --layout <json-or-file>
 `extension new` writes a native UI extension into a new directory and needs no server; with `--sdk`, its packages link to a local SDK checkout. `extension dev` needs a development server with developer tools on: it uploads the built bundle, then rebuilds with `--build` and uploads again whenever a watched path changes, replacing the installed release's Worker without new grants. See [Native UI](/extensions/native/).
 
 Connection secrets and workspace secret values are read from standard input so they never appear in process arguments; with both `--client-secret-stdin` and `--refresh-token-stdin`, put the client secret on the first line. `connection authorize` needs a browser session (`--session-file`) and returns the provider's authorization URL, but the provider's callback completes only in the session that started it, which your browser does not carry; authorize from the web app instead, or use `connection exchange-code` with a code you obtained yourself.
+
+`webhook create` and `webhook rotate` print the endpoint with its `url`, or only its `path` when the deployment has no `EXTENSION_WEBHOOK_BASE_URL`. It is shown only this once, so store it before you do anything else. See [Webhooks](/builders/extensions/#webhooks).
 
 ### Solution packs
 

@@ -42,12 +42,13 @@ pub enum RetentionFamily {
     ExtensionFileLinks,
     ExtensionAuthorizationRequests,
     ExtensionExportRetryRequests,
+    ExtensionWebhookReceipts,
     AuditEvents,
     ReadNotifications,
 }
 
 impl RetentionFamily {
-    pub const ALL: [Self; 19] = [
+    pub const ALL: [Self; 20] = [
         Self::ValueHistory,
         Self::Tasks,
         Self::RuleRuns,
@@ -65,6 +66,7 @@ impl RetentionFamily {
         Self::ExtensionFileLinks,
         Self::ExtensionAuthorizationRequests,
         Self::ExtensionExportRetryRequests,
+        Self::ExtensionWebhookReceipts,
         Self::AuditEvents,
         Self::ReadNotifications,
     ];
@@ -88,6 +90,7 @@ impl RetentionFamily {
             Self::ExtensionFileLinks => "extension_file_links",
             Self::ExtensionAuthorizationRequests => "extension_authorization_requests",
             Self::ExtensionExportRetryRequests => "extension_export_retry_requests",
+            Self::ExtensionWebhookReceipts => "extension_webhook_receipts",
             Self::AuditEvents => "audit_events",
             Self::ReadNotifications => "read_notifications",
         }
@@ -410,6 +413,11 @@ async fn purge_batch(
         RetentionFamily::ExtensionExportRetryRequests => {
             repository
                 .purge_extension_export_retry_requests_batch(limit)
+                .await
+        }
+        RetentionFamily::ExtensionWebhookReceipts => {
+            repository
+                .purge_extension_webhook_receipts_batch(limit)
                 .await
         }
         RetentionFamily::AuditEvents => match config.audit_events {

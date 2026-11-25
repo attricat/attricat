@@ -28,6 +28,22 @@ export const invalidInputErrorCode = 'invalid_input' satisfies ApiErrorCode;
 
 /** Translation key prefix of API error codes (`apiErrors.<code>`). */
 const API_ERROR_KEY_PREFIX = 'apiErrors';
+/**
+ * Translation key prefix of a code's message for one resource, such as a
+ * `code_taken` whose `details.resource` names what holds the code
+ * (`apiErrorResources.<code>.<resource>`). Without one, the code's own
+ * message is used.
+ */
+const API_ERROR_RESOURCE_KEY_PREFIX = 'apiErrorResources';
+
+/** `details.resource` of an API error, when it names one. */
+const detailsResource = (details: unknown) =>
+  details &&
+  typeof details === 'object' &&
+  'resource' in details &&
+  typeof details.resource === 'string'
+    ? details.resource
+    : null;
 
 /** The scalar fields of `error.details` that a translation can interpolate. */
 const interpolatedDetails = (details: unknown) =>
@@ -57,9 +73,12 @@ export const apiErrorText = ({
   details?: unknown;
   message: string;
 }) => {
+  const options = { ...interpolatedDetails(details), message };
+  const resource = detailsResource(details);
+  const resourceKey = `${API_ERROR_RESOURCE_KEY_PREFIX}.${code}.${resource}`;
+  if (resource && i18n.exists(resourceKey)) return i18n.t(resourceKey, options);
   const key = `${API_ERROR_KEY_PREFIX}.${code}`;
-  if (i18n.exists(key))
-    return i18n.t(key, { ...interpolatedDetails(details), message });
+  if (i18n.exists(key)) return i18n.t(key, options);
   if (import.meta.env.DEV)
     console.warn(`No translation for API error code ${code}`);
   return message;

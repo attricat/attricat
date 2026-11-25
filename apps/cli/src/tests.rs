@@ -3028,6 +3028,39 @@ async fn rule_finding_and_connector_job_commands_build_requests() {
 }
 
 #[tokio::test]
+async fn extension_webhook_commands_build_requests() {
+    let created = echo(&[
+        "extension",
+        "webhook",
+        "create",
+        "acme.shop",
+        "--webhook",
+        "orders",
+        "--endpoint",
+        "eu",
+    ])
+    .await;
+    assert_eq!(created["method"], "POST");
+    assert_eq!(created["path"], "/extensions/acme.shop/webhook-endpoints");
+    assert_eq!(
+        created["body"],
+        json!({ "webhook": "orders", "endpoint": "eu" })
+    );
+    let rotated = echo(&["extension", "webhook", "rotate", "acme.shop", "eu"]).await;
+    assert_eq!(rotated["method"], "POST");
+    assert_eq!(
+        rotated["path"],
+        "/extensions/acme.shop/webhook-endpoints/eu/rotate"
+    );
+    let deleted = echo(&["extension", "webhook", "delete", "acme.shop", "eu"]).await;
+    assert_eq!(deleted["method"], "DELETE");
+    assert_eq!(
+        deleted["path"],
+        "/extensions/acme.shop/webhook-endpoints/eu"
+    );
+}
+
+#[tokio::test]
 async fn extension_connection_export_and_run_commands_build_requests() {
     let id = "00000000-0000-4000-8000-000000000001";
     let created = echo(&[

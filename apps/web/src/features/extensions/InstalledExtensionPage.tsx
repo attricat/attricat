@@ -48,12 +48,15 @@ import {
   ExportIcon,
   ExtensionConnectionIcon,
   ExtensionIcon,
+  ExtensionWebhookIcon,
   PermissionIcon,
 } from '../../components/systemIcons';
 import { ExtensionBudgetsSection } from '../extension-exports/ExtensionBudgetsSection';
 import { ExtensionConnectionsSection } from '../extension-exports/ExtensionConnectionsSection';
 import { ExtensionExportStatusSection } from '../extension-exports/ExtensionExportStatusSection';
 import { manifestExportsSchema } from '../extension-exports/schemas';
+import { ExtensionWebhooksSection } from '../extension-webhooks/ExtensionWebhooksSection';
+import { manifestWebhooks } from '../extension-webhooks/schemas';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { InstallationStateChip } from './InstallationStateChip';
@@ -64,6 +67,7 @@ const tabIcons = {
   [installedExtensionTabs.permissions]: PermissionIcon,
   [installedExtensionTabs.exports]: ExportIcon,
   [installedExtensionTabs.connections]: ExtensionConnectionIcon,
+  [installedExtensionTabs.webhooks]: ExtensionWebhookIcon,
   [installedExtensionTabs.lifecycle]: HistoryIcon,
 } satisfies Record<InstalledExtensionTab, LucideIcon>;
 
@@ -118,6 +122,7 @@ const InstalledExtensionTabs = ({
   const { grants, installation, lifecycle } = detail;
   const pending = pendingGrants(installation.manifest, grants).length;
   const manifest = manifestExportsSchema.safeParse(installation.manifest).data;
+  const webhooks = manifestWebhooks(installation.manifest);
   const panels: { content: ReactNode; key: InstalledExtensionTab }[] = [
     {
       key: installedExtensionTabs.overview,
@@ -205,6 +210,20 @@ const InstalledExtensionTabs = ({
                 canManage={canManage}
                 extensionId={extensionId}
                 manifest={manifest}
+              />
+            ),
+          },
+        ]
+      : []),
+    ...(webhooks.length
+      ? [
+          {
+            key: installedExtensionTabs.webhooks,
+            content: (
+              <ExtensionWebhooksSection
+                canManage={canManage}
+                extensionId={extensionId}
+                webhooks={webhooks}
               />
             ),
           },

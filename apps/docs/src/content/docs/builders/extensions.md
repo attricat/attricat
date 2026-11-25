@@ -93,6 +93,19 @@ For an extension that declares export destinations, the **Export status** sectio
 
 Each record's status is also on its [Exports tab](/guides/records/#exports), and the Data health page counts problems across extensions.
 
+## Webhooks
+
+Some extensions receive webhooks: requests that an external system, such as a marketplace, sends when something happens there. For an extension that declares webhooks, the **Webhooks** section of its page lists its endpoints with their last request and reply.
+
+Choose **Add endpoint**, pick the webhook and enter a name, such as the sending account (letters, digits, `.`, `_` or `-`). Attricat shows the endpoint's URL once: copy it into the sending system's webhook settings before you close the dialog, since only a hash of it is stored. If the deployment has no [`EXTENSION_WEBHOOK_BASE_URL`](/reference/configuration/#extensions), you get a path instead; put the public address of your Attricat deployment in front of it. Give each sending system its own endpoint, so you can replace or remove its URL without affecting the others. An extension can have up to 64 endpoints.
+
+Attricat doesn't check who sends a request: the extension does, usually by verifying a signature with a secret. Its documentation says which [secret](#secrets) to store and what to set up at the sender.
+
+- **Rotate URL** issues a new URL. The old one stops working at once, so update the sender.
+- **Delete** removes the endpoint and its URL. Requests it already received are still processed.
+
+The extension must be enabled with `webhooks.receive` granted; otherwise senders get `503` and retry later, if they retry at all. The extension processes what it receives later, as events: a request it couldn't process shows up among its failed event deliveries. Payloads are kept for 7 days.
+
 ## When something goes wrong
 
 - **Disable** an extension to stop it without losing its configuration and grants.
@@ -118,6 +131,7 @@ acli extension grant acme.inventory --grant-kind capability --grant-id attricat.
 acli extension grant acme.inventory --grant-kind host_permission --grant-id inventory-api
 acli extension enable acme.inventory
 acli extension disable acme.inventory
+acli extension webhook create acme.orders --webhook orders --endpoint shop-eu
 acli extension workspace-mode --enabled false
 ```
 
