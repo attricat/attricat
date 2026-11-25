@@ -42,6 +42,10 @@ longer satisfy.
 - **Release notes** (`.github/workflows/release-notes.yml`): runs after the
   release is published and fills it with GitHub's generated notes since the
   previous tag.
+- **Release retry** (`.github/workflows/release-retry.yml`): when a Release
+  run fails only because jobs never started, such as a macOS build cancelled
+  because no runner picked it up, re-runs the failed jobs, at most twice. A
+  job that ran and failed is left for a person.
 
 `release.yml` is generated. Change `dist-workspace.toml` (or
 `[package.metadata.dist]` in `apps/cli/Cargo.toml`) and run
