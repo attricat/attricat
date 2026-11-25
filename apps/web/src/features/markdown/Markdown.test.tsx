@@ -31,6 +31,25 @@ describe('Markdown', () => {
     expect(screen.getByText('Description')).toBeTruthy();
   });
 
+  it('renders GitHub Flavored Markdown', () => {
+    const { container } = render(
+      <MarkdownContent
+        value={
+          '| Name | Count |\n| --- | ---: |\n| A | 1 |\n\n~~old~~\n\n- [x] Done'
+        }
+      />,
+    );
+    expect(screen.getByRole('columnheader', { name: 'Name' })).toBeTruthy();
+    expect(screen.getByRole('cell', { name: '1' }).style.textAlign).toBe(
+      'right',
+    );
+    expect(container.querySelector('del')?.textContent).toBe('old');
+    expect(
+      container.querySelector<HTMLInputElement>('input[type="checkbox"]')
+        ?.checked,
+    ).toBe(true);
+  });
+
   it('rejects unsafe URLs and preserves safe links', () => {
     for (const url of [
       'javascript:alert(1)',

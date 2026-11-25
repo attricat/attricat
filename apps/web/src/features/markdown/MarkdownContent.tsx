@@ -2,6 +2,7 @@ import { Box, Link } from '@mui/material';
 import ReactMarkdown from 'react-markdown';
 import { monoFontFamily } from '../../app/theme';
 import { UserProfileLink } from '../../components/UserProfileLink';
+import { githubMarkdownPlugins, githubMarkdownStyles } from './githubMarkdown';
 import { markdownUrlTransform } from './markdownUrls';
 import { mentionedUserId } from './mentions';
 
@@ -42,10 +43,12 @@ export const MarkdownContent = ({ value }: { value: string }) => (
         borderColor: 'divider',
         color: 'text.secondary',
       },
+      ...githubMarkdownStyles,
     }}
   >
     <ReactMarkdown
       skipHtml
+      remarkPlugins={githubMarkdownPlugins}
       urlTransform={urlTransform}
       components={{
         a: ({ href, children }) => {

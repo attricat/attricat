@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import {
   Alert,
+  Box,
   Button,
   MenuItem,
   Paper,
@@ -22,6 +23,10 @@ import { invalidateExtensions } from './extensionPageUtils';
 import { ExtensionIcon } from '../../components/systemIcons';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import {
+  githubMarkdownPlugins,
+  githubMarkdownStyles,
+} from '../markdown/githubMarkdown';
 
 export const MarketplaceExtensionPage = ({
   owner,
@@ -117,7 +122,11 @@ export const MarketplaceExtensionPage = ({
           </Paper>
           <Paper sx={{ mt: 3, p: 2 }}>
             <Typography variant="h6">{t('extensions.readme')}</Typography>
-            <ReactMarkdown>{details.data.readme}</ReactMarkdown>
+            <Box sx={{ minWidth: 0, ...githubMarkdownStyles }}>
+              <ReactMarkdown remarkPlugins={githubMarkdownPlugins}>
+                {details.data.readme}
+              </ReactMarkdown>
+            </Box>
           </Paper>
         </>
       )}

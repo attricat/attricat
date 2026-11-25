@@ -8,6 +8,10 @@ import { isJsonObject as isRecord } from '../../api/jsonObject';
 import { JsonBlock } from '../../components/JsonValue';
 import { messageRoles, uuidPattern } from './constants';
 import { DetailsAccordion } from './DetailsAccordion';
+import {
+  githubMarkdownPlugins,
+  githubMarkdownStyles,
+} from '../markdown/githubMarkdown';
 
 const JsonDetails = ({
   children,
@@ -85,6 +89,7 @@ const markdownStyles = {
   '& code': { bgcolor: 'action.hover', borderRadius: 0.5, px: 0.5 },
   '& pre': { bgcolor: 'action.hover', overflow: 'auto', p: 1 },
   '& pre code': { bgcolor: 'transparent', p: 0 },
+  ...githubMarkdownStyles,
 } as const;
 
 export const ConversationMessageContent = ({
@@ -130,6 +135,7 @@ export const ConversationMessageContent = ({
     return (
       <Box sx={markdownStyles}>
         <ReactMarkdown
+          remarkPlugins={githubMarkdownPlugins}
           components={{
             a: ({ href, children }) =>
               href && isAttricatLink(href) ? (
