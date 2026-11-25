@@ -166,9 +166,6 @@ impl ApiError {
             message,
         )
     }
-    pub(super) fn invalid_search_query(message: String) -> Self {
-        Self::new(StatusCode::BAD_REQUEST, ErrorCode::InvalidInput, message)
-    }
     pub(super) fn conflict(message: &'static str) -> Self {
         Self::new(StatusCode::CONFLICT, ErrorCode::Conflict, message)
     }
@@ -348,6 +345,7 @@ impl From<RepositoryError> for ApiError {
     fn from(error: RepositoryError) -> Self {
         let description = error.describe();
         let status = match description.class {
+            ErrorClass::BadRequest => StatusCode::BAD_REQUEST,
             ErrorClass::Forbidden => StatusCode::FORBIDDEN,
             ErrorClass::NotFound => StatusCode::NOT_FOUND,
             ErrorClass::Conflict => StatusCode::CONFLICT,

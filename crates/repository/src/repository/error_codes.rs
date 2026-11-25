@@ -113,6 +113,7 @@ error_codes! {
     InvalidFileReferences = "invalid_file_references",
     InvalidIdentityProvider = "invalid_identity_provider",
     InvalidInput = "invalid_input",
+    InvalidSearchCursor = "invalid_search_cursor",
     InvalidSearchSort = "invalid_search_sort",
     InvalidLoginIdentifier = "invalid_login_identifier",
     InvalidRange = "invalid_range",
@@ -213,6 +214,9 @@ impl Serialize for ErrorCode {
 /// class to exactly one status code.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ErrorClass {
+    /// 400: the request is malformed, such as a search query the search
+    /// syntax rejects or a stale page cursor.
+    BadRequest,
     /// 403: the actor may not perform this action.
     Forbidden,
     /// 404: the addressed resource does not exist or is not visible.
@@ -279,7 +283,7 @@ impl RepositoryError {
     /// and structured details. This is the only place codes are assigned.
     pub fn describe(&self) -> ErrorDescription {
         use ErrorClass::{
-            Conflict, Forbidden, Internal, NotFound, PreconditionRequired, Unavailable,
+            BadRequest, Conflict, Forbidden, Internal, NotFound, PreconditionRequired, Unavailable,
             Unprocessable,
         };
         use ErrorCode as Code;
@@ -717,6 +721,11 @@ impl RepositoryError {
                 Code::GlobalRelationshipSearchTimedOut,
                 "global relationship search exceeded its database time limit; refine the query",
             ),
+            Self::InvalidSearchQuery(_) => plain(BadRequest, Code::InvalidInput),
+            Self::InvalidSearchCursor(_) => plain(BadRequest, Code::InvalidSearchCursor),
+            Self::SearchInvariant(_) => {
+                ErrorDescription::new(Internal, Code::InternalError, "search operation failed")
+            }
             Self::Task(_) => {
                 ErrorDescription::new(Internal, Code::InternalError, "task queue operation failed")
             }

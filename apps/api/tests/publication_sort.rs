@@ -134,7 +134,8 @@ attributes:
         .send()
         .await
         .unwrap();
-    assert_eq!(mismatch.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    // A cursor from another channel's order asks the client to start over.
+    expect_error(mismatch, StatusCode::BAD_REQUEST, "invalid_search_cursor").await;
     let missing = client
         .post(format!("{base_url}/v1/records/search"))
         .json(&json!({"blueprint":{"code":"publication_sort_product"},

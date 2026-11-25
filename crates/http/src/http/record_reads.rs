@@ -13,8 +13,8 @@ use crate::{
     },
     repository::{
         DEFAULT_SYSTEM_TAG_FACET_LIMIT, MAX_SEARCH_FILTERS, MAX_SYSTEM_TAG_FACET_LIMIT,
-        RelationshipFacetHop, RepositoryError, SearchPageRequest, SearchPhase, SearchScopeError,
-        SearchScopeRequest, intersect_record_ids, valid_connection_key,
+        RelationshipFacetHop, SearchPageRequest, SearchPhase, SearchScopeError, SearchScopeRequest,
+        intersect_record_ids, valid_connection_key,
     },
 };
 use attricat_domain::permissions::Permission;
@@ -32,24 +32,6 @@ use std::{collections::HashSet, time::Instant};
 use tracing::Instrument;
 use uuid::Uuid;
 
-fn map_search_error(error: RepositoryError) -> ApiError {
-    match error {
-        // Search budgets keep their own codes. Infrastructure failures are
-        // server errors; their text (SQL, pool state) must never be echoed to
-        // the client as a query problem.
-        error @ (RepositoryError::RelationshipSearchBudgetExceeded { .. }
-        | RepositoryError::RelationshipSearchTimedOut
-        | RepositoryError::Database(_)
-        | RepositoryError::Task(_)
-        | RepositoryError::RelationshipPathConflict(_)) => error.into(),
-        // The query parser reports its problems as this variant; its
-        // "invalid blueprint definition" prefix would misdescribe a query.
-        RepositoryError::InvalidBlueprintDefinition(reason) => {
-            ApiError::invalid_search_query(reason)
-        }
-        error => ApiError::invalid_search_query(error.to_string()),
-    }
-}
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct PreviewQuery {
@@ -337,7 +319,7 @@ fn search_scope_error(error: SearchScopeError) -> ApiError {
     match error {
         SearchScopeError::UnknownBlueprint => ApiError::not_found("blueprint"),
         SearchScopeError::Invalid { message, .. } => ApiError::invalid_input(message),
-        SearchScopeError::Query { error, .. } => map_search_error(error),
+        SearchScopeError::Query { error, .. } => error.into(),
         SearchScopeError::InvalidSort(message) => ApiError::invalid_search_sort(message),
         SearchScopeError::RelationshipSortRequiresSingleVersion => {
             ApiError::relationship_sort_requires_single_version()
@@ -512,7 +494,7 @@ pub(super) async fn relationship_tree_facet_children(
             repository
                 .resolve_search(&search_blueprint, version, Some(query))
                 .await
-                .map_err(map_search_error)?,
+                .map_err(ApiError::from)?,
         ),
         None => None,
     };

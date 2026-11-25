@@ -83,6 +83,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `record_locked` | 409 | The record's status locks the content being changed, or the record cannot be deleted while it is locked. |
 | `status_not_locked` | 409 | An unlock named a status that does not lock the record. |
 | `record_id_taken` | 409 | A batch `create` chose an `record_id` that already exists. |
+| `invalid_search_cursor` | 400 | `page.cursor` is malformed or belongs to another sort or result scope. Search again from the first page. |
 | `invalid_search_sort` | 422 | The search can't be sorted that way, for example by a column or publication channel that no longer exists. Drop the sort and search again. |
 | `relationship_path_sort_requires_single_result_version` | 422 | Sorting by a related value across several blueprint revisions. |
 | `relationship_path_type_conflict` | 422 | A relationship path passes through a relationship to several blueprints that declare its next field with different value types, or a relationship with different targets. `details.conflicts` names the blueprints of each kind. |

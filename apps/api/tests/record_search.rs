@@ -1606,3 +1606,98 @@ async fn filtering_by_export_status_needs_data_health_read(pool: PgPool) {
     );
     server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn search_rejects_bad_queries_and_stale_cursors_with_their_own_codes(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    create_blueprint(
+        &client,
+        &base_url,
+        r#"format_version: 1
+code: paged_item
+name: Paged item
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+  table:
+    type: table
+    columns:
+      - {field: title}
+      - {field: rank}
+attributes:
+  - code: title
+    value_type: string
+  - code: rank
+    value_type: integer"#,
+    )
+    .await;
+    for rank in 1..=3 {
+        create_record_with(
+            &client,
+            &base_url,
+            "paged_item",
+            json!([
+                scalar("title", format!("Item {rank}")),
+                scalar("rank", rank)
+            ]),
+        )
+        .await;
+    }
+    let search = |body: Value| {
+        let client = client.clone();
+        let base_url = base_url.clone();
+        async move {
+            client
+                .post(format!("{base_url}/v1/records/search"))
+                .json(&body)
+                .send()
+                .await
+                .unwrap()
+        }
+    };
+    let first = expect_success(
+        search(json!({"blueprint": {"code": "paged_item"},
+                      "sort": {"field": "rank", "direction": "asc"},
+                      "page": {"size": 1}}))
+        .await,
+    )
+    .await;
+    let cursor = first["next_cursor"].clone();
+    assert!(cursor.is_string(), "{first}");
+
+    // A query the search syntax rejects names the reason in its message.
+    let body = expect_error(
+        search(json!({"blueprint": {"code": "paged_item"}, "query": "missing.name:x"})).await,
+        StatusCode::BAD_REQUEST,
+        "invalid_input",
+    )
+    .await;
+    assert!(
+        !body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("blueprint definition"),
+        "{body}"
+    );
+    // A malformed cursor, or one from another sort, asks to start over.
+    for (cursor, sort) in [
+        (
+            json!("not-a-cursor"),
+            json!({"field": "rank", "direction": "asc"}),
+        ),
+        (cursor, json!({"field": "title", "direction": "asc"})),
+    ] {
+        expect_error(
+            search(json!({"blueprint": {"code": "paged_item"}, "sort": sort,
+                          "page": {"size": 1, "cursor": cursor}}))
+            .await,
+            StatusCode::BAD_REQUEST,
+            "invalid_search_cursor",
+        )
+        .await;
+    }
+    server.abort();
+}

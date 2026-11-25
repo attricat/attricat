@@ -694,7 +694,7 @@ impl AttricatRepository {
             validate_code(&relationship.field)?;
         }
         let selectors = serde_json::to_value(relationships)
-            .map_err(|error| RepositoryError::InvalidBlueprintDefinition(error.to_string()))?;
+            .map_err(|error| RepositoryError::SearchInvariant(error.to_string()))?;
         let (cursor_created_at, cursor_id) = cursor.unzip();
         let rows = sqlx::query_as::<_, IncomingRelationshipRow>(
             AssertSqlSafe(format!(r#"SELECT source.id, b.code AS blueprint_code, source.blueprint_version,
@@ -1234,7 +1234,7 @@ impl AttricatRepository {
                 || cursor.context_id != Some(sort.context.requested_id())
                 || cursor.version != SORTED_SEARCH_CURSOR_VERSION)
         {
-            return Err(RepositoryError::InvalidBlueprintDefinition(
+            return Err(RepositoryError::InvalidSearchCursor(
                 "page.cursor does not match sort".to_owned(),
             ));
         }
@@ -1396,7 +1396,7 @@ impl AttricatRepository {
         let cursor_version = cursor
             .map(|cursor| {
                 if cursor.is_null {
-                    return Err(RepositoryError::InvalidBlueprintDefinition(
+                    return Err(RepositoryError::InvalidSearchCursor(
                         "page.cursor is invalid".to_owned(),
                     ));
                 }
@@ -1405,7 +1405,7 @@ impl AttricatRepository {
                     .as_deref()
                     .and_then(|value| value.parse::<i64>().ok())
                     .ok_or_else(|| {
-                        RepositoryError::InvalidBlueprintDefinition("page.cursor is invalid".to_owned())
+                        RepositoryError::InvalidSearchCursor("page.cursor is invalid".to_owned())
                     })
             })
             .transpose()?;
@@ -2121,7 +2121,7 @@ impl AttricatRepository {
                 })
                 .collect::<Vec<_>>(),
         )
-        .map_err(|error| RepositoryError::InvalidBlueprintDefinition(error.to_string()))?;
+        .map_err(|error| RepositoryError::SearchInvariant(error.to_string()))?;
         let rows = sqlx::query_as::<_, RelatedTablePreviewRow>(
             AssertSqlSafe(format!(r#"SELECT source.id AS source_id, a.code AS attribute_code,
                       context.id AS relationship_context_id,
@@ -2891,7 +2891,7 @@ impl AttricatRepository {
         }
         let parts: Vec<_> = selector.split('.').collect();
         if parts.len() > MAX_RELATIONSHIP_HOPS + 1 || parts.iter().any(|part| part.is_empty()) {
-            return Err(RepositoryError::InvalidBlueprintDefinition(
+            return Err(RepositoryError::InvalidSearchQuery(
                 "search selector may contain at most three relationship hops and a scalar leaf"
                     .into(),
             ));
@@ -2929,7 +2929,7 @@ impl AttricatRepository {
                     a.code.eq_ignore_ascii_case(parts[1]) && a.value_type != ValueType::Relationship
                 })
                 .ok_or_else(|| {
-                    RepositoryError::InvalidBlueprintDefinition(format!(
+                    RepositoryError::InvalidSearchQuery(format!(
                         "unknown selected-blueprint attribute '{}'",
                         parts[1]
                     ))
@@ -2945,7 +2945,7 @@ impl AttricatRepository {
             if !selected.attributes.iter().any(|a| {
                 a.code.eq_ignore_ascii_case(parts[0]) && a.value_type == ValueType::Relationship
             }) {
-                return Err(RepositoryError::InvalidBlueprintDefinition(format!(
+                return Err(RepositoryError::InvalidSearchQuery(format!(
                     "unknown search selector '{}'",
                     parts[0]
                 )));
@@ -2982,7 +2982,7 @@ impl AttricatRepository {
             })
             .collect();
         let Some((_, attribute)) = matches.first().cloned() else {
-            return Err(RepositoryError::InvalidBlueprintDefinition(format!(
+            return Err(RepositoryError::InvalidSearchQuery(format!(
                 "unknown scalar search-path leaf '{}'",
                 leaf
             )));
@@ -3027,7 +3027,7 @@ impl AttricatRepository {
         .await
         .map_err(|error| {
             error.into_repository(|error| {
-                RepositoryError::InvalidBlueprintDefinition(format!("search path '{selector}' {error}"))
+                RepositoryError::InvalidSearchQuery(format!("search path '{selector}' {error}"))
             })
         })?;
         // Each hop starts from the source, then from the targets of the hop
@@ -3059,7 +3059,7 @@ impl AttricatRepository {
         let count: i64 = sqlx::query_scalar("SELECT COUNT(DISTINCT code) FROM blueprints WHERE lower(name) = lower($1) AND status = 'published' AND workspace_id = $2 AND deleted_at IS NULL")
             .bind(name).bind(self.workspace_id.0).fetch_one(&self.pool).await?;
         if count > 1 {
-            return Err(RepositoryError::InvalidBlueprintDefinition(format!(
+            return Err(RepositoryError::InvalidSearchQuery(format!(
                 "blueprint name '{}' is ambiguous; use its code",
                 name
             )));
@@ -3595,7 +3595,7 @@ const ID_SELECTOR: &str = "@id";
 const MAX_SEARCH_IDS: usize = 100;
 fn parse_search_ids(term: &SearchTerm) -> Result<Vec<Uuid>, RepositoryError> {
     if term.prefix {
-        return Err(RepositoryError::InvalidBlueprintDefinition(format!(
+        return Err(RepositoryError::InvalidSearchQuery(format!(
             "wildcards are not allowed in an ID search term: '{}'",
             term.original
         )));
@@ -3605,7 +3605,7 @@ fn parse_search_ids(term: &SearchTerm) -> Result<Vec<Uuid>, RepositoryError> {
         .split(',')
         .map(|id| {
             Uuid::parse_str(id).map_err(|_| {
-                RepositoryError::InvalidBlueprintDefinition(format!(
+                RepositoryError::InvalidSearchQuery(format!(
                     "'{id}' is not a record ID in search term '{}'",
                     term.original
                 ))
@@ -3615,7 +3615,7 @@ fn parse_search_ids(term: &SearchTerm) -> Result<Vec<Uuid>, RepositoryError> {
     ids.sort_unstable();
     ids.dedup();
     if ids.len() > MAX_SEARCH_IDS {
-        return Err(RepositoryError::InvalidBlueprintDefinition(format!(
+        return Err(RepositoryError::InvalidSearchQuery(format!(
             "an ID search term may list at most {MAX_SEARCH_IDS} records"
         )));
     }
@@ -3630,7 +3630,7 @@ fn parse_search_terms(query: &str) -> Result<Vec<SearchTerm>, RepositoryError> {
                     (Some(s.to_owned()), v)
                 }
                 Some(_) => {
-                    return Err(RepositoryError::InvalidBlueprintDefinition(format!(
+                    return Err(RepositoryError::InvalidSearchQuery(format!(
                         "malformed search term '{raw}'"
                     )));
                 }
@@ -3639,7 +3639,7 @@ fn parse_search_terms(query: &str) -> Result<Vec<SearchTerm>, RepositoryError> {
             let prefix = value.ends_with('*');
             let value = value.strip_suffix('*').unwrap_or(value);
             if value.is_empty() || value.contains('*') {
-                return Err(RepositoryError::InvalidBlueprintDefinition(format!(
+                return Err(RepositoryError::InvalidSearchQuery(format!(
                     "wildcard is only allowed at the end of a search term: '{raw}'"
                 )));
             }
@@ -3763,7 +3763,7 @@ mod global_search_budget_tests {
 
 fn relationship_sort_reverse_joins(depth: usize) -> Result<String, RepositoryError> {
     if !(1..=MAX_RELATIONSHIP_HOPS).contains(&depth) {
-        return Err(RepositoryError::InvalidBlueprintDefinition(
+        return Err(RepositoryError::SearchInvariant(
             "relationship sort path must contain one to three hops".to_owned(),
         ));
     }
@@ -3813,7 +3813,7 @@ fn relationship_sort_reverse_joins(depth: usize) -> Result<String, RepositoryErr
 
 fn relationship_sort_forward_joins(depth: usize) -> Result<String, RepositoryError> {
     if !(1..=MAX_RELATIONSHIP_HOPS).contains(&depth) {
-        return Err(RepositoryError::InvalidBlueprintDefinition(
+        return Err(RepositoryError::SearchInvariant(
             "relationship sort path must contain one to three hops".to_owned(),
         ));
     }
@@ -3896,7 +3896,7 @@ fn native_sort_column(
         ValueType::Date => Ok(("value_date", "date")),
         ValueType::Datetime => Ok(("value_datetime", "timestamptz")),
         ValueType::Time => Ok(("value_time", "time")),
-        _ => Err(RepositoryError::InvalidBlueprintDefinition(format!(
+        _ => Err(RepositoryError::SearchInvariant(format!(
             "{value_type} is not sortable"
         ))),
     }
@@ -3905,9 +3905,9 @@ fn native_sort_column(
 fn decode_sorted_search_cursor(cursor: &str) -> Result<SortedSearchCursor, RepositoryError> {
     let bytes = URL_SAFE_NO_PAD
         .decode(cursor)
-        .map_err(|_| RepositoryError::InvalidBlueprintDefinition("page.cursor is invalid".to_owned()))?;
+        .map_err(|_| RepositoryError::InvalidSearchCursor("page.cursor is invalid".to_owned()))?;
     serde_json::from_slice(&bytes)
-        .map_err(|_| RepositoryError::InvalidBlueprintDefinition("page.cursor is invalid".to_owned()))
+        .map_err(|_| RepositoryError::InvalidSearchCursor("page.cursor is invalid".to_owned()))
 }
 
 fn encode_sorted_search_cursor(sort: &RecordSearchSort, row: &SortedRecordPreviewRow) -> String {

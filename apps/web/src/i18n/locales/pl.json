@@ -134,6 +134,7 @@
     "invalid_login_identifier": "Identyfikator logowania wygląda jak nazwa domeny, na przykład acme.example.",
     "invalid_range": "Żądany fragment pliku jest niedostępny.",
     "invalid_rule_definition": "Definicja reguły jest nieprawidłowa: {{reason}}",
+    "invalid_search_cursor": "Wyniki się zmieniły. Wyszukaj ponownie, aby zobaczyć je od początku.",
     "invalid_search_sort": "Tej listy nie można tak posortować.",
     "invalid_system_metadata": "Metadane systemowe muszą być obiektem JSON w granicach limitu rozmiaru.",
     "invalid_system_tags": "Znaczniki systemowe muszą być unikalne i niepuste.",

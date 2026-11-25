@@ -480,8 +480,11 @@ version), or `multiple`. This summary uses the complete query/filter/facet/tag
 candidate set, not the current page. Sorted responses use an opaque keyset
 `next_cursor`; return it unchanged as `page.cursor` with the same sort. The
 cursor includes the effective source version, so a changed all-version result
-scope rejects the stale cursor. An invalid direction, unconfigured field (other
-than `blueprint_version`), or non-scalar column also returns `422`.
+scope rejects the stale cursor. A malformed cursor, or one from another sort, is
+rejected with `400 invalid_search_cursor`: search again from the first page. A
+query the search syntax rejects returns `400 invalid_input` with the reason in
+`message`. An invalid direction, unconfigured field (other than
+`blueprint_version`), or non-scalar column also returns `422`.
 
 When an explicit current version is selected, first-page responses also return
 `hidden_outdated_count` and `hidden_outdated_count_capped`. This count ignores

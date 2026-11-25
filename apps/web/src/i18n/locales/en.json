@@ -132,6 +132,7 @@
     "invalid_login_identifier": "Sign-in identifiers look like a domain name, such as acme.example.",
     "invalid_range": "The requested part of the file isn't available.",
     "invalid_rule_definition": "The rule definition is invalid: {{reason}}",
+    "invalid_search_cursor": "These results changed. Search again to see them from the start.",
     "invalid_search_sort": "This list can't be sorted that way.",
     "invalid_system_metadata": "System metadata must be a JSON object within the size limit.",
     "invalid_system_tags": "System tags must be unique and not empty.",

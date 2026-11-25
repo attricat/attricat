@@ -362,6 +362,16 @@ pub enum RepositoryError {
     InvalidHierarchyRelationship,
     #[error("invalid blueprint definition: {0}")]
     InvalidBlueprintDefinition(String),
+    /// A search query term, selector or path the search syntax rejects.
+    #[error("{0}")]
+    InvalidSearchQuery(String),
+    /// A page cursor that is malformed or belongs to another sort; the client
+    /// should search again from the first page.
+    #[error("{0}")]
+    InvalidSearchCursor(String),
+    /// A search plan broke an invariant its resolution guarantees.
+    #[error("search invariant failed: {0}")]
+    SearchInvariant(String),
     /// The target blueprints a relationship path passes through declare one
     /// of its segments with different value types or targets.
     #[error("{0}")]

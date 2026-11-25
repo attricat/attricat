@@ -83,6 +83,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `record_locked` | 409 | Status rekordu blokuje zmienianą treść albo rekordu nie można usunąć, dopóki jest zablokowany. |
 | `status_not_locked` | 409 | Odblokowanie wskazało status, który nie blokuje rekordu. |
 | `record_id_taken` | 409 | Operacja `create` we wsadzie wybrała `record_id`, który już istnieje. |
+| `invalid_search_cursor` | 400 | `page.cursor` jest nieprawidłowy albo należy do innego sortowania lub zakresu wyników. Wyszukaj ponownie od pierwszej strony. |
 | `invalid_search_sort` | 422 | Wyszukiwania nie można tak posortować, np. według kolumny lub kanału publikacji, które już nie istnieją. Usuń sortowanie i wyszukaj ponownie. |
 | `relationship_path_sort_requires_single_result_version` | 422 | Sortowanie według powiązanej wartości w kilku wersjach schematu. |
 | `relationship_path_type_conflict` | 422 | Ścieżka relacji przechodzi przez relację do kilku schematów, które deklarują jej następny atrybut z różnymi typami wartości lub relację do różnych schematów. `details.conflicts` wymienia schematy każdego rodzaju. |
