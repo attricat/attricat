@@ -170,6 +170,8 @@ Każde żądanie wykonane przy przesyłaniu jest wliczane do [limitu żądań](/
 
 Operacje mogą wywoływać `attricat-data.read` i `attricat-data.batch` (ten sam JSON co `attricat.read.v1` i `attricat.command.v1`) oraz wywołania w kształcie konektora: `schema`, `page` i `upsert-batch`. Strony mieszczą do 100 rekordów, a partie do 100 intencji. Partie muszą zawierać bieżący klucz partii, a klucz każdej intencji jest zapisywany, więc odtworzona partia zwraca `already_applied` zamiast zapisywać dwukrotnie.
 
+Wykonanie odczytuje pojedynczy rekord operacją odczytu `record`, która zwraca to samo co `api.read`, więc może porównać rekord z systemem zewnętrznym i zapisać tylko zmienione pola. Operacje `blueprint` i `context` znajdują bieżącą wersję Schematu i kontekst po kodzie. Zobacz [Odczytuj i zapisuj katalog](/pl/extensions/server/#odczytuj-i-zapisuj-katalog).
+
 Kursory stron rozwiązują wartości według stanu z pierwszej strony, korzystając z historii wartości, i wygasają po 30 dniach. To nie jest migawka bazy danych: rekordy tworzone, usuwane lub migrowane w trakcie długiego eksportu nadal mogą zmienić to, które rekordy się pojawią. Jeśli potrzebujesz dokładnego eksportu, zamroź źródło.
 
 W wykonaniu konektora `attricat-data.batch` przyjmuje też partie zawierające wyłącznie adnotacje rekordów Schematu zadania, dzięki czemu eksporter może zapisać w [adnotacjach](#adnotacje-rekordów) zewnętrzne identyfikatory lub stan synchronizacji tam, gdzie widzą je kontrole i przeglądarka rekordów. Wykonania eksportu nadal nie mogą zapisywać wartości.

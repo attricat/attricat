@@ -228,10 +228,17 @@ impl AttricatRepository {
                 record_id,
                 values,
                 relationships,
+                remove_values,
                 ..
             } => {
-                self.apply_extension_attricat_update(transaction, record_id, values, relationships)
-                    .await
+                self.apply_extension_attricat_update(
+                    transaction,
+                    record_id,
+                    values,
+                    relationships,
+                    remove_values,
+                )
+                .await
             }
             ExtensionAttricatIntent::Relationships {
                 record_id,
@@ -243,6 +250,7 @@ impl AttricatRepository {
                     record_id,
                     Vec::new(),
                     relationships,
+                    Vec::new(),
                 )
                 .await
             }
@@ -256,6 +264,7 @@ impl AttricatRepository {
                 lookup_value,
                 values,
                 relationships,
+                remove_values,
                 system_tags,
                 system_metadata,
                 ..
@@ -289,6 +298,7 @@ impl AttricatRepository {
                             record_id,
                             values,
                             relationships,
+                            remove_values,
                         )
                         .await
                     }
@@ -492,6 +502,7 @@ impl AttricatRepository {
         record_id: Uuid,
         values: Vec<NewAttributeValue>,
         relationships: Vec<RelationshipTargets>,
+        remove_values: Vec<AttributeValueSelector>,
     ) -> Result<Uuid, RepositoryError> {
         // The seam takes this lock too; the actor checks below come first.
         if !relationships.is_empty() || writes_relationship_values(&values) {
@@ -528,7 +539,7 @@ impl AttricatRepository {
                     expected_updated_at: None,
                     values,
                     relationships,
-                    remove_values: Vec::new(),
+                    remove_values,
                     system_tags: None,
                     system_metadata: None,
                 },

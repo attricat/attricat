@@ -1077,6 +1077,27 @@ impl HostState {
                 Some(parse_uuid(&input.context_id, "context ID")?),
             ),
         };
+        let read = self.record_read(record_id, context_id).await?;
+        Ok(wit::api::ReadResponse {
+            record: bounded_serialize(&read.record)?,
+            blueprint: bounded_serialize(&read.blueprint)?,
+            direct_values: bounded_serialize(&read.direct_values)?,
+            resolved_values: read
+                .resolved_values
+                .as_ref()
+                .map(bounded_serialize)
+                .transpose()?,
+        })
+    }
+
+    /// One record with its pinned blueprint revision and direct values, and
+    /// with a context its values resolved through the fallback chain. Both
+    /// the typed `api.read` and the `record` read operation answer with it.
+    async fn record_read(
+        &self,
+        record_id: Uuid,
+        context_id: Option<Uuid>,
+    ) -> Result<RecordRead, String> {
         let record = self
             .repository
             .get_record_with_revision(record_id)
@@ -1104,14 +1125,11 @@ impl HostState {
             ),
             None => None,
         };
-        Ok(wit::api::ReadResponse {
-            record: bounded_serialize(&record)?,
-            blueprint: bounded_serialize(&blueprint)?,
-            direct_values: bounded_serialize(&direct_values)?,
-            resolved_values: resolved_values
-                .as_ref()
-                .map(bounded_serialize)
-                .transpose()?,
+        Ok(RecordRead {
+            record,
+            blueprint,
+            direct_values,
+            resolved_values,
         })
     }
 
@@ -1303,6 +1321,35 @@ impl HostState {
                     .await
                     .map_err(|error| error.to_string())?;
                 bounded_serialize(&record)
+            }
+            AttricatReadRequest::Record {
+                record_id,
+                context_id,
+            } => {
+                let context_id = context_id
+                    .as_deref()
+                    .map(|value| parse_uuid(value, "context ID"))
+                    .transpose()?;
+                let read = self
+                    .record_read(parse_uuid(&record_id, "record ID")?, context_id)
+                    .await?;
+                bounded_serialize(&read)
+            }
+            AttricatReadRequest::Blueprint { code } => {
+                let blueprint = self
+                    .repository
+                    .get_blueprint_by_code(&code)
+                    .await
+                    .map_err(|error| error.to_string())?;
+                bounded_serialize(&blueprint)
+            }
+            AttricatReadRequest::Context { code } => {
+                let context = self
+                    .repository
+                    .get_context_by_code(&code)
+                    .await
+                    .map_err(|error| error.to_string())?;
+                bounded_serialize(&context)
             }
             AttricatReadRequest::Movements {
                 record_id,
@@ -1658,6 +1705,15 @@ struct EventEmit {
     payload: Value,
 }
 
+/// The answer to a single-record read.
+#[derive(serde::Serialize)]
+struct RecordRead {
+    record: crate::model::Record,
+    blueprint: crate::model::BlueprintWithAttributes,
+    direct_values: Vec<crate::model::AttributeValue>,
+    resolved_values: Option<crate::model::ResolvedRecordPreviewResponse>,
+}
+
 #[derive(Deserialize)]
 #[serde(tag = "operation", rename_all = "snake_case", deny_unknown_fields)]
 enum AttricatReadRequest {
@@ -1681,6 +1737,18 @@ enum AttricatReadRequest {
         attribute_id: String,
         value: String,
     },
+    /// One record, as the typed `api.read` returns it, for operation runs,
+    /// which cannot call `api.read`. With a context, its values resolved
+    /// through the fallback chain too.
+    Record {
+        record_id: String,
+        context_id: Option<String>,
+    },
+    /// The latest published revision of a blueprint with its attributes, or
+    /// `null`, so configuration can name a blueprint by code.
+    Blueprint { code: String },
+    /// A context by code, or `null`.
+    Context { code: String },
     /// A record's movement history after a sequence, as
     /// `GET /v1/records/{id}/movements` returns it.
     Movements {
@@ -3518,6 +3586,7 @@ impl OperationState {
                 lookup_value: row.key,
                 values,
                 relationships: Vec::new(),
+                remove_values: Vec::new(),
                 system_tags: Vec::new(),
                 system_metadata: json!({}),
             });

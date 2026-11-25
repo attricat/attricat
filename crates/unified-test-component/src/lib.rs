@@ -96,6 +96,43 @@ impl handler::Guest for Component {
     }
 }
 
+/// Reads and writes the catalog as a run without a selection does, through
+/// the run-scoped `attricat-data` interface: the input's reads, then its
+/// intents, then the reads again. Each read keeps its error, if any.
+fn inspect(request: &OperationRequest) -> Result<BatchResult, String> {
+    let input = parse(&request.input)?;
+    let read_all = || -> Vec<Value> {
+        input["reads"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|read| {
+                attricat_data::read(&read.to_string())
+                    .and_then(|response| parse(&response))
+                    .unwrap_or_else(|error| json!({"error": error}))
+            })
+            .collect()
+    };
+    let before = read_all();
+    let outcomes = match input["intents"].as_array() {
+        Some(intents) if !intents.is_empty() => parse(&attricat_data::batch(
+            &json!({"operation": "batch", "batch": {
+                "batch_key": request.batch_key,
+                "dry_run": false,
+                "intents": intents,
+            }})
+            .to_string(),
+        )?)?,
+        _ => json!([]),
+    };
+    let after = read_all();
+    Ok(BatchResult {
+        progress: json!({"completed": 1, "total": 1}).to_string(),
+        checkpoint: json!({"before": before, "outcomes": outcomes, "after": after}).to_string(),
+        done: true,
+    })
+}
+
 impl operations::Guest for Component {
     fn prepare(_request: OperationRequest) -> Result<String, String> {
         Ok("prepared".into())
@@ -106,6 +143,9 @@ impl operations::Guest for Component {
     }
 
     fn process_batch(request: OperationRequest) -> Result<BatchResult, String> {
+        if request.operation_id == "inspect" {
+            return inspect(&request);
+        }
         let mut checkpoint = parse(&request.checkpoint)?;
         let cursor = checkpoint["cursor"].as_str().unwrap_or_default().to_owned();
         let described = parse(&selection::describe()?)?;

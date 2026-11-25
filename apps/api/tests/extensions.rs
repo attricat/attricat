@@ -478,6 +478,7 @@ attributes:
         batch_key: key.into(),
         dry_run: false,
         intents: vec![ExtensionAttricatIntent::Upsert {
+            remove_values: vec![],
             intent_key: "item".into(),
             blueprint_id: blueprint.blueprint.id,
             blueprint_version: blueprint.blueprint.version,
@@ -550,6 +551,7 @@ async fn extension_attricat_upsert_is_idempotent_and_emits_a_change_feed(pool: s
         batch_key: key.into(),
         dry_run: false,
         intents: vec![ExtensionAttricatIntent::Upsert {
+            remove_values: vec![],
             intent_key: "item-1".into(),
             blueprint_id: blueprint.blueprint.id,
             blueprint_version: blueprint.blueprint.version,
@@ -755,6 +757,7 @@ async fn extension_intents_use_unique_keys_and_withdraw_publications(pool: sqlx:
         batch_key: key.into(),
         dry_run: false,
         intents: vec![ExtensionAttricatIntent::Upsert {
+            remove_values: vec![],
             intent_key: "item".into(),
             blueprint_id: blueprint.blueprint.id,
             blueprint_version: blueprint.blueprint.version,

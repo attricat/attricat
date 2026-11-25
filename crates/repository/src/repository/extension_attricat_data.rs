@@ -52,6 +52,11 @@ pub enum ExtensionAttricatIntent {
         values: Vec<NewAttributeValue>,
         #[serde(default)]
         relationships: Vec<RelationshipTargets>,
+        /// Scalar values to clear, as `remove_values` of a record update.
+        /// Left out of the intent hash when empty, so intents recorded
+        /// before the field existed still replay as `already_applied`.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        remove_values: Vec<AttributeValueSelector>,
     },
     Relationships {
         intent_key: String,
@@ -70,6 +75,10 @@ pub enum ExtensionAttricatIntent {
         values: Vec<NewAttributeValue>,
         #[serde(default)]
         relationships: Vec<RelationshipTargets>,
+        /// Scalar values to clear when the upsert updates a match. A created
+        /// record has no values to clear, so they are ignored then.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        remove_values: Vec<AttributeValueSelector>,
         #[serde(default)]
         system_tags: Vec<String>,
         #[serde(default = "empty_object")]

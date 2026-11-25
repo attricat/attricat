@@ -170,6 +170,8 @@ Every request a transfer makes counts against its rule's [request budget](/exten
 
 Operations can call `attricat-data.read` and `attricat-data.batch` (the same JSON as `attricat.read.v1` and `attricat.command.v1`), plus connector-shaped `schema`, `page`, and `upsert-batch` calls. Pages hold up to 100 records and batches up to 100 intents. Batches must carry the current batch key, and each intent key is recorded, so a replayed batch returns `already_applied` instead of writing twice.
 
+A run reads one record with the `record` read operation, which returns what `api.read` does, so it can compare a record with an external system and write only the fields that changed. The `blueprint` and `context` operations find a blueprint's current revision and a context by code. See [Read and write the catalog](/extensions/server/#read-and-write-the-catalog).
+
 Page cursors resolve values as of the first page, using value history, and expire after 30 days. This is not a database snapshot: records created, deleted, or migrated during a long export can still change which records appear. Freeze the source if you need an exact export.
 
 In a connector run, `attricat-data.batch` also accepts annotation-only batches on records of the job's blueprint, so an exporter can [annotate](#record-annotations) records with external IDs or sync state where checks and the Explorer can see them. Export runs still cannot write values.

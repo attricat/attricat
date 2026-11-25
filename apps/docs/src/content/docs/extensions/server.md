@@ -135,9 +135,12 @@ A write made while handling an event is attributed to the user or token behind t
 { "operation": "lookup", "blueprint_id": "…", "blueprint_version": 3, "attribute_id": "…", "value": "ABC-1" }
 { "operation": "movements", "record_id": "…", "after": 0, "limit": 500 }
 { "operation": "incoming", "record_id": "…", "relationships": [{ "source_blueprint": "order_line", "field": "order" }], "cursor": null, "limit": 100 }
+{ "operation": "record", "record_id": "…", "context_id": "…" }
+{ "operation": "blueprint", "code": "invoice" }
+{ "operation": "context", "code": "default" }
 ```
 
-`page` returns `{records, next_cursor}`, with up to 100 records. Pass `next_cursor` back until it is `null`. `changes` pages through record changes of the blueprint in event order; save its cursor to resume later. `lookup` returns one record or `null`. `movements` returns a record's movement history after the sequence `after`, as [`GET /v1/records/{id}/movements`](/reference/api/) does, up to 500 entries a page. Every balance change also updates the record and publishes `record.updated.v1`, so a handler of that event can read the history after the last sequence it saw. `incoming` returns `{items, next_cursor}`: the records whose named relationship fields link to the record, such as an order's lines, up to 100 a page.
+`page` returns `{records, next_cursor}`, with up to 100 records. Pass `next_cursor` back until it is `null`. `changes` pages through record changes of the blueprint in event order; save its cursor to resume later. `lookup` returns one record or `null`. `movements` returns a record's movement history after the sequence `after`, as [`GET /v1/records/{id}/movements`](/reference/api/) does, up to 500 entries a page. Every balance change also updates the record and publishes `record.updated.v1`, so a handler of that event can read the history after the last sequence it saw. `incoming` returns `{items, next_cursor}`: the records whose named relationship fields link to the record, such as an order's lines, up to 100 a page. `record` returns one record as `api.read` does, `{record, blueprint, direct_values, resolved_values}`, with `resolved_values` only when you pass `context_id`; operations use it because they cannot call `api.read`. `blueprint` returns the latest published revision of a blueprint, with its ID, version and attributes, and `context` returns a context with its ID; both return `null` for an unknown code. Use them to let configuration name blueprints and contexts by code, and to create records against the current revision.
 
 `attricat.command.v1` applies a batch of intents:
 
@@ -156,6 +159,8 @@ A write made while handling an event is attributed to the user or token behind t
 ```
 
 Intent kinds are `create`, `update`, `relationships`, `upsert`, and [`annotate`](/extensions/operations/#record-annotations). A batch holds up to 100 intents. The response lists one outcome per intent, `{intent_key, status, record_id, error}`, where `status` is `applied`, `already_applied`, `validated` (with `dry_run: true`), or `rejected`. Keep intent keys stable across retries: an intent key that was already applied is reported as `already_applied` and not written twice.
+
+To clear a value, list it in `remove_values` of an `update` or `upsert` intent, as `{"attribute_code": "due_date", "context_id": "…"}`. Writing `null` or `""` as a value does not clear it: `null` fails the type check, and `""` is a value of string attributes only. An upsert that creates a record ignores `remove_values`.
 
 An upsert matches on a declared business key attribute (`lookup_attribute_id` and `lookup_value`), creates only when no record matches, and fails if more than one does. Its relationship sets apply whether it updates a match or creates the record.
 

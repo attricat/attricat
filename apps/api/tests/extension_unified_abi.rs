@@ -7,7 +7,8 @@ use std::sync::Arc;
 
 use api::{
     extension_runtime::{ComponentCompiler, ExtensionRuntime, ExtensionRuntimeConfig},
-    repository::AttricatRepository,
+    model::NewAttributeValue,
+    repository::{AttricatRepository, StartExtensionOperation},
     storage::FakeObjectStore,
 };
 use support::*;
@@ -25,6 +26,22 @@ views:
 attributes:
   - code: title
     value_type: string
+"#;
+/// A blueprint with a value that is not a string, to clear.
+const COUNTED_BLUEPRINT: &str = r#"
+format_version: 1
+code: unified_counted_item
+name: Unified counted item
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+  - code: quantity
+    value_type: integer
 "#;
 const PERMISSIONS: &[&str] = &[
     "attricat.read",
@@ -73,6 +90,10 @@ fn manifest() -> Value {
                 "request_schema": {"type": "object", "additionalProperties": false},
                 "max_request_bytes": 1024, "max_checkpoint_bytes": 8192,
                 "interactive": {"version": 1, "max_selection": 50}
+            }, {
+                "id": "inspect", "handler": "inspect",
+                "request_schema": {"type": "object"},
+                "max_request_bytes": 8192, "max_checkpoint_bytes": 65536
             }]
         },
         "ui": [
@@ -232,6 +253,126 @@ async fn one_unified_component_serves_commands_and_interactive_operations(pool: 
         "operation runs access catalog data through their run-scoped interfaces"
     );
     server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_run_reads_a_record_finds_codes_and_clears_a_value(pool: sqlx::PgPool) {
+    let repository =
+        AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
+    let store = Arc::new(FakeObjectStore::available());
+    let release = install_extension(
+        &repository,
+        store.clone(),
+        EXTENSION,
+        &archive(&unified_component()),
+        PERMISSIONS,
+    )
+    .await;
+    let blueprint = published_blueprint(&repository, COUNTED_BLUEPRINT).await;
+    let record_id = repository
+        .create_record_with_values(
+            blueprint.0,
+            blueprint.1,
+            vec![
+                NewAttributeValue::Scalar {
+                    attribute_id: None,
+                    attribute_code: Some("title".into()),
+                    context_id: None,
+                    value: json!("Counted"),
+                },
+                NewAttributeValue::Scalar {
+                    attribute_id: None,
+                    attribute_code: Some("quantity".into()),
+                    context_id: None,
+                    value: json!(5),
+                },
+            ],
+            vec![],
+            json!({}),
+        )
+        .await
+        .unwrap()
+        .id;
+    let default_context = repository
+        .get_context_by_code("default")
+        .await
+        .unwrap()
+        .unwrap()
+        .id;
+
+    let run = repository
+        .start_extension_operation(StartExtensionOperation {
+            extension_id: EXTENSION.into(),
+            expected_release_id: release,
+            operation_id: "inspect".into(),
+            input: json!({
+                "reads": [
+                    {"operation": "record", "record_id": record_id, "context_id": default_context},
+                    {"operation": "blueprint", "code": "unified_counted_item"},
+                    {"operation": "context", "code": "default"},
+                    {"operation": "blueprint", "code": "no_such_blueprint"},
+                ],
+                "intents": [{
+                    "kind": "update", "intent_key": "clear-quantity", "record_id": record_id,
+                    "remove_values": [{"attribute_code": "quantity", "context_id": default_context}]
+                }],
+            }),
+            source_reference: json!({}),
+            destination_reference: json!({}),
+            idempotency_key: "inspect-1".into(),
+            schedule_id: None,
+            configuration_snapshot: None,
+        })
+        .await
+        .unwrap();
+    drain_extension_operations(&repository, store).await;
+    let (status, checkpoint): (String, Value) =
+        sqlx::query_as("SELECT status, checkpoint FROM extension_operation_runs WHERE id=$1")
+            .bind(run)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(status, "completed", "checkpoint: {checkpoint}");
+    let before = &checkpoint["before"];
+    let quantity = before[1]["attributes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|attribute| attribute["code"] == "quantity")
+        .unwrap()["id"]
+        .clone();
+    let quantity_values = |read: &Value| {
+        read["direct_values"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|value| value["attribute_id"] == quantity)
+            .map(|value| value["value"].clone())
+            .collect::<Vec<_>>()
+    };
+
+    // A run reads one record as `api.read` would, resolved in a context.
+    assert_eq!(before[0]["record"]["id"], json!(record_id), "{before}");
+    assert_eq!(
+        before[0]["blueprint"]["blueprint"]["id"],
+        json!(blueprint.0)
+    );
+    assert_eq!(quantity_values(&before[0]), vec![json!(5)]);
+    assert!(before[0]["resolved_values"].is_object(), "{before}");
+    // Configuration can name a blueprint and a context by code.
+    assert_eq!(before[1]["blueprint"]["id"], json!(blueprint.0));
+    assert_eq!(before[1]["blueprint"]["version"], json!(blueprint.1));
+    assert_eq!(before[2]["id"], json!(default_context));
+    assert_eq!(before[3], Value::Null);
+
+    // An integer value is cleared, not overwritten with an empty string.
+    assert_eq!(
+        checkpoint["outcomes"][0]["status"], "applied",
+        "{checkpoint}"
+    );
+    let after = &checkpoint["after"];
+    assert_eq!(quantity_values(&after[0]), Vec::<Value>::new(), "{after}");
+    assert_eq!(after[0]["direct_values"].as_array().unwrap().len(), 1);
 }
 
 #[sqlx::test(migrator = "api::MIGRATOR")]

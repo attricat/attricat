@@ -135,9 +135,12 @@ Zapis wykonany podczas obsługi zdarzenia jest przypisywany użytkownikowi lub t
 { "operation": "lookup", "blueprint_id": "…", "blueprint_version": 3, "attribute_id": "…", "value": "ABC-1" }
 { "operation": "movements", "record_id": "…", "after": 0, "limit": 500 }
 { "operation": "incoming", "record_id": "…", "relationships": [{ "source_blueprint": "order_line", "field": "order" }], "cursor": null, "limit": 100 }
+{ "operation": "record", "record_id": "…", "context_id": "…" }
+{ "operation": "blueprint", "code": "invoice" }
+{ "operation": "context", "code": "default" }
 ```
 
-`page` zwraca `{records, next_cursor}`, do 100 rekordów. Przekazuj `next_cursor` z powrotem, dopóki nie będzie `null`. `changes` przegląda zmiany rekordów Schematu w kolejności zdarzeń; zapisz jego kursor, aby wznowić później. `lookup` zwraca jeden rekord albo `null`. `movements` zwraca historię przesunięć rekordu po numerze kolejnym `after`, tak jak [`GET /v1/records/{id}/movements`](/pl/reference/api/), do 500 pozycji na stronę. Każda zmiana salda aktualizuje też rekord i publikuje `record.updated.v1`, więc obsługa tego zdarzenia może odczytać historię od ostatniego numeru, który widziała. `incoming` zwraca `{items, next_cursor}`: rekordy, których wskazane pola relacji wskazują na rekord, np. linie zamówienia, do 100 na stronę.
+`page` zwraca `{records, next_cursor}`, do 100 rekordów. Przekazuj `next_cursor` z powrotem, dopóki nie będzie `null`. `changes` przegląda zmiany rekordów Schematu w kolejności zdarzeń; zapisz jego kursor, aby wznowić później. `lookup` zwraca jeden rekord albo `null`. `movements` zwraca historię przesunięć rekordu po numerze kolejnym `after`, tak jak [`GET /v1/records/{id}/movements`](/pl/reference/api/), do 500 pozycji na stronę. Każda zmiana salda aktualizuje też rekord i publikuje `record.updated.v1`, więc obsługa tego zdarzenia może odczytać historię od ostatniego numeru, który widziała. `incoming` zwraca `{items, next_cursor}`: rekordy, których wskazane pola relacji wskazują na rekord, np. linie zamówienia, do 100 na stronę. `record` zwraca jeden rekord tak jak `api.read`, `{record, blueprint, direct_values, resolved_values}`, przy czym `resolved_values` tylko wtedy, gdy podasz `context_id`; korzystają z niego operacje, bo nie mogą wywołać `api.read`. `blueprint` zwraca najnowszą opublikowaną wersję Schematu z jego identyfikatorem, wersją i atrybutami, a `context` zwraca kontekst z jego identyfikatorem; oba zwracają `null` dla nieznanego kodu. Dzięki nim konfiguracja może wskazywać Schematy i konteksty kodem, a nowe rekordy można tworzyć w bieżącej wersji Schematu.
 
 `attricat.command.v1` stosuje partię intencji:
 
@@ -156,6 +159,8 @@ Zapis wykonany podczas obsługi zdarzenia jest przypisywany użytkownikowi lub t
 ```
 
 Rodzaje intencji to `create`, `update`, `relationships`, `upsert` i [`annotate`](/pl/extensions/operations/#adnotacje-rekordów). Partia mieści do 100 intencji. Odpowiedź zawiera po jednym wyniku na intencję, `{intent_key, status, record_id, error}`, gdzie `status` to `applied`, `already_applied`, `validated` (przy `dry_run: true`) lub `rejected`. Zachowuj te same klucze intencji przy ponowieniach: już zastosowany klucz intencji jest zgłaszany jako `already_applied` i nie jest zapisywany drugi raz.
+
+Aby wyczyścić wartość, wymień ją w `remove_values` intencji `update` lub `upsert`, jako `{"attribute_code": "due_date", "context_id": "…"}`. Zapisanie `null` lub `""` jako wartości jej nie czyści: `null` nie przechodzi kontroli typu, a `""` jest wartością tylko atrybutów tekstowych. Upsert, który tworzy rekord, pomija `remove_values`.
 
 Upsert dopasowuje rekord po zadeklarowanym atrybucie klucza biznesowego (`lookup_attribute_id` i `lookup_value`), tworzy go tylko wtedy, gdy żaden rekord nie pasuje, i kończy się błędem, jeśli pasuje więcej niż jeden. Zbiory relacji z upsertu są stosowane zarówno wtedy, gdy aktualizuje on dopasowany rekord, jak i wtedy, gdy go tworzy.
 

@@ -354,7 +354,9 @@ components with `storage.extension`. From the browser, reading storage needs
 `records.read` and changing it needs `records.write` across the workspace,
 because server components act on what they find there. The JSON
 `attricat.read.v1` surface additionally provides bounded `page`, `changes`,
-single-attribute `lookup`, `movements` and `incoming` requests; `page` cursors pin a database-clock snapshot
+single-attribute `lookup`, `movements`, `incoming`, single-record `record`
+(the `api.read` response, for operation runs that cannot call `api.read`) and
+code-to-ID `blueprint` and `context` requests; `page` cursors pin a database-clock snapshot
 and `changes` cursors pin a domain-event sequence high-water mark. Cursors are
 opaque and filter/workspace-bound. A `lookup` resolves exactly like an upsert's
 business key (below): a single-attribute unique key on a string attribute uses
@@ -376,7 +378,11 @@ declared unique key on a string attribute, the lookup uses that key's normalized
 revision of the blueprint family; otherwise it matches the exact text among
 records of the requested revision. An upsert's declared relationship sets
 apply whether it updates a match or creates; on create they are written as the
-new record's relationship values.
+new record's relationship values. `update` and `upsert` intents clear scalar
+values through `remove_values` (the record update's selectors), since `null`
+fails the type check; an upsert that creates ignores them. The field is left
+out of the intent's input hash when empty, so intents recorded before it
+existed still replay as `already_applied`.
 `events.emit.v1`
 is implemented only for a manifest-declared, per-contract event export as
 described in [Inter-extension events](#inter-extension-events).
