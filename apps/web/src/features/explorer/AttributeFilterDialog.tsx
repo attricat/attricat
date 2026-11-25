@@ -79,6 +79,11 @@ type Props = {
   onSelectRelationship: (attribute: RelationshipFilterAttribute) => void;
   onSubmit: (filter: AttributeFilter) => void;
   open: boolean;
+  /**
+   * Fields only some of the blueprints a path links to have, with those
+   * blueprints' names.
+   */
+  partialFields?: Record<string, string>;
   relationshipPathsLoading: boolean;
 };
 
@@ -92,6 +97,7 @@ export const AttributeFilterDialog = ({
   onSelectRelationship,
   onSubmit,
   open,
+  partialFields = {},
   relationshipPathsLoading,
 }: Props) => {
   const { t } = useTranslation();
@@ -243,6 +249,13 @@ export const AttributeFilterDialog = ({
                     <ValueTypeIcon valueType={item.value_type} />
                     <Chip label={blueprintName} size="small" />
                     <Typography>{attributeLabel(item)}</Typography>
+                    {partialFields[item.code] && (
+                      <Typography color="text.secondary" variant="caption">
+                        {t('explorer.fieldOnlyOn', {
+                          blueprints: partialFields[item.code],
+                        })}
+                      </Typography>
+                    )}
                   </Stack>
                 </li>
               )}

@@ -424,6 +424,10 @@ pub struct TablePathAttribute {
     pub code: String,
     pub value_type: crate::value_type::ValueType,
     pub sortable: bool,
+    /// For a path through a relationship to several blueprints, the ones that
+    /// declare the leaf when not all of them do; others show no value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub declared_on: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, Serialize)]

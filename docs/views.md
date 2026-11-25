@@ -135,6 +135,16 @@ fixed-depth, leaf-first traversal for paths of up to three hops. Many-valued
 paths are displayable but are not sortable, and columns that resolve to
 non-scalar values are rejected.
 
+A column path may pass through a relationship to
+[several target blueprints](blueprints.md#several-target-blueprints), such as
+`spec.thickness_mm` on a product whose `spec` is a sheet, profile or part. Its
+leaf must exist on at least one target and have one value type on every target
+that declares it; otherwise saving the blueprint fails with
+`422 relationship_path_type_conflict`. A row whose linked record's blueprint
+lacks the leaf has an empty cell and sorts with the rows that have no value.
+The sort walks the same fixed-depth joins and reads leaf values of every
+target blueprint, so no row is looked up per blueprint.
+
 ## Blocks
 
 Container blocks are `stack`, `grid`, `section`, `tabs`, and `accordion`.

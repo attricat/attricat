@@ -8,6 +8,7 @@ pub mod files;
 pub mod pattern_hint;
 pub mod predicate;
 pub mod principal;
+pub mod relationship_path;
 pub mod saved_search;
 pub mod status;
 pub mod system_tags;

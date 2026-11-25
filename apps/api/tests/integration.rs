@@ -57,6 +57,7 @@ mod image_gallery;
 mod lexicon;
 mod lifecycle_credentials;
 mod membership_revocation;
+mod multi_target_paths;
 mod notifications;
 mod oidc_sign_in;
 mod operator_workspaces;

@@ -85,6 +85,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `record_id_taken` | 409 | A batch `create` chose an `record_id` that already exists. |
 | `invalid_search_sort` | 422 | The search can't be sorted that way, for example by a column or publication channel that no longer exists. Drop the sort and search again. |
 | `relationship_path_sort_requires_single_result_version` | 422 | Sorting by a related value across several blueprint revisions. |
+| `relationship_path_type_conflict` | 422 | A relationship path passes through a relationship to several blueprints that declare its next field with different value types, or a relationship with different targets. `details.conflicts` names the blueprints of each kind. |
 | `file_processing` | 409 | The file is not ready to download yet. |
 | `approval_already_decided` | 409 | An agent tool call was already approved or rejected. |
 | `service_unavailable` | 503 | The server is at request capacity, a write conflicted with another and can be retried, or a service the route needs is not set up, such as an AI provider for agent routes. |

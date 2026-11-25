@@ -154,6 +154,11 @@ export const blueprintWithAttributesSchema = z.object({
         code: z.string(),
         value_type: valueTypeSchema,
         sortable: z.boolean(),
+        /**
+         * For a path through a relationship to several blueprints, those
+         * that declare its leaf when not all of them do.
+         */
+        declared_on: z.array(z.string()).optional(),
       }),
     )
     .default([]),

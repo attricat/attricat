@@ -362,6 +362,10 @@ pub enum RepositoryError {
     InvalidHierarchyRelationship,
     #[error("invalid blueprint definition: {0}")]
     InvalidBlueprintDefinition(String),
+    /// The target blueprints a relationship path passes through declare one
+    /// of its segments with different value types or targets.
+    #[error("{0}")]
+    RelationshipPathConflict(attricat_validation::relationship_path::PathError),
     #[error("{0}")]
     InvalidSolutionPackPlan(String),
     #[error("solution-pack asset storage is unavailable")]

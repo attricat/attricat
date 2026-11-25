@@ -40,7 +40,8 @@ fn map_search_error(error: RepositoryError) -> ApiError {
         error @ (RepositoryError::RelationshipSearchBudgetExceeded { .. }
         | RepositoryError::RelationshipSearchTimedOut
         | RepositoryError::Database(_)
-        | RepositoryError::Task(_)) => error.into(),
+        | RepositoryError::Task(_)
+        | RepositoryError::RelationshipPathConflict(_)) => error.into(),
         // The query parser reports its problems as this variant; its
         // "invalid blueprint definition" prefix would misdescribe a query.
         RepositoryError::InvalidBlueprintDefinition(reason) => {

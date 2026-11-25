@@ -14,7 +14,10 @@ use serde_json::{Value, json};
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
+use crate::persistence_rows::{Db, IntoDomain};
 use crate::repository::RepositoryError;
+use crate::repository::relationship_paths::{PathBlueprint, PathLoader, walk_relationship_path};
+use attricat_domain::model::Attribute;
 
 pub(crate) async fn compile_definition(
     transaction: &mut Transaction<'_, Postgres>,
@@ -310,6 +313,58 @@ async fn published_path_segment(
     .await?)
 }
 
+/// Loads the blueprints a table column path reaches inside the transaction
+/// that saves the blueprint, which may have published them.
+struct TransactionPathLoader<'t, 'c> {
+    transaction: &'t mut Transaction<'c, Postgres>,
+    workspace_id: Uuid,
+}
+
+impl PathLoader for TransactionPathLoader<'_, '_> {
+    fn load(
+        &mut self,
+        code: &str,
+    ) -> impl Future<Output = Result<Option<PathBlueprint>, RepositoryError>> + Send {
+        published_path_blueprint(self.transaction, self.workspace_id, code)
+    }
+}
+
+/// The latest published revision of blueprint `code` with its attributes,
+/// as a table column path reaching it sees it inside this transaction.
+async fn published_path_blueprint(
+    transaction: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+    code: &str,
+) -> Result<Option<PathBlueprint>, RepositoryError> {
+    let Some((id, version)) = sqlx::query_as::<_, (Uuid, i64)>(
+        "SELECT id, version FROM blueprints WHERE code = $1 AND workspace_id = $2 AND status = 'published' AND deleted_at IS NULL ORDER BY version DESC LIMIT 1",
+    )
+    .bind(code)
+    .bind(workspace_id)
+    .fetch_optional(&mut **transaction)
+    .await?
+    else {
+        return Ok(None);
+    };
+    let attributes = sqlx::query_as::<_, Db<Attribute>>(
+        r#"SELECT id, blueprint_id, blueprint_version, code, name, value_type, value_schema, extension_type, default_value, file_policy, target_blueprint_code, target_blueprint_codes, cardinality, target_cardinality, hierarchy, tags, context_fallback, context_editable, readonly, generated, balance, target_scope, position, created_at, updated_at, deleted_at
+             FROM attributes
+            WHERE blueprint_id = $1 AND blueprint_version = $2 AND workspace_id = $3 AND deleted_at IS NULL
+            ORDER BY position"#,
+    )
+    .bind(id)
+    .bind(version)
+    .bind(workspace_id)
+    .fetch_all(&mut **transaction)
+    .await?
+    .into_domain();
+    Ok(Some(PathBlueprint {
+        id,
+        code: code.to_owned(),
+        attributes,
+    }))
+}
+
 /// Follows the hops of a `views.explorer.browse_by` path past the first,
 /// which the compiler checked, through the published target blueprints.
 async fn validate_browse_by(
@@ -380,55 +435,35 @@ async fn validate_table_columns(
                     .expect("compiler validated table field")
                     .value_type
             } else {
-                let source = compiled
-                    .attributes
-                    .iter()
-                    .find(|attribute| attribute.code == parts[0])
-                    .expect("compiler validated table relationship");
-                let mut target = source.target_blueprint.clone().ok_or_else(|| {
-                    RepositoryError::InvalidBlueprintDefinition(format!(
-                        "table column '{}' relationship has no target blueprint",
-                        column.field
-                    ))
+                let resolved = walk_relationship_path(
+                    &column.field,
+                    &parts,
+                    &compiled.code,
+                    &compiled.attributes,
+                    TransactionPathLoader {
+                        transaction: &mut *transaction,
+                        workspace_id,
+                    },
+                )
+                .await
+                .map_err(|error| {
+                    error.into_repository(|error| {
+                        RepositoryError::InvalidBlueprintDefinition(format!(
+                            "table column '{}' {error}",
+                            column.field
+                        ))
+                    })
                 })?;
-                let mut leaf_type = None;
-                for (index, field) in parts[1..].iter().enumerate() {
-                    let PathSegment {
-                        value_type,
-                        target_blueprint: next_target,
-                        ..
-                    } = published_path_segment(transaction, workspace_id, &target, field)
-                        .await?
-                        .ok_or_else(|| {
-                            RepositoryError::InvalidBlueprintDefinition(format!(
-                                "table column '{}' path segment '{}' was not found",
-                                column.field, field
-                            ))
-                        })?;
-                    let is_leaf = index + 1 == parts.len() - 1;
-                    if is_leaf {
-                        if value_type == ValueType::Relationship || value_type == ValueType::File {
-                            return Err(RepositoryError::InvalidBlueprintDefinition(format!(
-                                "table column '{}' leaf must be scalar",
-                                column.field
-                            )));
-                        }
-                        leaf_type = Some(value_type);
-                    } else if value_type != ValueType::Relationship {
-                        return Err(RepositoryError::InvalidBlueprintDefinition(format!(
-                            "table column '{}' segment '{}' must be a relationship",
-                            column.field, field
-                        )));
-                    } else {
-                        target = next_target.ok_or_else(|| {
-                            RepositoryError::InvalidBlueprintDefinition(format!(
-                                "table column '{}' segment '{}' has no target blueprint",
-                                column.field, field
-                            ))
-                        })?;
-                    }
+                if matches!(
+                    resolved.value_type,
+                    ValueType::Relationship | ValueType::File
+                ) {
+                    return Err(RepositoryError::InvalidBlueprintDefinition(format!(
+                        "table column '{}' leaf must be scalar",
+                        column.field
+                    )));
                 }
-                leaf_type.expect("relationship table path has a leaf")
+                resolved.value_type
             };
             if let Some(renderer) = &column.renderer {
                 if renderer.id == "attricat.table_image" {

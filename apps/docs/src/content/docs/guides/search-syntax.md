@@ -56,7 +56,7 @@ Blueprint display names are matched without regard to case. If two blueprints sh
 
 The last part of a longer path must be a scalar attribute, not a relationship, file, or JSON attribute. A term can contain only one colon.
 
-A relationship can link to records of several blueprints, such as an `item` that is either a product or a material. A term through it matches the linked records of all of them: `item:steel` searches every attribute of the linked product or material, and `item.name:steel` searches `name` on those that have it. An attribute only one of them has, such as `item.sku:HK*`, matches only that blueprint's records. A path can't continue past such a relationship, so `item.brand.name:…` is rejected.
+A relationship can link to records of several blueprints, such as an `item` that is either a product or a material. A term through it matches the linked records of all of them: `item:steel` searches every attribute of the linked product or material, and `item.name:steel` searches `name` on those that have it. An attribute only one of them has, such as `item.sku:HK*`, matches only that blueprint's records. A path can continue through such a relationship into a relationship its blueprints declare alike: `item.brand.name:acme` follows `brand` on the products that have it. If the blueprints declare the next part differently, for example as a relationship to different blueprints, the term is rejected.
 
 When a one-part selector could be either the blueprint's name or one of its attributes or relationships, the blueprint wins.
 

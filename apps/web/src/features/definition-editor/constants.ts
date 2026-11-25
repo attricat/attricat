@@ -38,6 +38,7 @@ export const valueTypeKey = 'value_type';
 export const codeKey = 'code';
 export const fromKey = 'from';
 export const targetBlueprintKey = 'target_blueprint';
+export const targetBlueprintsKey = 'target_blueprints';
 export const aliasKey = 'alias';
 export const versionKey = 'version';
 

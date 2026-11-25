@@ -10,6 +10,7 @@ use attricat_domain::value_type::ValueType;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use attricat_blueprint::BlueprintKind;
+use attricat_validation::relationship_path::{PathError, WalkError, walk_path};
 use attricat_validation::saved_search;
 use semver::VersionReq;
 use serde::{Deserialize, Serialize};
@@ -779,7 +780,7 @@ fn validate_saved_search(
         .and_then(|sort| sort["field"].as_str())
         .filter(|field| !saved_search::is_system_sort_field(field))
     {
-        validate_attribute_path(target, field, &by_code, &mut referenced_blueprints)
+        walk_explorer_field(target, field, &by_code, &mut referenced_blueprints)
             .map_err(|reason| invalid_state(&reason))?;
     }
     for filter in state
@@ -789,11 +790,9 @@ fn validate_saved_search(
         .flatten()
     {
         let field = filter["field"].as_str().expect("validated filter field");
-        let attribute = walk_attribute_path(target, field, &by_code, &mut referenced_blueprints)
+        let value_type = walk_explorer_field(target, field, &by_code, &mut referenced_blueprints)
             .map_err(|reason| invalid_state(&reason))?;
-        if filter["operator"] == saved_search::FILTER_OPERATOR_IS_SET
-            && !attribute.value_type.is_scalar()
-        {
+        if filter["operator"] == saved_search::FILTER_OPERATOR_IS_SET && !value_type.is_scalar() {
             return Err(invalid_state(&format!(
                 "presence filter '{field}' must select a scalar attribute"
             )));
@@ -906,15 +905,45 @@ fn walk_attribute_path<'a>(
     Err(format!("field '{path}' is empty"))
 }
 
-/// Validates an Explorer attribute path: relationship hops through pack
-/// blueprints ending in an attribute of the last blueprint.
-fn validate_attribute_path(
-    start: &SolutionPackBlueprint,
+/// Resolves the field of a sort or attribute filter, as Explorer does: a
+/// path may pass through a relationship to several pack blueprints, and its
+/// next segment resolves against each, by the rule in
+/// [`attricat_validation::relationship_path`]. Returns the leaf's value type.
+fn walk_explorer_field<'a>(
+    start: &'a SolutionPackBlueprint,
     path: &str,
-    by_code: &HashMap<&str, &SolutionPackBlueprint>,
+    by_code: &HashMap<&str, &'a SolutionPackBlueprint>,
     referenced: &mut BTreeSet<String>,
-) -> Result<(), String> {
-    walk_attribute_path(start, path, by_code, referenced).map(|_| ())
+) -> Result<ValueType, String> {
+    let segments = saved_search::field_path(path)?;
+    if let [leaf] = segments.as_slice() {
+        return start
+            .effective_attributes()
+            .iter()
+            .find(|attribute| attribute.code == *leaf)
+            .map(|attribute| attribute.value_type)
+            .ok_or_else(|| format!("field '{path}' references unknown attribute '{leaf}'"));
+    }
+    let walked = walk_path(
+        path,
+        &segments,
+        (start.code(), start.effective_attributes()),
+        |code| {
+            let target = by_code.get(code).ok_or_else(|| {
+                format!("field '{path}' links to '{code}', which is not a pack blueprint")
+            })?;
+            referenced.insert(target.key().to_owned());
+            Ok(Some((target.code(), target.effective_attributes())))
+        },
+    )
+    .map_err(|error| match error {
+        WalkError::Load(reason) => reason,
+        WalkError::Path(PathError::Unknown { segment }) => {
+            format!("field '{path}' references unknown attribute '{segment}'")
+        }
+        WalkError::Path(error) => format!("field '{path}' {error}"),
+    })?;
+    Ok(walked.leaf.value_type)
 }
 
 /// Validates a relationship facet path, which must end in a relationship.

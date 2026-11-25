@@ -56,7 +56,7 @@ Nazwy wyświetlane schematów są dopasowywane bez rozróżniania wielkości lit
 
 Ostatni człon dłuższej ścieżki musi być atrybutem skalarnym, a nie relacją, plikiem ani atrybutem JSON. Termin może zawierać tylko jeden dwukropek.
 
-Relacja może wskazywać rekordy kilku schematów, na przykład `item`, który jest produktem albo materiałem. Termin przez taką relację dopasowuje powiązane rekordy wszystkich tych schematów: `item:stal` przeszukuje wszystkie atrybuty powiązanego produktu lub materiału, a `item.name:stal` przeszukuje `name` w tych, które go mają. Atrybut, który ma tylko jeden z nich, na przykład `item.sku:HK*`, dopasowuje tylko rekordy tego schematu. Ścieżka nie może przejść dalej przez taką relację, więc `item.brand.name:…` jest odrzucane.
+Relacja może wskazywać rekordy kilku schematów, na przykład `item`, który jest produktem albo materiałem. Termin przez taką relację dopasowuje powiązane rekordy wszystkich tych schematów: `item:stal` przeszukuje wszystkie atrybuty powiązanego produktu lub materiału, a `item.name:stal` przeszukuje `name` w tych, które go mają. Atrybut, który ma tylko jeden z nich, na przykład `item.sku:HK*`, dopasowuje tylko rekordy tego schematu. Ścieżka może przejść przez taką relację dalej, do relacji, którą jej schematy deklarują tak samo: `item.brand.name:acme` podąża za `brand` w produktach, które ją mają. Jeśli schematy deklarują następną część różnie, na przykład jako relację do różnych schematów, termin jest odrzucany.
 
 Gdy jednoczłonowy selektor może oznaczać zarówno nazwę schematu, jak i jeden z jego atrybutów lub jedną z relacji, pierwszeństwo ma schemat.
 

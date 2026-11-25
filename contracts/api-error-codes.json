@@ -116,6 +116,7 @@
     "relationship_cycle",
     "relationship_hierarchy_violations",
     "relationship_path_sort_requires_single_result_version",
+    "relationship_path_type_conflict",
     "relationship_target_type_mismatch",
     "request_timeout",
     "reserved_context_code",

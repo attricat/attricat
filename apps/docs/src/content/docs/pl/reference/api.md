@@ -85,6 +85,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `record_id_taken` | 409 | Operacja `create` we wsadzie wybrała `record_id`, który już istnieje. |
 | `invalid_search_sort` | 422 | Wyszukiwania nie można tak posortować, np. według kolumny lub kanału publikacji, które już nie istnieją. Usuń sortowanie i wyszukaj ponownie. |
 | `relationship_path_sort_requires_single_result_version` | 422 | Sortowanie według powiązanej wartości w kilku wersjach schematu. |
+| `relationship_path_type_conflict` | 422 | Ścieżka relacji przechodzi przez relację do kilku schematów, które deklarują jej następny atrybut z różnymi typami wartości lub relację do różnych schematów. `details.conflicts` wymienia schematy każdego rodzaju. |
 | `file_processing` | 409 | Plik nie jest jeszcze gotowy do pobrania. |
 | `approval_already_decided` | 409 | Wywołanie narzędzia przez agenta zostało już zatwierdzone lub odrzucone. |
 | `service_unavailable` | 503 | Serwer osiągnął limit równoczesnych żądań, zapis był w konflikcie z innym i można go ponowić albo usługa potrzebna trasie nie jest skonfigurowana, na przykład dostawca AI dla tras agentów. |

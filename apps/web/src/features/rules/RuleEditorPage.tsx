@@ -20,6 +20,7 @@ import {
 } from '../blueprints/queryOptions';
 import { contextLabel } from '../contexts/defaultContext';
 import { contextListOptions } from '../contexts/queryOptions';
+import { referenceAttribute } from '../definition-editor/definitionReferences';
 import { definitionKinds } from '../definition-editor/constants';
 import {
   DefinitionEditorActions,
@@ -102,12 +103,7 @@ export const RuleEditorPage = ({ ruleId }: { ruleId?: string }) => {
     blueprintRevisionOptions(scope.blueprintId, publishedVersion),
   );
   const scopeAttributes = useMemo(
-    () =>
-      blueprint.data?.attributes.map((attribute) => ({
-        code: attribute.code,
-        targetBlueprint: attribute.target_blueprint_code ?? undefined,
-        valueType: attribute.value_type,
-      })),
+    () => blueprint.data?.attributes.map(referenceAttribute),
     [blueprint.data],
   );
 

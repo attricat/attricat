@@ -43,8 +43,12 @@ authorized member. The pack's blueprint, relationship target, and context
 references are replaced with the plan's physical blueprint and context codes,
 and the state is validated and normalized by the same code as an ordinary
 write. Field paths must resolve through the pack's blueprints, following at
-most three single-target relationship hops like Explorer, and a relationship
-facet's target blueprint must be one of the relationship's targets. Packs cannot seed a pinned
+most three relationship hops like Explorer. A sort or attribute filter may pass
+through a relationship to several pack blueprints, resolved by the
+[rule for several target blueprints](blueprints.md#several-target-blueprints),
+and a pack whose targets declare a segment differently is rejected. A
+relationship facet's or `browseBy` path's hops still need a single target, and
+its target blueprint must be one of the relationship's targets. Packs cannot seed a pinned
 blueprint `version` or selected relationship record IDs, because both identify
 workspace data. Like any named view, only its owner can update or delete it
 afterwards.

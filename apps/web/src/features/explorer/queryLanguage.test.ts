@@ -324,8 +324,38 @@ describe('relationships to several blueprints', () => {
     expect(errors('item.missing:x')).toContain('unknownField');
   });
 
-  it('does not continue a path past them', () => {
-    expect(errors('item.brand.name:x')).toContain('severalTargets');
+  it('continues a path through a relationship only some targets have', () => {
+    const withBrand: QuerySchema = {
+      ...stock,
+      targets: new Map([...stock.targets, ['brand', [scalar('name')]]]),
+    };
+    expect(
+      highlightQuery('item.brand.name:x', withBrand)
+        .map((segment) => segment.error?.code)
+        .filter(Boolean),
+    ).toEqual([]);
+    expect(queryTargetCodes(withBrand, 'item.brand.na').sort()).toEqual([
+      'brand',
+      'material',
+      'product',
+    ]);
+  });
+
+  it('refuses a relationship the targets declare differently', () => {
+    const conflicting: QuerySchema = {
+      ...stock,
+      targets: new Map([
+        ['product', [relationship('brand', 'brand')]],
+        ['material', [relationship('brand', 'supplier')]],
+        ['brand', [scalar('name')]],
+        ['supplier', [scalar('name')]],
+      ]),
+    };
+    expect(
+      highlightQuery('item.brand.name:x', conflicting)
+        .map((segment) => segment.error?.code)
+        .filter(Boolean),
+    ).toContain('conflictingTargets');
   });
 
   it('loads every target and suggests their fields', () => {

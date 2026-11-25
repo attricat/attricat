@@ -893,3 +893,90 @@ attributes:
     page.getByRole('cell', { name: 'v1 · Outdated', exact: true }),
   ).toBeVisible();
 });
+
+test('shows, sorts and filters a path through a relationship to several blueprints', async ({
+  page,
+}) => {
+  const id = suffix();
+  const spec = (kind: string, extra = '') =>
+    createRecordBlueprint(
+      `${kind}_${id}`,
+      `Spec ${kind}`,
+      `attributes:
+  - code: title
+    value_type: string
+  - code: thickness_mm
+    value_type: number${extra}`,
+    );
+  const sheet = await spec(
+    'sheet',
+    '\n  - code: width_mm\n    value_type: number',
+  );
+  const part = await spec('part');
+  const code = `spec_product_${id}`;
+  const product = await createRecordBlueprint(
+    code,
+    'Spec products',
+    `attributes:
+  - code: title
+    value_type: string
+  - code: spec
+    value_type: relationship
+    cardinality: one
+    target_blueprints: [sheet_${id}, part_${id}]`,
+    {
+      views: `views:
+  table:
+    type: table
+    columns:
+      - {field: title, label: Product}
+      - {field: spec.thickness_mm, label: Thickness}
+      - {field: spec.width_mm, label: Width}`,
+    },
+  );
+  for (const [blueprint, title, values] of [
+    [
+      sheet,
+      'Thick sheet',
+      [scalar('thickness_mm', 3), scalar('width_mm', 1250)],
+    ],
+    [part, 'Thin part', [scalar('thickness_mm', 1)]],
+  ] as const) {
+    const target = await createRecord(blueprint, [
+      scalar('title', title),
+      ...values,
+    ]);
+    await createRecord(product, [
+      scalar('title', `${title} product`),
+      relationship('spec', target.id),
+    ]);
+  }
+
+  await page.goto(`/?blueprint=${code}`);
+  await expect(page.getByText('2 results')).toBeVisible();
+  const row = (title: string) =>
+    page.getByRole('row').filter({ hasText: `${title} product` });
+  await expect(row('Thick sheet')).toContainText('1250');
+  await expect(row('Thin part')).toContainText('1');
+
+  // Sorting by the related thickness puts the thin part first.
+  await page.getByRole('button', { name: 'Thickness' }).click();
+  await expect(page.getByRole('row').nth(1)).toContainText('Thin part product');
+
+  const filters = page.getByRole('group', { name: 'Filters' });
+  await filters.getByRole('button', { name: 'Add filter' }).click();
+  const filterDialog = page.getByRole('dialog', { name: /^Add filter/ });
+  await filterDialog
+    .getByRole('combobox', { name: 'Field', exact: true })
+    .click();
+  await expect(
+    page.locator('[role="option"][data-value="spec.width_mm"]'),
+  ).toContainText(`Only on Spec sheet`);
+  await page.locator('[role="option"][data-value="spec.thickness_mm"]').click();
+  await filterDialog.getByLabel('Operator').click();
+  await page.getByRole('option', { name: 'Greater than', exact: true }).click();
+  await filterDialog.getByLabel('Value').fill('2');
+  await filterDialog.getByLabel('Value').press('Enter');
+  await expect(page.getByText('1 result', { exact: true })).toBeVisible();
+  await expect(row('Thick sheet')).toBeVisible();
+});

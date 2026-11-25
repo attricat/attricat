@@ -8,21 +8,32 @@ const cursorMarker = '|';
 
 const references: DefinitionReferences = {
   blueprintAttributes: vi.fn(async (code: string) =>
-    code === 'category'
+    code === 'sheet'
       ? [
-          { code: 'name', valueType: 'string' },
-          {
-            code: 'parent',
-            targetBlueprint: 'category',
-            valueType: 'relationship',
-          },
+          { code: 'thickness_mm', valueType: 'number' },
+          { code: 'width_mm', valueType: 'number' },
+          { code: 'gauge', valueType: 'number' },
         ]
-      : code === 'seo'
+      : code === 'part'
         ? [
-            { code: 'meta_title', valueType: 'string' },
-            { code: 'meta_description', valueType: 'string' },
+            { code: 'thickness_mm', valueType: 'number' },
+            { code: 'gauge', valueType: 'string' },
           ]
-        : [],
+        : code === 'category'
+          ? [
+              { code: 'name', valueType: 'string' },
+              {
+                code: 'parent',
+                targetBlueprints: ['category'],
+                valueType: 'relationship',
+              },
+            ]
+          : code === 'seo'
+            ? [
+                { code: 'meta_title', valueType: 'string' },
+                { code: 'meta_description', valueType: 'string' },
+              ]
+            : [],
   ),
   blueprints: vi.fn(async () => [
     {
@@ -230,6 +241,18 @@ describe('definitionCompletions', () => {
     ).toBe('pa');
   });
 
+  it('follows a relationship to several blueprints in table column paths', async () => {
+    const attributes = `attributes:\n  - code: spec\n    value_type: relationship\n    target_blueprints: [sheet, part]\n`;
+    const table = `${header}views:\n  table:\n    type: table\n    columns:\n`;
+    const fields = await complete(
+      `${table}      - field: 'spec.|'\n${attributes}`,
+    );
+    // A field they declare differently is left out; one only some declare
+    // says where it is.
+    expect(fields.labels).toEqual(['thickness_mm', 'width_mm']);
+    expect(fields.suggestions[1].detail).toBe('number · only on sheet');
+  });
+
   it('completes include selections and mixin references', async () => {
     const includes = `includes:\n  - alias: seo\n    code: seo\n    version: 2\n`;
     const mixins = await complete(`${header}includes:\n  - code: |`);
@@ -345,7 +368,7 @@ predicate:
           { code: 'title', valueType: 'string' },
           {
             code: 'brand',
-            targetBlueprint: 'brand',
+            targetBlueprints: ['brand'],
             valueType: 'relationship',
           },
         ],

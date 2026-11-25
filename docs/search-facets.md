@@ -60,8 +60,12 @@ that targets the same blueprint. Without one, the facet is a one-level picker.
 A source may also be a relationship path of up to three hops, such as
 `model.brand` on a vehicle whose `model` targets `model` and whose model's
 `brand` targets `brand`. Every hop must be a relationship with a single target
-blueprint and `cardinality: one`, the rule for sortable relationship table
-paths, so each source reaches at most one node. Hops after the first are read
+blueprint and `cardinality: one`, so each source reaches at most one node.
+Unlike table columns, filters and `relationship_filters`, a facet path cannot
+pass through a relationship to
+[several target blueprints](blueprints.md#several-target-blueprints): its
+nodes, counts and hierarchy field come from one blueprint's records, and
+merging trees of several blueprints needs its own design. Hops after the first are read
 from the latest published revision of the previous hop's target. The last
 hop's target holds the facet's nodes and supplies the hierarchy field.
 

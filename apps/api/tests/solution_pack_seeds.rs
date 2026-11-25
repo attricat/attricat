@@ -953,3 +953,162 @@ async fn unapplied_sample_file_staging_is_released_for_cleanup(pool: PgPool) {
     );
     server.abort();
 }
+
+/// A spec blueprint of the multi-target pack: `thickness_type` is the type of
+/// its `thickness_mm`.
+fn spec_blueprint(code: &str, thickness_type: &str) -> String {
+    format!(
+        r#"
+format_version: 1
+code: {code}
+name: {code}
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: thickness_mm
+    value_type: {thickness_type}
+"#
+    )
+}
+
+const SPEC_PRODUCT_BLUEPRINT: &[u8] = br#"
+format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [sku]
+  table:
+    type: table
+    columns:
+      - {field: sku}
+      - {field: spec.thickness_mm}
+attributes:
+  - code: sku
+    value_type: string
+  - code: spec
+    value_type: relationship
+    cardinality: one
+    target_blueprints: [blueprints/sheet, blueprints/part]
+"#;
+const THICK_SEARCH: &[u8] = br#"{"format_version":1,"kind":"solution_pack_saved_search","name":"Thick specs","state":{"blueprint":"blueprints/product","attributeFilters":[{"field":"spec.thickness_mm","operator":"gte","value":2}],"sort":{"field":"spec.thickness_mm","direction":"desc"}}}"#;
+
+/// A pack whose saved search filters and sorts products by a parameter of
+/// their spec, a sheet or a part; `part_thickness` is the part's type of it.
+fn spec_archive(part_thickness: &str) -> Vec<u8> {
+    let sheet = spec_blueprint("sheet", "number");
+    let part = spec_blueprint("part", part_thickness);
+    let mut manifest = manifest("attricat.spec-seeds", "1.0.0");
+    manifest["resources"] = json!({
+        "blueprints": [
+            resource("blueprints/product", "blueprints/product.yaml", SPEC_PRODUCT_BLUEPRINT),
+            resource("blueprints/sheet", "blueprints/sheet.yaml", sheet.as_bytes()),
+            resource("blueprints/part", "blueprints/part.yaml", part.as_bytes()),
+        ],
+        "saved_searches": [resource("saved-searches/thick", "saved-searches/thick.json", THICK_SEARCH)],
+    });
+    archive(
+        &manifest,
+        &[
+            ("blueprints/product.yaml", SPEC_PRODUCT_BLUEPRINT),
+            ("blueprints/sheet.yaml", sheet.as_bytes()),
+            ("blueprints/part.yaml", part.as_bytes()),
+            ("saved-searches/thick.json", THICK_SEARCH),
+        ],
+    )
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn saved_search_seeds_follow_a_relationship_to_several_blueprints(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+
+    // Targets that disagree on the parameter's type are refused offline.
+    let conflicting = client
+        .post(format!("{base_url}/solution-packs/inspect"))
+        .header("content-type", "application/zstd")
+        .body(spec_archive("string"))
+        .send()
+        .await
+        .unwrap();
+    let (status, body) = status_json(conflicting).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("different value types"),
+        "{body}"
+    );
+
+    let plan = create_plan(
+        &client,
+        &base_url,
+        spec_archive("number"),
+        "prefix=spec&blueprint_publication=publish",
+        &[],
+    )
+    .await;
+    let (status, plan) = status_json(plan).await;
+    assert_eq!(status, StatusCode::CREATED, "{plan}");
+    assert_eq!(plan["ready"], true, "{plan}");
+    apply(&client, &base_url, &plan).await;
+
+    let searches = get_json(&client, format!("{base_url}/saved-views")).await;
+    let search = searches
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|view| view["name"] == "Thick specs")
+        .expect("seeded search is listed");
+    assert_eq!(search["state"]["blueprint"], "spec_product");
+    assert_eq!(
+        search["state"]["attributeFilters"][0]["field"],
+        "spec.thickness_mm"
+    );
+
+    let mut skus = Vec::new();
+    for (blueprint, thickness, sku) in [("spec_sheet", 3, "A"), ("spec_part", 1, "B")] {
+        let target = create_record_with(
+            &client,
+            &base_url,
+            blueprint,
+            json!([scalar("thickness_mm", thickness)]),
+        )
+        .await;
+        create_record_with(
+            &client,
+            &base_url,
+            "spec_product",
+            json!([scalar("sku", sku), relationship("spec", &target)]),
+        )
+        .await;
+        skus.push(sku);
+    }
+    let page = expect_success(
+        client
+            .post(format!("{base_url}/v1/records/search"))
+            .json(&json!({
+                "blueprint": {"code": "spec_product"},
+                "filters": search["state"]["attributeFilters"],
+                "sort": search["state"]["sort"],
+            }))
+            .send()
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(page["items"].as_array().unwrap().len(), 1, "{page}");
+    assert_eq!(
+        page["items"][0]["table_values"]["spec.thickness_mm"],
+        json!([3])
+    );
+    server.abort();
+}

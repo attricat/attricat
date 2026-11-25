@@ -13,7 +13,10 @@ import {
   type QueryCursorContext,
   type QuerySchema,
 } from './queryLanguage';
-import { allowedTargetBlueprints } from '../records/relationshipTargets';
+import {
+  allowedTargetBlueprints,
+  frontierAttributes,
+} from '../records/relationshipTargets';
 
 /** Keeps the dropdown scannable; typing narrows longer lists. */
 const maximumQuerySuggestions = 50;
@@ -113,7 +116,13 @@ const fieldSuggestions = (
   for (const attribute of resolved.attributes) {
     if (attribute.value_type === attributeValueTypes.relationship) {
       const targets = allowedTargetBlueprints(attribute);
-      if (!allowRelationships || targets.length === 0) continue;
+      // A relationship its blueprints declare differently leads nowhere.
+      if (
+        !allowRelationships ||
+        targets.length === 0 ||
+        resolved.conflicts.has(attribute.code.toLowerCase())
+      )
+        continue;
       suggestions.push({
         kind: 'relationship',
         code: attribute.code,
@@ -240,9 +249,18 @@ export const queryTargetCodes = (
       );
       const targets = relationship ? allowedTargetBlueprints(relationship) : [];
       for (const code of targets) codes.add(code);
-      // Only a hop to one blueprint can be followed further.
+      // A hop is followed further once every blueprint it links to loaded.
+      const loaded = targets.map((code) => schema.targets.get(code));
       attributes =
-        targets.length === 1 ? schema.targets.get(targets[0]) : undefined;
+        targets.length > 0 && loaded.every(Boolean)
+          ? frontierAttributes(
+              targets.map((code, index) => ({
+                code,
+                attributes: loaded[index]!,
+              })),
+              (code) => code.toLowerCase(),
+            ).attributes
+          : undefined;
     }
   };
   for (const term of query.split(/\s+/)) {

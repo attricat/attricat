@@ -3,6 +3,7 @@ use super::{record_projection::display_label, system_annotations::validate_syste
 use crate::model::ExportStatusFilter;
 use attricat_domain::constants::DEFAULT_CONTEXT_CODE;
 use attricat_domain::states::{DataQualityFilter, RuleFindingState};
+use attricat_validation::relationship_path::{PathError, resolve_segment};
 use attricat_validation::saved_search::MAX_RELATIONSHIP_HOPS;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
@@ -46,7 +47,9 @@ pub struct RecordSearchSort {
     pub field: String,
     pub relationship_path: Vec<String>,
     pub leaf_field: String,
-    pub leaf_blueprint_id: Uuid,
+    /// The blueprints the sorted path may end in; a path through a
+    /// relationship to several blueprints ends in each.
+    pub leaf_blueprint_ids: Vec<Uuid>,
     pub value_type: ValueType,
     pub descending: bool,
     pub effective_source_version: Option<i64>,
@@ -1503,10 +1506,10 @@ impl AttricatRepository {
         let direction = if sort.descending { "DESC" } else { "ASC" };
         let workspace_id = self.workspace_id.0;
         let leaf_attribute_ids = sqlx::query_scalar::<_, Uuid>(
-            "SELECT id FROM attributes WHERE workspace_id = $1 AND blueprint_id = $2 AND code = $3 AND value_type = $4 AND deleted_at IS NULL",
+            "SELECT id FROM attributes WHERE workspace_id = $1 AND blueprint_id = ANY($2) AND code = $3 AND value_type = $4 AND deleted_at IS NULL",
         )
         .bind(workspace_id)
-        .bind(sort.leaf_blueprint_id)
+        .bind(&sort.leaf_blueprint_ids)
         .bind(&sort.leaf_field)
         .bind(sort.value_type.as_str())
         .fetch_all(&self.pool)
@@ -1618,6 +1621,9 @@ impl AttricatRepository {
                     .bind(workspace_id)
                     .bind(&sort.context.ids)
                     .bind(export_status_param(export_status))
+                    // The leaf attributes the value phase sorts by, so each
+                    // record lands in exactly one phase.
+                    .bind(&leaf_attribute_ids)
                     .fetch_all(&self.pool)
                     .await?;
             rows.append(&mut null_rows);
@@ -1638,7 +1644,7 @@ impl AttricatRepository {
         &self,
         items: &mut [RecordPreview],
         paths: &HashMap<String, ValueType>,
-        relationships: &HashMap<String, String>,
+        relationships: &HashMap<String, Vec<String>>,
         context: &SearchContext,
     ) -> Result<(), RepositoryError> {
         let (mut values, related) = tokio::try_join!(
@@ -1964,7 +1970,8 @@ impl AttricatRepository {
                     AND target.workspace_id = $3 AND target.deleted_at IS NULL
                    JOIN blueprints target_blueprint ON target_blueprint.id = target.blueprint_id
                     AND target_blueprint.version = target.blueprint_version
-                    AND target_blueprint.code = a.target_blueprint_code
+                    AND (target_blueprint.code = a.target_blueprint_code
+                         OR target_blueprint.code = ANY(a.target_blueprint_codes))
                   WHERE {edge_context}"#
                     .replace("{edge_context}", &resolved_context("av", "a", "$4")),
             ))
@@ -2085,7 +2092,7 @@ impl AttricatRepository {
     async fn related_table_previews(
         &self,
         items: &[RecordPreview],
-        relationships: &HashMap<String, String>,
+        relationships: &HashMap<String, Vec<String>>,
         context: &SearchContext,
     ) -> Result<Option<HashMap<Uuid, HashMap<String, Vec<RelatedRecordPreview>>>>, RepositoryError>
     {
@@ -2107,10 +2114,10 @@ impl AttricatRepository {
         let requested = serde_json::to_value(
             relationships
                 .iter()
-                .map(|(attribute_code, target_blueprint_code)| {
+                .map(|(attribute_code, target_blueprint_codes)| {
                     serde_json::json!({
                         "attribute_code": attribute_code,
-                        "target_blueprint_code": target_blueprint_code,
+                        "target_blueprint_codes": target_blueprint_codes,
                     })
                 })
                 .collect::<Vec<_>>(),
@@ -2135,9 +2142,8 @@ impl AttricatRepository {
                   AND a.deleted_at IS NULL
                   AND {{edge_context}}
                  JOIN LATERAL jsonb_to_recordset($2::jsonb)
-                    AS requested(attribute_code text, target_blueprint_code text)
+                    AS requested(attribute_code text, target_blueprint_codes jsonb)
                     ON requested.attribute_code = a.code
-                   AND requested.target_blueprint_code = a.target_blueprint_code
                  JOIN attribute_contexts context ON context.id = av.context_id
                   AND context.workspace_id = $4
                  JOIN records target ON target.id = av.relationship_target_record_id
@@ -2145,6 +2151,7 @@ impl AttricatRepository {
                  JOIN blueprints target_blueprint ON target_blueprint.id = target.blueprint_id
                   AND target_blueprint.workspace_id = $4
                   AND target_blueprint.version = target.blueprint_version
+                  AND requested.target_blueprint_codes ? target_blueprint.code
                 WHERE source.id = ANY($1)
                   AND source.workspace_id = $4 AND source.deleted_at IS NULL
                 ORDER BY source.id, a.code, context.code, av.id"#)
@@ -2990,63 +2997,67 @@ impl AttricatRepository {
     }
 
     /// Walks named relationships from the selected blueprint, returning the
-    /// relationship codes, the blueprint each hop starts from, and the
-    /// blueprints the path ends on. The last hop may link to several
-    /// blueprints; a hop followed by another needs one to continue in.
+    /// relationship codes, the blueprints each hop starts from, and the
+    /// blueprints the path ends on. A hop may link to several blueprints: the
+    /// path continues in those its declarations agree on, by the rule in
+    /// [`attricat_validation::relationship_path`].
     async fn search_relationship_path(
         &self,
         selected: &BlueprintWithAttributes,
         path: &[&str],
-    ) -> Result<(Vec<String>, Vec<Uuid>, Vec<BlueprintWithAttributes>), RepositoryError> {
-        let mut current = selected.clone();
+    ) -> Result<(Vec<String>, Vec<Vec<Uuid>>, Vec<BlueprintWithAttributes>), RepositoryError> {
+        let selector = path.join(".");
+        let mut frontier = vec![selected.clone()];
         let mut fields = Vec::new();
         let mut source_blueprint_ids = Vec::new();
-        for (hop, relationship_name) in path.iter().enumerate() {
-            let relationship = current
-                .attributes
+        for relationship_name in path {
+            let declarations: Vec<(&str, Option<&Attribute>)> = frontier
                 .iter()
-                .find(|a| {
-                    a.code.eq_ignore_ascii_case(relationship_name)
-                        && a.value_type == ValueType::Relationship
+                .map(|blueprint| {
+                    (
+                        blueprint.blueprint.code.as_str(),
+                        blueprint
+                            .attributes
+                            .iter()
+                            .find(|a| a.code.eq_ignore_ascii_case(relationship_name)),
+                    )
                 })
-                .ok_or_else(|| {
+                .collect();
+            let path_error = |error: PathError| match error {
+                error if error.is_conflict() => RepositoryError::RelationshipPathConflict(error),
+                PathError::Unknown { .. } | PathError::NotRelationship { .. } => {
                     RepositoryError::InvalidBlueprintDefinition(format!(
-                        "unknown relationship '{}' in search path",
-                        relationship_name
+                        "unknown relationship '{relationship_name}' in search path"
                     ))
-                })?;
-            fields.push(relationship.code.clone());
-            source_blueprint_ids.push(current.blueprint.id);
-            let codes = relationship.declared_target_codes();
-            if codes.is_empty() {
-                return Err(RepositoryError::InvalidBlueprintDefinition(format!(
-                    "relationship '{}' names no target blueprint, so a search path cannot follow it",
-                    relationship.code
-                )));
-            }
-            if hop + 1 == path.len() {
-                let mut targets = Vec::with_capacity(codes.len());
-                for code in &codes {
-                    targets.push(
-                        self.get_blueprint_by_code(code)
-                            .await?
-                            .ok_or(RepositoryError::NotFound("target blueprint"))?,
-                    );
                 }
-                return Ok((fields, source_blueprint_ids, targets));
-            }
-            let [code] = codes.as_slice() else {
-                return Err(RepositoryError::InvalidBlueprintDefinition(format!(
-                    "relationship '{}' links to several blueprints, so a search path cannot continue past it",
-                    relationship.code
-                )));
+                error => RepositoryError::InvalidBlueprintDefinition(error.to_string()),
             };
-            current = self
-                .get_blueprint_by_code(code)
-                .await?
-                .ok_or(RepositoryError::NotFound("target blueprint"))?;
+            let segment =
+                resolve_segment(&selector, relationship_name, &declarations).map_err(path_error)?;
+            let targets = segment.next_frontier(&selector).map_err(path_error)?;
+            fields.push(segment.first().code.clone());
+            source_blueprint_ids.push(
+                frontier
+                    .iter()
+                    .filter(|blueprint| {
+                        segment
+                            .declarations
+                            .iter()
+                            .any(|(code, _)| *code == blueprint.blueprint.code)
+                    })
+                    .map(|blueprint| blueprint.blueprint.id)
+                    .collect(),
+            );
+            let mut next = Vec::with_capacity(targets.len());
+            for code in &targets {
+                // A target never published has no records to reach.
+                if let Some(target) = self.get_blueprint_by_code(code).await? {
+                    next.push(target);
+                }
+            }
+            frontier = next;
         }
-        Ok((fields, source_blueprint_ids, vec![current]))
+        Ok((fields, source_blueprint_ids, frontier))
     }
 
     async fn ensure_unambiguous_name(
@@ -3174,12 +3185,12 @@ impl AttricatRepository {
                   AND source.workspace_id = $4 AND target.workspace_id = $4
                   AND av.workspace_id = $4 AND a.workspace_id = $4
                   AND av.relationship_target_record_id = ANY($1) AND a.value_type = 'relationship'
-                  AND ($2::uuid IS NULL OR source.blueprint_id = $2)
+                  AND ($2::uuid[] IS NULL OR source.blueprint_id = ANY($2))
                   AND ($3::text IS NULL OR a.code = $3)
                 ORDER BY source.id, a.code, av.relationship_target_record_id"#,
             )
             .bind(&level)
-            .bind(path_source_blueprints.and_then(|ids| ids.get(ids.len() - depth)))
+            .bind(path_source_blueprints.and_then(|ids| ids.get(ids.len() - depth).cloned()))
             .bind(
                 path_fields
                     .and_then(|fields| fields.get(fields.len() - depth))
@@ -3574,7 +3585,8 @@ enum TermPlan {
     /// the term is matched on (with `attribute`, the ones that have it).
     Relationship {
         fields: Vec<String>,
-        source_blueprint_ids: Vec<Uuid>,
+        /// The blueprints each hop starts from.
+        source_blueprint_ids: Vec<Vec<Uuid>>,
         target_blueprint_ids: Vec<Uuid>,
         attribute: Option<String>,
     },
@@ -3582,7 +3594,7 @@ enum TermPlan {
     /// on the selected blueprint or reached through the relationship path.
     Ids {
         fields: Vec<String>,
-        source_blueprint_ids: Vec<Uuid>,
+        source_blueprint_ids: Vec<Vec<Uuid>>,
         target_blueprint_ids: Vec<Uuid>,
         ids: Vec<Uuid>,
     },
@@ -3845,6 +3857,7 @@ fn relationship_sort_forward_joins(depth: usize) -> Result<String, RepositoryErr
          AND sort_attribute.blueprint_version = {source}.blueprint_version \
          AND sort_attribute.workspace_id = $14 AND sort_attribute.code = $11 \
          AND sort_attribute.value_type = $12 AND sort_attribute.deleted_at IS NULL \
+         AND sort_attribute.id = ANY($17) \
          LEFT JOIN attribute_values sort_value ON sort_value.record_id = {source}.id \
          AND sort_value.workspace_id = $14 AND sort_value.attribute_id = sort_attribute.id \
          AND sort_value.active AND sort_value.relationship_target_record_id IS NULL \

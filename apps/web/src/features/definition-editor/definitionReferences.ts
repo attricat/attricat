@@ -1,5 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { referenceStaleTimeMs } from './constants';
+import type { Attribute } from '../records/api';
+import { allowedTargetBlueprints } from '../records/relationshipTargets';
 import { blueprintByCodeOptions } from '../records/queryOptions';
 import { contextListOptions } from '../contexts/queryOptions';
 import { blueprintCatalogueOptions } from '../blueprints/queryOptions';
@@ -28,7 +30,8 @@ export type ReferenceEditor = {
 
 export type ReferenceAttribute = {
   code: string;
-  targetBlueprint?: string;
+  /** A relationship's target blueprints; none for any blueprint. */
+  targetBlueprints?: string[];
   valueType: string;
 };
 
@@ -53,6 +56,15 @@ export type DefinitionReferences = {
   scopeAttributes?: readonly ReferenceAttribute[];
 };
 
+/** An attribute as definition references describe it. */
+export const referenceAttribute = (
+  attribute: Attribute,
+): ReferenceAttribute => ({
+  code: attribute.code,
+  targetBlueprints: allowedTargetBlueprints(attribute),
+  valueType: attribute.value_type,
+});
+
 const orEmpty = async <T>(lookup: () => Promise<T[]>) => {
   try {
     return await lookup();
@@ -70,11 +82,7 @@ export const createDefinitionReferences = (
         ...blueprintByCodeOptions(code, version),
         staleTime: referenceStaleTimeMs,
       });
-      return blueprint.attributes.map((attribute) => ({
-        code: attribute.code,
-        targetBlueprint: attribute.target_blueprint_code ?? undefined,
-        valueType: attribute.value_type,
-      }));
+      return blueprint.attributes.map(referenceAttribute);
     }),
   blueprints: () =>
     orEmpty(() =>

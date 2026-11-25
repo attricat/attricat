@@ -157,6 +157,7 @@ error_codes! {
     RelationshipCycle = "relationship_cycle",
     RelationshipHierarchyViolations = "relationship_hierarchy_violations",
     RelationshipPathSortRequiresSingleResultVersion = "relationship_path_sort_requires_single_result_version",
+    RelationshipPathTypeConflict = "relationship_path_type_conflict",
     RelationshipTargetTypeMismatch = "relationship_target_type_mismatch",
     RequestTimeout = "request_timeout",
     ReservedContextCode = "reserved_context_code",
@@ -650,6 +651,10 @@ impl RepositoryError {
             Self::PublicationActorRequired => plain(Internal, Code::InternalError),
             // `reason` is the message without its "invalid … definition"
             // prefix, so a translation can supply its own.
+            Self::RelationshipPathConflict(error) => {
+                plain(Unprocessable, Code::RelationshipPathTypeConflict)
+                    .with_details(error.conflict_details().unwrap_or_default())
+            }
             Self::InvalidBlueprintDefinition(reason) => {
                 plain(Unprocessable, Code::InvalidBlueprintDefinition)
                     .with_details(json!({ "reason": reason }))

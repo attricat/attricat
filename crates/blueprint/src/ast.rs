@@ -641,3 +641,24 @@ pub struct CompiledBlueprint {
     pub movements: Vec<crate::MovementDefinition>,
     pub attributes: Vec<EffectiveAttribute>,
 }
+
+impl attricat_validation::relationship_path::PathAttribute for EffectiveAttribute {
+    fn path_code(&self) -> &str {
+        &self.code
+    }
+
+    fn path_value_type(&self) -> attricat_domain::value_type::ValueType {
+        self.value_type
+    }
+
+    fn path_target_codes(&self) -> Vec<String> {
+        match &self.target_blueprint {
+            Some(target) => vec![target.clone()],
+            None => self.target_blueprints.clone(),
+        }
+    }
+
+    fn path_cardinality(&self) -> Option<attricat_domain::attribute_options::Cardinality> {
+        self.cardinality
+    }
+}

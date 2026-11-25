@@ -294,13 +294,42 @@ attributes:
 A write linking a record of any other blueprint returns
 `422 relationship_target_type_mismatch`. Compiled attributes expose the complete
 allowed set as `target_blueprint_codes` (empty means any blueprint);
-`target_blueprint_code` is set only when exactly one target is allowed, so
-single-target consumers such as table column paths and tree facets treat a
-multi-target relationship like an unrestricted one. A relationship filter
-(`relationship_filters`, and a picker's `target_scope`) may end in a
-multi-target or unrestricted relationship, since its last hop only matches the
-selected records; a hop it passes through needs a single target. Path walks
-(`REACHED_SQL`) follow links to any of a relationship's allowed targets. The record relationship picker searches one allowed blueprint at a time with a
+`target_blueprint_code` is set only when exactly one target is allowed.
+
+A relationship path such as `spec.thickness_mm` or `spec.grade.code` may pass
+through a multi-target relationship. Table columns and their sorting, Explorer
+filters, `relationship_filters`, saved searches (including solution-pack seeds),
+agent search filters and the search syntax resolve it the same way
+(`attricat_validation::relationship_path`):
+
+1. The segment after the hop is looked up in the latest published revision of
+   **every** allowed target.
+2. The path is valid when at least one target declares the segment, and every
+   target that declares it agrees on its `value_type`. For a relationship the
+   path continues through, they must also agree on its set of targets, which
+   are where the next segment is looked up. Otherwise the request or definition
+   is rejected with `422 relationship_path_type_conflict`, whose `details`
+   name the blueprints of each kind.
+3. A record linked to a target that lacks the segment shows no value and does
+   not match, as for a historical revision whose path no longer resolves.
+
+Shared parameters declared once in a mixin have the same code and value type
+on every target, so a path through them always resolves. Table metadata lists
+a path's `declared_on` blueprints when only some targets declare its leaf, and
+Explorer's field picker names them. The usual limits still apply: at most
+three hops, a scalar leaf for columns, and `cardinality: one` on every hop for
+sorting. An unrestricted relationship (no targets) cannot be continued
+through, since no published revision describes what lies beyond it. A
+relationship filter (`relationship_filters`, and a picker's `target_scope`) may
+end in a multi-target or unrestricted relationship, since its last hop only
+matches the selected records. Path walks (`REACHED_SQL`) follow links to any of
+a relationship's allowed targets.
+
+Relationship facets with a `hierarchy_field`, tree-facet paths
+(`source_relationship_field`) and `browse_by` still need a single target on
+every hop a path continues through: a tree's nodes and the browse rail come
+from one blueprint's records, so continuing through several blueprints needs a
+separate design. Explorer's relationship-facet paths follow the same rule. The record relationship picker searches one allowed blueprint at a time with a
 **Target blueprint** selector, offering every record blueprint when the
 relationship names no target, and an `incoming_relationship_list` on any
 allowed target can list the field. A migration preview reports
@@ -629,7 +658,9 @@ views:
 `columns` is the current table syntax. Each column names either a local scalar
 field, a local relationship, a renderer-compatible direct file field, or a
 scalar field through at most three relationship hops. Column paths
-must be unique; each relationship and the scalar leaf must exist.
+must be unique; each relationship and the scalar leaf must exist. A hop may
+link to [several target blueprints](#several-target-blueprints): the leaf must
+exist on at least one of them, with one value type on all that declare it.
 A relationship column is listed in `table_path_attributes` with
 `sortable: false`; search fills its `table_values` entry with one
 `{items: [{id, display}], truncated}` value, at most

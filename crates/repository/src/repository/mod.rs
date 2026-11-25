@@ -140,6 +140,7 @@ mod record_publications;
 mod record_search;
 mod record_values;
 mod references;
+pub(crate) mod relationship_paths;
 mod retention;
 mod retention_holds;
 mod reusable_attributes;

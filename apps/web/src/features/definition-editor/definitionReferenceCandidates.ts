@@ -9,10 +9,12 @@ import {
   maxAttributePathHops,
   requiredSortPrefix,
   targetBlueprintKey,
+  targetBlueprintsKey,
   valueTypeKey,
   versionKey,
 } from './constants';
 import type { DefinitionReferences } from './definitionReferences';
+import { frontierAttributes } from '../records/relationshipTargets';
 import {
   definitionReferenceKinds,
   type DefinitionReferenceKind,
@@ -34,7 +36,7 @@ export type Candidate = {
 type DocumentAttribute = {
   code: string;
   from?: string;
-  targetBlueprint?: string;
+  targetBlueprints?: string[];
   valueType?: string;
 };
 
@@ -51,11 +53,21 @@ const documentAttributes = (outline: YamlOutline): DocumentAttribute[] =>
       const found = outline.valueAt([attributesKey, path[1], key]);
       return typeof found === 'string' ? found : undefined;
     };
+    const target = at(targetBlueprintKey);
+    const targets = outline.entries.flatMap((entry) =>
+      entry.path.length === 4 &&
+      entry.path[0] === attributesKey &&
+      entry.path[1] === path[1] &&
+      entry.path[2] === targetBlueprintsKey &&
+      typeof entry.value === 'string'
+        ? [entry.value]
+        : [],
+    );
     return [
       {
         code: value,
         from: at(fromKey),
-        targetBlueprint: at(targetBlueprintKey),
+        targetBlueprints: target ? [target] : targets,
         valueType: at(valueTypeKey),
       },
     ];
@@ -72,18 +84,48 @@ const knownAttributes = (
 
 const attributeDetail = (attribute: {
   from?: string;
-  targetBlueprint?: string;
+  targetBlueprints?: string[];
   valueType?: string;
 }) =>
   attribute.from
     ? i18n.t('definitionEditor.details.selectedAttribute', {
         from: attribute.from,
       })
-    : attribute.targetBlueprint
+    : attribute.targetBlueprints?.length
       ? i18n.t('definitionEditor.details.relationshipTo', {
-          target: attribute.targetBlueprint,
+          target: attribute.targetBlueprints.join(' | '),
         })
       : (attribute.valueType ?? '');
+
+/**
+ * The attributes of the blueprints a path hop links to, merged as the API
+ * resolves the next segment: codes they declare differently are left out,
+ * and `partial` names the blueprints of codes only some of them declare.
+ */
+const pathTargetAttributes = async (
+  targets: string[],
+  references: DefinitionReferences,
+) => {
+  const lists = await Promise.all(
+    targets.map((target) => references.blueprintAttributes(target)),
+  );
+  const frontier = frontierAttributes(
+    targets.map((code, index) => ({
+      code,
+      attributes: lists[index].map((attribute) => ({
+        ...attribute,
+        target_blueprint_codes: attribute.targetBlueprints ?? [],
+        value_type: attribute.valueType,
+      })),
+    })),
+  );
+  return {
+    attributes: frontier.attributes.filter(
+      (attribute) => !frontier.conflicts.has(attribute.code),
+    ),
+    partial: frontier.partial,
+  };
+};
 
 const includes = (outline: YamlOutline) =>
   outline.entries.flatMap(({ path, value }) => {
@@ -173,12 +215,17 @@ export const referenceCandidates = async (
         outline,
         references,
       );
+      let partial = new Map<string, string[]>();
+      // A hop may link to several blueprints; the path continues in each.
       for (const segment of segments.slice(0, -1)) {
-        const target = attributes.find(
+        const targets = attributes.find(
           (attribute) => attribute.code === segment,
-        )?.targetBlueprint;
-        if (!target) return [];
-        attributes = await references.blueprintAttributes(target);
+        )?.targetBlueprints;
+        if (!targets?.length) return [];
+        ({ attributes, partial } = await pathTargetAttributes(
+          targets,
+          references,
+        ));
       }
       return attributes
         .filter(
@@ -190,9 +237,15 @@ export const referenceCandidates = async (
           const continues =
             attribute.valueType === attributeValueTypes.relationship &&
             hops < maxHops;
+          const declaredOn = partial.get(attribute.code);
           return {
             continues,
-            detail: attributeDetail(attribute),
+            detail: declaredOn
+              ? i18n.t('definitionEditor.details.onlyOn', {
+                  detail: attributeDetail(attribute),
+                  blueprints: declaredOn.join(', '),
+                })
+              : attributeDetail(attribute),
             label: attribute.code,
             value: [
               ...segments.slice(0, -1),

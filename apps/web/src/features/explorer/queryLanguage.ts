@@ -1,7 +1,10 @@
 import type { Attribute } from '../records/api';
 import { attributeValueTypes } from '../records/valueTypes';
 import { relationshipPathSeparator } from './constants';
-import { allowedTargetBlueprints } from '../records/relationshipTargets';
+import {
+  allowedTargetBlueprints,
+  frontierAttributes,
+} from '../records/relationshipTargets';
 
 // Explorer query syntax; see apps/docs/src/content/docs/guides/search-syntax.md.
 export const querySelectorSeparator = ':';
@@ -37,7 +40,7 @@ export type QueryError =
   | { code: 'tooManyHops' }
   | { code: 'unknownField'; field: string }
   | { code: 'unknownRelationship'; field: string }
-  | { code: 'severalTargets'; field: string }
+  | { code: 'conflictingTargets'; field: string }
   | { code: 'notSearchableLeaf'; field: string };
 
 /** Attribute schemas of the selected blueprint and of relationship targets. */
@@ -98,45 +101,55 @@ type Resolution =
 /**
  * Walks a relationship path, returning the attributes of the blueprints the
  * path ends on, `pending` while a target is loading, or the index of the
- * first relationship it cannot follow. The last hop may link to several
- * blueprints, whose attributes are merged by code; a hop followed by another
- * needs one blueprint to continue in (mirrors the API).
+ * first relationship it cannot follow. A hop may link to several blueprints,
+ * whose attributes are merged by code; the path continues through a
+ * relationship they all declare alike (mirrors the API).
  */
 export const resolveRelationshipPath = (
   schema: QuerySchema,
   path: string[],
 ):
-  | { status: 'ok'; attributes: Attribute[]; targetCodes: string[] }
+  | {
+      status: 'ok';
+      attributes: Attribute[];
+      /** Lowercased codes the path's last blueprints declare differently. */
+      conflicts: Set<string>;
+      targetCodes: string[];
+    }
   | { status: 'pending' }
-  | { status: 'error'; part: number; severalTargets?: true } => {
+  | { status: 'error'; part: number; conflictingTargets?: true } => {
   let attributes = schema.attributes;
+  let conflicts = new Set<string>();
   let targetCodes: string[] = [];
   for (const [index, name] of path.entries()) {
+    if (conflicts.has(name.toLowerCase()))
+      return { status: 'error', part: index, conflictingTargets: true };
     const relationship = findAttribute(attributes, name, isRelationship);
     const codes = relationship ? allowedTargetBlueprints(relationship) : [];
     if (codes.length === 0) return { status: 'error', part: index };
-    if (codes.length > 1 && index < path.length - 1)
-      return { status: 'error', part: index, severalTargets: true };
     const targets = codes.map((code) => schema.targets.get(code));
     if (targets.some((target) => !target)) return { status: 'pending' };
-    const merged = new Map<string, Attribute>();
-    for (const target of targets)
-      for (const attribute of target!)
-        if (!merged.has(attribute.code.toLowerCase()))
-          merged.set(attribute.code.toLowerCase(), attribute);
-    attributes = [...merged.values()];
+    const frontier = frontierAttributes(
+      codes.map((code, target) => ({
+        code,
+        attributes: targets[target]!,
+      })),
+      (code) => code.toLowerCase(),
+    );
+    attributes = frontier.attributes;
+    conflicts = frontier.conflicts;
     targetCodes = [...codes];
   }
-  return { status: 'ok', attributes, targetCodes };
+  return { status: 'ok', attributes, conflicts, targetCodes };
 };
 
 /** The error for a path `resolveRelationshipPath` could not follow. */
 const pathError = (
   parts: string[],
-  resolved: { part: number; severalTargets?: true },
+  resolved: { part: number; conflictingTargets?: true },
 ): QueryError =>
-  resolved.severalTargets
-    ? { code: 'severalTargets', field: parts[resolved.part] }
+  resolved.conflictingTargets
+    ? { code: 'conflictingTargets', field: parts[resolved.part] }
     : { code: 'unknownRelationship', field: parts[resolved.part] };
 
 /** Mirrors `compile_search_term` in the API's record search repository. */

@@ -242,6 +242,44 @@ describe('ExplorerFilterBar', () => {
     expect(await screen.findByRole('option', { name: 'Live' })).toBeTruthy();
   });
 
+  it('names the blueprints a path field is only on', async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ExplorerFilterBar
+          attributes={[]}
+          blueprint="product"
+          blueprints={[
+            { ...brandBlueprint.blueprint, code: 'sheet', name: 'Sheet' },
+            { ...brandBlueprint.blueprint, code: 'profile', name: 'Profile' },
+          ]}
+          filters={[]}
+          onAdd={vi.fn()}
+          onRemove={vi.fn()}
+          onUpdate={vi.fn()}
+          pathAttributes={[
+            { code: 'spec.thickness_mm', value_type: 'number' },
+            {
+              code: 'spec.width_mm',
+              value_type: 'number',
+              declared_on: ['sheet', 'profile'],
+            },
+          ]}
+        />
+      </QueryClientProvider>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Add filter' }));
+    await user.click(screen.getByRole('combobox', { name: 'Field' }));
+    const width = await screen.findByRole('option', { name: /width mm/ });
+    expect(width.textContent).toContain('Only on Sheet, Profile');
+    const thickness = screen.getByRole('option', { name: /thickness mm/ });
+    expect(thickness.textContent).not.toContain('Only on');
+  });
+
   it('offers reusable attributes by their qualified code', async () => {
     vi.mocked(listBlueprintFilterReusableAttributes).mockResolvedValueOnce([
       {

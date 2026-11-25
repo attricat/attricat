@@ -65,7 +65,11 @@ type Props = {
   /** Receives focus when the last chip is removed and nothing can be added. */
   emptyFocusTarget?: RefObject<HTMLElement | null>;
   facets?: ExplorerRelationshipFacet[];
-  pathAttributes?: { code: string; value_type: Attribute['value_type'] }[];
+  pathAttributes?: {
+    code: string;
+    value_type: Attribute['value_type'];
+    declared_on?: string[];
+  }[];
   relationshipAttributes?: RelationshipFilterAttribute[];
   onAdd: (filter: AttributeFilter) => void;
   onRemove: (index: number) => void;
@@ -188,8 +192,9 @@ export const ExplorerFilterBar = ({
       setOpen(true);
     }
   }
-  // A path continues through one target blueprint, so only single-target
-  // relationships lead to fields of their targets.
+  // Relationship facets list one blueprint's records, so only single-target
+  // relationships lead to the relationships of their targets. Scalar fields
+  // through any relationship come from the table's path columns.
   const relationshipPaths = useRelationshipFilterPaths(
     relationshipAttributes.filter(hasSingleFilterTarget),
     open && editor.editingIndex === null,
@@ -233,6 +238,13 @@ export const ExplorerFilterBar = ({
     return name === undefined ? code : lexiconText(name);
   };
 
+  // A path through a relationship to several blueprints may reach a field
+  // only some of them have; the picker names those.
+  const partialFields = Object.fromEntries(
+    pathAttributes.flatMap(({ code, declared_on }) =>
+      declared_on ? [[code, declared_on.map(blueprintName).join(', ')]] : [],
+    ),
+  );
   const findAttribute = (code: string) =>
     filterableAttributes.find((item) => item.code === code) ??
     attributes.find((item) => item.code === code);
@@ -408,6 +420,7 @@ export const ExplorerFilterBar = ({
         onSubmit={submit}
         open={open}
         relationshipPathsLoading={relationshipPaths.loading}
+        partialFields={partialFields}
       />
     </Box>
   );

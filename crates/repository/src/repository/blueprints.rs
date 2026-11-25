@@ -850,6 +850,33 @@ impl AttricatRepository {
         .into_domain())
     }
 
+    /// The latest published revision of blueprint `code` with its attributes,
+    /// as a relationship path reaching it sees it. It skips the read-time
+    /// decoration, whose table paths would follow paths of their own.
+    pub(super) async fn latest_published_path_blueprint(
+        &self,
+        code: &str,
+    ) -> Result<Option<super::relationship_paths::PathBlueprint>, RepositoryError> {
+        let latest = match self.latest_published_revision(LatestBy::Code(code)).await? {
+            Some(latest) => latest,
+            None => sqlx::query_as(
+                "SELECT id, version FROM blueprints WHERE code = $1 AND workspace_id = $2 AND status = 'published' AND deleted_at IS NULL ORDER BY version DESC LIMIT 1",
+            )
+            .bind(code)
+            .bind(self.workspace_id.0)
+            .fetch_optional(&self.pool)
+            .await?,
+        };
+        let Some((id, version)) = latest else {
+            return Ok(None);
+        };
+        Ok(Some(super::relationship_paths::PathBlueprint {
+            id,
+            code: code.to_owned(),
+            attributes: self.list_attributes(id, version).await?,
+        }))
+    }
+
     /// Table paths of a revision. A published revision's paths only follow
     /// other published revisions, so they are cached for the request's
     /// catalog generation, which publication advances. Drafts and reads
@@ -920,51 +947,28 @@ impl AttricatRepository {
                         first.value_type,
                         ValueType::File | ValueType::Json | ValueType::Relationship
                     ),
+                    declared_on: None,
                 });
                 continue;
             }
-            let mut attribute = first.clone();
-            let mut sortable = true;
-            for field in &parts[1..] {
-                if attribute.value_type != ValueType::Relationship {
-                    break;
-                }
-                sortable &= attribute.cardinality == Some(Cardinality::One);
-                let Some(target) = attribute.target_blueprint_code.as_deref() else {
-                    break;
-                };
-                let Some(next) = sqlx::query_as::<_, Db<Attribute>>(
-                    r#"SELECT a.id, a.blueprint_id, a.blueprint_version, a.code, a.name, a.value_type,
-                              a.value_schema, a.extension_type, a.default_value, a.file_policy, a.target_blueprint_code,
-                              a.target_blueprint_codes, a.cardinality, a.target_cardinality, a.hierarchy, a.tags, a.context_fallback,
-                              a.context_editable, a.readonly, a.generated, a.balance, a.target_scope, a.position, a.created_at, a.updated_at,
-                              a.deleted_at
-                         FROM blueprints b
-                         JOIN attributes a ON a.blueprint_id = b.id AND a.blueprint_version = b.version
-                        WHERE b.workspace_id = $1 AND b.code = $2
-                          AND b.status = 'published' AND b.deleted_at IS NULL
-                          AND a.code = $3 AND a.deleted_at IS NULL
-                        ORDER BY b.version DESC LIMIT 1"#,
-                )
-                .bind(self.workspace_id.0)
-                .bind(target)
-                .bind(field)
-                .fetch_optional(&self.pool)
-                .await?
-                else {
-                    break;
-                };
-                attribute = next.into_domain();
-            }
+            // A path that no longer resolves, such as one whose targets now
+            // disagree on a segment, is left out rather than failing reads.
+            let Ok(path_attribute) = self
+                .resolve_relationship_path(path, &parts, &blueprint.code, attributes)
+                .await
+            else {
+                continue;
+            };
             if !matches!(
-                attribute.value_type,
+                path_attribute.value_type,
                 ValueType::Relationship | ValueType::File
-            ) && attribute.code == parts[parts.len() - 1]
-            {
+            ) {
                 resolved.push(TablePathAttribute {
                     code: path.to_owned(),
-                    value_type: attribute.value_type,
-                    sortable: sortable && attribute.value_type != ValueType::Json,
+                    value_type: path_attribute.value_type,
+                    sortable: path_attribute.single_valued
+                        && path_attribute.value_type != ValueType::Json,
+                    declared_on: path_attribute.partial.then_some(path_attribute.declared_on),
                 });
             }
         }

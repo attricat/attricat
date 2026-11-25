@@ -8,6 +8,7 @@ use attricat_blueprint::{
     BlueprintDefinition, BlueprintError, BlueprintKind, BrowseBy, CompiledBlueprint,
     ResolvedInclude, ViewDefinition, ViewNode,
 };
+use attricat_validation::relationship_path::{WalkError, walk_path};
 use attricat_validation::saved_search::browse_hop;
 use serde_json::Value;
 
@@ -598,52 +599,33 @@ fn validate_table_paths(
                 if parts.len() == 1 {
                     continue;
                 }
-                let mut current = owner;
-                for segment in &parts[..parts.len() - 1] {
-                    let attribute = current
-                        .attributes
-                        .iter()
-                        .find(|attribute| attribute.code == *segment)
-                        .ok_or_else(|| {
+                // Every blueprint a hop links to must be in the pack, and is
+                // published before the owner.
+                let walked = walk_path(
+                    &column.field,
+                    &parts,
+                    (owner.code.as_str(), owner.attributes.as_slice()),
+                    |target_code| {
+                        let target_key = by_code.get(target_code).ok_or_else(|| {
                             SolutionPackError::Invalid(format!(
-                                "blueprint '{owner_key}' table column '{}' path segment '{segment}' was not found",
+                                "blueprint '{owner_key}' table column '{}' target '{target_code}' is not declared by the pack",
                                 column.field
                             ))
                         })?;
-                    if attribute.value_type != ValueType::Relationship {
-                        return invalid(format!(
-                            "blueprint '{owner_key}' table column '{}' segment '{segment}' must be a relationship",
-                            column.field
-                        ));
-                    }
-                    let target_code = attribute.target_blueprint.as_deref().ok_or_else(|| {
-                        SolutionPackError::Invalid(format!(
-                            "blueprint '{owner_key}' table column '{}' segment '{segment}' has no target blueprint",
-                            column.field
-                        ))
-                    })?;
-                    let target_key = by_code.get(target_code).ok_or_else(|| {
-                        SolutionPackError::Invalid(format!(
-                            "blueprint '{owner_key}' table column '{}' target '{target_code}' is not declared by the pack",
-                            column.field
-                        ))
-                    })?;
-                    owner_dependencies.insert((*target_key).to_owned());
-                    current = &blueprints[*target_key];
-                }
-                let leaf = parts.last().expect("multi-part table path has a leaf");
-                let leaf_attribute = current
-                    .attributes
-                    .iter()
-                    .find(|attribute| attribute.code == *leaf)
-                    .ok_or_else(|| {
-                        SolutionPackError::Invalid(format!(
-                            "blueprint '{owner_key}' table column '{}' path segment '{leaf}' was not found",
-                            column.field
-                        ))
-                    })?;
+                        owner_dependencies.insert((*target_key).to_owned());
+                        let target = &blueprints[*target_key];
+                        Ok(Some((target.code.as_str(), target.attributes.as_slice())))
+                    },
+                )
+                .map_err(|error| match error {
+                    WalkError::Load(error) => error,
+                    WalkError::Path(error) => SolutionPackError::Invalid(format!(
+                        "blueprint '{owner_key}' table column '{}' {error}",
+                        column.field
+                    )),
+                })?;
                 if matches!(
-                    leaf_attribute.value_type,
+                    walked.leaf.value_type,
                     ValueType::Relationship | ValueType::File
                 ) {
                     return invalid(format!(
