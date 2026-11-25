@@ -1,4 +1,7 @@
 use super::generations::{Generation, advance_generation};
+use super::relationship_paths::{
+    LoadedBlueprints, OnceLoader, PathWalkError, walk_relationship_path,
+};
 use super::values::NativeValue;
 use super::*;
 use crate::domain_events::{
@@ -20,6 +23,15 @@ use uuid::Uuid;
 
 /// The `blueprints` columns a [`Blueprint`] row is read from.
 const BLUEPRINT_COLUMNS: &str = "id, code, name, kind, version, includes, views, record_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash, movements";
+
+/// The `attributes` columns an [`Attribute`] row is read from.
+pub(crate) const ATTRIBUTE_COLUMNS: &str = "id, blueprint_id, blueprint_version, code, name, value_type, value_schema, extension_type, default_value, file_policy, target_blueprint_code, target_blueprint_codes, cardinality, target_cardinality, hierarchy, tags, context_fallback, context_editable, readonly, generated, balance, target_scope, position, created_at, updated_at, deleted_at";
+
+/// The ID and version of a blueprint's latest published revision, by code
+/// (`$1`) in a workspace (`$2`).
+pub(crate) const LATEST_PUBLISHED_BY_CODE: &str = "SELECT id, version FROM blueprints WHERE code = $1 AND workspace_id = $2 AND status = 'published' AND deleted_at IS NULL ORDER BY version DESC LIMIT 1";
+/// As [`LATEST_PUBLISHED_BY_CODE`], by blueprint ID (`$1`).
+const LATEST_PUBLISHED_BY_ID: &str = "SELECT id, version FROM blueprints WHERE id = $1 AND workspace_id = $2 AND status = 'published' AND deleted_at IS NULL ORDER BY version DESC LIMIT 1";
 
 #[derive(sqlx::FromRow)]
 struct LatestBlueprint {
@@ -432,18 +444,7 @@ impl AttricatRepository {
         {
             return Ok(Some(revision));
         }
-        let blueprint = sqlx::query_as::<_, Db<Blueprint>>(AssertSqlSafe(format!(
-            r#"SELECT {BLUEPRINT_COLUMNS}
-               FROM blueprints
-               WHERE id = $1 AND version = $2 AND workspace_id = $3 AND deleted_at IS NULL"#
-        )))
-        .bind(blueprint_id)
-        .bind(version)
-        .bind(self.workspace_id.0)
-        .fetch_optional(&self.pool)
-        .await?
-        .into_domain();
-
+        let blueprint = self.blueprint_revision_row(blueprint_id, version).await?;
         self.with_attributes(blueprint).await
     }
 
@@ -836,12 +837,12 @@ impl AttricatRepository {
         {
             return Ok(revision.1.clone());
         }
-        Ok(sqlx::query_as::<_, Db<Attribute>>(
-            r#"SELECT id, blueprint_id, blueprint_version, code, name, value_type, value_schema, extension_type, default_value, file_policy, target_blueprint_code, target_blueprint_codes, cardinality, target_cardinality, hierarchy, tags, context_fallback, context_editable, readonly, generated, balance, target_scope, position, created_at, updated_at, deleted_at
+        Ok(sqlx::query_as::<_, Db<Attribute>>(AssertSqlSafe(format!(
+            r#"SELECT {ATTRIBUTE_COLUMNS}
                FROM attributes
                WHERE blueprint_id = $1 AND blueprint_version = $2 AND workspace_id = $3 AND deleted_at IS NULL
-               ORDER BY position"#,
-        )
+               ORDER BY position"#
+        )))
         .bind(blueprint_id)
         .bind(blueprint_version)
         .bind(self.workspace_id.0)
@@ -852,28 +853,30 @@ impl AttricatRepository {
 
     /// The latest published revision of blueprint `code` with its attributes,
     /// as a relationship path reaching it sees it. It skips the read-time
-    /// decoration, whose table paths would follow paths of their own.
+    /// decoration, whose table paths would follow paths of their own, but
+    /// fills the revision cache that decorated reads share.
     pub(super) async fn latest_published_path_blueprint(
         &self,
         code: &str,
     ) -> Result<Option<super::relationship_paths::PathBlueprint>, RepositoryError> {
         let latest = match self.latest_published_revision(LatestBy::Code(code)).await? {
             Some(latest) => latest,
-            None => sqlx::query_as(
-                "SELECT id, version FROM blueprints WHERE code = $1 AND workspace_id = $2 AND status = 'published' AND deleted_at IS NULL ORDER BY version DESC LIMIT 1",
-            )
-            .bind(code)
-            .bind(self.workspace_id.0)
-            .fetch_optional(&self.pool)
-            .await?,
+            None => self.query_latest_published(LatestBy::Code(code)).await?,
         };
         let Some((id, version)) = latest else {
             return Ok(None);
         };
+        let attributes = match self.cached_revision(&self.revision_key(id, version)).await {
+            Some(revision) => revision.1.clone(),
+            None => match self.blueprint_revision_row(id, version).await? {
+                Some(blueprint) => self.revision_attributes(&blueprint).await?,
+                None => return Ok(None),
+            },
+        };
         Ok(Some(super::relationship_paths::PathBlueprint {
             id,
             code: code.to_owned(),
-            attributes: self.list_attributes(id, version).await?,
+            attributes: attributes.into(),
         }))
     }
 
@@ -926,6 +929,8 @@ impl AttricatRepository {
             return Ok(Vec::new());
         };
         let mut resolved = Vec::new();
+        // Columns through the same relationships share their targets' loads.
+        let mut loaded = LoadedBlueprints::new();
         for path in columns
             .iter()
             .filter_map(|column| column.get("field").and_then(Value::as_str))
@@ -953,22 +958,28 @@ impl AttricatRepository {
             }
             // A path that no longer resolves, such as one whose targets now
             // disagree on a segment, is left out rather than failing reads.
-            let Ok(path_attribute) = self
-                .resolve_relationship_path(path, &parts, &blueprint.code, attributes)
-                .await
-            else {
-                continue;
+            let path_attribute = match walk_relationship_path(
+                path,
+                &parts,
+                (&blueprint.code, attributes),
+                OnceLoader {
+                    inner: self,
+                    loaded: &mut loaded,
+                },
+            )
+            .await
+            {
+                Ok(path_attribute) => path_attribute,
+                Err(PathWalkError::Path { .. }) => continue,
+                Err(PathWalkError::Repository(error)) => return Err(error),
             };
-            if !matches!(
-                path_attribute.value_type,
-                ValueType::Relationship | ValueType::File
-            ) {
+            let value_type = path_attribute.leaf.value_type;
+            if !matches!(value_type, ValueType::Relationship | ValueType::File) {
                 resolved.push(TablePathAttribute {
                     code: path.to_owned(),
-                    value_type: path_attribute.value_type,
-                    sortable: path_attribute.single_valued
-                        && path_attribute.value_type != ValueType::Json,
-                    declared_on: path_attribute.partial.then_some(path_attribute.declared_on),
+                    value_type,
+                    sortable: path_attribute.hops.single_valued && value_type != ValueType::Json,
+                    declared_on: path_attribute.partially_declared_on,
                 });
             }
         }
@@ -1026,23 +1037,43 @@ impl AttricatRepository {
         let latest = self
             .cache
             .fetch(key, &[], Policy::Generation, || async {
-                let row: Option<(Uuid, i64)> = match by {
-                    LatestBy::Id(id) => sqlx::query_as(
-                        "SELECT id, version FROM blueprints WHERE id = $1 AND workspace_id = $2 AND status = 'published' AND deleted_at IS NULL ORDER BY version DESC LIMIT 1",
-                    )
-                    .bind(id),
-                    LatestBy::Code(code) => sqlx::query_as(
-                        "SELECT id, version FROM blueprints WHERE code = $1 AND workspace_id = $2 AND status = 'published' AND deleted_at IS NULL ORDER BY version DESC LIMIT 1",
-                    )
-                    .bind(code),
-                }
-                .bind(workspace_id)
-                .fetch_optional(&self.pool)
-                .await?;
-                Ok::<_, RepositoryError>(row)
+                self.query_latest_published(by).await
             })
             .await?;
         Ok(Some(*latest))
+    }
+
+    /// The latest published revision of a family, read from the database.
+    async fn query_latest_published(
+        &self,
+        by: LatestBy<'_>,
+    ) -> Result<Option<(Uuid, i64)>, RepositoryError> {
+        Ok(match by {
+            LatestBy::Id(id) => sqlx::query_as(LATEST_PUBLISHED_BY_ID).bind(id),
+            LatestBy::Code(code) => sqlx::query_as(LATEST_PUBLISHED_BY_CODE).bind(code),
+        }
+        .bind(self.workspace_id.0)
+        .fetch_optional(&self.pool)
+        .await?)
+    }
+
+    /// A revision's `blueprints` row, without its attributes.
+    async fn blueprint_revision_row(
+        &self,
+        blueprint_id: Uuid,
+        version: i64,
+    ) -> Result<Option<Blueprint>, RepositoryError> {
+        Ok(sqlx::query_as::<_, Db<Blueprint>>(AssertSqlSafe(format!(
+            r#"SELECT {BLUEPRINT_COLUMNS}
+               FROM blueprints
+               WHERE id = $1 AND version = $2 AND workspace_id = $3 AND deleted_at IS NULL"#
+        )))
+        .bind(blueprint_id)
+        .bind(version)
+        .bind(self.workspace_id.0)
+        .fetch_optional(&self.pool)
+        .await?
+        .into_domain())
     }
 
     /// A cached published revision, by ID or by code.

@@ -13,34 +13,50 @@ export const allowedTargetBlueprints = (
       ? [attribute.target_blueprint_code]
       : [];
 
-type PathAttribute = Pick<
-  Attribute,
-  'code' | 'target_blueprint_code' | 'target_blueprint_codes'
-> & { value_type: string };
-
-const sameTargets = (left: PathAttribute, right: PathAttribute) => {
-  const a = new Set(allowedTargetBlueprints(left));
-  const b = allowedTargetBlueprints(right);
-  return a.size === new Set(b).size && b.every((code) => a.has(code));
+/** How [`frontierAttributes`] reads an attribute of some shape. */
+export type PathFields<A> = {
+  code: (attribute: A) => string;
+  valueType: (attribute: A) => string;
+  /** A relationship's target blueprints; none for other attributes. */
+  targets: (attribute: A) => string[];
 };
+
+/** Reads API attributes for [`frontierAttributes`]. */
+export const attributePathFields: PathFields<
+  Pick<
+    Attribute,
+    'code' | 'value_type' | 'target_blueprint_code' | 'target_blueprint_codes'
+  >
+> = {
+  code: (attribute) => attribute.code,
+  valueType: (attribute) => attribute.value_type,
+  targets: allowedTargetBlueprints,
+};
+
+/** Whether two lists hold the same codes, in any order. */
+const sameCodes = (left: string[], right: string[]) =>
+  left.length === right.length &&
+  [...left].sort().join() === [...right].sort().join();
 
 /**
  * The fields of the blueprints a relationship path reaches, as the API
- * resolves them: each code once, from the first blueprint that declares it,
- * with the blueprints that do. A code the blueprints declare with different
- * value types, or as relationships to different blueprints, is a conflict a
- * path cannot continue through. `key` folds codes that match, such as by
- * case in the search syntax.
+ * resolves them: each code once, from the first blueprint that declares it.
+ * A code the blueprints declare with different value types, or as
+ * relationships to different blueprints, is a conflict a path cannot
+ * continue through; `partial` names the blueprints of a code only some of
+ * them declare. `key` folds codes that match, such as by case in the search
+ * syntax.
  */
-export const frontierAttributes = <A extends PathAttribute>(
-  targets: { code: string; attributes: A[] }[],
+export const frontierAttributes = <A>(
+  targets: { code: string; attributes: readonly A[] }[],
+  fields: PathFields<A>,
   key: (code: string) => string = (code) => code,
 ) => {
   const merged = new Map<string, { attribute: A; declaredOn: string[] }>();
   const conflicts = new Set<string>();
   for (const target of targets)
     for (const attribute of target.attributes) {
-      const code = key(attribute.code);
+      const code = key(fields.code(attribute));
       const first = merged.get(code);
       if (!first) {
         merged.set(code, { attribute, declaredOn: [target.code] });
@@ -48,15 +64,14 @@ export const frontierAttributes = <A extends PathAttribute>(
       }
       first.declaredOn.push(target.code);
       if (
-        first.attribute.value_type !== attribute.value_type ||
-        !sameTargets(first.attribute, attribute)
+        fields.valueType(first.attribute) !== fields.valueType(attribute) ||
+        !sameCodes(fields.targets(first.attribute), fields.targets(attribute))
       )
         conflicts.add(code);
     }
   return {
     attributes: [...merged.values()].map(({ attribute }) => attribute),
     conflicts,
-    /** The blueprints declaring each code that only some of them declare. */
     partial: new Map(
       [...merged.entries()]
         .filter(([, { declaredOn }]) => declaredOn.length < targets.length)

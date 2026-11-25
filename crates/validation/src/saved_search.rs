@@ -329,10 +329,14 @@ pub fn browse_hop(
     )
 }
 
+/// Separates the relationship hops and the leaf of a field path, such as
+/// `spec.grade.code`.
+pub const FIELD_PATH_SEPARATOR: &str = ".";
+
 /// Splits an Explorer field path into relationship hops and the leaf, and
 /// checks the hop limit. Every segment must be a valid code.
 pub fn field_path(path: &str) -> Result<Vec<&str>, String> {
-    let segments = path.split('.').collect::<Vec<_>>();
+    let segments = path.split(FIELD_PATH_SEPARATOR).collect::<Vec<_>>();
     if path.len() > MAX_FIELD_PATH_BYTES
         || !segments.iter().all(|segment| crate::is_valid_code(segment))
     {

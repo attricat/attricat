@@ -1,3 +1,4 @@
+import { formatList } from '../../i18n/listFormat';
 import { allowedTargetBlueprints } from '../records/relationshipTargets';
 import { Box, Button, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
@@ -242,7 +243,7 @@ export const ExplorerFilterBar = ({
   // only some of them have; the picker names those.
   const partialFields = Object.fromEntries(
     pathAttributes.flatMap(({ code, declared_on }) =>
-      declared_on ? [[code, declared_on.map(blueprintName).join(', ')]] : [],
+      declared_on ? [[code, formatList(declared_on.map(blueprintName))]] : [],
     ),
   );
   const findAttribute = (code: string) =>

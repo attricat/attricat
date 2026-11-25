@@ -3,6 +3,7 @@ import { attributeValueTypes } from '../records/valueTypes';
 import { relationshipPathSeparator } from './constants';
 import {
   allowedTargetBlueprints,
+  attributePathFields,
   frontierAttributes,
 } from '../records/relationshipTargets';
 
@@ -99,6 +100,24 @@ type Resolution =
   | { status: 'error'; error: QueryError; part: number };
 
 /**
+ * The merged fields of the blueprints `codes` (by `frontierAttributes`,
+ * matching codes without regard to case as the search syntax does), or
+ * `undefined` while one of them is loading.
+ */
+export const schemaFrontier = (schema: QuerySchema, codes: string[]) => {
+  const targets = codes.map((code) => ({
+    code,
+    attributes: schema.targets.get(code),
+  }));
+  if (targets.some((target) => !target.attributes)) return undefined;
+  return frontierAttributes(
+    targets.map(({ code, attributes }) => ({ code, attributes: attributes! })),
+    attributePathFields,
+    (code) => code.toLowerCase(),
+  );
+};
+
+/**
  * Walks a relationship path, returning the attributes of the blueprints the
  * path ends on, `pending` while a target is loading, or the index of the
  * first relationship it cannot follow. A hop may link to several blueprints,
@@ -127,15 +146,8 @@ export const resolveRelationshipPath = (
     const relationship = findAttribute(attributes, name, isRelationship);
     const codes = relationship ? allowedTargetBlueprints(relationship) : [];
     if (codes.length === 0) return { status: 'error', part: index };
-    const targets = codes.map((code) => schema.targets.get(code));
-    if (targets.some((target) => !target)) return { status: 'pending' };
-    const frontier = frontierAttributes(
-      codes.map((code, target) => ({
-        code,
-        attributes: targets[target]!,
-      })),
-      (code) => code.toLowerCase(),
-    );
+    const frontier = schemaFrontier(schema, codes);
+    if (!frontier) return { status: 'pending' };
     attributes = frontier.attributes;
     conflicts = frontier.conflicts;
     targetCodes = [...codes];

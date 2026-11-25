@@ -365,7 +365,7 @@ pub enum RepositoryError {
     /// The target blueprints a relationship path passes through declare one
     /// of its segments with different value types or targets.
     #[error("{0}")]
-    RelationshipPathConflict(attricat_validation::relationship_path::PathError),
+    RelationshipPathConflict(attricat_validation::relationship_path::PathConflict),
     #[error("{0}")]
     InvalidSolutionPackPlan(String),
     #[error("solution-pack asset storage is unavailable")]
@@ -470,6 +470,20 @@ impl RepositoryError {
 
     pub fn invalid_blueprint_definition(error: impl std::fmt::Display) -> Self {
         Self::InvalidBlueprintDefinition(error.to_string())
+    }
+
+    /// A relationship path that did not resolve: a conflict keeps its own
+    /// error code, any other failure becomes `invalid`'s error.
+    pub fn from_path_error(
+        error: attricat_validation::relationship_path::PathError,
+        invalid: impl FnOnce(attricat_validation::relationship_path::PathError) -> Self,
+    ) -> Self {
+        match error {
+            attricat_validation::relationship_path::PathError::Conflict(conflict) => {
+                Self::RelationshipPathConflict(conflict)
+            }
+            error => invalid(error),
+        }
     }
 }
 

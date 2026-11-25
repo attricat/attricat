@@ -275,7 +275,7 @@ describe('ExplorerFilterBar', () => {
     await user.click(screen.getByRole('button', { name: 'Add filter' }));
     await user.click(screen.getByRole('combobox', { name: 'Field' }));
     const width = await screen.findByRole('option', { name: /width mm/ });
-    expect(width.textContent).toContain('Only on Sheet, Profile');
+    expect(width.textContent).toContain('Only on Sheet and Profile');
     const thickness = screen.getByRole('option', { name: /thickness mm/ });
     expect(thickness.textContent).not.toContain('Only on');
   });

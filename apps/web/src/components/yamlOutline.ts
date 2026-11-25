@@ -72,6 +72,8 @@ export type YamlOutline = {
   /** Source range for a path, falling back to its nearest ancestor. */
   rangeOf: (path: YamlPath) => TextRange | undefined;
   valueAt: (path: YamlPath) => YamlScalar | undefined;
+  /** The scalar items of the sequence at this path, in order. */
+  valuesAt: (path: YamlPath) => YamlScalar[];
 };
 
 /** A path as a string, for keying maps and sets by path. */
@@ -584,8 +586,15 @@ export const scanYaml = (text: string, cursor?: number): YamlOutline => {
   }
   const byPath = new Map(entries.map((entry) => [pathKey(entry.path), entry]));
   const keys = new Map<string, Set<string>>();
-  for (const { path } of entries) {
+  const items = new Map<string, YamlEntry[]>();
+  for (const entry of entries) {
+    const { path } = entry;
     const last = path.at(-1);
+    if (typeof last === 'number') {
+      const sequence = pathKey(path.slice(0, -1));
+      if (!items.has(sequence)) items.set(sequence, []);
+      items.get(sequence)!.push(entry);
+    }
     if (typeof last !== 'string') continue;
     const parent = pathKey(path.slice(0, -1));
     if (!keys.has(parent)) keys.set(parent, new Set());
@@ -609,5 +618,9 @@ export const scanYaml = (text: string, cursor?: number): YamlOutline => {
     },
     text,
     valueAt: (path) => byPath.get(pathKey(path))?.value,
+    valuesAt: (path) =>
+      (items.get(pathKey(path)) ?? []).flatMap((entry) =>
+        entry.value === undefined ? [] : [entry.value],
+      ),
   };
 };

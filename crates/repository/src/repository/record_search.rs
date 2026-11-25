@@ -1,10 +1,11 @@
+use super::relationship_paths::{PathBlueprint, WalkedHops, walk_hops};
 use super::*;
 use super::{record_projection::display_label, system_annotations::validate_system_tag_filter};
 use crate::model::ExportStatusFilter;
 use attricat_domain::constants::DEFAULT_CONTEXT_CODE;
 use attricat_domain::states::{DataQualityFilter, RuleFindingState};
-use attricat_validation::relationship_path::{PathError, resolve_segment};
-use attricat_validation::saved_search::MAX_RELATIONSHIP_HOPS;
+use attricat_validation::relationship_path::CodeMatch;
+use attricat_validation::saved_search::{FIELD_PATH_SEPARATOR, MAX_RELATIONSHIP_HOPS};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
 use sqlx::AssertSqlSafe;
@@ -1404,9 +1405,7 @@ impl AttricatRepository {
                     .as_deref()
                     .and_then(|value| value.parse::<i64>().ok())
                     .ok_or_else(|| {
-                        RepositoryError::InvalidBlueprintDefinition(
-                            "page.cursor is invalid".to_owned(),
-                        )
+                        RepositoryError::InvalidBlueprintDefinition("page.cursor is invalid".to_owned())
                     })
             })
             .transpose()?;
@@ -2913,7 +2912,7 @@ impl AttricatRepository {
             return Ok(TermPlan::Ids {
                 fields,
                 source_blueprint_ids,
-                target_blueprint_ids: targets.iter().map(|target| target.blueprint.id).collect(),
+                target_blueprint_ids: targets.iter().map(|target| target.id).collect(),
                 ids,
             });
         }
@@ -2956,7 +2955,7 @@ impl AttricatRepository {
             return Ok(TermPlan::Relationship {
                 fields,
                 source_blueprint_ids,
-                target_blueprint_ids: targets.iter().map(|target| target.blueprint.id).collect(),
+                target_blueprint_ids: targets.iter().map(|target| target.id).collect(),
                 attribute: None,
             });
         }
@@ -2979,7 +2978,7 @@ impl AttricatRepository {
                                 ValueType::Relationship | ValueType::File | ValueType::Json
                             )
                     })
-                    .map(|attribute| (target.blueprint.id, attribute.code.clone()))
+                    .map(|attribute| (target.id, attribute.code.clone()))
             })
             .collect();
         let Some((_, attribute)) = matches.first().cloned() else {
@@ -2996,68 +2995,57 @@ impl AttricatRepository {
         })
     }
 
-    /// Walks named relationships from the selected blueprint, returning the
-    /// relationship codes, the blueprints each hop starts from, and the
-    /// blueprints the path ends on. A hop may link to several blueprints: the
-    /// path continues in those its declarations agree on, by the rule in
-    /// [`attricat_validation::relationship_path`].
+    /// Walks named relationships from the selected blueprint, matching their
+    /// codes without regard to case, by the rule in
+    /// [`attricat_validation::relationship_path`]. Returns the relationship
+    /// codes, the blueprints each hop starts from, and the blueprints the path
+    /// ends on.
     async fn search_relationship_path(
         &self,
         selected: &BlueprintWithAttributes,
         path: &[&str],
-    ) -> Result<(Vec<String>, Vec<Vec<Uuid>>, Vec<BlueprintWithAttributes>), RepositoryError> {
-        let selector = path.join(".");
-        let mut frontier = vec![selected.clone()];
-        let mut fields = Vec::new();
-        let mut source_blueprint_ids = Vec::new();
-        for relationship_name in path {
-            let declarations: Vec<(&str, Option<&Attribute>)> = frontier
-                .iter()
-                .map(|blueprint| {
-                    (
-                        blueprint.blueprint.code.as_str(),
-                        blueprint
-                            .attributes
-                            .iter()
-                            .find(|a| a.code.eq_ignore_ascii_case(relationship_name)),
-                    )
-                })
-                .collect();
-            let path_error = |error: PathError| match error {
-                error if error.is_conflict() => RepositoryError::RelationshipPathConflict(error),
-                PathError::Unknown { .. } | PathError::NotRelationship { .. } => {
-                    RepositoryError::InvalidBlueprintDefinition(format!(
-                        "unknown relationship '{relationship_name}' in search path"
-                    ))
-                }
-                error => RepositoryError::InvalidBlueprintDefinition(error.to_string()),
-            };
-            let segment =
-                resolve_segment(&selector, relationship_name, &declarations).map_err(path_error)?;
-            let targets = segment.next_frontier(&selector).map_err(path_error)?;
-            fields.push(segment.first().code.clone());
-            source_blueprint_ids.push(
-                frontier
-                    .iter()
-                    .filter(|blueprint| {
-                        segment
-                            .declarations
-                            .iter()
-                            .any(|(code, _)| *code == blueprint.blueprint.code)
-                    })
-                    .map(|blueprint| blueprint.blueprint.id)
-                    .collect(),
-            );
-            let mut next = Vec::with_capacity(targets.len());
-            for code in &targets {
-                // A target never published has no records to reach.
-                if let Some(target) = self.get_blueprint_by_code(code).await? {
-                    next.push(target);
-                }
-            }
-            frontier = next;
+    ) -> Result<(Vec<String>, Vec<Vec<Uuid>>, Vec<PathBlueprint>), RepositoryError> {
+        if path.is_empty() {
+            return Ok((
+                Vec::new(),
+                Vec::new(),
+                vec![PathBlueprint {
+                    id: selected.blueprint.id,
+                    code: selected.blueprint.code.clone(),
+                    attributes: selected.attributes.as_slice().into(),
+                }],
+            ));
         }
-        Ok((fields, source_blueprint_ids, frontier))
+        let selector = path.join(FIELD_PATH_SEPARATOR);
+        let walked = walk_hops(
+            &selector,
+            path,
+            (&selected.blueprint.code, &selected.attributes),
+            CodeMatch::IgnoreCase,
+            self,
+        )
+        .await
+        .map_err(|error| {
+            error.into_repository(|error| {
+                RepositoryError::InvalidBlueprintDefinition(format!("search path '{selector}' {error}"))
+            })
+        })?;
+        // Each hop starts from the source, then from the targets of the hop
+        // before it.
+        let source_blueprint_ids = std::iter::once(vec![selected.blueprint.id])
+            .chain(
+                walked.frontiers[..walked.frontiers.len() - 1]
+                    .iter()
+                    .map(|frontier| frontier.iter().map(|target| target.id).collect()),
+            )
+            .collect();
+        let WalkedHops {
+            relationships,
+            mut frontiers,
+            ..
+        } = walked;
+        let targets = frontiers.pop().unwrap_or_default();
+        Ok((relationships, source_blueprint_ids, targets))
     }
 
     async fn ensure_unambiguous_name(
@@ -3915,12 +3903,11 @@ fn native_sort_column(
 }
 
 fn decode_sorted_search_cursor(cursor: &str) -> Result<SortedSearchCursor, RepositoryError> {
-    let bytes = URL_SAFE_NO_PAD.decode(cursor).map_err(|_| {
-        RepositoryError::InvalidBlueprintDefinition("page.cursor is invalid".to_owned())
-    })?;
-    serde_json::from_slice(&bytes).map_err(|_| {
-        RepositoryError::InvalidBlueprintDefinition("page.cursor is invalid".to_owned())
-    })
+    let bytes = URL_SAFE_NO_PAD
+        .decode(cursor)
+        .map_err(|_| RepositoryError::InvalidBlueprintDefinition("page.cursor is invalid".to_owned()))?;
+    serde_json::from_slice(&bytes)
+        .map_err(|_| RepositoryError::InvalidBlueprintDefinition("page.cursor is invalid".to_owned()))
 }
 
 fn encode_sorted_search_cursor(sort: &RecordSearchSort, row: &SortedRecordPreviewRow) -> String {

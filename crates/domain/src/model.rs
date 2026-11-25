@@ -94,10 +94,20 @@ impl Attribute {
     /// The blueprints a relationship links to: its single target, or else
     /// every allowed target (empty for any record blueprint).
     pub fn declared_target_codes(&self) -> Vec<String> {
-        match &self.target_blueprint_code {
-            Some(code) => vec![code.clone()],
-            None => self.target_blueprint_codes.clone(),
-        }
+        declared_target_codes(
+            self.target_blueprint_code.as_ref(),
+            &self.target_blueprint_codes,
+        )
+    }
+}
+
+/// The blueprints a relationship links to, from its single target and its
+/// list of allowed targets: the single target when it has one, else the list
+/// (empty for any record blueprint).
+pub fn declared_target_codes(single: Option<&String>, allowed: &[String]) -> Vec<String> {
+    match single {
+        Some(code) => vec![code.clone()],
+        None => allowed.to_vec(),
     }
 }
 

@@ -652,10 +652,10 @@ impl attricat_validation::relationship_path::PathAttribute for EffectiveAttribut
     }
 
     fn path_target_codes(&self) -> Vec<String> {
-        match &self.target_blueprint {
-            Some(target) => vec![target.clone()],
-            None => self.target_blueprints.clone(),
-        }
+        attricat_domain::model::declared_target_codes(
+            self.target_blueprint.as_ref(),
+            &self.target_blueprints,
+        )
     }
 
     fn path_cardinality(&self) -> Option<attricat_domain::attribute_options::Cardinality> {

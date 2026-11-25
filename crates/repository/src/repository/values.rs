@@ -6,7 +6,7 @@ use crate::persistence_rows::{Db, IntoDomain};
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use chrono_tz::Tz;
 use rust_decimal::Decimal;
-use sqlx::{Postgres, Transaction};
+use sqlx::{AssertSqlSafe, Postgres, Transaction};
 use uuid::Uuid;
 
 #[derive(sqlx::FromRow)]
@@ -460,14 +460,13 @@ impl AttricatRepository {
         blueprint_id: Uuid,
         blueprint_version: i64,
     ) -> Result<Vec<Attribute>, RepositoryError> {
-        Ok(sqlx::query_as::<_, Db<Attribute>>(
-            r#"SELECT id, blueprint_id, blueprint_version, code, name, value_type, value_schema, extension_type, default_value, file_policy,
-                      target_blueprint_code, target_blueprint_codes, cardinality, target_cardinality, hierarchy, tags, context_fallback, context_editable, readonly,
-                      generated, balance, target_scope, position, created_at, updated_at, deleted_at
+        Ok(sqlx::query_as::<_, Db<Attribute>>(AssertSqlSafe(format!(
+            r#"SELECT {}
                FROM attributes
                WHERE blueprint_id = $1 AND blueprint_version = $2 AND deleted_at IS NULL
                ORDER BY position"#,
-        )
+            super::ATTRIBUTE_COLUMNS
+        )))
         .bind(blueprint_id)
         .bind(blueprint_version)
         .fetch_all(&mut **transaction)

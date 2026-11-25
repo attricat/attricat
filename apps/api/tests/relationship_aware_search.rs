@@ -517,7 +517,10 @@ attributes:
 
     for (query, message) in [
         // A path continues past several targets only into fields they declare.
-        ("item.color.name:red", "unknown relationship 'color'"),
+        (
+            "item.color.name:red",
+            "references unknown attribute 'color'",
+        ),
         (
             "item.missing:red",
             "unknown scalar search-path leaf 'missing'",

@@ -10,13 +10,11 @@ import {
   querySelectorSeparator,
   queryWildcard,
   resolveRelationshipPath,
+  schemaFrontier,
   type QueryCursorContext,
   type QuerySchema,
 } from './queryLanguage';
-import {
-  allowedTargetBlueprints,
-  frontierAttributes,
-} from '../records/relationshipTargets';
+import { allowedTargetBlueprints } from '../records/relationshipTargets';
 
 /** Keeps the dropdown scannable; typing narrows longer lists. */
 const maximumQuerySuggestions = 50;
@@ -250,16 +248,9 @@ export const queryTargetCodes = (
       const targets = relationship ? allowedTargetBlueprints(relationship) : [];
       for (const code of targets) codes.add(code);
       // A hop is followed further once every blueprint it links to loaded.
-      const loaded = targets.map((code) => schema.targets.get(code));
       attributes =
-        targets.length > 0 && loaded.every(Boolean)
-          ? frontierAttributes(
-              targets.map((code, index) => ({
-                code,
-                attributes: loaded[index]!,
-              })),
-              (code) => code.toLowerCase(),
-            ).attributes
+        targets.length > 0
+          ? schemaFrontier(schema, targets)?.attributes
           : undefined;
     }
   };

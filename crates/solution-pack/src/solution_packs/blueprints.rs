@@ -601,7 +601,7 @@ fn validate_table_paths(
                 }
                 // Every blueprint a hop links to must be in the pack, and is
                 // published before the owner.
-                let walked = walk_path(
+                let leaf = walk_path(
                     &column.field,
                     &parts,
                     (owner.code.as_str(), owner.attributes.as_slice()),
@@ -624,10 +624,7 @@ fn validate_table_paths(
                         column.field
                     )),
                 })?;
-                if matches!(
-                    walked.leaf.value_type,
-                    ValueType::Relationship | ValueType::File
-                ) {
+                if matches!(leaf.value_type, ValueType::Relationship | ValueType::File) {
                     return invalid(format!(
                         "blueprint '{owner_key}' table column '{}' leaf must be scalar",
                         column.field

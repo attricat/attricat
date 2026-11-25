@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { frontierAttributes } from './relationshipTargets';
+import { attributePathFields, frontierAttributes } from './relationshipTargets';
 
 const scalar = (code: string, value_type: 'number' | 'string' = 'number') => ({
   code,
@@ -13,13 +13,16 @@ const relationship = (code: string, targets: string[]) => ({
 
 describe('frontierAttributes', () => {
   it('merges the fields of every target and names partial ones', () => {
-    const frontier = frontierAttributes([
-      {
-        code: 'sheet',
-        attributes: [scalar('thickness_mm'), scalar('width_mm')],
-      },
-      { code: 'part', attributes: [scalar('thickness_mm')] },
-    ]);
+    const frontier = frontierAttributes(
+      [
+        {
+          code: 'sheet',
+          attributes: [scalar('thickness_mm'), scalar('width_mm')],
+        },
+        { code: 'part', attributes: [scalar('thickness_mm')] },
+      ],
+      attributePathFields,
+    );
     expect(frontier.attributes.map((attribute) => attribute.code)).toEqual([
       'thickness_mm',
       'width_mm',
@@ -29,24 +32,27 @@ describe('frontierAttributes', () => {
   });
 
   it('marks fields declared differently as conflicts', () => {
-    const frontier = frontierAttributes([
-      {
-        code: 'sheet',
-        attributes: [
-          scalar('gauge'),
-          relationship('grade', ['grade', 'alloy']),
-          relationship('maker', ['brand']),
-        ],
-      },
-      {
-        code: 'part',
-        attributes: [
-          scalar('gauge', 'string'),
-          relationship('grade', ['alloy', 'grade']),
-          relationship('maker', ['supplier']),
-        ],
-      },
-    ]);
+    const frontier = frontierAttributes(
+      [
+        {
+          code: 'sheet',
+          attributes: [
+            scalar('gauge'),
+            relationship('grade', ['grade', 'alloy']),
+            relationship('maker', ['brand']),
+          ],
+        },
+        {
+          code: 'part',
+          attributes: [
+            scalar('gauge', 'string'),
+            relationship('grade', ['alloy', 'grade']),
+            relationship('maker', ['supplier']),
+          ],
+        },
+      ],
+      attributePathFields,
+    );
     expect([...frontier.conflicts].sort()).toEqual(['gauge', 'maker']);
   });
 });

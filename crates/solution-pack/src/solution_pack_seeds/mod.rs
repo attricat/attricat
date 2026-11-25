@@ -10,7 +10,7 @@ use attricat_domain::value_type::ValueType;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use attricat_blueprint::BlueprintKind;
-use attricat_validation::relationship_path::{PathError, WalkError, walk_path};
+use attricat_validation::relationship_path::{WalkError, walk_path};
 use attricat_validation::saved_search;
 use semver::VersionReq;
 use serde::{Deserialize, Serialize};
@@ -916,15 +916,11 @@ fn walk_explorer_field<'a>(
     referenced: &mut BTreeSet<String>,
 ) -> Result<ValueType, String> {
     let segments = saved_search::field_path(path)?;
-    if let [leaf] = segments.as_slice() {
-        return start
-            .effective_attributes()
-            .iter()
-            .find(|attribute| attribute.code == *leaf)
-            .map(|attribute| attribute.value_type)
-            .ok_or_else(|| format!("field '{path}' references unknown attribute '{leaf}'"));
+    if segments.len() == 1 {
+        return walk_attribute_path(start, path, by_code, referenced)
+            .map(|attribute| attribute.value_type);
     }
-    let walked = walk_path(
+    let leaf = walk_path(
         path,
         &segments,
         (start.code(), start.effective_attributes()),
@@ -938,12 +934,9 @@ fn walk_explorer_field<'a>(
     )
     .map_err(|error| match error {
         WalkError::Load(reason) => reason,
-        WalkError::Path(PathError::Unknown { segment }) => {
-            format!("field '{path}' references unknown attribute '{segment}'")
-        }
         WalkError::Path(error) => format!("field '{path}' {error}"),
     })?;
-    Ok(walked.leaf.value_type)
+    Ok(leaf.value_type)
 }
 
 /// Validates a relationship facet path, which must end in a relationship.

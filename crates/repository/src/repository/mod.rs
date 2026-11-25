@@ -94,6 +94,7 @@ mod avatars;
 mod blueprint_connector_jobs;
 mod blueprint_migration_batches;
 mod blueprints;
+pub(crate) use blueprints::{ATTRIBUTE_COLUMNS, LATEST_PUBLISHED_BY_CODE};
 mod bootstrap;
 mod checks;
 mod contexts;

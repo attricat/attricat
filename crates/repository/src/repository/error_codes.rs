@@ -652,8 +652,7 @@ impl RepositoryError {
             // `reason` is the message without its "invalid … definition"
             // prefix, so a translation can supply its own.
             Self::RelationshipPathConflict(error) => {
-                plain(Unprocessable, Code::RelationshipPathTypeConflict)
-                    .with_details(error.conflict_details().unwrap_or_default())
+                plain(Unprocessable, Code::RelationshipPathTypeConflict).with_details(json!(error))
             }
             Self::InvalidBlueprintDefinition(reason) => {
                 plain(Unprocessable, Code::InvalidBlueprintDefinition)

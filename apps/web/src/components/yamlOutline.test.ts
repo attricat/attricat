@@ -46,6 +46,18 @@ describe('scanYaml', () => {
     );
   });
 
+  it('lists the scalar items of a sequence', () => {
+    const outline = scanYaml(
+      'attributes:\n  - code: spec\n    target_blueprints: [sheet, part]\n  - code: tags\n    tags:\n      - a\n      - b\n',
+    );
+    expect(outline.valuesAt(['attributes', 0, 'target_blueprints'])).toEqual([
+      'sheet',
+      'part',
+    ]);
+    expect(outline.valuesAt(['attributes', 1, 'tags'])).toEqual(['a', 'b']);
+    expect(outline.valuesAt(['attributes', 1, 'missing'])).toEqual([]);
+  });
+
   it('maps paths to their nearest source range', () => {
     const { rangeOf } = scanYaml(definition);
     const range = rangeOf(['attributes', 1, 'value_type'])!;

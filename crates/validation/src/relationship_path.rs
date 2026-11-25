@@ -57,7 +57,7 @@ impl PathAttribute for Attribute {
 /// Blueprints that declare a path segment with one value type.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct ValueTypeConflict {
-    pub value_type: String,
+    pub value_type: ValueType,
     pub blueprints: Vec<String>,
 }
 
@@ -68,123 +68,121 @@ pub struct TargetConflict {
     pub blueprints: Vec<String>,
 }
 
-/// Why a relationship path does not resolve.
+/// How the blueprints a path reaches disagree on a segment.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(untagged)]
+pub enum Conflicts {
+    /// They declare it with different value types.
+    ValueTypes(Vec<ValueTypeConflict>),
+    /// They declare it as relationships to different blueprints.
+    Targets(Vec<TargetConflict>),
+}
+
+/// A segment the blueprints a path reaches declare differently, reported
+/// with the `relationship_path_type_conflict` error code; it serializes as
+/// that error's `details`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct PathConflict {
+    pub path: String,
+    pub segment: String,
+    pub conflicts: Conflicts,
+}
+
+/// Lists blueprint codes in messages.
+const BLUEPRINT_LIST_SEPARATOR: &str = ", ";
+/// Separates the groups of a conflict in its message.
+const CONFLICT_GROUP_SEPARATOR: &str = "; ";
+/// Joins a relationship's target blueprints, as in `target_blueprints`
+/// listings.
+const TARGET_SEPARATOR: &str = " | ";
+/// Describes a relationship that names no target blueprint.
+const ANY_TARGET: &str = "any blueprint";
+
+impl fmt::Display for PathConflict {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Self {
+            path,
+            segment,
+            conflicts,
+        } = self;
+        let groups: Vec<String> = match conflicts {
+            Conflicts::ValueTypes(conflicts) => {
+                write!(
+                    formatter,
+                    "path '{path}' segment '{segment}' has different value types on its target blueprints: "
+                )?;
+                conflicts
+                    .iter()
+                    .map(|conflict| {
+                        format!(
+                            "{} = {}",
+                            conflict.blueprints.join(BLUEPRINT_LIST_SEPARATOR),
+                            conflict.value_type
+                        )
+                    })
+                    .collect()
+            }
+            Conflicts::Targets(conflicts) => {
+                write!(
+                    formatter,
+                    "path '{path}' relationship '{segment}' links to different blueprints on its target blueprints: "
+                )?;
+                conflicts
+                    .iter()
+                    .map(|conflict| {
+                        let targets = if conflict.targets.is_empty() {
+                            ANY_TARGET.to_owned()
+                        } else {
+                            conflict.targets.join(TARGET_SEPARATOR)
+                        };
+                        format!(
+                            "{} -> {targets}",
+                            conflict.blueprints.join(BLUEPRINT_LIST_SEPARATOR)
+                        )
+                    })
+                    .collect()
+            }
+        };
+        formatter.write_str(&groups.join(CONFLICT_GROUP_SEPARATOR))
+    }
+}
+
+/// Why a relationship path does not resolve. Its message completes a
+/// sentence about the path, such as "table column 'spec.x' …".
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PathError {
     /// No frontier blueprint declares the segment.
     Unknown { segment: String },
     /// The segment must be a relationship for the path to continue.
-    NotRelationship { segment: String },
+    NotRelationship {
+        segment: String,
+        value_type: ValueType,
+    },
     /// The relationship may link to any blueprint, so the path cannot
     /// continue through it.
     Unrestricted { segment: String },
-    /// Frontier blueprints declare the segment with different value types.
-    TypeConflict {
-        path: String,
-        segment: String,
-        conflicts: Vec<ValueTypeConflict>,
-    },
-    /// Frontier blueprints declare the relationship with different targets.
-    TargetConflict {
-        path: String,
-        segment: String,
-        conflicts: Vec<TargetConflict>,
-    },
-}
-
-impl PathError {
-    /// Whether frontier blueprints disagree on the segment, which callers
-    /// report with the `relationship_path_type_conflict` error code.
-    pub fn is_conflict(&self) -> bool {
-        matches!(
-            self,
-            Self::TypeConflict { .. } | Self::TargetConflict { .. }
-        )
-    }
-
-    /// The `details` of a `relationship_path_type_conflict` error.
-    pub fn conflict_details(&self) -> Option<serde_json::Value> {
-        match self {
-            Self::TypeConflict {
-                path,
-                segment,
-                conflicts,
-            } => Some(serde_json::json!({
-                "path": path,
-                "segment": segment,
-                "conflicts": conflicts,
-            })),
-            Self::TargetConflict {
-                path,
-                segment,
-                conflicts,
-            } => Some(serde_json::json!({
-                "path": path,
-                "segment": segment,
-                "conflicts": conflicts,
-            })),
-            _ => None,
-        }
-    }
+    /// Frontier blueprints declare the segment differently.
+    Conflict(PathConflict),
 }
 
 impl fmt::Display for PathError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Unknown { segment } => write!(formatter, "segment '{segment}' was not found"),
-            Self::NotRelationship { segment } => {
-                write!(formatter, "segment '{segment}' must be a relationship")
+            Self::Unknown { segment } => {
+                write!(formatter, "references unknown attribute '{segment}'")
             }
+            Self::NotRelationship {
+                segment,
+                value_type,
+            } => write!(
+                formatter,
+                "segment '{segment}' is a {value_type} attribute, not a relationship"
+            ),
             Self::Unrestricted { segment } => write!(
                 formatter,
                 "relationship '{segment}' may link to any blueprint, so a path cannot continue past it"
             ),
-            Self::TypeConflict {
-                path,
-                segment,
-                conflicts,
-            } => {
-                write!(
-                    formatter,
-                    "path '{path}' segment '{segment}' has different value types on its target blueprints: "
-                )?;
-                let groups: Vec<_> = conflicts
-                    .iter()
-                    .map(|conflict| {
-                        format!(
-                            "{} = {}",
-                            conflict.blueprints.join(", "),
-                            conflict.value_type
-                        )
-                    })
-                    .collect();
-                formatter.write_str(&groups.join("; "))
-            }
-            Self::TargetConflict {
-                path,
-                segment,
-                conflicts,
-            } => {
-                write!(
-                    formatter,
-                    "path '{path}' relationship '{segment}' links to different blueprints on its target blueprints: "
-                )?;
-                let groups: Vec<_> = conflicts
-                    .iter()
-                    .map(|conflict| {
-                        format!(
-                            "{} -> {}",
-                            conflict.blueprints.join(", "),
-                            if conflict.targets.is_empty() {
-                                "any".to_owned()
-                            } else {
-                                conflict.targets.join(" | ")
-                            }
-                        )
-                    })
-                    .collect();
-                formatter.write_str(&groups.join("; "))
-            }
+            Self::Conflict(conflict) => conflict.fmt(formatter),
         }
     }
 }
@@ -209,17 +207,15 @@ impl<'a, A: PathAttribute> Segment<'a, A> {
         self.declarations[0].1
     }
 
-    /// The blueprints that declare the segment.
-    pub fn declared_on(&self) -> Vec<String> {
-        self.declarations
-            .iter()
-            .map(|(blueprint, _)| (*blueprint).to_owned())
-            .collect()
-    }
-
-    /// Whether only some frontier blueprints declare the segment.
-    pub fn is_partial(&self) -> bool {
-        self.declarations.len() < self.frontier_len
+    /// The blueprints that declare the segment when only some frontier
+    /// blueprints do; `None` when all of them do.
+    pub fn partially_declared_on(&self) -> Option<Vec<String>> {
+        (self.declarations.len() < self.frontier_len).then(|| {
+            self.declarations
+                .iter()
+                .map(|(blueprint, _)| (*blueprint).to_owned())
+                .collect()
+        })
     }
 
     /// Whether every declaration holds a single value.
@@ -235,37 +231,40 @@ impl<'a, A: PathAttribute> Segment<'a, A> {
         if self.value_type != ValueType::Relationship {
             return Err(PathError::NotRelationship {
                 segment: self.code.clone(),
+                value_type: self.value_type,
             });
         }
-        let mut groups: Vec<(BTreeSet<String>, Vec<String>, Vec<String>)> = Vec::new();
+        let mut groups: Vec<(BTreeSet<String>, TargetConflict)> = Vec::new();
         for (blueprint, attribute) in &self.declarations {
             let targets = attribute.path_target_codes();
             let set: BTreeSet<_> = targets.iter().cloned().collect();
-            match groups.iter_mut().find(|(group, _, _)| *group == set) {
-                Some((_, _, blueprints)) => blueprints.push((*blueprint).to_owned()),
-                None => groups.push((set, targets, vec![(*blueprint).to_owned()])),
+            match groups.iter_mut().find(|(group, _)| *group == set) {
+                Some((_, conflict)) => conflict.blueprints.push((*blueprint).to_owned()),
+                None => groups.push((
+                    set,
+                    TargetConflict {
+                        targets,
+                        blueprints: vec![(*blueprint).to_owned()],
+                    },
+                )),
             }
         }
         if groups.len() > 1 {
-            return Err(PathError::TargetConflict {
+            return Err(PathError::Conflict(PathConflict {
                 path: path.to_owned(),
                 segment: self.code.clone(),
-                conflicts: groups
-                    .into_iter()
-                    .map(|(_, targets, blueprints)| TargetConflict {
-                        targets,
-                        blueprints,
-                    })
-                    .collect(),
-            });
+                conflicts: Conflicts::Targets(
+                    groups.into_iter().map(|(_, conflict)| conflict).collect(),
+                ),
+            }));
         }
-        let (_, targets, _) = groups.pop().expect("a segment has a declaration");
-        if targets.is_empty() {
+        let (_, agreed) = groups.pop().expect("a segment has a declaration");
+        if agreed.targets.is_empty() {
             return Err(PathError::Unrestricted {
                 segment: self.code.clone(),
             });
         }
-        Ok(targets)
+        Ok(agreed.targets)
     }
 }
 
@@ -292,23 +291,23 @@ pub fn resolve_segment<'a, A: PathAttribute>(
     {
         let mut conflicts: Vec<ValueTypeConflict> = Vec::new();
         for (blueprint, attribute) in &declarations {
-            let value_type = attribute.path_value_type().as_str();
+            let value_type = attribute.path_value_type();
             match conflicts
                 .iter_mut()
                 .find(|conflict| conflict.value_type == value_type)
             {
                 Some(conflict) => conflict.blueprints.push((*blueprint).to_owned()),
                 None => conflicts.push(ValueTypeConflict {
-                    value_type: value_type.to_owned(),
+                    value_type,
                     blueprints: vec![(*blueprint).to_owned()],
                 }),
             }
         }
-        return Err(PathError::TypeConflict {
+        return Err(PathError::Conflict(PathConflict {
             path: path.to_owned(),
             segment: segment.to_owned(),
-            conflicts,
-        });
+            conflicts: Conflicts::ValueTypes(conflicts),
+        }));
     }
     Ok(Segment {
         code: segment.to_owned(),
@@ -318,20 +317,44 @@ pub fn resolve_segment<'a, A: PathAttribute>(
     })
 }
 
-/// A path of at least one relationship hop, walked through blueprints held
-/// in memory.
-#[derive(Debug)]
-pub struct WalkedPath<'a, A> {
-    /// The codes of the relationships the path follows, before the leaf.
-    pub relationships: Vec<String>,
-    /// The leaf, resolved against the blueprints the last relationship
-    /// links to.
-    pub leaf: Segment<'a, A>,
-    /// The blueprints each relationship hop links to, in order.
-    pub frontiers: Vec<Vec<&'a str>>,
-    /// Whether every relationship holds a single value on every blueprint
-    /// that declares it.
-    pub single_valued: bool,
+/// How a path compares a segment with attribute codes.
+#[derive(Clone, Copy, Debug)]
+pub enum CodeMatch {
+    /// Exactly, as field paths name attributes.
+    Exact,
+    /// Ignoring ASCII case, as the search syntax does.
+    IgnoreCase,
+}
+
+impl CodeMatch {
+    pub fn matches(self, code: &str, segment: &str) -> bool {
+        match self {
+            Self::Exact => code == segment,
+            Self::IgnoreCase => code.eq_ignore_ascii_case(segment),
+        }
+    }
+}
+
+/// Resolves `segment` of `path` against a frontier of blueprints, each a
+/// code and its attributes: the step every path walk takes per segment.
+pub fn resolve_in<'a, A: PathAttribute + 'a>(
+    path: &str,
+    segment: &str,
+    frontier: impl IntoIterator<Item = (&'a str, &'a [A])>,
+    code_match: CodeMatch,
+) -> Result<Segment<'a, A>, PathError> {
+    let declarations: Vec<(&'a str, Option<&'a A>)> = frontier
+        .into_iter()
+        .map(|(code, attributes)| {
+            (
+                code,
+                attributes
+                    .iter()
+                    .find(|attribute| code_match.matches(attribute.path_code(), segment)),
+            )
+        })
+        .collect();
+    resolve_segment(path, segment, &declarations)
 }
 
 /// Why an in-memory walk failed: the path rule, or `load`'s own error.
@@ -344,57 +367,34 @@ pub enum WalkError<E> {
 /// A blueprint for an in-memory walk: its code and attributes.
 pub type WalkBlueprint<'a, A> = (&'a str, &'a [A]);
 
-/// Walks `parts`, at least one relationship and a leaf, from `source`.
-/// `load` returns the blueprint of a target code, `None` when it has none to
-/// declare segments, or its own error for a target the walk must not reach.
+/// Walks `parts`, at least one relationship and a leaf, from `source`, and
+/// returns the leaf. `load` returns the blueprint of a target code, `None`
+/// when it has none to declare segments, or its own error for a target the
+/// walk must not reach.
 pub fn walk_path<'a, A, E>(
     path: &str,
     parts: &[&str],
     source: WalkBlueprint<'a, A>,
     mut load: impl FnMut(&str) -> Result<Option<WalkBlueprint<'a, A>>, E>,
-) -> Result<WalkedPath<'a, A>, WalkError<E>>
+) -> Result<Segment<'a, A>, WalkError<E>>
 where
     A: PathAttribute,
 {
     debug_assert!(parts.len() >= 2, "a relationship path has a hop and a leaf");
+    let (leaf, hops) = parts.split_last().expect("a path has a leaf");
     let mut frontier = vec![source];
-    let mut relationships = Vec::new();
-    let mut frontiers = Vec::new();
-    let mut single_valued = true;
-    for (index, part) in parts.iter().enumerate() {
-        let declarations: Vec<(&'a str, Option<&'a A>)> = frontier
-            .iter()
-            .map(|(code, attributes)| {
-                (
-                    *code,
-                    attributes
-                        .iter()
-                        .find(|attribute| attribute.path_code() == *part),
-                )
-            })
-            .collect();
-        let segment = resolve_segment(path, part, &declarations).map_err(WalkError::Path)?;
-        if index + 1 == parts.len() {
-            return Ok(WalkedPath {
-                relationships,
-                leaf: segment,
-                frontiers,
-                single_valued,
-            });
-        }
-        single_valued &= segment.single_valued();
-        let targets = segment.next_frontier(path).map_err(WalkError::Path)?;
-        let mut next = Vec::with_capacity(targets.len());
+    for hop in hops {
+        let targets = resolve_in(path, hop, frontier.iter().copied(), CodeMatch::Exact)
+            .and_then(|segment| segment.next_frontier(path))
+            .map_err(WalkError::Path)?;
+        frontier = Vec::with_capacity(targets.len());
         for target in &targets {
             if let Some(blueprint) = load(target).map_err(WalkError::Load)? {
-                next.push(blueprint);
+                frontier.push(blueprint);
             }
         }
-        frontiers.push(next.iter().map(|(code, _)| *code).collect());
-        relationships.push((*part).to_owned());
-        frontier = next;
     }
-    unreachable!("the loop returns at the leaf")
+    resolve_in(path, leaf, frontier, CodeMatch::Exact).map_err(WalkError::Path)
 }
 
 #[cfg(test)]
@@ -449,14 +449,17 @@ mod tests {
         ];
         let segment = resolve_segment("spec.width_mm", "width_mm", &frontier).unwrap();
         assert_eq!(segment.value_type, ValueType::Number);
-        assert_eq!(segment.declared_on(), ["sheet", "profile"]);
-        assert!(segment.is_partial());
+        assert_eq!(
+            segment.partially_declared_on().unwrap(),
+            ["sheet", "profile"]
+        );
 
         let all = [("sheet", Some(&number)), ("part", Some(&number))];
         assert!(
-            !resolve_segment("spec.width_mm", "width_mm", &all)
+            resolve_segment("spec.width_mm", "width_mm", &all)
                 .unwrap()
-                .is_partial()
+                .partially_declared_on()
+                .is_none()
         );
     }
 
@@ -481,22 +484,24 @@ mod tests {
             ("part", Some(&string)),
         ];
         let error = resolve_segment("spec.thickness_mm", "thickness_mm", &frontier).unwrap_err();
-        assert!(error.is_conflict());
+        let PathError::Conflict(conflict) = &error else {
+            panic!("{error:?} is not a conflict");
+        };
         assert_eq!(
-            error,
-            PathError::TypeConflict {
+            conflict,
+            &PathConflict {
                 path: "spec.thickness_mm".to_owned(),
                 segment: "thickness_mm".to_owned(),
-                conflicts: vec![
+                conflicts: Conflicts::ValueTypes(vec![
                     ValueTypeConflict {
-                        value_type: "number".to_owned(),
+                        value_type: ValueType::Number,
                         blueprints: vec!["sheet".to_owned(), "profile".to_owned()],
                     },
                     ValueTypeConflict {
-                        value_type: "string".to_owned(),
+                        value_type: ValueType::String,
                         blueprints: vec!["part".to_owned()],
                     },
-                ],
+                ]),
             }
         );
         assert_eq!(
@@ -504,7 +509,11 @@ mod tests {
             "path 'spec.thickness_mm' segment 'thickness_mm' has different value types on its target blueprints: sheet, profile = number; part = string"
         );
         assert_eq!(
-            error.conflict_details().unwrap()["conflicts"][1]["blueprints"],
+            serde_json::to_value(conflict).unwrap()["conflicts"][1],
+            serde_json::json!({"value_type": "string", "blueprints": ["part"]})
+        );
+        assert_eq!(
+            serde_json::to_value(conflict).unwrap()["conflicts"][1]["blueprints"],
             serde_json::json!(["part"])
         );
     }
@@ -533,7 +542,7 @@ mod tests {
         ];
         let segment = resolve_segment("spec.grade.code", "grade", &frontier).unwrap();
         let error = segment.next_frontier("spec.grade.code").unwrap_err();
-        assert!(error.is_conflict());
+        assert!(matches!(error, PathError::Conflict(_)));
         assert_eq!(
             error.to_string(),
             "path 'spec.grade.code' relationship 'grade' links to different blueprints on its target blueprints: sheet, profile -> material_grade; part -> steel_grade"
@@ -561,7 +570,8 @@ mod tests {
         assert_eq!(
             segment.next_frontier("spec.width_mm.x").unwrap_err(),
             PathError::NotRelationship {
-                segment: "width_mm".to_owned()
+                segment: "width_mm".to_owned(),
+                value_type: ValueType::Number,
             }
         );
     }
@@ -588,7 +598,7 @@ mod tests {
     }
 
     #[test]
-    fn a_walk_follows_every_target_and_reports_the_frontiers() {
+    fn a_walk_follows_every_target_to_the_leaf() {
         let product = [Named {
             code: "spec",
             field: relationship(&["sheet", "part"]),
@@ -619,17 +629,15 @@ mod tests {
                 _ => None,
             })
         };
-        let walked = walk_path(
+        let code = walk_path(
             "spec.grade.code",
             &["spec", "grade", "code"],
             ("product", &product[..]),
             load,
         )
         .unwrap();
-        assert_eq!(walked.relationships, ["spec", "grade"]);
-        assert_eq!(walked.frontiers, [vec!["sheet", "part"], vec!["grade"]]);
-        assert_eq!(walked.leaf.value_type, ValueType::String);
-        assert!(walked.single_valued);
+        assert_eq!(code.value_type, ValueType::String);
+        assert_eq!(code.declarations[0].0, "grade");
 
         let width = walk_path(
             "spec.width_mm",
@@ -638,8 +646,7 @@ mod tests {
             load,
         )
         .unwrap();
-        assert_eq!(width.leaf.declared_on(), ["sheet"]);
-        assert!(width.leaf.is_partial());
+        assert_eq!(width.partially_declared_on().unwrap(), ["sheet"]);
     }
 
     #[test]

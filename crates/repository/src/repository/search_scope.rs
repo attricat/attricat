@@ -12,7 +12,7 @@ use thiserror::Error;
 use tracing::Instrument;
 use uuid::Uuid;
 
-use super::relationship_paths::PathWalkError;
+use super::relationship_paths::{PathWalkError, ResolvedPath};
 use super::{
     AttricatRepository, RecordRelationshipFilter, RecordSearchFilter, RecordSearchSort,
     RepositoryError, SEARCH_FILTER_EQ_ANY, SearchContext,
@@ -20,6 +20,7 @@ use super::{
 use crate::model::{
     BlueprintWithAttributes, MatchExplanation, RelationshipFilter, SearchBlueprint, SearchFilter,
 };
+use attricat_validation::relationship_path::PathError;
 
 /// What a search resolves a relationship path for, which decides its error.
 #[derive(Clone, Copy)]
@@ -239,36 +240,56 @@ impl AttricatRepository {
         })
     }
 
-    /// A path that did not resolve, as a search scope error: a conflict keeps
-    /// its own code; any other failure names the field and, when the failing
-    /// segment resolved against one blueprint, offers that blueprint's fields.
-    async fn path_scope_error(
+    /// Resolves a relationship path of the `label` request field against
+    /// `blueprint`. A conflict keeps its own error code; any other failure
+    /// names the field and, when the failing segment resolved against one
+    /// blueprint, offers that blueprint's fields.
+    async fn resolve_scope_path(
         &self,
-        error: PathWalkError,
-        field: &str,
+        blueprint: &BlueprintWithAttributes,
+        path: &str,
+        parts: &[&str],
+        label: &str,
         path_use: PathUse,
-    ) -> SearchScopeError {
-        match error {
-            PathWalkError::Repository(error) => error.into(),
-            PathWalkError::Path { error, .. } if error.is_conflict() => {
-                RepositoryError::RelationshipPathConflict(error).into()
-            }
-            PathWalkError::Path { error, frontier } => {
-                let message = format!("{field} {error}");
-                match path_use {
-                    PathUse::Sort => invalid_sort(message),
-                    PathUse::Filter => {
-                        let blueprint = match frontier.as_slice() {
-                            [code] => self.get_blueprint_by_code(code).await.ok().flatten(),
-                            _ => None,
-                        };
-                        SearchScopeError::Invalid {
-                            message,
-                            blueprint: blueprint.map(Box::new),
-                        }
-                    }
-                }
-            }
+    ) -> Result<ResolvedPath, SearchScopeError> {
+        let error = match self
+            .resolve_relationship_path(
+                path,
+                parts,
+                &blueprint.blueprint.code,
+                &blueprint.attributes,
+            )
+            .await
+        {
+            Ok(resolved) => return Ok(resolved),
+            Err(error) => error,
+        };
+        let (error, frontier) = match error {
+            PathWalkError::Repository(error) => return Err(error.into()),
+            PathWalkError::Path { error, frontier } => (error, frontier),
+        };
+        if let PathError::Conflict(conflict) = error {
+            return Err(RepositoryError::RelationshipPathConflict(conflict).into());
+        }
+        let message = format!("{label} {error}");
+        Err(match path_use {
+            PathUse::Sort => invalid_sort(message),
+            PathUse::Filter => SearchScopeError::Invalid {
+                message,
+                blueprint: self.fields_hint(&frontier).await?.map(Box::new),
+            },
+        })
+    }
+
+    /// The blueprint whose fields an invalid path's error offers: the one the
+    /// failing segment resolved against, when there was one.
+    async fn fields_hint(
+        &self,
+        frontier: &[String],
+    ) -> Result<Option<BlueprintWithAttributes>, RepositoryError> {
+        match frontier {
+            [code] => self.get_blueprint_by_code(code).await,
+            _ => Ok(None),
         }
     }
 
@@ -328,28 +349,21 @@ impl AttricatRepository {
                     }
                 }
             } else {
-                let resolved = match self
-                    .resolve_relationship_path(
+                let resolved = self
+                    .resolve_scope_path(
+                        blueprint,
                         &filter.field,
                         &parts,
-                        &blueprint.blueprint.code,
-                        &blueprint.attributes,
+                        "filters.field",
+                        PathUse::Filter,
                     )
-                    .await
-                {
-                    Ok(resolved) => resolved,
-                    Err(error) => {
-                        return Err(self
-                            .path_scope_error(error, "filters.field", PathUse::Filter)
-                            .await);
-                    }
-                };
+                    .await?;
                 (
-                    resolved.relationships,
-                    resolved.leaf.code.clone(),
-                    resolved.value_type,
+                    resolved.hops.relationships,
+                    resolved.leaf.code,
+                    resolved.leaf.value_type,
                     false,
-                    resolved.leaf.value_schema.clone(),
+                    resolved.leaf.value_schema,
                 )
             };
         // "Assigned to me" matches the actor and each of the actor's teams.
@@ -461,51 +475,37 @@ impl AttricatRepository {
         // to several blueprints or any; the hops before it continue in the
         // targets their declarations agree on.
         let last = path[path.len() - 1];
-        let (relationship_path, leaf_type, at) = if path.len() == 1 {
-            let leaf_type = blueprint
-                .attributes
-                .iter()
-                .find(|attribute| attribute.code == last)
-                .map(|attribute| attribute.value_type);
-            (Vec::new(), leaf_type, Some(blueprint.clone()))
+        let not_relationship =
+            || format!("relationship_filters.field segment '{last}' is not a relationship");
+        let relationship_path = if path.len() == 1 {
+            if !blueprint.attributes.iter().any(|attribute| {
+                attribute.code == last && attribute.value_type == ValueType::Relationship
+            }) {
+                return Err(invalid_in(not_relationship(), blueprint));
+            }
+            vec![last.to_owned()]
         } else {
-            match self
-                .resolve_relationship_path(
+            let resolved = self
+                .resolve_scope_path(
+                    blueprint,
                     &filter.field,
                     &path,
-                    &blueprint.blueprint.code,
-                    &blueprint.attributes,
+                    "relationship_filters.field",
+                    PathUse::Filter,
                 )
-                .await
-            {
-                Ok(resolved) => {
-                    // A leaf that is not a relationship names the fields of
-                    // the one blueprint it resolved on.
-                    let at = match resolved.leaf_frontier.as_slice() {
-                        [target] if resolved.value_type != ValueType::Relationship => {
-                            self.get_blueprint_by_code(&target.code).await?
-                        }
-                        _ => None,
-                    };
-                    (resolved.relationships, Some(resolved.value_type), at)
-                }
-                Err(error) => {
-                    return Err(self
-                        .path_scope_error(error, "relationship_filters.field", PathUse::Filter)
-                        .await);
-                }
+                .await?;
+            let targets = resolved.hops.targets();
+            if resolved.leaf.value_type != ValueType::Relationship {
+                let codes: Vec<String> = targets.iter().map(|target| target.code.clone()).collect();
+                return Err(SearchScopeError::Invalid {
+                    message: not_relationship(),
+                    blueprint: self.fields_hint(&codes).await?.map(Box::new),
+                });
             }
+            let mut relationship_path = resolved.hops.relationships;
+            relationship_path.push(resolved.leaf.code);
+            relationship_path
         };
-        if leaf_type != Some(ValueType::Relationship) {
-            let message =
-                format!("relationship_filters.field segment '{last}' is not a relationship");
-            return Err(match at {
-                Some(blueprint) => invalid_in(message, &blueprint),
-                None => invalid(message),
-            });
-        }
-        let mut relationship_path = relationship_path;
-        relationship_path.push(last.to_owned());
         Ok(RecordRelationshipFilter {
             field: filter.field.clone(),
             relationship_path,
@@ -632,23 +632,10 @@ impl AttricatRepository {
                 value_type,
             )
         } else {
-            let resolved = match self
-                .resolve_relationship_path(
-                    &sort.field,
-                    &parts,
-                    &blueprint.blueprint.code,
-                    &blueprint.attributes,
-                )
-                .await
-            {
-                Ok(resolved) => resolved,
-                Err(error) => {
-                    return Err(self
-                        .path_scope_error(error, "sort.field", PathUse::Sort)
-                        .await);
-                }
-            };
-            if !resolved.single_valued {
+            let resolved = self
+                .resolve_scope_path(blueprint, &sort.field, &parts, "sort.field", PathUse::Sort)
+                .await?;
+            if !resolved.hops.single_valued {
                 return Err(invalid_sort(
                     "sort.field relationship path must be single-valued".to_owned(),
                 ));
@@ -656,14 +643,15 @@ impl AttricatRepository {
             // Every blueprint the path may end in, whether or not it has the
             // leaf, so records ending in each sort with or after the values.
             (
-                resolved.relationships,
+                resolved.hops.relationships.clone(),
                 resolved.leaf.code,
                 resolved
-                    .leaf_frontier
+                    .hops
+                    .targets()
                     .iter()
                     .map(|target| target.id)
                     .collect(),
-                resolved.value_type,
+                resolved.leaf.value_type,
             )
         };
         if !value_type.is_scalar() {

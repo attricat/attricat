@@ -11,12 +11,14 @@ use attricat_validation::saved_search::browse_path_hop;
 use attricat_validation::validate_json_schema;
 use semver::VersionReq;
 use serde_json::{Value, json};
-use sqlx::{Postgres, Transaction};
+use sqlx::{AssertSqlSafe, Postgres, Transaction};
 use uuid::Uuid;
 
 use crate::persistence_rows::{Db, IntoDomain};
-use crate::repository::RepositoryError;
-use crate::repository::relationship_paths::{PathBlueprint, PathLoader, walk_relationship_path};
+use crate::repository::relationship_paths::{
+    LoadedBlueprints, OnceLoader, PathBlueprint, PathLoader, walk_relationship_path,
+};
+use crate::repository::{ATTRIBUTE_COLUMNS, LATEST_PUBLISHED_BY_CODE, RepositoryError};
 use attricat_domain::model::Attribute;
 
 pub(crate) async fn compile_definition(
@@ -336,22 +338,20 @@ async fn published_path_blueprint(
     workspace_id: Uuid,
     code: &str,
 ) -> Result<Option<PathBlueprint>, RepositoryError> {
-    let Some((id, version)) = sqlx::query_as::<_, (Uuid, i64)>(
-        "SELECT id, version FROM blueprints WHERE code = $1 AND workspace_id = $2 AND status = 'published' AND deleted_at IS NULL ORDER BY version DESC LIMIT 1",
-    )
-    .bind(code)
-    .bind(workspace_id)
-    .fetch_optional(&mut **transaction)
-    .await?
+    let Some((id, version)) = sqlx::query_as::<_, (Uuid, i64)>(LATEST_PUBLISHED_BY_CODE)
+        .bind(code)
+        .bind(workspace_id)
+        .fetch_optional(&mut **transaction)
+        .await?
     else {
         return Ok(None);
     };
-    let attributes = sqlx::query_as::<_, Db<Attribute>>(
-        r#"SELECT id, blueprint_id, blueprint_version, code, name, value_type, value_schema, extension_type, default_value, file_policy, target_blueprint_code, target_blueprint_codes, cardinality, target_cardinality, hierarchy, tags, context_fallback, context_editable, readonly, generated, balance, target_scope, position, created_at, updated_at, deleted_at
+    let attributes: Vec<Attribute> = sqlx::query_as::<_, Db<Attribute>>(AssertSqlSafe(format!(
+        r#"SELECT {ATTRIBUTE_COLUMNS}
              FROM attributes
             WHERE blueprint_id = $1 AND blueprint_version = $2 AND workspace_id = $3 AND deleted_at IS NULL
-            ORDER BY position"#,
-    )
+            ORDER BY position"#
+    )))
     .bind(id)
     .bind(version)
     .bind(workspace_id)
@@ -361,7 +361,7 @@ async fn published_path_blueprint(
     Ok(Some(PathBlueprint {
         id,
         code: code.to_owned(),
-        attributes,
+        attributes: attributes.into(),
     }))
 }
 
@@ -417,6 +417,8 @@ async fn validate_table_columns(
     workspace_id: Uuid,
     compiled: &CompiledBlueprint,
 ) -> Result<(), RepositoryError> {
+    // Columns through the same relationships share their targets' loads.
+    let mut loaded = LoadedBlueprints::new();
     for view in compiled.views.values() {
         let ViewDefinition::Table {
             columns: Some(columns),
@@ -438,11 +440,13 @@ async fn validate_table_columns(
                 let resolved = walk_relationship_path(
                     &column.field,
                     &parts,
-                    &compiled.code,
-                    &compiled.attributes,
-                    TransactionPathLoader {
-                        transaction: &mut *transaction,
-                        workspace_id,
+                    (&compiled.code, &compiled.attributes),
+                    OnceLoader {
+                        inner: TransactionPathLoader {
+                            transaction: &mut *transaction,
+                            workspace_id,
+                        },
+                        loaded: &mut loaded,
                     },
                 )
                 .await
@@ -455,7 +459,7 @@ async fn validate_table_columns(
                     })
                 })?;
                 if matches!(
-                    resolved.value_type,
+                    resolved.leaf.value_type,
                     ValueType::Relationship | ValueType::File
                 ) {
                     return Err(RepositoryError::InvalidBlueprintDefinition(format!(
@@ -463,7 +467,7 @@ async fn validate_table_columns(
                         column.field
                     )));
                 }
-                resolved.value_type
+                resolved.leaf.value_type
             };
             if let Some(renderer) = &column.renderer {
                 if renderer.id == "attricat.table_image" {

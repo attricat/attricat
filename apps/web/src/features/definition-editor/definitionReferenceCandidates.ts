@@ -14,7 +14,12 @@ import {
   versionKey,
 } from './constants';
 import type { DefinitionReferences } from './definitionReferences';
-import { frontierAttributes } from '../records/relationshipTargets';
+import {
+  allowedTargetBlueprints,
+  frontierAttributes,
+  type PathFields,
+} from '../records/relationshipTargets';
+import { formatList } from '../../i18n/listFormat';
 import {
   definitionReferenceKinds,
   type DefinitionReferenceKind,
@@ -53,21 +58,16 @@ const documentAttributes = (outline: YamlOutline): DocumentAttribute[] =>
       const found = outline.valueAt([attributesKey, path[1], key]);
       return typeof found === 'string' ? found : undefined;
     };
-    const target = at(targetBlueprintKey);
-    const targets = outline.entries.flatMap((entry) =>
-      entry.path.length === 4 &&
-      entry.path[0] === attributesKey &&
-      entry.path[1] === path[1] &&
-      entry.path[2] === targetBlueprintsKey &&
-      typeof entry.value === 'string'
-        ? [entry.value]
-        : [],
-    );
     return [
       {
         code: value,
         from: at(fromKey),
-        targetBlueprints: target ? [target] : targets,
+        targetBlueprints: allowedTargetBlueprints({
+          target_blueprint_code: at(targetBlueprintKey),
+          target_blueprint_codes: outline
+            .valuesAt([attributesKey, path[1], targetBlueprintsKey])
+            .filter((code) => typeof code === 'string'),
+        }),
         valueType: at(valueTypeKey),
       },
     ];
@@ -93,9 +93,16 @@ const attributeDetail = (attribute: {
       })
     : attribute.targetBlueprints?.length
       ? i18n.t('definitionEditor.details.relationshipTo', {
-          target: attribute.targetBlueprints.join(' | '),
+          target: formatList(attribute.targetBlueprints, 'disjunction'),
         })
       : (attribute.valueType ?? '');
+
+/** Reads definition-reference attributes for `frontierAttributes`. */
+const referencePathFields: PathFields<DocumentAttribute> = {
+  code: (attribute) => attribute.code,
+  valueType: (attribute) => attribute.valueType ?? '',
+  targets: (attribute) => attribute.targetBlueprints ?? [],
+};
 
 /**
  * The attributes of the blueprints a path hop links to, merged as the API
@@ -110,14 +117,8 @@ const pathTargetAttributes = async (
     targets.map((target) => references.blueprintAttributes(target)),
   );
   const frontier = frontierAttributes(
-    targets.map((code, index) => ({
-      code,
-      attributes: lists[index].map((attribute) => ({
-        ...attribute,
-        target_blueprint_codes: attribute.targetBlueprints ?? [],
-        value_type: attribute.valueType,
-      })),
-    })),
+    targets.map((code, index) => ({ code, attributes: lists[index] })),
+    referencePathFields,
   );
   return {
     attributes: frontier.attributes.filter(
@@ -243,7 +244,7 @@ export const referenceCandidates = async (
             detail: declaredOn
               ? i18n.t('definitionEditor.details.onlyOn', {
                   detail: attributeDetail(attribute),
-                  blueprints: declaredOn.join(', '),
+                  blueprints: formatList(declaredOn),
                 })
               : attributeDetail(attribute),
             label: attribute.code,
