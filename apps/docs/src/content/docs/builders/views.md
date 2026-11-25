@@ -147,7 +147,7 @@ views:
 
 A column is a local scalar attribute, a local relationship, or a path through up to three relationships that ends in a scalar attribute. A relationship column lists the labels of the records the row links to, up to five, whichever of the relationship's target blueprints they belong to; it can't be sorted. Each hop is resolved with the linked record's own blueprint revision. If an older linked record does not have the attribute, the cell is empty. A many-valued path can show several values in one cell.
 
-A path can pass through a relationship to several blueprints, such as `spec.thickness_mm` on a product whose `spec` is a sheet, a profile or a part. The next attribute must exist on at least one of them, with the same value type on every blueprint that has it; declaring the shared attributes once in a mixin keeps them alike. Rows linked to a blueprint without the attribute have an empty cell. A blueprint whose path meets the same attribute with different value types can't be saved.
+A path can pass through a relationship to several blueprints. Say a stock record's `item` is either a product or a material. The column `item.unit` is valid if at least one of them has `unit` and every blueprint that has it declares the same value type. Declaring shared attributes once in a mixin keeps them alike. A row whose item lacks the attribute has an empty cell, and sorts after the rows with a value. A blueprint can't be saved if its path meets the same attribute with different value types.
 
 Columns can be sorted when they resolve to a scalar and every relationship in the path has `cardinality: one`.
 

@@ -55,6 +55,8 @@ Every type also offers **Presence**: choose **Has a value** or **Not set**. For 
 
 You can filter on an attribute of a related record too, such as `brand.name`, through up to three relationships.
 
+The path can also pass through a relationship that links to several blueprints, such as an `item` that is either a product or a material. The field list offers such a path when the blueprint's table has it as a column. When only some of the linked blueprints have the attribute, the field list says which, for example **Only on Product**, and records linked to the others don't match. Columns through such a relationship show an empty cell for those records, and sorting puts them last.
+
 The list also offers [reusable attributes](/builders/modeling/#reuse-attributes) attached to the blueprint's records when their definition sets both `searchable` and `facetable`.
 
 You can also start a filter from the table: hover over a cell and select its filter icon, **Filter by *field* = *value*…**. **Add filter** opens with that field and value filled in.

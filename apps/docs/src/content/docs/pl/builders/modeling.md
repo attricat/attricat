@@ -82,6 +82,8 @@ attributes:
 
 Powiązania z innymi schematami są odrzucane, okno wyboru rekordu pozwala wskazać, który z wymienionych schematów przeszukać, a każdy z nich może pokazać powiązania blokiem `incoming_relationship_list`. Zamiast jednej nieograniczonej relacji wybieraj jedną relację na znaczenie.
 
+Kolumny tabeli, filtry, sortowanie i [składnia wyszukiwania](/pl/guides/search-syntax/) mogą przejść przez tę relację do atrybutów jej schematów docelowych, na przykład `subject.name`. Atrybuty wspólne dla kilku schematów, zadeklarowane raz w mixinie, działają w takiej ścieżce jak jeden atrybut. Atrybut, który ma tylko część schematów, ma wartość tylko w rekordach powiązanych z tymi schematami. Zobacz [Tabela Przeglądarki rekordów](/pl/builders/views/#tabela-przeglądarki-rekordów).
+
 ### Klucze biznesowe
 
 Numery części, dokumentów czy inwentarzowe identyfikują rekord dla ludzi i innych systemów. Zadeklaruj je jako [klucze unikalne](/pl/builders/validation/#klucze-unikalne); łącz atrybuty, gdy identyfikator jest unikalny tylko w obrębie czegoś innego, np. oznaczenie wersji w obrębie dokumentu albo numer części w obrębie producenta.

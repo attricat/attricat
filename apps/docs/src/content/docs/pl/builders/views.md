@@ -147,7 +147,7 @@ views:
 
 Kolumna to lokalny atrybut skalarny, lokalna relacja albo ścieżka przez maksymalnie trzy relacje, zakończona atrybutem skalarnym. Kolumna relacji pokazuje etykiety rekordów, z którymi wiersz jest powiązany, najwyżej pięć, niezależnie od tego, do którego ze schematów docelowych relacji należą; nie można jej sortować. Każdy krok jest rozstrzygany według wersji schematu powiązanego rekordu. Jeśli starszy powiązany rekord nie ma danego atrybutu, komórka jest pusta. Ścieżka o wielu wartościach może pokazać kilka wartości w jednej komórce.
 
-Ścieżka może przechodzić przez relację do kilku schematów, na przykład `spec.thickness_mm` w produkcie, którego `spec` jest arkuszem, profilem albo częścią. Następny atrybut musi istnieć w co najmniej jednym z nich i mieć ten sam typ wartości w każdym schemacie, który go ma; zadeklarowanie wspólnych atrybutów raz w mixinie utrzymuje je zgodne. Wiersze powiązane ze schematem bez tego atrybutu mają pustą komórkę. Schematu, którego ścieżka trafia na ten sam atrybut z różnymi typami wartości, nie można zapisać.
+Ścieżka może przechodzić przez relację do kilku schematów. Powiedzmy, że `item` rekordu stanu magazynowego to produkt albo materiał. Kolumna `item.unit` jest poprawna, jeśli co najmniej jeden z nich ma `unit`, a każdy schemat, który go ma, deklaruje ten sam typ wartości. Wspólne atrybuty zadeklarowane raz w mixinie pozostają zgodne. Wiersz, którego pozycja nie ma tego atrybutu, ma pustą komórkę i przy sortowaniu trafia za wiersze z wartością. Schematu nie można zapisać, jeśli jego ścieżka trafia na ten sam atrybut z różnymi typami wartości.
 
 Kolumny można sortować, gdy prowadzą do wartości skalarnej, a każda relacja na ścieżce ma `cardinality: one`.
 

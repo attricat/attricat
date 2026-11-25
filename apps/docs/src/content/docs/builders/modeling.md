@@ -80,6 +80,8 @@ attributes:
 
 Links to other blueprints are rejected, the record picker lets editors choose which of the listed blueprints to search, and each listed blueprint can show the links with an `incoming_relationship_list`. Prefer one relationship per meaning over one unrestricted relationship.
 
+Table columns, filters, sorting and the [search syntax](/guides/search-syntax/) can follow the relationship into attributes of its targets, such as `subject.name`. Attributes that several targets share, declared once in a mixin, act as one attribute in such a path. An attribute that only some targets have has a value only on records linked to those targets. See [Explorer table](/builders/views/#explorer-table).
+
 ### Business keys
 
 Part numbers, document numbers, and accession numbers identify a record to people and other systems. Declare them as [unique keys](/builders/validation/#unique-keys); combine attributes when the identifier is only unique within something else, such as a revision label within its document or a part number within its manufacturer.

@@ -137,7 +137,7 @@ non-scalar values are rejected.
 
 A column path may pass through a relationship to
 [several target blueprints](blueprints.md#several-target-blueprints), such as
-`spec.thickness_mm` on a product whose `spec` is a sheet, profile or part. Its
+`item.unit` on a stock record whose `item` is a product or a material. Its
 leaf must exist on at least one target and have one value type on every target
 that declares it; otherwise saving the blueprint fails with
 `422 relationship_path_type_conflict`. A row whose linked record's blueprint

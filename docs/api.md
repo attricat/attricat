@@ -504,7 +504,9 @@ Direct `related[relationship]` previews remain available for compatibility with
 custom one-hop cell renderers. Blueprint responses expose
 `table_path_attributes` with each configured path's scalar `value_type` and
 whether every hop is single-valued; the Explorer uses that metadata for filter
-controls and sortable headers.
+controls and sortable headers. For a path through a relationship to several
+blueprints, `declared_on` lists the blueprints that declare its leaf when not
+all of them do; records linked to the others have no value there.
 
 ## Lexicon
 

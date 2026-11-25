@@ -55,6 +55,8 @@ Każdy typ ma też operator **Obecność wartości**: wybierz **Ma wartość** l
 
 Możesz też filtrować według atrybutu powiązanego rekordu, na przykład `brand.name`, przez maksymalnie trzy relacje.
 
+Ścieżka może też przechodzić przez relację, która wskazuje kilka schematów, na przykład `item`, który jest produktem albo materiałem. Lista pól oferuje taką ścieżkę, gdy tabela schematu ma ją jako kolumnę. Gdy atrybut ma tylko część powiązanych schematów, lista pól podaje które, na przykład **Tylko w: Produkt**, a rekordy powiązane z pozostałymi nie pasują do filtra. Kolumny przez taką relację pokazują dla tych rekordów pustą komórkę, a sortowanie umieszcza je na końcu.
+
 Lista obejmuje też [atrybuty wielokrotnego użytku](/pl/builders/modeling/#wielokrotne-użycie-atrybutów) dołączone do rekordów schematu, jeśli ich definicja ustawia zarówno `searchable`, jak i `facetable`.
 
 Filtr możesz również utworzyć z poziomu tabeli: najedź na komórkę i wybierz jej ikonę filtra, **Filtruj: *pole* = *wartość*…**. Okno **Dodaj filtr** otworzy się z wypełnionym polem i wartością.

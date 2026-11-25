@@ -296,10 +296,11 @@ A write linking a record of any other blueprint returns
 allowed set as `target_blueprint_codes` (empty means any blueprint);
 `target_blueprint_code` is set only when exactly one target is allowed.
 
-A relationship path such as `spec.thickness_mm` or `spec.grade.code` may pass
-through a multi-target relationship. Table columns and their sorting, Explorer
-filters, `relationship_filters`, saved searches (including solution-pack seeds),
-agent search filters and the search syntax resolve it the same way
+A relationship path may pass through a multi-target relationship, such as
+`item.unit` or `item.supplier.name` where `item` links to a product or a
+material. Table columns and their sorting, Explorer filters,
+`relationship_filters`, saved searches (including solution-pack seeds), agent
+search filters and the search syntax resolve it the same way
 (`attricat_validation::relationship_path`):
 
 1. The segment after the hop is looked up in the latest published revision of
