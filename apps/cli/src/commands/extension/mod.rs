@@ -8,6 +8,7 @@ pub(crate) mod run;
 pub(crate) mod scaffold;
 pub(crate) mod schedule;
 pub(crate) mod validate;
+pub(crate) mod webhook;
 
 use std::path::PathBuf;
 
@@ -25,6 +26,7 @@ use operation::{ExtensionOperationCommand, extension_operation_command};
 use registry::{ExtensionRegistryCommand, extension_registry_command};
 use run::{ExtensionRunCommand, extension_run_command};
 use schedule::{ExtensionScheduleCommand, extension_schedule_command};
+use webhook::{WebhookCommand, webhook_command};
 
 #[derive(Subcommand)]
 pub(crate) enum ExtensionCommand {
@@ -207,6 +209,11 @@ pub(crate) enum ExtensionCommand {
     Connection {
         #[command(subcommand)]
         command: ConnectionCommand,
+    },
+    /// Public endpoints through which external systems send webhooks.
+    Webhook {
+        #[command(subcommand)]
+        command: WebhookCommand,
     },
     /// Where connector exports sent records, and resending them.
     Export {
@@ -491,6 +498,7 @@ pub(crate) async fn extension_command(
         ExtensionCommand::Schedule { command } => extension_schedule_command(api, command).await,
         ExtensionCommand::ConnectorJob { command } => connector_job_command(api, command).await,
         ExtensionCommand::Connection { command } => connection_command(api, command).await,
+        ExtensionCommand::Webhook { command } => webhook_command(api, command).await,
         ExtensionCommand::Export { command } => export_command(api, command).await,
         ExtensionCommand::Budget { command } => budget_command(api, command).await,
         ExtensionCommand::Secret { command } => match command {

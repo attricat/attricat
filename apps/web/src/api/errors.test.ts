@@ -43,6 +43,23 @@ describe('API error messages', () => {
     await i18n.changeLanguage('en');
   });
 
+  it('names the resource that holds a taken code when it has a message', () => {
+    expect(
+      errorMessage(
+        new ApiRequestError(409, 'code is already taken', 'code_taken', {
+          resource: 'webhook_endpoint',
+        }),
+      ),
+    ).toBe('An endpoint with this name already exists.');
+    expect(
+      errorMessage(
+        new ApiRequestError(409, 'code is already taken', 'code_taken', {
+          resource: 'team',
+        }),
+      ),
+    ).toBe('This code is already in use.');
+  });
+
   it('keeps the server message for generic codes', () => {
     const error = new ApiRequestError(
       422,

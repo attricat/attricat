@@ -7,7 +7,7 @@ Serwerowy kod rozszerzenia to **komponent** WebAssembly zadeklarowany jako artef
 
 ## Wersja API hosta
 
-Interfejs hosta to pakiet WIT `attricat:host@1.1.0`, opublikowany jako `wit/attricat-host-1.1.0.wit` w repozytorium [attricat-extension-sdk](https://github.com/attricat/attricat-extension-sdk) razem z każdą inną wydaną wersją. Ustaw `attricat.host_api` w manifeście na zakres, który go obejmuje, np. `">=1.0.0, <2.0.0"` lub `"^1.1"`. Każde wydanie z takim zakresem może używać wszystkich funkcji: procedur obsługi zdarzeń, poleceń, typowanego odczytu i zapisu, konfiguracji zakresowej, wszystkich rodzajów [operacji](/pl/extensions/operations/) i wszystkich miejsc osadzenia po stronie klienta. Jeśli komponent korzysta z czegokolwiek, co dodano w 1.1, zadeklaruj `"^1.1"`, aby host obsługujący tylko 1.0 odrzucił pakiet, zamiast zawieść w czasie działania.
+Interfejs hosta to pakiet WIT `attricat:host@1.2.0`, opublikowany jako `wit/attricat-host-1.2.0.wit` w repozytorium [attricat-extension-sdk](https://github.com/attricat/attricat-extension-sdk) razem z każdą inną wydaną wersją. Ustaw `attricat.host_api` w manifeście na zakres, który go obejmuje, np. `">=1.0.0, <2.0.0"`, `"^1.1"` lub `"^1.2"`. Każde wydanie z takim zakresem może używać wszystkich funkcji: procedur obsługi zdarzeń, poleceń, typowanego odczytu i zapisu, konfiguracji zakresowej, wszystkich rodzajów [operacji](/pl/extensions/operations/), [webhooków przychodzących](#odbieraj-webhooki) i wszystkich miejsc osadzenia po stronie klienta. Jeśli komponent korzysta z czegokolwiek, co dodano w 1.1 lub 1.2, zadeklaruj `"^1.1"` lub `"^1.2"`, aby starszy host odrzucił pakiet, zamiast zawieść w czasie działania.
 
 Zbuduj komponent dla jednego z tych światów:
 
@@ -17,8 +17,9 @@ Zbuduj komponent dla jednego z tych światów:
 | `handler-extension` | `handler` (zdarzenia i polecenia) |
 | `operation-extension` | `operations` |
 | `outcome-extension` (1.1) | `event-handler`, `command-handler` i `deferrable-operations` |
+| `webhook-extension` (1.2) | wszystko, co eksportuje `outcome-extension`, oraz `webhook-receiver` |
 
-`outcome-extension` eksportuje interfejsy z wersji 1.1, które zgłaszają [typowane wyniki](#typowane-wyniki) zamiast zwykłego błędu. Gdy komponent eksportuje interfejs z 1.1, host wywołuje go zamiast jego poprzednika z 1.0. Komponent, który potrzebuje tylko części z tych trzech eksportów, zwraca z pozostałych błąd `fault`.
+`outcome-extension` eksportuje interfejsy z wersji 1.1, które zgłaszają [typowane wyniki](#typowane-wyniki) zamiast zwykłego błędu. Gdy komponent eksportuje interfejs z 1.1, host wywołuje go zamiast jego poprzednika z 1.0. Komponent, który potrzebuje tylko części eksportów, zwraca z pozostałych błąd `fault`. Buduj dla `webhook-extension` tylko wtedy, gdy rozszerzenie [odbiera webhooki](#odbieraj-webhooki).
 
 Wszystkie importy są zawsze dostępne, ale część działa tylko we właściwym miejscu. Interfejsy operacji (`artifacts`, `attricat-data`, `attricat`, `transfer`, `selection`) zwracają błąd poza wykonaniem operacji. W wykonaniu błąd zwracają typowane funkcje `read` i `write` oraz wywołania `attricat.read.v1` i `attricat.command.v1`; używaj wtedy interfejsów katalogu przypisanych do wykonania.
 
@@ -45,6 +46,7 @@ let response = api::call("storage.get.v1", r#"{"key":"last-sync"}"#)?;
 | `mappings.*.v1` | `exports.mappings` | [Konektory eksportu](/pl/extensions/exports/#mapowania-eksportu) |
 | `files.link.v1` | `attricat.files.public_links` | [Konektory eksportu](/pl/extensions/exports/#publiczne-linki-do-plików) |
 | `connector.scope.v1` | | [Konektory eksportu](/pl/extensions/exports/#zakres-wykonania) |
+| `webhooks.receipt.get.v1` | `webhooks.receive` | [Odbieraj webhooki](#odbieraj-webhooki) |
 
 Host sprawdza uprawnienie przy każdym wywołaniu, więc uprawnienie cofnięte w trakcie działania Twojego kodu obowiązuje od jego następnego wywołania. Odrzucone wywołanie zwraca błąd, np. `missing capability 'storage.extension'`, a nieznana nazwa zwraca `unknown host operation`. JSON wysyłany przez Ciebie jest ograniczony do 64 KiB, a JSON w odpowiedzi hosta do 1 MiB.
 
@@ -252,6 +254,102 @@ Wynik ma pole `outcome`:
 
 `headers` zawiera `content-type`, `etag`, `retry-after` oraz nagłówki wymienione w `response_headers` reguły. Przekierowania nigdy nie są śledzone: odpowiedź 3xx jest zwracana bez zmian, a jej `Location` możesz pobrać przez przyznaną regułę. Odpowiedź 401 usuwa zapamiętany token połączenia, więc następne żądanie otrzyma nowy.
 
+## Odbieraj webhooki
+
+API hosta 1.2 pozwala systemom zewnętrznym, np. marketplace'owi wysyłającemu powiadomienia o zamówieniach, wywoływać Twoje rozszerzenie. Komponent odpowiada na każde żądanie, gdy nadawca czeka, i może zachować jego ładunek. Zachowany ładunek jest zapisywany i później dostarczany do Twoich własnych procedur obsługi zdarzeń, gdzie odbywa się właściwa praca.
+
+Zadeklaruj każdy webhook w `server.webhooks` i obsłuż zdarzenie, które powstaje:
+
+```json
+"attricat": { "id": "acme.orders", "host_api": "^1.2" },
+"permissions": ["webhooks.receive", "secrets.read", "events.subscribe", "attricat.write"],
+"server": {
+  "webhooks": [
+    { "id": "orders", "title": "Order notifications", "max_body_bytes": 131072 }
+  ],
+  "event_handlers": [{
+    "id": "orders",
+    "event_types": ["webhook.received.v1"],
+    "handler": "handle-event"
+  }]
+}
+```
+
+Wydanie może zadeklarować do 16 webhooków. `max_body_bytes` to największa treść żądania, jaką Attricat przyjmie, i największy ładunek, jaki możesz zachować: domyślnie 64 KiB, najwyżej 512 KiB. Webhooki wymagają uprawnienia `webhooks.receive`, wymaganego lub opcjonalnego, oraz komponentu zbudowanego dla świata `webhook-extension`.
+
+Webhook nic nie odbiera, dopóki operator nie utworzy dla niego **punktu końcowego** w [sekcji Webhooki](/pl/builders/extensions/#webhooki) rozszerzenia. Każdy punkt końcowy ma własny tajny adres URL i nazwę, np. konta nadawcy, którą otrzymuje Twój komponent, więc jeden webhook może obsługiwać kilka kont, każde z własnym sekretem.
+
+### Odpowiedz na żądanie
+
+Attricat znajduje punkt końcowy po adresie URL i na niektóre żądania odpowiada sam, bez wywoływania komponentu:
+
+| Sytuacja | Odpowiedź |
+| --- | --- |
+| Nieznany adres URL | `404` |
+| Ponad 600 żądań do punktu końcowego w ciągu minuty | `429` |
+| Rozszerzenie jest wyłączone lub w kwarantannie, `webhooks.receive` nie jest przyznane albo zainstalowane wydanie nie deklaruje już webhooka | `503` |
+| Treść jest większa niż `max_body_bytes` | `413` |
+
+W pozostałych przypadkach wywołuje `webhook-receiver.receive` z `webhook-request`:
+
+| Pole | Zawartość |
+| --- | --- |
+| `webhook` | `id` webhooka z manifestu. |
+| `endpoint` | Nazwa punktu końcowego nadana przez operatora. |
+| `method` | `GET` lub `POST`. |
+| `query` | Ciąg zapytania bez `?`, może być pusty. |
+| `headers` | Nagłówki żądania z nazwami małymi literami. `cookie`, `authorization`, `proxy-authorization` i nagłówki, których wartość nie jest w UTF-8, są pomijane. |
+| `body` | Surowe bajty treści. |
+
+Zwróć `webhook-outcome` z odpowiedzią `reply`, którą dostaje nadawca (`status`, `headers`, `body`), i opcjonalnie `keep`: ładunkiem `payload` do zapisania i opcjonalnym `dedupe-key`.
+
+```rust
+fn receive(request: WebhookRequest) -> Result<WebhookOutcome, String> {
+    let secret = call("secrets.get.v1", json!({"name": format!("{}-signing-key", request.endpoint)}))?;
+    if !signature_matches(&secret, &request) {
+        return Ok(reply(401, "bad signature"));
+    }
+    let mut outcome = reply(202, "accepted");
+    outcome.keep = Some(KeptPayload {
+        payload: String::from_utf8(request.body).map_err(|e| e.to_string())?,
+        dedupe_key: header(&request, "x-delivery-id").map(str::to_owned),
+    });
+    Ok(outcome)
+}
+```
+
+`receive` musi działać szybko i może tylko odczytywać:
+
+- Ma 5 sekund, łącznie z czekaniem na wolne miejsce wywołania, i mniej paliwa niż inne wywołania.
+- Może używać `configuration.get.v1`, `secrets.get.v1`, `storage.get.v1`, `storage.list.v1`, odczytu konfiguracji zakresowej, `api.log` i `clock`, każdego z jego zwykłym uprawnieniem. Wszystko inne, w tym odczyt i zapis katalogu, zapis w magazynie, publikowanie zdarzeń, żądania sieciowe i `webhooks.receipt.get.v1`, zwraca błąd.
+- Każde niepowodzenie, czy to zwrócony błąd, pułapka, przekroczenie limitu czasu, czy nieprawidłowy wynik, kończy się odpowiedzią `500` i wpisem w dzienniku. Nigdy nie powoduje kwarantanny rozszerzenia, bo żądania może wysyłać każdy, kto zna adres URL.
+
+Attricat sprawdza wynik przed wysłaniem. Status musi mieścić się między 200 a 599. Dozwolonych jest najwyżej 16 nagłówków i nie możesz ustawić `connection`, `content-length`, `transfer-encoding`, `set-cookie`, `cache-control`, `referrer-policy`, `x-content-type-options`, `strict-transport-security` ani `content-security-policy`. Treść odpowiedzi to tekst o długości najwyżej 64 KiB. Zachowany ładunek to tekst o długości najwyżej `max_body_bytes`, więc binarną treść, którą zachowujesz, zakoduj, np. w base64. Klucz `dedupe-key` ma od 1 do 256 bajtów. Odpowiedź jest wysyłana tak, jak ją zwróciłeś, z `Cache-Control: no-store` i `X-Content-Type-Options: nosniff`, oraz jako `text/plain`, jeśli nie ustawisz `content-type`.
+
+Niektórzy nadawcy sprawdzają nowy adres URL żądaniem `GET`, które oczekuje odesłania wartości z zapytania. Odpowiedz na nie w `receive` jak na każde inne żądanie.
+
+### Sprawdź nadawcę
+
+Attricat nie uwierzytelnia nadawców poza tajnym adresem URL. To komponent decyduje, czy żądanie jest prawdziwe:
+
+- Sprawdź podpis nadawcy nad surową treścią `body` kluczem z [sekretów](#sekrety). Na żądanie bez podpisu lub z błędnym podpisem odpowiedz kodem `4xx` i niczego nie zachowuj.
+- Jeśli nadawca podpisuje znacznik czasu, odrzucaj żądania ze zbyt starym znacznikiem, aby przechwyconego żądania nie dało się później odtworzyć.
+- Ustaw `dedupe-key` na identyfikator dostarczenia nadawcy. Punkt końcowy zachowuje tylko pierwszy ładunek z danym kluczem: powtórzenie dostaje Twoją odpowiedź, ale nie jest ponownie zapisywane ani dostarczane.
+
+### Przetwarzaj zachowane ładunki
+
+Zachowany ładunek i jego zdarzenie `webhook.received.v1` są zapisywane w jednej transakcji przed wysłaniem odpowiedzi. Jeśli zapis się nie powiedzie, nadawca dostaje błąd i może ponowić żądanie, więc żądanie, które potwierdziłeś, nigdy nie przepada. Zdarzenie otrzymuje tylko Twoje rozszerzenie; zobacz jego [ładunek](/pl/reference/events/#odebrane-webhooki).
+
+Procedura obsługi odczytuje ładunek przez `webhooks.receipt.get.v1`:
+
+```json
+{ "receipt_id": "<receipt_id ze zdarzenia>" }
+```
+
+Zwraca `{id, webhook, endpoint, dedupe_key, payload, received_at}` albo `null`, gdy ładunek jest starszy niż 7 dni i został usunięty. Zdarzenie jest dostarczane jak każde inne: co najmniej raz, z [typowanymi wynikami](#typowane-wyniki), ponowieniami i martwymi wiadomościami. Twórz idempotentną procedurę obsługi. To samo zdarzenie może dotrzeć dwa razy, a nadawca może wysłać dostarczenie ponownie pod nowym identyfikatorem, więc wykonuj upsert według identyfikatora nadawcy, np. numeru zamówienia, albo zapisuj w [magazynie](#magazyn), co już przetworzyłeś.
+
+Usunięcie punktu końcowego lub zmiana jego adresu URL nie wpływa na już zachowane ładunki. Usunięcie rozszerzenia usuwa jego punkty końcowe i ładunki.
+
 ## Eksport do marketplace'ów i sklepów
 
 Połączenia, mapowania eksportu, publiczne linki do plików i zadania eksportu uruchamiane zmianami opisuje strona [Konektory eksportu](/pl/extensions/exports/).
@@ -301,7 +399,7 @@ Każde wywołanie Twojego komponentu, np. jedno polecenie, dostarczenie zdarzeni
 
 Komponent serwerowy może mieć najwyżej 32 MiB, a każdy jego moduł najwyżej 16 384 typy, importy, zmienne globalne, tabele, pamięci, eksporty i elementy tabel łącznie. Kompiluje się w osobnym procesie ograniczonym do 512 MiB pamięci i 2 minut, a po niepowodzeniu kolejna próba nastąpi dopiero po 5 minutach. Każdy proces API wykonuje naraz 16 wywołań, w tym 8 z jednego obszaru roboczego, a kolejne czekają na swoją kolej.
 
-Przekroczenie limitu w wywołaniu liczy się jako błąd krytyczny i powoduje kwarantannę instalacji, więc utrzymuj wywołania małe. Długotrwała praca należy do [operacji](/pl/extensions/operations/), która w każdej partii wykonuje ograniczoną ilość pracy.
+Przekroczenie limitu w wywołaniu liczy się jako błąd krytyczny i powoduje kwarantannę instalacji, więc utrzymuj wywołania małe. `receive` webhooka ma [ostrzejsze limity](#odpowiedz-na-żądanie) i nigdy nie powoduje kwarantanny. Długotrwała praca należy do [operacji](/pl/extensions/operations/), która w każdej partii wykonuje ograniczoną ilość pracy.
 
 - JSON wysyłany do hosta: 64 KiB na wywołanie. JSON w odpowiedzi hosta: 1 MiB.
 - Komunikaty dziennika: 16 KiB.

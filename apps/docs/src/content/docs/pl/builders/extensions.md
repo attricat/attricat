@@ -93,6 +93,19 @@ Dla rozszerzenia, które deklaruje miejsca docelowe eksportu, sekcja **Stan eksp
 
 Stan każdego rekordu widać też na jego [karcie Eksporty](/pl/guides/records/#eksporty), a strona Stan danych zlicza problemy we wszystkich rozszerzeniach.
 
+## Webhooki
+
+Niektóre rozszerzenia odbierają webhooki: żądania, które system zewnętrzny, np. marketplace, wysyła, gdy coś się u niego wydarzy. Dla rozszerzenia, które deklaruje webhooki, sekcja **Webhooki** na jego stronie pokazuje punkty końcowe wraz z ich ostatnim żądaniem i odpowiedzią.
+
+Wybierz **Dodaj punkt końcowy**, wskaż webhook i wpisz nazwę, np. konta nadawcy (litery, cyfry, `.`, `_` lub `-`). Attricat pokazuje adres URL punktu końcowego tylko raz: skopiuj go do ustawień webhooków systemu wysyłającego, zanim zamkniesz okno, bo przechowywany jest tylko jego skrót. Jeśli wdrożenie nie ma ustawionego [`EXTENSION_WEBHOOK_BASE_URL`](/pl/reference/configuration/#rozszerzenia), dostajesz zamiast niego ścieżkę; poprzedź ją publicznym adresem swojego wdrożenia Attricat. Daj każdemu systemowi wysyłającemu osobny punkt końcowy, aby móc zmienić lub usunąć jego adres URL bez wpływu na pozostałe. Rozszerzenie może mieć do 64 punktów końcowych.
+
+Attricat nie sprawdza, kto wysyła żądanie: robi to rozszerzenie, zwykle weryfikując podpis sekretem. Jego dokumentacja określa, jaki [sekret](#sekrety) zapisać i co skonfigurować u nadawcy.
+
+- **Zmień adres URL** wydaje nowy adres URL. Stary natychmiast przestaje działać, więc zaktualizuj nadawcę.
+- **Usuń** usuwa punkt końcowy i jego adres URL. Żądania, które już odebrał, są nadal przetwarzane.
+
+Rozszerzenie musi być włączone i mieć przyznane `webhooks.receive`; w przeciwnym razie nadawcy dostają `503` i ponawiają później, o ile w ogóle ponawiają. Rozszerzenie przetwarza odebrane dane później, jako zdarzenia: żądanie, którego nie udało mu się przetworzyć, pojawia się wśród nieudanych dostarczeń jego zdarzeń. Ładunki są przechowywane przez 7 dni.
+
 ## Gdy coś pójdzie nie tak
 
 - **Wyłącz** rozszerzenie, aby je zatrzymać bez utraty konfiguracji i przyznanych uprawnień.
@@ -118,6 +131,7 @@ acli extension grant acme.inventory --grant-kind capability --grant-id attricat.
 acli extension grant acme.inventory --grant-kind host_permission --grant-id inventory-api
 acli extension enable acme.inventory
 acli extension disable acme.inventory
+acli extension webhook create acme.orders --webhook orders --endpoint shop-eu
 acli extension workspace-mode --enabled false
 ```
 

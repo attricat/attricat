@@ -7,7 +7,7 @@ Server-side extension code is a WebAssembly **component** declared as a `server_
 
 ## Host API version
 
-The host interface is the WIT package `attricat:host@1.1.0`, published as `wit/attricat-host-1.1.0.wit` in the [attricat-extension-sdk](https://github.com/attricat/attricat-extension-sdk) repository with every other released version. Set `attricat.host_api` in your manifest to a range that accepts it, such as `">=1.0.0, <2.0.0"` or `"^1.1"`. Every release with such a range can use every feature: event handlers, commands, typed reads and writes, scoped configuration, every kind of [operation](/extensions/operations/), and all client outlets. If your component uses anything added in 1.1, declare `"^1.1"`, so a host that only supports 1.0 refuses the package instead of failing at run time.
+The host interface is the WIT package `attricat:host@1.2.0`, published as `wit/attricat-host-1.2.0.wit` in the [attricat-extension-sdk](https://github.com/attricat/attricat-extension-sdk) repository with every other released version. Set `attricat.host_api` in your manifest to a range that accepts it, such as `">=1.0.0, <2.0.0"`, `"^1.1"` or `"^1.2"`. Every release with such a range can use every feature: event handlers, commands, typed reads and writes, scoped configuration, every kind of [operation](/extensions/operations/), [inbound webhooks](#receive-webhooks), and all client outlets. If your component uses anything added in 1.1 or 1.2, declare `"^1.1"` or `"^1.2"`, so an older host refuses the package instead of failing at run time.
 
 Build your component against one of these worlds:
 
@@ -17,8 +17,9 @@ Build your component against one of these worlds:
 | `handler-extension` | `handler` (event handlers and commands) |
 | `operation-extension` | `operations` |
 | `outcome-extension` (1.1) | `event-handler`, `command-handler`, and `deferrable-operations` |
+| `webhook-extension` (1.2) | everything `outcome-extension` exports, plus `webhook-receiver` |
 
-`outcome-extension` exports the 1.1 interfaces, which report [typed outcomes](#typed-outcomes) instead of a plain error. When a component exports a 1.1 interface, the host calls it instead of its 1.0 predecessor. A component that needs only some of the three exports returns a fault from the others.
+`outcome-extension` exports the 1.1 interfaces, which report [typed outcomes](#typed-outcomes) instead of a plain error. When a component exports a 1.1 interface, the host calls it instead of its 1.0 predecessor. A component that needs only some of the exports returns a fault from the others. Build for `webhook-extension` only if the extension [receives webhooks](#receive-webhooks).
 
 Every import is always available, but some only work in the right place. The operation interfaces (`artifacts`, `attricat-data`, `attricat`, `transfer`, `selection`) return an error outside an operation run. Inside a run, the typed `read` and `write` functions and the `attricat.read.v1` and `attricat.command.v1` calls return an error; use the run's own catalog interfaces instead.
 
@@ -45,6 +46,7 @@ let response = api::call("storage.get.v1", r#"{"key":"last-sync"}"#)?;
 | `mappings.*.v1` | `exports.mappings` | [Export connectors](/extensions/exports/#export-mappings) |
 | `files.link.v1` | `attricat.files.public_links` | [Export connectors](/extensions/exports/#public-file-links) |
 | `connector.scope.v1` | | [Export connectors](/extensions/exports/#run-scope) |
+| `webhooks.receipt.get.v1` | `webhooks.receive` | [Receive webhooks](#receive-webhooks) |
 
 The host checks the grant on every call, so a grant revoked while your code runs takes effect at its next call. A refused call returns an error such as `missing capability 'storage.extension'`, and an unknown name returns `unknown host operation`. JSON you send is limited to 64 KiB, and JSON the host answers with to 1 MiB.
 
@@ -252,6 +254,102 @@ The result has an `outcome`:
 
 `headers` holds `content-type`, `etag`, `retry-after`, and the headers the rule lists in `response_headers`. Redirects are never followed: a 3xx response is returned as it is, and you can request its `Location` through a granted rule. A 401 response discards the connection's cached token, so the next request gets a new one.
 
+## Receive webhooks
+
+Host API 1.2 lets external systems, such as a marketplace sending order notifications, call your extension. Your component answers each request while the sender waits and can keep its payload. A kept payload is stored and later delivered to your own event handlers, where the real work happens.
+
+Declare each webhook in `server.webhooks`, and handle the event it produces:
+
+```json
+"attricat": { "id": "acme.orders", "host_api": "^1.2" },
+"permissions": ["webhooks.receive", "secrets.read", "events.subscribe", "attricat.write"],
+"server": {
+  "webhooks": [
+    { "id": "orders", "title": "Order notifications", "max_body_bytes": 131072 }
+  ],
+  "event_handlers": [{
+    "id": "orders",
+    "event_types": ["webhook.received.v1"],
+    "handler": "handle-event"
+  }]
+}
+```
+
+A release can declare up to 16 webhooks. `max_body_bytes` is the largest request body Attricat accepts and the largest payload you can keep: 64 KiB by default, at most 512 KiB. Webhooks need the `webhooks.receive` capability, required or optional, and a component built for the `webhook-extension` world.
+
+A webhook receives nothing until an operator creates an **endpoint** for it in the extension's [Webhooks section](/builders/extensions/#webhooks). Each endpoint has its own secret URL and a name, such as the sending account, which your component receives, so one webhook can serve several accounts with a secret each.
+
+### Answer the request
+
+Attricat finds the endpoint by its URL and answers some requests itself, without calling your component:
+
+| Situation | Response |
+| --- | --- |
+| Unknown URL | `404` |
+| More than 600 requests to the endpoint in a minute | `429` |
+| The extension is disabled or quarantined, `webhooks.receive` isn't granted, or the installed release no longer declares the webhook | `503` |
+| The body is larger than `max_body_bytes` | `413` |
+
+Otherwise it calls `webhook-receiver.receive` with a `webhook-request`:
+
+| Field | Contents |
+| --- | --- |
+| `webhook` | The webhook `id` from your manifest. |
+| `endpoint` | The operator's endpoint name. |
+| `method` | `GET` or `POST`. |
+| `query` | The query string without `?`, possibly empty. |
+| `headers` | Request headers with lower-case names. `cookie`, `authorization`, `proxy-authorization` and headers whose value isn't UTF-8 are left out. |
+| `body` | The raw body bytes. |
+
+Return a `webhook-outcome` with the `reply` the sender gets (`status`, `headers`, `body`) and, optionally, `keep`: a `payload` to store and an optional `dedupe-key`.
+
+```rust
+fn receive(request: WebhookRequest) -> Result<WebhookOutcome, String> {
+    let secret = call("secrets.get.v1", json!({"name": format!("{}-signing-key", request.endpoint)}))?;
+    if !signature_matches(&secret, &request) {
+        return Ok(reply(401, "bad signature"));
+    }
+    let mut outcome = reply(202, "accepted");
+    outcome.keep = Some(KeptPayload {
+        payload: String::from_utf8(request.body).map_err(|e| e.to_string())?,
+        dedupe_key: header(&request, "x-delivery-id").map(str::to_owned),
+    });
+    Ok(outcome)
+}
+```
+
+`receive` must be quick and can only read:
+
+- It gets 5 seconds, including waiting for a free invocation slot, and less fuel than other calls.
+- It can use `configuration.get.v1`, `secrets.get.v1`, `storage.get.v1`, `storage.list.v1`, scoped configuration reads, `api.log` and `clock`, each with its usual capability. Everything else, including catalog reads and writes, storage writes, publishing events, network requests and `webhooks.receipt.get.v1`, returns an error.
+- Any failure, whether an error you return, a trap, a timeout or an invalid outcome, is answered with `500` and logged. It never quarantines the extension, because anyone who knows the URL can send requests.
+
+Attricat checks the outcome before sending it. The status must be between 200 and 599. At most 16 headers are allowed, and you can't set `connection`, `content-length`, `transfer-encoding`, `set-cookie`, `cache-control`, `referrer-policy`, `x-content-type-options`, `strict-transport-security` or `content-security-policy`. The reply body is text of at most 64 KiB. A kept payload is text of at most `max_body_bytes`, so encode a binary body, for example as base64, if you keep it. A dedupe key has 1 to 256 bytes. The reply is sent as you returned it, with `Cache-Control: no-store` and `X-Content-Type-Options: nosniff`, and as `text/plain` unless you set `content-type`.
+
+Some senders check a new URL with a `GET` that expects a value from the query echoed back. Answer it from `receive` like any other request.
+
+### Check the sender
+
+Attricat doesn't authenticate senders beyond the secret URL. Your component decides whether a request is genuine:
+
+- Verify the sender's signature over the raw `body`, with a key from [secrets](#secrets). Answer anything unsigned or wrongly signed with a `4xx` and keep nothing.
+- If the sender signs a timestamp, reject requests whose timestamp is too old, so a captured request can't be replayed later.
+- Set `dedupe-key` to the sender's delivery ID. An endpoint keeps only the first payload with each key: a repeat gets your reply but isn't stored or delivered again.
+
+### Process kept payloads
+
+A kept payload and its `webhook.received.v1` event are stored in one transaction before the reply is sent. If storing fails, the sender gets an error and can retry, so a request you acknowledged is never lost. Only your extension receives the event; see its [payload](/reference/events/#webhook-receipts).
+
+Your handler reads the payload with `webhooks.receipt.get.v1`:
+
+```json
+{ "receipt_id": "<receipt_id from the event>" }
+```
+
+It returns `{id, webhook, endpoint, dedupe_key, payload, received_at}`, or `null` once the payload is older than 7 days and has been removed. The event is delivered like any other: at least once, with [typed outcomes](#typed-outcomes), retries and dead letters. Make the handler idempotent. The same event can arrive twice, and a sender may resend a delivery under a new ID, so upsert by the sender's own ID, such as an order number, or record what you've processed in [storage](#storage).
+
+Deleting an endpoint or rotating its URL doesn't affect payloads already kept. Removing the extension deletes its endpoints and payloads.
+
 ## Export to marketplaces and storefronts
 
 Connections, export mappings, public file links, and change-triggered export jobs are described in [Export connectors](/extensions/exports/).
@@ -301,7 +399,7 @@ Each call into your component, such as one command, event delivery, or operation
 
 A server component can be at most 32 MiB, and each module in it at most 16,384 types, imports, globals, tables, memories, exports and table elements together. It compiles in a separate process limited to 512 MiB of memory and 2 minutes, and if that fails it isn't tried again for 5 minutes. Each API process runs 16 invocations at once, and 8 from one workspace, so more wait their turn.
 
-Going over a limit on a call counts as a fault and quarantines the installation, so keep each call small. Long work belongs in an [operation](/extensions/operations/), which does a bounded amount per batch.
+Going over a limit on a call counts as a fault and quarantines the installation, so keep each call small. A webhook's `receive` has [tighter limits](#answer-the-request) and never quarantines. Long work belongs in an [operation](/extensions/operations/), which does a bounded amount per batch.
 
 - JSON you send to the host: 64 KiB per call. JSON the host answers with: 1 MiB.
 - Log messages: 16 KiB.

@@ -224,7 +224,7 @@ Przekaż `record_ids` dla wybranych rekordów albo `status` dla rekordów z tym 
 
 ## Testuj eksporter lokalnie
 
-Do testowania eksportera nie potrzebujesz prawdziwego sklepu. Na lokalnym serwerze z `ATTRICAT_DEVTOOLS=true` ustawienia [`EXTENSION_DEV_EGRESS_RESOLVE` i `EXTENSION_DEV_EGRESS_CA_FILE`](/pl/reference/configuration/#extensions) kierują żądania do wybranych hostów na lokalną atrapę.
+Do testowania eksportera nie potrzebujesz prawdziwego sklepu. Na lokalnym serwerze z `ATTRICAT_DEVTOOLS=true` ustawienia [`EXTENSION_DEV_EGRESS_RESOLVE` i `EXTENSION_DEV_EGRESS_CA_FILE`](/pl/reference/configuration/#rozszerzenia) kierują żądania do wybranych hostów na lokalną atrapę.
 
 [`examples/marketplace-export`](https://github.com/attricat/attricat/tree/main/examples/marketplace-export) w repozytorium Attricat zawiera działający testowy eksporter dla Shopify, Amazona i Allegro, atrapę ich API, która potrafi symulować ograniczanie i awarie, oraz skrypt end-to-end. Zacznij od niego, pisząc własny eksporter.
 

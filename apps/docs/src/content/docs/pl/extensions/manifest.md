@@ -17,7 +17,7 @@ Identyfikatory używane w manifeście (`attricat.id` oraz identyfikatory artefak
 | `description` | Tak | Jednowierszowy opis. |
 | `icons` | Tak | Mapa rozmiarów na ścieżki ikon, z co najmniej jednym wpisem, np. `{ "48": "assets/icon-48.svg" }`. |
 | `attricat.id` | Tak | Identyfikator rozszerzenia, np. `acme.inventory`. |
-| `attricat.host_api` | Tak | Zakres SemVer obsługiwanych wersji API hosta. Musi obejmować bieżącą wersję API hosta, `1.1.0`, np. `>=1.0.0, <2.0.0` lub `^1.1`. |
+| `attricat.host_api` | Tak | Zakres SemVer obsługiwanych wersji API hosta. Musi obejmować bieżącą wersję API hosta, `1.2.0`, np. `>=1.0.0, <2.0.0` lub `^1.2`. |
 | `artifacts` | Tak | Co najmniej jeden artefakt. |
 | `permissions` | | Uprawnienia, które muszą zostać przyznane, zanim rozszerzenie będzie można włączyć. |
 | `optional_permissions` | | Uprawnienia, które administrator może przyznać. |
@@ -78,6 +78,7 @@ Wymień uprawnienia w `permissions` lub `optional_permissions`. Każde z nich ze
 | `connections.use` | Odczyt [połączeń](/pl/extensions/exports/#połączenia) rozszerzenia i wysyłanie żądań z ich tokenami. Wymagane do zadeklarowania `server.connections`. |
 | `attricat.files.read` | Kopiowanie pliku, do którego odwołuje się rekord, do danych wejściowych operacji przez `transfer.open-record-file`. |
 | `attricat.files.public_links` | Wydawanie [publicznych linków](/pl/extensions/exports/#publiczne-linki-do-plików) do plików, do których odwołują się rekordy. |
+| `webhooks.receive` | Odpowiadanie na żądania do punktów końcowych webhooków rozszerzenia i odczyt zachowanych ładunków. Wymagane do zadeklarowania `server.webhooks`. Zobacz [Odbieraj webhooki](/pl/extensions/server/#odbieraj-webhooki). |
 
 ### Interakcja z klientem
 
@@ -211,8 +212,9 @@ Eksportowane typy zdarzeń muszą zaczynać się od `plugin.<extension-id>.` i k
 | `operations` | `id`, `handler`, `request_schema`, `max_request_bytes`, `max_checkpoint_bytes` (domyślnie i maksymalnie 64 KiB), opcjonalnie `interactive`: `{"version": 1, "max_selection": 1–50}` dla zaznaczenia albo `{"version": 1, "scope": "blueprint"}` dla [operacji na schemacie](/pl/extensions/operations/#operacje-na-schemacie) | `interactive` wymaga `client.operations.start` |
 | `connections` | Zobacz [Połączenia](#połączenia). | `connections.use` |
 | `exports` | Zobacz [Miejsca docelowe eksportu](#miejsca-docelowe-eksportu). | `exports.mappings` |
+| `webhooks` | Do 16 obiektów `{id, title, max_body_bytes}`. `title` ma najwyżej 200 bajtów; `max_body_bytes`, czyli największa przyjmowana treść żądania i zachowywany ładunek, domyślnie wynosi 65536, a najwyżej 524288. Zobacz [Odbieraj webhooki](/pl/extensions/server/#odbieraj-webhooki). | `webhooks.receive` i artefaktu `server_wasm` |
 
-Procedury obsługi zdarzeń, polecenia i operacje wymagają artefaktu `server_wasm`. `handler` to nazwa, którą widzi Twój komponent: polecenia otrzymują ją jako `request.handler`, a operacje jako `operation-id`. Procedury obsługi zdarzeń jej nie otrzymują; zobacz [Która procedura obsługi została wywołana](/pl/extensions/server/#która-procedura-obsługi-została-wywołana).
+Procedury obsługi zdarzeń, polecenia, operacje i webhooki wymagają artefaktu `server_wasm`. `handler` to nazwa, którą widzi Twój komponent: polecenia otrzymują ją jako `request.handler`, a operacje jako `operation-id`. Procedury obsługi zdarzeń jej nie otrzymują; zobacz [Która procedura obsługi została wywołana](/pl/extensions/server/#która-procedura-obsługi-została-wywołana).
 
 ### Połączenia
 

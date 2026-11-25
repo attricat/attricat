@@ -30,6 +30,9 @@ pub const CONTEXT_DELETED_V1: &str = "context.deleted.v1";
 /// An operator asked an export extension to push a record again. Only the
 /// extension named in the payload receives it.
 pub const EXPORT_RETRY_REQUESTED_V1: &str = "export.retry_requested.v1";
+/// An extension's webhook endpoint kept a request's payload. Only the
+/// extension named in the payload receives it.
+pub const WEBHOOK_RECEIVED_V1: &str = "webhook.received.v1";
 
 /// [`AffectedFactV1::change_kind`] values: a scalar value was set, replaced,
 /// removed or restored from history, or a relationship target was added or
@@ -67,6 +70,7 @@ pub const ALL_EVENT_TYPES_V1: &[&str] = &[
     CONTEXT_UPDATED_V1,
     CONTEXT_DELETED_V1,
     EXPORT_RETRY_REQUESTED_V1,
+    WEBHOOK_RECEIVED_V1,
 ];
 /// Events that change what a record exports: values, relationships,
 /// publication and lifecycle. Each advances the record's content revision to
@@ -100,6 +104,7 @@ const CORE_EVENT_PREFIXES: &[&str] = &[
     "blueprint.",
     "context.",
     "export.",
+    "webhook.",
 ];
 const MAX_JSON_BYTES: usize = 64 * 1024;
 /// The longest aggregate kind, source name, or event type segment.

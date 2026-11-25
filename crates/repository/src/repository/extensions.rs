@@ -242,14 +242,18 @@ pub(crate) fn validate_workspace_extension_layout(layout: &Value) -> Result<(), 
     Ok(())
 }
 
-/// A retry request reaches only the extension it names.
-fn export_retry_addressed_to(
-    extension_id: &str,
-    event: &crate::domain_events::DomainEvent,
-) -> bool {
-    event.event_type != crate::domain_events::EXPORT_RETRY_REQUESTED_V1
+/// A retry request or kept webhook payload reaches only the extension it names.
+fn addressed_to(extension_id: &str, event: &crate::domain_events::DomainEvent) -> bool {
+    !ADDRESSED_EVENT_TYPES.contains(&event.event_type.as_str())
         || event.payload.get("extension_id").and_then(Value::as_str) == Some(extension_id)
 }
+
+/// Core events that concern one extension, named by their payload's
+/// `extension_id`: no other extension receives them.
+const ADDRESSED_EVENT_TYPES: &[&str] = &[
+    crate::domain_events::EXPORT_RETRY_REQUESTED_V1,
+    crate::domain_events::WEBHOOK_RECEIVED_V1,
+];
 
 /// Core Attricat events retain existing subscription semantics. Extension-owned
 /// events additionally require a matching declared provider contract.
@@ -1185,7 +1189,7 @@ impl AttricatRepository {
                                 .any(|registered| registered == event_type)
                         })
                     }) && event_contract_subscription_allowed(&installation.manifest, event)
-                        && export_retry_addressed_to(&installation.extension_id, event);
+                        && addressed_to(&installation.extension_id, event);
                 if subscribed {
                     enabled.push(installation);
                 }
@@ -1829,14 +1833,16 @@ impl AttricatRepository {
             .await?;
         self.revoke_extension_file_links(&mut transaction, &current.extension_id)
             .await?;
-        // Credentials, operator budgets, handler outcomes and retry keys go
-        // with the installation, so a later install of the same ID starts
-        // without them. Export mappings stay: they only name destination IDs.
+        // Credentials, operator budgets, handler outcomes, retry keys, webhook
+        // endpoints and kept webhook payloads go with the installation, so a
+        // later install of the same ID starts without them. Export mappings stay: they only name destination IDs.
         for table in [
             "extension_connections",
             "extension_host_permission_budgets",
             "extension_handler_attempts",
             "extension_export_retry_requests",
+            "extension_webhook_endpoints",
+            "extension_webhook_receipts",
         ] {
             sqlx::query(AssertSqlSafe(format!(
                 "DELETE FROM {table} WHERE workspace_id = $1 AND extension_id = $2"

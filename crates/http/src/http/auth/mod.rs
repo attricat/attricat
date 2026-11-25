@@ -354,6 +354,14 @@ fn is_public_route(path: &str) -> bool {
     {
         return true;
     }
+    // Webhook senders are authenticated by the extension's component; the
+    // endpoint is named by its unguessable URL token.
+    if path
+        .strip_prefix("/public/extension-webhooks/")
+        .is_some_and(|token| !token.is_empty() && !token.contains('/'))
+    {
+        return true;
+    }
     // Provider redirects carry a single-use state and a browser-bound secret.
     if path
         .strip_prefix("/auth/oidc/callback/")
@@ -476,6 +484,7 @@ mod route_tests {
             "/auth/sample-logins",
             "/onboarding/complete",
             "/public/extension-oauth/callback",
+            "/public/extension-webhooks/{token}",
         ] {
             assert!(is_public_route(super::super::canonical_route(route)));
             assert!(is_public_route(super::super::canonical_route(&format!(

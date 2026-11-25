@@ -71,6 +71,7 @@ or inaccessible configured bucket.
 | `EXTENSIONS_MODE` | `enabled` | API | Deployment emergency gate. Set `disabled` to block all new extension execution, artifacts, runtime descriptors, commands, storage, host calls, and event delivery without changing installations or grants. Any other value stops startup. Changing it takes a restart. |
 | `EXTENSION_DENYLIST` | Empty | API | Comma-separated targeted containment entries. Each entry is an extension ID (`acme.extension`) or exact release (`acme.extension@uuid`). Read at startup and applied at every runtime gate. |
 | `EXTENSION_PUBLIC_FILE_BASE_URL` | Unset | API | Externally reachable base URL of extension-issued public file links, ending in `/api/public/extension-files/`, for example `https://attricat.example.com/api/public/extension-files/`. Marketplaces fetch listing images from it. Unset, `files.link.v1` is unavailable. |
+| `EXTENSION_WEBHOOK_BASE_URL` | Unset | API | Externally reachable base URL of extension webhook endpoints, ending in `/api/public/extension-webhooks/`, for example `https://attricat.example.com/api/public/extension-webhooks/`. Creating or rotating an endpoint then returns its full `url`. Unset, the response carries only the endpoint's `path`, which operators prefix with the public origin themselves. Any other value stops startup. |
 | `OIDC_CALLBACK_URL` | Unset | API | Externally reachable URL ending in `/api/auth/oidc/callback`. Each workspace has its own redirect URI below it, shown in its sign-in settings. Sign-in through a provider is unavailable without it. |
 | `OIDC_ALLOWED_PRIVATE_HOSTS` | Unset | API | Comma-separated hosts of internal providers, exempt from the check that refuses non-public addresses. Workspace administrators supply issuers, so leave it empty unless you need it, and always on a shared deployment. |
 | `TRUSTED_CLIENT_IP_HEADER` | Unset | API | Header your reverse proxy sets to the client's address, such as `X-Forwarded-For`, whose last entry is read. With it, `POST /auth/oidc/start` allows 300 starts per client in 15 minutes. Without it there's no per-client limit, because behind a proxy every client looks the same. Don't set it unless the proxy overwrites or appends to that header. |
@@ -224,6 +225,7 @@ Invalid values stop startup. Day counts must be positive integers.
 | (none) | | Public extension file links (`extension_file_links`) that expired more than a day ago. |
 | (none) | | Browser authorizations of extension connections (`extension_authorization_requests`) that expired without completing; the connection stays. |
 | (none) | | Keyed extension export retry requests (`extension_export_retry_requests`) after 7 days. |
+| (none) | | Payloads kept by extension webhook endpoints (`extension_webhook_receipts`) after 7 days. Their `webhook.received.v1` deliveries have settled or dead-lettered by then; a handler that reads one later gets `null`. |
 | `AUDIT_EVENT_RETENTION_DAYS` | Unset | Audit events and their value changes. Unset keeps them forever. |
 | `READ_NOTIFICATION_RETENTION_DAYS` | Unset | Read notifications. Unread ones are never deleted. Unset keeps them forever. |
 

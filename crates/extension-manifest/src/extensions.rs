@@ -22,7 +22,7 @@ pub const MANIFEST_VERSION: u32 = 1;
 /// The host ABI accepted by manifests: the `attricat:host` WIT package version.
 /// It evolves additively, so a manifest whose `attricat.host_api` range accepts
 /// it may use every server and client feature.
-pub const SUPPORTED_HOST_API: &str = "1.1.0";
+pub const SUPPORTED_HOST_API: &str = "1.2.0";
 pub const MAX_EXTENSION_ARCHIVE_BYTES: usize = 32 * 1024 * 1024;
 pub const MAX_EXTENSION_UNPACKED_BYTES: usize = 128 * 1024 * 1024;
 /// A server component, which leaves room for a debug build. This bounds what is
@@ -189,7 +189,13 @@ pub const CAPABILITIES: &[&str] = &[
     "attricat.files.public_links",
     "client.export_mapping",
     "client.attribute_editor",
+    // 1.2 inbound webhooks (#279).
+    WEBHOOKS_RECEIVE_CAPABILITY,
 ];
+
+/// Receives inbound webhooks: the host answers declared webhooks' public
+/// endpoints through the component's `webhook-receiver` export.
+pub const WEBHOOKS_RECEIVE_CAPABILITY: &str = "webhooks.receive";
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -503,6 +509,33 @@ pub struct Server {
     /// preview and resync surfaces their names and entry points.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub exports: Vec<ExportDestination>,
+    /// 1.2: inbound webhooks. Operators create named public endpoints of
+    /// these; the component answers each request and may keep its payload.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub webhooks: Vec<Webhook>,
+}
+
+/// An inbound webhook an operator can create endpoints for.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Webhook {
+    pub id: String,
+    pub title: String,
+    /// The largest request body the host accepts, and the largest payload the
+    /// component may keep from it.
+    #[serde(default = "default_webhook_body_bytes")]
+    pub max_body_bytes: u64,
+}
+
+pub const DEFAULT_WEBHOOK_BODY_BYTES: u64 = 64 * 1024;
+/// Half the host's 1 MiB response bound, so a kept payload always fits in the
+/// JSON of `webhooks.receipt.get.v1` however much of it needs escaping.
+pub const MAX_WEBHOOK_BODY_BYTES: u64 = 512 * 1024;
+/// The most webhooks one release may declare.
+pub const MAX_WEBHOOKS: usize = 16;
+
+fn default_webhook_body_bytes() -> u64 {
+    DEFAULT_WEBHOOK_BODY_BYTES
 }
 
 /// OAuth 2.0 grant types the host can run for a connection.
@@ -1671,9 +1704,11 @@ impl Manifest {
                 }
             }
             self.validate_connections_and_exports(server)?;
+            self.validate_webhooks(server)?;
             if (!server.event_handlers.is_empty()
                 || !server.commands.is_empty()
-                || !server.operations.is_empty())
+                || !server.operations.is_empty()
+                || !server.webhooks.is_empty())
                 && !self
                     .artifacts
                     .iter()
@@ -2107,6 +2142,39 @@ impl Manifest {
             .iter()
             .chain(&self.optional_host_permissions)
             .find(|rule| rule.id == id)
+    }
+
+    fn validate_webhooks(&self, server: &Server) -> Result<(), ManifestError> {
+        if server.webhooks.is_empty() {
+            return Ok(());
+        }
+        unique(server.webhooks.iter().map(|webhook| &webhook.id), "webhook")?;
+        if server.webhooks.len() > MAX_WEBHOOKS {
+            return Err(ManifestError::Invalid(format!(
+                "at most {MAX_WEBHOOKS} webhooks may be declared"
+            )));
+        }
+        if !self.declares(WEBHOOKS_RECEIVE_CAPABILITY) {
+            return Err(ManifestError::Invalid(format!(
+                "webhooks require {WEBHOOKS_RECEIVE_CAPABILITY}"
+            )));
+        }
+        for webhook in &server.webhooks {
+            valid_id(&webhook.id, "webhook id")?;
+            if webhook.title.trim().is_empty() || webhook.title.len() > MAX_TITLE_BYTES {
+                return Err(ManifestError::Invalid(format!(
+                    "webhook '{}' needs a title of at most {MAX_TITLE_BYTES} bytes",
+                    webhook.id
+                )));
+            }
+            if webhook.max_body_bytes == 0 || webhook.max_body_bytes > MAX_WEBHOOK_BODY_BYTES {
+                return Err(ManifestError::Invalid(format!(
+                    "webhook '{}' max_body_bytes must be between 1 and {MAX_WEBHOOK_BODY_BYTES}",
+                    webhook.id
+                )));
+            }
+        }
+        Ok(())
     }
 
     fn validate_connections_and_exports(&self, server: &Server) -> Result<(), ManifestError> {
@@ -3035,11 +3103,11 @@ mod tests {
     #[test]
     fn host_api_ranges_must_accept_the_supported_abi() {
         let mut value = manifest();
-        for range in ["^1.0", ">=1.0.0, <2.0.0", "1.0.0", "^1.1"] {
+        for range in ["^1.0", ">=1.0.0, <2.0.0", "1.0.0", "^1.1", "^1.2"] {
             value.attricat.host_api = range.into();
             assert!(value.validate(SUPPORTED_HOST_API).is_ok(), "{range}");
         }
-        for range in [">=1.2.0, <2.0.0", "^2", "<1.0.0"] {
+        for range in [">=1.3.0, <2.0.0", "^2", "<1.0.0"] {
             value.attricat.host_api = range.into();
             assert!(value.validate(SUPPORTED_HOST_API).is_err(), "{range}");
         }
@@ -4065,15 +4133,56 @@ mod tests {
             "client.clipboard",
             "client.theme.read",
             "client.locale.read",
-            "webhooks.receive",
         ] {
             let mut value = manifest();
             value.permissions.push(capability.into());
             assert!(value.validate(SUPPORTED_HOST_API).is_err(), "{capability}");
         }
+    }
+
+    #[test]
+    fn validates_webhooks() {
+        let webhook = |id: &str| Webhook {
+            id: id.into(),
+            title: "Orders".into(),
+            max_body_bytes: DEFAULT_WEBHOOK_BODY_BYTES,
+        };
+        let mut value = manifest();
+        value
+            .server
+            .as_mut()
+            .unwrap()
+            .webhooks
+            .push(webhook("orders"));
+        assert!(
+            value.validate(SUPPORTED_HOST_API).is_err(),
+            "needs the capability"
+        );
+        value.permissions.push(WEBHOOKS_RECEIVE_CAPABILITY.into());
+        assert!(value.validate(SUPPORTED_HOST_API).is_ok());
+        value
+            .server
+            .as_mut()
+            .unwrap()
+            .webhooks
+            .push(webhook("orders"));
+        assert!(value.validate(SUPPORTED_HOST_API).is_err(), "duplicate id");
+        value.server.as_mut().unwrap().webhooks.pop();
+        value.server.as_mut().unwrap().webhooks[0].max_body_bytes = MAX_WEBHOOK_BODY_BYTES + 1;
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+        value.server.as_mut().unwrap().webhooks[0].max_body_bytes = MAX_WEBHOOK_BODY_BYTES;
+        value.server.as_mut().unwrap().webhooks[0].title = " ".into();
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+        value.server.as_mut().unwrap().webhooks[0] = webhook("bad id");
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+
         let mut raw = serde_json::to_value(manifest()).unwrap();
-        raw["server"] = serde_json::json!({"webhooks": []});
-        assert!(serde_json::from_value::<Manifest>(raw).is_err());
+        raw["server"] = serde_json::json!({"webhooks": [{"id": "orders", "title": "Orders"}]});
+        let parsed: Manifest = serde_json::from_value(raw).unwrap();
+        assert_eq!(
+            parsed.server.unwrap().webhooks[0].max_body_bytes,
+            DEFAULT_WEBHOOK_BODY_BYTES
+        );
     }
 
     #[test]

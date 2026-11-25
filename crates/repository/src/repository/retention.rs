@@ -407,6 +407,20 @@ impl<S: RepositoryScope> AttricatRepository<S> {
         .await
     }
 
+    /// Kept webhook payloads after [`WEBHOOK_RECEIPT_RETENTION_DAYS`]: their
+    /// deliveries have long settled or dead-lettered by then.
+    pub async fn purge_extension_webhook_receipts_batch(
+        &self,
+        limit: i64,
+    ) -> Result<u64, RepositoryError> {
+        self.purge_with(
+            AssertSqlSafe(format!("WITH expired AS (SELECT id FROM extension_webhook_receipts WHERE received_at < clock_timestamp() - interval '{} days' ORDER BY received_at LIMIT $1 FOR UPDATE SKIP LOCKED) DELETE FROM extension_webhook_receipts r USING expired e WHERE r.id = e.id", super::WEBHOOK_RECEIPT_RETENTION_DAYS)),
+            None,
+            limit,
+        )
+        .await
+    }
+
     /// Keyed export retry requests after a week: a client resends a timed
     /// out request within minutes, not days.
     pub async fn purge_extension_export_retry_requests_batch(

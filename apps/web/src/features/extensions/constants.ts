@@ -124,6 +124,7 @@ export const installedExtensionTabs = {
   permissions: 'permissions',
   exports: 'exports',
   connections: 'connections',
+  webhooks: 'webhooks',
   lifecycle: 'lifecycle',
 } as const;
 export type InstalledExtensionTab =

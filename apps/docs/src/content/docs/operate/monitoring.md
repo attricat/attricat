@@ -53,6 +53,7 @@ Useful series:
 | `attricat_event_delivery_queue_depth{workspace_id,consumer,status}` | Growing `pending`, any `dead_letter`. |
 | `attricat_event_deliveries_total{outcome}` | `dead_letter` increases. |
 | `attricat_extension_operation_runs`, `attricat_extension_operation_oldest_age_seconds` | Stuck extension operations. |
+| `attricat_extension_webhook_requests_total{outcome}` | Increasing `failed` (the extension couldn't answer), `unavailable` (the extension is disabled or lacks its grant), or `unknown_endpoint` (a sender uses a deleted or rotated URL). Other outcomes are `too_large`, `rate_limited`, `answered`, `kept`, and `duplicate`. |
 | `attricat_file_uploads_total`, `attricat_file_downloads_total`, `attricat_object_store_operations_total` | Error outcomes. |
 | `attricat_retention_cleanup_total{family,outcome}` | `failed`. Repeated `budget_exhausted` for a `family` means each cleanup run ends with old data of that kind still left to delete; raise `RETENTION_SWEEP_BUDGET_SECONDS`. A `domain_events` backlog that never shrinks usually means a dead-lettered delivery or a stalled consumer. `attricat_retention_rows_purged_total{family}` counts deleted rows. |
 | `attricat_upload_cleanup_total{outcome}` | `failed`. Failed deletions of abandoned uploads are retried. |

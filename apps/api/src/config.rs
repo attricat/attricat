@@ -240,6 +240,11 @@ pub struct ExtensionsConfig {
     /// (`EXTENSION_PUBLIC_FILE_BASE_URL`, ending in
     /// `/api/public/extension-files/`); without it links are unavailable.
     pub public_file_base_url: Option<url::Url>,
+    /// Externally reachable base URL of extension webhook endpoints
+    /// (`EXTENSION_WEBHOOK_BASE_URL`, ending in
+    /// `/api/public/extension-webhooks/`). Without it, operators get each
+    /// endpoint's path and prefix their public origin themselves.
+    pub webhook_base_url: Option<url::Url>,
     /// Externally reachable URL of the public OAuth callback
     /// (`EXTENSION_OAUTH_CALLBACK_URL`, the `/api/public/extension-oauth/callback`
     /// route), which operators register as their apps' redirect URI. Without
@@ -471,6 +476,18 @@ impl Config {
                             .ok_or_else(|| {
                                 ConfigError::from(
                                     "EXTENSION_PUBLIC_FILE_BASE_URL must be an HTTP(S) URL ending in '/'",
+                                )
+                            })
+                    })
+                    .transpose()?,
+                webhook_base_url: source
+                    .var("EXTENSION_WEBHOOK_BASE_URL")
+                    .map(|value| {
+                        plain_http_url(value)
+                            .filter(|url| url.path().ends_with("/public/extension-webhooks/"))
+                            .ok_or_else(|| {
+                                ConfigError::from(
+                                    "EXTENSION_WEBHOOK_BASE_URL must be an HTTP(S) URL ending in /api/public/extension-webhooks/",
                                 )
                             })
                     })
@@ -1117,6 +1134,13 @@ mod tests {
         assert!(
             load(
                 &secrets,
+                &[("EXTENSION_WEBHOOK_BASE_URL", "https://attricat.test/hooks/")]
+            )
+            .is_err()
+        );
+        assert!(
+            load(
+                &secrets,
                 &[(
                     "EXTENSION_OAUTH_CALLBACK_URL",
                     "https://attricat.test/callback"
@@ -1182,9 +1206,14 @@ mod tests {
                     "EXTENSION_OAUTH_CALLBACK_URL",
                     "https://attricat.test/api/public/extension-oauth/callback",
                 ),
+                (
+                    "EXTENSION_WEBHOOK_BASE_URL",
+                    "https://attricat.test/api/public/extension-webhooks/",
+                ),
             ],
         )
         .unwrap();
+        assert!(config.extensions.webhook_base_url.is_some());
         assert!(config.extensions.oauth_callback_url.is_some());
         assert!(config.extensions.oauth_return_url.is_none());
         assert_eq!(config.extensions.credential_key, Some([1; 32]));

@@ -171,7 +171,9 @@ The v1 capability catalogue is: `attricat.read`, `attricat.write`,
 `network.request`. Host ABI 1.1 adds `exports.mappings`,
 `connections.use`, `attricat.files.read`, `attricat.files.public_links` and
 `client.export_mapping` (see [Export platform](#export-platform-attricathost-11)),
-and native UI adds `client.attribute_editor` (see [Attribute editors](#attribute-editors)).
+native UI adds `client.attribute_editor` (see [Attribute editors](#attribute-editors)),
+and host ABI 1.2 adds `webhooks.receive` (see
+[Inbound webhooks](#inbound-webhooks-attricathost-12)).
 
 Required `permissions` and `host_permissions` must be granted before an
 extension can be enabled. Optional variants are independently grantable and
@@ -212,7 +214,8 @@ no longer fits, or its dependencies or consumed contracts changed. It cancels
 unfinished runs of the prior release, since they can never resume and would
 otherwise count as overlap. Removal
 deletes current state, including the extension's connections and their
-credentials, host-permission budgets and handler outcomes, but retains
+credentials, host-permission budgets, handler outcomes, webhook endpoints and
+kept webhook payloads, but retains
 installed-release and append-only lifecycle history and export mappings.
 
 Each lifecycle mutation uses an explicit Rust/SQLx transaction to write the
@@ -225,32 +228,37 @@ declarative and contain no behavior.
 Attricat provides management APIs and web UI for registry sources, discovery,
 installation, configuration, grants, lifecycle actions, and client runtime
 descriptors. Server WASM execution, client components, storage, commands, mediated
-extension-owned event publication, and mediated network/secrets APIs are
-implemented. There is no inbound webhook route; see
-[Decisions](#decisions).
+extension-owned event publication, mediated network/secrets APIs and inbound
+webhooks ([Inbound webhooks](#inbound-webhooks-attricathost-12)) are
+implemented. Attricat does not send outbound webhooks.
 
 ## Host ABI versions and evolution
 
 The host ABI is the single WIT package `attricat:host` at
 `crates/extension-runtime/wit-host/attricat-extension.wit`, currently
-`attricat:host@1.1.0` (`SUPPORTED_HOST_API` in `crates/extension-manifest`). A
+`attricat:host@1.2.0` (`SUPPORTED_HOST_API` in `crates/extension-manifest`). A
 release's `attricat.host_api` range must accept that version, for example
-`">=1.0.0, <2.0.0"`, `"^1.0"` or `"^1.1"`. A release whose range accepts it may use every
+`">=1.0.0, <2.0.0"`, `"^1.0"`, `"^1.1"` or `"^1.2"`. A release whose range accepts it may use every
 server and client feature in one component: event handlers, client commands,
 typed reads and writes, scoped configuration, scheduled, connector and
-interactive operations, artifacts, transfer, connector jobs, every UI outlet,
-and host-rendered actions. There are no per-feature `host_api` gates.
+interactive operations, artifacts, transfer, connector jobs, inbound webhooks,
+every UI outlet, and host-rendered actions. There are no per-feature
+`host_api` gates.
 
 The package defines the interfaces `api`, `handler`, `artifacts`,
 `attricat-data`, `attricat` (connector calls), `transfer`, `selection` and
 `operations`, and since
 1.1 `clock`, `outcomes`, `event-handler`, `command-handler` and
-`deferrable-operations`. The `imports` world imports every host interface. A
-component targets the combined `attricat-extension` world (exports `handler`
-and `operations`), the narrower `handler-extension` or `operation-extension`
-world, or the 1.1 `outcome-extension` world (exports `event-handler`,
-`command-handler` and `deferrable-operations`; see
-[Export platform](#export-platform-attricathost-11)). When a component exports
+`deferrable-operations`, and since 1.2 `webhook-receiver`. The `imports` world
+imports every host interface. A component targets the combined
+`attricat-extension` world (exports `handler` and `operations`), the narrower
+`handler-extension` or `operation-extension` world, the 1.1
+`outcome-extension` world (exports `event-handler`, `command-handler` and
+`deferrable-operations`; see
+[Export platform](#export-platform-attricathost-11)), or the 1.2
+`webhook-extension` world (the `outcome-extension` exports plus
+`webhook-receiver`; see
+[Inbound webhooks](#inbound-webhooks-attricathost-12)). When a component exports
 a 1.1 interface the host calls it instead of its 1.0 predecessor. The host
 links every import for every invocation and loads only the export it needs. Run-bound
 interfaces (`artifacts`, `attricat-data`, `attricat`, `transfer`, `selection`)
@@ -259,7 +267,9 @@ return an error outside an operation run. Direct catalog access through `api`
 an error inside one, so operations, including interactive runs confined to
 their selection, reach catalog data only through their run-scoped interfaces.
 Other `api` calls (configuration, secrets, storage, events, network, logging)
-work in both, still checked against capabilities at each call.
+work in both, still checked against capabilities at each call. A webhook's
+`receive` reaches only configuration, secrets, storage reads, logging and the
+clock; see [Receiving a request](#receiving-a-request).
 
 ### Host ABI evolution
 
@@ -1589,10 +1599,181 @@ mappings pointing at missing items.
   extension's management page mounts once per export destination with
   `{context_version: 1, export_id}` (requires `client.export_mapping`).
   Scoped configuration remains for small per-blueprint settings.
-- **Webhook ingress** (inbound order and stock events) is tracked in #279
-  and is not needed for pure export. Manifests cannot declare webhooks until
-  it exists. OAuth callbacks are implemented; see
+- **Webhook ingress** (inbound order and stock events) is part of host ABI
+  1.2; see [Inbound webhooks](#inbound-webhooks-attricathost-12). OAuth
+  callbacks are implemented; see
   [Browser authorization](#browser-authorization).
+
+## Inbound webhooks (attricat:host 1.2)
+
+Host ABI 1.2 lets an extension receive webhooks from external systems, such as
+a marketplace's order notifications. The sender calls a public endpoint; the
+extension's component checks the request and answers it while the sender
+waits, and may keep a payload. A kept payload is stored, and later delivered
+to the extension's own event handlers, where the real work happens.
+
+### Declaring webhooks
+
+```json
+{
+  "attricat": { "id": "acme.orders", "host_api": "^1.2" },
+  "permissions": ["webhooks.receive", "secrets.read", "events.subscribe"],
+  "server": {
+    "webhooks": [
+      { "id": "orders", "title": "Order notifications", "max_body_bytes": 131072 }
+    ],
+    "event_handlers": [
+      { "id": "orders", "event_types": ["webhook.received.v1"], "handler": "handle-event" }
+    ]
+  }
+}
+```
+
+`server.webhooks` lists at most 16 webhooks, each with a unique `id`, a
+`title` and `max_body_bytes`: the largest request body the host accepts and
+the largest payload the component may keep, 64 KiB by default and at most
+512 KiB. Declaring a webhook requires the `webhooks.receive` capability (as a
+required or optional permission) and a `server_wasm` artifact built for the
+`webhook-extension` world. The host only answers an endpoint while the
+installation is enabled with `webhooks.receive` granted.
+
+### Endpoints
+
+A webhook does nothing until an operator creates an endpoint for it: a named
+public URL. The endpoint name (1-128 letters, digits, `.`, `_` or `-`, unique
+within the extension) is passed to the component, so one webhook can serve
+several sending accounts, each with a secret of its own. An installation has
+at most 64 endpoints.
+
+| Action | API (`/api`) | CLI | Permission |
+|---|---|---|---|
+| List | `GET /extensions/{extension_id}/webhook-endpoints` | `acli extension webhook list <extension_id>` | `extensions.read` |
+| Create | `POST /extensions/{extension_id}/webhook-endpoints` `{webhook, endpoint}` | `acli extension webhook create <extension_id> --webhook <id> --endpoint <name>` | `extensions.manage` |
+| Rotate | `POST /extensions/{extension_id}/webhook-endpoints/{endpoint}/rotate` | `acli extension webhook rotate <extension_id> <endpoint>` | `extensions.manage` |
+| Delete | `DELETE /extensions/{extension_id}/webhook-endpoints/{endpoint}` | `acli extension webhook delete <extension_id> <endpoint>` | `extensions.manage` |
+
+The installed extension's page in the web app has a Webhooks section with the
+same actions. Create and rotate return the endpoint with its `path`
+(`/api/public/extension-webhooks/<token>`) and, when the deployment sets
+[`EXTENSION_WEBHOOK_BASE_URL`](configuration.md), its full `url`. The token is
+256 random bits; only its SHA-256 is stored, so the URL is shown once. Rotating
+replaces it, and the previous URL stops working at once. Deleting an endpoint
+stops its URL; payloads it already kept are still delivered. A taken endpoint
+name is `409 code_taken` with resource `webhook_endpoint`. Endpoint changes are
+audited like other extension management. Removing the extension deletes its
+endpoints and kept payloads.
+
+### Receiving a request
+
+`GET` and `POST` to `/api/public/extension-webhooks/{token}` need no session.
+Before the component runs, the host answers itself:
+
+| Condition | Response |
+|---|---|
+| Unknown token | `404 not_found` |
+| More than 600 requests in a minute to this endpoint (per API process, or across replicas with `CACHE_BACKEND=redis`) | `429 rate_limited` |
+| Installation not enabled or quarantined, `webhooks.receive` not granted, or the installed release no longer declares the webhook | `503 service_unavailable` |
+| Body larger than the webhook's `max_body_bytes` | `413 payload_too_large` |
+
+Otherwise the host calls the component's `webhook-receiver.receive` with a
+`webhook-request`: the manifest `webhook` ID, the operator's `endpoint` name,
+the `method`, the raw `query` string without `?`, the `headers` with lower-case
+names, and the raw `body` bytes. `cookie`, `authorization` and
+`proxy-authorization` headers, and headers whose values are not UTF-8, are
+withheld. The component returns a `webhook-outcome`: the `reply` the sender
+receives (`status`, `headers`, `body`) and an optional `keep`
+(`payload`, `dedupe-key`).
+
+`receive` runs under tighter limits than other invocations: 5 seconds,
+including the wait for an invocation slot, and a reduced fuel budget. It may
+use only `configuration.get.v1`, `secrets.get.v1`, `storage.get.v1`,
+`storage.list.v1`, scoped configuration reads, `api.log` and `clock`, each
+still checked against the release's capabilities. Catalog reads and writes,
+storage writes, `events.emit.v1`, network requests, run-bound interfaces and
+`webhooks.receipt.get.v1` return an error. An error, trap, timeout, exhausted
+fuel or invalid outcome is answered with `500 internal_error` and logged, and
+never quarantines the installation, since anyone who knows the URL can send a
+request.
+
+The host checks the outcome before sending it:
+
+- `status` is between 200 and 599.
+- At most 16 headers, each a valid header name and value of at most 8 KiB. The
+  host refuses `connection`, `content-length`, `transfer-encoding`,
+  `set-cookie`, `cache-control`, `referrer-policy`, `x-content-type-options`,
+  `strict-transport-security` and `content-security-policy`.
+- The reply `body` is UTF-8 text of at most 64 KiB.
+- A kept `payload` is UTF-8 text of at most the webhook's `max_body_bytes`;
+  encode a binary body (for example as base64) if you need to keep it. A
+  `dedupe-key` has 1 to 256 bytes.
+
+The reply is sent as the component returned it, with `Cache-Control: no-store`
+and `X-Content-Type-Options: nosniff`, and `Content-Type: text/plain;
+charset=utf-8` unless the component set one. Some senders verify an endpoint
+with a `GET` handshake that expects a challenge echoed back; answer it from
+`receive` like any other request.
+
+### Security model
+
+The host authenticates nothing beyond the URL token. The component decides
+whether a request is genuine, usually by checking the sender's signature over
+the raw body with a secret it reads through `secrets.get.v1`. Answer an
+unsigned or wrongly signed request with a 4xx and keep nothing. Replay
+protection is the component's too: reject a request whose signed timestamp is
+too old, where the sender signs one, and give each kept payload the sender's
+delivery ID as `dedupe-key`.
+
+Do the real work later, in an event handler. `receive` cannot touch the
+catalog or the network, and a sender gives up after a few seconds anyway.
+
+### Kept payloads and delivery
+
+When the outcome keeps a payload, the host stores it as a receipt and enqueues
+`webhook.received.v1` in one transaction, before it sends the reply. If that
+transaction fails, the sender gets a 5xx and can retry, so an acknowledged
+payload is never lost. The event's payload is
+`{extension_id, webhook, endpoint, receipt_id, dedupe_key, received_at}`; it
+has aggregate kind `webhook_receipt`, source kind `system` and source name
+`webhook`, and only the extension it names receives it, like
+`export.retry_requested.v1`.
+
+An endpoint keeps only the first payload of each `dedupe-key`. A repeat is not
+stored and not delivered again, but the sender still gets the component's
+reply, so a sender that retries an acknowledged delivery sees it acknowledged
+again. Without a dedupe key every kept payload is stored.
+
+The extension handles the event with an ordinary `server.event_handlers`
+entry that subscribes to `webhook.received.v1`. Delivery is at-least-once with
+retries, the 1.1 [typed outcomes](#handler-and-batch-outcomes) and dead
+letters, as for any other event. The handler reads the payload with
+`webhooks.receipt.get.v1` `{receipt_id}` (requires `webhooks.receive`), which
+returns `{id, webhook, endpoint, dedupe_key, payload, received_at}`, or `null`
+once retention has removed it. Make the handler idempotent: a redelivered
+event, or a sender that resends a delivery under a new ID, must not create an
+order twice. Upsert by the sender's own ID (`attricat.command.v1` `upsert`) or
+remember processed IDs in extension storage.
+
+Receipts are kept for 7 days and then removed by the
+`extension_webhook_receipts` retention sweep (see
+[Data retention](configuration.md)).
+
+### Troubleshooting
+
+- The endpoint list shows each endpoint's `last_request_at` and
+  `last_reply_status`, whether the host or the component answered, except
+  for requests refused by the rate limit.
+- `attricat_extension_webhook_requests_total{outcome}` counts requests by
+  `unknown_endpoint`, `unavailable`, `too_large`, `rate_limited`, `failed`
+  (the component failed), `answered` (nothing kept), `kept` and `duplicate`.
+- A `failed` request is logged with the extension, webhook, endpoint and
+  error.
+- A handler that keeps failing on `webhook.received.v1` dead-letters like any
+  other delivery; `acli event dead-letters` lists it for replay.
+
+`crates/webhook-test-component` is a complete example: it checks a signature,
+answers a `GET` challenge, keeps payloads by delivery ID and stores them from
+its event handler. `apps/api/tests/extension_webhooks.rs` exercises it end to
+end.
 
 ## Client extension runtime (v1)
 

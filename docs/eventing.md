@@ -136,8 +136,11 @@ The `EventPublisher::enqueue_event` boundary accepts a `NewDomainEvent` and the
 **caller-owned SQL transaction**. It appends to the outbox; it does not publish
 to a broker. This boundary intentionally leaves room for a future RabbitMQ (or
 other) transport adapter without making broker availability part of a catalog
-write transaction. There is no RabbitMQ configuration or external webhook
-transport today.
+write transaction. There is no RabbitMQ configuration or outbound webhook
+transport today. Inbound webhooks enter the outbox the same way: an extension's
+webhook endpoint enqueues `webhook.received.v1` in the transaction that stores
+the payload; see
+[Inbound webhooks](extensions.md#inbound-webhooks-attricathost-12).
 
 ## Backend handler author guide
 

@@ -13,6 +13,7 @@ mod extension_exports;
 mod extension_field_notes;
 mod extension_registries;
 mod extension_runs;
+mod extension_webhooks;
 mod extensions;
 mod extractors;
 mod files;
@@ -765,6 +766,22 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/public/extension-oauth/callback",
             get(extension_exports::oauth_callback),
+        )
+        .route(
+            "/public/extension-webhooks/{token}",
+            get(extension_webhooks::receive).post(extension_webhooks::receive),
+        )
+        .route(
+            "/extensions/{extension_id}/webhook-endpoints",
+            get(extension_webhooks::list_endpoints).post(extension_webhooks::create_endpoint),
+        )
+        .route(
+            "/extensions/{extension_id}/webhook-endpoints/{endpoint}",
+            axum::routing::delete(extension_webhooks::delete_endpoint),
+        )
+        .route(
+            "/extensions/{extension_id}/webhook-endpoints/{endpoint}/rotate",
+            post(extension_webhooks::rotate_endpoint),
         )
         .route(
             "/extensions/{extension_id}/annotation-namespace",

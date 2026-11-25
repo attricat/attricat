@@ -276,6 +276,9 @@ async fn serve() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     if let Some(base) = extensions.public_file_base_url.clone() {
         extension_runtime::use_public_file_link_base(base);
     }
+    if let Some(base) = extensions.webhook_base_url.clone() {
+        extension_runtime::use_webhook_base_url(base);
+    }
     if let Some(redirect_uri) = extensions.oauth_callback_url.clone() {
         let return_base = extensions.oauth_return_url.clone().unwrap_or_else(|| {
             let mut base = redirect_uri.clone();

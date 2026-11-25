@@ -53,6 +53,7 @@ Przydatne serie:
 | `attricat_event_delivery_queue_depth{workspace_id,consumer,status}` | Rosnące `pending`, jakiekolwiek `dead_letter`. |
 | `attricat_event_deliveries_total{outcome}` | Wzrosty `dead_letter`. |
 | `attricat_extension_operation_runs`, `attricat_extension_operation_oldest_age_seconds` | Zablokowane operacje rozszerzeń. |
+| `attricat_extension_webhook_requests_total{outcome}` | Rosnące `failed` (rozszerzenie nie zdołało odpowiedzieć), `unavailable` (rozszerzenie jest wyłączone lub nie ma uprawnienia) lub `unknown_endpoint` (nadawca używa usuniętego albo zmienionego adresu URL). Pozostałe wyniki to `too_large`, `rate_limited`, `answered`, `kept` i `duplicate`. |
 | `attricat_file_uploads_total`, `attricat_file_downloads_total`, `attricat_object_store_operations_total` | Wyniki z błędem. |
 | `attricat_retention_cleanup_total{family,outcome}` | `failed`. Powtarzające się `budget_exhausted` dla danej rodziny (`family`) oznacza, że każde wykonanie czyszczenia kończy się, zanim usunie wszystkie stare dane tego rodzaju; zwiększ `RETENTION_SWEEP_BUDGET_SECONDS`. Zaległość `domain_events`, która nie maleje, zwykle oznacza martwą wiadomość (dead letter) w dostarczeniach lub zatrzymanego odbiorcę. `attricat_retention_rows_purged_total{family}` zlicza usunięte wiersze. |
 | `attricat_upload_cleanup_total{outcome}` | `failed`. Nieudane usunięcia porzuconych przesłanych plików są ponawiane. |

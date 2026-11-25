@@ -26,8 +26,9 @@ Zdarzenia napędzają [przepływy pracy](/pl/builders/workflows/), [reguły](/pl
 | `blueprint.published.v1` | Wersja schematu zostaje opublikowana. |
 | `context.created.v1`, `context.updated.v1`, `context.deleted.v1` | Kontekst się zmienia. |
 | `export.retry_requested.v1` | Operator prosi rozszerzenie eksportujące o ponowne wysłanie rekordu. |
+| `webhook.received.v1` | Punkt końcowy webhooka rozszerzenia zachowuje ładunek żądania. |
 
-Rozszerzenia publikują własne typy o nazwach `plugin.<extension-id>.<name>.vN`. Przestrzenie nazw `record`, `attribute_value`, `relationship`, `blueprint`, `context` i `export` są zarezerwowane.
+Rozszerzenia publikują własne typy o nazwach `plugin.<extension-id>.<name>.vN`. Przestrzenie nazw `record`, `attribute_value`, `relationship`, `blueprint`, `context`, `export` i `webhook` są zarezerwowane.
 
 Przyrostek wersji nigdy nie zmienia znaczenia. Niezgodny ładunek otrzymuje nowy typ `.vN`, a konsumenci subskrybują dokładnie te wersje, które rozumieją.
 
@@ -108,6 +109,23 @@ Tagi i klucze to lokalne nazwy rozszerzenia, bez prefiksu `<extension-id>:`. `re
 ```
 
 `connection` ma wartość `null` dla domyślnego miejsca docelowego rozszerzenia. Zdarzenie otrzymuje tylko rozszerzenie wskazane w `extension_id` i tylko wtedy, gdy któraś z jego procedur obsługi subskrybuje ten typ.
+
+## Odebrane webhooki
+
+`webhook.received.v1` jest zapisywane, gdy komponent rozszerzenia [zachowuje ładunek żądania webhooka](/pl/extensions/server/#odbieraj-webhooki), w tej samej transakcji, która go zapisuje. Rodzaj jego agregatu to `webhook_receipt`, źródło to `system` o nazwie `webhook`, a ładunek wygląda tak:
+
+```json
+{
+  "extension_id": "acme.orders",
+  "webhook": "orders",
+  "endpoint": "shop-eu",
+  "receipt_id": "0b9e…",
+  "dedupe_key": "delivery-4711",
+  "received_at": "2026-11-20T10:15:00.123Z"
+}
+```
+
+`dedupe_key` ma wartość `null`, gdy komponent go nie podał. Samego zachowanego ładunku nie ma w zdarzeniu: procedura obsługi odczytuje go przez `webhooks.receipt.get.v1` i `receipt_id` w ciągu 7 dni. Zdarzenie otrzymuje tylko rozszerzenie wskazane w `extension_id` i tylko wtedy, gdy któraś z jego procedur obsługi subskrybuje ten typ.
 
 ## Gwarancje dostarczania
 

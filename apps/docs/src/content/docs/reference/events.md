@@ -26,8 +26,9 @@ Events drive [workflows](/builders/workflows/), [rules](/builders/rules/), and [
 | `blueprint.published.v1` | A blueprint revision is published. |
 | `context.created.v1`, `context.updated.v1`, `context.deleted.v1` | A context changes. |
 | `export.retry_requested.v1` | An operator asks an export extension to push a record again. |
+| `webhook.received.v1` | An extension's webhook endpoint keeps the payload of a request. |
 
-Extensions publish their own types, named `plugin.<extension-id>.<name>.vN`. The `record`, `attribute_value`, `relationship`, `blueprint`, `context`, and `export` namespaces are reserved.
+Extensions publish their own types, named `plugin.<extension-id>.<name>.vN`. The `record`, `attribute_value`, `relationship`, `blueprint`, `context`, `export`, and `webhook` namespaces are reserved.
 
 A version suffix never changes meaning. An incompatible payload gets a new `.vN` type, and consumers subscribe to the exact versions they understand.
 
@@ -108,6 +109,23 @@ Tags and keys are the extension's local names, without the `<extension-id>:` pre
 ```
 
 `connection` is `null` for the extension's default destination. Only the extension named in `extension_id` receives it, and only if one of its handlers subscribes to the type.
+
+## Webhook receipts
+
+`webhook.received.v1` is recorded when an extension's component [keeps the payload of a webhook request](/extensions/server/#receive-webhooks), in the same transaction that stores it. Its aggregate kind is `webhook_receipt`, its source is `system` named `webhook`, and its payload is:
+
+```json
+{
+  "extension_id": "acme.orders",
+  "webhook": "orders",
+  "endpoint": "shop-eu",
+  "receipt_id": "0b9e…",
+  "dedupe_key": "delivery-4711",
+  "received_at": "2026-11-20T10:15:00.123Z"
+}
+```
+
+`dedupe_key` is `null` when the component gave none. The payload itself isn't in the event: the handler reads it with `webhooks.receipt.get.v1` and `receipt_id` within 7 days. Only the extension named in `extension_id` receives it, and only if one of its handlers subscribes to the type.
 
 ## Delivery guarantees
 

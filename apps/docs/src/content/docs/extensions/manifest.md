@@ -17,7 +17,7 @@ IDs used in the manifest (`attricat.id`, artifact, dependency, permission-rule, 
 | `description` | Yes | One-line description. |
 | `icons` | Yes | Map of size to icon path, with at least one entry, such as `{ "48": "assets/icon-48.svg" }`. |
 | `attricat.id` | Yes | Extension ID, such as `acme.inventory`. |
-| `attricat.host_api` | Yes | SemVer range of supported host APIs. It must accept the current host API, `1.1.0`, for example `>=1.0.0, <2.0.0` or `^1.1`. |
+| `attricat.host_api` | Yes | SemVer range of supported host APIs. It must accept the current host API, `1.2.0`, for example `>=1.0.0, <2.0.0` or `^1.2`. |
 | `artifacts` | Yes | At least one artifact. |
 | `permissions` | | Capabilities that must be granted before the extension can be enabled. |
 | `optional_permissions` | | Capabilities the administrator may grant. |
@@ -78,6 +78,7 @@ List capabilities in `permissions` or `optional_permissions`. Each one allows a 
 | `connections.use` | Reading the extension's [connections](/extensions/exports/#connections) and sending requests with their tokens. Required to declare `server.connections`. |
 | `attricat.files.read` | Copying a file a record references into an operation input with `transfer.open-record-file`. |
 | `attricat.files.public_links` | Issuing [public links](/extensions/exports/#public-file-links) to files records reference. |
+| `webhooks.receive` | Answering requests to the extension's webhook endpoints and reading the payloads it kept. Required to declare `server.webhooks`. See [Receive webhooks](/extensions/server/#receive-webhooks). |
 
 ### Client interaction
 
@@ -211,8 +212,9 @@ Exported event types must start with `plugin.<extension-id>.` and end in `.vN`. 
 | `operations` | `id`, `handler`, `request_schema`, `max_request_bytes`, `max_checkpoint_bytes` (default and maximum 64 KiB), optional `interactive`: `{"version": 1, "max_selection": 1–50}` for a selection, or `{"version": 1, "scope": "blueprint"}` for a [blueprint operation](/extensions/operations/#blueprint-operations) | `interactive` needs `client.operations.start` |
 | `connections` | See [Connections](#connections). | `connections.use` |
 | `exports` | See [Export destinations](#export-destinations). | `exports.mappings` |
+| `webhooks` | Up to 16 of `{id, title, max_body_bytes}`. `title` has at most 200 bytes; `max_body_bytes`, the largest request body accepted and payload kept, defaults to 65536 and is at most 524288. See [Receive webhooks](/extensions/server/#receive-webhooks). | `webhooks.receive` and a `server_wasm` artifact |
 
-Event handlers, commands, and operations need a `server_wasm` artifact. `handler` is a name your component sees: commands receive it as `request.handler`, operations as `operation-id`. Event handlers don't receive it; see [Which handler was called](/extensions/server/#which-handler-was-called).
+Event handlers, commands, operations, and webhooks need a `server_wasm` artifact. `handler` is a name your component sees: commands receive it as `request.handler`, operations as `operation-id`. Event handlers don't receive it; see [Which handler was called](/extensions/server/#which-handler-was-called).
 
 ### Connections
 

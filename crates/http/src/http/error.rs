@@ -25,7 +25,6 @@ impl ApiError {
             details: None,
         }
     }
-    #[cfg(test)]
     pub(super) fn status(&self) -> StatusCode {
         self.status
     }
@@ -48,6 +47,14 @@ impl ApiError {
             StatusCode::TOO_MANY_REQUESTS,
             ErrorCode::RateLimited,
             "too many login attempts; try again later",
+        )
+    }
+    /// A webhook endpoint received more requests than its rate allows.
+    pub(super) fn webhook_rate_limited() -> Self {
+        Self::new(
+            StatusCode::TOO_MANY_REQUESTS,
+            ErrorCode::RateLimited,
+            "too many webhook requests; try again later",
         )
     }
     pub(super) fn invalid_credentials() -> Self {

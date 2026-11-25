@@ -227,6 +227,11 @@
     "workspace_conflict": "Ten obszar roboczy już istnieje z innymi wartościami.",
     "workspace_owner_exists": "Ten obszar roboczy ma już właściciela."
   },
+  "apiErrorResources": {
+    "code_taken": {
+      "webhook_endpoint": "Punkt końcowy o tej nazwie już istnieje."
+    }
+  },
   "drafts": {
     "restoreTitle": "Przywrócić niezapisany szkic?",
     "restoreDescription": "Ta karta zawiera niezapisany szkic z <timestamp/>. Przywróć go, aby zastąpić wczytany formularz, lub odrzuć, aby zachować formularz w obecnej postaci.",
@@ -2029,6 +2034,7 @@
       "permissions": "Uprawnienia",
       "exports": "Eksporty",
       "connections": "Połączenia",
+      "webhooks": "Webhooki",
       "lifecycle": "Cykl życia"
     },
     "lifecycle": "Cykl życia i stan",
@@ -3199,6 +3205,36 @@
     "filterByExport": "Stan eksportu",
     "filterChip": "{{destination}}: {{status}}",
     "removeFilter": "Usuń filtr {{filter}}"
+  },
+  "extensionWebhooks": {
+    "title": "Webhooki",
+    "description": "Publiczne punkty końcowe, do których systemy zewnętrzne wysyłają zdarzenia. Na każde żądanie odpowiada rozszerzenie; Attricat tylko je przekazuje.",
+    "addEndpoint": "Dodaj punkt końcowy",
+    "addEndpointDescription": "Każdy punkt końcowy dostaje własny tajny adres URL, więc każdemu systemowi wysyłającemu możesz dać osobny i niezależnie go zmieniać lub usuwać.",
+    "create": "Utwórz",
+    "webhook": "Webhook",
+    "endpointName": "Nazwa",
+    "endpointNameHelp": "Litery, cyfry, „.”, „_” lub „-”, maksymalnie 128 znaków.",
+    "endpointNameInvalid": "Użyj od 1 do 128 liter, cyfr, „.”, „_” lub „-”.",
+    "lastRequest": "Ostatnie żądanie",
+    "lastReply": "Ostatnia odpowiedź",
+    "neverRequested": "Brak żądań",
+    "noEndpoints": "Brak punktów końcowych webhooków",
+    "noEndpointsDescription": "Punkty końcowe webhooków pozwalają systemom zewnętrznym przesyłać zdarzenia do tego rozszerzenia. Dodaj osobny dla każdego systemu, który ma je wysyłać.",
+    "rotateUrl": "Zmień adres URL",
+    "rotateTitle": "Zmienić adres URL punktu końcowego {{name}}?",
+    "rotateExplanation": "Obecny adres URL natychmiast przestanie działać. Skonfiguruj system wysyłający z nowym adresem.",
+    "delete": "Usuń",
+    "deleteTitle": "Usunąć {{name}}?",
+    "deleteExplanation": "Jego adres URL natychmiast przestanie działać i nie będzie można go przywrócić.",
+    "urlTitle": "Skopiuj teraz adres URL punktu końcowego {{name}}",
+    "urlWarning": "Ten adres URL jest pokazywany tylko raz i zawiera sekret. Zapisz go w bezpiecznym miejscu przed zamknięciem tego okna; nie będzie można go ponownie wyświetlić.",
+    "url": "Adres URL webhooka",
+    "path": "Ścieżka webhooka",
+    "pathExplanation": "Ten serwer nie zna swojego publicznego adresu. Poprzedź ścieżkę publicznym adresem tego wdrożenia Attricat, na przykład https://attricat.example.com.",
+    "urlInstructions": "Skonfiguruj system wysyłający z tym adresem URL. Attricat nie weryfikuje podpisów: każde żądanie sprawdza samo rozszerzenie, a jego dokumentacja określa, jaki sekret lub podpis należy skonfigurować.",
+    "copyUrl": "Kopiuj adres URL",
+    "copyPath": "Kopiuj ścieżkę"
   },
   "validation": {
     "required": "To pole jest wymagane.",
