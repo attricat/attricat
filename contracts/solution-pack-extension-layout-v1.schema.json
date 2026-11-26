@@ -26,15 +26,9 @@
           "outlet": {
             "enum": [
               "navigation",
-              "record_tab",
               "blueprint_attribute_configuration",
-              "record_action",
-              "explorer_row_action",
               "explorer_table_cell",
               "blueprint_detail_panel",
-              "explorer_action",
-              "explorer_bulk_action",
-              "record_header_action",
               "blueprint_panel",
               "blueprint_publish_check",
               "audit_event_panel",

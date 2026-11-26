@@ -1687,6 +1687,17 @@ fn published_manifest_schema_accepts_the_v1_fixture_and_is_strict() {
             .unwrap()
             .is_empty()
     );
+    // Blueprint views place record and Explorer contributions.
+    let placed_layout = json!({
+        "format_version": 1,
+        "kind": "extension_layout",
+        "entries": [{"contribution": "acme.shop:action", "outlet": "record_action", "required": true}],
+    });
+    assert!(
+        !attricat_validation::validate_json_schema(&layout_schema, &placed_layout)
+            .unwrap()
+            .is_empty()
+    );
     let promoted_layout = json!({
         "format_version": 1,
         "kind": "extension_layout",
