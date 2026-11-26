@@ -63,6 +63,9 @@ export const outletPolicies = {
   data_health_card: cardPolicy,
   blueprint_publish_check: panelPolicy,
   export_mapping: panelPolicy,
+  // Form assists have no artifact, so nothing mounts here; the inline policy
+  // keeps the outlet from reserving space if one ever does.
+  record_form: inlinePanelPolicy,
 } as const satisfies Record<OutletName, { kind: string }>;
 
 const embeddedOutlets = new Set<OutletName>([
