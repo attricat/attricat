@@ -1095,7 +1095,15 @@ Inside the run:
   Members the initiator can no longer read are `unavailable`; deleted members
   are `deleted`. Membership and access are separate: frozen membership never
   grants access.
-- Generic `attricat-data.read` and the connector `attricat` interface calls are rejected.
+- `attricat-data.read` answers `record` for a record linked from the
+  selection (a member, a live record whose relationship value targets a
+  member, or a live record reached from those through at most
+  `MAX_SELECTION_LINK_HOPS` = 3 relationship values; incoming links are
+  followed only into the selection), `incoming` from a member with the items
+  the initiator cannot read left out, and the `blueprint`/`context` code
+  lookups. Each record read also needs the initiator's current
+  `records.read`. Other reads and the connector `attricat` interface calls
+  are rejected.
   `attricat-data.batch` accepts only `update`, `relationships`, and `annotate`
   intents for members of the selection, and checks the initiator's current
   grants for each intent (`records.write` for values, `records.read` for
@@ -1508,6 +1516,19 @@ artifact. It needs `attricat.read`, `attricat.files.read` and
 `artifacts.read`; connector runs are confined to the records they serve and
 the live records those link to (which page-v2 expands), and interactive runs
 to their selection.
+
+`files.attach.v1` (`{record_id, attribute_code, context_id?, artifact_id,
+filename}`) stores a completed input artifact of the run (up to 16 MiB) as a
+new workspace file and writes it to a file attribute through the same seam as
+an upload: the type is detected from the bytes and checked against the
+attribute's file policy, cardinality one replaces and many appends, and the
+change is audited and emitted. A file already on the attribute with the same
+SHA-256 and name is returned with `replayed: true` instead. It is run-only
+(an `api.call` the unified host routes to the run, so the WIT is unchanged),
+needs `attricat.write` and `artifacts.read`, and writes a selection run's
+members only, as the initiator with `records.write`; connector and blueprint
+runs are refused, other runs write as the extension. The object key is
+covered by a file upload intent before the bytes are written.
 
 `files.link.v1` (`{file_id, record_id, expires_in_seconds}`, 60 s to 7 days)
 issues a public, unguessable link to a record's file for destinations that

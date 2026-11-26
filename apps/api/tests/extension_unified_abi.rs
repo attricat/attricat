@@ -11,6 +11,7 @@ use api::{
     repository::{AttricatRepository, StartExtensionOperation},
     storage::FakeObjectStore,
 };
+use reqwest::multipart::{Form, Part};
 use support::*;
 
 const EXTENSION: &str = "acme.unified";
@@ -54,7 +55,32 @@ const PERMISSIONS: &[&str] = &[
     "client.action_dialog",
     "client.operations.start",
     "client.operations.read",
+    "attricat.files.read",
+    "artifacts.read",
 ];
+/// Records that link to each other: an order is selected, its lines point
+/// at it through `parent`, and `related` chains on to further records.
+const LINKED_BLUEPRINT: &str = r#"
+format_version: 1
+code: unified_linked
+name: Unified linked
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+  - code: parent
+    value_type: relationship
+    target_blueprint: unified_linked
+  - code: related
+    value_type: relationship
+    target_blueprint: unified_linked
+  - code: document
+    value_type: file
+"#;
 
 fn unified_component() -> Vec<u8> {
     build_test_component(
@@ -89,6 +115,11 @@ fn manifest() -> Value {
                 "id": "tag", "handler": "tag",
                 "request_schema": {"type": "object", "additionalProperties": false},
                 "max_request_bytes": 1024, "max_checkpoint_bytes": 8192,
+                "interactive": {"version": 1, "max_selection": 50}
+            }, {
+                "id": "inspect-selection", "handler": "inspect-selection",
+                "request_schema": {"type": "object"},
+                "max_request_bytes": 8192, "max_checkpoint_bytes": 65536,
                 "interactive": {"version": 1, "max_selection": 50}
             }, {
                 "id": "inspect", "handler": "inspect",
@@ -252,6 +283,205 @@ async fn one_unified_component_serves_commands_and_interactive_operations(pool: 
         checkpoint["direct_command_error"],
         "operation runs access catalog data through their run-scoped interfaces"
     );
+    server.abort();
+}
+
+/// Creates a `unified_linked` record titled `title` with the given
+/// relationship values.
+async fn linked_record(
+    repository: &AttricatRepository,
+    blueprint: (Uuid, i64),
+    title: &str,
+    links: &[(&str, Uuid)],
+) -> Uuid {
+    let mut values = vec![NewAttributeValue::Scalar {
+        attribute_id: None,
+        attribute_code: Some("title".into()),
+        context_id: None,
+        value: json!(title),
+    }];
+    values.extend(
+        links
+            .iter()
+            .map(|(code, target)| NewAttributeValue::Relationship {
+                attribute_id: None,
+                attribute_code: Some((*code).into()),
+                context_id: None,
+                target_record_id: *target,
+            }),
+    );
+    repository
+        .create_record_with_values(blueprint.0, blueprint.1, values, vec![], json!({}))
+        .await
+        .unwrap()
+        .id
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_selection_run_reads_linked_records_and_attaches_files(pool: sqlx::PgPool) {
+    let repository =
+        AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
+    let store = Arc::new(FakeObjectStore::available());
+    let release = install_extension(
+        &repository,
+        store.clone(),
+        EXTENSION,
+        &archive(&unified_component()),
+        PERMISSIONS,
+    )
+    .await;
+    let blueprint = published_blueprint(&repository, LINKED_BLUEPRINT).await;
+    // The selection is an order and a document record. A line links to the
+    // order; `related` chains from the line through A, B and C to D, one hop
+    // too far. P points at A but is linked to nothing selected.
+    let d = linked_record(&repository, blueprint, "D", &[]).await;
+    let c = linked_record(&repository, blueprint, "C", &[("related", d)]).await;
+    let b = linked_record(&repository, blueprint, "B", &[("related", c)]).await;
+    let a = linked_record(&repository, blueprint, "A", &[("related", b)]).await;
+    let order = linked_record(&repository, blueprint, "Order", &[]).await;
+    let line = linked_record(
+        &repository,
+        blueprint,
+        "Line",
+        &[("parent", order), ("related", a)],
+    )
+    .await;
+    let p = linked_record(&repository, blueprint, "P", &[("related", a)]).await;
+    let source = linked_record(&repository, blueprint, "Source", &[]).await;
+
+    let (base, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
+    let uploaded: Value = authenticated_client()
+        .post(format!(
+            "{base}/records/{source}/file-attributes/document/uploads"
+        ))
+        .multipart(
+            Form::new().part(
+                "file",
+                Part::bytes(b"%PDF-1.4 invoice".to_vec())
+                    .file_name("source.pdf")
+                    .mime_str("application/pdf")
+                    .unwrap(),
+            ),
+        )
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let file_id = uploaded["files"][0]["id"].clone();
+    let sha256 = uploaded["files"][0]["sha256"].clone();
+    // The fake store has no file worker; mark the upload ready.
+    sqlx::query("UPDATE files SET status='ready' WHERE id=$1")
+        .bind(file_id.as_str().unwrap().parse::<Uuid>().unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let read = |record: Uuid| json!({"operation": "record", "record_id": record});
+    let attach = |record: Uuid| {
+        json!({"open": {"record_id": source, "file_id": file_id}, "record_id": record,
+            "attribute_code": "document", "filename": "invoice.pdf"})
+    };
+    let response = authenticated_client()
+        .post(format!("{base}/extensions/{EXTENSION}/bulk/operations"))
+        .json(&json!({
+            "release_id": release,
+            "operation_id": "inspect-selection",
+            "input": {
+                "reads": [
+                    read(order),
+                    {"operation": "incoming", "record_id": order,
+                        "relationships": [{"source_blueprint": "unified_linked", "field": "parent"}],
+                        "limit": 10},
+                    read(line), read(a), read(b), read(c),
+                    read(d), read(p),
+                    {"operation": "incoming", "record_id": a,
+                        "relationships": [{"source_blueprint": "unified_linked", "field": "related"}],
+                        "limit": 10},
+                    {"operation": "blueprint", "code": "unified_linked"},
+                    {"operation": "page", "blueprint_id": blueprint.0,
+                        "blueprint_version": blueprint.1, "cursor": null, "limit": 1},
+                ],
+                "attach": [attach(order), attach(a)],
+            },
+            "idempotency_key": "linked-1",
+            "selection": {
+                "blueprint_id": blueprint.0,
+                "blueprint_version": blueprint.1,
+                "context_id": null,
+                "record_ids": [order, source]
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
+    let run_id: Uuid = response.json::<Value>().await.unwrap()["run_id"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    drain_extension_operations(&repository, store.clone()).await;
+    let (status, checkpoint): (String, Value) =
+        sqlx::query_as("SELECT status, checkpoint FROM extension_operation_runs WHERE id=$1")
+            .bind(run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(status, "completed", "checkpoint: {checkpoint}");
+    let before = &checkpoint["before"];
+
+    // The selection, its lines and three hops on from them are readable.
+    assert_eq!(before[0]["record"]["id"], json!(order), "{before}");
+    let lines: Vec<&Value> = before[1]["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| &item["id"])
+        .collect();
+    assert_eq!(lines, vec![&json!(line)], "{before}");
+    for (index, record) in [(2, line), (3, a), (4, b), (5, c)] {
+        assert_eq!(before[index]["record"]["id"], json!(record), "{before}");
+    }
+    // A fourth hop, and a record that only links to a linked one, are not.
+    for index in [6, 7] {
+        assert_eq!(
+            before[index]["error"], "the record is not linked from the run selection",
+            "{before}"
+        );
+    }
+    assert_eq!(
+        before[8]["error"], "incoming reads start at a record of the run selection",
+        "{before}"
+    );
+    assert_eq!(before[9]["blueprint"]["id"], json!(blueprint.0));
+    assert_eq!(
+        before[10]["error"],
+        "interactive runs read catalog data through their run-bound selection"
+    );
+
+    // A file opened into the run is attached to a selected record once; the
+    // second attachment of the same file and name is a replay.
+    let attached = &checkpoint["attachments"][0];
+    assert_eq!(attached[0]["replayed"], false, "{checkpoint}");
+    assert_eq!(attached[1]["replayed"], true, "{checkpoint}");
+    assert_eq!(attached[0]["file"]["sha256"], sha256);
+    assert_eq!(attached[0]["file"]["filename"], "invoice.pdf");
+    assert_eq!(attached[1]["file"]["id"], attached[0]["file"]["id"]);
+    assert_eq!(
+        checkpoint["attachments"][1]["error"],
+        "the record is outside the run selection"
+    );
+    let files: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT r.file_id FROM attribute_file_references r JOIN attribute_values v ON v.id=r.attribute_value_id WHERE v.record_id=$1",
+    )
+    .bind(order)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(files.len(), 1);
+    assert_eq!(json!(files[0]), attached[0]["file"]["id"]);
     server.abort();
 }
 

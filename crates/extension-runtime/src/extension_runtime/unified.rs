@@ -50,6 +50,8 @@ use host_unified::exports::attricat::host::{
 const RUN_ONLY_ERROR: &str = "this interface is available only during an operation run";
 const RUN_ATTRICAT_ERROR: &str =
     "operation runs access catalog data through their run-scoped interfaces";
+/// The run-only `api.call` that attaches an input artifact to a record.
+const FILES_ATTACH_OPERATION: &str = "files.attach.v1";
 const RECEIVE_ERROR: &str = "this interface is not available while receiving a webhook";
 
 pub(super) struct UnifiedState {
@@ -120,6 +122,10 @@ impl v16::api::Host for UnifiedState {
             "attricat.read.v1" | "attricat.command.v1"
         ) {
             self.deny_in_run()?;
+        }
+        if operation == FILES_ATTACH_OPERATION {
+            self.deny_in_receive()?;
+            return self.run()?.files_attach(request).await;
         }
         if operation == "connector.scope.v1" {
             return match self.operation.as_mut() {

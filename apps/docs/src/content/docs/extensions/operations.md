@@ -97,7 +97,13 @@ When a run starts, Attricat checks that the user can read every selected record 
 
 - `selection.describe()` returns the count, blueprint revision, and context.
 - `selection.page(cursor, limit)` returns 1 to 10 members with their saved values resolved in the run's context, the stored values of reusable attributes attached to them (`reusable_values`, with each value's `context_id`), your own annotations, and `read_at`. Members the user can no longer read come back as `unavailable`, deleted ones as `deleted`.
-- `attricat-data.read` and the connector `attricat` calls are refused. `attricat-data.batch` accepts `update`, `relationships`, and `annotate` intents for selected records only, checked against the user's current permissions.
+- `attricat-data.read` reads what the selection links to, as far as the user can still read it:
+  - `record` returns a selected record, a record whose relationship points at one (such as an order's lines), or a record reached from those through at most three relationship values (such as a line's product's unit).
+  - `incoming` lists the records linking to a selected record, without the ones the user cannot read.
+  - `blueprint` and `context` look up codes.
+
+  Other reads, and the connector `attricat` calls, are refused.
+- `attricat-data.batch` accepts `update`, `relationships`, and `annotate` intents for selected records only, checked against the user's current permissions.
 - If the user leaves the workspace, the run stops with a safe reason rather than continuing with the extension's own grants.
 
 Capture what you need from each record once and keep it in the checkpoint, so a retried batch renders the same bytes. Report progress as `{"completed": n, "total": n, "outcome": {"succeeded": n, "failed": n, "skipped": n}}`; Attricat shows these counts separately from the run status, so a run can complete with some records failed.
@@ -163,6 +169,14 @@ Host API 1.1 adds versions that fit marketplace and cloud storage uploads:
 - `multipart: {"fields": [{"name", "value"}], "file_field", "filename"?}` sends a `multipart/form-data` form with the artifact as its file part, for form-style staged uploads.
 - A v2 delivery can upload a completed input artifact of the run as well as an output.
 - `transfer.open-record-file({"record_id", "file_id", "variant"?})` copies a file a live record references, up to 16 MiB, into an input artifact of the run and returns its artifact ID, so you can upload it directly. `variant` picks an image variant instead of the original. Records that share a file get the same artifact. It needs `attricat.read`, `attricat.files.read`, and `artifacts.read`. Connector runs can only open files of the records they export and of the live records those link to (the related records `page-v2` expands), and interactive runs only of their selection.
+
+To keep a fetched document on a record, such as an invoice PDF, attach the input artifact to one of the record's file attributes with `api.call("files.attach.v1", …)`:
+
+```json
+{ "record_id": "…", "attribute_code": "invoice_pdf", "context_id": null, "artifact_id": "…", "filename": "FV 1/11/2026.pdf" }
+```
+
+It returns `{"file": {id, filename, mime_type, byte_size, sha256, status}, "replayed": false}`. The file's type comes from its contents and must be one the attribute accepts; a one-file attribute's file is replaced, and a many-file attribute gets one more. When the attribute already holds a file with the same contents and name, the call returns that file with `"replayed": true` and writes nothing, so a retried batch attaches it once. It works only during an operation run and needs `attricat.write` and `artifacts.read`. A selection run attaches only to its selected records, as the user who started it, who needs `records.write`; connector and blueprint runs cannot attach files; other runs write as the extension.
 
 Every request a transfer makes counts against its rule's [request budget](/extensions/manifest/#request-budgets).
 

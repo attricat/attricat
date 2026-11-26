@@ -36,6 +36,10 @@ const MAX_SELECTION_PAGE: u32 = 10;
 /// Leaves headroom below the 64 KiB host JSON bound for the page envelope.
 const SELECTION_PAGE_BUDGET_BYTES: usize = 60 * 1024;
 const MAX_USER_RUNS: i64 = 50;
+/// How many relationship values an interactive run may follow from its
+/// selection, or from the records that link to it, to read a related record:
+/// enough for an order line's product's unit.
+pub const MAX_SELECTION_LINK_HOPS: i32 = 3;
 /// Safe failure code for an initiator who lost access to the workspace.
 pub const INITIATOR_ACCESS_REVOKED: &str = "initiator_access_revoked";
 
@@ -680,6 +684,45 @@ impl AttricatRepository {
             blueprint_version,
             context_id,
         }))
+    }
+
+    /// Whether `record_id` is linked from a selection: a selected record, a
+    /// live record whose relationship points at one (such as an order's
+    /// lines), or a live record reached from those through at most
+    /// [`MAX_SELECTION_LINK_HOPS`] relationship values. Incoming links are
+    /// followed only into the selection, so a run cannot walk from a shared
+    /// record, such as a product, to every record that links to it.
+    pub async fn selection_links_record(
+        &self,
+        selection: &[Uuid],
+        record_id: Uuid,
+    ) -> Result<bool, RepositoryError> {
+        if selection.contains(&record_id) {
+            return Ok(true);
+        }
+        Ok(sqlx::query_scalar(
+            "WITH RECURSIVE anchors AS ( \
+               SELECT unnest($2::uuid[]) AS id \
+               UNION \
+               SELECT av.record_id FROM attribute_values av \
+                 JOIN records source ON source.workspace_id=av.workspace_id AND source.id=av.record_id AND source.deleted_at IS NULL \
+               WHERE av.workspace_id=$1 AND av.active AND av.relationship_target_record_id=ANY($2::uuid[]) \
+             ), reached(id, hops) AS ( \
+               SELECT id, 0 FROM anchors \
+               UNION \
+               SELECT av.relationship_target_record_id, reached.hops + 1 FROM reached \
+                 JOIN attribute_values av ON av.workspace_id=$1 AND av.record_id=reached.id AND av.active \
+                 JOIN records target ON target.workspace_id=av.workspace_id AND target.id=av.relationship_target_record_id AND target.deleted_at IS NULL \
+               WHERE reached.hops < $3 \
+             ) \
+             SELECT EXISTS(SELECT 1 FROM reached WHERE id=$4)",
+        )
+        .bind(self.workspace_id.0)
+        .bind(selection)
+        .bind(MAX_SELECTION_LINK_HOPS)
+        .bind(record_id)
+        .fetch_one(&self.pool)
+        .await?)
     }
 
     /// The workspace's default attribute context.

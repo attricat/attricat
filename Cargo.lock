@@ -484,6 +484,7 @@ dependencies = [
  "attricat-extension-manifest",
  "attricat-repository",
  "attricat-storage",
+ "attricat-validation",
  "attricat-workers",
  "base64 0.23.1",
  "bytes",

@@ -8,7 +8,7 @@ wit_bindgen::generate!({
     world: "attricat-extension",
 });
 
-use attricat::host::{api, attricat_data, clock, selection};
+use attricat::host::{api, attricat_data, clock, selection, transfer};
 use exports::attricat::host::{
     handler::{self, CommandRequest, CommandResponse},
     operations::{self, BatchResult, OperationRequest},
@@ -120,9 +120,10 @@ impl handler::Guest for Component {
     }
 }
 
-/// Reads and writes the catalog as a run without a selection does, through
-/// the run-scoped `attricat-data` interface: the input's reads, then its
-/// intents, then the reads again. Each read keeps its error, if any.
+/// Reads and writes the catalog through the run-scoped `attricat-data`
+/// interface: the input's reads, then its intents, then its attachments
+/// (`files.attach.v1`), then the reads again. Each read and attachment keeps
+/// its error, if any. `inspect-selection` does the same in an interactive run.
 fn inspect(request: &OperationRequest) -> Result<BatchResult, String> {
     let input = parse(&request.input)?;
     let read_all = || -> Vec<Value> {
@@ -149,10 +150,35 @@ fn inspect(request: &OperationRequest) -> Result<BatchResult, String> {
         )?)?,
         _ => json!([]),
     };
+    // Each attachment opens a record file into the run and attaches it,
+    // twice, so the second attachment shows the replay.
+    let attachments: Vec<Value> = input["attach"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|attach| {
+            let attached = || -> Result<Value, String> {
+                let opened = parse(&transfer::open_record_file(&attach["open"].to_string())?)?;
+                let request = json!({
+                    "record_id": attach["record_id"],
+                    "attribute_code": attach["attribute_code"],
+                    "artifact_id": opened["artifact_id"],
+                    "filename": attach["filename"],
+                })
+                .to_string();
+                let first = parse(&api::call("files.attach.v1", &request)?)?;
+                let second = parse(&api::call("files.attach.v1", &request)?)?;
+                Ok(json!([first, second]))
+            };
+            attached().unwrap_or_else(|error| json!({"error": error}))
+        })
+        .collect();
     let after = read_all();
     Ok(BatchResult {
         progress: json!({"completed": 1, "total": 1}).to_string(),
-        checkpoint: json!({"before": before, "outcomes": outcomes, "after": after}).to_string(),
+        checkpoint: json!({"before": before, "outcomes": outcomes, "attachments": attachments,
+            "after": after})
+        .to_string(),
         done: true,
     })
 }
@@ -167,7 +193,10 @@ impl operations::Guest for Component {
     }
 
     fn process_batch(request: OperationRequest) -> Result<BatchResult, String> {
-        if request.operation_id == "inspect" {
+        if matches!(
+            request.operation_id.as_str(),
+            "inspect" | "inspect-selection"
+        ) {
             return inspect(&request);
         }
         let mut checkpoint = parse(&request.checkpoint)?;

@@ -171,6 +171,53 @@ impl AttricatRepository {
         Ok(target.policy)
     }
 
+    /// The file policy of a record's file attribute, like
+    /// [`Self::file_upload_policy`], with the attribute's current files in
+    /// `context_id`, so a writer can tell whether a file is already there.
+    pub async fn file_upload_target_files(
+        &self,
+        record_id: Uuid,
+        attribute_code: &str,
+        context_id: Option<Uuid>,
+    ) -> Result<(FilePolicy, Vec<UploadedFile>), RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
+        let target = self
+            .lock_file_upload_target(&mut transaction, record_id, attribute_code, context_id)
+            .await?;
+        let current = self
+            .current_file_ids(
+                &mut transaction,
+                record_id,
+                target.attribute_id,
+                target.context_id,
+            )
+            .await?;
+        let files = sqlx::query_as::<_, (Uuid, String, String, i64, String, String)>(
+            "SELECT id, display_filename, mime_type, byte_size, sha256, status FROM files WHERE workspace_id = $1 AND id = ANY($2)",
+        )
+        .bind(self.workspace_id.0)
+        .bind(&current)
+        .fetch_all(&mut *transaction)
+        .await?;
+        transaction.commit().await?;
+        let files = files
+            .into_iter()
+            .map(|(id, filename, mime_type, byte_size, sha256, status)| {
+                Ok(UploadedFile {
+                    id,
+                    filename,
+                    mime_type,
+                    byte_size,
+                    sha256,
+                    status: status
+                        .parse()
+                        .map_err(|_| RepositoryError::NotFound("file status"))?,
+                })
+            })
+            .collect::<Result<_, RepositoryError>>()?;
+        Ok((target.policy, files))
+    }
+
     /// Locks the record and checks that `attribute_code` accepts files in an
     /// editable, unlocked context.
     async fn lock_file_upload_target(

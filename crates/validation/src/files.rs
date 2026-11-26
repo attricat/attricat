@@ -40,6 +40,21 @@ pub fn extension(filename: &str) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
+/// The longest file name a stored file keeps.
+pub const MAX_FILENAME_BYTES: usize = 255;
+
+/// A file name safe to store and show: its last path segment, without
+/// control characters, or `None` when nothing usable remains.
+pub fn sanitize_filename(name: &str) -> Option<String> {
+    let base = name.rsplit(['/', '\\']).next()?.trim();
+    let clean: String = base
+        .chars()
+        .filter(|character| !character.is_control())
+        .collect();
+    (!clean.is_empty() && clean != "." && clean != ".." && clean.len() <= MAX_FILENAME_BYTES)
+        .then_some(clean)
+}
+
 /// Detects a supported MIME type from the leading bytes of a file. The file
 /// name only disambiguates Office Open XML containers. `valid_text` says
 /// whether the whole stream is UTF-8 text without NUL bytes.

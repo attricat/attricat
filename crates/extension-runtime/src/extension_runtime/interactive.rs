@@ -5,6 +5,10 @@
 //! generic page/lookup reads and connector calls are rejected, and every
 //! write is checked against the selection and the initiator's live grants.
 
+use std::collections::HashSet;
+
+use attricat_domain::permissions::Permission;
+
 use super::*;
 use crate::extensions::InteractiveScope;
 use crate::repository::{ExtensionAttricatBatch, ExtensionAttricatIntent, InteractiveRunScope};
@@ -75,7 +79,116 @@ fn check_batch_scope(
     Ok(())
 }
 
+/// What a selection run may ask `attricat-data.read` for.
+enum SelectionRead {
+    /// Blueprint and context lookups by code: shape, not record data.
+    Shape,
+    /// One record linked from the selection.
+    Record(Uuid),
+    /// The records linking to a selected record.
+    Incoming(Uuid),
+}
+
+fn selection_read_kind(request: &str) -> Result<SelectionRead, String> {
+    let request: Value = parse_host_request(request, "read request")?;
+    let record_id = || {
+        request["record_id"]
+            .as_str()
+            .ok_or_else(|| "read request names no record".to_owned())
+            .and_then(|id| parse_uuid(id, "record ID"))
+    };
+    match request["operation"].as_str() {
+        Some("blueprint" | "context") => Ok(SelectionRead::Shape),
+        Some("record") => Ok(SelectionRead::Record(record_id()?)),
+        Some("incoming") => Ok(SelectionRead::Incoming(record_id()?)),
+        _ => Err(SELECTION_SCOPE_ERROR.into()),
+    }
+}
+
+/// The records of `record_ids` the run's initiator can still read. It
+/// borrows only the repository, which is Sync.
+async fn initiator_reads(
+    repository: &AttricatRepository,
+    scope: &InteractiveRunScope,
+    record_ids: &[Uuid],
+) -> Result<HashSet<Uuid>, String> {
+    repository
+        .principal_record_ids(
+            scope.actor,
+            repository.workspace_id(),
+            Permission::RecordsRead,
+            record_ids,
+        )
+        .await
+        .map(|readable| readable.into_iter().collect())
+        .map_err(|error| error.to_string())
+}
+
 impl OperationState {
+    /// A read of a selection run: blueprint and context lookups, a record
+    /// linked from the selection, or the records linking to a selected one,
+    /// each only as far as the initiator can still read.
+    async fn selection_read(
+        &mut self,
+        scope: InteractiveRunScope,
+        request: String,
+    ) -> Result<String, String> {
+        if request.len() > MAX_HOST_JSON_BYTES {
+            return Err("request exceeds host JSON limit".into());
+        }
+        match selection_read_kind(&request)? {
+            SelectionRead::Shape => self.attricat_data_read(request).await,
+            SelectionRead::Record(record_id) => {
+                let linked = self
+                    .repository
+                    .selection_links_record(&scope.record_ids, record_id)
+                    .await
+                    .map_err(|error| error.to_string())?;
+                if !linked {
+                    return Err("the record is not linked from the run selection".into());
+                }
+                if !initiator_reads(&self.repository, &scope, &[record_id])
+                    .await?
+                    .contains(&record_id)
+                {
+                    return Err("the run's initiator can no longer read the record".into());
+                }
+                self.attricat_data_read(request).await
+            }
+            SelectionRead::Incoming(record_id) => {
+                if !scope.record_ids.contains(&record_id) {
+                    return Err("incoming reads start at a record of the run selection".into());
+                }
+                if !initiator_reads(&self.repository, &scope, &[record_id])
+                    .await?
+                    .contains(&record_id)
+                {
+                    return Err("the run's initiator can no longer read the record".into());
+                }
+                let mut page: Value =
+                    parse_host_request(&self.attricat_data_read(request).await?, "incoming page")?;
+                // A page keeps its cursor, so leaving out records the
+                // initiator cannot read only shortens it.
+                let ids: Vec<Uuid> = page["items"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|item| item["id"].as_str()?.parse().ok())
+                    .collect();
+                let readable = initiator_reads(&self.repository, &scope, &ids).await?;
+                if let Some(items) = page["items"].as_array_mut() {
+                    items.retain(|item| {
+                        item["id"]
+                            .as_str()
+                            .and_then(|id| id.parse().ok())
+                            .is_some_and(|id: Uuid| readable.contains(&id))
+                    });
+                }
+                bounded_serialize(&page)
+            }
+        }
+    }
+
     /// Validates a batch against an interactive run's scope, then applies it
     /// with the initiator as the authorization actor.
     async fn interactive_batch(
@@ -144,10 +257,13 @@ impl wit::selection::Host for OperationState {
 
 impl wit::attricat_data::Host for OperationState {
     async fn read(&mut self, request: String) -> Result<String, String> {
-        if load_scope(&self.repository, self.run_id).await?.is_some() {
-            return Err(SELECTION_SCOPE_ERROR.into());
+        match load_scope(&self.repository, self.run_id).await? {
+            None => self.attricat_data_read(request).await,
+            Some(scope) if scope.scope == InteractiveScope::Selection => {
+                self.selection_read(scope, request).await
+            }
+            Some(_) => Err(SELECTION_SCOPE_ERROR.into()),
         }
-        self.attricat_data_read(request).await
     }
 
     async fn batch(&mut self, request: String) -> Result<String, String> {
