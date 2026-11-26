@@ -16,9 +16,9 @@ use crate::{
     extension_policy,
     extensions::{
         ActionCondition, ActionConfirmation, ActionInvocation, CellDeclaration,
-        ContributionTranslation, EditorDeclaration, FORM_ASSIST_CAPABILITY, Manifest,
-        RECORD_FIELD_NOTES_CAPABILITY, RenderingMode, SUPPORTED_HOST_API, UiContributionKind,
-        UiOutlet, valid_contribution_key,
+        ContributionTranslation, ContributionView, EditorDeclaration, FORM_ASSIST_CAPABILITY,
+        Manifest, RECORD_FIELD_NOTES_CAPABILITY, RenderingMode, SUPPORTED_HOST_API,
+        UiContributionKind, UiOutlet, valid_contribution_key,
     },
 };
 
@@ -140,8 +140,11 @@ pub fn extension_manifest_sha256(manifest: &Manifest) -> Result<String, Reposito
 /// removing an outlet does not leave the layout unreadable or unsaveable.
 pub(crate) fn without_removed_outlets(mut layout: Value) -> Value {
     if let Some(outlets) = layout.get_mut("outlets").and_then(Value::as_object_mut) {
+        // Blueprint views place record and Explorer contributions, so the
+        // workspace layout no longer keeps entries for those outlets.
         outlets.retain(|outlet, _| {
-            serde_json::from_value::<UiOutlet>(Value::String(outlet.clone())).is_ok()
+            serde_json::from_value::<UiOutlet>(Value::String(outlet.clone()))
+                .is_ok_and(|outlet| outlet.blueprint_view().is_none())
         });
     }
     layout
@@ -159,7 +162,9 @@ pub(crate) fn validate_workspace_extension_layout(layout: &Value) -> Result<(), 
     }
     let mut assigned_keys = HashSet::new();
     for (outlet, value) in object["outlets"].as_object().expect("validated object") {
-        if serde_json::from_value::<UiOutlet>(Value::String(outlet.clone())).is_err() {
+        if serde_json::from_value::<UiOutlet>(Value::String(outlet.clone()))
+            .map_or(true, |outlet| outlet.blueprint_view().is_some())
+        {
             return Err(RepositoryError::InvalidCode);
         }
         let item = value.as_object().ok_or(RepositoryError::InvalidCode)?;
@@ -401,6 +406,8 @@ pub struct ClientExtensionContribution {
     pub version: u32,
     pub kind: UiContributionKind,
     pub outlet: Option<UiOutlet>,
+    /// The blueprint view whose `extensions` list places the contribution.
+    pub view: Option<ContributionView>,
     pub route: Option<String>,
     pub title: Option<String>,
     /// What a host-rendered action invokes.
@@ -421,6 +428,57 @@ pub struct ClientExtensionContribution {
     /// The development build that replaces the release's native artifact.
     pub dev_revision: Option<String>,
     pub artifact_key: Option<String>,
+}
+
+/// The contributions a blueprint revision's `detail` and `table` views list
+/// under `extensions`, in order.
+pub(crate) struct ViewPlacements {
+    detail: Vec<String>,
+    table: Vec<String>,
+}
+
+impl ViewPlacements {
+    pub(crate) fn of(views: &Value) -> Self {
+        Self {
+            detail: super::blueprints::view_extensions(views, ContributionView::Detail),
+            table: super::blueprints::view_extensions(views, ContributionView::Table),
+        }
+    }
+
+    /// Where `view` lists the contribution, when it declares that view.
+    pub(crate) fn position(
+        &self,
+        contribution: &ClientExtensionContribution,
+        view: ContributionView,
+    ) -> Option<usize> {
+        placement_position(
+            match view {
+                ContributionView::Detail => &self.detail,
+                ContributionView::Table => &self.table,
+            },
+            &contribution.extension_id,
+            &contribution.id,
+            contribution.view,
+            view,
+        )
+    }
+}
+
+/// Where `entries` place a contribution of `view`: a contribution must
+/// declare the view it is listed in.
+pub(crate) fn placement_position(
+    entries: &[String],
+    extension_id: &str,
+    contribution_id: &str,
+    declared: Option<ContributionView>,
+    view: ContributionView,
+) -> Option<usize> {
+    if declared != Some(view) {
+        return None;
+    }
+    entries.iter().position(|entry| {
+        attricat_blueprint::view_extension_key(entry) == Some((extension_id, contribution_id))
+    })
 }
 
 /// An enabled installation with its capability grants and any development
@@ -569,6 +627,65 @@ impl AttricatRepository {
             .bind(installation.id).fetch_all(&self.pool).await?)
     }
 
+    /// The blueprint revisions of live records, or `None` when any record
+    /// is missing from the workspace.
+    pub async fn record_blueprint_revisions(
+        &self,
+        record_ids: &[Uuid],
+    ) -> Result<Option<BTreeSet<(Uuid, i64)>>, RepositoryError> {
+        if record_ids.is_empty() {
+            return Ok(Some(BTreeSet::new()));
+        }
+        let rows: Vec<(Uuid, Uuid, i64)> = sqlx::query_as(
+            "SELECT id, blueprint_id, blueprint_version FROM records WHERE workspace_id = $1 AND id = ANY($2) AND deleted_at IS NULL",
+        )
+        .bind(self.workspace_id())
+        .bind(record_ids)
+        .fetch_all(&self.pool)
+        .await?;
+        let found = rows.iter().map(|(id, _, _)| *id).collect::<HashSet<_>>();
+        if record_ids.iter().any(|id| !found.contains(id)) {
+            return Ok(None);
+        }
+        Ok(Some(
+            rows.into_iter()
+                .map(|(_, blueprint_id, version)| (blueprint_id, version))
+                .collect(),
+        ))
+    }
+
+    /// Whether every published record blueprint revision's `view` lists the
+    /// contribution under `extensions`. A revision that is missing, not
+    /// published or not a record blueprint lists nothing.
+    pub async fn views_list_contribution(
+        &self,
+        revisions: &BTreeSet<(Uuid, i64)>,
+        extension_id: &str,
+        contribution_id: &str,
+        declared: Option<ContributionView>,
+        view: ContributionView,
+    ) -> Result<bool, RepositoryError> {
+        for (blueprint_id, version) in revisions {
+            let views = sqlx::query_scalar::<_, Value>(
+                "SELECT views FROM blueprints WHERE id = $1 AND version = $2 AND workspace_id = $3 AND kind = 'record' AND status = 'published' AND deleted_at IS NULL",
+            )
+            .bind(blueprint_id)
+            .bind(version)
+            .bind(self.workspace_id())
+            .fetch_optional(&self.pool)
+            .await?;
+            let Some(views) = views else {
+                return Ok(false);
+            };
+            let entries = super::blueprints::view_extensions(&views, view);
+            if placement_position(&entries, extension_id, contribution_id, declared, view).is_none()
+            {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
+
     /// Resolves the layout for one immutable published blueprint revision.
     /// Callers cannot provide a view definition directly.
     pub async fn client_extension_contributions_for_blueprint(
@@ -635,25 +752,6 @@ impl AttricatRepository {
             .insert(key, manifest.clone(), &[], Policy::Immutable)
             .await;
         Ok(manifest)
-    }
-
-    /// [`Self::enabled_client_extension_contributions`] read on the caller's
-    /// connection, for a caller holding a transaction: it must not wait for a
-    /// second pool connection.
-    pub(crate) async fn enabled_client_extension_contributions_on(
-        &self,
-        connection: &mut sqlx::PgConnection,
-    ) -> Result<Vec<ClientExtensionContribution>, RepositoryError> {
-        let mut contributions = self
-            .unfiltered_client_contributions_on(connection, None)
-            .await?;
-        contributions.retain(|contribution| {
-            extension_policy::allows(
-                &contribution.extension_id,
-                contribution.installed_release_id,
-            )
-        });
-        Ok(contributions)
     }
 
     /// Resolves enabled, policy-compatible manifest contributions without
@@ -781,6 +879,7 @@ impl AttricatRepository {
                     } else {
                         contribution.outlet
                     },
+                    view: contribution.view,
                     route: contribution.route,
                     title: contribution.title,
                     invoke: contribution.invoke,
@@ -833,53 +932,44 @@ impl AttricatRepository {
                 .clone(),
             None => load_layout().await?,
         };
-        // A published record revision overlays only its explicitly declared,
-        // record-owned outlets. Global and unspecified workspace defaults remain
-        // authoritative.
-        let mut layout = if layout.get("outlets").is_some_and(Value::is_object) {
+        let layout = if layout.get("outlets").is_some_and(Value::is_object) {
             layout
         } else {
             empty_workspace_extension_layout()
         };
-        if let Some((blueprint_id, blueprint_version)) = blueprint {
-            let override_layout = sqlx::query_scalar::<_, Option<Value>>(
-                "SELECT views->'extension_layout' FROM blueprints WHERE id = $1 AND version = $2 AND workspace_id = $3 AND kind = 'record' AND status = 'published' AND deleted_at IS NULL",
-            )
-            .bind(blueprint_id)
-            .bind(blueprint_version)
-            .bind(self.workspace_id())
-            .fetch_optional(&self.pool)
-            .await?
-            .flatten();
-            if let Some(override_outlets) = override_layout
-                .as_ref()
-                .and_then(|value| value.get("outlets"))
-                .and_then(Value::as_object)
-            {
-                let workspace_outlets = layout["outlets"]
-                    .as_object_mut()
-                    .expect("normalized extension layout");
-                for &outlet in attricat_blueprint::EXTENSION_LAYOUT_OUTLETS {
-                    if let Some(value) = override_outlets.get(outlet) {
-                        workspace_outlets.insert(outlet.to_owned(), value.clone());
-                    }
-                }
+        // A published record revision's views place record and Explorer
+        // contributions: only those its view lists appear, in list order.
+        // Without a revision every contribution is returned, for the native
+        // runtime and the surfaces that are not about one blueprint.
+        let placements = match blueprint {
+            Some((blueprint_id, blueprint_version)) => {
+                let views = sqlx::query_scalar::<_, Value>(
+                    "SELECT views FROM blueprints WHERE id = $1 AND version = $2 AND workspace_id = $3 AND kind = 'record' AND status = 'published' AND deleted_at IS NULL",
+                )
+                .bind(blueprint_id)
+                .bind(blueprint_version)
+                .bind(self.workspace_id())
+                .fetch_optional(&self.pool)
+                .await?
+                .unwrap_or(Value::Null);
+                Some(ViewPlacements::of(&views))
             }
-        }
+            None => None,
+        };
         let outlets = layout.get("outlets").and_then(Value::as_object);
+        let outlet_layout = |outlet: &UiOutlet| {
+            outlets.and_then(|items| items.get(serde_json::to_value(outlet).ok()?.as_str()?))
+        };
         contributions.retain(|contribution| {
             let Some(outlet) = contribution.outlet.as_ref() else {
                 return true;
             };
-            let hidden = outlets
-                .and_then(|items| {
-                    items.get(
-                        &serde_json::to_string(outlet)
-                            .unwrap()
-                            .trim_matches('"')
-                            .to_owned(),
-                    )
-                })
+            if let Some(view) = outlet.blueprint_view() {
+                return placements
+                    .as_ref()
+                    .is_none_or(|placements| placements.position(contribution, view).is_some());
+            }
+            let hidden = outlet_layout(outlet)
                 .and_then(|item| item.get("hidden"))
                 .and_then(Value::as_array);
             !hidden.is_some_and(|keys| {
@@ -887,22 +977,20 @@ impl AttricatRepository {
                     .any(|key| key.as_str() == Some(&contribution.contribution_key))
             })
         });
+        let position = |contribution: &ClientExtensionContribution| {
+            let outlet = contribution.outlet.as_ref()?;
+            match outlet.blueprint_view() {
+                Some(view) => placements.as_ref()?.position(contribution, view),
+                None => outlet_layout(outlet)
+                    .and_then(|item| item.get("order"))
+                    .and_then(Value::as_array)
+                    .and_then(|keys| {
+                        keys.iter()
+                            .position(|key| key.as_str() == Some(&contribution.contribution_key))
+                    }),
+            }
+        };
         contributions.sort_by(|left, right| {
-            let position = |contribution: &ClientExtensionContribution| {
-                contribution.outlet.as_ref().and_then(|outlet| {
-                    outlets
-                        .and_then(|items| {
-                            items.get(serde_json::to_string(outlet).ok()?.trim_matches('"'))
-                        })
-                        .and_then(|item| item.get("order"))
-                        .and_then(Value::as_array)
-                        .and_then(|keys| {
-                            keys.iter().position(|key| {
-                                key.as_str() == Some(&contribution.contribution_key)
-                            })
-                        })
-                })
-            };
             position(left)
                 .is_none()
                 .cmp(&position(right).is_none())
@@ -2304,16 +2392,18 @@ mod layout_tests {
 
     #[test]
     fn stored_layouts_drop_placements_in_removed_outlets() {
+        // Removed outlets, and outlets that blueprint views now place.
         let layout = without_removed_outlets(json!({
             "version": 1,
             "outlets": {
                 "record_preview_panel": {"order": ["acme.x:panel"], "hidden": []},
                 "record_tab": {"order": ["acme.x:tab"], "hidden": []},
+                "blueprint_panel": {"order": ["acme.x:summary"], "hidden": []},
             },
         }));
         assert_eq!(
             layout["outlets"],
-            json!({"record_tab": {"order": ["acme.x:tab"], "hidden": []}})
+            json!({"blueprint_panel": {"order": ["acme.x:summary"], "hidden": []}})
         );
         assert!(validate_workspace_extension_layout(&layout).is_ok());
     }

@@ -38,8 +38,8 @@ pub enum BlueprintError {
     MissingDropdownOptionView,
     #[error("views.dropdown_option must define at least one field")]
     EmptyDropdownOptionFields,
-    #[error("invalid extension layout view")]
-    InvalidExtensionLayout,
+    #[error("invalid view extensions: {0}")]
+    InvalidViewExtensions(String),
     #[error("explorer views must be named views.explorer on a record blueprint")]
     InvalidExplorerView,
     #[error("views.edit is no longer supported; records are edited on the detail view")]
@@ -64,8 +64,6 @@ pub enum BlueprintError {
     RelationshipValueSchema { code: String },
     #[error("attribute '{code}' can only define a default value for scalar values")]
     DefaultValueOnNonScalarAttribute { code: String },
-    #[error("invalid form_assists: {0}")]
-    InvalidFormAssist(String),
     #[error("attribute '{code}' has an invalid default_from: {message}")]
     InvalidDefaultFrom { code: String, message: String },
     #[error("attribute '{code}' has an invalid generated value: {message}")]

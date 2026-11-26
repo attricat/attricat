@@ -78,7 +78,7 @@ Dodaj kontrybucję `navigation`, aby umieścić do niej link na pasku bocznym. A
 | `record_header_action` | `action` | `client.record_header_action` | [Kontekst akcji](#akcje) z tym rekordem |
 | `record_attribute_action` | `action` | `client.record_field_notes` | [Kontekst akcji](#akcje) z tym rekordem i `attribute_code` pola. Dostępne tylko z odznaki [notatki pola](#notatki-pól). |
 
-Każda kontrybucja `record_tab` to karta za własnymi kartami rekordu, z Twoim `title` i `icon`; `when.blueprints` ogranicza rekordy, które ją pokazują. Po trzech kartach rozszerzeń pozostałe trafiają do menu **Więcej**, a administratorzy mogą zmieniać ich kolejność lub je ukrywać w układzie `record_tab`. Ramka montuje się przy pierwszym otwarciu karty i pozostaje zamontowana, dopóki rekord jest otwarty. Otwarta karta jest częścią adresu rekordu (`?tab=<extension-id>:<contribution-id>`), a `attricat.navigate({ record_id, tab })` do niej prowadzi. Akcje rekordu to przyciski pod polami, cztery przed menu przepełnienia; akcje nagłówka to pozycje menu **Akcje** rekordu. Pola i pliki nie mają ramek; opisuj je [notatkami pól](#notatki-pól).
+Każda kontrybucja `record_tab` to karta za własnymi kartami rekordu, z Twoim `title` i `icon`, w schematach, których widok szczegółów ją wymienia ([gdzie pojawiają się akcje](#gdzie-pojawiają-się-akcje) dotyczy też kart); `when.blueprints` może to dodatkowo zawęzić. Po trzech kartach rozszerzeń pozostałe trafiają do menu **Więcej**. Ramka montuje się przy pierwszym otwarciu karty i pozostaje zamontowana, dopóki rekord jest otwarty. Otwarta karta jest częścią adresu rekordu (`?tab=<extension-id>:<contribution-id>`), a `attricat.navigate({ record_id, tab })` do niej prowadzi. Akcje rekordu to przyciski pod polami, cztery przed menu przepełnienia; akcje nagłówka to pozycje menu **Akcje** rekordu. Pola i pliki nie mają ramek; opisuj je [notatkami pól](#notatki-pól).
 
 ### Notatki pól
 
@@ -140,10 +140,10 @@ Akcje wiersza to pozycje menu akcji wiersza, akcje zbiorcze to pozycje menu **Ak
 Akcja to pozycja menu lub przycisk, które Attricat rysuje sam. Deklarujesz jej tytuł i to, co robi jej wybranie; żadna ramka nie ładuje się, dopóki użytkownik jej nie wybierze.
 
 ```json
-{ "id": "check", "version": 1, "kind": "action", "outlet": "record_header_action",
+{ "id": "check", "version": 1, "kind": "action", "outlet": "record_header_action", "view": "detail",
   "title": "Check formulas", "icon": "check", "invoke": { "command": "check-formulas" },
   "translations": { "pl": { "title": "Sprawdź formuły" } } }
-{ "id": "recalculate-now", "version": 1, "kind": "action", "outlet": "explorer_bulk_action",
+{ "id": "recalculate-now", "version": 1, "kind": "action", "outlet": "explorer_bulk_action", "view": "table",
   "title": "Recalculate now", "invoke": { "operation": { "id": "recalculate", "input": { "mode": "write" } } },
   "when": { "requires_write": true, "max_records": 50 },
   "confirm": { "message": "Write recalculated values to the selected records?" } }
@@ -157,13 +157,29 @@ Akcja to pozycja menu lub przycisk, które Attricat rysuje sam. Deklarujesz jej 
 
 | Pole opcjonalne | Działanie |
 | --- | --- |
-| `when` | Oferuje akcję tylko tam, gdzie ma sens: `blueprints` (kody), `min_records`, `max_records` (najwyżej 50), `has_tags`, `missing_tags`, `requires_write`. Attricat odrzuca też polecenia i uruchomienia akcji z `requires_write` dla rekordów, których użytkownik nie może zmieniać. Akcja `explorer_action` nie wskazuje rekordów, więc nie może użyć `requires_write`. |
+| `when` | Zawęża miejsca, w których akcja jest oferowana, ponad widoki schematów, które ją wymieniają: `blueprints` (kody), `min_records`, `max_records` (najwyżej 50), `has_tags`, `missing_tags`, `requires_write`. Attricat odrzuca też polecenia i uruchomienia akcji z `requires_write` dla rekordów, których użytkownik nie może zmieniać. Akcja `explorer_action` nie wskazuje rekordów, więc nie może użyć `requires_write`. |
 | `confirm` | `{ "message", "destructive" }`: Attricat pyta przed uruchomieniem akcji. |
 | `accepts` | Typy pliku, o który Attricat poprosi przed rozpoczęciem akcji operacji, np. `["text/csv"]`; najwyżej 16. Zobacz [Plik wejściowy](/pl/extensions/operations/#plik-wejściowy). |
 | `icon` | Jedna z `alert`, `calculator`, `check`, `clock`, `download`, `file`, `info`, `link`, `refresh`, `search`, `send`, `settings`, `sparkles`, `tag`, `wand`. |
 | `translations` | Tytuły w innych językach, np. `{ "pl": { "title": "…" } }`. Może je mieć każda kontrybucja z tytułem. |
 
 W jednym miejscu osadzenia możesz dodać kilka akcji. Zakończ tytuł znakiem `…`, gdy akcja otwiera okno. Attricat pokazuje też akcje strony w palecie poleceń (Ctrl/⌘+K). Twoje [notatki pól](#notatki-pól) mogą dla danego rekordu wyłączyć akcję z podaniem powodu albo ją ukryć.
+
+#### Gdzie pojawiają się akcje
+
+Każda akcja oprócz akcji notatki pola (`record_attribute_action`) deklaruje `view` schematu, do którego należy: `detail` dla akcji rekordu i akcji nagłówka (oraz kart rekordu i asystentów formularza), `table` dla akcji wiersza, zaznaczenia i paska narzędzi Przeglądarki rekordów. Rozszerzenie nie może wiedzieć, jakich schematów używa obszar roboczy, więc to schemat wymienia potrzebne kontrybucje w `extensions` tego widoku:
+
+```yaml
+views:
+  detail:
+    type: stack
+    extensions: [acme.tools/check]
+  table:
+    type: table
+    extensions: [acme.tools/recalculate-now]
+```
+
+Akcja pojawia się tylko w schematach, których widok ją wymienia, w kolejności listy, a Attricat odrzuca jej polecenie, operację lub wykonanie z okna dla rekordów, których wersja schematu jej nie wymienia. Schemat może wymienić rozszerzenie, zanim zostanie zainstalowane. Opisz w dokumentacji, które kontrybucje użytkownicy powinni wymienić i w którym widoku.
 
 Polecenie otrzymuje, a okno dostaje jako `attricat.context`, kontekst akcji:
 
@@ -224,6 +240,6 @@ Każdy pozostały obiekt kontekstu zawiera `context_version: 1`.
 
 ## Kolejność i usuwanie
 
-Kontrybucje w tym samym miejscu osadzenia są uporządkowane według identyfikatora rozszerzenia, a następnie identyfikatora kontrybucji, chyba że administrator obszaru roboczego lub Schemat ustawi układ. Wyłączenie, kwarantanna, uaktualnienie lub cofnięcie uprawnienia usuwa kontrybucje; otwarte ramki sprawdzają to cyklicznie i są zamykane w ciągu 15 sekund, a ich oczekujące wywołania są odrzucane.
+Kontrybucje stron rekordów i Przeglądarki rekordów mają kolejność, w jakiej wymienia je widok schematu. Kontrybucje w innych miejscach osadzenia są uporządkowane według identyfikatora rozszerzenia, a następnie identyfikatora kontrybucji, chyba że administrator obszaru roboczego ustawi układ. Wyłączenie, kwarantanna, uaktualnienie lub cofnięcie uprawnienia usuwa kontrybucje; otwarte ramki sprawdzają to cyklicznie i są zamykane w ciągu 15 sekund, a ich oczekujące wywołania są odrzucane.
 
 Jeśli ramka nie uruchomi się, host wyświetla w jej miejscu ostrzeżenie, nie ujawniając Twojego kodu ani szczegółów hosta.

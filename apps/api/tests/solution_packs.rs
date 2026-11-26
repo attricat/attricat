@@ -354,19 +354,15 @@ fn archive_with_extension_template(required: bool, template: &[u8]) -> Vec<u8> {
     zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
 }
 
-fn archive_with_blueprint_extension_layout() -> Vec<u8> {
+fn archive_with_blueprint_view_extensions() -> Vec<u8> {
     let blueprint = std::str::from_utf8(PRODUCT_BLUEPRINT)
         .unwrap()
         .replacen(
             "views:\n",
             r#"views:
-  extension_layout:
-    type: extension_layout
-    version: 1
-    outlets:
-      record_action:
-        order: ['acme.layout:action']
-        hidden: []
+  detail:
+    type: stack
+    extensions: [acme.layout/action, acme.later/assist]
 "#,
             1,
         )
@@ -637,7 +633,7 @@ async fn install_layout_extension(pool: &PgPool) -> Uuid {
                 "id": "action",
                 "version": 1,
                 "kind": "action",
-                "outlet": "record_action",
+                "outlet": "record_action", "view": "detail",
                 "title": "Act",
                 "invoke": {"command": "act"}
             }
@@ -3617,7 +3613,7 @@ async fn apply_merges_extension_layout_without_enabling_or_replacing_settings(po
             "extension_layout": {
                 "version":1,
                 "outlets": {
-                    "record_action": {
+                    "blueprint_panel": {
                         "order":["other.extension:action"],
                         "hidden":[]
                     }
@@ -3688,7 +3684,7 @@ async fn apply_merges_extension_layout_without_enabling_or_replacing_settings(po
         .unwrap();
     assert_eq!(settings["theme"], "dark");
     assert_eq!(
-        settings["extension_layout"]["outlets"]["record_action"]["order"][0],
+        settings["extension_layout"]["outlets"]["blueprint_panel"]["order"][0],
         "other.extension:action"
     );
     assert_eq!(
@@ -3714,7 +3710,7 @@ async fn apply_merges_extension_layout_without_enabling_or_replacing_settings(po
 }
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
-async fn blueprint_extension_layout_applies_for_draft_and_publish_with_disabled_extension(
+async fn blueprint_view_extensions_apply_for_draft_and_publish_with_unavailable_extensions(
     pool: PgPool,
 ) {
     install_layout_extension(&pool).await;
@@ -3729,7 +3725,7 @@ async fn blueprint_extension_layout_applies_for_draft_and_publish_with_disabled_
         let plan = create_plan_with_publication(
             &client,
             &base_url,
-            archive_with_blueprint_extension_layout(),
+            archive_with_blueprint_view_extensions(),
             prefix,
             publication,
         )
@@ -3749,7 +3745,10 @@ async fn blueprint_extension_layout_applies_for_draft_and_publish_with_disabled_
         .await
         .unwrap();
         assert_eq!(status, expected_status);
-        assert!(definition.contains("acme.layout:action"));
+        // Entries for a disabled extension, or one the pack does not
+        // install, stay in the definition until such an extension is enabled.
+        assert!(definition.contains("acme.layout/action"));
+        assert!(definition.contains("acme.later/assist"));
     }
     let installation_state: String = sqlx::query_scalar(
         "SELECT state FROM extension_installations WHERE workspace_id=$1 AND extension_id='acme.layout'",
@@ -4232,7 +4231,7 @@ async fn concurrent_ordinary_layout_replacement_and_pack_append_do_not_lose_upda
             .update_workspace_extension_layout(json!({
                 "version":1,
                 "outlets": {
-                    "record_action": {
+                    "blueprint_panel": {
                         "order":["other.extension:action"],
                         "hidden":[]
                     }
@@ -4257,7 +4256,7 @@ async fn concurrent_ordinary_layout_replacement_and_pack_append_do_not_lose_upda
             .await
             .unwrap();
     assert_eq!(
-        layout["outlets"]["record_action"]["order"],
+        layout["outlets"]["blueprint_panel"]["order"],
         json!(["other.extension:action"])
     );
     assert_eq!(

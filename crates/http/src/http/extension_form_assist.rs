@@ -28,8 +28,8 @@ use super::{
 use crate::{
     constants::DEFAULT_CONTEXT_CODE,
     extensions::{
-        FormAssistDeclaration, MAX_FORM_ASSIST_FIELDS, UiContribution, UiContributionKind,
-        UiOutlet, validate_schema,
+        ContributionView, FormAssistDeclaration, MAX_FORM_ASSIST_FIELDS, UiContribution,
+        UiContributionKind, UiOutlet, validate_schema,
     },
     repository::{AttricatRepository, ExtensionRuntimeInstallation, accepted_attribute_value},
 };
@@ -129,9 +129,10 @@ struct Answer {
     proposals: Vec<Proposal>,
 }
 
-/// The revision's form assists that run now: named by its definition,
-/// declared by an enabled extension granted `client.form_assist` for this
-/// blueprint, with a declared command.
+/// The revision's form assists that run now: listed by its detail view,
+/// declared by an enabled extension granted `client.form_assist` for that
+/// view, with a declared command, and not narrowed away by `when.blueprints`.
+/// The detail view's order is the order they run in.
 async fn active_assists(
     repository: &AttricatRepository,
     blueprint_id: Uuid,
@@ -143,11 +144,11 @@ async fn active_assists(
     ),
     ApiError,
 > {
-    let (code, references) = repository
-        .blueprint_form_assists(blueprint_id, blueprint_version)
+    let (code, entries) = repository
+        .blueprint_view_extensions(blueprint_id, blueprint_version, ContributionView::Detail)
         .await?
         .ok_or_else(|| ApiError::not_found("blueprint version"))?;
-    if references.is_empty() {
+    if entries.is_empty() {
         return Ok((code, Vec::new()));
     }
     let providers: HashMap<String, Arc<ExtensionRuntimeInstallation>> = repository
@@ -156,19 +157,18 @@ async fn active_assists(
         .into_iter()
         .map(|installation| (installation.extension_id.clone(), Arc::new(installation)))
         .collect();
-    let assists = references
+    let assists = entries
         .iter()
-        .filter_map(|reference| {
-            let installation = providers.get(&reference.extension_id)?;
+        .filter_map(|(extension_id, contribution_id)| {
+            let installation = providers.get(extension_id)?;
             let contribution = installation.manifest.ui.iter().find(|contribution| {
                 contribution.kind == UiContributionKind::FormAssist
                     && contribution.outlet == Some(UiOutlet::RecordForm)
-                    && contribution.id == reference.id
-                    && contribution.version == reference.version
-                    && contribution
-                        .when
-                        .as_ref()
-                        .is_some_and(|when| when.blueprints.contains(&code))
+                    && contribution.view == Some(ContributionView::Detail)
+                    && contribution.id == *contribution_id
+                    && contribution.when.as_ref().is_none_or(|when| {
+                        when.blueprints.is_empty() || when.blueprints.contains(&code)
+                    })
             })?;
             Some((installation.clone(), contribution.clone()))
         })

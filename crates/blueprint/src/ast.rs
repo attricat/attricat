@@ -20,25 +20,7 @@ pub struct BlueprintDefinition {
     pub embedded_rules: bool,
     pub unique_keys: Vec<UniqueKeyDefinition>,
     pub movements: Vec<crate::MovementDefinition>,
-    pub form_assists: Vec<FormAssistReference>,
     pub attributes: Vec<AttributeDeclaration>,
-}
-
-/// The most form assists one blueprint may use.
-pub const MAX_FORM_ASSISTS: usize = 8;
-
-/// An extension's `form_assist` that proposes values in this blueprint's
-/// record form. Saving checks it against the enabled extension releases, as
-/// a field's `editor` is checked.
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Eq, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct FormAssistReference {
-    /// The enabled extension that declares the assist.
-    pub extension_id: String,
-    /// The `form_assist` contribution's ID in that extension.
-    pub id: String,
-    /// The contribution's version.
-    pub version: u32,
 }
 
 /// Unique-key scopes: `workspace` compares default-context values across the
@@ -127,8 +109,11 @@ pub struct ConnectorJobTrigger {
     pub debounce_seconds: i32,
 }
 
-/// Record-owned outlets whose placement a blueprint `extension_layout` may override.
-pub const EXTENSION_LAYOUT_OUTLETS: &[&str] = &["record_tab", "record_action"];
+/// The most extension contributions one view may list under `extensions`.
+pub const MAX_VIEW_EXTENSIONS: usize = 32;
+/// Views whose `extensions` list places contributions: `detail` (the record
+/// page and form) and `table` (the Explorer).
+pub const EXTENSION_VIEWS: &[&str] = &["detail", "table"];
 /// View names with platform meaning, offered to editors as suggestions.
 pub const KNOWN_VIEW_NAMES: &[&str] = &[
     "dropdown_option",
@@ -136,7 +121,6 @@ pub const KNOWN_VIEW_NAMES: &[&str] = &[
     "detail",
     "table",
     "explorer",
-    "extension_layout",
 ];
 
 pub const CONNECTOR_JOB_DIRECTIONS: &[&str] = &["import", "export"];
@@ -210,19 +194,6 @@ pub struct ViewSection {
     pub children: Vec<ViewNode>,
 }
 
-/// Host-owned per-blueprint extension layout. It is declarative data only;
-/// contribution keys cannot select DOM nodes or invoke extension code.
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct ExtensionOutletLayout {
-    /// Contribution keys (`<extension-id>:<contribution-id>`) in display order.
-    #[serde(default)]
-    pub order: Vec<String>,
-    /// Contribution keys hidden in this outlet.
-    #[serde(default)]
-    pub hidden: Vec<String>,
-}
-
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct IncomingRelationship {
@@ -265,6 +236,13 @@ pub enum ViewDefinition {
         /// Registered component that renders this block.
         #[serde(default)]
         component: Option<ComponentReference>,
+        /// Extension contributions placed in this view, as
+        /// `<extension-id>/<contribution-id>`, in display order. Only listed
+        /// contributions that target the view appear on its records.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        #[schemars(length(max = MAX_VIEW_EXTENSIONS))]
+        #[schemars(extend("x-attricat-reference" = "view_extension"))]
+        extensions: Vec<String>,
     },
     /// Explorer defaults for this blueprint's results.
     Explorer {
@@ -276,13 +254,22 @@ pub enum ViewDefinition {
         #[serde(default)]
         browse_by: Option<BrowseBy>,
     },
-    /// Blocks stacked vertically.
+    /// Blocks stacked vertically. A `detail` stack without children keeps
+    /// the default record layout and only lists `extensions`.
     Stack {
         /// Nested blocks.
+        #[serde(default)]
         children: Vec<ViewNode>,
         /// Registered component that renders this block.
         #[serde(default)]
         component: Option<ComponentReference>,
+        /// Extension contributions placed in this view, as
+        /// `<extension-id>/<contribution-id>`, in display order. Only listed
+        /// contributions that target the view appear on its records.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        #[schemars(length(max = MAX_VIEW_EXTENSIONS))]
+        #[schemars(extend("x-attricat-reference" = "view_extension"))]
+        extensions: Vec<String>,
     },
     /// Blocks arranged in a responsive grid.
     Grid {
@@ -291,6 +278,13 @@ pub enum ViewDefinition {
         /// Registered component that renders this block.
         #[serde(default)]
         component: Option<ComponentReference>,
+        /// Extension contributions placed in this view, as
+        /// `<extension-id>/<contribution-id>`, in display order. Only listed
+        /// contributions that target the view appear on its records.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        #[schemars(length(max = MAX_VIEW_EXTENSIONS))]
+        #[schemars(extend("x-attricat-reference" = "view_extension"))]
+        extensions: Vec<String>,
     },
     /// Blocks grouped in a section.
     Section {
@@ -299,6 +293,13 @@ pub enum ViewDefinition {
         /// Registered component that renders this block.
         #[serde(default)]
         component: Option<ComponentReference>,
+        /// Extension contributions placed in this view, as
+        /// `<extension-id>/<contribution-id>`, in display order. Only listed
+        /// contributions that target the view appear on its records.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        #[schemars(length(max = MAX_VIEW_EXTENSIONS))]
+        #[schemars(extend("x-attricat-reference" = "view_extension"))]
+        extensions: Vec<String>,
     },
     /// Blocks split into tabs.
     Tabs {
@@ -307,6 +308,13 @@ pub enum ViewDefinition {
         /// Registered component that renders this block.
         #[serde(default)]
         component: Option<ComponentReference>,
+        /// Extension contributions placed in this view, as
+        /// `<extension-id>/<contribution-id>`, in display order. Only listed
+        /// contributions that target the view appear on its records.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        #[schemars(length(max = MAX_VIEW_EXTENSIONS))]
+        #[schemars(extend("x-attricat-reference" = "view_extension"))]
+        extensions: Vec<String>,
     },
     /// Blocks split into collapsible sections.
     Accordion {
@@ -315,18 +323,45 @@ pub enum ViewDefinition {
         /// Registered component that renders this block.
         #[serde(default)]
         component: Option<ComponentReference>,
-    },
-    /// A versioned layout override for record-owned extension surfaces.
-    ExtensionLayout {
-        /// Layout format version. Only `1` is supported.
-        #[schemars(extend("const" = 1))]
-        version: u32,
-        /// Layouts keyed by record outlet: `record_tab` or
-        /// `record_action`.
-        #[schemars(extend("x-attricat-key-suggestions" = EXTENSION_LAYOUT_OUTLETS))]
-        outlets: HashMap<String, ExtensionOutletLayout>,
+        /// Extension contributions placed in this view, as
+        /// `<extension-id>/<contribution-id>`, in display order. Only listed
+        /// contributions that target the view appear on its records.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        #[schemars(length(max = MAX_VIEW_EXTENSIONS))]
+        #[schemars(extend("x-attricat-reference" = "view_extension"))]
+        extensions: Vec<String>,
     },
 }
+
+impl ViewDefinition {
+    /// The contributions the view lists under `extensions`.
+    pub fn extensions(&self) -> &[String] {
+        match self {
+            Self::Table { extensions, .. }
+            | Self::Stack { extensions, .. }
+            | Self::Grid { extensions, .. }
+            | Self::Section { extensions, .. }
+            | Self::Tabs { extensions, .. }
+            | Self::Accordion { extensions, .. } => extensions,
+            Self::DropdownOption { .. } | Self::PageTitle { .. } | Self::Explorer { .. } => &[],
+        }
+    }
+}
+
+/// Splits a view `extensions` entry into its extension and contribution IDs.
+pub fn view_extension_key(entry: &str) -> Option<(&str, &str)> {
+    let (extension_id, contribution_id) = entry.split_once('/')?;
+    let valid = |id: &str| {
+        (1..=MAX_EXTENSION_ID_BYTES).contains(&id.len())
+            && id
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || b"._-".contains(&byte))
+    };
+    (valid(extension_id) && valid(contribution_id)).then_some((extension_id, contribution_id))
+}
+
+/// The longest extension or contribution ID a view `extensions` entry names.
+const MAX_EXTENSION_ID_BYTES: usize = 128;
 
 /// The Explorer browse rail's default: a relationship field or path, or `false`.
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
@@ -664,7 +699,6 @@ pub struct CompiledBlueprint {
     pub embedded_rules: bool,
     pub unique_keys: Vec<UniqueKeyDefinition>,
     pub movements: Vec<crate::MovementDefinition>,
-    pub form_assists: Vec<FormAssistReference>,
     pub attributes: Vec<EffectiveAttribute>,
 }
 

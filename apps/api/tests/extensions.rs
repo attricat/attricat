@@ -1,5 +1,6 @@
 use crate::support;
 
+use api::extensions::UiOutlet;
 use api::states::{ExtensionState, HttpDeliveryState};
 use api::value_type::ValueType;
 use std::{io::Cursor, path::Path, sync::Arc};
@@ -308,7 +309,7 @@ fn storage_client_release_archive(version: &str) -> Vec<u8> {
         "optional_permissions": ["client.record_tab"],
         "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
         "artifacts": [{"id": "client", "kind": "client_frame", "path": "client.js"}],
-        "ui": [{"id": "panel", "version": 1, "kind": "tab", "artifact": "client", "outlet": "record_tab", "title": "Panel"}]
+        "ui": [{"id": "panel", "version": 1, "kind": "tab", "artifact": "client", "outlet": "record_tab", "view": "detail", "title": "Panel"}]
     }))
     .unwrap();
     let mut tar_bytes = Vec::new();
@@ -336,7 +337,11 @@ fn client_release_archive_for_outlet(
         "icons": {"48": "icon.png"},
         "attricat": {"id": extension_id, "host_api": "^1.0"},
         "permissions": ["configuration.read"],
-        "optional_permissions": if record_tab { vec!["client.record_tab"] } else { vec![] },
+        "optional_permissions": match outlet {
+            "record_tab" => vec!["client.record_tab"],
+            "blueprint_attribute_configuration" => vec!["client.blueprint_configuration"],
+            _ => vec![],
+        },
         "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
         "attribute_types": [{
             "id": "money", "version": "1.0.0", "primitive": "number",
@@ -354,6 +359,7 @@ fn client_release_archive_for_outlet(
             "kind": if record_tab { "tab" } else { "embedded" },
             "artifact": "client",
             "outlet": outlet,
+            "view": record_tab.then_some("detail"),
             "title": record_tab.then_some("Panel")
         }]
     }))
@@ -1139,7 +1145,11 @@ async fn enabled_client_contributions_are_hidden_after_state_changes(pool: sqlx:
     installer
         .install(
             "github:acme/client@v1.0.0",
-            &client_release_archive("acme.client"),
+            &client_release_archive_for_outlet(
+                "acme.client",
+                "panel",
+                "blueprint_attribute_configuration",
+            ),
         )
         .await
         .unwrap();
@@ -1178,7 +1188,7 @@ async fn enabled_client_contributions_are_hidden_after_state_changes(pool: sqlx:
         .update_workspace_extension_layout(json!({
             "version": 1,
             "outlets": {
-                "record_tab": {
+                "blueprint_attribute_configuration": {
                     "order": [],
                     "hidden": ["acme.client:panel"]
                 }
@@ -1197,7 +1207,7 @@ async fn enabled_client_contributions_are_hidden_after_state_changes(pool: sqlx:
         .update_workspace_extension_layout(json!({
             "version": 1,
             "outlets": {
-                "record_tab": { "order": [], "hidden": [] }
+                "blueprint_attribute_configuration": { "order": [], "hidden": [] }
             }
         }))
         .await
@@ -1393,7 +1403,14 @@ async fn extension_layout_order_is_stable_and_host_owned(pool: sqlx::PgPool) {
         ExtensionInstaller::new(repository.clone(), Arc::new(FakeObjectStore::available()));
     for extension_id in ["acme.zebra", "acme.alpha"] {
         installer
-            .install("test", &client_release_archive(extension_id))
+            .install(
+                "test",
+                &client_release_archive_for_outlet(
+                    extension_id,
+                    "panel",
+                    "blueprint_attribute_configuration",
+                ),
+            )
             .await
             .unwrap();
         repository
@@ -1416,7 +1433,7 @@ async fn extension_layout_order_is_stable_and_host_owned(pool: sqlx::PgPool) {
         .update_workspace_extension_layout(json!({
             "version": 1,
             "outlets": {
-                "record_tab": {
+                "blueprint_attribute_configuration": {
                     "order": ["acme.zebra:panel"],
                     "hidden": []
                 }
@@ -1434,6 +1451,13 @@ async fn extension_layout_order_is_stable_and_host_owned(pool: sqlx::PgPool) {
     .unwrap();
     assert_eq!(audited, 1);
     for invalid in [
+        // Blueprint views place record and Explorer contributions.
+        json!({
+            "version": 1,
+            "outlets": {
+                "record_tab": {"order": ["acme.zebra:panel"], "hidden": []}
+            }
+        }),
         json!({
             "version": 1,
             "outlets": {
@@ -1496,23 +1520,88 @@ async fn extension_layout_order_is_stable_and_host_owned(pool: sqlx::PgPool) {
     }
 }
 
+/// A release with a record tab, a record action and an Explorer bulk action,
+/// each placed by the blueprint view it declares; both actions open a dialog.
+fn placed_release_archive(extension_id: &str) -> Vec<u8> {
+    let manifest = serde_json::to_vec(&json!({
+        "manifest_version": 1,
+        "name": "Placed extension",
+        "version": "1.0.0",
+        "description": "view placement integration test",
+        "icons": {"48": "icon.png"},
+        "attricat": {"id": extension_id, "host_api": "^1.0"},
+        "permissions": ["configuration.read", "client.record_tab", "client.record_action",
+            "client.explorer_bulk_action", "client.action_dialog"],
+        "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
+        "artifacts": [{"id": "client", "kind": "client_frame", "path": "client.js"}],
+        "ui": [
+            {"id": "panel", "version": 1, "kind": "tab", "artifact": "client", "outlet": "record_tab", "view": "detail", "title": "Panel"},
+            {"id": "dialog", "version": 1, "kind": "dialog", "artifact": "client", "outlet": "action_dialog", "title": "Dialog"},
+            {"id": "recalc", "version": 1, "kind": "action", "outlet": "record_action", "view": "detail", "title": "Recalculate", "invoke": {"dialog": "dialog"}},
+            {"id": "bulk", "version": 1, "kind": "action", "outlet": "explorer_bulk_action", "view": "table", "title": "Issue", "invoke": {"dialog": "dialog"}}
+        ]
+    }))
+    .unwrap();
+    let mut tar_bytes = Vec::new();
+    {
+        let mut tar = tar::Builder::new(&mut tar_bytes);
+        append_file(&mut tar, "manifest.json", &manifest);
+        append_file(&mut tar, "client.js", b"export {}");
+        tar.finish().unwrap();
+    }
+    zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
+}
+
+/// A record blueprint whose detail and table views list `detail` and `table`.
+fn placing_blueprint(detail: &str, table: &str) -> String {
+    let table = if table.is_empty() {
+        String::new()
+    } else {
+        format!("\n  table:\n    type: table\n    extensions: [{table}]")
+    };
+    format!(
+        r#"
+format_version: 1
+code: placing_product
+name: Placing product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+  detail:
+    type: stack
+    extensions: [{detail}]{table}
+attributes:
+  - code: title
+    value_type: string
+"#
+    )
+}
+
 #[sqlx::test(migrator = "api::MIGRATOR")]
-async fn blueprint_layout_overlays_owned_outlets_and_preserves_global_workspace_rules(
-    pool: sqlx::PgPool,
-) {
+async fn blueprint_views_place_record_and_explorer_contributions(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
     let repository = AttricatRepository::system(pool).for_workspace(workspace);
     let installer =
         ExtensionInstaller::new(repository.clone(), Arc::new(FakeObjectStore::available()));
     for extension_id in ["acme.alpha", "acme.zebra"] {
         installer
-            .install("test", &client_release_archive(extension_id))
+            .install("test", &placed_release_archive(extension_id))
             .await
             .unwrap();
-        repository
-            .grant_extension(extension_id, "capability", "configuration.read")
-            .await
-            .unwrap();
+        for capability in [
+            "configuration.read",
+            "client.record_tab",
+            "client.record_action",
+            "client.explorer_bulk_action",
+            "client.action_dialog",
+        ] {
+            repository
+                .grant_extension(extension_id, "capability", capability)
+                .await
+                .unwrap();
+        }
         repository.enable_extension(extension_id).await.unwrap();
     }
     installer
@@ -1530,6 +1619,8 @@ async fn blueprint_layout_overlays_owned_outlets_and_preserves_global_workspace_
         .enable_extension("acme.navigation")
         .await
         .unwrap();
+    // The workspace layout keeps arranging shared outlets such as navigation,
+    // and no longer accepts the outlets blueprint views place.
     repository
         .update_workspace_extension_layout(json!({
             "version": 1,
@@ -1543,91 +1634,114 @@ async fn blueprint_layout_overlays_owned_outlets_and_preserves_global_workspace_
         }))
         .await
         .unwrap();
+    for outlet in ["record_tab", "record_action", "explorer_bulk_action"] {
+        assert!(
+            repository
+                .update_workspace_extension_layout(json!({
+                    "version": 1,
+                    "outlets": {outlet: {"order": ["acme.alpha:panel"], "hidden": []}}
+                }))
+                .await
+                .is_err(),
+            "{outlet}"
+        );
+    }
+
+    // Revision 1 lists zebra's tab and alpha's actions. alpha's bulk action
+    // targets the table view, so listing it in detail places nothing; an
+    // extension that is not installed is ignored.
+    let created = repository
+        .create_blueprint(CreateBlueprint {
+            definition: placing_blueprint(
+                "acme.zebra/panel, acme.alpha/recalc, acme.alpha/bulk, acme.later/tab",
+                "acme.alpha/bulk",
+            ),
+        })
+        .await
+        .unwrap();
+    let blueprint_id = created.blueprint.id;
+    repository
+        .publish_blueprint_revision(blueprint_id, 1)
+        .await
+        .unwrap();
+    let placed = |version: i64| {
+        let repository = repository.clone();
+        async move {
+            repository
+                .client_extension_contributions_for_blueprint(Some((blueprint_id, version)))
+                .await
+                .unwrap()
+        }
+    };
+    let keys = |contributions: &[api::repository::ClientExtensionContribution],
+                outlet: UiOutlet| {
+        contributions
+            .iter()
+            .filter(|item| item.outlet.as_ref() == Some(&outlet))
+            .map(|item| item.contribution_key.clone())
+            .collect::<Vec<_>>()
+    };
+    let first = placed(1).await;
+    assert_eq!(keys(&first, UiOutlet::RecordTab), ["acme.zebra:panel"]);
+    assert_eq!(keys(&first, UiOutlet::RecordAction), ["acme.alpha:recalc"]);
     assert_eq!(
-        repository
-            .client_extension_contributions_for_blueprint(None)
-            .await
-            .unwrap()
-            .into_iter()
+        keys(&first, UiOutlet::ExplorerBulkAction),
+        ["acme.alpha:bulk"]
+    );
+    // Shared outlets are not placed by views.
+    assert_eq!(
+        keys(&first, UiOutlet::ActionDialog),
+        ["acme.alpha:dialog", "acme.zebra:dialog"]
+    );
+    assert!(
+        first
+            .iter()
+            .any(|item| item.contribution_key == "acme.navigation:entry")
+    );
+
+    // Revision 2 orders both tabs and drops the record action.
+    let next = repository
+        .create_blueprint_revision(
+            blueprint_id,
+            CreateBlueprint {
+                definition: placing_blueprint("acme.zebra/panel, acme.alpha/panel", ""),
+            },
+        )
+        .await
+        .unwrap();
+    repository
+        .publish_blueprint_revision(blueprint_id, next.blueprint.version)
+        .await
+        .unwrap();
+    let second = placed(next.blueprint.version).await;
+    assert_eq!(
+        keys(&second, UiOutlet::RecordTab),
+        ["acme.zebra:panel", "acme.alpha:panel"]
+    );
+    assert!(keys(&second, UiOutlet::RecordAction).is_empty());
+    assert!(keys(&second, UiOutlet::ExplorerBulkAction).is_empty());
+    // Records still on revision 1 keep what it lists.
+    assert_eq!(
+        keys(&placed(1).await, UiOutlet::RecordAction),
+        ["acme.alpha:recalc"]
+    );
+
+    // Without a revision the runtime lists everything, for the native runtime.
+    let all = repository
+        .client_extension_contributions_for_blueprint(None)
+        .await
+        .unwrap();
+    assert_eq!(
+        keys(&all, UiOutlet::RecordTab),
+        ["acme.alpha:panel", "acme.zebra:panel"]
+    );
+    assert_eq!(
+        all.iter()
             .find(|item| item.contribution_key == "acme.navigation:entry")
             .unwrap()
             .navigation_group
             .as_deref(),
         Some("promoted")
-    );
-    repository
-        .update_workspace_extension_layout(json!({
-            "version": 1,
-            "outlets": {
-                "record_tab": {
-                    "order": ["acme.alpha:panel", "acme.zebra:panel"],
-                    "hidden": []
-                },
-                "navigation": {
-                    "order": [],
-                    "hidden": ["acme.navigation:entry"],
-                    "promoted": []
-                }
-            }
-        }))
-        .await
-        .unwrap();
-    let definition = r#"
-format_version: 1
-code: extension_layout_product
-name: Extension layout product
-kind: record
-views:
-  dropdown_option:
-    type: dropdown_option
-    fields: [title]
-  extension_layout:
-    type: extension_layout
-    version: 1
-    outlets:
-      record_tab:
-        order: ['acme.zebra:panel']
-        hidden: ['acme.alpha:panel']
-attributes:
-  - code: title
-    value_type: string
-"#;
-    let blueprint = repository
-        .create_blueprint(CreateBlueprint {
-            definition: definition.to_owned(),
-        })
-        .await
-        .unwrap();
-    repository
-        .publish_blueprint_revision(blueprint.blueprint.id, 1)
-        .await
-        .unwrap();
-
-    let scoped = repository
-        .client_extension_contributions_for_blueprint(Some((blueprint.blueprint.id, 1)))
-        .await
-        .unwrap();
-    assert_eq!(
-        scoped
-            .iter()
-            .map(|item| item.contribution_key.as_str())
-            .collect::<Vec<_>>(),
-        ["acme.zebra:panel"]
-    );
-    assert!(
-        scoped
-            .iter()
-            .all(|item| item.contribution_key != "acme.navigation:entry")
-    );
-    assert_eq!(
-        repository
-            .client_extension_contributions_for_blueprint(None)
-            .await
-            .unwrap()
-            .into_iter()
-            .map(|item| item.contribution_key)
-            .collect::<Vec<_>>(),
-        ["acme.alpha:panel", "acme.zebra:panel"]
     );
 }
 
@@ -1994,13 +2108,20 @@ attributes:
 }
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
-async fn hidden_contributions_remain_authorized_and_are_validated_on_publish(pool: sqlx::PgPool) {
+async fn hidden_contributions_remain_authorized(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
     let repository = AttricatRepository::system(pool).for_workspace(workspace);
     let installer =
         ExtensionInstaller::new(repository.clone(), Arc::new(FakeObjectStore::available()));
     installer
-        .install("test", &client_release_archive("acme.client"))
+        .install(
+            "test",
+            &client_release_archive_for_outlet(
+                "acme.client",
+                "panel",
+                "blueprint_attribute_configuration",
+            ),
+        )
         .await
         .unwrap();
     repository
@@ -2012,7 +2133,7 @@ async fn hidden_contributions_remain_authorized_and_are_validated_on_publish(poo
         .update_workspace_extension_layout(json!({
             "version": 1,
             "outlets": {
-                "record_tab": {
+                "blueprint_attribute_configuration": {
                     "order": [],
                     "hidden": ["acme.client:panel"]
                 }
@@ -2036,39 +2157,6 @@ async fn hidden_contributions_remain_authorized_and_are_validated_on_publish(poo
             .artifact_key
             .as_deref()
             .is_some_and(|key| key.ends_with("/client"))
-    );
-
-    let incompatible = r#"
-format_version: 1
-code: invalid_extension_layout
-name: Invalid extension layout
-kind: record
-views:
-  dropdown_option:
-    type: dropdown_option
-    fields: [title]
-  extension_layout:
-    type: extension_layout
-    version: 1
-    outlets:
-      record_action:
-        order: ['acme.client:panel']
-        hidden: []
-attributes:
-  - code: title
-    value_type: string
-"#;
-    let blueprint = repository
-        .create_blueprint(CreateBlueprint {
-            definition: incompatible.to_owned(),
-        })
-        .await
-        .unwrap();
-    assert!(
-        repository
-            .publish_blueprint_revision(blueprint.blueprint.id, 1)
-            .await
-            .is_err()
     );
 }
 

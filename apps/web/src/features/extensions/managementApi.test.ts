@@ -53,7 +53,7 @@ describe('extension management API', () => {
     const layout = {
       version: 1 as const,
       outlets: {
-        record_tab: {
+        blueprint_panel: {
           order: ['acme.test:panel'],
           hidden: ['acme.legacy:panel'],
         },

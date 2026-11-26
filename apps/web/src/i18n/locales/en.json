@@ -1123,7 +1123,8 @@
       "role": "Workspace role",
       "section": "Section",
       "selectedAttribute": "From {{from}}",
-      "editor": "{{extension}} editor v{{version}}"
+      "editor": "{{extension}} editor v{{version}}",
+      "viewExtension": "{{extension}} · {{title}}"
     },
     "diagnostics": {
       "expectedOneOf": "Expected one of: {{values}}.",
@@ -1147,6 +1148,8 @@
       "unknownKey": "Unknown key “{{key}}”.",
       "unknownKeySuggestion": "Unknown key “{{key}}”. Did you mean “{{suggestion}}”?",
       "unknownReference": "“{{value}}” does not exist in this workspace.",
+      "viewExtensionOtherView": "“{{value}}” belongs to the {{view}} view, so it will not appear here.",
+      "viewExtensionWithoutView": "“{{value}}” does not declare a blueprint view, so it will not appear here.",
       "unsupportedTag": "The tag “{{value}}” is not supported. Use !!str, !!int, !!float, !!bool, !!null, !!seq, !!map or !."
     },
     "fixes": {

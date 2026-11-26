@@ -18,6 +18,8 @@ import {
   maximumCellPrecision,
   maximumCellUnitLength,
   renderingModes,
+  contributionViews,
+  viewPlacedOutlets,
 } from './constants';
 
 export const extensionOutletSchema = z.enum(extensionOutlets);
@@ -109,6 +111,8 @@ const contributionSchema = z
     version: z.number().int().positive(),
     kind: z.enum(contributionKinds),
     outlet: extensionOutletSchema.nullable(),
+    /** The blueprint view whose `extensions` list placed the contribution. */
+    view: z.enum(contributionViews).nullable().default(null),
     route: z.string().nullable().default(null),
     title: z.string().nullable(),
     /** What a host-rendered action opens or calls; absent on other kinds. */
@@ -233,6 +237,14 @@ export const workspaceExtensionLayoutSchema = z
           | z.infer<typeof navigationLayoutSchema>
         > = {};
         for (const [outlet, value] of Object.entries(outlets)) {
+          if (outlet in viewPlacedOutlets) {
+            context.addIssue({
+              code: 'custom',
+              message: layoutValidationMessages.viewPlacedOutlet,
+              path: [outlet],
+            });
+            return z.NEVER;
+          }
           const result =
             outlet === extensionOutlets.navigation
               ? navigationLayoutSchema.safeParse(value)

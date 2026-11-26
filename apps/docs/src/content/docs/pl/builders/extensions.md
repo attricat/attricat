@@ -47,9 +47,9 @@ Trwające operacje pozostają przy wydaniu, na którym się rozpoczęły. Są ws
 
 ## Rozmieść interfejs rozszerzeń
 
-Gdy kilka rozszerzeń dodaje elementy w tym samym miejscu, np. na pasku akcji rekordu, pojawiają się w stałej kolejności według identyfikatora rozszerzenia. **Zarządzanie → Rozszerzenia → Układ rozszerzeń** pozwala zmienić kolejność, ukryć elementy i przenieść strony rozszerzeń do głównej nawigacji.
+Karty rekordu, akcje rekordu, asystenci formularza i akcje Przeglądarki rekordów pojawiają się tylko w schematach, które je wymieniają, w kolejności, w jakiej je wymieniają. Zobacz [Widoki i układy](/pl/builders/views/#rozszerzenia-na-stronach-rekordów-i-w-przeglądarce-rekordów).
 
-Schemat może nadpisać układ dla stron swoich rekordów. Zobacz [Widoki i układy](/pl/builders/views/#panele-rozszerzeń-na-stronach-rekordów).
+W miejscach wspólnych dla wszystkich schematów, takich jak nawigacja i panele, rozszerzenia pojawiają się w stałej kolejności według identyfikatora rozszerzenia. **Zarządzanie → Rozszerzenia → Układ rozszerzeń** pozwala zmienić tę kolejność, ukryć elementy i przenieść strony rozszerzeń do głównej nawigacji.
 
 ## Sekrety
 

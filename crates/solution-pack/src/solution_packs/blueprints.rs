@@ -13,7 +13,7 @@ use attricat_validation::saved_search::browse_hop;
 use serde_json::Value;
 
 use super::{
-    BlueprintExtensionLayoutEntry, MAX_IDENTIFIER_BYTES, MAX_SOLUTION_PACK_BLUEPRINT_ATTRIBUTES,
+    MAX_IDENTIFIER_BYTES, MAX_SOLUTION_PACK_BLUEPRINT_ATTRIBUTES,
     MAX_SOLUTION_PACK_BLUEPRINT_INCLUDES, MAX_SOLUTION_PACK_RESOLVED_INCLUDE_ATTRIBUTES,
     MAX_SOLUTION_PACK_TOTAL_BLUEPRINT_COMPLEXITY, SolutionPackBlueprint,
     SolutionPackBlueprintInclude, SolutionPackError, SolutionPackManifest, invalid, resource_code,
@@ -340,31 +340,23 @@ fn prepare_blueprint(
         return invalid(format!("blueprint '{key}' code must be '{expected_code}'"));
     }
 
-    let mut extension_layout = definition
-        .views
-        .get("extension_layout")
-        .and_then(|view| match view {
-            ViewDefinition::ExtensionLayout { outlets, .. } => Some(outlets),
-            _ => None,
+    // Entries naming extensions the workspace lacks are kept: the host
+    // ignores them until such an extension is installed and enabled.
+    let view_extensions = attricat_blueprint::EXTENSION_VIEWS
+        .iter()
+        .filter_map(|view| {
+            definition
+                .views
+                .get(*view)
+                .map(|definition| (*view, definition))
         })
-        .into_iter()
-        .flat_map(|outlets| outlets.iter())
-        .flat_map(|(outlet, layout)| {
-            layout
-                .order
+        .flat_map(|(view, definition)| {
+            definition
+                .extensions()
                 .iter()
-                .chain(&layout.hidden)
-                .map(move |contribution| BlueprintExtensionLayoutEntry {
-                    contribution: contribution.clone(),
-                    outlet: outlet.clone(),
-                })
+                .map(move |entry| ((*view).to_owned(), entry.clone()))
         })
         .collect::<Vec<_>>();
-    extension_layout.sort_by(|left, right| {
-        left.outlet
-            .cmp(&right.outlet)
-            .then_with(|| left.contribution.cmp(&right.contribution))
-    });
 
     Ok(PreparedBlueprint {
         portable: SolutionPackBlueprint {
@@ -379,7 +371,7 @@ fn prepare_blueprint(
             kind: definition.kind.clone(),
             effective_attributes: Vec::new(),
             unique_keys: Vec::new(),
-            extension_layout,
+            view_extensions,
         },
         native_definition: definition,
         native_source,
@@ -816,8 +808,7 @@ fn validate_incoming_relationships_in_view(
         ViewDefinition::DropdownOption { .. }
         | ViewDefinition::PageTitle { .. }
         | ViewDefinition::Table { .. }
-        | ViewDefinition::Explorer { .. }
-        | ViewDefinition::ExtensionLayout { .. } => Ok(()),
+        | ViewDefinition::Explorer { .. } => Ok(()),
     }
 }
 

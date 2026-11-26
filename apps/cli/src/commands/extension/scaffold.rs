@@ -192,6 +192,8 @@ fn manifest(extension_id: &str, name: &str, server: bool) -> String {
                 "version": 1,
                 "kind": "action",
                 "outlet": "record_header_action",
+                // It appears on blueprints whose views.detail lists it.
+                "view": "detail",
                 "title": "Ping",
                 "icon": "send",
                 "invoke": {"command": "ping"}
@@ -217,7 +219,10 @@ fn readme(extension_id: &str, name: &str, server: bool) -> String {
         format!(
             "\n`server/` is a WebAssembly component built with `pnpm build:server`, which needs\n\
              the `wasm32-unknown-unknown` Rust target and `wasm-tools`. It answers the `ping`\n\
-             command, which the **Ping** action in a record's Actions menu calls. `acli extension dev {extension_id} --component {SERVER_ARTIFACT_PATH} --build\n\
+             command, which the **Ping** action in a record's Actions menu calls. The action\n\
+             appears on blueprints whose detail view lists it:\n\n\
+             ```yaml\nviews:\n  detail:\n    type: stack\n    extensions: [{extension_id}/ping-action]\n```\n\n\
+             `acli extension dev {extension_id} --component {SERVER_ARTIFACT_PATH} --build\n\
              \"pnpm build:server\" --watch server/src` hot-swaps it the same way.\n"
         )
     } else {

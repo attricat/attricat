@@ -16,7 +16,6 @@ Widoki są opcjonalne. Bez nich aplikacja internetowa pokazuje atrybuty w kolejn
 | `detail` | Strona rekordu, jej podgląd i formularz tworzenia. W tym układzie pola są zarówno wyświetlane, jak i edytowane. |
 | `table` | Kolumny wyników w **Przeglądarce rekordów**. |
 | `explorer` | Ustawienia domyślne **Przeglądarki rekordów**, np. atrybut wyświetlany w panelu **Przeglądaj według**. |
-| `extension_layout` | Kolejność i widoczność paneli i akcji rozszerzeń na stronach rekordów tego schematu. |
 
 Nie ma osobnego widoku edycji: rekordy edytuje się na miejscu w układzie szczegółów. Schemat, który definiuje `views.edit`, zostaje odrzucony.
 
@@ -261,19 +260,22 @@ Kontrolki edycji walidują wartości tylko w aplikacji internetowej. Aby odrzuca
 
 Bloki `field`, `relationship_list`, `incoming_relationship_list`, `stack` i `table` mogą wskazać komponent przez `component: {id, version, props}`; blok `grid`, `section`, `tabs`, `accordion`, `heading`, `text` lub `divider`, który go wskazuje, jest odrzucany. Identyfikator i wersja muszą odpowiadać zarejestrowanemu komponentowi, komponent musi obsługiwać dany blok i typ wartości, a `props` może zawierać tylko zadeklarowane przez niego opcje. Wbudowane komponenty są wymienione w [dokumentacji schematu](/pl/reference/blueprint/#odwołania-do-komponentów).
 
-## Panele rozszerzeń na stronach rekordów
+## Rozszerzenia na stronach rekordów i w Przeglądarce rekordów
 
-Administratorzy obszaru roboczego ustawiają domyślną kolejność elementów rozszerzeń dla całego obszaru roboczego. Schemat może nadpisać dwa miejsca osadzenia na stronach własnych rekordów:
+Karty rekordu, akcje rekordu, asystenci formularza i akcje Przeglądarki rekordów z rozszerzeń pojawiają się tylko w schematach, które je wymieniają. Wymień je w `extensions` widoku `detail` (strony rekordów i formularz rekordu) lub `table` (akcje wiersza, zaznaczenia i paska narzędzi Przeglądarki rekordów), w wybranej kolejności:
 
 ```yaml
 views:
-  extension_layout:
-    type: extension_layout
-    version: 1
-    outlets:
-      record_tab:
-        order: ['acme.inventory:summary', 'acme.pricing:margin']
-        hidden: ['acme.legacy:panel']
+  detail:
+    type: stack
+    extensions: [acme.stock/recalculate, acme.invoicing/issue-invoice, acme.stock/history]
+  table:
+    type: table
+    extensions: [acme.stock/recalculate-selected]
 ```
 
-Miejsca osadzenia, które można tu ustawić, to `record_tab` i `record_action`. Układ nigdy nie nadaje uprawnień ani nie włącza rozszerzenia. Wpisy dla brakujących lub wyłączonych rozszerzeń są zachowywane i ignorowane, więc układ przetrwa wyłączenie i ponowne włączenie rozszerzenia.
+- Każdy wpis ma postać `<extension-id>/<contribution-id>`, najwyżej 32 na widok. Dokumentacja rozszerzenia podaje jego kontrybucje i widok, do którego należy każda z nich.
+- Bez `children` lub `columns` widok zachowuje domyślny układ rekordu lub domyślne kolumny Przeglądarki rekordów i tylko rozmieszcza rozszerzenia.
+- Kolejność decyduje o tym, które akcje rekordu są widoczne przed **Więcej**, oraz o kolejności kart i asystentów formularza.
+- Wpisy dla rozszerzeń, które nie są zainstalowane lub włączone, są ignorowane do czasu ich włączenia, więc możesz wymienić rozszerzenie przed jego instalacją. Edytor definicji ostrzega o wpisie należącym do drugiego widoku.
+- Lista należy do wersji schematu. Rekordy korzystają z wersji, na której są, a Attricat odrzuca akcję rozszerzenia dla rekordów, których wersja jej nie wymienia.

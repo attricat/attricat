@@ -755,12 +755,13 @@ document history stay in the extension.
 
 ```json
 {"id": "check", "version": 1, "kind": "action", "outlet": "record_header_action",
- "title": "Check formulas", "icon": "check", "invoke": {"command": "check-formulas"},
+ "view": "detail", "title": "Check formulas", "icon": "check",
+ "invoke": {"command": "check-formulas"},
  "translations": {"pl": {"title": "Sprawdź formuły"}}}
 {"id": "generate", "version": 1, "kind": "action", "outlet": "explorer_bulk_action",
- "title": "Generate documents…", "invoke": {"dialog": "documents"}}
+ "view": "table", "title": "Generate documents…", "invoke": {"dialog": "documents"}}
 {"id": "recalculate-now", "version": 1, "kind": "action", "outlet": "explorer_bulk_action",
- "title": "Recalculate now", "icon": "calculator",
+ "view": "table", "title": "Recalculate now", "icon": "calculator",
  "invoke": {"operation": {"id": "recalculate", "input": {"mode": "write"}}},
  "when": {"requires_write": true, "max_records": 50},
  "confirm": {"message": "Write recalculated values to the selected records?"}}
@@ -774,7 +775,9 @@ outlet (`record_action`, `record_header_action`, `explorer_row_action`,
 only [field-note](#field-notes) badges reach) and exactly one `invoke`. It
 declares no `artifact` or `route`; an extension may place several actions in
 the same outlet and declare several dialogs. End a title with `…` when the
-action opens a dialog.
+action opens a dialog. Every outlet except `record_attribute_action` also
+needs the blueprint `view` it belongs to; see
+[Where record and Explorer contributions appear](#where-record-and-explorer-contributions-appear).
 
 | `invoke` | Needs | Effect |
 | --- | --- | --- |
@@ -784,8 +787,8 @@ action opens a dialog.
 
 Optional fields:
 
-- `when` decides where the host offers the action; every condition holds for
-  every record. `blueprints` lists blueprint codes; `min_records` and
+- `when` narrows where the host offers the action, on top of the blueprint
+  views that list it; every condition holds for every record. `blueprints` lists blueprint codes; `min_records` and
   `max_records` (at most 50) bound the record count; `has_tags` and
   `missing_tags` name system tags; `requires_write` offers it only to users who
   may change the records. A condition a surface cannot judge, such as tags it
@@ -805,6 +808,73 @@ Optional fields:
 The host also lists the actions the current page offers in its command palette
 (Ctrl/⌘+K), with the same conditions and states as the page's menus and
 buttons.
+
+### Where record and Explorer contributions appear
+
+A generic extension cannot know which blueprints a workspace uses: solution
+packs apply them under any prefix, and configuration chooses them. So a record
+or Explorer contribution declares the blueprint view it belongs to, and
+appears only on blueprints whose view lists it, the way a table column already
+names an extension cell.
+
+| `view` | Outlets |
+| --- | --- |
+| `detail` | `record_action`, `record_header_action`, `record_tab`, `record_form` (form assists: the form edits the record the detail view shows) |
+| `table` | `explorer_row_action`, `explorer_bulk_action`, `explorer_action` |
+
+Manifest validation refuses a contribution at one of these outlets without
+`view` or with the other view, and `view` at any other outlet. Navigation,
+routes, panels, publish checks, export mapping, audit and data-health panels,
+field-note actions (`record_attribute_action`), cells and attribute editors
+are unchanged: they are shared by every blueprint or already named explicitly.
+
+A record blueprint's `views.detail` and `views.table` may list `extensions`:
+at most 32 distinct `<extension-id>/<contribution-id>` entries, in display
+order. A view that only places extensions needs no layout or columns; the page
+keeps its default fields and the Explorer its default columns:
+
+```yaml
+views:
+  detail:
+    type: stack
+    extensions: [acme.stock/recalculate, acme.invoicing/issue-invoice, acme.stock/history]
+  table:
+    type: table
+    extensions: [acme.stock/recalculate-selected]
+```
+
+- Only listed contributions that target that view appear there, in list
+  order. The order also decides which record actions show before **More**
+  and the order of record tabs and form assists. `when` still applies on top
+  (`requires_write`, `max_records`, tags, `when.blueprints`).
+- An entry naming an extension or contribution that is not installed or not
+  enabled is ignored, so a blueprint or solution pack may list an extension
+  installed later or separately. An entry whose contribution exists but
+  targets another view, or declares no view, is accepted, and the definition
+  editor and solution-pack plans warn about it. Saving checks an enabled form
+  assist's watched and proposed fields against the blueprint.
+- The lists are part of the blueprint revision: publishing a revision changes
+  them, and records keep what their own revision lists until they are
+  migrated. Solution packs declare them in blueprint YAML; IDs are global, so
+  entries are not rewritten.
+- `GET /extensions/runtime?blueprint_id=&blueprint_version=` returns only the
+  placed contributions of that published revision, with `display_order` from
+  the list; every surface (record buttons, the **Actions** menu, tabs, form
+  assists, the Explorer row menu, bulk menu and toolbar, and the command
+  palette) reads it. Without a revision the runtime lists every contribution,
+  for the native runtime.
+- The host enforces the lists like `requires_write`: an action's command and
+  an operation started from an action or from the dialog an action opens are
+  refused (`forbidden`) unless every record's blueprint revision, and the
+  revision the request names, lists the contribution in its view. A dialog
+  runs where one of the actions that open it may. A form assist the revision
+  does not list is not found. Commands a tab or dialog frame calls itself
+  carry no record context and are not checked this way.
+- The workspace extension layout no longer arranges these outlets; it refuses
+  them and drops stored entries for them.
+
+Installed releases that predate `view` declare none at these outlets, so they
+appear on no blueprint until a release that declares it is installed.
 
 ### Action context
 
@@ -946,7 +1016,7 @@ outlet; the host draws nothing for it, so it has no artifact or title:
   "version": 1,
   "kind": "form_assist",
   "outlet": "record_form",
-  "when": {"blueprints": ["order_line"]},
+  "view": "detail",
   "form_assist": {
     "command": "propose-price",
     "watch": ["item", "quantity", "customer"],
@@ -957,20 +1027,23 @@ outlet; the host draws nothing for it, so it has no artifact or title:
 
 The release needs `client.form_assist` and, for the command,
 `client.commands` and a `server_wasm` artifact. `watch` and `proposes` each name
-1 to 16 attribute codes, and `when` names the blueprints and nothing else. A
-blueprint opts in by naming the assist, which saving (including
-`POST /blueprints/validate` and solution-pack application) checks against the
-enabled releases, as a field's `editor` is checked:
+1 to 16 attribute codes, and `when` may only narrow the assist by
+`blueprints`. A blueprint runs the assist by listing it in its detail view,
+like any [detail contribution](#where-record-and-explorer-contributions-appear):
 
 ```yaml
-form_assists:
-  - {extension_id: acme.pricing, id: customer_price, version: 1}
+views:
+  detail:
+    type: stack
+    extensions: [acme.pricing/customer_price]
 ```
 
-The assist must list the blueprint's code under `when.blueprints`; each watched
-code must be a scalar or relationship field of the blueprint and each proposed
-code an editable scalar (not a relationship or file, `readonly`, `generated`,
-a balance or set by a movement). A blueprint names at most eight assists.
+When the assist's release is enabled, saving (including
+`POST /blueprints/validate` and solution-pack application) checks that each
+watched code is a scalar or relationship field of the blueprint and each
+proposed code an editable scalar (not a relationship or file, `readonly`,
+`generated`, a balance or set by a movement). An entry for an assist that is
+not enabled is kept and ignored until it is.
 
 While a new record is entered, in the record form or a new row of an editable
 incoming relationship table, a change the user makes to a watched field calls
@@ -1968,9 +2041,13 @@ outlet once, but may add several actions and dialogs, up to two record
 tabs, and any number of native contributions, and all
 contribution/artifact IDs remain stable across releases. Multiple enabled
 extensions may contribute to a surface. The host orders them deterministically
-by `extension_id`, then contribution `id`, unless a workspace administrator
-sets an outlet layout through `PUT /workspace/extension-layout`. Layouts use
-`{"version":1,"outlets":{"record_tab":{"order":["acme.inventory:stock"],"hidden":[]},"navigation":{"order":["acme.app:entry"],"hidden":[],"promoted":["acme.app:entry"]}}}`.
+by `extension_id`, then contribution `id`. Record and Explorer contributions
+follow the order their blueprint view lists them in
+([placement](#where-record-and-explorer-contributions-appear)); for the
+shared outlets a workspace administrator may set an outlet layout through
+`PUT /workspace/extension-layout`. Layouts use
+`{"version":1,"outlets":{"blueprint_panel":{"order":["acme.inventory:stock"],"hidden":[]},"navigation":{"order":["acme.app:entry"],"hidden":[],"promoted":["acme.app:entry"]}}}`
+and refuse the outlets blueprint views place.
 Keys are stable `<extension-id>:<contribution-id>` values; unavailable keys are
 retained for restoration. Navigation contributions are kept in a host-owned
 extension group unless an administrator lists their key in `promoted`; built-in
@@ -2044,8 +2121,9 @@ contextual actions—not an application-wide navigation tree.
   translation) and optional host `icon`; `when` may only list `blueprints`,
   matched against the record's blueprint code. An extension may declare up to
   two tabs. Three extension tabs fit in the tab bar and the rest are listed in
-  its host-owned **More** menu; layout ordering and hiding use the `record_tab`
-  outlet, workspace-wide or per blueprint. A frame mounts when its tab is
+  its host-owned **More** menu; a tab declares `"view": "detail"` and appears,
+  in list order, on blueprints whose `views.detail.extensions` lists it. A
+  frame mounts when its tab is
   first opened and stays mounted, like the built-in tabs, while the record is
   open. Its strict v1 context is `{ "context_version": 1, "record_id",
   "context_id"?, "blueprint_id", "blueprint_version" }`. The open tab is kept in

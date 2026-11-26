@@ -156,7 +156,7 @@ export const unknownReferences = async (
       target,
     })),
   );
-  return resolved
+  const unknown = resolved
     .filter(({ found, known }) => known && !found)
     .map(({ target }) => ({
       message: i18n.t('definitionEditor.diagnostics.unknownReference', {
@@ -164,6 +164,41 @@ export const unknownReferences = async (
       }),
       range: target.range,
     }));
+  return [...unknown, ...(await misplacedViewExtensions(kind, context))];
+};
+
+/**
+ * View `extensions` entries that name an enabled contribution of another
+ * view, or one that declares none: it will not appear there. Entries for
+ * extensions that are not enabled are fine; they apply once enabled.
+ */
+const misplacedViewExtensions = async (
+  kind: DefinitionKind,
+  context: ReferenceContext,
+) => {
+  const entries = referenceValues(kind, context.outline).filter(
+    ({ reference }) => reference === definitionReferenceKinds.viewExtension,
+  );
+  if (entries.length === 0) return [];
+  const contributions = (await context.references.viewExtensions?.()) ?? [];
+  return entries.flatMap(({ entry, range, value }) => {
+    const contribution = contributions.find(({ key }) => key === value);
+    const view = entry.path[1];
+    if (!contribution || contribution.view === view) return [];
+    return [
+      {
+        message: contribution.view
+          ? i18n.t('definitionEditor.diagnostics.viewExtensionOtherView', {
+              value,
+              view: contribution.view,
+            })
+          : i18n.t('definitionEditor.diagnostics.viewExtensionWithoutView', {
+              value,
+            }),
+        range,
+      },
+    ];
+  });
 };
 
 const declaration = (

@@ -304,6 +304,19 @@ export const referenceCandidates = async (
         }),
         value: editor.id,
       }));
+    case definitionReferenceKinds.viewExtension: {
+      // `views.<view>.extensions.<index>`: offer what targets this view.
+      const view = path[1];
+      return ((await references.viewExtensions?.()) ?? [])
+        .filter((contribution) => contribution.view === view)
+        .map((contribution) => ({
+          detail: i18n.t('definitionEditor.details.viewExtension', {
+            extension: contribution.extensionName,
+            title: contribution.title ?? contribution.key,
+          }),
+          value: contribution.key,
+        }));
+    }
     case definitionReferenceKinds.viewComponent:
       return componentCandidates(outline, path.slice(0, -1)).map(
         (component) => ({

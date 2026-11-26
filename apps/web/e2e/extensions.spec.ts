@@ -79,8 +79,12 @@ test('side-loads the example extension and recalculates a blueprint formula', as
   - code: price_gross
     value_type: number
 views:
+  detail:
+    type: stack
+    extensions: [attricat-extension-example/recalculate-record]
   table:
     type: table
+    extensions: [attricat-extension-example/recalculate-row]
     columns:
       - field: price_net
         renderer:

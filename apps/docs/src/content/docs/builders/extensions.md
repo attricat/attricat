@@ -47,9 +47,9 @@ Running operations stay on the release they started with. They pause until that 
 
 ## Arrange extension UI
 
-When several extensions contribute to the same place, such as the record action bar, they appear in a fixed order by extension ID. **Manage → Extensions → Extension layout** lets you change the order, hide contributions, and promote extension pages into the main navigation.
+Record tabs, record actions, form assists and Explorer actions appear only on blueprints that list them, in the order they list them. See [Views and layouts](/builders/views/#extensions-on-records-and-in-the-explorer).
 
-A blueprint can override the layout for its own record pages. See [Views and layouts](/builders/views/#extension-panels-on-record-pages).
+For the places every blueprint shares, such as navigation and panels, extensions appear in a fixed order by extension ID. **Manage → Extensions → Extension layout** lets you change that order, hide contributions, and promote extension pages into the main navigation.
 
 ## Secrets
 

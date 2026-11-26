@@ -730,50 +730,44 @@ async fn validate_field_editors(
     Ok(())
 }
 
-/// Each `form_assists` entry must be an enabled extension's `form_assist`
-/// with that id and version, for this blueprint, whose watched fields are
-/// fields of the blueprint and whose proposed fields are scalars the form
-/// can edit.
+/// Each `views.detail.extensions` entry that names an enabled extension's
+/// `form_assist` must fit the blueprint: its watched fields are fields of the
+/// blueprint and its proposed fields are scalars the form can edit. Entries
+/// for other contributions, or for extensions that are not enabled, are not
+/// checked here; the host ignores what it cannot offer.
 async fn validate_form_assists(
     transaction: &mut Transaction<'_, Postgres>,
     workspace_id: Uuid,
     compiled: &CompiledBlueprint,
 ) -> Result<(), RepositoryError> {
-    if compiled.form_assists.is_empty() {
+    let Some(detail) = compiled.views.get("detail") else {
+        return Ok(());
+    };
+    if detail.extensions().is_empty() {
         return Ok(());
     }
     let manifests = enabled_manifests(transaction, workspace_id).await?;
-    for reference in &compiled.form_assists {
-        let name = format!(
-            "{}:{}@{}",
-            reference.extension_id, reference.id, reference.version
-        );
-        let invalid = |message: String| {
-            RepositoryError::InvalidBlueprintDefinition(format!("form assist '{name}' {message}"))
+    for entry in detail.extensions() {
+        let Some((extension_id, contribution_id)) = attricat_blueprint::view_extension_key(entry)
+        else {
+            continue;
         };
-        let (contribution, declaration) = manifests
+        let invalid = |message: String| {
+            RepositoryError::InvalidBlueprintDefinition(format!("form assist '{entry}' {message}"))
+        };
+        let Some(declaration) = manifests
             .iter()
-            .filter(|manifest| manifest.attricat.id == reference.extension_id)
+            .filter(|manifest| manifest.attricat.id == extension_id)
             .flat_map(|manifest| &manifest.ui)
-            .find_map(|contribution| {
-                (contribution.kind == UiContributionKind::FormAssist
+            .find(|contribution| {
+                contribution.kind == UiContributionKind::FormAssist
                     && contribution.outlet == Some(UiOutlet::RecordForm)
-                    && contribution.id == reference.id
-                    && contribution.version == reference.version)
-                    .then_some(contribution)
-                    .zip(contribution.form_assist.as_ref())
+                    && contribution.id == contribution_id
             })
-            .ok_or_else(|| invalid("is not declared by an enabled extension".into()))?;
-        if !contribution
-            .when
-            .as_ref()
-            .is_some_and(|when| when.blueprints.contains(&compiled.code))
-        {
-            return Err(invalid(format!(
-                "does not apply to blueprint '{}'",
-                compiled.code
-            )));
-        }
+            .and_then(|contribution| contribution.form_assist.as_ref())
+        else {
+            continue;
+        };
         let attribute = |code: &str| {
             compiled
                 .attributes

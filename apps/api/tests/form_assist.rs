@@ -1,4 +1,4 @@
-//! Form assists: a blueprint opts in to an enabled extension's assist, and
+//! Form assists: a blueprint's detail view lists an extension's assist, and
 //! the host calls its command with the form's watched and proposed fields
 //! only, keeping proposals for declared, unedited fields that their
 //! attributes accept.
@@ -25,8 +25,13 @@ attributes:
   - code: title
     value_type: string"#;
 
-/// The order line, using `assists` (YAML list items) under `form_assists`.
-fn line(code: &str, assists: &str) -> String {
+/// The order line, whose detail view lists `assists`.
+fn line(code: &str, assists: &[&str]) -> String {
+    let assists = assists
+        .iter()
+        .map(|id| format!("{EXTENSION}/{id}"))
+        .collect::<Vec<_>>()
+        .join(", ");
     format!(
         r#"format_version: 1
 code: {code}
@@ -36,7 +41,9 @@ views:
   dropdown_option:
     type: dropdown_option
     fields: [note]
-form_assists:{assists}
+  detail:
+    type: stack
+    extensions: [{assists}]
 attributes:
   - code: note
     value_type: string
@@ -57,10 +64,6 @@ attributes:
     )
 }
 
-fn assist(id: &str) -> String {
-    format!("\n  - {{extension_id: {EXTENSION}, id: {id}, version: 1}}")
-}
-
 fn archive() -> Vec<u8> {
     let command = |id: &str| {
         json!({
@@ -71,7 +74,7 @@ fn archive() -> Vec<u8> {
     };
     let assist = |id: &str, command: &str, watch: Value, proposes: Value| {
         json!({
-            "id": id, "version": 1, "kind": "form_assist", "outlet": "record_form",
+            "id": id, "version": 1, "kind": "form_assist", "outlet": "record_form", "view": "detail",
             "when": {"blueprints": ["fa_line"]},
             "form_assist": {"command": command, "watch": watch, "proposes": proposes}
         })
@@ -167,10 +170,7 @@ async fn form(pool: PgPool) -> (Form, tokio::task::JoinHandle<()>, AttricatRepos
     let blueprint = create_blueprint(
         &client,
         &base_url,
-        &line(
-            "fa_line",
-            &[assist("customer_price"), assist("echo"), assist("broken")].concat(),
-        ),
+        &line("fa_line", &["customer_price", "echo", "broken"]),
     )
     .await;
     let product = create_record_with(
@@ -202,32 +202,37 @@ async fn saving_checks_assists_against_the_enabled_release(pool: PgPool) {
             .json(&json!({"definition": definition}));
         async move { request.send().await.unwrap() }
     };
-    for (definition, message) in [
-        (line("fa_line_check", &assist("missing")), "is not declared"),
-        (
-            line("fa_other", &assist("customer_price")),
-            "does not apply to blueprint 'fa_other'",
-        ),
+    // An entry the workspace cannot offer is ignored, so a blueprint may
+    // list an assist installed later; `when.blueprints` still narrows where
+    // an assist runs.
+    for (code, assists) in [
+        ("fa_line_check", ["missing"]),
+        ("fa_other", ["customer_price"]),
     ] {
-        let error = expect_error(
-            validate(definition).await,
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "invalid_blueprint_definition",
+        let saved = create_blueprint(&form.client, &form.base_url, &line(code, &assists)).await;
+        let listed = get_json(
+            &form.client,
+            format!(
+                "{}/v1/records/form-assists?blueprint_id={}&blueprint_version={}",
+                form.base_url,
+                saved["blueprint"]["id"].as_str().unwrap(),
+                saved["blueprint"]["version"]
+            ),
         )
         .await;
-        assert!(
-            error["error"]["message"]
-                .as_str()
-                .unwrap()
-                .contains(message),
-            "{error}"
-        );
+        assert_eq!(listed["assists"], json!([]), "{code}: {listed}");
     }
+    assert_eq!(
+        validate(line("fa_line_validate", &["missing"]))
+            .await
+            .status(),
+        StatusCode::OK
+    );
     // Saving a new revision of the line itself checks the same rules.
     let error = expect_error(
         form.client
             .post(format!("{}/blueprints", form.base_url))
-            .json(&json!({"definition": line("fa_line", &assist("links"))}))
+            .json(&json!({"definition": line("fa_line", &["links"])}))
             .send()
             .await
             .unwrap(),

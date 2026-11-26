@@ -1,6 +1,6 @@
 use attricat_blueprint::{
-    BlueprintError, BrowseBy, EffectiveAttribute, ResolvedInclude, ViewDefinition, compile, parse,
-    raw_hash,
+    BlueprintError, BrowseBy, EffectiveAttribute, MAX_VIEW_EXTENSIONS, ResolvedInclude,
+    ViewDefinition, compile, parse, raw_hash,
 };
 use attricat_domain::attribute_options::Cardinality;
 use attricat_domain::attribute_options::ContextEditable;
@@ -1083,7 +1083,7 @@ attributes:
 }
 
 #[test]
-fn extension_layout_is_record_only_and_rejects_ambiguous_keys() {
+fn detail_and_table_views_list_extensions_in_order() {
     let source = r#"
 format_version: 1
 code: product
@@ -1093,39 +1093,73 @@ views:
   dropdown_option:
     type: dropdown_option
     fields: [title]
-  extension_layout:
-    type: extension_layout
-    version: 1
-    outlets:
-      record_tab:
-        order: ['acme.inventory:summary']
-        hidden: ['acme.legacy:panel']
+  detail:
+    type: stack
+    extensions: [acme.stock/recalculate, acme.invoices/issue]
+  table:
+    type: table
+    extensions: [acme.stock/bulk_recalculate]
 attributes:
   - code: title
     value_type: string
 "#;
     let compiled = compile(parse(source).unwrap(), &[], source).unwrap();
-    assert!(matches!(
-        compiled.views.get("extension_layout"),
-        Some(ViewDefinition::ExtensionLayout { version: 1, .. })
-    ));
+    // A detail stack without children and a table without columns only
+    // place extensions; the record page and Explorer keep their defaults.
+    assert_eq!(
+        compiled.views["detail"].extensions(),
+        ["acme.stock/recalculate", "acme.invoices/issue"]
+    );
+    assert_eq!(
+        compiled.views["table"].extensions(),
+        ["acme.stock/bulk_recalculate"]
+    );
 
+    let many = (0..=MAX_VIEW_EXTENSIONS)
+        .map(|index| format!("acme.x/a{index}"))
+        .collect::<Vec<_>>()
+        .join(", ");
     for invalid in [
         source.replace("kind: record", "kind: mixin"),
-        source.replace("    version: 1\n    outlets:", "    version: 2\n    outlets:"),
-        source.replace("record_tab", "navigation"),
-        source.replace("acme.inventory:summary", "malformed"),
+        source.replace("acme.invoices/issue", "acme.invoices:issue"),
+        source.replace("acme.invoices/issue", "acme.invoices/"),
+        source.replace("acme.invoices/issue", "acme.stock/recalculate"),
         source.replace(
-            "hidden: ['acme.legacy:panel']",
-            "hidden: ['acme.inventory:summary']",
+            "    type: table
+    extensions",
+            "    type: stack
+    extensions",
         ),
         source.replace(
-            "    outlets:\n",
-            "    outlets:\n      record_action:\n        order: ['acme.inventory:summary']\n        hidden: []\n",
+            "  table:
+    type: table
+",
+            "  page_title:
+    type: page_title
+    fields: [title]
+  explorer_actions:
+    type: table
+",
         ),
+        source.replace("[acme.stock/bulk_recalculate]", &format!("[{many}]")),
     ] {
-        assert!(compile(parse(&invalid).unwrap(), &[], &invalid).is_err());
+        let result = parse(&invalid).and_then(|definition| compile(definition, &[], &invalid));
+        assert!(
+            matches!(result, Err(BlueprintError::InvalidViewExtensions(_))),
+            "{invalid}: {result:?}"
+        );
     }
+
+    // A view without extensions keeps its old requirements.
+    let bare = source.replace(
+        "    extensions: [acme.stock/bulk_recalculate]
+",
+        "",
+    );
+    assert!(matches!(
+        compile(parse(&bare).unwrap(), &[], &bare),
+        Err(BlueprintError::EmptyTableColumns)
+    ));
 }
 
 #[test]

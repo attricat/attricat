@@ -56,7 +56,7 @@ struct RawBlueprintDefinition {
     /// Exact, version-pinned mixins whose attributes can be selected with `from`.
     #[serde(default)]
     includes: Vec<IncludeRef>,
-    /// Named views: `dropdown_option`, `page_title`, `table`, `detail`, and `extension_layout`.
+    /// Named views: `dropdown_option`, `page_title`, `table`, `detail`, and `explorer`.
     /// The `detail` layout also drives editing.
     #[serde(default)]
     #[schemars(extend("x-attricat-key-suggestions" = KNOWN_VIEW_NAMES))]
@@ -91,14 +91,6 @@ struct RawBlueprintDefinition {
     #[serde(default)]
     #[schemars(length(max = crate::MAX_MOVEMENTS))]
     movements: Vec<crate::MovementDefinition>,
-    /// Extension form assists that propose values in the record form when
-    /// watched fields change, such as a customer-specific price. Each must
-    /// be an enabled extension's `form_assist` for this blueprint. Proposals
-    /// are unsaved form changes; writes outside the form do not call them.
-    /// Record blueprints only.
-    #[serde(default)]
-    #[schemars(length(max = crate::MAX_FORM_ASSISTS))]
-    form_assists: Vec<crate::FormAssistReference>,
     /// Attributes in display order. Each declares exactly one of `value_type`,
     /// `extension_type`, or `from`.
     #[schemars(length(min = 1))]
@@ -743,7 +735,6 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
     }
 
     validate_unique_keys(&raw.unique_keys, &raw.kind, &codes)?;
-    validate_form_assist_references(&raw.form_assists, &raw.kind)?;
     crate::movements::validate_movement_declarations(&raw.movements, &raw.kind, &codes)?;
 
     let definition = BlueprintDefinition {
@@ -760,7 +751,6 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
         embedded_rules: raw.rules.is_some(),
         unique_keys: raw.unique_keys,
         movements: raw.movements,
-        form_assists: raw.form_assists,
         attributes,
     };
     crate::lexicon_text::validate_lexicon_references(&definition)?;
@@ -785,43 +775,6 @@ impl RawAttributeDeclaration {
             || self.target_scope.is_some()
             || self.default_from.is_some()
     }
-}
-
-/// Form assists belong to record forms; each is named once.
-fn validate_form_assist_references(
-    references: &[crate::FormAssistReference],
-    kind: &BlueprintKind,
-) -> Result<(), BlueprintError> {
-    let invalid = |message: String| BlueprintError::InvalidFormAssist(message);
-    if !references.is_empty() && *kind != BlueprintKind::Record {
-        return Err(invalid(
-            "only record blueprints can use form assists".into(),
-        ));
-    }
-    if references.len() > crate::MAX_FORM_ASSISTS {
-        return Err(invalid(format!(
-            "a blueprint can use at most {} form assists",
-            crate::MAX_FORM_ASSISTS
-        )));
-    }
-    let mut seen = HashSet::new();
-    for reference in references {
-        if reference.extension_id.trim().is_empty()
-            || reference.id.trim().is_empty()
-            || reference.version == 0
-        {
-            return Err(invalid(
-                "each form assist needs an extension_id, an id and a positive version".into(),
-            ));
-        }
-        if !seen.insert((&reference.extension_id, &reference.id)) {
-            return Err(invalid(format!(
-                "'{}:{}' is named more than once",
-                reference.extension_id, reference.id
-            )));
-        }
-    }
-    Ok(())
 }
 
 /// What a `default_from` cannot be combined with.

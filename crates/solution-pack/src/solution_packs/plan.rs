@@ -46,6 +46,8 @@ pub struct InstalledExtensionSnapshot {
     pub policy_compatible: bool,
     /// Stable contribution key to its manifest-declared outlet.
     pub contributions: BTreeMap<String, String>,
+    /// Stable contribution key to the blueprint view it declares, if any.
+    pub contribution_views: BTreeMap<String, Option<String>>,
     /// An official-registry release that applying the plan will install,
     /// configure, grant, and enable. Its `installed_release_id` is reserved for
     /// that installation and `configuration` is the configuration it receives.
@@ -563,13 +565,12 @@ pub fn build_solution_pack_plan(
         &workspace.seed,
     );
     let mut mappings_by_key = plan_resource_mappings(pack, prefix, publication, workspace)?;
-    let layouts = plan_blueprint_extension_layouts(pack, workspace);
+    let view_extensions = plan_view_extensions(pack, workspace);
     let mut blueprints = plan_blueprint_outcomes(
         pack,
         publication,
         workspace,
         &mappings_by_key,
-        &layouts,
         &prerequisite_outcomes,
     )?;
 
@@ -617,7 +618,7 @@ pub fn build_solution_pack_plan(
         publication,
         workspace,
         &mappings_by_key,
-        &layouts,
+        &view_extensions,
         &mut blueprints,
     )?);
     actions.extend(plan_presentation_asset_actions(
@@ -856,59 +857,60 @@ fn plan_resource_mappings(
 }
 
 /// Per-blueprint extension contributions placed in its views.
-#[derive(Default)]
-struct BlueprintExtensionLayouts {
-    /// Contributions available in the workspace, by blueprint key.
-    allowed: HashMap<String, HashSet<String>>,
-    /// Per-contribution evidence for the action summary, by blueprint key.
-    evidence: HashMap<String, Vec<Value>>,
-    /// The reason a required contribution blocks the blueprint, by key.
-    blocked: HashMap<String, &'static str>,
+/// How a blueprint view's `extensions` entry stands in the workspace. Only
+/// a contribution that exists but targets another view, or declares none, is
+/// a warning: the host ignores entries for missing or disabled extensions,
+/// so a pack may list extensions installed later or separately.
+fn view_extension_status(
+    view: &str,
+    entry: &str,
+    workspace: &PlanningWorkspaceSnapshot,
+) -> (&'static str, bool) {
+    let (extension_id, contribution_id) =
+        attricat_blueprint::view_extension_key(entry).expect("validated view extension entry");
+    let Some(installed) = workspace.installed_extensions.get(extension_id) else {
+        return ("extension_not_installed", false);
+    };
+    if installed.state != ExtensionState::Enabled && !installed.pending_install {
+        return ("extension_not_enabled", false);
+    }
+    match installed
+        .contribution_views
+        .get(&format!("{extension_id}:{contribution_id}"))
+    {
+        None => ("contribution_missing", false),
+        Some(None) => ("contribution_has_no_view", true),
+        Some(Some(declared)) if declared != view => ("contribution_targets_other_view", true),
+        Some(Some(_)) => ("available", false),
+    }
 }
 
-fn plan_blueprint_extension_layouts(
+/// Per-blueprint evidence for the `extensions` its views list.
+fn plan_view_extensions(
     pack: &ValidatedSolutionPack,
     workspace: &PlanningWorkspaceSnapshot,
-) -> BlueprintExtensionLayouts {
-    let manifest = pack.manifest();
-    let mut layouts = BlueprintExtensionLayouts::default();
-    for resource in &manifest.resources.blueprints {
-        let mut allowed = HashSet::new();
-        let mut evidence = Vec::new();
-        for entry in &validated_blueprint(pack, &resource.key).extension_layout {
-            let requirement = extension_requirement_for_contribution(manifest, &entry.contribution);
-            let reason = contribution_availability_reason(
-                requirement,
-                &entry.contribution,
-                &entry.outlet,
-                workspace.installed_extensions.get(&requirement.id),
-            );
-            let outcome = match reason {
-                None => {
-                    allowed.insert(entry.contribution.clone());
-                    PlanActionKind::Satisfied
-                }
-                Some(_) if requirement.required => {
-                    layouts
-                        .blocked
-                        .entry(resource.key.clone())
-                        .or_insert("extension_contribution_unavailable");
-                    PlanActionKind::Blocked
-                }
-                Some(_) => PlanActionKind::Skip,
-            };
-            evidence.push(serde_json::json!({
-                "contribution": entry.contribution,
-                "outlet": entry.outlet,
-                "required": requirement.required,
-                "outcome": outcome,
-                "reason_code": reason.unwrap_or("satisfied"),
-            }));
-        }
-        layouts.allowed.insert(resource.key.clone(), allowed);
-        layouts.evidence.insert(resource.key.clone(), evidence);
-    }
-    layouts
+) -> HashMap<String, Vec<Value>> {
+    pack.manifest()
+        .resources
+        .blueprints
+        .iter()
+        .map(|resource| {
+            let evidence = validated_blueprint(pack, &resource.key)
+                .view_extensions()
+                .iter()
+                .map(|(view, entry)| {
+                    let (status, warning) = view_extension_status(view, entry, workspace);
+                    serde_json::json!({
+                        "view": view,
+                        "contribution": entry,
+                        "status": status,
+                        "warning": warning,
+                    })
+                })
+                .collect();
+            (resource.key.clone(), evidence)
+        })
+        .collect()
 }
 
 /// Blueprint outcomes and the normalized definitions they were decided from.
@@ -924,7 +926,6 @@ fn plan_blueprint_outcomes(
     publication: BlueprintPublication,
     workspace: &PlanningWorkspaceSnapshot,
     mappings: &BTreeMap<String, PlannedMapping>,
-    layouts: &BlueprintExtensionLayouts,
     prerequisite_outcomes: &BTreeMap<String, Outcome>,
 ) -> Result<PlannedBlueprints, SolutionPackError> {
     let manifest = pack.manifest();
@@ -949,14 +950,7 @@ fn plan_blueprint_outcomes(
         let logical_key = &resource.key;
         let blueprint = validated_blueprint(pack, logical_key);
         let mapping = &mappings[logical_key];
-        let normalized = normalized_blueprint_payload(
-            blueprint,
-            mappings,
-            publication,
-            &layouts.allowed[logical_key],
-            workspace,
-            manifest,
-        )?;
+        let normalized = normalized_blueprint_payload(blueprint, mappings, publication)?;
         let canonical_definition_hash = attricat_blueprint::canonical_definition_hash(
             normalized["definition"]
                 .as_str()
@@ -991,13 +985,10 @@ fn plan_blueprint_outcomes(
                 PlanActionKind::Conflict,
                 "prerequisite_blueprint_incompatible",
             )
-        } else if prerequisite_available == Some(true) && !layouts.blocked.contains_key(logical_key)
-        {
+        } else if prerequisite_available == Some(true) {
             (PlanActionKind::Map, "prerequisite_blueprint_match")
         } else if !resource.required && !explicitly_mapped {
             (PlanActionKind::Skip, "optional_not_selected")
-        } else if let Some(reason) = layouts.blocked.get(logical_key) {
-            (PlanActionKind::Blocked, *reason)
         } else if explicitly_mapped && !mapping_compatible {
             (PlanActionKind::Conflict, "existing_blueprint_incompatible")
         } else if explicitly_mapped {
@@ -1058,7 +1049,7 @@ fn plan_blueprint_actions(
     publication: BlueprintPublication,
     workspace: &PlanningWorkspaceSnapshot,
     mappings: &BTreeMap<String, PlannedMapping>,
-    layouts: &BlueprintExtensionLayouts,
+    view_extensions: &HashMap<String, Vec<Value>>,
     blueprints: &mut PlannedBlueprints,
 ) -> Result<Vec<PlannedAction>, SolutionPackError> {
     let resources = pack
@@ -1140,7 +1131,7 @@ fn plan_blueprint_actions(
             "target_version": mapping.target_version,
             "required": resource.required,
             "dependencies": validated_blueprint(pack, &logical_key).dependencies(),
-            "extension_layout": layouts.evidence.get(&logical_key).cloned().unwrap_or_default(),
+            "view_extensions": view_extensions.get(&logical_key).cloned().unwrap_or_default(),
         });
         if let Some(reuse) = &resource.reuse {
             summary["reuse"] = serde_json::json!(reuse);
@@ -1600,9 +1591,6 @@ pub(super) fn normalized_blueprint_payload(
     blueprint: &SolutionPackBlueprint,
     mappings: &BTreeMap<String, PlannedMapping>,
     publication: BlueprintPublication,
-    allowed_contributions: &HashSet<String>,
-    workspace: &PlanningWorkspaceSnapshot,
-    manifest: &SolutionPackManifest,
 ) -> Result<Value, SolutionPackError> {
     let mut value: Value = attricat_yaml::from_str(blueprint.source()).map_err(|_| {
         SolutionPackError::Invalid(format!("blueprint '{}' is invalid", blueprint.key()))
@@ -1668,49 +1656,12 @@ pub(super) fn normalized_blueprint_payload(
         Ok(())
     })?;
     if let Some(views) = table.get_mut("views").and_then(Value::as_object_mut) {
-        for (name, view) in views.iter_mut() {
+        for view in views.values_mut() {
             if let Some(view) = view.as_object_mut() {
                 normalize_view_references(view, mappings);
-                if name == "extension_layout"
-                    && let Some(outlets) = view.get_mut("outlets").and_then(Value::as_object_mut)
-                {
-                    for (_, outlet) in outlets.iter_mut() {
-                        if let Some(outlet) = outlet.as_object_mut() {
-                            for list in ["order", "hidden"] {
-                                if let Some(entries) =
-                                    outlet.get_mut(list).and_then(Value::as_array_mut)
-                                {
-                                    entries.retain(|entry| {
-                                        entry.as_str().is_some_and(|entry| {
-                                            allowed_contributions.contains(entry)
-                                        })
-                                    });
-                                }
-                            }
-                        }
-                    }
-                }
             }
         }
     }
-    let extension_contributions = blueprint
-        .extension_layout
-        .iter()
-        .filter(|entry| allowed_contributions.contains(&entry.contribution))
-        .map(|entry| {
-            let requirement = extension_requirement_for_contribution(manifest, &entry.contribution);
-            let installed = workspace
-                .installed_extensions
-                .get(&requirement.id)
-                .expect("allowed contribution is installed");
-            serde_json::json!({
-                "contribution": entry.contribution,
-                "outlet": entry.outlet,
-                "installed_release_id": installed.installed_release_id,
-                "installed_version": installed.version,
-            })
-        })
-        .collect::<Vec<_>>();
     // Edit the author's text in place so their comments and layout survive;
     // serialize the value only when that edit cannot be made.
     let definition = match attricat_yaml::rewrite_preserving_layout(blueprint.source(), &value) {
@@ -1723,7 +1674,6 @@ pub(super) fn normalized_blueprint_payload(
         "definition": definition,
         "version": 1,
         "publication": publication.as_str(),
-        "extension_contributions": extension_contributions,
     }))
 }
 

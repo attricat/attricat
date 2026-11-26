@@ -35,6 +35,7 @@ const contribution: ExtensionContribution = {
   id: 'inspector',
   kind: 'embedded',
   outlet: 'record_tab',
+  view: null,
   release_id: '11111111-1111-4111-8111-111111111111',
   route: null,
   title: 'Inspector',

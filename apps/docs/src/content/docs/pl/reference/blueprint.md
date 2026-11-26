@@ -46,7 +46,6 @@ Schematy rekordów mają `kind: record`.
 | `unique_keys` | lista mapowań | Nie | Klucze biznesowe, których wartości muszą być unikalne. Tylko schematy rekordów. Zobacz [Klucze unikalne](#klucze-unikalne). |
 | `connector_jobs` | lista mapowań | Nie | Zaplanowane lub ręczne zadania importu i eksportu wykonywane przez rozszerzenie konektora. Tylko schematy rekordów. Zobacz [Zadania konektorów](#zadania-konektorów). |
 | `movements` | lista mapowań | Nie | Jak utworzenie rekordu zmienia saldo innego rekordu, np. wydanie towaru obniża stan magazynowy. Najwyżej 4. Tylko schematy rekordów. Zobacz [Salda i przesunięcia](#salda-i-przesunięcia). |
-| `form_assists` | lista mapowań | Nie | Asystenci rozszerzeń, którzy proponują wartości w formularzu rekordu, każdy `{ extension_id, id, version }`. Najwyżej 8. Tylko schematy rekordów. Zobacz [Asystenci formularza](/pl/extensions/manifest/#asystenci-formularza). |
 | `extensions` | mapowanie | Nie | Dowolne dane dla rozszerzeń, w przestrzeniach nazw `extensions.<extension-id>`. Kompilator rdzenia je ignoruje; rozszerzenia odczytują je z zapisanej definicji. |
 
 ## Atrybuty
@@ -444,7 +443,6 @@ Wybrany atrybut zachowuje wszystkie ustawienia z mixinu. Aby uwzględnić zmiany
 | `edit` | Przestarzały i ignorowany przez aplikację internetową. Nadal akceptowany, a komponenty edycji w nim nadal są walidowane. | Blok układu |
 | `table` | Kolumny przeglądarki rekordów. | `table` |
 | `explorer` | Ustawienia domyślne przeglądarki rekordów, np. atrybut wyświetlany w panelu **Przeglądaj według**. | `explorer` |
-| `extension_layout` | Kolejność i widoczność kontrybucji z rozszerzeń na stronach rekordów tego schematu. | `extension_layout` |
 
 Gdy brakuje `detail` lub `table`, aplikacja webowa wyświetla atrybuty w kolejności deklaracji.
 
@@ -581,27 +579,26 @@ Tam, gdzie pole w `detail` jest edytowalne, aplikacja internetowa używa kontrol
 
 Identyfikator i wersja komórki z rozszerzenia muszą odpowiadać [komórce tabeli](/pl/extensions/manifest/#komórki-tabeli) zadeklarowanej przez włączone rozszerzenie dla typu wartości kolumny, a jej `props` muszą pasować do zadeklarowanych typów właściwości.
 
-### `extension_layout`
+### `extensions`
+
+`detail` i `table` mogą wymieniać kontrybucje rozszerzeń widoczne na rekordach tego schematu:
 
 ```yaml
 views:
-  extension_layout:
-    type: extension_layout
-    version: 1
-    outlets:
-      record_tab:
-        order: ['acme.inventory:summary']
-        hidden: ['acme.legacy:panel']
+  detail:
+    type: stack
+    extensions: [acme.stock/recalculate, acme.pricing/customer_price]
+  table:
+    type: table
+    extensions: [acme.stock/recalculate-selected]
 ```
 
 | Klucz | Opis |
 | --- | --- |
-| `version` | Musi wynosić `1`. |
-| `outlets` | Klucze `record_tab` lub `record_action`. |
-| `outlets.<outlet>.order` | Klucze kontrybucji (`<extension-id>:<contribution-id>`) w kolejności wyświetlania. |
-| `outlets.<outlet>.hidden` | Klucze kontrybucji do ukrycia. |
+| `views.detail.extensions` | Akcje rekordu, akcje nagłówka, karty rekordu i asystenci formularza w postaci `<extension-id>/<contribution-id>`, w kolejności wyświetlania. Najwyżej 32. |
+| `views.table.extensions` | Akcje wiersza, zaznaczenia i paska narzędzi Przeglądarki rekordów, w tej samej postaci. Najwyżej 32. |
 
-Punkt osadzenia wymieniony tutaj zastępuje domyślny układ obszaru roboczego dla tego punktu na rekordach tego schematu. Punkty, których nie wymienisz, zachowują układ obszaru roboczego. Klucze rozszerzeń, które nie są zainstalowane, są zachowywane, więc układ przetrwa wyłączenie i ponowne włączenie rozszerzenia.
+W widoku pojawiają się tylko kontrybucje, które deklarują ten widok. Stos `detail` bez `children` i `table` bez `columns` zachowują domyślny układ i kolumny. Wpisy dla rozszerzeń, które nie są zainstalowane lub włączone, są zachowywane i ignorowane. Zapis sprawdza obserwowane i proponowane pola włączonego asystenta formularza względem schematu. Tylko schematy rekordów.
 
 ## Publikacja
 

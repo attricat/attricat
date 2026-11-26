@@ -16,7 +16,6 @@ Views are optional. Without them, the web app shows attributes in declaration or
 | `detail` | The record page, its preview, and the create form. Fields are shown and edited in this layout. |
 | `table` | The Explorer's result columns. |
 | `explorer` | Explorer defaults, such as the field the **Browse by** panel lists. |
-| `extension_layout` | Order and visibility of extension panels and actions on this blueprint's record pages. |
 
 There is no separate edit view: records are edited in place on the detail layout. A blueprint that defines `views.edit` is rejected.
 
@@ -261,19 +260,22 @@ The edit controls validate only in the web app. To reject bad values from the AP
 
 `field`, `relationship_list`, `incoming_relationship_list`, `stack`, and `table` blocks can name a component with `component: {id, version, props}`; a `grid`, `section`, `tabs`, `accordion`, `heading`, `text`, or `divider` block that names one is rejected. The ID and version must match a registered component, the component must support the block and value type, and `props` may contain only the options it declares. The built-in components are listed in the [blueprint reference](/reference/blueprint/#component-references).
 
-## Extension panels on record pages
+## Extensions on records and in the Explorer
 
-Workspace administrators set the default order of extension contributions for the whole workspace. A blueprint can override two record page outlets for its own records:
+Record tabs, record actions, form assists and Explorer actions from extensions appear only on blueprints that list them. List them under `extensions` in `detail` (record pages and the record form) or `table` (Explorer row, selection and toolbar actions), in the order you want them:
 
 ```yaml
 views:
-  extension_layout:
-    type: extension_layout
-    version: 1
-    outlets:
-      record_tab:
-        order: ['acme.inventory:summary', 'acme.pricing:margin']
-        hidden: ['acme.legacy:panel']
+  detail:
+    type: stack
+    extensions: [acme.stock/recalculate, acme.invoicing/issue-invoice, acme.stock/history]
+  table:
+    type: table
+    extensions: [acme.stock/recalculate-selected]
 ```
 
-The outlets you can set here are `record_tab` and `record_action`. The layout never grants permissions or enables an extension. Entries for extensions that are missing or disabled are kept and ignored, so a layout survives an extension being turned off and on again.
+- Each entry is `<extension-id>/<contribution-id>`, at most 32 per view. The extension's documentation names its contributions and which view each belongs to.
+- Without `children` or `columns`, the view keeps the default record layout or Explorer columns and only places extensions.
+- The order decides which record actions show before **More**, and the order of tabs and form assists.
+- Entries for extensions that aren't installed or enabled are ignored until they are, so you can list an extension before installing it. The definition editor warns about an entry that belongs to the other view.
+- The list belongs to the blueprint revision. Records follow the revision they are on, and Attricat refuses an extension's action for records whose revision doesn't list it.

@@ -1183,7 +1183,8 @@
       "role": "Rola w przestrzeni roboczej",
       "section": "Sekcja",
       "selectedAttribute": "Z {{from}}",
-      "editor": "Edytor {{extension}} v{{version}}"
+      "editor": "Edytor {{extension}} v{{version}}",
+      "viewExtension": "{{extension}} · {{title}}"
     },
     "diagnostics": {
       "expectedOneOf": "Oczekiwano jednej z wartości: {{values}}.",
@@ -1207,6 +1208,8 @@
       "unknownKey": "Nieznany klucz „{{key}}”.",
       "unknownKeySuggestion": "Nieznany klucz „{{key}}”. Czy chodziło o „{{suggestion}}”?",
       "unknownReference": "„{{value}}” nie istnieje w tym obszarze roboczym.",
+      "viewExtensionOtherView": "„{{value}}” należy do widoku {{view}}, więc nie pojawi się tutaj.",
+      "viewExtensionWithoutView": "„{{value}}” nie deklaruje widoku schematu, więc nie pojawi się tutaj.",
       "unsupportedTag": "Znacznik „{{value}}” nie jest obsługiwany. Użyj !!str, !!int, !!float, !!bool, !!null, !!seq, !!map lub !."
     },
     "fixes": {

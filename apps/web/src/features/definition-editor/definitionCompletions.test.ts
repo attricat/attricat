@@ -94,7 +94,7 @@ describe('definitionCompletions', () => {
       suggestions.find((suggestion) => suggestion.label === 'views')
         ?.insertText,
     ).toBe(
-      'views:\n  ${1|dropdown_option,page_title,detail,table,explorer,extension_layout|}:\n    type: ${2|dropdown_option,page_title,table,explorer,stack,grid,section,tabs,accordion,extension_layout|}',
+      'views:\n  ${1|dropdown_option,page_title,detail,table,explorer|}:\n    type: ${2|dropdown_option,page_title,table,explorer,stack,grid,section,tabs,accordion|}',
     );
   });
 

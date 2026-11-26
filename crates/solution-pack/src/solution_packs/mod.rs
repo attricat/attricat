@@ -416,13 +416,9 @@ pub struct SolutionPackBlueprint {
     kind: BlueprintKind,
     effective_attributes: Vec<attricat_blueprint::EffectiveAttribute>,
     unique_keys: Vec<attricat_blueprint::UniqueKeyDefinition>,
-    extension_layout: Vec<BlueprintExtensionLayoutEntry>,
-}
-
-#[derive(Clone, Debug)]
-struct BlueprintExtensionLayoutEntry {
-    contribution: String,
-    outlet: String,
+    /// `(view, "<extension-id>/<contribution-id>")` for each entry the
+    /// blueprint's `detail` and `table` views list under `extensions`.
+    view_extensions: Vec<(String, String)>,
 }
 
 #[derive(Debug)]
@@ -458,6 +454,10 @@ impl SolutionPackBlueprint {
 
     pub fn default_from_dependencies(&self) -> &BTreeSet<String> {
         &self.default_from_dependencies
+    }
+
+    pub fn view_extensions(&self) -> &[(String, String)] {
+        &self.view_extensions
     }
 
     pub fn movement_dependencies(&self) -> &BTreeSet<String> {
@@ -645,7 +645,6 @@ impl ValidatedSolutionPack {
         let explore_navigation = validate_explore_navigation(&manifest, &files, &blueprints)?;
         let extension_layout = validate_extension_layout(&manifest, &files)?;
         let lexicon = validate_lexicon(&manifest, &files)?;
-        validate_blueprint_extension_layouts(&manifest, &blueprints)?;
         let configuration_templates = validate_configuration_templates(&manifest, &files)?;
         let presentation_assets = validate_presentation_assets(&manifest, &files)?;
         let sample_data = validate_sample_resource(&manifest, &files, &blueprints, &seeds)?;
@@ -1698,13 +1697,17 @@ fn validate_extension_layout(
                 entry.contribution
             ));
         }
-        if serde_json::from_value::<crate::extensions::UiOutlet>(Value::String(
+        let Ok(outlet) = serde_json::from_value::<crate::extensions::UiOutlet>(Value::String(
             entry.outlet.clone(),
-        ))
-        .is_err()
-        {
+        )) else {
             return invalid(format!(
                 "workspace extension layout outlet '{}' is invalid",
+                entry.outlet
+            ));
+        };
+        if outlet.blueprint_view().is_some() {
+            return invalid(format!(
+                "workspace extension layout outlet '{}' is placed by blueprint views, not the workspace layout",
                 entry.outlet
             ));
         }
@@ -1716,33 +1719,6 @@ fn validate_extension_layout(
         }
     }
     Ok(Some(layout))
-}
-
-fn validate_blueprint_extension_layouts(
-    manifest: &SolutionPackManifest,
-    blueprints: &BTreeMap<String, SolutionPackBlueprint>,
-) -> Result<(), SolutionPackError> {
-    let requirements = manifest
-        .extensions
-        .iter()
-        .map(|requirement| requirement.id.as_str())
-        .collect::<HashSet<_>>();
-    for blueprint in blueprints.values() {
-        for entry in &blueprint.extension_layout {
-            let extension_id = entry
-                .contribution
-                .split_once(':')
-                .map(|(extension_id, _)| extension_id)
-                .expect("blueprint compiler validated contribution key");
-            if !requirements.contains(extension_id) {
-                return invalid(format!(
-                    "blueprint '{}' extension layout contribution '{}' has no extension requirement",
-                    blueprint.key, entry.contribution
-                ));
-            }
-        }
-    }
-    Ok(())
 }
 
 pub(crate) fn validate_acyclic<'a>(

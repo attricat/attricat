@@ -4,13 +4,10 @@ use attricat_domain::value_type::ValueType;
 use attricat_validation::saved_search::{MAX_RELATIONSHIP_HOPS, browse_hop};
 
 use crate::{
-    BlueprintError, BlueprintKind, BrowseBy, ComponentReference, EXTENSION_LAYOUT_OUTLETS,
-    EditorReference, EffectiveAttribute, TableColumn, ViewDefinition, ViewNode,
-    component_manifest::validate_component, parser::validate_code,
+    BlueprintError, BlueprintKind, BrowseBy, ComponentReference, EditorReference,
+    EffectiveAttribute, MAX_VIEW_EXTENSIONS, TableColumn, ViewDefinition, ViewNode,
+    component_manifest::validate_component, parser::validate_code, view_extension_key,
 };
-
-/// Longest `extension_id:contribution_id` key in an extension layout.
-const MAX_CONTRIBUTION_KEY_BYTES: usize = 256;
 
 pub(crate) fn validate_view(
     view: &str,
@@ -19,6 +16,7 @@ pub(crate) fn validate_view(
     blueprint_code: &str,
     blueprint_kind: &BlueprintKind,
 ) -> Result<(), BlueprintError> {
+    validate_view_extensions(view, definition, blueprint_kind)?;
     match definition {
         ViewDefinition::DropdownOption { fields, .. } => {
             if fields.is_empty() {
@@ -47,9 +45,18 @@ pub(crate) fn validate_view(
                 validate_view_field(view, field, attributes, false)?;
             }
         }
-        ViewDefinition::Table { columns, component } => {
+        ViewDefinition::Table {
+            columns,
+            component,
+            extensions,
+        } => {
+            // A table that only places extensions keeps the default columns.
             let Some(columns) = columns else {
-                return Err(BlueprintError::EmptyTableColumns);
+                if extensions.is_empty() {
+                    return Err(BlueprintError::EmptyTableColumns);
+                }
+                validate_component(component.as_ref(), view, "table", None)?;
+                return Ok(());
             };
             // Validate the table component's identity, placement and
             // capability before resolving column paths.
@@ -71,6 +78,7 @@ pub(crate) fn validate_view(
         ViewDefinition::Stack {
             children,
             component,
+            ..
         } => {
             validate_stack_component(component.as_ref(), view, children, attributes)?;
             validate_view_nodes(view, children, attributes, blueprint_code)?;
@@ -78,15 +86,19 @@ pub(crate) fn validate_view(
         ViewDefinition::Grid {
             children,
             component,
+            ..
         }
         | ViewDefinition::Section {
             children,
             component,
+            ..
         } => {
             validate_non_data_component(component.as_ref())?;
             validate_view_nodes(view, children, attributes, blueprint_code)?;
         }
-        ViewDefinition::Tabs { tabs, component } => {
+        ViewDefinition::Tabs {
+            tabs, component, ..
+        } => {
             validate_non_data_component(component.as_ref())?;
             for tab in tabs {
                 validate_view_nodes(view, &tab.children, attributes, blueprint_code)?;
@@ -95,42 +107,56 @@ pub(crate) fn validate_view(
         ViewDefinition::Accordion {
             sections,
             component,
+            ..
         } => {
             validate_non_data_component(component.as_ref())?;
             for section in sections {
                 validate_view_nodes(view, &section.children, attributes, blueprint_code)?;
             }
         }
-        ViewDefinition::ExtensionLayout { version, outlets } => {
-            if view != "extension_layout"
-                || *version != 1
-                || *blueprint_kind != BlueprintKind::Record
-            {
-                return Err(BlueprintError::InvalidExtensionLayout);
-            }
-            let mut seen = HashSet::new();
-            for (outlet, layout) in outlets {
-                if !EXTENSION_LAYOUT_OUTLETS.contains(&outlet.as_str())
-                    || layout.order.iter().chain(&layout.hidden).any(|key| {
-                        let Some((extension_id, contribution_id)) = key.split_once(':') else {
-                            return true;
-                        };
-                        key.len() > MAX_CONTRIBUTION_KEY_BYTES
-                            || extension_id.is_empty()
-                            || contribution_id.is_empty()
-                            || contribution_id.contains(':')
-                            || !key
-                                .chars()
-                                .filter(|character| *character != ':')
-                                .all(|character| {
-                                    character.is_ascii_alphanumeric() || "._-".contains(character)
-                                })
-                            || !seen.insert(key.as_str())
-                    })
-                {
-                    return Err(BlueprintError::InvalidExtensionLayout);
-                }
-            }
+    }
+    Ok(())
+}
+
+/// A record blueprint's `detail` layout and `table` may list the extension
+/// contributions placed in them: at most [`MAX_VIEW_EXTENSIONS`] distinct
+/// `<extension-id>/<contribution-id>` entries. Whether each names an enabled
+/// contribution is checked when the blueprint is saved, and only warned
+/// about, so a blueprint may list an extension installed later.
+fn validate_view_extensions(
+    view: &str,
+    definition: &ViewDefinition,
+    blueprint_kind: &BlueprintKind,
+) -> Result<(), BlueprintError> {
+    let extensions = definition.extensions();
+    if extensions.is_empty() {
+        return Ok(());
+    }
+    let invalid = |message: String| Err(BlueprintError::InvalidViewExtensions(message));
+    let placed = match view {
+        "table" => matches!(definition, ViewDefinition::Table { .. }),
+        "detail" => !matches!(definition, ViewDefinition::Table { .. }),
+        _ => false,
+    };
+    if !placed || *blueprint_kind != BlueprintKind::Record {
+        return invalid(format!(
+            "only a record blueprint's views.detail and views.table can list extensions, not views.{view}"
+        ));
+    }
+    if extensions.len() > MAX_VIEW_EXTENSIONS {
+        return invalid(format!(
+            "views.{view} lists more than {MAX_VIEW_EXTENSIONS} extensions"
+        ));
+    }
+    let mut seen = HashSet::new();
+    for entry in extensions {
+        if view_extension_key(entry).is_none() {
+            return invalid(format!(
+                "views.{view} entry '{entry}' must be <extension-id>/<contribution-id>"
+            ));
+        }
+        if !seen.insert(entry.as_str()) {
+            return invalid(format!("views.{view} lists '{entry}' more than once"));
         }
     }
     Ok(())

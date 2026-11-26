@@ -30,6 +30,7 @@ const action = (id: string, title: string): ExtensionContribution => ({
   id,
   kind: 'action',
   outlet: 'explorer_bulk_action',
+  view: null,
   release_id: '11111111-1111-4111-8111-111111111111',
   route: null,
   title,

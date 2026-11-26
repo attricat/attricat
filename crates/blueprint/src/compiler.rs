@@ -195,7 +195,6 @@ pub fn compile(
         embedded_rules: definition.embedded_rules,
         unique_keys: definition.unique_keys,
         movements: definition.movements,
-        form_assists: definition.form_assists,
         attributes,
     })
 }

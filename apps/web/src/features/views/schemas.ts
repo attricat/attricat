@@ -16,7 +16,6 @@ export const viewBlockTypes = {
   relationshipList: 'relationship_list',
   incomingRelationshipList: 'incoming_relationship_list',
   table: 'table',
-  extensionLayout: 'extension_layout',
   explorer: 'explorer',
 } as const;
 
@@ -97,11 +96,6 @@ export type ViewDefinition =
       component?: ComponentReference | null;
     }
   | { type: 'explorer'; browse_by?: string | false | null }
-  | {
-      type: 'extension_layout';
-      version: 1;
-      outlets: Record<string, { order: string[]; hidden: string[] }>;
-    }
   | Exclude<
       ViewNode,
       {
@@ -244,14 +238,6 @@ const viewDefinitionSchema: z.ZodType<ViewDefinition> = z.lazy(() =>
     z.object({
       type: z.literal(viewBlockTypes.explorer),
       browse_by: z.union([z.string(), z.literal(false)]).nullish(),
-    }),
-    z.object({
-      type: z.literal(viewBlockTypes.extensionLayout),
-      version: z.literal(1),
-      outlets: z.record(
-        z.string(),
-        z.object({ order: z.array(z.string()), hidden: z.array(z.string()) }),
-      ),
     }),
     ...containerBlockSchemas(),
   ]),

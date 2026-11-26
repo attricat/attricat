@@ -1,5 +1,4 @@
 import {
-  viewBlockTypes,
   type Attribute,
   type BlueprintWithAttributes,
   type FormAttributeValue,
@@ -18,6 +17,7 @@ import {
   viewPlacedFields,
 } from '../views/viewFieldComponents';
 import { recordHeadingComponentId } from '../views/components/blocks/RecordHeadingDefinition';
+import { isLayoutView } from '../views/layoutView';
 
 const inContext = (
   value: { context_id?: string | null },
@@ -105,12 +105,7 @@ export const withFillableReadonlyAttributes = (
 
 /** Views that do not place fields and render the default layout instead. */
 const usesDefaultLayout = (view: ViewDefinition | undefined) =>
-  !view ||
-  view.type === viewBlockTypes.table ||
-  view.type === viewBlockTypes.dropdownOption ||
-  view.type === viewBlockTypes.pageTitle ||
-  view.type === viewBlockTypes.extensionLayout ||
-  view.type === viewBlockTypes.explorer;
+  !isLayoutView(view);
 
 /**
  * Required attributes the form layout does not render. A form shows them after

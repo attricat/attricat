@@ -34,32 +34,32 @@ under **Additional attributes**, so a required attribute is never out of
 reach. The create and migration forms (`RecordForm`) use the same order:
 heading fields, the layout, then **Other attributes**.
 
-## Extension layout
+## Extension placement
 
-Record blueprint revisions may override workspace extension placement for their
-owned surfaces (`record_tab` and `record_action`). This is versioned declarative data, published with the normal
-blueprint revision flow; it neither grants permissions nor runs extension code.
-Use stable contribution keys (`<extension-id>:<contribution-id>`). Missing or
-disabled contributions are ignored at runtime while their entries remain in the
-published layout for restoration. Publication rejects a currently enabled
-contribution if its key is assigned to a different outlet; unknown keys remain
-valid so removed or disabled contributions can later be restored:
+A record blueprint's `views.detail` and `views.table` decide which record and
+Explorer extension contributions appear on its records, in order, through
+`extensions`: `<extension-id>/<contribution-id>` entries, at most 32, each
+once. Only contributions that declare that view appear (`detail`: record
+actions and header actions, record tabs and form assists; `table`: Explorer
+row, bulk and toolbar actions). A view that only places extensions keeps the
+default layout or columns:
 
 ```yaml
 views:
-  extension_layout:
-    type: extension_layout
-    version: 1
-    outlets:
-      record_tab:
-        order: ['acme.inventory:summary']
-        hidden: ['acme.legacy:panel']
+  detail:
+    type: stack
+    extensions: [acme.stock/recalculate, acme.inventory/summary]
+  table:
+    type: table
+    extensions: [acme.stock/recalculate-selected]
 ```
 
-Each declared record-owned outlet replaces only that outlet's workspace default;
-unspecified record outlets and all global outlets continue to use the workspace
-layout. Global outlets, including navigation and explorer surfaces, are
-workspace-only.
+The lists are versioned with the revision and neither grant permissions nor run
+extension code. Entries for extensions that are not installed or enabled are
+ignored until they are; an entry for a contribution of the other view, or of
+none, is accepted with a warning. The workspace extension layout keeps
+arranging the shared outlets (navigation, panels) only. See
+[Extensions](extensions.md#where-record-and-explorer-contributions-appear).
 
 ```yaml
 views:

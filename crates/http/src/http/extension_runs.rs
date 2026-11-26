@@ -215,6 +215,23 @@ pub(super) async fn start(
         .runtime_extension_installation(&extension_id, input.release_id)
         .await?
         .ok_or_else(ApiError::forbidden)?;
+    let placed = installation
+        .manifest
+        .ui
+        .iter()
+        .find(|item| item.id == contribution_id)
+        .ok_or_else(ApiError::forbidden)?;
+    super::extensions::ensure_contribution_placed(
+        &repository,
+        &installation.manifest,
+        placed,
+        Some((
+            input.selection.blueprint_id,
+            input.selection.blueprint_version,
+        )),
+        &input.selection.record_ids,
+    )
+    .await?;
     let operation = installation
         .manifest
         .server

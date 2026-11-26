@@ -26,8 +26,8 @@ use crate::{
     extensions::{
         ActionCondition, ActionConfirmation, ActionInvocation, CellDeclaration,
         ContributionTranslation, EditorDeclaration, ExtensionPackage,
-        MAX_EXTENSION_IDENTIFIER_BYTES, MAX_NATIVE_ARTIFACT_BYTES, RenderingMode,
-        UiContributionKind, UiOutlet, validate_schema,
+        MAX_EXTENSION_IDENTIFIER_BYTES, MAX_NATIVE_ARTIFACT_BYTES, Manifest, RenderingMode,
+        UiContribution, UiContributionKind, UiOutlet, validate_schema,
     },
     repository::{
         BlueprintConnectorJob, CreateExtensionOperationSchedule, ExtensionGrant,
@@ -72,6 +72,9 @@ pub(super) struct RuntimeContribution {
     version: u32,
     kind: UiContributionKind,
     outlet: Option<UiOutlet>,
+    /// The blueprint view whose `extensions` list placed the contribution.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    view: Option<crate::extensions::ContributionView>,
     route: Option<String>,
     title: Option<String>,
     /// What a host-rendered action invokes, e.g. `{"command": "check"}`.
@@ -924,6 +927,7 @@ pub(super) async fn runtime(
                 version: item.version,
                 kind: item.kind,
                 outlet: item.outlet,
+                view: item.view,
                 route: item.route,
                 title: item.title,
                 invoke: item.invoke,
@@ -1009,6 +1013,18 @@ pub(super) async fn command(
         )
         .await?;
     }
+    // A host-rendered action's payload is its action context, which names the
+    // blueprint revision and records it was offered for.
+    if contribution.kind == UiContributionKind::Action {
+        ensure_contribution_placed(
+            &repository,
+            &installation.manifest,
+            contribution,
+            command_blueprint(&input.payload)?,
+            &command_record_ids(&input.payload)?,
+        )
+        .await?;
+    }
     if mapping_editor
         && !state
             .repository
@@ -1082,6 +1098,76 @@ fn command_record_ids(payload: &Value) -> Result<Vec<Uuid>, ApiError> {
             })
             .collect(),
     }
+}
+
+/// The blueprint revision an action context names, if it names one.
+fn command_blueprint(payload: &Value) -> Result<Option<(Uuid, i64)>, ApiError> {
+    let invalid = || {
+        ApiError::invalid_input("blueprint_id and blueprint_version must name a revision".into())
+    };
+    match (
+        payload.get("blueprint_id"),
+        payload.get("blueprint_version"),
+    ) {
+        (None, None) => Ok(None),
+        (Some(id), Some(version)) => Ok(Some((
+            id.as_str()
+                .and_then(|id| id.parse().ok())
+                .ok_or_else(invalid)?,
+            version.as_i64().ok_or_else(invalid)?,
+        ))),
+        _ => Err(invalid()),
+    }
+}
+
+/// A record or Explorer contribution runs only for blueprint revisions whose
+/// view lists it, as the runtime offers it; a dialog runs where one of the
+/// actions that open it may. The revision the browser names and every
+/// record's own revision must list it, so neither can be widened.
+pub(super) async fn ensure_contribution_placed(
+    repository: &crate::repository::AttricatRepository,
+    manifest: &Manifest,
+    contribution: &UiContribution,
+    blueprint: Option<(Uuid, i64)>,
+    record_ids: &[Uuid],
+) -> Result<(), ApiError> {
+    let placed = if contribution.outlet == Some(UiOutlet::ActionDialog) {
+        manifest
+            .ui
+            .iter()
+            .filter(|action| {
+                action.invoke == Some(ActionInvocation::Dialog(contribution.id.clone()))
+            })
+            .collect::<Vec<_>>()
+    } else {
+        vec![contribution]
+    };
+    let mut views = Vec::with_capacity(placed.len());
+    for item in placed {
+        match item.outlet.as_ref().and_then(UiOutlet::blueprint_view) {
+            // Shared outlets, such as a field note's badge, are not placed by
+            // a blueprint view.
+            None => return Ok(()),
+            Some(view) => views.push((item, view)),
+        }
+    }
+    let mut revisions = repository
+        .record_blueprint_revisions(record_ids)
+        .await?
+        .ok_or_else(ApiError::forbidden)?;
+    revisions.extend(blueprint);
+    if revisions.is_empty() {
+        return Err(ApiError::forbidden());
+    }
+    for (item, view) in views {
+        if repository
+            .views_list_contribution(&revisions, &manifest.attricat.id, &item.id, item.view, view)
+            .await?
+        {
+            return Ok(());
+        }
+    }
+    Err(ApiError::forbidden())
 }
 
 /// An action whose `when.requires_write` is set runs only for records the

@@ -38,6 +38,7 @@ const contribution: ExtensionContribution = {
   id: 'panel',
   kind: 'panel',
   outlet: 'blueprint_panel',
+  view: null,
   release_id: '11111111-1111-4111-8111-111111111111',
   route: null,
   title: null,
@@ -93,6 +94,7 @@ const selectionDependencies = (
     id: 'bulk',
     kind: 'dialog' as const,
     outlet: 'action_dialog' as const,
+    view: null,
     version: 1,
     ...overrides,
   },
@@ -210,6 +212,7 @@ describe('extension broker', () => {
     const panel = selectionDependencies(['client.operations.start'], {
       kind: 'panel',
       outlet: 'blueprint_panel',
+      view: null,
     });
     await expect(
       handleBrokerRequest(

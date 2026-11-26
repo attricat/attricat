@@ -1023,6 +1023,11 @@ pub struct UiContribution {
     pub artifact: Option<String>,
     #[serde(default)]
     pub outlet: Option<UiOutlet>,
+    /// The blueprint view a record or Explorer contribution belongs to;
+    /// required at those outlets (see [`UiOutlet::blueprint_view`]) and
+    /// rejected elsewhere. It appears only on blueprints whose view lists it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub view: Option<ContributionView>,
     #[serde(default)]
     pub route: Option<String>,
     #[serde(default)]
@@ -1200,8 +1205,28 @@ pub enum UiContributionKind {
     Editor,
     /// Proposes values in an open record form when watched fields change,
     /// through a server command. Host-rendered, so it has no artifact; a
-    /// blueprint opts in under `form_assists`.
+    /// blueprint opts in by listing it in `views.detail.extensions`.
     FormAssist,
+}
+
+/// A blueprint view whose `extensions` list places contributions.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum ContributionView {
+    /// The record page and its form.
+    Detail,
+    /// The Explorer table: its row, bulk and toolbar actions.
+    Table,
+}
+
+impl ContributionView {
+    /// The blueprint view name, as under `views`.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Detail => "detail",
+            Self::Table => "table",
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
@@ -1242,6 +1267,32 @@ pub enum UiOutlet {
 }
 
 impl UiOutlet {
+    /// The blueprint view whose `extensions` list places this outlet's
+    /// contributions; `None` for outlets every blueprint shares or that are
+    /// already placed explicitly (cells, editors, field-note actions).
+    pub const fn blueprint_view(&self) -> Option<ContributionView> {
+        match self {
+            Self::RecordAction | Self::RecordHeaderAction | Self::RecordTab | Self::RecordForm => {
+                Some(ContributionView::Detail)
+            }
+            Self::ExplorerRowAction | Self::ExplorerBulkAction | Self::ExplorerAction => {
+                Some(ContributionView::Table)
+            }
+            Self::Navigation
+            | Self::BlueprintAttributeConfiguration
+            | Self::ExplorerTableCell
+            | Self::BlueprintDetailPanel
+            | Self::RecordAttributeAction
+            | Self::BlueprintPanel
+            | Self::BlueprintPublishCheck
+            | Self::AuditEventPanel
+            | Self::DataHealthCard
+            | Self::ActionDialog
+            | Self::ExportMapping
+            | Self::AttributeEditor => None,
+        }
+    }
+
     /// How an outlet's contributions may be drawn, when they run extension
     /// code. Host-rendered outlets (actions and cells) have none; route and
     /// embedded navigation stay frame-only.
@@ -1362,7 +1413,10 @@ impl Manifest {
             .as_ref()
             .ok_or_else(|| invalid("requires a form_assist declaration".into()))?;
         declaration.validate().map_err(invalid)?;
+        // The blueprint's detail view decides where an assist runs; `when`
+        // may only narrow it further by blueprint code.
         let blueprints = match &contribution.when {
+            None => &Vec::new(),
             Some(ActionCondition {
                 blueprints,
                 min_records: None,
@@ -1370,13 +1424,9 @@ impl Manifest {
                 requires_write: false,
                 has_tags,
                 missing_tags,
-            }) if !blueprints.is_empty() && has_tags.is_empty() && missing_tags.is_empty() => {
-                blueprints
-            }
+            }) if has_tags.is_empty() && missing_tags.is_empty() => blueprints,
             _ => {
-                return Err(invalid(
-                    "requires when.blueprints, and no other condition".into(),
-                ));
+                return Err(invalid("may only limit when.blueprints".into()));
             }
         };
         let mut seen = HashSet::new();
@@ -1907,6 +1957,35 @@ impl Manifest {
                     "navigation UI contribution '{}' requires a route and cannot declare an artifact or outlet",
                     contribution.id
                 )));
+            }
+            let expected_view = contribution
+                .outlet
+                .as_ref()
+                .and_then(UiOutlet::blueprint_view);
+            match (expected_view, contribution.view) {
+                (Some(expected), Some(view)) if expected == view => {}
+                (Some(expected), None) => {
+                    return Err(ManifestError::Invalid(format!(
+                        "UI contribution '{}' must declare view: {}",
+                        contribution.id,
+                        expected.as_str()
+                    )));
+                }
+                (Some(expected), Some(view)) => {
+                    return Err(ManifestError::Invalid(format!(
+                        "UI contribution '{}' belongs to the {} view, not {}",
+                        contribution.id,
+                        expected.as_str(),
+                        view.as_str()
+                    )));
+                }
+                (None, Some(_)) => {
+                    return Err(ManifestError::Invalid(format!(
+                        "only record and Explorer UI contributions may declare view ('{}')",
+                        contribution.id
+                    )));
+                }
+                (None, None) => {}
             }
             if matches!(contribution.kind, UiContributionKind::Cell) {
                 validate_cell_namespace(&self.attricat.id, &contribution.id)?;
@@ -3611,7 +3690,7 @@ mod tests {
             manifest
         };
         let valid = serde_json::json!({
-            "id": "customer_price", "version": 1, "kind": "form_assist", "outlet": "record_form",
+            "id": "customer_price", "version": 1, "kind": "form_assist", "outlet": "record_form", "view": "detail",
             "when": {"blueprints": ["order_line"]},
             "form_assist": {"command": "propose", "watch": ["item", "quantity"], "proposes": ["unit_price_net"]}
         });
@@ -3636,12 +3715,10 @@ mod tests {
         };
         type Change<'a> = &'a dyn Fn(&mut serde_json::Value);
         let invalid: [(&str, Change); 9] = [
-            ("no when", &|value| {
-                value.as_object_mut().unwrap().remove("when");
+            ("no view", &|value| {
+                value.as_object_mut().unwrap().remove("view");
             }),
-            ("empty blueprints", &|value| {
-                value["when"]["blueprints"] = serde_json::json!([])
-            }),
+            ("table view", &|value| value["view"] = "table".into()),
             ("other condition", &|value| {
                 value["when"]["min_records"] = 1.into()
             }),
@@ -3666,6 +3743,15 @@ mod tests {
             assert!(with(change).is_err(), "{case}");
         }
         assert!(with(&|value| value["form_assist"]["proposes"] = codes(16)).is_ok());
+        // The blueprint's detail view decides where it runs; `when` may
+        // still narrow it by blueprint code.
+        assert!(
+            with(&|value| {
+                value.as_object_mut().unwrap().remove("when");
+            })
+            .is_ok()
+        );
+        assert!(with(&|value| value["when"]["blueprints"] = serde_json::json!([])).is_ok());
 
         let mut ungranted = assist(valid.clone());
         ungranted
@@ -3759,6 +3845,7 @@ mod tests {
             artifact: Some("client".into()),
             route: None,
             outlet: Some(UiOutlet::Navigation),
+            view: UiOutlet::Navigation.blueprint_view(),
             title: None,
             invoke: None,
             when: None,
@@ -3928,7 +4015,7 @@ mod tests {
                 "interactive": {"version": 1, "max_selection": 50}
             }]},
             "ui": [
-                {"id": "bulk", "version": 1, "kind": "action", "outlet": "explorer_bulk_action", "title": "Generate documents", "invoke": {"dialog": "dialog"}},
+                {"id": "bulk", "version": 1, "kind": "action", "outlet": "explorer_bulk_action", "view": "table", "title": "Generate documents", "invoke": {"dialog": "dialog"}},
                 {"id": "dialog", "version": 1, "kind": "dialog", "artifact": "client", "outlet": "action_dialog", "title": "Generate"}
             ]
         }))
@@ -3997,6 +4084,7 @@ mod tests {
             kind: UiContributionKind::Action,
             artifact: None,
             outlet: Some(UiOutlet::RecordAttributeAction),
+            view: UiOutlet::RecordAttributeAction.blueprint_view(),
             route: None,
             title: Some("Explain".into()),
             invoke: Some(ActionInvocation::Dialog("dialog".into())),
@@ -4159,6 +4247,7 @@ mod tests {
             version: 1,
             kind: UiContributionKind::Action,
             artifact: None,
+            view: outlet.blueprint_view(),
             outlet: Some(outlet),
             route: None,
             title: Some("Check".into()),
@@ -4191,6 +4280,58 @@ mod tests {
             manifest.validate(SUPPORTED_HOST_API).is_err()
         };
         let last = |manifest: &mut Manifest| manifest.ui.len() - 1;
+        // Every record and Explorer action names the blueprint view it
+        // belongs to, and only that one.
+        for outlet in [
+            UiOutlet::RecordAction,
+            UiOutlet::RecordHeaderAction,
+            UiOutlet::ExplorerRowAction,
+            UiOutlet::ExplorerBulkAction,
+            UiOutlet::ExplorerAction,
+        ] {
+            let mut placed = value.clone();
+            let permission = format!(
+                "client.{}",
+                serde_json::to_value(&outlet).unwrap().as_str().unwrap()
+            );
+            if !placed.permissions.contains(&permission) {
+                placed.permissions.push(permission);
+            }
+            placed.ui.push(action(
+                "placed",
+                outlet.clone(),
+                ActionInvocation::Command("check".into()),
+            ));
+            let result = placed.validate(SUPPORTED_HOST_API);
+            assert!(result.is_ok(), "{outlet:?} {result:?}");
+            let index = last(&mut placed);
+            let expected = outlet.blueprint_view().unwrap();
+            for view in [
+                None,
+                Some(if expected == ContributionView::Detail {
+                    ContributionView::Table
+                } else {
+                    ContributionView::Detail
+                }),
+            ] {
+                let mut wrong = placed.clone();
+                wrong.ui[index].view = view;
+                assert!(
+                    wrong.validate(SUPPORTED_HOST_API).is_err(),
+                    "{outlet:?} {view:?}"
+                );
+            }
+        }
+        // A field-note action is reached from its badge, on any blueprint.
+        assert!(invalid(&|m| {
+            m.ui.push(action(
+                "badge",
+                UiOutlet::RecordAttributeAction,
+                ActionInvocation::Command("check".into()),
+            ));
+            let index = last(m);
+            m.ui[index].view = Some(ContributionView::Detail);
+        }));
         assert!(invalid(&|m| {
             let index = last(m);
             m.ui[index].artifact = Some("client".into());
@@ -4240,6 +4381,7 @@ mod tests {
             kind: UiContributionKind::Tab,
             artifact: Some("client".into()),
             outlet: Some(UiOutlet::RecordTab),
+            view: UiOutlet::RecordTab.blueprint_view(),
             route: None,
             title: Some("Stock".into()),
             invoke: None,
@@ -4321,6 +4463,7 @@ mod tests {
                 kind: UiContributionKind::Route,
                 artifact: Some("client".into()),
                 outlet: None,
+                view: None,
                 route: None,
                 title: Some("Workbench".into()),
                 invoke: None,
@@ -4339,6 +4482,7 @@ mod tests {
                 kind: UiContributionKind::Navigation,
                 artifact: None,
                 outlet: None,
+                view: None,
                 route: Some("workbench".into()),
                 title: Some("Workbench".into()),
                 invoke: None,
@@ -4485,6 +4629,7 @@ mod tests {
             kind: UiContributionKind::Dialog,
             artifact: Some("client".into()),
             outlet: Some(UiOutlet::ActionDialog),
+            view: UiOutlet::ActionDialog.blueprint_view(),
             route: None,
             title: Some("Explore".into()),
             invoke: None,
@@ -4504,6 +4649,7 @@ mod tests {
             kind: UiContributionKind::Action,
             artifact: None,
             outlet: Some(UiOutlet::ExplorerAction),
+            view: UiOutlet::ExplorerAction.blueprint_view(),
             route: None,
             title: Some("Explore".into()),
             invoke: Some(ActionInvocation::Dialog("explorer-dialog".into())),
@@ -4551,6 +4697,7 @@ mod tests {
             kind: UiContributionKind::Cell,
             artifact: None,
             outlet: Some(UiOutlet::ExplorerTableCell),
+            view: UiOutlet::ExplorerTableCell.blueprint_view(),
             route: None,
             title: None,
             invoke: None,
@@ -4670,6 +4817,7 @@ mod tests {
             kind: UiContributionKind::Action,
             artifact: None,
             outlet: Some(UiOutlet::RecordAction),
+            view: UiOutlet::RecordAction.blueprint_view(),
             route: None,
             title: Some("Refresh".into()),
             invoke: Some(ActionInvocation::Command("refresh".into())),
@@ -4713,6 +4861,7 @@ mod tests {
             kind: UiContributionKind::Dialog,
             artifact: Some("client".into()),
             outlet: Some(UiOutlet::ActionDialog),
+            view: UiOutlet::ActionDialog.blueprint_view(),
             route: None,
             title: Some("Row".into()),
             invoke: None,
@@ -4731,6 +4880,7 @@ mod tests {
             kind: UiContributionKind::Action,
             artifact: None,
             outlet: Some(UiOutlet::ExplorerRowAction),
+            view: UiOutlet::ExplorerRowAction.blueprint_view(),
             route: None,
             title: Some("Open".into()),
             invoke: Some(ActionInvocation::Dialog("row-dialog".into())),

@@ -273,8 +273,8 @@ An export destination gives Attricat's export status, preview, retry, and resync
 "ui": [
   { "id": "workbench", "version": 1, "kind": "route", "artifact": "app", "title": "Formula workbench" },
   { "id": "workbench-nav", "version": 1, "kind": "navigation", "route": "workbench", "title": "Formula workbench" },
-  { "id": "stock", "version": 1, "kind": "tab", "artifact": "panel", "outlet": "record_tab", "title": "Stock", "icon": "tag", "when": { "blueprints": ["product"] } },
-  { "id": "recalc", "version": 1, "kind": "action", "outlet": "explorer_row_action", "title": "Recalculate…", "invoke": { "dialog": "recalc-dialog" } },
+  { "id": "stock", "version": 1, "kind": "tab", "artifact": "panel", "outlet": "record_tab", "view": "detail", "title": "Stock", "icon": "tag" },
+  { "id": "recalc", "version": 1, "kind": "action", "outlet": "explorer_row_action", "view": "table", "title": "Recalculate…", "invoke": { "dialog": "recalc-dialog" } },
   { "id": "recalc-dialog", "version": 1, "kind": "dialog", "artifact": "dialog", "outlet": "action_dialog", "title": "Recalculate" }
 ]
 ```
@@ -290,9 +290,11 @@ An export destination gives Attricat's export status, preview, retry, and resync
 | `tab` | `artifact`, `outlet`, `title` | A tab on the record page at `record_tab`, whose panel is the frame; optional `icon`, and `when` limited to `blueprints`. See [Record pages](/extensions/client/#record-pages). |
 | `cell` | `outlet`, `cell` | How Attricat draws a value in an `explorer_table_cell` column. No artifact. See [Table cells](#table-cells). |
 | `editor` | `artifact`, `outlet`, `editor` | An input control a blueprint field may use at `attribute_editor`; its artifact must be `client_native`. See [Attribute editors](#attribute-editors). |
-| `form_assist` | `outlet`, `when`, `form_assist` | Proposes values in a record form at `record_form` when watched fields change, through a server command. No artifact. See [Form assists](#form-assists). |
+| `form_assist` | `outlet`, `view`, `form_assist` | Proposes values in a record form at `record_form` when watched fields change, through a server command. No artifact. See [Form assists](#form-assists). |
 
 A contribution whose `artifact` is the `client_native` artifact is drawn natively; otherwise its artifact must be `client_frame`. Native UI is allowed at `record_tab`, `blueprint_attribute_configuration`, `blueprint_detail_panel`, `blueprint_panel`, `data_health_card`, `export_mapping`, `action_dialog` and `attribute_editor`; routes, embedded `navigation`, `blueprint_publish_check` and `audit_event_panel` stay Frame UI.
+
+A contribution at `record_action`, `record_header_action`, `record_tab` or `record_form` declares `"view": "detail"`, and one at `explorer_row_action`, `explorer_bulk_action` or `explorer_action` declares `"view": "table"`. It appears only on blueprints whose view lists it under `extensions`, so a generic extension never shows on blueprints it doesn't fit; tell your users which contributions to list, and where. See [Where actions appear](/extensions/client/#where-actions-appear). Other outlets don't take `view`.
 
 Each extension can use each frame outlet once, but may add several native contributions, actions, dialogs, table cells and editors, and up to two record tabs. Actions, dialogs and tabs use `version` 1. An action's `title` has at most 64 characters; a tab's, in every language, at most 24. A contribution with a `title` can add `translations`, keyed by a language code such as `pl` or `pt-BR`: `{ "pl": { "title": "…" } }`, at most 128 characters each.
 
@@ -388,7 +390,7 @@ A `form_assist` contribution proposes values while someone enters a new record, 
   "version": 1,
   "kind": "form_assist",
   "outlet": "record_form",
-  "when": { "blueprints": ["order_line"] },
+  "view": "detail",
   "form_assist": {
     "command": "propose-price",
     "watch": ["item", "quantity", "customer"],
@@ -397,12 +399,14 @@ A `form_assist` contribution proposes values while someone enters a new record, 
 }
 ```
 
-- `watch` and `proposes` each list 1 to 16 attribute codes, and `when` lists the blueprints the assist is for. The extension needs `client.form_assist` and `client.commands`.
-- A blueprint uses the assist by naming it; saving checks it against your enabled release. Watched fields must exist on the blueprint, and proposed fields must be editable values, not relationships or files:
+- `watch` and `proposes` each list 1 to 16 attribute codes; `when` may narrow the assist to `blueprints`. The extension needs `client.form_assist` and `client.commands`.
+- A blueprint runs the assist by listing it in its detail view. When your release is enabled, saving checks that watched fields exist on the blueprint and proposed fields are editable values, not relationships or files:
 
   ```yaml
-  form_assists:
-    - { extension_id: acme.pricing, id: customer_price, version: 1 }
+  views:
+    detail:
+      type: stack
+      extensions: [acme.pricing/customer_price]
   ```
 
 - The command receives `{ "version": 1, "assist", "blueprint": { "code", "id", "version" }, "record_id", "context_id", "values", "edited" }`. `values` holds only the watched and proposed fields, `null` when empty; a relationship is a list of `{ "record_id", "blueprint_code" }` the person can read. `edited` lists the proposed fields the person has changed. The command can read the catalog with your extension's own permissions.

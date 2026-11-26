@@ -24,6 +24,26 @@ views:
   dropdown_option:
     type: dropdown_option
     fields: [title]
+  table:
+    type: table
+    extensions: [acme.unified/bulk-action, acme.unified/check, acme.unified/probe-write]
+attributes:
+  - code: title
+    value_type: string
+"#;
+/// A blueprint whose views list none of the extension's actions.
+const UNLISTED_BLUEPRINT: &str = r#"
+format_version: 1
+code: unified_unlisted_item
+name: Unified unlisted item
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+  detail:
+    type: stack
+    extensions: [acme.unified/check]
 attributes:
   - code: title
     value_type: string
@@ -38,6 +58,9 @@ views:
   dropdown_option:
     type: dropdown_option
     fields: [title]
+  table:
+    type: table
+    extensions: [acme.unified/bulk-action, acme.unified/check, acme.unified/probe-write]
 attributes:
   - code: title
     value_type: string
@@ -69,6 +92,9 @@ views:
   dropdown_option:
     type: dropdown_option
     fields: [title]
+  table:
+    type: table
+    extensions: [acme.unified/bulk-action, acme.unified/check, acme.unified/probe-write]
 attributes:
   - code: title
     value_type: string
@@ -129,9 +155,9 @@ fn manifest() -> Value {
         },
         "ui": [
             {"id": "bulk", "version": 1, "kind": "dialog", "artifact": "client", "outlet": "action_dialog", "title": "Bulk"},
-            {"id": "bulk-action", "version": 1, "kind": "action", "outlet": "explorer_bulk_action", "title": "Tag", "invoke": {"dialog": "bulk"}},
-            {"id": "check", "version": 1, "kind": "action", "outlet": "explorer_bulk_action", "title": "Probe", "invoke": {"command": "probe"}},
-            {"id": "probe-write", "version": 1, "kind": "action", "outlet": "explorer_bulk_action", "title": "Probe writable", "invoke": {"command": "probe"}, "when": {"requires_write": true}}
+            {"id": "bulk-action", "version": 1, "kind": "action", "outlet": "explorer_bulk_action", "view": "table", "title": "Tag", "invoke": {"dialog": "bulk"}},
+            {"id": "check", "version": 1, "kind": "action", "outlet": "explorer_bulk_action", "view": "table", "title": "Probe", "invoke": {"command": "probe"}},
+            {"id": "probe-write", "version": 1, "kind": "action", "outlet": "explorer_bulk_action", "view": "table", "title": "Probe writable", "invoke": {"command": "probe"}, "when": {"requires_write": true}}
         ]
     })
 }
@@ -200,12 +226,15 @@ async fn one_unified_component_serves_commands_and_interactive_operations(pool: 
     }
     let (base, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
     // A host-rendered action calls only the command its manifest names.
-    let command = |command_id: &str| {
-        authenticated_client()
+    let command =
+        |command_id: &str| {
+            authenticated_client()
             .post(format!("{base}/extensions/{EXTENSION}/check/command"))
-            .json(&json!({"release_id": release, "command_id": command_id, "payload": {}}))
+            .json(&json!({"release_id": release, "command_id": command_id, "payload": {
+                "blueprint_id": blueprint.0, "blueprint_version": blueprint.1, "record_ids": []
+            }}))
             .send()
-    };
+        };
     let declared = command("probe").await.unwrap();
     assert_eq!(declared.status(), StatusCode::OK);
     assert_eq!(declared.json::<Value>().await.unwrap()["handler"], "probe");
@@ -238,6 +267,60 @@ async fn one_unified_component_serves_commands_and_interactive_operations(pool: 
             .unwrap()
             .status(),
         StatusCode::UNPROCESSABLE_ENTITY
+    );
+    // An action runs only where the blueprint's table view lists it: not for
+    // a revision or record whose views do not, even when the request names a
+    // revision that does. (`check` listed under detail does not count.)
+    let unlisted = published_blueprint(&repository, UNLISTED_BLUEPRINT).await;
+    let stranger = titled_record(&repository, unlisted, "Stranger").await;
+    let check = |payload: Value| {
+        authenticated_client()
+            .post(format!("{base}/extensions/{EXTENSION}/check/command"))
+            .json(&json!({"release_id": release, "command_id": "probe", "payload": payload}))
+            .send()
+    };
+    for payload in [
+        json!({"blueprint_id": unlisted.0, "blueprint_version": unlisted.1, "record_ids": []}),
+        json!({"blueprint_id": blueprint.0, "blueprint_version": blueprint.1, "record_ids": [stranger]}),
+        json!({"record_ids": []}),
+    ] {
+        assert_eq!(
+            check(payload.clone()).await.unwrap().status(),
+            StatusCode::FORBIDDEN,
+            "{payload}"
+        );
+    }
+    let run = |key: &str, blueprint: (Uuid, i64), record_ids: Vec<Uuid>| {
+        authenticated_client()
+            .post(format!("{base}/extensions/{EXTENSION}/bulk/operations"))
+            .json(&json!({
+                "release_id": release,
+                "operation_id": "tag",
+                "input": {},
+                "idempotency_key": key,
+                "selection": {
+                    "blueprint_id": blueprint.0,
+                    "blueprint_version": blueprint.1,
+                    "context_id": null,
+                    "record_ids": record_ids
+                }
+            }))
+            .send()
+    };
+    // The dialog runs where an action that opens it may.
+    assert_eq!(
+        run("unlisted-1", unlisted, vec![stranger])
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        run("unlisted-2", blueprint, vec![records[0], stranger])
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::FORBIDDEN
     );
     let response = authenticated_client()
         .post(format!("{base}/extensions/{EXTENSION}/bulk/operations"))

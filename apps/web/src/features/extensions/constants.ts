@@ -67,6 +67,29 @@ export const actionOutlets = [
 ] as const;
 export type ActionOutlet = (typeof actionOutlets)[number];
 
+/** Blueprint views whose `extensions` list places contributions. */
+export const contributionViews = {
+  detail: 'detail',
+  table: 'table',
+} as const;
+export type ContributionView =
+  (typeof contributionViews)[keyof typeof contributionViews];
+
+/**
+ * Outlets whose contributions a blueprint view places: they appear only on
+ * blueprints whose view lists them, so the workspace layout does not arrange
+ * them.
+ */
+export const viewPlacedOutlets: Readonly<Record<string, ContributionView>> = {
+  [extensionOutlets.recordAction]: contributionViews.detail,
+  [extensionOutlets.recordHeaderAction]: contributionViews.detail,
+  [extensionOutlets.recordTab]: contributionViews.detail,
+  [extensionOutlets.recordForm]: contributionViews.detail,
+  [extensionOutlets.explorerRowAction]: contributionViews.table,
+  [extensionOutlets.explorerBulkAction]: contributionViews.table,
+  [extensionOutlets.explorerAction]: contributionViews.table,
+};
+
 export const contributionKinds = {
   route: 'route',
   navigation: 'navigation',
@@ -236,6 +259,8 @@ export const layoutValidationMessages = {
   hiddenAndPromoted: 'A contribution cannot be hidden and promoted',
   invalidOutlet: 'Invalid outlet layout',
   multipleOutlets: 'A contribution can be configured in only one outlet',
+  viewPlacedOutlet:
+    'Blueprint views place record and Explorer contributions, not the workspace layout',
 } as const;
 
 // Components may read current record data or the exact blueprint revision named

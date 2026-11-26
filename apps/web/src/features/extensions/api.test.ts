@@ -25,6 +25,7 @@ const contribution = {
   version: 1,
   kind: 'embedded',
   outlet: 'record_tab',
+  view: 'detail',
   route: null,
   title: null,
   invoke: null,

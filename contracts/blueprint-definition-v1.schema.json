@@ -44,15 +44,14 @@
       "additionalProperties": {
         "$ref": "#/$defs/ViewDefinition"
       },
-      "description": "Named views: `dropdown_option`, `page_title`, `table`, `detail`, and `extension_layout`.\nThe `detail` layout also drives editing.",
+      "description": "Named views: `dropdown_option`, `page_title`, `table`, `detail`, and `explorer`.\nThe `detail` layout also drives editing.",
       "default": {},
       "x-attricat-key-suggestions": [
         "dropdown_option",
         "page_title",
         "detail",
         "table",
-        "explorer",
-        "extension_layout"
+        "explorer"
       ]
     },
     "record_schema": {
@@ -98,15 +97,6 @@
       },
       "description": "How creating a record changes a `balance` attribute of another\nrecord, such as a goods issue lowering a stock level. Applied in the\ncreate transaction. Record blueprints only.",
       "maxItems": 4,
-      "default": []
-    },
-    "form_assists": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/FormAssistReference"
-      },
-      "description": "Extension form assists that propose values in the record form when\nwatched fields change, such as a customer-specific price. Each must\nbe an enabled extension's `form_assist` for this blueprint. Proposals\nare unsaved form changes; writes outside the form do not call them.\nRecord blueprints only.",
-      "maxItems": 8,
       "default": []
     },
     "attributes": {
@@ -260,6 +250,15 @@
               ],
               "description": "Registered component that renders this block.",
               "default": null
+            },
+            "extensions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Extension contributions placed in this view, as\n`<extension-id>/<contribution-id>`, in display order. Only listed\ncontributions that target the view appear on its records.",
+              "maxItems": 32,
+              "x-attricat-reference": "view_extension"
             }
           },
           "required": [
@@ -306,7 +305,8 @@
               "items": {
                 "$ref": "#/$defs/ViewNode"
               },
-              "description": "Nested blocks."
+              "description": "Nested blocks.",
+              "default": []
             },
             "component": {
               "anyOf": [
@@ -319,13 +319,21 @@
               ],
               "description": "Registered component that renders this block.",
               "default": null
+            },
+            "extensions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Extension contributions placed in this view, as\n`<extension-id>/<contribution-id>`, in display order. Only listed\ncontributions that target the view appear on its records.",
+              "maxItems": 32,
+              "x-attricat-reference": "view_extension"
             }
           },
           "required": [
-            "type",
-            "children"
+            "type"
           ],
-          "description": "Blocks stacked vertically."
+          "description": "Blocks stacked vertically. A `detail` stack without children keeps\nthe default record layout and only lists `extensions`."
         },
         {
           "type": "object",
@@ -353,6 +361,15 @@
               ],
               "description": "Registered component that renders this block.",
               "default": null
+            },
+            "extensions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Extension contributions placed in this view, as\n`<extension-id>/<contribution-id>`, in display order. Only listed\ncontributions that target the view appear on its records.",
+              "maxItems": 32,
+              "x-attricat-reference": "view_extension"
             }
           },
           "required": [
@@ -387,6 +404,15 @@
               ],
               "description": "Registered component that renders this block.",
               "default": null
+            },
+            "extensions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Extension contributions placed in this view, as\n`<extension-id>/<contribution-id>`, in display order. Only listed\ncontributions that target the view appear on its records.",
+              "maxItems": 32,
+              "x-attricat-reference": "view_extension"
             }
           },
           "required": [
@@ -421,6 +447,15 @@
               ],
               "description": "Registered component that renders this block.",
               "default": null
+            },
+            "extensions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Extension contributions placed in this view, as\n`<extension-id>/<contribution-id>`, in display order. Only listed\ncontributions that target the view appear on its records.",
+              "maxItems": 32,
+              "x-attricat-reference": "view_extension"
             }
           },
           "required": [
@@ -455,6 +490,15 @@
               ],
               "description": "Registered component that renders this block.",
               "default": null
+            },
+            "extensions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Extension contributions placed in this view, as\n`<extension-id>/<contribution-id>`, in display order. Only listed\ncontributions that target the view appear on its records.",
+              "maxItems": 32,
+              "x-attricat-reference": "view_extension"
             }
           },
           "required": [
@@ -462,40 +506,6 @@
             "sections"
           ],
           "description": "Blocks split into collapsible sections."
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "extension_layout"
-            },
-            "version": {
-              "type": "integer",
-              "format": "uint32",
-              "minimum": 0,
-              "description": "Layout format version. Only `1` is supported.",
-              "const": 1
-            },
-            "outlets": {
-              "type": "object",
-              "additionalProperties": {
-                "$ref": "#/$defs/ExtensionOutletLayout"
-              },
-              "description": "Layouts keyed by record outlet: `record_tab` or\n`record_action`.",
-              "x-attricat-key-suggestions": [
-                "record_tab",
-                "record_action"
-              ]
-            }
-          },
-          "required": [
-            "type",
-            "version",
-            "outlets"
-          ],
-          "description": "A versioned layout override for record-owned extension surfaces."
         }
       ],
       "description": "A named view. `dropdown_option` labels relationship choices, `page_title`\nnames the record page, `table` configures Explorer columns, `explorer`\nsets Explorer defaults, and layout roots arrange `detail` and `edit`."
@@ -1084,29 +1094,6 @@
       ],
       "description": "How an `incoming_relationship_list` shows the records linking to a record."
     },
-    "ExtensionOutletLayout": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "order": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "Contribution keys (`<extension-id>:<contribution-id>`) in display order.",
-          "default": []
-        },
-        "hidden": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "Contribution keys hidden in this outlet.",
-          "default": []
-        }
-      },
-      "description": "Host-owned per-blueprint extension layout. It is declarative data only;\ncontribution keys cannot select DOM nodes or invoke extension code."
-    },
     "PublicationPolicy": {
       "type": "object",
       "additionalProperties": false,
@@ -1472,32 +1459,6 @@
         "to"
       ],
       "description": "A status transition that applies a movement: of the record itself, or,\nwith `relationship`, of the record it links to, such as the production\norder of an order line."
-    },
-    "FormAssistReference": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "extension_id": {
-          "type": "string",
-          "description": "The enabled extension that declares the assist."
-        },
-        "id": {
-          "type": "string",
-          "description": "The `form_assist` contribution's ID in that extension."
-        },
-        "version": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0,
-          "description": "The contribution's version."
-        }
-      },
-      "required": [
-        "extension_id",
-        "id",
-        "version"
-      ],
-      "description": "An extension's `form_assist` that proposes values in this blueprint's\nrecord form. Saving checks it against the enabled extension releases, as\na field's `editor` is checked."
     },
     "RawAttributeDeclaration": {
       "type": "object",

@@ -70,6 +70,7 @@ const action = (
   id,
   kind: 'action',
   outlet: 'explorer_row_action',
+  view: null,
   release_id: '11111111-1111-4111-8111-111111111111',
   route: null,
   title: `Title ${id}`,
@@ -111,6 +112,7 @@ describe('ExtensionActionMenuItems', () => {
         { dialog: 'documents' },
         {
           outlet: 'explorer_bulk_action',
+          view: null,
         },
       ),
       action('panel', null, { kind: 'panel' }),
@@ -232,6 +234,7 @@ describe('ExtensionActionButtons', () => {
           { dialog: 'documents' },
           {
             outlet: 'record_action',
+            view: null,
             display_order: index,
           },
         ),

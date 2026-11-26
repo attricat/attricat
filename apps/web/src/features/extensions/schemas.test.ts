@@ -15,7 +15,7 @@ const validLayout = {
       hidden: [],
       promoted: ['acme.navigation:entry'],
     },
-    record_tab: {
+    blueprint_panel: {
       order: ['acme.inventory:summary'],
       hidden: ['acme.legacy:summary'],
     },
@@ -97,7 +97,7 @@ describe('workspaceExtensionLayoutSchema', () => {
     {
       ...validLayout,
       outlets: {
-        record_tab: {
+        blueprint_panel: {
           order: ['acme.inventory:summary'],
           hidden: ['acme.inventory:summary'],
         },
@@ -116,14 +116,21 @@ describe('workspaceExtensionLayoutSchema', () => {
     {
       ...validLayout,
       outlets: {
-        record_action: { order: ['not-a-key'], hidden: [] },
+        blueprint_panel: { order: ['not-a-key'], hidden: [] },
       },
     },
     {
       ...validLayout,
       outlets: {
-        record_action: { order: ['acme.shared:action'], hidden: [] },
-        record_tab: { order: ['acme.shared:action'], hidden: [] },
+        blueprint_panel: { order: ['acme.shared:action'], hidden: [] },
+        data_health_card: { order: ['acme.shared:action'], hidden: [] },
+      },
+    },
+    // Blueprint views place record and Explorer contributions.
+    {
+      ...validLayout,
+      outlets: {
+        record_tab: { order: ['acme.inventory:summary'], hidden: [] },
       },
     },
   ])('rejects malformed or ambiguous layout %#', (layout) => {

@@ -88,6 +88,68 @@ describe('definition reference targets', () => {
     ]);
   });
 
+  it('warns about view extensions that will not appear in their view', async () => {
+    const text = `format_version: 1
+code: product
+name: Product
+kind: record
+attributes:
+  - code: title
+    value_type: string
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+  detail:
+    type: stack
+    extensions: [acme.stock/recalculate, acme.stock/bulk, acme.old/legacy, acme.later/assist]
+`;
+    const warnings = await unknownReferences(definitionKinds.blueprint, {
+      outline: scanYaml(text),
+      references: {
+        ...references,
+        viewExtensions: vi.fn(async () => [
+          {
+            key: 'acme.stock/recalculate',
+            extensionName: 'Stock',
+            title: 'Recalculate',
+            view: 'detail' as const,
+          },
+          {
+            key: 'acme.stock/bulk',
+            extensionName: 'Stock',
+            title: 'Recalculate all',
+            view: 'table' as const,
+          },
+          {
+            key: 'acme.old/legacy',
+            extensionName: 'Old',
+            title: 'Legacy',
+            view: null,
+          },
+        ]),
+      },
+    });
+    // An extension that is not enabled is listed for later, without a warning.
+    expect(
+      warnings.map(({ message, range }) => ({
+        message,
+        source: text.slice(range.start, range.end),
+      })),
+    ).toEqual([
+      {
+        message:
+          '“acme.stock/bulk” belongs to the table view, so it will not appear here.',
+        source: 'acme.stock/bulk',
+      },
+      {
+        message:
+          '“acme.old/legacy” does not declare a blueprint view, so it will not appear here.',
+        source: 'acme.old/legacy',
+      },
+    ]);
+  });
+
   it('finds attribute declarations in the document', () => {
     const text = definition('brand');
     const { outline, target } = at(text, 'maker');

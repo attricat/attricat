@@ -46,7 +46,6 @@ Record blueprints use `kind: record`.
 | `unique_keys` | list of mappings | No | Business keys whose values must be unique. Record blueprints only. See [Unique keys](#unique-keys). |
 | `connector_jobs` | list of mappings | No | Scheduled or manual import and export jobs run by a connector extension. Record blueprints only. See [Connector jobs](#connector-jobs). |
 | `movements` | list of mappings | No | How creating a record changes a balance on another record, such as a goods issue lowering a stock level. Up to 4. Record blueprints only. See [Balances and movements](#balances-and-movements). |
-| `form_assists` | list of mappings | No | Extension assists that propose values in the record form, each `{ extension_id, id, version }`. Up to 8. Record blueprints only. See [Form assists](/extensions/manifest/#form-assists). |
 | `extensions` | mapping | No | Free-form data for extensions, namespaced under `extensions.<extension-id>`. The core compiler ignores it; extensions read it from the stored definition. |
 
 ## Attributes
@@ -444,7 +443,6 @@ A selected attribute keeps all of the mixin's settings. To pick up changes in th
 | `edit` | Deprecated and ignored by the web app. Still accepted, and edit components in it are still validated. | A layout block |
 | `table` | Explorer columns. | `table` |
 | `explorer` | Explorer defaults, such as the field the **Browse by** panel lists. | `explorer` |
-| `extension_layout` | Order and visibility of extension contributions on this blueprint's record pages. | `extension_layout` |
 
 When `detail` or `table` is missing, the web app lists attributes in declaration order.
 
@@ -581,27 +579,26 @@ Where a `detail` field is editable, the web app uses the input that goes with it
 
 An extension cell's ID and version must match a [table cell](/extensions/manifest/#table-cells) declared by an enabled extension for the column's value type, and its `props` must match the cell's declared prop types.
 
-### `extension_layout`
+### `extensions`
+
+`detail` and `table` may list the extension contributions that appear on this blueprint's records:
 
 ```yaml
 views:
-  extension_layout:
-    type: extension_layout
-    version: 1
-    outlets:
-      record_tab:
-        order: ['acme.inventory:summary']
-        hidden: ['acme.legacy:panel']
+  detail:
+    type: stack
+    extensions: [acme.stock/recalculate, acme.pricing/customer_price]
+  table:
+    type: table
+    extensions: [acme.stock/recalculate-selected]
 ```
 
 | Key | Description |
 | --- | --- |
-| `version` | Must be `1`. |
-| `outlets` | Keyed by `record_tab` or `record_action`. |
-| `outlets.<outlet>.order` | Contribution keys (`<extension-id>:<contribution-id>`) in display order. |
-| `outlets.<outlet>.hidden` | Contribution keys to hide. |
+| `views.detail.extensions` | Record actions, header actions, record tabs and form assists, as `<extension-id>/<contribution-id>`, in display order. Up to 32. |
+| `views.table.extensions` | Explorer row, selection and toolbar actions, in the same form. Up to 32. |
 
-An outlet you list here replaces the workspace default for that outlet on this blueprint's records. Outlets you leave out keep the workspace layout. Keys for extensions that are not installed are kept, so a layout survives an extension being disabled and re-enabled.
+Only contributions that declare the view appear in it. A `detail` stack without `children` and a `table` without `columns` keep the default layout and columns. Entries for extensions that are not installed or enabled are kept and ignored. Saving checks an enabled form assist's watched and proposed fields against the blueprint. Record blueprints only.
 
 ## Publication
 

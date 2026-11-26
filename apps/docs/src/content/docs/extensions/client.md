@@ -78,7 +78,7 @@ Add a `navigation` contribution to link to it from the sidebar. Workspace admini
 | `record_header_action` | `action` | `client.record_header_action` | The [action context](#actions), with this record |
 | `record_attribute_action` | `action` | `client.record_field_notes` | The [action context](#actions), with this record and the field's `attribute_code`. Reached only from a [field note](#field-notes) badge. |
 
-Each `record_tab` contribution is a tab after the record's own tabs, with your `title` and `icon`; `when.blueprints` limits which records show it. After three extension tabs the rest are in a **More** menu, and administrators can reorder or hide them with the `record_tab` layout. The frame mounts the first time its tab is opened and stays mounted while the record is open. The open tab is part of the record's address (`?tab=<extension-id>:<contribution-id>`), and `attricat.navigate({ record_id, tab })` leads there. Record actions are buttons below the fields, four before an overflow menu; header actions are items of the record's **Actions** menu. Fields and files carry no frames; describe them with [field notes](#field-notes).
+Each `record_tab` contribution is a tab after the record's own tabs, with your `title` and `icon`, on blueprints whose detail view lists it ([where actions appear](#where-actions-appear) applies to tabs too); `when.blueprints` can narrow it further. After three extension tabs the rest are in a **More** menu. The frame mounts the first time its tab is opened and stays mounted while the record is open. The open tab is part of the record's address (`?tab=<extension-id>:<contribution-id>`), and `attricat.navigate({ record_id, tab })` leads there. Record actions are buttons below the fields, four before an overflow menu; header actions are items of the record's **Actions** menu. Fields and files carry no frames; describe them with [field notes](#field-notes).
 
 ### Field notes
 
@@ -141,10 +141,10 @@ An action is a menu item or button that Attricat draws itself. You declare its t
 
 ```json
 { "id": "check", "version": 1, "kind": "action", "outlet": "record_header_action",
-  "title": "Check formulas", "icon": "check", "invoke": { "command": "check-formulas" },
+  "view": "detail", "title": "Check formulas", "icon": "check", "invoke": { "command": "check-formulas" },
   "translations": { "pl": { "title": "Sprawdź formuły" } } }
 { "id": "recalculate-now", "version": 1, "kind": "action", "outlet": "explorer_bulk_action",
-  "title": "Recalculate now", "invoke": { "operation": { "id": "recalculate", "input": { "mode": "write" } } },
+  "view": "table", "title": "Recalculate now", "invoke": { "operation": { "id": "recalculate", "input": { "mode": "write" } } },
   "when": { "requires_write": true, "max_records": 50 },
   "confirm": { "message": "Write recalculated values to the selected records?" } }
 ```
@@ -157,13 +157,29 @@ An action is a menu item or button that Attricat draws itself. You declare its t
 
 | Optional field | Does |
 | --- | --- |
-| `when` | Offers the action only where it applies: `blueprints` (codes), `min_records`, `max_records` (at most 50), `has_tags`, `missing_tags`, `requires_write`. Attricat also refuses commands and runs of a `requires_write` action for records the user can't change. An `explorer_action` names no records, so it can't use `requires_write`. |
+| `when` | Narrows where the action is offered, on top of the blueprint views that list it: `blueprints` (codes), `min_records`, `max_records` (at most 50), `has_tags`, `missing_tags`, `requires_write`. Attricat also refuses commands and runs of a `requires_write` action for records the user can't change. An `explorer_action` names no records, so it can't use `requires_write`. |
 | `confirm` | `{ "message", "destructive" }`: Attricat asks before running the action. |
 | `accepts` | Media types of a file Attricat asks for before starting an operation action, such as `["text/csv"]`; up to 16. See [File input](/extensions/operations/#file-input). |
 | `icon` | One of `alert`, `calculator`, `check`, `clock`, `download`, `file`, `info`, `link`, `refresh`, `search`, `send`, `settings`, `sparkles`, `tag`, `wand`. |
 | `translations` | Titles in other languages, such as `{ "pl": { "title": "…" } }`. Any contribution with a title can have them. |
 
-You may add several actions to the same outlet. End a title with `…` when the action opens a dialog. Attricat also lists the actions a page offers in its command palette (Ctrl/⌘+K). Your [field notes](#field-notes) can disable an action with a reason, or hide it, for one record.
+You may add several actions to the same outlet. End a title with `…` when the action opens a dialog.
+
+#### Where actions appear
+
+Every action except a field note's (`record_attribute_action`) declares the blueprint `view` it belongs to: `detail` for record actions and header actions (and record tabs and form assists), `table` for Explorer row, selection and toolbar actions. Your extension can't know which blueprints a workspace uses, so a blueprint lists the contributions it wants under `extensions` in that view:
+
+```yaml
+views:
+  detail:
+    type: stack
+    extensions: [acme.tools/check]
+  table:
+    type: table
+    extensions: [acme.tools/recalculate-now]
+```
+
+An action appears only on blueprints whose view lists it, in the list's order, and Attricat refuses its command, operation or dialog run for records whose blueprint revision doesn't list it. A blueprint can list your extension before it is installed. Document which contributions users should list, and in which view. Attricat also lists the actions a page offers in its command palette (Ctrl/⌘+K). Your [field notes](#field-notes) can disable an action with a reason, or hide it, for one record.
 
 The command receives, and the dialog gets as `attricat.context`, the action context:
 
@@ -224,6 +240,6 @@ Every other context object contains `context_version: 1`.
 
 ## Ordering and removal
 
-Contributions to the same outlet are ordered by extension ID, then contribution ID, unless a workspace administrator or a blueprint sets a layout. Disabling, quarantining, upgrading, or revoking a grant removes contributions; open frames poll for this and are closed within 15 seconds, and their pending calls are rejected.
+Record and Explorer contributions follow the order their blueprint view lists them in. Contributions to other outlets are ordered by extension ID, then contribution ID, unless a workspace administrator sets a layout. Disabling, quarantining, upgrading, or revoking a grant removes contributions; open frames poll for this and are closed within 15 seconds, and their pending calls are rejected.
 
 If a frame fails to start, the host shows a warning in its place without exposing your code or host details.

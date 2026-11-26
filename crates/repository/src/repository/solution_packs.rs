@@ -361,8 +361,14 @@ fn installed_extension_snapshot(
     // Historical/synthetic requirement-only rows may not have a decodable
     // manifest. They can still satisfy the pre-existing version/configuration
     // requirement contract, but cannot prove a contribution declaration.
-    let contributions = serde_json::from_value::<Manifest>(installed.manifest)
-        .map(|manifest| manifest_contributions(&installed.extension_id, &manifest))
+    let manifest = serde_json::from_value::<Manifest>(installed.manifest).ok();
+    let contributions = manifest
+        .as_ref()
+        .map(|manifest| manifest_contributions(&installed.extension_id, manifest))
+        .unwrap_or_default();
+    let contribution_views = manifest
+        .as_ref()
+        .map(|manifest| manifest_contribution_views(&installed.extension_id, manifest))
         .unwrap_or_default();
     let policy_compatible =
         extension_policy::allows(&installed.extension_id, installed.installed_release_id);
@@ -375,6 +381,7 @@ fn installed_extension_snapshot(
             configuration: installed.configuration,
             policy_compatible,
             contributions,
+            contribution_views,
             pending_install: false,
         },
     )
@@ -392,8 +399,26 @@ fn pending_extension_snapshot(release: &ResolvedExtensionRelease) -> InstalledEx
             release.installed_release_id,
         ),
         contributions: manifest_contributions(&release.extension_id, &release.manifest),
+        contribution_views: manifest_contribution_views(&release.extension_id, &release.manifest),
         pending_install: true,
     }
+}
+
+/// Stable contribution keys mapped to the blueprint view each declares.
+fn manifest_contribution_views(
+    extension_id: &str,
+    manifest: &Manifest,
+) -> std::collections::BTreeMap<String, Option<String>> {
+    manifest
+        .ui
+        .iter()
+        .map(|contribution| {
+            (
+                format!("{extension_id}:{}", contribution.id),
+                contribution.view.map(|view| view.as_str().to_owned()),
+            )
+        })
+        .collect()
 }
 
 /// Stable contribution keys mapped to their manifest-declared outlets.
@@ -622,11 +647,27 @@ async fn planned_extension_snapshots<'r>(
     ),
     RepositoryError,
 > {
+    // Extensions a blueprint view lists are read too, so the plan can warn
+    // about a listed contribution that targets another view.
     let extension_ids = pack
         .manifest()
         .extensions
         .iter()
         .map(|requirement| requirement.id.clone())
+        .chain(
+            pack.manifest()
+                .resources
+                .blueprints
+                .iter()
+                .filter_map(|resource| pack.blueprint(&resource.key))
+                .flat_map(|blueprint| {
+                    blueprint.view_extensions().iter().filter_map(|(_, entry)| {
+                        attricat_blueprint::view_extension_key(entry).map(|(id, _)| id.to_owned())
+                    })
+                }),
+        )
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
         .collect::<Vec<_>>();
     let mut installed_extensions: std::collections::BTreeMap<_, _> = if extension_ids.is_empty() {
         Default::default()
@@ -2568,8 +2609,6 @@ struct BlueprintPayload {
     definition: String,
     version: i64,
     publication: BlueprintPublication,
-    #[serde(default)]
-    extension_contributions: Vec<ExtensionContributionSnapshotPayload>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -4262,11 +4301,6 @@ impl AttricatRepository {
                             "persisted blueprint version is invalid".into(),
                         ));
                     }
-                    self.revalidate_extension_contributions(
-                        &mut tx,
-                        &payload.extension_contributions,
-                    )
-                    .await?;
                     let created = self
                         .create_blueprint_in_transaction(
                             &mut tx,

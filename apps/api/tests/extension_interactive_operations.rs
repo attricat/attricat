@@ -23,6 +23,9 @@ views:
   dropdown_option:
     type: dropdown_option
     fields: [title]
+  table:
+    type: table
+    extensions: [acme.interactive/row, acme.interactive/summarize-now, acme.importer/import-csv, acme.importer/sync, acme.importer/no-file]
 attributes:
   - code: title
     value_type: string
@@ -36,6 +39,9 @@ views:
   dropdown_option:
     type: dropdown_option
     fields: [title]
+  table:
+    type: table
+    extensions: [acme.interactive/row, acme.interactive/summarize-now, acme.importer/import-csv, acme.importer/sync, acme.importer/no-file]
 attributes:
   - code: title
     value_type: string
@@ -86,8 +92,8 @@ fn archive(extension_id: &str, server: &[u8]) -> Vec<u8> {
         }]},
         "ui": [
             {"id": "bulk", "version": 1, "kind": "dialog", "artifact": "client", "outlet": "action_dialog", "title": "Bulk"},
-            {"id": "row", "version": 1, "kind": "action", "outlet": "explorer_row_action", "title": "Summarize", "invoke": {"dialog": "bulk"}},
-            {"id": "summarize-now", "version": 1, "kind": "action", "outlet": "explorer_row_action", "title": "Summarize now",
+            {"id": "row", "version": 1, "kind": "action", "outlet": "explorer_row_action", "view": "table", "title": "Summarize", "invoke": {"dialog": "bulk"}},
+            {"id": "summarize-now", "version": 1, "kind": "action", "outlet": "explorer_row_action", "view": "table", "title": "Summarize now",
              "invoke": {"operation": {"id": "summarize", "input": {"template": "summary"}}}, "when": {"requires_write": true}}
         ]
     }))
@@ -159,11 +165,11 @@ fn importer_archive(server: &[u8]) -> Vec<u8> {
             "interactive": {"version": 1, "max_selection": 50}
         }]},
         "ui": [
-            {"id": "import-csv", "version": 1, "kind": "action", "outlet": "explorer_action", "title": "Import CSV",
+            {"id": "import-csv", "version": 1, "kind": "action", "outlet": "explorer_action", "view": "table", "title": "Import CSV",
              "accepts": ["text/csv"], "invoke": {"operation": {"id": "import", "input": {}}}},
-            {"id": "sync", "version": 1, "kind": "action", "outlet": "explorer_action", "title": "Sync",
+            {"id": "sync", "version": 1, "kind": "action", "outlet": "explorer_action", "view": "table", "title": "Sync",
              "invoke": {"operation": {"id": "import", "input": {}}}},
-            {"id": "no-file", "version": 1, "kind": "action", "outlet": "explorer_bulk_action", "title": "Summarize",
+            {"id": "no-file", "version": 1, "kind": "action", "outlet": "explorer_bulk_action", "view": "table", "title": "Summarize",
              "invoke": {"operation": {"id": "summarize", "input": {}}}}
         ]
     }))
@@ -1708,6 +1714,9 @@ views:
   dropdown_option:
     type: dropdown_option
     fields: [title]
+  table:
+    type: table
+    extensions: [acme.interactive/row, acme.interactive/summarize-now, acme.importer/import-csv, acme.importer/sync, acme.importer/no-file]
 attributes:
   - code: title
     value_type: string

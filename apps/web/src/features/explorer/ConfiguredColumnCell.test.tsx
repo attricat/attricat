@@ -74,6 +74,7 @@ describe('declared extension cells', () => {
     version: 1,
     kind: 'cell',
     outlet: 'explorer_table_cell',
+    view: null,
     route: null,
     title: null,
     invoke: null,

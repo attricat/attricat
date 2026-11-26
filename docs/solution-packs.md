@@ -248,6 +248,18 @@ A pack does not change extensions that are already installed:
 Extensions a pack installed are ordinary installations. Manage, disable, or
 remove them through normal extension administration.
 
+A pack's blueprints may list record and Explorer extension contributions in
+`views.detail.extensions` and `views.table.extensions`
+([placement](extensions.md#where-record-and-explorer-contributions-appear)).
+The entries need no extension requirement and stay in the created blueprint
+even when the extension is not installed; they take effect once it is enabled.
+Each blueprint action's `summary.view_extensions` lists them with a `status`:
+`available`, `extension_not_installed`, `extension_not_enabled` or
+`contribution_missing` (ignored until that changes), or, with `warning: true`,
+`contribution_targets_other_view` or `contribution_has_no_view`, which will not
+appear where they are listed. A pack's workspace extension layout may only
+arrange shared outlets, such as navigation and panels.
+
 ## Apply and verify
 
 ```sh

@@ -602,6 +602,7 @@ fn validates_and_plans_extension_layout_item_level_merge() {
         configuration: json!({}),
         policy_compatible: true,
         contributions: BTreeMap::from([("acme.shop:nav".to_owned(), "navigation".to_owned())]),
+        contribution_views: BTreeMap::new(),
         pending_install: false,
     };
     let workspace = |extension_layout| PlanningWorkspaceSnapshot {
@@ -748,224 +749,185 @@ fn validates_and_plans_extension_layout_item_level_merge() {
 }
 
 #[test]
-fn blueprint_layout_skips_optional_unavailable_contributions_and_blocks_required() {
-    let blueprint = with_additional_views(
-        PRODUCT_BLUEPRINT,
-        br#"
-views:
-  extension_layout:
-    type: extension_layout
-    version: 1
-    outlets:
-      record_action:
-        order: ['acme.shop:action']
-        hidden: []
-"#,
-    );
-    for (required, expected_action) in [
-        (false, PlanActionKind::Create),
-        (true, PlanActionKind::Blocked),
-    ] {
-        let mut manifest = manifest_value();
-        manifest["resources"]["blueprints"][0]["sha256"] = json!(digest(&blueprint));
-        manifest["extensions"] = json!([{
-            "key": "extensions/shop",
-            "id": "acme.shop",
-            "version": "^1.0",
-            "required": required,
-        }]);
-        let mut files = valid_files();
-        files[0] = (files[0].0, &blueprint);
-        let pack = ValidatedSolutionPack::from_tar_zst(&archive(&manifest, &files)).unwrap();
-        let plan = build_solution_pack_plan(
-            &pack,
-            "shop",
-            BlueprintPublication::Draft,
-            &PlanningWorkspaceSnapshot {
-                workspace_id: uuid::Uuid::nil(),
-                physical_codes: BTreeSet::from(["default".to_owned()]),
-                existing_blueprints: BTreeMap::new(),
-                existing_presentation_assets: BTreeMap::new(),
-                installed_extensions: BTreeMap::new(),
-                explore_navigation: Vec::new(),
-                explore_navigation_valid: true,
-                extension_layout: json!({"version":1,"outlets":{}}),
-                extension_layout_valid: true,
-                role_codes: BTreeSet::new(),
-                published_record_codes: BTreeSet::new(),
-                seed: Default::default(),
-            },
-        )
-        .unwrap();
-        let action = plan
-            .actions
-            .iter()
-            .find(|action| action.logical_key == "blueprints/product")
-            .unwrap();
-        assert_eq!(action.action, expected_action);
-        if !required {
-            assert!(
-                !action.normalized_payload.as_ref().unwrap()["definition"]
-                    .as_str()
-                    .unwrap()
-                    .contains("acme.shop:action")
-            );
-            assert_eq!(action.summary["extension_layout"][0]["outcome"], "skip");
-        } else {
-            for contributions in [
-                BTreeMap::new(),
-                BTreeMap::from([("acme.shop:action".to_owned(), "record_tab".to_owned())]),
-            ] {
-                let mapped = build_solution_pack_plan(
-                    &pack,
-                    "shop",
-                    BlueprintPublication::Draft,
-                    &PlanningWorkspaceSnapshot {
-                        workspace_id: uuid::Uuid::nil(),
-                        physical_codes: BTreeSet::from(["shop_product".to_owned()]),
-                        existing_presentation_assets: BTreeMap::new(),
-                        existing_blueprints: BTreeMap::from([(
-                            "blueprints/product".to_owned(),
-                            ExistingBlueprintSnapshot {
-                                id: uuid::Uuid::from_u128(100),
-                                code: "shop_product".to_owned(),
-                                version: 1,
-                                kind: "record".to_owned(),
-                                canonical_definition_hash: "0".repeat(64),
-                                definition_hash: "0".repeat(64),
-                            },
-                        )]),
-                        installed_extensions: BTreeMap::from([(
-                            "acme.shop".to_owned(),
-                            InstalledExtensionSnapshot {
-                                installed_release_id: uuid::Uuid::from_u128(101),
-                                version: "1.0.0".to_owned(),
-                                state: ExtensionState::Enabled,
-                                configuration: json!({}),
-                                policy_compatible: true,
-                                contributions,
-                                pending_install: false,
-                            },
-                        )]),
-                        explore_navigation: Vec::new(),
-                        explore_navigation_valid: true,
-                        extension_layout: json!({"version":1,"outlets":{}}),
-                        extension_layout_valid: true,
-                        role_codes: BTreeSet::new(),
-                        published_record_codes: BTreeSet::from(["shop_product".to_owned()]),
-                        seed: Default::default(),
-                    },
-                )
-                .unwrap();
-                let mapped_product = mapped
-                    .actions
-                    .iter()
-                    .find(|action| action.logical_key == "blueprints/product")
-                    .unwrap();
-                assert_eq!(
-                    (mapped_product.action, mapped_product.reason_code),
-                    (
-                        PlanActionKind::Blocked,
-                        "extension_contribution_unavailable"
-                    )
-                );
-                assert_eq!(
-                    mapped.extension_requirements[0].status,
-                    RequirementStatus::Satisfied
-                );
-                assert!(!mapped.ready);
-            }
-        }
-    }
-}
-
-#[test]
-fn workspace_layout_accepts_every_manifest_outlet_and_both_primary_lists() {
+fn workspace_layout_accepts_shared_outlets_and_both_primary_lists() {
+    let layout = |outlet: &str, hidden: bool| {
+        serde_json::to_vec(&json!({
+            "format_version": 1,
+            "kind": "extension_layout",
+            "entries": [{
+                "contribution": "acme.shop:item",
+                "outlet": outlet,
+                "hidden": hidden,
+                "required": true,
+            }],
+        }))
+        .unwrap()
+    };
     for outlet in [
         "navigation",
-        "record_tab",
         "blueprint_attribute_configuration",
-        "record_action",
-        "explorer_row_action",
         "explorer_table_cell",
         "blueprint_detail_panel",
-        "explorer_action",
-        "explorer_bulk_action",
-        "record_header_action",
         "blueprint_panel",
         "blueprint_publish_check",
         "audit_event_panel",
         "data_health_card",
     ] {
         for hidden in [false, true] {
-            let layout = serde_json::to_vec(&json!({
-                "format_version": 1,
-                "kind": "extension_layout",
-                "entries": [{
-                    "contribution": "acme.shop:item",
-                    "outlet": outlet,
-                    "hidden": hidden,
-                    "required": true,
-                }],
-            }))
+            ValidatedSolutionPack::from_tar_zst(&archive_with_extension_layout(
+                &layout(outlet, hidden),
+                true,
+            ))
             .unwrap();
-            ValidatedSolutionPack::from_tar_zst(&archive_with_extension_layout(&layout, true))
-                .unwrap();
         }
+    }
+    // Blueprint views place record and Explorer contributions.
+    for outlet in [
+        "record_tab",
+        "record_action",
+        "record_header_action",
+        "explorer_row_action",
+        "explorer_action",
+        "explorer_bulk_action",
+    ] {
+        let error = ValidatedSolutionPack::from_tar_zst(&archive_with_extension_layout(
+            &layout(outlet, false),
+            true,
+        ))
+        .unwrap_err()
+        .to_string();
+        assert!(
+            error.contains("placed by blueprint views"),
+            "{outlet}: {error}"
+        );
     }
 }
 
 #[test]
-fn blueprint_layout_contribution_evidence_order_is_deterministic() {
+fn planner_reports_view_extensions_without_requiring_their_extensions() {
+    // The pack lists contributions of an extension it neither requires nor
+    // installs: the host ignores them until the extension is enabled.
     let blueprint = with_additional_views(
         PRODUCT_BLUEPRINT,
         br#"
 views:
-  extension_layout:
-    type: extension_layout
-    version: 1
-    outlets:
-      record_tab:
-        order: ['acme.shop:preview']
-        hidden: []
-      record_action:
-        order: ['acme.shop:z_action']
-        hidden: ['acme.shop:a_action']
+  detail:
+    type: stack
+    extensions: [acme.shop/recalculate, acme.shop/bulk_issue, acme.shop/legacy, acme.later/assist]
+  table:
+    type: table
+    extensions: [acme.shop/bulk_issue]
 "#,
     );
     let mut manifest = manifest_value();
     manifest["resources"]["blueprints"][0]["sha256"] = json!(digest(&blueprint));
-    manifest["extensions"] = json!([{
-        "key": "extensions/shop",
-        "id": "acme.shop",
-        "version": "^1.0",
-        "required": true,
-    }]);
     let mut files = valid_files();
     files[0] = (files[0].0, &blueprint);
-    let archive = archive(&manifest, &files);
-    let expected = vec![
-        ("record_action", "acme.shop:a_action"),
-        ("record_action", "acme.shop:z_action"),
-        ("record_tab", "acme.shop:preview"),
-    ];
-    for _ in 0..20 {
-        let pack = ValidatedSolutionPack::from_tar_zst(&archive).unwrap();
-        let actual = pack
-            .blueprint("blueprints/product")
+    let pack = ValidatedSolutionPack::from_tar_zst(&archive(&manifest, &files)).unwrap();
+    assert_eq!(
+        pack.blueprint("blueprints/product")
             .unwrap()
-            .extension_layout
-            .iter()
-            .map(|entry| (entry.outlet.as_str(), entry.contribution.as_str()))
-            .collect::<Vec<_>>();
-        assert_eq!(actual, expected);
-    }
+            .view_extensions(),
+        [
+            ("detail".to_owned(), "acme.shop/recalculate".to_owned()),
+            ("detail".to_owned(), "acme.shop/bulk_issue".to_owned()),
+            ("detail".to_owned(), "acme.shop/legacy".to_owned()),
+            ("detail".to_owned(), "acme.later/assist".to_owned()),
+            ("table".to_owned(), "acme.shop/bulk_issue".to_owned()),
+        ]
+    );
+
+    let installed = InstalledExtensionSnapshot {
+        installed_release_id: uuid::Uuid::from_u128(7),
+        version: "1.2.0".into(),
+        state: ExtensionState::Enabled,
+        configuration: json!({}),
+        policy_compatible: true,
+        contributions: BTreeMap::new(),
+        contribution_views: BTreeMap::from([
+            (
+                "acme.shop:recalculate".to_owned(),
+                Some("detail".to_owned()),
+            ),
+            ("acme.shop:bulk_issue".to_owned(), Some("table".to_owned())),
+            ("acme.shop:legacy".to_owned(), None),
+        ]),
+        pending_install: false,
+    };
+    let workspace = PlanningWorkspaceSnapshot {
+        workspace_id: uuid::Uuid::nil(),
+        physical_codes: BTreeSet::from(["default".to_owned()]),
+        existing_blueprints: BTreeMap::new(),
+        existing_presentation_assets: BTreeMap::new(),
+        installed_extensions: BTreeMap::from([("acme.shop".to_owned(), installed)]),
+        explore_navigation: Vec::new(),
+        explore_navigation_valid: true,
+        extension_layout: serde_json::json!({"version":1,"outlets":{}}),
+        extension_layout_valid: true,
+        role_codes: BTreeSet::new(),
+        published_record_codes: BTreeSet::new(),
+        seed: Default::default(),
+    };
+    let plan =
+        build_solution_pack_plan(&pack, "shop", BlueprintPublication::Publish, &workspace).unwrap();
+    assert!(plan.ready);
+    let action = plan
+        .actions
+        .iter()
+        .find(|action| action.logical_key == "blueprints/product")
+        .unwrap();
+    let statuses = action.summary["view_extensions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| {
+            (
+                entry["view"].as_str().unwrap(),
+                entry["contribution"].as_str().unwrap(),
+                entry["status"].as_str().unwrap(),
+                entry["warning"].as_bool().unwrap(),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        statuses,
+        [
+            ("detail", "acme.shop/recalculate", "available", false),
+            (
+                "detail",
+                "acme.shop/bulk_issue",
+                "contribution_targets_other_view",
+                true
+            ),
+            (
+                "detail",
+                "acme.shop/legacy",
+                "contribution_has_no_view",
+                true
+            ),
+            (
+                "detail",
+                "acme.later/assist",
+                "extension_not_installed",
+                false
+            ),
+            ("table", "acme.shop/bulk_issue", "available", false),
+        ]
+    );
+    // The entries stay in the created definition, for extensions enabled later.
+    let payload = action.normalized_payload.as_ref().unwrap();
+    assert!(
+        payload["definition"]
+            .as_str()
+            .unwrap()
+            .contains("acme.later/assist")
+    );
 }
 
 #[test]
 fn rejects_invalid_extension_layout_contract() {
     for invalid in [
-        br#"{"format_version":1,"kind":"extension_layout","entries":[{"contribution":"acme.shop:nav","outlet":"record_action","promoted":true,"required":true}]}"#.as_slice(),
+        br#"{"format_version":1,"kind":"extension_layout","entries":[{"contribution":"acme.shop:nav","outlet":"blueprint_panel","promoted":true,"required":true}]}"#.as_slice(),
         br#"{"format_version":1,"kind":"extension_layout","entries":[{"contribution":"acme.shop:nav","outlet":"navigation","hidden":true,"promoted":true,"required":true}]}"#.as_slice(),
         br#"{"format_version":1,"kind":"extension_layout","entries":[{"contribution":"acme.shop:nav","outlet":"navigation","required":true,"unknown":true}]}"#.as_slice(),
         br#"{"format_version":1,"kind":"extension_layout","entries":[{"contribution":"acme.shop:nav","outlet":"navigation","required":true},{"contribution":"acme.shop:nav","outlet":"navigation","required":true}]}"#.as_slice(),
@@ -978,7 +940,7 @@ fn rejects_invalid_extension_layout_contract() {
         "entries": (0..=MAX_SOLUTION_PACK_EXTENSION_LAYOUT_ENTRIES)
             .map(|index| json!({
                 "contribution": format!("acme.shop:item_{index}"),
-                "outlet": "record_action",
+                "outlet": "blueprint_panel",
                 "required": true,
             }))
             .collect::<Vec<_>>(),
@@ -1344,6 +1306,7 @@ fn extension_requirement_evaluation_is_deterministic_and_does_not_require_enable
         configuration: json!({"endpoint":"https://example.test","unrelated_secret":"not exposed"}),
         policy_compatible: true,
         contributions: BTreeMap::new(),
+        contribution_views: BTreeMap::new(),
         pending_install: false,
     };
     let template = json!({"endpoint":"https://example.test"});
@@ -1413,6 +1376,7 @@ fn pending_official_release_is_planned_as_an_install_without_installed_state() {
         configuration: json!({}),
         policy_compatible: true,
         contributions: BTreeMap::new(),
+        contribution_views: BTreeMap::new(),
         pending_install: true,
     };
     let planned = evaluate_extension_requirement(&requirement, None, Some(&pending));
@@ -3511,9 +3475,6 @@ attributes:
             cyclic_pack.blueprint(key).unwrap(),
             &mapping_graph,
             BlueprintPublication::Publish,
-            &HashSet::new(),
-            &mapped_workspace,
-            cyclic_pack.manifest(),
         )
         .unwrap();
         mapped_workspace.existing_blueprints.insert(
@@ -3608,7 +3569,7 @@ fn planner_uses_workspace_wide_codes_and_deterministic_target_ids() {
 }
 
 #[test]
-fn rejects_unsafe_workspace_dependent_blueprint_constructs_and_allows_layouts() {
+fn rejects_unsafe_workspace_dependent_blueprint_constructs_and_allows_view_extensions() {
     let role = PRODUCT_BLUEPRINT.replace_ascii(
         b"kind: record",
         b"kind: record\npublication:\n  retain_on_edit_roles: [editor]",
@@ -3632,10 +3593,9 @@ views:
         PRODUCT_BLUEPRINT,
         br#"
 views:
-  extension_layout:
-    type: extension_layout
-    version: 1
-    outlets: {}
+  detail:
+    type: stack
+    extensions: [acme.shop/action]
 "#,
     );
     let mut files = valid_files();

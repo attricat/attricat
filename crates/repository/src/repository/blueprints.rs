@@ -8,9 +8,10 @@ use crate::domain_events::{
     BLUEPRINT_CREATED_V1, BLUEPRINT_PUBLISHED_V1, BLUEPRINT_REVISION_CREATED_V1,
     BlueprintRevisionV1, EventSource, EventSourceKind, NewDomainEvent,
 };
+use crate::extensions::ContributionView;
 use crate::model::{PublishedBlueprint, TablePathAttribute};
 use crate::persistence_rows::{Db, IntoDomain};
-use attricat_blueprint::{AttributeDeclaration, GeneratedValue, ViewDefinition, parse};
+use attricat_blueprint::{AttributeDeclaration, GeneratedValue, parse};
 use attricat_cache::{CacheKey, Policy};
 use attricat_domain::attribute_options::Cardinality;
 use attricat_domain::states::RevisionStatus;
@@ -434,23 +435,27 @@ impl AttricatRepository {
         self.with_attributes(blueprint).await
     }
 
-    /// The code of a blueprint revision and the form assists its definition
-    /// names, or `None` when the revision does not exist.
-    pub async fn blueprint_form_assists(
+    /// The code of a blueprint revision and the `(extension id, contribution
+    /// id)` pairs its `view` lists under `extensions`, in order, or `None`
+    /// when the revision does not exist.
+    pub async fn blueprint_view_extensions(
         &self,
         blueprint_id: Uuid,
         version: i64,
-    ) -> Result<Option<(String, Vec<attricat_blueprint::FormAssistReference>)>, RepositoryError>
-    {
+        view: ContributionView,
+    ) -> Result<Option<(String, Vec<(String, String)>)>, RepositoryError> {
         Ok(self
             .get_blueprint_revision(blueprint_id, version)
             .await?
             .map(|revision| {
-                // A stored definition parsed when it was saved.
-                let references = attricat_blueprint::parse(&revision.blueprint.definition)
-                    .map(|definition| definition.form_assists)
-                    .unwrap_or_default();
-                (revision.blueprint.code, references)
+                let entries = view_extensions(&revision.blueprint.views, view)
+                    .iter()
+                    .filter_map(|entry| {
+                        attricat_blueprint::view_extension_key(entry)
+                            .map(|(extension, id)| (extension.to_owned(), id.to_owned()))
+                    })
+                    .collect();
+                (revision.blueprint.code, entries)
             }))
     }
 
@@ -625,8 +630,6 @@ impl AttricatRepository {
                 .await?;
             self.validate_publication_movements(&mut transaction, &compiled)
                 .await?;
-            self.validate_publication_extension_layout(&mut transaction, &blueprint.definition)
-                .await?;
             let includes_published = sqlx::query_scalar::<_, bool>(
                 r#"SELECT NOT EXISTS (
                        SELECT 1
@@ -723,8 +726,6 @@ impl AttricatRepository {
                 .await?;
             self.validate_publication_movements(transaction, &compiled)
                 .await?;
-            self.validate_publication_extension_layout(&mut *transaction, &blueprint.definition)
-                .await?;
             let includes_published = sqlx::query_scalar::<_, bool>(
                 r#"SELECT NOT EXISTS (
                        SELECT 1 FROM jsonb_array_elements($1) include
@@ -774,50 +775,6 @@ impl AttricatRepository {
             .await?;
         }
         Ok(blueprint)
-    }
-
-    /// A layout may retain unknown keys for a removed extension, but a key that
-    /// currently resolves must stay in the outlet declared by that enabled
-    /// contribution. This prevents a blueprint from moving an extension into
-    /// an incompatible host surface at publication time.
-    async fn validate_publication_extension_layout(
-        &self,
-        connection: &mut sqlx::PgConnection,
-        definition: &str,
-    ) -> Result<(), RepositoryError> {
-        let blueprint = parse(definition).map_err(RepositoryError::invalid_blueprint_definition)?;
-        let Some(ViewDefinition::ExtensionLayout { outlets, .. }) =
-            blueprint.views.get("extension_layout")
-        else {
-            return Ok(());
-        };
-        let contributions = self
-            .enabled_client_extension_contributions_on(connection)
-            .await?;
-        for (outlet, layout) in outlets {
-            for key in layout.order.iter().chain(&layout.hidden) {
-                if let Some(contribution) = contributions
-                    .iter()
-                    .find(|item| item.contribution_key == *key)
-                {
-                    let contribution_outlet = contribution
-                        .outlet
-                        .as_ref()
-                        .map(serde_json::to_value)
-                        .transpose()
-                        .map_err(|error| {
-                            RepositoryError::InvalidBlueprintDefinition(error.to_string())
-                        })?
-                        .and_then(|value| value.as_str().map(str::to_owned));
-                    if contribution_outlet.as_deref() != Some(outlet.as_str()) {
-                        return Err(RepositoryError::InvalidBlueprintDefinition(
-                            "extension layout contribution is incompatible with its outlet".into(),
-                        ));
-                    }
-                }
-            }
-        }
-        Ok(())
     }
 
     async fn validate_publication_roles(
@@ -1444,4 +1401,20 @@ async fn compile_new_definition(
         ));
     }
     Ok(compiled)
+}
+
+/// The entries a stored revision's `view` lists under `extensions`. Stored
+/// views were validated when the revision was saved; anything else lists none.
+pub(crate) fn view_extensions(views: &serde_json::Value, view: ContributionView) -> Vec<String> {
+    views
+        .get(view.as_str())
+        .and_then(|definition| definition.get("extensions"))
+        .and_then(serde_json::Value::as_array)
+        .map(|entries| {
+            entries
+                .iter()
+                .filter_map(|entry| entry.as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default()
 }

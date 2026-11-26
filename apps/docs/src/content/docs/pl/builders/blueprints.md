@@ -358,6 +358,6 @@ Schemat może też zawierać:
 - [Politykę publikacji](/pl/guides/publishing/#zachowaj-publikację-po-zaufanych-edycjach), która pozwala zaufanym rolom edytować bez cofania zatwierdzeń w kanałach.
 - [Zadania konektorów](/pl/reference/blueprint/#zadania-konektorów), które importują lub eksportują rekordy przez rozszerzenie konektora.
 - Atrybuty, których typ pochodzi z [rozszerzenia](/pl/reference/blueprint/#typy-atrybutów-z-rozszerzeń).
-- [Układ paneli i akcji rozszerzeń](/pl/reference/blueprint/#extension_layout) na stronach rekordów.
+- [Karty i akcje rozszerzeń](/pl/builders/views/#rozszerzenia-na-stronach-rekordów-i-w-przeglądarce-rekordów) na stronach rekordów i w Przeglądarce rekordów.
 
 [Reguły jakości danych](/pl/builders/rules/) tworzy się osobno, poza schematem. Reguła oznacza problemy w rekordach schematu, np. brak tytułu, i może [odrzucać](/pl/builders/rules/#egzekwowanie-reguły) zapisy lub zmiany statusu, które ją naruszają.

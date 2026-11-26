@@ -57,6 +57,7 @@ const contribution: ExtensionContribution = {
   id: 'row-action',
   kind: 'embedded',
   outlet: 'navigation',
+  view: null,
   release_id: '11111111-1111-4111-8111-111111111111',
   route: null,
   title: 'Example action',
@@ -85,6 +86,7 @@ describe('ExtensionOutlet', () => {
           id: 'audit-panel',
           kind: 'panel',
           outlet: 'audit_event_panel',
+          view: null,
         },
       ]);
       const queryClient = new QueryClient({
@@ -146,12 +148,14 @@ describe('ExtensionOutlet', () => {
         id: 'publish-check',
         kind: 'panel',
         outlet: 'blueprint_publish_check',
+        view: null,
       },
       {
         ...contribution,
         id: 'wrong-kind',
         kind: 'action',
         outlet: 'blueprint_publish_check',
+        view: null,
       },
     ]);
     const queryClient = new QueryClient({
@@ -187,12 +191,14 @@ describe('ExtensionOutlet', () => {
         id: 'health-card',
         kind: 'panel',
         outlet: 'data_health_card',
+        view: null,
       },
       {
         ...contribution,
         id: 'wrong-kind',
         kind: 'embedded',
         outlet: 'data_health_card',
+        view: null,
       },
     ]);
     const queryClient = new QueryClient({
@@ -229,12 +235,14 @@ describe('ExtensionOutlet', () => {
         id: 'audit-panel',
         kind: 'panel',
         outlet: 'audit_event_panel',
+        view: null,
       },
       {
         ...contribution,
         id: 'wrong-kind',
         kind: 'action',
         outlet: 'audit_event_panel',
+        view: null,
       },
     ]);
     const queryClient = new QueryClient({
@@ -269,12 +277,14 @@ describe('ExtensionOutlet', () => {
         id: 'blueprint-panel',
         kind: 'panel',
         outlet: 'blueprint_panel',
+        view: null,
       },
       {
         ...contribution,
         id: 'wrong-kind',
         kind: 'action',
         outlet: 'blueprint_panel',
+        view: null,
       },
     ]);
     const queryClient = new QueryClient({
@@ -312,6 +322,7 @@ describe('ExtensionOutlet', () => {
         kind: 'embedded',
         navigation_group: 'promoted',
         outlet: 'navigation',
+        view: null,
       },
       {
         ...contribution,
@@ -320,6 +331,7 @@ describe('ExtensionOutlet', () => {
         kind: 'embedded',
         navigation_group: 'grouped',
         outlet: 'navigation',
+        view: null,
       },
     ]);
     const queryClient = new QueryClient({
@@ -348,6 +360,7 @@ describe('ExtensionOutlet', () => {
         kind: 'navigation',
         navigation_group: 'promoted',
         outlet: 'navigation',
+        view: null,
         route: 'workbench',
         title: 'Workbench',
       },

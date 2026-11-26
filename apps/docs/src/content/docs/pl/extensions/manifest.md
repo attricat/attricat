@@ -273,8 +273,8 @@ Miejsce docelowe eksportu nadaje ekranom stanu eksportu, podglądu, ponawiania i
 "ui": [
   { "id": "workbench", "version": 1, "kind": "route", "artifact": "app", "title": "Formula workbench" },
   { "id": "workbench-nav", "version": 1, "kind": "navigation", "route": "workbench", "title": "Formula workbench" },
-  { "id": "stock", "version": 1, "kind": "tab", "artifact": "panel", "outlet": "record_tab", "title": "Stany", "icon": "tag", "when": { "blueprints": ["product"] } },
-  { "id": "recalc", "version": 1, "kind": "action", "outlet": "explorer_row_action", "title": "Przelicz…", "invoke": { "dialog": "recalc-dialog" } },
+  { "id": "stock", "version": 1, "kind": "tab", "artifact": "panel", "outlet": "record_tab", "view": "detail", "title": "Stany", "icon": "tag" },
+  { "id": "recalc", "version": 1, "kind": "action", "outlet": "explorer_row_action", "view": "table", "title": "Przelicz…", "invoke": { "dialog": "recalc-dialog" } },
   { "id": "recalc-dialog", "version": 1, "kind": "dialog", "artifact": "dialog", "outlet": "action_dialog", "title": "Przelicz" }
 ]
 ```
@@ -290,9 +290,11 @@ Miejsce docelowe eksportu nadaje ekranom stanu eksportu, podglądu, ponawiania i
 | `tab` | `artifact`, `outlet`, `title` | Karta na stronie rekordu w miejscu `record_tab`, której panelem jest ramka; opcjonalnie `icon` oraz `when` ograniczone do `blueprints`. Zobacz [Strony rekordów](/pl/extensions/client/#strony-rekordów). |
 | `cell` | `outlet`, `cell` | Jak Attricat rysuje wartość w kolumnie `explorer_table_cell`. Bez artefaktu. Zobacz [Komórki tabeli](#komórki-tabeli). |
 | `editor` | `artifact`, `outlet`, `editor` | Kontrolka wprowadzania, której pole schematu może użyć w `attribute_editor`; jej artefakt musi być typu `client_native`. Zobacz [Edytory atrybutów](#edytory-atrybutów). |
-| `form_assist` | `outlet`, `when`, `form_assist` | Proponuje wartości w formularzu rekordu w `record_form`, gdy zmienią się obserwowane pola, przez polecenie serwerowe. Bez artefaktu. Zobacz [Asystenci formularza](#asystenci-formularza). |
+| `form_assist` | `outlet`, `view`, `form_assist` | Proponuje wartości w formularzu rekordu w `record_form`, gdy zmienią się obserwowane pola, przez polecenie serwerowe. Bez artefaktu. Zobacz [Asystenci formularza](#asystenci-formularza). |
 
 Kontrybucja, której `artifact` jest artefaktem `client_native`, jest rysowana natywnie; w przeciwnym razie jej artefakt musi być typu `client_frame`. Natywny interfejs jest dozwolony w `record_tab`, `blueprint_attribute_configuration`, `blueprint_detail_panel`, `blueprint_panel`, `data_health_card`, `export_mapping`, `action_dialog` i `attribute_editor`; trasy, osadzona `navigation`, `blueprint_publish_check` i `audit_event_panel` pozostają interfejsem w ramce.
+
+Kontrybucja w miejscu `record_action`, `record_header_action`, `record_tab` lub `record_form` deklaruje `"view": "detail"`, a w miejscu `explorer_row_action`, `explorer_bulk_action` lub `explorer_action` – `"view": "table"`. Pojawia się tylko w schematach, których widok wymienia ją w `extensions`, więc ogólne rozszerzenie nigdy nie pokazuje się w schematach, do których nie pasuje; poinformuj użytkowników, które kontrybucje i gdzie wymienić. Zobacz [Gdzie pojawiają się akcje](/pl/extensions/client/#gdzie-pojawiają-się-akcje). Inne miejsca osadzenia nie przyjmują `view`.
 
 Każde rozszerzenie może użyć każdego miejsca osadzenia z ramką jeden raz, ale może dodać kilka natywnych kontrybucji, akcji, okien, komórek tabeli i edytorów oraz do dwóch kart rekordu. Akcje, okna i karty używają `version` 1. `title` akcji ma najwyżej 64 znaki; tytuł karty, w każdym języku, najwyżej 24. Kontrybucja z `title` może dodać `translations`, według kodu języka, takiego jak `pl` lub `pt-BR`: `{ "pl": { "title": "…" } }`, każde najwyżej 128 znaków.
 
@@ -388,7 +390,7 @@ Kontrybucja `form_assist` proponuje wartości, gdy ktoś wprowadza nowy rekord w
   "version": 1,
   "kind": "form_assist",
   "outlet": "record_form",
-  "when": { "blueprints": ["order_line"] },
+  "view": "detail",
   "form_assist": {
     "command": "propose-price",
     "watch": ["item", "quantity", "customer"],
@@ -397,12 +399,14 @@ Kontrybucja `form_assist` proponuje wartości, gdy ktoś wprowadza nowy rekord w
 }
 ```
 
-- `watch` i `proposes` wymieniają po 1–16 kodów atrybutów, a `when` – schematy, dla których jest asystent. Rozszerzenie potrzebuje `client.form_assist` i `client.commands`.
-- Schemat używa asystenta, wskazując go; zapis sprawdza go względem włączonego wydania rozszerzenia. Obserwowane pola muszą istnieć w schemacie, a proponowane muszą być edytowalnymi wartościami, nie relacjami ani plikami:
+- `watch` i `proposes` wymieniają po 1–16 kodów atrybutów; `when` może zawęzić asystenta do `blueprints`. Rozszerzenie potrzebuje `client.form_assist` i `client.commands`.
+- Schemat uruchamia asystenta, wymieniając go w widoku szczegółów. Gdy Twoje wydanie jest włączone, zapis sprawdza, czy obserwowane pola istnieją w schemacie, a proponowane są edytowalnymi wartościami, nie relacjami ani plikami:
 
   ```yaml
-  form_assists:
-    - { extension_id: acme.pricing, id: customer_price, version: 1 }
+  views:
+    detail:
+      type: stack
+      extensions: [acme.pricing/customer_price]
   ```
 
 - Polecenie otrzymuje `{ "version": 1, "assist", "blueprint": { "code", "id", "version" }, "record_id", "context_id", "values", "edited" }`. `values` zawiera tylko obserwowane i proponowane pola, `null` gdy są puste; relacja to lista `{ "record_id", "blueprint_code" }`, które ta osoba może odczytać. `edited` wymienia proponowane pola zmienione przez tę osobę. Polecenie może odczytywać katalog z uprawnieniami rozszerzenia.

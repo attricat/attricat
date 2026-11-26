@@ -50,6 +50,7 @@ export const definitionReferenceKinds = {
   relationshipPath: 'relationship_path',
   role: 'role',
   viewComponent: 'view_component',
+  viewExtension: 'view_extension',
 } as const;
 export type DefinitionReferenceKind =
   (typeof definitionReferenceKinds)[keyof typeof definitionReferenceKinds];

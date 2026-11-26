@@ -7,7 +7,11 @@ import { contextListOptions } from '../contexts/queryOptions';
 import { blueprintCatalogueOptions } from '../blueprints/queryOptions';
 import { roleListOptions } from '../workspace/queryOptions';
 import { getExtensionRuntime } from '../extensions/api';
-import { contributionKinds } from '../extensions/constants';
+import {
+  contributionKinds,
+  viewPlacedOutlets,
+  type ContributionView,
+} from '../extensions/constants';
 import { extensionQueryKeys } from '../extensions/queryKeys';
 
 type ReferenceBlueprint = {
@@ -26,6 +30,16 @@ export type ReferenceEditor = {
   extensionName: string;
   title: string | null;
   valueTypes: string[];
+};
+
+/** An enabled extension's contribution a blueprint view may list. */
+export type ReferenceViewExtension = {
+  /** `<extension-id>/<contribution-id>`, as a view lists it. */
+  key: string;
+  extensionName: string;
+  title: string | null;
+  /** The view it declares; `null` when it declares none. */
+  view: ContributionView | null;
 };
 
 export type ReferenceAttribute = {
@@ -49,6 +63,8 @@ export type DefinitionReferences = {
   roles: () => Promise<string[]>;
   /** Attribute editors of enabled extensions. */
   attributeEditors?: () => Promise<ReferenceEditor[]>;
+  /** Record and Explorer contributions of enabled extensions. */
+  viewExtensions?: () => Promise<ReferenceViewExtension[]>;
   /**
    * Attributes the definition refers to without declaring them, such as the
    * blueprint revision a rule checks.
@@ -127,6 +143,27 @@ export const createDefinitionReferences = (
                 extensionName: contribution.extension_name,
                 title: contribution.title,
                 valueTypes: contribution.editor.value_types,
+              },
+            ]
+          : [],
+      ),
+    ),
+  viewExtensions: () =>
+    orEmpty(async () =>
+      (
+        await queryClient.fetchQuery({
+          queryKey: extensionQueryKeys.runtime(),
+          queryFn: () => getExtensionRuntime(),
+          staleTime: referenceStaleTimeMs,
+        })
+      ).flatMap((contribution) =>
+        contribution.outlet && contribution.outlet in viewPlacedOutlets
+          ? [
+              {
+                key: `${contribution.extension_id}/${contribution.id}`,
+                extensionName: contribution.extension_name,
+                title: contribution.title,
+                view: contribution.view,
               },
             ]
           : [],
