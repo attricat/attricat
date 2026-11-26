@@ -62,6 +62,11 @@ release bump:
 production-build image="attricat:local":
     docker build --build-arg VCS_REF="$(git rev-parse HEAD)" --build-arg VCS_BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME:-$(git rev-parse --abbrev-ref HEAD)}}" --build-arg VERSION="$(git describe --always --dirty)" -t "{{image}}" .
 
+# Uncommitted changes are ignored; ATTRICAT_SNAPSHOT_JOBS raises cargo parallelism.
+# Build a host-local production image from committed local `main` (or another ref).
+snapshot ref="main" image="attricat:snapshot":
+    scripts/build-snapshot.sh "{{ref}}" "{{image}}"
+
 # Start the production image with disposable PostgreSQL, RustFS, and Mailpit services.
 production-up image="attricat:local":
     ATTRICAT_IMAGE="{{image}}" docker compose -f deploy/compose.ci.yml up -d
