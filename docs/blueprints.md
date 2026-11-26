@@ -688,22 +688,8 @@ views:
       - {field: category.name, label: Category}
 ```
 
-Both views may also list the extension contributions that appear on the
-blueprint's records under `extensions`, in order; see
-[Extension placement](views.md#extension-placement):
-
-```yaml
-views:
-  detail:
-    type: stack
-    extensions: [acme.stock/recalculate, acme.invoicing/issue-invoice]
-  table:
-    type: table
-    extensions: [acme.stock/recalculate-selected]
-```
-
-A `detail` stack without `children` and a `table` without `columns` only place
-extensions and keep the default layout and columns.
+Both views may list the extension contributions shown on the blueprint's
+records under `extensions`; see [Extension placement](views.md#extension-placement).
 
 `columns` is the current table syntax. Each column names either a local scalar
 field, a local relationship, a renderer-compatible direct file field, or a
