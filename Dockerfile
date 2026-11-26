@@ -6,7 +6,8 @@ WORKDIR /src
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json apps/web/package.json
 COPY apps/docs/package.json apps/docs/package.json
-RUN pnpm install --filter web --frozen-lockfile
+RUN --mount=type=cache,id=attricat-pnpm-store,target=/pnpm-store \
+    pnpm install --store-dir /pnpm-store --filter web --frozen-lockfile
 COPY contracts contracts
 # The web type check covers the UI kit contract test, which imports its generator.
 COPY scripts/ui-kit scripts/ui-kit
@@ -31,7 +32,16 @@ COPY docs docs
 ARG VCS_REF=unknown
 ARG VCS_BRANCH=unknown
 ENV ATTRICAT_BUILD_COMMIT=$VCS_REF ATTRICAT_BUILD_BRANCH=$VCS_BRANCH
-RUN cargo build --locked --release -p api --bins -p acli --bin acli
+# BuildKit cache mounts keep the registry and compiled dependencies between
+# builds on the same host, so repeat local builds recompile only changed
+# crates. A fresh CI runner starts with empty caches. The target directory is a
+# cache mount, so the binaries are copied out before the step ends.
+RUN --mount=type=cache,id=attricat-cargo-registry,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=attricat-cargo-git,target=/usr/local/cargo/git \
+    --mount=type=cache,id=attricat-cargo-target,target=/src/target \
+    cargo build --locked --release -p api --bins -p acli --bin acli \
+ && mkdir -p /out \
+ && cp target/release/api target/release/file-worker target/release/migrate target/release/acli /out/
 
 FROM debian:trixie-slim AS runtime
 ARG VCS_REF=unknown
@@ -47,10 +57,10 @@ RUN apt-get update \
  && groupadd --system --gid 10001 attricat \
  && useradd --system --uid 10001 --gid attricat --home /srv/attricat attricat
 WORKDIR /srv/attricat
-COPY --from=rust-builder /src/target/release/api /usr/local/bin/attricat-api
-COPY --from=rust-builder /src/target/release/file-worker /usr/local/bin/attricat-file-worker
-COPY --from=rust-builder /src/target/release/migrate /usr/local/bin/attricat-migrate
-COPY --from=rust-builder /src/target/release/acli /usr/local/bin/acli
+COPY --from=rust-builder /out/api /usr/local/bin/attricat-api
+COPY --from=rust-builder /out/file-worker /usr/local/bin/attricat-file-worker
+COPY --from=rust-builder /out/migrate /usr/local/bin/attricat-migrate
+COPY --from=rust-builder /out/acli /usr/local/bin/acli
 COPY --from=rust-builder /tmp/web-dist /srv/attricat/web
 COPY scripts/docker-entrypoint.sh /usr/local/bin/
 RUN chmod 0555 /usr/local/bin/docker-entrypoint.sh \
