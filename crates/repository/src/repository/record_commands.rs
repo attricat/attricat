@@ -1,3 +1,4 @@
+use super::default_from::{PriorTargets, mark_defaulted, supplied_value_keys};
 use super::generations::WritePrefetch;
 use super::record_search::empty_projections;
 use super::record_values::{ContextTree, RecordValues};
@@ -33,6 +34,23 @@ pub(super) struct AuditValueSnapshot {
     context_code: Option<String>,
     relationship_target_record_id: Option<Uuid>,
     value: Value,
+}
+
+/// The active relationship targets of an audit snapshot, by attribute and
+/// context.
+pub(super) fn snapshot_relationship_targets(snapshot: &[AuditValueSnapshot]) -> PriorTargets {
+    let mut targets = PriorTargets::new();
+    for value in snapshot {
+        if let (Some(target), Some(context_id)) =
+            (value.relationship_target_record_id, value.context_id)
+        {
+            targets
+                .entry((value.attribute_id, context_id))
+                .or_default()
+                .insert(target);
+        }
+    }
+    targets
 }
 
 /// How [`AttricatRepository::validate_record_schema_with`] treats status.
@@ -301,7 +319,17 @@ impl AttricatRepository {
             .await?;
         self.insert_generated_values_in(transaction, &write, &record, generated)
             .await?;
+        let supplied = supplied_value_keys(&write, &values, &[]);
         self.insert_values_in(transaction, &write, &record, values)
+            .await?;
+        let defaulted = self
+            .apply_defaults_from(
+                transaction,
+                &write,
+                &record,
+                &PriorTargets::new(),
+                &supplied,
+            )
             .await?;
         if !movements.is_empty() {
             let movement_values =
@@ -330,6 +358,7 @@ impl AttricatRepository {
         let record = self.store_preview(transaction, record.id, preview).await?;
         let after = self.record_audit_snapshot(transaction, record.id).await?;
         let mut changes = Self::audit_changes(record.id, Vec::new(), after, false);
+        mark_defaulted(&mut changes, &defaulted);
         changes.extend(file_changes);
         let event = self.core_event(
             RECORD_CREATED_V1,
@@ -754,6 +783,7 @@ impl AttricatRepository {
             .execute(&mut **transaction)
             .await?;
         }
+        let supplied = supplied_value_keys(&write, &values, &remove_values);
         self.insert_values_with(transaction, &write, &record, values, origin)
             .await?;
         for selector in remove_values {
@@ -762,12 +792,22 @@ impl AttricatRepository {
         }
         self.replace_relationship_sets(transaction, &write, &record, relationships)
             .await?;
+        let defaulted = self
+            .apply_defaults_from(
+                transaction,
+                &write,
+                &record,
+                &snapshot_relationship_targets(&before),
+                &supplied,
+            )
+            .await?;
         self.validate_record_schema_in(transaction, &write, &record, Revalidation::Write)
             .await?;
         let preview = write.preview(transaction, record.id).await?;
         let record = self.store_preview(transaction, record.id, preview).await?;
         let after = self.record_audit_snapshot(transaction, record_id).await?;
-        let changes = Self::audit_changes(record_id, before, after, false);
+        let mut changes = Self::audit_changes(record_id, before, after, false);
+        mark_defaulted(&mut changes, &defaulted);
         let (tags_added, tags_removed) = tag_changes(&before_tags, &record.system_tags);
         let event = self.core_event(
             RECORD_UPDATED_V1,
@@ -798,7 +838,7 @@ impl AttricatRepository {
                       approver.display_name AS approved_by_display_name,
                       approver_avatar.id AS approved_by_avatar_file_id,
                       c.attribute_id, c.attribute_code, c.context_id, c.context_code,
-                      c.change_kind, c.before_value, c.after_value,
+                      c.change_kind, c.before_value, c.after_value, c.origin,
                       ARRAY(SELECT f.id FROM attributes a CROSS JOIN LATERAL (VALUES (c.before_value), (c.after_value)) x(v) CROSS JOIN LATERAL jsonb_array_elements_text(CASE WHEN a.value_type = 'file' AND jsonb_typeof(x.v) = 'array' THEN x.v ELSE '[]'::jsonb END) e(id) JOIN files f ON f.id = e.id::uuid AND f.workspace_id = c.workspace_id AND f.deleted_at IS NOT NULL WHERE a.id = c.attribute_id) AS deleted_file_ids
                FROM audit_event_changes c
                JOIN audit_events e ON e.id = c.audit_event_id
@@ -830,7 +870,7 @@ impl AttricatRepository {
                       approver.display_name AS approved_by_display_name,
                       approver_avatar.id AS approved_by_avatar_file_id,
                       c.attribute_id, c.attribute_code, c.context_id, c.context_code,
-                      c.change_kind, c.before_value, c.after_value,
+                      c.change_kind, c.before_value, c.after_value, c.origin,
                       ARRAY(SELECT f.id FROM attributes a CROSS JOIN LATERAL (VALUES (c.before_value), (c.after_value)) x(v) CROSS JOIN LATERAL jsonb_array_elements_text(CASE WHEN a.value_type = 'file' AND jsonb_typeof(x.v) = 'array' THEN x.v ELSE '[]'::jsonb END) e(id) JOIN files f ON f.id = e.id::uuid AND f.workspace_id = c.workspace_id AND f.deleted_at IS NOT NULL WHERE a.id = c.attribute_id) AS deleted_file_ids
                FROM audit_event_changes c
                JOIN audit_events e ON e.id = c.audit_event_id
@@ -1034,8 +1074,18 @@ impl AttricatRepository {
         {
             Self::check_status_precondition(&write, &record, input.expected_updated_at)?;
         }
+        let supplied = supplied_value_keys(&write, &input.values, &[]);
         let values = self
             .insert_values_in(&mut transaction, &write, &record, input.values)
+            .await?;
+        let defaulted = self
+            .apply_defaults_from(
+                &mut transaction,
+                &write,
+                &record,
+                &snapshot_relationship_targets(&before),
+                &supplied,
+            )
             .await?;
 
         self.validate_record_schema_in(&mut transaction, &write, &record, Revalidation::Write)
@@ -1056,7 +1106,8 @@ impl AttricatRepository {
         let after = self
             .record_audit_snapshot(&mut transaction, record_id)
             .await?;
-        let changes = Self::audit_changes(record_id, before, after, false);
+        let mut changes = Self::audit_changes(record_id, before, after, false);
+        mark_defaulted(&mut changes, &defaulted);
         let facts = Self::affected_facts(&changes);
         let contains_relationship = values
             .iter()
@@ -1197,23 +1248,61 @@ impl AttricatRepository {
                 }
             }
         }
+        // Removing links never defaults a value.
+        let defaulted = if replace {
+            self.apply_defaults_from(
+                &mut transaction,
+                &write,
+                &record,
+                &snapshot_relationship_targets(&before),
+                &HashSet::new(),
+            )
+            .await?
+        } else {
+            HashSet::new()
+        };
         self.validate_record_schema_in(&mut transaction, &write, &record, Revalidation::Write)
             .await?;
-        self.touch_record(&mut transaction, record_id).await?;
+        if defaulted.is_empty() {
+            self.touch_record(&mut transaction, record_id).await?;
+        } else {
+            // A defaulted scalar may be part of the record's preview.
+            let preview = write.preview(&mut transaction, record_id).await?;
+            self.store_preview(&mut transaction, record_id, preview)
+                .await?;
+        }
         let after = self
             .record_audit_snapshot(&mut transaction, record_id)
             .await?;
-        let changes = Self::audit_changes(record_id, before, after, false);
-        let event = self.core_event(
-            RELATIONSHIP_CHANGED_V1,
-            "record",
-            record_id,
-            serde_json::to_value(RelationshipMutationV1 {
+        let mut changes = Self::audit_changes(record_id, before, after, false);
+        mark_defaulted(&mut changes, &defaulted);
+        let facts = Self::affected_facts(&changes);
+        // Defaulted scalars make the write a record update, as an append of
+        // relationships and scalars is.
+        let event = if defaulted.is_empty() {
+            self.core_event(
+                RELATIONSHIP_CHANGED_V1,
+                "record",
                 record_id,
-                facts: Self::affected_facts(&changes),
-            })
-            .expect("relationship-changed payload is serializable"),
-        );
+                serde_json::to_value(RelationshipMutationV1 { record_id, facts })
+                    .expect("relationship-changed payload is serializable"),
+            )
+        } else {
+            self.core_event(
+                RECORD_UPDATED_V1,
+                "record",
+                record_id,
+                serde_json::to_value(RecordMutationV1 {
+                    record_id,
+                    blueprint_id: record.blueprint_id,
+                    blueprint_version: record.blueprint_version,
+                    facts,
+                    tags_added: Vec::new(),
+                    tags_removed: Vec::new(),
+                })
+                .expect("record-updated payload is serializable"),
+            )
+        };
         self.commit_record_mutation(transaction, changes, event)
             .await?;
         Ok(values)
@@ -2274,6 +2363,7 @@ impl AttricatRepository {
                     change_kind,
                     before_value: old.map(|value| value.value.clone()),
                     after_value: new.map(|value| value.value.clone()),
+                    origin: None,
                 })
             })
             .collect()

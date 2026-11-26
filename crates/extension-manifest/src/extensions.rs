@@ -191,6 +191,7 @@ pub const CAPABILITIES: &[&str] = &[
     "client.attribute_editor",
     // 1.2 inbound webhooks (#279).
     WEBHOOKS_RECEIVE_CAPABILITY,
+    FORM_ASSIST_CAPABILITY,
 ];
 
 /// Receives inbound webhooks: the host answers declared webhooks' public
@@ -265,6 +266,10 @@ pub enum FieldNotesSource {
 pub const RECORD_FIELD_NOTES_VERSION: u32 = 1;
 /// The capability a field-notes source and its badge actions need.
 pub const RECORD_FIELD_NOTES_CAPABILITY: &str = "client.record_field_notes";
+/// Lets a `form_assist` contribution propose values in record forms.
+pub const FORM_ASSIST_CAPABILITY: &str = "client.form_assist";
+/// The most fields one form assist may watch, and the most it may propose.
+pub const MAX_FORM_ASSIST_FIELDS: usize = 16;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -952,6 +957,42 @@ impl EditorDeclaration {
     }
 }
 
+/// A form assist: the fields of an open record form it watches, the fields
+/// it may propose values for, and the server command the host calls when a
+/// watched field changes. The host owns the form; proposals are unsaved
+/// changes the user can keep or replace.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct FormAssistDeclaration {
+    /// The `server.commands` command the host calls.
+    pub command: String,
+    /// Attribute codes whose changes call the command.
+    pub watch: Vec<String>,
+    /// Attribute codes the command may propose values for.
+    pub proposes: Vec<String>,
+}
+
+impl FormAssistDeclaration {
+    fn validate(&self) -> Result<(), String> {
+        for (label, codes) in [("watch", &self.watch), ("proposes", &self.proposes)] {
+            if codes.is_empty() || codes.len() > MAX_FORM_ASSIST_FIELDS {
+                return Err(format!(
+                    "{label} must name 1 to {MAX_FORM_ASSIST_FIELDS} attribute codes"
+                ));
+            }
+            let mut seen = HashSet::new();
+            for code in codes {
+                if !valid_cell_prop_name(code) || !seen.insert(code) {
+                    return Err(format!(
+                        "{label} has an invalid or repeated attribute code '{code}'"
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
 /// Cell prop names follow attribute codes: lowercase snake case.
 fn valid_cell_prop_name(name: &str) -> bool {
     let mut bytes = name.bytes();
@@ -1014,6 +1055,10 @@ pub struct UiContribution {
     /// editors and rejected on every other kind.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub editor: Option<EditorDeclaration>,
+    /// What a `form_assist` watches, proposes and calls; required for form
+    /// assists and rejected on every other kind.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub form_assist: Option<FormAssistDeclaration>,
 }
 
 /// Declarative conditions the host checks before offering an action. Every
@@ -1153,6 +1198,10 @@ pub enum UiContributionKind {
     /// An input control blueprint fields may name under `editor`. It is
     /// native UI; an extension may declare several.
     Editor,
+    /// Proposes values in an open record form when watched fields change,
+    /// through a server command. Host-rendered, so it has no artifact; a
+    /// blueprint opts in under `form_assists`.
+    FormAssist,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
@@ -1187,6 +1236,9 @@ pub enum UiOutlet {
     ExportMapping,
     /// An input control for a record field whose blueprint names it.
     AttributeEditor,
+    /// An open record form, whose watched field changes a `form_assist`
+    /// answers with proposed values.
+    RecordForm,
 }
 
 impl UiOutlet {
@@ -1215,7 +1267,8 @@ impl UiOutlet {
             | UiOutlet::ExplorerAction
             | UiOutlet::ExplorerBulkAction
             | UiOutlet::RecordHeaderAction
-            | UiOutlet::RecordAttributeAction => &[],
+            | UiOutlet::RecordAttributeAction
+            | UiOutlet::RecordForm => &[],
         }
     }
 }
@@ -1276,6 +1329,76 @@ impl Manifest {
             return Err(ManifestError::Invalid(
                 "record_field_notes must use a declared command or client_frame artifact".into(),
             ));
+        }
+        Ok(())
+    }
+
+    /// A form assist is only its declaration and the blueprints it serves:
+    /// no artifact, route, title or action settings, a declared server
+    /// command, and `when` naming blueprints and nothing else.
+    fn validate_form_assist(&self, contribution: &UiContribution) -> Result<(), ManifestError> {
+        let invalid = |reason: String| {
+            ManifestError::Invalid(format!("form_assist '{}' {reason}", contribution.id))
+        };
+        if contribution.version == 0 {
+            return Err(invalid("requires a positive version".into()));
+        }
+        if contribution.artifact.is_some()
+            || contribution.route.is_some()
+            || contribution.title.is_some()
+            || contribution.invoke.is_some()
+            || contribution.confirm.is_some()
+            || contribution.icon.is_some()
+            || !contribution.accepts.is_empty()
+            || !contribution.translations.is_empty()
+        {
+            return Err(invalid(
+                "cannot declare an artifact, route, title, translations, invoke, confirm, accepts or icon"
+                    .into(),
+            ));
+        }
+        let declaration = contribution
+            .form_assist
+            .as_ref()
+            .ok_or_else(|| invalid("requires a form_assist declaration".into()))?;
+        declaration.validate().map_err(invalid)?;
+        let blueprints = match &contribution.when {
+            Some(ActionCondition {
+                blueprints,
+                min_records: None,
+                max_records: None,
+                requires_write: false,
+                has_tags,
+                missing_tags,
+            }) if !blueprints.is_empty() && has_tags.is_empty() && missing_tags.is_empty() => {
+                blueprints
+            }
+            _ => {
+                return Err(invalid(
+                    "requires when.blueprints, and no other condition".into(),
+                ));
+            }
+        };
+        let mut seen = HashSet::new();
+        if blueprints
+            .iter()
+            .any(|code| !attricat_validation::is_valid_code(code) || !seen.insert(code))
+        {
+            return Err(invalid(
+                "when.blueprints has an invalid or repeated code".into(),
+            ));
+        }
+        let declared = self.server.as_ref().is_some_and(|server| {
+            server
+                .commands
+                .iter()
+                .any(|command| command.id == declaration.command)
+        });
+        if !declared {
+            return Err(invalid(format!(
+                "must call a declared server command, not '{}'",
+                declaration.command
+            )));
         }
         Ok(())
     }
@@ -1748,6 +1871,7 @@ impl Manifest {
                 UiContributionKind::Navigation
                     | UiContributionKind::Action
                     | UiContributionKind::Cell
+                    | UiContributionKind::FormAssist
             );
             let rendering = self.rendering_mode(contribution);
             if !host_rendered && (contribution.version == 0 || rendering.is_none()) {
@@ -1801,10 +1925,20 @@ impl Manifest {
                     contribution.id
                 )));
             }
+            if matches!(contribution.kind, UiContributionKind::FormAssist) {
+                self.validate_form_assist(contribution)?;
+            } else if contribution.form_assist.is_some() {
+                return Err(ManifestError::Invalid(format!(
+                    "only form_assist UI contributions may declare form_assist ('{}')",
+                    contribution.id
+                )));
+            }
             if matches!(contribution.kind, UiContributionKind::Action) {
                 self.validate_action(contribution)?;
             } else if matches!(contribution.kind, UiContributionKind::Tab) {
                 self.validate_record_tab(contribution)?;
+            } else if matches!(contribution.kind, UiContributionKind::FormAssist) {
+                // Its `when` is checked with the rest of the assist.
             } else if contribution.invoke.is_some()
                 || contribution.when.is_some()
                 || contribution.confirm.is_some()
@@ -1850,6 +1984,7 @@ impl Manifest {
                     UiOutlet::ActionDialog => Some("client.action_dialog"),
                     UiOutlet::ExportMapping => Some("client.export_mapping"),
                     UiOutlet::AttributeEditor => Some("client.attribute_editor"),
+                    UiOutlet::RecordForm => Some(FORM_ASSIST_CAPABILITY),
                 };
                 if required.is_some_and(|capability| {
                     !self
@@ -1872,7 +2007,8 @@ impl Manifest {
                 | (UiContributionKind::Dialog, Some(outlet))
                 | (UiContributionKind::Tab, Some(outlet))
                 | (UiContributionKind::Cell, Some(outlet))
-                | (UiContributionKind::Editor, Some(outlet)) => {
+                | (UiContributionKind::Editor, Some(outlet))
+                | (UiContributionKind::FormAssist, Some(outlet)) => {
                     // Extensions may each contribute one frame to a content
                     // outlet. A single extension cannot rely on duplicate
                     // ordering; actions, dialogs, tabs, cells and editors are
@@ -1885,6 +2021,7 @@ impl Manifest {
                             | UiContributionKind::Tab
                             | UiContributionKind::Cell
                             | UiContributionKind::Editor
+                            | UiContributionKind::FormAssist
                     ) || rendering == Some(RenderingMode::Native);
                     if !repeatable && !outlets.insert(outlet) {
                         return Err(ManifestError::Invalid(
@@ -1914,6 +2051,7 @@ impl Manifest {
                             | (UiContributionKind::Dialog, UiOutlet::ActionDialog)
                             | (UiContributionKind::Panel, UiOutlet::ExportMapping)
                             | (UiContributionKind::Editor, UiOutlet::AttributeEditor)
+                            | (UiContributionKind::FormAssist, UiOutlet::RecordForm)
                     );
                     if !valid_kind {
                         return Err(ManifestError::Invalid(
@@ -1933,7 +2071,8 @@ impl Manifest {
                 | (UiContributionKind::Dialog, None)
                 | (UiContributionKind::Tab, None)
                 | (UiContributionKind::Cell, None)
-                | (UiContributionKind::Editor, None) => {
+                | (UiContributionKind::Editor, None)
+                | (UiContributionKind::FormAssist, None) => {
                     return Err(ManifestError::Invalid(
                         "embedded UI contributions require an outlet".into(),
                     ));
@@ -3451,6 +3590,100 @@ mod tests {
     }
 
     #[test]
+    fn form_assists_watch_and_propose_fields_through_a_declared_command() {
+        let assist = |contribution: serde_json::Value| {
+            let mut manifest = native_manifest(serde_json::json!([contribution]));
+            manifest.permissions.push(FORM_ASSIST_CAPABILITY.into());
+            manifest.permissions.push("client.commands".into());
+            manifest.artifacts.push(
+                serde_json::from_value(
+                    serde_json::json!({"id": "server", "kind": "server_wasm", "path": "server.wasm"}),
+                )
+                .unwrap(),
+            );
+            manifest.server = Some(
+                serde_json::from_value(serde_json::json!({"commands": [{
+                    "id": "propose", "handler": "propose",
+                    "request_schema": {"type": "object"}, "response_schema": {"type": "object"}
+                }]}))
+                .unwrap(),
+            );
+            manifest
+        };
+        let valid = serde_json::json!({
+            "id": "customer_price", "version": 1, "kind": "form_assist", "outlet": "record_form",
+            "when": {"blueprints": ["order_line"]},
+            "form_assist": {"command": "propose", "watch": ["item", "quantity"], "proposes": ["unit_price_net"]}
+        });
+        let manifest = assist(valid.clone());
+        manifest.validate(SUPPORTED_HOST_API).unwrap();
+        assert_eq!(
+            manifest.ui[0].form_assist.as_ref().unwrap().proposes,
+            ["unit_price_net"]
+        );
+
+        let with = |change: &dyn Fn(&mut serde_json::Value)| {
+            let mut contribution = valid.clone();
+            change(&mut contribution);
+            assist(contribution).validate(SUPPORTED_HOST_API)
+        };
+        let codes = |count: usize| {
+            serde_json::Value::from(
+                (0..count)
+                    .map(|index| format!("field_{index}"))
+                    .collect::<Vec<_>>(),
+            )
+        };
+        type Change<'a> = &'a dyn Fn(&mut serde_json::Value);
+        let invalid: [(&str, Change); 9] = [
+            ("no when", &|value| {
+                value.as_object_mut().unwrap().remove("when");
+            }),
+            ("empty blueprints", &|value| {
+                value["when"]["blueprints"] = serde_json::json!([])
+            }),
+            ("other condition", &|value| {
+                value["when"]["min_records"] = 1.into()
+            }),
+            ("no watch", &|value| {
+                value["form_assist"]["watch"] = serde_json::json!([])
+            }),
+            ("too many proposals", &|value| {
+                value["form_assist"]["proposes"] = codes(17)
+            }),
+            ("repeated code", &|value| {
+                value["form_assist"]["watch"] = serde_json::json!(["item", "item"])
+            }),
+            ("undeclared command", &|value| {
+                value["form_assist"]["command"] = "missing".into()
+            }),
+            ("artifact", &|value| value["artifact"] = "ui".into()),
+            ("other outlet", &|value| {
+                value["outlet"] = "record_action".into()
+            }),
+        ];
+        for (case, change) in invalid {
+            assert!(with(change).is_err(), "{case}");
+        }
+        assert!(with(&|value| value["form_assist"]["proposes"] = codes(16)).is_ok());
+
+        let mut ungranted = assist(valid.clone());
+        ungranted
+            .permissions
+            .retain(|item| item != FORM_ASSIST_CAPABILITY);
+        assert!(ungranted.validate(SUPPORTED_HOST_API).is_err());
+        let mut undeclared = assist(valid);
+        undeclared.ui[0].form_assist = None;
+        assert!(undeclared.validate(SUPPORTED_HOST_API).is_err());
+        // Other kinds cannot declare a form assist.
+        let mut panel = native_manifest(serde_json::json!([
+            {"id": "a", "version": 1, "kind": "panel", "artifact": "ui", "outlet": "blueprint_panel"}
+        ]));
+        panel.ui[0].form_assist = manifest.ui[0].form_assist.clone();
+        assert!(panel.validate(SUPPORTED_HOST_API).is_err());
+    }
+
+    #[test]
     fn native_archives_record_the_ui_kit_they_were_built_against() {
         let manifest = serde_json::json!({
             "manifest_version": 1, "name": "Acme", "version": "1.0.0",
@@ -3535,6 +3768,7 @@ mod tests {
             translations: BTreeMap::new(),
             cell: None,
             editor: None,
+            form_assist: None,
         });
         value.attricat.id = "a".repeat(127);
         assert_eq!(
@@ -3773,6 +4007,7 @@ mod tests {
             translations: BTreeMap::new(),
             cell: None,
             editor: None,
+            form_assist: None,
         });
         assert!(
             value.validate(SUPPORTED_HOST_API).is_ok(),
@@ -3935,6 +4170,7 @@ mod tests {
             translations: BTreeMap::new(),
             cell: None,
             editor: None,
+            form_assist: None,
         };
         // Several actions may share an outlet; each invokes one thing.
         value.ui.push(action(
@@ -4022,6 +4258,7 @@ mod tests {
             )]),
             cell: None,
             editor: None,
+            form_assist: None,
         };
         // An extension may add several tabs, up to its limit.
         value.ui.push(tab("stock"));
@@ -4094,6 +4331,7 @@ mod tests {
                 translations: BTreeMap::new(),
                 cell: None,
                 editor: None,
+                form_assist: None,
             },
             UiContribution {
                 id: "workbench-nav".into(),
@@ -4111,6 +4349,7 @@ mod tests {
                 translations: BTreeMap::new(),
                 cell: None,
                 editor: None,
+                form_assist: None,
             },
         ];
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
@@ -4256,6 +4495,7 @@ mod tests {
             translations: BTreeMap::new(),
             cell: None,
             editor: None,
+            form_assist: None,
         });
         value.permissions.push("client.action_dialog".into());
         value.ui.push(UiContribution {
@@ -4274,6 +4514,7 @@ mod tests {
             translations: BTreeMap::new(),
             cell: None,
             editor: None,
+            form_assist: None,
         });
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
         // A toolbar action names no records, so it cannot require write access.
@@ -4320,6 +4561,7 @@ mod tests {
             translations: BTreeMap::new(),
             cell: Some(cell()),
             editor: None,
+            form_assist: None,
         });
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
         // Several cells may share the outlet.
@@ -4438,6 +4680,7 @@ mod tests {
             translations: BTreeMap::new(),
             cell: None,
             editor: None,
+            form_assist: None,
         });
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
         value
@@ -4480,6 +4723,7 @@ mod tests {
             translations: BTreeMap::new(),
             cell: None,
             editor: None,
+            form_assist: None,
         });
         value.ui.push(UiContribution {
             id: "explorer-action".into(),
@@ -4497,6 +4741,7 @@ mod tests {
             translations: BTreeMap::new(),
             cell: None,
             editor: None,
+            form_assist: None,
         });
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
         value.ui[1].kind = UiContributionKind::Panel;

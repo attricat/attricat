@@ -20,7 +20,25 @@ pub struct BlueprintDefinition {
     pub embedded_rules: bool,
     pub unique_keys: Vec<UniqueKeyDefinition>,
     pub movements: Vec<crate::MovementDefinition>,
+    pub form_assists: Vec<FormAssistReference>,
     pub attributes: Vec<AttributeDeclaration>,
+}
+
+/// The most form assists one blueprint may use.
+pub const MAX_FORM_ASSISTS: usize = 8;
+
+/// An extension's `form_assist` that proposes values in this blueprint's
+/// record form. Saving checks it against the enabled extension releases, as
+/// a field's `editor` is checked.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Eq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct FormAssistReference {
+    /// The enabled extension that declares the assist.
+    pub extension_id: String,
+    /// The `form_assist` contribution's ID in that extension.
+    pub id: String,
+    /// The contribution's version.
+    pub version: u32,
 }
 
 /// Unique-key scopes: `workspace` compares default-context values across the
@@ -554,6 +572,10 @@ pub struct LocalAttributeDeclaration {
     pub extension_type: Option<String>,
     pub extension_configuration: Option<serde_json::Value>,
     pub default_value: Option<serde_json::Value>,
+    /// A relationship path, such as `item.sale_price_net`, whose value is
+    /// copied into this empty attribute when the path's first relationship
+    /// gains a target. A snapshot: later source changes do not reach it.
+    pub default_from: Option<String>,
     pub file_policy: Option<FilePolicy>,
     pub target_blueprint: Option<String>,
     /// Every allowed target blueprint. A single target is also kept in
@@ -601,6 +623,9 @@ pub struct EffectiveAttribute {
     /// values remain readable when the provider is unavailable.
     pub extension_type: Option<serde_json::Value>,
     pub default_value: Option<serde_json::Value>,
+    /// Set only on the record blueprint that declares it, like `generated`:
+    /// the path starts at that blueprint's relationships.
+    pub default_from: Option<String>,
     pub file_policy: Option<FilePolicy>,
     pub target_blueprint: Option<String>,
     /// Every allowed target blueprint; empty means any record blueprint.
@@ -639,6 +664,7 @@ pub struct CompiledBlueprint {
     pub embedded_rules: bool,
     pub unique_keys: Vec<UniqueKeyDefinition>,
     pub movements: Vec<crate::MovementDefinition>,
+    pub form_assists: Vec<FormAssistReference>,
     pub attributes: Vec<EffectiveAttribute>,
 }
 

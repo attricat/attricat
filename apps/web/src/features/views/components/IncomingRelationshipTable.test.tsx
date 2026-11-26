@@ -13,6 +13,8 @@ import { listContexts } from '../../contexts/api';
 import {
   createRecord,
   getBlueprintByCode,
+  getDefaultValues,
+  getRecordLabels,
   getRecordForm,
   getResolvedRecordPreview,
   searchRecords,
@@ -30,6 +32,8 @@ vi.mock('../../records/api', async (importOriginal) => ({
   ...(await importOriginal()),
   createRecord: vi.fn(),
   getBlueprintByCode: vi.fn(),
+  getDefaultValues: vi.fn(),
+  getRecordLabels: vi.fn(),
   getRecordForm: vi.fn(),
   getResolvedRecordPreview: vi.fn(),
   searchRecords: vi.fn(),
@@ -225,6 +229,73 @@ describe('IncomingRelationshipTable', () => {
     await waitFor(() => expect(quantity).toHaveProperty('value', ''));
     fireEvent.keyDown(quantity, { key: 'Escape' });
     expect(screen.queryByRole('row', { name: 'New Order line' })).toBeNull();
+  });
+
+  it('fills a new row with the values its link defaults, and saves them', async () => {
+    // A required currency the line copies from its order.
+    const defaulted = {
+      ...lineBlueprint,
+      blueprint: {
+        ...lineBlueprint.blueprint,
+        record_schema: { type: 'object', required: ['currency'] },
+      },
+      attributes: [
+        ...lineBlueprint.attributes,
+        {
+          code: 'currency',
+          name: 'Currency',
+          value_type: 'string',
+          default_from: 'order.currency',
+        },
+      ],
+    };
+    vi.mocked(getBlueprintByCode).mockResolvedValue(defaulted as never);
+    vi.mocked(searchRecords).mockResolvedValue({
+      blueprint: defaulted,
+      items: [],
+      next_cursor: null,
+      total_count: 0,
+    } as never);
+    vi.mocked(getDefaultValues).mockResolvedValue({
+      values: [{ attribute_code: 'currency', value: 'PLN' }],
+    });
+    vi.mocked(getRecordLabels).mockResolvedValue({
+      items: [
+        {
+          id: orderId,
+          blueprint_code: 'order',
+          display: { default: 'Order 7' },
+        },
+      ],
+    });
+    vi.mocked(createRecord).mockResolvedValue({ id: lineId } as never);
+    renderTable(false);
+
+    (await screen.findByRole('button', { name: 'Add Order line' })).click();
+    const row = await screen.findByRole('row', { name: 'New Order line' });
+    const currency = await within(row).findByRole('textbox', {
+      name: 'Currency',
+    });
+    await waitFor(() => expect(currency).toHaveProperty('value', 'PLN'));
+    expect(getDefaultValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        relationship: 'order',
+        targetRecordId: orderId,
+      }),
+      expect.any(AbortSignal),
+    );
+    expect(await within(row).findByText(/Suggested from Order 7/)).toBeTruthy();
+
+    // The required, defaulted field no longer blocks the save.
+    fireEvent.keyDown(currency, { key: 'Enter' });
+    await waitFor(() => expect(createRecord).toHaveBeenCalled());
+    expect(vi.mocked(createRecord).mock.calls[0][0].values).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ attribute_code: 'currency', value: 'PLN' }),
+      ]),
+    );
+    // The next row starts with the defaults again.
+    await waitFor(() => expect(getDefaultValues).toHaveBeenCalledTimes(2));
   });
 
   it('only opens settled records', async () => {

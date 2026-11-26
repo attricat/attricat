@@ -11,6 +11,7 @@ mod error;
 mod event_deliveries;
 mod extension_exports;
 mod extension_field_notes;
+mod extension_form_assist;
 mod extension_registries;
 mod extension_runs;
 mod extension_webhooks;
@@ -1205,6 +1206,12 @@ pub fn router(state: AppState) -> Router {
             post(record_reads::search_record_previews),
         )
         .route("/v1/records/labels", post(record_reads::record_labels))
+        .route(
+            "/v1/records/default-values",
+            post(record_reads::default_values),
+        )
+        .route("/v1/records/form-assists", get(extension_form_assist::list))
+        .route("/v1/records/form-assist", post(extension_form_assist::run))
         .route(
             "/v1/records/publications",
             post(record_reads::record_publications),

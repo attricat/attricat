@@ -98,7 +98,7 @@ List capabilities in `permissions` or `optional_permissions`. Each one allows a 
 
 Each placement capability allows a contribution at one outlet. See [Client contributions](/extensions/client/#outlets).
 
-`client.blueprint_configuration`, `client.record_tab`, `client.record_action`, `client.record_header_action`, `client.record_field_notes`, `client.explorer_row_action`, `client.explorer_table_cell`, `client.explorer_action`, `client.explorer_bulk_action`, `client.blueprint_detail_panel`, `client.blueprint_panel`, `client.blueprint_publish_check`, `client.audit_event_panel`, `client.data_health_card`, `client.action_dialog`, `client.export_mapping`, `client.attribute_editor`.
+`client.blueprint_configuration`, `client.record_tab`, `client.record_action`, `client.record_header_action`, `client.record_field_notes`, `client.explorer_row_action`, `client.explorer_table_cell`, `client.explorer_action`, `client.explorer_bulk_action`, `client.blueprint_detail_panel`, `client.blueprint_panel`, `client.blueprint_publish_check`, `client.audit_event_panel`, `client.data_health_card`, `client.action_dialog`, `client.export_mapping`, `client.attribute_editor`, `client.form_assist`.
 
 ## Host permissions
 
@@ -290,6 +290,7 @@ An export destination gives Attricat's export status, preview, retry, and resync
 | `tab` | `artifact`, `outlet`, `title` | A tab on the record page at `record_tab`, whose panel is the frame; optional `icon`, and `when` limited to `blueprints`. See [Record pages](/extensions/client/#record-pages). |
 | `cell` | `outlet`, `cell` | How Attricat draws a value in an `explorer_table_cell` column. No artifact. See [Table cells](#table-cells). |
 | `editor` | `artifact`, `outlet`, `editor` | An input control a blueprint field may use at `attribute_editor`; its artifact must be `client_native`. See [Attribute editors](#attribute-editors). |
+| `form_assist` | `outlet`, `when`, `form_assist` | Proposes values in a record form at `record_form` when watched fields change, through a server command. No artifact. See [Form assists](#form-assists). |
 
 A contribution whose `artifact` is the `client_native` artifact is drawn natively; otherwise its artifact must be `client_frame`. Native UI is allowed at `record_tab`, `blueprint_attribute_configuration`, `blueprint_detail_panel`, `blueprint_panel`, `data_health_card`, `export_mapping`, `action_dialog` and `attribute_editor`; routes, embedded `navigation`, `blueprint_publish_check` and `audit_event_panel` stay Frame UI.
 
@@ -376,6 +377,39 @@ views:
 ```
 
 Saving and publishing the blueprint check the field's value type and props against an enabled extension's declaration. An editor needs `client.attribute_editor`. While its extension is disabled, lacks that grant, fails or is still starting, the field uses its default control. See [Attribute editors](/extensions/native/#attribute-editors).
+
+## Form assists
+
+A `form_assist` contribution proposes values while someone enters a new record, in the record form or a new row of a table of linked records, for rules a blueprint cannot declare, such as a customer-specific price or a unit conversion. When a field it watches changes, Attricat calls one of your server commands with the form's values and fills in what it proposes.
+
+```json
+{
+  "id": "customer_price",
+  "version": 1,
+  "kind": "form_assist",
+  "outlet": "record_form",
+  "when": { "blueprints": ["order_line"] },
+  "form_assist": {
+    "command": "propose-price",
+    "watch": ["item", "quantity", "customer"],
+    "proposes": ["unit_price_net", "discount_percent"]
+  }
+}
+```
+
+- `watch` and `proposes` each list 1 to 16 attribute codes, and `when` lists the blueprints the assist is for. The extension needs `client.form_assist` and `client.commands`.
+- A blueprint uses the assist by naming it; saving checks it against your enabled release. Watched fields must exist on the blueprint, and proposed fields must be editable values, not relationships or files:
+
+  ```yaml
+  form_assists:
+    - { extension_id: acme.pricing, id: customer_price, version: 1 }
+  ```
+
+- The command receives `{ "version": 1, "assist", "blueprint": { "code", "id", "version" }, "record_id", "context_id", "values", "edited" }`. `values` holds only the watched and proposed fields, `null` when empty; a relationship is a list of `{ "record_id", "blueprint_code" }` the person can read. `edited` lists the proposed fields the person has changed. The command can read the catalog with your extension's own permissions.
+- It answers `{ "proposals": [{ "attribute_code", "value", "note" }] }`, at most 16, with an optional plain-text `note` of up to 140 characters. Attricat keeps a proposal only for a declared field the person has not edited, and only when the field accepts the value.
+- The form fills each kept proposal in as an unsaved change and shows the note under the field. Nothing is saved until the person saves the record. An answer for values that changed meanwhile, an error, a slow answer (over three seconds) or a disabled extension leaves the form as it is.
+- A blueprint's `default_from` fills fields first; a proposal may replace such a value, but never one the person typed.
+- Only the record form calls assists. Writes through the API, imports, workflows and other extensions do not, so use an event handler for a rule every write must follow.
 
 ## Attribute types
 

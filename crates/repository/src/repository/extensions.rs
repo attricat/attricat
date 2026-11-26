@@ -16,8 +16,9 @@ use crate::{
     extension_policy,
     extensions::{
         ActionCondition, ActionConfirmation, ActionInvocation, CellDeclaration,
-        ContributionTranslation, EditorDeclaration, Manifest, RECORD_FIELD_NOTES_CAPABILITY,
-        RenderingMode, SUPPORTED_HOST_API, UiContributionKind, UiOutlet, valid_contribution_key,
+        ContributionTranslation, EditorDeclaration, FORM_ASSIST_CAPABILITY, Manifest,
+        RECORD_FIELD_NOTES_CAPABILITY, RenderingMode, SUPPORTED_HOST_API, UiContributionKind,
+        UiOutlet, valid_contribution_key,
     },
 };
 
@@ -1213,6 +1214,32 @@ impl AttricatRepository {
                 && installation
                     .capability_grants
                     .contains(RECORD_FIELD_NOTES_CAPABILITY)
+            {
+                providers.push(installation);
+            }
+        }
+        Ok(providers)
+    }
+
+    /// Enabled installations granted [`FORM_ASSIST_CAPABILITY`] whose
+    /// manifests declare form assists, in extension ID order.
+    pub async fn enabled_form_assist_providers(
+        &self,
+    ) -> Result<Vec<ExtensionRuntimeInstallation>, RepositoryError> {
+        let mut providers = Vec::new();
+        for row in self.runtime_installation_rows(None).await? {
+            if !extension_policy::allows(&row.extension_id, row.installed_release_id) {
+                continue;
+            }
+            if let Some(installation) = self.listed_runtime_installation(row).await?
+                && installation
+                    .manifest
+                    .ui
+                    .iter()
+                    .any(|contribution| contribution.form_assist.is_some())
+                && installation
+                    .capability_grants
+                    .contains(FORM_ASSIST_CAPABILITY)
             {
                 providers.push(installation);
             }

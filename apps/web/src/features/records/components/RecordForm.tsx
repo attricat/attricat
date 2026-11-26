@@ -93,6 +93,12 @@ import { useBlueprintFieldDiagnostics } from '../useBlueprintFieldDiagnostics';
 import { migrationReviewSelector } from '../constants';
 import { fieldSkeletons } from '../constants';
 import { DiscardChangesDialog } from '../../drafts/DiscardChangesDialog';
+import {
+  useDefaultFromSuggestions,
+  useFormAssistSuggestions,
+  useFormSuggestions,
+  useSuggestionNotes,
+} from './useFormSuggestions';
 
 export type RecordFormHandle = {
   /** Removes the persisted draft after a confirmed save. */
@@ -458,6 +464,45 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
     });
 
     const fields = useStore(form.store, (state) => state.values.fields);
+    const getFields = () => form.state.values.fields;
+    const suggestions = useFormSuggestions({
+      getFields,
+      setFields: (nextFields) => {
+        validateFields(nextFields);
+        form.setFieldValue('fields', nextFields);
+      },
+    });
+    // A migration moves saved values; only a new record takes defaults.
+    const suggestDefaults = useDefaultFromSuggestions({
+      blueprint,
+      contextId,
+      enabled: expectedUpdatedAt === undefined,
+      getFields,
+      offer: suggestions.offer,
+    });
+    // Extension assists apply after the defaults and may replace them.
+    const assistFieldChanged = useFormAssistSuggestions({
+      blueprint,
+      contextId,
+      enabled: expectedUpdatedAt === undefined,
+      getFields,
+      suggestions,
+    });
+    const suggestionNotes = useSuggestionNotes(suggestions.suggestions);
+    // A form can start with a relationship chosen, such as one created from
+    // a relationship picker; its defaults show once the blueprint loads.
+    const startingDefaultsFor = useRef<string>(undefined);
+    useEffect(() => {
+      const revision =
+        blueprint && `${blueprint.blueprint.id}:${blueprint.blueprint.version}`;
+      if (!blueprint || startingDefaultsFor.current === revision) return;
+      startingDefaultsFor.current = revision;
+      for (const attribute of blueprint.attributes) {
+        const value = form.state.values.fields[attribute.code];
+        if (attribute.value_type === attributeValueTypes.relationship && value)
+          suggestDefaults(attribute, value);
+      }
+    });
     const {
       draft,
       fieldsChanged,
@@ -553,6 +598,7 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
       fieldErrors: allFieldErrors,
       migrationReviews,
       resolvedValues: noResolvedValues,
+      suggestionNotes,
     };
     const submit = async (another: boolean) => {
       if (settling.current) return;
@@ -739,6 +785,12 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
                     markTouched([attribute.code]);
                     validateFields(nextFields);
                     field.handleChange(nextFields);
+                    if (
+                      attribute.value_type === attributeValueTypes.relationship
+                    )
+                      suggestDefaults(attribute, nextValue);
+                    else suggestions.markEdited(attribute.code);
+                    assistFieldChanged(attribute.code);
                   };
                 const renderEditor = (
                   attribute: Attribute,

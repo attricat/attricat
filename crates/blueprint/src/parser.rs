@@ -4,6 +4,7 @@ use attricat_domain::attribute_options::{
     Cardinality, ContextEditable, ContextFallback, SequenceReset,
 };
 use attricat_domain::value_type::ValueType;
+use attricat_validation::saved_search::MAX_RELATIONSHIP_HOPS;
 use attricat_validation::{CODE_PATTERN, is_valid_code, validate_json_schema_definition};
 use schemars::{JsonSchema, generate::SchemaSettings};
 use serde::Deserialize;
@@ -90,6 +91,14 @@ struct RawBlueprintDefinition {
     #[serde(default)]
     #[schemars(length(max = crate::MAX_MOVEMENTS))]
     movements: Vec<crate::MovementDefinition>,
+    /// Extension form assists that propose values in the record form when
+    /// watched fields change, such as a customer-specific price. Each must
+    /// be an enabled extension's `form_assist` for this blueprint. Proposals
+    /// are unsaved form changes; writes outside the form do not call them.
+    /// Record blueprints only.
+    #[serde(default)]
+    #[schemars(length(max = crate::MAX_FORM_ASSISTS))]
+    form_assists: Vec<crate::FormAssistReference>,
     /// Attributes in display order. Each declares exactly one of `value_type`,
     /// `extension_type`, or `from`.
     #[schemars(length(min = 1))]
@@ -127,6 +136,22 @@ struct RawAttributeDeclaration {
     /// Value stored in the default context when a record is created.
     /// Not supported for relationships and files.
     default_value: Option<serde_json::Value>,
+    /// A relationship path such as `item.sale_price_net`. When the path's
+    /// first relationship gains a target and this attribute is empty and not
+    /// written in the same request, the leaf's value is copied here, in the
+    /// relationship's context. A snapshot: later source changes are not
+    /// copied, and a supplied value always wins. Every hop needs
+    /// `cardinality: one`; the leaf must be a scalar of the same value type
+    /// (an `integer` leaf may fill a `number`). Record blueprints only; not
+    /// with `default_value`, `generated` or `balance`.
+    #[schemars(
+        length(min = 3),
+        extend(
+            "x-attricat-reference" = "attribute_path",
+            "x-attricat-value-types" = ["string", "number", "integer", "boolean", "date", "datetime", "time", "json"]
+        )
+    )]
+    default_from: Option<String>,
     /// Relationships: `one`, `many` (default), or `one_to_one`.
     /// Files: `one` (default) or `many`.
     #[schemars(extend(
@@ -542,6 +567,20 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                             }
                         })?;
                     }
+                    let default_from = parse_default_from(
+                        &attribute.code,
+                        attribute.default_from.clone(),
+                        DefaultFromConflicts {
+                            value_type,
+                            kind: &raw.kind,
+                            default_value: attribute.default_value.is_some(),
+                            generated: attribute.generated.is_some(),
+                            balance: attribute.balance.is_some(),
+                            status_or_assignment: value_schema
+                                .as_ref()
+                                .is_some_and(is_status_or_assignment),
+                        },
+                    )?;
                     let Some(context_fallback) = ContextFallback::parse(&attribute.context_fallback)
                     else {
                         return Err(BlueprintError::InvalidContextFallback {
@@ -607,6 +646,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                         extension_type: None,
                         extension_configuration: None,
                         default_value: attribute.default_value,
+                        default_from,
                         file_policy,
                         target_blueprint,
                         target_blueprints,
@@ -681,6 +721,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                         extension_type: Some(extension_type),
                         extension_configuration,
                         default_value: attribute.default_value,
+                        default_from: None,
                         file_policy: None,
                         target_blueprint: None,
                         target_blueprints: Vec::new(),
@@ -702,6 +743,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
     }
 
     validate_unique_keys(&raw.unique_keys, &raw.kind, &codes)?;
+    validate_form_assist_references(&raw.form_assists, &raw.kind)?;
     crate::movements::validate_movement_declarations(&raw.movements, &raw.kind, &codes)?;
 
     let definition = BlueprintDefinition {
@@ -718,6 +760,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
         embedded_rules: raw.rules.is_some(),
         unique_keys: raw.unique_keys,
         movements: raw.movements,
+        form_assists: raw.form_assists,
         attributes,
     };
     crate::lexicon_text::validate_lexicon_references(&definition)?;
@@ -737,8 +780,112 @@ impl RawAttributeDeclaration {
     /// Whether the declaration sets options only a local attribute may have:
     /// a generated value, a balance or a target scope.
     fn declares_local_only_options(&self) -> bool {
-        self.generated.is_some() || self.balance.is_some() || self.target_scope.is_some()
+        self.generated.is_some()
+            || self.balance.is_some()
+            || self.target_scope.is_some()
+            || self.default_from.is_some()
     }
+}
+
+/// Form assists belong to record forms; each is named once.
+fn validate_form_assist_references(
+    references: &[crate::FormAssistReference],
+    kind: &BlueprintKind,
+) -> Result<(), BlueprintError> {
+    let invalid = |message: String| BlueprintError::InvalidFormAssist(message);
+    if !references.is_empty() && *kind != BlueprintKind::Record {
+        return Err(invalid(
+            "only record blueprints can use form assists".into(),
+        ));
+    }
+    if references.len() > crate::MAX_FORM_ASSISTS {
+        return Err(invalid(format!(
+            "a blueprint can use at most {} form assists",
+            crate::MAX_FORM_ASSISTS
+        )));
+    }
+    let mut seen = HashSet::new();
+    for reference in references {
+        if reference.extension_id.trim().is_empty()
+            || reference.id.trim().is_empty()
+            || reference.version == 0
+        {
+            return Err(invalid(
+                "each form assist needs an extension_id, an id and a positive version".into(),
+            ));
+        }
+        if !seen.insert((&reference.extension_id, &reference.id)) {
+            return Err(invalid(format!(
+                "'{}:{}' is named more than once",
+                reference.extension_id, reference.id
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// What a `default_from` cannot be combined with.
+struct DefaultFromConflicts<'a> {
+    value_type: ValueType,
+    kind: &'a BlueprintKind,
+    default_value: bool,
+    generated: bool,
+    balance: bool,
+    status_or_assignment: bool,
+}
+
+/// Validates the local shape of `default_from`: a scalar attribute of a
+/// record blueprint, and a path of one to [`MAX_RELATIONSHIP_HOPS`]
+/// relationships and a leaf, each a code. The compiler checks the first hop
+/// against the blueprint's attributes and saving resolves the rest.
+fn parse_default_from(
+    code: &str,
+    default_from: Option<String>,
+    conflicts: DefaultFromConflicts<'_>,
+) -> Result<Option<String>, BlueprintError> {
+    let Some(path) = default_from else {
+        return Ok(None);
+    };
+    let invalid = |message: &str| BlueprintError::InvalidDefaultFrom {
+        code: code.to_owned(),
+        message: message.to_owned(),
+    };
+    if *conflicts.kind != BlueprintKind::Record {
+        return Err(invalid(
+            "only record blueprints can default values from related records",
+        ));
+    }
+    if matches!(
+        conflicts.value_type,
+        ValueType::Relationship | ValueType::File
+    ) {
+        return Err(invalid(
+            "only scalar attributes can default from a related record",
+        ));
+    }
+    if conflicts.default_value {
+        return Err(invalid("it cannot be combined with default_value"));
+    }
+    if conflicts.generated || conflicts.balance {
+        return Err(invalid(
+            "a generated value or balance cannot have a default",
+        ));
+    }
+    if conflicts.status_or_assignment {
+        return Err(invalid(
+            "a status or an assignment cannot default from a related record",
+        ));
+    }
+    let parts: Vec<&str> = path.split('.').collect();
+    if parts.len() < 2
+        || parts.len() > MAX_RELATIONSHIP_HOPS + 1
+        || parts.iter().any(|part| !is_valid_code(part))
+    {
+        return Err(invalid(&format!(
+            "'{path}' must be one to {MAX_RELATIONSHIP_HOPS} relationships and an attribute, such as item.sale_price_net"
+        )));
+    }
+    Ok(Some(path))
 }
 
 /// Whether a value schema makes the attribute a status or a user or team

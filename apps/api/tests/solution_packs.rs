@@ -5598,3 +5598,51 @@ async fn installed_official_extension_satisfies_the_packs_extension_layout(pool:
     );
     server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn sample_records_default_from_the_samples_they_link_to(pool: PgPool) {
+    const BLUEPRINT: &[u8] = br#"
+format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: price
+    value_type: number
+    default_from: base.price
+  - code: base
+    value_type: relationship
+    target_blueprint: blueprints/product
+    cardinality: one
+"#;
+    const SAMPLES: &[u8] = br#"{"format_version":1,"kind":"solution_pack_sample_data","classification":"synthetic","records":[
+      {"key":"sample-records/base","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/name","value":"Sample base"},{"attribute":"blueprints/product/attributes/price","value":12.5}],"relationships":[]},
+      {"key":"sample-records/variant","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/name","value":"Sample variant"}],"relationships":[{"attribute":"blueprints/product/attributes/base","targets":["sample-records/base"]}]}
+    ]}"#;
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let plan = client
+        .post(format!("{base_url}/solution-packs/plans?prefix=defaults&blueprint_publication=publish&include_sample_data=true"))
+        .header("content-type", "application/zstd")
+        .body(archive_with_sample("1.0.0", BLUEPRINT, SAMPLES))
+        .send()
+        .await
+        .unwrap();
+    let plan = expect_status(plan, StatusCode::CREATED).await;
+    expect_success(apply_plan(&client, &base_url, plan["id"].as_str().unwrap()).await).await;
+    let (price, origin): (Value, Option<String>) = sqlx::query_as(
+        "SELECT c.after_value, c.origin FROM audit_event_changes c JOIN attribute_values v ON v.record_id = c.record_id AND v.attribute_id = c.attribute_id JOIN attribute_values link ON link.record_id = c.record_id AND link.relationship_target_record_id IS NOT NULL WHERE c.attribute_code = 'price'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(price, json!(12.5));
+    assert_eq!(origin.as_deref(), Some("default_from"));
+    server.abort();
+}

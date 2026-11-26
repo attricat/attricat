@@ -632,6 +632,7 @@ mod tests {
             value_schema: None,
             extension_type: None,
             default_value: None,
+            default_from: None,
             file_policy: None,
             target_blueprint_code: None,
             target_blueprint_codes: Vec::new(),

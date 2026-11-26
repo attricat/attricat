@@ -7,6 +7,9 @@ export const extensionQueryKeys = {
   runtimeRoot: () => ['extensions', 'runtime'] as const,
   runtime: (scope?: { blueprintId: string; blueprintVersion: number }) =>
     ['extensions', 'runtime', scope ?? null] as const,
+  /** A blueprint revision's form assists; under the runtime, which changes with enabled extensions. */
+  formAssists: (scope: { blueprintId: string; blueprintVersion: number }) =>
+    ['extensions', 'runtime', 'form-assists', scope] as const,
   /**
    * Under the record's resolved previews: field notes describe its values, so
    * whatever refreshes those after an edit refreshes the notes too.

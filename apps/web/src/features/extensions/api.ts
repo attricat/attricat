@@ -1,9 +1,11 @@
 import type { z } from 'zod';
-import { request, requestText } from '../../api/request';
+import { jsonRequest, request, requestText } from '../../api/request';
 import { maximumExtensionResponseBytes } from './constants';
 import {
   extensionCommandRequestSchema,
   type ExtensionStorageRequest,
+  formAssistAnswerSchema,
+  formAssistsResponseSchema,
   runtimeSchema,
 } from './schemas';
 import { utf8ByteLength } from './utf8';
@@ -26,6 +28,37 @@ export const getExtensionRuntime = (scope?: ExtensionRuntimeScope) => {
     : '';
   return request(`${extensionsApiPath}/runtime${query}`, runtimeSchema);
 };
+
+/** The form assists a blueprint revision's record form runs. */
+export const getFormAssists = (
+  scope: ExtensionRuntimeScope,
+  signal?: AbortSignal,
+) =>
+  request(
+    `/api/v1/records/form-assists?blueprint_id=${encodeURIComponent(scope.blueprintId)}&blueprint_version=${scope.blueprintVersion}`,
+    formAssistsResponseSchema,
+    signal === undefined ? {} : { signal },
+  );
+
+/** Calls one form assist with the form's working values. */
+export const runFormAssist = (
+  input: {
+    extension_id: string;
+    id: string;
+    blueprint_id: string;
+    blueprint_version: number;
+    record_id: string | null;
+    context_id: string | null;
+    values: Record<string, unknown>;
+    relationships: Record<string, string[]>;
+    edited: string[];
+  },
+  signal?: AbortSignal,
+) =>
+  request('/api/v1/records/form-assist', formAssistAnswerSchema, {
+    ...jsonRequest('POST', input),
+    ...(signal === undefined ? {} : { signal }),
+  });
 
 export const getExtensionArtifact = async (
   extensionId: string,

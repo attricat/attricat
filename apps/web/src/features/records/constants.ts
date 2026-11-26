@@ -167,6 +167,12 @@ export const approvalCauseKinds = {
   override: 'override',
 } as const;
 
+/** Why the server, rather than the writer, supplied a changed value. */
+export const valueOrigins = {
+  /** Copied from a related record by the attribute's `default_from`. */
+  defaultFrom: 'default_from',
+} as const;
+
 /** The operation that wrote a status change. */
 export const transitionOperations = {
   edit: 'edit',

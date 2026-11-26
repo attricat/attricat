@@ -97,6 +97,10 @@ const blueprintSnippets: DefinitionSnippet[] = [
     'value_type: relationship\ntarget_blueprint: ${3:blueprint}\ncardinality: ${4|one,many|}',
   ),
   attributeSnippet(
+    'defaultedAttribute',
+    'value_type: ${3|number,string,integer,date|}\ndefault_from: ${4:relationship}.${5:attribute}',
+  ),
+  attributeSnippet(
     'imageAttribute',
     'value_type: file\ncardinality: ${3|one,many|}\nallowed_mime_groups: [image]\nimage_only: true',
   ),

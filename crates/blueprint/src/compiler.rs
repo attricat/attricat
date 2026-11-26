@@ -44,6 +44,7 @@ pub fn compile(
             value_schema,
             extension_type,
             default_value,
+            default_from,
             file_policy,
             target_blueprint,
             target_blueprints,
@@ -70,6 +71,7 @@ pub fn compile(
                     })
                 }),
                 local.default_value.clone(),
+                local.default_from.clone(),
                 local.file_policy.clone(),
                 local.target_blueprint.clone(),
                 local.target_blueprints.clone(),
@@ -107,6 +109,7 @@ pub fn compile(
                     attribute.value_schema.clone(),
                     attribute.extension_type.clone(),
                     attribute.default_value.clone(),
+                    None,
                     attribute.file_policy.clone(),
                     attribute.target_blueprint.clone(),
                     attribute.target_blueprints.clone(),
@@ -130,6 +133,7 @@ pub fn compile(
             value_schema,
             extension_type,
             default_value,
+            default_from,
             file_policy,
             target_blueprint,
             target_blueprints,
@@ -151,6 +155,7 @@ pub fn compile(
     {
         validate_record_schema_attributes(schema, &attributes)?;
     }
+    validate_default_from_first_hops(&attributes)?;
     validate_declarative_checks(&definition, &attributes)?;
     validate_unique_key_attributes(&definition.unique_keys, &attributes)?;
     validate_selected_hierarchies(&definition.code, &definition.kind, &attributes)?;
@@ -190,8 +195,40 @@ pub fn compile(
         embedded_rules: definition.embedded_rules,
         unique_keys: definition.unique_keys,
         movements: definition.movements,
+        form_assists: definition.form_assists,
         attributes,
     })
+}
+
+/// A `default_from` path starts at one of the blueprint's own relationships
+/// with `cardinality: one`, so the source is a single record. Later hops are
+/// resolved against the published target blueprints when the blueprint is
+/// saved.
+fn validate_default_from_first_hops(
+    attributes: &[EffectiveAttribute],
+) -> Result<(), BlueprintError> {
+    for attribute in attributes {
+        let Some(path) = &attribute.default_from else {
+            continue;
+        };
+        let first = path.split('.').next().expect("a path has a first hop");
+        let relationship = attributes.iter().find(|candidate| candidate.code == first);
+        let message = match relationship {
+            None => format!("'{first}' is not an attribute of this blueprint"),
+            Some(relationship) if relationship.value_type != ValueType::Relationship => {
+                format!("'{first}' must be a relationship")
+            }
+            Some(relationship) if relationship.cardinality != Some(Cardinality::One) => {
+                format!("relationship '{first}' must have cardinality: one")
+            }
+            Some(_) => continue,
+        };
+        return Err(BlueprintError::InvalidDefaultFrom {
+            code: attribute.code.clone(),
+            message,
+        });
+    }
+    Ok(())
 }
 
 /// Type-checks record-schema checks and status transition conditions against

@@ -251,7 +251,16 @@ pub struct AffectedFactV1 {
     pub change_kind: String,
     pub before_value: Option<Value>,
     pub after_value: Option<Value>,
+    /// Why core, not the writer, supplied the value: [`FACT_ORIGIN_DEFAULT_FROM`]
+    /// when it was copied by an attribute's `default_from`. Omitted for values
+    /// the writer supplied.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
 }
+
+/// The origin of a value an attribute's `default_from` copied from a related
+/// record.
+pub const FACT_ORIGIN_DEFAULT_FROM: &str = "default_from";
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RecordMutationV1 {

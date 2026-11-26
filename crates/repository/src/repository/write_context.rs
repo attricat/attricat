@@ -50,6 +50,9 @@ pub(super) struct WriteAttribute {
     #[sqlx(try_from = "String")]
     pub context_fallback: ContextFallback,
     pub default_value: Option<Value>,
+    /// The relationship path core copies a value from; see
+    /// [`super::default_from`].
+    pub default_from: Option<String>,
     /// Numbered by core on record creation; clients never write it.
     pub generated: Option<sqlx::types::Json<GeneratedValue>>,
     /// A balance only movements change; clients never write it.
@@ -277,7 +280,7 @@ impl WriteContext {
             r#"SELECT id, code, value_type, value_schema,
                       CASE WHEN cardinality(target_blueprint_codes) > 0 THEN target_blueprint_codes WHEN target_blueprint_code IS NULL THEN '{}'::text[] ELSE ARRAY[target_blueprint_code] END AS target_blueprint_codes,
                       cardinality, target_cardinality, context_editable, context_fallback, default_value,
-                      generated, balance,
+                      default_from, generated, balance,
                       record_id IS NULL AND EXISTS (
                           SELECT 1 FROM blueprints b, jsonb_array_elements(b.movements) movement
                           WHERE b.workspace_id = attributes.workspace_id

@@ -49,6 +49,8 @@ export const extensionOutlets = {
   actionDialog: 'action_dialog',
   exportMapping: 'export_mapping',
   attributeEditor: 'attribute_editor',
+  /** An open record form; `form_assist` contributions propose its values. */
+  recordForm: 'record_form',
 } as const;
 /**
  * Outlets that render an extension's actions as host-owned menu items or
@@ -75,7 +77,17 @@ export const contributionKinds = {
   tab: 'tab',
   cell: 'cell',
   editor: 'editor',
+  formAssist: 'form_assist',
 } as const;
+/** How the host's call of a form assist ended. */
+export const formAssistOutcomes = {
+  answered: 'answered',
+  failed: 'failed',
+  timedOut: 'timed_out',
+} as const;
+/** How long a record form waits after a watched field changes. */
+export const formAssistDebounceMs = 400;
+
 /** Who draws a contribution that runs extension code. */
 export const renderingModes = { frame: 'frame', native: 'native' } as const;
 /** Host-owned ways a declared Explorer table cell shows its value. */

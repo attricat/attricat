@@ -21,6 +21,13 @@ crate::code_enum! {
 }
 
 impl ValueType {
+    /// Whether a value of this type may be copied into an attribute of
+    /// `target` type by `default_from`: the same type, or an `integer` into a
+    /// `number`.
+    pub fn copies_into(self, target: Self) -> bool {
+        self == target || (self == Self::Integer && target == Self::Number)
+    }
+
     /// A single comparable value: every type but `json`, `relationship` and
     /// `file`. Scalars sort, take presence filters and render in table cells.
     pub const fn is_scalar(self) -> bool {
