@@ -14,8 +14,8 @@ sso_cookies="$(mktemp)"
 extension_archive="$(mktemp)"
 tls="deploy/ci-tls"
 # The newest published first-party extension must keep installing and running.
-extension_release=v0.15.0
-extension_sha256=98e1d47b1c191e15b6b7101b22aa28784f2cf1981a77f85cd94b0d34953a2f93
+extension_release=v0.18.0
+extension_sha256=50c3dd211a95c93f5b63a2ef50e5695779ea0e61096943ef2bde8475f1ef000c
 mkdir -p "$evidence"
 cleanup() {
   rm -f "$session_cookies" "$sso_cookies" "$extension_archive"
