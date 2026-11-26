@@ -46,6 +46,7 @@ Schematy rekordów mają `kind: record`.
 | `unique_keys` | lista mapowań | Nie | Klucze biznesowe, których wartości muszą być unikalne. Tylko schematy rekordów. Zobacz [Klucze unikalne](#klucze-unikalne). |
 | `connector_jobs` | lista mapowań | Nie | Zaplanowane lub ręczne zadania importu i eksportu wykonywane przez rozszerzenie konektora. Tylko schematy rekordów. Zobacz [Zadania konektorów](#zadania-konektorów). |
 | `movements` | lista mapowań | Nie | Jak utworzenie rekordu zmienia saldo innego rekordu, np. wydanie towaru obniża stan magazynowy. Najwyżej 4. Tylko schematy rekordów. Zobacz [Salda i przesunięcia](#salda-i-przesunięcia). |
+| `form_assists` | lista mapowań | Nie | Asystenci rozszerzeń, którzy proponują wartości w formularzu rekordu, każdy `{ extension_id, id, version }`. Najwyżej 8. Tylko schematy rekordów. Zobacz [Asystenci formularza](/pl/extensions/manifest/#asystenci-formularza). |
 | `extensions` | mapowanie | Nie | Dowolne dane dla rozszerzeń, w przestrzeniach nazw `extensions.<extension-id>`. Kompilator rdzenia je ignoruje; rozszerzenia odczytują je z zapisanej definicji. |
 
 ## Atrybuty
@@ -73,9 +74,34 @@ attributes:
 | `readonly` | wartość logiczna | `false` | Pokazuje pole w aplikacji webowej, ale uniemożliwia jego edycję w niej. API, CLI, agenci, przepływy pracy i rozszerzenia nadal mogą je zapisywać. Używaj dla wartości, którymi zarządza integracja. |
 | `tags` | tablica ciągów znaków | `[]` | Dowolne metadane. Muszą być unikalne i niepuste. Niektóre tagi ukrywają atrybut w aplikacji webowej; zobacz [Tagi widoczności](#tagi-widoczności). |
 | `default_value` | zgodny z typem | Nieustawiony | Wartość zapisywana w kontekście domyślnym, gdy rekord zostaje utworzony bez niej. Tylko typy skalarne. |
+| `default_from` | ciąg znaków | Nieustawiony | Ścieżka relacji, np. `item.sale_price_net`, z której wartość jest kopiowana do pustego atrybutu, gdy pierwsza relacja ścieżki otrzyma cel. Tylko atrybuty skalarne w schematach rekordów; nie razem z `default_value`. Zobacz [Wartości z powiązanych rekordów](#wartości-z-powiązanych-rekordów). |
 | `value_schema` | ciąg znaków (JSON) | Nieustawiony | JSON Schema dla jednej wartości. Tylko typy skalarne. Schemat atrybutu `string` może uczynić go [statusem](#statusy) lub [przypisaniem użytkownika lub zespołu](#przypisania-użytkowników-i-zespołów). Zobacz [Walidacja](/pl/builders/validation/). |
 | `generated` | mapowanie | Nieustawiony | Serwer numeruje nowe rekordy, np. numerami faktur lub zamówień. Tylko atrybuty `string` i `integer` w schematach rekordów. Zobacz [Wartości generowane](#wartości-generowane). |
 | `balance` | mapowanie | Nieustawiony | Suma bieżąca, którą zmieniają tylko [przesunięcia](#salda-i-przesunięcia), np. stan magazynowy. Tylko atrybuty `number` i `integer` w schematach rekordów. |
+
+### Wartości z powiązanych rekordów
+
+`default_from` kopiuje wartość z rekordu, do którego prowadzi relacja, np. cenę pozycji zamówienia z wybranego produktu:
+
+```yaml
+attributes:
+  - code: item
+    value_type: relationship
+    target_blueprints: [product, service]
+    cardinality: one
+  - code: unit_price_net
+    value_type: number
+    default_from: item.sale_price_net
+```
+
+- Ścieżka ma od jednej do trzech relacji i atrybut, tak jak kolumna tabeli. Każda relacja musi mieć `cardinality: one`. Ostatni atrybut musi mieć ten sam typ wartości; `integer` może wypełnić `number`.
+- Wartość jest kopiowana, gdy rekord zostaje utworzony z relacją albo gdy późniejszy zapis powiąże go z innym rekordem, i tylko wtedy, gdy atrybut jest pusty w tym kontekście, a zapis go nie ustawia ani nie czyści. Importy, przepływy pracy, rozszerzenia i przykładowe rekordy pakietów rozwiązań działają tak samo.
+- To migawka: późniejsza zmiana ceny produktu nie zmienia istniejących pozycji, a wpisana wartość zawsze wygrywa.
+- Wartość jest odczytywana w kontekście relacji, z dziedziczeniem atrybutu źródłowego, i tylko z rekordów, które może odczytać osoba zapisująca. Gdy nie ma czego skopiować, np. usługa nie ma ceny, atrybut pozostaje pusty, a zapis i tak się udaje.
+- Historia rekordu oznacza skopiowaną wartość jako uzupełnioną z powiązanego rekordu.
+- W aplikacji webowej wybranie rekordu od razu wypełnia te pola, w formularzu rekordu i w nowym wierszu tabeli powiązanych rekordów, np. pozycji faktury, i podaje rekord, z którego pochodzi wartość. Nowa pozycja dostaje też wartości kopiowane z faktury, gdy tylko wiersz się otworzy. Pole, w którym coś wpisano, nigdy nie jest zmieniane.
+
+`default_from` nie może występować razem z `default_value`, `generated`, `balance`, statusem ani przypisaniem.
 
 ### Typy wartości
 

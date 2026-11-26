@@ -180,6 +180,7 @@ impl DomainRow for Attribute {
             value_schema: row.try_get("value_schema")?,
             extension_type: row.try_get("extension_type")?,
             default_value: row.try_get("default_value")?,
+            default_from: row.try_get("default_from")?,
             file_policy: row.try_get("file_policy")?,
             target_blueprint_code,
             target_blueprint_codes,
@@ -321,6 +322,7 @@ domain_row!(RecordAuditChange {
     change_kind,
     before_value,
     after_value,
+    origin,
     deleted_file_ids,
 });
 domain_row!(FileVariantMetadata {

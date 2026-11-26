@@ -100,6 +100,15 @@
       "maxItems": 4,
       "default": []
     },
+    "form_assists": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/FormAssistReference"
+      },
+      "description": "Extension form assists that propose values in the record form when\nwatched fields change, such as a customer-specific price. Each must\nbe an enabled extension's `form_assist` for this blueprint. Proposals\nare unsaved form changes; writes outside the form do not call them.\nRecord blueprints only.",
+      "maxItems": 8,
+      "default": []
+    },
     "attributes": {
       "type": "array",
       "items": {
@@ -1464,6 +1473,32 @@
       ],
       "description": "A status transition that applies a movement: of the record itself, or,\nwith `relationship`, of the record it links to, such as the production\norder of an order line."
     },
+    "FormAssistReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "extension_id": {
+          "type": "string",
+          "description": "The enabled extension that declares the assist."
+        },
+        "id": {
+          "type": "string",
+          "description": "The `form_assist` contribution's ID in that extension."
+        },
+        "version": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0,
+          "description": "The contribution's version."
+        }
+      },
+      "required": [
+        "extension_id",
+        "id",
+        "version"
+      ],
+      "description": "An extension's `form_assist` that proposes values in this blueprint's\nrecord form. Saving checks it against the enabled extension releases, as\na field's `editor` is checked."
+    },
     "RawAttributeDeclaration": {
       "type": "object",
       "additionalProperties": false,
@@ -1532,6 +1567,25 @@
         },
         "default_value": {
           "description": "Value stored in the default context when a record is created.\nNot supported for relationships and files."
+        },
+        "default_from": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "A relationship path such as `item.sale_price_net`. When the path's\nfirst relationship gains a target and this attribute is empty and not\nwritten in the same request, the leaf's value is copied here, in the\nrelationship's context. A snapshot: later source changes are not\ncopied, and a supplied value always wins. Every hop needs\n`cardinality: one`; the leaf must be a scalar of the same value type\n(an `integer` leaf may fill a `number`). Record blueprints only; not\nwith `default_value`, `generated` or `balance`.",
+          "minLength": 3,
+          "x-attricat-reference": "attribute_path",
+          "x-attricat-value-types": [
+            "string",
+            "number",
+            "integer",
+            "boolean",
+            "date",
+            "datetime",
+            "time",
+            "json"
+          ]
         },
         "cardinality": {
           "type": [

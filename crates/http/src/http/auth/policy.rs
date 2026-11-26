@@ -522,6 +522,9 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
         return Some(read(TargetKind::RecordList));
     }
     if path == "/v1/records/search"
+        || path == "/v1/records/default-values"
+        || path == "/v1/records/form-assists"
+        || path == "/v1/records/form-assist"
         || path == "/v1/records/facets/relationship-tree/children"
         || path == "/v1/records/facets/system-tags"
         || path == "/v1/records/reusable-attributes"

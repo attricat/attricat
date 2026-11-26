@@ -22,9 +22,14 @@ import {
   retentionHoldSources,
   transitionChannels,
   transitionOperations,
+  valueOrigins,
 } from './constants';
 
 export const uuidSchema = z.uuid();
+/** Values `default_from` would copy for a chosen relationship target. */
+export const defaultValuesResponseSchema = z.object({
+  values: z.array(z.object({ attribute_code: z.string(), value: z.json() })),
+});
 export const recordLabelsResponseSchema = z.object({
   items: z.array(
     z.object({
@@ -74,6 +79,11 @@ export const attributeSchema = z
       .object({ attribute: z.string(), equals: z.string() })
       .nullish(),
     tags: z.array(z.string()).optional(),
+    /**
+     * A relationship path whose value the server copies into this empty
+     * attribute when the path's first relationship gains a target.
+     */
+    default_from: z.string().nullish(),
     value_schema: jsonSchemaSchema.nullish(),
     extension_type: z
       .object({
@@ -362,6 +372,8 @@ const recordAuditChangeSchema = z.object({
   deleted_file_ids: z.array(uuidSchema).default([]),
   before_value: z.unknown().nullable(),
   after_value: z.unknown().nullable(),
+  /** Set when the server, not the writer, supplied the value. */
+  origin: z.enum(valueOrigins).optional(),
 });
 const reusableRecordAttributeSchema = attributeSchema.extend({
   attachment_id: uuidSchema,

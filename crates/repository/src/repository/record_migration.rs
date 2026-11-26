@@ -1170,6 +1170,7 @@ mod tests {
             change_kind: crate::domain_events::CHANGE_KIND_RELATIONSHIP_REMOVE,
             before_value: None,
             after_value: None,
+            origin: None,
         }
     }
 

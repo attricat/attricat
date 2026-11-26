@@ -77,6 +77,30 @@ impl handler::Guest for Component {
             "field-notes-invalid" => Some(json!({
                 "records": {"x": {"attributes": {"title": {"badge": {"label": "x".repeat(30)}}}}}
             })),
+            // A form assist pricing an order line: ten per unit of its item,
+            // with proposals the host must drop (an undeclared field and a
+            // value its attribute refuses).
+            "form-assist" => {
+                let item = &payload["values"]["item"][0];
+                let quantity = payload["values"]["quantity"].as_f64();
+                Some(
+                    json!({"proposals": match (item["blueprint_code"].as_str(), quantity) {
+                        (Some(blueprint), Some(quantity)) => json!([
+                            {"attribute_code": "unit_price_net", "value": quantity * 10.0, "note": format!("Customer price for a {blueprint}")},
+                            {"attribute_code": "discount", "value": "ten"},
+                            {"attribute_code": "note", "value": "not proposed"}
+                        ]),
+                        _ => json!([]),
+                    }}),
+                )
+            }
+            // Proposes the context it was given, so a test can read it.
+            "form-assist-echo" => Some(json!({"proposals": [
+                {"attribute_code": "memo", "value": payload.to_string()}
+            ]})),
+            "form-assist-invalid" => Some(json!({"proposals": [
+                {"attribute_code": "unit_price_net", "value": 1, "note": "x".repeat(200)}
+            ]})),
             _ => None,
         };
         if let Some(notes) = notes {

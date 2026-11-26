@@ -25,7 +25,7 @@ use uuid::Uuid;
 const BLUEPRINT_COLUMNS: &str = "id, code, name, kind, version, includes, views, record_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash, movements";
 
 /// The `attributes` columns an [`Attribute`] row is read from.
-pub(crate) const ATTRIBUTE_COLUMNS: &str = "id, blueprint_id, blueprint_version, code, name, value_type, value_schema, extension_type, default_value, file_policy, target_blueprint_code, target_blueprint_codes, cardinality, target_cardinality, hierarchy, tags, context_fallback, context_editable, readonly, generated, balance, target_scope, position, created_at, updated_at, deleted_at";
+pub(crate) const ATTRIBUTE_COLUMNS: &str = "id, blueprint_id, blueprint_version, code, name, value_type, value_schema, extension_type, default_value, default_from, file_policy, target_blueprint_code, target_blueprint_codes, cardinality, target_cardinality, hierarchy, tags, context_fallback, context_editable, readonly, generated, balance, target_scope, position, created_at, updated_at, deleted_at";
 
 /// The ID and version of a blueprint's latest published revision, by code
 /// (`$1`) in a workspace (`$2`).
@@ -352,9 +352,9 @@ impl AttricatRepository {
             validate_attribute_default_value(&attribute)?;
             attributes.push(
                 sqlx::query_as::<_, Db<Attribute>>(
-                    r#"INSERT INTO attributes (id, workspace_id, blueprint_id, blueprint_version, code, name, value_type, value_schema, extension_type, default_value, file_policy, target_blueprint_code, cardinality, target_cardinality, tags, context_fallback, context_editable, readonly, position, target_blueprint_codes, hierarchy, generated, balance, target_scope)
-                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
-                       RETURNING id, blueprint_id, blueprint_version, code, name, value_type, value_schema, extension_type, default_value, file_policy, target_blueprint_code, target_blueprint_codes, cardinality, target_cardinality, hierarchy, tags, context_fallback, context_editable, readonly, generated, balance, target_scope, position, created_at, updated_at, deleted_at"#,
+                    r#"INSERT INTO attributes (id, workspace_id, blueprint_id, blueprint_version, code, name, value_type, value_schema, extension_type, default_value, default_from, file_policy, target_blueprint_code, cardinality, target_cardinality, tags, context_fallback, context_editable, readonly, position, target_blueprint_codes, hierarchy, generated, balance, target_scope)
+                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
+                       RETURNING id, blueprint_id, blueprint_version, code, name, value_type, value_schema, extension_type, default_value, default_from, file_policy, target_blueprint_code, target_blueprint_codes, cardinality, target_cardinality, hierarchy, tags, context_fallback, context_editable, readonly, generated, balance, target_scope, position, created_at, updated_at, deleted_at"#,
                 )
                 .bind(Uuid::new_v4())
                 .bind(self.workspace_id.0)
@@ -366,6 +366,7 @@ impl AttricatRepository {
                 .bind(attribute.value_schema)
                 .bind(attribute.extension_type)
                 .bind(attribute.default_value)
+                .bind(attribute.default_from)
                 .bind(attribute.file_policy.map(|policy| serde_json::to_value(policy).expect("file policy serializes")))
                 .bind(attribute.target_blueprint)
                 .bind(attribute.cardinality.map(Cardinality::as_str))
@@ -431,6 +432,26 @@ impl AttricatRepository {
         .into_domain();
 
         self.with_attributes(blueprint).await
+    }
+
+    /// The code of a blueprint revision and the form assists its definition
+    /// names, or `None` when the revision does not exist.
+    pub async fn blueprint_form_assists(
+        &self,
+        blueprint_id: Uuid,
+        version: i64,
+    ) -> Result<Option<(String, Vec<attricat_blueprint::FormAssistReference>)>, RepositoryError>
+    {
+        Ok(self
+            .get_blueprint_revision(blueprint_id, version)
+            .await?
+            .map(|revision| {
+                // A stored definition parsed when it was saved.
+                let references = attricat_blueprint::parse(&revision.blueprint.definition)
+                    .map(|definition| definition.form_assists)
+                    .unwrap_or_default();
+                (revision.blueprint.code, references)
+            }))
     }
 
     pub async fn get_blueprint_revision(

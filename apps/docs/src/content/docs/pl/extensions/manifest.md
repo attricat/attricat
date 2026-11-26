@@ -98,7 +98,7 @@ Wymień uprawnienia w `permissions` lub `optional_permissions`. Każde z nich ze
 
 Każde uprawnienie umiejscowienia zezwala na kontrybucję w jednym miejscu osadzenia. Zobacz [Kontrybucje klienckie](/pl/extensions/client/#miejsca-osadzenia).
 
-`client.blueprint_configuration`, `client.record_tab`, `client.record_action`, `client.record_header_action`, `client.record_field_notes`, `client.explorer_row_action`, `client.explorer_table_cell`, `client.explorer_action`, `client.explorer_bulk_action`, `client.blueprint_detail_panel`, `client.blueprint_panel`, `client.blueprint_publish_check`, `client.audit_event_panel`, `client.data_health_card`, `client.action_dialog`, `client.export_mapping`, `client.attribute_editor`.
+`client.blueprint_configuration`, `client.record_tab`, `client.record_action`, `client.record_header_action`, `client.record_field_notes`, `client.explorer_row_action`, `client.explorer_table_cell`, `client.explorer_action`, `client.explorer_bulk_action`, `client.blueprint_detail_panel`, `client.blueprint_panel`, `client.blueprint_publish_check`, `client.audit_event_panel`, `client.data_health_card`, `client.action_dialog`, `client.export_mapping`, `client.attribute_editor`, `client.form_assist`.
 
 ## Uprawnienia hosta
 
@@ -290,6 +290,7 @@ Miejsce docelowe eksportu nadaje ekranom stanu eksportu, podglądu, ponawiania i
 | `tab` | `artifact`, `outlet`, `title` | Karta na stronie rekordu w miejscu `record_tab`, której panelem jest ramka; opcjonalnie `icon` oraz `when` ograniczone do `blueprints`. Zobacz [Strony rekordów](/pl/extensions/client/#strony-rekordów). |
 | `cell` | `outlet`, `cell` | Jak Attricat rysuje wartość w kolumnie `explorer_table_cell`. Bez artefaktu. Zobacz [Komórki tabeli](#komórki-tabeli). |
 | `editor` | `artifact`, `outlet`, `editor` | Kontrolka wprowadzania, której pole schematu może użyć w `attribute_editor`; jej artefakt musi być typu `client_native`. Zobacz [Edytory atrybutów](#edytory-atrybutów). |
+| `form_assist` | `outlet`, `when`, `form_assist` | Proponuje wartości w formularzu rekordu w `record_form`, gdy zmienią się obserwowane pola, przez polecenie serwerowe. Bez artefaktu. Zobacz [Asystenci formularza](#asystenci-formularza). |
 
 Kontrybucja, której `artifact` jest artefaktem `client_native`, jest rysowana natywnie; w przeciwnym razie jej artefakt musi być typu `client_frame`. Natywny interfejs jest dozwolony w `record_tab`, `blueprint_attribute_configuration`, `blueprint_detail_panel`, `blueprint_panel`, `data_health_card`, `export_mapping`, `action_dialog` i `attribute_editor`; trasy, osadzona `navigation`, `blueprint_publish_check` i `audit_event_panel` pozostają interfejsem w ramce.
 
@@ -376,6 +377,39 @@ views:
 ```
 
 Zapisanie i opublikowanie schematu sprawdza typ wartości pola i właściwości względem deklaracji włączonego rozszerzenia. Edytor wymaga `client.attribute_editor`. Gdy rozszerzenie jest wyłączone, nie ma tego uprawnienia, uległo awarii lub dopiero się uruchamia, pole używa domyślnej kontrolki. Zobacz [Edytory atrybutów](/pl/extensions/native/#edytory-atrybutów).
+
+## Asystenci formularza
+
+Kontrybucja `form_assist` proponuje wartości, gdy ktoś wprowadza nowy rekord w formularzu rekordu lub w nowym wierszu tabeli powiązanych rekordów, dla zasad, których schemat nie może zadeklarować, np. ceny dla konkretnego klienta albo przeliczenia jednostek. Gdy zmieni się obserwowane pole, Attricat wywołuje jedno z poleceń serwerowych rozszerzenia z wartościami formularza i wpisuje to, co ono zaproponuje.
+
+```json
+{
+  "id": "customer_price",
+  "version": 1,
+  "kind": "form_assist",
+  "outlet": "record_form",
+  "when": { "blueprints": ["order_line"] },
+  "form_assist": {
+    "command": "propose-price",
+    "watch": ["item", "quantity", "customer"],
+    "proposes": ["unit_price_net", "discount_percent"]
+  }
+}
+```
+
+- `watch` i `proposes` wymieniają po 1–16 kodów atrybutów, a `when` – schematy, dla których jest asystent. Rozszerzenie potrzebuje `client.form_assist` i `client.commands`.
+- Schemat używa asystenta, wskazując go; zapis sprawdza go względem włączonego wydania rozszerzenia. Obserwowane pola muszą istnieć w schemacie, a proponowane muszą być edytowalnymi wartościami, nie relacjami ani plikami:
+
+  ```yaml
+  form_assists:
+    - { extension_id: acme.pricing, id: customer_price, version: 1 }
+  ```
+
+- Polecenie otrzymuje `{ "version": 1, "assist", "blueprint": { "code", "id", "version" }, "record_id", "context_id", "values", "edited" }`. `values` zawiera tylko obserwowane i proponowane pola, `null` gdy są puste; relacja to lista `{ "record_id", "blueprint_code" }`, które ta osoba może odczytać. `edited` wymienia proponowane pola zmienione przez tę osobę. Polecenie może odczytywać katalog z uprawnieniami rozszerzenia.
+- Odpowiada `{ "proposals": [{ "attribute_code", "value", "note" }] }`, najwyżej 16, z opcjonalną notatką `note` w czystym tekście do 140 znaków. Attricat zachowuje propozycję tylko dla zadeklarowanego pola, którego ta osoba nie zmieniła, i tylko gdy pole przyjmuje tę wartość.
+- Formularz wpisuje każdą zachowaną propozycję jako niezapisaną zmianę i pokazuje notatkę pod polem. Nic nie jest zapisywane, dopóki ta osoba nie zapisze rekordu. Odpowiedź dla wartości, które w międzyczasie się zmieniły, błąd, zbyt wolna odpowiedź (ponad trzy sekundy) albo wyłączone rozszerzenie zostawiają formularz bez zmian.
+- `default_from` schematu wypełnia pola jako pierwsze; propozycja może zastąpić taką wartość, ale nigdy wartości wpisanej przez osobę.
+- Asystentów wywołuje tylko formularz rekordu. Zapisy przez API, importy, przepływy pracy i inne rozszerzenia ich nie wywołują, więc dla zasady obowiązującej przy każdym zapisie użyj obsługi zdarzeń.
 
 ## Typy atrybutów
 

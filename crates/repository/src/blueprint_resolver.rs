@@ -102,7 +102,9 @@ async fn compile_source(
         .map_err(RepositoryError::invalid_blueprint_definition)?;
     resolve_extension_attribute_types(transaction, workspace_id, &mut compiled).await?;
     validate_table_columns(transaction, workspace_id, &compiled).await?;
+    validate_default_from_paths(transaction, workspace_id, &compiled).await?;
     validate_field_editors(transaction, workspace_id, &compiled).await?;
+    validate_form_assists(transaction, workspace_id, &compiled).await?;
     validate_browse_by(transaction, workspace_id, &compiled).await?;
     validate_status_coverage(&compiled)?;
     Ok(compiled)
@@ -499,6 +501,113 @@ async fn validate_table_columns(
     Ok(())
 }
 
+/// A `default_from` path resolves like a table column, through the latest
+/// published revisions of the blueprints it reaches, to one source value:
+/// every hop holds a single target, and the leaf is a scalar of the
+/// attribute's value type (an `integer` may fill a `number`). A leaf that only
+/// some targets of a multi-target hop declare is allowed; the others yield
+/// nothing.
+async fn validate_default_from_paths(
+    transaction: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+    compiled: &CompiledBlueprint,
+) -> Result<(), RepositoryError> {
+    if compiled
+        .attributes
+        .iter()
+        .all(|attribute| attribute.default_from.is_none())
+    {
+        return Ok(());
+    }
+    // A path back to this blueprint, such as a variant's `base.price`, sees
+    // the revision being saved rather than the last published one.
+    let mut loaded =
+        LoadedBlueprints::from([(compiled.code.clone(), Some(draft_path_blueprint(compiled)))]);
+    for attribute in &compiled.attributes {
+        let Some(path) = &attribute.default_from else {
+            continue;
+        };
+        let invalid = |message: String| {
+            RepositoryError::InvalidBlueprintDefinition(format!(
+                "attribute '{}' has an invalid default_from: '{path}' {message}",
+                attribute.code
+            ))
+        };
+        let parts: Vec<_> = path.split('.').collect();
+        let resolved = walk_relationship_path(
+            path,
+            &parts,
+            (&compiled.code, &compiled.attributes),
+            OnceLoader {
+                inner: TransactionPathLoader {
+                    transaction: &mut *transaction,
+                    workspace_id,
+                },
+                loaded: &mut loaded,
+            },
+        )
+        .await
+        .map_err(|error| error.into_repository(|error| invalid(error.to_string())))?;
+        if !resolved.hops.single_valued {
+            return Err(invalid(
+                "must follow relationships with cardinality: one".into(),
+            ));
+        }
+        let leaf = resolved.leaf.value_type;
+        if !leaf.copies_into(attribute.value_type) {
+            return Err(invalid(format!(
+                "ends on a {leaf} attribute, which cannot fill a {} attribute",
+                attribute.value_type
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// The blueprint being saved as a path walk sees it: only the fields a walk
+/// reads (code, value type, targets and cardinality) are meaningful.
+fn draft_path_blueprint(compiled: &CompiledBlueprint) -> PathBlueprint {
+    let now = chrono::Utc::now();
+    PathBlueprint {
+        id: Uuid::nil(),
+        code: compiled.code.clone(),
+        attributes: compiled
+            .attributes
+            .iter()
+            .map(|attribute| Attribute {
+                id: Uuid::nil(),
+                blueprint_id: Uuid::nil(),
+                blueprint_version: 0,
+                code: attribute.code.clone(),
+                name: attribute.name.clone(),
+                description: None,
+                value_type: attribute.value_type,
+                value_schema: attribute.value_schema.clone(),
+                extension_type: attribute.extension_type.clone(),
+                default_value: attribute.default_value.clone(),
+                default_from: attribute.default_from.clone(),
+                file_policy: None,
+                target_blueprint_code: attribute.target_blueprint.clone(),
+                target_blueprint_codes: attribute.target_blueprints.clone(),
+                cardinality: attribute.cardinality,
+                target_cardinality: attribute.target_cardinality,
+                hierarchy: attribute.hierarchy.clone(),
+                tags: json!(attribute.tags),
+                context_fallback: attribute.context_fallback,
+                context_editable: attribute.context_editable,
+                readonly: attribute.readonly,
+                generated: None,
+                balance: None,
+                target_scope: None,
+                position: attribute.position,
+                created_at: now,
+                updated_at: now,
+                deleted_at: None,
+            })
+            .collect(),
+    }
+}
+
 /// Collects the `views.detail` fields that name an extension editor.
 fn field_editors<'a>(
     nodes: &'a [ViewNode],
@@ -616,6 +725,82 @@ async fn validate_field_editors(
                     editor.extension_id, editor.id, editor.version
                 ),
             }));
+        }
+    }
+    Ok(())
+}
+
+/// Each `form_assists` entry must be an enabled extension's `form_assist`
+/// with that id and version, for this blueprint, whose watched fields are
+/// fields of the blueprint and whose proposed fields are scalars the form
+/// can edit.
+async fn validate_form_assists(
+    transaction: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+    compiled: &CompiledBlueprint,
+) -> Result<(), RepositoryError> {
+    if compiled.form_assists.is_empty() {
+        return Ok(());
+    }
+    let manifests = enabled_manifests(transaction, workspace_id).await?;
+    for reference in &compiled.form_assists {
+        let name = format!(
+            "{}:{}@{}",
+            reference.extension_id, reference.id, reference.version
+        );
+        let invalid = |message: String| {
+            RepositoryError::InvalidBlueprintDefinition(format!("form assist '{name}' {message}"))
+        };
+        let (contribution, declaration) = manifests
+            .iter()
+            .filter(|manifest| manifest.attricat.id == reference.extension_id)
+            .flat_map(|manifest| &manifest.ui)
+            .find_map(|contribution| {
+                (contribution.kind == UiContributionKind::FormAssist
+                    && contribution.outlet == Some(UiOutlet::RecordForm)
+                    && contribution.id == reference.id
+                    && contribution.version == reference.version)
+                    .then_some(contribution)
+                    .zip(contribution.form_assist.as_ref())
+            })
+            .ok_or_else(|| invalid("is not declared by an enabled extension".into()))?;
+        if !contribution
+            .when
+            .as_ref()
+            .is_some_and(|when| when.blueprints.contains(&compiled.code))
+        {
+            return Err(invalid(format!(
+                "does not apply to blueprint '{}'",
+                compiled.code
+            )));
+        }
+        let attribute = |code: &str| {
+            compiled
+                .attributes
+                .iter()
+                .find(|attribute| attribute.code == code)
+        };
+        for code in &declaration.watch {
+            if attribute(code).is_none_or(|attribute| attribute.value_type == ValueType::File) {
+                return Err(invalid(format!(
+                    "watches '{code}', which is not a scalar or relationship field of the blueprint"
+                )));
+            }
+        }
+        for code in &declaration.proposes {
+            let editable = attribute(code).is_some_and(|attribute| {
+                !matches!(
+                    attribute.value_type,
+                    ValueType::Relationship | ValueType::File
+                ) && !attribute.readonly
+                    && attribute.generated.is_none()
+                    && attribute.balance.is_none()
+            });
+            if !editable {
+                return Err(invalid(format!(
+                    "proposes '{code}', which is not an editable scalar field of the blueprint"
+                )));
+            }
         }
     }
     Ok(())

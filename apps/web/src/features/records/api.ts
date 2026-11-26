@@ -5,6 +5,7 @@ import { RECORD_CHANGES_PAGE_SIZE, RECORD_SEARCH_PAGE_SIZE } from './constants';
 import {
   blueprintSchema,
   blueprintWithAttributesSchema,
+  defaultValuesResponseSchema,
   recordLabelsResponseSchema,
   createRecordRequestSchema,
   recordHierarchySchema,
@@ -219,6 +220,30 @@ export const getRecordLabels = (
   request('/api/v1/records/labels', recordLabelsResponseSchema, {
     ...jsonRequest('POST', {
       record_ids: z.array(uuidSchema).parse(recordIds),
+    }),
+    ...(signal === undefined ? {} : { signal }),
+  });
+/**
+ * The values `default_from` attributes of a blueprint revision would copy
+ * when `relationship` links to `targetRecordId` in `contextId`.
+ */
+export const getDefaultValues = (
+  input: {
+    blueprintId: string;
+    blueprintVersion: number;
+    contextId: string | null;
+    relationship: string;
+    targetRecordId: string;
+  },
+  signal?: AbortSignal,
+) =>
+  request('/api/v1/records/default-values', defaultValuesResponseSchema, {
+    ...jsonRequest('POST', {
+      blueprint_id: uuidSchema.parse(input.blueprintId),
+      blueprint_version: input.blueprintVersion,
+      context_id: input.contextId,
+      relationship: input.relationship,
+      target_record_id: uuidSchema.parse(input.targetRecordId),
     }),
     ...(signal === undefined ? {} : { signal }),
   });

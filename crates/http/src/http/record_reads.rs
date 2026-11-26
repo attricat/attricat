@@ -638,6 +638,46 @@ const MAX_RECORD_LABEL_IDS: usize = 100;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+pub(super) struct DefaultValuesRequest {
+    blueprint_id: Uuid,
+    blueprint_version: i64,
+    /// The context the relationship is written in; the default context when
+    /// absent.
+    #[serde(default)]
+    context_id: Option<Uuid>,
+    /// The relationship attribute the form links.
+    relationship: String,
+    target_record_id: Uuid,
+}
+
+#[derive(serde::Serialize)]
+pub(super) struct DefaultValuesResponse {
+    values: Vec<crate::model::DefaultValuePreview>,
+}
+
+/// The values `default_from` attributes would copy when the form's
+/// relationship links to the target, read with the caller's permissions.
+pub(super) async fn default_values(
+    principal: super::auth::AuthenticatedPrincipal,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ApiJson(input): ApiJson<DefaultValuesRequest>,
+) -> Result<Json<DefaultValuesResponse>, ApiError> {
+    Ok(Json(DefaultValuesResponse {
+        values: repository
+            .with_authorization_actor(principal.actor())
+            .preview_defaults_from(
+                input.blueprint_id,
+                input.blueprint_version,
+                input.context_id,
+                &input.relationship,
+                input.target_record_id,
+            )
+            .await?,
+    }))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(super) struct RecordLabelsRequest {
     record_ids: Vec<Uuid>,
 }

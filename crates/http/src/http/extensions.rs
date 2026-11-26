@@ -908,6 +908,9 @@ pub(super) async fn runtime(
     Ok(Json(
         contributions
             .into_iter()
+            // A record form asks for its assists itself; see
+            // `extension_form_assist`.
+            .filter(|item| item.kind != UiContributionKind::FormAssist)
             .map(|item| RuntimeContribution {
                 contribution_key: item.contribution_key,
                 display_order: item.display_order,

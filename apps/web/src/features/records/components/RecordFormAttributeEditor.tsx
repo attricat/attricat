@@ -57,6 +57,8 @@ type RecordFormAttributeEditorContext = {
   fieldErrors: Record<string, string>;
   migrationReviews?: Readonly<Record<string, MigrationFieldReview>>;
   resolvedValues: Readonly<Record<string, ResolvedValue>>;
+  /** Where the form's suggested values came from, by attribute code. */
+  suggestionNotes?: Readonly<Record<string, string>>;
   onRecordUpdated?: (updatedAt: string) => void;
 };
 
@@ -88,6 +90,7 @@ export const RecordFormAttributeEditor = ({
   onChange,
   onRecordUpdated,
   resolvedValues,
+  suggestionNotes,
   value,
 }: Props) => {
   const { t } = useTranslation();
@@ -161,7 +164,7 @@ export const RecordFormAttributeEditor = ({
           ? t('records.lockedByStatus', { status: lockedBy })
           : defaultOnly
             ? t('records.managedInDefault')
-            : inheritedHelperText(),
+            : (suggestionNotes?.[attribute.code] ?? inheritedHelperText()),
       attributeHint(attribute, t),
     ]
       .filter(Boolean)

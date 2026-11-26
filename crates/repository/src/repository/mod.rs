@@ -98,6 +98,8 @@ pub(crate) use blueprints::{ATTRIBUTE_COLUMNS, LATEST_PUBLISHED_BY_CODE};
 mod bootstrap;
 mod checks;
 mod contexts;
+mod default_from;
+pub use default_from::accepted_attribute_value;
 mod domain_events;
 mod error;
 mod error_codes;
@@ -463,6 +465,9 @@ pub struct AuditEventChange {
     pub change_kind: &'static str,
     pub before_value: Option<Value>,
     pub after_value: Option<Value>,
+    /// Set when core supplied the value; see
+    /// [`attricat_events::FACT_ORIGIN_DEFAULT_FROM`].
+    pub origin: Option<&'static str>,
 }
 
 #[derive(Clone)]
@@ -1020,6 +1025,7 @@ impl AttricatRepository {
                 change_kind: change.change_kind.to_owned(),
                 before_value: change.before_value.clone(),
                 after_value: change.after_value.clone(),
+                origin: change.origin.map(str::to_owned),
             })
             .collect()
     }
@@ -1072,6 +1078,7 @@ impl AttricatRepository {
             let mut change_kinds = Vec::with_capacity(changes.len());
             let mut before_values = Vec::with_capacity(changes.len());
             let mut after_values = Vec::with_capacity(changes.len());
+            let mut origins = Vec::with_capacity(changes.len());
             for change in changes {
                 ids.push(Uuid::new_v4());
                 record_ids.push(change.record_id);
@@ -1082,8 +1089,9 @@ impl AttricatRepository {
                 change_kinds.push(change.change_kind);
                 before_values.push(change.before_value);
                 after_values.push(change.after_value);
+                origins.push(change.origin);
             }
-            sqlx::query("INSERT INTO audit_event_changes (id, audit_event_id, workspace_id, record_id, attribute_id, attribute_code, context_id, context_code, change_kind, before_value, after_value) SELECT id, $2, $3, record_id, attribute_id, attribute_code, context_id, context_code, change_kind, before_value, after_value FROM UNNEST($1::uuid[], $4::uuid[], $5::uuid[], $6::text[], $7::uuid[], $8::text[], $9::text[], $10::jsonb[], $11::jsonb[]) AS change(id, record_id, attribute_id, attribute_code, context_id, context_code, change_kind, before_value, after_value)")
+            sqlx::query("INSERT INTO audit_event_changes (id, audit_event_id, workspace_id, record_id, attribute_id, attribute_code, context_id, context_code, change_kind, before_value, after_value, origin) SELECT id, $2, $3, record_id, attribute_id, attribute_code, context_id, context_code, change_kind, before_value, after_value, origin FROM UNNEST($1::uuid[], $4::uuid[], $5::uuid[], $6::text[], $7::uuid[], $8::text[], $9::text[], $10::jsonb[], $11::jsonb[], $12::text[]) AS change(id, record_id, attribute_id, attribute_code, context_id, context_code, change_kind, before_value, after_value, origin)")
                 .bind(ids)
                 .bind(audit_event_id)
                 .bind(self.workspace_id.0)
@@ -1095,6 +1103,7 @@ impl AttricatRepository {
                 .bind(change_kinds)
                 .bind(before_values)
                 .bind(after_values)
+                .bind(origins)
                 .execute(&mut **transaction)
                 .await?;
         }

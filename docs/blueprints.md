@@ -223,6 +223,39 @@ attributes:
     default_value: draft
 ```
 
+A scalar attribute of a record blueprint may instead set `default_from`, a
+relationship path whose value is copied from a related record. An order line
+takes its price from the chosen product:
+
+```yaml
+attributes:
+  - code: item
+    value_type: relationship
+    target_blueprints: [product, service]
+    cardinality: one
+  - code: unit_price_net
+    value_type: number
+    default_from: item.sale_price_net
+```
+
+The path uses table-column syntax (up to three relationships, multi-target
+hops included). Every hop needs `cardinality: one`; the leaf must be a scalar
+of the attribute's type (an `integer` may fill a `number`). Saving checks the
+path against the published targets (a path back to the blueprint sees the
+revision being saved). It cannot be combined with `default_value`,
+`generated`, `balance`, a status or an assignment, and mixins and `from`
+selections cannot declare it.
+
+Every write path (API, imports, workflows, extensions, sample records) copies
+the value when the first relationship gains a target in a context, the
+attribute holds no value there and the request neither sets nor clears it. It
+is a snapshot: it never overwrites a value and is not copied again when the
+source changes. When nothing applies (no target, a target without the
+attribute, an empty or unreadable source, a refused value, a locked field) the
+attribute stays empty and the write succeeds. The record form previews it. See
+[Values from related records](api.md#values-from-related-records) for the
+context, permission, audit and preview rules.
+
 A string attribute becomes a status when its `value_schema` has an `enum` and an
 `x-attricat-status` annotation with `version: 1`, one `options` entry
 (`code`, `label`, optional `tone`) per enum code, and optional `transitions`

@@ -59,6 +59,11 @@ pub struct Attribute {
     /// Immutable provider/type/release metadata for extension-defined types.
     pub extension_type: Option<Value>,
     pub default_value: Option<Value>,
+    /// A relationship path (`item.sale_price_net`) whose leaf value core
+    /// copies into this attribute while it is empty, when the path's first
+    /// relationship gains a target.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_from: Option<String>,
     pub file_policy: Option<Value>,
     /// The single allowed target blueprint, if exactly one is allowed.
     pub target_blueprint_code: Option<String>,
@@ -328,6 +333,10 @@ pub struct RecordAuditChange {
     pub change_kind: String,
     pub before_value: Option<Value>,
     pub after_value: Option<Value>,
+    /// `default_from` when core copied the value from a related record;
+    /// absent when the writer supplied it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
     /// Files this change names that are no longer stored. History doesn't keep
     /// a file alive, so these IDs lead nowhere.
     pub deleted_file_ids: Vec<Uuid>,
@@ -1005,6 +1014,14 @@ pub enum FormAttributeValue {
         context_id: Option<Uuid>,
         files: Vec<FileMetadata>,
     },
+}
+
+/// A value an attribute's `default_from` would copy from a chosen
+/// relationship target.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct DefaultValuePreview {
+    pub attribute_code: String,
+    pub value: Value,
 }
 
 /// Public metadata for a file attached to a record attribute.

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   cellDisplayTypes,
   contributionKinds,
+  formAssistOutcomes,
   contributionKeyPattern,
   grantKinds,
   installationStates,
@@ -142,6 +143,32 @@ const contributionSchema = z
   .strict();
 
 export const runtimeSchema = z.array(contributionSchema);
+
+/** A form assist a blueprint revision's record form runs. */
+const formAssistSchema = z.object({
+  extension_id: z.string().min(1),
+  extension_name: z.string().min(1),
+  id: z.string().min(1),
+  version: z.number().int().positive(),
+  outlet: extensionOutletSchema,
+  watch: z.array(z.string().min(1)),
+  proposes: z.array(z.string().min(1)),
+});
+export const formAssistsResponseSchema = z.object({
+  assists: z.array(formAssistSchema),
+});
+export type FormAssist = z.infer<typeof formAssistSchema>;
+/** The proposals the host checked and kept from one assist call. */
+export const formAssistAnswerSchema = z.object({
+  outcome: z.enum(formAssistOutcomes),
+  proposals: z.array(
+    z.object({
+      attribute_code: z.string().min(1),
+      value: z.json(),
+      note: z.string().optional(),
+    }),
+  ),
+});
 export type ExtensionContribution = z.infer<typeof contributionSchema>;
 
 const baseOutletLayoutSchema = z

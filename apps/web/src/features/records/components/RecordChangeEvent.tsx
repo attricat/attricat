@@ -1,4 +1,5 @@
 import { personName } from '../../../components/personName';
+import { valueOrigins } from '../constants';
 import { Box, Chip, Paper, Stack, Typography } from '@mui/material';
 import { Link } from '@tanstack/react-router';
 import { Trans, useTranslation } from 'react-i18next';
@@ -163,6 +164,11 @@ export const RecordChangeEvent = ({
               </>
             )}
           </Typography>
+          {change.origin === valueOrigins.defaultFrom && (
+            <Typography color="text.secondary" variant="body2">
+              {t('records.changeDefaultedFromRelated')}
+            </Typography>
+          )}
           {change.deleted_file_ids.length > 0 && (
             <Typography color="text.secondary" variant="body2">
               {t('records.changeFilesDeleted', {

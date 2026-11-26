@@ -616,6 +616,42 @@ Creation and update payloads:
 
 Use `visibility: "private"` or `"workspace"` for named views. For a snapshot, omit `name`, `description` and `visibility` when posting to `/view-state-links`; send `kind` and `state`. Responses include `id`, `owner_user_id`, `kind`, `name`, `description`, `visibility`, `state`, `created_at`, `updated_at`. State uses the Explorer URL field names; see [saved views](saved-views.md) for semantics and limits.
 
+## Values from related records
+
+An attribute's [`default_from`](blueprints.md) is applied in the shared record
+write path: on create, update, relationship replace and append, inside the
+write's transaction after the request's own values and before validation.
+Blueprint migrations and history restores do not apply it.
+
+- **When:** for each context in which the path's first relationship gains a
+  target it did not link to before, if the attribute holds no direct value in
+  that context and the request neither writes nor removes it there. An
+  attribute with `context_editable: default` only defaults from a relationship
+  in the default context.
+- **Source:** later hops and the leaf resolve in that context, each with its
+  own `context_fallback`, reading only records the writer may read.
+- **Nothing to copy:** no target, a target of a blueprint without the
+  attribute, an empty source, an unreadable record, a value the attribute's
+  `value_schema` refuses, or an attribute the record's status locks leave the
+  attribute empty without an error.
+- **Audit:** the defaulted value is part of the write's audit and event. Its
+  change in `GET /records/{id}/changes` and its fact in the domain event carry
+  `"origin": "default_from"`; values the writer supplied have no `origin`. A
+  relationship replace that defaults a value emits `record.updated.v1` instead
+  of `relationship.changed.v1`.
+
+`POST /v1/records/default-values` previews the rule for the record form:
+`{"blueprint_id", "blueprint_version", "context_id"?, "relationship",
+"target_record_id"}` answers `{"values": [{"attribute_code", "value"}]}`, the
+values a save linking that target would copy, read with the caller's
+permissions. The record form and a new row of an editable incoming
+relationship table (such as an invoice's line items) use it. The row asks for
+the defaults of its link to the page's record as soon as it opens. Choosing a
+target in the form fills each empty field that
+defaults from it, or one still holding the previous default, and says which
+record the value came from; a field the user typed in is never changed. The
+server rule still applies on save.
+
 ## Record batches
 
 `POST /v1/records/batch` applies writes, status transitions, and deletions to

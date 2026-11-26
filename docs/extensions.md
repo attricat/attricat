@@ -172,8 +172,9 @@ The v1 capability catalogue is: `attricat.read`, `attricat.write`,
 `connections.use`, `attricat.files.read`, `attricat.files.public_links` and
 `client.export_mapping` (see [Export platform](#export-platform-attricathost-11)),
 native UI adds `client.attribute_editor` (see [Attribute editors](#attribute-editors)),
-and host ABI 1.2 adds `webhooks.receive` (see
-[Inbound webhooks](#inbound-webhooks-attricathost-12)).
+host ABI 1.2 adds `webhooks.receive` (see
+[Inbound webhooks](#inbound-webhooks-attricathost-12)), and record forms add
+`client.form_assist` (see [Form assists](#form-assists)).
 
 Required `permissions` and `host_permissions` must be granted before an
 extension can be enabled. Optional variants are independently grantable and
@@ -930,6 +931,133 @@ cannot run commands, use storage or render anything. The web app checks the
 answer against the contract's limits and keeps it only for records the server
 confirmed the viewer can read; an answer later than two seconds is asked for
 again.
+
+### Form assists
+
+A **form assist** watches fields of an open record form and proposes values
+for other fields, for rules too rich for a blueprint's
+[`default_from`](blueprints.md), such as customer-specific prices, discounts or
+unit conversions. It is a `form_assist` contribution at the `record_form`
+outlet; the host draws nothing for it, so it has no artifact or title:
+
+```json
+{
+  "id": "customer_price",
+  "version": 1,
+  "kind": "form_assist",
+  "outlet": "record_form",
+  "when": {"blueprints": ["order_line"]},
+  "form_assist": {
+    "command": "propose-price",
+    "watch": ["item", "quantity", "customer"],
+    "proposes": ["unit_price_net", "discount_percent"]
+  }
+}
+```
+
+The release needs `client.form_assist` and, for the command,
+`client.commands` and a `server_wasm` artifact. `watch` and `proposes` each name
+1 to 16 attribute codes, and `when` names the blueprints and nothing else. A
+blueprint opts in by naming the assist, which saving (including
+`POST /blueprints/validate` and solution-pack application) checks against the
+enabled releases, as a field's `editor` is checked:
+
+```yaml
+form_assists:
+  - {extension_id: acme.pricing, id: customer_price, version: 1}
+```
+
+The assist must list the blueprint's code under `when.blueprints`; each watched
+code must be a scalar or relationship field of the blueprint and each proposed
+code an editable scalar (not a relationship or file, `readonly`, `generated`,
+a balance or set by a movement). A blueprint names at most eight assists.
+
+While a new record is entered, in the record form or a new row of an editable
+incoming relationship table, a change the user makes to a watched field calls
+the assist once the user pauses (400 ms). The web app lists a revision's
+assists with `GET /v1/records/form-assists?blueprint_id=&blueprint_version=`,
+which answers `{"assists": [{"extension_id", "extension_name", "id", "version",
+"watch", "proposes"}]}` for the assists of enabled releases granted
+`client.form_assist`, and calls one with `POST /v1/records/form-assist`:
+
+```json
+{
+  "extension_id": "acme.pricing", "id": "customer_price",
+  "blueprint_id": "<uuid>", "blueprint_version": 3,
+  "record_id": null, "context_id": null,
+  "values": {"quantity": 3},
+  "relationships": {"item": ["<record uuid>"]},
+  "edited": ["discount_percent"]
+}
+```
+
+`values` and `relationships` may only name the assist's watched and proposed
+fields, of the matching kind (otherwise `422 invalid_input`), with at most 100
+targets per relationship. The command receives a strict context with every
+watched and proposed field, `null` when empty, and only targets the caller can
+read, each with its blueprint code:
+
+```json
+{
+  "version": 1,
+  "assist": "customer_price",
+  "blueprint": {"code": "order_line", "id": "<uuid>", "version": 3},
+  "record_id": null,
+  "context_id": "<uuid>",
+  "values": {
+    "item": [{"record_id": "<uuid>", "blueprint_code": "product"}],
+    "quantity": 3,
+    "customer": null,
+    "unit_price_net": null,
+    "discount_percent": 5
+  },
+  "edited": ["discount_percent"]
+}
+```
+
+`context_id` is always concrete, the default context when the form names none;
+`edited` lists the proposed fields the user has edited. The command may read
+the catalog with the extension's own grants (`attricat.read`). Declare the
+context's shape in its `request_schema`. It answers with the
+[`extension-form-assist-v1`](../contracts/extension-form-assist-v1.schema.json)
+contract:
+
+```json
+{
+  "proposals": [
+    {"attribute_code": "unit_price_net", "value": 12.4,
+     "note": "Contract price for ACME"}
+  ]
+}
+```
+
+The answer must match the command's `response_schema` and the contract (at
+most 16 proposals, notes up to 140 characters of plain text). The host keeps
+the first proposal per field for declared, unedited `proposes` fields whose
+attribute accepts the value by its type and `value_schema`, in the stored form,
+and drops the rest. It answers `{"outcome": "answered", "proposals": [...]}`;
+an assist that fails or breaks the contract answers `"failed"` with no
+proposals, and one that has not answered after three seconds (typically while
+its component first compiles) `"timed_out"`, while it keeps running so a later
+call finds it ready. A disabled extension or a revoked grant makes the assist
+disappear from the list and its calls `404 not_found`.
+
+The form applies each proposal as an unsaved change, only when the user has not
+edited that field, and shows the note under the field (or "Suggested by
+<extension>"). An answer to watched values that changed meanwhile is discarded,
+and a failure, timeout or unavailable assist leaves the form as it is; a
+blueprint never depends on an extension being healthy. Nothing is saved until
+the user submits the form. Changes the form makes itself (defaults and
+proposals) do not call assists.
+
+`default_from` applies first: choosing a target fills defaulted fields at once,
+and an assist proposal may then replace a value that only came from
+`default_from`, never the other way round. On save the server applies
+`default_from` only to fields the request leaves empty, so a kept proposal
+wins. Assists run only in the record form: the API, imports, workflows and
+other extensions never call them, and the server does not enforce their
+proposals. Extensions that need a rule on every write keep using event
+handlers.
 
 ### Interactive operations
 
@@ -2006,10 +2134,15 @@ dialog frame should call `attricat.dialog.close()` on Escape. Closing it
   native only: an input control that a blueprint field in `views.detail` names
   under `editor`. See [Attribute editors](#attribute-editors).
 
+- **`record_form`** (`form_assist`, requiring `client.form_assist`) runs no
+  extension code in the browser: the record form calls the assist's server
+  command when watched fields change. See [Form assists](#form-assists).
+
 Every manifest-declared outlet has a host-owned client mount path;
-`explorer_table_cell` is drawn by the Explorer table itself and
-`attribute_editor` by the record's inline fields, rather than
-`ExtensionOutlet`. The browser schema tests compare the declared Rust outlets
+`explorer_table_cell` is drawn by the Explorer table itself,
+`attribute_editor` by the record's inline fields and `record_form` by the
+record form, rather than `ExtensionOutlet`. Form assists are not in
+`GET /extensions/runtime`; the form lists them itself. The browser schema tests compare the declared Rust outlets
 with the client enum and check each outlet's mount path. A placement is still
 shown only when its page, scope, contribution kind, and required grants match.
 

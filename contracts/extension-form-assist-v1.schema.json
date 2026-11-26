@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://attricat.com/contracts/extension-form-assist-v1.schema.json",
+  "title": "Attricat extension form assist answer v1",
+  "description": "What an extension's form_assist command answers for one open record form. The host checks each proposal against its attribute and applies it as an unsaved form change, only to a declared proposes field the user has not edited. Proposals for other fields, and values the attribute refuses, are dropped. Notes are plain text, never markup.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["proposals"],
+  "properties": {
+    "proposals": {
+      "description": "At most one proposal per field; an empty list proposes nothing.",
+      "type": "array",
+      "maxItems": 16,
+      "items": {"$ref": "#/$defs/proposal"}
+    }
+  },
+  "$defs": {
+    "proposal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["attribute_code", "value"],
+      "properties": {
+        "attribute_code": {
+          "description": "One of the assist's declared proposes fields.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "value": {
+          "description": "The value in the attribute's JSON form, as the record API writes it.",
+          "type": ["string", "number", "integer", "boolean", "object", "array"]
+        },
+        "note": {
+          "description": "Why the value is proposed, shown under the field.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 140
+        }
+      }
+    }
+  }
+}

@@ -64,6 +64,10 @@ pub enum BlueprintError {
     RelationshipValueSchema { code: String },
     #[error("attribute '{code}' can only define a default value for scalar values")]
     DefaultValueOnNonScalarAttribute { code: String },
+    #[error("invalid form_assists: {0}")]
+    InvalidFormAssist(String),
+    #[error("attribute '{code}' has an invalid default_from: {message}")]
+    InvalidDefaultFrom { code: String, message: String },
     #[error("attribute '{code}' has an invalid generated value: {message}")]
     InvalidGeneratedAttribute { code: String, message: String },
     #[error("attribute '{code}' has an invalid balance: {message}")]

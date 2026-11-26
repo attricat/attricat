@@ -46,6 +46,7 @@ Record blueprints use `kind: record`.
 | `unique_keys` | list of mappings | No | Business keys whose values must be unique. Record blueprints only. See [Unique keys](#unique-keys). |
 | `connector_jobs` | list of mappings | No | Scheduled or manual import and export jobs run by a connector extension. Record blueprints only. See [Connector jobs](#connector-jobs). |
 | `movements` | list of mappings | No | How creating a record changes a balance on another record, such as a goods issue lowering a stock level. Up to 4. Record blueprints only. See [Balances and movements](#balances-and-movements). |
+| `form_assists` | list of mappings | No | Extension assists that propose values in the record form, each `{ extension_id, id, version }`. Up to 8. Record blueprints only. See [Form assists](/extensions/manifest/#form-assists). |
 | `extensions` | mapping | No | Free-form data for extensions, namespaced under `extensions.<extension-id>`. The core compiler ignores it; extensions read it from the stored definition. |
 
 ## Attributes
@@ -73,9 +74,34 @@ attributes:
 | `readonly` | boolean | `false` | Shows the field in the web app but prevents editing it there. The API, CLI, agents, workflows, and extensions can still write it. Use it for values owned by an integration. |
 | `tags` | array of strings | `[]` | Free-form metadata. Must be unique and non-empty. Some tags hide the attribute in the web app; see [Visibility tags](#visibility-tags). |
 | `default_value` | matches the type | Unset | Value stored in the default context when a record is created without one. Scalar types only. |
+| `default_from` | string | Unset | A relationship path, such as `item.sale_price_net`, whose value is copied into the empty attribute when the path's first relationship gets a target. Scalar attributes of record blueprints only; not with `default_value`. See [Values from related records](#values-from-related-records). |
 | `value_schema` | string (JSON) | Unset | JSON Schema for one value. Scalar types only. A `string` attribute's schema can make it a [status](#statuses) or a [user or team assignment](#user-or-team-assignments). See [Validation](/builders/validation/). |
 | `generated` | mapping | Unset | Lets the server number new records, such as invoice or order numbers. `string` and `integer` attributes of record blueprints only. See [Generated values](#generated-values). |
 | `balance` | mapping | Unset | A running total that only [movements](#balances-and-movements) change, such as a stock level. `number` and `integer` attributes of record blueprints only. |
+
+### Values from related records
+
+`default_from` copies a value from the record a relationship links to, such as an order line's price from the chosen product:
+
+```yaml
+attributes:
+  - code: item
+    value_type: relationship
+    target_blueprints: [product, service]
+    cardinality: one
+  - code: unit_price_net
+    value_type: number
+    default_from: item.sale_price_net
+```
+
+- The path has one to three relationships and an attribute, like a table column. Every relationship needs `cardinality: one`. The last attribute must have the same value type; an `integer` can fill a `number`.
+- The value is copied when a record is created with the relationship, or when a later save links it to another record, and only while the attribute is empty in that context and the save does not set or clear it. Imports, workflows, extensions and solution-pack sample records follow the same rule.
+- It is a snapshot: a later change to the product's price does not change existing lines, and a value you enter always wins.
+- The value is read in the relationship's context, with the source attribute's context fallback, and only from records the person saving can read. When there is nothing to copy, such as a service without a price, the attribute stays empty and the save still succeeds.
+- The record history marks a copied value as filled in from the related record.
+- In the web app, choosing a record fills these fields at once, in the record form and in a new row of a table of linked records such as an invoice's lines, and names the record the value came from. A new line also gets the values it copies from the invoice as soon as the row opens. A field you have typed in is never changed.
+
+`default_from` cannot be combined with `default_value`, `generated`, `balance`, a status or an assignment.
 
 ### Value types
 
