@@ -97,7 +97,13 @@ Przy starcie Attricat sprawdza, czy użytkownik może odczytać każdy zaznaczon
 
 - `selection.describe()` zwraca liczbę rekordów, wersję schematu i kontekst.
 - `selection.page(cursor, limit)` zwraca od 1 do 10 rekordów z zapisanymi wartościami rozwiązanymi w kontekście uruchomienia, zapisanymi wartościami dołączonych atrybutów wielokrotnego użytku (`reusable_values`, z `context_id` każdej wartości), Twoimi adnotacjami i `read_at`. Rekordy, których użytkownik nie może już odczytać, mają status `unavailable`, a usunięte `deleted`.
-- `attricat-data.read` i wywołania konektorowego interfejsu `attricat` są odrzucane. `attricat-data.batch` przyjmuje intencje `update`, `relationships` i `annotate` tylko dla zaznaczonych rekordów, sprawdzane względem bieżących uprawnień użytkownika.
+- `attricat-data.read` odczytuje to, z czym zaznaczenie jest powiązane, o ile użytkownik nadal może to odczytać:
+  - `record` zwraca zaznaczony rekord, rekord, którego relacja wskazuje na zaznaczony (na przykład pozycje zamówienia), albo rekord osiągalny z nich przez co najwyżej trzy wartości relacji (na przykład jednostkę produktu z pozycji).
+  - `incoming` wymienia rekordy, które wskazują na zaznaczony rekord, bez tych, których użytkownik nie może odczytać.
+  - `blueprint` i `context` wyszukują kody.
+
+  Inne odczyty oraz wywołania konektorowego interfejsu `attricat` są odrzucane.
+- `attricat-data.batch` przyjmuje intencje `update`, `relationships` i `annotate` tylko dla zaznaczonych rekordów, sprawdzane względem bieżących uprawnień użytkownika.
 - Jeśli użytkownik opuści obszar roboczy, uruchomienie zatrzymuje się z bezpiecznym powodem zamiast działać dalej z uprawnieniami rozszerzenia.
 
 Pobierz z każdego rekordu to, czego potrzebujesz, raz i zapisz w punkcie kontrolnym, aby ponowiona paczka tworzyła te same bajty. Raportuj postęp jako `{"completed": n, "total": n, "outcome": {"succeeded": n, "failed": n, "skipped": n}}`; Attricat pokazuje te liczby niezależnie od statusu uruchomienia, więc uruchomienie może się zakończyć mimo niepowodzeń części rekordów.
@@ -163,6 +169,14 @@ API hosta 1.1 dodaje wersje dopasowane do przesyłania plików do marketplace'ó
 - `multipart: {"fields": [{"name", "value"}], "file_field", "filename"?}` wysyła formularz `multipart/form-data` z artefaktem jako częścią z plikiem, na potrzeby przesyłania etapowego w postaci formularza.
 - Dostarczenie v2 może przesłać nie tylko dane wyjściowe, ale też ukończony artefakt wejściowy wykonania.
 - `transfer.open-record-file({"record_id", "file_id", "variant"?})` kopiuje plik, do którego odwołuje się aktywny rekord, do 16 MiB, do artefaktu wejściowego wykonania i zwraca jego identyfikator, aby można go było przesłać bezpośrednio. `variant` wybiera wariant obrazu zamiast oryginału. Rekordy, które współdzielą plik, dostają ten sam artefakt. Wymaga `attricat.read`, `attricat.files.read` i `artifacts.read`. Wykonania konektorów mogą otwierać tylko pliki eksportowanych rekordów i aktywnych rekordów, do których one linkują (rekordów powiązanych rozwijanych przez `page-v2`), a wykonania interaktywne tylko pliki z zaznaczenia.
+
+Aby zachować pobrany dokument przy rekordzie, na przykład PDF faktury, dołącz artefakt wejściowy do jednego z atrybutów plikowych rekordu przez `api.call("files.attach.v1", …)`:
+
+```json
+{ "record_id": "…", "attribute_code": "invoice_pdf", "context_id": null, "artifact_id": "…", "filename": "FV 1/11/2026.pdf" }
+```
+
+Zwraca `{"file": {id, filename, mime_type, byte_size, sha256, status}, "replayed": false}`. Typ pliku jest ustalany z jego zawartości i musi być akceptowany przez atrybut; w atrybucie z jednym plikiem plik jest zastępowany, a w atrybucie z wieloma plikami dochodzi kolejny. Jeśli atrybut ma już plik o tej samej zawartości i nazwie, wywołanie zwraca ten plik z `"replayed": true` i niczego nie zapisuje, więc ponowiona partia dołącza go raz. Działa tylko w trakcie wykonania operacji i wymaga `attricat.write` oraz `artifacts.read`. Wykonanie na zaznaczeniu dołącza pliki tylko do zaznaczonych rekordów, w imieniu użytkownika, który je uruchomił i który potrzebuje `records.write`; wykonania konektorów i operacje na schemacie nie mogą dołączać plików; pozostałe wykonania zapisują jako rozszerzenie.
 
 Każde żądanie wykonane przy przesyłaniu jest wliczane do [limitu żądań](/pl/extensions/manifest/#limity-żądań) jego reguły.
 

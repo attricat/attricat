@@ -15,6 +15,7 @@ attricat-events = { path = "../events" }
 attricat-extension-manifest = { path = "../extension-manifest" }
 attricat-repository = { path = "../repository" }
 attricat-storage = { path = "../storage" }
+attricat-validation = { path = "../validation" }
 attricat-workers = { path = "../workers" }
 chrono.workspace = true
 metrics.workspace = true

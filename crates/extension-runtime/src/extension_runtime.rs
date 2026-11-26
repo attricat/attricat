@@ -67,6 +67,7 @@ mod compilation;
 pub mod connections;
 mod connector_v2;
 mod export_host;
+mod file_attach;
 mod interactive;
 mod network_v2;
 mod operation_batch;
