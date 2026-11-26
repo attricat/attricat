@@ -35,7 +35,7 @@ acli solution-pack plan get <plan-id>
 Planning saves an immutable dry run without changing catalog resources. Review readiness, actions, conflicts, and extension requirements. A requirement with status `install` lists the official release apply will install and the permissions it will grant.
 
 - `--prefix` produces new blueprint codes such as `example_product`. Use 1–32 lowercase letters, digits, or underscores, beginning with a letter and not ending with an underscore.
-- `--blueprint-publication` is `draft` or `publish`. Navigation and samples can require published blueprints, so selecting `draft` may block a pack that needs them.
+- `--blueprint-publication` is `draft` or `publish`. Navigation, samples, and blueprints whose table columns or `default_from` paths read another of the pack's blueprints can require published blueprints, so selecting `draft` may block a pack that needs them (for example `draft_default_from_target_unpublished`). With `publish`, apply creates the blueprints those paths read first.
 - `--include-sample-data` explicitly selects fictional sample records. Leave it out unless you want them.
 
 | Action | Meaning |

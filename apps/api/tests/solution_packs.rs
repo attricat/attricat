@@ -2676,6 +2676,86 @@ async fn apply_runs_reverse_declared_dependencies_in_dependency_order(pool: PgPo
 }
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
+async fn apply_publishes_default_from_targets_before_their_owner(pool: PgPool) {
+    // `order_line` sorts before the `product` its default_from reads, and
+    // `service` does not declare the leaf at all.
+    const ORDER_LINE: &[u8] = br#"format_version: 1
+code: order_line
+name: Order line
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: item
+    value_type: relationship
+    target_blueprints: [blueprints/product, blueprints/service]
+    cardinality: one
+  - code: unit_price_net
+    value_type: number
+    default_from: item.sale_price_net
+"#;
+    const PRODUCT: &[u8] = br#"format_version: 1
+code: product
+name: Product
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+  - code: sale_price_net
+    value_type: number
+"#;
+    const SERVICE: &[u8] = br#"format_version: 1
+code: service
+name: Service
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [name]
+attributes:
+  - code: name
+    value_type: string
+"#;
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let archive = release_archive(
+        "attricat.defaults",
+        "1.0.0",
+        &[
+            ("blueprints/order_line", ORDER_LINE),
+            ("blueprints/product", PRODUCT),
+            ("blueprints/service", SERVICE),
+        ],
+    );
+    let plan =
+        create_plan_with_publication(&client, &base_url, archive, "defaults", "publish").await;
+    assert_eq!(plan.status(), StatusCode::CREATED);
+    let plan = plan.json::<Value>().await.unwrap();
+    assert_eq!(plan["ready"], true);
+    let order = plan["actions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|action| action["logical_key"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(order.last(), Some(&"blueprints/order_line"), "{order:?}");
+
+    let applied = apply_plan(&client, &base_url, plan["id"].as_str().unwrap()).await;
+    assert_eq!(applied.status(), StatusCode::OK);
+    let application = applied.json::<Value>().await.unwrap();
+    assert_eq!(application["state"], "completed", "{application}");
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn mapped_plan_digest_rejects_kind_downgrade_and_resource_row_removal(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();

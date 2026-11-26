@@ -8,7 +8,7 @@ use attricat_blueprint::{
     BlueprintDefinition, BlueprintError, BlueprintKind, BrowseBy, CompiledBlueprint,
     ResolvedInclude, ViewDefinition, ViewNode,
 };
-use attricat_validation::relationship_path::{WalkError, walk_path};
+use attricat_validation::relationship_path::{CodeMatch, WalkError, resolve_in, walk_path};
 use attricat_validation::saved_search::browse_hop;
 use serde_json::Value;
 
@@ -82,10 +82,12 @@ pub(super) fn validate_content(
     }
     validate_incoming_relationships(&compiled)?;
     let table_path_dependencies = validate_table_paths(&compiled)?;
+    let default_from_dependencies = validate_default_from_paths(&compiled)?;
     let blueprints = prepared
         .into_iter()
         .map(|(key, mut blueprint)| {
             blueprint.portable.table_path_dependencies = table_path_dependencies[&key].clone();
+            blueprint.portable.default_from_dependencies = default_from_dependencies[&key].clone();
             blueprint.portable.effective_attributes = compiled[&key].attributes.clone();
             blueprint.portable.unique_keys = compiled[&key].unique_keys.clone();
             (key, blueprint.portable)
@@ -372,6 +374,7 @@ fn prepare_blueprint(
             includes: portable_includes,
             dependencies,
             table_path_dependencies: BTreeSet::new(),
+            default_from_dependencies: BTreeSet::new(),
             movement_dependencies,
             kind: definition.kind.clone(),
             effective_attributes: Vec::new(),
@@ -675,6 +678,88 @@ fn validate_table_paths(
         }
         dependencies.insert(owner_key.clone(), owner_dependencies);
     }
+    Ok(dependencies)
+}
+
+/// Resolves `default_from` paths within the pack as the repository does when
+/// the blueprint is saved: every hop holds a single target, and the leaf is a
+/// scalar the attribute's value type can copy (an `integer` may fill a
+/// `number`). A leaf that only some targets of a multi-target hop declare is
+/// allowed. Returns the other blueprints each path reads from, which must be
+/// published before the owner; a path back to the owner reads the revision
+/// being saved, so it adds no dependency. The edges must be acyclic, since
+/// neither end of a cycle could be saved first.
+fn validate_default_from_paths(
+    blueprints: &HashMap<String, CompiledBlueprint>,
+) -> Result<BTreeMap<String, BTreeSet<String>>, SolutionPackError> {
+    let by_code = blueprints
+        .iter()
+        .map(|(key, blueprint)| (blueprint.code.as_str(), key.as_str()))
+        .collect::<HashMap<_, _>>();
+    let mut dependencies = BTreeMap::new();
+
+    for (owner_key, owner) in blueprints {
+        let mut owner_dependencies = BTreeSet::new();
+        for attribute in &owner.attributes {
+            let Some(path) = &attribute.default_from else {
+                continue;
+            };
+            let path_error = |message: String| {
+                SolutionPackError::Invalid(format!(
+                    "blueprint '{owner_key}' attribute '{}' default_from '{path}' {message}",
+                    attribute.code
+                ))
+            };
+            let parts = path.split('.').collect::<Vec<_>>();
+            let (leaf, hops) = parts.split_last().expect("a path has a leaf");
+            let mut frontier = vec![(owner.code.as_str(), owner.attributes.as_slice())];
+            for hop in hops {
+                let segment = resolve_in(path, hop, frontier.iter().copied(), CodeMatch::Exact)
+                    .map_err(|error| path_error(error.to_string()))?;
+                if !segment.single_valued() {
+                    return Err(path_error(
+                        "must follow relationships with cardinality: one".into(),
+                    ));
+                }
+                let targets = segment
+                    .next_frontier(path)
+                    .map_err(|error| path_error(error.to_string()))?;
+                frontier = Vec::with_capacity(targets.len());
+                for target_code in &targets {
+                    let target_key = by_code.get(target_code.as_str()).ok_or_else(|| {
+                        path_error(format!(
+                            "target '{target_code}' is not declared by the pack"
+                        ))
+                    })?;
+                    if *target_key != owner_key.as_str() {
+                        owner_dependencies.insert((*target_key).to_owned());
+                    }
+                    let target = &blueprints[*target_key];
+                    frontier.push((target.code.as_str(), target.attributes.as_slice()));
+                }
+            }
+            let leaf = resolve_in(path, leaf, frontier, CodeMatch::Exact)
+                .map_err(|error| path_error(error.to_string()))?;
+            if !leaf.value_type.copies_into(attribute.value_type) {
+                return Err(path_error(format!(
+                    "ends on a {} attribute, which cannot fill a {} attribute",
+                    leaf.value_type, attribute.value_type
+                )));
+            }
+        }
+        dependencies.insert(owner_key.clone(), owner_dependencies);
+    }
+
+    let graph = dependencies
+        .iter()
+        .map(|(key, targets)| {
+            (
+                key.as_str(),
+                targets.iter().map(String::as_str).collect::<Vec<_>>(),
+            )
+        })
+        .collect::<HashMap<_, _>>();
+    validate_acyclic(&graph, "blueprint default_from")?;
     Ok(dependencies)
 }
 

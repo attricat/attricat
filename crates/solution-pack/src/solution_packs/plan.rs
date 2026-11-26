@@ -1013,6 +1013,13 @@ fn plan_blueprint_outcomes(
                 PlanActionKind::Blocked,
                 "draft_table_path_target_unpublished",
             )
+        } else if publication == BlueprintPublication::Draft
+            && !blueprint.default_from_dependencies().is_empty()
+        {
+            (
+                PlanActionKind::Blocked,
+                "draft_default_from_target_unpublished",
+            )
         } else {
             (PlanActionKind::Create, "target_absent")
         };
@@ -1080,6 +1087,9 @@ fn plan_blueprint_actions(
                 );
                 if publication == BlueprintPublication::Publish {
                     dependencies.extend(blueprint.table_path_dependencies().iter().cloned());
+                    // Saving resolves a default_from path through the
+                    // published blueprints it reaches.
+                    dependencies.extend(blueprint.default_from_dependencies().iter().cloned());
                     // Publishing checks a movement's target and factor
                     // blueprints, which must be published already.
                     dependencies.extend(blueprint.movement_dependencies().iter().cloned());

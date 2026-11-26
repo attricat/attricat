@@ -407,6 +407,9 @@ pub struct SolutionPackBlueprint {
     includes: Vec<SolutionPackBlueprintInclude>,
     dependencies: BTreeSet<String>,
     table_path_dependencies: BTreeSet<String>,
+    /// Other blueprints an attribute's `default_from` path reads from, which
+    /// saving the blueprint resolves, so they are published first.
+    default_from_dependencies: BTreeSet<String>,
     /// Blueprints a movement targets or reads its factor from, which
     /// publication checks, so they are published first.
     movement_dependencies: BTreeSet<String>,
@@ -451,6 +454,10 @@ impl SolutionPackBlueprint {
 
     pub fn table_path_dependencies(&self) -> &BTreeSet<String> {
         &self.table_path_dependencies
+    }
+
+    pub fn default_from_dependencies(&self) -> &BTreeSet<String> {
+        &self.default_from_dependencies
     }
 
     pub fn movement_dependencies(&self) -> &BTreeSet<String> {

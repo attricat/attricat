@@ -35,7 +35,7 @@ acli solution-pack plan get <plan-id>
 Planowanie zapisuje niezmienny plan próbny bez zmieniania zasobów katalogu. Sprawdź gotowość, akcje, konflikty i wymagania dotyczące rozszerzeń. Wymaganie ze statusem `install` wskazuje oficjalne wydanie, które zostanie zainstalowane, oraz uprawnienia, które otrzyma.
 
 - `--prefix` tworzy kody nowych Schematów, takie jak `example_product`. Użyj od 1 do 32 małych liter, cyfr lub podkreśleń; zacznij literą i nie kończ podkreśleniem.
-- `--blueprint-publication` przyjmuje `draft` lub `publish`. Nawigacja i dane przykładowe mogą wymagać opublikowanych Schematów, więc wybór `draft` może zablokować taki pakiet.
+- `--blueprint-publication` przyjmuje `draft` lub `publish`. Nawigacja, dane przykładowe oraz Schematy, których kolumny tabeli lub ścieżki `default_from` odczytują inny Schemat pakietu, mogą wymagać opublikowanych Schematów, więc wybór `draft` może zablokować taki pakiet (na przykład `draft_default_from_target_unpublished`). Przy `publish` zastosowanie planu najpierw tworzy Schematy odczytywane przez te ścieżki.
 - `--include-sample-data` jawnie wybiera fikcyjne rekordy przykładowe. Pomiń tę opcję, jeśli ich nie potrzebujesz.
 
 | Akcja | Znaczenie |

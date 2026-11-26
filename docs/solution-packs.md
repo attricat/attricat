@@ -60,6 +60,17 @@ selection.
 - `--blueprint-publication draft` creates drafts on apply; `publish` creates
   published blueprints. Navigation entries and sample creation may require
   published targets, so choosing `draft` can block such a pack.
+- With `publish`, apply creates blueprints in dependency order, whatever their
+  declaration or key order: included blueprints, the blueprints a table column
+  or `browse_by` path reads, a movement's target and factor blueprints, and the
+  blueprints an attribute's `default_from` path reads are created first. A
+  `default_from` path back to the blueprint itself (a variant's `base.price`)
+  adds no dependency. A cycle among `default_from` paths is rejected at
+  inspection. With `draft`, a blueprint whose table path or `default_from`
+  reads another new blueprint is blocked as
+  `draft_table_path_target_unpublished` or
+  `draft_default_from_target_unpublished`, because saving resolves those paths
+  through published revisions only.
 - Sample data is omitted unless you explicitly add `--include-sample-data`
   during planning. Review [sample-data safety](solution-pack-sample-data.md)
   before selecting it.

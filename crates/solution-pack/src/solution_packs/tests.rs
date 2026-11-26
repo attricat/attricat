@@ -5260,3 +5260,225 @@ fn planner_publishes_movement_targets_first_and_rewrites_them() {
         "{definition}"
     );
 }
+
+fn default_from_pack(
+    blueprints: &[(&str, &str)],
+) -> Result<ValidatedSolutionPack, SolutionPackError> {
+    let paths = blueprints
+        .iter()
+        .map(|(key, source)| (format!("{key}.yaml"), source.as_bytes()))
+        .collect::<Vec<_>>();
+    let manifest = json!({
+        "manifest_version": 1,
+        "id": "attricat.defaults",
+        "name": "Default from",
+        "version": "1.0.0",
+        "description": "default_from paths",
+        "attricat": {"host_api": "^1.0"},
+        "resources": {"blueprints": blueprints
+            .iter()
+            .zip(&paths)
+            .map(|((key, _), (path, bytes))| resource(key, path, bytes))
+            .collect::<Vec<_>>()}
+    });
+    let files = paths
+        .iter()
+        .map(|(path, bytes)| (path.as_str(), *bytes))
+        .collect::<Vec<_>>();
+    ValidatedSolutionPack::from_tar_zst(&archive(&manifest, &files))
+}
+
+fn default_from_workspace() -> PlanningWorkspaceSnapshot {
+    PlanningWorkspaceSnapshot {
+        workspace_id: uuid::Uuid::nil(),
+        physical_codes: BTreeSet::from(["default".to_owned()]),
+        existing_blueprints: BTreeMap::new(),
+        existing_presentation_assets: BTreeMap::new(),
+        installed_extensions: BTreeMap::new(),
+        explore_navigation: Vec::new(),
+        explore_navigation_valid: true,
+        extension_layout: serde_json::json!({"version":1,"outlets":{}}),
+        extension_layout_valid: true,
+        role_codes: BTreeSet::new(),
+        published_record_codes: BTreeSet::new(),
+        seed: Default::default(),
+    }
+}
+
+fn simple_blueprint(code: &str, attributes: &str) -> String {
+    format!(
+        "format_version: 1\ncode: {code}\nname: {code}\nkind: record\nviews:\n  dropdown_option:\n    type: dropdown_option\n    fields: [name]\nattributes:\n  - code: name\n    value_type: string\n{attributes}"
+    )
+}
+
+fn order_line(unit_price_type: &str, path: &str) -> String {
+    simple_blueprint(
+        "order_line",
+        &format!(
+            "  - code: item\n    value_type: relationship\n    target_blueprints: [blueprints/product, blueprints/service]\n    cardinality: one\n  - code: unit_price_net\n    value_type: {unit_price_type}\n    default_from: {path}\n"
+        ),
+    )
+}
+
+fn product() -> String {
+    simple_blueprint(
+        "product",
+        "  - code: sale_price_net\n    value_type: number\n",
+    )
+}
+
+fn service() -> String {
+    simple_blueprint("service", "")
+}
+
+#[test]
+fn planner_orders_default_from_targets_before_their_owner() {
+    // `service` does not declare the leaf: a multi-target hop needs only one
+    // target that does.
+    let order_line = order_line("number", "item.sale_price_net");
+    let pack = default_from_pack(&[
+        ("blueprints/order_line", &order_line),
+        ("blueprints/product", &product()),
+        ("blueprints/service", &service()),
+    ])
+    .unwrap();
+    assert_eq!(
+        pack.blueprints["blueprints/order_line"].default_from_dependencies(),
+        &BTreeSet::from([
+            "blueprints/product".to_owned(),
+            "blueprints/service".to_owned()
+        ])
+    );
+    let workspace = default_from_workspace();
+
+    let publish =
+        build_solution_pack_plan(&pack, "df", BlueprintPublication::Publish, &workspace).unwrap();
+    assert!(publish.ready);
+    let order = publish
+        .actions
+        .iter()
+        .map(|action| action.logical_key.as_str())
+        .collect::<Vec<_>>();
+    let position = |key| {
+        order
+            .iter()
+            .position(|candidate| *candidate == key)
+            .unwrap()
+    };
+    assert!(position("blueprints/product") < position("blueprints/order_line"));
+    assert!(position("blueprints/service") < position("blueprints/order_line"));
+
+    let draft =
+        build_solution_pack_plan(&pack, "df", BlueprintPublication::Draft, &workspace).unwrap();
+    let action = draft
+        .actions
+        .iter()
+        .find(|action| action.logical_key == "blueprints/order_line")
+        .unwrap();
+    assert_eq!(
+        (action.action, action.reason_code),
+        (
+            PlanActionKind::Blocked,
+            "draft_default_from_target_unpublished"
+        )
+    );
+    assert!(!draft.ready);
+}
+
+#[test]
+fn an_integer_leaf_fills_a_number_default_from() {
+    let product = simple_blueprint(
+        "product",
+        "  - code: sale_price_net\n    value_type: integer\n",
+    );
+    default_from_pack(&[
+        (
+            "blueprints/order_line",
+            &order_line("number", "item.sale_price_net"),
+        ),
+        ("blueprints/product", &product),
+        ("blueprints/service", &service()),
+    ])
+    .unwrap();
+}
+
+#[test]
+fn a_default_from_leaf_of_the_wrong_type_is_a_pack_error() {
+    let error = default_from_pack(&[
+        (
+            "blueprints/order_line",
+            &order_line("string", "item.sale_price_net"),
+        ),
+        ("blueprints/product", &product()),
+        ("blueprints/service", &service()),
+    ])
+    .unwrap_err()
+    .to_string();
+    assert!(
+        error.contains(
+            "attribute 'unit_price_net' default_from 'item.sale_price_net' ends on a number attribute, which cannot fill a string attribute"
+        ),
+        "{error}"
+    );
+
+    let error = default_from_pack(&[
+        (
+            "blueprints/order_line",
+            &order_line("number", "item.list_price"),
+        ),
+        ("blueprints/product", &product()),
+        ("blueprints/service", &service()),
+    ])
+    .unwrap_err()
+    .to_string();
+    assert!(error.contains("default_from 'item.list_price'"), "{error}");
+}
+
+#[test]
+fn a_default_from_target_outside_the_pack_is_a_pack_error() {
+    let error = default_from_pack(&[(
+        "blueprints/order_line",
+        &order_line("number", "item.sale_price_net"),
+    )])
+    .unwrap_err()
+    .to_string();
+    assert!(error.contains("blueprints/product"), "{error}");
+}
+
+#[test]
+fn a_default_from_path_back_to_its_owner_adds_no_dependency() {
+    let variant = simple_blueprint(
+        "variant",
+        "  - code: price\n    value_type: number\n  - code: base\n    value_type: relationship\n    target_blueprint: blueprints/variant\n    cardinality: one\n  - code: variant_price\n    value_type: number\n    default_from: base.price\n",
+    );
+    let pack = default_from_pack(&[("blueprints/variant", &variant)]).unwrap();
+    assert!(
+        pack.blueprints["blueprints/variant"]
+            .default_from_dependencies()
+            .is_empty()
+    );
+    let workspace = default_from_workspace();
+    for publication in [BlueprintPublication::Publish, BlueprintPublication::Draft] {
+        let plan = build_solution_pack_plan(&pack, "df", publication, &workspace).unwrap();
+        assert!(plan.ready);
+    }
+}
+
+#[test]
+fn a_default_from_cycle_is_a_pack_error() {
+    let first = simple_blueprint(
+        "first",
+        "  - code: other\n    value_type: relationship\n    target_blueprint: blueprints/second\n    cardinality: one\n  - code: copied\n    value_type: string\n    default_from: other.name\n",
+    );
+    let second = simple_blueprint(
+        "second",
+        "  - code: other\n    value_type: relationship\n    target_blueprint: blueprints/first\n    cardinality: one\n  - code: copied\n    value_type: string\n    default_from: other.name\n",
+    );
+    let error = default_from_pack(&[("blueprints/first", &first), ("blueprints/second", &second)])
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("blueprint default_from references contain a cycle"),
+        "{error}"
+    );
+}
