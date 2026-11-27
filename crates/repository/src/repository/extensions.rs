@@ -526,7 +526,7 @@ impl AttricatRepository {
         Ok(())
     }
 
-    /// Lists installations with their immutable release metadata for management UI.
+    /// Lists workspace extension secret names and timestamps, never values.
     pub async fn workspace_extension_secrets(
         &self,
     ) -> Result<Vec<WorkspaceExtensionSecret>, RepositoryError> {

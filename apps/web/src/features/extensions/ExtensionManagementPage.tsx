@@ -15,7 +15,10 @@ import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { useCan } from '../auth/useCan';
 import { useTabAccessibility } from '../../components/useTabAccessibility';
-import { ExtensionIcon } from '../../components/systemIcons';
+import {
+  ExtensionIcon,
+  ExtensionSecretIcon,
+} from '../../components/systemIcons';
 import { capabilities } from '../auth/capabilities';
 import { RequireCapability } from '../auth/RequireCapability';
 import { RouterButton, RouterTab } from '../../components/RouterLink';
@@ -35,6 +38,11 @@ const extensionTabs = [
     icon: PanelsTopLeftIcon,
     label: 'extensions.layout',
     to: '/manage/extensions/layout',
+  },
+  {
+    icon: ExtensionSecretIcon,
+    label: 'extensions.secrets',
+    to: '/manage/extensions/secrets',
   },
 ] as const satisfies ReadonlyArray<{
   icon: LucideIcon;

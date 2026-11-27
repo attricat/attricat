@@ -53,14 +53,26 @@ For the places every blueprint shares, such as navigation and panels, extensions
 
 ## Secrets
 
-Extensions that call external services often need an API key. Store it as a named workspace extension secret through the API:
+Extensions that call external services often need an API key. Store it as a named workspace extension secret under **Manage → Extensions → Secrets**: **Add secret** asks for the name the extension's documentation gives and the value. Names use letters, digits, dots, hyphens and underscores, up to 128 characters.
+
+Values are write-only: nobody can read them back, and an extension with `secrets.read` receives a value only while it runs. The list shows each name and when its value was last set. **Replace value** rotates a secret without renaming it, and deleting one makes the extensions that use it fail until you add it again.
+
+Automation can do the same through the API, with a token that can manage extensions:
 
 ```http
 PUT /workspace/extension-secrets/destination-token
 {"value": "…"}
 ```
 
-`GET /workspace/extension-secrets` lists names only, and `DELETE` removes a secret. Values are write-only: nobody can read them back, and an extension with `secrets.read` receives a value only while it runs.
+`GET /workspace/extension-secrets` lists names only, and `DELETE` removes a secret.
+
+The [CLI](/reference/cli/#extensions) has the same commands. `set` reads the value from standard input, so it stays out of your shell history:
+
+```sh
+acli extension secret list
+printf '%s' "$VALUE" | acli extension secret set destination-token --value-stdin
+acli extension secret delete destination-token
+```
 
 ## Connections
 

@@ -356,6 +356,16 @@ const lifecycleSchema = z.object({
   diagnostics: jsonValue,
   created_at: z.string(),
 });
+/** A workspace extension secret; its value is write-only and never returned. */
+export const workspaceExtensionSecretSchema = z.object({
+  name: z.string(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+export type WorkspaceExtensionSecret = z.infer<
+  typeof workspaceExtensionSecretSchema
+>;
+
 export const installationSchema = z.object({
   id: z.uuid(),
   extension_id: z.string(),
