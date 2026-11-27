@@ -48,6 +48,7 @@ const renderSection = (canManage = true) => {
       />
     </QueryClientProvider>,
   );
+  return client;
 };
 
 describe('ExtensionSecretsSection', () => {
@@ -79,7 +80,7 @@ describe('ExtensionSecretsSection', () => {
   it('sets the value of a declared secret under its own name', async () => {
     vi.mocked(putExtensionSecret).mockResolvedValue(undefined);
     const user = userEvent.setup();
-    renderSection();
+    const client = renderSection();
     await user.click(
       await screen.findByRole('button', { name: 'Set value of api-key' }),
     );
@@ -97,6 +98,17 @@ describe('ExtensionSecretsSection', () => {
       }),
     );
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    // The write-only value does not stay in the query client's cache.
+    await waitFor(() =>
+      expect(
+        JSON.stringify(
+          client
+            .getMutationCache()
+            .getAll()
+            .map((mutation) => mutation.state.variables),
+        ),
+      ).not.toContain('s3cret'),
+    );
   });
 
   it('adds a secret under a valid name the extension does not use yet', async () => {

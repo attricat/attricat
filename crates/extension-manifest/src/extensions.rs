@@ -3391,7 +3391,6 @@ pub fn validate_schema(schema: &Value, value: &Value) -> Result<(), ManifestErro
 mod tests {
     use super::*;
 
-
     #[test]
     fn host_api_ranges_must_accept_the_supported_abi() {
         let mut value = manifest();
