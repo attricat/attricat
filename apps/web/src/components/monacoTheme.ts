@@ -66,6 +66,8 @@ export const monacoThemeRules = (mode: DesignMode) => {
     { token: 'comment', foreground: c.text.secondary.slice(1) },
     // Keys such as YAML mapping keys, on the highlighted line too.
     { token: 'type', foreground: c.semantic.info.main.slice(1) },
+    // JSON object keys, colored like YAML keys.
+    { token: 'string.key.json', foreground: c.semantic.info.main.slice(1) },
   ];
 };
 

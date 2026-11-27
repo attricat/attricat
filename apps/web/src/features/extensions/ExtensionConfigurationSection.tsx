@@ -1,6 +1,7 @@
-import { Button, Paper, TextField, Typography } from '@mui/material';
+import { Box, Button, Paper, Skeleton, Typography } from '@mui/material';
 import { useForm } from '@tanstack/react-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invalidateExtensions } from './extensionPageUtils';
 import {
@@ -8,6 +9,14 @@ import {
   type ExtensionInstallation,
 } from './managementApi';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { jsonEditorMinHeight } from '../../components/jsonEditorSize';
+
+// Monaco loads in its own chunk, only where configuration is shown.
+const JsonEditor = lazy(() =>
+  import('../../components/JsonEditor').then(({ JsonEditor }) => ({
+    default: JsonEditor,
+  })),
+);
 
 const configurationIndentation = 2;
 
@@ -79,19 +88,26 @@ export const ExtensionConfigurationSection = ({
           }}
         >
           {(field) => (
-            <TextField
-              required
-              error={field.state.meta.errors.length > 0}
-              fullWidth
-              helperText={field.state.meta.errors[0]}
-              label={t('extensions.jsonConfiguration')}
-              minRows={5}
-              multiline
-              onBlur={field.handleBlur}
-              onChange={(event) => field.handleChange(event.target.value)}
-              sx={{ mt: 2 }}
-              value={field.state.value}
-            />
+            <Suspense
+              fallback={
+                <Skeleton
+                  height={jsonEditorMinHeight}
+                  sx={{ mt: 2 }}
+                  variant="rectangular"
+                />
+              }
+            >
+              <Box sx={{ mt: 2 }}>
+                <JsonEditor
+                  defaultValue={field.state.value}
+                  error={field.state.meta.errors[0]}
+                  label={t('extensions.jsonConfiguration')}
+                  onBlur={field.handleBlur}
+                  onChange={field.handleChange}
+                  readOnly={!canManage}
+                />
+              </Box>
+            </Suspense>
           )}
         </form.Field>
         <Button

@@ -67,6 +67,58 @@ test('side-loads the example extension and recalculates a blueprint formula', as
     )
     .toBe(true);
 
+  // Configuration opens in a JSON editor that colors keys apart from values
+  // and formats a compact document once it loses focus.
+  await page.getByRole('tab', { name: 'Configuration' }).click();
+  const configuration = page.getByRole('group', {
+    name: 'JSON configuration',
+  });
+  const lines = configuration.locator('.view-line');
+  await expect(configuration.locator('.monaco-editor')).toBeVisible();
+  const input = configuration.getByRole('textbox', {
+    name: 'JSON configuration',
+  });
+  await input.focus();
+  await expect(input).toBeFocused();
+  // A new installation starts from the one line `{}`; selecting it needs no
+  // platform modifier, which macOS headless Chromium keeps from Monaco.
+  await expect(lines).toHaveText(['{}']);
+  await page.keyboard.press('Home');
+  await page.keyboard.press('Shift+End');
+  // Typing over a selection would wrap it in the auto-closed brackets.
+  await page.keyboard.press('Delete');
+  await page.keyboard.insertText('{"webhook_secret":"example-webhook-secret"}');
+  await expect(lines).toHaveCount(1);
+  await page.getByRole('heading', { name: 'Configuration' }).click();
+  await expect(lines).toHaveCount(3);
+  await expect(lines.nth(1)).toHaveText(
+    '  "webhook_secret": "example-webhook-secret"',
+  );
+  const tokenColor = (text: string) =>
+    lines
+      .nth(1)
+      .locator('span span', { hasText: text })
+      .evaluate((token) => getComputedStyle(token).color);
+  expect(await tokenColor('"webhook_secret"')).not.toBe(
+    await tokenColor('"example-webhook-secret"'),
+  );
+  const saved = page.waitForResponse((response) =>
+    response.url().endsWith('/configure'),
+  );
+  await page.getByRole('button', { name: 'Save configuration' }).click();
+  const response = await saved;
+  expect({
+    status: response.status(),
+    sent: response.request().postDataJSON(),
+  }).toEqual({
+    status: 200,
+    sent: { configuration: { webhook_secret: 'example-webhook-secret' } },
+  });
+  await page.reload();
+  await expect(lines.nth(1)).toHaveText(
+    '  "webhook_secret": "example-webhook-secret"',
+  );
+
   const code = `formula_${suffix()}`;
   const blueprint = await createRecordBlueprint(
     code,
