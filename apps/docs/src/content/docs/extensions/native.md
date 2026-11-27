@@ -30,7 +30,7 @@ Declare one `client_native` artifact and point contributions at it:
   { "id": "ui", "kind": "client_native", "path": "dist/ui.js", "ui_kit": "^1.0" }
 ],
 "ui": [
-  { "id": "stock", "version": 1, "kind": "tab", "artifact": "ui", "outlet": "record_tab", "title": "Stock" }
+  { "id": "stock", "version": 1, "kind": "tab", "artifact": "ui", "outlet": "record_tab", "view": "detail", "title": "Stock" }
 ]
 ```
 

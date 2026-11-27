@@ -85,6 +85,7 @@ Design with that in mind: your extension asks for capabilities; an administrator
       "kind": "tab",
       "artifact": "panel",
       "outlet": "record_tab",
+      "view": "detail",
       "title": "Stock"
     }
   ]
@@ -99,6 +100,17 @@ export const mount = async (root, attricat) => {
   return () => root.replaceChildren();
 };
 ```
+
+The tab appears only on the record pages of blueprints that place it. After you install and enable the extension, list it in a blueprint's detail view:
+
+```yaml
+views:
+  detail:
+    type: stack
+    extensions: [acme.inventory/summary]
+```
+
+Record actions, record tabs and form assists are placed in `views.detail.extensions`, and Explorer actions in `views.table.extensions`; see [blueprint views](/reference/blueprint/#extensions).
 
 The full manifest format is in the [manifest reference](/extensions/manifest/).
 

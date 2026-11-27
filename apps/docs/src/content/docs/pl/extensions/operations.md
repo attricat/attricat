@@ -129,7 +129,7 @@ Uruchomienie wymaga uprawnienia `records.write` w całym obszarze roboczym, bo m
 Dodaj `accepts` do [akcji](/pl/extensions/client/#akcje) operacji, aby Attricat poprosił o plik, gdy użytkownik ją wybierze:
 
 ```json
-{ "id": "import-csv", "version": 1, "kind": "action", "outlet": "explorer_action", "title": "Import CSV…",
+{ "id": "import-csv", "version": 1, "kind": "action", "outlet": "explorer_action", "view": "table", "title": "Import CSV…",
   "accepts": ["text/csv"], "invoke": { "operation": { "id": "import", "input": {} } } }
 ```
 

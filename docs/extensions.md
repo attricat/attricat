@@ -2016,6 +2016,7 @@ is native):
   "kind": "tab",
   "artifact": "client",
   "outlet": "record_tab",
+  "view": "detail",
   "title": "Stock",
   "icon": "tag",
   "when": {"blueprints": ["product"]}

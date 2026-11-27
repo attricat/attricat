@@ -129,7 +129,7 @@ Starting one needs a workspace-wide `records.write` grant, because the run can c
 Add `accepts` to an operation [action](/extensions/client/#actions) to make Attricat ask for a file when the user chooses it:
 
 ```json
-{ "id": "import-csv", "version": 1, "kind": "action", "outlet": "explorer_action", "title": "Import CSV…",
+{ "id": "import-csv", "version": 1, "kind": "action", "outlet": "explorer_action", "view": "table", "title": "Import CSV…",
   "accepts": ["text/csv"], "invoke": { "operation": { "id": "import", "input": {} } } }
 ```
 

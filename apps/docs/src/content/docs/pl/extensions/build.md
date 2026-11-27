@@ -85,6 +85,7 @@ Projektuj z myślą o tym: Twoje rozszerzenie prosi o uprawnienia, a administrat
       "kind": "tab",
       "artifact": "panel",
       "outlet": "record_tab",
+      "view": "detail",
       "title": "Stany"
     }
   ]
@@ -99,6 +100,17 @@ export const mount = async (root, attricat) => {
   return () => root.replaceChildren();
 };
 ```
+
+Karta pojawia się tylko na stronach rekordów tych schematów, które ją umieszczają. Po zainstalowaniu i włączeniu rozszerzenia dodaj ją do widoku szczegółów schematu:
+
+```yaml
+views:
+  detail:
+    type: stack
+    extensions: [acme.inventory/summary]
+```
+
+Akcje rekordu, karty rekordu i asystentów formularza umieszcza się w `views.detail.extensions`, a akcje przeglądarki rekordów w `views.table.extensions`; zobacz [widoki schematu](/pl/reference/blueprint/#extensions).
 
 Pełny format manifestu opisuje [dokumentacja manifestu](/pl/extensions/manifest/).
 
