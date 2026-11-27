@@ -152,7 +152,7 @@ describe('blueprintConnections', () => {
         attributeCodes: ['sale_status', 'reserved_until'],
         sources: ['sale_status'],
         name: 'Sale status',
-        detail: 'Available → Reserved',
+        transition: { from: 'Available', to: 'Reserved' },
       },
     ]);
   });

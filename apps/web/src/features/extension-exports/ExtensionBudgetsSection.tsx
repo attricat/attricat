@@ -18,7 +18,7 @@ import { extensionExportQueryKeys } from './queryKeys';
 import type { HostPermissionBudget } from './schemas';
 import { ActionsHeaderCell } from '../../components/ActionsHeaderCell';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
-import { emptyValuePlaceholder } from '../../components/placeholders';
+import { EmptyValue } from '../../components/EmptyValue';
 
 const BudgetRow = ({
   budget,
@@ -71,7 +71,7 @@ const BudgetRow = ({
         {declared ? describe(declared) : t('extensionExports.sharedBudget')}
       </TableCell>
       <TableCell>
-        {budget.lowered ? describe(budget.lowered) : emptyValuePlaceholder}
+        {budget.lowered ? describe(budget.lowered) : <EmptyValue />}
         <ApiErrorAlert error={save.error ?? reset.error} sx={{ mt: 1 }} />
       </TableCell>
       <TableCell>

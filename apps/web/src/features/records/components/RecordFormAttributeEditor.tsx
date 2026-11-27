@@ -132,18 +132,22 @@ export const RecordFormAttributeEditor = ({
     if (!inherited) return undefined;
     const context = sourceContext.code;
     const fromDefault = context === defaultContextCode;
+    const inheritedRaw = resolvedValue.value;
+    // Links, files and an empty inherited value only name the source.
     if (
       attribute.value_type === attributeValueTypes.relationship ||
-      attribute.value_type === attributeValueTypes.file
+      attribute.value_type === attributeValueTypes.file ||
+      inheritedRaw === null ||
+      inheritedRaw === undefined
     )
       return fromDefault
         ? t('records.inheritedFromDefaultContext')
         : t('records.inheritedFromContext', { context });
     const value =
       attribute.value_type === attributeValueTypes.datetime &&
-      typeof resolvedValue.value === 'string'
-        ? formatInstant(resolvedValue.value)
-        : formatAttributeValue(attribute, resolvedValue.value);
+      typeof inheritedRaw === 'string'
+        ? formatInstant(inheritedRaw)
+        : formatAttributeValue(attribute, inheritedRaw);
     return fromDefault
       ? t('records.inheritedValueFromDefaultContext', { value })
       : t('records.inheritedValue', { context, value });

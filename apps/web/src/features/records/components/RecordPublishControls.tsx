@@ -3,7 +3,6 @@ import { Box, Chip, IconButton, Tooltip } from '@mui/material';
 import { Trans, useTranslation } from 'react-i18next';
 import { navigationRoutes } from '../../../components/navigation';
 import { RouterLink } from '../../../components/RouterLink';
-import { emptyValuePlaceholder } from '../../../components/placeholders';
 import { publicationStatuses } from '../constants';
 import { publicationReadinessText } from '../checkViolations';
 import { compactIconSize } from '../../../components/iconSizes';
@@ -42,10 +41,16 @@ export const RecordPublishControls = ({
       t={t}
     />
   ) : published && publication.published_at ? (
-    t('records.publication.publishedDetails', {
-      publishedAt: formatWithUtc(publication.published_at),
-      publishedBy: publication.published_by_name ?? emptyValuePlaceholder,
-    })
+    publication.published_by_name ? (
+      t('records.publication.publishedDetails', {
+        publishedAt: formatWithUtc(publication.published_at),
+        publishedBy: publication.published_by_name,
+      })
+    ) : (
+      t('records.publication.publishedAt', {
+        publishedAt: formatWithUtc(publication.published_at),
+      })
+    )
   ) : published ? null : (
     t('records.publication.notPublishedDescription')
   );

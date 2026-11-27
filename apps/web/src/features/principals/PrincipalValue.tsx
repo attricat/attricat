@@ -2,7 +2,7 @@ import { Chip, Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { compactIconSize } from '../../components/iconSizes';
 import { RouterChip } from '../../components/RouterLink';
-import { NotSetValue } from '../views/components/values/NotSetValue';
+import { EmptyValue } from '../../components/EmptyValue';
 import { AssignedUserIcon, TeamIcon } from '../../components/systemIcons';
 import { principalKinds } from './constants';
 import { isAssignable, resolvePrincipal } from './principal';
@@ -28,7 +28,7 @@ export const PrincipalValue = ({ value }: { value: unknown }) => {
   const { t } = useTranslation();
   const assigned = isAssigned(value);
   const directory = usePrincipalDirectory(assigned);
-  if (!assigned) return <NotSetValue />;
+  if (!assigned) return <EmptyValue />;
   const principal = resolvePrincipal(directory.data, value);
   if (!principal) {
     // A reference is unknown only once the directory has loaded without it.
@@ -82,9 +82,8 @@ export const PrincipalValue = ({ value }: { value: unknown }) => {
 
 /** Plain-text form of an assignment, for headings and compact text. */
 export const PrincipalText = ({ value }: { value: unknown }) => {
-  const { t } = useTranslation();
   const assigned = isAssigned(value);
   const directory = usePrincipalDirectory(assigned);
-  if (!assigned) return <>{t('views.notSet')}</>;
+  if (!assigned) return <EmptyValue />;
   return <>{resolvePrincipal(directory.data, value)?.label ?? String(value)}</>;
 };

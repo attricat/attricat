@@ -6,7 +6,7 @@ import {
 } from '../../records/status';
 import { MarkdownContent } from '../../markdown/MarkdownContent';
 import type { ValueRenderer } from '../components/componentTypes';
-import { NotSetValue } from '../components/values/NotSetValue';
+import { EmptyValue } from '../../../components/EmptyValue';
 import { parseColor, COLOR_VALUE_SWATCH_SIZE } from './color';
 import { CopyableText } from './CopyableText';
 import { EachValue } from './EachValue';
@@ -88,7 +88,7 @@ export const MarkdownValue: ValueRenderer = ({ value }) =>
   typeof value === 'string' && value.trim() ? (
     <MarkdownContent value={value} />
   ) : (
-    <NotSetValue />
+    <EmptyValue />
   );
 
 /** A status code as its labelled chip; unknown codes stay visible. */
@@ -100,7 +100,7 @@ export const StatusValue = ({
   value: unknown;
 }) => {
   const { t } = useTranslation();
-  if (value === null || value === undefined) return <NotSetValue />;
+  if (value === null || value === undefined) return <EmptyValue />;
   const option = config.options.find((item) => item.code === value);
   const label = statusCodeLabel(config, value) ?? String(value);
   return (

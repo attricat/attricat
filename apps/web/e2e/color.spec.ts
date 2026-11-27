@@ -146,7 +146,12 @@ views:
     await text.fill('');
     await commitField(page, recordId, text, 'Enter');
     await page.reload();
-    await expect(page.getByText('Not set', { exact: true })).toBeVisible();
+    // An empty value shows a dash that hover and screen readers name.
+    await page
+      .getByRole('group', { name: 'hex' })
+      .getByText('—', { exact: true })
+      .hover();
+    await expect(page.getByRole('tooltip', { name: 'Not set' })).toBeVisible();
     await page.goto(`/?blueprint=${code}`);
     await expect(
       page.getByRole('link', { name: 'Color sample', exact: true }),

@@ -1,6 +1,7 @@
 import { Stack, Typography } from '@mui/material';
 import { Fragment } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
+import { EmptyValue } from '../../../components/EmptyValue';
 import type { Attribute } from '../api';
 import {
   attributeConnectionKinds,
@@ -69,6 +70,17 @@ const FieldNames = ({
     </>
   );
 };
+
+/** A status transition as `from → to`; a missing side reads as not set. */
+const TransitionLabel = ({
+  transition,
+}: {
+  transition?: AttributeConnection['transition'];
+}) => (
+  <>
+    {transition?.from ?? <EmptyValue />} → {transition?.to ?? <EmptyValue />}
+  </>
+);
 
 /** The sentence describing a connection, seen from one of its fields. */
 const connectionKey = (
@@ -160,6 +172,9 @@ export const FieldConnectionList = ({
                     code={connection.sources?.[0] ?? ''}
                     onReveal={onReveal}
                   />
+                ),
+                transition: (
+                  <TransitionLabel transition={connection.transition} />
                 ),
               }}
               i18nKey={connectionKey(connection, outgoing, others.length === 0)}

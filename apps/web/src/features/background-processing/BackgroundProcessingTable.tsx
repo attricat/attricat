@@ -14,7 +14,7 @@ import {
   taskKindTranslationKeys,
 } from './constants';
 import type { BackgroundProcessingStatus } from './schemas';
-import { emptyValuePlaceholder } from '../../components/placeholders';
+import { EmptyValue } from '../../components/EmptyValue';
 
 export const BackgroundProcessingTable = ({
   rows,
@@ -55,11 +55,13 @@ export const BackgroundProcessingTable = ({
                 {number.format(row.expired_leases)}
               </TableCell>
               <TableCell align="right">
-                {row.oldest_due_seconds === null
-                  ? emptyValuePlaceholder
-                  : t('backgroundProcessing.seconds', {
-                      value: number.format(row.oldest_due_seconds),
-                    })}
+                {row.oldest_due_seconds === null ? (
+                  <EmptyValue />
+                ) : (
+                  t('backgroundProcessing.seconds', {
+                    value: number.format(row.oldest_due_seconds),
+                  })
+                )}
               </TableCell>
             </TableRow>
           ))}

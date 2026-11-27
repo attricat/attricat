@@ -1,6 +1,6 @@
 import { Stack } from '@mui/material';
 import { Fragment, type ReactNode } from 'react';
-import { NotSetValue } from '../components/values/NotSetValue';
+import { EmptyValue } from '../../../components/EmptyValue';
 
 const isMissing = (value: unknown) =>
   value === null ||
@@ -22,7 +22,7 @@ export const EachValue = ({
   direction?: 'row' | 'column';
 }) => {
   const render = (item: unknown) =>
-    isMissing(item) ? <NotSetValue /> : renderItem(item);
+    isMissing(item) ? <EmptyValue /> : renderItem(item);
   if (!Array.isArray(value) || !value.length) return render(value);
   return (
     <Stack

@@ -12,7 +12,7 @@ import { Timestamp } from '../../time/Timestamp';
 import { ExportStatusChip } from './ExportStatusChip';
 import { formatPushError } from './pushErrors';
 import type { ExportMapping } from './schemas';
-import { emptyValuePlaceholder } from '../../components/placeholders';
+import { EmptyValue } from '../../components/EmptyValue';
 
 /**
  * Records in one export status with their push errors; with `selected`,
@@ -76,7 +76,7 @@ export const ExportMappingsTable = ({
               <ExportStatusChip status={mapping.status} />
             </TableCell>
             <TableCell>
-              {formatPushError(mapping.error) || emptyValuePlaceholder}
+              {formatPushError(mapping.error) || <EmptyValue />}
             </TableCell>
             <TableCell>
               <Timestamp value={mapping.updated_at} />

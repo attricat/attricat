@@ -24,7 +24,7 @@ import {
 import { JsonMetadata } from './BlueprintMetadata';
 import { isHiddenByDefault } from '../records/attributeVisibility';
 import { ValueTypeLabel } from '../records/components/ValueTypeLabel';
-import { emptyValuePlaceholder } from '../../components/placeholders';
+import { EmptyValue } from '../../components/EmptyValue';
 import { SectionPaper } from '../../components/SectionPaper';
 
 export const BlueprintVersionMetadata = ({
@@ -137,20 +137,21 @@ export const BlueprintVersionMetadata = ({
                     <TableCell>
                       {attribute.target_blueprint_codes?.length
                         ? attribute.target_blueprint_codes.join(', ')
-                        : (attribute.target_blueprint_code ??
-                          emptyValuePlaceholder)}
+                        : (attribute.target_blueprint_code ?? <EmptyValue />)}
                       {attribute.hierarchy && ` (${attribute.hierarchy})`}
                     </TableCell>
                     <TableCell>
-                      {attribute.tags?.length
-                        ? attribute.tags.join(', ')
-                        : emptyValuePlaceholder}
+                      {attribute.tags?.length ? (
+                        attribute.tags.join(', ')
+                      ) : (
+                        <EmptyValue />
+                      )}
                     </TableCell>
                     <TableCell>
                       {attribute.value_schema ? (
                         <JsonInline value={attribute.value_schema} />
                       ) : (
-                        emptyValuePlaceholder
+                        <EmptyValue />
                       )}
                     </TableCell>
                     <TableCell>

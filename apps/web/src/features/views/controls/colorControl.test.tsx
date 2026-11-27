@@ -44,7 +44,8 @@ describe('color components', () => {
         <ColorValue attribute={attribute} value={value} />,
       );
       expect(screen.getByText('Not set')).toBeTruthy();
-      expect(container.querySelector('[aria-hidden="true"]')).toBeNull();
+      // The placeholder's dash is hidden too; the swatch is the only box.
+      expect(container.querySelector('div[aria-hidden="true"]')).toBeNull();
     },
   );
   it('keeps partial text and synchronizes the picker without saving a default', () => {

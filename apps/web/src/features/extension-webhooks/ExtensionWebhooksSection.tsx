@@ -35,7 +35,7 @@ import { ActionsHeaderCell } from '../../components/ActionsHeaderCell';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { EmptyState } from '../../components/EmptyState';
-import { emptyValuePlaceholder } from '../../components/placeholders';
+import { EmptyValue } from '../../components/EmptyValue';
 import { StatusChip, type StatusChipStyle } from '../../components/StatusChip';
 import { ExtensionWebhookIcon } from '../../components/systemIcons';
 import { Timestamp } from '../../time/Timestamp';
@@ -132,7 +132,7 @@ const EndpointRow = ({
       </TableCell>
       <TableCell>
         {endpoint.last_reply_status === null ? (
-          emptyValuePlaceholder
+          <EmptyValue />
         ) : (
           <StatusChip
             label={endpoint.last_reply_status}
