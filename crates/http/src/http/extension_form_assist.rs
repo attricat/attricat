@@ -53,6 +53,11 @@ const MAX_FORM_ASSIST_TARGETS: usize = 100;
 /// invocations, so typing in forms never holds every slot its event
 /// deliveries and other commands need.
 const MAX_FORM_ASSISTS_IN_FLIGHT: usize = MAX_CONCURRENT_WORKSPACE_INVOCATIONS / 2;
+// Form assists always leave the workspace some extension slots.
+const _: () = assert!(
+    MAX_FORM_ASSISTS_IN_FLIGHT > 0
+        && MAX_FORM_ASSISTS_IN_FLIGHT < MAX_CONCURRENT_WORKSPACE_INVOCATIONS
+);
 
 /// The form assist calls each workspace has running, so a busy workspace
 /// answers at once instead of queueing calls behind its extension slots.
@@ -613,7 +618,5 @@ mod tests {
         assert!(permits.try_enter(Uuid::new_v4()).is_some());
         drop(held);
         assert!(permits.try_enter(busy).is_some());
-        // Form assists always leave the workspace extension slots.
-        assert!(MAX_FORM_ASSISTS_IN_FLIGHT < MAX_CONCURRENT_WORKSPACE_INVOCATIONS);
     }
 }
