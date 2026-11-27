@@ -9,7 +9,7 @@
 
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
-    sync::{Arc, LazyLock},
+    sync::{Arc, LazyLock, Mutex},
     time::Duration,
 };
 
@@ -17,6 +17,7 @@ use attricat_domain::{model::Attribute, permissions::Permission, value_type::Val
 use axum::{Json, extract::State};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use uuid::Uuid;
 
 use super::{
@@ -27,6 +28,7 @@ use super::{
 };
 use crate::{
     constants::DEFAULT_CONTEXT_CODE,
+    extension_runtime::MAX_CONCURRENT_WORKSPACE_INVOCATIONS,
     extensions::{
         ContributionView, FormAssistDeclaration, MAX_FORM_ASSIST_FIELDS, UiContribution,
         UiContributionKind, UiOutlet, validate_schema,
@@ -47,6 +49,29 @@ const FORM_ASSIST_TIMEOUT: Duration = Duration::from_secs(3);
 const FORM_ASSIST_CONTEXT_VERSION: u32 = 1;
 /// The most targets of one relationship field passed to an assist.
 const MAX_FORM_ASSIST_TARGETS: usize = 100;
+/// Form assist calls one workspace runs at once: half its extension
+/// invocations, so typing in forms never holds every slot its event
+/// deliveries and other commands need.
+const MAX_FORM_ASSISTS_IN_FLIGHT: usize = MAX_CONCURRENT_WORKSPACE_INVOCATIONS / 2;
+
+/// The form assist calls each workspace has running, so a busy workspace
+/// answers at once instead of queueing calls behind its extension slots.
+#[derive(Clone, Default)]
+pub struct FormAssistPermits(Arc<Mutex<HashMap<Uuid, Arc<Semaphore>>>>);
+
+impl FormAssistPermits {
+    /// A place for one call, or `None` while the workspace is at its limit.
+    fn try_enter(&self, workspace_id: Uuid) -> Option<OwnedSemaphorePermit> {
+        self.0
+            .lock()
+            .expect("form assist permits are not poisoned")
+            .entry(workspace_id)
+            .or_insert_with(|| Arc::new(Semaphore::new(MAX_FORM_ASSISTS_IN_FLIGHT)))
+            .clone()
+            .try_acquire_owned()
+            .ok()
+    }
+}
 
 /// How a form assist call ended.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -331,38 +356,37 @@ pub(super) async fn run(
         "edited": edited,
     });
 
-    let call = tokio::spawn(ask(
-        state,
+    // A workspace at its limit answers as if the assist were slow: the form
+    // goes on without it rather than queue behind other calls.
+    let Some(_permit) = state.form_assist_permits.try_enter(workspace) else {
+        return Ok(Json(FormAssistResponse {
+            outcome: Outcome::TimedOut,
+            proposals: Vec::new(),
+        }));
+    };
+    // Called inline, so a timeout or a dropped request also ends the call
+    // and frees its extension slot; a task would keep running unobserved.
+    let call = ask(
+        state.clone(),
         repository.for_extension(&installation.extension_id),
         installation.clone(),
         declaration.command.clone(),
         request,
-    ));
+    );
     let answer = match tokio::time::timeout(FORM_ASSIST_TIMEOUT, call).await {
-        Ok(Ok(Ok(answer))) => answer,
+        Ok(Ok(answer)) => answer,
         Err(_) => {
             return Ok(Json(FormAssistResponse {
                 outcome: Outcome::TimedOut,
                 proposals: Vec::new(),
             }));
         }
-        Ok(Ok(Err(error))) => {
+        Ok(Err(error)) => {
             tracing::warn!(
                 extension = %installation.extension_id,
                 assist = %contribution.id,
                 error = %error,
                 "a form assist proposed nothing"
-            );
-            return Ok(Json(FormAssistResponse {
-                outcome: Outcome::Failed,
-                proposals: Vec::new(),
-            }));
-        }
-        Ok(Err(_)) => {
-            tracing::warn!(
-                extension = %installation.extension_id,
-                assist = %contribution.id,
-                "a form assist task failed"
             );
             return Ok(Json(FormAssistResponse {
                 outcome: Outcome::Failed,
@@ -575,5 +599,21 @@ mod tests {
                 "{invalid}"
             );
         }
+    }
+
+    #[test]
+    fn a_busy_workspace_refuses_more_calls_until_one_ends() {
+        let permits = FormAssistPermits::default();
+        let busy = Uuid::new_v4();
+        let held: Vec<_> = (0..MAX_FORM_ASSISTS_IN_FLIGHT)
+            .map(|_| permits.try_enter(busy).expect("room for a call"))
+            .collect();
+        assert!(permits.try_enter(busy).is_none());
+        // Another workspace has its own limit.
+        assert!(permits.try_enter(Uuid::new_v4()).is_some());
+        drop(held);
+        assert!(permits.try_enter(busy).is_some());
+        // Form assists always leave the workspace extension slots.
+        assert!(MAX_FORM_ASSISTS_IN_FLIGHT < MAX_CONCURRENT_WORKSPACE_INVOCATIONS);
     }
 }

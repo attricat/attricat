@@ -527,6 +527,7 @@ async fn start_configured_server(
         max_upload_files: 10,
         data_health_cache_ttl_seconds,
         data_health_cache: Default::default(),
+        form_assist_permits: Default::default(),
         session_cookie_secure: false,
         allow_trusted_headers,
         request_permits: Arc::new(tokio::sync::Semaphore::new(256)),

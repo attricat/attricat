@@ -455,6 +455,7 @@ async fn serve() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             max_upload_files: http.max_upload_files,
             data_health_cache_ttl_seconds: http.data_health_cache_ttl_seconds,
             data_health_cache: Default::default(),
+            form_assist_permits: Default::default(),
             session_cookie_secure: http.session_cookie_secure,
             allow_trusted_headers: false,
             request_permits: Arc::new(Semaphore::new(http.max_concurrent_requests)),

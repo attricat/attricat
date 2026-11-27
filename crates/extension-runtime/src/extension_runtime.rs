@@ -123,7 +123,7 @@ const MAX_INSTANCES: usize = 32;
 /// what extensions can hold together against the documented 2 GiB.
 const MAX_CONCURRENT_INVOCATIONS: usize = 16;
 /// Half of the above, so one workspace's extensions cannot hold all of it.
-const MAX_CONCURRENT_WORKSPACE_INVOCATIONS: usize = 8;
+pub const MAX_CONCURRENT_WORKSPACE_INVOCATIONS: usize = 8;
 /// Compilations at once, each in a process with its own memory limit.
 const MAX_CONCURRENT_COMPILATIONS: usize = 1;
 /// How long a component that failed to compile stays failed. Each attempt can

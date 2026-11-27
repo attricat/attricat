@@ -114,6 +114,8 @@ pub struct AppState {
     pub max_upload_files: usize,
     pub data_health_cache_ttl_seconds: u64,
     pub data_health_cache: DataHealthCache,
+    /// Form assist calls running per workspace.
+    pub form_assist_permits: FormAssistPermits,
     pub session_cookie_secure: bool,
     pub allow_trusted_headers: bool,
     /// Bounds in-flight requests before expensive extractors or handlers run.
@@ -145,6 +147,7 @@ pub struct AppState {
 }
 
 pub use self::data_health::DataHealthCache;
+pub use self::extension_form_assist::FormAssistPermits;
 pub use self::operator::OperatorToken;
 
 impl OidcSettings {
