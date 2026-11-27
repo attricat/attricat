@@ -2077,7 +2077,7 @@
   },
   "workspace": {
     "memberSummary": "{{email}} · {{state}}",
-    "memberSummaryWithRoles": "{{email}} · {{state}} · {{roles}}",
+    "memberRoles": "Roles",
     "memberStates": {
       "active": "Active",
       "inactive": "Inactive"

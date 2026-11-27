@@ -11,7 +11,9 @@ import { capabilities } from '../auth/capabilities';
 import { useCan } from '../auth/useCan';
 import {
   Alert,
+  Box,
   Button,
+  Chip,
   List,
   ListItem,
   ListItemAvatar,
@@ -59,11 +61,7 @@ export const WorkspaceMembersSection = ({
   currentUserId?: string;
   workspaceId?: string;
 }) => {
-  const { i18n, t } = useTranslation();
-  const roleFormatter = new Intl.ListFormat(i18n.language, {
-    style: 'narrow',
-    type: 'unit',
-  });
+  const { t } = useTranslation();
   const client = useQueryClient();
   const members = useQuery({
     enabled: canManage,
@@ -236,41 +234,65 @@ export const WorkspaceMembersSection = ({
                     {personName(member.display_name, member.email)}
                   </UserProfileLink>
                 }
-                secondary={t(
-                  member.grants.length
-                    ? 'workspace.memberSummaryWithRoles'
-                    : 'workspace.memberSummary',
-                  {
-                    email: member.email,
-                    state: t(`workspace.memberStates.${member.state}`),
-                    roles: roleFormatter.format(member.grants.map(grantLabel)),
-                  },
-                )}
+                // The roles below need a block, not a paragraph.
+                slotProps={{ secondary: { component: 'div' } }}
+                secondary={
+                  <>
+                    {t('workspace.memberSummary', {
+                      email: member.email,
+                      state: t(`workspace.memberStates.${member.state}`),
+                    })}
+                    {member.grants.length > 0 && (
+                      <Box
+                        aria-label={t('workspace.memberRoles')}
+                        role="list"
+                        sx={{
+                          display: 'flex',
+                          flexWrap: 'wrap',
+                          gap: 1,
+                          mt: 1,
+                        }}
+                      >
+                        {member.grants.map((grant) => {
+                          const role = grantLabel(grant);
+                          // Only an owner can change an owner's access.
+                          const revocable =
+                            canGrantRoles &&
+                            (isOwner || grant.role_code !== ownerRoleCode);
+                          const confirmRevoke = () => {
+                            revoke.reset();
+                            setRevokeTarget({
+                              memberId: member.id,
+                              grantId: grant.id,
+                              name: personName(
+                                member.display_name,
+                                member.email,
+                              ),
+                              role,
+                            });
+                          };
+                          return (
+                            <Box key={grant.id} role="listitem">
+                              <Chip
+                                label={role}
+                                {...(revocable && {
+                                  'aria-label': t('workspace.revoke', {
+                                    role,
+                                  }),
+                                  deleteIcon: <Trash2Icon />,
+                                  disabled: revoke.isPending,
+                                  onClick: confirmRevoke,
+                                  onDelete: confirmRevoke,
+                                })}
+                              />
+                            </Box>
+                          );
+                        })}
+                      </Box>
+                    )}
+                  </>
+                }
               />
-              {canGrantRoles &&
-                member.grants
-                  // Only an owner can change an owner's access.
-                  .filter(
-                    (grant) => isOwner || grant.role_code !== ownerRoleCode,
-                  )
-                  .map((grant) => (
-                    <Button
-                      key={grant.id}
-                      disabled={revoke.isPending}
-                      onClick={() => {
-                        revoke.reset();
-                        setRevokeTarget({
-                          memberId: member.id,
-                          grantId: grant.id,
-                          name: personName(member.display_name, member.email),
-                          role: grantLabel(grant),
-                        });
-                      }}
-                      startIcon={<Trash2Icon />}
-                    >
-                      {t('workspace.revoke', { role: grantLabel(grant) })}
-                    </Button>
-                  ))}
               <Stack direction="row" sx={{ gap: 1 }}>
                 {canManageSignIn && member.identity_linked && (
                   <Button

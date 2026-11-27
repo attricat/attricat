@@ -56,7 +56,9 @@ describe('WorkspaceMembersSection', () => {
         <WorkspaceMembersSection canManage workspaceId={workspaceId} />
       </QueryClientProvider>,
     );
-    await screen.findByRole('listitem');
+    const roles = await screen.findByRole('list', { name: 'Roles' });
+    // The role still shows, as a plain chip that revokes nothing.
+    expect(within(roles).getByText('reader')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Revoke/ })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Grant role' })).toBeNull();
   });
@@ -187,5 +189,54 @@ describe('WorkspaceMembersSection', () => {
       expect(revokeMemberRole).toHaveBeenCalledWith(memberId, grantId),
     );
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+  it('asks to revoke from the trash icon too, and keeps owners to owners', async () => {
+    vi.mocked(listMembers).mockResolvedValue([
+      {
+        id: '123e4567-e89b-12d3-a456-426614174001',
+        user_id: '123e4567-e89b-12d3-a456-426614174101',
+        email: 'member@example.test',
+        state: 'active',
+        grants: [
+          {
+            id: 'editor-grant',
+            role_code: 'editor',
+            scope_type: 'workspace',
+            scope_target_id: workspaceId,
+          },
+          {
+            id: 'owner-grant',
+            role_code: 'owner',
+            scope_type: 'workspace',
+            scope_target_id: workspaceId,
+          },
+        ],
+      },
+    ] as never);
+    vi.mocked(listAssignableRoles).mockResolvedValue([]);
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <WorkspaceMembersSection
+          canManage
+          canGrantRoles
+          currentUserId="123e4567-e89b-12d3-a456-426614174102"
+          workspaceId={workspaceId}
+        />
+      </QueryClientProvider>,
+    );
+    const editor = await screen.findByRole('button', {
+      name: 'Revoke editor',
+    });
+    // Only an owner may change an owner's access.
+    const roles = screen.getByRole('list', { name: 'Roles' });
+    expect(within(roles).getByText('owner')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Revoke owner' })).toBeNull();
+    const trash = editor.querySelector('svg.MuiChip-deleteIcon');
+    expect(trash).toBeTruthy();
+    fireEvent.click(trash!);
+    expect(
+      screen.getByRole('dialog', { name: 'Revoke role?' }).textContent,
+    ).toContain('loses the editor role');
+    expect(revokeMemberRole).not.toHaveBeenCalled();
   });
 });

@@ -15,8 +15,19 @@ vi.mock('@tanstack/react-router', () => ({
   },
 }));
 vi.mock('../../components/RouterLink', () => ({
-  RouterButton: ({ children, to }: { children: ReactNode; to: string }) => (
-    <a href={to}>{children}</a>
+  // MUI Tabs passes `selected` to each tab.
+  RouterTab: ({
+    label,
+    selected,
+    to,
+  }: {
+    label: ReactNode;
+    selected?: boolean;
+    to: string;
+  }) => (
+    <a aria-selected={selected} href={to} role="tab">
+      {label}
+    </a>
   ),
 }));
 vi.mock('../auth/api', () => ({ currentSession: vi.fn() }));
@@ -62,10 +73,10 @@ describe('WorkspaceManagementPage', () => {
       session({ agents_manage: true }),
     );
     renderPage('agent');
-    expect(
-      (await screen.findByRole('link', { name: 'Agent' })).getAttribute('href'),
-    ).toBe('/manage/workspace/agent');
-    expect(screen.queryByRole('link', { name: 'Members' })).toBeNull();
+    const agent = await screen.findByRole('tab', { name: 'Agent' });
+    expect(agent.getAttribute('href')).toBe('/manage/workspace/agent');
+    expect(agent.getAttribute('aria-selected')).toBe('true');
+    expect(screen.queryByRole('tab', { name: 'Members' })).toBeNull();
   });
 
   it('opens the first section the caller may manage', async () => {

@@ -47,7 +47,7 @@ test('manages custom roles through their full lifecycle', async ({ page }) => {
   await expect(
     page.getByRole('heading', { name: 'Workspace management' }),
   ).toBeVisible();
-  await page.getByRole('link', { name: 'Roles' }).click();
+  await page.getByRole('tab', { name: 'Roles' }).click();
 
   await page.getByLabel('Role code').fill(roleCode);
   await page.getByLabel(/^blueprints\.read —/).check();
@@ -93,11 +93,11 @@ test('grants and revokes a workspace member role', async ({ page }) => {
     page.getByRole('listitem').filter({ hasText: roleCode }),
   ).toBeVisible();
 
-  await page.getByRole('link', { name: 'Members' }).click();
+  await page.getByRole('tab', { name: 'Members' }).click();
   await expect(page.getByText('fixture@example.test').first()).toBeVisible();
-  await page.getByLabel('Member').click();
+  await page.getByRole('combobox', { name: 'Member' }).click();
   await page.getByRole('option', { name: 'fixture@example.test' }).click();
-  await page.getByLabel('Role').click();
+  await page.getByRole('combobox', { name: 'Role' }).click();
   await page.getByRole('option', { name: roleCode }).click();
   await page.getByRole('button', { name: 'Grant role' }).click();
 

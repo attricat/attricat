@@ -2167,7 +2167,7 @@
   },
   "workspace": {
     "memberSummary": "{{email}} · {{state}}",
-    "memberSummaryWithRoles": "{{email}} · {{state}} · {{roles}}",
+    "memberRoles": "Role",
     "memberStates": {
       "active": "Aktywny",
       "inactive": "Nieaktywny"
@@ -2206,7 +2206,7 @@
     "transferOwnership": "Przenieś własność",
     "transferOwnershipTitle": "Przenieść własność?",
     "transferOwnershipConfirm": "{{name}} zostanie właścicielem obszaru roboczego, a Ty utracisz rolę właściciela. Tylko właściciel może ją przywrócić.",
-    "addRoleGrant": "Dodaj nadanie roli",
+    "addRoleGrant": "Dodaj rolę",
     "member": "Członek",
     "role": "Rola",
     "grantRole": "Nadaj rolę",
