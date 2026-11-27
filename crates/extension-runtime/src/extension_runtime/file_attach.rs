@@ -5,7 +5,7 @@
 
 use attricat_domain::permissions::Permission;
 use attricat_storage::StoredObject;
-use attricat_validation::files::{detect_mime, sanitize_filename};
+use attricat_validation::files::{detect_mime, sanitize_supplied_filename};
 use bytes::Bytes;
 
 use super::*;
@@ -51,7 +51,7 @@ impl OperationState {
             input.record_id,
         )
         .await?;
-        let filename = sanitize_filename(&input.filename)
+        let filename = sanitize_supplied_filename(&input.filename)
             .ok_or_else(|| "the file name is not usable".to_owned())?;
         let artifact = self
             .repository

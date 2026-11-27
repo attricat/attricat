@@ -55,6 +55,17 @@ pub fn sanitize_filename(name: &str) -> Option<String> {
         .then_some(clean)
 }
 
+/// What a path separator in a name an extension supplies becomes.
+const FILENAME_SEPARATOR_REPLACEMENT: char = '_';
+
+/// Like [`sanitize_filename`] for a name an extension chose rather than a
+/// path a browser sent: a `/` or `\`, as in an invoice number such as
+/// `FV 1/11/2026.pdf`, becomes `_` instead of cutting the name down to its
+/// last part.
+pub fn sanitize_supplied_filename(name: &str) -> Option<String> {
+    sanitize_filename(&name.replace(['/', '\\'], &FILENAME_SEPARATOR_REPLACEMENT.to_string()))
+}
+
 /// Detects a supported MIME type from the leading bytes of a file. The file
 /// name only disambiguates Office Open XML containers. `valid_text` says
 /// whether the whole stream is UTF-8 text without NUL bytes.
@@ -148,6 +159,24 @@ impl FileConstraints<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_supplied_name_keeps_its_separators_as_underscores() {
+        assert_eq!(
+            sanitize_supplied_filename("FV 1/11/2026.pdf").as_deref(),
+            Some("FV 1_11_2026.pdf")
+        );
+        assert_eq!(
+            sanitize_supplied_filename("a\\b.txt").as_deref(),
+            Some("a_b.txt")
+        );
+        // A browser path still keeps only its last part.
+        assert_eq!(
+            sanitize_filename("C:\\Users\\me\\report.pdf").as_deref(),
+            Some("report.pdf")
+        );
+        assert_eq!(sanitize_supplied_filename(""), None);
+    }
 
     #[test]
     fn policy_constrains_type_extension_and_size() {

@@ -106,7 +106,7 @@ Przy starcie Attricat sprawdza, czy użytkownik może odczytać każdy zaznaczon
 - `attricat-data.batch` przyjmuje intencje `update`, `relationships` i `annotate` tylko dla zaznaczonych rekordów, sprawdzane względem bieżących uprawnień użytkownika.
 - Jeśli użytkownik opuści obszar roboczy, uruchomienie zatrzymuje się z bezpiecznym powodem zamiast działać dalej z uprawnieniami rozszerzenia.
 
-Pobierz z każdego rekordu to, czego potrzebujesz, raz i zapisz w punkcie kontrolnym, aby ponowiona paczka tworzyła te same bajty. Raportuj postęp jako `{"completed": n, "total": n, "outcome": {"succeeded": n, "failed": n, "skipped": n}}`; Attricat pokazuje te liczby niezależnie od statusu uruchomienia, więc uruchomienie może się zakończyć mimo niepowodzeń części rekordów.
+Pobierz z każdego rekordu to, czego potrzebujesz, raz i zapisz w punkcie kontrolnym, aby ponowiona partia tworzyła te same bajty. Raportuj postęp jako `{"completed": n, "total": n, "outcome": {"succeeded": n, "failed": n, "skipped": n}}`; Attricat pokazuje te liczby niezależnie od statusu uruchomienia, więc uruchomienie może się zakończyć mimo niepowodzeń części rekordów.
 
 Użytkownicy widzą swoje uruchomienia w **Profil → Uruchomienia rozszerzeń**. Uruchomienie widzą tylko osoba, która je rozpoczęła, i osoby z `extensions.manage`. Osoba, która je rozpoczęła, zawsze może je anulować, ale otworzyć je i pobrać wyniki może tylko dopóty, dopóki może odczytać każdy zaznaczony rekord. Osoby z `extensions.manage` mogą otwierać, anulować i pobierać każde uruchomienie.
 
@@ -141,7 +141,7 @@ Plik może wykorzystać tylko osoba, która go przesłała, dla Twojego rozszerz
 
 ## Adnotacje rekordów
 
-Z `attricat.annotations.write` dodawaj do paczki intencje `annotate`, aby zapisać informacje o rekordzie we własnej przestrzeni nazw: tagi `<extension-id>:<tag>` i obiekt w `system_metadata[<extension-id>]`. Intencje wskazują rekord przez `record_id`.
+Z `attricat.annotations.write` dodawaj do partii intencje `annotate`, aby zapisać informacje o rekordzie we własnej przestrzeni nazw: tagi `<extension-id>:<tag>` i obiekt w `system_metadata[<extension-id>]`. Intencje wskazują rekord przez `record_id`.
 
 ```json
 {"kind": "annotate", "intent_key": "doc-<run>-<record>", "record_id": "…",
@@ -176,7 +176,7 @@ Aby zachować pobrany dokument przy rekordzie, na przykład PDF faktury, dołąc
 { "record_id": "…", "attribute_code": "invoice_pdf", "context_id": null, "artifact_id": "…", "filename": "FV 1/11/2026.pdf" }
 ```
 
-Zwraca `{"file": {id, filename, mime_type, byte_size, sha256, status}, "replayed": false}`. Typ pliku jest ustalany z jego zawartości i musi być akceptowany przez atrybut; w atrybucie z jednym plikiem plik jest zastępowany, a w atrybucie z wieloma plikami dochodzi kolejny. Jeśli atrybut ma już plik o tej samej zawartości i nazwie, wywołanie zwraca ten plik z `"replayed": true` i niczego nie zapisuje, więc ponowiona partia dołącza go raz. Działa tylko w trakcie wykonania operacji i wymaga `attricat.write` oraz `artifacts.read`. Wykonanie na zaznaczeniu dołącza pliki tylko do zaznaczonych rekordów, w imieniu użytkownika, który je uruchomił i który potrzebuje `records.write`; wykonania konektorów i operacje na schemacie nie mogą dołączać plików; pozostałe wykonania zapisują jako rozszerzenie.
+Znak `/` lub `\` w nazwie zmienia się w `_`, więc ten plik zostaje zapisany jako `FV 1_11_2026.pdf`. Zwraca `{"file": {id, filename, mime_type, byte_size, sha256, status}, "replayed": false}`. Typ pliku jest ustalany z jego zawartości i musi być akceptowany przez atrybut; w atrybucie z jednym plikiem plik jest zastępowany, a w atrybucie z wieloma plikami dochodzi kolejny. Jeśli atrybut ma już plik o tej samej zawartości i nazwie, wywołanie zwraca ten plik z `"replayed": true` i niczego nie zapisuje, więc ponowiona partia dołącza go raz. Działa tylko w trakcie wykonania operacji i wymaga `attricat.write` oraz `artifacts.read`. Wykonanie na zaznaczeniu dołącza pliki tylko do zaznaczonych rekordów, w imieniu użytkownika, który je uruchomił i który potrzebuje `records.write`; wykonania konektorów i operacje na schemacie nie mogą dołączać plików; pozostałe wykonania zapisują jako rozszerzenie.
 
 Każde żądanie wykonane przy przesyłaniu jest wliczane do [limitu żądań](/pl/extensions/manifest/#limity-żądań) jego reguły.
 
