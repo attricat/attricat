@@ -23,6 +23,7 @@ const MAX_PENDING_REQUESTS_PER_WORKSPACE: i64 = 10_000;
 
 const SIGNED_IN_ACTION: &str = "auth.sign_in";
 const SIGNED_OUT_ACTION: &str = "auth.sign_out";
+const PASSWORD_CHANGED_ACTION: &str = "auth.password_change";
 const IDENTITY_LINKED_ACTION: &str = "auth.identity.link";
 const IDENTITY_UNLINKED_ACTION: &str = "auth.identity.unlink";
 
@@ -111,6 +112,16 @@ impl AttricatRepository {
     pub fn audited_as_sign_out(&self, user_id: Uuid) -> Self {
         self.clone()
             .with_audit_context(user_audit_context(SIGNED_OUT_ACTION, user_id, json!({})))
+    }
+
+    /// Returns a copy whose next mutation is audited as `user_id` changing
+    /// their own password.
+    pub fn audited_as_password_change(&self, user_id: Uuid) -> Self {
+        self.clone().with_audit_context(user_audit_context(
+            PASSWORD_CHANGED_ACTION,
+            user_id,
+            json!({}),
+        ))
     }
 }
 

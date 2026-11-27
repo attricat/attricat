@@ -117,7 +117,9 @@ not restore those tokens. Disabling someone only at the provider leaves their
 personal API tokens working.
 
 Sign-ins and sign-outs are audited as `auth.sign_in` and `auth.sign_out`, with
-`metadata.method` on a sign-in, for both passwords and providers. Failed sign-ins go
+`metadata.method` on a sign-in, for both passwords and providers. Changing
+one's own password is audited as `auth.password_change` in the workspace the
+change was made from. Failed sign-ins go
 to logs rather than the audit log.
 
 ## Local credentials

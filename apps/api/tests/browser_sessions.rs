@@ -1201,6 +1201,14 @@ async fn changing_the_password_ends_other_sessions_but_keeps_tokens(pool: PgPool
         .await;
     assert_eq!(changed.status(), StatusCode::OK);
     let renewed = Browser::from_response(&changed);
+    let audited: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM audit_events WHERE action = 'auth.password_change' AND workspace_id = $1",
+    )
+    .bind(bootstrap_workspace_id())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(audited, 1);
     assert_eq!(
         changed.json::<Value>().await.unwrap()["email"],
         "api-test-owner@example.test"

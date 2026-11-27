@@ -295,6 +295,8 @@ pub(super) async fn change_password(
     let (session, csrf, expires_at) = issue_session();
     state
         .repository
+        .for_workspace(workspace_id)
+        .audited_as_password_change(user_id)
         .change_local_password(
             &credential,
             workspace_id,
