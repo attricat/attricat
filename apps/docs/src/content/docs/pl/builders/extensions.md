@@ -66,6 +66,14 @@ PUT /workspace/extension-secrets/destination-token
 
 `GET /workspace/extension-secrets` zwraca wyłącznie nazwy, a `DELETE` usuwa sekret.
 
+[CLI](/pl/reference/cli/#rozszerzenia) ma te same polecenia. `set` odczytuje wartość ze standardowego wejścia, więc nie trafia ona do historii powłoki:
+
+```sh
+acli extension secret list
+printf '%s' "$VALUE" | acli extension secret set destination-token --value-stdin
+acli extension secret delete destination-token
+```
+
 ## Połączenia
 
 Rozszerzenia eksportujące do marketplace'ów i sklepów internetowych łączą się z miejscem docelowym przez **połączenia**: po jednym na konto, np. sklep Shopify albo konto sprzedawcy Amazon w jednym regionie. Rozszerzenie może mieć kilka połączeń każdego zadeklarowanego rodzaju. Zarządzasz nimi w sekcji **Połączenia** na stronie rozszerzenia w **Zarządzanie → Rozszerzenia**.

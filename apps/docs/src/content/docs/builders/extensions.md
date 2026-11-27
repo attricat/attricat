@@ -66,6 +66,14 @@ PUT /workspace/extension-secrets/destination-token
 
 `GET /workspace/extension-secrets` lists names only, and `DELETE` removes a secret.
 
+The [CLI](/reference/cli/#extensions) has the same commands. `set` reads the value from standard input, so it stays out of your shell history:
+
+```sh
+acli extension secret list
+printf '%s' "$VALUE" | acli extension secret set destination-token --value-stdin
+acli extension secret delete destination-token
+```
+
 ## Connections
 
 Extensions that export to marketplaces or storefronts reach the destination through **connections**: one per account, such as a Shopify shop or an Amazon seller account in one region. An extension can have several connections of each kind it declares. Manage them in the **Connections** section of the extension's page under **Manage → Extensions**.
