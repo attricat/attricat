@@ -223,6 +223,42 @@ describe('SideNavigation', () => {
     expect(screen.queryByRole('link', { name: 'Blueprints' })).toBeNull();
   });
 
+  it('names the workspace over the logo and as the Explorer heading', async () => {
+    vi.mocked(currentSession).mockResolvedValue({
+      capabilities: {},
+      workspace_name: 'Acme catalog',
+    } as never);
+    renderNavigation(vi.fn(), { compact: true, exploreOpen: true });
+
+    expect(
+      await screen.findByRole('heading', { name: 'Acme catalog' }),
+    ).toBeTruthy();
+    // The pane and its entry point keep the Explorer's name.
+    expect(
+      screen.getByRole('navigation', { name: /record explorer/i }),
+    ).toBeTruthy();
+    expect(screen.getByRole('link', { name: /record explorer/i })).toBeTruthy();
+    const logo = screen.getByRole('img', { name: 'Attricat' });
+    expect(logo.getAttribute('aria-label')).toBe('Attricat');
+    fireEvent.mouseOver(logo);
+    expect(await screen.findByRole('tooltip')).toHaveProperty(
+      'textContent',
+      'Acme catalog',
+    );
+  });
+
+  it('names the mobile Explorer section after the workspace', async () => {
+    vi.mocked(currentSession).mockResolvedValue({
+      capabilities: {},
+      workspace_name: 'Acme catalog',
+    } as never);
+    renderNavigation();
+
+    expect(
+      await screen.findByRole('heading', { name: 'Acme catalog' }),
+    ).toBeTruthy();
+  });
+
   it('always links to the documentation in a new tab', () => {
     renderNavigation(vi.fn(), { compact: true });
 

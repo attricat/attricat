@@ -83,6 +83,8 @@ pub(super) struct DiscoveryOidc {
 #[derive(serde::Serialize)]
 pub(super) struct DiscoveryResponse {
     login_identifier: String,
+    /// The workspace's display name, shown on its sign-in page.
+    name: String,
     sign_in_methods: Vec<&'static str>,
     /// The workspace's enabled identity provider.
     oidc: Option<DiscoveryOidc>,
@@ -152,6 +154,7 @@ pub(super) async fn discover(
     }
     Ok(Json(DiscoveryResponse {
         login_identifier: workspace.login_identifier,
+        name: workspace.name,
         sign_in_methods,
         oidc: provider.map(|display_name| DiscoveryOidc { display_name }),
         password_restricted: options.password_sign_in == PasswordSignIn::Owners,

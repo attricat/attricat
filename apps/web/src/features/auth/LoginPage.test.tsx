@@ -70,6 +70,7 @@ const submitTwice = async (name: string) => {
 
 const discovered = (overrides: object = {}) => ({
   login_identifier: 'acme.example',
+  name: 'Acme',
   sign_in_methods: ['local_password'],
   oidc: null,
   password_restricted: false,
@@ -131,6 +132,29 @@ describe('single sign-on on the workspace sign-in page', () => {
     expect(screen.queryByLabelText('Password')).toBeNull();
     fireEvent.click(usePassword);
     expect(await screen.findByLabelText('Password')).toBeTruthy();
+  });
+});
+
+describe('the workspace sign-in heading', () => {
+  beforeEach(() => vi.mocked(fetchSampleLogins).mockResolvedValue(null));
+  afterEach(() => vi.clearAllMocks());
+
+  it('names the workspace once discovery answers', async () => {
+    vi.mocked(discoverWorkspace).mockResolvedValue(discovered());
+    renderWithClient(<PasswordLoginPage identifier="acme.example" />);
+    expect(
+      await screen.findByRole('heading', { name: 'Sign in to Acme' }),
+    ).toBeTruthy();
+    expect(screen.getByText('acme.example')).toBeTruthy();
+  });
+
+  it('falls back to the identifier when discovery fails', async () => {
+    vi.mocked(discoverWorkspace).mockRejectedValue(new Error('offline'));
+    renderWithClient(<PasswordLoginPage identifier="acme.example" />);
+    await waitFor(() => expect(discoverWorkspace).toHaveBeenCalled());
+    expect(
+      await screen.findByRole('heading', { name: 'Sign in to acme.example' }),
+    ).toBeTruthy();
   });
 });
 

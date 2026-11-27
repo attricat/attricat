@@ -47,5 +47,7 @@ export const useSideNavigation = () => {
     pathname,
     pinnedExplore,
     primaryItems: getVisiblePrimaryNavigationItems(session.data?.capabilities),
+    /** Shown over the logo and as the Explorer pane heading. */
+    workspaceName: session.data?.workspace_name || undefined,
   };
 };

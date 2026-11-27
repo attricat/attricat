@@ -51,6 +51,20 @@ test('the workspace with a configured identifier has its default context', async
   expect(codes).toContain('default');
 });
 
+test('the app names the workspace over the logo and in the Explorer', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.getByRole('img', { name: 'Attricat' }).hover();
+  await expect(page.getByRole('tooltip')).toHaveText('Default workspace');
+  // The Explorer pane is open on the home route.
+  await expect(
+    page
+      .getByRole('navigation', { name: 'Record explorer' })
+      .getByRole('heading', { name: 'Default workspace' }),
+  ).toBeVisible();
+});
+
 test('sign-in skips the workspace step in a single-workspace deployment', async ({
   browser,
 }) => {
@@ -63,6 +77,10 @@ test('sign-in skips the workspace step in a single-workspace deployment', async 
     (url) => url.pathname === `/login/${e2eLoginIdentifier}`,
   );
   await expect(page.getByLabel('Workspace', { exact: true })).toHaveCount(0);
+  await expect(
+    page.getByRole('heading', { name: 'Sign in to Default workspace' }),
+  ).toBeVisible();
+  await expect(page.getByText(e2eLoginIdentifier)).toBeVisible();
   await expect(
     page.getByRole('link', { name: 'Change workspace' }),
   ).toHaveCount(0);

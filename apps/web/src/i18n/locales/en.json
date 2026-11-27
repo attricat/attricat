@@ -297,7 +297,7 @@
       "workflows_manage": "You are not authorized to manage workflows in this workspace."
     },
     "signIn": "Sign in",
-    "signInTo": "Sign in to {{identifier}}",
+    "signInTo": "Sign in to {{workspace}}",
     "workspacePrompt": "Enter your workspace identifier.",
     "workspace": "Workspace",
     "continue": "Continue",

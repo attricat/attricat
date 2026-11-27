@@ -54,7 +54,8 @@ A client workspace header cannot select a different workspace.
 `POST /auth/renew` atomically rotates the browser session, `POST /auth/logout`
 revokes it, and login, renew, and `GET /auth/session` return the active user identity,
 preferred `time_zone` (an IANA name, or `null` to follow the client),
-session-bound `workspace_id`, and human-facing workspace `login_identifier`. The local
+session-bound `workspace_id`, human-facing workspace `login_identifier`, and the
+workspace's display `workspace_name`. The local
 password, cookie, CSRF, expiry, and revocation contract is documented in
 [Browser Authentication](authentication.md).
 
@@ -123,7 +124,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `GET` | `/extension-runs/{run_id}/artifacts/{artifact_id}/download` | Download a finalized output of a completed, unexpired interactive run, with the same access rule as the run, including `?scope=own`. Outputs are attachments named by the extension and expire 30 days after completion. |
 | `GET`, `POST` | `/extensions/{extension_id}/annotation-namespace` | Inventory an extension's annotation namespace, or explicitly adopt pre-existing annotations under that name for an installed extension (`extensions.read` / `extensions.manage`). |
 | `POST` | `/extensions/{extension_id}/annotation-namespace/records/{record_id}` | Operator repair or cleanup of one claimed namespace on a record using the extension annotation patch shape (`extensions.manage` and `records.write` on the record). |
-| `POST` | `/auth/discover` | Resolve a normalized workspace identifier and return its sign-in methods; rate-limited and intentionally minimal. |
+| `POST` | `/auth/discover` | Resolve a normalized workspace identifier and return its display `name` and sign-in methods; rate-limited and intentionally minimal. The name is public to anyone who knows the identifier, as the sign-in page shows it. |
 | `GET` | `/client-config` | Public settings the web app loads before it renders: `default_language` (`en`, `pl` or `null`, from `ATTRICAT_DEFAULT_LANGUAGE`) and `sign_in_workspace` (the bootstrap sign-in identifier when `ATTRICAT_SINGLE_WORKSPACE` or demo mode is on, otherwise `null`). |
 | `GET` | `/auth/sample-logins` | Return the sample accounts, their shared password and the workspace identifier when `ATTRICAT_SAMPLE_ACCOUNTS` or `ATTRICAT_DEMO_MODE` is on, otherwise `null`. Demo mode also rejects password reset and member, role-grant, ownership, invitation and user-creation changes with `403 disabled_in_demo`. |
 | `POST` | `/auth/login` | Sign in with a previously resolved workspace identifier, email, and password. An optional `invitation_secret` accepts that workspace's invitation in the same step, for someone not yet a member. |

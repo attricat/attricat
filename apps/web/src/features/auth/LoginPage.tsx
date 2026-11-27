@@ -166,6 +166,8 @@ const PasswordLoginForm = ({
     staleTime: Infinity,
   });
   const provider = discovery.data?.oidc;
+  // Until discovery answers, or when it fails, the identifier names it.
+  const workspaceName = discovery.data?.name || undefined;
   const [passwordRequested, setPasswordRequested] = useState(false);
   const passwordHidden =
     discovery.data?.password_restricted === true && !passwordRequested;
@@ -196,7 +198,14 @@ const PasswordLoginForm = ({
   });
   return (
     <LoginShell onSubmit={() => form.handleSubmit()}>
-      <AuthFormTitle>{t('auth.signInTo', { identifier })}</AuthFormTitle>
+      <AuthFormTitle>
+        {t('auth.signInTo', { workspace: workspaceName ?? identifier })}
+      </AuthFormTitle>
+      {workspaceName && (
+        <Typography color="text.secondary" variant="body2">
+          {identifier}
+        </Typography>
+      )}
       {samples?.demo ? (
         <Alert severity="info" sx={{ mb: 2 }}>
           {t('auth.demoNotice')}

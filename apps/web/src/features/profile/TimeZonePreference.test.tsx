@@ -22,6 +22,7 @@ const session = (time_zone: string | null): Session => ({
   avatar: null,
   workspace_id: '123e4567-e89b-12d3-a456-426614174001',
   login_identifier: 'default.local',
+  workspace_name: 'Default workspace',
   agents_configured: false,
 });
 

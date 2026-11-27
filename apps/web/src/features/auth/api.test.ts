@@ -7,6 +7,7 @@ const session = {
   email: 'user@example.test',
   workspace_id: '223e4567-e89b-12d3-a456-426614174000',
   login_identifier: 'example.local',
+  workspace_name: 'Example',
 };
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);
@@ -27,6 +28,7 @@ describe('session API client', () => {
     });
     await expect(currentSession()).resolves.toMatchObject({
       login_identifier: 'example.local',
+      workspace_name: 'Example',
     });
   });
 

@@ -10,13 +10,16 @@ import {
 // Desktop compact navigation pane rendered beside the icon rail.
 export const NavigationFlyout = ({
   children,
+  label,
   title,
 }: {
   children: ReactNode;
+  /** Names the pane for assistive technology when the heading differs. */
+  label?: string;
   title: string;
 }) => (
   <Box
-    aria-label={title}
+    aria-label={label ?? title}
     component="nav"
     sx={{
       ...navigationItemHoverSx,

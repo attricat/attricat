@@ -37,6 +37,7 @@ pub struct ValidBrowserSession {
 pub struct DiscoveredWorkspace {
     pub id: Uuid,
     pub login_identifier: String,
+    pub name: String,
 }
 
 impl<S: super::RepositoryScope> AttricatRepository<S> {
@@ -44,7 +45,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         &self,
         login_identifier: &str,
     ) -> Result<Option<DiscoveredWorkspace>, RepositoryError> {
-        let row = sqlx::query("SELECT id, login_identifier FROM workspaces WHERE login_identifier = lower(btrim($1)) AND deleted_at IS NULL")
+        let row = sqlx::query("SELECT id, login_identifier, name FROM workspaces WHERE login_identifier = lower(btrim($1)) AND deleted_at IS NULL")
             .bind(login_identifier)
             .fetch_optional(&self.pool)
             .await?;
@@ -52,6 +53,7 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
             Ok::<DiscoveredWorkspace, sqlx::Error>(DiscoveredWorkspace {
                 id: row.try_get("id")?,
                 login_identifier: row.try_get("login_identifier")?,
+                name: row.try_get("name")?,
             })
         })
         .transpose()
@@ -64,6 +66,16 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
     ) -> Result<String, RepositoryError> {
         Ok(
             sqlx::query_scalar("SELECT login_identifier FROM workspaces WHERE id = $1")
+                .bind(workspace_id)
+                .fetch_one(&self.pool)
+                .await?,
+        )
+    }
+
+    /// The display name people see for the workspace.
+    pub async fn workspace_name(&self, workspace_id: Uuid) -> Result<String, RepositoryError> {
+        Ok(
+            sqlx::query_scalar("SELECT name FROM workspaces WHERE id = $1")
                 .bind(workspace_id)
                 .fetch_one(&self.pool)
                 .await?,

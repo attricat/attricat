@@ -1,7 +1,14 @@
 import type { BrandVariant } from './brandIconSizes';
 import { ArrowLeftIcon, ChevronRightIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Box, Divider, IconButton, List, Typography } from '@mui/material';
+import {
+  Box,
+  Divider,
+  IconButton,
+  List,
+  Tooltip,
+  Typography,
+} from '@mui/material';
 import { ExtensionOutlet } from '../features/extensions/ExtensionOutlet';
 import { ExploreNavigationLinks } from './ExploreNavigationLinks';
 import { ManagementNavigationLinks } from './ManagementNavigationLinks';
@@ -42,9 +49,15 @@ const navigationSx = {
   position: 'relative',
 } as const;
 
-const Brand = ({ variant }: { variant: BrandVariant }) => {
+const Brand = ({
+  variant,
+  workspaceName,
+}: {
+  variant: BrandVariant;
+  workspaceName?: string;
+}) => {
   const { t } = useTranslation();
-  return (
+  const brand = (
     <Box
       aria-label={t('app.attricat')}
       data-navigation-icon-trigger
@@ -53,6 +66,14 @@ const Brand = ({ variant }: { variant: BrandVariant }) => {
     >
       <NavigationBrandIcon variant={variant} />
     </Box>
+  );
+  // The logo keeps its own name; the workspace describes it.
+  return workspaceName ? (
+    <Tooltip describeChild placement="right" title={workspaceName}>
+      {brand}
+    </Tooltip>
+  ) : (
+    brand
   );
 };
 
@@ -88,6 +109,7 @@ export const CompactSideNavigation = ({
     pathname,
     pinnedExplore,
     primaryItems,
+    workspaceName,
   } = useSideNavigation();
   const panels = useCompactNavigationPanels(pathname, {
     explore: { onOpenChange: onExploreOpenChange, open: exploreOpen },
@@ -108,7 +130,7 @@ export const CompactSideNavigation = ({
       }}
     >
       <Box sx={{ ...navigationHeaderSx, justifyContent: 'center' }}>
-        <Brand variant="mark" />
+        <Brand variant="mark" workspaceName={workspaceName} />
       </Box>
       <Divider />
       <List
@@ -194,7 +216,10 @@ export const CompactSideNavigation = ({
         </NavigationFlyout>
       )}
       {panels.isOpen('explore') && (
-        <NavigationFlyout title={t('navigation.recordExplorer')}>
+        <NavigationFlyout
+          label={t('navigation.recordExplorer')}
+          title={workspaceName ?? t('navigation.recordExplorer')}
+        >
           <ExploreNavigationLinks {...exploreLinkProps} />
         </NavigationFlyout>
       )}
@@ -239,6 +264,7 @@ export const MobileSideNavigation = ({
     pathname,
     pinnedExplore,
     primaryItems,
+    workspaceName,
   } = useSideNavigation();
   const [section, setSection] = useMobileNavigationSection(pathname);
   const primary = section === 'primary';
@@ -255,7 +281,7 @@ export const MobileSideNavigation = ({
     >
       <Box sx={{ ...navigationHeaderSx, px: primary ? 3 : 1 }}>
         {primary ? (
-          <Brand variant="wordmark" />
+          <Brand variant="wordmark" workspaceName={workspaceName} />
         ) : (
           <>
             <IconButton
@@ -265,7 +291,9 @@ export const MobileSideNavigation = ({
               <ArrowLeftIcon />
             </IconButton>
             <Typography sx={{ ml: 1 }} variant="h6">
-              {t(mobileSectionTitleKeys[section])}
+              {section === 'explore' && workspaceName
+                ? workspaceName
+                : t(mobileSectionTitleKeys[section])}
             </Typography>
           </>
         )}

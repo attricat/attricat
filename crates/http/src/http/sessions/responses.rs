@@ -24,6 +24,8 @@ pub(in crate::http) struct SessionResponse {
     pub(super) workspace_id: Uuid,
     /// The human-facing identifier for the session-bound workspace.
     pub(super) login_identifier: String,
+    /// The session-bound workspace's display name.
+    pub(super) workspace_name: String,
     pub(super) capabilities: SessionCapabilities,
     /// Whether this deployment has an agent provider. Without one, nothing
     /// can run an agent, whatever the caller's permissions.
@@ -148,7 +150,7 @@ pub(super) async fn session_response_payload(
     workspace_id: Uuid,
 ) -> Result<SessionResponse, ApiError> {
     // These reads are independent; run them concurrently.
-    let (login_identifier, account, avatar, capabilities) = tokio::try_join!(
+    let (login_identifier, workspace_name, account, avatar, capabilities) = tokio::try_join!(
         async {
             Ok::<_, ApiError>(
                 state
@@ -157,6 +159,7 @@ pub(super) async fn session_response_payload(
                     .await?,
             )
         },
+        async { Ok(state.repository.workspace_name(workspace_id).await?) },
         async { Ok(state.repository.user_account(user_id).await?) },
         async { Ok(state.repository.own_avatar(user_id, workspace_id).await?) },
         session_capabilities(state, user_id, workspace_id),
@@ -169,6 +172,7 @@ pub(super) async fn session_response_payload(
         avatar,
         workspace_id,
         login_identifier,
+        workspace_name,
         capabilities,
         agents_configured: state.agent_provider.is_some(),
     })
@@ -180,8 +184,9 @@ async fn session_response_payload_with_identifier(
     workspace_id: Uuid,
     login_identifier: String,
 ) -> Result<SessionResponse, ApiError> {
-    let (account, avatar, capabilities) = tokio::try_join!(
-        async { Ok::<_, ApiError>(state.repository.user_account(user_id).await?) },
+    let (workspace_name, account, avatar, capabilities) = tokio::try_join!(
+        async { Ok::<_, ApiError>(state.repository.workspace_name(workspace_id).await?) },
+        async { Ok(state.repository.user_account(user_id).await?) },
         async { Ok(state.repository.own_avatar(user_id, workspace_id).await?) },
         session_capabilities(state, user_id, workspace_id),
     )?;
@@ -193,6 +198,7 @@ async fn session_response_payload_with_identifier(
         avatar,
         workspace_id,
         login_identifier,
+        workspace_name,
         capabilities,
         agents_configured: state.agent_provider.is_some(),
     })

@@ -301,7 +301,7 @@
       "workflows_manage": "Nie masz uprawnień do zarządzania przepływami pracy w tym obszarze roboczym."
     },
     "signIn": "Zaloguj się",
-    "signInTo": "Zaloguj się do {{identifier}}",
+    "signInTo": "Zaloguj się do {{workspace}}",
     "workspacePrompt": "Wpisz identyfikator obszaru roboczego.",
     "workspace": "Obszar roboczy",
     "continue": "Kontynuuj",

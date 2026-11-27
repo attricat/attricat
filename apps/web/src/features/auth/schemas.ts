@@ -16,6 +16,7 @@ export const sessionSchema = z.object({
   avatar: ownAvatarSchema.nullable().default(null),
   workspace_id: z.uuid(),
   login_identifier: z.string(),
+  workspace_name: z.string(),
   capabilities: z
     .object({
       audit_read: z.boolean(),
@@ -54,6 +55,8 @@ export type UserPreferences = Pick<Session, 'time_zone'>;
 
 export const discoverySchema = z.object({
   login_identifier: z.string(),
+  /** The workspace's display name, shown on its sign-in page. */
+  name: z.string(),
   sign_in_methods: z.array(z.string()),
   oidc: z.object({ display_name: z.string() }).nullable().default(null),
   password_restricted: z.boolean().default(false),

@@ -65,6 +65,7 @@ async fn login_rotates_sessions_and_csrf_protects_mutations(pool: PgPool) {
     );
     let login: Value = login.json().await.unwrap();
     assert_eq!(login["login_identifier"], "default.local");
+    assert_eq!(login["workspace_name"], "Default workspace");
     assert_eq!(login["email"], "api-test-owner@example.test");
     assert!(login.get("display_name").is_some());
     let cookie = format!("{session}; {csrf}");
@@ -83,6 +84,7 @@ async fn login_rotates_sessions_and_csrf_protects_mutations(pool: PgPool) {
     assert_eq!(current["email"], "api-test-owner@example.test");
     assert!(current.get("display_name").is_some());
     assert_eq!(current["login_identifier"], "default.local");
+    assert_eq!(current["workspace_name"], "Default workspace");
     assert_eq!(
         client
             .post(format!("{base_url}/data-health/refresh"))
@@ -637,10 +639,11 @@ async fn the_configured_identifier_renames_the_bootstrap_workspace(pool: PgPool)
             .json(&json!({ "login_identifier": identifier }))
             .send()
     };
-    assert_eq!(
-        discover("acme.example").await.unwrap().status(),
-        StatusCode::OK
-    );
+    let discovered = discover("acme.example").await.unwrap();
+    assert_eq!(discovered.status(), StatusCode::OK);
+    let discovered: Value = discovered.json().await.unwrap();
+    assert_eq!(discovered["login_identifier"], "acme.example");
+    assert_eq!(discovered["name"], "Default workspace");
     assert_eq!(
         discover("default.local").await.unwrap().status(),
         StatusCode::NOT_FOUND
