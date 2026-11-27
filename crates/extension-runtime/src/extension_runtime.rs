@@ -9,7 +9,7 @@
 use attricat_domain::states::ArtifactState;
 use attricat_domain::states::HandlerAttemptStatus;
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     fs::{File, OpenOptions},
     io::Write,
     path::PathBuf,
@@ -798,6 +798,9 @@ struct OperationState {
     /// The run's scope, loaded on first use.
     run_facts: Arc<tokio::sync::OnceCell<transfer::RunFacts>>,
     network_wait: NetworkWait,
+    /// Records this invocation already found linked from its run selection,
+    /// so reading one again does not repeat the walk.
+    linked_records: HashSet<Uuid>,
 }
 
 impl OperationState {
@@ -816,6 +819,7 @@ impl OperationState {
             artifacts: ResourceTable::new(),
             run_facts: Arc::default(),
             network_wait: NetworkWait::default(),
+            linked_records: HashSet::new(),
         }
     }
 

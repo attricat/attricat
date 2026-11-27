@@ -40,6 +40,19 @@ const MAX_USER_RUNS: i64 = 50;
 /// selection, or from the records that link to it, to read a related record:
 /// enough for an order line's product's unit.
 pub const MAX_SELECTION_LINK_HOPS: i32 = 3;
+/// The most relationship values pointing at a selection that a linked-record
+/// check follows. Each read re-runs the check, so past this a run reads only
+/// its selected records rather than scan every link on each read.
+pub const MAX_SELECTION_LINK_ANCHORS: i64 = 10_000;
+
+/// Whether a record is linked from an interactive run's selection.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SelectionLink {
+    Linked,
+    NotLinked,
+    /// More than [`MAX_SELECTION_LINK_ANCHORS`] values point at the selection.
+    TooManyLinks,
+}
 /// Safe failure code for an initiator who lost access to the workspace.
 pub const INITIATOR_ACCESS_REVOKED: &str = "initiator_access_revoked";
 
@@ -696,11 +709,40 @@ impl AttricatRepository {
         &self,
         selection: &[Uuid],
         record_id: Uuid,
-    ) -> Result<bool, RepositoryError> {
+    ) -> Result<SelectionLink, RepositoryError> {
+        self.selection_links_record_within(selection, record_id, MAX_SELECTION_LINK_ANCHORS)
+            .await
+    }
+
+    /// [`Self::selection_links_record`] with `max_links` in place of
+    /// [`MAX_SELECTION_LINK_ANCHORS`], so tests can reach the limit cheaply.
+    pub async fn selection_links_record_within(
+        &self,
+        selection: &[Uuid],
+        record_id: Uuid,
+        max_links: i64,
+    ) -> Result<SelectionLink, RepositoryError> {
         if selection.contains(&record_id) {
-            return Ok(true);
+            return Ok(SelectionLink::Linked);
         }
-        Ok(sqlx::query_scalar(
+        // Bounds the walk below, which starts from every record linking in.
+        let links: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM ( \
+               SELECT 1 FROM attribute_values av \
+                 JOIN records source ON source.workspace_id=av.workspace_id AND source.id=av.record_id AND source.deleted_at IS NULL \
+               WHERE av.workspace_id=$1 AND av.active AND av.relationship_target_record_id=ANY($2::uuid[]) \
+               LIMIT $3 + 1 \
+             ) links",
+        )
+        .bind(self.workspace_id.0)
+        .bind(selection)
+        .bind(max_links)
+        .fetch_one(&self.pool)
+        .await?;
+        if links > max_links {
+            return Ok(SelectionLink::TooManyLinks);
+        }
+        let linked: bool = sqlx::query_scalar(
             "WITH RECURSIVE anchors AS ( \
                SELECT unnest($2::uuid[]) AS id \
                UNION \
@@ -722,7 +764,12 @@ impl AttricatRepository {
         .bind(MAX_SELECTION_LINK_HOPS)
         .bind(record_id)
         .fetch_one(&self.pool)
-        .await?)
+        .await?;
+        Ok(if linked {
+            SelectionLink::Linked
+        } else {
+            SelectionLink::NotLinked
+        })
     }
 
     /// The workspace's default attribute context.

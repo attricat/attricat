@@ -1172,7 +1172,9 @@ Inside the run:
   selection (a member, a live record whose relationship value targets a
   member, or a live record reached from those through at most
   `MAX_SELECTION_LINK_HOPS` = 3 relationship values; incoming links are
-  followed only into the selection), `incoming` from a member with the items
+  followed only into the selection; past `MAX_SELECTION_LINK_ANCHORS` =
+  10,000 values pointing at the selection, only members, and each
+  invocation remembers the records it found linked), `incoming` from a member with the items
   the initiator cannot read left out, and the `blueprint`/`context` code
   lookups. Each record read also needs the initiator's current
   `records.read`. Other reads and the connector `attricat` interface calls

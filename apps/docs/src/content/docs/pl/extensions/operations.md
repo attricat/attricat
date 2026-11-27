@@ -98,7 +98,7 @@ Przy starcie Attricat sprawdza, czy użytkownik może odczytać każdy zaznaczon
 - `selection.describe()` zwraca liczbę rekordów, wersję schematu i kontekst.
 - `selection.page(cursor, limit)` zwraca od 1 do 10 rekordów z zapisanymi wartościami rozwiązanymi w kontekście uruchomienia, zapisanymi wartościami dołączonych atrybutów wielokrotnego użytku (`reusable_values`, z `context_id` każdej wartości), Twoimi adnotacjami i `read_at`. Rekordy, których użytkownik nie może już odczytać, mają status `unavailable`, a usunięte `deleted`.
 - `attricat-data.read` odczytuje to, z czym zaznaczenie jest powiązane, o ile użytkownik nadal może to odczytać:
-  - `record` zwraca zaznaczony rekord, rekord, którego relacja wskazuje na zaznaczony (na przykład pozycje zamówienia), albo rekord osiągalny z nich przez co najwyżej trzy wartości relacji (na przykład jednostkę produktu z pozycji).
+  - `record` zwraca zaznaczony rekord, rekord, którego relacja wskazuje na zaznaczony (na przykład pozycje zamówienia), albo rekord osiągalny z nich przez co najwyżej trzy wartości relacji (na przykład jednostkę produktu z pozycji). Gdy na zaznaczenie wskazuje ponad 10 000 wartości relacji, w ten sposób można odczytać tylko zaznaczone rekordy.
   - `incoming` wymienia rekordy, które wskazują na zaznaczony rekord, bez tych, których użytkownik nie może odczytać.
   - `blueprint` i `context` wyszukują kody.
 

@@ -263,8 +263,8 @@ pub use extension_export_state::{
 };
 pub use extension_interactive_operations::{
     INITIATOR_ACCESS_REVOKED, InteractiveRun, InteractiveRunArtifact, InteractiveRunFailure,
-    InteractiveRunScope, InteractiveRunStatus, OPERATION_OUTPUT_RETENTION_DAYS,
-    StartInteractiveOperation,
+    InteractiveRunScope, InteractiveRunStatus, MAX_SELECTION_LINK_ANCHORS,
+    OPERATION_OUTPUT_RETENTION_DAYS, SelectionLink, StartInteractiveOperation,
 };
 pub use extension_operation_artifacts::{ExtensionOperationArtifact, MAX_OPERATION_ARTIFACT_BYTES};
 pub use extension_operation_http_transfer::{

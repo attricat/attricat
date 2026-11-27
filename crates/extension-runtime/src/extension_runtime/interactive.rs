@@ -11,7 +11,10 @@ use attricat_domain::permissions::Permission;
 
 use super::*;
 use crate::extensions::InteractiveScope;
-use crate::repository::{ExtensionAttricatBatch, ExtensionAttricatIntent, InteractiveRunScope};
+use crate::repository::{
+    ExtensionAttricatBatch, ExtensionAttricatIntent, InteractiveRunScope,
+    MAX_SELECTION_LINK_ANCHORS, SelectionLink,
+};
 
 const SELECTION_SCOPE_ERROR: &str =
     "interactive runs read catalog data through their run-bound selection";
@@ -139,13 +142,25 @@ impl OperationState {
         match selection_read_kind(&request)? {
             SelectionRead::Shape => self.attricat_data_read(request).await,
             SelectionRead::Record(record_id) => {
-                let linked = self
-                    .repository
-                    .selection_links_record(&scope.record_ids, record_id)
-                    .await
-                    .map_err(|error| error.to_string())?;
-                if !linked {
-                    return Err("the record is not linked from the run selection".into());
+                if !self.linked_records.contains(&record_id) {
+                    match self
+                        .repository
+                        .selection_links_record(&scope.record_ids, record_id)
+                        .await
+                        .map_err(|error| error.to_string())?
+                    {
+                        SelectionLink::Linked => {
+                            self.linked_records.insert(record_id);
+                        }
+                        SelectionLink::NotLinked => {
+                            return Err("the record is not linked from the run selection".into());
+                        }
+                        SelectionLink::TooManyLinks => {
+                            return Err(format!(
+                                "more than {MAX_SELECTION_LINK_ANCHORS} records link to the run selection, so only selected records can be read"
+                            ));
+                        }
+                    }
                 }
                 if !initiator_reads(&self.repository, &scope, &[record_id])
                     .await?

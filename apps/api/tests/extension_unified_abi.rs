@@ -765,3 +765,66 @@ fn the_compile_command_refuses_what_is_not_a_component() {
     assert!(!output.status.success());
     assert!(output.stdout.is_empty());
 }
+
+const LINK_LIMIT_BLUEPRINT: &str = r#"
+format_version: 1
+code: link_limit
+name: Link limit
+kind: record
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+  - code: parent
+    value_type: relationship
+    target_blueprint: link_limit
+  - code: related
+    value_type: relationship
+    target_blueprint: link_limit
+"#;
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn a_selection_with_too_many_incoming_links_reads_only_itself(pool: sqlx::PgPool) {
+    use api::repository::SelectionLink;
+    let repository =
+        AttricatRepository::system(pool.clone()).for_workspace(bootstrap_workspace_id());
+    let blueprint = published_blueprint(&repository, LINK_LIMIT_BLUEPRINT).await;
+    let product = linked_record(&repository, blueprint, "Product", &[]).await;
+    let order = linked_record(&repository, blueprint, "Order", &[]).await;
+    for title in ["Line 1", "Line 2", "Line 3"] {
+        linked_record(
+            &repository,
+            blueprint,
+            title,
+            &[("parent", order), ("related", product)],
+        )
+        .await;
+    }
+    let selection = [order];
+    // Within the limit, the lines' product is linked from the order.
+    assert_eq!(
+        repository
+            .selection_links_record_within(&selection, product, 3)
+            .await
+            .unwrap(),
+        SelectionLink::Linked
+    );
+    // Past it, the walk does not start; the selection itself stays readable.
+    assert_eq!(
+        repository
+            .selection_links_record_within(&selection, product, 2)
+            .await
+            .unwrap(),
+        SelectionLink::TooManyLinks
+    );
+    assert_eq!(
+        repository
+            .selection_links_record_within(&selection, order, 2)
+            .await
+            .unwrap(),
+        SelectionLink::Linked
+    );
+}

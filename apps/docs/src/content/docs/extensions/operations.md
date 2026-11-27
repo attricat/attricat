@@ -98,7 +98,7 @@ When a run starts, Attricat checks that the user can read every selected record 
 - `selection.describe()` returns the count, blueprint revision, and context.
 - `selection.page(cursor, limit)` returns 1 to 10 members with their saved values resolved in the run's context, the stored values of reusable attributes attached to them (`reusable_values`, with each value's `context_id`), your own annotations, and `read_at`. Members the user can no longer read come back as `unavailable`, deleted ones as `deleted`.
 - `attricat-data.read` reads what the selection links to, as far as the user can still read it:
-  - `record` returns a selected record, a record whose relationship points at one (such as an order's lines), or a record reached from those through at most three relationship values (such as a line's product's unit).
+  - `record` returns a selected record, a record whose relationship points at one (such as an order's lines), or a record reached from those through at most three relationship values (such as a line's product's unit). When more than 10,000 relationship values point at the selection, only the selected records can be read this way.
   - `incoming` lists the records linking to a selected record, without the ones the user cannot read.
   - `blueprint` and `context` look up codes.
 
