@@ -499,8 +499,14 @@ export const RecordForm = forwardRef<RecordFormHandle, RecordFormProps>(
       startingDefaultsFor.current = revision;
       for (const attribute of blueprint.attributes) {
         const value = form.state.values.fields[attribute.code];
-        if (attribute.value_type === attributeValueTypes.relationship && value)
+        if (
+          attribute.value_type === attributeValueTypes.relationship &&
+          value
+        ) {
           suggestDefaults(attribute, value);
+          // An assist watching it runs as if the user had chosen it.
+          assistFieldChanged(attribute.code);
+        }
       }
     });
     const {

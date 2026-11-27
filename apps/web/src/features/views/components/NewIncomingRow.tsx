@@ -141,7 +141,11 @@ export const NewIncomingRow = ({
   });
   const suggestionNotes = useSuggestionNotes(suggestions.suggestions);
   useEffect(() => {
-    if (link) suggestDefaults(link, recordId);
+    if (link) {
+      suggestDefaults(link, recordId);
+      // The link is not a cell, so assists watching it run from here.
+      assistFieldChanged(link.code);
+    }
     // Once per opened row and per saved record.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [round]);

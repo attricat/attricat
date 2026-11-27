@@ -286,6 +286,38 @@ describe('form assist suggestions', () => {
     assistApi.runFormAssist.mockReset();
   });
 
+  it('runs for a field the form opened with, once the assists load', async () => {
+    let loaded: (value: unknown) => void = () => undefined;
+    assistApi.getFormAssists.mockImplementationOnce(
+      () => new Promise((resolve) => (loaded = resolve)),
+    );
+    assistApi.runFormAssist.mockResolvedValue(
+      answer([{ attribute_code: 'price', value: 30 }]),
+    );
+    const form = renderAssists();
+    // The form reports its starting value before the assists have loaded.
+    act(() => {
+      form.view.result.current.changed('quantity');
+    });
+    expect(assistApi.runFormAssist).not.toHaveBeenCalled();
+    await act(async () =>
+      loaded({
+        assists: [
+          {
+            extension_id: 'acme.pricing',
+            extension_name: 'Pricing',
+            id: 'customer_price',
+            version: 1,
+            outlet: 'record_form',
+            watch: ['quantity'],
+            proposes: ['price', 'discount'],
+          },
+        ],
+      }),
+    );
+    await waitFor(() => expect(assistApi.runFormAssist).toHaveBeenCalled());
+  });
+
   it('fills unedited proposed fields with valid values', async () => {
     assistApi.runFormAssist.mockResolvedValue(
       answer([

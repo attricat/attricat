@@ -280,10 +280,16 @@ export const useFormAssistSuggestions = ({
           pending.current.delete(key);
       });
   };
-  /** Call after the user changes field `code`. */
-  return (code: string) => {
+  // Fields changed before the assists loaded, such as a relationship the
+  // form opened with; they run once the list arrives.
+  const early = useRef(new Set<string>());
+  const fieldChanged = (code: string) => {
     if (!enabled) return;
-    const watching = (data?.assists ?? []).filter(
+    if (!data) {
+      early.current.add(code);
+      return;
+    }
+    const watching = data.assists.filter(
       (assist) =>
         assist.outlet === extensionOutlets.recordForm &&
         assist.watch.includes(code),
@@ -303,6 +309,14 @@ export const useFormAssistSuggestions = ({
       );
     }
   };
+  useEffect(() => {
+    if (!data || early.current.size === 0) return;
+    const codes = [...early.current];
+    early.current.clear();
+    codes.forEach(fieldChanged);
+  });
+  /** Call after the user changes field `code`. */
+  return fieldChanged;
 };
 
 /** The helper text of each suggested field: where its value came from. */
