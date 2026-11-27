@@ -1837,6 +1837,8 @@
     "readOnlyCatalogDescription": "Przeglądaj schematy, konteksty i produkty bez zmian.",
     "recordImporter": "Importer rekordów",
     "recordImporterDescription": "Odczytuj strukturę katalogu oraz twórz lub aktualizuj produkty.",
+    "supportAccess": "Dostęp serwisowy",
+    "supportAccessDescription": "Wszystkie uprawnienia, które możesz nadać, do diagnozowania problemów w całym obszarze roboczym.",
     "description": "Zarządzaj kontem, preferencjami i dostępem do API.",
     "accountDescription": "Twoja tożsamość w tym obszarze roboczym. Podaj te identyfikatory, prosząc o pomoc lub konfigurując integracje.",
     "displayNameNotSet": "Nie ustawiono nazwy wyświetlanej",

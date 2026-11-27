@@ -1759,6 +1759,8 @@
     "readOnlyCatalogDescription": "Browse blueprints, contexts, and products without changes.",
     "recordImporter": "Record importer",
     "recordImporterDescription": "Read catalog structure and create or update products.",
+    "supportAccess": "Support access",
+    "supportAccessDescription": "Every permission you can grant, for diagnosing issues across the workspace.",
     "description": "Manage your account, preferences, and API access.",
     "accountDescription": "Your identity in this workspace. Share these IDs when requesting support or configuring integrations.",
     "displayNameNotSet": "No display name set",

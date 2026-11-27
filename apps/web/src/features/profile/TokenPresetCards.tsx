@@ -2,14 +2,15 @@ import { Box, Card, CardActionArea, Stack, Typography } from '@mui/material';
 import { CircleCheckIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { compactIconSize } from '../../components/iconSizes';
-import { tokenPermissionPresets } from './constants';
+import { allTokenPermissions, tokenPermissionPresets } from './constants';
 
 const sameCodes = (left: readonly string[], right: readonly string[]) =>
   left.length === right.length && left.every((code) => right.includes(code));
 
 /**
  * Preset permission sets for a token; the one matching `selected` is marked,
- * and presets naming a permission the user cannot grant are disabled.
+ * and presets naming a permission the user cannot grant are disabled. The
+ * support preset selects every permission the user can grant.
  */
 export const TokenPresetCards = ({
   available,
@@ -29,16 +30,22 @@ export const TokenPresetCards = ({
         gap: 3,
         gridTemplateColumns: {
           xs: '1fr',
-          sm: 'repeat(3, minmax(0, 1fr))',
+          sm: 'repeat(2, minmax(0, 1fr))',
         },
         mt: 3,
       }}
     >
       {tokenPermissionPresets.map((preset) => {
+        const permissions =
+          preset.permissions === allTokenPermissions
+            ? [...(available ?? [])]
+            : preset.permissions;
         const unavailable = available
-          ? preset.permissions.some((code) => !available.has(code))
+          ? permissions.length === 0 ||
+            permissions.some((code) => !available.has(code))
           : false;
-        const active = sameCodes(selected, preset.permissions);
+        const active =
+          available !== undefined && sameCodes(selected, permissions);
         return (
           <Card
             key={preset.nameKey}
@@ -50,7 +57,7 @@ export const TokenPresetCards = ({
             <CardActionArea
               aria-pressed={active}
               disabled={!available || unavailable}
-              onClick={() => onSelect([...preset.permissions])}
+              onClick={() => onSelect([...permissions])}
               sx={{ height: '100%', p: 4 }}
             >
               <Stack
@@ -90,7 +97,7 @@ export const TokenPresetCards = ({
                 variant="caption"
               >
                 {t('profile.permissionCount', {
-                  count: preset.permissions.length,
+                  count: permissions.length,
                 })}
               </Typography>
             </CardActionArea>
