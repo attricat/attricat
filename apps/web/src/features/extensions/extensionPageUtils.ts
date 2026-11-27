@@ -5,6 +5,7 @@ import {
   installationStates,
   lifecycleOperations,
   releaseTagSeparator,
+  releaseTagVersionPrefix,
   type GrantKind,
   type InstallationState,
   type LifecycleOperation,
@@ -23,6 +24,21 @@ export const sourceRepository = (source: string) =>
 /** Returns the release tag that follows the last `@` in an installation source. */
 export const sourceReleaseTag = (source: string) =>
   source.split(releaseTagSeparator).at(-1);
+
+/**
+ * The marketplace page of an extension installed from a registry release;
+ * nothing for one side-loaded or installed another way.
+ */
+export const marketplaceRepository = (source: string) => {
+  const repository = sourceRepository(source);
+  if (!githubRepositoryPrefix.test(repository)) return undefined;
+  const [owner, name] = repositoryParts(repository);
+  return owner && name ? { owner, repository: name } : undefined;
+};
+
+/** The version a release tag names: the tag without its optional `v`. */
+export const releaseTagVersion = (tag: string) =>
+  tag.replace(releaseTagVersionPrefix, '');
 
 const manifestNameSchema = z.looseObject({ name: z.string().trim().min(1) });
 const manifestDescriptionSchema = z.looseObject({

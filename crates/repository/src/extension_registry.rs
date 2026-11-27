@@ -294,6 +294,15 @@ fn status_error(status: reqwest::StatusCode) -> RegistryError {
         _ => RegistryError::Unavailable,
     }
 }
+/// Names a release list by its repository and the versions the index reviews.
+fn release_cache_key(source: &GitHubRepository, reviewed: &[ReviewedVersion]) -> String {
+    let mut versions = reviewed
+        .iter()
+        .map(|listed| listed.version.as_str())
+        .collect::<Vec<_>>();
+    versions.sort_unstable();
+    format!("{}#{}", source.identity(), versions.join(","))
+}
 fn catalogue_cache<V: Clone + Send + Sync + 'static>() -> moka::future::Cache<String, V> {
     moka::future::Cache::builder()
         .max_capacity(CATALOGUE_CACHE_ENTRIES)
@@ -536,18 +545,22 @@ impl GitHubRegistry {
         extension: &DiscoveredExtension,
     ) -> Result<Vec<DiscoveredRelease>, RegistryError> {
         let repository = extension.github_repository()?;
-        let releases = self.releases(&repository).await?;
+        let releases = self.releases(&repository, &extension.versions).await?;
         Ok(releases
             .into_iter()
             .filter_map(|release| extension.reviewed_release(release))
             .collect())
     }
 
+    /// The repository's releases. A list is reused only while the index still
+    /// reviews the same versions, so a version the index has just added is
+    /// shown as soon as the index lists it, not when the cached list expires.
     async fn releases(
         &self,
         source: &GitHubRepository,
+        reviewed: &[ReviewedVersion],
     ) -> Result<Vec<DiscoveredRelease>, RegistryError> {
-        let key = source.identity();
+        let key = release_cache_key(source, reviewed);
         if let Some(releases) = self.releases.get(&key).await {
             return Ok(releases);
         }
@@ -819,8 +832,79 @@ mod tests {
     #[tokio::test]
     async fn release_lists_are_reused_rather_than_spending_the_rate_limit() {
         let registry = registry_answering_once(EMPTY_LIST).await;
-        registry.releases(&acme()).await.unwrap();
-        registry.releases(&acme()).await.unwrap();
+        registry.releases(&acme(), &[]).await.unwrap();
+        registry.releases(&acme(), &[]).await.unwrap();
+    }
+
+    /// A registry whose origin answers these requests in turn, then refuses
+    /// connections.
+    async fn registry_answering(responses: Vec<String>) -> GitHubRegistry {
+        use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let origin = Url::parse(&format!("http://{}/", listener.local_addr().unwrap())).unwrap();
+        tokio::spawn(async move {
+            for response in responses {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                let mut request = [0; 1024];
+                let _ = socket.read(&mut request).await.unwrap();
+                let _ = socket.write_all(response.as_bytes()).await;
+            }
+        });
+        GitHubRegistry::with_origins(origin.clone(), origin).unwrap()
+    }
+    /// GitHub's release list for `acme/widget` with one release per tag.
+    fn release_list(tags: &[&str]) -> String {
+        let releases = tags
+            .iter()
+            .enumerate()
+            .map(|(id, tag)| {
+                serde_json::json!({
+                    "id": id, "tag_name": tag, "name": tag, "draft": false,
+                    "prerelease": false, "published_at": null,
+                    "assets": [{
+                        "id": id, "name": "widget.tar.zst", "digest": null,
+                        "browser_download_url": format!(
+                            "https://github.com/acme/widget/releases/download/{tag}/widget.tar.zst"
+                        ),
+                    }],
+                })
+            })
+            .collect::<Vec<_>>();
+        let body = serde_json::to_string(&releases).unwrap();
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
+    }
+    fn tags(releases: Vec<DiscoveredRelease>) -> Vec<String> {
+        releases
+            .into_iter()
+            .map(|release| release.tag_name)
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn a_version_the_index_adds_is_listed_without_waiting_for_the_cache() {
+        let registry = registry_answering(vec![
+            release_list(&["v1.0.0"]),
+            release_list(&["v1.0.0", "v1.1.0"]),
+        ])
+        .await;
+        let before = listing(&[("1.0.0", "^1")]);
+        let after = listing(&[("1.0.0", "^1"), ("1.1.0", "^1")]);
+        assert_eq!(
+            tags(registry.listed_releases(&before).await.unwrap()),
+            ["v1.0.0"]
+        );
+        assert_eq!(
+            tags(registry.listed_releases(&after).await.unwrap()),
+            ["v1.0.0", "v1.1.0"]
+        );
+        // The same index is answered from the cache: the origin is gone.
+        assert_eq!(
+            tags(registry.listed_releases(&after).await.unwrap()),
+            ["v1.0.0", "v1.1.0"]
+        );
     }
 
     #[tokio::test]
@@ -832,11 +916,11 @@ mod tests {
         ));
         let registry = registry_answering_once(LIMITED).await;
         assert!(matches!(
-            registry.releases(&acme()).await,
+            registry.releases(&acme(), &[]).await,
             Err(RegistryError::RateLimited)
         ));
         assert!(matches!(
-            registry.releases(&acme()).await,
+            registry.releases(&acme(), &[]).await,
             Err(RegistryError::Unavailable)
         ));
     }

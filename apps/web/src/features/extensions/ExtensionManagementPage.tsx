@@ -25,14 +25,14 @@ import { RouterButton, RouterTab } from '../../components/RouterLink';
 
 const extensionTabs = [
   {
-    icon: StoreIcon,
-    label: 'extensions.marketplace',
-    to: '/manage/extensions/marketplace',
-  },
-  {
     icon: PackageCheckIcon,
     label: 'extensions.installed',
     to: '/manage/extensions/installed',
+  },
+  {
+    icon: StoreIcon,
+    label: 'extensions.marketplace',
+    to: '/manage/extensions/marketplace',
   },
   {
     icon: PanelsTopLeftIcon,

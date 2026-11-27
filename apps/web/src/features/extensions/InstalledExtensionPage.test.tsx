@@ -19,7 +19,10 @@ import '../../i18n';
 import { InstalledExtensionPage } from './InstalledExtensionPage';
 import {
   extensionDetail,
+  extensionUpdates,
+  registryDetails,
   removeExtension,
+  upgradeExtension,
   upgradeExtensionFromArchive,
 } from './managementApi';
 import {
@@ -30,7 +33,9 @@ import {
 vi.mock('../auth/useCan', () => ({ useCan: () => true }));
 vi.mock('./managementApi', () => ({
   extensionDetail: vi.fn(),
+  extensionUpdates: vi.fn(),
   lifecycleExtension: vi.fn(),
+  registryDetails: vi.fn(),
   removeExtension: vi.fn(),
   upgradeExtension: vi.fn(),
   upgradeExtensionFromArchive: vi.fn(),
@@ -48,7 +53,18 @@ vi.mock('../extension-webhooks/ExtensionWebhooksSection', () => ({
   ExtensionWebhooksSection: () => <p>webhooks</p>,
 }));
 
-const detail = (manifest: Record<string, unknown>) => ({
+const registrySource = 'github:attricat/example@v1.0.0';
+
+const release = (release_id: number, tag_name: string) => ({
+  source: 'github:attricat/example',
+  release_id,
+  tag_name,
+  name: tag_name,
+  published_at: null,
+  asset: { id: release_id, name: 'example.tar.zst', download_url: 'https://x' },
+});
+
+const detail = (manifest: Record<string, unknown>, source = 'sideload') => ({
   grants: [],
   lifecycle: [],
   installation: {
@@ -64,15 +80,18 @@ const detail = (manifest: Record<string, unknown>) => ({
     manifest: { name: 'Example', description: 'Does things', ...manifest },
     manifest_unreadable: Boolean(manifest.unreadable),
     manifest_sha256: 'abc123',
-    source: 'sideload',
+    source,
   },
 });
 
 const renderPage = async (
   manifest: Record<string, unknown>,
   tab?: InstalledExtensionTab,
+  source?: string,
 ) => {
-  vi.mocked(extensionDetail).mockResolvedValue(detail(manifest) as never);
+  vi.mocked(extensionDetail).mockResolvedValue(
+    detail(manifest, source) as never,
+  );
   const root = createRootRoute();
   const page = createRoute({
     getParentRoute: () => root,
@@ -88,11 +107,15 @@ const renderPage = async (
     path: '/manage/extensions/installed',
     component: () => <p>Installed extensions</p>,
   });
+  const marketplace = createRoute({
+    getParentRoute: () => root,
+    path: '/manage/extensions/$owner/$repository',
+  });
   const router = createRouter({
     history: createMemoryHistory({
       initialEntries: ['/manage/extensions/example'],
     }),
-    routeTree: root.addChildren([page, list, installed]),
+    routeTree: root.addChildren([page, list, installed, marketplace]),
   });
   render(
     <QueryClientProvider client={new QueryClient()}>
@@ -105,7 +128,63 @@ const renderPage = async (
 const tabNames = () => screen.getAllByRole('tab').map((tab) => tab.textContent);
 
 describe('InstalledExtensionPage', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(extensionUpdates).mockResolvedValue([]);
+  });
+
+  it('leads the overview with the update and upgrades only after confirming', async () => {
+    vi.mocked(extensionUpdates).mockResolvedValue([
+      {
+        extension_id: 'example',
+        installed_version: '1.0.0',
+        latest_version: '1.2.0',
+        repository: 'github:attricat/example',
+        registry_source: 'github:attricat/registry',
+      },
+    ]);
+    vi.mocked(registryDetails).mockResolvedValue({
+      extension: {},
+      readme: '',
+      releases: [release(3, 'v1.2.0'), release(2, 'v1.1.0')],
+    } as never);
+    vi.mocked(upgradeExtension).mockResolvedValue(undefined as never);
+    await renderPage({}, undefined, registrySource);
+
+    const card = await screen.findByRole('heading', {
+      name: 'Update available: 1.2.0',
+    });
+    const details = screen.getByRole('heading', { name: 'Details' });
+    expect(
+      card.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole('link', { name: 'View in marketplace' })
+        .getAttribute('href'),
+    ).toBe('/manage/extensions/attricat/example');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Upgrade to v1.2.0' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog.textContent).toContain('from v1.0.0 to v1.2.0');
+    expect(upgradeExtension).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Upgrade' }));
+    await waitFor(() =>
+      expect(upgradeExtension).toHaveBeenCalledWith('example', {
+        owner: 'attricat',
+        repository: 'example',
+        release_id: 3,
+      }),
+    );
+  });
+
+  it('offers no update or marketplace link for a side-loaded extension', async () => {
+    await renderPage({});
+    expect(
+      screen.queryByRole('link', { name: 'View in marketplace' }),
+    ).toBeNull();
+    expect(registryDetails).not.toHaveBeenCalled();
+  });
 
   it('says when this version cannot read the stored manifest', async () => {
     await renderPage({ unreadable: true });
