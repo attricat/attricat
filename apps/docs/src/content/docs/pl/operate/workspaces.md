@@ -117,6 +117,12 @@ Kolory widzi każdy, kto może odczytywać rekordy. Ich zmiana wymaga uprawnieni
 
 Zdjęcie należy do bieżącego obszaru roboczego: ustaw je w każdym obszarze, z którego korzystasz. Widzą je wszyscy członkowie obszaru, ale udostępniana jest tylko zmniejszona wersja. Przesłany oryginalny plik nigdy nie jest nikomu pokazywany.
 
+### Zmiana hasła
+
+**Profil → Hasło → Zmień hasło** prosi o obecne hasło i nowe, które musi spełniać te same zasady co przy resetowaniu. Wszystkie inne przeglądarki zalogowane na Twoje konto zostają wylogowane, a ta pozostaje zalogowana. Osobiste tokeny API nadal działają; te, którym już nie ufasz, unieważnij w **Profil → Osobiste tokeny API**. Attricat wysyła Ci e-mail o zmianie hasła, dzięki czemu od razu zauważysz nieautoryzowaną zmianę.
+
+Błędne obecne hasła wliczają się do tego samego limitu co nieudane logowania. Sekcja nie jest widoczna, jeśli logujesz się wyłącznie przez [logowanie jednokrotne](#logowanie-jednokrotne) albo obszar roboczy pozwala używać hasła tylko właścicielom, a Ty nim nie jesteś.
+
 ## Osobiste tokeny API
 
 Skrypty, CLI i integracje uwierzytelniają się osobistymi tokenami API. Utwórz token w **Profil → Osobiste tokeny API** albo poleceniem `acli token create`.

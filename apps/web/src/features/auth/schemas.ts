@@ -17,6 +17,8 @@ export const sessionSchema = z.object({
   workspace_id: z.uuid(),
   login_identifier: z.string(),
   workspace_name: z.string(),
+  /** The account has a password it may change in this workspace. */
+  password_change_available: z.boolean().default(false),
   capabilities: z
     .object({
       audit_read: z.boolean(),

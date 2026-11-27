@@ -1057,3 +1057,253 @@ async fn unknown_api_routes_are_not_found_and_responses_carry_security_headers(p
     assert_eq!(unknown.status(), StatusCode::NOT_FOUND);
     server.abort();
 }
+
+/// A signed-in browser: its cookie header and CSRF token.
+struct Browser {
+    cookie: String,
+    csrf: String,
+}
+
+impl Browser {
+    fn from_response(response: &reqwest::Response) -> Self {
+        let (session, csrf) = cookie_pair(response);
+        Self {
+            csrf: csrf.split_once('=').unwrap().1.to_owned(),
+            cookie: format!("{session}; {csrf}"),
+        }
+    }
+
+    async fn sign_in(base_url: &str, password: &str) -> reqwest::Response {
+        Client::new()
+            .post(format!("{base_url}/auth/login"))
+            .json(&json!({
+                "login_identifier": "default.local",
+                "email": "api-test-owner@example.test",
+                "password": password,
+            }))
+            .send()
+            .await
+            .unwrap()
+    }
+
+    async fn session(&self, base_url: &str) -> reqwest::Response {
+        Client::new()
+            .get(format!("{base_url}/auth/session"))
+            .header("cookie", &self.cookie)
+            .send()
+            .await
+            .unwrap()
+    }
+
+    async fn change_password(&self, base_url: &str, current: &str, new: &str) -> reqwest::Response {
+        Client::new()
+            .post(format!("{base_url}/auth/password"))
+            .header("cookie", &self.cookie)
+            .header("x-attricat-csrf", &self.csrf)
+            .json(&json!({ "current_password": current, "new_password": new }))
+            .send()
+            .await
+            .unwrap()
+    }
+}
+
+async fn error_code(response: reqwest::Response) -> (StatusCode, Value) {
+    let status = response.status();
+    (
+        status,
+        response.json::<Value>().await.unwrap()["error"]["code"].clone(),
+    )
+}
+
+const OLD_PASSWORD: &str = "correct horse battery staple";
+const NEW_PASSWORD: &str = "a different horse, 2 batteries";
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn changing_the_password_ends_other_sessions_but_keeps_tokens(pool: PgPool) {
+    let mail = std::sync::Arc::new(TestMailDelivery::default());
+    let (base_url, server) =
+        start_configured_session_server(pool.clone(), mail.clone(), |_| {}).await;
+    let hash = hash_password(&Password::new(OLD_PASSWORD)).unwrap();
+    sqlx::query("INSERT INTO local_password_credentials (user_id, password_hash) VALUES ($1, $2)")
+        .bind(OWNER_ID.parse::<Uuid>().unwrap())
+        .bind(hash.as_phc())
+        .execute(&pool)
+        .await
+        .unwrap();
+    let this = Browser::from_response(&Browser::sign_in(&base_url, OLD_PASSWORD).await);
+    let other = Browser::from_response(&Browser::sign_in(&base_url, OLD_PASSWORD).await);
+    let session: Value = this.session(&base_url).await.json().await.unwrap();
+    assert_eq!(session["password_change_available"], true);
+    let token: Value = Client::new()
+        .post(format!("{base_url}/personal-access-tokens"))
+        .header("cookie", &this.cookie)
+        .header("x-attricat-csrf", &this.csrf)
+        .json(&json!({ "label": "integration", "permissions": ["records.read"] }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let bearer = format!("Bearer {}", token["secret"].as_str().unwrap());
+
+    assert_eq!(
+        error_code(
+            this.change_password(&base_url, "not my password", NEW_PASSWORD)
+                .await
+        )
+        .await,
+        (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            json!("current_password_incorrect")
+        )
+    );
+    assert_eq!(
+        error_code(
+            this.change_password(&base_url, OLD_PASSWORD, OLD_PASSWORD)
+                .await
+        )
+        .await,
+        (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            json!("password_unchanged")
+        )
+    );
+    assert_eq!(
+        error_code(this.change_password(&base_url, OLD_PASSWORD, "a1!b").await).await,
+        (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            json!("password_too_short")
+        )
+    );
+    // A token cannot change the password: only a signed-in browser can.
+    assert_eq!(
+        Client::new()
+            .post(format!("{base_url}/auth/password"))
+            .header("authorization", &bearer)
+            .json(&json!({ "current_password": OLD_PASSWORD, "new_password": NEW_PASSWORD }))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        mail.password_changed_notices("api-test-owner@example.test")
+            .await,
+        0
+    );
+
+    let changed = this
+        .change_password(&base_url, OLD_PASSWORD, NEW_PASSWORD)
+        .await;
+    assert_eq!(changed.status(), StatusCode::OK);
+    let renewed = Browser::from_response(&changed);
+    assert_eq!(
+        changed.json::<Value>().await.unwrap()["email"],
+        "api-test-owner@example.test"
+    );
+    // This browser stays signed in through its replacement session.
+    assert_eq!(renewed.session(&base_url).await.status(), StatusCode::OK);
+    assert_eq!(
+        this.session(&base_url).await.status(),
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        other.session(&base_url).await.status(),
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        Client::new()
+            .get(format!("{base_url}/auth/session"))
+            .header("authorization", &bearer)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        Browser::sign_in(&base_url, OLD_PASSWORD).await.status(),
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        Browser::sign_in(&base_url, NEW_PASSWORD).await.status(),
+        StatusCode::OK
+    );
+    for _ in 0..50 {
+        if mail
+            .password_changed_notices("api-test-owner@example.test")
+            .await
+            == 1
+        {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    assert_eq!(
+        mail.password_changed_notices("api-test-owner@example.test")
+            .await,
+        1
+    );
+
+    // Wrong guesses share the sign-in limit, so a borrowed session cannot
+    // be used to guess the password.
+    for _ in 0..5 {
+        assert_eq!(
+            renewed
+                .change_password(&base_url, "guess", "another strong password 3")
+                .await
+                .status(),
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
+    }
+    assert_eq!(
+        renewed
+            .change_password(&base_url, NEW_PASSWORD, "another strong password 3")
+            .await
+            .status(),
+        StatusCode::TOO_MANY_REQUESTS
+    );
+    server.abort();
+
+    let (base_url, server) =
+        start_configured_session_server(pool, mail, |state| state.demo_mode = true).await;
+    assert_eq!(
+        error_code(
+            renewed
+                .change_password(&base_url, NEW_PASSWORD, "another strong password 3")
+                .await
+        )
+        .await,
+        (StatusCode::FORBIDDEN, json!("disabled_in_demo"))
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn an_account_without_a_password_is_not_offered_a_change(pool: PgPool) {
+    let (base_url, server) = start_configured_session_server(
+        pool.clone(),
+        std::sync::Arc::new(TestMailDelivery::default()),
+        |_| {},
+    )
+    .await;
+    let user = passwordless_member(&pool).await;
+    let (cookie, csrf) = issue_passwordless_session(&pool, user).await;
+    let browser = Browser { cookie, csrf };
+    let session: Value = browser.session(&base_url).await.json().await.unwrap();
+    assert_eq!(session["password_change_available"], false);
+    assert_eq!(
+        error_code(
+            browser
+                .change_password(&base_url, "anything", NEW_PASSWORD)
+                .await
+        )
+        .await,
+        (StatusCode::FORBIDDEN, json!("password_not_available"))
+    );
+    server.abort();
+}

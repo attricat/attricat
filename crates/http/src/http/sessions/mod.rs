@@ -53,6 +53,13 @@ pub(super) struct PasswordResetRequest {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct PasswordChangeRequest {
+    current_password: String,
+    new_password: String,
+}
+
+#[derive(Deserialize)]
 pub(super) struct PasswordResetConfirmation {
     token: String,
     password: String,
@@ -236,6 +243,94 @@ pub(super) async fn confirm_password_reset(
             error => error.into(),
         })?;
     Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
+/// `POST /auth/password`: changes the signed-in account's own password. The
+/// caller proves the current one, and wrong guesses count toward the same
+/// limit as sign-in, so a borrowed session cannot be used to guess it. Every
+/// other browser session ends; this one is replaced so the caller stays
+/// signed in. Personal API tokens keep working.
+pub(super) async fn change_password(
+    State(state): State<AppState>,
+    AuthenticatedPrincipal(user_id, _): AuthenticatedPrincipal,
+    AuthenticatedSession(_): AuthenticatedSession,
+    ActiveWorkspace(workspace_id): ActiveWorkspace,
+    ApiJson(request): ApiJson<PasswordChangeRequest>,
+) -> Result<Response, ApiError> {
+    if state.demo_mode {
+        return Err(ApiError::disabled_in_demo());
+    }
+    if !state
+        .repository
+        .may_use_local_password(user_id, workspace_id)
+        .await?
+    {
+        return Err(ApiError::password_not_available());
+    }
+    let email = state.repository.user_account(user_id).await?.email;
+    let rate_key = digest_login_key(&email);
+    if !state.repository.reserve_login_attempt(&rate_key).await? {
+        return Err(ApiError::rate_limited());
+    }
+    let credential = state
+        .repository
+        .local_login_credential(&email)
+        .await?
+        .filter(|credential| credential.active && credential.user_id == user_id)
+        .ok_or_else(ApiError::password_not_available)?;
+    if !password::verify_password(
+        Some(credential.password_hash.clone()),
+        request.current_password.clone(),
+    )
+    .await?
+    {
+        return Err(ApiError::current_password_incorrect());
+    }
+    state.repository.clear_login_failures(&rate_key).await?;
+    if request.new_password == request.current_password {
+        return Err(ApiError::password_unchanged());
+    }
+    validate_password(&request.new_password).map_err(ApiError::password_policy)?;
+    let password_hash = hash_password(request.new_password).await?;
+    let (session, csrf, expires_at) = issue_session();
+    state
+        .repository
+        .change_local_password(
+            &credential,
+            workspace_id,
+            &password_hash,
+            Uuid::new_v4(),
+            &session.digest(),
+            &csrf.digest(),
+            expires_at,
+        )
+        .await
+        // Another change won the race, so the proven password is stale.
+        .map_err(|error| match error {
+            RepositoryError::NotFound(_) => ApiError::current_password_incorrect(),
+            error => error.into(),
+        })?;
+    // The change is committed; how long the notice takes must not hold it up.
+    let mail_delivery = state.mail_delivery.clone();
+    tokio::spawn(async move {
+        if let Err(error) = mail_delivery.deliver_password_changed(&email).await {
+            tracing::error!(%error, "password changed notice delivery failed");
+        }
+    });
+    session_response(
+        &state,
+        user_id,
+        workspace_id,
+        state
+            .repository
+            .workspace_login_identifier(workspace_id)
+            .await?,
+        &session,
+        &csrf,
+        state.session_cookie_secure,
+        SESSION_LIFETIME_HOURS,
+    )
+    .await
 }
 
 pub(super) async fn login(

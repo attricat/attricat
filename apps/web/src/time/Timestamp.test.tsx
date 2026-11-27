@@ -25,6 +25,7 @@ const session = (time_zone: string | null): Session => ({
   workspace_id: '123e4567-e89b-12d3-a456-426614174001',
   login_identifier: 'default.local',
   workspace_name: 'Default workspace',
+  password_change_available: true,
   agents_configured: false,
 });
 // A zone that differs from the test runner's zone in either case.

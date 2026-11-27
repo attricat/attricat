@@ -149,6 +149,7 @@ impl OfficialExtensionReleases for FakeOfficialExtensions {
 pub struct TestMailDelivery {
     workspace_invitation_urls: Mutex<Vec<(String, String)>>,
     workspace_onboarding_urls: Mutex<Vec<(String, String)>>,
+    password_changed_recipients: Mutex<Vec<String>>,
     fail_next_delivery: std::sync::atomic::AtomicBool,
 }
 
@@ -169,6 +170,16 @@ impl TestMailDelivery {
             .iter()
             .rev()
             .find_map(|(delivered_to, url)| (delivered_to == recipient).then(|| url.clone()))
+    }
+
+    /// How many password-changed notices went to `recipient`.
+    pub async fn password_changed_notices(&self, recipient: &str) -> usize {
+        self.password_changed_recipients
+            .lock()
+            .await
+            .iter()
+            .filter(|delivered_to| *delivered_to == recipient)
+            .count()
     }
 
     pub async fn delivered_count(&self) -> usize {
@@ -220,6 +231,14 @@ impl MailDelivery for TestMailDelivery {
             .lock()
             .await
             .push((recipient.to_owned(), onboarding_url.to_owned()));
+        Ok(())
+    }
+
+    async fn deliver_password_changed(&self, recipient: &str) -> Result<(), MailError> {
+        self.password_changed_recipients
+            .lock()
+            .await
+            .push(recipient.to_owned());
         Ok(())
     }
 }

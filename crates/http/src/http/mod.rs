@@ -874,6 +874,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/auth/logout", post(sessions::logout))
         .route("/auth/renew", post(sessions::renew))
+        .route("/auth/password", post(sessions::change_password))
         .route(
             "/data-health/background-processing",
             get(data_health::background_processing_status),

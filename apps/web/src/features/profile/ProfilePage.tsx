@@ -17,12 +17,14 @@ import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import {
   ProfileIcon,
   LanguageIcon,
+  PasswordIcon,
   TimeZoneIcon,
 } from '../../components/systemIcons';
 import { UserAvatar } from '../../components/UserAvatar';
 import { fileStatuses, THUMBNAIL_POLLING_STATUSES } from '../files/constants';
 import { AvatarControls } from './AvatarControls';
 import { ChangeDisplayNameDialog } from './ChangeDisplayNameDialog';
+import { ChangePasswordDialog } from './ChangePasswordDialog';
 import { ProfileSection } from './ProfileSection';
 import { SingleSignOnSection } from './SingleSignOnSection';
 import { TimeZonePreference } from './TimeZonePreference';
@@ -61,6 +63,7 @@ export const ProfilePage = () => {
   const account = session.data;
   const name = personName(account?.display_name, account?.email);
   const [editingName, setEditingName] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const avatar = account?.avatar;
   const avatarProcessing =
@@ -154,6 +157,25 @@ export const ProfilePage = () => {
           />
         </DetailList>
       </ProfileSection>
+      {account?.password_change_available && (
+        <ProfileSection
+          description={t('profile.passwordDescription')}
+          icon={PasswordIcon}
+          title={t('profile.password')}
+        >
+          <Button
+            onClick={() => setChangingPassword(true)}
+            startIcon={<PencilIcon />}
+            sx={{ alignSelf: 'flex-start' }}
+            variant="outlined"
+          >
+            {t('profile.changePassword')}
+          </Button>
+          {changingPassword && (
+            <ChangePasswordDialog onClose={() => setChangingPassword(false)} />
+          )}
+        </ProfileSection>
+      )}
       <ProfileSection
         description={t('profile.languageDescription')}
         icon={LanguageIcon}

@@ -199,6 +199,27 @@ impl ApiError {
             "password reset link is invalid or expired",
         )
     }
+    /// Not `401`: the session is valid, only the proof of the password failed.
+    pub(super) fn current_password_incorrect() -> Self {
+        Self::unprocessable(
+            ErrorCode::CurrentPasswordIncorrect,
+            "the current password is incorrect",
+        )
+    }
+    pub(super) fn password_unchanged() -> Self {
+        Self::unprocessable(
+            ErrorCode::PasswordUnchanged,
+            "the new password must differ from the current one",
+        )
+    }
+    /// The account signs in only through single sign-on here.
+    pub(super) fn password_not_available() -> Self {
+        Self::new(
+            StatusCode::FORBIDDEN,
+            ErrorCode::PasswordNotAvailable,
+            "this account has no password it can use in this workspace",
+        )
+    }
     pub(super) fn password_policy(error: attricat_domain::account::PasswordPolicyError) -> Self {
         use attricat_domain::account::{
             MAXIMUM_PASSWORD_BYTES, MINIMUM_PASSWORD_LENGTH, PasswordPolicyError,

@@ -158,6 +158,17 @@ export const updateDisplayName = (displayName: string) =>
     jsonRequest('PUT', { display_name: displayName }),
   );
 
+/** Replaces the session: every other browser of the account signs out. */
+export const changePassword = (currentPassword: string, newPassword: string) =>
+  request(
+    '/api/auth/password',
+    sessionSchema,
+    jsonRequest('POST', {
+      current_password: currentPassword,
+      new_password: newPassword,
+    }),
+  );
+
 export const clearDisplayName = () =>
   request('/api/auth/display-name', sessionSchema, { method: 'DELETE' });
 

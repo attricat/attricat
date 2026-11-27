@@ -41,6 +41,7 @@ export { SpeechIcon as LanguageIcon } from 'lucide-react';
 export { EarthIcon as TimeZoneIcon } from 'lucide-react';
 export { LockKeyholeIcon as PermissionIcon } from 'lucide-react';
 export { KeyRoundIcon as SingleSignOnIcon } from 'lucide-react';
+export { LockKeyholeIcon as PasswordIcon } from 'lucide-react';
 export { SquareActivityIcon as ExtensionRunIcon } from 'lucide-react';
 export { UserRoundIcon as AssignedUserIcon } from 'lucide-react';
 export { UsersRoundIcon as TeamIcon } from 'lucide-react';

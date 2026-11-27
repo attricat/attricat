@@ -37,6 +37,9 @@ pub trait MailDelivery: Send + Sync {
         recipient: &str,
         onboarding_url: &str,
     ) -> Result<(), MailError>;
+    /// Tells the account holder that its password changed, so someone whose
+    /// session was taken over finds out. It carries no link or secret.
+    async fn deliver_password_changed(&self, recipient: &str) -> Result<(), MailError>;
 }
 
 pub struct SmtpMailDelivery {
@@ -173,12 +176,26 @@ impl SmtpMailDelivery {
         instruction: &str,
         action_url: &str,
     ) -> Result<(), MailError> {
+        self.deliver_text(
+            recipient,
+            subject,
+            format!("{instruction}\n\n{action_url}\n"),
+        )
+        .await
+    }
+
+    async fn deliver_text(
+        &self,
+        recipient: &str,
+        subject: &str,
+        body: String,
+    ) -> Result<(), MailError> {
         let recipient = recipient.parse().map_err(|_| MailError::Configuration)?;
         let message = Message::builder()
             .from(self.from.clone())
             .to(recipient)
             .subject(subject)
-            .body(format!("{instruction}\n\n{action_url}\n"))
+            .body(body)
             .map_err(|_| MailError::Configuration)?;
         self.transport
             .send(message)
@@ -231,4 +248,15 @@ impl MailDelivery for SmtpMailDelivery {
         )
         .await
     }
+
+    async fn deliver_password_changed(&self, recipient: &str) -> Result<(), MailError> {
+        self.deliver_text(
+            recipient,
+            "Your Attricat password was changed",
+            PASSWORD_CHANGED_BODY.to_owned(),
+        )
+        .await
+    }
 }
+
+const PASSWORD_CHANGED_BODY: &str = "The password of your Attricat account was just changed, and every other browser signed in to the account was signed out.\n\nIf you did not change it, choose Forgot password on the sign-in page to reset it, then review the account's personal API tokens.\n";

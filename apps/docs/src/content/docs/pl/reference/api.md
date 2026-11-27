@@ -451,6 +451,7 @@ Trasy `GET` reguł, wykonań i ustaleń wymagają `rules.read`; pozostałe trasy
 | Metoda | Ścieżka | Opis |
 | --- | --- | --- |
 | `POST` | `/auth/discover`, `/auth/login`, `/auth/renew`, `/auth/logout` | Sesje. |
+| `POST` | `/auth/password` | Zmienia własne hasło z zalogowanej przeglądarki, `{"current_password", "new_password"}`. Kończy pozostałe sesje przeglądarek, zachowuje osobiste tokeny API i zwraca nową sesję. |
 | `POST` | `/auth/password-reset`, `/auth/password-reset/confirm` | Prośba o link do resetowania z `{"email"}`, a następnie ustawienie hasła z `{"token", "password"}`. Obie trasy zwracają `204`. |
 | `POST` | `/onboarding/complete` | Ustawia hasło nowego użytkownika na podstawie linku wdrożeniowego: `{"invitation_secret", "onboarding_secret", "password"}`. |
 | `POST`, `GET` | `/auth/oidc/start`, `/auth/oidc/callback/{workspace_id}` | Logowanie przez dostawcę tożsamości obszaru roboczego. `start` zwraca `authorization_url` i przyjmuje `invitation_secret`, aby przyjąć zaproszenie. |

@@ -231,6 +231,91 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         self.commit_mutation(tx).await
     }
 
+    /// Whether the account has a local password it may use in this
+    /// workspace, which a workspace allowing passwords only to owners
+    /// withholds from everyone else.
+    pub async fn may_use_local_password(
+        &self,
+        user_id: Uuid,
+        workspace_id: Uuid,
+    ) -> Result<bool, RepositoryError> {
+        let mut tx = self.pool.begin().await?;
+        let has_password: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM local_password_credentials c JOIN users u ON u.id = c.user_id WHERE c.user_id = $1 AND u.kind = 'person' AND u.state = 'active')",
+        )
+        .bind(user_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        let allowed = has_password
+            && (!Self::passwords_restricted_on(&mut tx, workspace_id).await?
+                || Self::active_owner_on(&mut tx, user_id, workspace_id).await?);
+        tx.rollback().await?;
+        Ok(allowed)
+    }
+
+    /// Replaces a password the caller just proved, in one transaction: it
+    /// ends every browser session of the account, cancels unused reset and
+    /// setup links, and issues the session that replaces the caller's. A
+    /// password changed meanwhile fails it with `NotFound`. Personal API
+    /// tokens keep working, since a routine change is not a recovery.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn change_local_password(
+        &self,
+        credential: &LocalLoginCredential,
+        workspace_id: Uuid,
+        password_hash: &PasswordHash,
+        session_id: Uuid,
+        session: &SessionDigest,
+        csrf: &SessionDigest,
+        expires_at: DateTime<Utc>,
+    ) -> Result<(), RepositoryError> {
+        let mut tx = self.pool.begin().await?;
+        Self::lock_workspace_for_session_on(&mut tx, workspace_id).await?;
+        let user_updated = sqlx::query("UPDATE users SET security_version = security_version + 1, updated_at = clock_timestamp() WHERE id = $1 AND security_version = $2 AND state = 'active'")
+            .bind(credential.user_id)
+            .bind(credential.security_version)
+            .execute(&mut *tx)
+            .await?
+            .rows_affected();
+        let credential_updated = sqlx::query("UPDATE local_password_credentials SET password_hash = $1, credential_version = credential_version + 1, updated_at = clock_timestamp() WHERE user_id = $2 AND credential_version = $3")
+            .bind(password_hash.as_phc())
+            .bind(credential.user_id)
+            .bind(credential.credential_version)
+            .execute(&mut *tx)
+            .await?
+            .rows_affected();
+        if user_updated != 1 || credential_updated != 1 {
+            return Err(RepositoryError::NotFound("active credential"));
+        }
+        sqlx::query("UPDATE browser_sessions SET revoked_at = clock_timestamp() WHERE user_id = $1 AND revoked_at IS NULL")
+            .bind(credential.user_id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("UPDATE user_lifecycle_action_tokens SET revoked_at = clock_timestamp() WHERE user_id = $1 AND consumed_at IS NULL AND revoked_at IS NULL")
+            .bind(credential.user_id)
+            .execute(&mut *tx)
+            .await?;
+        let changed = LocalLoginCredential {
+            user_id: credential.user_id,
+            password_hash: password_hash.clone(),
+            active: credential.active,
+            email_verified: credential.email_verified,
+            security_version: credential.security_version + 1,
+            credential_version: credential.credential_version + 1,
+        };
+        self.issue_login_session_on(
+            &mut tx,
+            session_id,
+            &changed,
+            workspace_id,
+            session,
+            csrf,
+            expires_at,
+        )
+        .await?;
+        self.commit_mutation(tx).await
+    }
+
     pub async fn reserve_login_attempt(
         &self,
         key: &SessionDigest,

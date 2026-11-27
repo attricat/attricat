@@ -117,6 +117,12 @@ Everyone who can read records sees the colors. Changing them needs `tag_colors.m
 
 Your photo belongs to the current workspace: set one in each workspace you use. Every member of the workspace can see it, but only the resized version is shared. The original file you uploaded is never shown to anyone.
 
+### Changing your password
+
+**Profile → Password → Change password** asks for your current password and a new one that follows the same rules as a reset. Every other browser signed in to your account is signed out, while this one stays signed in. Your personal API tokens keep working; revoke any you no longer trust under **Profile → Personal API tokens**. Attricat emails you that the password changed, so you notice a change you did not make.
+
+Wrong current passwords count toward the same limit as failed sign-ins. The section is not shown if you sign in only through [single sign-on](#single-sign-on), or if the workspace lets only owners use a password and you are not one.
+
 ## Personal API tokens
 
 Scripts, the CLI, and integrations authenticate with personal API tokens. Create one under **Profile → Personal API tokens**, or with `acli token create`.

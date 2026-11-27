@@ -26,6 +26,10 @@ pub(in crate::http) struct SessionResponse {
     pub(super) login_identifier: String,
     /// The session-bound workspace's display name.
     pub(super) workspace_name: String,
+    /// The account has a password it may change here, so the profile offers
+    /// it. False in demo mode, for single sign-on only accounts, and for
+    /// non-owners where the workspace keeps passwords for owners.
+    pub(super) password_change_available: bool,
     pub(super) capabilities: SessionCapabilities,
     /// Whether this deployment has an agent provider. Without one, nothing
     /// can run an agent, whatever the caller's permissions.
@@ -150,7 +154,14 @@ pub(super) async fn session_response_payload(
     workspace_id: Uuid,
 ) -> Result<SessionResponse, ApiError> {
     // These reads are independent; run them concurrently.
-    let (login_identifier, workspace_name, account, avatar, capabilities) = tokio::try_join!(
+    let (
+        login_identifier,
+        workspace_name,
+        password_change_available,
+        account,
+        avatar,
+        capabilities,
+    ) = tokio::try_join!(
         async {
             Ok::<_, ApiError>(
                 state
@@ -160,6 +171,7 @@ pub(super) async fn session_response_payload(
             )
         },
         async { Ok(state.repository.workspace_name(workspace_id).await?) },
+        password_change_available(state, user_id, workspace_id),
         async { Ok(state.repository.user_account(user_id).await?) },
         async { Ok(state.repository.own_avatar(user_id, workspace_id).await?) },
         session_capabilities(state, user_id, workspace_id),
@@ -173,6 +185,7 @@ pub(super) async fn session_response_payload(
         workspace_id,
         login_identifier,
         workspace_name,
+        password_change_available,
         capabilities,
         agents_configured: state.agent_provider.is_some(),
     })
@@ -184,8 +197,9 @@ async fn session_response_payload_with_identifier(
     workspace_id: Uuid,
     login_identifier: String,
 ) -> Result<SessionResponse, ApiError> {
-    let (workspace_name, account, avatar, capabilities) = tokio::try_join!(
+    let (workspace_name, password_change_available, account, avatar, capabilities) = tokio::try_join!(
         async { Ok::<_, ApiError>(state.repository.workspace_name(workspace_id).await?) },
+        password_change_available(state, user_id, workspace_id),
         async { Ok(state.repository.user_account(user_id).await?) },
         async { Ok(state.repository.own_avatar(user_id, workspace_id).await?) },
         session_capabilities(state, user_id, workspace_id),
@@ -199,9 +213,22 @@ async fn session_response_payload_with_identifier(
         workspace_id,
         login_identifier,
         workspace_name,
+        password_change_available,
         capabilities,
         agents_configured: state.agent_provider.is_some(),
     })
+}
+
+async fn password_change_available(
+    state: &AppState,
+    user_id: Uuid,
+    workspace_id: Uuid,
+) -> Result<bool, ApiError> {
+    Ok(!state.demo_mode
+        && state
+            .repository
+            .may_use_local_password(user_id, workspace_id)
+            .await?)
 }
 
 /// Workspace-wide permissions reported as session capability flags.

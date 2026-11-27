@@ -336,6 +336,7 @@ fn is_self_service_route(route: &str) -> bool {
             | "/auth/avatar"
             | "/auth/logout"
             | "/auth/renew"
+            | "/auth/password"
             | "/auth/oidc/link"
             // Each member's own inbox: handlers only ever read and change
             // the caller's notifications, so no catalog permission applies.

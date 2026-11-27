@@ -451,6 +451,7 @@ See [Translate labels](/builders/translations/).
 | Method | Path | Description |
 | --- | --- | --- |
 | `POST` | `/auth/discover`, `/auth/login`, `/auth/renew`, `/auth/logout` | Sessions. |
+| `POST` | `/auth/password` | Change your own password from a signed-in browser, `{"current_password", "new_password"}`. Ends your other browser sessions, keeps personal API tokens, and returns the replacement session. |
 | `POST` | `/auth/password-reset`, `/auth/password-reset/confirm` | Request a reset link with `{"email"}`, then set the password with `{"token", "password"}`. Both return `204`. |
 | `POST` | `/onboarding/complete` | Set a new user's password from their onboarding link: `{"invitation_secret", "onboarding_secret", "password"}`. |
 | `POST`, `GET` | `/auth/oidc/start`, `/auth/oidc/callback/{workspace_id}` | Sign in through the workspace's identity provider. `start` returns `authorization_url`, and takes `invitation_secret` to accept an invitation. |
