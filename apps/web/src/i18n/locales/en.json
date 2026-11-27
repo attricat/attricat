@@ -1760,7 +1760,7 @@
     "recordImporter": "Record importer",
     "recordImporterDescription": "Read catalog structure and create or update products.",
     "supportAccess": "Support access",
-    "supportAccessDescription": "Every permission you can grant, for diagnosing issues across the workspace.",
+    "supportAccessDescription": "Every permission you can grant except managing tokens, members, roles, sign-in and extensions, for diagnosing issues across the workspace. Expires in a week unless you change it.",
     "description": "Manage your account, preferences, and API access.",
     "accountDescription": "Your identity in this workspace. Share these IDs when requesting support or configuring integrations.",
     "displayNameNotSet": "No display name set",

@@ -11,7 +11,11 @@ import {
   PermissionIcon,
   PersonalTokenIcon,
 } from '../../components/systemIcons';
-import { futureZonedInstant } from '../../time/instantFormat';
+import { millisecondsPerDay } from '../../time/durations';
+import {
+  futureZonedInstant,
+  isoToZonedDateTime,
+} from '../../time/instantFormat';
 import { useTimeZone } from '../../time/useInstantFormat';
 import { useToast } from '../../components/useToast';
 import { useCan } from '../auth/useCan';
@@ -186,7 +190,25 @@ export const CreatePersonalTokenPage = () => {
                       permissions.data.map((permission) => permission.code),
                     )
                   }
-                  onSelect={field.handleChange}
+                  onSelect={(codes, preset) => {
+                    field.handleChange(codes);
+                    // A preset that should not last suggests an expiry,
+                    // which the user can still change or clear.
+                    if (
+                      preset.expiresInDays &&
+                      !form.getFieldValue('expires_at')
+                    )
+                      form.setFieldValue(
+                        'expires_at',
+                        isoToZonedDateTime(
+                          new Date(
+                            Date.now() +
+                              preset.expiresInDays * millisecondsPerDay,
+                          ),
+                          timeZone,
+                        ),
+                      );
+                  }}
                   selected={selected}
                 />
                 <Stack

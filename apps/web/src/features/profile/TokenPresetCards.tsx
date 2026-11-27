@@ -2,7 +2,11 @@ import { Box, Card, CardActionArea, Stack, Typography } from '@mui/material';
 import { CircleCheckIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { compactIconSize } from '../../components/iconSizes';
-import { allTokenPermissions, tokenPermissionPresets } from './constants';
+import {
+  allTokenPermissions,
+  tokenPermissionPresets,
+  type TokenPermissionPreset,
+} from './constants';
 
 const sameCodes = (left: readonly string[], right: readonly string[]) =>
   left.length === right.length && left.every((code) => right.includes(code));
@@ -10,7 +14,8 @@ const sameCodes = (left: readonly string[], right: readonly string[]) =>
 /**
  * Preset permission sets for a token; the one matching `selected` is marked,
  * and presets naming a permission the user cannot grant are disabled. The
- * support preset selects every permission the user can grant.
+ * support preset selects every permission the user can grant except those
+ * that would outlast the token.
  */
 export const TokenPresetCards = ({
   available,
@@ -19,7 +24,7 @@ export const TokenPresetCards = ({
 }: {
   /** Permissions the user can grant, or `undefined` while they load. */
   available: ReadonlySet<string> | undefined;
-  onSelect: (permissions: string[]) => void;
+  onSelect: (permissions: string[], preset: TokenPermissionPreset) => void;
   selected: readonly string[];
 }) => {
   const { t } = useTranslation();
@@ -38,7 +43,9 @@ export const TokenPresetCards = ({
       {tokenPermissionPresets.map((preset) => {
         const permissions =
           preset.permissions === allTokenPermissions
-            ? [...(available ?? [])]
+            ? [...(available ?? [])].filter(
+                (code) => !preset.excludedPermissions?.includes(code),
+              )
             : preset.permissions;
         const unavailable = available
           ? permissions.length === 0 ||
@@ -57,7 +64,7 @@ export const TokenPresetCards = ({
             <CardActionArea
               aria-pressed={active}
               disabled={!available || unavailable}
-              onClick={() => onSelect([...permissions])}
+              onClick={() => onSelect([...permissions], preset)}
               sx={{ height: '100%', p: 4 }}
             >
               <Stack

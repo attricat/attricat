@@ -1838,7 +1838,7 @@
     "recordImporter": "Importer rekordów",
     "recordImporterDescription": "Odczytuj strukturę katalogu oraz twórz lub aktualizuj produkty.",
     "supportAccess": "Dostęp serwisowy",
-    "supportAccessDescription": "Wszystkie uprawnienia, które możesz nadać, do diagnozowania problemów w całym obszarze roboczym.",
+    "supportAccessDescription": "Wszystkie uprawnienia, które możesz nadać, poza zarządzaniem tokenami, członkami, rolami, logowaniem i rozszerzeniami, do diagnozowania problemów w całym obszarze roboczym. Wygasa po tygodniu, chyba że to zmienisz.",
     "description": "Zarządzaj kontem, preferencjami i dostępem do API.",
     "accountDescription": "Twoja tożsamość w tym obszarze roboczym. Podaj te identyfikatory, prosząc o pomoc lub konfigurując integracje.",
     "displayNameNotSet": "Nie ustawiono nazwy wyświetlanej",

@@ -131,7 +131,8 @@ Scripts, the CLI, and integrations authenticate with personal API tokens. Create
 - The token secret starts with `cat_pat_` and is shown once. Store it in a secret manager.
 - Send it as `Authorization: Bearer cat_pat_…`. The token decides the workspace; no header or parameter selects one.
 - A token can create another token only with a subset of its own permissions. If the creating token expires, the new one must expire no later.
-- Revoke tokens you no longer need. Revoking a token does not revoke tokens it created; revoke each one. The token list shows when each was last used, to within a minute.
+- Revoke tokens you no longer need. Revoking a token also revokes every token it created, and the tokens those created. The token list shows when each was last used, to within a minute.
+- The **Support access** preset, for handing a token to someone diagnosing a problem, selects every permission you can grant except managing tokens, members, roles, sign-in, extensions and solution packs, so its holder cannot keep access after you revoke it. It fills in an expiry a week ahead, which you can change.
 
 Creating tokens needs `tokens.manage`.
 

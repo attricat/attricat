@@ -459,3 +459,67 @@ async fn member_management_token_cannot_grant_or_revoke_without_roles_grant(pool
     );
     server.abort();
 }
+
+fn bearer_client(secret: &str) -> Client {
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert(
+        "authorization",
+        reqwest::header::HeaderValue::from_str(&format!("Bearer {secret}")).unwrap(),
+    );
+    Client::builder().default_headers(headers).build().unwrap()
+}
+
+async fn issue_token(client: &Client, base_url: &str, label: &str, permissions: &[&str]) -> Value {
+    let created = client
+        .post(format!("{base_url}/personal-access-tokens"))
+        .json(&json!({ "label": label, "permissions": permissions }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED, "{label}");
+    created.json().await.unwrap()
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn revoking_a_token_revokes_the_tokens_it_issued(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let owner = authenticated_client();
+    let delegating = ["tokens.manage", "blueprints.read"];
+    let source = issue_token(&owner, &base_url, "support", &delegating).await;
+    let source_client = bearer_client(source["secret"].as_str().unwrap());
+    // Neither has an expiry, so only revocation can end them.
+    let child = issue_token(&source_client, &base_url, "child", &delegating).await;
+    let child_client = bearer_client(child["secret"].as_str().unwrap());
+    let grandchild =
+        issue_token(&child_client, &base_url, "grandchild", &["blueprints.read"]).await;
+    let unrelated = issue_token(&owner, &base_url, "unrelated", &["blueprints.read"]).await;
+    let reads = |secret: &Value| {
+        let client = bearer_client(secret.as_str().unwrap());
+        let url = format!("{base_url}/blueprints");
+        async move { client.get(url).send().await.unwrap().status() }
+    };
+    for token in [&source, &child, &grandchild, &unrelated] {
+        assert_eq!(reads(&token["secret"]).await, StatusCode::OK);
+    }
+
+    let source_id = source["id"].as_str().unwrap();
+    assert_eq!(
+        owner
+            .delete(format!("{base_url}/personal-access-tokens/{source_id}"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NO_CONTENT
+    );
+    for token in [&source, &child, &grandchild] {
+        assert_eq!(
+            reads(&token["secret"]).await,
+            StatusCode::UNAUTHORIZED,
+            "{}",
+            token["label"]
+        );
+    }
+    assert_eq!(reads(&unrelated["secret"]).await, StatusCode::OK);
+    server.abort();
+}

@@ -300,8 +300,9 @@ roles. Role grant and revoke requests require both `members.manage` and
 with a personal token, `/auth/session` reports capabilities restricted to that
 token's permissions. When a PAT issues another PAT, the requested permissions
 must also be a subset of the issuing token's permissions. If the issuer expires,
-the new token must have an explicit expiry no later than its issuer. Revocation
-remains per-token; revoke separately issued tokens individually. User state is
+the new token must have an explicit expiry no later than its issuer. A PAT records
+the PAT that issued it (`issuer_token_id`), and revoking a PAT also revokes,
+in the same transaction, every PAT it issued, transitively. User state is
 checked during credential validation, and authenticated session/profile routes
 also require an active workspace membership. `last_used_at` is updated at most
 once per minute rather than on every request.

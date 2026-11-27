@@ -1,11 +1,36 @@
 /** Marks a preset that grants every permission the user can grant. */
 export const allTokenPermissions = 'all';
 
-export const tokenPermissionPresets: readonly {
+/**
+ * Permissions the support preset leaves out: each lets its holder keep or
+ * widen access after the token is revoked, by minting tokens, adding or
+ * promoting accounts, changing sign-in, or installing extensions that keep
+ * running.
+ */
+export const supportAccessExcludedPermissions = [
+  'tokens.manage',
+  'members.manage',
+  'roles.manage',
+  'roles.grant',
+  'workspace.manage',
+  'extensions.manage',
+  'solution_packs.manage',
+] as const;
+
+/** How long a support token lasts unless its creator picks another expiry. */
+export const supportAccessTokenDays = 7;
+
+export type TokenPermissionPreset = {
   nameKey: string;
   descriptionKey: string;
   permissions: readonly string[] | typeof allTokenPermissions;
-}[] = [
+  /** Left out of an `allTokenPermissions` preset. */
+  excludedPermissions?: readonly string[];
+  /** Filled into an empty expiry when the preset is picked. */
+  expiresInDays?: number;
+};
+
+export const tokenPermissionPresets: readonly TokenPermissionPreset[] = [
   {
     nameKey: 'profile.catalogGenerator',
     descriptionKey: 'profile.catalogGeneratorDescription',
@@ -34,6 +59,8 @@ export const tokenPermissionPresets: readonly {
     nameKey: 'profile.supportAccess',
     descriptionKey: 'profile.supportAccessDescription',
     permissions: allTokenPermissions,
+    excludedPermissions: supportAccessExcludedPermissions,
+    expiresInDays: supportAccessTokenDays,
   },
 ];
 

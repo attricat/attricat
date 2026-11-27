@@ -131,7 +131,8 @@ Skrypty, CLI i integracje uwierzytelniają się osobistymi tokenami API. Utwórz
 - Sekret tokenu zaczyna się od `cat_pat_` i jest wyświetlany tylko raz. Przechowuj go w menedżerze sekretów.
 - Wysyłaj go jako `Authorization: Bearer cat_pat_…`. To token wyznacza obszar roboczy; żaden nagłówek ani parametr go nie wybiera.
 - Token może utworzyć inny token tylko z częścią własnych uprawnień. Jeśli token tworzący wygasa, nowy musi wygasnąć nie później.
-- Odwołuj tokeny, których już nie potrzebujesz. Odwołanie tokenu nie odwołuje tokenów, które utworzył; odwołaj każdy z osobna. Lista tokenów pokazuje, kiedy każdy z nich był ostatnio użyty, z dokładnością do minuty.
+- Odwołuj tokeny, których już nie potrzebujesz. Odwołanie tokenu odwołuje też wszystkie tokeny, które utworzył, oraz tokeny utworzone przez nie. Lista tokenów pokazuje, kiedy każdy z nich był ostatnio użyty, z dokładnością do minuty.
+- Szablon **Dostęp serwisowy**, do przekazania tokenu osobie diagnozującej problem, zaznacza wszystkie uprawnienia, które możesz nadać, poza zarządzaniem tokenami, członkami, rolami, logowaniem, rozszerzeniami i pakietami rozwiązań, więc jego posiadacz nie zachowa dostępu po odwołaniu tokenu. Ustawia wygaśnięcie za tydzień, które możesz zmienić.
 
 Tworzenie tokenów wymaga uprawnienia `tokens.manage`.
 

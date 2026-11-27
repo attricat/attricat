@@ -92,7 +92,7 @@ impl AttricatRepository {
         }
         // The count check above rejects duplicate permissions, so the token
         // and its permission rows are inserted by one statement.
-        sqlx::query("WITH token AS (INSERT INTO personal_api_tokens (id, user_id, workspace_id, label, token_digest, expires_at) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id) INSERT INTO personal_api_token_permissions (token_id, permission_code) SELECT token.id, permission FROM token CROSS JOIN unnest($7::text[]) AS permission").bind(token_id).bind(user_id).bind(workspace_id).bind(label).bind(digest).bind(expires_at).bind(permissions).execute(&mut *tx).await?;
+        sqlx::query("WITH token AS (INSERT INTO personal_api_tokens (id, user_id, workspace_id, label, token_digest, expires_at, issuer_token_id) VALUES ($1, $2, $3, $4, $5, $6, $8) RETURNING id) INSERT INTO personal_api_token_permissions (token_id, permission_code) SELECT token.id, permission FROM token CROSS JOIN unnest($7::text[]) AS permission").bind(token_id).bind(user_id).bind(workspace_id).bind(label).bind(digest).bind(expires_at).bind(permissions).bind(issuer_token_id).execute(&mut *tx).await?;
         self.commit_mutation(tx).await?;
         Ok(())
     }
@@ -114,6 +114,9 @@ impl AttricatRepository {
         let mut tx = self.pool.begin().await?;
         let revoked = sqlx::query("UPDATE personal_api_tokens SET revoked_at = clock_timestamp() WHERE id = $1 AND user_id = $2 AND workspace_id = $3 AND revoked_at IS NULL").bind(token_id).bind(user_id).bind(workspace_id).execute(&mut *tx).await?.rows_affected() == 1;
         if revoked {
+            // Delegated access ends with its source: every token this one
+            // issued, and the tokens those issued, are revoked with it.
+            sqlx::query("WITH RECURSIVE issued (id) AS (SELECT id FROM personal_api_tokens WHERE issuer_token_id = $1 UNION SELECT token.id FROM personal_api_tokens token JOIN issued ON token.issuer_token_id = issued.id) UPDATE personal_api_tokens SET revoked_at = clock_timestamp() WHERE id IN (SELECT id FROM issued) AND revoked_at IS NULL").bind(token_id).execute(&mut *tx).await?;
             self.commit_mutation(tx).await?;
         }
         Ok(revoked)
