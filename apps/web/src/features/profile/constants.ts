@@ -1,4 +1,11 @@
-export const tokenPermissionPresets = [
+/** Marks a preset that grants every permission the user can grant. */
+export const allTokenPermissions = 'all';
+
+export const tokenPermissionPresets: readonly {
+  nameKey: string;
+  descriptionKey: string;
+  permissions: readonly string[] | typeof allTokenPermissions;
+}[] = [
   {
     nameKey: 'profile.catalogGenerator',
     descriptionKey: 'profile.catalogGeneratorDescription',
@@ -22,6 +29,11 @@ export const tokenPermissionPresets = [
     nameKey: 'profile.recordImporter',
     descriptionKey: 'profile.recordImporterDescription',
     permissions: ['blueprints.read', 'contexts.read', 'records.write'],
+  },
+  {
+    nameKey: 'profile.supportAccess',
+    descriptionKey: 'profile.supportAccessDescription',
+    permissions: allTokenPermissions,
   },
 ];
 
